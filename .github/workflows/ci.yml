@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install BCDice bridge
+        run: npm ci --no-audit --no-fund
+        working-directory: bridge
+      - name: Install
+        run: uv sync --extra claude
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Test
+        run: uv run pytest -q
+      - name: Validate skills and the demo module
+        run: |
+          for d in skills/*/; do uv run agentskills validate "$d"; done
+          uv run autokeeper check src/autokeeper/module/example

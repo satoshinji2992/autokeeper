@@ -1,0 +1,152 @@
+# 格式样例：只用来演示字段和跑测试，不是可玩的模组，也不会出现在模组菜单里。
+id: example
+title: 格式样例·钟楼
+subtitle: 字段齐全的最小样例
+system: CoC7
+era: 1920 年代
+setting: 一座虚构的小镇
+players: 1 人
+duration: 约 30 分钟
+source: AutoKeeper 格式样例
+license: CC0-1.0
+hook: 镇上的钟楼每到午夜都会多敲一下。报社托你去看看。
+truth: 守钟人在钟里藏了一样东西，多出的那一下是它在敲。午夜之前停下钟，它就出不来。
+keeper_notes: 样例只演示格式：一个枢纽地点、两个分支地点、一次定时布道、两个结局。
+flags:
+  bell_stopped: 钟被停下了
+start: square
+start_time: D1 14:00
+opening: 午后的广场上没什么人，钟楼的影子斜斜地压在石板路上。
+locations:
+  - id: square
+    name: 广场
+    art: square
+    read_aloud: 广场中央立着钟楼，告示栏上贴着一张泛黄的告示。
+    keeper: 枢纽地点，去哪儿都从这里走。
+    features: [告示栏, 钟楼大门]
+    exits: [tower, office]
+  - id: tower
+    name: 钟楼
+    read_aloud: 楼梯又窄又陡，顶上的齿轮间里传来咔哒声。守钟人坐在楼梯口打盹。
+    keeper: 齿轮间里藏着东西。守钟人不愿多说。
+    features: [齿轮间, 守钟人的柜子]
+    exits: [square]
+  - id: office
+    name: 报社
+    read_aloud: 报社档案室里堆满了旧报纸。
+    features: [旧报合订本]
+    exits: [square]
+npcs:
+  - id: warden
+    name: 老守钟人
+    role: 钟楼的守钟人
+    look: 驼背，手上全是油污
+    personality: 寡言，护着钟楼
+    voice: 说话慢，爱说“钟有钟的规矩”
+    goal: 不让人上齿轮间
+    knows: [钟每到午夜多敲一下]
+    secrets: [他在钟里藏了东西]
+    lies: [钟只是老了]
+    clues: [c_diary]
+    gates:
+      c_diary: {skill: 说服, difficulty: 困难}
+    location: tower
+    portrait: warden
+  - id: preacher
+    name: 街头布道者
+    role: 每晚在广场布道的人
+    voice: 嗓门大，爱引经据典
+    goal: 让镇上的人听他讲完
+    knows: [午夜的钟声不对劲]
+    location: square
+    portrait: preacher
+clues:
+  - id: c_notice
+    title: 广场告示
+    where: square
+    feature: 告示栏
+    points_to: [k_motive]
+    text: 告示说钟楼即日起谢绝参观，落款是守钟人。
+  - id: c_gears
+    title: 齿轮间
+    where: tower
+    feature: 齿轮间
+    check: {skill: 侦查, difficulty: 困难}
+    core: true
+    sanity: 0/1D2
+    points_to: [k_tower]
+    text: 最大的那只齿轮背后缠着一圈不属于钟的东西，像干枯的藤，还在动。
+  - id: c_diary
+    title: 守钟人的日记
+    where: tower
+    npc: warden
+    handout: h_diary
+    points_to: [k_tower, k_motive]
+    text: 日记里写着：“它在钟里很安静，只要钟一直走。”
+  - id: c_archive
+    title: 旧报
+    where: office
+    feature: 旧报合订本
+    check: {skill: 图书馆使用}
+    core: true
+    points_to: [k_tower]
+    text: 三十年前的报道：钟楼刚落成那年，午夜钟声也多敲过一下。
+conclusions:
+  - id: k_tower
+    text: 钟里藏着会动的东西，多出的钟声是它在敲
+  - id: k_motive
+    text: 守钟人知道钟里有什么，并在替它遮掩
+handouts:
+  - id: h_diary
+    title: 守钟人的日记
+    kind: 日记
+    text: |
+      它在钟里很安静，只要钟一直走。
+      钟要是停了，就要出事。
+events:
+  - id: e_dusk
+    title: 黄昏
+    when: D1 18:00
+    read_aloud: 天黑了，钟楼的影子吞没了半个广场。
+    text: 时间提醒。
+  - id: e_sermon
+    title: 午夜前的布道
+    when: D1 21:00
+    move_to: square
+    performer: preacher
+    performance: 把调查员今天做过的事编进布道词里，最后说“钟声会替我们作证”。
+    read_aloud: 布道者登上台阶，所有人都抬头看钟。
+    sanity: 0/1D3
+    text: 布道者登台。
+  - id: e_finale
+    title: 午夜
+    when: D1 22:00
+    text: 钟多敲了一下。
+    ending: toll
+endings:
+  - id: stopped
+    title: 钟停了
+    condition: flag:bell_stopped
+    text: 钟停在十一点五十九分，镇上第一次安静地过了一夜。
+    reward: 理智 +1D6
+  - id: toll
+    title: 多出的那一下
+    condition: 以上都没有发生
+    text: 午夜，钟声多敲了一下。
+    reward: 在场的调查员过理智检定 1/1D6
+sketches:
+  - id: sk_coil
+    ask: 把齿轮背后那圈东西画出来
+    target: 一圈缠在齿轮上的螺旋状枯藤，末端分成三股
+    threshold: 0.6
+    sanity: 1/1D4
+    after: c_gears
+pregens:
+  - id: zhouheng
+    name: 周衡
+    occupation: 记者
+    age: 28
+    portrait: zhouheng
+    characteristics: {力量: 45, 体质: 55, 体型: 60, 敏捷: 65, 外貌: 60, 智力: 75, 意志: 55, 教育: 70}
+    luck: 55
+    skills: {图书馆使用: 60, 侦查: 55, 心理学: 45, 话术: 50, 说服: 40, 外语(英语): 40}

@@ -1,0 +1,228 @@
+Screen {
+    background: $background;
+    color: $foreground;
+}
+
+/* ---------- title ---------- */
+#title-screen {
+    align: center middle;
+}
+#title-box {
+    width: 100%;
+    height: 100%;
+}
+#title-box Center {
+    height: auto;
+}
+#title-art {
+    width: auto;
+}
+#title-eye {
+    width: auto;
+    margin-top: 1;
+}
+#tagline {
+    width: 100%;
+    content-align: center middle;
+    color: $secondary;
+    margin: 1 0;
+    text-style: bold;
+}
+#menu {
+    width: 36;
+    height: auto;
+    max-height: 9;
+    margin-top: 1;
+    border: heavy $primary-darken-1;
+    background: $surface;
+}
+#menu > .option-list--option {
+    padding: 0 2;
+}
+#title-hint {
+    width: 100%;
+    content-align: center middle;
+    color: $text-muted;
+    margin-top: 1;
+}
+
+/* ---------- setup ---------- */
+#setup {
+    padding: 1 2;
+}
+#setup-title {
+    color: $primary;
+    text-style: bold;
+    margin-bottom: 1;
+}
+#setup-body {
+    height: 1fr;
+}
+#choices {
+    width: 38;
+    border: round $primary-darken-1;
+    background: $surface;
+}
+#preview {
+    width: 1fr;
+    padding: 0 2;
+    border: round $secondary-darken-2;
+    background: $surface;
+    overflow-y: auto;
+}
+#setup-hint {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+/* ---------- game ---------- */
+#topbar {
+    height: 1;
+    background: $primary-darken-3;
+    color: $foreground;
+    padding: 0 1;
+}
+#main {
+    height: 1fr;
+}
+#left {
+    width: 1fr;
+}
+#right {
+    width: 40;
+    border-left: tall $primary-darken-2;
+    background: $surface;
+}
+#scene {
+    height: auto;
+    max-height: 17;
+    padding: 0 1;
+    color: $primary;
+    border-bottom: dashed $primary-darken-2;
+}
+#scene.dread {
+    color: $error;
+}
+#story {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+}
+#status {
+    height: 1;
+    padding: 0 1;
+    color: $secondary;
+}
+#command {
+    border: tall $primary-darken-1;
+    background: $surface;
+}
+#command:focus {
+    border: tall $primary;
+}
+
+.entry {
+    margin: 1 0 0 0;
+}
+.keeper {
+    color: $foreground;
+}
+.player {
+    color: $text-muted;
+    text-style: italic;
+}
+.npc {
+    padding: 0 1;
+    border-left: thick $accent;
+}
+.dice {
+    color: $secondary;
+}
+.clue {
+    border: round $success;
+    padding: 0 1;
+    color: $foreground;
+}
+.handout {
+    color: $warning;
+}
+.event {
+    content-align: center middle;
+    text-style: bold;
+    color: $warning;
+}
+.sanity {
+    color: $error;
+    text-style: bold;
+}
+.system {
+    color: $text-muted;
+}
+.performance {
+    border: double $accent;
+    padding: 0 1;
+    color: $foreground;
+}
+.ending {
+    border: heavy $primary;
+    padding: 1 2;
+    text-style: bold;
+}
+
+#sheet {
+    height: auto;
+    padding: 0 1;
+}
+#dice {
+    height: 10;
+    padding: 0 1;
+    border-top: dashed $primary-darken-2;
+    content-align: center middle;
+}
+#clues {
+    height: 1fr;
+    padding: 0 1;
+    border-top: dashed $primary-darken-2;
+    overflow-y: auto;
+}
+
+/* ---------- modals ---------- */
+ModalScreen {
+    align: center middle;
+    background: $background 70%;
+}
+.modal {
+    width: auto;
+    max-width: 96;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: heavy $primary;
+    background: $surface;
+}
+.modal-title {
+    color: $primary;
+    text-style: bold;
+    margin-bottom: 1;
+}
+.modal-body {
+    height: auto;
+    max-height: 30;
+    overflow-y: auto;
+}
+.buttons {
+    height: auto;
+    margin-top: 1;
+    align: center middle;
+}
+.buttons Button {
+    margin: 0 1;
+}
+#canvas {
+    width: 72;
+    height: 22;
+    border: round $secondary;
+}
+#ending-art {
+    color: $primary;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "autokeeper",
+  "owner": { "name": "satoshinji2992" },
+  "plugins": [
+    {
+      "name": "autokeeper",
+      "source": "./",
+      "description": "CoC 7 版中文跑团守秘人：MCP 游戏引擎 + 规则与模组 Skill 包"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "autokeeper-bcdice-bridge",
+  "private": true,
+  "type": "module",
+  "description": "JSON-lines bridge from Python to BCDice",
+  "dependencies": {
+    "bcdice": "^4.10.0"
+  }
+}

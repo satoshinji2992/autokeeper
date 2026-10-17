@@ -1,0 +1,19 @@
+# 复制为 autokeeper.toml 后修改。backend 可选 claude / langchain / codex。
+module = "zhuishuren"
+theme = "amber"          # amber / phosphor / lavender / blood
+
+[roles.keeper]
+backend = "claude"
+model = "claude-opus-5-5"
+effort = "medium"
+
+[roles.npc]
+backend = "claude"
+model = "claude-haiku-5-5"
+effort = "medium"
+
+# 换成 Gemini（需要 GOOGLE_API_KEY / GEMINI_API_KEY）：
+# [roles.investigator]
+# backend = "langchain"
+# model = "google_genai:gemini-3.5-flash"
+# effort = "low"

@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Copyrighted modules stay local: drop files in modules/_import/, imports land in modules/local/
+modules/_import/
+modules/local/
+skills/module-*
+saves/
+.env
+bridge/node_modules/
+
+# Personal planning notes (job targets, resume drafts)
+PLAN.md
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
