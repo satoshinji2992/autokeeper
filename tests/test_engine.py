@@ -177,6 +177,7 @@ async def test_timed_event_moves_party_and_npc_performs(module, fake):
     assert game.state.location == "square"
     await game.talk(turn)
     assert turn.performance and "旧报" in cast.performances[0]
+    assert game.state.npc(turn.performance[0]).met  # the map lists who you have met
     assert any(e["type"] == "performance" for e in events)
 
 

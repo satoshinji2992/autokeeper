@@ -844,8 +844,13 @@ class GameScreen(Screen):
         self.app.notify(f"已存档：{self.state.slot}")
 
 
+SKY_MARK = {"rain": "☂ 雨", "storm": "⚡ 雷雨", "snow": "❄ 雪", "fog": "≋ 雾"}
+
+
 def _map(m: Module, st: GameState) -> Text:
-    """Breadth-first tree of locations from the module's start, with what you have seen."""
+    """Breadth-first tree of locations from the module's start, with what you have seen:
+    where you are, where you have been, the clues found and the people met at each place,
+    and the weather over the open-air ones. Nothing the investigators have not seen."""
     out = Text()
     seen = {m.start}
     children: dict[str, list[str]] = {}
@@ -868,6 +873,13 @@ def _map(m: Module, st: GameState) -> Text:
             out.append("  ◀ 你在这里", style="bold")
         elif node in st.visited:
             out.append("  ✓", style="dim")
+        if st.sky and weather.outdoors(loc.name):
+            out.append(f"  {SKY_MARK.get(st.sky, '')}", style="italic")
+        found = sum(1 for c in st.clues if m.clue(c).where == node)
+        met = [n.name for n in m.npcs_at(node) if st.npcs.get(n.id) and st.npcs[n.id].met]
+        notes = ([f"线索 {found}"] if found else []) + met
+        if notes:
+            out.append("  · " + " · ".join(notes), style="dim")
         out.append("\n")
         kids = children.get(node, [])
         for i, kid in enumerate(kids):

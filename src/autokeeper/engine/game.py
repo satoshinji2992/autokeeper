@@ -215,6 +215,7 @@ class Game:
                 await self.emit({"type": "status", "text": f"{npc.name}正在开口…"})
                 line = await self.cast.npc(st, npc.id, self._npc_message(turn, npc.id))
                 turn.npc_lines.append((npc.id, line))
+                st.npc(npc.id).met = True
                 st.add("npc", line, who=npc.name)
                 await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
         for ev in turn.events:
@@ -223,6 +224,7 @@ class Game:
                 await self.emit({"type": "status", "text": f"{npc.name}登台了…"})
                 text = await self.cast.perform(st, npc.id, ev.performance, self._deeds())
                 turn.performance = (npc.id, text)
+                st.npc(npc.id).met = True
                 st.add("npc", text, who=npc.name)
                 await self.emit({"type": "performance", "npc": npc.id, "name": npc.name, "text": text, "portrait": m.art.get(npc.portrait or "", "")})
 
