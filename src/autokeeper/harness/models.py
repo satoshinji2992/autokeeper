@@ -51,12 +51,33 @@ class Reply:
     cost_usd: float = 0.0
     seconds: float = 0.0
     repairs: int = 0
+    retries: int = 0
 
     def add(self, other: Reply) -> None:
         for k, v in other.usage.items():
             self.usage[k] = self.usage.get(k, 0) + v
         self.cost_usd += other.cost_usd
         self.thinking += other.thinking
+        self.retries += other.retries
+
+
+# -- transient failures --------------------------------------------------------------------
+ATTEMPTS = 3
+RETRY_WAIT = (1.0, 20.0)  # first back-off and cap in seconds; exponential with jitter
+CALL_TIMEOUT = float(os.environ.get("AUTOKEEPER_TIMEOUT", 600))
+TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
+TRANSIENT_NAMES = ("Timeout", "RateLimit", "Connection", "InternalServer", "ServiceUnavailable", "Overloaded", "RemoteProtocol")
+
+
+def transient(exc: BaseException) -> bool:
+    """Worth another try: rate limits, overload, time-outs, dropped connections, 5xx.
+    Not: budget, auth, bad requests, missing keys, our own bugs."""
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status in TRANSIENT_STATUS
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    return any(n in type(exc).__name__ for n in TRANSIENT_NAMES)
 
 
 # -- structured output -----------------------------------------------------------------
@@ -130,14 +151,14 @@ class Model:
         started = time.monotonic()
         reply, error = Reply(), ""
         try:
-            reply = await self._call(messages, schema=schema, images=images, on_delta=on_delta)
+            reply = await self._attempt(messages, schema=schema, images=images, on_delta=on_delta)
             if schema is not None and (errors := problems(reply.data, schema)):
                 fix = [
                     *messages,
                     {"role": "assistant", "content": reply.text or "（空）"},
                     {"role": "user", "content": REPAIR.format(errors="\n".join(errors))},
                 ]
-                second = await self._call(fix, schema=schema, images=None, on_delta=None)
+                second = await self._attempt(fix, schema=schema, images=None, on_delta=None)
                 reply.add(second)
                 reply.repairs += 1
                 if not problems(second.data, schema) or (reply.data is None and second.data is not None):
@@ -151,6 +172,31 @@ class Model:
             if not reply.cost_usd:
                 reply.cost_usd = spend.record(self.spec.model, reply.usage)
             trace.emit(self, messages, reply, schema=schema, error=error)
+
+    async def _attempt(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
+        """One call under a time limit, retried with back-off on transient failures. Once
+        streamed text has reached the player, a failure is not retried (it would repeat)."""
+        from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
+
+        streamed = False
+
+        async def delta(piece: str) -> None:
+            nonlocal streamed
+            streamed = True
+            await on_delta(piece)  # type: ignore[misc]
+
+        reply = Reply()
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(ATTEMPTS),
+            wait=wait_exponential_jitter(initial=RETRY_WAIT[0], max=RETRY_WAIT[1]),
+            retry=retry_if_exception(lambda e: transient(e) and not streamed),
+            reraise=True,
+        ):
+            with attempt:
+                async with asyncio.timeout(CALL_TIMEOUT):
+                    reply = await self._call(messages, schema=schema, images=images, on_delta=delta if on_delta else None)
+                reply.retries = attempt.retry_state.attempt_number - 1
+        return reply
 
     async def warm(self) -> None:
         return None
@@ -237,9 +283,9 @@ class ClaudeCodeModel(Model):
             if pending := self._wiping.pop(key, None):
                 await pending
             client = await self._client(key, schema)
-            await client.query(_stream(_blocks(messages, images)))
             reply, streamed = Reply(), False
             try:
+                await client.query(_stream(_blocks(messages, images)))
                 async for msg in client.receive_response():
                     if isinstance(msg, StreamEvent):
                         ev = msg.event
@@ -265,13 +311,20 @@ class ClaudeCodeModel(Model):
                         reply.data = msg.structured_output
                         if msg.is_error and not reply.text:
                             reply.text = msg.result or ""
-            finally:
-                self._wiping[key] = asyncio.create_task(self._wipe(key))
+            except BaseException:
+                self._discard(key)  # a half-read stream is unusable; a retry gets a fresh process
+                raise
+            self._wiping[key] = asyncio.create_task(self._wipe(key))
         if on_delta and not streamed and reply.text and not schema:
             await on_delta(reply.text)
         if schema and reply.data is None and reply.text:
             reply.data = parse_json(reply.text)
         return reply
+
+    def _discard(self, key: str) -> None:
+        if (client := self._clients.pop(key, None)) is not None:
+            task = asyncio.get_running_loop().create_task(client.disconnect())
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())  # swallow errors from a dead process
 
     async def close(self) -> None:
         for task in self._wiping.values():

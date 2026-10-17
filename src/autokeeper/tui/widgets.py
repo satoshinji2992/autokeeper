@@ -24,9 +24,22 @@ LEVEL_STYLE = {
 }
 
 
+LIGHT_MARK = {"清晨": "◌", "上午": "☀", "晌午": "☀", "下午": "☀", "傍晚": "◐", "夜里": "☾", "深夜": "☾"}
+
+
+def center(art_text: Text, width: int) -> Text:
+    """Centre a block of art in the panel."""
+    lines = art_text.split("\n")
+    pad = max(0, (width - max((ln.cell_len for ln in lines), default=0)) // 2)
+    return Text("\n").join(Text(" " * pad) + ln for ln in lines) if pad else art_text
+
+
 class SceneArt(Static):
-    """Location name and its art: a real picture rendered by chafa to fit the panel, or the
-    hand-drawn ASCII fallback. Glitches when sanity drops."""
+    """Location name and its art: a real picture rendered by chafa to fill the panel, or the
+    hand-drawn ASCII fallback. Both are lit for the time of day (artkit.LIGHTS), scan in when
+    the party arrives somewhere new, and glitch when sanity drops."""
+
+    HEIGHT = 15
 
     def __init__(self, **kw):
         super().__init__("", **kw)
@@ -35,40 +48,78 @@ class SceneArt(Static):
         self.mask: str | None = None
         self.image: str | None = None
         self.style_name = "picture"
+        self.when = ""  # time of day, lights the art
         self.madness = 0.0
         self._burst = 0
+        self._art: Text | None = None  # the current art, ready to paint
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
 
     def on_resize(self) -> None:
-        self._paint()
+        self._refresh()
 
     def show(self, place: str, picture: str, mask: str | None = None, image: str | None = None) -> None:
+        arrived = place != self.place
         self.place, self.picture, self.mask, self.image = place, picture, mask, image
-        self._paint()
+        self._refresh(reveal=arrived)
+
+    def set_light(self, when: str) -> None:
+        if when != self.when:
+            self.when = when
+            self._refresh()
 
     def _fit(self) -> tuple[int, int]:
-        return max(24, (self.size.width or 72) - 2), 15
+        return max(24, (self.size.width or 72) - 2), self.HEIGHT
 
     def _uses_image(self) -> bool:
         return bool(self.image) and imagery.available()
 
-    def _paint(self, rate: float = 0.0, frame: str | None = None) -> None:
-        body = Text()
-        body.append(f"◆ {self.place}\n", style="bold")
+    def _render(self, rate: float = 0.0) -> Text:
+        """The art alone, lit and centred. Pictures go through chafa, so call off the UI thread."""
+        w, h = self._fit()
+        if self._uses_image():
+            return center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, self.when, True)), w)
+        if self.picture:
+            return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=self.when), w)
+        return Text()
+
+    def _title(self) -> Text:
+        t = Text()
+        t.append(f"◆ {self.place}", style="bold")
+        if self.when:
+            t.append(f"   {LIGHT_MARK.get(self.when, '')} {self.when}", style="dim")
+        return t
+
+    def _paint(self, rate: float = 0.0, frame: str | None = None, rows: int | None = None) -> None:
         if frame is not None:
-            body.append_text(Text.from_ansi(frame))
-        elif self._uses_image():
-            body.append_text(Text.from_ansi(imagery.render(self.image, *self._fit(), self.style_name)))
-        elif self.picture:
-            body.append_text(artkit.colorize(art.corrupt(self.picture, rate), self.mask))
-        self.update(body)
+            art_text = center(Text.from_ansi(frame), self._fit()[0])
+        elif rate or self._art is None:
+            art_text = self._render(rate) if not self._uses_image() else (self._art or Text())
+        else:
+            art_text = self._art
+        if rows is not None:  # scan-in: the rows below the beam are still dark
+            lines = art_text.split("\n")
+            beam = Text("▔" * min(self._fit()[0], max((ln.cell_len for ln in lines), default=0)), style="dim")
+            art_text = Text("\n").join([*lines[:rows], beam] if rows < len(lines) else lines)
+        self.update(Text("\n").join([self._title(), art_text]))
+
+    def _refresh(self, reveal: bool = False) -> None:
+        self.run_worker(self._load(reveal), exclusive=True, group="art")
+
+    async def _load(self, reveal: bool) -> None:
+        self._art = await asyncio.to_thread(self._render)
+        if reveal:
+            total = len(self._art.split("\n"))
+            for rows in range(0, total, 2):
+                self._paint(rows=rows)
+                await asyncio.sleep(0.035)
+        self._paint()
 
     def glitch(self, frames: int = 14) -> None:
         self.add_class("dread")
         if self._uses_image():
-            self.run_worker(self._picture_glitch(min(8, max(3, frames // 3))), exclusive=True, group="glitch")
+            self.run_worker(self._picture_glitch(min(8, max(3, frames // 3))), exclusive=True, group="art")
             return
         self._burst = frames
         self._tick()
@@ -77,7 +128,7 @@ class SceneArt(Static):
         w, h = self._fit()
         for i in range(frames):
             strength = 1.0 - i / frames
-            frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name)
+            frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name, self.when, True)
             self._paint(frame=frame)
             await asyncio.sleep(0.05)
         self.remove_class("dread")

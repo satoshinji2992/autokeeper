@@ -126,7 +126,7 @@ async def run(
                 if state.ending or state.turn >= max_turns:
                     break
                 state.active = next(i for i, inv in enumerate(state.investigators) if inv.id == inv_id)
-                console.print(f"[dim]▶ {state.investigator.name}：{text}[/]")
+                console.print(f"[dim]▶ {state.investigator.name}：{text}[/]", soft_wrap=True)
                 await emit({"type": "player", "who": state.investigator.name, "text": text})
                 inp: Any = {"input": text}
                 while True:

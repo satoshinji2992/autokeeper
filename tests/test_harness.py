@@ -61,6 +61,60 @@ async def test_json_is_validated_and_repaired_once():
     assert reply.usage == {"input_tokens": 200, "output_tokens": 20}
 
 
+class Flaky(Scripted):
+    """Fails the first calls with a given error, then answers from SCRIPT."""
+
+    failures: deque = deque()
+
+    async def _call(self, messages, *, schema, images, on_delta):
+        if self.failures:
+            exc = self.failures.popleft()
+            if on_delta and getattr(exc, "after_text", False):
+                await on_delta("半句叙事")
+            raise exc
+        return await super()._call(messages, schema=schema, images=images, on_delta=on_delta)
+
+
+class RateLimitError(Exception):
+    status_code = 429
+
+
+class BadRequestError(Exception):
+    status_code = 400
+
+
+@pytest.fixture
+def flaky(monkeypatch):
+    monkeypatch.setitem(hm.MODELS, "flaky", Flaky)
+    monkeypatch.setattr(hm, "RETRY_WAIT", (0.0, 0.0))
+    Flaky.failures.clear()
+    return Role("flaky", "flaky-model", None)
+
+
+async def test_transient_errors_are_retried(flaky):
+    Flaky.failures.extend([RateLimitError("slow down"), ConnectionError("reset")])
+    SCRIPT.append("好了")
+    reply = await hm.make_model(flaky, "守秘人").complete([{"role": "user", "content": "继续"}])
+    assert reply.text == "好了" and reply.retries == 2
+
+
+async def test_bad_requests_and_streamed_text_are_not_retried(flaky):
+    Flaky.failures.append(BadRequestError("schema invalid"))
+    with pytest.raises(BadRequestError):
+        await hm.make_model(flaky, "守秘人").complete([{"role": "user", "content": "继续"}])
+    broken = TimeoutError("stalled mid-stream")
+    broken.after_text = True  # type: ignore[attr-defined]
+    Flaky.failures.append(broken)
+    seen: list[str] = []
+
+    async def show(piece: str) -> None:
+        seen.append(piece)
+
+    with pytest.raises(TimeoutError):
+        await hm.make_model(flaky, "守秘人").complete([{"role": "user", "content": "继续"}], on_delta=show)
+    assert seen == ["半句叙事"]  # the player saw half a sentence once, not twice
+
+
 def test_prompted_json_carries_schema_and_example():
     text = hm.json_instruction(Action.model_json_schema())
     assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example
@@ -83,12 +137,25 @@ async def test_session_keeps_a_window_and_folds_old_turns():
     for i in range(4):
         SCRIPT.append(f"回答{i}" * 3)
         await s.send(f"问题{i}" * 3)
+    await s.settle()  # folding runs in the background
     assert notes["npc:a"].startswith("摘要（npc:a）")
     assert sum(len(m["content"]) for m in transcript) <= 60 and transcript[-1]["content"] == "回答3" * 3
     SCRIPT.append("好")
     await s.send("最后一问")
     window = SEEN[-1]["messages"]
     assert window[0]["content"].startswith("【更早的经过") and window[-1]["content"] == "最后一问"
+
+
+async def test_a_failed_summarizer_does_not_cost_memory():
+    async def broken(text: str, who: str) -> str:
+        raise RuntimeError("summarizer is down")
+
+    s = Session("npc", SCRIPTED, "你是 NPC", memory=60, summarizer=broken)  # type: ignore[arg-type]
+    for i in range(4):
+        SCRIPT.append(f"回答{i}" * 3)
+        await s.send(f"问题{i}" * 3)
+    await s.settle()
+    assert "回答1" in s.summary and s.transcript[-1]["content"] == "回答3" * 3
 
 
 async def test_pinned_task_survives_folding():
@@ -100,6 +167,7 @@ async def test_pinned_task_survives_folding():
     for i in range(4):
         SCRIPT.append(f"第{i}步做完了" * 2)
         await s.send(f"观察{i}" * 4)
+    await s.settle()
     window = s.window("下一步")
     assert window[0]["content"] == "【任务】\n把原文整理成 module.yaml，id 用 changpian"
     assert window[2]["content"].endswith("进度摘要") and s.summary == "进度摘要"

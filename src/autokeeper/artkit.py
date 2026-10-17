@@ -11,6 +11,7 @@ Pieces without a mask are coloured by character class.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from rich.text import Text
@@ -51,8 +52,54 @@ def auto_mask(text: str) -> str:
     return "\n".join("".join(_AUTO.get(ch, ".") for ch in line) for line in text.split("\n"))
 
 
-def colorize(text: str, mask: str | None = None, default: str = "") -> Text:
+# Light by time of day, shared by pictures (imagery.light) and hand-drawn ASCII (shade):
+# brightness, saturation, contrast, tint colour, tint strength, vignette strength.
+LIGHTS: dict[str, tuple[float, float, float, tuple[int, int, int] | None, float, float]] = {
+    "清晨": (0.92, 0.80, 0.95, (150, 175, 230), 0.14, 0.30),
+    "上午": (1.00, 1.00, 1.00, None, 0.00, 0.18),
+    "晌午": (1.06, 1.05, 1.05, (255, 244, 214), 0.06, 0.12),
+    "下午": (1.00, 1.05, 1.02, (255, 205, 140), 0.12, 0.22),
+    "傍晚": (0.82, 1.10, 1.06, (255, 130, 50), 0.24, 0.42),
+    "夜里": (0.55, 0.55, 1.12, (35, 55, 135), 0.36, 0.62),
+    "深夜": (0.42, 0.42, 1.18, (18, 26, 88), 0.46, 0.78),
+}
+_HEX = re.compile(r"#([0-9a-fA-F]{6})")
+DEFAULT_INK = "#c8c8c8"  # unmasked strokes, so they take the light too
+GLOW = set("oyYW")  # lamplight, candles, lit windows: they stay bright after dark
+DARK = {"傍晚", "夜里", "深夜"}
+
+
+def shade(color: str, when: str, *, strokes: bool = False) -> str:
+    """One colour seen under the light of `when`: exposure, saturation, tint.
+
+    `strokes` is for ASCII art on a dark terminal: lines must stay readable, so exposure
+    and tint go only half as far as they do on a picture."""
+    if when not in LIGHTS:
+        return color
+    bright, sat, _, tint, amount, _ = LIGHTS[when]
+    if strokes:
+        bright, amount = 1 - (1 - bright) * 0.5, amount * 0.6
+
+    def one(m: re.Match) -> str:
+        r, g, b = (int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4))
+        grey = 0.299 * r + 0.587 * g + 0.114 * b
+        rgb = [grey + (c - grey) * sat for c in (r, g, b)]
+        if tint:
+            rgb = [c * (1 - amount) + t * amount for c, t in zip(rgb, tint, strict=True)]
+        return "#" + "".join(f"{max(0, min(255, round(c * bright))):02x}" for c in rgb)
+
+    return _HEX.sub(one, color)
+
+
+def colorize(text: str, mask: str | None = None, default: str = "", *, when: str = "") -> Text:
+    """Coloured ASCII; `when` (清晨 … 深夜) lights it for the time of day. After dark the
+    light sources (GLOW keys) keep their colour, so lit windows and lamps stand out."""
     mask = mask if mask is not None else auto_mask(text)
+    palette = PALETTE
+    if when:
+        palette = {k: v if when in DARK and k in GLOW else shade(v, when, strokes=True) for k, v in PALETTE.items()}
+    if when and not default:
+        default = shade(DEFAULT_INK, when, strokes=True)
     out = Text()
     mlines = mask.split("\n")
     for i, line in enumerate(text.split("\n")):
@@ -60,7 +107,7 @@ def colorize(text: str, mask: str | None = None, default: str = "") -> Text:
         run_style, run = None, ""
         for j, ch in enumerate(line):
             key = m[j] if j < len(m) else "."
-            style = PALETTE.get(key, default) if ch != " " else default
+            style = palette.get(key, default) if ch != " " else default
             if style != run_style and run:
                 out.append(run, style=run_style or default)
                 run = ""

@@ -349,6 +349,7 @@ class GameScreen(Screen):
         self.met: set[str] = set()
         self.spinner = 0
         self.status_text = ""
+        self.engine_label = ""
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -366,6 +367,8 @@ class GameScreen(Screen):
 
     async def on_mount(self) -> None:
         cfg = config.load()
+        keeper = cfg.role("keeper")
+        self.engine_label = f"{cfg.preset} · 守秘人 {keeper.model.split(':', 1)[-1]}"
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         config.SAVES.mkdir(parents=True, exist_ok=True)
@@ -413,6 +416,7 @@ class GameScreen(Screen):
         name = loc.art or ""
         scene = self.query_one(SceneArt)
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
+        scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
         scene.show(loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name), self.m.pictures.get(name))
         self._topbar()
 
@@ -437,8 +441,9 @@ class GameScreen(Screen):
         t.append(f"{moon} {st.clock} {time_of_day(st.minutes)}  ", style="bold")
         t.append(f"◆ {self.m.location(st.location).name}  ")
         tokens = sum(int(u.get("output", 0)) for u in st.usage.values())
-        t.append(f"  第 {st.turn} 轮 · 输出 {tokens} tokens", style="dim")
+        t.append(f"  第 {st.turn} 轮 · 输出 {tokens} tokens · {self.engine_label}", style="dim")
         self.query_one("#topbar", Static).update(t)
+        self.query_one(SceneArt).set_light(time_of_day(st.minutes))
 
     def _panels(self) -> None:
         st = self.state

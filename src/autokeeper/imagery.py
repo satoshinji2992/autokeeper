@@ -24,6 +24,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 from pydantic import BaseModel, Field
 
+from . import artkit
 from .config import Config
 from .harness import Session
 
@@ -352,9 +353,15 @@ def available() -> bool:
     return shutil.which("chafa") is not None
 
 
-def _chafa(path: str, width: int, height: int, style: str, *, work: int = 9) -> str:
-    cmd = ["chafa", "-f", "symbols", "-c", "full", "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), path]
-    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20).stdout
+def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, work: int = 9) -> str:
+    """chafa on a file, or on an in-memory image piped through stdin."""
+    data = None
+    if isinstance(source, Image.Image):
+        buf = io.BytesIO()
+        source.save(buf, format="PNG")
+        data, source = buf.getvalue(), "-"
+    cmd = ["chafa", "-f", "symbols", "-c", "full", "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), source]
+    out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
 
 
@@ -365,29 +372,78 @@ def picture_source(path: str | Path) -> str:
     return str(prep if prep.exists() else p)
 
 
-@lru_cache(maxsize=256)
-def render(path: str, width: int, height: int, style: str = "picture") -> str:
-    """ANSI text for a picture at the given character size (cached per size and style)."""
-    return _chafa(picture_source(path), width, height, style)
+def light(im: Image.Image, when: str) -> Image.Image:
+    """Grade a picture for the time of day (artkit.LIGHTS): exposure, colour, contrast, a
+    tint, and a vignette that closes in after dark."""
+    if when not in artkit.LIGHTS:
+        return im
+    bright, sat, contrast, tint, amount, vignette = artkit.LIGHTS[when]
+    im = ImageEnhance.Contrast(ImageEnhance.Color(ImageEnhance.Brightness(im).enhance(bright)).enhance(sat)).enhance(contrast)
+    if tint and amount:
+        im = Image.blend(im, Image.new("RGB", im.size, tint), amount)
+    if vignette:
+        mask = Image.radial_gradient("L").resize(im.size).point(lambda v: int(v * vignette))
+        im = Image.composite(Image.new("RGB", im.size, (0, 0, 0)), im, mask)
+    return im
 
 
-def glitch(path: str, width: int, height: int, strength: float, style: str = "picture") -> str:
-    """A glitched frame: RGB split and torn scanlines, rendered fresh (not cached)."""
+def cover(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5, widest: float = 2.6) -> Image.Image:
+    """Crop to the panel's shape so a scene fills it (terminal cells are about half as wide
+    as tall). Very wide panels get a letterbox no wider than `widest`."""
+    target = min(widest, cols * cell / rows)
+    w, h = im.size
+    if w / h > target:
+        nw = int(h * target)
+        left = (w - nw) // 2
+        return im.crop((left, 0, left + nw, h))
+    nh = int(w / target)
+    top = int((h - nh) * 0.4)  # keep the upper middle, where scenes put their subject
+    return im.crop((0, top, w, top + nh))
+
+
+def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
+    """Fill the panel without cutting the subject: when cropping would lose more than a
+    quarter of the picture, the whole picture sits in the middle and a blurred, darkened
+    copy of itself fills the sides (the letterbox trick from video)."""
+    from PIL import ImageFilter
+
+    target = cols * cell / rows
+    w, h = im.size
+    if w / h >= target * 0.75:
+        return cover(im, cols, rows, widest=99)
+    height = max(h, 240)
+    canvas = cover(im, cols, rows, widest=99).resize((int(height * target), height))
+    canvas = ImageEnhance.Brightness(canvas.filter(ImageFilter.GaussianBlur(height / 24))).enhance(0.45)
+    fg = im.resize((int(w * height / h), height))
+    canvas.paste(fg, ((canvas.width - fg.width) // 2, 0))
+    return canvas
+
+
+def _prepared(path: str, width: int, height: int, when: str, fill: bool) -> Image.Image:
     im = Image.open(picture_source(path)).convert("RGB")
+    return light(frame(im, width, height) if fill else im, when)
+
+
+@lru_cache(maxsize=256)
+def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False) -> str:
+    """ANSI text for a picture at the given character size, lit for `when`, optionally
+    cropped to fill the panel (cached per combination)."""
+    if not when and not fill:
+        return _chafa(picture_source(path), width, height, style)
+    return _chafa(_prepared(path, width, height, when, fill), width, height, style)
+
+
+def glitch(path: str, width: int, height: int, strength: float, style: str = "picture", when: str = "", fill: bool = False) -> str:
+    """A glitched frame: RGB split and torn scanlines, rendered fresh (not cached)."""
+    im = _prepared(path, width, height, when, fill)
     r, g, b = im.split()
     shift = max(1, int(im.width * 0.02 * strength))
-    im = Image.merge("RGB", (r.transform(r.size, Image.AFFINE, (1, 0, shift, 0, 1, 0)), g, b.transform(b.size, Image.AFFINE, (1, 0, -shift, 0, 1, 0))))
-    rows = int(10 * strength) + 1
-    for _ in range(rows):
+    im = Image.merge("RGB", (r.transform(r.size, Image.Transform.AFFINE, (1, 0, shift, 0, 1, 0)), g, b.transform(b.size, Image.Transform.AFFINE, (1, 0, -shift, 0, 1, 0))))
+    for _ in range(int(10 * strength) + 1):
         y = random.randrange(im.height)
         band = im.crop((0, y, im.width, min(im.height, y + random.randint(2, 12))))
         im.paste(band, (random.randint(-shift * 4, shift * 4), y))
-    tmp = Path(path).with_name(Path(path).stem + ".glitch.jpg")
-    im.save(tmp, quality=70)
-    try:
-        return _chafa(str(tmp), width, height, style, work=3)
-    finally:
-        tmp.unlink(missing_ok=True)
+    return _chafa(im, width, height, style, work=3)
 
 
 def credits(art_dir: Path) -> list[dict]:

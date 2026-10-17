@@ -38,6 +38,7 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
         "cost_usd": round(reply.cost_usd, 6),
         "seconds": round(reply.seconds, 2),
         "repairs": reply.repairs,
+        "retries": reply.retries,
     }
     if error:
         row["error"] = error[:500]

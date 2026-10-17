@@ -15,6 +15,7 @@ The window is append-only between compactions, which keeps provider prompt cache
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -71,6 +72,7 @@ class Session:
         self.transcript: list[Msg] = [] if transcript is None else transcript
         self.notes: dict[str, str] = {} if notes is None else notes
         self.model = make_model(spec, system, label=role)
+        self._folding: asyncio.Task | None = None
 
     def bind(self, transcript: list[Msg], notes: dict[str, str]) -> Session:
         """Point the session at the caller's current state objects (after a load or a copy)."""
@@ -96,38 +98,58 @@ class Session:
         return msgs
 
     async def send(self, prompt: str, *, extra: str = "", images: list[bytes] | None = None, on_delta: OnDelta = None) -> Reply:
-        """`extra` is appended for this call only and never stored (corrections, reminders)."""
+        """`extra` is appended for this call only and never stored (corrections, reminders).
+
+        Folding old turns runs in the background after the reply is out, so the player never
+        waits for the summarizer; the next call waits for it instead."""
+        await self.settle()
         window = self.window(prompt + extra)
         reply = await self.model.complete(window, schema=self.schema, images=images, on_delta=on_delta)
         if self.memory:
             answer = reply.text if self.schema is None else json.dumps(reply.data, ensure_ascii=False)
             self.transcript += [{"role": "user", "content": prompt}, {"role": "assistant", "content": answer}]
-            await self.compact()
+            if len(self.transcript) >= 4 and sum(len(m["content"]) for m in self.transcript) > self.memory:
+                self._folding = asyncio.create_task(self.compact())
         return reply
+
+    async def settle(self) -> None:
+        """Wait for a background fold (before the next call, or in tests)."""
+        if self._folding is not None:
+            task, self._folding = self._folding, None
+            await task
 
     def forget(self, turns: int = 1) -> None:
         del self.transcript[-2 * turns :]
 
     async def compact(self) -> None:
-        size = sum(len(m["content"]) for m in self.transcript)
-        if size <= self.memory or len(self.transcript) < 4:
+        """Fold the oldest turns into the summary. The old turns are removed only once the new
+        summary exists, so a save taken meanwhile loses nothing, and a failed summarizer falls
+        back to keeping the latest part verbatim."""
+        transcript, notes = self.transcript, self.notes  # the objects in the state, even if rebound
+        size = sum(len(m["content"]) for m in transcript)
+        if size <= self.memory or len(transcript) < 4:
             return
         cut, folded = 0, 0
-        while cut < len(self.transcript) - 2 and size - folded > self.memory // 2:
-            folded += len(self.transcript[cut]["content"]) + len(self.transcript[cut + 1]["content"])
+        while cut < len(transcript) - 2 and size - folded > self.memory // 2:
+            folded += len(transcript[cut]["content"]) + len(transcript[cut + 1]["content"])
             cut += 2
-        old = self.transcript[:cut]
-        del self.transcript[:cut]
-        text = "\n".join(f"{'回复' if m['role'] == 'assistant' else '输入'}：{m['content']}" for m in old)
+        text = "\n".join(f"{'回复' if m['role'] == 'assistant' else '输入'}：{m['content']}" for m in transcript[:cut])
         if self.summary:
             text = f"已有摘要：\n{self.summary}\n\n较早的记录：\n{text}"
+        summary = ""
         if self.summarizer:
-            self.notes[self.key] = await self.summarizer(text, self.key)
-        else:  # no summarizer: keep the most recent part verbatim
-            self.notes[self.key] = text[-max(2000, self.memory // 4) :]
+            try:
+                summary = await self.summarizer(text, self.key)
+            except Exception:  # never lose memory because the summarizer failed
+                summary = ""
+        notes[self.key] = summary or text[-max(2000, self.memory // 4) :]
+        del transcript[:cut]
 
     async def warm(self) -> None:
         await self.model.warm()
 
     async def close(self) -> None:
+        if self._folding is not None:  # nothing is removed before the summary lands, so cancelling is safe
+            self._folding.cancel()
+            self._folding = None
         await self.model.close()
