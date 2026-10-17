@@ -405,11 +405,19 @@ def autoplay(
     party: int = 1,
     turns: int = 40,
     slot: str | None = None,
+    record: Annotated[Path | None, typer.Option(help="把这局录成录像：每个 Agent 的回复和每一次掷骰")] = None,
+    replay: Annotated[Path | None, typer.Option(help="回放一盘录像，不调用任何模型")] = None,
 ) -> None:
     """无界面自动跑团：全部由 AI 调查员行动，输出跑团记录。"""
     from .engine.autoplay import run
 
-    asyncio.run(run(module, party=party, max_turns=turns, slot=slot, console=console))
+    summary = asyncio.run(run(module, party=party, max_turns=turns, slot=slot, console=console, record=record, replay=replay))
+    if replay is not None:
+        from .harness.replay import cassette
+
+        same = summary["fingerprint"] == cassette(replay).summary
+        console.print(f"{'[green]回放与录像一致[/]' if same else '[red]回放与录像不一致[/]'}：{replay}")
+        raise typer.Exit(0 if same else 1)
 
 
 eval_app = typer.Typer(help="评测")

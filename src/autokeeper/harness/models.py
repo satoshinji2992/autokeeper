@@ -489,6 +489,10 @@ MODELS: dict[str, type[Model]] = {"claude": ClaudeCodeModel, "langchain": LangCh
 
 def make_model(spec: Role, system: str, *, label: str = "") -> Model:
     load_env()  # keys in ~/.config/autokeeper/.env, also when the harness is used as a library
+    if spec.backend == "replay" and "replay" not in MODELS:
+        from .replay import ReplayModel
+
+        MODELS["replay"] = ReplayModel
     try:
         cls = MODELS[spec.backend]
     except KeyError:

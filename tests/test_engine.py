@@ -166,6 +166,9 @@ async def test_a_night_of_sleep_passes_but_other_actions_are_capped(module, fake
     turn = await game.resolve(Action(kind="wait", summary="回客栈睡到第二天"), Ruling(needs_roll=False, minutes=600))
     assert game.state.minutes - start == 180 + 600
     assert {"e_dusk", "e_sermon"} <= {e.id for e in turn.events}  # everything due on the way fires
+    said = Action(kind="talk", summary="周衡招呼同伴：先回去睡一觉，明早再来")  # a rest, though phrased as talk
+    await game.resolve(said, Ruling(needs_roll=False, minutes=500, rest=True))
+    assert game.state.minutes - start == 180 + 600 + 500
 
 
 async def test_travel_time_and_timed_events(module, fake):

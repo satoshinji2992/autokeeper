@@ -21,10 +21,13 @@ from rich.console import Console
 
 from .. import config, weather
 from ..agents.cast import Cast
+from ..config import Role
 from ..harness import models as channels
+from ..harness import replay as tapes
 from ..harness import trace
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
+from ..rules.bcdice import shared
 from ..rules.coc import Rules
 from . import graph as turn_graph
 from .game import Game
@@ -71,6 +74,21 @@ def situation(m: Module, st: GameState) -> str:
     )
 
 
+def fingerprint(state: GameState) -> dict[str, Any]:
+    """What a game came to: compared between a recording and its replay."""
+    return {
+        "ending": state.ending,
+        "turn": state.turn,
+        "minutes": state.minutes,
+        "location": state.location,
+        "visited": state.visited,
+        "clues": state.clues,
+        "flags": state.flags,
+        "fired": state.fired,
+        "investigators": [[i.id, i.hp, i.san] for i in state.investigators],
+    }
+
+
 async def run(
     module_dir: Path,
     *,
@@ -78,7 +96,11 @@ async def run(
     max_turns: int = 40,
     slot: str | None = None,
     console: Console | None = None,
+    record: Path | None = None,
+    replay: Path | None = None,
 ) -> dict[str, Any]:
+    """`record` writes a cassette of the game (every reply and die); `replay` plays one
+    back with no model at all (harness/replay.py)."""
     console = console or Console()
     m = Module.load(module_dir)
     if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
@@ -87,7 +109,17 @@ async def run(
     slot = slot or f"auto-{m.id}-{time.strftime('%m%d-%H%M%S')}"
     trace.label_run(slot)
     state = Game.new(m, investigators, slot=slot, human=[])
-    cast = Cast(config.load(), m)
+    recorder = None
+    if replay is not None:
+        tape = tapes.cassette(replay)
+        cfg = config.Config(roles={r: Role("replay", str(replay), None) for r in config.DEFAULT_ROLES}, preset="replay")
+        dice: Any = tapes.ReplayDice(tape)
+    else:
+        cfg, dice = config.load(), shared()
+        if record is not None:
+            recorder = tapes.Recorder(record)
+            dice = tapes.RecordingDice(dice, recorder)
+    cast = Cast(cfg, m)
     out_dir = config.SAVES / "autoplay"
     out_dir.mkdir(parents=True, exist_ok=True)
     log = (out_dir / f"{slot}.jsonl").open("w", encoding="utf-8")
@@ -119,7 +151,7 @@ async def run(
         console.print(f"[yellow]⚠ {note}[/]")
 
     channels.listeners.append(fell_back)
-    game = Game(m, state, cast, Rules(), emit=emit)
+    game = Game(m, state, cast, Rules(dice=dice), emit=emit)
     app = turn_graph.build(game, InMemorySaver())
     party_app = party_graph(cast, state)
     thread = {"configurable": {"thread_id": slot}}
@@ -167,7 +199,10 @@ async def run(
         "investigators": [{"name": i.name, "hp": i.hp, "san": i.san, "conditions": i.conditions} for i in state.investigators],
         "usage": state.usage,
         "seconds": round(time.monotonic() - started, 1),
+        "fingerprint": fingerprint(state),
     }
+    if recorder is not None:
+        recorder.close(summary["fingerprint"])
     (out_dir / f"{slot}.summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     console.print(f"\n[bold]本局小结[/] {json.dumps({k: v for k, v in summary.items() if k != 'usage'}, ensure_ascii=False)}")
     return summary

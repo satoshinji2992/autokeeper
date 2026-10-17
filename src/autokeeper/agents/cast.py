@@ -49,6 +49,7 @@ class Ruling(BaseModel):
     auto_clues: list[str] = Field(default_factory=list, description="不用掷骰就能获得的线索 id")
     set_flags: list[str] = Field(default_factory=list, description="行动成功（或无需检定）时设置的剧情标记")
     minutes: int = Field(15, description="这次行动花的分钟数，赶路填 0；等待、休息、过夜按说的时长填，最多 720")
+    rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
     reason: str = Field("", description="一句话理由（玩家看不到）")
 
 
@@ -97,7 +98,8 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
 - 剧情标记只在行动真的达成了标记含义时设置，比如真的点火烧了戏本才设 script_burned；前提不具备（手里没有那样东西）就不设，也不掷骰。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
-- 等待、休息、睡觉（kind 为 wait）按说的时长给分钟数，比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
+- 等待、休息、睡觉（不管行动类别填的是什么，哪怕是对同伴说“先回去睡一觉”）把 rest 设为 true，按说的时长给分钟数，
+  比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
 
 {rules}"""
 

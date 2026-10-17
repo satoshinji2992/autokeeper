@@ -12,12 +12,15 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from .. import config
 
 if TYPE_CHECKING:
     from .models import Model, Reply
+
+taps: list[Callable[[Model, Reply, dict | None], None]] = []  # told of every answered call (replay.Recorder)
 
 RUN = os.environ.get("AUTOKEEPER_RUN") or f"{dt.datetime.now():%m%d-%H%M%S}-{os.getpid()}"
 
@@ -29,6 +32,9 @@ def label_run(name: str) -> None:
 
 
 def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | None, error: str = "") -> None:
+    if not error:
+        for tap in taps:
+            tap(model, reply, schema)
     level = os.environ.get("AUTOKEEPER_TRACE", "meta")
     if level == "off":
         return

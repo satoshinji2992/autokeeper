@@ -170,8 +170,10 @@ class Game:
             await self._flags(ruling.set_flags, turn)
         await self._gain(gained, turn, action)
 
-        # A night's sleep is legitimate; anything else that claims hours is capped.
-        st.minutes += max(0, min(ruling.minutes, WAIT_CAP if action.kind == "wait" else ACT_CAP))
+        # A night's sleep is legitimate; anything else that claims hours is capped. The arbiter
+        # says when it is a rest: "先回去睡一觉" said to a partner parses as talk, not wait.
+        resting = action.kind == "wait" or ruling.rest
+        st.minutes += max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
         await self._time(turn)
         await self._check_ending(turn)
         return turn

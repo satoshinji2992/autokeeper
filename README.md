@@ -30,6 +30,7 @@
   - **工具循环**：基于 LangGraph 的 think → act 循环，每步一个扁平 JSON，工作区沙箱化，不需要厂商的 tool calling。
   - **降级与熔断**：每个角色可配备用模型。主模型重试用完仍失败或超预算时自动切换，失败的模型冷却 5 分钟，期间所有 Agent 一起绕开它。
   - **可观测**：每次模型调用记一行追踪，`autokeeper trace` 按 Agent 汇总调用、token、缓存命中、延迟、修复、重试、降级和花费。
+  - **录制回放**：用真实模型录一局（每条回复、每颗骰子），CI 不调模型、不要密钥就能把整条回合流水线重放一遍，比对结局；引擎多调一次模型或多掷一颗骰子都会当场报错。
   - **其他**：搜索后端可插拔，可以离线；有预算护栏。
 - **多智能体回合图**（LangGraph）：
   - 回合流程：`intent → arbiter → resolve → talk → narrate → remember`；
@@ -262,7 +263,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `index DIR` / `ask DIR "问题"` | 建 LightRAG 知识库 / 向知识库提问 |
 | `check DIR` / `compile DIR` | 校验 / 编译成 Agent Skill 包 |
 | `art color DIR` / `art show DIR NAME` | 美术 Agent 上色 / 终端预览 |
-| `autoplay DIR --party N` | AI 调查员无界面自动跑团 |
+| `autoplay DIR --party N [--record/--replay 录像]` | AI 调查员无界面自动跑团；录下整局，或不调模型回放一局 |
 | `eval context` / `eval rhetoric` / `eval lore` | 上下文账本 / 修辞诱导对照 / 原文细节问答 |
 | `mcp` | 以 MCP 服务运行 |
 | `setup` / `doctor [--ping]` | 安装 / 环境检查：角色路由、密钥、搜索后端、花费，`--ping` 实测每个模型 |
