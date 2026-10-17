@@ -170,7 +170,8 @@ class Game:
             await self._flags(ruling.set_flags, turn)
         await self._gain(gained, turn, action)
 
-        st.minutes += max(0, min(ruling.minutes, 180))
+        # A night's sleep is legitimate; anything else that claims hours is capped.
+        st.minutes += max(0, min(ruling.minutes, WAIT_CAP if action.kind == "wait" else ACT_CAP))
         await self._time(turn)
         await self._check_ending(turn)
         return turn
@@ -537,6 +538,10 @@ class Game:
         if sky != st.sky:
             st.sky = sky
             await self.emit({"type": "sky", "sky": sky})
+
+
+ACT_CAP = 180  # minutes one action may take
+WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 
 
 def _check_view(c: Check) -> dict[str, Any]:

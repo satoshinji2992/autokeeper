@@ -157,6 +157,17 @@ async def test_narration_sets_the_sky_and_it_passes(module, fake):
     assert game.state.sky == "" and events[-1] == {"type": "sky", "sky": ""}
 
 
+async def test_a_night_of_sleep_passes_but_other_actions_are_capped(module, fake):
+    game, *_ = make(module, fake, {})
+    start = game.state.minutes
+    await game.resolve(Action(kind="investigate", summary="翻遍告示栏"), Ruling(needs_roll=False, minutes=600))
+    assert game.state.minutes - start == 180  # searching cannot swallow the day
+    fake.queue(10, 10)  # the evening sermon calls for a sanity check
+    turn = await game.resolve(Action(kind="wait", summary="回客栈睡到第二天"), Ruling(needs_roll=False, minutes=600))
+    assert game.state.minutes - start == 180 + 600
+    assert {"e_dusk", "e_sermon"} <= {e.id for e in turn.events}  # everything due on the way fires
+
+
 async def test_travel_time_and_timed_events(module, fake):
     game, *_ = make(module, fake, {}, location="tower")
     move = Action(kind="move", summary="去报社", destination="office")
