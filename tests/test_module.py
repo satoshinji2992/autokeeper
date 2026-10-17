@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import skills_ref
 
 from autokeeper.config import EXAMPLE
@@ -45,3 +49,11 @@ def test_custom_kg_for_lightrag_has_unique_names_and_no_self_loops():
     assert "守钟人的日记（手稿）" in names  # the handout shares its clue's title
     assert all(r["src_id"] != r["tgt_id"] for r in kg["relationships"])
     assert {"src_id", "tgt_id", "description", "keywords", "source_id"} <= set(kg["relationships"][0])
+
+
+def test_cli_prints_chinese_through_a_non_utf8_pipe():
+    """Windows pipes use the ANSI code page; the CLI must not crash on Chinese output."""
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    r = subprocess.run([sys.executable, "-m", "autokeeper", "check", str(EXAMPLE)], env=env, capture_output=True, timeout=120)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert "通过" in r.stdout.decode("utf-8")
