@@ -1,0 +1,281 @@
+"""Weather over a scene: rain, storms, snow, fog, wind-blown leaves, dust, embers,
+flickering lamps and a torch beam, animated on top of the picture or the ASCII art.
+
+Each frame is put together cell by cell. Light effects pick every cell from a graded copy
+of the scene (artkit.GRADES: the dark outside a torch beam, a fog veil, a lightning
+flash...), made once when the scene loads; particles are then drawn over it, keeping the
+background colour of the cell they cross. A location may name its weather in the module
+(Location.weather); otherwise it is read off the location's name and description.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+from dataclasses import dataclass
+
+import numpy as np
+from rich.style import Style
+from rich.text import Text
+
+from . import artkit
+
+KINDS = {
+    "rain": "雨",
+    "storm": "雷雨",
+    "snow": "雪",
+    "fog": "雾或烟",
+    "leaves": "风吹落叶",
+    "dust": "光里的浮尘",
+    "embers": "火星与火光",
+    "flicker": "灯火摇曳",
+    "torch": "只有手电或火把照亮",
+}
+# Graded copies each kind needs ("beam": the scene in plain white light, for a torch).
+GRADES_FOR = {"storm": ("flash",), "fog": ("haze", "haze2"), "embers": ("glow", "fade"), "flicker": ("glow", "fade"), "torch": ("beam", "dim")}
+LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash")  # index order of the layer map
+DUSK_TO_DAWN = {"清晨", "傍晚", "夜里", "深夜"}
+
+
+def infer(name: str, text: str, when: str = "") -> list[str]:
+    """Weather read off a location's name and description, at most two kinds."""
+    words = name + text
+
+    def has(*ws: str) -> bool:
+        return any(w in words for w in ws)
+
+    kinds = []
+    if has("雷", "闪电", "暴雨", "暴风雨"):
+        kinds.append("storm")
+    elif has("雨") and not has("雨停", "雨后", "雨过", "雨伞", "雨衣"):
+        kinds.append("rain")
+    if has("雪") and not has("雪白", "雪亮", "雪茄"):
+        kinds.append("snow")
+    if has("雾", "蒸汽") or (any(w in name for w in ("墓", "坟", "沼", "湖", "河", "林")) and when in DUSK_TO_DAWN):
+        kinds.append("fog")
+    if has("手电", "火把", "提灯", "马灯") and has("黑", "暗", "隧道", "地道", "地下", "洞", "地窖", "通道", "只能照"):
+        kinds.append("torch")
+    if has("叶") and has("飘", "旋", "落", "风"):
+        kinds.append("leaves")
+    if has("壁炉", "炉火", "篝火", "火堆", "火盆"):
+        kinds.append("embers")
+    if has("灰尘", "尘土", "积灰", "落满灰", "尘埃", "浮尘"):
+        kinds.append("dust")
+    if when in artkit.DARK and has("台灯", "油灯", "煤油灯", "蜡烛", "烛", "灯笼", "灯火", "路灯") and "torch" not in kinds:
+        kinds.append("flicker")
+    return kinds[:2]
+
+
+def grades(kinds: list[str]) -> list[str]:
+    """The graded copies these kinds need, besides the plain scene."""
+    return sorted({g for k in kinds for g in GRADES_FOR.get(k, ())})
+
+
+Cell = tuple[str, Style | None]
+
+
+def grid(text: Text, width: int, height: int) -> list[list[Cell]]:
+    """A scene as rows of (character, style), padded to the panel."""
+    rows: list[list[Cell]] = []
+    for line in text.split("\n", allow_blank=True)[:height]:
+        plain = line.plain
+        styles: list[Style | None] = [None] * len(plain)
+        for span in line.spans:
+            style = span.style if isinstance(span.style, Style) else Style.parse(span.style)
+            for i in range(span.start, min(span.end, len(plain))):
+                styles[i] = style
+        row = list(zip(plain, styles, strict=True))[:width]
+        rows.append(row + [(" ", None)] * (width - len(row)))
+    while len(rows) < height:
+        rows.append([(" ", None)] * width)
+    return rows
+
+
+@dataclass
+class Mote:
+    kind: str
+    x: float
+    y: float
+    vx: float
+    vy: float
+    glyph: str
+    color: str
+
+
+class Atmosphere:
+    """Composes frames for a scene; call frame() once per tick (about seven a second)."""
+
+    def __init__(self, kinds: list[str], layers: dict[str, Text], width: int, height: int, *, when: str = "", seed: int | None = None):
+        self.kinds, self.when = kinds, when
+        self.w, self.h = width, height
+        self.layers = {name: grid(t, width, height) for name, t in layers.items()}
+        self.rng = random.Random(seed)
+        self.t = 0
+        self.flash = 0  # frames of lightning left
+        self.level = ""  # flicker: "", "glow" or "fade" for the whole frame
+        self.motes = [m for k in kinds for m in self._spawn(k)]
+        self._styles: dict[tuple[str, object], Style] = {}
+        self.fog_style = Style(color="#2b313b" if when in artkit.DARK else "#4a5059")
+        self._lattice = np.random.default_rng(seed).random((24, 48))
+        self._ys, self._xs = np.mgrid[0:height, 0:width].astype(float)
+
+    # -- particles ---------------------------------------------------------------------------
+    def _spawn(self, kind: str) -> list[Mote]:
+        w, h, r = self.w, self.h, self.rng
+        night = self.when in artkit.DARK
+        if kind in ("rain", "storm"):
+            heavy = kind == "storm"
+            colour = "#4f6a8a" if night else "#9fb4c8"
+            return [self._drop(colour, heavy, top=False) for _ in range(max(8, w * h // (22 if heavy else 32)))]
+        if kind == "snow":
+            colour = "#a9b3c2" if night else "#eef3f8"
+            return [Mote(kind, r.uniform(0, w), r.uniform(0, h), 0, r.uniform(0.2, 0.45), r.choice("··*•"), colour) for _ in range(max(6, w * h // 40))]
+        if kind == "leaves":
+            colours = ("#c8752a", "#a0522d", "#d4a017", "#8b5a2b")
+            return [Mote(kind, r.uniform(0, w), r.uniform(0, h), r.uniform(0.6, 1.3), r.uniform(0.1, 0.35), r.choice("*~'`,"), r.choice(colours)) for _ in range(8 + w // 12)]
+        if kind == "dust":
+            colour = "#8c8068" if night else "#d8c9a3"
+            return [Mote(kind, r.uniform(0, w), r.uniform(0, h), 0, 0, r.choice("·.·'"), colour) for _ in range(8 + w // 8)]
+        if kind == "embers":
+            return [self._ember(top=False) for _ in range(6 + w // 14)]
+        return []
+
+    def _drop(self, colour: str, heavy: bool, *, top: bool = True) -> Mote:
+        r = self.rng
+        vy = r.uniform(1.6, 2.3) if heavy else r.uniform(1.0, 1.6)
+        return Mote("rain", r.uniform(0, self.w + self.h * 0.6), 0 if top else r.uniform(0, self.h), -vy * 0.45, vy, "/", colour)
+
+    def _ember(self, *, top: bool = True) -> Mote:
+        r = self.rng
+        return Mote("embers", r.uniform(self.w * 0.15, self.w * 0.85), self.h - 1 if top else r.uniform(0, self.h), 0, -r.uniform(0.35, 0.8), r.choice("·'*."), "#ffb347")
+
+    def _move(self) -> None:
+        r, w, h = self.rng, self.w, self.h
+        for i, m in enumerate(self.motes):
+            if m.kind == "rain":
+                m.x, m.y = m.x + m.vx, m.y + m.vy
+                if m.y >= h or m.x < 0:
+                    self.motes[i] = self._drop(m.color, m.vy > 1.6)
+            elif m.kind == "embers":  # rise, waver, cool from amber to red
+                m.x += r.uniform(-0.35, 0.35)
+                m.y += m.vy
+                m.color = "#ffb347" if m.y > h * 0.6 else "#e07a2e" if m.y > h * 0.3 else "#c0501a"
+                if m.y < 0:
+                    self.motes[i] = self._ember()
+            elif m.kind == "leaves":  # carried along by the wind, bobbing
+                m.x += m.vx
+                m.y += m.vy + 0.35 * math.sin(self.t * 0.4 + i)
+                if m.x >= w or m.y >= h or m.y < 0:
+                    m.x, m.y = r.uniform(-4, 0), r.uniform(0, h * 0.7)
+            elif m.kind == "snow":
+                m.x += r.uniform(-0.3, 0.3)
+                m.y += m.vy
+                if m.y >= h:
+                    m.x, m.y = r.uniform(0, w), 0
+            else:  # dust: a slow random walk
+                m.x = (m.x + r.uniform(-0.25, 0.25)) % w
+                m.y = (m.y + r.uniform(-0.12, 0.12)) % h
+
+    # -- light -------------------------------------------------------------------------------
+    def _noise(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """Smooth value noise in 0..1 over a fixed random lattice."""
+        lat = self._lattice
+        n, m = lat.shape
+        x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+        fx, fy = x - x0, y - y0
+        sx, sy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+        i0, i1, j0, j1 = y0 % n, (y0 + 1) % n, x0 % m, (x0 + 1) % m
+        top = lat[i0, j0] + (lat[i0, j1] - lat[i0, j0]) * sx
+        bottom = lat[i1, j0] + (lat[i1, j1] - lat[i1, j0]) * sx
+        return top + (bottom - top) * sy
+
+    def fog(self) -> np.ndarray:
+        """Fog density per cell: wide, flat banks drifting sideways, thicker near the ground."""
+        t, xs, ys = self.t, self._xs, self._ys
+        wide = self._noise(xs * 0.06 - t * 0.022, ys * 0.3)
+        fine = self._noise(xs * 0.15 - t * 0.045, ys * 0.6 + 7.3)
+        return 0.68 * wide + 0.32 * fine + 0.22 * (ys / max(1, self.h - 1) - 0.5)
+
+    def beam(self) -> tuple[float, float, float]:
+        """Torch: centre and radius of the light, sweeping slowly."""
+        t = self.t
+        return self.w * (0.5 + 0.12 * math.sin(t * 0.07)), self.h * (0.5 + 0.18 * math.sin(t * 0.11 + 1)), self.h * 0.5
+
+    def layer_map(self) -> tuple[np.ndarray, np.ndarray]:
+        """Which graded copy each cell shows (index into LAYERS), and where fog is thick
+        enough to fill empty cells."""
+        shape = (self.h, self.w)
+        index = np.full(shape, LAYERS.index(self.level), dtype=np.int8)
+        veil = np.zeros(shape, dtype=bool)
+        if self.flash:
+            return np.full(shape, LAYERS.index("flash"), dtype=np.int8), veil
+        if "fog" in self.kinds:
+            density = self.fog()
+            index[density > 0.5] = LAYERS.index("haze")
+            index[density > 0.62] = LAYERS.index("haze2")
+            veil = density > 0.7
+        if "torch" in self.kinds:
+            cx, cy, radius = self.beam()
+            d = np.hypot((self._xs - cx) * 0.5, self._ys - cy)
+            index[d <= radius * 0.7] = LAYERS.index("beam")
+            index[d > radius * 1.3] = LAYERS.index("dim")
+            veil &= d <= radius * 1.3
+        return index, veil
+
+    # -- one frame -------------------------------------------------------------------------
+    def step(self) -> None:
+        self.t += 1
+        self._move()
+        if "storm" in self.kinds:
+            if self.flash:
+                self.flash -= 1
+            elif self.rng.random() < 0.025:
+                self.flash = self.rng.choice((1, 2, 3))
+        if ("flicker" in self.kinds or "embers" in self.kinds) and self.rng.random() < 0.4:
+            self.level = self.rng.choice(("", "", "", "glow", "fade"))
+
+    def frame(self) -> Text:
+        self.step()
+        return self.compose()
+
+    def compose(self) -> Text:
+        index, veil = self.layer_map()
+        layers = [self.layers.get(name, self.layers[""]) for name in LAYERS]
+        dark = LAYERS.index("dim")
+        dots: dict[tuple[int, int], Mote] = {}
+        for m in self.motes:
+            x, y = int(m.x), int(m.y)
+            if 0 <= x < self.w and 0 <= y < self.h and (m.kind != "dust" or self.rng.random() < 0.75):  # dust twinkles
+                dots[x, y] = m
+        rows, fog_rows = index.tolist(), veil.tolist()
+        out = Text()
+        for y in range(self.h):
+            run: list[str] = []
+            run_style: Style | None = None
+            row, fog_row = rows[y], fog_rows[y]
+            for x in range(self.w):
+                which = row[x]
+                ch, style = layers[which][y][x]
+                if fog_row[x] and ch == " " and (style is None or style.bgcolor is None):
+                    ch, style = "░", self.fog_style
+                mote = dots.get((x, y))
+                if mote is not None and (which != dark or mote.kind == "embers"):
+                    ch, style = mote.glyph, self._over(mote.color, style)
+                if style is not run_style and run:
+                    out.append("".join(run), run_style)
+                    run = []
+                run_style = style
+                run.append(ch)
+            if run:
+                out.append("".join(run), run_style)
+            if y < self.h - 1:
+                out.append("\n")
+        return out
+
+    def _over(self, colour: str, under: Style | None) -> Style:
+        """A particle's colour over whatever background the cell already has."""
+        bg = under.bgcolor if under is not None else None
+        key = (colour, bg)
+        if key not in self._styles:
+            self._styles[key] = Style(color=colour, bgcolor=bg)
+        return self._styles[key]

@@ -97,8 +97,12 @@ class Session:
         msgs.append({"role": "user", "content": prompt})
         return msgs
 
-    async def send(self, prompt: str, *, extra: str = "", images: list[bytes] | None = None, on_delta: OnDelta = None) -> Reply:
+    async def send(
+        self, prompt: str, *, extra: str = "", remember: str | None = None, images: list[bytes] | None = None, on_delta: OnDelta = None
+    ) -> Reply:
         """`extra` is appended for this call only and never stored (corrections, reminders).
+        `remember` is what the transcript keeps instead of the prompt: a turn's long context
+        (scene, clue lists) need not be resent forever, only what was asked.
 
         Folding old turns runs in the background after the reply is out, so the player never
         waits for the summarizer; the next call waits for it instead."""
@@ -107,7 +111,8 @@ class Session:
         reply = await self.model.complete(window, schema=self.schema, images=images, on_delta=on_delta)
         if self.memory:
             answer = reply.text if self.schema is None else json.dumps(reply.data, ensure_ascii=False)
-            self.transcript += [{"role": "user", "content": prompt}, {"role": "assistant", "content": answer}]
+            kept = prompt if remember is None else remember
+            self.transcript += [{"role": "user", "content": kept}, {"role": "assistant", "content": answer}]
             if len(self.transcript) >= 4 and sum(len(m["content"]) for m in self.transcript) > self.memory:
                 self._folding = asyncio.create_task(self.compact())
         return reply

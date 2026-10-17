@@ -28,7 +28,9 @@
   - **上下文归 harness**：每个 Agent 的对话记录存进存档，按字符预算开窗，旧内容由摘要员折叠。窗口只往后追加，前缀缓存实测命中 60%–98%。
   - **结构化输出**：用厂商的 schema 模式或提示词 JSON，经 JSON Schema 校验，不合格修一轮。
   - **工具循环**：基于 LangGraph 的 think → act 循环，每步一个扁平 JSON，工作区沙箱化，不需要厂商的 tool calling。
-  - **其他**：搜索后端可插拔，可以离线；有预算护栏；每次模型调用记一行追踪。
+  - **降级与熔断**：每个角色可配备用模型。主模型重试用完仍失败或超预算时自动切换，失败的模型冷却 5 分钟，期间所有 Agent 一起绕开它。
+  - **可观测**：每次模型调用记一行追踪，`autokeeper trace` 按 Agent 汇总调用、token、缓存命中、延迟、修复、重试、降级和花费。
+  - **其他**：搜索后端可插拔，可以离线；有预算护栏。
 - **多智能体回合图**（LangGraph）：
   - 回合流程：`intent → arbiter → resolve → talk → narrate → remember`；
   - `interrupt` 把“孤注一掷 / 花幸运”交还给玩家；checkpointer 负责存档；
@@ -46,6 +48,7 @@
   - 场景、人物、手稿都是“图 + 同形状配色蒙版”；也可以用 chafa 把实景照片转成块字符；
   - 画面按游戏时间打光，从清晨到深夜共七档。照片调曝光、色调、加暗角；手绘线条只压暗一半，保证看得清；入夜后窗和灯反而更亮；
   - 照片不硬裁，主体完整居中，两侧用模糊压暗的同图铺满；
+  - 地点自带天气，叠在照片或手绘图上动起来：雨、雷雨、雪、雾、落叶、浮尘、炉火、灯影摇曳、手电光圈。模组可以写明，不写就从地点名和描述推断，比如夜里的墓地起雾、隧道里只有手电照亮；F6 关闭；
   - 进入新地点时画面逐行扫描显现，理智下降时画面会故障；
   - 可以用鼠标手绘，交给读图员（VLM）判断画得像不像。
 
@@ -64,6 +67,13 @@
 > - **白天的书房**：同一模组的上午。
 > - **手绘场景和头像**：来自用 `autokeeper generate` 生成的原创模组《多一人》。
 > - 仓库不附带任何官方模组。
+
+<p align="center"><img src="docs/img/weather.gif" width="100%" alt="场景里的天气：雾、手电、雷雨、炉火"></p>
+
+> **天气**（实际的渲染代码逐帧导出）：
+> - 深夜的公墓起雾，食尸鬼隧道里只有手电照亮。这两处都是按地点名和描述推断的。
+> - 雷雨大街、手绘 ASCII 书房里的炉火与浮尘，是写明了 `weather` 的效果。
+> - 每一帧逐格选用预先调好的几份画面（暗、雾、闪电、白光），再把雨、雪、落叶、火星画在上面，一帧 1–4 毫秒。
 
 ## Harness
 
@@ -160,6 +170,7 @@ flowchart LR
 | 渐进式披露 | 守秘人的常驻上下文（tiktoken o200k） | 14,067 → 平均 3,871 token（**−72.5%**） |
 | 原文细节问答 | 24 道题，守秘人分别拿总览 / 整本 / 检索结果作答 | 只给总览 29.2%；整本 95.8%（14.1k token）；LightRAG 检索 91.7%–95.8%，只用 6.2k–6.4k token |
 | 换后端跑同一局 | `autoplay`《追书人》，同一个 AI 调查员 | DeepSeek：4 回合 33 秒，缓存命中 64%；本地 gemma4-31b：2 回合 57 秒，离线（Python 进程只连了本机 Ollama） |
+| 完整一局 | `autoplay`《追书人》，DeepSeek，两名 AI 调查员 | 53 回合打到结局“最后一晚”：7 分 17 秒，237 次调用，0 次修复，缓存命中 74%，估算 $0.15。之前用 `trace` 查出摘要员占了 47% 的花费、队伍会卡在公墓，修完后每回合花费 **−43%**（[详见](docs/harness.md#用追踪找到的问题)） |
 | harness 驱动的模组生成 | DeepSeek flash，`generate`：联网考据 → 写模组 → 画图 → 校验 → 建库 | 20 分钟、115 步；335 万输入 token，**97.6%** 命中缓存；校验一次通过；含前面几局试玩在内，账户实际扣费 ¥1.05 |
 
 ## 快速开始
@@ -186,6 +197,8 @@ uv run autokeeper doctor --ping                       # 每个角色走哪个模
 uv run autokeeper --preset deepseek                   # DeepSeek：flash，思考强度按分工（需要 DEEPSEEK_API_KEY）
 AUTOKEEPER_MODEL=ollama:qwen3:14b uv run autokeeper --search none    # 全部换成本地模型，完全离线
 uv run autokeeper --budget 5 --preset deepseek generate "1931 年上海，一张没有标签的唱片" --id changpian
+uv run autokeeper --preset deepseek --fallback ollama:qwen3:14b      # DeepSeek 连不上或花超了，就换本地模型接着玩
+uv run autokeeper trace --run last                                   # 刚才那一局每个 Agent 花了多少、多快、缓存命中多少
 ```
 
 - **配置文件**：单个角色也可以单独改，写在 `autokeeper.toml` 或 `~/.config/autokeeper/config.toml`，比如裁定员换成 `deepseek-v4-pro`，或者 `[roles.all]` 指向自建的 OpenAI 兼容服务。字段见 [docs/harness.md](docs/harness.md#换模型)。
@@ -214,7 +227,7 @@ uv run autokeeper --budget 5 --preset deepseek generate "1931 年上海，一张
 | 直接说话 | “我拉开书桌抽屉”“我问守墓人最近见过谁”，交给 intent → arbiter |
 | `.ra 侦查` `.ra 困难聆听` `.rab 侦查` `.rap2 侦查` | 检定、指定难度、奖励骰、惩罚骰 |
 | `.sc 1/1d6` `.st 侦查60 hp-2` `.r 1d6+1` `.coc` `.en` `.ti` | 理智、改人物卡、掷骰、掷属性、成长、疯狂发作 |
-| F2 · F4 · F5 · Ctrl+R · Ctrl+T | 线索本与手稿 · 手绘 · 地图 · 上回书说到 · 换配色 |
+| F2 · F4 · F5 · F6 · Ctrl+R · Ctrl+T | 线索本与手稿 · 手绘 · 地图 · 天气动画 · 上回书说到 · 换配色 |
 
 ## 嵌入 Claude Code / Codex
 
@@ -242,7 +255,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | 命令 | 作用 |
 |---|---|
 | `autokeeper` / `play` / `serve` | 终端界面 / 浏览器 |
-| `--preset` `--model` `--search` `--budget` | 全局选项：模型预设、所有角色换成同一个模型、搜索后端、花费上限 |
+| `--preset` `--model` `--fallback` `--search` `--budget` | 全局选项：模型预设、所有角色换成同一个模型、备用模型、搜索后端、花费上限 |
 | `import FILE --id ID [--pages 8-19]` | 导入 Agent：读原文、结构化、画图、自校验、编译、建库 |
 | `generate "种子" --id ID` | 考据 Agent 联网查资料（也可离线），再原创一个模组 |
 | `research DIR` | 联网逐条核实考据卡 |
@@ -253,6 +266,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `eval context` / `eval rhetoric` / `eval lore` | 上下文账本 / 修辞诱导对照 / 原文细节问答 |
 | `mcp` | 以 MCP 服务运行 |
 | `setup` / `doctor [--ping]` | 安装 / 环境检查：角色路由、密钥、搜索后端、花费，`--ping` 实测每个模型 |
+| `trace [--run last] [--by model] [--runs]` | 汇总模型调用追踪：每个 Agent 的调用、token、缓存命中、延迟 p50/p95、修复、重试、降级、花费 |
 
 </details>
 

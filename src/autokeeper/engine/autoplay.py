@@ -21,6 +21,8 @@ from rich.console import Console
 
 from .. import config
 from ..agents.cast import Cast
+from ..harness import models as channels
+from ..harness import trace
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
 from ..rules.coc import Rules
@@ -83,6 +85,7 @@ async def run(
         compile_module(m, config.SKILLS)
     investigators = [p.model_copy(deep=True) for p in m.pregens[: max(1, party)]]
     slot = slot or f"auto-{m.id}-{time.strftime('%m%d-%H%M%S')}"
+    trace.label_run(slot)
     state = Game.new(m, investigators, slot=slot, human=[])
     cast = Cast(config.load(), m)
     out_dir = config.SAVES / "autoplay"
@@ -110,6 +113,10 @@ async def run(
         elif t == "ending":
             console.print(f"[bold reverse] 结局：{ev['title']} [/]\n{ev['text']}")
 
+    def fell_back(note: str) -> None:
+        console.print(f"[yellow]⚠ {note}[/]")
+
+    channels.listeners.append(fell_back)
     game = Game(m, state, cast, Rules(), emit=emit)
     app = turn_graph.build(game, InMemorySaver())
     party_app = party_graph(cast, state)
@@ -141,6 +148,7 @@ async def run(
                     inp = Command(resume="push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop")
                 game.emit = emit
     finally:
+        channels.listeners.remove(fell_back)
         await cast.close()
         log.close()
 

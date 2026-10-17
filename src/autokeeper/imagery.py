@@ -419,18 +419,29 @@ def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5) -> Image.
     return canvas
 
 
-def _prepared(path: str, width: int, height: int, when: str, fill: bool) -> Image.Image:
+def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
+    """A copy for the weather layer: torchlight and flicker exposures, fog, lightning."""
+    if name in artkit.GRADES:
+        return ImageEnhance.Brightness(im).enhance(artkit.GRADES[name])
+    if name in artkit.HAZE:
+        return Image.blend(im, Image.new("RGB", im.size, artkit.fog_colour(when)), artkit.HAZE[name])
+    if name == "flash":
+        return Image.blend(ImageEnhance.Brightness(im).enhance(1.6), Image.new("RGB", im.size, artkit.FLASH), 0.55)
+    return im
+
+
+def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded: str = "") -> Image.Image:
     im = Image.open(picture_source(path)).convert("RGB")
-    return light(frame(im, width, height) if fill else im, when)
+    return grade(light(frame(im, width, height) if fill else im, when), graded, when)
 
 
 @lru_cache(maxsize=256)
-def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False) -> str:
+def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False, graded: str = "") -> str:
     """ANSI text for a picture at the given character size, lit for `when`, optionally
-    cropped to fill the panel (cached per combination)."""
-    if not when and not fill:
+    cropped to fill the panel and graded for the weather layer (cached per combination)."""
+    if not when and not fill and not graded:
         return _chafa(picture_source(path), width, height, style)
-    return _chafa(_prepared(path, width, height, when, fill), width, height, style)
+    return _chafa(_prepared(path, width, height, when, fill, graded), width, height, style)
 
 
 def glitch(path: str, width: int, height: int, strength: float, style: str = "picture", when: str = "", fill: bool = False) -> str:

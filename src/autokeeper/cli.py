@@ -35,9 +35,10 @@ def main(
     model: Annotated[str | None, typer.Option(help="所有角色改用这个模型，如 ollama:qwen3:14b、deepseek:deepseek-flash")] = None,
     search: Annotated[str | None, typer.Option(help="联网搜索：auto / tavily / ddgs / wikipedia / none")] = None,
     budget: Annotated[float | None, typer.Option(help="按量计费 API 的花费上限（美元）")] = None,
+    fallback: Annotated[str | None, typer.Option(help="备用模型：主模型出错或超预算时改用它，如 ollama:qwen3:14b")] = None,
 ) -> None:
     # Environment, not globals: the browser server and every config.load() see the same choice.
-    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget)):
+    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
     if ctx.invoked_subcommand is None:
@@ -139,13 +140,13 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
         ok = False
         console.print(f"✗ BCDice: {exc}")
     table = Table(title=f"角色路由（预设：{cfg.preset}）", title_justify="left")
-    for col in ("角色", "后端", "模型", "思考", "上下文窗口"):
+    for col in ("角色", "后端", "模型", "思考", "上下文窗口", "备用"):
         table.add_column(col)
     for name in sorted(cfg.roles):
         r = cfg.role(name)
-        table.add_row(name, r.backend, r.model, str(r.effort or "关"), str(r.window or "默认"))
+        table.add_row(name, r.backend, r.model, str(r.effort or "关"), str(r.window or "默认"), r.fallback or "—")
     console.print(table)
-    routes = {(r.backend, r.model) for r in cfg.roles.values()}
+    routes = {(r.backend, r.model) for r in cfg.roles.values()} | {config.route(r.fallback) for r in cfg.roles.values() if r.fallback}
     if any(b == "claude" for b, _ in routes):
         found = shutil.which("claude")
         console.print(f"{'✓' if found else '·'} claude CLI: {found or '未找到（用 Agent SDK 自带的 CLI）'}")
@@ -179,6 +180,76 @@ async def _ping(routes: set[tuple[str, str]]) -> bool:
         finally:
             await m.close()
     return good
+
+
+def _count(x: float) -> str:
+    return f"{x / 1e6:.2f}M" if x >= 1e6 else f"{x / 1e3:.1f}k" if x >= 1e3 else f"{x:.0f}"
+
+
+def _usd(x: float) -> str:
+    return f"${x:.2f}" if x >= 0.995 else f"${x:.4f}"
+
+
+@app.command(name="trace")
+def trace_cmd(
+    run: Annotated[str | None, typer.Option(help="只看一次运行：运行编号（autoplay 用存档名），last 表示最近一次")] = None,
+    day: Annotated[str | None, typer.Option(help="哪天的追踪，如 2026-10-18；all 为全部；默认最近一天")] = None,
+    by: Annotated[str, typer.Option(help="按什么汇总：agent / model / backend / run")] = "agent",
+    runs: Annotated[bool, typer.Option("--runs", help="列出每次运行")] = False,
+) -> None:
+    """汇总模型调用追踪：每个 Agent 的调用、token、缓存命中、延迟、修复、重试、降级、错误和花费。"""
+    import datetime as dt
+
+    from rich import box
+    from rich.table import Table
+
+    from .harness import trace
+
+    rows = trace.read("all" if day is None and run not in (None, "last") else day)
+    if run:
+        name = trace.runs(rows)[-1]["run"] if run == "last" and rows else run
+        rows = [r for r in rows if r.get("run", "?") == name]
+    if not rows:
+        console.print(f"没有追踪记录（{config.SAVES / 'traces'}）")
+        raise typer.Exit(1)
+    if runs:
+        table = Table(box=box.SIMPLE_HEAD, padding=(0, 1))
+        for col in ("运行", "开始", "结束", "调用", "错误", "花费"):
+            table.add_column(col, justify="left" if col == "运行" else "right", no_wrap=col != "运行", overflow="fold")
+        for r in trace.runs(rows):
+            label = "（没有编号）" if r["run"] == "?" else r["run"]
+            table.add_row(label, r["start"].replace("T", " "), r["end"][11:], str(r["calls"]), str(r["errors"] or ""), _usd(r["cost"]))
+        console.print(table)
+        return
+    groups, total = trace.summarize(rows, by), trace.summarize(rows, None)[0]
+    if run:
+        first, last = dt.datetime.fromisoformat(rows[0]["at"]), dt.datetime.fromisoformat(rows[-1]["at"])
+        span = (last - first).total_seconds() + rows[0].get("seconds", 0)
+        scope = f"运行 {name} · 历时 {span // 60:.0f} 分 {span % 60:.0f} 秒"
+    else:
+        scope = f"{rows[0]['at'][:10]} 至 {rows[-1]['at'][:10]}" if day == "all" else rows[0]["at"][:10]
+    console.print(f"[bold]{scope}[/] · {total['calls']} 次调用 · 调用耗时合计 {total['seconds']:.0f}s · 花费 {_usd(total['cost'])}")
+    console.print(
+        f"输入 {_count(total['input'])} token（缓存命中 {total['cache_rate']:.0%}）· 输出 {_count(total['output'])} token"
+        + (f" · 思考 {_count(total['thinking'])} 字" if total["thinking"] else "")
+    )
+    extra = [(k, h) for k, h in (("repairs", "修复"), ("retries", "重试"), ("fallbacks", "降级"), ("errors", "错误")) if total[k]]
+    table = Table(box=box.SIMPLE_HEAD, padding=(0, 1))
+    table.add_column({"agent": "Agent", "model": "模型", "backend": "后端", "run": "运行"}.get(by, by), overflow="fold")
+    for col in ("调用", "输入", "缓存", "输出", *(h for _, h in extra), "延迟 p50/p95", "花费"):
+        table.add_column(col, justify="right", no_wrap=True)
+    for i, g in enumerate([*groups, total]):
+        if i == len(groups):
+            table.add_section()
+        key = g["key"].split(":", 1)[-1] if by == "model" else "（没有编号）" if g["key"] == "?" and by == "run" else g["key"]
+        table.add_row(
+            key, str(g["calls"]), _count(g["input"]), f"{g['cache_rate']:.0%}" if g["cached"] else "—", _count(g["output"]),
+            *(str(g[k]) if g[k] else "" for k, _ in extra), f"{g['p50']:.1f}/{g['p95']:.1f}s", _usd(g["cost"]),
+            style="bold" if i == len(groups) else None,
+        )
+    console.print(table)
+    if any(r.get("backend") == "claude" for r in rows):
+        console.print("[dim]Claude Code 的花费是它报告的等价 API 价，订阅登录时不另外计费；DeepSeek 按峰时价估算。[/]")
 
 
 @app.command()

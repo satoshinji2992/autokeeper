@@ -115,6 +115,80 @@ async def test_bad_requests_and_streamed_text_are_not_retried(flaky):
     assert seen == ["半句叙事"]  # the player saw half a sentence once, not twice
 
 
+@pytest.fixture
+def standby(flaky, monkeypatch):
+    """A flaky primary; fallbacks named claude:* land on the scripted backend."""
+    monkeypatch.setattr(hm, "_down", {})
+    monkeypatch.setitem(hm.MODELS, "claude", Scripted)
+    return flaky
+
+
+async def test_a_failing_model_hands_over_to_its_fallback(standby, monkeypatch):
+    notes: list[str] = []
+    monkeypatch.setattr(hm, "listeners", [notes.append])
+    Flaky.failures.extend([ConnectionError("down")] * hm.ATTEMPTS)
+    SCRIPT.extend(["备用模型接着讲", "还是备用模型"])
+    spec = Role("flaky", "flaky-model", "high", fallback="claude:scripted-model")
+    keeper = hm.make_model(spec, "守秘人", label="keeper")
+    assert keeper.fallback.spec == Role("claude", "scripted-model", "high")
+    reply = await keeper.complete([{"role": "user", "content": "继续"}])
+    assert reply.text == "备用模型接着讲" and len(notes) == 1 and "flaky-model" in notes[0]
+    Flaky.failures.append(AssertionError("the tripped model must not be called again"))
+    other = hm.make_model(spec, "NPC", label="npc")  # another agent on the same model skips it too
+    assert (await other.complete([{"role": "user", "content": "你好"}])).text == "还是备用模型"
+    rows = [json.loads(line) for line in (config.SAVES / "traces").glob("*.jsonl").__next__().read_text().splitlines()]
+    assert [r.get("fallback_for", "") for r in rows] == ["", "flaky-model", "flaky-model"]
+    assert "ConnectionError" in rows[0]["error"]
+
+
+async def test_no_fallback_once_the_player_has_read_part_of_a_reply(standby):
+    broken = TimeoutError("stalled mid-stream")
+    broken.after_text = True  # type: ignore[attr-defined]
+    Flaky.failures.append(broken)
+    seen: list[str] = []
+
+    async def show(piece: str) -> None:
+        seen.append(piece)
+
+    keeper = hm.make_model(Role("flaky", "flaky-model", None, fallback="claude:scripted-model"), "守秘人")
+    with pytest.raises(TimeoutError):
+        await keeper.complete([{"role": "user", "content": "继续"}], on_delta=show)
+    assert seen == ["半句叙事"]
+
+
+async def test_spent_budget_falls_back_to_a_free_model(standby, monkeypatch):
+    monkeypatch.setenv("AUTOKEEPER_BUDGET_USD", "0")
+    spend.budget.cache_clear()
+    SCRIPT.append("本地模型接手")
+    spec = Role("scripted", "deepseek:deepseek-flash", "low", fallback="claude:local-model")  # priced, so capped
+    reply = await hm.make_model(spec, "NPC").complete([{"role": "user", "content": "你好"}])
+    assert reply.text == "本地模型接手"
+
+
+def test_model_strings_route_to_channels():
+    assert config.route("claude-haiku-5-5") == ("claude", "claude-haiku-5-5")
+    assert config.route("claude:claude-opus-5-5") == ("claude", "claude-opus-5-5")
+    assert config.route("anthropic:claude-haiku-5-5") == ("langchain", "anthropic:claude-haiku-5-5")
+    assert config.route("ollama:qwen3:14b") == ("langchain", "ollama:qwen3:14b")
+
+
+def test_trace_summary_per_agent_and_run(monkeypatch):
+    from autokeeper.harness import trace
+
+    rows = [
+        {"at": "2026-10-18T05:00:00", "run": "a", "agent": "keeper", "input_tokens": 1000, "cache_read": 800, "output_tokens": 50, "seconds": 2.0, "cost_usd": 0.001},
+        {"at": "2026-10-18T05:00:03", "run": "a", "agent": "keeper", "input_tokens": 1200, "cache_read": 1000, "output_tokens": 60, "seconds": 4.0, "cost_usd": 0.001, "repairs": 1},
+        {"at": "2026-10-18T05:00:05", "run": "a", "agent": "npc", "input_tokens": 300, "seconds": 1.0, "error": "TimeoutError: x"},
+        {"at": "2026-10-18T06:00:00", "run": "b", "agent": "npc", "input_tokens": 300, "seconds": 1.0, "fallback_for": "deepseek:deepseek-flash"},
+    ]
+    keeper, npc = trace.summarize(rows)
+    assert (keeper["key"], keeper["calls"], keeper["cache_rate"], keeper["repairs"]) == ("keeper", 2, 1800 / 2200, 1)
+    assert (keeper["p50"], keeper["p95"]) == (2.0, 4.0) or (keeper["p50"], keeper["p95"]) == (4.0, 4.0)
+    assert (npc["errors"], npc["fallbacks"], npc["cache_rate"]) == (1, 1, 0.0)
+    assert [(r["run"], r["calls"], r["end"]) for r in trace.runs(rows)] == [("a", 3, "2026-10-18T05:00:05"), ("b", 1, "2026-10-18T06:00:00")]
+    assert trace.summarize(rows, None)[0]["calls"] == 4
+
+
 def test_prompted_json_carries_schema_and_example():
     text = hm.json_instruction(Action.model_json_schema())
     assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example
@@ -181,6 +255,15 @@ async def test_extra_is_sent_but_not_remembered_and_forget_drops_a_turn():
     await s.send("你知道什么？", extra="（系统提醒：别说秘密）")
     assert SEEN[-1]["messages"][-1]["content"].endswith("别说秘密）")
     assert [m["content"] for m in s.transcript] == ["你知道什么？", "我不知道"]
+
+
+async def test_remember_keeps_a_short_note_of_a_long_prompt():
+    s = Session("arbiter", SCRIPTED, "你是裁定员", memory=10_000)
+    SCRIPT.extend(["裁定一", "裁定二"])
+    await s.send("【行动】翻书桌\n【场景】……很长的场景、线索表和人物卡……", remember="【行动】翻书桌")
+    await s.send("【行动】看窗台\n【场景】……", remember="【行动】看窗台")
+    sent = [m["content"] for m in SEEN[-1]["messages"]]
+    assert sent == ["【行动】翻书桌", "裁定一", "【行动】看窗台\n【场景】……"]  # history short, this turn whole
 
 
 async def test_npc_leak_is_rolled_back_out_of_memory():

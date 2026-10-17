@@ -21,6 +21,7 @@ locations:
   - id: square
     name: 广场
     art: square
+    weather: [fog]
     read_aloud: 广场中央立着钟楼，告示栏上贴着一张泛黄的告示。
     keeper: 枢纽地点，去哪儿都从这里走。
     features: [告示栏, 钟楼大门]

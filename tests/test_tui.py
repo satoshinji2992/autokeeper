@@ -67,6 +67,44 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path):
         assert isinstance(app.screen, GameScreen)
         scene = app.screen.query_one(SceneArt)
         assert scene.when == "深夜" and scene.place
+        for _ in range(20):  # the scan-in, then the square's fog starts drifting
+            await pilot.pause(0.1)
+            if scene._atmo is not None and scene._atmo.t > 1:
+                break
+        assert scene._atmo is not None and scene._atmo.kinds == ["fog"] and scene._atmo.t > 1
+        await pilot.press("f6")
+        await pilot.pause(0.2)
+        assert scene._atmo is None  # weather off
+
+
+def test_weather_is_read_off_the_place_and_the_hour():
+    from autokeeper import atmosphere
+
+    assert atmosphere.infer("公墓", "墓碑之间点缀着灌木。", "深夜") == ["fog"]
+    assert atmosphere.infer("公墓", "墓碑之间点缀着灌木。", "上午") == []
+    assert atmosphere.infer("书房", "窗外就是公墓的树影。", "深夜") == []  # the graveyard is only out of the window
+    assert atmosphere.infer("隧道", "手电的光只能照出前面几步。", "上午") == ["torch"]
+    assert atmosphere.infer("大街", "梧桐叶子在人行道上打着旋。", "下午") == ["leaves"]
+    assert atmosphere.infer("图书馆", "长桌上方吊着绿罩台灯。", "深夜") == ["flicker"]
+    assert atmosphere.infer("码头", "雨后的石板路。", "下午") == []
+
+
+def test_weather_frames_keep_the_panel_and_light_the_torch_beam():
+    from autokeeper import atmosphere
+
+    art = Text("\n".join(["#" * 40] * 10), style="#808080")
+    dim = Text("\n".join(["#" * 40] * 10), style="#202020")
+    beam = Text("\n".join(["#" * 40] * 10), style="#ffffff")
+    a = atmosphere.Atmosphere(["torch", "dust"], {"": art, "dim": dim, "beam": beam}, 48, 12, when="深夜", seed=1)
+    frame = a.frame()
+    lines = frame.split("\n")
+    assert len(lines) == 12 and all(ln.cell_len == 48 for ln in lines)
+    index, _ = a.layer_map()
+    assert index[0, 0] == atmosphere.LAYERS.index("dim")  # a corner is outside the beam
+    cx, cy, _ = a.beam()
+    assert index[int(cy), int(cx)] == atmosphere.LAYERS.index("beam")
+    rain = atmosphere.Atmosphere(["rain"], {"": art}, 48, 12, seed=2)
+    assert "/" in rain.frame().plain
 
 
 def test_ascii_art_keeps_lamplight_after_dark():

@@ -8,9 +8,11 @@ Every agent role picks its own backend and model. A preset sets all of them at o
               DEEPSEEK_API_KEY.
 
 Pick one with `autokeeper --preset deepseek`, AUTOKEEPER_PRESET, or `preset = "deepseek"`
-in the config file. AUTOKEEPER_MODEL=ollama:qwen3:14b (any init_chat_model string) points
-every role at one model, e.g. a local server with no internet. Single roles are
-overridden in autokeeper.toml or ~/.config/autokeeper/config.toml:
+in the config file. AUTOKEEPER_MODEL=ollama:qwen3:14b (any init_chat_model string; a bare
+claude-* name means Claude Code) points every role at one model, e.g. a local server with
+no internet. AUTOKEEPER_FALLBACK names a model to switch to when a role's own model fails
+or the budget runs out. Single roles are overridden in autokeeper.toml or
+~/.config/autokeeper/config.toml:
 
     preset = "deepseek"
     search = "auto"            # auto | tavily | ddgs | wikipedia | none
@@ -18,6 +20,7 @@ overridden in autokeeper.toml or ~/.config/autokeeper/config.toml:
 
     [roles.all]                # applies to every role
     base_url = "http://localhost:8000/v1"
+    fallback = "ollama:qwen3:14b"
 
     [roles.npc]
     backend = "langchain"      # claude | langchain | codex
@@ -53,6 +56,17 @@ class Role:
     effort: str | None = "medium"
     base_url: str | None = None
     window: int = 0  # 0: the caller's default
+    fallback: str = ""  # model to switch to when this one fails or the budget runs out
+
+
+def route(model: str) -> tuple[str, str]:
+    """The channel a model string goes through: a bare claude-* name is Claude Code,
+    anything else is an init_chat_model string (deepseek:, ollama:, openai:, ...)."""
+    if model.startswith("claude:"):
+        return "claude", model.removeprefix("claude:")
+    if ":" not in model and model.startswith("claude-"):
+        return "claude", model
+    return "langchain", model
 
 
 OPUS = Role("claude", "claude-opus-5-5", "medium")
@@ -73,7 +87,7 @@ DEFAULT_ROLES: dict[str, Role] = {
 }
 
 
-def _deepseek(effort: str) -> Role:
+def _deepseek(effort: str | None) -> Role:
     return Role("langchain", "deepseek:deepseek-flash", effort)
 
 
@@ -81,7 +95,9 @@ PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
     "deepseek": {
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
-        **{r: _deepseek("low") for r in ("chronicler", "vision", "npc", "intent", "investigator", "lore", "summarizer")},
+        **{r: _deepseek("low") for r in ("chronicler", "vision", "npc", "intent", "investigator", "lore")},
+        # Summaries need no reasoning; with thinking on, half the summarizer's output was thinking.
+        "summarizer": _deepseek(None),
     },
 }
 
@@ -135,7 +151,10 @@ def load(path: Path | None = None) -> Config:
     roles = data.get("roles", {})
     every = dict(roles.get("all", {}))
     if os.environ.get("AUTOKEEPER_MODEL"):
-        every.update(backend="langchain", model=os.environ["AUTOKEEPER_MODEL"])
+        backend, model = route(os.environ["AUTOKEEPER_MODEL"])
+        every.update(backend=backend, model=model)
+    if os.environ.get("AUTOKEEPER_FALLBACK"):
+        every.update(fallback=os.environ["AUTOKEEPER_FALLBACK"])
     for name in set(DEFAULT_ROLES) | set(roles) - {"all"}:
         cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
     cfg.module = data.get("module", cfg.module)

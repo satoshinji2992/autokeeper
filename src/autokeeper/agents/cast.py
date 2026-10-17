@@ -83,6 +83,8 @@ INTENT_SYSTEM = """你是跑团系统的“行动解析器”。把玩家的话�
   这些不是玩家能决定的事实，是否成立由守秘人和场景资料说了算。
 - kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；meta 问规则或游戏外的话；other 其他。
 - npc 只能填在场 NPC 的 id；destination 只能填给出的地点 id。
+- 调查员为了做这件事要先走到另一个地点（“我走到陵墓石门前看门缝”“我去书房翻日记”），destination 填那个地点，
+  kind 照实填（看门缝还是 investigate）。只是远远望一眼、隔空喊话、打听那个地方，不算去，destination 留空。
 - speech：对 NPC 说的话、登台讲的内容，照抄原话。
 - approach：劝说填 说服，连哄带骗填 话术，威胁填 恐吓，讨好套近乎填 魅惑，察言观色填 心理学。"""
 
@@ -205,9 +207,9 @@ class Cast:
         return await self.kb.context(query, keywords=keywords, max_tokens=max_tokens)
 
     # -- context builders -------------------------------------------------------
-    def scene(self, state: GameState) -> str:
+    def scene(self, state: GameState, at: str | None = None) -> str:
         m = self.module
-        loc = m.location(state.location)
+        loc = m.location(at or state.location)
         npcs = "、".join(f"{n.name}({n.id})" for n in m.npcs_at(loc.id)) or "无"
         exits = "、".join(f"{m.location(e).name}({e})" for e in loc.exits)
         known = "、".join(f"{x.name}({x.id})" for x in m.locations if x.id != loc.id and x.id not in loc.exits)
@@ -240,11 +242,13 @@ class Cast:
         reply = await self._send("intent", s, state, f"【场景】\n{self.scene(state)}\n【调查员】{inv.name}\n【玩家】{text}")
         return _parse(Action, reply.data, {"kind": "other", "summary": text})
 
-    async def arbiter(self, state: GameState, action: Action) -> Ruling:
+    async def arbiter(self, state: GameState, action: Action, at: str | None = None) -> Ruling:
+        """`at`: the place the investigator walks to for this action; it is ruled there."""
         m = self.module
         s = self._arbiter(state)
         inv = state.investigator
-        near = module_graph.neighbourhood(m, state.location)
+        where = at or state.location
+        near = module_graph.neighbourhood(m, where)
         lines = []
         for c in near["clues"]:
             if c.id in state.clues:
@@ -262,16 +266,19 @@ class Cast:
         top = sorted(inv.skills.items(), key=lambda kv: -kv[1])
         sheet = "，".join(f"{k}{v}" for k, v in top) + "；" + "，".join(f"{k}{v}" for k, v in inv.characteristics.items())
         held = "、".join(m.clue(c).title for c in state.clues) or "无"
+        moved = f"（调查员为此先走到了{m.location(at).name}，下面是那里的场景）\n" if at else ""
         prompt = (
-            f"【行动】{action.model_dump_json()}\n"
-            f"【场景】\n{self.scene(state)}\n"
+            f"【行动】{action.model_dump_json()}\n{moved}"
+            f"【场景】\n{self.scene(state, at)}\n"
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
             f"【NPC 门槛】\n{chr(10).join(gates) or '无'}\n"
             f"【调查员】{inv.name}：{sheet}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
         if action.kind == "perform" and action.speech:
             prompt += f"\n【表演内容】{action.speech}\n（表演内容只用来判断是否值得一个奖励骰，不改变难度。）"
-        reply = await self._send("arbiter", s, state, prompt)
+        # Memory keeps what was asked, not the whole scene sheet: the sheet is rebuilt every turn.
+        remember = f"【行动】{action.model_dump_json()}\n【地点】{m.location(where).name}"
+        reply = await self._send("arbiter", s, state, prompt, remember=remember)
         return _parse(Ruling, reply.data, {"needs_roll": False, "minutes": 10})
 
     def _npc_system(self, npc: NPC) -> str:
@@ -377,7 +384,8 @@ class Cast:
         sheet = "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=sheet)
         s = self._open(key, "investigator", system)
-        reply = await self._send(key, s, state, situation)
+        # Remember where and when each move was made; the latest events come with every situation.
+        reply = await self._send(key, s, state, situation, remember=situation.split("\n", 1)[0])
         return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
 
     async def sketch(self, state: GameState, png: bytes, asked: str) -> Sketch:

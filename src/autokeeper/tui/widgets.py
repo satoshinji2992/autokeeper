@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from functools import partial
 
 from rich.console import Group
@@ -11,7 +12,7 @@ from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from .. import artkit, imagery
+from .. import artkit, atmosphere, imagery
 from ..rules.coc import Investigator
 from . import art
 
@@ -38,9 +39,11 @@ def center(art_text: Text, width: int) -> Text:
 class SceneArt(Static):
     """Location name and its art: a real picture rendered by chafa to fill the panel, or the
     hand-drawn ASCII fallback. Both are lit for the time of day (artkit.LIGHTS), scan in when
-    the party arrives somewhere new, and glitch when sanity drops."""
+    the party arrives somewhere new, carry the place's weather (atmosphere.py) and glitch
+    when sanity drops."""
 
     HEIGHT = 15
+    TICK = 0.15  # weather frames, about seven a second
 
     def __init__(self, **kw):
         super().__init__("", **kw)
@@ -48,21 +51,35 @@ class SceneArt(Static):
         self.picture = ""
         self.mask: str | None = None
         self.image: str | None = None
+        self.weather: list[str] = []  # the module's own; empty: read off the description
+        self.description = ""
         self.style_name = "picture"
         self.when = ""  # time of day, lights the art
+        self.effects = True  # weather animation, F6
         self.madness = 0.0
         self._burst = 0
         self._art: Text | None = None  # the current art, ready to paint
+        self._atmo: atmosphere.Atmosphere | None = None
+        self._hold = 0.0  # weather waits until then (a glitch or a flicker owns the panel)
+        self._width = 0
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
+        self.set_interval(self.TICK, self._weather)
 
     def on_resize(self) -> None:
-        self._refresh()
+        # Only a new width needs new art: height follows the content, so reacting to it
+        # would rebuild the scene every time a frame is painted.
+        if self.size.width != self._width:
+            self._width = self.size.width
+            self._refresh()
 
-    def show(self, place: str, picture: str, mask: str | None = None, image: str | None = None) -> None:
+    def show(
+        self, place: str, picture: str, mask: str | None = None, image: str | None = None, *, weather: list[str] | None = None, description: str = ""
+    ) -> None:
         arrived = place != self.place
         self.place, self.picture, self.mask, self.image = place, picture, mask, image
+        self.weather, self.description = list(weather or []), description
         self._refresh(reveal=arrived)
 
     def set_light(self, when: str) -> None:
@@ -70,19 +87,32 @@ class SceneArt(Static):
             self.when = when
             self._refresh()
 
+    def toggle_effects(self) -> bool:
+        self.effects = not self.effects
+        self._refresh()
+        return self.effects
+
+    def kinds(self) -> list[str]:
+        """The weather on screen now: the module's, else read off the place for this hour."""
+        if not self.effects or not (self.picture or self._uses_image()):
+            return []
+        return self.weather[:2] or atmosphere.infer(self.place, self.description, self.when)
+
     def _fit(self) -> tuple[int, int]:
         return max(24, (self.size.width or 72) - 2), self.HEIGHT
 
     def _uses_image(self) -> bool:
         return bool(self.image) and imagery.available()
 
-    def _draw(self, rate: float = 0.0) -> Text:
-        """The art alone, lit and centred. Pictures go through chafa, so call off the UI thread."""
+    def _draw(self, rate: float = 0.0, graded: str = "") -> Text:
+        """The art alone, lit and centred. Pictures go through chafa, so call off the UI thread.
+        `graded` makes a copy for the weather layer; "beam" is plain white light (a torch)."""
         w, h = self._fit()
+        when, graded = ("", "") if graded == "beam" else (self.when, graded)
         if self._uses_image():
-            return center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, self.when, True)), w)
+            return center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded)), w)
         if self.picture:
-            return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=self.when), w)
+            return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w)
         return Text()
 
     def _title(self) -> Text:
@@ -92,8 +122,10 @@ class SceneArt(Static):
             t.append(f"   {LIGHT_MARK.get(self.when, '')} {self.when}", style="dim")
         return t
 
-    def _paint(self, rate: float = 0.0, frame: str | None = None, rows: int | None = None) -> None:
-        if frame is not None:
+    def _paint(self, rate: float = 0.0, frame: str | None = None, rows: int | None = None, art_text: Text | None = None) -> None:
+        if art_text is not None:
+            pass
+        elif frame is not None:
             art_text = center(Text.from_ansi(frame), self._fit()[0])
         elif rate or self._art is None:
             art_text = self._draw(rate) if not self._uses_image() else (self._art or Text())
@@ -108,14 +140,30 @@ class SceneArt(Static):
     def _refresh(self, reveal: bool = False) -> None:
         self.run_worker(partial(self._load, reveal), exclusive=True, group="art")
 
+    def _build(self, kinds: list[str]) -> tuple[Text, atmosphere.Atmosphere | None]:
+        """The lit art, and the weather over it with the graded copies it needs (thread)."""
+        base = self._draw()
+        if not kinds or not base.plain.strip():
+            return base, None
+        w, h = self._fit()[0], len(base.split("\n"))  # as tall as the art, so the panel keeps its size
+        layers = {"": base} | {g: self._draw(graded=g) for g in atmosphere.grades(kinds)}
+        return base, atmosphere.Atmosphere(kinds, layers, w, h, when=self.when)
+
     async def _load(self, reveal: bool) -> None:
-        self._art = await asyncio.to_thread(self._draw)
+        self._atmo = None  # no weather over a half-loaded scene
+        self._art, atmo = await asyncio.to_thread(self._build, self.kinds())
         if reveal:
             total = len(self._art.split("\n"))
             for rows in range(0, total, 2):
                 self._paint(rows=rows)
                 await asyncio.sleep(0.035)
-        self._paint()
+        self._atmo = atmo
+        self._paint(art_text=atmo.compose() if atmo else None)
+
+    def _weather(self) -> None:
+        if self._atmo is None or self._burst or time.monotonic() < self._hold:
+            return
+        self._paint(art_text=self._atmo.frame())
 
     def glitch(self, frames: int = 14) -> None:
         self.add_class("dread")
@@ -127,11 +175,15 @@ class SceneArt(Static):
 
     async def _picture_glitch(self, frames: int) -> None:
         w, h = self._fit()
-        for i in range(frames):
-            strength = 1.0 - i / frames
-            frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name, self.when, True)
-            self._paint(frame=frame)
-            await asyncio.sleep(0.05)
+        self._hold = time.monotonic() + 60  # until the glitch is over
+        try:
+            for i in range(frames):
+                strength = 1.0 - i / frames
+                frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name, self.when, True)
+                self._paint(frame=frame)
+                await asyncio.sleep(0.05)
+        finally:
+            self._hold = 0.0
         self.remove_class("dread")
         self._paint()
 
@@ -150,6 +202,7 @@ class SceneArt(Static):
         if self._uses_image():
             self.run_worker(partial(self._picture_glitch, 2), exclusive=True, group="art")
             return
+        self._hold = time.monotonic() + 0.12
         self._paint(0.03 + self.madness * 0.08)
         self.set_timer(0.12, self._paint)
 

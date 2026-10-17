@@ -68,6 +68,35 @@ DEFAULT_INK = "#c8c8c8"  # unmasked strokes, so they take the light too
 GLOW = set("oyYW")  # lamplight, candles, lit windows: they stay bright after dark
 DARK = {"傍晚", "夜里", "深夜"}
 
+# Graded copies of a scene for the weather layer (atmosphere.py): exposure multipliers for
+# torchlight and flicker, a fog veil, a lightning flash. Shared by pictures and ASCII.
+GRADES: dict[str, float] = {"dim": 0.24, "half": 0.55, "glow": 1.18, "fade": 0.8}
+HAZE: dict[str, float] = {"haze": 0.24, "haze2": 0.44}  # thin and thick fog
+FLASH = (228, 234, 255)
+
+
+def fog_colour(when: str) -> tuple[int, int, int]:
+    return (92, 104, 128) if when in DARK else (198, 204, 210)
+
+
+def regrade(color: str, grade: str, when: str = "") -> str:
+    """One colour in a graded copy of the scene (see GRADES; also "haze" and "flash")."""
+    if not grade:
+        return color
+
+    def one(m: re.Match) -> str:
+        rgb = [int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4)]
+        if grade in GRADES:
+            rgb = [c * GRADES[grade] for c in rgb]
+        elif grade in HAZE:
+            a = HAZE[grade]
+            rgb = [c * (1 - a) + f * a for c, f in zip(rgb, fog_colour(when), strict=True)]
+        elif grade == "flash":
+            rgb = [min(255, c * 1.6) * 0.45 + f * 0.55 for c, f in zip(rgb, FLASH, strict=True)]
+        return "#" + "".join(f"{max(0, min(255, round(c))):02x}" for c in rgb)
+
+    return _HEX.sub(one, color)
+
 
 def shade(color: str, when: str, *, strokes: bool = False) -> str:
     """One colour seen under the light of `when`: exposure, saturation, tint.
@@ -91,15 +120,19 @@ def shade(color: str, when: str, *, strokes: bool = False) -> str:
     return _HEX.sub(one, color)
 
 
-def colorize(text: str, mask: str | None = None, default: str = "", *, when: str = "") -> Text:
+def colorize(text: str, mask: str | None = None, default: str = "", *, when: str = "", grade: str = "") -> Text:
     """Coloured ASCII; `when` (清晨 … 深夜) lights it for the time of day. After dark the
-    light sources (GLOW keys) keep their colour, so lit windows and lamps stand out."""
+    light sources (GLOW keys) keep their colour, so lit windows and lamps stand out.
+    `grade` makes one of the weather layer's copies (GRADES, "haze", "flash")."""
     mask = mask if mask is not None else auto_mask(text)
     palette = PALETTE
     if when:
         palette = {k: v if when in DARK and k in GLOW else shade(v, when, strokes=True) for k, v in PALETTE.items()}
     if when and not default:
         default = shade(DEFAULT_INK, when, strokes=True)
+    if grade:
+        palette = {k: regrade(v, grade, when) for k, v in palette.items()}
+        default = regrade(default or DEFAULT_INK, grade, when)
     out = Text()
     mlines = mask.split("\n")
     for i, line in enumerate(text.split("\n")):

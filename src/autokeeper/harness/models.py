@@ -21,6 +21,10 @@ The contract belongs to the harness, not the provider:
     thinking           Role.effort is mapped to each provider's own knob. Reasoning text
                        comes back in Reply.thinking for traces and is never resent.
     spend              metered calls pass the budget guard and land in the ledger.
+    fallback           a role may name a second model (Role.fallback). When the first one
+                       still fails after its retries, or the budget is spent, the call goes
+                       to the fallback, and the failed model is skipped for COOLDOWN seconds
+                       so every agent switches at once instead of each waiting it out.
 """
 
 from __future__ import annotations
@@ -35,7 +39,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..config import SESSIONS, Role, load_env
+from ..config import SESSIONS, Role, load_env, route
 from . import spend, trace
 
 OnDelta = Callable[[str], Awaitable[None]] | None
@@ -78,6 +82,11 @@ def transient(exc: BaseException) -> bool:
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return True
     return any(n in type(exc).__name__ for n in TRANSIENT_NAMES)
+
+
+COOLDOWN = 300.0  # seconds a failed model is skipped in favour of its fallback
+_down: dict[tuple, float] = {}  # (backend, model, base_url) -> when to try it again
+listeners: list[Callable[[str], None]] = []  # told when a role switches to its fallback
 
 
 # -- structured output -----------------------------------------------------------------
@@ -137,6 +146,8 @@ REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完�
 # -- the channel contract -----------------------------------------------------------------
 class Model:
     mode = "native"  # how structured output is obtained: native | json
+    fallback: Model | None = None
+    standby_for = ""  # on a fallback: the model it stands in for (shows in traces)
 
     def __init__(self, spec: Role, system: str, *, label: str = ""):
         self.spec, self.system, self.label = spec, system, label or spec.model
@@ -147,6 +158,29 @@ class Model:
     async def complete(
         self, messages: list[Msg], *, schema: dict | None = None, images: list[bytes] | None = None, on_delta: OnDelta = None
     ) -> Reply:
+        if self.fallback is None:
+            return await self._complete(messages, schema=schema, images=images, on_delta=on_delta)
+        key = (self.spec.backend, self.spec.model, self.spec.base_url)
+        if time.monotonic() < _down.get(key, 0.0):
+            return await self.fallback.complete(messages, schema=schema, images=images, on_delta=on_delta)
+        shown = False
+
+        async def watch(piece: str) -> None:
+            nonlocal shown
+            shown = True
+            await on_delta(piece)  # type: ignore[misc]
+
+        try:
+            return await self._complete(messages, schema=schema, images=images, on_delta=watch if on_delta else None)
+        except Exception as exc:
+            if shown:  # the player already read part of this reply; starting over would repeat it
+                raise
+            _down[key] = time.monotonic() + COOLDOWN
+            for tell in listeners:
+                tell(f"{self.spec.model} 出错（{type(exc).__name__}），{self.label} 等角色改用备用模型 {self.fallback.spec.model}")
+            return await self.fallback.complete(messages, schema=schema, images=images, on_delta=on_delta)
+
+    async def _complete(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
         spend.guard(self.spec.model)
         started = time.monotonic()
         reply, error = Reply(), ""
@@ -202,7 +236,8 @@ class Model:
         return None
 
     async def close(self) -> None:
-        return None
+        if self.fallback is not None:
+            await self.fallback.close()
 
 
 # -- Claude Code ----------------------------------------------------------------------------
@@ -336,6 +371,7 @@ class ClaudeCodeModel(Model):
                 pass
         self._clients.clear()
         self._wiping.clear()
+        await super().close()
 
 
 # -- LangChain ------------------------------------------------------------------------------
@@ -457,7 +493,12 @@ def make_model(spec: Role, system: str, *, label: str = "") -> Model:
         cls = MODELS[spec.backend]
     except KeyError:
         raise ValueError(f"未知后端：{spec.backend}（可选：{', '.join(MODELS)}）") from None
-    return cls(spec, system, label=label)
+    model = cls(spec, system, label=label)
+    if spec.fallback:
+        backend, name = route(spec.fallback)
+        model.fallback = make_model(Role(backend, name, spec.effort, window=spec.window), system, label=label)
+        model.fallback.standby_for = spec.model
+    return model
 
 
 class ModelPool:

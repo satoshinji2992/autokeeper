@@ -26,6 +26,7 @@ from ..agents.cast import Cast
 from ..engine import graph as turn_graph
 from ..engine.game import Game
 from ..engine.state import GameState, time_of_day
+from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
 from ..rules.coc import Investigator, Rules
@@ -338,6 +339,7 @@ class GameScreen(Screen):
         Binding("ctrl+r", "recap", "上回书说到"),
         Binding("ctrl+s", "save", "存档"),
         Binding("ctrl+a", "art_style", "画法"),
+        Binding("f6", "weather", "天气"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -373,6 +375,7 @@ class GameScreen(Screen):
         self.engine_label = f"{cfg.preset} · 守秘人 {keeper.model.split(':', 1)[-1]}"
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
+        channels.listeners.append(self._fell_back)
         config.SAVES.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(config.SAVES / "checkpoints.sqlite")
         saver = AsyncSqliteSaver(self._db)
@@ -386,12 +389,17 @@ class GameScreen(Screen):
         self.boot()
 
     async def on_unmount(self) -> None:
+        if self._fell_back in channels.listeners:
+            channels.listeners.remove(self._fell_back)
         if self.cast:
             await self.cast.close()
         if getattr(self, "_db", None):
             await self._db.close()
 
     # -- helpers ---------------------------------------------------------------------------
+    def _fell_back(self, note: str) -> None:
+        self.app.notify(note, title="改用备用模型", severity="warning", timeout=12)
+
     @property
     def story(self) -> StoryLog:
         return self.query_one(StoryLog)
@@ -419,7 +427,9 @@ class GameScreen(Screen):
         scene = self.query_one(SceneArt)
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
-        scene.show(loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name), self.m.pictures.get(name))
+        scene.show(
+            loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name), self.m.pictures.get(name), weather=loc.weather, description=loc.read_aloud
+        )
         self._topbar()
 
     def on_resize(self, event) -> None:
@@ -433,6 +443,10 @@ class GameScreen(Screen):
         self.app.notify(f"画面：{'纯 ASCII' if self.app.art_style == 'ascii' else '块字符'}")  # type: ignore[attr-defined]
         self._scene(self.state.location)
         self._panels()
+
+    def action_weather(self) -> None:
+        on = self.query_one(SceneArt).toggle_effects()
+        self.app.notify(f"天气动画：{'开' if on else '关'}")
 
     def _topbar(self) -> None:
         st = self.state

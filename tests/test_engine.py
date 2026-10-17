@@ -29,7 +29,8 @@ class FakeCast:
     async def intent(self, state, text):
         return self.script[text][0]
 
-    async def arbiter(self, state, action):
+    async def arbiter(self, state, action, at=None):
+        self.ruled_at = at
         return next(r for a, r in self.script.values() if a == action)
 
     async def npc(self, state, npc_id, message):
@@ -123,6 +124,19 @@ async def test_arbiter_cannot_hand_out_clues_from_elsewhere(module, fake):
     game, *_ = make(module, fake, {"x": (look, ruling)})
     turn = await game.resolve(look, ruling)
     assert turn.clues == [] and game.state.clues == []
+
+
+async def test_walking_somewhere_to_act_moves_the_party_first(module, fake):
+    look = Action(kind="investigate", summary="周衡走到钟楼楼梯口查看齿轮间", target="齿轮", destination="tower")
+    ruling = Ruling(needs_roll=False, auto_clues=["c_gears"], minutes=10)
+    game, cast, events = make(module, fake, {"我去钟楼看看齿轮": (look, ruling)})
+    assert await game.rule(look) == ruling and cast.ruled_at == "tower"  # ruled with the tower's clue list
+    fake.queue(10)  # the gears call for a sanity check
+    turn = await game.resolve(look, ruling)
+    assert game.state.location == "tower" and turn.arrived == "tower" and turn.clues == ["c_gears"]
+    assert [e["name"] for e in events if e["type"] == "move"] == ["钟楼"]
+    gaze = Action(kind="investigate", summary="周衡远远望着报社", destination="nowhere")
+    assert game._heading(gaze) is None  # unknown places do not move anyone
 
 
 async def test_travel_time_and_timed_events(module, fake):

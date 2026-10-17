@@ -112,7 +112,15 @@ class Game:
         if action.kind == "move" and action.destination:
             return Ruling(needs_roll=False, minutes=0, reason="移动")
         await self.emit({"type": "status", "text": "裁定中…"})
-        return await self.cast.arbiter(self.state, action)
+        return await self.cast.arbiter(self.state, action, at=self._heading(action))
+
+    def _heading(self, action: Action) -> str | None:
+        """Where an action happens when the investigator walks somewhere to do it ("I go up to
+        the tomb door and check the seams"): a reachable place other than here."""
+        dst = action.destination
+        if action.kind == "move" or not dst or dst == self.state.location or self._travel(self.state.location, dst) is None:
+            return None
+        return dst
 
     async def resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         st, _m = self.state, self.m
@@ -121,14 +129,15 @@ class Game:
         if action.kind == "meta" or ruling is None:
             return turn
 
-        # movement
-        if action.kind == "move" and action.destination:
-            minutes = self._travel(st.location, action.destination)
+        # movement: a plain move, or walking somewhere to do something there (ruled there)
+        heading = action.destination if action.kind == "move" else self._heading(action)
+        if heading:
+            minutes = self._travel(st.location, heading)
             if minutes is None:
-                turn.notes.append(f"去不了“{action.destination}”")
+                turn.notes.append(f"去不了“{heading}”")
             else:
                 st.minutes += minutes
-                await self._arrive(action.destination, turn)
+                await self._arrive(heading, turn)
 
         # the check
         passed = not ruling.needs_roll

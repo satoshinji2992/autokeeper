@@ -68,6 +68,11 @@ class Location(BaseModel):
     features: list[str] = Field(default_factory=list, description="可以调查的东西")
     exits: list[str] = Field(default_factory=list)
     art: str | None = None
+    weather: list[Literal["rain", "storm", "snow", "fog", "leaves", "dust", "embers", "flicker", "torch"]] = Field(
+        default_factory=list,
+        description="画面上的天气与光：rain 雨、storm 雷雨、snow 雪、fog 雾或烟、leaves 风吹落叶、dust 光里的浮尘、"
+        "embers 火星与火光、flicker 灯火摇曳、torch 只有手电或火把照亮；最多两种，不写就按名字和描述推断",
+    )
 
 
 class Handout(BaseModel):
