@@ -427,6 +427,8 @@ def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
         return Image.blend(im, Image.new("RGB", im.size, artkit.fog_colour(when)), artkit.HAZE[name])
     if name == "flash":
         return Image.blend(ImageEnhance.Brightness(im).enhance(1.6), Image.new("RGB", im.size, artkit.FLASH), 0.55)
+    if name == "red":
+        return ImageOps.colorize(im.convert("L"), black=(18, 0, 0), white=(255, 70, 48))
     return im
 
 

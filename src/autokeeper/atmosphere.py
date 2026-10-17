@@ -20,8 +20,15 @@ from rich.text import Text
 from . import artkit
 
 # Graded copies each kind needs ("beam": the scene in plain white light, for a torch).
-GRADES_FOR = {"storm": ("flash",), "fog": ("haze", "haze2"), "embers": ("glow", "fade"), "flicker": ("glow", "fade"), "torch": ("beam", "dim")}
-LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash")  # index order of the layer map
+GRADES_FOR = {
+    "storm": ("flash",),
+    "fog": ("haze", "haze2"),
+    "embers": ("glow", "fade"),
+    "flicker": ("glow", "fade"),
+    "torch": ("beam", "dim"),
+    "redlight": ("red",),
+}
+LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash", "red")  # index order of the layer map
 
 
 def grades(kinds: list[str]) -> list[str]:
@@ -73,7 +80,9 @@ class Atmosphere:
         self.level = ""  # flicker: "", "glow" or "fade" for the whole frame
         self.motes = [m for k in kinds for m in self._spawn(k)]
         self._styles: dict[tuple[str, object], Style] = {}
-        self.fog_style = Style(color="#2b313b" if when in artkit.DARK else "#4a5059")
+        night = when in artkit.DARK
+        self.fog_edge = Style(color="#23282f" if night else "#3a3f46")  # thin fog over empty cells
+        self.fog_core = Style(color="#30363f" if night else "#525860")
         self._lattice = np.random.default_rng(seed).random((24, 48))
         self._ys, self._xs = np.mgrid[0:height, 0:width].astype(float)
 
@@ -160,25 +169,33 @@ class Atmosphere:
         return self.w * (0.5 + 0.12 * math.sin(t * 0.07)), self.h * (0.5 + 0.18 * math.sin(t * 0.11 + 1)), self.h * 0.5
 
     def layer_map(self) -> tuple[np.ndarray, np.ndarray]:
-        """Which graded copy each cell shows (index into LAYERS), and where fog is thick
-        enough to fill empty cells."""
+        """Which graded copy each cell shows (index into LAYERS), and how thick the fog over
+        an empty cell is: 0 none, 1 thin, 2 thick."""
         shape = (self.h, self.w)
-        index = np.full(shape, LAYERS.index(self.level), dtype=np.int8)
-        veil = np.zeros(shape, dtype=bool)
+        index = np.full(shape, LAYERS.index("red" if "redlight" in self.kinds else self.level), dtype=np.int8)
+        veil = np.zeros(shape, dtype=np.int8)
         if self.flash:
             return np.full(shape, LAYERS.index("flash"), dtype=np.int8), veil
         if "fog" in self.kinds:
             density = self.fog()
             index[density > 0.5] = LAYERS.index("haze")
             index[density > 0.62] = LAYERS.index("haze2")
-            veil = density > 0.7
+            veil[density > 0.68] = 1
+            veil[density > 0.78] = 2
         if "torch" in self.kinds:
             cx, cy, radius = self.beam()
             d = np.hypot((self._xs - cx) * 0.5, self._ys - cy)
             index[d <= radius * 0.7] = LAYERS.index("beam")
             index[d > radius * 1.3] = LAYERS.index("dim")
-            veil &= d <= radius * 1.3
+            veil[d > radius * 1.3] = 0
         return index, veil
+
+    def warp(self) -> np.ndarray:
+        """Funhouse mirror: each cell shows a neighbour a column or two away, and the bulges
+        drift, so the scene swells and pinches like a reflection in a bent glass."""
+        t, xs, ys = self.t, self._xs, self._ys
+        shift = 2.2 * np.sin(xs * 0.11 + t * 0.15) + 1.2 * np.sin(ys * 0.7 - t * 0.22)
+        return np.clip(np.rint(xs + shift), 0, self.w - 1).astype(int)
 
     # -- one frame -------------------------------------------------------------------------
     def step(self) -> None:
@@ -206,16 +223,17 @@ class Atmosphere:
             if 0 <= x < self.w and 0 <= y < self.h and (m.kind != "dust" or self.rng.random() < 0.75):  # dust twinkles
                 dots[x, y] = m
         rows, fog_rows = index.tolist(), veil.tolist()
+        src = self.warp().tolist() if "warp" in self.kinds else None
         out = Text()
         for y in range(self.h):
             run: list[str] = []
             run_style: Style | None = None
-            row, fog_row = rows[y], fog_rows[y]
+            row, fog_row, cols = rows[y], fog_rows[y], src[y] if src else range(self.w)
             for x in range(self.w):
                 which = row[x]
-                ch, style = layers[which][y][x]
+                ch, style = layers[which][y][cols[x]]
                 if fog_row[x] and ch == " " and (style is None or style.bgcolor is None):
-                    ch, style = "░", self.fog_style
+                    ch, style = "░", self.fog_core if fog_row[x] == 2 else self.fog_edge
                 mote = dots.get((x, y))
                 if mote is not None and (which != dark or mote.kind == "embers"):
                     ch, style = mote.glyph, self._over(mote.color, style)

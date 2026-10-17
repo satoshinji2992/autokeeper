@@ -93,6 +93,9 @@ def regrade(color: str, grade: str, when: str = "") -> str:
             rgb = [c * (1 - a) + f * a for c, f in zip(rgb, fog_colour(when), strict=True)]
         elif grade == "flash":
             rgb = [min(255, c * 1.6) * 0.45 + f * 0.55 for c, f in zip(rgb, FLASH, strict=True)]
+        elif grade == "red":  # everything under a darkroom safelight
+            lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+            rgb = [48 + lum, lum * 0.2, lum * 0.12]
         return "#" + "".join(f"{max(0, min(255, round(c))):02x}" for c in rgb)
 
     return _HEX.sub(one, color)

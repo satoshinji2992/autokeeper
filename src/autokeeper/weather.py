@@ -17,6 +17,8 @@ KINDS = {
     "embers": "火星与火光",
     "flicker": "灯火摇曳",
     "torch": "只有手电或火把照亮",
+    "redlight": "暗房红灯或红灯笼的光",
+    "warp": "哈哈镜般的扭曲",
 }
 DARK = {"傍晚", "夜里", "深夜"}
 DUSK_TO_DAWN = {"清晨", "傍晚", "夜里", "深夜"}
@@ -36,7 +38,11 @@ def infer(name: str, text: str, when: str = "") -> list[str]:
         kinds.append("rain")
     if has("雪") and not has("雪白", "雪亮", "雪茄"):
         kinds.append("snow")
-    if has("雾", "蒸汽") or (any(w in name for w in ("墓", "坟", "沼", "湖", "河", "林")) and when in DUSK_TO_DAWN):
+    if has("哈哈镜") or (has("镜") and has("变形", "扭曲", "忽胖忽瘦")):
+        kinds.append("warp")
+    if has("红灯"):  # a darkroom's safelight, red lanterns
+        kinds.append("redlight")
+    if has("雾", "蒸汽", "水汽", "缭绕") or (any(w in name for w in ("墓", "坟", "沼", "湖", "河", "林")) and when in DUSK_TO_DAWN):
         kinds.append("fog")
     if has("手电", "火把", "提灯", "马灯") and has("黑", "暗", "隧道", "地道", "地下", "洞", "地窖", "通道", "只能照"):
         kinds.append("torch")
@@ -51,13 +57,18 @@ def infer(name: str, text: str, when: str = "") -> list[str]:
     return kinds[:2]
 
 
-INDOOR = ("室", "屋", "房", "馆", "厅", "店", "社", "局", "堂", "宅", "家", "楼", "隧", "洞", "窖", "舱", "库", "所")
-OUTDOOR = ("街", "路", "巷", "墓", "坟", "园", "场", "野", "林", "山", "河", "湖", "港", "码头", "桥", "岸", "镇", "村", "田", "海", "滩", "坡")
+OPEN = ("弄堂", "街口", "路口", "院子", "天台", "码头")  # outdoors, though 堂 or 口 might say otherwise
+INDOOR = ("室", "屋", "房", "馆", "厅", "店", "铺", "社", "局", "堂", "宅", "家", "楼", "间", "棚", "隧", "洞", "窖", "舱", "库", "所")
+OUTDOOR = ("街", "路", "巷", "墓", "坟", "园", "场", "野", "林", "山", "河", "湖", "港", "桥", "岸", "镇", "村", "田", "海", "滩", "坡")
 
 
 def outdoors(name: str) -> bool:
-    """Open to the sky, going by the name: 公墓 and 大街 are, 书房 and 警察局 are not."""
-    return not any(w in name for w in INDOOR) and any(w in name for w in OUTDOOR)
+    """Open to the sky, going by the name: 公墓 and 后弄堂 are, 书房 and 警察局 are not. In
+    "霞飞路·西点铺" the part after the dot is the place itself."""
+    place = name.split("·")[-1]
+    if any(w in place for w in OPEN):
+        return True
+    return not any(w in place for w in INDOOR) and any(w in place for w in OUTDOOR)
 
 
 # What the keeper's words do to the sky, in the order they are said. Rain during a storm is

@@ -101,6 +101,11 @@ def test_weather_is_read_off_the_place_and_the_hour():
     assert [weather.outdoors(n) for n in ("公墓", "艾尔斯伯里大街", "广场", "道格拉斯的书房", "警察局", "食尸鬼隧道网", "钟楼")] == [
         True, True, True, False, False, False, False,
     ]
+    names = ("后弄堂", "南京路街口", "霞飞路·特卡琴科西点铺", "江西路口·总巡捕房", "徐家汇路百代厂房·整理间")
+    assert [weather.outdoors(n) for n in names] == [True, True, False, False, False]  # after the dot is the place
+    assert weather.infer("南市老茶馆", "老虎灶的水汽把半间屋子糊成白的。") == ["fog"]
+    assert weather.infer("宝光照相馆·暗室", "门一关，只剩一盏红灯。") == ["redlight"]
+    assert weather.infer("大世界·哈哈镜厅", "一排变形的镜子，把人照得忽胖忽瘦。") == ["warp"]
 
 
 def test_the_keepers_words_set_the_sky():
@@ -136,6 +141,11 @@ def test_weather_frames_keep_the_panel_and_light_the_torch_beam():
     assert index[int(cy), int(cx)] == atmosphere.LAYERS.index("beam")
     rain = atmosphere.Atmosphere(["rain"], {"": art}, 48, 12, seed=2)
     assert "/" in rain.frame().plain
+    stripes = Text("\n".join(["".join("ab"[(x // 3) % 2] for x in range(48))] * 12))
+    mirror = atmosphere.Atmosphere(["warp", "redlight"], {"": stripes, "red": stripes}, 48, 12, seed=3)
+    bent = mirror.frame().split("\n")
+    assert all(ln.cell_len == 48 for ln in bent) and bent[0].plain != stripes.split("\n")[0].plain  # the mirror bends it
+    assert (mirror.layer_map()[0] == atmosphere.LAYERS.index("red")).all()  # all under the safelight
 
 
 def test_ascii_art_keeps_lamplight_after_dark():
