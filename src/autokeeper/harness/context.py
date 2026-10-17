@@ -65,6 +65,7 @@ class Session:
     ):
         self.role, self.spec, self.system, self.schema = role, spec, system, schema
         self.memory = (spec.window or memory) if memory else 0
+        self.pinned = ""  # leads every window and is never folded: a tool agent's task
         self.key = key or role
         self.summarizer = summarizer
         self.transcript: list[Msg] = [] if transcript is None else transcript
@@ -82,6 +83,8 @@ class Session:
 
     def window(self, prompt: str) -> list[Msg]:
         msgs: list[Msg] = []
+        if self.pinned:
+            msgs += [{"role": "user", "content": f"【任务】\n{self.pinned}"}, {"role": "assistant", "content": "明白，开始。"}]
         if self.memory:
             if self.summary:
                 msgs += [

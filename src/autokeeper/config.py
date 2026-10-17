@@ -100,7 +100,8 @@ class Config:
         return self.roles.get(name, DEFAULT_ROLES.get(name, OPUS))
 
 
-def _env_files() -> None:
+def load_env() -> None:
+    """Read keys from ~/.config/autokeeper/.env and ./.env; the real environment wins."""
     from dotenv import load_dotenv
 
     for f in (USER_DIR / ".env", ROOT / ".env"):
@@ -117,7 +118,7 @@ def _role(base: Role, spec: dict) -> Role:
 
 
 def load(path: Path | None = None) -> Config:
-    _env_files()
+    load_env()
     data: dict = {}
     for candidate in (USER_DIR / "config.toml", ROOT / "autokeeper.toml", path):
         if candidate and Path(candidate).is_file():

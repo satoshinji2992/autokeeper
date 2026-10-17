@@ -20,6 +20,7 @@ local embedding plus graph traversal.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from .module.compiler import compile_module, skill_name
 from .module.schema import Module
 
 EMBED_MODEL = "BAAI/bge-small-zh-v1.5"
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")  # fastembed's tokenizer warns after LightRAG forks
 EMBED_DIM = 512
 ENTITY_TYPES = ["人物", "地点", "物品", "组织", "事件", "怪物", "线索"]
 
@@ -213,7 +215,19 @@ class KnowledgeBase:
         from lightrag import QueryParam
 
         assert self.rag is not None
-        param = QueryParam(mode=mode, only_need_context=True, top_k=20, chunk_top_k=6, max_total_tokens=max_tokens, enable_rerank=False)
+        # LightRAG's entity and relation budgets (6k / 8k by default) are not bounded by the total,
+        # so with a small total they crowd out every source chunk. Split it: a quarter each for
+        # graph facts, the rest for the original text, where the detail questions are answered.
+        param = QueryParam(
+            mode=mode,
+            only_need_context=True,
+            top_k=20,
+            chunk_top_k=6,
+            max_entity_tokens=max_tokens // 4,
+            max_relation_tokens=max_tokens // 4,
+            max_total_tokens=max_tokens,
+            enable_rerank=False,
+        )
         if keywords:
             param.ll_keywords = [k for k in keywords if k]
             param.hl_keywords = [question]

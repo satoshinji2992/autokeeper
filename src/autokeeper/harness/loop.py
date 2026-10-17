@@ -140,7 +140,13 @@ class Agent:
         return {"observation": f"〔{name} 的结果〕\n{obs}", "steps": steps}
 
     async def run(self, task: str) -> AgentResult:
-        final = await self.graph.ainvoke({"observation": task, "steps": 0}, {"recursion_limit": self.max_steps * 2 + 10})
+        """The first task is pinned at the head of every window, so folding old steps never
+        loses its rules; later tasks (fix rounds) arrive as ordinary messages."""
+        if not self.session.pinned:
+            self.session.pinned, first = task, "开始执行任务。"
+        else:
+            first = task
+        final = await self.graph.ainvoke({"observation": first, "steps": 0}, {"recursion_limit": self.max_steps * 2 + 10})
         return AgentResult(final.get("answer", ""), final.get("steps", 0), bool(final.get("done")))
 
     async def close(self) -> None:

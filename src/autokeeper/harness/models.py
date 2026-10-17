@@ -35,7 +35,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..config import SESSIONS, Role
+from ..config import SESSIONS, Role, load_env
 from . import spend, trace
 
 OnDelta = Callable[[str], Awaitable[None]] | None
@@ -399,6 +399,7 @@ MODELS: dict[str, type[Model]] = {"claude": ClaudeCodeModel, "langchain": LangCh
 
 
 def make_model(spec: Role, system: str, *, label: str = "") -> Model:
+    load_env()  # keys in ~/.config/autokeeper/.env, also when the harness is used as a library
     try:
         cls = MODELS[spec.backend]
     except KeyError:

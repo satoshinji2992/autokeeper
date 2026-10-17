@@ -14,6 +14,28 @@ uv run autokeeper eval context modules/local/zhuishuren
 |---|---|---|---|---|
 | 追书人（本地导入） | 14,067 | 3,371 | 3,871 / 4,502 | 72.5% |
 
+## 原文细节问答（LightRAG）
+
+```bash
+uv run autokeeper --preset deepseek eval lore            # 四种策略都跑
+uv run autokeeper --preset deepseek eval lore --only graphrag   # 只重跑一种，其余沿用上次的结果
+```
+
+题目由 importer 从原文里出：24 道细节题，三分之一要串起两三处原文才能回答，每题附原文依据。之后守秘人拿四种上下文分别作答，判卷模型对照参考答案打分。这一轮的出题、作答、判卷都用 DeepSeek flash。
+
+| 上下文 | 准确率 | 平均上下文（token） |
+|---|---|---|
+| 只有 SKILL.md 总览（守秘人常驻） | 29.2% | 3,371 |
+| 整本模组（总览 + 全部 reference 文件） | 95.8% | 14,084 |
+| 总览 + LightRAG naive（只检索原文块） | 95.8% | 6,181 |
+| 总览 + LightRAG mix（图谱 + 原文块） | 91.7% | 6,388 |
+
+- **单看总览**：回答细节问题不够，这也是守秘人每轮都要检索的原因。
+- **检索的效果**：用不到一半的上下文，就追平了整本模组的准确率。
+- **mix 第一版**：只有 83.3%，上下文反而有 15,165 token。原因是 LightRAG 的实体、关系预算（默认 6k / 8k）不受 `max_total_tokens` 约束，结果把原文块全挤掉了（日志里是“35 entities, 112 relations, 0 chunks”），而细节题的答案恰恰在原文里。
+- **修正**：按总预算分配，实体、关系各占四分之一，剩下的留给原文块。
+- **明细**：两版都在 `saves/eval/`（`lore_zhuishuren_v1.json`、`lore_zhuishuren.json`）。
+
 ## 修辞诱导对照
 
 ```bash

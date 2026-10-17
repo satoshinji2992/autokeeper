@@ -91,6 +91,20 @@ async def test_session_keeps_a_window_and_folds_old_turns():
     assert window[0]["content"].startswith("【更早的经过") and window[-1]["content"] == "最后一问"
 
 
+async def test_pinned_task_survives_folding():
+    async def summarize(text: str, who: str) -> str:
+        return "进度摘要"
+
+    s = Session("importer", SCRIPTED, "你是整理员", memory=40, summarizer=summarize)  # type: ignore[arg-type]
+    s.pinned = "把原文整理成 module.yaml，id 用 changpian"
+    for i in range(4):
+        SCRIPT.append(f"第{i}步做完了" * 2)
+        await s.send(f"观察{i}" * 4)
+    window = s.window("下一步")
+    assert window[0]["content"] == "【任务】\n把原文整理成 module.yaml，id 用 changpian"
+    assert window[2]["content"].endswith("进度摘要") and s.summary == "进度摘要"
+
+
 async def test_extra_is_sent_but_not_remembered_and_forget_drops_a_turn():
     s = Session("npc", SCRIPTED, "你是 NPC", memory=10_000)
     SCRIPT.extend(["泄露了秘密", "我不知道"])

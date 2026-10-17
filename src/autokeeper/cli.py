@@ -356,12 +356,17 @@ def eval_rhetoric(module: Path = Path("modules/local/zhuishuren"), limit: int | 
 
 
 @eval_app.command("lore")
-def eval_lore(module: Path = Path("modules/local/zhuishuren"), n: int = 24) -> None:
+def eval_lore(
+    module: Path = Path("modules/local/zhuishuren"),
+    n: int = 24,
+    only: Annotated[list[str] | None, typer.Option(help="只重跑这些策略，其余沿用上次的结果")] = None,
+) -> None:
     """原文细节问答：总览 / 整本 / 向量检索 / GraphRAG（LightRAG mix）四种上下文的准确率与上下文大小。"""
+    from .eval.lore import STRATEGIES
     from .eval.lore import run as run_lore
 
     out = config.SAVES / "eval" / f"lore_{module.name}.json"
-    console.print_json(data=asyncio.run(run_lore(module, out, n=n)))
+    console.print_json(data=asyncio.run(run_lore(module, out, n=n, only=tuple(only or STRATEGIES))))
     console.print(f"明细：{out}")
 
 

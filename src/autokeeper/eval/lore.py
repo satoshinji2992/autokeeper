@@ -81,7 +81,11 @@ async def question_set(m: Module, module_dir: Path, n: int = 24) -> list[QA]:
     return qa.items
 
 
-async def run(module_dir: Path, out: Path, *, n: int = 24, parallel: int = 4) -> dict:
+STRATEGIES = ("overview", "full", "naive", "graphrag")
+
+
+async def run(module_dir: Path, out: Path, *, n: int = 24, parallel: int = 4, only: tuple[str, ...] = STRATEGIES) -> dict:
+    """`only` re-runs some strategies and keeps the other strategies' rows already in `out`."""
     m = Module.load(module_dir)
     if not knowledge.exists(m.id):
         raise ValueError(f"先运行 autokeeper index {module_dir} 建知识库")
@@ -93,6 +97,8 @@ async def run(module_dir: Path, out: Path, *, n: int = 24, parallel: int = 4) ->
     full = overview + "\n\n" + "\n\n".join(p.read_text(encoding="utf-8") for p in sorted((root / "references").rglob("*.md")))
     sem = asyncio.Semaphore(parallel)
     rows: list[dict] = []
+    if out.exists() and set(only) != set(STRATEGIES):
+        rows = [r for r in json.loads(out.read_text(encoding="utf-8"))["rows"] if r["strategy"] not in only]
 
     async with knowledge.KnowledgeBase(m) as kb:
 
@@ -117,11 +123,10 @@ async def run(module_dir: Path, out: Path, *, n: int = 24, parallel: int = 4) ->
             rows.append({"strategy": strategy, "i": i, "question": q.question, "reference": q.answer, "answer": answer,
                          "correct": ok, "context_tokens": tokens(ctx)})
 
-        strategies = ["overview", "full", "naive", "graphrag"]
-        await asyncio.gather(*(one(s, i, q) for s in strategies for i, q in enumerate(qa)))
+        await asyncio.gather(*(one(s, i, q) for s in only for i, q in enumerate(qa)))
 
     summary: dict = {"module": m.id, "questions": len(qa)}
-    for s in strategies:
+    for s in STRATEGIES:
         mine = [r for r in rows if r["strategy"] == s]
         summary[s] = {
             "accuracy": round(sum(r["correct"] for r in mine) / max(1, len(mine)), 3),
