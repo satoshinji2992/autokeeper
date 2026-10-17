@@ -62,6 +62,17 @@ def fake() -> FakeDice:
 
 
 @pytest.fixture
+def skills_dir(monkeypatch, tmp_path):
+    """Module skills compile into a temp folder, not the repo; the shared ones come along."""
+    from autokeeper import config
+
+    target = tmp_path / "skills"
+    shutil.copytree(config.SKILLS, target, ignore=shutil.ignore_patterns("module-*"))
+    monkeypatch.setattr(config, "SKILLS", target)
+    return target
+
+
+@pytest.fixture
 def rules(fake: FakeDice) -> Rules:
     return Rules(dice=fake)  # type: ignore[arg-type]
 

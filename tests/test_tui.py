@@ -20,7 +20,7 @@ from autokeeper.tui.widgets import SceneArt
 
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
-async def test_title_and_setup_flow(monkeypatch, size):
+async def test_title_and_setup_flow(monkeypatch, size, skills_dir):
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=size) as pilot:
@@ -45,7 +45,7 @@ class Canned(hm.Model):
         return Reply(text=text, data={} if schema else None)
 
 
-async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path):
+async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, skills_dir):
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK"):  # F3 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)

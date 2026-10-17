@@ -404,10 +404,7 @@ class Cast:
 
 def _module_overview(m: Module) -> str:
     """The SKILL.md body the keeper carries all game long (level 2 of progressive disclosure)."""
-    from ..config import SKILLS
-
-    file = SKILLS / skill_name(m) / "SKILL.md"
-    if file.exists():
+    if (skills.path(skill_name(m)) / "SKILL.md").exists():
         return skills.body(skill_name(m))
     from ..module.compiler import _skill_md
 

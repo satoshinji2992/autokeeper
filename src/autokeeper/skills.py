@@ -13,17 +13,21 @@ from pathlib import Path
 
 import skills_ref
 
-from .config import SKILLS
+from . import config
 
 
 def path(name: str) -> Path:
-    return SKILLS / name
+    return config.SKILLS / name  # read at call time, so a relocated skills folder is honoured everywhere
+
+
+def body(name: str) -> str:
+    """SKILL.md without its YAML frontmatter."""
+    return _body(path(name) / "SKILL.md")
 
 
 @lru_cache(maxsize=64)
-def body(name: str) -> str:
-    """SKILL.md without its YAML frontmatter."""
-    text = (path(name) / "SKILL.md").read_text(encoding="utf-8")
+def _body(file: Path) -> str:
+    text = file.read_text(encoding="utf-8")
     if text.startswith("---"):
         text = text.split("---", 2)[2]
     return text.strip()
@@ -39,9 +43,9 @@ def wrap(name: str, text: str | None = None) -> str:
 
 def available(names: list[str] | None = None) -> str:
     """Level-1 metadata of the installed skills, in the format Anthropic recommends."""
-    dirs = [path(n) for n in names] if names else sorted(p for p in SKILLS.iterdir() if (p / "SKILL.md").exists())
+    dirs = [path(n) for n in names] if names else sorted(p for p in config.SKILLS.iterdir() if (p / "SKILL.md").exists())
     return skills_ref.to_prompt(dirs)
 
 
 def clear_cache() -> None:
-    body.cache_clear()
+    _body.cache_clear()

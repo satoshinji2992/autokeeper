@@ -24,9 +24,8 @@ TAPE = Path(__file__).parent / "cassettes" / "clocktower.jsonl"
 
 
 @pytest.fixture
-def tape(monkeypatch, tmp_path):
+def tape(monkeypatch, tmp_path, skills_dir):
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    monkeypatch.setattr(config, "SKILLS", tmp_path / "skills")
     replay.forget(TAPE)
     yield TAPE
     replay.forget(TAPE)
