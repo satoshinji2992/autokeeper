@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
 import time
 from pathlib import Path
@@ -31,7 +32,7 @@ from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
 from ..rules.coc import Investigator, Rules
 from . import art
-from .screens import HELP, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
+from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
 from .widgets import LEVEL_STYLE, CluePanel, DiceTray, SceneArt, SheetPanel, StoryLog
 
 THEMES = [
@@ -334,6 +335,7 @@ class GameScreen(Screen):
     BINDINGS = [
         Binding("f1", "help", "帮助"),
         Binding("f2", "notes", "线索本"),
+        Binding("f3", "engine", "换模型"),
         Binding("f4", "sketch", "手绘"),
         Binding("f5", "map", "地图"),
         Binding("ctrl+r", "recap", "上回书说到"),
@@ -354,6 +356,7 @@ class GameScreen(Screen):
         self.spinner = 0
         self.status_text = ""
         self.engine_label = ""
+        self.busy = False
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -371,8 +374,7 @@ class GameScreen(Screen):
 
     async def on_mount(self) -> None:
         cfg = config.load()
-        keeper = cfg.role("keeper")
-        self.engine_label = f"{cfg.preset} · 守秘人 {keeper.model.split(':', 1)[-1]}"
+        self.engine_label = self._engine_label(cfg)
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         channels.listeners.append(self._fell_back)
@@ -414,6 +416,7 @@ class GameScreen(Screen):
         label.update(Text(f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""))
 
     def _busy(self, busy: bool) -> None:
+        self.busy = busy
         inp = self.query_one(Input)
         inp.disabled = busy or self.watch
         if not busy:
@@ -443,6 +446,52 @@ class GameScreen(Screen):
         self.app.notify(f"画面：{'纯 ASCII' if self.app.art_style == 'ascii' else '块字符'}")  # type: ignore[attr-defined]
         self._scene(self.state.location)
         self._panels()
+
+    @staticmethod
+    def _engine_label(cfg: config.Config) -> str:
+        keeper = cfg.role("keeper")
+        label = f"{cfg.preset} · 守秘人 {keeper.model.split(':', 1)[-1]}"
+        return label + (f" · 备用 {keeper.fallback.split(':', 1)[-1]}" if keeper.fallback else "")
+
+    def action_engine(self) -> None:
+        if self.busy:
+            self.app.notify("等这一回合结束再换模型", severity="warning")
+            return
+        cfg = config.load()
+        presets = {
+            "claude": "Claude 订阅：Opus 5.5 主持，Haiku 5.5 演 NPC 和 AI 调查员",
+            "deepseek": "DeepSeek flash，思考强度按分工" + ("" if os.environ.get("DEEPSEEK_API_KEY") else "（缺 DEEPSEEK_API_KEY）"),
+        }
+        presets |= {name: "" for name in config.PRESETS if name not in presets}
+        model, fallback = os.environ.get("AUTOKEEPER_MODEL", ""), os.environ.get("AUTOKEEPER_FALLBACK", "")
+        self.app.push_screen(EngineModal(presets, cfg.preset, model, fallback), self._switch_engine)
+
+    def _switch_engine(self, choice: dict | None) -> None:
+        if choice:
+            self._apply_engine(choice)
+
+    @work(exclusive=True, group="turn")
+    async def _apply_engine(self, choice: dict) -> None:
+        """New channels for every agent; the transcripts stay in the state, so nobody forgets."""
+        assert self.game
+        os.environ["AUTOKEEPER_PRESET"] = choice["preset"]
+        for key, env in (("model", "AUTOKEEPER_MODEL"), ("fallback", "AUTOKEEPER_FALLBACK")):
+            if choice[key]:
+                os.environ[env] = choice[key]
+            else:
+                os.environ.pop(env, None)
+        try:
+            cfg = config.load()
+        except ValueError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
+        old, self.cast = self.cast, Cast(cfg, self.m)
+        self.game.cast = self.cast
+        self.engine_label = self._engine_label(cfg)
+        self._topbar()
+        self.app.notify(f"已换成 {self.engine_label}，记忆都在，接着玩。")
+        if old is not None:
+            await old.close()
 
     def action_weather(self) -> None:
         on = self.query_one(SceneArt).toggle_effects()

@@ -46,6 +46,9 @@ class Canned(hm.Model):
 
 
 async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path):
+    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK"):  # F3 sets these; undo afterwards
+        monkeypatch.setenv(var, "")
+        monkeypatch.delenv(var)
     monkeypatch.setattr(config, "SAVES", tmp_path)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
@@ -75,6 +78,14 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path):
         await pilot.press("f6")
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off
+        screen = app.screen
+        before, memory = screen.cast, screen.state.transcripts
+        await pilot.press("f3")  # change models mid-game
+        await pilot.pause()
+        await pilot.click("#apply")
+        await pilot.pause(0.3)
+        assert screen.cast is not before and screen.game.cast is screen.cast
+        assert screen.state.transcripts is memory  # the agents' memories carry over
 
 
 def test_weather_is_read_off_the_place_and_the_hour():

@@ -24,7 +24,7 @@
 ## 亮点
 
 - **自研 harness**（[docs/harness.md](docs/harness.md)）：
-  - **模型只是通道**：无状态，换一家照样玩。Claude Code 只当传输层，每次回复后 `/clear`；DeepSeek、OpenAI、Gemini、Ollama 走 LangChain。
+  - **模型只是通道**：无状态，换一家照样玩。Claude Code 只当传输层，每次回复后 `/clear`；DeepSeek、OpenAI、Gemini、Ollama 走 LangChain。实测同一局中途从 DeepSeek 换到本地 gemma4，守秘人和 NPC 都记得换之前发生的事；游戏里按 F3 就能换。
   - **上下文归 harness**：每个 Agent 的对话记录存进存档，按字符预算开窗，旧内容由摘要员折叠。窗口只往后追加，前缀缓存实测命中 60%–98%。
   - **结构化输出**：用厂商的 schema 模式或提示词 JSON，经 JSON Schema 校验，不合格修一轮。
   - **工具循环**：基于 LangGraph 的 think → act 循环，每步一个扁平 JSON，工作区沙箱化，不需要厂商的 tool calling。
@@ -227,7 +227,7 @@ uv run autokeeper trace --run last                                   # 刚才那
 | 直接说话 | “我拉开书桌抽屉”“我问守墓人最近见过谁”，交给 intent → arbiter |
 | `.ra 侦查` `.ra 困难聆听` `.rab 侦查` `.rap2 侦查` | 检定、指定难度、奖励骰、惩罚骰 |
 | `.sc 1/1d6` `.st 侦查60 hp-2` `.r 1d6+1` `.coc` `.en` `.ti` | 理智、改人物卡、掷骰、掷属性、成长、疯狂发作 |
-| F2 · F4 · F5 · F6 · Ctrl+R · Ctrl+T | 线索本与手稿 · 手绘 · 地图 · 天气动画 · 上回书说到 · 换配色 |
+| F2 · F3 · F4 · F5 · F6 · Ctrl+R · Ctrl+T | 线索本与手稿 · 换模型 · 手绘 · 地图 · 天气动画 · 上回书说到 · 换配色 |
 
 ## 嵌入 Claude Code / Codex
 

@@ -1,4 +1,4 @@
-"""Modal screens: push offer, handouts, notebook, sketch canvas, map, help, ending."""
+"""Modal screens: push offer, handouts, notebook, sketch canvas, map, help, models, ending."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from textual.color import Color
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import MouseDown, MouseMove, MouseUp
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
+from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets.option_list import Option
 from textual_canvas import Canvas
 
 from . import art
@@ -202,6 +203,42 @@ class TextModal(ModalScreen[None]):
             yield Static("Esc 关闭", classes="system")
 
 
+class EngineModal(ModalScreen[dict | None]):
+    """Switch models mid-game. Every agent's memory lives in the save, not in the model, so
+    the new one carries on where the old one stopped."""
+
+    BINDINGS = [("escape", "dismiss(None)", "取消")]
+
+    def __init__(self, presets: dict[str, str], preset: str, model: str, fallback: str):
+        super().__init__()
+        self.presets, self.preset, self.model, self.fallback = presets, preset, model, fallback
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="modal"):
+            yield Static("换模型", classes="modal-title")
+            yield Static(Text("每个 Agent 的记忆都在存档里，换完接着玩，谁也不会忘事。", style="dim"))
+            options = [Option(Text.assemble((f"{name:<9}", "bold"), desc), id=name) for name, desc in self.presets.items()]
+            yield OptionList(*options, id="preset")
+            yield Input(self.model, placeholder="所有角色改用同一个模型（可空），如 ollama:qwen3:14b", id="model")
+            yield Input(self.fallback, placeholder="备用模型（可空）：主模型出错或超预算时改用它", id="fallback")
+            with Horizontal(classes="buttons"):
+                yield Button("应用", id="apply", variant="primary")
+                yield Button("取消", id="cancel")
+
+    def on_mount(self) -> None:
+        ol = self.query_one(OptionList)
+        ol.highlighted = list(self.presets).index(self.preset) if self.preset in self.presets else 0
+
+    @on(Button.Pressed)
+    def choose(self, event: Button.Pressed) -> None:
+        if event.button.id != "apply":
+            self.dismiss(None)
+            return
+        ol = self.query_one(OptionList)
+        preset = ol.get_option_at_index(ol.highlighted or 0).id or self.preset
+        self.dismiss({"preset": preset, "model": self.query_one("#model", Input).value.strip(), "fallback": self.query_one("#fallback", Input).value.strip()})
+
+
 HELP = Text.from_markup(
     """[b]直接说你想做什么[/b]，比如“我翻看书台上的折扇”“我去拾遗书局”“我问小顺子钥匙在哪”。
 
@@ -212,7 +249,7 @@ HELP = Text.from_markup(
   .r 1d6+1        掷骰            .coc / .en       掷属性 / 成长
 
 [b]界面[/b]
-  F1 帮助   F2 线索本与手稿   F4 手绘   F5 地图   F6 天气动画开关
+  F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关
   Ctrl+R 上回书说到   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
   /draw /notes /map /recap /save 也可以在输入框里用"""
 )
