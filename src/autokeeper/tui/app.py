@@ -22,7 +22,7 @@ from textual.theme import Theme
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import artkit, config, imagery
+from .. import artkit, config, imagery, weather
 from ..agents.cast import Cast
 from ..engine import graph as turn_graph
 from ..engine.game import Game
@@ -431,9 +431,19 @@ class GameScreen(Screen):
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
         scene.show(
-            loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name), self.m.pictures.get(name), weather=loc.weather, description=loc.read_aloud
+            loc.name,
+            self.m.art.get(name, ""),
+            self.m.art_colors.get(name),
+            self.m.pictures.get(name),
+            weather=loc.weather,
+            description=loc.read_aloud,
+            sky=self._sky(loc_id),
         )
         self._topbar()
+
+    def _sky(self, loc_id: str) -> str:
+        """The narrated weather, if this place is under the open sky."""
+        return self.state.sky if weather.outdoors(self.m.location(loc_id).name) else ""
 
     def on_resize(self, event) -> None:
         right = self.query_one("#right")
@@ -530,6 +540,8 @@ class GameScreen(Screen):
             self._scene(ev["location"])
         elif t == "time":
             self._topbar()
+        elif t == "sky":
+            self.query_one(SceneArt).set_sky(self._sky(self.state.location))
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "keeper_start":

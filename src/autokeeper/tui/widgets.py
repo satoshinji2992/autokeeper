@@ -12,7 +12,7 @@ from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from .. import artkit, atmosphere, imagery
+from .. import artkit, atmosphere, imagery, weather
 from ..rules.coc import Investigator
 from . import art
 
@@ -53,6 +53,7 @@ class SceneArt(Static):
         self.image: str | None = None
         self.weather: list[str] = []  # the module's own; empty: read off the description
         self.description = ""
+        self.sky = ""  # the narrated weather, for places under the open sky
         self.style_name = "picture"
         self.when = ""  # time of day, lights the art
         self.effects = True  # weather animation, F6
@@ -75,12 +76,25 @@ class SceneArt(Static):
             self._refresh()
 
     def show(
-        self, place: str, picture: str, mask: str | None = None, image: str | None = None, *, weather: list[str] | None = None, description: str = ""
+        self,
+        place: str,
+        picture: str,
+        mask: str | None = None,
+        image: str | None = None,
+        *,
+        weather: list[str] | None = None,
+        description: str = "",
+        sky: str = "",
     ) -> None:
         arrived = place != self.place
         self.place, self.picture, self.mask, self.image = place, picture, mask, image
-        self.weather, self.description = list(weather or []), description
+        self.weather, self.description, self.sky = list(weather or []), description, sky
         self._refresh(reveal=arrived)
+
+    def set_sky(self, sky: str) -> None:
+        if sky != self.sky:
+            self.sky = sky
+            self._refresh()
 
     def set_light(self, when: str) -> None:
         if when != self.when:
@@ -93,10 +107,15 @@ class SceneArt(Static):
         return self.effects
 
     def kinds(self) -> list[str]:
-        """The weather on screen now: the module's, else read off the place for this hour."""
+        """The weather on screen now: what the keeper said the sky is doing, then the place's
+        own (the module's, else read off the place for this hour). At most two."""
         if not self.effects or not (self.picture or self._uses_image()):
             return []
-        return self.weather[:2] or atmosphere.infer(self.place, self.description, self.when)
+        own = self.weather[:2] or weather.infer(self.place, self.description, self.when)
+        if not self.sky:
+            return own
+        wet = {"rain", "storm"}
+        return [self.sky, *(k for k in own if k != self.sky and not (k in wet and self.sky in wet))][:2]
 
     def _fit(self) -> tuple[int, int]:
         return max(24, (self.size.width or 72) - 2), self.HEIGHT

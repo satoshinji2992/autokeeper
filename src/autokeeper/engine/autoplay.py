@@ -19,7 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Send
 from rich.console import Console
 
-from .. import config
+from .. import config, weather
 from ..agents.cast import Cast
 from ..harness import models as channels
 from ..harness import trace
@@ -110,6 +110,8 @@ async def run(
             console.print(f"[red]※ {ev['who']} {ev['text']}[/]")
         elif t == "event":
             console.print(f"[bold]━━ {ev['title']} ━━[/] {ev.get('text', '')}")
+        elif t == "sky":
+            console.print(f"[dim]☁ 天气：{weather.KINDS.get(ev['sky'], '转晴')}[/]")
         elif t == "ending":
             console.print(f"[bold reverse] 结局：{ev['title']} [/]\n{ev['text']}")
 

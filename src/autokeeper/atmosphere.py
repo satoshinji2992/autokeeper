@@ -4,8 +4,7 @@ flickering lamps and a torch beam, animated on top of the picture or the ASCII a
 Each frame is put together cell by cell. Light effects pick every cell from a graded copy
 of the scene (artkit.GRADES: the dark outside a torch beam, a fog veil, a lightning
 flash...), made once when the scene loads; particles are then drawn over it, keeping the
-background colour of the cell they cross. A location may name its weather in the module
-(Location.weather); otherwise it is read off the location's name and description.
+background colour of the cell they cross. Which weather a place has is weather.py's call.
 """
 
 from __future__ import annotations
@@ -20,50 +19,9 @@ from rich.text import Text
 
 from . import artkit
 
-KINDS = {
-    "rain": "雨",
-    "storm": "雷雨",
-    "snow": "雪",
-    "fog": "雾或烟",
-    "leaves": "风吹落叶",
-    "dust": "光里的浮尘",
-    "embers": "火星与火光",
-    "flicker": "灯火摇曳",
-    "torch": "只有手电或火把照亮",
-}
 # Graded copies each kind needs ("beam": the scene in plain white light, for a torch).
 GRADES_FOR = {"storm": ("flash",), "fog": ("haze", "haze2"), "embers": ("glow", "fade"), "flicker": ("glow", "fade"), "torch": ("beam", "dim")}
 LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash")  # index order of the layer map
-DUSK_TO_DAWN = {"清晨", "傍晚", "夜里", "深夜"}
-
-
-def infer(name: str, text: str, when: str = "") -> list[str]:
-    """Weather read off a location's name and description, at most two kinds."""
-    words = name + text
-
-    def has(*ws: str) -> bool:
-        return any(w in words for w in ws)
-
-    kinds = []
-    if has("雷", "闪电", "暴雨", "暴风雨"):
-        kinds.append("storm")
-    elif has("雨") and not has("雨停", "雨后", "雨过", "雨伞", "雨衣"):
-        kinds.append("rain")
-    if has("雪") and not has("雪白", "雪亮", "雪茄"):
-        kinds.append("snow")
-    if has("雾", "蒸汽") or (any(w in name for w in ("墓", "坟", "沼", "湖", "河", "林")) and when in DUSK_TO_DAWN):
-        kinds.append("fog")
-    if has("手电", "火把", "提灯", "马灯") and has("黑", "暗", "隧道", "地道", "地下", "洞", "地窖", "通道", "只能照"):
-        kinds.append("torch")
-    if has("叶") and has("飘", "旋", "落", "风"):
-        kinds.append("leaves")
-    if has("壁炉", "炉火", "篝火", "火堆", "火盆"):
-        kinds.append("embers")
-    if has("灰尘", "尘土", "积灰", "落满灰", "尘埃", "浮尘"):
-        kinds.append("dust")
-    if when in artkit.DARK and has("台灯", "油灯", "煤油灯", "蜡烛", "烛", "灯笼", "灯火", "路灯") and "torch" not in kinds:
-        kinds.append("flicker")
-    return kinds[:2]
 
 
 def grades(kinds: list[str]) -> list[str]:

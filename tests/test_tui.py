@@ -89,15 +89,35 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path):
 
 
 def test_weather_is_read_off_the_place_and_the_hour():
-    from autokeeper import atmosphere
+    from autokeeper import weather
 
-    assert atmosphere.infer("公墓", "墓碑之间点缀着灌木。", "深夜") == ["fog"]
-    assert atmosphere.infer("公墓", "墓碑之间点缀着灌木。", "上午") == []
-    assert atmosphere.infer("书房", "窗外就是公墓的树影。", "深夜") == []  # the graveyard is only out of the window
-    assert atmosphere.infer("隧道", "手电的光只能照出前面几步。", "上午") == ["torch"]
-    assert atmosphere.infer("大街", "梧桐叶子在人行道上打着旋。", "下午") == ["leaves"]
-    assert atmosphere.infer("图书馆", "长桌上方吊着绿罩台灯。", "深夜") == ["flicker"]
-    assert atmosphere.infer("码头", "雨后的石板路。", "下午") == []
+    assert weather.infer("公墓", "墓碑之间点缀着灌木。", "深夜") == ["fog"]
+    assert weather.infer("公墓", "墓碑之间点缀着灌木。", "上午") == []
+    assert weather.infer("书房", "窗外就是公墓的树影。", "深夜") == []  # the graveyard is only out of the window
+    assert weather.infer("隧道", "手电的光只能照出前面几步。", "上午") == ["torch"]
+    assert weather.infer("大街", "梧桐叶子在人行道上打着旋。", "下午") == ["leaves"]
+    assert weather.infer("图书馆", "长桌上方吊着绿罩台灯。", "深夜") == ["flicker"]
+    assert weather.infer("码头", "雨后的石板路。", "下午") == []
+    assert [weather.outdoors(n) for n in ("公墓", "艾尔斯伯里大街", "广场", "道格拉斯的书房", "警察局", "食尸鬼隧道网", "钟楼")] == [
+        True, True, True, False, False, False, False,
+    ]
+
+
+def test_the_keepers_words_set_the_sky():
+    from autokeeper import weather
+
+    assert weather.sky("天色暗下来，下起了雨，雨点打在墓碑上。") == ("rain", True)
+    assert weather.sky("远处滚过一阵闷雷。", "rain") == ("storm", True)
+    assert weather.sky("闷雷过后，雨点砸在石板上。") == ("storm", True)  # rain in a storm is the storm
+    assert weather.sky("雷声渐渐远了，只剩细雨。", "storm") == ("rain", True)
+    assert weather.sky("雨停了，屋檐还在滴水。", "storm") == ("", True)
+    assert weather.sky("雾散了些。", "rain") == ("rain", True)  # clearing fog leaves the rain
+    assert weather.sky("看样子快下雨了。", "") == ("", False)  # not yet
+    assert weather.sky("他把手电光挪到封面上，闪电般合上了书。") == ("", False)  # a torch, a figure of speech
+    assert weather.sky("推开窗，雾还没散干净，公墓的石碑浮在里面。") == ("fog", True)
+    assert weather.sky("窗外的雾淡了，日头照进来。", "fog") == ("", True)
+    assert weather.sky("编辑部里烟雾缭绕，他听得一头雾水。") == ("", False)
+    assert weather.sky("他把信递给你。", "fog") == ("fog", False)
 
 
 def test_weather_frames_keep_the_panel_and_light_the_torch_beam():

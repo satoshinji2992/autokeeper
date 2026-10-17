@@ -139,6 +139,24 @@ async def test_walking_somewhere_to_act_moves_the_party_first(module, fake):
     assert game._heading(gaze) is None  # unknown places do not move anyone
 
 
+async def test_narration_sets_the_sky_and_it_passes(module, fake):
+    game, cast, events = make(module, fake, {})
+    lines = iter(["钟楼背后滚过一声闷雷，雨点砸在广场的石板上。", "守钟人点起油灯。", "守钟人又打了个盹。"])
+
+    async def keeper(state, report, on_delta=None):
+        return next(lines)
+
+    cast.keeper = keeper
+    await game._narrate("报告")
+    assert game.state.sky == "storm" and {"type": "sky", "sky": "storm"} in events
+    game.state.minutes += 60
+    await game._narrate("报告")  # not mentioned, still within the hour
+    assert game.state.sky == "storm"
+    game.state.minutes += 200
+    await game._narrate("报告")  # unmentioned for hours: the storm has passed
+    assert game.state.sky == "" and events[-1] == {"type": "sky", "sky": ""}
+
+
 async def test_travel_time_and_timed_events(module, fake):
     game, *_ = make(module, fake, {}, location="tower")
     move = Action(kind="move", summary="去报社", destination="office")

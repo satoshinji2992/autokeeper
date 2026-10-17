@@ -47,6 +47,8 @@ class GameState(BaseModel):
     log: list[LogEntry] = Field(default_factory=list)
     memory: str = ""  # chronicler's summary of everything before the recent log
     pending_push: dict | None = None
+    sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
+    sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
     turn: int = 0
     usage: dict[str, dict[str, float]] = Field(default_factory=dict)

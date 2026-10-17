@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import skills
+from .. import skills, weather
 from ..agents.cast import Action, Cast, Ruling
 from ..module.compiler import skill_name
 from ..module.schema import Event, Module
@@ -467,6 +467,8 @@ class Game:
         inv = st.investigator
         loc = m.location(st.location)
         out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）"]
+        if st.sky and st.minutes - st.sky_at < weather.LASTS:
+            out.append(f"天气：{weather.KINDS[st.sky]}（你之前写到的）")
         a = turn.action
         if a and a.kind == "meta":
             out.append(f"玩家在问游戏外的问题：{a.summary}\n请以守秘人身份用一两句话简短回答，不推进剧情。")
@@ -519,7 +521,19 @@ class Game:
         text = await self.cast.keeper(self.state, report, on_delta=delta)
         self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
+        await self._sky(text)
         return text
+
+    async def _sky(self, narration: str) -> None:
+        """The keeper's words set the weather; unmentioned for a few hours, it passes."""
+        st = self.state
+        current = st.sky if st.minutes - st.sky_at < weather.LASTS else ""
+        sky, mentioned = weather.sky(narration, current)
+        if mentioned:
+            st.sky_at = st.minutes
+        if sky != st.sky:
+            st.sky = sky
+            await self.emit({"type": "sky", "sky": sky})
 
 
 def _check_view(c: Check) -> dict[str, Any]:
