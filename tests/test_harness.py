@@ -337,6 +337,25 @@ def test_presets_and_environment(monkeypatch, tmp_path):
     assert cfg.role("keeper").window == 4000 and cfg.role("npc").effort is None and cfg.role("keeper").effort == "high"
 
 
+def _spend_in(saves: str, n: int) -> None:
+    """Runs in a child process: n metered calls recorded against the ledger in `saves`."""
+    from pathlib import Path
+
+    config.SAVES = Path(saves)
+    for _ in range(n):
+        spend.record("deepseek:deepseek-flash", {"input_tokens": 1000, "cache_read": 0, "output_tokens": 0})
+
+
+def test_ledger_survives_processes_spending_at_once(tmp_path):
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(4) as pool:
+        list(pool.map(_spend_in, [str(tmp_path)] * 4, [40] * 4))
+    data = json.loads((tmp_path / "spend.json").read_text(encoding="utf-8"))
+    assert data["models"]["deepseek:deepseek-flash"]["calls"] == 160  # no update lost
+    assert data["total_usd"] == pytest.approx(160 * 0.0003)
+
+
 def test_budget_guard_stops_metered_calls(monkeypatch):
     monkeypatch.setenv("AUTOKEEPER_BUDGET_USD", "0.01")
     spend.budget.cache_clear()

@@ -3,14 +3,21 @@
 Claude Code reports its own cost. For API backends the harness estimates from token
 usage at peak list prices, so the estimate errs high; `budget_usd` in the config stops
 further calls once the running total crosses it. The ledger is saves/spend.json.
+
+Several processes may spend at once (an autoplay next to the TUI), so each update holds a
+file lock around read-modify-write and lands by atomic rename: a reader never sees half a
+file, and a broken ledger is set aside instead of being silently restarted from zero.
 """
 
 from __future__ import annotations
 
 import functools
 import json
+import os
 import threading
 from typing import Any
+
+from filelock import FileLock
 
 from .. import config
 
@@ -70,8 +77,14 @@ def record(model: str, usage: dict) -> float:
     cost = estimate(model, usage)
     if not cost:
         return 0.0
-    with _lock:
-        data = ledger()
+    path = _file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _lock, FileLock(f"{path}.lock", timeout=30):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"total_usd": 0.0, "models": {}}
+        except json.JSONDecodeError:  # keep the evidence; never quietly restart the count
+            os.replace(path, path.with_suffix(".json.bad"))
+            data = {"total_usd": 0.0, "models": {}}
         row = data["models"].setdefault(model, {"calls": 0, "input": 0, "cache_read": 0, "output": 0, "usd": 0.0})
         row["calls"] += 1
         row["input"] += usage.get("input_tokens", 0)
@@ -79,6 +92,7 @@ def record(model: str, usage: dict) -> float:
         row["output"] += usage.get("output_tokens", 0)
         row["usd"] = round(row["usd"] + cost, 6)
         data["total_usd"] = round(data["total_usd"] + cost, 6)
-        _file().parent.mkdir(parents=True, exist_ok=True)
-        _file().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, path)
     return cost

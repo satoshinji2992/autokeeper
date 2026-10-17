@@ -149,7 +149,7 @@ START → think ─┬─ finish ─────────→ END
 
 ## 预算与追踪
 
-- `spend.py`：按 token 估价（DeepSeek 按峰时价，所以估高不估低）。配置了 `budget_usd`，超出后按量计费的调用全部拒绝。账本在 `saves/spend.json`。
+- `spend.py`：按 token 估价（DeepSeek 按峰时价，所以估高不估低）。配置了 `budget_usd`，超出后按量计费的调用全部拒绝。账本在 `saves/spend.json`。几个进程可能同时花钱（比如自动跑团和 TUI 一起开），所以每次记账都持文件锁读改写，写完用原子改名替换，读的人看不到写了一半的文件；账本真坏了就挪成 `.bad` 留证据，不会悄悄从零记起（要是从零记起，预算护栏就形同虚设）。测试里 4 个进程各记 40 笔，一笔不丢。
 - `trace.py`：每次调用一行 JSON，写进 `saves/traces/<日期>.jsonl`。记录运行编号（进程，或 autoplay 的存档名）、Agent、后端、模型、思考强度、输出方式（text / native / json）、输入字数、token、缓存命中、思考字数、耗时、修复和重试次数、是否降级、错误。`AUTOKEEPER_TRACE=full` 还会记下完整的提示、输出和思考内容。
 - `autokeeper trace`：把追踪按 Agent（或模型、后端、运行）汇总成表：调用、输入、缓存命中、输出、延迟 p50/p95、花费；出现过修复、重试、降级、错误时自动多出这几列。`--run last` 只看最近一次运行，`--runs` 列出每次运行。
 
