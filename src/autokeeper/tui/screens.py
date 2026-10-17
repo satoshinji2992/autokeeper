@@ -152,7 +152,7 @@ class SketchCanvas(Canvas):
                 c = self.get_pixel(x, y)
                 if c and (c.r, c.g, c.b) != (18, 14, 8):
                     img.putpixel((x, y), (0, 0, 0))
-        img = img.resize((560, 320), Image.NEAREST)
+        img = img.resize((560, 320), Image.Resampling.NEAREST)
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()

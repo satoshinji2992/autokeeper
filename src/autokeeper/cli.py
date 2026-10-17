@@ -206,6 +206,7 @@ def trace_cmd(
     from .harness import trace
 
     rows = trace.read("all" if day is None and run not in (None, "last") else day)
+    name = ""
     if run:
         name = trace.runs(rows)[-1]["run"] if run == "last" and rows else run
         rows = [r for r in rows if r.get("run", "?") == name]

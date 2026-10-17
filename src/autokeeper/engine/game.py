@@ -147,7 +147,8 @@ class Game:
             passed = check.passed
             st.add("dice", check.describe(), who=inv.name)
             await self.emit({"type": "dice", "who": inv.name, **_check_view(check)})
-            if not passed and (check.can_push or check.luck_needed() is not None):
+            need = check.luck_needed()
+            if not passed and (check.can_push or need is not None):
                 wanted = self._valid_clues(ruling.clues_on_success, action)
                 if wanted:
                     turn.push = {
@@ -158,7 +159,7 @@ class Game:
                         "clues": wanted,
                         "flags": ruling.set_flags,
                         "can_push": check.can_push,
-                        "luck": check.luck_needed() if check.luck_needed() is not None and check.luck_needed() <= inv.luck else None,
+                        "luck": need if need is not None and need <= inv.luck else None,
                         "value": check.value,
                     }
                     st.pending_push = turn.push

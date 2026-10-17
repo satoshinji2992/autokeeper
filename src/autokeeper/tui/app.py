@@ -136,9 +136,9 @@ class TitleScreen(Screen):
     def choose(self, event: OptionList.OptionSelected) -> None:
         choice = event.option.id
         if choice == "new":
-            self.app.push_screen(SetupScreen(watch=False))
+            self.app.push_screen(SetupScreen(spectate=False))
         elif choice == "watch":
-            self.app.push_screen(SetupScreen(watch=True))
+            self.app.push_screen(SetupScreen(spectate=True))
         elif choice == "continue":
             self.app.push_screen(LoadScreen())
         elif choice == "import":
@@ -165,9 +165,9 @@ def _eye_mask() -> str:
 class SetupScreen(Screen):
     BINDINGS = [Binding("escape", "back", "返回")]
 
-    def __init__(self, watch: bool):
+    def __init__(self, spectate: bool):
         super().__init__()
-        self.watch = watch
+        self.spectate = spectate  # AI players only; not `watch`, which is Textual's
         self.step = "module"
         self.module: Module | None = None
         self.lead: Investigator | None = None
@@ -212,12 +212,12 @@ class SetupScreen(Screen):
                 opts.append(Option(f"《{m.title}》 {m.players}", id=str(p)))
             except Exception as exc:  # broken module files should not crash the menu
                 opts.append(Option(f"{p.name}（无法读取：{exc.__class__.__name__}）", id=str(p), disabled=True))
-        self._set("选择模组" + ("（AI 观战）" if self.watch else ""), opts, "Enter 选择 · Esc 返回")
+        self._set("选择模组" + ("（AI 观战）" if self.spectate else ""), opts, "Enter 选择 · Esc 返回")
 
     def _show_investigators(self) -> None:
         assert self.module
         self.step = "investigator"
-        if self.watch:
+        if self.spectate:
             opts = [Option(f"{n} 名 AI 调查员", id=f"party-{n}") for n in (1, 2, 3) if n <= max(1, len(self.module.pregens))]
             self._set(f"《{self.module.title}》· 观战人数", opts, "Enter 开始 · Esc 返回")
             return
@@ -247,7 +247,7 @@ class SetupScreen(Screen):
             t.append("\n\n" + m.hook.strip() + "\n\n", style="italic")
             t.append(m.source, style="dim")
             body.update(t)
-        elif self.step == "investigator" and self.module and not self.watch:
+        elif self.step == "investigator" and self.module and not self.spectate:
             inv = next((p for p in self.module.pregens if p.id == oid), None)
             if inv:
                 body.update(_investigator_card(self.module, inv))
@@ -263,7 +263,7 @@ class SetupScreen(Screen):
             self._show_investigators()
         elif self.step == "investigator":
             assert self.module
-            if self.watch:
+            if self.spectate:
                 n = int(oid.split("-")[1])
                 party = [p.model_copy(deep=True) for p in self.module.pregens[:n]]
                 self._start(party, human=[])
@@ -281,7 +281,7 @@ class SetupScreen(Screen):
         assert self.module
         slot = f"{self.module.id}-{time.strftime('%m%d-%H%M%S')}"
         state = Game.new(self.module, party, slot=slot, human=human)
-        self.app.switch_screen(GameScreen(self.module, state, watch=self.watch))
+        self.app.switch_screen(GameScreen(self.module, state, spectate=self.spectate))
 
 
 def _investigator_card(m: Module, inv: Investigator) -> Text:
@@ -327,7 +327,7 @@ class LoadScreen(Screen):
         meta = save_index()[slot]
         module = load_module(Path(meta["path"]))
         state = GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
-        self.app.switch_screen(GameScreen(module, state, resume=True, watch=not state.human))
+        self.app.switch_screen(GameScreen(module, state, resume=True, spectate=not state.human))
 
 
 # -- the game -------------------------------------------------------------------------------
@@ -345,9 +345,9 @@ class GameScreen(Screen):
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
-    def __init__(self, module: Module, state: GameState, *, resume: bool = False, watch: bool = False):
+    def __init__(self, module: Module, state: GameState, *, resume: bool = False, spectate: bool = False):
         super().__init__()
-        self.m, self.state, self.resume, self.watch = module, state, resume, watch
+        self.m, self.state, self.resume, self.spectate = module, state, resume, spectate
         self.cast: Cast | None = None
         self.game: Game | None = None
         self.graph = None
@@ -355,6 +355,7 @@ class GameScreen(Screen):
         self.met: set[str] = set()
         self.spinner = 0
         self.status_text = ""
+        self._spun = ""
         self.engine_label = ""
         self.busy = False
 
@@ -386,7 +387,7 @@ class GameScreen(Screen):
         self._scene(self.state.location)
         self._panels()
         self.set_interval(0.1, self._spin)
-        if self.watch:
+        if self.spectate:
             self.query_one(Input).disabled = True
         self.boot()
 
@@ -412,16 +413,18 @@ class GameScreen(Screen):
     def _spin(self) -> None:
         frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self.spinner = (self.spinner + 1) % len(frames)
-        label = self.query_one("#status", Static)
-        label.update(Text(f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""))
+        line = f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""
+        if line != self._spun:  # an idle status line is not repainted ten times a second
+            self._spun = line
+            self.query_one("#status", Static).update(Text(line))
 
     def _busy(self, busy: bool) -> None:
         self.busy = busy
         inp = self.query_one(Input)
-        inp.disabled = busy or self.watch
+        inp.disabled = busy or self.spectate
         if not busy:
             self.status_text = ""
-            if not self.watch:
+            if not self.spectate:
                 inp.focus()
 
     def _scene(self, loc_id: str) -> None:
@@ -644,7 +647,7 @@ class GameScreen(Screen):
             write_save(self.state, self.m)
         await warm
         self._busy(False)
-        if self.watch:
+        if self.spectate:
             self.autoplay()
 
     async def _feed(self, text: str) -> None:
@@ -659,7 +662,7 @@ class GameScreen(Screen):
             pass
 
     def action_focus_input(self) -> None:
-        if not self.watch:
+        if not self.spectate:
             self.query_one(Input).focus()
 
     @on(Input.Submitted, "#command")
