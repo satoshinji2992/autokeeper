@@ -7,32 +7,37 @@
 `prepare` extracts the source here; module generation (generator.py) reuses the same
 pipeline with web research as its `prepare` step.
 
-`build` and `fix` are one Claude agent session (Opus, medium effort by default) with
-file tools, working inside modules/local/<id>/. It reads the extracted text and the
-rendered page images, writes module.yaml, draws every location and portrait as ASCII
-art with colour masks, and runs `autokeeper check` itself until the module passes.
-Imported material stays in modules/local/ and skills/module-<id>/, both git-ignored.
+`build` and `fix` are one harness Agent (harness/loop.py) on the importer role, so any
+model can do it: Claude through Claude Code, DeepSeek, or a local model with no
+internet. It works inside modules/local/<id>/ with sandboxed file tools (it may write
+only module.yaml, notes.md and art/), a view_image tool backed by the vision role, and
+a check tool that runs the module validator in-process. It reads the extracted text,
+keeps notes, writes module.yaml, draws every location and portrait as ASCII art with
+colour masks, and checks its own work until the module passes. Imported material stays
+in modules/local/ and skills/module-<id>/, both git-ignored.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from rich.console import Console
+from rich.markup import escape
 
 from .. import artkit, config, skills
-from ..llm.backends import ClaudeSession, Session, open_session
+from ..harness import Agent, make_model
+from ..harness.tools import Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
 from .compiler import compile_module
 from .schema import Module
 
 MAX_FIX_ROUNDS = 3
+VISION = "你是跑团模组整理员的读图助手。看图，用简体中文如实回答问题；看不清的地方直说。"
 
 
 class ImportState(TypedDict, total=False):
@@ -88,12 +93,8 @@ def _prepare(work: Path) -> None:
     (ex / "schema.json").write_text(json.dumps(Module.model_json_schema(), ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def _check_cmd() -> str:
-    return f"{sys.executable} -m autokeeper check ."
-
-
 BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 CoC 7 版模组（页面图片在 source/pages/）
-整理成 AutoKeeper 的模组格式，写进当前目录的 module.yaml，并给它画彩色 ASCII 图。
+整理成 AutoKeeper 的模组格式，写进工作目录的 module.yaml，并给它画彩色 ASCII 图。
 
 ## 格式
 - 照着 _example/module.yaml（字段齐全的格式样例）写；字段含义见 _example/schema.json。
@@ -114,40 +115,14 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 只用 ASCII 字符，自己构图，不要照搬原书插图。_example/ 里有图和蒙版的格式样例。
 {art_skill}
 
-## 流程
-1. 通读 source/source.md；需要看地图、手稿时用 Read 打开 source/pages/ 下对应页的图片。
-2. 写 module.yaml。
-3. 画 art/ 下的图和蒙版。
-4. 运行 `{check}` 校验，按输出改到没有“错误”和“[图]”为止（“提醒”可以留着）。
-5. 最后用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。"""
-
-
-def _session(cfg, work: Path) -> Session:
-    from claude_agent_sdk.types import PermissionResultAllow, PermissionResultDeny
-
-    check = _check_cmd()
-
-    readonly = ("ls", "cat ", "head ", "tail ", "wc ")
-
-    async def can_use_tool(name, data, _context):
-        if name == "Bash":
-            cmd = str(data.get("command", "")).strip()
-            if cmd.startswith(check) or (cmd.startswith(readonly) and not any(c in cmd for c in ";&|>`$")):
-                return PermissionResultAllow()
-            return PermissionResultDeny(message=f"这里只允许只读命令和校验命令：{check}")
-        return PermissionResultAllow()
-
-    role = cfg.role("importer")
-    if role.backend != "claude":
-        return open_session("importer", role, "你是模组构建员。")
-    return ClaudeSession(
-        "importer",
-        role,
-        "你是一个仔细、守规矩的 TRPG 模组整理员。所有输出用简体中文。",
-        tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-        cwd=work,
-        extra={"permission_mode": "acceptEdits", "can_use_tool": can_use_tool, "max_turns": 200, "max_buffer_size": 32 * 1024 * 1024},
-    )
+## 流程（每一步调用一个工具）
+1. 用 read_file 分段通读 source/source.md（每次 200–400 行）。边读边用 append_file 把要点记进 notes.md：
+   地点、人物、线索（带检定）、时间线、结局。上下文会被压缩，notes.md 是你的长期记忆，写 module.yaml 时以它为准。
+2. 需要看地图、手稿时，用 view_image 看 source/pages/ 下对应页的图片。
+3. 用 write_file 写 module.yaml（内容多就先写前半，再用 append_file 续写），之后用 edit_file 修改。
+4. 画 art/ 下的图和 .color 蒙版。
+5. 调用 check 校验，按输出改到没有“错误”和“[图]”为止（“提醒”可以留着）。
+6. 最后 finish，在 answer 里用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。"""
 
 
 def validate(work: Path) -> list[str]:
@@ -165,6 +140,40 @@ def validate(work: Path) -> list[str]:
     return issues
 
 
+def report(issues: list[str]) -> str:
+    return "校验通过：没有错误。" if not issues else f"还有 {len(issues)} 个问题：\n" + "\n".join(issues[:40])
+
+
+def printer(console: Console, work: Path) -> Callable[[str, dict], None]:
+    """Agent events as console lines: the model's thought, then the tool it ran."""
+
+    def on_event(kind: str, data: dict) -> None:
+        if kind == "think" and data.get("thought"):
+            fixed = "  [yellow](修复格式 1 次)[/]" if data.get("repairs") else ""
+            console.print(f"  [italic dim]{escape(data['thought'][:160])}[/]{fixed}")
+        elif kind == "act":
+            args = data.get("args", {})
+            target = args.get("path") or args.get("query") or args.get("url") or ""
+            first = data.get("observation", "").splitlines()[0][:80] if data.get("observation") else ""
+            console.print(f"  [cyan]· {data['tool']}[/] {escape(str(target)[:80])}  [dim]{escape(first)}[/]")
+
+    return on_event
+
+
+def builder(work: Path, cfg: config.Config, console: Console, *, writable=("module.yaml", "notes.md", "art/*"), max_steps: int = 160) -> Agent:
+    ws = Workspace(work, writable=writable)
+    eye = make_model(cfg.role("vision"), VISION, label="vision")
+
+    async def see(png: bytes, query: str) -> str:
+        return (await eye.complete([{"role": "user", "content": query}], images=[png])).text.strip()
+
+    tools = [*file_tools(ws), image_tool(ws, see), check_tool(lambda: report(validate(work)))]
+    system = "你是一个仔细、守规矩的 TRPG 模组整理员。所有输出用简体中文。"
+    agent = Agent("importer", system, tools, cfg=cfg, max_steps=max_steps, memory=150_000, on_event=printer(console, work))
+    agent.closers.append(eye.close)
+    return agent
+
+
 async def pipeline(
     work: Path,
     *,
@@ -176,33 +185,26 @@ async def pipeline(
     console = console or Console()
     cfg = config.load()
     work.mkdir(parents=True, exist_ok=True)
-    session = _session(cfg, work)
+    agent = builder(work, cfg, console)
 
-    async def on_tool(name: str, data: dict) -> None:
-        target = data.get("file_path") or data.get("command") or data.get("pattern") or data.get("query") or data.get("url") or ""
-        console.print(f"  [dim]· {name}[/] {str(target).replace(str(work) + '/', '')[:100]}")
-
-    async def on_delta(text: str) -> None:
-        console.print(text, end="", style="italic", markup=False, highlight=False)
-
-    async def n_prepare(state: ImportState) -> dict:
+    async def n_prepare(_: ImportState) -> dict:
         if prepare:
             await prepare(console)
         _prepare(work)
         return {"work": str(work), "rounds": 0}
 
-    async def n_build(state: ImportState) -> dict:
+    async def n_build(_: ImportState) -> dict:
         role = cfg.role("importer")
-        console.print(f"[bold]构建[/] {role.model}（effort={role.effort}）开始写 module.yaml、画图…")
-        await session.send(brief, on_delta=on_delta, on_tool=on_tool)  # type: ignore[call-arg]
-        console.print()
+        console.print(f"[bold]构建[/] {role.backend}:{role.model}（effort={role.effort}）开始读原文、写 module.yaml、画图…")
+        result = await agent.run(brief)
+        console.print(f"[bold]构建结束[/] {result.steps} 步{'' if result.finished else '（到步数上限）'}  {escape(result.answer[:300])}")
         return {}
 
-    async def n_validate(state: ImportState) -> dict:
+    async def n_validate(_: ImportState) -> dict:
         issues = validate(work)
         console.print(f"[bold]校验[/] {'通过' if not issues else f'{len(issues)} 个问题'}")
         for i in issues[:20]:
-            console.print(f"  {i}")
+            console.print(f"  {escape(i)}")
         return {"issues": issues}
 
     def after_validate(state: ImportState) -> str:
@@ -213,20 +215,23 @@ async def pipeline(
     async def n_fix(state: ImportState) -> dict:
         rounds = state.get("rounds", 0) + 1
         console.print(f"[bold]修复[/] 第 {rounds} 轮")
-        problems = "\n".join(state.get("issues", []))
-        await session.send(  # type: ignore[call-arg]
-            f"校验还有这些问题，请逐条修好，再运行 `{_check_cmd()}` 确认：\n{problems}", on_delta=on_delta, on_tool=on_tool
-        )
-        console.print()
+        await agent.run(f"校验还有这些问题，请逐条修好，用 check 确认后再 finish：\n{report(state.get('issues', []))}")
         return {"rounds": rounds}
 
-    async def n_compile(state: ImportState) -> dict:
+    async def n_compile(_: ImportState) -> dict:
         m = Module.load(work)
         root = compile_module(m, config.SKILLS)
         console.print(
             f"[bold green]完成[/] 《{m.title}》：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、"
             f"{len(m.art)} 张 ASCII 图 → {root}"
         )
+        from .. import knowledge
+
+        if knowledge.available():
+            console.print("[bold]建库[/] LightRAG：抽取原文实体与关系，并灌入模组图谱…")
+            async with knowledge.KnowledgeBase(m, cfg) as kb:
+                stats = await kb.build(work)
+            console.print(f"[bold green]知识库[/] {stats}")
         return {}
 
     g = StateGraph(ImportState)
@@ -244,7 +249,7 @@ async def pipeline(
     try:
         await g.compile().ainvoke({}, {"recursion_limit": 20})
     finally:
-        await session.close()
+        await agent.close()
     return work
 
 
@@ -255,5 +260,5 @@ async def run_import(file: Path, module_id: str, *, pages: str | None = None, co
         n, size = extract(Path(file), work, pages)
         console.print(f"[bold]提取[/] {Path(file).name}：{n} 页，{size} 字 → {work}/source/")
 
-    brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"), check=_check_cmd())
+    brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
     return await pipeline(work, brief=brief, prepare=prepare, console=console)

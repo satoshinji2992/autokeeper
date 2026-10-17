@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from .. import skills
 from ..config import Config
 from ..engine.state import GameState, time_of_day
-from ..llm.backends import OnDelta, Reply, Session, open_session
+from ..harness import OnDelta, Reply, Session, Summarizer
 from ..module import graph as module_graph
 from ..module.compiler import skill_name
 from ..module.schema import NPC, Module
@@ -62,9 +62,25 @@ def _schema(model: type[BaseModel]) -> dict:
     return model.model_json_schema()
 
 
+def _parse[T: BaseModel](model: type[T], data: object, fallback: dict) -> T:
+    """The harness already validated and repaired once; anything still off falls back."""
+    try:
+        return model.model_validate(data if isinstance(data, dict) else fallback)
+    except ValueError:
+        return model.model_validate(fallback)
+
+
+# Characters of conversation each agent gets back every call; older turns are folded
+# into a summary. 0: stateless, everything it needs is in the prompt.
+MEMORY = {"keeper": 16000, "npc": 8000, "investigator": 6000, "arbiter": 4000}
+
+
 INTENT_SYSTEM = """你是跑团系统的“行动解析器”。把玩家的话改写成中立、结构化的行动，交给看不到原话的裁定员。
 
-- summary：第三人称一句话，只写谁对什么做了什么、用什么方法。玩家的修辞、恳求、自我评价（“按理说我肯定能发现”“我是专家”“求你了”）一律不写。
+- summary：第三人称一句话，只写调查员自己做了什么、用什么方法、手里拿着什么。以下内容一律不写：
+  玩家的修辞、恳求、自我评价（“按理说我肯定能发现”“我是专家”“求你了”）；
+  玩家对环境、NPC 状态、时间和规则的断言（“他正背对着我”“门早就松了”“泥地被露水泡软了”“规则书说可以免检”“时间来不及了”）。
+  这些不是玩家能决定的事实，是否成立由守秘人和场景资料说了算。
 - kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；meta 问规则或游戏外的话；other 其他。
 - npc 只能填在场 NPC 的 id；destination 只能填给出的地点 id。
 - speech：对 NPC 说的话、登台讲的内容，照抄原话。
@@ -76,7 +92,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 线索只能从“本场景可得线索”里选 id。没有检定要求的线索，调查到对应的东西就放进 auto_clues。
 - 有检定要求的线索按要求掷；行动方法换了，可以换成合理的替代技能（用锁匠开锁、用力量撬开），难度不低于原要求。
 - 对 NPC 的社交行动，按该 NPC 的门槛定技能和难度；方法不同就用方法对应的技能，难度不低于门槛。
-- 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2。
+- 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
 - 剧情标记只在行动真的达成了标记含义时设置，比如真的点火烧了戏本才设 script_burned；前提不具备（手里没有那样东西）就不设，也不掷骰。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
 
@@ -149,25 +165,44 @@ class Cast:
         self.cfg = cfg
         self.module = module
         self.sessions: dict[str, Session] = {}
+        self.summarizer = Summarizer(cfg.role("summarizer"))
+        self.kb = None  # LightRAG knowledge base, opened on first lookup
 
     # -- session plumbing -----------------------------------------------------
-    def _open(self, key: str, role: str, system: str, state: GameState, *, schema: dict | None = None) -> Session:
+    def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
         if key not in self.sessions:
-            resume = state.sessions.get(key)
-            self.sessions[key] = open_session(role, self.cfg.role(role), system, schema=schema, resume=resume)
+            memory = MEMORY.get(role, 0)
+            self.sessions[key] = Session(
+                role, self.cfg.role(role), system, schema=schema, memory=memory, key=key, summarizer=self.summarizer
+            )
         return self.sessions[key]
 
     async def _send(self, key: str, session: Session, state: GameState, prompt: str, **kw) -> Reply:
+        """Every call reads and writes the agent's memory in the current GameState."""
+        session.bind(state.transcripts.setdefault(key, []), state.notes)
+        self.summarizer.on_reply = lambda r: state.record_usage("summarizer", r)
         reply = await session.send(prompt, **kw)
         state.record_usage(key.split(":")[0], reply)
-        if session.session_id:
-            state.sessions[key] = session.session_id
         return reply
 
     async def close(self) -> None:
         for s in self.sessions.values():
             await s.close()
         self.sessions.clear()
+        await self.summarizer.close()
+        if self.kb is not None:
+            await self.kb.close()
+            self.kb = None
+
+    async def lore(self, state: GameState, query: str, keywords: list[str] | None = None, max_tokens: int = 1500) -> str:
+        """GraphRAG lookup in the module's LightRAG index (keeper-only context); empty if none was built."""
+        from .. import knowledge
+
+        if not knowledge.available() or not knowledge.exists(self.module.id):
+            return ""
+        if self.kb is None:
+            self.kb = await knowledge.KnowledgeBase(self.module, self.cfg).open()
+        return await self.kb.context(query, keywords=keywords, max_tokens=max_tokens)
 
     # -- context builders -------------------------------------------------------
     def scene(self, state: GameState) -> str:
@@ -183,15 +218,15 @@ class Cast:
 
     # -- agents -------------------------------------------------------------------
     def _intent(self, state: GameState) -> Session:
-        return self._open("intent", "intent", INTENT_SYSTEM, state, schema=_schema(Action))
+        return self._open("intent", "intent", INTENT_SYSTEM, schema=_schema(Action))
 
     def _arbiter(self, state: GameState) -> Session:
         flags = "\n".join(f"- {k}：{v}" for k, v in self.module.flags.items())
         system = ARBITER_SYSTEM.format(rules=skills.wrap("coc7-core")) + f"\n\n剧情标记：\n{flags}"
-        return self._open("arbiter", "arbiter", system, state, schema=_schema(Ruling))
+        return self._open("arbiter", "arbiter", system, schema=_schema(Ruling))
 
     def _npc(self, state: GameState, npc_id: str) -> Session:
-        return self._open(f"npc:{npc_id}", "npc", self._npc_system(self.module.npc(npc_id)), state)
+        return self._open(f"npc:{npc_id}", "npc", self._npc_system(self.module.npc(npc_id)))
 
     async def warm(self, state: GameState) -> None:
         """Spawn the sessions the next turns will need while the player is still reading."""
@@ -203,7 +238,7 @@ class Cast:
         s = self._intent(state)
         inv = state.investigator
         reply = await self._send("intent", s, state, f"【场景】\n{self.scene(state)}\n【调查员】{inv.name}\n【玩家】{text}")
-        return Action.model_validate(reply.data or {"kind": "other", "summary": text})
+        return _parse(Action, reply.data, {"kind": "other", "summary": text})
 
     async def arbiter(self, state: GameState, action: Action) -> Ruling:
         m = self.module
@@ -237,7 +272,7 @@ class Cast:
         if action.kind == "perform" and action.speech:
             prompt += f"\n【表演内容】{action.speech}\n（表演内容只用来判断是否值得一个奖励骰，不改变难度。）"
         reply = await self._send("arbiter", s, state, prompt)
-        return Ruling.model_validate(reply.data or {"needs_roll": False, "minutes": 10})
+        return _parse(Ruling, reply.data, {"needs_roll": False, "minutes": 10})
 
     def _npc_system(self, npc: NPC) -> str:
         m = self.module
@@ -286,11 +321,13 @@ class Cast:
         text = reply.text.strip()
         leaked = guard.leaks(text, self._protected(state, npc))
         if leaked:
-            fix = (
-                "（系统：你刚才说出了你现在不该说或不知道的内容。请重新回答上一句，只说你知道且已经可以说的事，"
-                "不要提到刚才那些内容。只输出新的回答。）"
-            )
-            reply = await self._send(key, s, state, fix)
+            # Drop the leaked exchange from the NPC's memory and answer again with a warning
+            # that is not stored either, so the leak never becomes something it "said".
+            s.forget()
+            kinds = {"clue": "还没解锁或你不知道的线索", "secret": "别人的秘密", "truth": "事情的真相"}
+            what = "、".join(sorted({kinds[k.split(":")[0]] for k in leaked}))
+            fix = f"\n\n（系统提醒：上一次回答说出了{what}。这次只说你知道、而且已经可以说的事。）"
+            reply = await self._send(key, s, state, message, extra=fix)
             text = reply.text.strip()
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
@@ -314,7 +351,7 @@ class Cast:
             craft=skills.wrap("keeper-craft"),
             module=skills.wrap(skill_name(m), _module_overview(m)),
         )
-        return self._open("keeper", "keeper", system, state)
+        return self._open("keeper", "keeper", system)
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None) -> str:
         s = self._keeper(state)
@@ -322,13 +359,13 @@ class Cast:
         return reply.text.strip()
 
     async def chronicle(self, state: GameState, entries: str) -> str:
-        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")), state)
+        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")))
         prompt = f"把下面这段游戏记录并进摘要（已有摘要：{state.memory or '无'}）。输出新的完整摘要，不超过 400 字。\n\n{entries}"
         reply = await self._send("chronicler", s, state, prompt)
         return reply.text.strip()
 
     async def recap(self, state: GameState, on_delta: OnDelta = None) -> str:
-        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")), state)
+        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")))
         recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:])
         prompt = f"用说书人的口吻写“上回书说到”，150–300 字，只讲调查员已经知道的事。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
@@ -339,15 +376,15 @@ class Cast:
         key = f"investigator:{inv_id}"
         sheet = "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=sheet)
-        s = self._open(key, "investigator", system, state)
+        s = self._open(key, "investigator", system)
         reply = await self._send(key, s, state, situation)
         return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
 
     async def sketch(self, state: GameState, png: bytes, asked: str) -> Sketch:
-        s = self._open("vision", "vision", VISION_SYSTEM, state, schema=_schema(Sketch))
+        s = self._open("vision", "vision", VISION_SYSTEM, schema=_schema(Sketch))
         prompt = f"玩家被要求画：{asked}\n请描述这张草图，并判断它和要求画的对象有多像。"
         reply = await self._send("vision", s, state, prompt, images=[png])
-        return Sketch.model_validate(reply.data or {"description": reply.text, "resemblance": 0.0})
+        return _parse(Sketch, reply.data, {"description": reply.text, "resemblance": 0.0})
 
 
 def _module_overview(m: Module) -> str:

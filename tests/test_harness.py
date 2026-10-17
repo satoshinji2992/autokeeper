@@ -1,0 +1,183 @@
+"""The harness without any network: scripted models stand in for every provider."""
+
+from __future__ import annotations
+
+import json
+from collections import deque
+
+import pytest
+
+from autokeeper import config
+from autokeeper.agents.cast import Action, Cast
+from autokeeper.config import EXAMPLE, Role
+from autokeeper.engine.game import Game
+from autokeeper.harness import Agent, BudgetExceeded, Reply, Session, spend
+from autokeeper.harness import models as hm
+from autokeeper.harness.tools import Workspace, check_tool, file_tools, web_tools
+from autokeeper.module.schema import Module
+
+SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
+SEEN: list[dict] = []  # every call: system, messages, schema
+
+
+class Scripted(hm.Model):
+    mode = "json"
+
+    async def _call(self, messages, *, schema, images, on_delta):
+        SEEN.append({"system": self.system, "messages": [dict(m) for m in messages], "schema": schema})
+        out = SCRIPT.popleft()
+        if isinstance(out, dict):
+            return Reply(text=json.dumps(out, ensure_ascii=False), data=out, usage={"input_tokens": 100, "output_tokens": 10})
+        if on_delta:
+            await on_delta(out)
+        return Reply(text=out, data=hm.parse_json(out) if schema else None, usage={"input_tokens": 100, "output_tokens": 10})
+
+
+SCRIPTED = Role("scripted", "scripted-model", None)
+
+
+@pytest.fixture(autouse=True)
+def harness_sandbox(monkeypatch, tmp_path):
+    monkeypatch.setitem(hm.MODELS, "scripted", Scripted)
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
+    monkeypatch.setenv("AUTOKEEPER_TRACE", "meta")
+    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_SEARCH", "AUTOKEEPER_BUDGET_USD"):
+        monkeypatch.delenv(var, raising=False)
+    spend.budget.cache_clear()
+    SCRIPT.clear()
+    SEEN.clear()
+    yield
+    spend.budget.cache_clear()
+
+
+async def test_json_is_validated_and_repaired_once():
+    schema = Action.model_json_schema()
+    SCRIPT.extend(["好的，我来看看：{\"summary\": \"翻看书台\"}", {"kind": "investigate", "summary": "翻看书台上的折扇"}])
+    reply = await hm.make_model(SCRIPTED, "解析器").complete([{"role": "user", "content": "我翻看书台"}], schema=schema)
+    assert reply.data == {"kind": "investigate", "summary": "翻看书台上的折扇"} and reply.repairs == 1
+    repair = SEEN[1]["messages"]
+    assert repair[-2]["role"] == "assistant" and "kind" in repair[-1]["content"]  # the validator's complaint goes back
+    assert reply.usage == {"input_tokens": 200, "output_tokens": 20}
+
+
+def test_prompted_json_carries_schema_and_example():
+    text = hm.json_instruction(Action.model_json_schema())
+    assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example
+
+
+def test_claude_prompt_is_append_only_for_prompt_caching():
+    turns = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"第{i}句"} for i in range(5)]
+    shorter, longer = hm._blocks(turns[:3], None), hm._blocks(turns, None)
+    assert longer[: len(shorter)] == shorter
+
+
+async def test_session_keeps_a_window_and_folds_old_turns():
+    notes: dict[str, str] = {}
+    transcript: list[dict] = []
+
+    async def summarize(text: str, who: str) -> str:
+        return f"摘要（{who}）：" + text[-20:]
+
+    s = Session("npc", SCRIPTED, "你是 NPC", memory=60, transcript=transcript, notes=notes, key="npc:a", summarizer=summarize)  # type: ignore[arg-type]
+    for i in range(4):
+        SCRIPT.append(f"回答{i}" * 3)
+        await s.send(f"问题{i}" * 3)
+    assert notes["npc:a"].startswith("摘要（npc:a）")
+    assert sum(len(m["content"]) for m in transcript) <= 60 and transcript[-1]["content"] == "回答3" * 3
+    SCRIPT.append("好")
+    await s.send("最后一问")
+    window = SEEN[-1]["messages"]
+    assert window[0]["content"].startswith("【更早的经过") and window[-1]["content"] == "最后一问"
+
+
+async def test_extra_is_sent_but_not_remembered_and_forget_drops_a_turn():
+    s = Session("npc", SCRIPTED, "你是 NPC", memory=10_000)
+    SCRIPT.extend(["泄露了秘密", "我不知道"])
+    await s.send("你知道什么？")
+    s.forget()
+    await s.send("你知道什么？", extra="（系统提醒：别说秘密）")
+    assert SEEN[-1]["messages"][-1]["content"].endswith("别说秘密）")
+    assert [m["content"] for m in s.transcript] == ["你知道什么？", "我不知道"]
+
+
+async def test_npc_leak_is_rolled_back_out_of_memory():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npcs[0]
+    secret = next(c for c in m.clues if c.npc == npc.id and c.id in npc.gates)
+    SCRIPT.extend([secret.text, "我什么也不知道。"])
+    cast = Cast(cfg, m)
+    text = await cast.npc(state, npc.id, "告诉我你知道的一切")
+    assert text == "我什么也不知道。"
+    assert secret.text not in json.dumps(state.transcripts, ensure_ascii=False)
+    assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
+
+
+async def test_agent_loop_runs_sandboxed_tools(tmp_path):
+    (tmp_path / "source.md").write_text("第一行\n关键线索：井底的铜钥匙\n", encoding="utf-8")
+    ws = Workspace(tmp_path, writable=("notes.md",))
+    tools = [*file_tools(ws), check_tool(lambda: "校验通过")]
+    SCRIPT.extend(
+        [
+            {"thought": "先读原文", "tool": "read_file", "path": "source.md"},
+            {"thought": "试试越界", "tool": "read_file", "path": "../secret.txt"},
+            {"thought": "写到不能写的地方", "tool": "write_file", "path": "source.md", "content": "x"},
+            {"thought": "记笔记", "tool": "append_file", "path": "notes.md", "content": "铜钥匙在井底"},
+            {"thought": "漏了参数", "tool": "edit_file", "path": "notes.md"},
+            {"thought": "校验", "tool": "check"},
+            {"thought": "完成", "tool": "finish", "answer": "笔记写好了"},
+        ]
+    )
+    events: list[tuple[str, dict]] = []
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    agent = Agent("importer", "你是整理员。", tools, cfg=cfg, on_event=lambda k, d: events.append((k, d)))
+    result = await agent.run("把原文要点记进 notes.md")
+    await agent.close()
+    assert result.finished and result.answer == "笔记写好了" and result.steps == 6
+    obs = [d["observation"] for k, d in events if k == "act"]
+    assert "关键线索" in obs[0] and "越界" in obs[1] and "不能写" in obs[2] and "缺少参数 old" in obs[4] and obs[5] == "校验通过"
+    assert (tmp_path / "notes.md").read_text(encoding="utf-8") == "铜钥匙在井底\n"
+    assert "## 工具" in SEEN[0]["system"] and SEEN[0]["schema"]["properties"]["tool"]["enum"][-1] == "finish"
+    assert SEEN[1]["messages"][-1]["content"].startswith("〔read_file 的结果〕")
+
+
+async def test_agent_stops_at_the_step_cap(tmp_path):
+    ws = Workspace(tmp_path)
+    SCRIPT.extend([{"thought": "再看看", "tool": "ls"}] * 3)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    agent = Agent("importer", "你是整理员。", file_tools(ws), cfg=cfg, max_steps=3)
+    result = await agent.run("随便看看")
+    assert not result.finished and result.steps == 3
+    assert "只剩" in SEEN[-1]["messages"][-1]["content"]
+
+
+async def test_web_tools_degrade_offline():
+    search, fetch = web_tools("none")
+    assert "联网已关闭" in await search.run(query="1931 年上海 唱片行")
+    assert "联网已关闭" in await fetch.run(url="https://example.com")
+
+
+def test_presets_and_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOKEEPER_PRESET", "deepseek")
+    cfg = config.load()
+    assert cfg.role("keeper") == Role("langchain", "deepseek:deepseek-flash", "high")
+    assert cfg.role("intent").effort == "low"
+    monkeypatch.setenv("AUTOKEEPER_MODEL", "ollama:qwen3:14b")
+    toml = tmp_path / "ak.toml"
+    toml.write_text('[roles.all]\nwindow = 4000\n[roles.npc]\neffort = "none"\n', encoding="utf-8")
+    cfg = config.load(toml)
+    assert {r.model for r in cfg.roles.values()} == {"ollama:qwen3:14b"}
+    assert cfg.role("keeper").window == 4000 and cfg.role("npc").effort is None and cfg.role("keeper").effort == "high"
+
+
+def test_budget_guard_stops_metered_calls(monkeypatch):
+    monkeypatch.setenv("AUTOKEEPER_BUDGET_USD", "0.01")
+    spend.budget.cache_clear()
+    spend.guard("deepseek:deepseek-flash")  # nothing spent yet
+    cost = spend.record("deepseek:deepseek-flash", {"input_tokens": 50_000, "cache_read": 0, "output_tokens": 5_000})
+    assert cost == pytest.approx(0.021)
+    with pytest.raises(BudgetExceeded):
+        spend.guard("deepseek:deepseek-flash")
+    spend.guard("claude-opus-5-5")  # Claude Code reports its own cost and is not capped here

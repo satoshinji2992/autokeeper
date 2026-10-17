@@ -21,7 +21,7 @@ from textual.theme import Theme
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import artkit, config
+from .. import artkit, config, imagery
 from ..agents.cast import Cast
 from ..engine import graph as turn_graph
 from ..engine.game import Game
@@ -90,7 +90,10 @@ def load_module(path: Path) -> Module:
     return m
 
 
-def art_text(m: Module, name: str | None) -> Text:
+def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "picture") -> Text:
+    """A picture (chafa) when the module has one and a size is given, else the hand-drawn art."""
+    if name and size and name in m.pictures and imagery.available():
+        return Text.from_ansi(imagery.render(m.pictures[name], *size, style))
     if not name or name not in m.art:
         return Text("")
     return artkit.colorize(m.art[name], m.art_colors.get(name))
@@ -140,7 +143,7 @@ class TitleScreen(Screen):
             self.app.push_screen(TextModal("导入模组", Text(
                 "把模组文件（PDF / Word / Markdown）放进 modules/_import/，然后在终端运行：\n\n"
                 "    uv run autokeeper import modules/_import/你的模组.pdf --id 英文短名\n\n"
-                "Opus 会读文本和页面图片，写出 module.yaml、给每个地点和 NPC 画彩色 ASCII 图，\n"
+                "导入 Agent 会读文本和页面图片，写出 module.yaml、给每个地点和 NPC 画彩色 ASCII 图，\n"
                 "跑校验直到没有错误，再编译成 Skill 包。导入的模组只留在本地 modules/local/。"
             )))
         elif choice == "quit":
@@ -225,7 +228,7 @@ class SetupScreen(Screen):
         others = [p for p in self.module.pregens if p.id != self.lead.id]
         opts = [Option("独自调查", id="solo")]
         opts += [Option(f"带 {n} 名 AI 同伴", id=f"with-{n}") for n in (1, 2) if n <= len(others)]
-        self._set("同伴", opts, "AI 同伴由 Haiku 扮演，会在你之后行动 · Esc 返回")
+        self._set("同伴", opts, "AI 同伴是 investigator Agent，会在你之后行动 · Esc 返回")
 
     @on(OptionList.OptionHighlighted, "#choices")
     def preview(self, event: OptionList.OptionHighlighted) -> None:
@@ -332,6 +335,7 @@ class GameScreen(Screen):
         Binding("f5", "map", "地图"),
         Binding("ctrl+r", "recap", "上回书说到"),
         Binding("ctrl+s", "save", "存档"),
+        Binding("ctrl+a", "art_style", "画法"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -407,8 +411,22 @@ class GameScreen(Screen):
     def _scene(self, loc_id: str) -> None:
         loc = self.m.location(loc_id)
         name = loc.art or ""
-        self.query_one(SceneArt).show(loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name))
+        scene = self.query_one(SceneArt)
+        scene.style_name = self.app.art_style  # type: ignore[attr-defined]
+        scene.show(loc.name, self.m.art.get(name, ""), self.m.art_colors.get(name), self.m.pictures.get(name))
         self._topbar()
+
+    def on_resize(self, event) -> None:
+        right = self.query_one("#right")
+        width = event.size.width
+        right.display = width >= 96
+        right.styles.width = 40 if width >= 130 else 34
+
+    def action_art_style(self) -> None:
+        self.app.art_style = "ascii" if self.app.art_style == "picture" else "picture"  # type: ignore[attr-defined]
+        self.app.notify(f"画面：{'纯 ASCII' if self.app.art_style == 'ascii' else '块字符'}")  # type: ignore[attr-defined]
+        self._scene(self.state.location)
+        self._panels()
 
     def _topbar(self) -> None:
         st = self.state
@@ -425,7 +443,7 @@ class GameScreen(Screen):
     def _panels(self) -> None:
         st = self.state
         inv = st.investigator
-        self.query_one(SheetPanel).show(inv, art_text(self.m, inv.portrait))
+        self.query_one(SheetPanel).show(inv, art_text(self.m, inv.portrait, (30, 12), self.app.art_style))  # type: ignore[attr-defined]
         titles = [self.m.clue(c).title for c in st.clues]
         self.query_one(CluePanel).show(titles, len(self.m.clues))
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
@@ -516,8 +534,8 @@ class GameScreen(Screen):
     def _npc_line(self, ev: dict, kind: str) -> None:
         npc = self.m.npc(ev["npc"])
         body = Text()
-        if npc.id not in self.met and npc.portrait in self.m.art:
-            body.append_text(art_text(self.m, npc.portrait))
+        if npc.id not in self.met and (npc.portrait in self.m.art or npc.portrait in self.m.pictures):
+            body.append_text(art_text(self.m, npc.portrait, (30, 12), self.app.art_style))  # type: ignore[attr-defined]
             body.append("\n")
             self.met.add(npc.id)
         body.append(f"{ev['name']}", style="bold")
@@ -782,6 +800,7 @@ class AutoKeeperApp(App):
     def __init__(self, theme: str | None = None):
         super().__init__()
         self._theme_name = theme
+        self.art_style = config.load().art_style
 
     def on_mount(self) -> None:
         for th in THEMES:

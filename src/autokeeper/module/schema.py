@@ -149,6 +149,7 @@ class Module(BaseModel):
     pregens: list[Investigator] = Field(default_factory=list)
     art: dict[str, str] = Field(default_factory=dict, exclude=True)
     art_colors: dict[str, str] = Field(default_factory=dict, exclude=True)
+    pictures: dict[str, str] = Field(default_factory=dict, exclude=True)  # art name -> art/<name>.jpg
 
     # -- lookups ------------------------------------------------------------
     def location(self, id: str) -> Location:
@@ -180,6 +181,7 @@ class Module(BaseModel):
         if art_dir.is_dir():
             module.art = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.txt"))}
             module.art_colors = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.color"))}
+            module.pictures = {p.stem: str(p) for p in sorted(art_dir.glob("*.jpg")) if not p.stem.endswith(".glitch")}
         return module
 
     def save(self, folder: Path) -> Path:

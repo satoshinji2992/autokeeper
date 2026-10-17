@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import random
 
 from rich.console import Group
@@ -9,7 +10,7 @@ from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from .. import artkit
+from .. import artkit, imagery
 from ..rules.coc import Investigator
 from . import art
 
@@ -24,34 +25,63 @@ LEVEL_STYLE = {
 
 
 class SceneArt(Static):
-    """Location name and ASCII art; glitches when sanity drops."""
+    """Location name and its art: a real picture rendered by chafa to fit the panel, or the
+    hand-drawn ASCII fallback. Glitches when sanity drops."""
 
     def __init__(self, **kw):
         super().__init__("", **kw)
         self.place = ""
         self.picture = ""
         self.mask: str | None = None
+        self.image: str | None = None
+        self.style_name = "picture"
         self.madness = 0.0
         self._burst = 0
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
 
-    def show(self, place: str, picture: str, mask: str | None = None) -> None:
-        self.place, self.picture, self.mask = place, picture, mask
+    def on_resize(self) -> None:
         self._paint()
 
-    def _paint(self, rate: float = 0.0) -> None:
+    def show(self, place: str, picture: str, mask: str | None = None, image: str | None = None) -> None:
+        self.place, self.picture, self.mask, self.image = place, picture, mask, image
+        self._paint()
+
+    def _fit(self) -> tuple[int, int]:
+        return max(24, (self.size.width or 72) - 2), 15
+
+    def _uses_image(self) -> bool:
+        return bool(self.image) and imagery.available()
+
+    def _paint(self, rate: float = 0.0, frame: str | None = None) -> None:
         body = Text()
         body.append(f"◆ {self.place}\n", style="bold")
-        if self.picture:
+        if frame is not None:
+            body.append_text(Text.from_ansi(frame))
+        elif self._uses_image():
+            body.append_text(Text.from_ansi(imagery.render(self.image, *self._fit(), self.style_name)))
+        elif self.picture:
             body.append_text(artkit.colorize(art.corrupt(self.picture, rate), self.mask))
         self.update(body)
 
     def glitch(self, frames: int = 14) -> None:
-        self._burst = frames
         self.add_class("dread")
+        if self._uses_image():
+            self.run_worker(self._picture_glitch(min(8, max(3, frames // 3))), exclusive=True, group="glitch")
+            return
+        self._burst = frames
         self._tick()
+
+    async def _picture_glitch(self, frames: int) -> None:
+        w, h = self._fit()
+        for i in range(frames):
+            strength = 1.0 - i / frames
+            frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name)
+            self._paint(frame=frame)
+            await asyncio.sleep(0.05)
+        self.remove_class("dread")
+        self._paint()
 
     def _tick(self) -> None:
         if self._burst <= 0:
@@ -64,6 +94,9 @@ class SceneArt(Static):
 
     def _idle_flicker(self) -> None:
         if self._burst or self.madness <= 0 or random.random() > self.madness:
+            return
+        if self._uses_image():
+            self.run_worker(self._picture_glitch(2), exclusive=True, group="glitch")
             return
         self._paint(0.03 + self.madness * 0.08)
         self.set_timer(0.12, self._paint)

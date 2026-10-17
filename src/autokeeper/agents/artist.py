@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .. import artkit, skills
 from ..config import Config
-from ..llm.backends import open_session
+from ..harness import Session
 
 
 class Mask(BaseModel):
@@ -31,7 +31,7 @@ SYSTEM = f"""你是 AutoKeeper 的美术，专画终端里的 ASCII 图，并给
 
 
 async def color(cfg: Config, name: str, text: str, hint: str = "") -> str:
-    session = open_session("artist", cfg.role("artist"), SYSTEM, schema=Mask.model_json_schema())
+    session = Session("artist", cfg.role("artist"), SYSTEM, schema=Mask.model_json_schema())
     try:
         lines = text.split("\n")
         prompt = (
@@ -49,7 +49,7 @@ async def color(cfg: Config, name: str, text: str, hint: str = "") -> str:
 
 async def draw(cfg: Config, subject: str, *, portrait: bool = False) -> tuple[str, str]:
     w, h = artkit.MAX_PORTRAIT if portrait else artkit.MAX_SCENE
-    session = open_session("artist", cfg.role("artist"), SYSTEM, schema=Drawing.model_json_schema())
+    session = Session("artist", cfg.role("artist"), SYSTEM, schema=Drawing.model_json_schema())
     try:
         reply = await session.send(
             f"画一张{'人物头像' if portrait else '场景插图'}：{subject}\n宽不超过 {w} 列，高不超过 {h} 行，只用 ASCII 字符。同时给出配色蒙版。"

@@ -24,5 +24,6 @@ async def test_mcp_tools_play_a_short_scene(monkeypatch, tmp_path):
     moved = await srv.move("tower")
     assert moved["arrived"] == "tower" and "齿轮间" in moved["read_aloud"]
     assert srv.scene()["location"]["id"] == "tower"
-    assert any(h["id"] == "warden" for h in srv.lookup("老守钟人"))
+    found = await srv.lookup("老守钟人")
+    assert any(h["id"] == "warden" for h in found["graph"])
     assert (tmp_path / "t.json").exists()

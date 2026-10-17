@@ -6,7 +6,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,7 +26,8 @@ jobs:
         run: uv run ruff check src tests
       - name: Test
         run: uv run pytest -q
-      - name: Validate skills and the demo module
+      - name: Validate skills and the format example
+        shell: bash
         run: |
           for d in skills/*/; do uv run agentskills validate "$d"; done
           uv run autokeeper check src/autokeeper/module/example

@@ -1,0 +1,84 @@
+"""What metered API calls cost, and a hard cap on it.
+
+Claude Code reports its own cost. For API backends the harness estimates from token
+usage at peak list prices, so the estimate errs high; `budget_usd` in the config stops
+further calls once the running total crosses it. The ledger is saves/spend.json.
+"""
+
+from __future__ import annotations
+
+import functools
+import json
+import threading
+from typing import Any
+
+from .. import config
+
+# USD per million tokens: (input, cached input, output). DeepSeek peak rates (off-peak is half).
+PRICES: dict[str, tuple[float, float, float]] = {
+    "deepseek-flash": (0.30, 0.006, 1.20),
+    "deepseek-v4-flash": (0.30, 0.006, 1.20),
+    "deepseek-v4-pro": (1.32, 0.044, 3.96),
+}
+
+_lock = threading.Lock()
+
+
+class BudgetExceeded(RuntimeError):
+    pass
+
+
+def _file():
+    return config.SAVES / "spend.json"
+
+
+def ledger() -> dict[str, Any]:
+    try:
+        return json.loads(_file().read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"total_usd": 0.0, "models": {}}
+
+
+def price(model: str) -> tuple[float, float, float] | None:
+    return PRICES.get(model.split(":", 1)[-1])
+
+
+def estimate(model: str, usage: dict) -> float:
+    p = price(model)
+    if not p:
+        return 0.0
+    cached = usage.get("cache_read", 0)
+    fresh = max(0, usage.get("input_tokens", 0) - cached)
+    return (fresh * p[0] + cached * p[1] + usage.get("output_tokens", 0) * p[2]) / 1_000_000
+
+
+@functools.cache
+def budget() -> float | None:
+    return config.load().budget_usd
+
+
+def guard(model: str) -> None:
+    """Refuse a metered call once the ledger is past the cap."""
+    if (cap := budget()) is None or price(model) is None:
+        return
+    spent = ledger()["total_usd"]
+    if spent >= cap:
+        raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（saves/spend.json；在配置里调 budget_usd）")
+
+
+def record(model: str, usage: dict) -> float:
+    cost = estimate(model, usage)
+    if not cost:
+        return 0.0
+    with _lock:
+        data = ledger()
+        row = data["models"].setdefault(model, {"calls": 0, "input": 0, "cache_read": 0, "output": 0, "usd": 0.0})
+        row["calls"] += 1
+        row["input"] += usage.get("input_tokens", 0)
+        row["cache_read"] += usage.get("cache_read", 0)
+        row["output"] += usage.get("output_tokens", 0)
+        row["usd"] = round(row["usd"] + cost, 6)
+        data["total_usd"] = round(data["total_usd"] + cost, 6)
+        _file().parent.mkdir(parents=True, exist_ok=True)
+        _file().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return cost

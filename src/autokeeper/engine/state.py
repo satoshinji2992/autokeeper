@@ -23,7 +23,6 @@ class LogEntry(BaseModel):
 class NpcState(BaseModel):
     met: bool = False
     unlocked: list[str] = Field(default_factory=list)  # gated clues the NPC may now give
-    session: str | None = None  # backend session id, so the NPC's memory survives a reload
     lines: int = 0
 
 
@@ -41,7 +40,10 @@ class GameState(BaseModel):
     flags: list[str] = Field(default_factory=list)
     fired: list[str] = Field(default_factory=list)
     npcs: dict[str, NpcState] = Field(default_factory=dict)
-    sessions: dict[str, str] = Field(default_factory=dict)  # role -> backend session id
+    # Agent memory lives in the save, not in any backend: per-agent conversation windows
+    # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.
+    transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    notes: dict[str, str] = Field(default_factory=dict)
     log: list[LogEntry] = Field(default_factory=list)
     memory: str = ""  # chronicler's summary of everything before the recent log
     pending_push: dict | None = None
@@ -75,8 +77,8 @@ class GameState(BaseModel):
         u = self.usage.setdefault(role, {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0, "seconds": 0.0})
         usage = reply.usage or {}
         u["calls"] += 1
-        u["input"] += usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
-        u["cache_read"] += usage.get("cache_read_input_tokens", 0)
+        u["input"] += usage.get("input_tokens", 0)
+        u["cache_read"] += usage.get("cache_read", 0)
         u["output"] += usage.get("output_tokens", 0)
         u["cost_usd"] += reply.cost_usd or 0.0
         u["seconds"] += reply.seconds or 0.0

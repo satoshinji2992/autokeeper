@@ -1,16 +1,21 @@
 [project]
 name = "autokeeper"
-version = "0.1.0"
-description = "自动化 CoC 7 版中文跑团：多智能体守秘人、模组导入、彩色 ASCII 终端界面"
+version = "0.2.0"
+description = "自动化 CoC 7 版中文跑团：自研 harness 上的多智能体守秘人，Claude / DeepSeek / 本地模型可换，模组导入与生成，彩色 ASCII 终端界面"
 authors = [
     { name = "Sato shinji", email = "wwwsatoshinji@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "ddgs>=9.16.0",
+    "httpx>=0.27",
+    "jsonschema>=4.23",
     "langchain>=1.4.6",
     "langchain-core>=1.6.12",
+    "langchain-deepseek>=1.1.1",
     "langchain-google-genai>=4.4.2",
     "langchain-mcp-adapters>=0.3.2",
+    "langchain-ollama>=1.1.0",
     "langchain-openai>=1.7.2",
     "langgraph>=1.2.16",
     "langgraph-checkpoint-sqlite>=3.1.2",
@@ -22,6 +27,7 @@ dependencies = [
     "pydantic-settings>=2.16.0",
     "pyfiglet>=1.0.4",
     "pypdfium2>=5.14.0",
+    "python-dotenv>=1.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
     "terminaltexteffects>=0.15.0",
@@ -42,6 +48,11 @@ claude = [
 graphrag = [
     "fastembed>=0.6",
     "lightrag-hku>=1.5.7",
+]
+art = [
+    "ascii-magic>=2.7.5",
+    "opencv-python-headless>=5.0.0.93",
+    "rembg>=2.0.50",
 ]
 
 [build-system]

@@ -1,10 +1,11 @@
 """Generate an original module from a one-line seed, grounded by web research.
 
-    research (Claude with WebSearch / WebFetch) ─→ the import pipeline's build ⇄ validate ─→ compile
+    research (harness Agent + web tools) ─→ the import pipeline's build ⇄ validate ─→ compile
 
-The researcher writes research.md: dated, sourced fact cards about the era and place
-(prices, streets, newspapers, customs, real events). The builder then writes an
-original scenario that uses those facts, cites them in `source`, and draws the art.
+The researcher is a harness Agent with the harness's own web_search / fetch_url tools,
+so it works on any model. With `search = "none"` (no network) it still runs: the cards
+come from the model's own knowledge and are all marked 未核实, and `autokeeper research`
+can verify them later when a network is available.
 """
 
 from __future__ import annotations
@@ -14,20 +15,23 @@ from pathlib import Path
 from rich.console import Console
 
 from .. import artkit, config, skills
-from ..llm.backends import ClaudeSession
-from .importer import _check_cmd, pipeline
+from ..harness import Agent
+from ..harness.search import resolve
+from ..harness.tools import Workspace, file_tools, web_tools
+from .importer import pipeline, printer
 
 RESEARCH = """你是 CoC 跑团模组的考据员。种子：{seed}
 
-用 WebSearch / WebFetch 查这个年代、这个地方的真实细节：街道与建筑、物价与交通、报纸与行业、风俗与俚语、
+用 web_search / fetch_url 查这个年代、这个地方的真实细节：街道与建筑、物价与交通、报纸与行业、风俗与俚语、
 当时发生过的真实事件，以及可以借用的公有领域怪谈或文学（比如钱伯斯、坡、洛夫克拉夫特已进入公有领域的作品）。
 把结果写成 research.md：10–15 张考据卡，每张包含“标题、事实（一两句）、可以怎么用进模组、出处链接”。
-只写查得到出处的事实；查不到的写“未核实”。"""
+查到出处的标【已核实】；查不到的、或联网已关闭时凭自己知识写的，一律标【未核实】，不要编造链接。
+写完调用 finish。"""
 
-GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创一个 CoC 7 版短模组，写进当前目录的 module.yaml，并画彩色 ASCII 图。
+GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创一个 CoC 7 版短模组，写进工作目录的 module.yaml，并画彩色 ASCII 图。
 
 种子：{seed}
-考据：research.md（先读它；用到的史实在 source 字段里注明出处）
+考据：research.md（先读它；用到的史实在 source 字段里注明出处，未核实的写明“未核实”）
 
 ## 设计要求
 - 1–3 名调查员，2–3 小时；6–9 个地点，4–6 个 NPC，12–18 条线索。
@@ -41,8 +45,17 @@ GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创
 - 每个地点画场景图（≤56 列、≤14 行），每个 NPC 和预设调查员画头像（≤18 列、7 行），各配同形状 .color 蒙版。颜色键：{palette}
 {art_skill}
 
-## 流程
-写完运行 `{check}`，按输出改到没有“错误”和“[图]”为止。最后用三五句话介绍这个模组的卖点。"""
+## 流程（每一步调用一个工具）
+先把设计要点用 append_file 记进 notes.md，再用 write_file / append_file 写 module.yaml、画 art/。
+写完调用 check，按输出改到没有“错误”和“[图]”为止。最后 finish，用三五句话介绍这个模组的卖点。"""
+
+RESEARCHER = "你是严谨的历史考据员，所有输出用简体中文。"
+
+
+def _researcher(work: Path, cfg: config.Config, console: Console, writable: tuple[str, ...], max_steps: int) -> Agent:
+    ws = Workspace(work, writable=writable)
+    tools = [*web_tools(cfg.search), *file_tools(ws)]
+    return Agent("importer", RESEARCHER, tools, cfg=cfg, max_steps=max_steps, memory=80_000, on_event=printer(console, work))
 
 
 async def run_generate(seed: str, module_id: str, *, console: Console | None = None) -> Path:
@@ -51,29 +64,37 @@ async def run_generate(seed: str, module_id: str, *, console: Console | None = N
     work = config.LOCAL_MODULES / module_id
 
     async def research(console: Console) -> None:
-        console.print(f"[bold]考据[/] {seed}")
-
-        async def on_tool(name: str, data: dict) -> None:
-            console.print(f"  [dim]· {name}[/] {str(data.get('query') or data.get('url') or data.get('file_path') or '')[:100]}")
-
-        tools = ["WebSearch", "WebFetch", "Write", "Read"]
-        session = ClaudeSession(
-            "researcher",
-            cfg.role("importer"),
-            "你是严谨的历史考据员，所有输出用简体中文。",
-            tools=tools,
-            cwd=work,
-            extra={"permission_mode": "acceptEdits", "allowed_tools": tools, "max_turns": 60},
-        )
+        console.print(f"[bold]考据[/] {seed}（搜索：{resolve(cfg.search)}）")
+        agent = _researcher(work, cfg, console, ("research.md",), 60)
         try:
-            await session.send(RESEARCH.format(seed=seed), on_tool=on_tool)
+            await agent.run(RESEARCH.format(seed=seed))
         finally:
-            await session.close()
+            await agent.close()
         cards = (work / "research.md").read_text(encoding="utf-8") if (work / "research.md").exists() else ""
-        console.print(f"[bold]考据完成[/] research.md {len(cards)} 字")
+        console.print(f"[bold]考据完成[/] research.md {len(cards)} 字，已核实 {cards.count('已核实')} 处，未核实 {cards.count('未核实')} 处")
 
     work.mkdir(parents=True, exist_ok=True)
-    brief = GENERATE.format(
-        seed=seed, module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"), check=_check_cmd()
-    )
+    brief = GENERATE.format(seed=seed, module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
     return await pipeline(work, brief=brief, prepare=research, console=console)
+
+
+VERIFY = """逐条核实 research.md 里的考据卡：用 web_search 找出处，必要时用 fetch_url 打开核对。
+- 核实无误的改成【已核实】并附出处链接；
+- 有出入的更正事实，标【已更正】并附出处；
+- 查不到可靠出处的保持【未核实】。
+改完 research.md，再把 module.yaml 里 source 字段中关于核实情况的说明改成实际情况（只改 source 字段）。最后 finish。"""
+
+
+async def verify_research(module_dir: Path, *, console: Console | None = None) -> None:
+    """Re-run the researcher with web tools over an existing research.md."""
+    console = console or Console()
+    cfg = config.load()
+    if resolve(cfg.search) == "none":
+        raise ValueError("search = none：核实需要联网，换一个搜索后端（auto / ddgs / wikipedia / tavily）再来")
+    agent = _researcher(Path(module_dir), cfg, console, ("research.md", "module.yaml"), 80)
+    try:
+        await agent.run(VERIFY)
+    finally:
+        await agent.close()
+    text = (Path(module_dir) / "research.md").read_text(encoding="utf-8")
+    console.print(f"[bold]核实完成[/] 已核实 {text.count('已核实')} 处，已更正 {text.count('已更正')} 处，未核实 {text.count('未核实')} 处")

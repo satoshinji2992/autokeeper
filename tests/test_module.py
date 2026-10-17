@@ -34,3 +34,14 @@ def test_compile_skill_package(tmp_path):
     assert (root / "assets" / "ascii" / "square.txt").exists()
     assert len(skill.splitlines()) < 500
     assert skills_ref.validate(root) == []
+
+
+def test_custom_kg_for_lightrag_has_unique_names_and_no_self_loops():
+    from autokeeper.knowledge import custom_kg
+
+    kg = custom_kg(Module.load(EXAMPLE))
+    names = [e["entity_name"] for e in kg["entities"]]
+    assert len(names) == len(set(names))
+    assert "守钟人的日记（手稿）" in names  # the handout shares its clue's title
+    assert all(r["src_id"] != r["tgt_id"] for r in kg["relationships"])
+    assert {"src_id", "tgt_id", "description", "keywords", "source_id"} <= set(kg["relationships"][0])

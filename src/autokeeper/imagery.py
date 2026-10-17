@@ -1,0 +1,394 @@
+"""Real pictures for scenes and portraits, rendered as terminal character art.
+
+    queries (Haiku)  ->  Wikimedia Commons search (licence-filtered)  ->  contact sheet
+    ->  vision agent picks one and a crop box (Opus)  ->  art/<name>.jpg + art/<name>.credit.json
+
+At play time chafa renders the picture to fit the panel it sits in: Unicode block
+characters by default ("picture"), or plain ASCII glyphs ("ascii"). Hand-drawn
+art/<name>.txt stays as the fallback when there is no picture or no chafa.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import io
+import json
+import random
+import shutil
+import subprocess
+from dataclasses import asdict, dataclass
+from functools import lru_cache
+from pathlib import Path
+
+import httpx
+from PIL import Image, ImageDraw, ImageEnhance, ImageOps
+from pydantic import BaseModel, Field
+
+from .config import Config
+from .harness import Session
+
+COMMONS = "https://commons.wikimedia.org/w/api.php"
+USER_AGENT = "AutoKeeper/0.1 (https://github.com/satoshinji2992/autokeeper)"
+OPEN_LICENSES = ("public domain", "pd", "cc0", "cc by", "cc-by", "attribution", "no restrictions", "no known copyright")
+IMAGE_MIMES = ("image/jpeg", "image/png", "image/webp", "image/tiff")
+STYLES = {
+    "picture": ["--symbols", "block+border+space-wide-inverted", "--color-space", "din99d", "--dither", "diffusion", "--dither-intensity", "0.5"],
+    "ascii": ["--symbols", "ascii", "--color-space", "din99d"],
+}
+
+
+@dataclass
+class Candidate:
+    title: str
+    page: str
+    thumb: str
+    license: str
+    artist: str
+    width: int
+    height: int
+
+
+class Queries(BaseModel):
+    queries: list[str] = Field(description="2–3 条英文检索词")
+
+
+class Pick(BaseModel):
+    index: int = Field(description="选中的候选编号，都不合适填 -1")
+    crop: list[float] = Field(default_factory=lambda: [0.0, 0.0, 1.0, 1.0], description="裁剪框 x0,y0,x1,y1，取值 0–1")
+    reason: str = ""
+
+
+QUERY_SYSTEM = """你为一个 1920 年代背景的克苏鲁跑团游戏找配图。根据描述写 3 条英文检索词，用于在 Wikimedia Commons 搜索：
+- 每条只有 2–4 个常见英文词，越宽泛越容易搜到，比如 "old graveyard"、"Victorian house night"、"portrait old man"；
+- 第一条写画面主体，第二条加一个年代或画种词（painting / photograph / 1920s），第三条换一个近义说法；
+- 人物写性别、年龄段和身份（portrait elderly woman、portrait policeman），不要写名字；不要引号和语法符号。"""
+
+PICK_SYSTEM = """你是游戏美术，从一张编号联系表里挑最适合做终端字符画的图：
+- 内容贴合描述，年代和气氛对得上；
+- 主体清楚、明暗对比强、背景简单（转成字符画后还能认出来）；
+- 头像要能看清一张脸；
+- 不选带大段文字、水印、现代物件或明显不合适的图。
+给出裁剪框（相对坐标）：头像裁到头肩，场景裁掉无关边缘。都不合适就填 -1。"""
+
+
+async def _get(client: httpx.AsyncClient, url: str, **params) -> httpx.Response:
+    r = await client.get(url, params=params or None, headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True)
+    r.raise_for_status()
+    return r
+
+
+def _licence_ok(name: str) -> bool:
+    low = name.lower()
+    return any(k in low for k in OPEN_LICENSES) and "nc" not in low.split() and "-nc" not in low and "nd" not in low.split()
+
+
+async def search(client: httpx.AsyncClient, query: str, limit: int = 8, width: int = 360) -> list[Candidate]:
+    data = (
+        await _get(
+            client, COMMONS, action="query", generator="search", gsrsearch=f"{query} filetype:bitmap", gsrnamespace=6, gsrlimit=limit,
+            prop="imageinfo", iiprop="url|mime|size|extmetadata", iiurlwidth=width, format="json",
+        )
+    ).json()
+    out = []
+    for p in sorted(data.get("query", {}).get("pages", {}).values(), key=lambda p: p.get("index", 0)):
+        ii = (p.get("imageinfo") or [{}])[0]
+        md = ii.get("extmetadata", {})
+        lic = str(md.get("LicenseShortName", {}).get("value", ""))
+        if ii.get("mime") not in IMAGE_MIMES or ii.get("width", 0) < 300 or not _licence_ok(lic):
+            continue
+        artist = str(md.get("Artist", {}).get("value", ""))
+        out.append(Candidate(p["title"], ii.get("descriptionurl", ""), ii.get("thumburl", ""), lic, _strip_html(artist), ii["width"], ii["height"]))
+    return out
+
+
+def _strip_html(text: str) -> str:
+    import re
+
+    return re.sub(r"<[^>]+>", "", text).strip()[:120]
+
+
+def contact_sheet(images: list[Image.Image], cell: int = 300) -> bytes:
+    cols = 3
+    rows = (len(images) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * cell, rows * cell), (20, 20, 20))
+    draw = ImageDraw.Draw(sheet)
+    for i, im in enumerate(images):
+        thumb = ImageOps.contain(im.convert("RGB"), (cell - 8, cell - 8))
+        x, y = (i % cols) * cell + 4, (i // cols) * cell + 4
+        sheet.paste(thumb, (x, y))
+        draw.rectangle([x, y, x + 34, y + 30], fill=(255, 200, 0))
+        draw.text((x + 10, y + 6), str(i), fill=(0, 0, 0))
+    buf = io.BytesIO()
+    sheet.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def prepare(im: Image.Image, crop: list[float]) -> Image.Image:
+    """Apply the vision agent's crop box; everything else happens in preprocess()."""
+    im = im.convert("RGB")
+    w, h = im.size
+    x0, y0, x1, y1 = (max(0.0, min(1.0, v)) for v in [*crop, 0, 0, 1, 1][:4])
+    if x1 - x0 > 0.1 and y1 - y0 > 0.1:
+        im = im.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
+    return im
+
+
+# -- preprocessing ------------------------------------------------------------------
+# Each step is one call into OpenCV, rembg or Pillow. Portraits get their background cut
+# out so the face reads on a dark terminal; scenes get local contrast and fewer colours
+# so the character grid does not turn into noise.
+PIPELINES: dict[str, tuple[str, ...]] = {
+    "portrait": ("face_crop", "remove_bg", "clahe", "saturate", "bilateral", "unsharp", "vignette"),
+    "scene": ("clahe", "bilateral", "saturate", "quantize", "unsharp", "vignette"),
+}
+BACKDROP = (6, 10, 12)  # BGR of the terminal background the art sits on
+
+
+def _face_crop(arr):
+    import cv2
+
+    gray = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
+    if len(faces) == 0:
+        return arr
+    x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+    H, W = arr.shape[:2]
+    x0, x1 = max(0, int(x - 0.9 * w)), min(W, int(x + 1.9 * w))
+    y0, y1 = max(0, int(y - 0.7 * h)), min(H, int(y + 2.1 * h))
+    return arr[y0:y1, x0:x1]
+
+
+@lru_cache(maxsize=2)
+def _rembg_session(model: str):
+    from rembg import new_session
+
+    return new_session(model)
+
+
+def _remove_bg(arr):
+    import cv2
+    import numpy as np
+    from rembg import remove
+
+    rgba = np.array(remove(Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)), session=_rembg_session("u2net_human_seg")))
+    alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+    fg = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR).astype(np.float32)
+    bg = np.empty_like(fg)
+    bg[:] = BACKDROP
+    return (fg * alpha + bg * (1 - alpha)).astype(np.uint8)
+
+
+def _clahe(arr):
+    import cv2
+
+    lab = cv2.cvtColor(arr, cv2.COLOR_BGR2LAB)
+    light, a, b = cv2.split(lab)
+    light = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(light)
+    return cv2.cvtColor(cv2.merge((light, a, b)), cv2.COLOR_LAB2BGR)
+
+
+def _bilateral(arr):
+    import cv2
+
+    return cv2.bilateralFilter(arr, 9, 60, 60)
+
+
+def _saturate(arr, factor: float = 1.3):
+    import cv2
+    import numpy as np
+
+    hsv = cv2.cvtColor(arr, cv2.COLOR_BGR2HSV).astype(np.float32)
+    hsv[:, :, 1] = (hsv[:, :, 1] * factor).clip(0, 255)
+    return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+
+def _quantize(arr, k: int = 20):
+    import cv2
+    import numpy as np
+
+    data = arr.reshape(-1, 3).astype(np.float32)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 12, 1.0)
+    _, labels, centers = cv2.kmeans(data, k, None, criteria, 2, cv2.KMEANS_PP_CENTERS)
+    return centers.astype(np.uint8)[labels.flatten()].reshape(arr.shape)
+
+
+def _unsharp(arr):
+    import cv2
+
+    return cv2.addWeighted(arr, 1.6, cv2.GaussianBlur(arr, (0, 0), 2.0), -0.6, 0)
+
+
+def _vignette(arr, strength: float = 0.45):
+    import cv2
+    import numpy as np
+
+    h, w = arr.shape[:2]
+    mask = cv2.getGaussianKernel(h, h * 0.65) @ cv2.getGaussianKernel(w, w * 0.65).T
+    mask = mask / mask.max()
+    mask = (1 - strength) + strength * mask
+    return (arr.astype(np.float32) * mask[:, :, None]).clip(0, 255).astype(np.uint8)
+
+
+STEPS = {
+    "face_crop": _face_crop,
+    "remove_bg": _remove_bg,
+    "clahe": _clahe,
+    "saturate": _saturate,
+    "bilateral": _bilateral,
+    "quantize": _quantize,
+    "unsharp": _unsharp,
+    "vignette": _vignette,
+}
+
+
+def preprocessing_available() -> bool:
+    try:
+        import cv2  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, keep_stages: bool = False) -> Path:
+    """Run the pipeline for `kind` and cache the result next to the source as <name>.prep.png."""
+    src = Path(src)
+    out = src.with_name(src.stem + ".prep.png")
+    if out.exists() and out.stat().st_mtime >= src.stat().st_mtime and not keep_stages:
+        return out
+    im = Image.open(src).convert("RGB")
+    if not preprocessing_available():
+        im = ImageEnhance.Contrast(ImageOps.autocontrast(im, cutoff=1)).enhance(1.1)
+        im.save(out)
+        return out
+    import cv2
+    import numpy as np
+
+    arr = cv2.cvtColor(np.array(im), cv2.COLOR_RGB2BGR)
+    for i, step in enumerate(steps or PIPELINES.get(kind, PIPELINES["scene"])):
+        try:
+            arr = STEPS[step](arr)
+        except Exception:  # a missing model or odd image skips that step, never the picture
+            continue
+        if keep_stages:
+            cv2.imwrite(str(src.with_name(f"{src.stem}.{i}-{step}.png")), arr)
+    cv2.imwrite(str(out), arr)
+    return out
+
+
+async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: type[BaseModel], images: list[bytes] | None = None):
+    s = Session(role, cfg.role(role), system, schema=schema.model_json_schema())
+    try:
+        reply = await s.send(prompt, images=images)
+        return schema.model_validate(reply.data or {})
+    finally:
+        await s.close()
+
+
+async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kind: str) -> tuple[Image.Image, Candidate] | None:
+    q = await _structured(cfg, "intent", QUERY_SYSTEM, f"{'人物头像' if kind == 'portrait' else '场景'}：{subject}", Queries)
+    seen: dict[str, Candidate] = {}
+    queries = list(q.queries[:3])
+    for query in queries:
+        for c in await search(client, query):
+            seen.setdefault(c.title, c)
+    if len(seen) < 3:  # broaden: the first two words of each query
+        for query in {" ".join(x.split()[:2]) for x in queries}:
+            for c in await search(client, query):
+                seen.setdefault(c.title, c)
+    cands = list(seen.values())[:6]
+    if not cands:
+        return None
+    thumbs = []
+    for c in cands:
+        thumbs.append(Image.open(io.BytesIO((await _get(client, c.thumb)).content)))
+    pick = await _structured(
+        cfg, "vision", PICK_SYSTEM, f"描述（{'头像' if kind == 'portrait' else '场景'}）：{subject}\n候选编号 0–{len(cands) - 1}。",
+        Pick, images=[contact_sheet(thumbs)],
+    )
+    if not 0 <= pick.index < len(cands):
+        return None
+    chosen = cands[pick.index]
+    big = chosen.thumb.replace("/360px-", "/1024px-") if "/360px-" in chosen.thumb else chosen.thumb
+    try:
+        im = Image.open(io.BytesIO((await _get(client, big)).content))
+    except httpx.HTTPError:
+        im = thumbs[pick.index]
+    return prepare(im, pick.crop), chosen
+
+
+async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print) -> list[str]:
+    """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json."""
+    art_dir.mkdir(parents=True, exist_ok=True)
+    sem = asyncio.Semaphore(parallel)
+    done: list[str] = []
+    async with httpx.AsyncClient() as client:
+
+        async def one(name: str, subject: str, kind: str) -> None:
+            if (art_dir / f"{name}.jpg").exists() and not force:
+                return
+            async with sem:
+                try:
+                    found = await find_picture(cfg, client, subject, kind)
+                except Exception as exc:  # one bad download should not stop the batch
+                    log(f"  ✗ {name}: {exc.__class__.__name__}")
+                    return
+            if not found:
+                log(f"  · {name}: 没有合适的图，保留手绘")
+                return
+            im, c = found
+            im.save(art_dir / f"{name}.jpg", quality=92)
+            (art_dir / f"{name}.credit.json").write_text(json.dumps(asdict(c) | {"kind": kind}, ensure_ascii=False, indent=1), encoding="utf-8")
+            await asyncio.to_thread(preprocess, art_dir / f"{name}.jpg", kind)
+            done.append(name)
+            log(f"  ✓ {name}: {c.title}（{c.license}）")
+
+        await asyncio.gather(*(one(*t) for t in targets))
+    return done
+
+
+# -- rendering ------------------------------------------------------------------
+def available() -> bool:
+    return shutil.which("chafa") is not None
+
+
+def _chafa(path: str, width: int, height: int, style: str, *, work: int = 9) -> str:
+    cmd = ["chafa", "-f", "symbols", "-c", "full", "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), path]
+    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20).stdout
+    return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
+
+
+def picture_source(path: str | Path) -> str:
+    """The preprocessed image if there is one, else the original."""
+    p = Path(path)
+    prep = p.with_name(p.stem + ".prep.png")
+    return str(prep if prep.exists() else p)
+
+
+@lru_cache(maxsize=256)
+def render(path: str, width: int, height: int, style: str = "picture") -> str:
+    """ANSI text for a picture at the given character size (cached per size and style)."""
+    return _chafa(picture_source(path), width, height, style)
+
+
+def glitch(path: str, width: int, height: int, strength: float, style: str = "picture") -> str:
+    """A glitched frame: RGB split and torn scanlines, rendered fresh (not cached)."""
+    im = Image.open(picture_source(path)).convert("RGB")
+    r, g, b = im.split()
+    shift = max(1, int(im.width * 0.02 * strength))
+    im = Image.merge("RGB", (r.transform(r.size, Image.AFFINE, (1, 0, shift, 0, 1, 0)), g, b.transform(b.size, Image.AFFINE, (1, 0, -shift, 0, 1, 0))))
+    rows = int(10 * strength) + 1
+    for _ in range(rows):
+        y = random.randrange(im.height)
+        band = im.crop((0, y, im.width, min(im.height, y + random.randint(2, 12))))
+        im.paste(band, (random.randint(-shift * 4, shift * 4), y))
+    tmp = Path(path).with_name(Path(path).stem + ".glitch.jpg")
+    im.save(tmp, quality=70)
+    try:
+        return _chafa(str(tmp), width, height, style, work=3)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def credits(art_dir: Path) -> list[dict]:
+    return [json.loads(p.read_text(encoding="utf-8")) | {"name": p.name.split(".")[0]} for p in sorted(Path(art_dir).glob("*.credit.json"))]

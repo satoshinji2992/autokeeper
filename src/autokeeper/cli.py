@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -27,7 +29,17 @@ def _module_dirs() -> list[Path]:
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    preset: Annotated[str | None, typer.Option(help="模型预设：claude / deepseek")] = None,
+    model: Annotated[str | None, typer.Option(help="所有角色改用这个模型，如 ollama:qwen3:14b、deepseek:deepseek-flash")] = None,
+    search: Annotated[str | None, typer.Option(help="联网搜索：auto / tavily / ddgs / wikipedia / none")] = None,
+    budget: Annotated[float | None, typer.Option(help="按量计费 API 的花费上限（美元）")] = None,
+) -> None:
+    # Environment, not globals: the browser server and every config.load() see the same choice.
+    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget)):
+        if value is not None:
+            os.environ[f"AUTOKEEPER_{name}"] = str(value)
     if ctx.invoked_subcommand is None:
         play()
 
@@ -66,15 +78,18 @@ def serve(port: int = 8000) -> None:
     """在浏览器里玩（textual-serve）。"""
     from textual_serve.server import Server
 
-    Server(f"{sys.executable} -m autokeeper play --no-intro", port=port, title="AutoKeeper").serve()
+    argv = [sys.executable, "-m", "autokeeper", "play", "--no-intro"]
+    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    Server(command, port=port, title="AutoKeeper").serve()
 
 
 @app.command()
 def setup() -> None:
-    """安装 BCDice 桥接、编译内置模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/。"""
+    """安装 BCDice 桥接、编译已导入模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/。"""
     bridge = config.ROOT / "bridge"
     console.print("[bold]1/3[/] 安装 BCDice（npm）…")
-    subprocess.run(["npm", "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
+    npm = shutil.which("npm") or "npm"  # npm.cmd on Windows
+    subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
     console.print("[bold]2/3[/] 编译模组 Skill 包…")
     from .module.compiler import compile_module
     from .module.schema import Module
@@ -86,35 +101,84 @@ def setup() -> None:
     for dot in (".claude", ".agents"):
         target = config.ROOT / dot / "skills"
         target.parent.mkdir(exist_ok=True)
-        if not target.exists():
-            target.symlink_to(Path("..") / "skills")
+        if target.is_dir():
+            continue
+        if target.exists() or target.is_symlink():  # e.g. a git symlink checked out as a text file on Windows
+            target.unlink()
+        try:
+            target.symlink_to(Path("..") / "skills", target_is_directory=True)
+        except OSError:  # Windows without developer mode: copy instead of linking
+            shutil.copytree(config.SKILLS, target)
+            console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
     console.print("[green]完成。[/] 运行 [bold]uv run autokeeper[/] 开始游戏。")
 
 
-@app.command()
-def doctor() -> None:
-    """检查运行环境。"""
-    import shutil
+KEYS = {"deepseek": ("DEEPSEEK_API_KEY",), "openai": ("OPENAI_API_KEY",), "anthropic": ("ANTHROPIC_API_KEY",),
+        "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY")}
 
+
+@app.command()
+def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发一句话，测通不通、多快")] = False) -> None:
+    """检查运行环境、每个角色的模型路由、密钥、搜索后端和花费。"""
+    from rich.table import Table
+
+    from .harness import spend
+    from .harness.search import resolve
     from .rules.bcdice import BCDice
 
     ok = True
-    for tool in ("node", "claude"):
-        found = shutil.which(tool)
-        console.print(f"{'✓' if found else '✗'} {tool}: {found or '未找到'}")
-        ok &= bool(found)
+    cfg = config.load()
+    found = shutil.which("node")
+    console.print(f"{'✓' if found else '✗'} node: {found or '未找到（BCDice 需要）'}")
+    ok &= bool(found)
     try:
         with BCDice() as dice:
-            r = dice.roll("CC<=50")
-            console.print(f"✓ BCDice {dice.version}: {r.text}")
+            roll = dice.roll("CC<=50")  # starts the bridge, which reports its version
+            console.print(f"✓ BCDice {dice.version}: {roll.text}")
     except Exception as exc:
         ok = False
         console.print(f"✗ BCDice: {exc}")
-    cfg = config.load()
-    for role in ("keeper", "arbiter", "npc", "intent", "importer"):
-        r = cfg.role(role)
-        console.print(f"  {role:<12} {r.backend}:{r.model} effort={r.effort}")
+    table = Table(title=f"角色路由（预设：{cfg.preset}）", title_justify="left")
+    for col in ("角色", "后端", "模型", "思考", "上下文窗口"):
+        table.add_column(col)
+    for name in sorted(cfg.roles):
+        r = cfg.role(name)
+        table.add_row(name, r.backend, r.model, str(r.effort or "关"), str(r.window or "默认"))
+    console.print(table)
+    routes = {(r.backend, r.model) for r in cfg.roles.values()}
+    if any(b == "claude" for b, _ in routes):
+        found = shutil.which("claude")
+        console.print(f"{'✓' if found else '·'} claude CLI: {found or '未找到（用 Agent SDK 自带的 CLI）'}")
+    for provider in sorted({m.partition(':')[0] for b, m in routes if b == 'langchain'}):
+        names = KEYS.get(provider, ())
+        have = [n for n in names if os.environ.get(n)]
+        if names:
+            console.print(f"{'✓' if have else '✗'} {provider}: {'、'.join(have) if have else '缺少 ' + ' 或 '.join(names)}")
+            ok &= bool(have)
+    console.print(f"· 联网搜索：{resolve(cfg.search)}（配置 {cfg.search}）")
+    spent = spend.ledger()["total_usd"]
+    console.print(f"· API 花费估计：${spent:.4f}" + (f" / 预算 ${cfg.budget_usd:g}" if cfg.budget_usd is not None else "（未设预算）"))
+    if ping:
+        ok &= asyncio.run(_ping(routes))
     raise typer.Exit(0 if ok else 1)
+
+
+async def _ping(routes: set[tuple[str, str]]) -> bool:
+    from .config import Role
+    from .harness import make_model
+
+    good = True
+    for backend, model in sorted(routes):
+        m = make_model(Role(backend, model, None), "你是连通性测试。", label="doctor")
+        try:
+            reply = await m.complete([{"role": "user", "content": "只回答两个字：收到"}])
+            console.print(f"✓ {backend}:{model}  {reply.seconds:.1f}s  {reply.text.strip()[:20]}")
+        except Exception as exc:
+            good = False
+            console.print(f"✗ {backend}:{model}  {type(exc).__name__}: {str(exc)[:200]}")
+        finally:
+            await m.close()
+    return good
 
 
 @app.command()
@@ -163,6 +227,36 @@ def art_color(module: Path, force: bool = False) -> None:
     console.print(f"上色完成：{', '.join(done) or '无需上色'}")
 
 
+@art_app.command("fetch")
+def art_fetch(
+    module: Path,
+    only: Annotated[list[str] | None, typer.Option(help="只处理这些图名")] = None,
+    force: bool = False,
+) -> None:
+    """从 Wikimedia Commons 找真实图片（公有领域 / CC），读图员挑图裁剪，存成 art/<名字>.jpg 并记录署名。"""
+    from .imagery import fetch_folder
+    from .module.schema import Module
+
+    m = Module.load(module)
+    era = f"{m.era}，{m.setting}"
+    targets = [(loc.art, f"{loc.name}（{era}）：{loc.read_aloud.strip()[:160]}", "scene") for loc in m.locations if loc.art]
+    targets += [(n.portrait, f"{n.name}，{n.role}；{n.look}（{era}）", "portrait") for n in m.npcs if n.portrait]
+    targets += [(p.portrait, f"{p.name}，{p.occupation}，{p.age} 岁，{p.backstory.get('个人描述', '')}（{era}）", "portrait") for p in m.pregens if p.portrait]
+    if only:
+        targets = [t for t in targets if t[0] in only]
+    done = asyncio.run(fetch_folder(config.load(), module / "art", targets, force=force, log=console.print))
+    console.print(f"找到 {len(done)}/{len(targets)} 张图")
+
+
+@art_app.command("credits")
+def art_credits(module: Path) -> None:
+    """列出模组里真实图片的来源与授权。"""
+    from .imagery import credits
+
+    for c in credits(module / "art"):
+        console.print(f"{c['name']}: {c['title']}  {c['license']}  {c['artist']}  {c['page']}")
+
+
 @art_app.command("show")
 def art_show(module: Path, name: str) -> None:
     """在终端里预览一张彩色 ASCII 图。"""
@@ -178,10 +272,40 @@ def import_cmd(
     id: Annotated[str, typer.Option("--id", help="模组的英文短名，如 zhuishuren")],
     pages: Annotated[str | None, typer.Option(help="只取这些页，如 7-18")] = None,
 ) -> None:
-    """让 Opus 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包。"""
+    """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。"""
     from .module.importer import run_import
 
     asyncio.run(run_import(file, id, pages=pages, console=console))
+
+
+@app.command()
+def index(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
+    """用 LightRAG 给模组原文和模组图谱建知识库（GraphRAG）。"""
+    from .knowledge import KnowledgeBase
+    from .module.schema import Module
+
+    async def go() -> dict:
+        async with KnowledgeBase(Module.load(module)) as kb:
+            return await kb.build(module)
+
+    console.print_json(data=asyncio.run(go()))
+
+
+@app.command()
+def ask(
+    module: Annotated[Path, typer.Argument(help="模组目录")],
+    question: Annotated[str, typer.Argument(help="关于模组的问题")],
+    context: Annotated[bool, typer.Option("--context", help="只看检索到的上下文")] = False,
+) -> None:
+    """向模组知识库提问（LightRAG mix 检索）。"""
+    from .knowledge import KnowledgeBase
+    from .module.schema import Module
+
+    async def go() -> str:
+        async with KnowledgeBase(Module.load(module)) as kb:
+            return await (kb.context(question) if context else kb.answer(question))
+
+    console.print(asyncio.run(go()))
 
 
 @app.command()
@@ -193,6 +317,14 @@ def generate(
     from .module.generator import run_generate
 
     asyncio.run(run_generate(seed, id, console=console))
+
+
+@app.command()
+def research(module: Annotated[Path, typer.Argument(help="生成的模组目录（含 research.md）")]) -> None:
+    """联网逐条核实考据卡，更新出处说明。"""
+    from .module.generator import verify_research
+
+    asyncio.run(verify_research(module, console=console))
 
 
 @app.command()
@@ -220,6 +352,16 @@ def eval_rhetoric(module: Path = Path("modules/local/zhuishuren"), limit: int | 
     out = config.SAVES / "eval" / "rhetoric.json"
     summary = asyncio.run(run_rhetoric(module, out, limit=limit))
     console.print_json(data=summary)
+    console.print(f"明细：{out}")
+
+
+@eval_app.command("lore")
+def eval_lore(module: Path = Path("modules/local/zhuishuren"), n: int = 24) -> None:
+    """原文细节问答：总览 / 整本 / 向量检索 / GraphRAG（LightRAG mix）四种上下文的准确率与上下文大小。"""
+    from .eval.lore import run as run_lore
+
+    out = config.SAVES / "eval" / f"lore_{module.name}.json"
+    console.print_json(data=asyncio.run(run_lore(module, out, n=n)))
     console.print(f"明细：{out}")
 
 

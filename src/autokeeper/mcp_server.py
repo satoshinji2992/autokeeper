@@ -285,13 +285,17 @@ def handout(handout_id: str) -> dict:
 
 
 @server.tool()
-def lookup(query: str, hops: int = 1) -> list[dict]:
-    """在模组知识图谱里检索：按名字命中地点、NPC、线索、结论，再带出相邻节点（谁知道、在哪、指向什么）。
-    只给守秘人参考，不要把未发现的内容直接告诉玩家。"""
+async def lookup(query: str, hops: int = 1) -> dict:
+    """检索模组知识：建过 LightRAG 知识库（autokeeper index）时走 GraphRAG mix 检索原文与图谱，
+    否则在结构化模组图谱里按名字命中节点并带出相邻节点。只给守秘人参考，不要把未发现的内容直接告诉玩家。"""
+    from . import knowledge
     from .module import graph as module_graph
 
     g = _need()
-    return module_graph.search(g.m, query, hops=hops)
+    hits = module_graph.search(g.m, query, hops=hops)
+    if knowledge.available() and knowledge.exists(g.m.id):
+        return {"graph": hits, "lightrag": await g.cast.lore(g.state, query, max_tokens=3000)}
+    return {"graph": hits}
 
 
 @server.tool()
