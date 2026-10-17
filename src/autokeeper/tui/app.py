@@ -654,10 +654,17 @@ class GameScreen(Screen):
         self.story.feed(text)
 
     async def _warm(self) -> None:
-        """Start the agents' processes while the opening plays, so the first turn is quick."""
+        """While the opening plays: start the agents' processes, and render the NPC portraits
+        (chafa, cached) so meeting someone does not stall the turn on the UI thread."""
         assert self.cast
+        style = self.app.art_style  # type: ignore[attr-defined]
+
+        def portraits() -> None:
+            for npc in self.m.npcs:
+                art_text(self.m, npc.portrait, (30, 12), style)
+
         try:
-            await self.cast.warm(self.state)
+            await asyncio.gather(self.cast.warm(self.state), asyncio.to_thread(portraits))
         except Exception:  # warming is an optimisation; failures surface on first real use
             pass
 

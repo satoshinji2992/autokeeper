@@ -425,12 +425,18 @@ app.add_typer(eval_app, name="eval")
 
 
 @eval_app.command("rhetoric")
-def eval_rhetoric(module: Path = Path("modules/local/zhuishuren"), limit: int | None = None) -> None:
+def eval_rhetoric(
+    module: Path = Path("modules/local/zhuishuren"),
+    limit: int | None = None,
+    referee: Annotated[list[str] | None, typer.Option(help="裁定员模型，可写多个；“模型@强度”比较思考强度，如 deepseek:deepseek-flash@low")] = None,
+    out: Annotated[Path | None, typer.Option(help="明细写到哪里")] = None,
+) -> None:
     """修辞诱导对照：单 Agent 裁定 vs 叙事与裁定分离。"""
     from .eval.rhetoric import run as run_rhetoric
 
-    out = config.SAVES / "eval" / "rhetoric.json"
-    summary = asyncio.run(run_rhetoric(module, out, limit=limit))
+    out = out or config.SAVES / "eval" / "rhetoric.json"
+    kw = {"referees": tuple(referee)} if referee else {}
+    summary = asyncio.run(run_rhetoric(module, out, limit=limit, **kw))
     console.print_json(data=summary)
     console.print(f"明细：{out}")
 

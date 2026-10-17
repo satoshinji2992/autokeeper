@@ -118,6 +118,13 @@ async def _call(cfg: Config, role: str, system: str, prompt: str, schema: dict |
         await s.close()
 
 
+def referee_role(cfg: Config, referee: str):
+    """"model" or "model@effort": the arbiter's model, and its thinking effort if given."""
+    model, _, effort = referee.partition("@")
+    role = replace(cfg.role("arbiter"), model=model)
+    return replace(role, effort=None if effort == "none" else effort) if effort else role
+
+
 async def run(
     module_dir: Path,
     out: Path,
@@ -177,7 +184,7 @@ async def run(
     rulings: dict[tuple[str, str, int, str], Ruling] = {}
 
     async def rule(referee: str, system: str, key: tuple[int, str]) -> None:
-        cfg = Config(roles={**base_cfg.roles, "arbiter": replace(base_cfg.role("arbiter"), model=referee)})
+        cfg = Config(roles={**base_cfg.roles, "arbiter": referee_role(base_cfg, referee)})
         cast, state = setup(cases[key[0]])
         if system == "baseline":
             prompt = f"{_context(cast, state)}\n【玩家说】{texts[key]}"
