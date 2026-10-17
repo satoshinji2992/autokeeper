@@ -152,11 +152,11 @@ flowchart LR
 | arbiter | Opus 5.5 · medium | flash · high | 4k 字 | 结构化行动、本场景线索的检定要求、人物卡（**看不到原话**） | 技能、难度、奖惩骰、可得线索、剧情标记 |
 | keeper | Opus 5.5 · medium | flash · high | 16k 字 | 模组总览；进入地点时才读该地点文件；本轮结算结果；LightRAG 检索 | 叙事（流式） |
 | npc × N | Haiku 5.5 · medium | flash · low | 各 8k 字 | **只有**自己的人设、秘密、谎言、门槛线索和自己的对话 | 台词 |
-| chronicler | Opus 5.5 | flash · low | 无状态 | 游戏记录 | 摘要、评书腔的“上回书说到” |
+| chronicler | Opus 5.5 | flash · 不思考 | 无状态 | 游戏记录 | 摘要、评书腔的“上回书说到” |
 | investigator | Haiku 5.5 | flash · low | 各 6k 字 | 玩家可见的内容、自己的人物卡 | 下一步行动（陪玩 / 自动跑团） |
 | vision | Opus 5.5 | flash · low | 无状态 | 玩家手绘、模组页面 | 描述与相似度 |
 | importer / artist | Opus 5.5 | flash · high | 150k 字 + 进度摘要 | 原文、页面图片、考据卡 | 模组、彩色 ASCII 图 |
-| lore / summarizer | Haiku 5.5 · low | flash · low | 无状态 | 原文分块、旧对话 | LightRAG 实体与关系、记忆摘要 |
+| lore / summarizer | Haiku 5.5 · low | flash · low / 不思考 | 无状态 | 原文分块、旧对话 | LightRAG 实体与关系、记忆摘要 |
 
 记忆窗口的单位是字符。超出的部分由 summarizer 折叠成摘要，和窗口一起存进存档。
 
