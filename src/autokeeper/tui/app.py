@@ -301,7 +301,7 @@ class LoadScreen(Screen):
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
             yield Static(Text("继续调查", style="bold"), id="setup-title")
-            yield OptionList(id="choices")
+            yield OptionList(id="choices", classes="saves")
             yield Static("Enter 读档 · Esc 返回", id="setup-hint")
         yield Footer()
 
@@ -315,6 +315,8 @@ class LoadScreen(Screen):
             ol.add_option(Option(f"{label}   [{meta['updated']}]", id=slot))
         if not idx:
             ol.add_option(Option("还没有存档", disabled=True))
+        else:
+            ol.highlighted = 0  # Enter loads the newest save straight away
         ol.focus()
 
     @on(OptionList.OptionSelected, "#choices")

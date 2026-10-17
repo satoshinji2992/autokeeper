@@ -63,6 +63,12 @@ Screen {
     border: round $primary-darken-1;
     background: $surface;
 }
+#choices.saves {
+    width: 1fr;
+    max-width: 110;
+    height: auto;
+    max-height: 1fr;
+}
 #preview {
     width: 1fr;
     padding: 0 2;

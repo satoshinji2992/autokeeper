@@ -43,23 +43,26 @@
   - LightRAG 知识图谱，原文抽出的实体和结构化模组图谱合在同一张图里。
 - **一套引擎，三种入口**：Textual TUI、浏览器（textual-serve）、MCP 服务。Claude Code 和 Codex 可以直接把游戏引擎当工具，自己当守秘人。
 - **彩色 ASCII 美术**：
-  - 场景、人物、手稿都是“图 + 同形状配色蒙版”；
-  - 理智下降时画面会故障；
+  - 场景、人物、手稿都是“图 + 同形状配色蒙版”；也可以用 chafa 把实景照片转成块字符；
+  - 画面按游戏时间打光，从清晨到深夜共七档。照片调曝光、色调、加暗角；手绘线条只压暗一半，保证看得清；入夜后窗和灯反而更亮；
+  - 照片不硬裁，主体完整居中，两侧用模糊压暗的同图铺满；
+  - 进入新地点时画面逐行扫描显现，理智下降时画面会故障；
   - 可以用鼠标手绘，交给读图员（VLM）判断画得像不像。
 
 ## 演示
 
-<p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》游戏画面"></p>
+<p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》深夜的公墓"></p>
 
-| 选模组 | 场景图与配色蒙版 | 人物头像 |
-|---|---|---|
-| <img src="docs/img/module.png" alt="选模组"> | <img src="docs/img/scenes.png" alt="场景图"> | <img src="docs/img/portraits.png" alt="头像"> |
+| 选模组 | 白天的书房 | 手绘 ASCII：场景与配色蒙版 | 人物头像 |
+|---|---|---|---|
+| <img src="docs/img/module.png" alt="选模组"> | <img src="docs/img/game_day.png" alt="白天的书房"> | <img src="docs/img/scenes.png" alt="场景图"> | <img src="docs/img/portraits.png" alt="头像"> |
 
-> - **主图**：《追书人》（CoC 7 版入门模组）在 `--preset deepseek` 下的实机画面。
->   - 左上是用 chafa 转成字符画的实景照片；
->   - “裁定员只看到”那一行，是 intent 改写后交给 arbiter 的中立行动；
->   - 右侧是人物卡和线索本。
-> - **场景图和头像**：来自用 `autokeeper generate` 生成的原创模组《多一人》。
+> - **主图**：《追书人》（CoC 7 版入门模组）读档后在深夜的公墓里，`--preset deepseek`。
+>   - 场景是用 chafa 转成字符画的实景照片，按游戏时间打光：深夜偏暗蓝，四角压暗；
+>   - 说书人先用评书腔讲“上回书说到”；
+>   - 一回合依次是：玩家行动 → “裁定员只看到”的中立行动 → 侦查检定，BCDice 掷出 30，困难成功 → 线索卡 → 守秘人叙事。
+> - **白天的书房**：同一模组的上午。
+> - **手绘场景和头像**：来自用 `autokeeper generate` 生成的原创模组《多一人》。
 > - 仓库不附带任何官方模组。
 
 ## Harness

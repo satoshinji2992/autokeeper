@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+from functools import partial
 
 from rich.console import Group
 from rich.text import Text
@@ -75,7 +76,7 @@ class SceneArt(Static):
     def _uses_image(self) -> bool:
         return bool(self.image) and imagery.available()
 
-    def _render(self, rate: float = 0.0) -> Text:
+    def _draw(self, rate: float = 0.0) -> Text:
         """The art alone, lit and centred. Pictures go through chafa, so call off the UI thread."""
         w, h = self._fit()
         if self._uses_image():
@@ -95,7 +96,7 @@ class SceneArt(Static):
         if frame is not None:
             art_text = center(Text.from_ansi(frame), self._fit()[0])
         elif rate or self._art is None:
-            art_text = self._render(rate) if not self._uses_image() else (self._art or Text())
+            art_text = self._draw(rate) if not self._uses_image() else (self._art or Text())
         else:
             art_text = self._art
         if rows is not None:  # scan-in: the rows below the beam are still dark
@@ -105,10 +106,10 @@ class SceneArt(Static):
         self.update(Text("\n").join([self._title(), art_text]))
 
     def _refresh(self, reveal: bool = False) -> None:
-        self.run_worker(self._load(reveal), exclusive=True, group="art")
+        self.run_worker(partial(self._load, reveal), exclusive=True, group="art")
 
     async def _load(self, reveal: bool) -> None:
-        self._art = await asyncio.to_thread(self._render)
+        self._art = await asyncio.to_thread(self._draw)
         if reveal:
             total = len(self._art.split("\n"))
             for rows in range(0, total, 2):
@@ -119,7 +120,7 @@ class SceneArt(Static):
     def glitch(self, frames: int = 14) -> None:
         self.add_class("dread")
         if self._uses_image():
-            self.run_worker(self._picture_glitch(min(8, max(3, frames // 3))), exclusive=True, group="art")
+            self.run_worker(partial(self._picture_glitch, min(8, max(3, frames // 3))), exclusive=True, group="art")
             return
         self._burst = frames
         self._tick()
@@ -147,7 +148,7 @@ class SceneArt(Static):
         if self._burst or self.madness <= 0 or random.random() > self.madness:
             return
         if self._uses_image():
-            self.run_worker(self._picture_glitch(2), exclusive=True, group="glitch")
+            self.run_worker(partial(self._picture_glitch, 2), exclusive=True, group="art")
             return
         self._paint(0.03 + self.madness * 0.08)
         self.set_timer(0.12, self._paint)
