@@ -58,7 +58,35 @@ def play(
 
     if intro and sys.stdout.isatty():
         _intro()
-    AutoKeeperApp(theme=theme).run()
+    _run(AutoKeeperApp(theme=theme))
+
+
+def _run(app) -> None:
+    """Run a full-screen app with file descriptor 2 sent to saves/stderr.log: C libraries
+    (numba, onnxruntime) write warnings there directly, over the game. A crash's traceback
+    lands in the log too, and is shown once the screen is back."""
+    log = config.SAVES / "stderr.log"
+    try:
+        config.SAVES.mkdir(parents=True, exist_ok=True)
+        start = log.stat().st_size if log.exists() else 0
+        sink = open(log, "a", encoding="utf-8")  # held open while the app runs
+        sys.stderr.flush()
+        saved = os.dup(2)
+        os.dup2(sink.fileno(), 2)
+    except OSError:  # no saves folder, an odd terminal: run as is
+        app.run()
+        return
+    try:
+        app.run()
+    finally:
+        sys.stderr.flush()
+        os.dup2(saved, 2)
+        os.close(saved)
+        sink.close()
+    if app.return_code:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            f.seek(start)
+            sys.stderr.write(f.read())
 
 
 def _intro() -> None:
@@ -209,7 +237,7 @@ def join(
     """加入局域网房间。"""
     from .tui.app import AutoKeeperApp
 
-    AutoKeeperApp(join=(address, name)).run()
+    _run(AutoKeeperApp(join=(address, name)))
 
 
 @app.command()

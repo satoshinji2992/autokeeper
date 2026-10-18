@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 import random
 import re
 import shutil
@@ -30,6 +31,11 @@ from pydantic import BaseModel, Field
 from . import artkit
 from .config import Config
 from .harness import Session
+
+# rembg pulls in numba, whose default TBB layer prints "Attempted to fork from a non-main
+# thread" straight onto the terminal when a worker thread starts chafa. The workqueue layer
+# has no such check.
+os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
 COMMONS = "https://commons.wikimedia.org/w/api.php"
 USER_AGENT = "AutoKeeper/0.1 (https://github.com/satoshinji2992/autokeeper)"
