@@ -587,6 +587,7 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
         self._leave_when_ready = False
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
@@ -695,6 +696,9 @@ class GameScreen(Screen):
         frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self.spinner = (self.spinner + 1) % len(frames)
         line = f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""
+        if self.queued is not None:
+            wait = "这一段中断了，/retry 讲完再交" if self.state.pending_turn and not self.busy else "讲完就交"
+            line += f"{'  · ' if line else ' '}{wait}：{self.queued[:24]}（/undo 撤回）"
         if line != self._spun:  # an idle status line is not repainted ten times a second
             self._spun = line
             self.query_one("#status", Static).update(Text(line))
@@ -710,6 +714,20 @@ class GameScreen(Screen):
             if self._leave_when_ready:
                 self._leave_when_ready = False
                 self.app.call_later(self._leave)
+            elif self.queued is not None:
+                self.set_timer(0.05, self._send_queued)
+
+    def _send_queued(self) -> None:
+        """The keeper is done: the action typed ahead goes in. A turn that broke off goes on
+        first (/retry); after the end the line goes back in the box."""
+        if self.busy or self.queued is None or self.state.pending_turn:
+            return
+        text, self.queued = self.queued, None
+        if self.state.ending and not commands.instant(text):
+            box = self.query_one("#command", Input)
+            box.value = box.value or text
+            return
+        self.send_line(text)
 
     def _scene(self, loc_id: str) -> None:
         loc = self.m.location(loc_id)
@@ -1083,8 +1101,12 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage"):
-            self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
+            if not text.startswith("/") and self.queued is None and not self.state.ending:
+                self.queued = text  # typed ahead: it goes in as soon as the keeper is done
+                event.input.value = ""
+            else:  # the line stays in the box
+                self.app.notify("已经记下一条了，讲完先交那条；/undo 撤回它" if self.queued else "这一回合还没结束，等它讲完再按回车", timeout=3)
             return
         event.input.value = ""
         if text:
@@ -1119,6 +1141,11 @@ class GameScreen(Screen):
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
         if cmd == "/retry":
             self.action_retry()
+        elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop
+            if self.queued is None:
+                self.app.notify("没有可以撤回的行动")
+            else:
+                self.query_one("#command", Input).value, self.queued = self.queued, None
         elif cmd == "/retell":  # /retell 短一点 skips the list
             self.action_retell(args[0] if args else "")
         elif cmd in actions:

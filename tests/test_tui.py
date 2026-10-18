@@ -227,13 +227,34 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
         await pilot.pause(0.3)
         assert screen.cast is not before and screen.game.cast is screen.cast and os.environ["AUTOKEEPER_MODE"] == "高级剧情"
         assert screen.state.transcripts is memory  # the agents' memories carry over
-        screen.busy = True  # mid-turn: the next action can be typed, but waits for the turn
+        screen.busy = True  # mid-turn: the next action can be typed ahead; it goes in once the keeper is done
         box = screen.query_one("#command", Input)
         box.value = "我爬上钟楼"
         await pilot.press("enter")
+        await pilot.pause(0.2)
+        status = screen.query_one("#status", Static)
+        assert box.value == "" and not box.disabled and screen.queued == "我爬上钟楼"
+        assert "讲完就交：我爬上钟楼" in str(status.render())
+        box.value = "我再去报社"
+        await pilot.press("enter")
         await pilot.pause()
-        assert box.value == "我爬上钟楼" and not box.disabled
-        screen.busy = False
+        assert box.value == "我再去报社" and screen.queued == "我爬上钟楼"  # one at a time: this one stays in the box
+        box.value = "/undo"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert box.value == "我爬上钟楼" and screen.queued is None  # back in the box, to change or drop
+        await pilot.press("enter")
+        sent: list[str] = []
+        screen.send_line = sent.append
+        screen.state.pending_turn = {"input": "我推开门"}  # a turn broke off: /retry goes on with it first
+        screen._busy(False)
+        await pilot.pause(0.2)
+        assert not sent and screen.queued == "我爬上钟楼" and "/retry" in str(status.render())
+        screen.state.pending_turn = {}
+        screen._busy(False)
+        await pilot.pause(0.2)
+        assert sent == ["我爬上钟楼"] and screen.queued is None
+        del screen.send_line
         for size, rows in (((200, 60), 23), ((80, 24), 9)):  # a taller terminal, a taller picture
             await pilot.resize_terminal(*size)
             await pilot.pause(0.2)
