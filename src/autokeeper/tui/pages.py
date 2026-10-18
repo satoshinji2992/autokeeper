@@ -112,9 +112,10 @@ def background_view(m: Module, st: GameState, me: Investigator | None) -> Text:
 
 def prologue(m: Module, st: GameState) -> str:
     """The opening as it was told; for a save from before that was kept, the first narration
-    still in the log, else the module's own opening (blank at a LAN screen)."""
+    still in the log, else the module's own opening once play is past it (a LAN screen has
+    it blank). Before the keeper has told it, nothing."""
     told = next((e.text for e in st.log if e.kind == "keeper" and e.turn == 0), "")
-    return st.prologue or told or m.opening
+    return st.prologue or told or (m.opening if st.turn else "")
 
 
 def digest(inv: Investigator) -> Text:

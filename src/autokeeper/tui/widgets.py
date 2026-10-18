@@ -667,8 +667,11 @@ def log_line(entry) -> Text | None:
         return Text(f"  ◈ {entry.text}", style="dim")
     if entry.kind == "clue":
         return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
-    if entry.kind in ("sanity", "damage", "ending"):
-        return Text("  " + entry.text.split("\n", 1)[0])
+    first = entry.text.split("\n", 1)[0]
+    if entry.kind in ("sanity", "damage"):  # whose, as the live line has it
+        return Text(f"  {'※' if entry.kind == 'sanity' else '✚'} {entry.who + ' ' if entry.who else ''}{first}")
+    if entry.kind == "ending":
+        return Text("  " + first)
     return None
 
 

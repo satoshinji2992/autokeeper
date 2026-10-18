@@ -115,6 +115,7 @@ uv run autokeeper autoplay modules/local/mymod --party 2
 | F6 · F7 · F8 · F9 · F10 | 让守秘人换个讲法重讲最新一段（骰子和线索不变）· 前情回顾 · 手绘 · 换模型 · 结局后复盘 |
 | Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T | 前情回顾 · 存档 · 换画法 · 换配色 |
 | Ctrl+O · Ctrl+B · Ctrl+K · Ctrl+P | 叙事偏好 · 用量与估算花费 · 规则插件 · 全部操作 |
+| Ctrl+G | 右栏翻页：经过 · 进展（故事至今，每 3 轮自动更新）· 背景（开场时知道的事） |
 
 ## 和朋友一起玩
 
