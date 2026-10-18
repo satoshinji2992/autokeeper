@@ -222,6 +222,7 @@ def test_claude_prompt_marks_the_end_of_history_for_the_prompt_cache():
 def test_claude_api_errors_are_errors_and_a_refused_cache_mark_steps_down(monkeypatch):
     overloaded, bad = hm.ClaudeError("API Error: 529 Overloaded"), hm.ClaudeError("API Error: 400 messages.0: bad")
     assert hm.transient(overloaded) and not hm.transient(bad)  # retried, or on to the fallback; never narrated
+    assert hm.transient(hm.ClaudeError("Claude Code reported an error"))  # failed without saying why: try again
     monkeypatch.setattr(hm, "CACHE_TTL", ["1h"])
     ttl = hm.ClaudeError("API Error: 400 messages.1.content.0.cache_control.ttl: a ttl='1h' block must not come after a ttl='5m' block")
     assert hm._cache_refused(ttl) and hm.CACHE_TTL == ["5m"]

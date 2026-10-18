@@ -68,3 +68,16 @@ def test_version_flag_prints_the_version():
 
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0 and result.output.strip() == f"autokeeper {__version__}"
+
+
+def test_only_a_join_from_the_host_machine_carries_the_room_key(monkeypatch, tmp_path):
+    from autokeeper import config
+    from autokeeper.net.hub import room_key, room_key_file
+
+    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.delenv("AUTOKEEPER_GUEST", raising=False)
+    room_key_file(8765).write_text("secret", encoding="utf-8")
+    assert room_key("ws://127.0.0.1:8765/ws") == "secret"
+    assert room_key("ws://26.1.2.3:8765/ws") == ""  # a friend's machine has no such file anyway
+    monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # the browser seats the host command starts
+    assert room_key("ws://127.0.0.1:8765/ws") == ""

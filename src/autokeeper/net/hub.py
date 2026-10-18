@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import secrets
 import time
 import uuid
 from pathlib import Path
@@ -101,6 +103,25 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     return d
 
 
+def room_key_file(port: int):
+    """Where a running room keeps its host key: only someone on this machine can read it."""
+    return config.SAVES / f".room-{port}.key"
+
+
+def room_key(url: str) -> str:
+    """The host key, for a `join` from the host's own machine (not the browser seats, which the
+    host command starts with AUTOKEEPER_GUEST set)."""
+    from urllib.parse import urlparse
+
+    target = urlparse(url)
+    if os.environ.get("AUTOKEEPER_GUEST") or target.hostname not in ("127.0.0.1", "localhost", "::1"):
+        return ""
+    try:
+        return room_key_file(target.port or 8765).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 class Hub:
     def __init__(
         self,
@@ -150,6 +171,9 @@ class Hub:
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
         self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F5)
         self.port = 0
+        self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
+        self.hosts: set[str] = set()  # clients that showed the key: the host may switch models
+        self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -178,6 +202,9 @@ class Hub:
         t = msg.get("t")
         if t == "hello":
             self.names[cid] = (msg.get("name") or "").strip()[:16] or f"玩家{len(self.names) + 1}"
+            if msg.get("key") and secrets.compare_digest(str(msg["key"]), self.key):
+                self.hosts.add(cid)
+                self.names[cid] += "·房主"
             await self._send(cid, self._welcome(cid))
             await self._broadcast({"t": "seats", "seats": self._seats()})
         elif t == "sit":
@@ -209,6 +236,12 @@ class Hub:
             else:
                 async with self.desk:
                     await self._afterword()
+        elif t == "engine":
+            if cid not in self.hosts:
+                await self._send(cid, {"t": "error", "text": "只有房主能换模型"})
+            elif isinstance(msg.get("choice"), dict):
+                self.swaps.put_nowait((cid, msg["choice"]))
+                await self._send(cid, {"t": "error", "text": "这一段讲完就换模型"})
         elif t == "suggest":
             seat = self._seat_of(cid)
             if seat is None or self.state.ending:
@@ -269,6 +302,7 @@ class Hub:
         return {
             "t": "welcome",
             "you": cid,
+            "host": cid in self.hosts,
             "version": __version__,  # a client on another version is told so (tui/net.py)
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
@@ -379,6 +413,7 @@ class Hub:
         self.waiting = inv.id
         try:
             while True:
+                await self._swap()  # the host's model switch, between actions
                 await self._asks()  # what the table asked for meanwhile: the last narration told again
                 try:
                     text = await asyncio.wait_for(queue.get(), 1.0)
@@ -395,6 +430,8 @@ class Hub:
                     await self._run(text, inv.id, ai=False)
                 except Exception as exc:
                     self.game.visuals.resume()
+                    await self._event({"type": "status", "text": ""})  # nobody's screen keeps spinning
+                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}这一回合中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
                     await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
                     continue
                 if not commands.instant(text):  # a check (.ra) is an action; .r, .st and the like leave the turn open
@@ -428,6 +465,32 @@ class Hub:
         else:
             self.asks.put_nowait((cid, nudge, self.game.told))
             self.inbox[self.waiting].put_nowait("")  # wake the turn loop
+
+    async def _swap(self) -> None:
+        """New channels for every agent, as GameScreen._apply_engine does; the transcripts stay
+        in the state, so nobody forgets."""
+        from ..agents.cast import Cast
+
+        while not self.swaps.empty():
+            cid, choice = self.swaps.get_nowait()
+            os.environ["AUTOKEEPER_PRESET"] = str(choice.get("preset", ""))
+            os.environ["AUTOKEEPER_MODE"] = str(choice.get("mode") or "标准")
+            for key, env in (("model", "AUTOKEEPER_MODEL"), ("fallback", "AUTOKEEPER_FALLBACK")):
+                if choice.get(key):
+                    os.environ[env] = str(choice[key])
+                else:
+                    os.environ.pop(env, None)
+            try:
+                cfg = config.load()
+            except ValueError as exc:
+                await self._send(cid, {"t": "error", "text": str(exc)})
+                continue
+            config.save_ui_settings(choice)
+            old, self.cast = self.cast, Cast(cfg, self.m)
+            await self.game.replace_cast(self.cast)
+            await old.close()
+            keeper = cfg.role("keeper").model.split(":", 1)[-1]
+            await self._broadcast({"t": "say", "from": "系统", "text": f"房主换了模型：{cfg.preset} · 守秘人 {keeper}"})
 
     async def _asks(self) -> None:
         while not self.asks.empty():
@@ -516,11 +579,15 @@ class Hub:
         site = web.TCPSite(runner, host, port)
         await site.start()
         self.port = site._server.sockets[0].getsockname()[1] if site._server else port  # type: ignore[union-attr]
+        key_file = room_key_file(self.port)
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(self.key, encoding="utf-8")
         try:
             await self.play()
             if linger:
                 await asyncio.Event().wait()
         finally:
+            key_file.unlink(missing_ok=True)
             await self.game.close()
             await self.cast.close()
             await runner.cleanup()

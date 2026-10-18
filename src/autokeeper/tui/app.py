@@ -1478,6 +1478,16 @@ class AutoKeeperApp(App):
         else:
             self.push_screen(TitleScreen())
 
+    def notify(self, message, *, title: str = "", severity="information", timeout: float | None = None, markup: bool = True) -> None:
+        """The same notice twice while the first still shows (a key pressed again) is dropped:
+        stacked toasts only crowd the screen, and some terminals garble wide characters there."""
+        now, key = time.monotonic(), (str(message), title)
+        shown = getattr(self, "_notices", {})
+        if now - shown.get(key, -1e9) < (timeout or 5):
+            return
+        self._notices = {k: v for k, v in shown.items() if now - v < 30} | {key: now}
+        super().notify(message, title=title, severity=severity, timeout=timeout, markup=markup)
+
     def action_confirm(self) -> None:
         """Space confirms like Enter in lists and on buttons. Inputs keep their spaces: they
         take the key before it ever reaches a binding."""

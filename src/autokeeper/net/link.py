@@ -28,11 +28,14 @@ class Link:
         self.handler: Handler | None = None
         self.session: aiohttp.ClientSession | None = None
         self.ws: aiohttp.ClientWebSocketResponse | None = None
+        self.host = False  # the Hub took this player for the host (welcome)
 
     async def connect(self) -> None:
         self.session = aiohttp.ClientSession()
         self.ws = await self.session.ws_connect(self.url, heartbeat=20, max_msg_size=64 * 1024 * 1024)
-        await self.send({"t": "hello", "name": self.name})
+        from .hub import room_key
+
+        await self.send({"t": "hello", "name": self.name, "key": room_key(self.url)})
 
     async def send(self, msg: dict[str, Any]) -> None:
         if self.ws is not None and not self.ws.closed:

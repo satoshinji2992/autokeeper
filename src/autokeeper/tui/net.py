@@ -8,6 +8,7 @@ is your turn, and anything that starts with a full-width bracket is table talk.
 from __future__ import annotations
 
 import asyncio
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ from ..net.link import Link
 from ..rules import commands
 from .app import GameScreen
 from .retell import RetellModal
-from .screens import PushModal, RollModal
+from .screens import EngineModal, PushModal, RollModal
 from .widgets import SceneArt
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
@@ -119,6 +120,7 @@ class LobbyScreen(Screen):
         t = msg["t"]
         if t == "welcome":
             self.welcome = msg
+            self.link.host = bool(msg.get("host"))
             if (theirs := msg.get("version")) and theirs != __version__:
                 self.app.notify(f"房主用的是 {theirs}，你是 {__version__}。版本不同可能出错，双方更新到同一版再联机。",
                                 severity="warning", timeout=12)
@@ -289,7 +291,8 @@ class NetGameScreen(GameScreen):
         elif t == "error":
             if msg.get("retry"):
                 self.my_turn = bool(self.seat)
-                self.story.end_keeper("这一段暂时中断。")
+                self.status_text = ""
+                self.story.end_keeper("这一段暂时中断，输入 /retry 接着讲。")
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
             self.app.notify("和房主的连接断了", severity="error", timeout=10)
@@ -348,7 +351,18 @@ class NetGameScreen(GameScreen):
 
     # The host runs the agents: switching models, sketches, recaps and saving happen there.
     def action_engine(self) -> None:
-        self.app.notify("联机时由房主决定用哪个模型")
+        if not self.link.host:
+            self.app.notify("联机时由房主决定用哪个模型")
+            return
+        from .settings import model_choices
+
+        cfg, saved = config.load(), config.ui_settings()
+        model, fallback = os.environ.get("AUTOKEEPER_MODEL", saved.get("model", "")), os.environ.get("AUTOKEEPER_FALLBACK", saved.get("fallback", ""))
+        self.app.push_screen(EngineModal(model_choices(), cfg.preset, model, fallback, cfg.mode), self._ask_engine)
+
+    def _ask_engine(self, choice: dict | None) -> None:
+        if choice:
+            self.run_worker(partial(self.link.send, {"t": "engine", "choice": choice}))
 
     def action_sketch(self) -> None:
         self.app.notify("联机时暂时不能手绘")

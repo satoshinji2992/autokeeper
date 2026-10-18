@@ -228,6 +228,7 @@ def host(
         for ip in ips:
             console.print(f"  [bold]http://{ip}:{port}[/]")
     console.print(f"装了 AutoKeeper 的人也可以在终端里加入：[bold]uv run autokeeper join {ips[0]}:{hub_port}[/]")
+    console.print(f"房主自己也要玩：另开一个终端 [bold]uv run autokeeper join 127.0.0.1:{hub_port}[/]，这样进来的就是房主，可以按 F9 换模型。")
     console.print("[dim]人齐了自动开局；也可以在大厅里选“现在开始”，空座交给 AI。Ctrl+C 关闭房间。[/]")
     console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。[/]")
     if not web_ui:
@@ -242,6 +243,7 @@ def host(
     argv = [sys.executable, "-m", "autokeeper", "join", f"127.0.0.1:{hub_port}"]
     command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     os.environ["COLORTERM"] = "truecolor"  # the friends' browsers show 24-bit colour
+    os.environ["AUTOKEEPER_GUEST"] = "1"  # browser seats run here too, but they are not the host
     Server(command, host="0.0.0.0", port=port, title="AutoKeeper 联机", public_url=f"http://{ips[0]}:{port}").serve()
 
 

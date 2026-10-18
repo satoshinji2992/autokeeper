@@ -198,7 +198,7 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
             if "↳ 获得线索〔广场告示〕" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
                 break  # the dice have settled, and under them what they led to
         lines = "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
-        assert "周衡（小明）：我看看告示栏" in lines and "↳ 获得线索〔广场告示〕" in lines and "叙事" in lines
+        assert "周衡（小明·房主）：我看看告示栏" in lines and "↳ 获得线索〔广场告示〕" in lines and "叙事" in lines
         notice = hub.m.clue("c_notice")
         assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
     await closed(task)

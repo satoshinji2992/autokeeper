@@ -83,6 +83,8 @@ def transient(exc: BaseException) -> bool:
         return status in TRANSIENT_STATUS
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return True
+    if type(exc).__name__ == "ClaudeError":  # no status code: Claude Code failed without saying why, worth another go
+        return True
     return any(n in type(exc).__name__ for n in TRANSIENT_NAMES)
 
 
