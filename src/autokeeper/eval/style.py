@@ -557,6 +557,7 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
                 await game.talk(turn)
                 said.setdefault(npc.name, []).append(turn.npc_lines[-1][1])
                 asked.setdefault(npc.name, []).append(q)
+        system = "".join(s.system for s in cast.sessions.values())
     finally:
         await cast.close()
     role = cfg.role("npc")
@@ -564,7 +565,7 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
         "module": m.id,
         "label": label,
         "npc": f"{role.model}@{role.effort or 'none'}",
-        "prompt": hashlib.sha1("".join(s.system for s in cast.sessions.values()).encode("utf-8")).hexdigest()[:10],
+        "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which NPC prompts answered
         **voice(said, {n.name: habits(n) for n in m.npcs}),
         "usage": state.usage.get("npc", {}),
         "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),
