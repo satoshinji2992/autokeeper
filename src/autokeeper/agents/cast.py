@@ -448,6 +448,33 @@ class Cast:
         reply = await self._send("keeper", s, state, report, extra=lore, on_delta=on_delta)
         return reply.text.strip()
 
+    async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
+        """`told`, the keeper's latest narration of `report`, told again. That exchange leaves the
+        keeper's memory first, so the new telling takes its place rather than following it;
+        `extra` (that turn's lore, the player's nudge) rides along this call only."""
+        s = self._keeper(state)
+        s.bind(state.transcripts.setdefault("keeper", []), state.notes)
+        await s.settle()  # a fold still running must not move the transcript underneath
+        last = s.transcript[-2:]
+        if [m["content"].strip() for m in last] != [report.strip(), told.strip()]:
+            raise ValueError("守秘人的记忆里，最后一段不是这段叙述")
+        s.forget()
+        try:
+            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
+        except BaseException:
+            s.transcript += last  # the old telling stands
+            raise
+        return reply.text.strip()
+
+    async def epilogue(self, state: GameState, prompt: str, on_delta: OnDelta = None) -> str:
+        """After the ending, the keeper's word on what became of everyone. Asked on its own
+        session, which remembers the game, then dropped from it: it is not part of the story."""
+        s = self._keeper(state)
+        reply = await self._send("keeper", s, state, prompt, on_delta=on_delta)
+        await s.settle()
+        s.forget()
+        return reply.text.strip()
+
     async def chronicle(self, state: GameState, entries: str) -> str:
         s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)
         prompt = f"把下面这段游戏记录并进摘要（已有摘要：{state.memory or '无'}）。输出新的完整摘要，不超过 400 字。\n\n{entries}"

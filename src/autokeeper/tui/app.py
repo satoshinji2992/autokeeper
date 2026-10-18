@@ -7,6 +7,7 @@ import json
 import os
 import random
 import time
+from functools import partial
 from pathlib import Path
 
 import aiosqlite
@@ -24,8 +25,9 @@ from textual.widgets.option_list import Option
 
 from .. import artkit, config, imagery, roster, weather
 from ..agents.cast import Cast
+from ..engine import debrief
 from ..engine import graph as turn_graph
-from ..engine.game import PLAY_WAIT, Game
+from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
@@ -33,7 +35,9 @@ from ..module.schema import Module
 from ..rules import commands
 from ..rules.coc import Investigator, Rules
 from . import art
+from .debrief import DebriefModal
 from .mapview import MapModal
+from .retell import RetellModal
 from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
 from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
@@ -377,6 +381,8 @@ class GameScreen(Screen):
         Binding("ctrl+a", "art_style", "画法", priority=True),  # before the input box takes it as Home
         Binding("f6", "weather", "天气"),
         Binding("f7", "sheet", "人物卡"),
+        Binding("f9", "retell", "重讲"),
+        Binding("f10", "debrief", "复盘"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -394,6 +400,8 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
+        self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -619,9 +627,9 @@ class GameScreen(Screen):
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "echo":  # the first beat, while the ruling and the narration are worked out
             story.add("echo", Text(ev["text"]))
-        elif t == "keeper_start":
-            self._status("守秘人正在讲述…")
-            story.begin_keeper()
+        elif t == "keeper_start":  # told again: the same block, new words
+            self._status("守秘人换个讲法…" if ev.get("again") else "守秘人正在讲述…")
+            self.told = story.begin_keeper(self.told if ev.get("again") else None)
         elif t == "keeper_delta":
             story.feed(ev["text"])
         elif t == "keeper_end":
@@ -689,6 +697,14 @@ class GameScreen(Screen):
             story.add("ending", body)
         elif t == "sheet":
             self._panels()
+        elif t == "epilogue_start":
+            self.afterword, self.writing = "", True
+        elif t == "epilogue_delta":
+            self.afterword += ev["text"]
+        elif t == "epilogue":
+            self.afterword, self.writing = ev["text"], False
+            if ev.get("error"):
+                self.app.notify(ev["error"], severity="error", timeout=6)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         npc = self.m.npc(ev["npc"])
@@ -768,15 +784,18 @@ class GameScreen(Screen):
             self._slash(text)
             return
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
-            self.app.notify("这局已经结束了。.en 做成长检定，Ctrl+R 回顾这一局，Esc 回到标题。")
+            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，Ctrl+R 回顾这一局，Esc 回到标题。")
             return
         self.play(text)
 
     def _slash(self, text: str) -> None:
-        cmd = text.split()[0].lower()
+        cmd, *args = text.split()
+        cmd = cmd.lower()
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
-                   "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save}
-        if cmd in actions:
+                   "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief}
+        if cmd == "/retell":  # /retell 短一点 skips the list
+            self.action_retell(args[0] if args else "")
+        elif cmd in actions:
             actions[cmd]()
         elif cmd == "/theme":
             names = [th.name for th in THEMES]
@@ -891,7 +910,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append(("" if self.spectate else ".en 做成长检定 · ") + "Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
+        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------
@@ -982,6 +1001,71 @@ class GameScreen(Screen):
     def action_save(self) -> None:
         write_save(self.state, self.m)
         self.app.notify(f"已存档：{self.state.slot}")
+
+    # -- telling it again, and after the end -------------------------------------------------
+    def action_retell(self, nudge: str = "") -> None:
+        """F9, /retell: the latest narration in other words; the dice and clues stay."""
+        if self._turn_running() or self.game is None:
+            return
+        why = self.game.retell_blocked() or ("" if not nudge or nudge in RETELL else f"可以这样要：{'、'.join(RETELL)}")
+        if why:
+            self.app.notify(why, severity="warning", timeout=5)
+        elif nudge:
+            self._retell(nudge)
+        else:
+            self.app.push_screen(RetellModal(), partial(self._retell_chosen, told=self.game.told))
+
+    def _retell_chosen(self, nudge: str | None, told: Told | None) -> None:
+        """While the list was open the keeper may have gone on (an interlude): then it is not
+        the narration they asked about any more."""
+        if not nudge or self._turn_running() or self.game is None:
+            return
+        if self.game.told is not told:
+            self.app.notify("守秘人已经讲到下一段了，想重讲就再按一次 F9", severity="warning", timeout=5)
+            return
+        self._retell(nudge)
+
+    @work(exclusive=True, group="turn")
+    async def _retell(self, nudge: str) -> None:
+        assert self.game
+        self._busy(True)
+        self.game.emit = self.handle
+        try:
+            await self.game.retell(nudge)
+        except Exception as exc:  # the old telling is back on screen
+            why = str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__
+            self.app.notify(f"没能重讲（{why}），原来那段还在", severity="error", timeout=6)
+        else:
+            write_save(self.state, self.m)
+        self._busy(False)
+
+    def action_debrief(self) -> None:
+        """F10, /debrief: once it is over, the whole book, and the epilogue on request."""
+        if not self.state.ending:
+            self.app.notify("复盘要等这一局结束", severity="warning", timeout=3)
+            return
+        self.app.push_screen(DebriefModal(debrief.build(self.m, self.state), self._epilogue_so_far, self._ask_epilogue))
+
+    def _epilogue_so_far(self) -> tuple[str, bool]:
+        return self.afterword or self.state.epilogue, self.writing
+
+    def _ask_epilogue(self) -> None:
+        if not self._turn_running():
+            self._epilogue()
+
+    @work(exclusive=True, group="turn")
+    async def _epilogue(self) -> None:
+        assert self.game
+        self._busy(True)
+        self._status("守秘人在讲后日谈…")
+        self.game.emit = self.handle
+        try:
+            await debrief.epilogue(self.game)
+        except Exception:  # the event already said so
+            pass
+        else:
+            write_save(self.state, self.m)
+        self._busy(False)
 
 
 class AutoKeeperApp(App):

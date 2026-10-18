@@ -77,6 +77,7 @@ class GameState(BaseModel):
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
+    epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)
     turn: int = 0
     usage: dict[str, dict[str, float]] = Field(default_factory=dict)
 

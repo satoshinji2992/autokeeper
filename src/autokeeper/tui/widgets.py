@@ -264,9 +264,16 @@ class StoryLog(VerticalScroll):
         return block
 
     # -- typewriter ----------------------------------------------------------------
-    def begin_keeper(self) -> None:
-        self._live = self.add("keeper", Text(""))
+    def begin_keeper(self, again: Static | None = None) -> Static:
+        """A narration starts: a new block that types itself out, or `again`, the block of a
+        narration being told again, whose old words fade until the new ones come in."""
+        if again is not None and again.parent is self:
+            again.styles.text_opacity = 0.45
+            self._live = again
+        else:
+            self._live = self.add("keeper", Text(""))
         self._shown, self._pending = "", ""
+        return self._live
 
     def feed(self, text: str) -> None:
         self._pending += text
@@ -281,6 +288,7 @@ class StoryLog(VerticalScroll):
         step = max(1, len(self._pending) // 12)
         self._shown += self._pending[:step]
         self._pending = self._pending[step:]
+        self._unfade(self._live)
         self._live.update(Text(self._shown + "▌"))
         self.scroll_end(animate=False)
         self.set_timer(0.03, self._type)
@@ -290,9 +298,15 @@ class StoryLog(VerticalScroll):
             self._live = self.add("keeper", Text(""))
         self._pending = ""
         self._typing = False
+        self._unfade(self._live)
         self._live.update(Text(full))
         self._live = None
         self.scroll_end(animate=False)
+
+    @staticmethod
+    def _unfade(block: Static) -> None:
+        if block.styles.text_opacity < 1:
+            block.styles.text_opacity = 1.0
 
 
 PASS, MISS = "#3cb371", "#ff6347"
@@ -385,7 +399,7 @@ def command_suggester(inv: Investigator | None = None) -> SuggestFromList:
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
-    slash = ["/draw", "/notes", "/map", "/recap", "/save", "/help", "/theme", "/quit"]
+    slash = ["/draw", "/notes", "/map", "/recap", "/retell", "/debrief", "/save", "/help", "/theme", "/quit"]
     return SuggestFromList([*checks, *lookups, *slash], case_sensitive=False)
 
 
