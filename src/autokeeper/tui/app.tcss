@@ -101,7 +101,7 @@ Screen {
 }
 #scene {
     height: auto;
-    max-height: 17;
+    max-height: 28;
     padding: 0 1;
     color: $primary;
     border-bottom: dashed $primary-darken-2;

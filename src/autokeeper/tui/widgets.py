@@ -42,8 +42,8 @@ class SceneArt(Static):
     the party arrives somewhere new, carry the place's weather (atmosphere.py) and glitch
     when sanity drops."""
 
-    HEIGHT = 15
     TICK = 0.15  # weather frames, about seven a second
+    ROWS = (9, 26)  # the art's height: about 38% of the terminal's, within these bounds
 
     def __init__(self, **kw):
         super().__init__("", **kw)
@@ -62,17 +62,21 @@ class SceneArt(Static):
         self._art: Text | None = None  # the current art, ready to paint
         self._atmo: atmosphere.Atmosphere | None = None
         self._hold = 0.0  # weather waits until then (a glitch or a flicker owns the panel)
-        self._width = 0
+        self._fitted = (0, 0)  # the size the art was last drawn for (not _size: Textual owns that)
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
         self.set_interval(self.TICK, self._weather)
 
     def on_resize(self) -> None:
-        # Only a new width needs new art: height follows the content, so reacting to it
-        # would rebuild the scene every time a frame is painted.
-        if self.size.width != self._width:
-            self._width = self.size.width
+        self.refit()
+
+    def refit(self) -> None:
+        """Redraw when the art's size changes: the panel's width, or the terminal's height,
+        which sets the art's (the screen calls this). The widget's own height follows the
+        content, so reacting to it would rebuild the scene every time a frame is painted."""
+        if self._fit() != self._fitted:
+            self._fitted = self._fit()
             self._refresh()
 
     def show(
@@ -118,7 +122,8 @@ class SceneArt(Static):
         return [self.sky, *(k for k in own if k != self.sky and not (k in wet and self.sky in wet))][:2]
 
     def _fit(self) -> tuple[int, int]:
-        return max(24, (self.size.width or 72) - 2), self.HEIGHT
+        rows = round(self.app.size.height * 0.38)
+        return max(24, (self.size.width or 72) - 2), max(self.ROWS[0], min(self.ROWS[1], rows))
 
     def _uses_image(self) -> bool:
         return bool(self.image) and imagery.available()
