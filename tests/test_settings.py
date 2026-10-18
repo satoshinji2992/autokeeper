@@ -91,7 +91,10 @@ async def test_model_choice_persists_and_narrative_preferences_stay_available(mo
         presets = models.query_one("#preset", OptionList)
         presets.highlighted = presets.get_option_index("codex")
         models.query_one("#apply", Button).press()
-        await pilot.pause()
+        for _ in range(100):  # the choice is saved in the dismiss callback: a slow runner takes more than a frame
+            if app.screen is settings and config.load().role("keeper").backend == "codex":
+                break
+            await pilot.pause(0.05)
         assert app.screen is settings
         assert config.load().role("keeper").backend == "codex"
     monkeypatch.delenv("AUTOKEEPER_PRESET", raising=False)
