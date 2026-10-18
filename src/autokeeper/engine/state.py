@@ -48,6 +48,7 @@ class GameState(BaseModel):
     memory: str = ""  # chronicler's summary of everything before the recent log
     pending_push: dict | None = None
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
+    missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS

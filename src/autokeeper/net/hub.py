@@ -38,7 +38,7 @@ from ..module.schema import Module
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
 SEATS = ("玩家", "AI", "不上场")
-PRIVATE = {"transcripts", "notes", "usage", "log", "memory", "improv"}  # agent memory, bookkeeping and the director's plans
+PRIVATE = {"transcripts", "notes", "usage", "log", "memory", "improv", "missed"}  # agent memory, bookkeeping and the director's plans
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:

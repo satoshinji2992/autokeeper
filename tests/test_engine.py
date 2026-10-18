@@ -422,15 +422,42 @@ async def test_a_stuck_party_gets_a_lead(module, fake):
     assert game.state.progress_at == 12 and any("没署名的信" in n for n in turn.notes)
 
 
-async def test_a_failed_roll_does_not_sit_on_a_core_clue(module, fake):
-    look = Action(kind="investigate", summary="周衡查看齿轮间")
+async def test_a_failed_roll_neither_sits_on_a_core_clue_nor_hands_it_out(module, fake):
+    look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
     ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)
     game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
     fake.queue(99)  # a plain failure: a push is offered first
     turn = await game.resolve(look, ruling)
     assert turn.push and "c_gears" not in game.state.clues
+    first = await game.push("drop")
+    assert "c_gears" not in game.state.clues and any("差一点" in n for n in first.notes)  # still there, and they felt it
+    fake.queue(99)  # looking again, and failing again
+    await game.resolve(look, ruling)
     before = game.state.minutes
     fake.queue(10)  # the gears' sanity check
-    dropped = await game.push("drop")
-    assert "c_gears" in game.state.clues and game.state.minutes - before == 20  # found, but it cost time
-    assert any("关键线索不能卡住" in n for n in dropped.notes)
+    second = await game.push("drop")
+    assert "c_gears" in game.state.clues and game.state.minutes - before == 20  # found the second time, at a cost
+    assert any("关键线索不能卡住" in n for n in second.notes)
+
+
+async def test_a_failed_push_brings_the_core_clue_at_once(module, fake):
+    look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)
+    game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
+    fake.queue(99)
+    await game.resolve(look, ruling)
+    fake.queue(99, 10)  # the pushed roll fails too; then the gears' sanity check
+    await game.push("push")
+    assert "c_gears" in game.state.clues
+
+
+async def test_a_look_around_does_not_empty_a_room(module, fake):
+    vague = Action(kind="investigate", summary="周衡在钟楼里四处查看")
+    ruling = Ruling(needs_roll=False, auto_clues=["c_gears", "c_diary"], minutes=10)
+    game, *_ = make(module, fake, {"x": (vague, ruling)}, location="tower")
+    fake.queue(10, 10)  # sanity checks that finding the clues may call for
+    await game.resolve(vague, ruling)
+    assert len(game.state.clues) == 1  # one plain thing; the rest waits for a closer look
+    pointed = Action(kind="investigate", summary="周衡翻看齿轮旁的日记", target="日记")
+    await game.resolve(pointed, ruling)
+    assert set(game.state.clues) == {"c_gears", "c_diary"}

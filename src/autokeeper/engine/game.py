@@ -272,16 +272,24 @@ class Game:
         r.now, r.go, r.note = list(applied.now), applied.go, applied.note
         return r
 
-    async def _fail_forward(self, ids: list[str], turn: Turn) -> None:
-        """Do not sit on clues: after a failed roll a core clue still turns up, at a price the
-        keeper has to tell (time lost, noise made, something given away)."""
+    async def _fail_forward(self, ids: list[str], turn: Turn, *, pushed: bool = False) -> None:
+        """Do not sit on clues, do not hand them out either. A core clue missed once stays where
+        it is, and the keeper shows how close they came; missed again, or after a pushed roll
+        failed, it turns up at a price the keeper has to tell (time lost, noise made, something
+        given away)."""
         st = self.state
         core = [c for c in ids if self.m.clue(c).core and c not in st.clues]
         if not core:
             return
+        for c in core:
+            st.missed[c] = st.missed.get(c, 0) + 1
+        due = [c for c in core if pushed or st.missed[c] >= 2]
+        if not due:
+            turn.notes.append("检定没过：要找的东西还在原处，写出他差一点就发现的感觉（哪里不对劲、还没摸到门道），不说出内容；换个办法或再仔细查一次还有机会")
+            return
         st.minutes += 20
-        await self._gain(core, turn, turn.action)
-        turn.notes.append("检定没过，但关键线索不能卡住：线索照样到手，叙事里要写出代价（多花了时间、弄出了动静或留下了把柄）")
+        await self._gain(due, turn, turn.action)
+        turn.notes.append("检定又没过，但关键线索不能卡住：线索照样到手，叙事里要写出代价（多花了时间、弄出了动静或留下了把柄）")
 
     async def _nudge(self, turn: Turn) -> None:
         """Stuck for a while: the director sends a lead."""
@@ -361,7 +369,7 @@ class Game:
         if passed:
             gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             await self._flags(ruling.set_flags, turn)
-        await self._gain(gained, turn, action)
+        await self._gain(gained[: MAX_FOUND if action.target else 1], turn, action)  # one look around does not empty a room
         if ruling.now:  # the director's scene plays out, whatever the dice said
             await self._flags(ruling.now, turn)
         if ruling.note:
@@ -406,7 +414,7 @@ class Game:
             await self._flags(pending.get("flags", []), turn)
             await self._gain(pending["clues"], turn, None)
         else:
-            await self._fail_forward(pending["clues"], turn)
+            await self._fail_forward(pending["clues"], turn, pushed=True)  # a pushed roll was the last chance: the clue comes, at a price
         await self._check_ending(turn)
         return turn
 
@@ -765,7 +773,8 @@ BACKSTAGE_LIMIT = 2  # plans being written at once
 # land in an interlude as soon as they are ready (Game.interlude).
 PLAY_WAIT = 0.0
 LATER = "还在准备，这一轮只写行动直接、合理的结果，不要编新的人物、地点和线索，收在一个悬念上"
-STALL_TURNS = 8  # turns without a clue, flag, event or new place before the director sends a lead
+STALL_TURNS = 12  # turns without a clue, flag, event or new place before the director sends a lead
+MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 
