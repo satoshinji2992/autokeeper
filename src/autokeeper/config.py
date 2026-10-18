@@ -21,6 +21,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     budget_usd = 5             # stop metered API calls past this estimate
     mode = "标准"              # 经济 | 标准 | 高级剧情
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
+    tips = false               # no first-time hints in the story (also switched in the guide, F1)
 
     [roles.all]                # applies to every role
     base_url = "http://localhost:8000/v1"
@@ -167,6 +168,7 @@ class Config:
     budget_usd: float | None = None
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
+    tips: bool = True  # first-time hints for new players (tui/tips.py)
 
     @property
     def improvising(self) -> bool:
@@ -223,6 +225,7 @@ def load(path: Path | None = None) -> Config:
     cfg.module = data.get("module", cfg.module)
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)
+    cfg.tips = data.get("tips", cfg.tips) is not False
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None
