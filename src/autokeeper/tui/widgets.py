@@ -47,12 +47,28 @@ def _pad(width: int, wide: int, covered: int = 0) -> int:
     return max(0, min(pad, width - covered - wide) if covered else pad)
 
 
+def _lines(text: Text) -> int:
+    return text.plain.count("\n") + 1
+
+
+def _tall(art_text: Text, rows: int) -> Text:
+    """A picture padded to the panel's height: chafa may come a row short, and the panel
+    should not change height with the art style or a glitch frame."""
+    short = rows - _lines(art_text)
+    return Text("\n").join([art_text, *(Text() for _ in range(short))]) if short > 0 else art_text
+
+
 class SceneArt(Static):
     """Location name and its art: a real picture rendered by chafa to fill the panel, or the
     hand-drawn ASCII fallback. Both are lit for the time of day (artkit.LIGHTS), scan in when
     the party arrives somewhere new, carry the place's weather (atmosphere.py) and glitch
-    when sanity drops."""
+    when sanity drops.
 
+    The panel's height changes only when its art does: a scan-in keeps the rows below the beam
+    dark, lines are cropped rather than wrapped (just after a resize, until the art is drawn
+    again for the new size), and a picture always takes its full share of rows."""
+
+    DEFAULT_CSS = "SceneArt { text-wrap: nowrap; text-overflow: clip; }"
     TICK = 0.15  # weather frames, about seven a second
     ROWS = (9, 26)  # the art's height: about 38% of the terminal's, within these bounds
 
@@ -75,6 +91,9 @@ class SceneArt(Static):
         self._hold = 0.0  # weather waits until then (a glitch or a flicker owns the panel)
         self._fitted = (0, 0)  # the size the art was last drawn for (not _size: Textual owns that)
         self.covered = 0  # columns on the right that a speaker's portrait stands over (tui/speaker.py)
+        self._reveal = False  # an arrival waiting for the panel's first size, to scan in then
+        self._asked: tuple | None = None  # what the latest load was asked to draw
+        self._painted = 0  # rows on screen, so a frame of the same height skips the layout
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
@@ -87,9 +106,20 @@ class SceneArt(Static):
         """Redraw when the art's size changes: the panel's width, or the terminal's height,
         which sets the art's (the screen calls this). The widget's own height follows the
         content, so reacting to it would rebuild the scene every time a frame is painted."""
-        if self._fit() != self._fitted:
+        if self.size.width and self._fit() != self._fitted:
             self._fitted = self._fit()
             self._refresh()
+
+    @property
+    def rows(self) -> int:
+        """How tall the scene is once drawn at this size, whatever is on screen this moment
+        (the old art just after a resize, say): what the speaker's panel goes by."""
+        if self._uses_image():
+            rows = self._fit()[1]
+        else:
+            rows = _lines(Text(self.picture)) if self.picture else 0
+        cap = self.styles.max_height
+        return min(rows, int(cap.value)) if cap is not None and cap.is_cells else rows
 
     def show(
         self,
@@ -105,7 +135,8 @@ class SceneArt(Static):
         arrived = place != self.place
         self.place, self.picture, self.mask, self.image = place, picture, mask, image
         self.weather, self.description, self.sky = list(weather or []), description, sky
-        self._refresh(reveal=arrived)
+        if arrived or self._look() != self._asked:  # the same scene again (a resumed game's recap) is left be
+            self._refresh(reveal=arrived)
 
     def set_sky(self, sky: str) -> None:
         if sky != self.sky:
@@ -157,7 +188,7 @@ class SceneArt(Static):
         w, h = self._fit()
         when, graded = ("", "") if graded == "beam" else (self.when, graded)
         if self._uses_image():
-            return center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded)), w)
+            return _tall(center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded)), w), h)
         if self.picture:
             return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w, self.covered)
         return Text()
@@ -166,18 +197,33 @@ class SceneArt(Static):
         if art_text is not None:
             pass
         elif frame is not None:
-            art_text = center(Text.from_ansi(frame), self._fit()[0])
+            art_text = _tall(center(Text.from_ansi(frame), self._fit()[0]), self._fit()[1])
         elif rate or self._art is None:
             art_text = self._draw(rate) if not self._uses_image() else (self._art or Text())
         else:
             art_text = self._art
         if rows is not None:  # scan-in: the rows below the beam are still dark
             lines = art_text.split("\n")
-            beam = Text("▔" * min(self._fit()[0], max((ln.cell_len for ln in lines), default=0)), style="dim")
-            art_text = Text("\n").join([*lines[:rows], beam] if rows < len(lines) else lines)
-        self.update(art_text)  # where and when are on the top bar
+            if rows < len(lines):
+                beam = Text("▔" * min(self._fit()[0], max((ln.cell_len for ln in lines), default=0)), style="dim")
+                art_text = Text("\n").join([*lines[:rows], beam, *(Text() for _ in lines[rows + 1 :])])
+        # Weather and glitch frames keep the panel's height: a repaint, without laying out the
+        # whole screen (the story's blocks with it) seven times a second.
+        tall = _lines(art_text)
+        self.update(art_text, layout=tall != self._painted)  # where and when are on the top bar
+        self._painted = tall
+
+    def _look(self) -> tuple:
+        """Everything a load draws from."""
+        return (self.place, self.picture, self.mask, self.image, tuple(self.weather), self.description, self.sky,
+                self.style_name, self.when, self.effects, self.covered, self._fit())
 
     def _refresh(self, reveal: bool = False) -> None:
+        self._reveal = self._reveal or reveal
+        self._asked = self._look()
+        if not self.size.width:  # not laid out yet: the first resize draws it, at its real width
+            return
+        reveal, self._reveal = self._reveal, False
         self.run_worker(partial(self._load, reveal), exclusive=True, group="art")
 
     def _build(self, kinds: list[str]) -> tuple[Text, atmosphere.Atmosphere | None]:
@@ -190,13 +236,19 @@ class SceneArt(Static):
         return base, atmosphere.Atmosphere(kinds, layers, w, h, when=self.when)
 
     async def _load(self, reveal: bool) -> None:
+        asked = self._asked
         self._atmo = None  # no weather over a half-loaded scene
-        self._art, atmo = await asyncio.to_thread(self._build, self.kinds())
-        if reveal:
-            total = len(self._art.split("\n"))
-            for rows in range(0, total, 2):
-                self._paint(rows=rows)
-                await asyncio.sleep(0.035)
+        try:
+            self._art, atmo = await asyncio.to_thread(self._build, self.kinds())
+            if reveal:
+                total = len(self._art.split("\n"))
+                for rows in range(0, total, 2):
+                    self._paint(rows=rows)
+                    await asyncio.sleep(0.035)
+        except asyncio.CancelledError:
+            if self._asked is asked:  # cut short by a glitch, not by a newer load: show() may ask again
+                self._asked = None
+            raise
         self._atmo = atmo
         self._paint(art_text=atmo.compose() if atmo else None)
 
