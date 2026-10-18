@@ -44,7 +44,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from aiohttp import WSMsgType, web
+from aiohttp import WSCloseCode, WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
@@ -658,10 +658,14 @@ class Hub:
         app = web.Application()
         app.router.add_get("/ws", self.ws)
         app.router.add_get("/", self._status)
-        runner = web.AppRunner(app)
+        runner = web.AppRunner(app, shutdown_timeout=2.0)  # a closing room does not wait a minute for open sockets
         await runner.setup()
         site = web.TCPSite(runner, host, port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError:  # the port is taken
+            await runner.cleanup()
+            raise
         self.port = site._server.sockets[0].getsockname()[1] if site._server else port  # type: ignore[union-attr]
         key_file = room_key_file(self.port)
         key_file.parent.mkdir(parents=True, exist_ok=True)
@@ -672,6 +676,9 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            # Every screen hears the room close at once (their link pumps end with "closed").
+            await asyncio.gather(*(asyncio.wait_for(ws.close(code=WSCloseCode.GOING_AWAY, message=b"closed"), 2.0)
+                                   for ws in list(self.clients.values())), return_exceptions=True)
             await self.game.close()
             await self.cast.close()
             await runner.cleanup()

@@ -101,6 +101,7 @@ class LobbyScreen(Screen):
         self.faces: dict[tuple[str, str], Text] = {}  # portraits drawn so far: (picture, art style) -> art
         self.width, self.short = 40, False  # the seat list's lines: how wide, and whether two a seat
         self.lit: int | None = None  # the seat drawn for the cursor
+        self._game_handler: Any = None  # the game screen's, once the link is handed on to it
 
     def compose(self) -> ComposeResult:
         with Vertical(id="lobby"):
@@ -142,6 +143,10 @@ class LobbyScreen(Screen):
             return
         self.link.handler = self.on_msg
         self.app.run_worker(self.link.pump, name="link", group="link", exit_on_error=False)
+
+    async def on_unmount(self) -> None:
+        if self.link.handler != self._game_handler:  # not handed on to the game screen: hang up
+            await self.link.close()
 
     def on_resize(self, event: events.Resize) -> None:
         self.set_class(event.size.width < NARROW, "-narrow")
@@ -439,7 +444,7 @@ class LobbyScreen(Screen):
         screen = NetGameScreen(self.m or table_module(w), state, self.link, self.chosen or None,
                                [LogEntry.model_validate(e) for e in w.get("log", [])])
         screen.inbox.extend(first)
-        self.link.handler = screen.on_msg
+        self.link.handler = self._game_handler = screen.on_msg
         self.gone = True
         self.app.switch_screen(screen)
 
