@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 
 import pytest
 from PIL import Image
 from rich.text import Text
+from textual.widgets import RadioButton
 
 from autokeeper import artkit, config, imagery
 from autokeeper.config import EXAMPLE, Role
@@ -46,7 +48,7 @@ class Canned(hm.Model):
 
 
 async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, skills_dir):
-    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK"):  # F3 sets these; undo afterwards
+    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F3 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
     monkeypatch.setattr(config, "SAVES", tmp_path)
@@ -82,9 +84,10 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
         before, memory = screen.cast, screen.state.transcripts
         await pilot.press("f3")  # change models mid-game
         await pilot.pause()
+        app.screen.query(RadioButton).last().value = True  # 高级剧情
         await pilot.click("#apply")
         await pilot.pause(0.3)
-        assert screen.cast is not before and screen.game.cast is screen.cast
+        assert screen.cast is not before and screen.game.cast is screen.cast and os.environ["AUTOKEEPER_MODE"] == "高级剧情"
         assert screen.state.transcripts is memory  # the agents' memories carry over
 
 

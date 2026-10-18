@@ -427,7 +427,7 @@ class LangChainModel(Model):
         elif p == "openai":
             kw["stream_usage"] = True
             if effort and re.match(r"(o\d|gpt-5)", self.name):
-                kw["reasoning_effort"] = effort
+                kw["reasoning_effort"] = "high" if effort == "max" else effort  # OpenAI tops out at high
         elif p == "google_genai" and effort:
             kw["thinking_level"] = "low" if effort in ("minimal", "low") else "high"
         elif p == "anthropic" and effort:

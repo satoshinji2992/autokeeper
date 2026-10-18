@@ -37,9 +37,10 @@ def main(
     budget: Annotated[float | None, typer.Option(help="按量计费 API 的花费上限（美元）")] = None,
     fallback: Annotated[str | None, typer.Option(help="备用模型：主模型出错或超预算时改用它，如 ollama:qwen3:14b")] = None,
     improv: Annotated[str | None, typer.Option(help="自由度：即兴（默认，守秘人可以加人加线索加结局）/ 严格（只用模组写好的）")] = None,
+    mode: Annotated[str | None, typer.Option(help="模式：标准（默认）/ 高级剧情（守秘人、导演、NPC、AI 队友多想一层）/ 经济（所有角色少想一层）")] = None,
 ) -> None:
     # Environment, not globals: the browser server and every config.load() see the same choice.
-    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv)):
+    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv), ("MODE", mode)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
     if ctx.invoked_subcommand is None:
@@ -228,7 +229,7 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     except Exception as exc:
         ok = False
         console.print(f"✗ BCDice: {exc}")
-    table = Table(title=f"角色路由（预设：{cfg.preset}）", title_justify="left")
+    table = Table(title=f"角色路由（预设：{cfg.preset} · 模式：{cfg.mode}）", title_justify="left")
     for col in ("角色", "后端", "模型", "思考", "上下文窗口", "备用"):
         table.add_column(col)
     for name in sorted(cfg.roles):

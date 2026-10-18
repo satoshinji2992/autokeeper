@@ -12,7 +12,7 @@ from textual.color import Color
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import MouseDown, MouseMove, MouseUp
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, OptionList, Static
+from textual.widgets import Button, Input, OptionList, RadioButton, RadioSet, Static
 from textual.widgets.option_list import Option
 from textual_canvas import Canvas
 
@@ -203,15 +203,22 @@ class TextModal(ModalScreen[None]):
             yield Static("Esc 关闭", classes="system")
 
 
+MODE_NOTES = {
+    "经济": "所有角色少想一层：更快，更省",
+    "标准": "按预设的分工",
+    "高级剧情": "守秘人、导演、NPC 和 AI 队友多想一层：剧情更细，也更慢、更贵",
+}
+
+
 class EngineModal(ModalScreen[dict | None]):
     """Switch models mid-game. Every agent's memory lives in the save, not in the model, so
     the new one carries on where the old one stopped."""
 
     BINDINGS = [("escape", "dismiss(None)", "取消")]
 
-    def __init__(self, presets: dict[str, str], preset: str, model: str, fallback: str):
+    def __init__(self, presets: dict[str, str], preset: str, model: str, fallback: str, mode: str = "标准"):
         super().__init__()
-        self.presets, self.preset, self.model, self.fallback = presets, preset, model, fallback
+        self.presets, self.preset, self.model, self.fallback, self.mode = presets, preset, model, fallback, mode
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
@@ -219,6 +226,9 @@ class EngineModal(ModalScreen[dict | None]):
             yield Static(Text("每个 Agent 的记忆都在存档里，换完接着玩，谁也不会忘事。", style="dim"))
             options = [Option(Text.assemble((f"{name:<9}", "bold"), desc), id=name) for name, desc in self.presets.items()]
             yield OptionList(*options, id="preset")
+            with RadioSet(id="mode"):
+                for name, note in MODE_NOTES.items():
+                    yield RadioButton(Text.assemble((name.ljust(4, "　"), "bold"), "  ", note), value=name == self.mode, name=name)
             yield Input(self.model, placeholder="所有角色改用同一个模型（可空），如 ollama:qwen3:14b", id="model")
             yield Input(self.fallback, placeholder="备用模型（可空）：主模型出错或超预算时改用它", id="fallback")
             with Horizontal(classes="buttons"):
@@ -236,7 +246,9 @@ class EngineModal(ModalScreen[dict | None]):
             return
         ol = self.query_one(OptionList)
         preset = ol.get_option_at_index(ol.highlighted or 0).id or self.preset
-        self.dismiss({"preset": preset, "model": self.query_one("#model", Input).value.strip(), "fallback": self.query_one("#fallback", Input).value.strip()})
+        pressed = self.query_one(RadioSet).pressed_button
+        mode = pressed.name if pressed is not None and pressed.name else self.mode
+        self.dismiss({"preset": preset, "mode": mode, "model": self.query_one("#model", Input).value.strip(), "fallback": self.query_one("#fallback", Input).value.strip()})
 
 
 HELP = Text.from_markup(

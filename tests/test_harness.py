@@ -357,6 +357,26 @@ def test_presets_and_environment(monkeypatch, tmp_path):
     assert cfg.role("keeper").window == 4000 and cfg.role("npc").effort is None and cfg.role("keeper").effort == "high"
 
 
+def test_modes_move_thinking_one_level_the_backend_can_tell_apart(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOKEEPER_PRESET", "deepseek")
+    monkeypatch.setenv("AUTOKEEPER_MODE", "高级剧情")
+    cfg = config.load()
+    story = [cfg.role(r).effort for r in ("keeper", "director", "npc", "investigator")]
+    assert story == ["max", "high", "high", "high"] and cfg.role("arbiter").effort == "high" and cfg.role("summarizer").effort is None
+    monkeypatch.setenv("AUTOKEEPER_MODE", "经济")
+    cfg = config.load()
+    assert [cfg.role(r).effort for r in ("keeper", "arbiter", "npc", "summarizer")] == ["low", "low", None, None]  # no medium on DeepSeek
+    assert cfg.role("director").effort == "low"  # its plans fail validation without thinking
+    monkeypatch.setenv("AUTOKEEPER_PRESET", "claude")
+    assert {r.effort for r in config.load().roles.values()} == {"low"}  # Claude Code's own default is not "less"
+    toml = tmp_path / "ak.toml"
+    toml.write_text('[roles.keeper]\neffort = "high"\n', encoding="utf-8")
+    assert config.load(toml).role("keeper").effort == "high"  # a role given its own effort keeps it
+    monkeypatch.setenv("AUTOKEEPER_MODE", "豪华")
+    with pytest.raises(ValueError, match="未知的模式"):
+        config.load()
+
+
 def _spend_in(saves: str, n: int) -> None:
     """Runs in a child process: n metered calls recorded against the ledger in `saves`."""
     from pathlib import Path

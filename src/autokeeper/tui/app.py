@@ -471,7 +471,8 @@ class GameScreen(Screen):
     def _engine_label(cfg: config.Config) -> str:
         keeper = cfg.role("keeper")
         label = f"{cfg.preset} · 守秘人 {keeper.model.split(':', 1)[-1]}"
-        return label + (f" · 备用 {keeper.fallback.split(':', 1)[-1]}" if keeper.fallback else "")
+        label += f" · 备用 {keeper.fallback.split(':', 1)[-1]}" if keeper.fallback else ""
+        return label + ("" if cfg.mode == "标准" else f" · {cfg.mode}")
 
     def action_engine(self) -> None:
         if self.busy:
@@ -484,7 +485,7 @@ class GameScreen(Screen):
         }
         presets |= {name: "" for name in config.PRESETS if name not in presets}
         model, fallback = os.environ.get("AUTOKEEPER_MODEL", ""), os.environ.get("AUTOKEEPER_FALLBACK", "")
-        self.app.push_screen(EngineModal(presets, cfg.preset, model, fallback), self._switch_engine)
+        self.app.push_screen(EngineModal(presets, cfg.preset, model, fallback, cfg.mode), self._switch_engine)
 
     def _switch_engine(self, choice: dict | None) -> None:
         if choice:
@@ -495,6 +496,7 @@ class GameScreen(Screen):
         """New channels for every agent; the transcripts stay in the state, so nobody forgets."""
         assert self.game
         os.environ["AUTOKEEPER_PRESET"] = choice["preset"]
+        os.environ["AUTOKEEPER_MODE"] = choice.get("mode", "标准")
         for key, env in (("model", "AUTOKEEPER_MODEL"), ("fallback", "AUTOKEEPER_FALLBACK")):
             if choice[key]:
                 os.environ[env] = choice[key]

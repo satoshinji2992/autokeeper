@@ -124,6 +124,8 @@ uv run autokeeper --preset deepseek --fallback ollama:qwen3:14b      # DeepSeek 
 uv run autokeeper --preset deepseek --budget 5                       # 花费超过 5 美元就停
 ```
 
+想要剧情更细，就加 `--mode 高级剧情`，守秘人、导演、NPC 和 AI 队友都会多想一层；想要快一点，就加 `--mode 经济`。游戏里按 F3 也能换。用 DeepSeek 实测 12 回合，高级剧情多花七成的钱、六成的时间；经济模式每一步快一些，但省不了多少钱，因为钱主要花在读上下文上。
+
 用 DeepSeek 跑完一整局入门模组大约一块钱人民币。每个角色用哪个模型，都可以在 `~/.config/autokeeper/config.toml` 里单独设，写法见[配置说明](docs/harness.md#换模型)。
 
 ## 在 Claude Code / Codex 里玩

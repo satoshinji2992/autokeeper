@@ -8,7 +8,9 @@ Every agent role picks its own backend and model. A preset sets all of them at o
               DEEPSEEK_API_KEY.
 
 Pick one with `autokeeper --preset deepseek`, AUTOKEEPER_PRESET, or `preset = "deepseek"`
-in the config file. AUTOKEEPER_MODEL=ollama:qwen3:14b (any init_chat_model string; a bare
+in the config file. A mode moves the preset's thinking levels: 高级剧情 lets the roles that
+tell the story think one level harder, 经济 lets every role think one level less (--mode,
+AUTOKEEPER_MODE, `mode = "经济"`); roles given their own effort keep it. AUTOKEEPER_MODEL=ollama:qwen3:14b (any init_chat_model string; a bare
 claude-* name means Claude Code) points every role at one model, e.g. a local server with
 no internet. AUTOKEEPER_FALLBACK names a model to switch to when a role's own model fails
 or the budget runs out. Single roles are overridden in autokeeper.toml or
@@ -17,6 +19,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     preset = "deepseek"
     search = "auto"            # auto | tavily | ddgs | wikipedia | none
     budget_usd = 5             # stop metered API calls past this estimate
+    mode = "标准"              # 经济 | 标准 | 高级剧情
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
 
     [roles.all]                # applies to every role
@@ -112,6 +115,44 @@ PRESETS: dict[str, dict[str, Role]] = {
 
 
 IMPROV = ("严格", "即兴")
+MODES = ("经济", "标准", "高级剧情")
+STORY = ("keeper", "director", "npc", "investigator")  # the roles 高级剧情 lets think harder
+# One step is one level the backend can tell apart. DeepSeek has no medium (it runs as
+# high); Claude Code without an effort uses its own default, which is not "less".
+LADDERS: dict[str, tuple[str | None, ...]] = {
+    "deepseek": (None, "low", "high", "max"),
+    "claude": ("low", "medium", "high", "max"),
+    "": (None, "low", "medium", "high", "max"),
+}
+
+
+def shift(role: Role, steps: int) -> Role:
+    """The role thinking `steps` levels harder (or less, when negative), within its backend."""
+    if role.backend == "claude":
+        ladder = LADDERS["claude"]
+    elif role.model.startswith("deepseek:"):
+        ladder = LADDERS["deepseek"]
+    else:
+        ladder = LADDERS[""]
+    effort = "high" if role.effort == "medium" and "medium" not in ladder else role.effort
+    if effort not in ladder:  # e.g. "minimal": leave a hand-picked level alone
+        return role
+    i = min(max(ladder.index(effort) + steps, 0), len(ladder) - 1)
+    return replace(role, effort=ladder[i])
+
+
+# Thinking it never gives up, even in 经济: without it the director's plans kept failing
+# validation (12 DeepSeek turns: 5 calls after the opening, 1 plan that held).
+KEEPS_THINKING = ("director",)
+
+
+def moded(roles: dict[str, Role], mode: str) -> dict[str, Role]:
+    if mode == "高级剧情":
+        return {name: shift(r, 1) if name in STORY else r for name, r in roles.items()}
+    if mode == "经济":
+        less = {name: shift(r, -1) for name, r in roles.items()}
+        return {name: r if r.effort or name not in KEEPS_THINKING else roles[name] for name, r in less.items()}
+    return dict(roles)
 
 
 @dataclass
@@ -124,6 +165,7 @@ class Config:
     search: str = "auto"
     budget_usd: float | None = None
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
+    mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
 
     @property
     def improvising(self) -> bool:
@@ -164,7 +206,10 @@ def load(path: Path | None = None) -> Config:
     preset = os.environ.get("AUTOKEEPER_PRESET") or data.get("preset", "claude")
     if preset not in PRESETS:
         raise ValueError(f"未知预设：{preset}（可选：{', '.join(PRESETS)}）")
-    cfg = Config(roles=dict(PRESETS[preset]), preset=preset)
+    mode = os.environ.get("AUTOKEEPER_MODE") or data.get("mode", "标准")
+    if mode not in MODES:
+        raise ValueError(f"未知的模式：{mode}（可选：{'、'.join(MODES)}）")
+    cfg = Config(roles=moded(PRESETS[preset], mode), preset=preset, mode=mode)
     roles = data.get("roles", {})
     every = dict(roles.get("all", {}))
     if os.environ.get("AUTOKEEPER_MODEL"):
