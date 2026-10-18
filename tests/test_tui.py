@@ -199,3 +199,41 @@ def test_picture_renders_to_requested_size(tmp_path):
     assert 1 <= len(lines) <= 10
     assert "\x1b[" in out
     assert imagery.render(str(img), 40, 10, "ascii").isascii()
+
+
+def test_the_sheet_lists_every_skill_and_the_specialisms():
+    from autokeeper.tui.sheet import skill_rows
+
+    inv = Module.load(EXAMPLE).pregens[0].model_copy(deep=True)
+    inv.skills["外语(英语)"] = 40
+    inv.marks = ["侦查"]
+    rows = {name: (value, raised, ticked) for name, value, raised, ticked in skill_rows(inv)}
+    assert "外语(英语)" in rows and "外语" not in rows  # the specialism replaces the general entry
+    assert rows["侦查"][2] and rows["攀爬"] == (20, False, False)  # ticked; an untouched base chance
+    assert rows["闪避"][0] == inv.characteristics["敏捷"] // 2 or rows["闪避"][1]
+
+
+async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
+    from autokeeper.tui.sheet import SheetModal
+
+    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setitem(hm.MODELS, "canned", Canned)
+    cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
+    monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
+    m = Module.load(EXAMPLE)
+    party = [p.model_copy(deep=True) for p in m.pregens[:2]]
+    state = Game.new(m, party, slot="sheet", human=[party[0].id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        app.push_screen(GameScreen(m, state, resume=False))
+        await pilot.pause(0.5)
+        await pilot.press("f7")
+        await pilot.pause()
+        sheet = app.screen
+        assert isinstance(sheet, SheetModal) and sheet.party[sheet.at].id == party[0].id
+        await pilot.press("right")
+        assert sheet.party[sheet.at].id == party[-1].id
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, GameScreen)

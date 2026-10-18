@@ -372,6 +372,7 @@ class GameScreen(Screen):
         Binding("ctrl+s", "save", "存档"),
         Binding("ctrl+a", "art_style", "画法"),
         Binding("f6", "weather", "天气"),
+        Binding("f7", "sheet", "人物卡"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -725,7 +726,7 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/help", "/theme"):
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme"):
             self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
             return
         event.input.value = ""
@@ -750,7 +751,7 @@ class GameScreen(Screen):
 
     def _slash(self, text: str) -> None:
         cmd = text.split()[0].lower()
-        actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map,
+        actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save}
         if cmd in actions:
             actions[cmd]()
@@ -877,6 +878,18 @@ class GameScreen(Screen):
         if chosen:
             h = self.m.handout(chosen)
             self.app.push_screen(HandoutModal(h.title, h.text))
+
+    def action_sheet(self) -> None:
+        from .sheet import SheetModal
+
+        party, viewer = self.state.investigators, self._viewer()
+        first = next((i for i, inv in enumerate(party) if inv.id == viewer.id), 0)
+        style = self.app.art_style  # type: ignore[attr-defined]
+
+        def portrait(inv: Investigator) -> Text:
+            return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style)
+
+        self.app.push_screen(SheetModal(party, first, portrait))
 
     def action_map(self) -> None:
         self.app.push_screen(TextModal("地图", _map(self.m, self.state)))

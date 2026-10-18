@@ -332,6 +332,9 @@ class DiceTray(Static):
 
 
 class SheetPanel(Static):
+    async def on_click(self) -> None:
+        await self.screen.run_action("sheet")  # the whole card (F7)
+
     def show(self, inv: Investigator, portrait: Text | None = None) -> None:
         out = Text()
         if portrait is not None and portrait.plain:

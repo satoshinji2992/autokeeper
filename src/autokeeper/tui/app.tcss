@@ -230,6 +230,12 @@ ModalScreen {
     width: 100%;
     margin: 1 0 0 0;
 }
+#sheet-modal {
+    max-width: 124;
+}
+#sheet-modal .modal-body {
+    max-height: 40;
+}
 .buttons {
     height: auto;
     margin-top: 1;
