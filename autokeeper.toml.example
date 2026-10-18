@@ -1,6 +1,7 @@
 # 复制为 autokeeper.toml 后修改。backend 可选 claude / langchain / codex。
 module = "zhuishuren"
 theme = "amber"          # amber / phosphor / lavender / blood
+# tips = false           # 关掉新手提示（游戏里按 F1，新手指南底下也能开关）
 
 [roles.keeper]
 backend = "claude"

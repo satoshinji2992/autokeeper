@@ -35,11 +35,12 @@ from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules import commands
 from ..rules.coc import Investigator, Rules
-from . import art
+from . import art, tips
 from .debrief import DebriefModal
+from .guide import GuideScreen
 from .mapview import MapModal
 from .retell import RetellModal
-from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
+from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from .suggest import Ideas
 from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
@@ -127,6 +128,7 @@ class TitleScreen(Screen):
                     Option("  加入局域网房间", id="join"),
                     Option("  导入模组", id="import"),
                     Option("  叙事偏好", id="prefs"),
+                    Option("  新手指南", id="guide"),
                     Option("  离开", id="quit"),
                     id="menu",
                 )
@@ -137,6 +139,11 @@ class TitleScreen(Screen):
         self._paint()
         self.set_interval(0.12, self._paint)
         self.query_one("#menu", OptionList).focus()
+
+    def on_resize(self, event) -> None:
+        # Too short for the art, the eye, the tagline, the menu and the hint with their margins:
+        # the eye gives way, so the whole menu stays in view.
+        self.query_one("#title-eye").display = event.size.height >= len(art.title_lines(event.size.width)) + 28
 
     def _paint(self) -> None:
         width = self.app.size.width
@@ -164,6 +171,8 @@ class TitleScreen(Screen):
             from .prefs import PrefsModal
 
             self.app.push_screen(PrefsModal())
+        elif choice == "guide":
+            self.app.push_screen(GuideScreen())
         elif choice == "quit":
             self.app.exit()
 
@@ -235,6 +244,7 @@ class SetupScreen(Screen):
             except Exception as exc:  # broken module files should not crash the menu
                 opts.append(Option(f"{p.name}（无法读取：{exc.__class__.__name__}）", id=str(p), disabled=True))
         self._set("选择模组" + ("（AI 观战）" if self.spectate else ""), opts, "Enter 或空格选择 · Esc 返回")
+        tips.first_game(self)  # no saves yet: 《追书人》 is the tutorial
 
     def _show_investigators(self) -> None:
         assert self.module
@@ -715,6 +725,7 @@ class GameScreen(Screen):
             self.afterword, self.writing = ev["text"], False
             if ev.get("error"):
                 self.app.notify(ev["error"], severity="error", timeout=6)
+        tips.after(self, ev)  # the first time something happens: one line on how it works
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         npc = self.m.npc(ev["npc"])
@@ -930,7 +941,7 @@ class GameScreen(Screen):
 
     # -- actions -----------------------------------------------------------------------------------
     def action_help(self) -> None:
-        self.app.push_screen(TextModal("帮助", HELP))
+        self.app.push_screen(GuideScreen(tips.page(self) or "keys"))  # where the last hint pointed, else the keys
 
     @work(group="ui")
     async def action_notes(self) -> None:
