@@ -21,6 +21,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     budget_usd = 5             # stop metered API calls past this estimate
     mode = "标准"              # 经济 | 标准 | 高级剧情
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
+    imagegen = true            # pictures from Codex's image tool, when codex is installed and logged in
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
 
     [roles.all]                # applies to every role
@@ -201,6 +202,7 @@ class Config:
     budget_usd: float | None = None
     visual_budget_usd: float = 1.0  # separate estimated allowance; jobs already in flight may finish
     visual_limit: int = 24  # illustration attempts per save, including unmetered backends
+    imagegen: bool = True  # pictures from Codex's image tool where the story changes a place or a person (imagegen.py)
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/tips.py)
@@ -241,7 +243,7 @@ def ui_settings() -> dict:
     for key, values in choices.items():
         if isinstance(data.get(key), str) and data[key] in values:
             out[key] = data[key]
-    for key in ("tips", "animations", "plugins"):
+    for key in ("tips", "animations", "plugins", "imagegen"):
         if type(data.get(key)) is bool:
             out[key] = data[key]
     for key in ("model", "fallback"):
@@ -305,6 +307,7 @@ def load(path: Path | None = None) -> Config:
     cfg.plugins = data.get("plugins", cfg.plugins)
     cfg.tips = data.get("tips", cfg.tips) is not False
     cfg.animations = data.get("animations", cfg.animations) is not False
+    cfg.imagegen = data.get("imagegen", cfg.imagegen) is not False
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None

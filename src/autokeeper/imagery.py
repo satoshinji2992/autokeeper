@@ -6,7 +6,8 @@
 At play time a scene is cropped to the panel's shape and chafa renders it in Unicode block
 characters, with ASCII strokes drawn along its lines so the shapes still read ("picture",
 the default). STYLES has the others: finer 2×3 sextants, no outlines, plain ASCII glyphs.
-Hand-drawn art/<name>.txt stays as the fallback when there is no picture or no chafa.
+Where no photo fits, Codex can draw one from the description (imagegen.py, fetch_folder's
+`generate`). Hand-drawn art/<name>.txt stays as the fallback when there is no picture or no chafa.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -370,11 +372,15 @@ def private(folder: Path) -> bool:
     return any(where.is_relative_to(p.resolve()) for p in (config.LOCAL_MODULES, config.SAVES))
 
 
-async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print, on_reply=None) -> list[str]:
-    """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json."""
+async def fetch_folder(
+    cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print,
+    on_reply=None, generate: Callable[[str, str, str], Awaitable[bool]] | None = None,
+) -> list[str]:
+    """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json.
+    `generate` (imagegen.filler) makes one from the description when no photo fits."""
     art_dir.mkdir(parents=True, exist_ok=True)
     web = private(art_dir) and cfg.search != "none"
-    sem = asyncio.Semaphore(parallel)
+    sem, drawing = asyncio.Semaphore(parallel), asyncio.Semaphore(2)  # a few Codex runs at a time
     done: list[str] = []
     async with httpx.AsyncClient() as client:
 
@@ -391,6 +397,13 @@ async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str,
                     log(f"  ✗ {name}: {exc.__class__.__name__}")
                     return
             if not found:
+                if generate is not None:
+                    async with drawing:
+                        made = await generate(name, subject, kind)
+                    if made:
+                        done.append(name)
+                        log(f"  ✓ {name}: 没找到照片，Codex 照描述画了一张")
+                        return
                 log(f"  · {name}: 没有合适的图，保留手绘")
                 return
             im, c = found

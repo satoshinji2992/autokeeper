@@ -433,6 +433,8 @@ class Game:
         for plugin in plan.plugins:
             self.state.plugin_sources[plugin.id] = plugin.model_dump(mode="json")
         self.state.improv.append({"turn": self.state.turn, "kind": kind, "plan": plan.model_dump()})
+        for target, change in applied.looks:  # a place burnt, a man wounded: their picture is redrawn
+            self.visuals.look(target, change)
         self.visuals.schedule()
         await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
         return applied

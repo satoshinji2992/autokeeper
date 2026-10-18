@@ -35,7 +35,7 @@ from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
-from .. import artkit, config, imagery, skills
+from .. import artkit, config, imagegen, imagery, skills
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
@@ -168,6 +168,8 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 原文有通用引擎未支持的持续机制时，读 _example/plugins.md，用 write_plugin 编写并运行测试，不能只在 keeper_notes 写“请手动执行”就宣称自动支持。
   插件只补原文规则，不改写原作，不替玩家作决定；保留专属规则全文与具体限制。插件失败可修复后重试，不跳过校验。
 - 原文里如果有适合让玩家“画出来”的东西（符号、地图、人像），在 sketches 里写一两个。
+- 原文明确写到某个地点或人物之后会明显变样（被烧毁、被水淹、被洗劫、受伤、变异、死去），而且有剧情标记表示这件事发生了，
+  可以在那个地点或 NPC 的 looks 里登记：when 写 flag:标记，change 写画面上看得见的变化。全模组最多 6 处；昼夜不用登记（画面按时间自动调光）。
 
 ## 美术
 - 先读 source/images/index.json（如果存在）。原模组已有的地图、病历、信件、人物或场景插图优先用 use_image 保存，不用新画的图替代原图。
@@ -490,18 +492,27 @@ async def pipeline(
 
 async def find_photos(m: Module, work: Path, cfg: config.Config, console: Console) -> list[str]:
     """The scenes and faces as real photos (Wikimedia Commons, licensed), drawn in characters
-    like 《追书人》's; whatever finds nothing keeps its hand-drawn art. Offline (search = none)
-    or without chafa there is nothing to do; `autokeeper art fetch` does the same later."""
+    like 《追书人》's. Whatever finds nothing gets a picture Codex draws from its description
+    (imagegen.py, when codex is here), else keeps its hand-drawn art; then the changed states
+    the module describes (Location.looks, NPC.looks) are drawn from those pictures. Offline
+    (search = none) or without chafa there is nothing to do; `autokeeper art fetch` does the
+    same later."""
     wanted = imagery.targets(m)
     if not wanted or cfg.search == "none" or not imagery.available():
         return []
-    console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，找不到的保留手绘…")
+    fill = imagegen.filler(cfg, m, work / "art")
+    rest = f"找不到的让 Codex 照描述画（最多 {imagegen.AT_IMPORT} 张）" if fill else "找不到的保留手绘"
+    console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，{rest}…")
     try:
-        done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print)
+        done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print, generate=fill)
     except Exception as exc:  # the module is done either way
         console.print(f"[yellow]照片没找成（{type(exc).__name__}），可以稍后用 autokeeper art fetch 补。[/]")
         return []
     console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/*.credit.json")
+    if fill and any(x.looks for x in [*m.locations, *m.npcs]):
+        console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
+        drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
+        console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张；本模组已用 Codex 生图 {imagegen.used(m.id)}/{imagegen.LIMIT} 张")
     return done
 
 

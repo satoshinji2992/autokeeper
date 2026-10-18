@@ -8,6 +8,7 @@ own neighbourhood of the graph.
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from dataclasses import dataclass
 
@@ -222,6 +223,17 @@ def audit(m: Module) -> list[Issue]:
     for end in m.endings:
         if end.condition.startswith("flag:") and end.condition[5:] not in m.flags:
             err(f"结局 {end.id} 依赖未声明的标记 {end.condition[5:]}")
+    changing = [(f"地点 {x.id}", x.art, x.looks) for x in m.locations] + [(f"NPC {n.id}", n.portrait, n.looks) for n in m.npcs]
+    for who, base, looks in changing:
+        for look in looks:
+            if not look.when.startswith("flag:") or look.when[5:] not in m.flags:
+                err(f"{who} 的变样图条件要写成 flag:已声明的标记，现在是 {look.when}")
+            if not base:
+                err(f"{who} 有变样图，但自己没有图片键（art 或 portrait）")
+            elif not re.fullmatch(r"[a-z0-9_]+", look.key(base)):
+                err(f"{who} 的变样图键 {look.key(base)} 只能用小写字母、数字和下划线")
+        if len(looks) > 2:
+            warn(f"{who} 写了 {len(looks)} 种变样，一般最多两种")
 
     reach = reachable_locations(m) if m.start in locs else set()
     for loc in m.locations:

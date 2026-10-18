@@ -47,6 +47,17 @@ class Conclusion(BaseModel):
     text: str
 
 
+class Look(BaseModel):
+    """How a place or a person looks once the story has changed them, for the picture."""
+
+    when: str = Field(description="flag:标记；标记成立后，这个地点或人物改用这张图")
+    change: str = Field(description="和平常相比画面上看得见的变化，比如“礼拜堂烧成焦黑的空壳，屋顶塌了一半”；不写剧透")
+    art: str = Field("", description="这张图的图片键（art/<键>.jpg）；留空就用 <原图键>_<标记>，导入时由 Codex 照原图生成")
+
+    def key(self, base: str) -> str:
+        return self.art or f"{base}_{self.when.removeprefix('flag:')}"
+
+
 class NPC(BaseModel):
     id: str
     name: str
@@ -64,6 +75,7 @@ class NPC(BaseModel):
     portrait: str | None = None
     stats: dict[str, int] = Field(default_factory=dict)
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
+    looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
 
 
 class Location(BaseModel):
@@ -83,6 +95,7 @@ class Location(BaseModel):
         "embers 火星与火光、flicker 灯火摇曳、torch 只有手电或火把照亮、redlight 暗房红灯或红灯笼、warp 哈哈镜般的扭曲；"
         "最多两种，不写就按名字和描述推断",
     )
+    looks: list[Look] = Field(default_factory=list, description="剧情让这里明显变样之后的场景图（烧毁、被淹、被洗劫），最多两种；昼夜不用写")
 
 
 class Item(BaseModel):

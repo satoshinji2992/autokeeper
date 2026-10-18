@@ -62,6 +62,7 @@ SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
+PRIVATE |= {"looks"}  # what the story changed reaches the screens as pictures (art events), not as notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
 
 
@@ -77,6 +78,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
     for loc in d["locations"]:
         loc["keeper"] = ""
+        loc["looks"] = []  # what will become of a place is the keeper's to know
         loc["exits"] = [pid for pid in loc["exits"] if pid in known]
         loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if pid in loc["exits"]}
         if loc["id"] not in visited:
@@ -85,7 +87,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
     d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     for n in d["npcs"]:
-        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="")
+        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
         if n["location"] not in visited:
             n["location"] = None
     for c in d["clues"]:

@@ -11,7 +11,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Select, Static, Switch
 
-from .. import config, imagery
+from .. import config, imagegen, imagery
 from . import dice
 from .prefs import PrefsModal
 from .screens import EngineModal
@@ -64,6 +64,12 @@ class SettingsModal(ModalScreen[None]):
                 with Horizontal(classes="settings-row"):
                     yield Static(label)
                     yield Switch(value, id=f"settings-{key}")
+            codex = imagegen.status()  # off without a logged-in Codex: the switch says why
+            with Horizontal(classes="settings-row"):
+                yield Static("剧情配图（Codex 生图）")
+                yield Switch(cfg.imagegen and codex.ok, id="settings-imagegen", disabled=not codex.ok)
+            yield Static(Text(f"地点和人物随剧情变样、或找不到图时，让 Codex 照原图重画；每个模组最多 {imagegen.LIMIT} 张"
+                              if codex.ok else f"用不了：{codex.reason}", style="dim"), id="settings-imagegen-why")
             with Horizontal(classes="buttons"):
                 yield Button("保存", id="settings-save", variant="primary")
                 yield Button("返回", id="settings-back")
@@ -107,6 +113,9 @@ class SettingsModal(ModalScreen[None]):
                    "dice": self.query_one("#settings-dice", Select).value,
                    "visual_limit": max(1, cfg.visual_limit or 24) if self.query_one("#settings-pictures", Switch).value else 0,
                    "search": (cfg.search if cfg.search != "none" else "auto") if self.query_one("#settings-search", Switch).value else "none"}
+        codex = self.query_one("#settings-imagegen", Switch)
+        if not codex.disabled:  # without Codex the saved choice stays for when it is back
+            choice["imagegen"] = codex.value
         config.save_ui_settings(choice)
         os.environ["AUTOKEEPER_IMPROV"] = choice["improv"]
         os.environ["AUTOKEEPER_SEARCH"] = choice["search"]

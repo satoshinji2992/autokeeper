@@ -403,3 +403,35 @@ def filler(cfg: config.Config | None, module, art_dir: Path, *, cap: int = AT_IM
             return False
 
     return generate
+
+
+async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, cap: int = LOOKS) -> list[str]:
+    """The pictures for the changed states a module gives its places and people
+    (Location.looks, NPC.looks), each made from the picture the place or person has
+    otherwise, at most `cap` tries per import. Pictures already there stay."""
+    from . import imagery
+
+    if not enabled(cfg) or not imagery.private(art_dir):
+        return []
+    wanted = [(x.art, look, "scene", f"{x.name}：{x.read_aloud.strip()[:160]}") for x in module.locations if x.art for look in x.looks]
+    wanted += [(n.portrait, look, "portrait", f"{n.name}，{n.look or n.name}") for n in module.npcs if n.portrait for look in n.looks]
+    wanted = [w for w in wanted if not (art_dir / f"{w[1].key(w[0])}.jpg").exists()][:cap]
+    done: list[str] = []
+    for base, look, kind, subject in wanted:
+        key = look.key(base)
+        original = next((p for p in (art_dir / f"{base}{ext}" for ext in IMAGES) if p.is_file()), None)
+        world = {"era": module.era, "setting": module.setting}
+        text = (prompt(subject, kind, change=look.change, **world) if original is not None
+                else prompt(f"{subject}。现在：{look.change}", kind, **world))
+        try:
+            await make(text, art_dir / f"{key}.jpg", kind=kind, module=module.id, original=original,
+                       title=f"{subject[:40]}（{look.change[:40]}）", where="import")
+        except (Unavailable, OverBudget) as exc:
+            log(f"  · 变样图停在这里：{exc}")
+            break
+        except (Failed, OSError, ValueError) as exc:
+            log(f"  ✗ {key}: {str(exc)[:120]}")
+            continue
+        done.append(key)
+        log(f"  ✓ {key}: {look.change[:40]}")
+    return done
