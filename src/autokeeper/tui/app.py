@@ -57,12 +57,13 @@ THEMES = [
 
 # -- library and saves ---------------------------------------------------------------
 def modules() -> list[Path]:
-    """The player's modules, then the bundled sample, so a fresh clone has something to play."""
+    """The modules to play: the bundled ones (《追书人》), then the player's own. The format
+    sample (config.EXAMPLE) is for the importer and the tests, not for playing."""
     found = []
     for base in (config.MODULES, config.LOCAL_MODULES):
         if base.is_dir():
             found += [p for p in sorted(base.iterdir()) if (p / "module.yaml").exists()]
-    return [*found, config.EXAMPLE]
+    return found
 
 
 def save_index() -> dict:
@@ -88,7 +89,7 @@ def write_save(state: GameState, module: Module) -> None:
 
 
 def _module_dir(module_id: str) -> Path:
-    for p in modules():
+    for p in [*modules(), config.EXAMPLE]:  # the format sample is not offered, but its saves still load
         if p.name == module_id:
             return p
     raise FileNotFoundError(module_id)

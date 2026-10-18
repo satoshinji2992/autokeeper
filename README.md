@@ -156,7 +156,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>手上没有模组怎么办？</summary>
 
-仓库自带《追书人》和一个只有三个地点的小样例《钟楼》，开团时都能直接选。想玩新的，就用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本原创模组。
+仓库自带《追书人》，开团时直接选，第一次玩也建议从它开始。想玩新的，可以在游戏里导入你手上的模组，或者就用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本原创模组。
 
 </details>
 

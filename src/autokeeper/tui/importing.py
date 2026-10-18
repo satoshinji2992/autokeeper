@@ -475,7 +475,7 @@ class ImportScreen(Screen):
         from .app import modules
 
         mid = self._module_id()
-        same = next((p for p in modules() if p.name == mid), None)
+        same = next((p for p in [*modules(), config.EXAMPLE] if p.name == mid), None)  # the format sample's name stays reserved
         if same is None:
             return "", f"导入后放在 modules/local/{mid}/"
         if same.parent != config.LOCAL_MODULES:
