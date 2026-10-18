@@ -306,3 +306,32 @@ async def test_plugin_controls_pause_without_exposing_private_rules_or_resetting
         button.press()
         await pilot.pause()
         assert "counter" not in state.plugin_errors
+
+
+async def test_the_arbiter_may_name_the_investigator_and_a_slip_does_not_pause_the_rules(fake):
+    """《有些人油盐不进》: the arbiter called dodge_escape with who="贝蒂·康西丁" where the rule
+    wants the id; the luck check found nobody, the plugin was paused and five later calls did
+    nothing. A name is the same person; an action the plugin lacks is a note, not a breakdown."""
+    module = Module.load(EXAMPLE)
+    inv = module.pregens[0]
+    code = '''def handle(event, ctx, api):
+    state = ctx["state"]
+    if event.get("action") == "dodge":
+        result = api.check(event["arguments"]["who"], "幸运")
+        state["escaped"] = state.get("escaped", 0) + (1 if result["passed"] else 0)
+    return {"state": state, "effects": []}
+'''
+    plugin = counter(code=code, hooks=["action"], capabilities=["dice"], initial={},
+                     actions=[PluginAction(name="dodge", description="闪避成功后掷幸运脱身。arguments: who（调查员 id）")],
+                     tests=[Case(name="dodge", event={"hook": "action", "action": "dodge", "arguments": {"who": inv.id}},
+                                 checks=[True], context={"investigators": [{"id": inv.id}]}, expected_state={"escaped": 1})])
+    assert not await verify(plugin)
+    module.extensions = {plugin.id: plugin}
+    game, _, _ = make(module, fake, {})
+    fake.queue(1)  # the luck check passes
+    named = Ruling(needs_roll=False, minutes=0, plugin_calls=[Call(plugin="counter", action="dodge", arguments={"who": inv.name})])
+    turn = await game.resolve(Action(kind="other", summary="冲向侧门"), named)
+    assert game.state.plugin_data["counter"]["escaped"] == 1 and "counter" not in game.state.plugin_errors
+    wrong = Ruling(needs_roll=False, minutes=0, plugin_calls=[Call(plugin="counter", action="run_away")])
+    turn = await game.resolve(Action(kind="other", summary="再跑"), wrong)
+    assert "counter" not in game.state.plugin_errors and any("run_away" in n for n in turn.notes)

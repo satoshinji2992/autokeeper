@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..rules.catalog import CHARACTERISTICS, canonical
 from ..rules.coc import DIFFICULTY_ZH, max_of
@@ -30,10 +30,21 @@ class Manager:
             except ValueError:
                 game.state.plugin_errors[identity] = "存档插件格式错误"
 
+    def _who(self, value: Any) -> Any:
+        """An investigator as the arbiter or a plugin named them: the id, the full name, or the
+        name before its bracket (贝蒂·康西丁 → betty). Anything else is left as it is."""
+        for inv in self.game.state.investigators:
+            if value in (inv.id, inv.name, inv.name.split("（")[0]):
+                return inv.id
+        return value
+
     async def run(self, hook: str, turn: Turn, **details) -> None:
         game = self.game
         if not getattr(getattr(game.cast, "cfg", None), "plugins", True):
             return
+        args = details.get("arguments")
+        if hook == "action" and isinstance(args, dict) and "who" in args:  # the arbiter writes names; rules use ids
+            details = {**details, "arguments": {**args, "who": self._who(args["who"])}}
         for plugin in list(game.m.extensions.values()):
             if hook == "start" and plugin.id in game.state.plugin_data:
                 continue
@@ -51,7 +62,9 @@ class Manager:
                     await self._invoke(plugin, {"hook": "start"}, turn)
                 if hook in plugin.hooks:
                     if hook == "action" and details.get("action") not in {action.name for action in plugin.actions}:
-                        raise PluginError("动作没有在插件清单中声明")
+                        # the arbiter's slip, not the plugin's: say so and leave the rules running
+                        turn.notes.append(f"规则插件没有“{details.get('action')}”这个动作，这次按普通行动处理")
+                        continue
                     await self._invoke(plugin, {"hook": hook, **details}, turn)
             except Exception as exc:
                 game.state.plugin_errors[plugin.id] = str(exc)[:1000]
@@ -90,7 +103,7 @@ class Manager:
             if message["request"] == "roll":
                 count, sides = dice_expression(message.get("expression"))
                 return [game.rules.dice.total(f"1D{sides}") for _ in range(count)]
-            identity = message.get("who")
+            identity = self._who(message.get("who"))
             if identity not in {inv.id for inv in state.investigators} or message.get("difficulty", "常规") not in DIFFICULTY_ZH:
                 raise PluginError("检定的人物或难度不存在")
             inv = state.find(identity)

@@ -30,7 +30,8 @@ class Applied:
 
 
 def _now_flag(event_id: str) -> str:
-    return f"now_{event_id}"
+    """The flag that fires an event this turn; the director often names such events now_… itself."""
+    return event_id if event_id.startswith("now_") else f"now_{event_id}"
 
 
 def check(m: Module, plan: Any, *, at: str) -> list[str]:
