@@ -288,6 +288,18 @@ async def test_npc_leak_is_rolled_back_out_of_memory():
     assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
 
 
+async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npcs[0]
+    npc.arc = "开始动摇，想说出钟里的秘密又怕被当成疯子"
+    SCRIPT.append("……你真想知道？")
+    await Cast(cfg, m).npc(state, npc.id, "钟里到底有什么？")
+    assert "开始动摇" in SEEN[-1]["messages"][-1]["content"]  # told this time
+    assert "开始动摇" not in json.dumps(state.transcripts, ensure_ascii=False)  # but not part of its memory
+
+
 async def test_agent_loop_runs_sandboxed_tools(tmp_path):
     (tmp_path / "source.md").write_text("第一行\n关键线索：井底的铜钥匙\n", encoding="utf-8")
     ws = Workspace(tmp_path, writable=("notes.md",))

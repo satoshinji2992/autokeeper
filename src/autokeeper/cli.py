@@ -36,9 +36,10 @@ def main(
     search: Annotated[str | None, typer.Option(help="联网搜索：auto / tavily / ddgs / wikipedia / none")] = None,
     budget: Annotated[float | None, typer.Option(help="按量计费 API 的花费上限（美元）")] = None,
     fallback: Annotated[str | None, typer.Option(help="备用模型：主模型出错或超预算时改用它，如 ollama:qwen3:14b")] = None,
+    improv: Annotated[str | None, typer.Option(help="自由度：即兴（默认，守秘人可以加人加线索加结局）/ 严格（只用模组写好的）")] = None,
 ) -> None:
     # Environment, not globals: the browser server and every config.load() see the same choice.
-    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback)):
+    for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
     if ctx.invoked_subcommand is None:
@@ -430,7 +431,7 @@ app.add_typer(eval_app, name="eval")
 
 @eval_app.command("rhetoric")
 def eval_rhetoric(
-    module: Path = Path("modules/local/zhuishuren"),
+    module: Path = Path("modules/zhuishuren"),
     limit: int | None = None,
     referee: Annotated[list[str] | None, typer.Option(help="裁定员模型，可写多个；“模型@强度”比较思考强度，如 deepseek:deepseek-flash@low")] = None,
     out: Annotated[Path | None, typer.Option(help="明细写到哪里")] = None,
@@ -447,7 +448,7 @@ def eval_rhetoric(
 
 @eval_app.command("lore")
 def eval_lore(
-    module: Path = Path("modules/local/zhuishuren"),
+    module: Path = Path("modules/zhuishuren"),
     n: int = 24,
     only: Annotated[list[str] | None, typer.Option(help="只重跑这些策略，其余沿用上次的结果")] = None,
 ) -> None:

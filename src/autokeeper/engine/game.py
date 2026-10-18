@@ -15,6 +15,8 @@ from typing import Any
 
 from .. import skills, weather
 from ..agents.cast import Action, Cast, Ruling
+from ..harness.replay import CassetteError
+from ..module import improv
 from ..module.compiler import skill_name
 from ..module.schema import Event, Module
 from ..rules import commands
@@ -50,6 +52,12 @@ class Game:
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         self.emit: Emit = emit or _silent
+        if state.improv:  # a loaded game brings its own branches
+            improv.restore(module, state.improv)
+
+    @property
+    def improvising(self) -> bool:
+        return bool(getattr(self.cast, "improvising", False))
 
     # -- setup ----------------------------------------------------------------------
     @staticmethod
@@ -67,19 +75,29 @@ class Game:
 
     async def start(self, on_delta=None) -> str:
         st, m = self.state, self.m
+        # Before anything is said, the director may rework the module around these investigators.
+        adapted = await self._improvise("开局改编") if not st.improv else None
         loc = m.location(st.location)
         await self.emit({"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", "")})
-        await self._time()
+        opening = Turn()
+        await self._time(opening)
         if m.opening:
             st.add("opening", m.opening.strip())
             await self.emit({"type": "opening", "text": m.opening.strip()})
+        if adapted is not None:
+            await self._flags(adapted.now, opening)
         party = "、".join(f"{i.name}（{i.occupation}）" for i in st.investigators)
         report = (
             f"【开场｜{st.clock}｜{loc.name}】\n调查员：{party}\n"
             f"开场钩子（玩家已经知道）：{m.hook.strip()}\n"
             f"【进入地点】\n{self._location_file(loc.id)}\n"
-            "请用 120–220 字开场：交代调查员为什么来到这里，描写眼前的地点，结尾落在一个能行动的细节上。"
         )
+        if adapted is not None and adapted.note:
+            report += f"导演为这几位调查员改编了模组：{adapted.note}\n"
+        happened = [e.read_aloud.strip() or e.title for e in opening.events]
+        if happened:
+            report += "【开场时发生的事】\n" + "\n".join(happened) + "\n"
+        report += "请用 120–220 字开场：交代调查员为什么来到这里，描写眼前的地点，结尾落在一个能行动的细节上。"
         return await self._narrate(report, on_delta)
 
     # -- dice commands ------------------------------------------------------------------
@@ -112,7 +130,88 @@ class Game:
         if action.kind == "move" and action.destination:
             return Ruling(needs_roll=False, minutes=0, reason="移动")
         await self.emit({"type": "status", "text": "裁定中…"})
-        return await self.cast.arbiter(self.state, action, at=self._heading(action))
+        heading = self._heading(action)
+        ruling = await self.cast.arbiter(self.state, action, at=heading)
+        if ruling.scope != "模组内":  # the module is silent here: the director fills the gap
+            kind = "展开" if ruling.scope == "可即兴" else "后果"
+            applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
+            if applied is not None:
+                ruling = self._steer(ruling, applied)
+        return ruling
+
+    # -- improvisation ----------------------------------------------------------------
+    async def _improvise(
+        self, kind: str, *, action: Action | None = None, ruling: Ruling | None = None, at: str = ""
+    ) -> improv.Applied | None:
+        """Ask the director for a plan, check it (with one chance to fix it), and write it into
+        this game's module. Without a usable plan the turn simply goes on as before."""
+        st = self.state
+        if not self.improvising or (kind != "开局改编" and sum(p["kind"] != "开局改编" for p in st.improv) >= IMPROV_LIMIT):
+            return None
+        await self.emit({"type": "status", "text": "守秘人在即兴…"})
+        where = at or st.location
+        said = f"{action.summary}（{action.kind}，对象：{action.target or '无'}）" if action else ""
+        problems: list[str] = []
+        for _ in range(2):
+            try:
+                plan = await self.cast.director(st, kind, action=said, reason=ruling.reason if ruling else "", at=where, problems=problems)
+            except CassetteError:  # a replay that drifted must fail loudly
+                raise
+            except Exception:  # improvising is a bonus; a failed call must not cost the turn
+                return None
+            if plan is None or plan.kind == "不需要":
+                return None
+            plan.kind = kind  # type: ignore[assignment]
+            problems = improv.check(self.m, plan, at=where)
+            if not problems:
+                break
+        else:
+            return None
+        applied = improv.apply(self.m, plan)
+        st.improv.append({"turn": st.turn, "kind": kind, "plan": plan.model_dump()})
+        await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
+        return applied
+
+    def _steer(self, ruling: Ruling, applied: improv.Applied) -> Ruling:
+        """The arbiter's ruling plus what the director just added: new clues to find (with
+        their check), scenes that play out this turn, and a word for the keeper."""
+        r = ruling.model_copy(deep=True)
+        for cid in applied.give:
+            clue = self.m.clue(cid)
+            gate = clue.check or (self.m.npc(clue.npc).gates.get(cid) if clue.npc else None)
+            if gate is None:
+                r.auto_clues.append(cid)
+                continue
+            r.clues_on_success.append(cid)
+            if not r.needs_roll:
+                r.needs_roll, r.skill, r.difficulty = True, gate.skill, gate.difficulty
+        r.now, r.go, r.note = list(applied.now), applied.go, applied.note
+        return r
+
+    async def _fail_forward(self, ids: list[str], turn: Turn) -> None:
+        """Do not sit on clues: after a failed roll a core clue still turns up, at a price the
+        keeper has to tell (time lost, noise made, something given away)."""
+        st = self.state
+        core = [c for c in ids if self.m.clue(c).core and c not in st.clues]
+        if not core:
+            return
+        st.minutes += 20
+        await self._gain(core, turn, turn.action)
+        turn.notes.append("检定没过，但关键线索不能卡住：线索照样到手，叙事里要写出代价（多花了时间、弄出了动静或留下了把柄）")
+
+    async def _nudge(self, turn: Turn) -> None:
+        """Stuck for a while: the director sends a lead."""
+        st = self.state
+        if st.ending or st.turn - st.progress_at < STALL_TURNS:
+            return
+        applied = await self._improvise("推进")
+        st.progress_at = st.turn  # whatever came of it, do not ask again next turn
+        if applied is None:
+            return
+        await self._flags(applied.now, turn)
+        await self._gain(self._valid_clues(applied.give, turn.action), turn, turn.action)
+        if applied.note:
+            turn.notes.append(f"导演的安排：{applied.note}")
 
     def _heading(self, action: Action) -> str | None:
         """Where an action happens when the investigator walks somewhere to do it ("I go up to
@@ -129,8 +228,10 @@ class Game:
         if action.kind == "meta" or ruling is None:
             return turn
 
-        # movement: a plain move, or walking somewhere to do something there (ruled there)
-        heading = action.destination if action.kind == "move" else self._heading(action)
+        # movement: a plain move, walking somewhere to do something there (ruled there), or the
+        # director sending them somewhere new
+        heading = ruling.go or (action.destination if action.kind == "move" else self._heading(action))
+        heading = None if heading == st.location else heading
         if heading:
             minutes = self._travel(st.location, heading)
             if minutes is None:
@@ -163,18 +264,26 @@ class Game:
                         "value": check.value,
                     }
                     st.pending_push = turn.push
+            if not passed and turn.push is None:  # no second chance offered: do not sit on core clues
+                await self._fail_forward(self._valid_clues(ruling.clues_on_success, action), turn)
 
         gained = self._valid_clues(ruling.auto_clues, action)
         if passed:
             gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             await self._flags(ruling.set_flags, turn)
         await self._gain(gained, turn, action)
+        if ruling.now:  # the director's scene plays out, whatever the dice said
+            await self._flags(ruling.now, turn)
+        if ruling.note:
+            turn.notes.append(f"导演的安排：{ruling.note}")
 
         # A night's sleep is legitimate; anything else that claims hours is capped. The arbiter
         # says when it is a rest: "先回去睡一觉" said to a partner parses as talk, not wait.
         resting = action.kind == "wait" or ruling.rest
         st.minutes += max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
         await self._time(turn)
+        if self.improvising:
+            await self._nudge(turn)
         await self._check_ending(turn)
         return turn
 
@@ -183,7 +292,10 @@ class Game:
         st = self.state
         pending, st.pending_push = st.pending_push, None
         turn = Turn()
-        if not pending or mode == "drop":
+        if not pending:
+            return turn
+        if mode == "drop":
+            await self._fail_forward(pending["clues"], turn)
             return turn
         inv = st.investigator
         diff = DIFFICULTY_ZH.get(pending["difficulty"], Level.REGULAR)
@@ -203,6 +315,8 @@ class Game:
         if passed:
             await self._flags(pending.get("flags", []), turn)
             await self._gain(pending["clues"], turn, None)
+        else:
+            await self._fail_forward(pending["clues"], turn)
         await self._check_ending(turn)
         return turn
 
@@ -319,6 +433,7 @@ class Game:
         turn.first_visit = loc_id not in st.visited
         if turn.first_visit:
             st.visited.append(loc_id)
+            st.progress_at = st.turn
         loc = m.location(loc_id)
         await self.emit({"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", "")})
         for ev in m.events:
@@ -340,6 +455,7 @@ class Game:
                 continue
             clue = m.clue(cid)
             st.clues.append(cid)
+            st.progress_at = st.turn
             turn.clues.append(cid)
             if clue.npc:
                 unlocked = st.npc(clue.npc).unlocked
@@ -367,6 +483,7 @@ class Game:
         for f in flags:
             if f in m.flags and f not in st.flags:
                 st.flags.append(f)
+                st.progress_at = st.turn
                 await self.emit({"type": "flag", "flag": f, "meaning": m.flags[f]})
                 for ev in m.events:
                     if ev.id not in st.fired and ev.when == f"flag:{f}":
@@ -387,6 +504,7 @@ class Game:
     async def _fire(self, ev: Event, turn: Turn) -> None:
         st, _m = self.state, self.m
         st.fired.append(ev.id)
+        st.progress_at = st.turn
         turn.events.append(ev)
         st.add("event", ev.read_aloud.strip() or ev.title)
         await self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()})
@@ -401,6 +519,12 @@ class Game:
                 turn.sanity.append((inv.name, s))
                 st.add("sanity", s.describe(), who=inv.name)
                 await self.emit({"type": "sanity", "who": inv.name, **_sanity_view(s)})
+        if ev.damage:  # the one who acted pays for it
+            inv = st.investigator
+            hurt = self.rules.damage(inv, ev.damage)
+            st.add("damage", hurt.describe(), who=inv.name)
+            turn.notes.append(f"{inv.name}{hurt.describe()}")
+            await self.emit({"type": "damage", "who": inv.name, "text": hurt.describe()})
         for f in ev.sets:
             if f not in st.flags:
                 st.flags.append(f)
@@ -542,6 +666,8 @@ class Game:
             await self.emit({"type": "sky", "sky": sky})
 
 
+IMPROV_LIMIT = 16  # plans per game besides the opening one, so a game cannot sprawl forever
+STALL_TURNS = 8  # turns without a clue, flag, event or new place before the director sends a lead
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 

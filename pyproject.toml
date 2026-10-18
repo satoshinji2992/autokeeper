@@ -1,6 +1,6 @@
 [project]
 name = "autokeeper"
-version = "0.3.0"
+version = "0.4.0"
 description = "自动化 CoC 7 版中文跑团：自研 harness 上的多智能体守秘人，Claude / DeepSeek / 本地模型可换，模组导入与生成，彩色 ASCII 终端界面"
 authors = [
     { name = "Sato shinji", email = "wwwsatoshinji@gmail.com" }

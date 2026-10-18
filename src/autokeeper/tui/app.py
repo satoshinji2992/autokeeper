@@ -326,7 +326,8 @@ class LoadScreen(Screen):
     def load(self, event: OptionList.OptionSelected) -> None:
         slot = event.option.id or ""
         meta = save_index()[slot]
-        module = load_module(Path(meta["path"]))
+        path = Path(meta["path"])
+        module = load_module(path if path.exists() else _module_dir(meta["module"]))  # the module may have moved
         state = GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
         self.app.switch_screen(GameScreen(module, state, resume=True, spectate=not state.human))
 
@@ -546,6 +547,15 @@ class GameScreen(Screen):
             self._topbar()
         elif t == "sky":
             self.query_one(SceneArt).set_sky(self._sky(self.state.location))
+        elif t == "improv":
+            told = {"开局改编": "守秘人根据你们的背景改编了这本模组", "展开": "模组没写到这里，守秘人即兴展开", "推进": "守秘人推了故事一把"}
+            if ev["kind"] in told:  # a consequence speaks for itself; the opening keeps its surprises
+                shown = ev["summary"] if ev["kind"] == "展开" else ""
+                story.add("system", Text(f"✦ {told[ev['kind']]}{('：' + shown) if shown else ''}", style="dim italic"))
+            self._topbar()
+        elif t == "damage":
+            story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
+            self._panels()
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "keeper_start":

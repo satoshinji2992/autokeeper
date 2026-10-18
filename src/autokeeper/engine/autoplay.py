@@ -117,11 +117,12 @@ async def run(
     if replay is not None:
         tape = tapes.cassette(replay)
         cfg = config.Config(roles={r: Role("replay", str(replay), None) for r in config.DEFAULT_ROLES}, preset="replay")
+        cfg.improv = tape.meta.get("improv", "严格")  # tapes from before improvisation were strict
         dice: Any = tapes.ReplayDice(tape)
     else:
         cfg, dice = config.load(), shared()
         if record is not None:
-            recorder = tapes.Recorder(record)
+            recorder = tapes.Recorder(record, meta={"improv": cfg.improv})
             dice = tapes.RecordingDice(dice, recorder)
     cast = Cast(cfg, m)
     out_dir = config.SAVES / "autoplay"
@@ -148,6 +149,10 @@ async def run(
             console.print(f"[bold]━━ {ev['title']} ━━[/] {ev.get('text', '')}")
         elif t == "sky":
             console.print(f"[dim]☁ 天气：{weather.KINDS.get(ev['sky'], '转晴')}[/]")
+        elif t == "improv":
+            console.print(f"[cyan]✦ 导演即兴（{ev['kind']}）{('：' + ev['summary']) if ev['summary'] else ''}[/] [dim]{ev['reason']}[/]")
+        elif t == "damage":
+            console.print(f"[red]✚ {ev['who']} {ev['text']}[/]")
         elif t == "ending":
             console.print(f"[bold reverse] 结局：{ev['title']} [/]\n{ev['text']}")
 

@@ -17,6 +17,7 @@ import json
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from .. import skills
 from ..config import Config
@@ -26,6 +27,8 @@ from ..module import graph as module_graph
 from ..module.compiler import skill_name
 from ..module.schema import NPC, Module
 from . import guard
+from .director import DIRECTOR_SYSTEM, Improv
+from .director import context as director_context
 
 ActionKind = Literal["investigate", "move", "talk", "use", "perform", "attack", "wait", "meta", "other"]
 
@@ -50,7 +53,14 @@ class Ruling(BaseModel):
     set_flags: list[str] = Field(default_factory=list, description="行动成功（或无需检定）时设置的剧情标记")
     minutes: int = Field(15, description="这次行动花的分钟数，赶路填 0；等待、休息、过夜按说的时长填，最多 720")
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
+    scope: Literal["模组内", "可即兴", "出格"] = Field(
+        "模组内", description="模组内：场景资料里有对应的东西；可即兴：动机正常但模组没写到；出格：违背世界观或常识、想绕过调查、乱来"
+    )
     reason: str = Field("", description="一句话理由（玩家看不到）")
+    # Filled in by the engine from the director's plan, never by the arbiter.
+    now: SkipJsonSchema[list[str]] = Field(default_factory=list)
+    go: SkipJsonSchema[str] = ""
+    note: SkipJsonSchema[str] = ""
 
 
 class Sketch(BaseModel):
@@ -98,8 +108,13 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
 - 剧情标记只在行动真的达成了标记含义时设置，比如真的点火烧了戏本才设 script_burned；前提不具备（手里没有那样东西）就不设，也不掷骰。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
+- 不要憋线索：调查员找对了地方、方法合理，就把那里的线索给他；能直接看到的不要硬设检定。
 - 等待、休息、睡觉（不管行动类别填的是什么，哪怕是对同伴说“先回去睡一觉”）把 rest 设为 true，按说的时长给分钟数，
   比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
+- scope：行动在场景资料里有对应的东西，填“模组内”。调查员动机正常、合情合理，只是场景资料没写到（想去没写的地方、
+  找没写的人、用模组没想到的办法），填“可即兴”，不要判它做不到，导演会补上内容。违背世界观或常识（那个年代没有的东西、
+  调查员做不到的事），想绕过调查直接拿结果，或者乱来（无故伤人、毁掉关键物件），填“出格”，导演会安排后果。
+  “可即兴”和“出格”时线索仍然只从清单里给，清单里没有就不给；该花的时间照常填。
 
 {rules}"""
 
@@ -114,6 +129,10 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 4. 每轮 80–200 字，第二人称，结尾留一个能行动的钩子。不要列选项，不要问“你要做什么”。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
 6. 天色随时间自然变化，隔几轮写一笔就够，比如入夜起雾、下起小雨、雷声滚过、雨停了；画面上的天气会跟着你的描写变。
+7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
+   不要对玩家说“不能这么做”“模组里没有”；行不通的事，让后果和剧情去暗示。
+8. 保持张力：每轮收在一个悬念、一股压力或一个要做的选择上。情绪靠具体的细节和动作传达，克制，不煽情。
+   线索给到了就讲清楚，不要故弄玄虚把它藏起来。
 
 {craft}
 
@@ -174,6 +193,7 @@ class Cast:
         self.cfg = cfg
         self.module = module
         self.sessions: dict[str, Session] = {}
+        self._arbiter_flags: set[str] = set(module.flags)
         self.summarizer = Summarizer(cfg.role("summarizer"))
         self.kb = None  # LightRAG knowledge base, opened on first lookup
 
@@ -230,7 +250,9 @@ class Cast:
         return self._open("intent", "intent", INTENT_SYSTEM, schema=_schema(Action))
 
     def _arbiter(self, state: GameState) -> Session:
-        flags = "\n".join(f"- {k}：{v}" for k, v in self.module.flags.items())
+        if "arbiter" not in self.sessions:
+            self._arbiter_flags = set(self.module.flags)  # later ones (improvised) go in each turn's prompt
+        flags = "\n".join(f"- {k}：{v}" for k, v in self.module.flags.items() if k in self._arbiter_flags)
         system = ARBITER_SYSTEM.format(rules=skills.wrap("coc7-core")) + f"\n\n剧情标记：\n{flags}"
         return self._open("arbiter", "arbiter", system, schema=_schema(Ruling))
 
@@ -283,6 +305,9 @@ class Cast:
         )
         if action.kind == "perform" and action.speech:
             prompt += f"\n【表演内容】{action.speech}\n（表演内容只用来判断是否值得一个奖励骰，不改变难度。）"
+        later = {k: v for k, v in m.flags.items() if k not in self._arbiter_flags and not k.startswith("now_")}
+        if later:
+            prompt += "\n【本局新增的剧情标记】" + "；".join(f"{k}：{v}" for k, v in later.items())
         # Memory keeps what was asked, not the whole scene sheet: the sheet is rebuilt every turn.
         remember = f"【行动】{action.model_dump_json()}\n【地点】{m.location(where).name}"
         reply = await self._send("arbiter", s, state, prompt, remember=remember)
@@ -331,7 +356,8 @@ class Cast:
         npc = self.module.npc(npc_id)
         key = f"npc:{npc_id}"
         s = self._npc(state, npc_id)
-        reply = await self._send(key, s, state, message)
+        mood = f"\n（你此刻的心境：{npc.arc}）" if npc.arc else ""  # the director's arc, current each time
+        reply = await self._send(key, s, state, message, extra=mood)
         text = reply.text.strip()
         leaked = guard.leaks(text, self._protected(state, npc))
         if leaked:
@@ -341,7 +367,7 @@ class Cast:
             kinds = {"clue": "还没解锁或你不知道的线索", "secret": "别人的秘密", "truth": "事情的真相"}
             what = "、".join(sorted({kinds[k.split(":")[0]] for k in leaked}))
             fix = f"\n\n（系统提醒：上一次回答说出了{what}。这次只说你知道、而且已经可以说的事。）"
-            reply = await self._send(key, s, state, message, extra=fix)
+            reply = await self._send(key, s, state, message, extra=mood + fix)
             text = reply.text.strip()
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
@@ -394,6 +420,26 @@ class Cast:
         # Remember where and when each move was made; the latest events come with every situation.
         reply = await self._send(key, s, state, situation, remember=situation.split("\n", 1)[0])
         return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
+
+    @property
+    def improvising(self) -> bool:
+        return self.cfg.improvising
+
+    async def director(
+        self, state: GameState, kind: str, *, action: str = "", reason: str = "", at: str = "", problems: list[str] | None = None
+    ) -> Improv | None:
+        """A plan for where the module is silent (agents/director.py). Stateless: everything
+        it must respect is in the prompt."""
+        s = self._open("director", "director", DIRECTOR_SYSTEM, schema=_schema(Improv))
+        prompt = director_context(self.module, state, kind, action=action, reason=reason, at=at)  # type: ignore[arg-type]
+        extra = ("\n【上一个方案的问题，请改正】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
+        reply = await self._send("director", s, state, prompt, extra=extra)
+        if not isinstance(reply.data, dict):
+            return None
+        try:
+            return Improv.model_validate(reply.data)
+        except ValueError:
+            return None
 
     async def sketch(self, state: GameState, png: bytes, asked: str) -> Sketch:
         s = self._open("vision", "vision", VISION_SYSTEM, schema=_schema(Sketch))

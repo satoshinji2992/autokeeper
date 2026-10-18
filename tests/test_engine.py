@@ -241,3 +241,135 @@ def test_leak_guard():
     secret = "他在钟里藏了东西，每到午夜它就多敲一下"
     assert guard.leaks("实话跟您说，我在钟里藏了东西，每到午夜……", {"s": secret}) == ["s"]
     assert guard.leaks("钟只是老了，您别多想。", {"s": secret}) == []
+
+
+# -- improvisation ----------------------------------------------------------------------
+from autokeeper.agents.director import Improv, NewClue, NewEvent, NewFlag, NewLocation, NewNPC  # noqa: E402
+
+
+class Improvising(FakeCast):
+    """A cast whose director follows a script of plans."""
+
+    improvising = True
+
+    def __init__(self, script, plans):
+        super().__init__(script)
+        self.plans = list(plans)
+        self.asked: list[tuple[str, str, list[str] | None]] = []
+
+    async def director(self, state, kind, *, action="", reason="", at="", problems=None):
+        self.asked.append((kind, at, problems))
+        return self.plans.pop(0) if self.plans else None
+
+
+def improvised(module, fake, script, plans, location=None):
+    game, _, events = make(module, fake, script, location=location)
+    cast = Improvising(script, plans)
+    game.cast = cast
+    return game, cast, events
+
+
+NEWSSTAND = Improv(
+    kind="展开",
+    reason="玩家想打听传闻，补一个报童，把人引回钟楼",
+    locations=[NewLocation(id="newsstand", name="街角报摊", read_aloud="街角支着一个报摊。", exits=["square"])],
+    npcs=[NewNPC(id="paperboy", name="报童小六", role="卖报的孩子", location="newsstand", knows=["半夜钟楼里有脚步声"])],
+    clues=[NewClue(id="c_rumor", title="报童的传闻", text="报童说半夜钟楼里有脚步声。", where="square")],
+    give=["c_rumor"],
+    note="一个报童凑上来兜售传闻，顺势把人引向钟楼",
+)
+
+
+async def test_a_sensible_unwritten_action_opens_a_new_line(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
+    ruling = Ruling(needs_roll=False, minutes=10, scope="可即兴", reason="场景里没有可以打听的路人")
+    game, cast, events = improvised(module, fake, {"x": (ask, ruling)}, [NEWSSTAND])
+    steered = await game.rule(ask)
+    assert cast.asked == [("展开", "square", [])] and steered.auto_clues == ["c_rumor"]
+    turn = await game.resolve(ask, steered)
+    assert game.state.clues == ["c_rumor"]  # not refused: the investigator walks away with something
+    assert "newsstand" in module.location("square").exits and module.npc("paperboy").location == "newsstand"
+    assert any("报童凑上来" in n for n in turn.notes)  # the keeper is told how to tell it
+    assert [p["kind"] for p in game.state.improv] == ["展开"]
+    assert any(e["type"] == "improv" and "报童小六" in e["summary"] for e in events)
+
+
+async def test_an_outrageous_action_plays_out_and_costs_something(module, fake):
+    phone = Action(kind="other", summary="周衡掏出手机给警察打电话")
+    ruling = Ruling(needs_roll=False, minutes=5, scope="出格", reason="那个年代没有手机")
+    plan = Improv(
+        kind="后果",
+        reason="时代不对：让他摸个空，旁人把他当成疯子",
+        flags=[NewFlag(id="seen_as_mad", meaning="镇上的人觉得调查员神神叨叨")],
+        events=[NewEvent(id="e_mad", title="摸了个空", when="now", read_aloud="他在口袋里摸了半天，什么也没有。", damage="1D2", sets=["seen_as_mad"])],
+        note="让他尴尬地摸个空，用旁人的眼光说明这样行不通",
+    )
+    game, _, events = improvised(module, fake, {"x": (phone, ruling)}, [plan])
+    hp = game.state.investigator.hp
+    fake.queue_totals(1)  # the 1D2 of damage
+    turn = await game.resolve(phone, await game.rule(phone))
+    assert "seen_as_mad" in game.state.flags and "e_mad" in game.state.fired
+    assert game.state.investigator.hp == hp - 1 and any(e["type"] == "damage" for e in events)
+    assert [e.id for e in turn.events] == ["e_mad"]
+
+
+async def test_the_opening_weaves_in_the_investigators(module, fake):
+    friend = Improv(
+        kind="开局改编",
+        reason="把调查员的老同事写进来",
+        npcs=[NewNPC(id="old_editor", name="老编辑钱伯", role="周衡在报社的老上司", location="office", knows=["三十年前也有人报道过多出的钟声"])],
+        note="周衡的老上司钱伯也在镇上，开场时可以提一句",
+    )
+    game, cast, _ = improvised(module, fake, {}, [friend])
+    await game.start()
+    assert cast.asked[0][0] == "开局改编" and module.npc("old_editor").location == "office"
+    assert "钱伯" in cast.reports[-1]  # the opening narration knows about it
+
+
+async def test_a_plan_that_does_not_fit_gets_one_chance_then_is_dropped(module, fake):
+    broken = NEWSSTAND.model_copy(update={"clues": [NewClue(id="c_rumor", title="传闻", text="……", where="nowhere")]})
+    ask = Action(kind="investigate", summary="周衡向路人打听传闻")
+    ruling = Ruling(needs_roll=False, scope="可即兴")
+    game, cast, _ = improvised(module, fake, {"x": (ask, ruling)}, [broken, broken])
+    assert await game.rule(ask) == ruling  # nothing usable came of it: the turn goes on as ruled
+    assert cast.asked[1][2] and "nowhere" in cast.asked[1][2][0]  # the second call saw what was wrong
+    assert not game.state.improv and not any(loc.id == "newsstand" for loc in module.locations)
+
+
+async def test_improvised_branches_survive_a_reload(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听传闻")
+    game, *_ = improvised(module, fake, {"x": (ask, Ruling(needs_roll=False, scope="可即兴"))}, [NEWSSTAND])
+    await game.resolve(ask, await game.rule(ask))
+    fresh = Module.load(EXAMPLE)
+    Game(fresh, game.state, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
+    assert fresh.location("newsstand").exits == ["square"] and "newsstand" in fresh.location("square").exits
+    assert fresh.clue("c_rumor").where == "square"
+
+
+async def test_a_stuck_party_gets_a_lead(module, fake):
+    lead = Improv(
+        kind="推进",
+        reason="一直在广场打转，送来一封信指向报社",
+        events=[NewEvent(id="e_letter", title="门缝里的信", when="now", read_aloud="有人把一封信塞到你手里：去报社查三十年前的旧报。")],
+        note="一封没署名的信把人引向报社",
+    )
+    wait = Action(kind="wait", summary="周衡在广场上发呆")
+    game, cast, _ = improvised(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))}, [lead])
+    game.state.turn = 12  # nothing found since the start
+    turn = await game.resolve(wait, await game.rule(wait))
+    assert cast.asked[0][0] == "推进" and "e_letter" in game.state.fired
+    assert game.state.progress_at == 12 and any("没署名的信" in n for n in turn.notes)
+
+
+async def test_a_failed_roll_does_not_sit_on_a_core_clue(module, fake):
+    look = Action(kind="investigate", summary="周衡查看齿轮间")
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)
+    game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
+    fake.queue(99)  # a plain failure: a push is offered first
+    turn = await game.resolve(look, ruling)
+    assert turn.push and "c_gears" not in game.state.clues
+    before = game.state.minutes
+    fake.queue(10)  # the gears' sanity check
+    dropped = await game.push("drop")
+    assert "c_gears" in game.state.clues and game.state.minutes - before == 20  # found, but it cost time
+    assert any("关键线索不能卡住" in n for n in dropped.notes)

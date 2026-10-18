@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..rules.coc import Investigator
 
-LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "event", "system", "handout", "ending"]
+LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
 
 class LogEntry(BaseModel):
@@ -47,6 +47,8 @@ class GameState(BaseModel):
     log: list[LogEntry] = Field(default_factory=list)
     memory: str = ""  # chronicler's summary of everything before the recent log
     pending_push: dict | None = None
+    improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
+    progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None

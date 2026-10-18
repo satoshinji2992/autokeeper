@@ -58,6 +58,7 @@ class NPC(BaseModel):
     location: str | None = None
     portrait: str | None = None
     stats: dict[str, int] = Field(default_factory=dict)
+    arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
 
 
 class Location(BaseModel):
@@ -101,6 +102,7 @@ class Event(BaseModel):
     read_aloud: str = ""
     sets: list[str] = Field(default_factory=list)
     sanity: str | None = None
+    damage: str | None = Field(None, description="当场受到的伤害，如 1D3（由行动的调查员承受）")
     move_to: str | None = None
     performer: str | None = Field(None, description="由哪个 NPC 当场表演（例如说书）")
     performance: str = Field("", description="表演要求，NPC 会结合本局发生过的事现编")

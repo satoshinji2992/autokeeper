@@ -17,6 +17,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     preset = "deepseek"
     search = "auto"            # auto | tavily | ddgs | wikipedia | none
     budget_usd = 5             # stop metered API calls past this estimate
+    improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
 
     [roles.all]                # applies to every role
     base_url = "http://localhost:8000/v1"
@@ -90,6 +91,7 @@ DEFAULT_ROLES: dict[str, Role] = {
     "investigator": HAIKU,  # AI players for companions and autoplay
     "lore": replace(HAIKU, effort="low"),  # LightRAG entity extraction and lore answers
     "summarizer": replace(HAIKU, effort="low"),  # folds old conversation into summaries
+    "director": OPUS,  # improvises where the module is silent (agents/director.py)
 }
 
 
@@ -101,12 +103,15 @@ PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
     "deepseek": {
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
-        **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore")},
+        **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director")},
         # Summaries and recaps need no reasoning. With thinking on, half the summarizer's output
         # was thinking, and the recap's first word came after 1.6-3.8 s instead of 0.5 s.
         **{r: _deepseek(None) for r in ("summarizer", "chronicler")},
     },
 }
+
+
+IMPROV = ("严格", "即兴")
 
 
 @dataclass
@@ -118,6 +123,11 @@ class Config:
     art_style: str = "picture"  # picture: chafa block characters; ascii: plain ASCII glyphs
     search: str = "auto"
     budget_usd: float | None = None
+    improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
+
+    @property
+    def improvising(self) -> bool:
+        return self.improv == "即兴"
 
     def role(self, name: str) -> Role:
         return self.roles.get(name, DEFAULT_ROLES.get(name, OPUS))
@@ -170,4 +180,7 @@ def load(path: Path | None = None) -> Config:
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None
+    cfg.improv = os.environ.get("AUTOKEEPER_IMPROV") or data.get("improv", cfg.improv)
+    if cfg.improv not in IMPROV:
+        raise ValueError(f"未知的自由度：{cfg.improv}（可选：{'、'.join(IMPROV)}）")
     return cfg

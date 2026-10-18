@@ -29,10 +29,12 @@ from .models import Model, Msg, OnDelta, Reply, parse_json
 class Recorder:
     """Writes a cassette while a game is played with real models and real dice."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, meta: dict[str, Any] | None = None):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.file = path.open("w", encoding="utf-8")
         trace.taps.append(self.reply)
+        if meta:  # how the game was set up (e.g. the improvisation level), so a replay matches it
+            self._write({"kind": "meta", **meta})
 
     def _write(self, row: dict[str, Any]) -> None:
         self.file.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -88,6 +90,7 @@ class Cassette:
         self.replies: dict[str, deque[dict]] = defaultdict(deque)
         self.dice: deque[dict] = deque()
         self.summary: dict[str, Any] = {}
+        self.meta: dict[str, Any] = {}
         for line in path.read_text(encoding="utf-8").splitlines():
             row = json.loads(line)
             kind = row.pop("kind")
@@ -97,6 +100,8 @@ class Cassette:
                 self.dice.append(row)
             elif kind == "summary":
                 self.summary = row
+            elif kind == "meta":
+                self.meta = row
 
     def reply(self, agent: str) -> dict:
         if not self.replies[agent]:
