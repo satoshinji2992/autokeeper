@@ -610,12 +610,14 @@ class HistoryPanel(VerticalScroll):
         self.round = -1
 
     def compose(self):
-        yield Static(Text.assemble(("经过", "bold"), ("   点一行跳到那里", "dim")), classes="history-head")
+        yield Static(Text("点一行，故事跳到那里 · Ctrl+G 翻页", style="dim"), classes="history-head")
 
     def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
-        if turn is not None and turn != self.round:
+        """`turn`: the round the line belongs to (GameState.turn once it is played). Rounds only
+        go up: a dice-bot roll (.r) after an action stays under that action's round."""
+        if turn is not None and turn > self.round:
             self.round = turn
-            self.mount(Static(Text(f"— 第 {turn + 1} 轮 —", style="dim"), classes="history-round"))  # the count of turns done; this is the next
+            self.mount(Static(Text(f"— 第 {turn} 轮 —", style="dim"), classes="history-round"))
         entry = HistoryLine(line, block)
         self.mount(entry)
         lines = list(self.query(HistoryLine))

@@ -27,8 +27,8 @@ from ..rules import commands
 from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from . import fog, world
-from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, parse_time, time_of_day
+from . import fog, progress, world
+from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, Progress, parse_time, time_of_day
 from .visuals import Visuals
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -96,6 +96,11 @@ class Game:
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
+        # Turns between two accounts of the story so far (engine/progress.py). 0 writes none
+        # (autoplay and replays: nobody reads them); a screen and the Hub set progress.EVERY.
+        self.progress_every = 0
+        self._recounting: asyncio.Task | None = None
+        self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.plugins = PluginManager(self)
         self.visuals.schedule()
@@ -104,8 +109,12 @@ class Game:
         """Stop work owned by this game before the model sessions and screen disappear."""
         for pending in self.backstage:
             pending.task.cancel()
-        await asyncio.gather(*(p.task for p in self.backstage), return_exceptions=True)
+        recounting = [self._recounting] if self._recounting else []
+        for task in recounting:
+            task.cancel()
+        await asyncio.gather(*(p.task for p in self.backstage), *recounting, return_exceptions=True)
         self.backstage.clear()
+        self._recounting = None
         await self.visuals.close()
 
     async def replace_cast(self, cast: Cast) -> None:
@@ -174,6 +183,7 @@ class Game:
             "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
         )
         text = await self._narrate(report, on_delta)
+        st.prologue = text  # the 背景 page keeps it after the log has moved on
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
         st.pending_turn.clear()
         if self.checkpoint:
@@ -756,6 +766,7 @@ class Game:
     async def remember(self) -> None:
         st = self.state
         st.tally()
+        self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]
         if len(recent) < 48:
@@ -765,6 +776,26 @@ class Game:
         await self.emit({"type": "status", "text": "记录员整理笔记…"})
         st.memory = await self.cast.chronicle(st, text)
         st.log = keep
+
+    def _recount(self) -> None:
+        """When it is due, the players' 故事至今 is written again (engine/progress.py) in the
+        background: the prompt is made now, the turn goes on without waiting for the reply."""
+        st, every = self.state, self.progress_every
+        if not every or (self._recounting and not self._recounting.done()) or not progress.due(st, every):
+            return
+        prompt = progress.material(self.m, st)
+        st.progress.next = st.turn + every  # one call a stretch, whatever comes of it
+        self._recounting = asyncio.create_task(self._recount_in(prompt, st.turn, st.logged))
+
+    async def _recount_in(self, prompt: str, turn: int, seen: int) -> None:
+        st = self.state
+        try:
+            text = progress.trim(await self.cast.progress(st, prompt))
+            if text:
+                st.progress = Progress(text=text, turn=turn, next=st.progress.next, seen=seen)
+                await self.listener({"type": "progress", **st.progress.model_dump()})
+        except Exception:  # the old text stands; the next call is a few turns away
+            pass
 
     async def sketch(self, png: bytes, prompt_id: str | None = None) -> str:
         """Interpret a player's drawing; module sketch prompts can trigger sanity or clues."""
@@ -1147,6 +1178,8 @@ class Game:
             await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
             raise
         told.entry.text = text
+        if st.prologue == old:  # the opening told again
+            st.prologue = text
         await self.emit({"type": "keeper_end", "text": text})
         shown = st.sky  # on the screens now, set by the old telling
         st.sky, st.sky_at = told.sky

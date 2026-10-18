@@ -49,7 +49,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import __version__, config, roster
-from ..engine import debrief, fog
+from ..engine import debrief, fog, progress
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
@@ -58,7 +58,7 @@ from ..module.schema import Module
 from ..rules import commands
 from . import media
 
-SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
+SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "progress"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
@@ -163,6 +163,7 @@ class Hub:
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
+        self.game.progress_every = progress.EVERY  # the 进展 page on every screen, through the sync
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}

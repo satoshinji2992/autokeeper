@@ -172,13 +172,43 @@ Screen {
     border-top: dashed $primary-darken-2;
     content-align: center middle;
 }
-#history {
+/* 经过 / 进展 / 背景: one row of tabs, the page under it */
+#pages {
+    height: 1fr;
+    border-top: dashed $primary-darken-2;
+}
+#pages > ContentTabs {
+    height: 1;
+}
+#pages Tab {
+    padding: 0 1;
+}
+#pages Tab.-active {
+    color: $background;
+    background: $primary;
+    text-style: bold;
+}
+#pages ContentTabs:focus Tab.-active {
+    text-style: bold underline;  /* ←/→ turn the page now */
+}
+#pages > ContentSwitcher, #pages TabPane {
+    height: 1fr;
+    padding: 0;
+}
+#history, .page {
     height: 1fr;
     padding: 0 1;
-    border-top: dashed $primary-darken-2;
+    scrollbar-size-vertical: 1;
 }
 #history HistoryLine:hover {
     background: $panel;
+}
+#pages-modal {
+    width: 72;
+    height: 80%;
+}
+#pages-modal #pages {
+    border-top: none;
 }
 #turnline {
     height: 1;
@@ -232,9 +262,11 @@ ModalScreen {
 }
 #sheet-modal {
     max-width: 124;
+    height: 90%;
 }
 #sheet-modal .modal-body {
-    max-height: 40;
+    height: 1fr;  /* scrolls inside the window, however small the terminal */
+    max-height: 100%;
 }
 .buttons {
     height: auto;

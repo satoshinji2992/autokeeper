@@ -23,12 +23,12 @@ from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.theme import Theme
-from textual.widgets import Button, Footer, Input, OptionList, Static
+from textual.widgets import Button, Footer, Input, OptionList, Static, TabbedContent
 from textual.widgets.option_list import Option
 
 from .. import artkit, config, imagery, roster, weather
 from ..agents.cast import Cast
-from ..engine import debrief
+from ..engine import debrief, progress
 from ..engine import graph as turn_graph
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState, time_of_day
@@ -42,6 +42,7 @@ from . import art, cover, tips
 from .debrief import DebriefModal
 from .guide import GuideScreen
 from .mapview import MapModal
+from .pages import Page, PagesModal, background_view, pages, progress_view, turn
 from .retell import RetellModal
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from .speaker import Speaker
@@ -536,6 +537,9 @@ COMMANDS = (
     ("出主意", "F5", "照眼下的情况想三件能做的事", "suggest"),
     ("重讲上一段", "F6", "骰子和线索不变，换个讲法", "retell"),
     ("前情回顾", "F7", "从头讲一遍到现在", "recap"),
+    ("经过", "Ctrl+G", "右栏：每一步做了什么、掷了什么、找到了什么", "page('history')"),
+    ("进展", "Ctrl+G", "右栏：故事至今，每 3 轮自动更新", "page('progress')"),
+    ("背景", "Ctrl+G", "右栏：开场时知道的事，你们是谁", "page('background')"),
     ("手绘", "F8", "画一张图给守秘人看", "sketch"),
     ("换模型", "F9", "切换模型和思考强度", "engine"),
     ("复盘", "F10", "结局以后：真相、漏掉的线索、后日谈", "debrief"),
@@ -549,6 +553,9 @@ COMMANDS = (
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
     ("回到标题", "", "先存档，再回标题画面", "leave_game"),
 )
+
+
+PAGE_ROWS = 8  # rows the right column's pages need to be read there; with fewer, they open over the story
 
 
 class GameScreen(Screen):
@@ -569,6 +576,7 @@ class GameScreen(Screen):
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
         Binding("ctrl+b", "usage", "用量", show=False),
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
+        Binding("ctrl+g", "turn_page", "翻页", show=False),  # 经过 / 进展 / 背景 in the right column
         Binding("escape", "focus_input", "输入", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
@@ -606,7 +614,7 @@ class GameScreen(Screen):
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
-                yield HistoryPanel(id="history")
+                yield from pages(HistoryPanel(id="history"))
                 yield CluePanel(id="clues")
         yield Footer()
 
@@ -618,6 +626,7 @@ class GameScreen(Screen):
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         self.query_one(SceneArt).effects = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
+        self.game.progress_every = progress.EVERY  # someone reads it: the 进展 page
         channels.listeners.append(self._fell_back)
         config.SAVES.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(config.SAVES / "checkpoints.sqlite")
@@ -858,7 +867,8 @@ class GameScreen(Screen):
 
     def _history(self, kind: str, body, block) -> None:
         if (line := history_line(kind, body, block)) is not None:
-            self.query_one(HistoryPanel).note(line, block, self.state.turn)
+            turn = self.state.turn + (kind == "player")  # an action is shown before its turn is counted
+            self.query_one(HistoryPanel).note(line, block, turn)
 
     def _panels(self) -> None:
         st = self.state
@@ -871,7 +881,36 @@ class GameScreen(Screen):
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
         self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))
+        self._pages()
         self._topbar()
+
+    def _pages(self) -> None:
+        """进展 and 背景 as the state has them now (经过 grows with the story)."""
+        self.query_one("#progress", Page).show(progress_view(self.state))
+        self.query_one("#background", Page).show(background_view(self.m, self.state, self._viewer()))
+
+    def _roomy(self) -> bool:
+        """The right column is up and its pages have room to be read."""
+        return bool(self.query_one("#right").display) and self.query_one("#pages").size.height >= PAGE_ROWS
+
+    def action_turn_page(self) -> None:
+        """Ctrl+G: the next page of the right column; without room for it, the pages over the story."""
+        if self._roomy():
+            turn(self.query_one("#pages", TabbedContent))
+        else:
+            self.action_page("progress")
+
+    def action_page(self, name: str) -> None:
+        if self._roomy():
+            self.query_one("#pages", TabbedContent).active = f"{name}-page"
+            return
+        history = [w.content for w in self.query_one(HistoryPanel).query(Static) if not w.has_class("history-head")]
+        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name))
+
+    @on(TabbedContent.TabActivated, "#pages")
+    def _paged(self, event: TabbedContent.TabActivated) -> None:
+        if event.pane.id == "history-page":  # lines came in while another page was up
+            self.query_one(HistoryPanel).scroll_end(animate=False)
 
     # -- event handling ----------------------------------------------------------------------
     async def handle(self, ev: dict) -> None:
@@ -927,6 +966,7 @@ class GameScreen(Screen):
         elif t == "keeper_end":
             story.end_keeper(ev["text"])
             self._status("")
+            self._pages()  # the opening, once told, is on the 背景 page
         elif t == "waived":  # a check asked for with .ra that the keeper needs no dice for
             story.add("dice", Text(f"◈ {ev['who']} 的{ev['skill']}不用掷：守秘人直接说结果", style="dim"))
         elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
@@ -988,6 +1028,10 @@ class GameScreen(Screen):
             story.add("ending", body)
         elif t == "sheet":
             self._panels()
+        elif t == "progress":  # the story so far, written again in the background
+            self._pages()
+            if self.game and not self.busy:
+                write_save(self.state, self.m)
         elif t == "epilogue_start":
             self.afterword, self.writing = "", True
         elif t == "epilogue_delta":
@@ -1294,7 +1338,7 @@ class GameScreen(Screen):
         def portrait(inv: Investigator) -> Text:
             return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style, face=True)
 
-        self.app.push_screen(SheetModal(party, first, portrait))
+        self.app.push_screen(SheetModal(party, first, portrait, self.state))
 
     def action_plugins(self) -> None:
         from .plugins import PluginsModal
