@@ -77,6 +77,9 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
             if scene._atmo is not None and scene._atmo.t > 1:
                 break
         assert scene._atmo is not None and scene._atmo.kinds == ["fog"] and scene._atmo.t > 1
+        assert scene._fit()[1] == 17  # the art takes about 38% of the terminal's height
+        await pilot.press("ctrl+a")  # the input box has focus, but Ctrl+A still changes the style
+        assert app.art_style == "fine" and scene.style_name == "fine"
         await pilot.press("f6")
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off
@@ -96,6 +99,10 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
         await pilot.pause()
         assert box.value == "我爬上钟楼" and not box.disabled
         screen.busy = False
+        for size, rows in (((200, 60), 23), ((80, 24), 9)):  # a taller terminal, a taller picture
+            await pilot.resize_terminal(*size)
+            await pilot.pause(0.2)
+            assert scene._fitted[1] == rows
 
 
 def test_weather_is_read_off_the_place_and_the_hour():
@@ -180,12 +187,12 @@ def test_ascii_art_keeps_lamplight_after_dark():
 
 
 @pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
-def test_scene_picture_fills_the_panel_without_losing_the_subject(tmp_path):
+def test_scene_picture_fills_the_panel(tmp_path):
     img = tmp_path / "tall.png"
     Image.new("RGB", (200, 300), (180, 60, 40)).save(img)
     framed = imagery.frame(Image.open(img).convert("RGB"), 80, 15)
-    assert abs(framed.width / framed.height - 80 * 0.5 / 15) < 0.05  # the panel's shape
-    assert framed.getpixel((framed.width // 2, framed.height // 2)) == (180, 60, 40)  # subject intact
+    assert abs(framed.width / framed.height - 80 * 0.5 / 15) < 0.05  # the panel's shape, no blurred sides
+    assert framed.getpixel((framed.width // 2, framed.height // 2)) == (180, 60, 40)
     out = imagery.render(str(img), 80, 15, "picture", "深夜", True)
     assert max(len(Text.from_ansi(line).plain) for line in out.split("\n")) >= 70
 

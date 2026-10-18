@@ -372,7 +372,7 @@ class GameScreen(Screen):
         Binding("f5", "map", "地图"),
         Binding("ctrl+r", "recap", "前情回顾"),
         Binding("ctrl+s", "save", "存档"),
-        Binding("ctrl+a", "art_style", "画法"),
+        Binding("ctrl+a", "art_style", "画法", priority=True),  # before the input box takes it as Home
         Binding("f6", "weather", "天气"),
         Binding("f7", "sheet", "人物卡"),
         Binding("escape", "focus_input", "输入", show=False),
@@ -489,10 +489,12 @@ class GameScreen(Screen):
         width = event.size.width
         right.display = width >= 96
         right.styles.width = 40 if width >= 130 else 34
+        self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
 
     def action_art_style(self) -> None:
-        self.app.art_style = "ascii" if self.app.art_style == "picture" else "picture"  # type: ignore[attr-defined]
-        self.app.notify(f"画面：{'纯 ASCII' if self.app.art_style == 'ascii' else '块字符'}")  # type: ignore[attr-defined]
+        styles, now = list(imagery.STYLES), self.app.art_style  # type: ignore[attr-defined]
+        self.app.art_style = styles[(styles.index(now) + 1) % len(styles)] if now in styles else styles[0]  # type: ignore[attr-defined]
+        self.app.notify(f"画面：{imagery.STYLE_NAMES[self.app.art_style]}")  # type: ignore[attr-defined]
         self._scene(self.state.location)
         self._panels()
 

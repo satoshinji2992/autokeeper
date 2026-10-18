@@ -3,9 +3,10 @@
     queries (Haiku)  ->  Wikimedia Commons search (licence-filtered)  ->  contact sheet
     ->  vision agent picks one and a crop box (Opus)  ->  art/<name>.jpg + art/<name>.credit.json
 
-At play time chafa renders the picture to fit the panel it sits in: Unicode block
-characters by default ("picture"), or plain ASCII glyphs ("ascii"). Hand-drawn
-art/<name>.txt stays as the fallback when there is no picture or no chafa.
+At play time a scene is cropped to the panel's shape and chafa renders it in Unicode block
+characters, with ASCII strokes drawn along its lines so the shapes still read ("picture",
+the default). STYLES has the others: finer 2×3 sextants, no outlines, plain ASCII glyphs.
+Hand-drawn art/<name>.txt stays as the fallback when there is no picture or no chafa.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import asyncio
 import io
 import json
 import random
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -21,7 +23,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageEnhance, ImageOps
+import numpy as np
+from PIL import Image, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from pydantic import BaseModel, Field
 
 from . import artkit
@@ -32,10 +35,22 @@ COMMONS = "https://commons.wikimedia.org/w/api.php"
 USER_AGENT = "AutoKeeper/0.1 (https://github.com/satoshinji2992/autokeeper)"
 OPEN_LICENSES = ("public domain", "pd", "cc0", "cc by", "cc-by", "attribution", "no restrictions", "no known copyright")
 IMAGE_MIMES = ("image/jpeg", "image/png", "image/webp", "image/tiff")
+# chafa's symbols per art style (Ctrl+A cycles them; the first is the default). Colour is
+# always 24-bit, where chafa's dither options do nothing. Box-drawing ("border") symbols are left
+# out: their thin lines read as noise in grass and leaves, and as stray strokes next to outlines.
 STYLES = {
-    "picture": ["--symbols", "block+border+space-wide-inverted", "--color-space", "din99d", "--dither", "diffusion", "--dither-intensity", "0.5"],
+    "picture": ["--symbols", "block+space-wide-inverted", "--color-space", "din99d"],
+    "fine": ["--symbols", "block+sextant+space-wide-inverted", "--color-space", "din99d"],
+    "photo": ["--symbols", "block+space-wide-inverted", "--color-space", "din99d"],
     "ascii": ["--symbols", "ascii", "--color-space", "din99d"],
 }
+STYLE_NAMES = {
+    "picture": "块字符 + 轮廓线",
+    "fine": "六分块 + 轮廓线（更细；终端字体不支持时会显示成方框）",
+    "photo": "块字符，不描轮廓",
+    "ascii": "纯 ASCII",
+}
+OUTLINED = {"picture", "fine"}  # styles that draw ASCII outlines over scenes (see outlines())
 
 
 @dataclass
@@ -103,8 +118,6 @@ async def search(client: httpx.AsyncClient, query: str, limit: int = 8, width: i
 
 
 def _strip_html(text: str) -> str:
-    import re
-
     return re.sub(r"<[^>]+>", "", text).strip()[:120]
 
 
@@ -136,11 +149,13 @@ def prepare(im: Image.Image, crop: list[float]) -> Image.Image:
 
 # -- preprocessing ------------------------------------------------------------------
 # Each step is one call into OpenCV, rembg or Pillow. Portraits get their background cut
-# out so the face reads on a dark terminal; scenes get local contrast and fewer colours
-# so the character grid does not turn into noise.
+# out so the face reads on a dark terminal; scenes get local contrast and an edge-keeping
+# smoothing that calms grain and leaves. Scenes are not quantized or sharpened: fewer
+# colours and sharper texture turned the character grid into a grey mosaic. Their vignette
+# comes from light(), after frame() has picked the part of the picture that shows.
 PIPELINES: dict[str, tuple[str, ...]] = {
     "portrait": ("face_crop", "remove_bg", "clahe", "saturate", "bilateral", "unsharp", "vignette"),
-    "scene": ("clahe", "bilateral", "saturate", "quantize", "unsharp", "vignette"),
+    "scene": ("clahe", "bilateral", "saturate"),
 }
 BACKDROP = (6, 10, 12)  # BGR of the terminal background the art sits on
 
@@ -387,36 +402,29 @@ def light(im: Image.Image, when: str) -> Image.Image:
     return im
 
 
-def cover(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5, widest: float = 2.6) -> Image.Image:
-    """Crop to the panel's shape so a scene fills it (terminal cells are about half as wide
-    as tall). Very wide panels get a letterbox no wider than `widest`."""
+def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5, widest: float = 4.0) -> Image.Image:
+    """Crop a scene to the panel's shape so it fills it (terminal cells are about half as wide
+    as tall): squeezed in whole, a photo becomes a strip of mosaic too small to read. The crop
+    slides to the band with the most coherent structure (walls, stones, shelves rather than
+    foliage), pulled a little towards the middle. Panels wider than `widest` get a letterbox."""
     target = min(widest, cols * cell / rows)
     w, h = im.size
-    if w / h > target:
-        nw = int(h * target)
-        left = (w - nw) // 2
+    sideways = w / h > target
+    share = h * target / w if sideways else w / target / h  # the window's part of the picture
+    if share > 0.98:
+        return im
+    across = max(1, round(rows * target / cell))  # the window's width in cells
+    grid = (round(across / share), rows) if sideways else (across, round(rows / share))
+    strength = _line_strength(im, *grid).sum(axis=0 if sideways else 1)
+    sums = np.convolve(strength, np.ones(across if sideways else rows), "valid") + 1e-9  # flat: the middle
+    best = int(np.argmax(sums * (1 - 0.3 * np.abs(np.linspace(-1, 1, len(sums))))))
+    if sideways:
+        nw = round(h * target)
+        left = min(w - nw, round(best * w / len(strength)))
         return im.crop((left, 0, left + nw, h))
-    nh = int(w / target)
-    top = int((h - nh) * 0.4)  # keep the upper middle, where scenes put their subject
+    nh = round(w / target)
+    top = min(h - nh, round(best * h / len(strength)))
     return im.crop((0, top, w, top + nh))
-
-
-def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
-    """Fill the panel without cutting the subject: when cropping would lose more than a
-    quarter of the picture, the whole picture sits in the middle and a blurred, darkened
-    copy of itself fills the sides (the letterbox trick from video)."""
-    from PIL import ImageFilter
-
-    target = cols * cell / rows
-    w, h = im.size
-    if w / h >= target * 0.75:
-        return cover(im, cols, rows, widest=99)
-    height = max(h, 240)
-    canvas = cover(im, cols, rows, widest=99).resize((int(height * target), height))
-    canvas = ImageEnhance.Brightness(canvas.filter(ImageFilter.GaussianBlur(height / 24))).enhance(0.45)
-    fg = im.resize((int(w * height / h), height))
-    canvas.paste(fg, ((canvas.width - fg.width) // 2, 0))
-    return canvas
 
 
 def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
@@ -432,18 +440,179 @@ def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
     return im
 
 
-def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded: str = "") -> Image.Image:
+# -- outlines -------------------------------------------------------------------------
+# A photo in a few dozen cells keeps its colours but loses its shapes, so scenes get ASCII
+# strokes along their lines, the recipe of ASCII shaders like Acerola's: the direction of the
+# picture's gradient picks | / - \ _ for a cell. A cell's gradients are summed into a structure
+# tensor, the standard way to read one direction off a patch; where they agree (coherent) the
+# cell sits on a line, while foliage and grain point every way and get no stroke. numpy and
+# Pillow only, so outlines work without the art extra's OpenCV.
+CELL_PX = (8, 16)  # pixels per cell when looking for lines; terminal cells are twice as tall
+GLYPHS = np.array(["", "-", "/", "|", "\\", "_"])
+ACROSS = {1: ((-1, 0), (1, 0)), 2: ((-1, -1), (1, 1)), 3: ((0, -1), (0, 1)), 4: ((-1, 1), (1, -1))}  # each line's two sides
+ALONG = {  # where the line through a cell can go on, and which strokes may carry it there
+    1: (((0, -1), (0, 1)), (1, 2, 4)),
+    2: (((-1, 1), (1, -1), (0, -1), (0, 1), (-1, 0), (1, 0)), (2, 1, 3)),
+    3: (((-1, 0), (1, 0), (-1, -1), (-1, 1), (1, -1), (1, 1)), (3, 2, 4)),
+    4: (((-1, -1), (1, 1), (0, -1), (0, 1), (-1, 0), (1, 0)), (4, 1, 3)),
+}
+PAPER = "#e8dec4"  # light strokes on dark cells, lit like the hand-drawn art's lines
+
+
+def _neighbour(a: np.ndarray, dy: int, dx: int, fill=0) -> np.ndarray:
+    """a[y + dy, x + dx] at (y, x), `fill` past the edge."""
+    h, w = a.shape
+    return np.pad(a, 1, constant_values=fill)[1 + dy : 1 + dy + h, 1 + dx : 1 + dx + w]
+
+
+def _gradients(im: Image.Image, cols: int, rows: int) -> tuple[np.ndarray, np.ndarray]:
+    cw, ch = CELL_PX
+    grey = im.convert("L").resize((cols * cw, rows * ch), Image.Resampling.BOX).filter(ImageFilter.GaussianBlur(2.5))
+    gy, gx = np.gradient(np.asarray(grey, dtype=np.float32) / 255)
+    return gx, gy
+
+
+def _cells(v: np.ndarray, cols: int, rows: int) -> np.ndarray:
+    return v.reshape(rows, CELL_PX[1], cols, CELL_PX[0]).sum(axis=(1, 3))
+
+
+def _coherence(jxx: np.ndarray, jyy: np.ndarray, jxy: np.ndarray) -> np.ndarray:
+    """0 where the gradients point every way, 1 where they all lie along one line."""
+    return np.sqrt((jxx - jyy) ** 2 + 4 * jxy**2) / (jxx + jyy + 1e-9)
+
+
+def _line_strength(im: Image.Image, cols: int, rows: int) -> np.ndarray:
+    gx, gy = _gradients(im, cols, rows)
+    jxx, jyy, jxy = (_cells(v, cols, rows) for v in (gx * gx, gy * gy, gx * gy))
+    return (jxx + jyy) * _coherence(jxx, jyy, jxy) ** 2
+
+
+def outlines(im: Image.Image, cols: int, rows: int, *, keep: float = 0.3) -> np.ndarray:
+    """The stroke for each cell of a cols × rows grid laid over the picture: | / - \\ or _
+    where a clear line crosses the cell, "" elsewhere. At most `keep` of the cells get one."""
+    gx, gy = _gradients(im, cols, rows)
+    jxx, jyy, jxy = (_cells(v, cols, rows) for v in (gx * gx, gy * gy, gx * gy))
+    energy = jxx + jyy
+    around = [sum(_neighbour(j, dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)) for j in (jxx, jyy, jxy)]
+    on = (energy >= max(float(np.quantile(energy, 1 - keep)), 0.01)) & (_coherence(jxx, jyy, jxy) >= 0.45) & (_coherence(*around) >= 0.4)
+    # The line runs across the gradient; its angle on screen (y up) picks the stroke.
+    angle = (90 - np.degrees(np.arctan2(2 * jxy, jxx - jyy)) / 2) % 180
+    way = np.digitize(angle, (30, 72, 108, 150)) % 4 + 1  # index into GLYPHS: - / | or backslash
+    for k, (a, b) in ACROSS.items():  # one stroke wide: a cell must beat its neighbours across its line
+        on &= (way != k) | (energy >= np.maximum(_neighbour(energy, *a), _neighbour(energy, *b)))
+    for k in (2, 4):  # a slanted line crosses two cells per row; the blur would make it three
+        same = np.where(way == k, energy, 0)
+        on &= (way != k) | (energy >= 0.75 * np.maximum(_neighbour(same, 0, -1), _neighbour(same, 0, 1)))
+    drawn = np.where(on, way, 0)
+    carried = np.zeros_like(on)
+    for k, (steps, fits) in ALONG.items():  # no lone specks: the line goes on into a neighbour
+        fit = np.isin(drawn, fits)
+        carried |= (drawn == k) & np.logical_or.reduce([_neighbour(fit, dy, dx, False) for dy, dx in steps])
+    rows_gy = (gy * gy).reshape(rows, CELL_PX[1], cols, CELL_PX[0]).sum(axis=3)
+    depth = (rows_gy * np.linspace(0, 1, CELL_PX[1])[None, :, None]).sum(axis=1) / (rows_gy.sum(axis=1) + 1e-9)
+    way = np.where((way == 1) & (depth > 0.6), 5, way)  # a horizontal line low in its cell: _
+    return np.where(carried, GLYPHS[way], "")
+
+
+def ink(colours: np.ndarray, when: str = "") -> np.ndarray:
+    """A stroke colour for each cell colour (rows × cols × RGB): dark on light cells, light on
+    dark ones. The light ink is lit like hand-drawn strokes (artkit.shade), so after dark the
+    lines stay readable over a picture that has gone almost black."""
+    colours = colours.astype(np.float32)
+    paper = np.array(ImageColor.getrgb(artkit.shade(PAPER, when, strokes=True)), dtype=np.float32)
+    light_cell = (colours @ np.array([0.299, 0.587, 0.114], dtype=np.float32) > 110)[..., None]
+    return np.where(light_cell, colours * 0.25, colours * 0.2 + paper * 0.8).clip(0, 255).astype(np.uint8)
+
+
+# chafa writes a cell as its character, after an SGR when the colours change: 24-bit colours
+# and resets, nothing else. overlay() splices strokes into that text instead of decoding it with
+# rich: a scene has a few thousand cells, decoded again for every weather layer.
+RGB = tuple[int, ...]
+_TOKEN = re.compile(r"(\x1b\[[0-9;?]*[A-Za-z])|(.)", re.S)  # an escape, or a cell's character
+_SGR = re.compile(r"\x1b\[([0-9;]*)m")
+_ESCAPES = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def _sgr(fg: RGB | None, bg: RGB | None, *, bold: bool = False) -> str:
+    codes = ["0", "1"] if bold else ["0"]
+    codes += [f"{n};2;{';'.join(map(str, rgb))}" for n, rgb in ((38, fg), (48, bg)) if rgb]
+    return f"\x1b[{';'.join(codes)}m"
+
+
+def _colours(escapes: str, fg: RGB | None, bg: RGB | None) -> tuple[RGB | None, RGB | None]:
+    """The colours chafa's escapes leave set (None: the terminal's own)."""
+    for params in _SGR.findall(escapes):
+        codes = [int(c) for c in params.split(";") if c] or [0]
+        i = 0
+        while i < len(codes):
+            if codes[i] == 0:
+                fg = bg = None
+            elif codes[i] in (38, 48) and codes[i + 1 : i + 2] == [2]:
+                rgb = tuple(codes[i + 2 : i + 5])
+                fg, bg = (rgb, bg) if codes[i] == 38 else (fg, rgb)
+                i += 4
+            i += 1
+    return fg, bg
+
+
+def overlay(art: str, strokes: np.ndarray, under: np.ndarray, colour: np.ndarray) -> str:
+    """chafa's art (ANSI) with the strokes drawn over it. A stroke cell shows its glyph in
+    `colour` on `under` (the picture's colour there), then chafa's colours are set back for
+    the cells after it, which are left exactly as chafa wrote them."""
+    rows, cols = strokes.shape
+    fg = bg = None
+    lines = []
+    for y, line in enumerate(art.split("\n")):
+        pieces, x = [], 0
+        for escape, ch in _TOKEN.findall(line):
+            if escape:
+                fg, bg = _colours(escape, fg, bg)
+                pieces.append(escape)
+                continue
+            glyph = strokes[y, x] if y < rows and x < cols else ""
+            if glyph:
+                ch = _sgr(tuple(map(int, colour[y, x])), tuple(map(int, under[y, x])), bold=True) + glyph + _sgr(fg, bg)
+            pieces.append(ch)
+            x += 1
+        lines.append("".join(pieces))
+    return "\n".join(lines)
+
+
+@lru_cache(maxsize=32)
+def _framed(path: str, width: int, height: int, fill: bool) -> Image.Image:
     im = Image.open(picture_source(path)).convert("RGB")
-    return grade(light(frame(im, width, height) if fill else im, when), graded, when)
+    return frame(im, width, height) if fill else im
+
+
+@lru_cache(maxsize=32)
+def _strokes(path: str, width: int, height: int, cols: int, rows: int) -> np.ndarray:
+    """A scene's strokes, found on the unlit picture: the same lines at every hour and in every
+    weather layer, only their colours change."""
+    return outlines(_framed(path, width, height, True), cols, rows)
+
+
+def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded: str = "") -> Image.Image:
+    return grade(light(_framed(path, width, height, fill), when), graded, when)
 
 
 @lru_cache(maxsize=256)
 def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False, graded: str = "") -> str:
     """ANSI text for a picture at the given character size, lit for `when`, optionally
-    cropped to fill the panel and graded for the weather layer (cached per combination)."""
+    cropped to fill the panel and graded for the weather layer (cached per combination).
+    Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every
+    weather layer so fog veils them and the dark outside a torch beam swallows them."""
     if not when and not fill and not graded:
         return _chafa(picture_source(path), width, height, style)
-    return _chafa(_prepared(path, width, height, when, fill, graded), width, height, style)
+    lit = light(_framed(path, width, height, fill), when)
+    im = grade(lit, graded, when)
+    out = _chafa(im, width, height, style)
+    if not (fill and style in OUTLINED and out):
+        return out
+    lines = _ESCAPES.sub("", out).split("\n")
+    size = (max(map(len, lines)), len(lines))  # chafa keeps the aspect, so maybe a cell short
+    under = np.asarray(im.resize(size, Image.Resampling.BOX))
+    stroke = grade(Image.fromarray(ink(np.asarray(lit.resize(size, Image.Resampling.BOX)), when)), graded, when)
+    return overlay(out, _strokes(path, width, height, *size), under, np.asarray(stroke))
 
 
 def glitch(path: str, width: int, height: int, strength: float, style: str = "picture", when: str = "", fill: bool = False) -> str:

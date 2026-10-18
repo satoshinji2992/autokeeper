@@ -162,7 +162,7 @@ class Config:
     preset: str = "claude"
     module: str = ""
     theme: str = "amber"
-    art_style: str = "picture"  # picture: chafa block characters; ascii: plain ASCII glyphs
+    art_style: str = "picture"  # imagery.STYLES: picture (blocks + outlines), fine (sextants + outlines), photo, ascii
     search: str = "auto"
     budget_usd: float | None = None
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
