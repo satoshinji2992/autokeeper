@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 
 import pytest
 from PIL import Image, PngImagePlugin
@@ -104,7 +105,9 @@ def test_a_dice_bot_line_is_read_by_code():
 def test_paths_come_typed_quoted_or_dragged(tmp_path):
     f = tmp_path / "我的 卡.json"
     f.write_text("{}", encoding="utf-8")
-    assert local_file(f'"{f}"') == f and local_file(str(f).replace(" ", "\\ ")) == f and local_file(f.as_uri()) == f
+    assert local_file(f'"{f}"') == f and local_file(f.as_uri()) == f
+    if os.name != "nt":  # on Windows a backslash separates folders and escapes nothing
+        assert local_file(str(f).replace(" ", "\\ ")) == f
     assert local_file("力量60") is None
 
 
