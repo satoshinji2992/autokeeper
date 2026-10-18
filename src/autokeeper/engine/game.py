@@ -27,7 +27,7 @@ from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from . import fog
-from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, parse_time, time_of_day
+from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, parse_time, time_of_day
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -64,6 +64,18 @@ class Backstage:
     at: str  # where the investigators were when it was asked for
 
 
+@dataclass
+class Told:
+    """The latest narration, kept so it can be told again: what the keeper was given (the
+    report and that turn's lore), and what telling it left behind (its log entry, and the
+    sky as it was before, since the words set the weather)."""
+
+    report: str
+    lore: str
+    entry: LogEntry
+    sky: tuple[str, int]
+
+
 class Game:
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
@@ -76,6 +88,7 @@ class Game:
         self.director_wait: float | None = None
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
+        self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
 
     @property
     def improvising(self) -> bool:
@@ -939,6 +952,8 @@ class Game:
         return "\n".join(out)
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "") -> str:
+        self.told = None  # while the keeper speaks there is nothing to tell again
+        sky = (self.state.sky, self.state.sky_at)
         await self.emit({"type": "keeper_start"})
 
         async def delta(text: str) -> None:
@@ -947,9 +962,10 @@ class Game:
                 await on_delta(text)
 
         text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
-        self.state.add("keeper", text, who="守秘人")
+        entry = self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
         await self._sky(text)
+        self.told = Told(report, lore, entry, sky)
         return text
 
     async def _sky(self, narration: str) -> None:
@@ -962,6 +978,78 @@ class Game:
         if sky != st.sky:
             st.sky = sky
             await self.emit({"type": "sky", "sky": sky})
+
+    # -- telling it again -------------------------------------------------------------------
+    def retell_blocked(self) -> str:
+        """Why the latest narration cannot be told again right now ("" when it can). Only one
+        nothing has followed yet: once someone acts, or the keeper speaks on, the story has
+        moved past it. Dice-bot rolls (.r, .en) stand outside the story and do not count."""
+        told, log = self.told, self.state.log
+        if told is None:
+            return "现在没有能重讲的段落：守秘人还没讲完，或者读档以后还没讲过新的一段"
+        at = next((i for i in range(len(log) - 1, -1, -1) if log[i] is told.entry), None)
+        if at is None or any(e.kind != "dice" for e in log[at + 1 :]):
+            return "只能重讲刚讲完的那一段，之后已经有人行动了"
+        return ""
+
+    async def retell(self, nudge: str = "换个讲法", on_delta=None) -> str:
+        """The latest narration told again in other words. The keeper gets the same report and
+        the same lore, so the dice, the clues, the NPCs' lines and the events stay as they were:
+        nothing is resolved or rolled again. The new telling takes the old one's place in the log
+        and in the keeper's memory. `nudge` is one of RETELL, never the player's own words: the
+        keeper knows the module's secrets."""
+        why = self.retell_blocked() or ("" if nudge in RETELL else f"不认识的讲法：{nudge}")
+        if why:
+            raise ValueError(why)
+        st, told = self.state, self.told
+        assert told is not None
+        self.told = None  # one telling at a time
+        await self.emit({"type": "keeper_start", "again": True})
+
+        async def delta(text: str) -> None:
+            await self.emit({"type": "keeper_delta", "text": text})
+            if on_delta:
+                await on_delta(text)
+
+        old = told.entry.text
+        try:
+            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge), on_delta=delta)
+        except Exception:
+            self.told = told
+            await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
+            raise
+        told.entry.text = text
+        await self.emit({"type": "keeper_end", "text": text})
+        shown = st.sky  # on the screens now, set by the old telling
+        st.sky, st.sky_at = told.sky
+        await self._sky(text)
+        if st.sky == told.sky[0] != shown:  # the new words leave the sky as it was before the old ones
+            await self.emit({"type": "sky", "sky": st.sky})
+        st.heard = fog.heard(self.m, st)
+        self.told = told
+        return text
+
+
+# The ways a player may ask for the latest narration again (Game.retell). Fixed on purpose: the
+# keeper knows the module's secrets, and a wish typed in freely is a way to talk them out of it.
+RETELL = {
+    "换个讲法": "",
+    "短一点": "篇幅砍到上一版的一半左右，只留最要紧的动作和细节。",
+    "更克制": "写得更克制：少用形容词和比喻，不渲染情绪，让细节自己说话。",
+    "多写细节": "多写细节：调查员看到、听到、闻到、摸到的具体东西，可以比上一版长一些。",
+    "更阴森": "写得更阴森：压低光线和声音，让不对劲的地方一点点显出来。",
+}
+
+
+def _retold(old: str, nudge: str) -> str:
+    """What rides along with a report told again, for that call only: every fact stays, the
+    words change; the old telling, so the new one does not echo it; the player's choice."""
+    ask = RETELL[nudge]
+    return (
+        "\n\n（系统：玩家想听这一段换个讲法。报告里的事一件不改：检定结果、线索原文、NPC 台词和事件都照旧，"
+        "不添新的事实，也不要提“重讲”。上一版是这样写的，这次换个写法，别沿用它的句子：\n"
+        f"「{old}」" + (f"\n这次{ask}" if ask else "") + "）"
+    )
 
 
 IMPROV_LIMIT = 16  # plans per game besides the opening one, so a game cannot sprawl forever

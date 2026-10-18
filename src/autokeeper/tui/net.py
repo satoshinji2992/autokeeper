@@ -19,11 +19,13 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ..engine.game import RETELL
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
 from ..net.link import Link
 from ..rules import commands
 from .app import GameScreen
+from .retell import RetellModal
 from .screens import PushModal, RollModal
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
@@ -198,7 +200,9 @@ class NetGameScreen(GameScreen):
         self.set_interval(0.1, self._spin)
         for e in self.backlog:  # what happened before you sat down
             who = f"{e.who}：" if e.who else ""
-            self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
+            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
+            if e.kind == "keeper":  # told again, it is rewritten in place
+                self.told = block
         self.query_one(Input).placeholder = "等你的回合时说出行动；全角括号开头是场外聊天，如（我去倒杯水）"
         self.ready = True
         while self.inbox:
@@ -249,6 +253,8 @@ class NetGameScreen(GameScreen):
             self._sync(msg["state"])
             self.engine_label = "局域网联机 · 本局结束"
             self._topbar()
+            if msg.get("ending"):
+                self.story.add("system", Text("这一局结束了：F10 复盘，看真相、漏掉的线索和没走到的结局" + ("；.en 做成长检定" if self.seat else ""), style="dim"))
         elif t == "error":
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
@@ -259,6 +265,9 @@ class NetGameScreen(GameScreen):
         if t == "said":
             who = f"{ev['who']}（{ev.get('player') or 'AI'}）"
             self.story.add("player", Text(f"▶ {who}：{ev['text']}"))
+            return
+        if t == "retold":  # the keeper is about to tell the last narration again, for everyone
+            self.app.notify(f"{ev.get('who') or '有人'}请守秘人重讲上一段" + ("" if ev.get("nudge") == "换个讲法" else f"：{ev.get('nudge')}"), timeout=4)
             return
         if t in ("clue", "handout"):  # hidden from this screen until now
             items = self.m.clues if t == "clue" else self.m.handouts
@@ -294,3 +303,21 @@ class NetGameScreen(GameScreen):
 
     def action_save(self) -> None:
         self.app.notify("房主那边每回合都会自动存档")
+
+    # Telling again and the epilogue happen on the host too, asked for from here.
+    def action_retell(self, nudge: str = "") -> None:
+        if not self.seat:
+            self.app.notify("你在观战，不能请守秘人重讲")
+        elif nudge and nudge not in RETELL:
+            self.app.notify(f"可以这样要：{'、'.join(RETELL)}", severity="warning")
+        elif nudge:
+            self._ask_retell(nudge)
+        else:
+            self.app.push_screen(RetellModal(), self._ask_retell)
+
+    def _ask_retell(self, nudge: str | None) -> None:
+        if nudge:
+            self.run_worker(partial(self.link.send, {"t": "retell", "nudge": nudge}))
+
+    def _ask_epilogue(self) -> None:
+        self.run_worker(partial(self.link.send, {"t": "epilogue"}))

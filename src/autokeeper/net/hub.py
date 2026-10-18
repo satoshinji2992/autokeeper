@@ -8,16 +8,20 @@ sit down again. Lines in full-width brackets are table talk and reach everyone a
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
 leave the turn open, and once the game is over they still work, growth rolls (.en) too.
 A seated player throws their own dice: the roll prompt reaches them as an offer of kind
-"roll", like a push offer, and the turn goes on when they answer (or leave).
+"roll", like a push offer, and the turn goes on when they answer (or leave). While the
+table waits for a seated player, any seated player may ask the keeper to tell the latest
+narration again (the turn loop does it, between actions); after the end, too.
 
 Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
+                    · retell {nudge} · epilogue
     hub -> client   welcome · seats · turn · event {ev} · module · sync {state} · offer · say · over · error
 
-Players' screens never hold the keeper's book: they get the module without its truth,
-keeper notes, NPC minds and anything not yet found, and a state without agent memory
-or the director's plans.
+Players' screens never hold the keeper's book while the game is on: they get the module
+without its truth, keeper notes, NPC minds and anything not yet found, and a state without
+agent memory or the director's plans. Once it has ended the whole module goes out, so every
+screen can open the debrief (复盘); the epilogue is told on the host and reaches everyone.
 """
 
 from __future__ import annotations
@@ -34,9 +38,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import config, roster
+from ..engine import debrief
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
-from ..engine.game import PLAY_WAIT, Game
+from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules import commands
@@ -117,6 +122,7 @@ class Hub:
         self.waiting: str | None = None  # the seat whose action the game waits for
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
+        self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
         self.port = 0
 
     # -- connections --------------------------------------------------------------------
@@ -169,6 +175,14 @@ class Hub:
                 self.choices[seat].put_nowait(msg.get("mode"))
         elif t == "say":
             await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
+        elif t == "retell":
+            await self._ask_retell(cid, str(msg.get("nudge") or "换个讲法"))
+        elif t == "epilogue":
+            if not self.over or not self.state.ending:
+                await self._send(cid, {"t": "error", "text": "后日谈要等这一局结束"})
+            else:
+                async with self.desk:
+                    await self._afterword()
 
     async def _sit(self, cid: str, inv_id: str) -> None:
         if inv_id not in self.sits:
@@ -206,7 +220,7 @@ class Hub:
         return {
             "t": "welcome",
             "you": cid,
-            "module": table(self.m, self.state),
+            "module": self._book(),
             "art": self.m.art,
             "colors": self.m.art_colors,
             "pictures": self.m.pictures,  # paths on the host: only screens running there can open them
@@ -215,6 +229,11 @@ class Hub:
             "seats": self._seats(),
             "started": self.started.is_set(),
         }
+
+    def _book(self) -> dict[str, Any]:
+        """The module for the players' screens: the table's copy while the game is on, the
+        whole book once it has ended (the debrief lays it open anyway)."""
+        return self.m.model_dump(mode="json") if self.state.ending else table(self.m, self.state)
 
     async def _send(self, cid: str, msg: dict[str, Any]) -> None:
         ws = self.clients.get(cid)
@@ -232,6 +251,8 @@ class Hub:
         if ev.get("type") == "improv":  # new places and people first, so later events can name them
             await self._broadcast({"t": "module", "module": table(self.m, self.state)})
             ev = {k: v for k, v in ev.items() if k != "reason"}  # the director's reasoning is for the keeper
+        elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
+            await self._broadcast({"t": "module", "module": self._book()})
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})
@@ -274,6 +295,7 @@ class Hub:
         self.waiting = inv.id
         try:
             while True:
+                await self._asks()  # what the table asked for meanwhile: the last narration told again
                 try:
                     text = await asyncio.wait_for(queue.get(), 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
@@ -282,7 +304,7 @@ class Hub:
                 if text is None:  # they left: the AI plays this turn for them
                     await self._ai_turn(inv)
                     return
-                if not text.strip():
+                if not text.strip():  # nothing said (a request waking the loop)
                     continue
                 await self._event({"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv.id) or "", ""), "text": text})
                 await self._run(text, inv.id, ai=False)
@@ -298,6 +320,54 @@ class Hub:
             st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == seat)
             await self._event({"type": "said", "who": st.investigator.name, "player": self.names.get(self.sits.get(seat) or "", ""), "text": text})
             await self._run(text, seat, ai=False)
+
+    # -- telling again, and after the end ------------------------------------------------------
+    async def _ask_retell(self, cid: str, nudge: str) -> None:
+        """A seated player asks for the latest narration again. Mid-game it waits for the turn
+        loop, between actions, so it never runs beside a turn or an interlude; and it is that
+        narration, the one on their screen when they asked, or none."""
+        why = self.game.retell_blocked() or ("" if nudge in RETELL else f"可以这样要：{'、'.join(RETELL)}")
+        if self._seat_of(cid) is None:
+            await self._send(cid, {"t": "error", "text": "你在观战，不能请守秘人重讲"})
+        elif why:
+            await self._send(cid, {"t": "error", "text": why})
+        elif self.over:
+            async with self.desk:
+                await self._tell_again(cid, nudge, self.game.told)
+        elif self.waiting is None:
+            await self._send(cid, {"t": "error", "text": "等这一回合结束再请守秘人重讲"})
+        else:
+            self.asks.put_nowait((cid, nudge, self.game.told))
+            self.inbox[self.waiting].put_nowait("")  # wake the turn loop
+
+    async def _asks(self) -> None:
+        while not self.asks.empty():
+            await self._tell_again(*self.asks.get_nowait())
+
+    async def _tell_again(self, cid: str, nudge: str, told: Told | None) -> None:
+        why = "守秘人已经讲到下一段了，想重讲就再要一次" if self.game.told is not told else self.game.retell_blocked()
+        if why:
+            await self._send(cid, {"t": "error", "text": why})
+            return
+        await self._event({"type": "retold", "who": self.names.get(cid, ""), "nudge": nudge})
+        self.game.emit = self._event
+        try:
+            await self.game.retell(nudge)
+        except Exception as exc:  # the old telling is back on every screen
+            await self._send(cid, {"t": "error", "text": f"守秘人没能重讲（{exc.__class__.__name__}），原来那段还在"})
+            return
+        self._save()
+        await self._broadcast({"t": "sync", "state": self._view()})
+
+    async def _afterword(self) -> None:
+        """The epilogue, told once on the host for the whole table; asked again, the kept one."""
+        self.game.emit = self._event
+        try:
+            await debrief.epilogue(self.game)
+        except Exception:  # the screens heard about it through the epilogue event
+            return
+        self._save()
+        await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _interlude(self) -> None:
         if self.game.ready():
