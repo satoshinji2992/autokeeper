@@ -32,6 +32,7 @@ from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
 from ..rules.coc import Investigator, Rules
 from . import art
+from .mapview import MapModal
 from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
 from .widgets import LEVEL_STYLE, CluePanel, DiceTray, SceneArt, SheetPanel, StoryLog
 
@@ -896,7 +897,7 @@ class GameScreen(Screen):
         self.app.push_screen(SheetModal(party, first, portrait))
 
     def action_map(self) -> None:
-        self.app.push_screen(TextModal("地图", _map(self.m, self.state)))
+        self.app.push_screen(MapModal(self.m, self.state))
 
     def _backstage(self) -> None:
         """The director finished a plan while nobody was mid-turn: play it now."""
@@ -957,51 +958,6 @@ class GameScreen(Screen):
     def action_save(self) -> None:
         write_save(self.state, self.m)
         self.app.notify(f"已存档：{self.state.slot}")
-
-
-SKY_MARK = {"rain": "☂ 雨", "storm": "⚡ 雷雨", "snow": "❄ 雪", "fog": "≋ 雾"}
-
-
-def _map(m: Module, st: GameState) -> Text:
-    """Breadth-first tree of locations from the module's start, with what you have seen:
-    where you are, where you have been, the clues found and the people met at each place,
-    and the weather over the open-air ones. Nothing the investigators have not seen."""
-    out = Text()
-    seen = {m.start}
-    children: dict[str, list[str]] = {}
-    queue = [m.start]
-    while queue:
-        cur = queue.pop(0)
-        for nxt in m.location(cur).exits:
-            if nxt not in seen and any(x.id == nxt for x in m.locations):
-                seen.add(nxt)
-                children.setdefault(cur, []).append(nxt)
-                queue.append(nxt)
-
-    def walk(node: str, prefix: str, last: bool, root: bool) -> None:
-        loc = m.location(node)
-        branch = "" if root else ("└─ " if last else "├─ ")
-        style = "bold reverse" if node == st.location else "bold" if node in st.visited else "dim"
-        out.append(prefix + branch)
-        out.append(loc.name, style=style)
-        if node == st.location:
-            out.append("  ◀ 你在这里", style="bold")
-        elif node in st.visited:
-            out.append("  ✓", style="dim")
-        if st.sky and weather.outdoors(loc.name):
-            out.append(f"  {SKY_MARK.get(st.sky, '')}", style="italic")
-        found = sum(1 for c in st.clues if m.clue(c).where == node)
-        met = [n.name for n in m.npcs_at(node) if st.npcs.get(n.id) and st.npcs[n.id].met]
-        notes = ([f"线索 {found}"] if found else []) + met
-        if notes:
-            out.append("  · " + " · ".join(notes), style="dim")
-        out.append("\n")
-        kids = children.get(node, [])
-        for i, kid in enumerate(kids):
-            walk(kid, prefix + ("" if root else ("   " if last else "│  ")), i == len(kids) - 1, False)
-
-    walk(m.start, "", True, True)
-    return out
 
 
 class AutoKeeperApp(App):

@@ -165,20 +165,6 @@ def test_weather_frames_keep_the_panel_and_light_the_torch_beam():
     assert (mirror.layer_map()[0] == atmosphere.LAYERS.index("red")).all()  # all under the safelight
 
 
-def test_map_shows_only_what_the_investigators_know():
-    m = Module.load(EXAMPLE)
-    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    state.visited = ["square", "tower"]
-    state.location = "tower"
-    state.clues = ["c_notice"]
-    state.npc("warden").met = True
-    state.sky = "fog"
-    plain = tui._map(m, state).plain
-    assert "钟楼  ◀ 你在这里  · 老守钟人" in plain  # met here
-    assert "广场  ✓  ≋ 雾  · 线索 1" in plain  # open-air, so the fog shows; one clue found here
-    assert "报社" in plain and "报社  ✓" not in plain and "线索 0" not in plain
-
-
 def test_ascii_art_keeps_lamplight_after_dark():
     lit = artkit.colorize("#", "Y", when="深夜")
     dim = artkit.colorize("|", "n", when="深夜")
