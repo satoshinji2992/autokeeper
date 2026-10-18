@@ -33,8 +33,8 @@ from ..module.schema import Module
 from ..rules import commands
 from ..rules.coc import Investigator, Rules
 from . import art
-from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
-from .widgets import LEVEL_STYLE, CluePanel, DiceTray, SceneArt, SheetPanel, StoryLog
+from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
+from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
 THEMES = [
     Theme("amber", primary="#ffb000", secondary="#d98e04", accent="#ff6b35", foreground="#f3d7a6", background="#0c0a06",
@@ -374,7 +374,8 @@ class GameScreen(Screen):
                 yield SceneArt(id="scene")
                 yield StoryLog(id="story")
                 yield Static(id="status")
-                yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command")
+                yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command",
+                            suggester=command_suggester(self._viewer()))  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
@@ -416,6 +417,16 @@ class GameScreen(Screen):
     @property
     def story(self) -> StoryLog:
         return self.query_one(StoryLog)
+
+    # A modal on top (a roll, a handout) holds the story still while the turn goes on under
+    # it; coming back, pick up the newest lines again unless the reader had scrolled away.
+    def on_screen_suspend(self) -> None:
+        self.following = all(s.is_vertical_scroll_end for s in self.query(StoryLog))
+
+    def on_screen_resume(self) -> None:
+        if getattr(self, "following", True):
+            for s in self.query(StoryLog):
+                s.scroll_end(animate=False)
 
     def _status(self, text: str) -> None:
         self.status_text = text
@@ -591,12 +602,12 @@ class GameScreen(Screen):
             story.add("dice", Text(f"◈ {ev['who']} 不重掷：{ev['text']}（刚才的结果不变）", style="dim"))
         elif t == "dice":
             self.query_one(DiceTray).roll(ev)
-            line = Text()
-            line.append(f"◈ {ev.get('who', '')} ", style="bold")
-            line.append(ev["text"].rsplit(" ", 2)[0] + " ")
-            line.append(f" {ev['level']} ", style=LEVEL_STYLE.get(ev["level"], "bold"))
-            story.add("dice", line)
+            story.add("dice", RollCard(ev))
             self._panels()
+        elif t == "outcome":  # what the roll led to, under its card
+            cards = story.query(RollCard)
+            if cards:
+                cards.last().settle(ev["lines"])
         elif t == "command":
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
         elif t == "clue":
@@ -748,7 +759,7 @@ class GameScreen(Screen):
         inv = self.state.investigator
         self.story.add("player", Text(f"▶ {inv.name}：{text}"))
         turn = self.state.turn
-        await self._run_turn({"input": text})
+        await self._run_turn({"input": text, "by_hand": True})  # their own dice
         if self.state.turn != turn:  # an instant dice command (.r, .st) does not use up the turn
             await self._companions()
         self._busy(False)
@@ -765,7 +776,10 @@ class GameScreen(Screen):
                     offer = chunk["__interrupt__"][0].value
             if offer is None:
                 break
-            if auto:
+            if offer.get("kind") == "roll":  # the player throws their own dice
+                self._status("等你掷骰…")
+                choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
+            elif auto:
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
                 self.story.add("system", Text(f"◇ AI 选择：{ {'push': '孤注一掷', 'luck': '花幸运', 'drop': '放弃'}[choice] }", style="dim"))
             else:
@@ -801,7 +815,7 @@ class GameScreen(Screen):
         situation = self._situation()
         action = await self.cast.investigator(st, inv.id, situation)
         self.story.add("player", Text(f"▶ {inv.name}（AI）：{action}"))
-        await self._run_turn({"input": action}, auto=True)
+        await self._run_turn({"input": action, "by_hand": False}, auto=True)
 
     def _situation(self) -> str:
         from ..engine.autoplay import situation
@@ -829,7 +843,7 @@ class GameScreen(Screen):
                 st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == inv_id)
                 self._panels()
                 self.story.add("player", Text(f"▶ {st.investigator.name}（AI）：{text}"))
-                await self._run_turn({"input": text}, auto=True)
+                await self._run_turn({"input": text, "by_hand": False}, auto=True)
         self._busy(False)
 
     def _ending_summary(self) -> None:

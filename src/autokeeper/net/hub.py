@@ -7,6 +7,8 @@ comes. Seats are humans or AI; a human who drops out is played by the AI until t
 sit down again. Lines in full-width brackets are table talk and reach everyone at once.
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
 leave the turn open, and once the game is over they still work, growth rolls (.en) too.
+A seated player throws their own dice: the roll prompt reaches them as an offer of kind
+"roll", like a push offer, and the turn goes on when they answer (or leave).
 
 Messages are JSON objects with a "t" field:
 
@@ -311,7 +313,7 @@ class Hub:
         await self._run(text, inv.id, ai=True)
 
     async def _run(self, text: str, inv_id: str, *, ai: bool) -> None:
-        inp: Any = {"input": text}
+        inp: Any = {"input": text, "by_hand": not ai and self.sits.get(inv_id) is not None}  # a seated player throws their own dice
         while True:
             offer = None
             async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
@@ -329,7 +331,9 @@ class Hub:
                     queue.get_nowait()
                 await self._send(who, {"t": "offer", "offer": offer})
                 choice = await queue.get()
-            if choice not in ("push", "luck", "drop"):
+            if offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
+                choice = "roll"
+            elif choice not in ("push", "luck", "drop"):
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
             inp = Command(resume=choice)
         self.game.emit = self._event

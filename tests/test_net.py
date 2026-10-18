@@ -156,10 +156,11 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
 
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens import RollModal
     from autokeeper.tui.widgets import StoryLog
 
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
     async with app.run_test(size=(140, 44)) as pilot:
@@ -180,14 +181,22 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
             if "1d6 → 5" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
                 break
         assert screen.my_turn  # a plain roll leaves the turn with you
+        fake.queue(30)  # reading the board takes a 侦查 roll, thrown on this screen
         screen.query_one(Input).value = "我看看告示栏"
         await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)
-            if "周衡（小明）：我看看告示栏" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+            if isinstance(app.screen, RollModal):
                 break
+        assert isinstance(app.screen, RollModal) and fake.values
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if "↳ 获得线索〔广场告示〕" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+                break  # the dice have settled, and under them what they led to
         lines = "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
-        assert "周衡（小明）：我看看告示栏" in lines and "叙事" in lines
+        assert "周衡（小明）：我看看告示栏" in lines and "↳ 获得线索〔广场告示〕" in lines and "叙事" in lines
         notice = hub.m.clue("c_notice")
         assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
     await closed(task)
@@ -245,6 +254,37 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
         await b.close()
     await closed(task)
     assert hub.state.investigators[0].skills["侦查"] == 61
+
+
+class NoticeCast(TableCast):
+    """Reading the notice board takes a 侦查 roll."""
+
+    async def arbiter(self, state, action, at=None):
+        if "告示栏" in action.summary and "c_notice" not in state.clues:
+            return Ruling(needs_roll=True, skill="侦查", minutes=5, clues_on_success=["c_notice"], reason="告示贴得很高，字又小")
+        return await super().arbiter(state, action, at)
+
+
+async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        ws = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await ws.send_json({"t": "hello", "name": "小明"})
+        await until(ws, lambda x: x["t"] == "welcome")
+        await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await until(ws, lambda x: x["t"] == "turn")
+        fake.queue(30)
+        await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        offer = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
+        assert offer["kind"] == "roll" and (offer["skill"], offer["target"], offer["why"]) == ("侦查", 55, "告示贴得很高，字又小")
+        assert fake.values  # the dice wait for the player
+        await ws.send_json({"t": "choice", "mode": "roll"})
+        led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome")
+        assert led["ev"]["lines"] == ["获得线索〔广场告示〕"] and not fake.values
+        await ws.close()
+    await closed(task)
 
 
 async def test_the_director_s_reasoning_stays_on_the_host(skills_dir, fake):

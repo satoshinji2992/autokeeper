@@ -8,7 +8,7 @@ import shutil
 import pytest
 from PIL import Image
 from rich.text import Text
-from textual.widgets import Input, RadioButton
+from textual.widgets import Input, RadioButton, Static
 
 from autokeeper import artkit, config, imagery
 from autokeeper.config import EXAMPLE, Role
@@ -16,9 +16,11 @@ from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
-from autokeeper.tui.widgets import SceneArt, StoryLog
+from autokeeper.tui.screens import HandoutModal, PushModal, RollModal
+from autokeeper.tui.widgets import SceneArt, StoryLog, command_suggester
 
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
@@ -63,6 +65,57 @@ def canned(monkeypatch, tmp_path, skills_dir):
 
 def story_text(screen) -> str:
     return "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
+
+
+async def until(pilot, test, tries: int = 40) -> bool:
+    for _ in range(tries):
+        if test():
+            return True
+        await pilot.pause(0.1)
+    return test()
+
+
+async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
+    from .test_engine import HARD_TALK, PLEAD, FakeCast
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="roll", human=[lead.id])
+    state.location = "tower"
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = GameScreen(m, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and "钟楼底下" in story_text(screen) and not screen.busy)  # recap told
+        screen.game.cast, screen.game.rules = FakeCast({"我劝守钟人说实话": (PLEAD, HARD_TALK)}), Rules(dice=fake)
+        fake.queue(8)  # 说服 40, hard: an extreme success
+        screen.send_line("我劝守钟人说实话")
+        assert await until(pilot, lambda: isinstance(app.screen, RollModal))
+        modal = app.screen
+        shown = "".join(str(w.render()) for w in modal.query(Static))
+        assert "说服 40 · 困难：掷出 ≤20 就算过" in shown and "极难 ≤8" in shown and "守钟人就在一旁盯着你" in shown
+        assert fake.values  # the dice wait for the player
+        await pilot.pause(0.5)
+        await pilot.press("escape")  # no way out
+        assert app.screen is modal and fake.values
+        await pilot.press("enter")
+        assert await until(pilot, lambda: "↳ 老守钟人松了口：〔守钟人的日记〕" in story_text(screen))
+        assert "十位" in story_text(screen) and "极难成功" in story_text(screen) and not fake.values
+        assert await until(pilot, lambda: isinstance(app.screen, HandoutModal))  # the diary came with it
+        await pilot.press("escape")
+        assert await until(pilot, lambda: app.screen is screen and not screen.busy)
+        box = screen.query_one("#command", Input)
+        box.focus()
+        box.value = ".ra 侦"
+        box.cursor_position = len(box.value)  # as if typed
+        await pilot.pause(0.2)
+        await pilot.press("right")  # → takes the suggestion
+        assert box.value == ".ra 侦查"
+        offer = {"kind": "push", "skill": "图书馆使用", "target": 60, "need": 60, "value": 63, "can_push": True, "luck": 3, "left": 52, "core": True}
+        app.push_screen(PushModal(offer))
+        await pilot.pause()
+        stakes = "".join(str(w.render()) for w in app.screen.query(Static))
+        assert "比这次更糟" in stakes and "幸运 55 → 52" in stakes and "关键发现还是会到手" in stakes
 
 
 async def test_after_the_ending_only_the_dice_lookups_work(canned):
@@ -229,3 +282,12 @@ def test_picture_renders_to_requested_size(tmp_path):
     assert 1 <= len(lines) <= 10
     assert "\x1b[" in out
     assert imagery.render(str(img), 40, 10, "ascii").isascii()
+
+
+async def test_the_command_box_completes_dice_commands_and_skills():
+    m = Module.load(EXAMPLE)
+    suggest = command_suggester(m.pregens[0]).get_suggestion
+    assert await suggest(".ra 侦") == ".ra 侦查"
+    assert await suggest(".rab 图") == ".rab 图书馆使用"  # the investigator's own skills first
+    assert await suggest(".ra 困难聆") == ".ra 困难聆听"  # every skill, not only theirs
+    assert await suggest(".s") == ".st" and await suggest("/n") == "/notes"

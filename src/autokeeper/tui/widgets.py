@@ -10,9 +10,11 @@ from functools import partial
 from rich.console import Group
 from rich.text import Text
 from textual.containers import VerticalScroll
+from textual.suggester import SuggestFromList
 from textual.widgets import Static
 
 from .. import artkit, atmosphere, imagery, weather
+from ..rules.catalog import CHARACTERISTICS, SKILL_BASE
 from ..rules.coc import Investigator
 from . import art
 
@@ -240,14 +242,18 @@ class StoryLog(VerticalScroll):
         self._pending = ""
         self._typing = False
 
-    def add(self, kind: str, body: Text | str | Group, *, who: str = "") -> Static:
-        if isinstance(body, str):
-            text = Text()
-            if who:
-                text.append(f"{who}：", style="bold")
-            text.append(body)
-            body = text
-        block = Static(body, classes=f"entry {kind}")
+    def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "") -> Static:
+        if isinstance(body, Static):  # a block that draws itself, such as a roll
+            block = body
+            block.add_class("entry", kind)
+        else:
+            if isinstance(body, str):
+                text = Text()
+                if who:
+                    text.append(f"{who}：", style="bold")
+                text.append(body)
+                body = text
+            block = Static(body, classes=f"entry {kind}")
         self.mount(block)
         self.scroll_end(animate=False)
         return block
@@ -284,11 +290,105 @@ class StoryLog(VerticalScroll):
         self.scroll_end(animate=False)
 
 
+PASS, MISS = "#3cb371", "#ff6347"
+
+
+def roll_card(v: dict, *, spinning: bool = False, led_to: list[str] | tuple[str, ...] = ()) -> Text:
+    """A check as the story shows it: who rolled what, the tens and units dice (with the
+    extra bonus or penalty tens die, and which one counted), the number against the
+    regular / hard / extreme thresholds, the level, and under it what the roll led to.
+    `v` is a dice event (engine/game.py _check_view)."""
+    target, value, bonus = int(v.get("target") or 0), int(v.get("value") or 0), int(v.get("bonus") or 0)
+    need = v.get("difficulty") or "常规"
+    out = Text("◈ ", style="bold")
+    if v.get("pushed"):
+        out.append("孤注一掷 ", style=f"bold {MISS}")
+    out.append(f"{v.get('who', '')} · {v.get('skill', '')} {target}", style="bold")
+    if need != "常规":
+        out.append(f" · {need}", style="bold")
+    if bonus:
+        out.append(f" · {'奖励' if bonus > 0 else '惩罚'}骰×{abs(bonus)}", style="bold")
+    tens = v.get("tens") or [value // 10 % 10 * 10]
+    kept = int(v.get("kept") or 0)
+    out.append("\n  十位", style="dim")
+    for i, t in enumerate(tens):
+        face = random.randrange(10) * 10 if spinning else t
+        out.append(" ")
+        out.append(f" {face:02d} ", style="dim" if spinning else "bold reverse" if i == kept else "dim strike")
+    out.append("  个位 ", style="dim")
+    units = random.randrange(10) if spinning else int(v.get("units", value % 10))
+    out.append(f" {units} ", style="dim" if spinning else "bold reverse")
+    if spinning:
+        return out
+    out.append(f"  = {value}", style="bold")
+    if len(tens) > 1:
+        out.append(f"（{'奖励骰取小的' if bonus > 0 else '惩罚骰取大的'}）", style="dim")
+    out.append("\n ")
+    for name, limit in (("常规", target), ("困难", v.get("hard", target // 2)), ("极难", v.get("extreme", target // 5))):
+        ok = value <= limit
+        out.append(f" {name}≤{limit} {'✓' if ok else '✗'}", style=f"{'bold underline ' if name == need else ''}{PASS if ok else MISS}")
+    level = v.get("level", "")
+    out.append("   ")
+    out.append(f" {level} ", style=LEVEL_STYLE.get(level, "bold"))
+    out.append(" 过了" if v.get("passed") else " 没过", style=f"bold {PASS if v.get('passed') else MISS}")
+    for line in led_to:
+        out.append(f"\n  ↳ {line}", style="bold")
+    return out
+
+
+class RollCard(Static):
+    """One check in the story: the dice tumble for a moment (well under a second), settle
+    on BCDice's result, and what the roll led to is written underneath once the engine
+    knows. The LAN client draws the same card from the same event."""
+
+    FRAMES = 9  # tumbling frames, 0.07 s each
+
+    def __init__(self, dice: dict, **kw):
+        super().__init__(roll_card(dice, spinning=True), **kw)
+        self.dice = dice
+        self.led_to: list[str] = []
+        self._frames = self.FRAMES
+
+    def on_mount(self) -> None:
+        self._tumble()
+
+    def _tumble(self) -> None:
+        if self._frames > 0:
+            self._frames -= 1
+            self.update(roll_card(self.dice, spinning=True))
+            self.set_timer(0.07, self._tumble)
+            return
+        self._settled()
+
+    def settle(self, lines: list[str]) -> None:
+        """Write what the roll led to under it (once the tumble is over, if it still runs)."""
+        self.led_to += lines
+        if self._frames <= 0:
+            self._settled()
+
+    def _settled(self) -> None:
+        self.update(roll_card(self.dice, led_to=self.led_to))
+        if isinstance(self.parent, StoryLog):  # the card grew: keep the newest lines in view
+            self.parent.scroll_end(animate=False)
+
+
+def command_suggester(inv: Investigator | None = None) -> SuggestFromList:
+    """Completions for the command box, accepted with →: `.ra 侦` becomes `.ra 侦查`. The
+    investigator's own skills come first, best first, then every other skill."""
+    mine = sorted(inv.skills, key=lambda k: -inv.skills[k]) if inv else []
+    names = list(dict.fromkeys([*mine, *SKILL_BASE, *CHARACTERISTICS, "幸运", "灵感", "知识"]))
+    checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
+    checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
+    lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
+    slash = ["/draw", "/notes", "/map", "/recap", "/save", "/help", "/theme", "/quit"]
+    return SuggestFromList([*checks, *lookups, *slash], case_sensitive=False)
+
+
 class DiceTray(Static):
     """Two spinning d10s that settle on BCDice's result."""
 
     def __init__(self, **kw):
-        super().__init__(Text("  .ra 技能  掷一次检定\n  /draw 手绘  /notes 线索本", style="dim"), **kw)
+        super().__init__(Text("  .ra 技能  想用某个技能\n  /draw 手绘  /notes 线索本", style="dim"), **kw)
         self._frames = 0
         self._view: dict | None = None
 

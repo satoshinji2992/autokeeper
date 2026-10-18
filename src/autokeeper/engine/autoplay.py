@@ -143,6 +143,8 @@ async def run(
             console.print(f"[yellow]◈ {ev['who']} {ev['text']}[/]")
         elif t == "repeat":
             console.print(f"[yellow]◈ {ev['who']} 不重掷：{ev['text']}[/]")
+        elif t == "outcome":
+            console.print(f"[yellow]  ↳ {'；'.join(ev['lines'])}[/]")
         elif t == "clue":
             console.print(f"[green]〔{ev['title']}〕[/] {ev['text']}")
         elif t == "sanity":

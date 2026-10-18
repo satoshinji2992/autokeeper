@@ -24,7 +24,7 @@ from ..module.schema import Module
 from ..net.link import Link
 from ..rules import commands
 from .app import GameScreen
-from .screens import PushModal
+from .screens import PushModal, RollModal
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
 
@@ -239,8 +239,9 @@ class NetGameScreen(GameScreen):
             if self.my_turn:
                 self.app.notify("轮到你了", timeout=4)
                 self.query_one(Input).focus()
-        elif t == "offer":
-            choice = await self.app.push_screen_wait(PushModal(msg["offer"]))
+        elif t == "offer":  # throw your own dice, or push / spend luck after a failure
+            offer = msg["offer"]
+            choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
             await self.link.send({"t": "choice", "mode": choice})
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
