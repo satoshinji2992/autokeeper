@@ -167,7 +167,7 @@ Screen {
     padding: 0 1;
 }
 #dice {
-    height: 10;
+    height: 11;
     padding: 0 1;
     border-top: dashed $primary-darken-2;
     content-align: center middle;

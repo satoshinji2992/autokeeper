@@ -494,3 +494,16 @@ def test_names_light_up_in_the_telling_and_the_history_keeps_a_line_per_event():
     clue = LogEntry(turn=5, time="19:20", kind="clue", text="〔有人入室〕后屋传来窗框被撬开的吱呀声")
     assert log_line(clue).plain == "  ↳ 〔有人入室〕"
     assert HistoryPanel.KEEP > 0
+
+
+def test_dice_skins_draw_both_dice_in_the_pixel_font():
+    from autokeeper import config as cfg_mod
+    from autokeeper.tui import dice
+
+    assert set(dice.SKINS) == {"bone", "obsidian", "blood", "brass", "eldritch", "phosphor"}
+    assert dice.digits("30") == ["▀▀█ █▀█", " ▀█ █ █", "▀▀▀ ▀▀▀"]
+    for key, skin in dice.SKINS.items():
+        shown = dice.pair("30", "7", skin, level="常规成功").plain.split("\n")
+        assert len(shown) == dice.HEIGHT + 2 and len({len(line) for line in shown}) == 1, key  # both dice, aligned
+    assert dice.skin("nonsense") is dice.SKINS[dice.DEFAULT]
+    assert cfg_mod.Config().dice == dice.DEFAULT

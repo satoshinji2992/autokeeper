@@ -543,6 +543,7 @@ COMMANDS = (
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
     ("换画法", "Ctrl+A", "块字符、六分块、照片、纯 ASCII", "art_style"),
+    ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、旧日、磷光", "dice_skin"),
     ("天气动画", "", "开或关；画面晃眼或卡顿时关掉", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
@@ -739,6 +740,20 @@ class GameScreen(Screen):
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
         self.query_one(Speaker).refit()
         self.call_after_refresh(self._panels)  # the sheet fits the new column; HP and SAN go up top without it
+
+    def action_dice_skin(self) -> None:
+        from . import dice
+
+        names = list(dice.SKINS)
+        now = self.app.dice_skin  # type: ignore[attr-defined]
+        self.app.dice_skin = names[(names.index(now) + 1) % len(names)] if now in names else names[0]  # type: ignore[attr-defined]
+        config.save_ui_settings({"dice": self.app.dice_skin})  # type: ignore[attr-defined]
+        tray = self.query_one(DiceTray)
+        if tray._view is None:  # nothing rolled yet: a look at the skin
+            tray.roll({"skill": "皮肤预览", "target": 50, "value": 37, "level": "常规成功"})
+        else:
+            tray.redraw()
+        self.app.notify(f"骰子皮肤：{dice.SKINS[self.app.dice_skin].name}")  # type: ignore[attr-defined]
 
     def action_art_style(self) -> None:
         styles, now = list(imagery.STYLES), self.app.art_style  # type: ignore[attr-defined]
@@ -1074,6 +1089,11 @@ class GameScreen(Screen):
         event.input.value = ""
         if text:
             self.send_line(text)
+        else:
+            self.empty_enter()
+
+    def empty_enter(self) -> None:
+        """Enter on an empty box: nothing here; at a shared table, the end of your round."""
 
     @on(Input.Changed, "#command")
     def typing(self) -> None:
@@ -1483,6 +1503,7 @@ class AutoKeeperApp(App):
         super().__init__()
         self._theme_name = theme
         self.art_style = config.load().art_style
+        self.dice_skin = config.load().dice
         self.join = join  # (host address, player name): straight to someone's table
 
     def on_mount(self) -> None:

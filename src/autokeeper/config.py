@@ -205,6 +205,7 @@ class Config:
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/tips.py)
     animations: bool = True
+    dice: str = "bone"  # tui/dice.py SKINS
 
     @property
     def improvising(self) -> bool:
@@ -235,6 +236,7 @@ def ui_settings() -> dict:
     choices = {"preset": PRESETS, "mode": MODES, "improv": IMPROV,
                "art_style": ("picture", "fine", "photo", "ascii"),
                "theme": ("amber", "phosphor", "lavender", "blood"),
+               "dice": ("bone", "obsidian", "blood", "brass", "eldritch", "phosphor"),
                "search": ("auto", "tavily", "ddgs", "wikipedia", "none")}
     for key, values in choices.items():
         if isinstance(data.get(key), str) and data[key] in values:
@@ -299,6 +301,7 @@ def load(path: Path | None = None) -> Config:
     cfg.module = data.get("module", cfg.module)
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)
+    cfg.dice = data.get("dice", cfg.dice)
     cfg.plugins = data.get("plugins", cfg.plugins)
     cfg.tips = data.get("tips", cfg.tips) is not False
     cfg.animations = data.get("animations", cfg.animations) is not False

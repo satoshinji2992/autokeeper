@@ -12,6 +12,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Select, Static, Switch
 
 from .. import config, imagery
+from . import dice
 from .prefs import PrefsModal
 from .screens import EngineModal
 
@@ -48,6 +49,9 @@ class SettingsModal(ModalScreen[None]):
             yield Static("画面风格")
             yield Select([(name, key) for key, name in imagery.STYLE_NAMES.items()], value=self.app.art_style,
                          allow_blank=False, id="settings-art")
+            yield Static("骰子皮肤")
+            yield Select([(s.name, key) for key, s in dice.SKINS.items()], value=getattr(self.app, "dice_skin", dice.DEFAULT),
+                         allow_blank=False, id="settings-dice")
             yield Static("配色")
             yield Select([("琥珀", "amber"), ("磷绿", "phosphor"), ("薰衣草", "lavender"), ("血红", "blood")],
                          value=self.app.theme if self.app.theme in ("amber", "phosphor", "lavender", "blood") else "amber",
@@ -100,12 +104,14 @@ class SettingsModal(ModalScreen[None]):
         choice |= {"improv": self.query_one("#settings-improv", Select).value,
                    "art_style": self.query_one("#settings-art", Select).value,
                    "theme": self.query_one("#settings-theme", Select).value,
+                   "dice": self.query_one("#settings-dice", Select).value,
                    "visual_limit": max(1, cfg.visual_limit or 24) if self.query_one("#settings-pictures", Switch).value else 0,
                    "search": (cfg.search if cfg.search != "none" else "auto") if self.query_one("#settings-search", Switch).value else "none"}
         config.save_ui_settings(choice)
         os.environ["AUTOKEEPER_IMPROV"] = choice["improv"]
         os.environ["AUTOKEEPER_SEARCH"] = choice["search"]
         self.app.theme, self.app.art_style = choice["theme"], choice["art_style"]
+        self.app.dice_skin = choice["dice"]  # type: ignore[attr-defined]
         self.app.notify("设置已保存。")
         self.dismiss()
 

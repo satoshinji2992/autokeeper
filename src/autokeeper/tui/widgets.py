@@ -489,17 +489,23 @@ class DiceTray(Static):
         v = self._view or {}
         if self._frames > 0:
             self._frames -= 1
-            self._paint(random.choice(art.DIGITS), random.choice(art.DIGITS), rolling=True)
-            self.set_timer(0.055, self._spin)
+            self._paint(random.choice(art.DIGITS) + "0", random.choice(art.DIGITS), rolling=True)
+            self.set_timer(0.06 + 0.012 * (12 - self._frames), self._spin)  # slowing down
             return
         value = int(v.get("value") or 0)
-        tens, units = ("0", "0") if value == 100 else divmod(value, 10)
-        self._paint(str(tens), str(units), rolling=False)
+        tens, units = (0, 0) if value == 100 else divmod(value, 10)
+        self._paint(f"{tens}0", str(units), rolling=False)
+
+    def redraw(self) -> None:
+        """The skin changed: the last roll again in the new one."""
+        if self._view is not None and self._frames <= 0:
+            self._spin()
 
     def _paint(self, tens: str, units: str, *, rolling: bool) -> None:
+        from . import dice
+
         v = self._view or {}
-        left, right = art.die_face(tens), art.die_face(units)
-        faces = "\n".join(f"  {a}  {b}" for a, b in zip(left, right, strict=True))
+        faces = dice.pair(tens, units, dice.skin(getattr(self.app, "dice_skin", None)), rolling=rolling, level=v.get("level", ""))
         head = f"{v.get('skill', '')} {v.get('target', '')}"
         if v.get("difficulty") and v.get("difficulty") != "常规":
             head += f" · {v['difficulty']}"
@@ -508,7 +514,8 @@ class DiceTray(Static):
         if v.get("pushed"):
             head = "孤注一掷 · " + head
         out = Text(head + "\n", style="bold")
-        out.append(faces + "\n", style="dim" if rolling else "bold")
+        out.append_text(faces)
+        out.append("\n")
         if not rolling:
             level = v.get("level", "")
             out.append(f"  {v.get('value')}  ", style="bold")

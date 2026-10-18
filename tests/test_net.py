@@ -131,17 +131,24 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         assert "已经有人" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await b.send_json({"t": "sit", "investigator": "lin"})  # every seat taken: the game begins
 
-        await until(a, pool_open)  # a round: both may act, in any order
+        opened_round = await until(a, pool_open)  # a round: both may act, in any order
+        assert opened_round["capacity"] == 3  # two players: three actions, nobody more than two
         await b.send_json({"t": "act", "text": "我抢着先说"})
-        pooled = await until(a, lambda x: x["t"] == "pool" and x["done"] == ["lin"])
-        assert pooled["open"] and pooled["waiting"] == ["周衡"]  # nothing is settled until everyone is in
-        await b.send_json({"t": "act", "text": "我改主意了，四下看看"})  # sent again: it replaces hers
-        await a.send_json({"t": "act", "text": "我看看告示栏"})  # the pool is full: the keeper settles it
+        await b.send_json({"t": "act", "text": "我再四下看看"})
+        pooled = await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)
+        assert pooled["open"] and pooled["by"] == {"zhouheng": 0, "lin": 2} and pooled["waiting"] == ["周衡"]
+        await b.send_json({"t": "act", "text": "我还要第三件事"})
+        assert "2 条" in (await until(b, lambda x: x["t"] == "error"))["text"]
+        await b.send_json({"t": "undo"})  # takes back her last one
+        await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
+        await b.send_json({"t": "act", "text": "我改主意了，翻翻报纸"})
+        await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)  # hers are in first
+        await a.send_json({"t": "act", "text": "我看看告示栏"})  # three in: the keeper settles it
         await until(b, lambda x: x["t"] == "pool" and not x["open"])
         await b.send_json({"t": "act", "text": "我插一句"})
         assert "结算" in (await until(b, lambda x: x["t"] == "error"))["text"]  # no actions while the keeper tells
-        said = [(m["ev"]["who"], m["ev"]["text"]) for m in [await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said") for _ in range(2)]]
-        assert said == [("周衡", "我看看告示栏"), ("林秋", "我改主意了，四下看看")]  # in seat order
+        said = [(m["ev"]["who"], m["ev"]["text"]) for m in [await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said") for _ in range(3)]]
+        assert said == [("林秋", "我抢着先说"), ("林秋", "我改主意了，翻翻报纸"), ("周衡", "我看看告示栏")]  # as they came in
         await until(a, pool_open)  # told: the next round
 
         await a.send_json({"t": "say", "text": "（场外）我去倒杯水"})
@@ -149,7 +156,9 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await b.close()  # 小红 drops out: the AI plays her seat
         seats = await until(a, lambda x: x["t"] == "seats" and not x["seats"][1]["online"])
         assert [s["online"] for s in seats["seats"]] == [True, False]
-        await a.send_json({"t": "act", "text": "我四下看看"})  # the only seated player: the pool is full
+        await a.send_json({"t": "act", "text": "我四下看看"})
+        assert (await until(a, lambda x: x["t"] == "pool" and x["count"] == 1))["capacity"] == 2  # alone: two
+        await a.send_json({"t": "done"})  # one is enough this time
         ai = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said" and bool(x["ev"].get("ai")))
         assert ai["ev"]["who"] == "林秋" and cast.ai_turns == ["lin"]
         await until(a, pool_open)
@@ -191,6 +200,7 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         fake.queue(30)  # reading the board takes a 侦查 roll, thrown on this screen
         screen.query_one(Input).value = "我看看告示栏"
         await pilot.press("enter")
+        await pilot.press("enter")  # an empty line: that's all from me this round
         for _ in range(40):
             await pilot.pause(0.1)
             if isinstance(app.screen, RollModal):
@@ -242,6 +252,8 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
         early = await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "command" and x["ev"]["who"] == "林秋")
         assert early["ev"]["kind"] == "refused" and "结局" in early["ev"]["text"]
         await b.send_json({"t": "act", "text": "我四下看看"})
+        await a.send_json({"t": "done"})
+        await b.send_json({"t": "done"})  # both done before the pool is full: settled now
         heard = []
         while "pool-closed" not in heard or heard[-1] != "pool-open":  # until the next round opens
             msg = await asyncio.wait_for(a.receive_json(), 5.0)
@@ -251,6 +263,8 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
         fake.queue_totals(3, 2)  # the ending's 理智 +1D6, for each of them
         await a.send_json({"t": "act", "text": "我拉下制动杆"})
         await b.send_json({"t": "act", "text": "我跟上"})
+        await a.send_json({"t": "done"})
+        await b.send_json({"t": "done"})
         await until(a, lambda x: x["t"] == "over")
         fake.queue_totals(80, 6)  # 80 > 55: 侦查 grows by 6
         await a.send_json({"t": "act", "text": ".en"})
@@ -285,6 +299,7 @@ async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skil
         await until(ws, pool_open)
         fake.queue(30)
         await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        await ws.send_json({"t": "done"})
         offer = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
         assert offer["kind"] == "roll" and (offer["skill"], offer["target"], offer["why"]) == ("侦查", 55, "告示贴得很高，字又小")
         assert fake.values  # the dice wait for the player
@@ -354,6 +369,7 @@ async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_pa
         await ws.send_json({"t": "sit", "investigator": st.investigator.id})
         await until(ws, pool_open)
         await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        await ws.send_json({"t": "done"})
         error = await until(ws, lambda x: x["t"] == "error")
         assert error["retry"] and st.pending_turn and st.turn == 1
         minute = st.minutes
@@ -401,6 +417,7 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
         panel = screen.query_one(Speaker)
         screen.query_one(Input).value = "我问布道者在等什么"
         await pilot.press("enter")
+        await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)
             if panel.display and panel.feeling == "警惕":
@@ -412,6 +429,7 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
             if screen.my_turn and not screen.pooled:
                 break
         screen.query_one(Input).value = "我四下看看"
+        await pilot.press("enter")
         await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)

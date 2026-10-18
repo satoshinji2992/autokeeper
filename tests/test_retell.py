@@ -339,6 +339,7 @@ async def test_a_shared_table_hears_it_again_and_gets_the_book_at_the_end(monkey
 
         fake.queue_totals(3)  # the ending's 理智 +1D6
         await a.send_json({"t": "act", "text": "我拉下制动杆"})
+        await a.send_json({"t": "done"})
         book = await until(b, lambda x: x["t"] == "module" and bool(x["module"]["truth"]))  # the whole book, before "over"
         assert book["module"]["npcs"][0]["secrets"] == ["他在钟里藏了东西"]
         await until(b, lambda x: x["t"] == "over")
@@ -387,6 +388,7 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
         fake.queue_totals(3)  # the ending's 理智 +1D6
         screen.query_one(Input).value = "我拉下制动杆"
         await pilot.press("enter")
+        await pilot.press("enter")  # that's all from me this round
         assert await waits(pilot, lambda: "F10 复盘" in story_text(screen))
         assert screen.state.ending == "stopped" and screen.m.truth == hub.m.truth  # the book came with the ending
         await pilot.press("f10")

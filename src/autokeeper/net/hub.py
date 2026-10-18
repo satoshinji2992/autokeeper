@@ -1,11 +1,12 @@
 """LAN play: one game, several players.
 
 The host runs a Hub. It owns the only copy of the game (module, state, agents) and plays
-it in rounds. A round opens an action pool: every seated player sends what they do, when
-they like and in any order, and may send again to change it. When every seated player has
-an action in (the pool is full), it closes and the keeper settles the round, seat by seat,
-the AI seats with them; nobody's action is taken until the keeper has told all of it, and
-then the next round opens. Every player's screen connects over a websocket and receives
+it in rounds. A round opens an action pool with one slot more than there are players at the
+table (one player: two, two players: three), and nobody takes more than two. Players send
+actions when they like, in any order; an empty Enter says "that's all from me this round",
+/undo takes back your last one. When the pool is full, or everyone is done, it closes and the
+keeper settles it in the order the actions came in, then lets each AI seat act; nobody's
+action is taken until the keeper has told all of it, and then the next round opens. Every player's screen connects over a websocket and receives
 the engine's events as they happen. Seats are humans or AI; a human who drops out is played by the AI until they
 sit down again. Lines in full-width brackets are table talk and reach everyone at once.
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
@@ -21,7 +22,8 @@ Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
                     · retell {nudge} · epilogue · suggest
-    hub -> client   welcome · seats · pool {open, done, waiting} · turn (whose action is being settled)
+    client -> hub   (in a round) done · undo
+    hub -> client   welcome · seats · pool {open, capacity, count, by, done, waiting} · turn (the action being settled)
                     · event {ev} · module · sync {state} · offer · say · ideas {ideas}
                     · over · error
 
@@ -58,6 +60,7 @@ from . import media
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
 SEATS = ("玩家", "AI", "不上场")
+PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
 
@@ -170,7 +173,8 @@ class Hub:
         self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
         self.started = asyncio.Event()
         self.open = False  # the round's action pool takes actions
-        self.pool: dict[str, str] = {}  # seat -> its action this round
+        self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
+        self.done: set[str] = set()  # seats that said they have nothing more this round
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
@@ -234,10 +238,25 @@ class Hub:
             elif commands.instant(text):  # .r, .st: at once, not the round's action
                 self.instant.put_nowait((seat, text))
                 self.wake.set()
+            elif self._count(seat) >= PER_PLAYER:
+                await self._send(cid, {"t": "error", "text": f"这一轮你已经交了 {PER_PLAYER} 条，等守秘人讲完；/undo 可以撤回上一条"})
             elif text.strip():
-                self.pool[seat] = text
+                self.pool.append((seat, text))
                 self.wake.set()
                 await self._pool()
+        elif t in ("done", "undo"):
+            seat = self._seat_of(cid)
+            if seat is None or not self.open:
+                return
+            if t == "done":
+                self.done.add(seat)
+            else:
+                mine = [i for i, (s, _) in enumerate(self.pool) if s == seat]
+                if mine:
+                    self.pool.pop(mine[-1])
+                self.done.discard(seat)
+            self.wake.set()
+            await self._pool()
         elif t == "choice":
             seat = self._seat_of(cid)
             if seat is not None:
@@ -408,21 +427,35 @@ class Hub:
         self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
 
+    def _count(self, seat: str) -> int:
+        return sum(1 for s, _ in self.pool if s == seat)
+
+    def _players(self) -> list[str]:
+        """Seated players still at the table and able to act."""
+        return [inv.id for inv in self.state.investigators if inv.can_act and self.sits.get(inv.id) is not None]
+
+    def capacity(self) -> int:
+        """One slot more than there are players: someone can do two things, nobody three."""
+        players = len(self._players())
+        return players + 1 if players else 0
+
     def _waiting_for(self) -> list[str]:
-        """Seated players, still at the table and able to act, with nothing in the pool yet."""
-        return [inv.id for inv in self.state.investigators
-                if inv.can_act and self.sits.get(inv.id) is not None and inv.id not in self.pool]
+        """Players who may still put an action in: not done, not at two, and room in the pool."""
+        if len(self.pool) >= self.capacity():
+            return []
+        return [seat for seat in self._players() if seat not in self.done and self._count(seat) < PER_PLAYER]
 
     async def _pool(self) -> None:
         names = {inv.id: inv.name for inv in self.state.investigators}
-        await self._broadcast({"t": "pool", "open": self.open, "done": sorted(self.pool),
-                               "waiting": [names[i] for i in self._waiting_for()]})
+        by = {seat: self._count(seat) for seat in self._players()}
+        await self._broadcast({"t": "pool", "open": self.open, "capacity": self.capacity(), "count": len(self.pool),
+                               "by": by, "done": sorted(self.done), "waiting": [names[i] for i in self._waiting_for()]})
 
     async def _collect(self) -> None:
-        """Open the pool and wait until every seated player has put an action in. Meanwhile
-        the table's requests (a retelling, the host's model switch, .r and .st) are done, and
-        a finished plan of the director's plays out. A seat left empty is the AI's."""
-        self.pool, self.open = {}, True
+        """Open the pool and wait until it is full or everyone is done. Meanwhile the table's
+        requests (a retelling, the host's model switch, .r and .st) are done, and a finished
+        plan of the director's plays out."""
+        self.pool, self.done, self.open = [], set(), True
         for queue in self.inbox.values():
             while not queue.empty():
                 queue.get_nowait()
@@ -446,19 +479,23 @@ class Hub:
         await self._pool()
 
     async def _settle(self) -> None:
-        """Every action of the round, in seat order: the pooled ones, the AI's for the rest."""
+        """The pooled actions in the order they came in, then one for each seat nobody is
+        playing (the AI's, and a player's who left without putting anything in)."""
         st = self.state
-        for idx, inv in enumerate(st.investigators):
+        acted = {seat for seat, _ in self.pool}
+        order = [*self.pool, *[(inv.id, None) for inv in st.investigators
+                               if inv.id not in acted and inv.id not in self.done and self.sits.get(inv.id) is None]]
+        for n, (seat, text) in enumerate(order, 1):
+            inv = next((i for i in st.investigators if i.id == seat), None)
             if st.ending:
                 return
-            if not inv.can_act:
+            if inv is None or not inv.can_act:
                 continue
-            st.active = idx
-            who = self.sits.get(inv.id)
-            text = self.pool.get(inv.id)
+            st.active = st.investigators.index(inv)
+            who = self.sits.get(seat)
             await self._broadcast({
-                "t": "turn", "investigator": inv.id, "name": inv.name,
-                "player": self.names.get(who or "", ""), "ai": text is None, "state": self._view(),
+                "t": "turn", "investigator": seat, "name": inv.name, "player": self.names.get(who or "", ""),
+                "ai": text is None, "index": n, "total": len(order), "state": self._view(),
             })  # fmt: skip
             if text is None:
                 await self._ai_turn(inv)
@@ -466,19 +503,19 @@ class Hub:
             await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""), "text": text})
             while True:
                 try:
-                    await self._run(text, inv.id, ai=False)
+                    await self._run(text, seat, ai=False)
                     break
                 except Exception as exc:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})  # nobody's screen keeps spinning
-                    who = self.sits.get(inv.id)
+                    who = self.sits.get(seat)
                     if who is None:  # they left meanwhile: on without them
                         break
                     await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
                     await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
-                    self.retrying = inv.id
+                    self.retrying = seat
                     try:
-                        text = await self.inbox[inv.id].get()
+                        text = await self.inbox[seat].get()
                     finally:
                         self.retrying = None
                     if text is None:
