@@ -1236,6 +1236,7 @@ def _check_view(c: Check) -> dict[str, Any]:
         "passed": c.passed,
         "pushed": c.pushed,
         "text": c.describe(),
+        "throw": c.roll.throw,  # the physical dice's recording: every screen replays this very throw
     }
 
 
