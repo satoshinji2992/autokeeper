@@ -327,7 +327,7 @@ async def test_a_shared_table_hears_it_again_and_gets_the_book_at_the_end(monkey
         await b.send_json({"t": "hello", "name": "小红"})  # watching
         await until(b, lambda x: x["t"] == "welcome")
         await a.send_json({"t": "sit", "investigator": "zhouheng"})  # the only seat: the game begins
-        await until(a, lambda x: x["t"] == "turn")
+        await until(a, lambda x: x["t"] == "pool" and x["open"])
         await b.send_json({"t": "retell", "nudge": "更阴森"})
         assert "观战" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await a.send_json({"t": "retell", "nudge": "更阴森"})  # the opening, told again for everyone

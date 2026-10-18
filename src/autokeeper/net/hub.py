@@ -1,9 +1,12 @@
 """LAN play: one game, several players.
 
 The host runs a Hub. It owns the only copy of the game (module, state, agents) and plays
-the turns in order, one seat at a time. Every player's screen connects over a websocket,
-receives the engine's events as they happen, and sends its own action when its turn
-comes. Seats are humans or AI; a human who drops out is played by the AI until they
+it in rounds. A round opens an action pool: every seated player sends what they do, when
+they like and in any order, and may send again to change it. When every seated player has
+an action in (the pool is full), it closes and the keeper settles the round, seat by seat,
+the AI seats with them; nobody's action is taken until the keeper has told all of it, and
+then the next round opens. Every player's screen connects over a websocket and receives
+the engine's events as they happen. Seats are humans or AI; a human who drops out is played by the AI until they
 sit down again. Lines in full-width brackets are table talk and reach everyone at once.
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
 leave the turn open, and once the game is over they still work, growth rolls (.en) too.
@@ -18,7 +21,8 @@ Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
                     · retell {nudge} · epilogue · suggest
-    hub -> client   welcome · seats · turn · event {ev} · module · sync {state} · offer · say · ideas {ideas}
+    hub -> client   welcome · seats · pool {open, done, waiting} · turn (whose action is being settled)
+                    · event {ev} · module · sync {state} · offer · say · ideas {ideas}
                     · over · error
 
 Players' screens never hold the keeper's book while the game is on: they get the module
@@ -165,7 +169,11 @@ class Hub:
         self.inbox: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
         self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
         self.started = asyncio.Event()
-        self.waiting: str | None = None  # the seat whose action the game waits for
+        self.open = False  # the round's action pool takes actions
+        self.pool: dict[str, str] = {}  # seat -> its action this round
+        self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
+        self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
+        self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
@@ -195,6 +203,7 @@ class Hub:
                     self.sits[inv_id] = None
                     self.inbox[inv_id].put_nowait(None)
                     self.choices[inv_id].put_nowait(None)
+                    self.wake.set()
             await self._broadcast({"t": "seats", "seats": self._seats()})
         return ws
 
@@ -218,10 +227,17 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "你在观战，没有自己的调查员"})
             elif self.over and commands.instant(text):  # growth rolls (.en) and the sheet still work
                 await self._afterwards(seat, text)
-            elif self.waiting != seat:
-                await self._send(cid, {"t": "error", "text": "还没轮到你"})
-            else:
+            elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
+            elif not self.open:
+                await self._send(cid, {"t": "error", "text": "守秘人正在结算这一轮，讲完才能行动"})
+            elif commands.instant(text):  # .r, .st: at once, not the round's action
+                self.instant.put_nowait((seat, text))
+                self.wake.set()
+            elif text.strip():
+                self.pool[seat] = text
+                self.wake.set()
+                await self._pool()
         elif t == "choice":
             seat = self._seat_of(cid)
             if seat is not None:
@@ -385,59 +401,88 @@ class Hub:
             self._save()
             await self._broadcast({"t": "sync", "state": self._view()})
         while not st.ending:
-            acted = False
-            for idx, inv in enumerate(st.investigators):
-                if st.ending:
-                    break
-                if inv.can_act:
-                    st.active = idx
-                    await self._turn(inv)
-                    acted = True
-            if not acted:  # nobody left standing
+            if not any(inv.can_act for inv in st.investigators):  # nobody left standing
                 break
+            await self._collect()
+            await self._settle()
         self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
 
-    async def _turn(self, inv: Any) -> None:
-        who = self.sits.get(inv.id)
-        await self._broadcast({
-            "t": "turn", "investigator": inv.id, "name": inv.name,
-            "player": self.names.get(who or "", ""), "ai": who is None, "state": self._view(),
-        })  # fmt: skip
-        if who is None:
-            await self._ai_turn(inv)
-            return
-        queue = self.inbox[inv.id]
-        while not queue.empty():  # nothing said before the turn counts
-            queue.get_nowait()
-        self.waiting = inv.id
+    def _waiting_for(self) -> list[str]:
+        """Seated players, still at the table and able to act, with nothing in the pool yet."""
+        return [inv.id for inv in self.state.investigators
+                if inv.can_act and self.sits.get(inv.id) is not None and inv.id not in self.pool]
+
+    async def _pool(self) -> None:
+        names = {inv.id: inv.name for inv in self.state.investigators}
+        await self._broadcast({"t": "pool", "open": self.open, "done": sorted(self.pool),
+                               "waiting": [names[i] for i in self._waiting_for()]})
+
+    async def _collect(self) -> None:
+        """Open the pool and wait until every seated player has put an action in. Meanwhile
+        the table's requests (a retelling, the host's model switch, .r and .st) are done, and
+        a finished plan of the director's plays out. A seat left empty is the AI's."""
+        self.pool, self.open = {}, True
+        for queue in self.inbox.values():
+            while not queue.empty():
+                queue.get_nowait()
+        await self._event({"type": "status", "text": ""})
+        await self._pool()
         try:
-            while True:
-                await self._swap()  # the host's model switch, between actions
-                await self._asks()  # what the table asked for meanwhile: the last narration told again
+            while self._waiting_for():
+                await self._swap()
+                await self._asks()
+                while not self.instant.empty():
+                    seat, text = self.instant.get_nowait()
+                    await self._afterwards(seat, text)
+                    await self._pool()
                 try:
-                    text = await asyncio.wait_for(queue.get(), 1.0)
+                    await asyncio.wait_for(self.wake.wait(), 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
                     await self._interlude()
-                    continue
-                if text is None:  # they left: the AI plays this turn for them
-                    await self._ai_turn(inv)
-                    return
-                if not text.strip():  # nothing said (a request waking the loop)
-                    continue
-                await self._event({"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv.id) or "", ""), "text": text})
+                self.wake.clear()
+        finally:
+            self.open = False
+        await self._pool()
+
+    async def _settle(self) -> None:
+        """Every action of the round, in seat order: the pooled ones, the AI's for the rest."""
+        st = self.state
+        for idx, inv in enumerate(st.investigators):
+            if st.ending:
+                return
+            if not inv.can_act:
+                continue
+            st.active = idx
+            who = self.sits.get(inv.id)
+            text = self.pool.get(inv.id)
+            await self._broadcast({
+                "t": "turn", "investigator": inv.id, "name": inv.name,
+                "player": self.names.get(who or "", ""), "ai": text is None, "state": self._view(),
+            })  # fmt: skip
+            if text is None:
+                await self._ai_turn(inv)
+                continue
+            await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""), "text": text})
+            while True:
                 try:
                     await self._run(text, inv.id, ai=False)
+                    break
                 except Exception as exc:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})  # nobody's screen keeps spinning
-                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}这一回合中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
+                    who = self.sits.get(inv.id)
+                    if who is None:  # they left meanwhile: on without them
+                        break
+                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
                     await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
-                    continue
-                if not commands.instant(text):  # a check (.ra) is an action; .r, .st and the like leave the turn open
-                    return
-        finally:
-            self.waiting = None
+                    self.retrying = inv.id
+                    try:
+                        text = await self.inbox[inv.id].get()
+                    finally:
+                        self.retrying = None
+                    if text is None:
+                        break
 
     async def _afterwards(self, seat: str, text: str) -> None:
         """After the end a player can still read their sheet and make their growth rolls."""
@@ -460,11 +505,11 @@ class Hub:
         elif self.over:
             async with self.desk:
                 await self._tell_again(cid, nudge, self.game.told)
-        elif self.waiting is None:
-            await self._send(cid, {"t": "error", "text": "等这一回合结束再请守秘人重讲"})
+        elif not self.open:
+            await self._send(cid, {"t": "error", "text": "等这一轮讲完再请守秘人重讲"})
         else:
             self.asks.put_nowait((cid, nudge, self.game.told))
-            self.inbox[self.waiting].put_nowait("")  # wake the turn loop
+            self.wake.set()  # the round loop does it, between actions
 
     async def _swap(self) -> None:
         """New channels for every agent, as GameScreen._apply_engine does; the transcripts stay

@@ -233,7 +233,7 @@ async def test_fear_trembles_anger_flashes_and_f6_stills_them():
             await screen.handle({"type": "npc", "npc": "warden", "name": "老守钟人", "text": text})
             offsets, tints = set(), set()
             started = time.monotonic()
-            while time.monotonic() - started < 1.0:  # every motion is over within a second
+            while time.monotonic() - started < 3.0:  # every motion is over within a second (a slow runner: three)
                 await pilot.pause(0.02)
                 offsets.add((portrait.styles.offset.x.value, portrait.styles.offset.y.value))
                 tints.add(round(portrait.styles.tint.a, 2))

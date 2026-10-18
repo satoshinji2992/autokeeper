@@ -206,7 +206,12 @@ class NetGameScreen(GameScreen):
     def __init__(self, module: Module, state: GameState, link: Link, seat: str | None, backlog: list[LogEntry]):
         super().__init__(module, state, resume=True, spectate=False)
         self.link, self.seat, self.backlog = link, seat, backlog
-        self.my_turn = False
+        self.my_turn = False  # the pool is open and you have a seat: what you send is your action
+        self.pool_open = False
+        self.pooled = ""  # what you put in this round
+        self.waiting_on: list[str] = []
+        self.settling = ""  # whose action the keeper is settling
+        self.retry_due = False  # your settled action broke off: /retry goes on with it
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
         self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F5
@@ -214,7 +219,8 @@ class NetGameScreen(GameScreen):
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game
         self._start_history(self.backlog)
-        self.query_one("#left").mount(Static(id="turnline"), before=self.query_one("#command", Input))
+        await self.query_one("#left").mount(Static(id="turnline"), before=self.query_one("#command", Input))
+        self._turnline()
         self.query_one(SceneArt).effects = config.load().animations
         self.engine_label = "局域网联机" + ("" if self.seat else " · 观战")
         self._scene(self.state.location)
@@ -236,18 +242,27 @@ class NetGameScreen(GameScreen):
     def _me(self) -> str | None:
         return self.seat or None
 
-    def _turnline(self, who: str = "", player: str = "") -> None:
+    def _turnline(self) -> None:
         line = self.query_one("#turnline", Static)
-        line.set_class(self.my_turn, "mine")
-        if self.my_turn:
-            line.update(Text(f" ▶ 轮到你了：{self.state.find(self.seat).name if self.seat else ''}，说出你的行动 ", style="bold"))
-        elif who:
-            line.update(Text(f" 轮到 {who}（{player or 'AI'}）行动，等一下… ", style=""))
+        others = "、".join(self.waiting_on)
+        if self.pool_open and self.seat and not self.pooled:
+            text = " ▶ 新的一轮：说出你的行动" + (f"（还在等：{others}）" if others else "") + " "
+        elif self.pool_open and self.seat:
+            text = f" 已交：{self.pooled[:30]} · " + (f"还在等：{others}，再发一句可以改" if others else "人齐了") + " "
+        elif self.pool_open:
+            text = " 这一轮在收集行动" + (f"：还在等 {others}" if others else "") + " "
+        elif self.settling:
+            text = f" 守秘人正在结算本轮：{self.settling}的行动……讲完才能继续 "
         else:
-            line.update(Text(" 等待开局… ", style="dim"))
+            text = " 等待开局… "
+        fresh = self.my_turn and not self.pooled
+        line.update(Text(text, style="bold" if fresh else ""))
+        line.set_class(fresh, "mine")
         inp = self.query_one("#command", Input)
-        inp.set_class(self.my_turn, "mine")
-        inp.placeholder = "轮到你了：输入行动或对话，回车发送" if self.my_turn else "还没轮到你；全角括号开头是场外聊天，如（我去倒杯水）"
+        inp.set_class(fresh, "mine")
+        inp.placeholder = ("说出这一轮你要做什么，回车发送" if fresh else
+                           "可以再发一句改掉刚才的行动；全角括号开头是场外聊天" if self.my_turn else
+                           "守秘人讲完这一轮才能行动；全角括号开头是场外聊天，如（我去倒杯水）")
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -282,16 +297,29 @@ class NetGameScreen(GameScreen):
             self.m = m
         elif t == "sync":
             self._sync(msg["state"])
-        elif t == "turn":
+        elif t == "pool":
+            was_open = self.pool_open
+            self.pool_open = bool(msg["open"])
+            self.my_turn = self.pool_open and bool(self.seat)
+            self.waiting_on = msg.get("waiting", [])
+            if not self.pool_open or (self.seat and self.seat not in msg.get("done", [])):
+                self.pooled = ""
+            if self.pool_open and not was_open:
+                self.settling = ""
+                self.engine_label = "局域网联机 · 新的一轮"
+                self._topbar()
+                if self.seat:
+                    self.app.notify("新的一轮：说出你的行动", timeout=4)
+                    self.query_one(Input).focus()
+            self._turnline()
+        elif t == "turn":  # the pool is closed: the keeper settles this seat's action
             self._sync(msg["state"])
-            self.my_turn = bool(self.seat) and msg["investigator"] == self.seat
-            who = "你" if self.my_turn else f"{msg['name']}（{msg['player'] or 'AI'}）"
-            self.engine_label = f"局域网联机 · 轮到{who}"
+            self.my_turn = False
+            mine = bool(self.seat) and msg["investigator"] == self.seat
+            self.settling = "你" if mine else f"{msg['name']}（{msg['player'] or 'AI'}）"
+            self.engine_label = f"局域网联机 · 结算{self.settling}的行动"
             self._topbar()
-            self._turnline(msg["name"], msg["player"])
-            if self.my_turn:
-                self.app.notify("轮到你了", timeout=4)
-                self.query_one(Input).focus()
+            self._turnline()
         elif t == "offer":  # throw your own dice, or push / spend luck after a failure
             offer = msg["offer"]
             choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
@@ -309,9 +337,8 @@ class NetGameScreen(GameScreen):
                 self.story.add("system", Text("这一局结束了：F10 复盘，看真相、漏掉的线索和没走到的结局" + ("；.en 做成长检定" if self.seat else ""), style="dim"))
         elif t == "error":
             if msg.get("retry"):
-                self.my_turn = bool(self.seat)
                 self.status_text = ""
-                self._turnline()
+                self.retry_due = True
                 self.story.end_keeper("这一段暂时中断，输入 /retry 接着讲。")
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
@@ -343,15 +370,16 @@ class NetGameScreen(GameScreen):
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
         elif not self.my_turn:
-            self.app.notify("还没轮到你")
+            self.app.notify("守秘人讲完这一轮才能行动")
         else:
-            if not commands.instant(text):  # .r, .st and the like leave the turn with you
-                self.my_turn = False
+            if not commands.instant(text):  # .r, .st and the like are not the round's action
+                self.pooled = text
+                self._turnline()
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
     def action_retry(self) -> None:
-        if self.seat and self.my_turn:
-            self.my_turn = False
+        if self.seat and self.retry_due:
+            self.retry_due = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": "/retry"}))
         else:
             self.app.notify("等房主允许接续这一回合后再试。")
