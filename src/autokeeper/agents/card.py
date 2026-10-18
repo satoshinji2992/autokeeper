@@ -31,7 +31,8 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import httpx
 from PIL import Image
@@ -305,7 +306,7 @@ def local_file(text: str) -> Path | None:
     """A path typed, pasted or dragged in (quoted, with escaped spaces, or a file:// URI)."""
     s = text.strip().strip("\"'")
     if s.startswith("file://"):
-        s = unquote(urlparse(s).path)
+        s = url2pathname(urlparse(s).path)  # also turns /C:/Users/... into C:\\Users\\... on Windows
     s = s.replace("\\ ", " ")
     if not s or "\n" in s or len(s) > 500:
         return None
