@@ -29,6 +29,14 @@ def _module_dirs() -> list[Path]:
     return dirs
 
 
+def _version(value: bool) -> None:
+    if value:
+        from . import __version__
+
+        print(f"autokeeper {__version__}")
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -39,6 +47,7 @@ def main(
     fallback: Annotated[str | None, typer.Option(help="备用模型：主模型出错或超预算时改用它，如 ollama:qwen3:14b")] = None,
     improv: Annotated[str | None, typer.Option(help="自由度：即兴（默认，守秘人可以加人加线索加结局）/ 严格（只用模组写好的）")] = None,
     mode: Annotated[str | None, typer.Option(help="模式：标准（默认）/ 高级剧情（守秘人、导演、NPC、AI 队友多想一层）/ 经济（所有角色少想一层）")] = None,
+    version: Annotated[bool, typer.Option("--version", callback=_version, is_eager=True, help="显示版本号")] = False,
 ) -> None:
     # Environment, not globals: the browser server and every config.load() see the same choice.
     for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv), ("MODE", mode)):

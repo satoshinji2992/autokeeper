@@ -58,3 +58,13 @@ def test_terminals_that_show_true_colour_are_told_so(monkeypatch):
     monkeypatch.delenv("COLORTERM")
     monkeypatch.setenv("AUTOKEEPER_TRUECOLOR", "0")
     assert not autokeeper.truecolor()
+
+
+def test_version_flag_prints_the_version():
+    from typer.testing import CliRunner
+
+    from autokeeper import __version__
+    from autokeeper.cli import app
+
+    result = CliRunner().invoke(app, ["--version"])
+    assert result.exit_code == 0 and result.output.strip() == f"autokeeper {__version__}"
