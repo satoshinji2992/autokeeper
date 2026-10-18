@@ -25,7 +25,7 @@ from textual.widgets.option_list import Option
 from .. import artkit, config, imagery, weather
 from ..agents.cast import Cast
 from ..engine import graph as turn_graph
-from ..engine.game import Game
+from ..engine.game import PLAY_WAIT, Game
 from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
@@ -385,6 +385,7 @@ class GameScreen(Screen):
         self.engine_label = self._engine_label(cfg)
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
+        self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         channels.listeners.append(self._fell_back)
         config.SAVES.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(config.SAVES / "checkpoints.sqlite")
@@ -394,6 +395,7 @@ class GameScreen(Screen):
         self._scene(self.state.location)
         self._panels()
         self.set_interval(0.1, self._spin)
+        self.set_interval(1.0, self._backstage)
         if self.spectate:
             self.query_one(Input).disabled = True
         self.boot()
@@ -569,6 +571,8 @@ class GameScreen(Screen):
             self._panels()
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
+        elif t == "echo":  # the first beat, while the ruling and the narration are worked out
+            story.add("echo", Text(ev["text"]))
         elif t == "keeper_start":
             self._status("守秘人正在讲述…")
             story.begin_keeper()
@@ -852,6 +856,21 @@ class GameScreen(Screen):
 
     def action_map(self) -> None:
         self.app.push_screen(TextModal("地图", _map(self.m, self.state)))
+
+    def _backstage(self) -> None:
+        """The director finished a plan while nobody was mid-turn: play it now."""
+        if self.game and not self.busy and self.game.ready():
+            self._interlude()
+
+    @work(exclusive=True, group="turn")
+    async def _interlude(self) -> None:
+        assert self.game
+        self._busy(True)
+        self._status("守秘人插进来一段…")
+        self.game.emit = self.handle
+        await self.game.interlude()
+        write_save(self.state, self.m)
+        self._busy(False)
 
     def _turn_running(self) -> bool:
         """Starting another turn-group worker would cancel the running turn."""

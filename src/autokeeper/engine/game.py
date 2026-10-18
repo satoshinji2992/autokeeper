@@ -7,6 +7,7 @@ or structure into words (NPCs, keeper).
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -15,6 +16,7 @@ from typing import Any
 
 from .. import skills, weather
 from ..agents.cast import Action, Cast, Ruling
+from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
 from ..module.compiler import skill_name
@@ -46,6 +48,16 @@ class Turn:
     push: dict | None = None
     notes: list[str] = field(default_factory=list)
     ending: str | None = None
+    interlude: bool = False  # no action of theirs: the director's scene comes in between turns
+
+
+@dataclass
+class Backstage:
+    """A director's plan still being written after its turn moved on."""
+
+    kind: str
+    task: asyncio.Task
+    at: str  # where the investigators were when it was asked for
 
 
 class Game:
@@ -54,6 +66,12 @@ class Game:
         self.emit: Emit = emit or _silent
         if state.improv:  # a loaded game brings its own branches
             improv.restore(module, state.improv)
+        # How long a turn waits for the director before the keeper goes on without it. None
+        # waits for the plan (autoplay and replays: no one is waiting, and replays must not
+        # depend on timing); a screen sets PLAY_WAIT.
+        self.director_wait: float | None = None
+        self.backstage: list[Backstage] = []
+        self._late = Turn()  # what landed from backstage, told in the next narration
 
     @property
     def improvising(self) -> bool:
@@ -75,8 +93,9 @@ class Game:
 
     async def start(self, on_delta=None) -> str:
         st, m = self.state, self.m
-        # Before anything is said, the director may rework the module around these investigators.
-        adapted = await self._improvise("开局改编") if not st.improv else None
+        # The director may rework the module around these investigators. At a screen the
+        # opening does not wait for it: the adaptation lands at the start of a later turn.
+        adapted = await self._improvise("开局改编", patience=0.0) if not st.improv else None
         loc = m.location(st.location)
         await self.emit({"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", "")})
         opening = Turn()
@@ -122,9 +141,13 @@ class Game:
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
-        return await self.cast.intent(st, text)
+        action = await self.cast.intent(st, text)
+        if action.echo and action.kind != "meta":  # something on screen at once, while the rest is worked out
+            await self.emit({"type": "echo", "text": action.echo})
+        return action
 
     async def rule(self, action: Action) -> Ruling | None:
+        await self._curtain()  # finished plans land before this action is ruled
         if action.kind in ("meta",):
             return None
         if action.kind == "move" and action.destination:
@@ -134,27 +157,47 @@ class Game:
         ruling = await self.cast.arbiter(self.state, action, at=heading)
         if ruling.scope != "模组内":  # the module is silent here: the director fills the gap
             kind = "展开" if ruling.scope == "可即兴" else "后果"
+            waiting = len(self.backstage)
             applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
             if applied is not None:
                 ruling = self._steer(ruling, applied)
+            elif len(self.backstage) > waiting:
+                ruling = ruling.model_copy(update={"note": LATER})
         return ruling
 
     # -- improvisation ----------------------------------------------------------------
     async def _improvise(
-        self, kind: str, *, action: Action | None = None, ruling: Ruling | None = None, at: str = ""
+        self, kind: str, *, action: Action | None = None, ruling: Ruling | None = None, at: str = "", patience: float | None = None
     ) -> improv.Applied | None:
-        """Ask the director for a plan, check it (with one chance to fix it), and write it into
-        this game's module. Without a usable plan the turn simply goes on as before."""
+        """Ask the director for a plan and write it into this game's module. A plan that takes
+        longer than the turn can wait keeps being written backstage and lands at the start of
+        a later turn (_curtain); meanwhile, and without a usable plan, the turn goes on."""
         st = self.state
         if not self.improvising or (kind != "开局改编" and sum(p["kind"] != "开局改编" for p in st.improv) >= IMPROV_LIMIT):
             return None
+        if len(self.backstage) >= BACKSTAGE_LIMIT:  # enough is being written already
+            return None
         await self.emit({"type": "status", "text": "守秘人在即兴…"})
         where = at or st.location
+        task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where))
+        wait = self.director_wait if patience is None or self.director_wait is None else min(patience, self.director_wait)
+        if wait is None:
+            plan = await task
+        else:
+            try:
+                plan = await asyncio.wait_for(asyncio.shield(task), wait)
+            except TimeoutError:
+                self.backstage.append(Backstage(kind, task, where))
+                return None
+        return await self._land(kind, plan) if plan is not None else None
+
+    async def _plan(self, kind: str, *, action: Action | None, ruling: Ruling | None, at: str) -> Improv | None:
+        """The director's plan, checked, with one chance to fix it; None without a usable one."""
         said = f"{action.summary}（{action.kind}，对象：{action.target or '无'}）" if action else ""
         problems: list[str] = []
         for _ in range(2):
             try:
-                plan = await self.cast.director(st, kind, action=said, reason=ruling.reason if ruling else "", at=where, problems=problems)
+                plan = await self.cast.director(self.state, kind, action=said, reason=ruling.reason if ruling else "", at=at, problems=problems)
             except CassetteError:  # a replay that drifted must fail loudly
                 raise
             except Exception:  # improvising is a bonus; a failed call must not cost the turn
@@ -162,15 +205,56 @@ class Game:
             if plan is None or plan.kind == "不需要":
                 return None
             plan.kind = kind  # type: ignore[assignment]
-            problems = improv.check(self.m, plan, at=where)
+            problems = improv.check(self.m, plan, at=at)
             if not problems:
-                break
-        else:
-            return None
+                return plan
+        return None
+
+    async def _land(self, kind: str, plan: Improv) -> improv.Applied:
         applied = improv.apply(self.m, plan)
-        st.improv.append({"turn": st.turn, "kind": kind, "plan": plan.model_dump()})
+        self.state.improv.append({"turn": self.state.turn, "kind": kind, "plan": plan.model_dump()})
         await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
         return applied
+
+    def ready(self) -> bool:
+        """A plan is finished backstage and can take the stage."""
+        return any(b.task.done() for b in self.backstage)
+
+    async def interlude(self) -> Turn | None:
+        """Between turns: a plan the director has finished plays out at once, told in a short
+        narration of its own, so no one waits for their next action to see it."""
+        if self.state.ending or not self.ready():
+            return None
+        await self._curtain()
+        turn, self._late = self._late, Turn()
+        if not (turn.events or turn.clues or turn.notes or turn.arrived or turn.sanity):
+            return None
+        turn.interlude = True
+        await self._time(turn)
+        await self._check_ending(turn)
+        await self.narrate(turn)
+        await self.remember()
+        return turn
+
+    async def _curtain(self) -> None:
+        """Plans finished backstage take the stage before the next action is ruled: their places
+        and people exist from now on, their scenes play out, and the next narration tells it."""
+        st, late = self.state, self._late
+        for b in [b for b in self.backstage if b.task.done()]:
+            self.backstage.remove(b)
+            plan = None if b.task.cancelled() or b.task.exception() else b.task.result()
+            if plan is None or improv.check(self.m, plan, at=b.at):  # the story moved on since: let it go
+                continue
+            applied = await self._land(b.kind, plan)
+            if applied.go and applied.go != st.location and st.location == b.at:  # they were on their way
+                minutes = self._travel(st.location, applied.go)
+                if minutes is not None:
+                    st.minutes += minutes
+                    await self._arrive(applied.go, late)
+            await self._flags(applied.now, late)
+            await self._gain(self._valid_clues(applied.give, None), late, None)
+            if applied.note:
+                late.notes.append(f"导演的安排：{applied.note}")
 
     def _steer(self, ruling: Ruling, applied: improv.Applied) -> Ruling:
         """The arbiter's ruling plus what the director just added: new clues to find (with
@@ -224,6 +308,12 @@ class Game:
     async def resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         st, _m = self.state, self.m
         turn = Turn(action=action, ruling=ruling)
+        late, self._late = self._late, Turn()  # what the director's late plans brought on stage
+        turn.events += late.events
+        turn.clues += late.clues
+        turn.sanity += late.sanity
+        turn.notes += late.notes
+        turn.arrived, turn.first_visit = late.arrived, late.first_visit
         inv = st.investigator
         if action.kind == "meta" or ruling is None:
             return turn
@@ -600,11 +690,15 @@ class Game:
         if st.sky and st.minutes - st.sky_at < weather.LASTS:
             out.append(f"天气：{weather.KINDS[st.sky]}（你之前写到的）")
         a = turn.action
+        if turn.interlude:
+            out.append("（插曲：调查员这回没有新的行动，下面这些事接着上一段叙述发生。）")
         if a and a.kind == "meta":
             out.append(f"玩家在问游戏外的问题：{a.summary}\n请以守秘人身份用一两句话简短回答，不推进剧情。")
             return "\n".join(out)
         if a:
             out.append(f"行动：{a.summary}")
+            if a.echo:
+                out.append(f"屏幕上已经先写了一句：「{a.echo}」，从这里接着往下写，不要重复它。")
         if turn.arrived:
             if turn.first_visit:
                 out.append(f"【进入新地点，以下是守秘人资料】\n{self._location_file(turn.arrived)}")
@@ -636,6 +730,8 @@ class Game:
         if turn.ending:
             end = next(e for e in m.endings if e.id == turn.ending)
             out.append(f"【结局：{end.title}】{end.text.strip()}\n请用 150–250 字为这个结局收尾，不再留行动钩子。")
+        elif turn.interlude:
+            out.append("请用 60–150 字接着上一段写这些事，像“就在这时”一样自然地插进来，收在一个能行动的细节上。")
         else:
             out.append("请叙述。")
         return "\n".join(out)
@@ -667,6 +763,12 @@ class Game:
 
 
 IMPROV_LIMIT = 16  # plans per game besides the opening one, so a game cannot sprawl forever
+BACKSTAGE_LIMIT = 2  # plans being written at once
+# A turn at a screen does not wait for the director: measured, a plan takes 9 s and more
+# (DeepSeek) or 14 s (Opus), so any wait shorter than that only made turns slower. Plans
+# land in an interlude as soon as they are ready (Game.interlude).
+PLAY_WAIT = 0.0
+LATER = "还在准备，这一轮只写行动直接、合理的结果，不要编新的人物、地点和线索，收在一个悬念上"
 STALL_TURNS = 8  # turns without a clue, flag, event or new place before the director sends a lead
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep

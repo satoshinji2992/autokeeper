@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 
 import pytest
@@ -13,7 +14,7 @@ from autokeeper.agents import guard
 from autokeeper.agents.cast import Action, Ruling, Sketch
 from autokeeper.config import EXAMPLE
 from autokeeper.engine import graph as turn_graph
-from autokeeper.engine.game import Game
+from autokeeper.engine.game import LATER, PLAY_WAIT, Game
 from autokeeper.engine.state import parse_time
 from autokeeper.module.schema import Module
 from autokeeper.rules.coc import Rules
@@ -334,6 +335,66 @@ async def test_a_plan_that_does_not_fit_gets_one_chance_then_is_dropped(module, 
     assert await game.rule(ask) == ruling  # nothing usable came of it: the turn goes on as ruled
     assert cast.asked[1][2] and "nowhere" in cast.asked[1][2][0]  # the second call saw what was wrong
     assert not game.state.improv and not any(loc.id == "newsstand" for loc in module.locations)
+
+
+class SlowDirector(Improvising):
+    """A director that takes longer than a turn will wait."""
+
+    async def director(self, state, kind, **kw):
+        await asyncio.sleep(0.2)
+        return await super().director(state, kind, **kw)
+
+
+async def test_a_slow_director_does_not_hold_up_the_turn(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
+    look = Action(kind="investigate", summary="周衡四下看看")
+    script = {"x": (ask, Ruling(needs_roll=False, minutes=10, scope="可即兴")), "y": (look, Ruling(needs_roll=False))}
+    game, *_ = make(module, fake, script)
+    game.cast, game.director_wait = SlowDirector(script, [NEWSSTAND]), 0.01
+    steered = await game.rule(ask)
+    assert steered.note == LATER and not steered.auto_clues  # the keeper tells what happens now
+    await game.resolve(ask, steered)
+    assert not game.state.improv and len(game.backstage) == 1
+    await asyncio.sleep(0.3)
+    await game.rule(look)  # the plan lands before the next action is ruled
+    assert [p["kind"] for p in game.state.improv] == ["展开"] and module.npc("paperboy").location == "newsstand"
+    turn = await game.resolve(look, Ruling(needs_roll=False))
+    assert turn.clues == ["c_rumor"] and any("报童凑上来" in n for n in turn.notes)  # and that turn's narration tells it
+
+
+async def test_a_finished_plan_plays_out_between_turns(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
+    script = {"x": (ask, Ruling(needs_roll=False, minutes=10, scope="可即兴"))}
+    game, *_ = make(module, fake, script)
+    cast = SlowDirector(script, [NEWSSTAND])
+    game.cast, game.director_wait = cast, PLAY_WAIT
+    await game.narrate(await game.resolve(ask, await game.rule(ask)))
+    assert await game.interlude() is None  # still being written
+    await asyncio.sleep(0.3)
+    turn = await game.interlude()  # nobody has to act for it to happen
+    assert turn and turn.interlude and "c_rumor" in game.state.clues
+    assert "插曲" in cast.reports[-1] and "报童凑上来" in cast.reports[-1]
+
+
+async def test_the_opening_does_not_wait_for_the_director_at_a_screen(module, fake):
+    friend = Improv(kind="开局改编", reason="把老上司写进来", npcs=[NewNPC(id="old_editor", name="老编辑钱伯", role="老上司", location="office")])
+    look = Action(kind="investigate", summary="周衡四下看看")
+    game, _, _ = make(module, fake, {"y": (look, Ruling(needs_roll=False))})
+    game.cast, game.director_wait = SlowDirector({"y": (look, Ruling(needs_roll=False))}, [friend]), PLAY_WAIT
+    await game.start()  # the opening is told right away
+    assert not game.state.improv and game.backstage
+    await asyncio.sleep(0.3)
+    await game.rule(look)
+    assert module.npc("old_editor").location == "office" and game.state.improv[0]["kind"] == "开局改编"
+
+
+async def test_the_first_beat_shows_before_the_ruling(module, fake):
+    look = Action(kind="investigate", summary="周衡翻看告示栏", echo="周衡凑近告示栏")
+    game, cast, events = make(module, fake, {"x": (look, Ruling(needs_roll=False))})
+    action = await game.parse("x")
+    assert events[-1] == {"type": "echo", "text": "周衡凑近告示栏"}
+    await game.narrate(await game.resolve(action, await game.rule(action)))
+    assert "「周衡凑近告示栏」" in cast.reports[-1]  # the keeper carries on from it
 
 
 async def test_improvised_branches_survive_a_reload(module, fake):

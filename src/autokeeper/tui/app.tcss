@@ -137,6 +137,10 @@ Screen {
     color: $text-muted;
     text-style: italic;
 }
+.echo {
+    color: $foreground;
+    text-style: italic;
+}
 .npc {
     padding: 0 1;
     border-left: thick $accent;

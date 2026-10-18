@@ -300,6 +300,17 @@ async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
     assert "开始动摇" not in json.dumps(state.transcripts, ensure_ascii=False)  # but not part of its memory
 
 
+async def test_the_first_beat_never_reaches_the_arbiter():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    SCRIPT.append({"needs_roll": False})
+    action = Action(kind="investigate", summary="周衡翻看告示栏", echo="周衡凑近告示栏，手指拂过一张泛黄的纸角")
+    await Cast(cfg, m).arbiter(state, action)
+    sent = SEEN[-1]["messages"][-1]["content"]
+    assert "周衡翻看告示栏" in sent and "泛黄" not in sent  # the player's flavour stays out of the ruling
+
+
 async def test_agent_loop_runs_sandboxed_tools(tmp_path):
     (tmp_path / "source.md").write_text("第一行\n关键线索：井底的铜钥匙\n", encoding="utf-8")
     ws = Workspace(tmp_path, writable=("notes.md",))

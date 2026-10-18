@@ -32,7 +32,7 @@ from langgraph.types import Command
 from .. import config
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
-from ..engine.game import Game
+from ..engine.game import PLAY_WAIT, Game
 from ..engine.state import GameState
 from ..module.schema import Module
 
@@ -99,6 +99,7 @@ class Hub:
         self.state = state
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
+        self.game.director_wait = PLAY_WAIT
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.thread = {"configurable": {"thread_id": state.slot}}
         self.clients: dict[str, web.WebSocketResponse] = {}
@@ -261,7 +262,11 @@ class Hub:
         self.waiting = inv.id
         try:
             while True:
-                text = await queue.get()
+                try:
+                    text = await asyncio.wait_for(queue.get(), 1.0)
+                except TimeoutError:  # while they think, a finished plan of the director's plays out
+                    await self._interlude()
+                    continue
                 if text is None:  # they left: the AI plays this turn for them
                     await self._ai_turn(inv)
                     return
@@ -274,7 +279,15 @@ class Hub:
         finally:
             self.waiting = None
 
+    async def _interlude(self) -> None:
+        if self.game.ready():
+            self.game.emit = self._event
+            await self.game.interlude()
+            self._save()
+            await self._broadcast({"t": "sync", "state": self._view()})
+
     async def _ai_turn(self, inv: Any) -> None:
+        await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
         text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state))
         await self._event({"type": "said", "who": inv.name, "player": "", "text": text, "ai": True})
