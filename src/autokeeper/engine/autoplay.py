@@ -28,10 +28,11 @@ from ..harness import trace
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
 from ..rules.bcdice import shared
-from ..rules.coc import Rules
+from ..rules.coc import Investigator, Rules
+from . import fog
 from . import graph as turn_graph
 from .game import Game
-from .state import GameState
+from .state import GameState, time_of_day
 
 
 class PartyState(TypedDict, total=False):
@@ -58,24 +59,72 @@ def party_graph(cast: Cast, state: GameState):
     return g.compile()
 
 
+TOLD = ("opening", "keeper", "npc", "player", "dice", "clue", "handout", "event", "sanity", "damage")  # log lines the players read
+TELLER = {"opening": "开场", "clue": "线索", "handout": "手稿", "event": "事件"}
+
+
 def situation(m: Module, st: GameState) -> str:
-    """What an AI player sees: the scene, where they have been, what they hold, what just happened."""
-    recent = [e for e in st.log if e.kind in ("keeper", "npc", "clue", "event", "dice", "player")][-8:]
-    clues = "；".join(m.clue(c).title for c in st.clues) or "无"
+    """What an AI player sees, and no more than the players have been shown: where they are
+    and what they saw on arriving, the places they know (engine/fog.py: been to, or heard of
+    by the name they heard), the people they have met and where, the clues and handouts they
+    found, the party's state, and the game so far as it was told. Not the place's list of
+    things to search, its exits, or the people there they have not met: those are the
+    keeper's. A companion who knew them would play another game than the human beside it,
+    and autoplay would finish modules no table could.
+
+    The first line is what the investigator's memory keeps of each turn (Cast.investigator)."""
     loc = m.location(st.location)
-    exits = "、".join(f"{m.location(e).name}{'（去过）' if e in st.visited else ''}" for e in loc.exits)
-    npcs = "、".join(n.name for n in m.npcs_at(loc.id)) or "无"
-    # People met elsewhere, and where: talking to someone who is not here wastes a turn.
-    away = [n for n in m.npcs if n.location and n.location != loc.id and st.npcs.get(n.id) and st.npcs[n.id].met]
-    elsewhere = "、".join(f"{n.name}（在{m.location(n.location).name}）" for n in away)
-    lines = "\n".join(f"- {e.who or e.kind}：{e.text[:180]}" for e in recent)
+    known, there = fog.known(m, st), set(fog.been(m, st))
+    places = "、".join(f"{name}（{'去过' if pid in there else '听说过'}）" for pid, name in known.items() if pid != loc.id)
+    met = [n for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
+    people = "、".join(
+        f"{n.name}（{n.role + '，' if n.role else ''}"
+        f"{'就在这里' if n.location == loc.id else f'在{known[n.location]}' if n.location in known else '不知道在哪'}）"
+        for n in met
+    )  # fmt: skip
+    clues = "\n".join(f"- 〔{m.clue(c).title}〕{_flat(m.clue(c).text, 240)}" for c in st.clues)
+    handouts = "；".join(f"〔{m.handout(h).title}〕{_flat(m.handout(h).text, 160)}" for h in st.handouts)
+    party = "\n".join(f"- {_status(inv)}" for inv in st.investigators)
+    recent = [e for e in st.log if e.kind in TOLD][-10:]
+    last = max((i for i, e in enumerate(recent) if e.kind == "keeper"), default=-1)  # where the keeper left the scene: in full
+    lines = "\n".join(f"- {e.who or TELLER.get(e.kind, e.kind)}：{_flat(e.text) if i == last else _tail(e.text, 160)}" for i, e in enumerate(recent))
     stay = sum(1 for e in st.log[-12:] if e.kind == "player")
-    return (
-        f"现在 {st.clock}，你们在{loc.name}。这里能查：{'、'.join(loc.features) or '无'}；在场的人：{npcs}。\n"
-        f"能去：{exits}。已有线索：{clues}。"
-        + (f"见过但不在这里的人：{elsewhere}，要找他们得先过去。" if elsewhere else "")
-        + f"\n最近发生的事：\n{lines}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？"
-    )
+    out = [
+        f"现在 {st.clock}（{time_of_day(st.minutes)}），你们在{loc.name}。",
+        f"你们到这里时看到：{_flat(loc.read_aloud)}",
+        f"知道的地方：{places or '只知道这里'}。",
+    ]
+    if people:  # talking to someone who is not here wastes a turn
+        out.append(f"见过的人：{people}。不在这里的人，要先过去才说得上话。")
+    out.append(f"已有线索：\n{clues}" if clues else "已有线索：无")
+    if handouts:
+        out.append(f"手上的文件：{handouts}")
+    out.append(f"队伍：\n{party}")
+    if st.memory:
+        out.append(f"更早的经过：{st.memory}")
+    out.append(f"最近发生的事：\n{lines or '（刚开场）'}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？")
+    return "\n".join(out)
+
+
+def _status(inv: Investigator) -> str:
+    out = f"{inv.name}，{inv.occupation}，HP {inv.hp}/{inv.hp_max}，理智 {inv.san}，幸运 {inv.luck}"
+    if inv.conditions:
+        out += "，" + "、".join(inv.conditions)
+    if inv.inventory:
+        out += "，带着" + "、".join(inv.inventory)
+    return out
+
+
+def _flat(text: str, limit: int = 0) -> str:
+    """Module or log text on one line (YAML wraps it), cut after `limit` characters."""
+    out = "".join(line.strip() for line in text.strip().splitlines())
+    return out if not limit or len(out) <= limit else out[: limit - 1] + "…"
+
+
+def _tail(text: str, limit: int) -> str:
+    """The end of a long line of play, where it left things."""
+    out = _flat(text)
+    return out if len(out) <= limit else "…" + out[-limit:]
 
 
 def fingerprint(state: GameState) -> dict[str, Any]:

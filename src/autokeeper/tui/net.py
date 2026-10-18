@@ -7,6 +7,7 @@ is your turn, and anything that starts with a full-width bracket is table talk.
 
 from __future__ import annotations
 
+import asyncio
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ from .retell import RetellModal
 from .screens import PushModal, RollModal
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
+IDEAS_WAIT = 60.0  # seconds F8 waits for the host's ideas
 
 
 def table_module(welcome: dict[str, Any]) -> Module:
@@ -191,6 +193,7 @@ class NetGameScreen(GameScreen):
         self.my_turn = False
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
+        self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F8
 
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game
@@ -249,6 +252,9 @@ class NetGameScreen(GameScreen):
             await self.link.send({"t": "choice", "mode": choice})
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
+        elif t == "ideas":  # for this screen alone
+            if self.ideas_due is not None and not self.ideas_due.done():
+                self.ideas_due.set_result(msg.get("ideas", []))
         elif t == "over":
             self._sync(msg["state"])
             self.engine_label = "局域网联机 · 本局结束"
@@ -290,6 +296,19 @@ class NetGameScreen(GameScreen):
             if not commands.instant(text):  # .r, .st and the like leave the turn with you
                 self.my_turn = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
+
+    def action_suggest(self) -> None:
+        if self.seat:
+            super().action_suggest()
+        else:
+            self.app.notify("你在观战，没有自己的调查员")
+
+    async def ideas_for(self, inv) -> list[str]:
+        """The host's investigator agent thinks for this seat (Hub._ideas), from the same view
+        the AI seats get; the answer comes back to this screen alone."""
+        self.ideas_due = asyncio.get_running_loop().create_future()
+        await self.link.send({"t": "suggest"})
+        return await asyncio.wait_for(self.ideas_due, IDEAS_WAIT)
 
     # The host runs the agents: switching models, sketches, recaps and saving happen there.
     def action_engine(self) -> None:
