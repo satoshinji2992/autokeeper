@@ -5,7 +5,7 @@
 ## 渐进式披露的上下文账本
 
 ```bash
-uv run autokeeper eval context modules/local/zhuishuren
+uv run autokeeper eval context modules/zhuishuren
 ```
 
 比较守秘人的常驻上下文：整本模组（Skill 包里所有 reference 文件）与“SKILL.md 总览 + 当前地点文件”。用 tiktoken 的 o200k_base 计数，只作为与模型无关的近似值。
@@ -91,9 +91,9 @@ uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-fl
 ## 同一局，三种后端
 
 ```bash
-uv run autokeeper --preset deepseek autoplay modules/local/zhuishuren --turns 4
-uv run autokeeper autoplay modules/local/zhuishuren --turns 2
-AUTOKEEPER_MODEL=ollama:gemma4-31b-ablit-q4 uv run autokeeper --search none autoplay modules/local/zhuishuren --turns 2
+uv run autokeeper --preset deepseek autoplay modules/zhuishuren --turns 4
+uv run autokeeper autoplay modules/zhuishuren --turns 2
+AUTOKEEPER_MODEL=ollama:gemma4-31b-ablit-q4 uv run autokeeper --search none autoplay modules/zhuishuren --turns 2
 ```
 
 数字取自 `saves/traces/`，表格和说明见 [harness.md](harness.md#实测)。

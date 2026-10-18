@@ -46,7 +46,7 @@ AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑
 |---|---|---|---|
 | <img src="docs/img/module.png" alt="选模组"> | <img src="docs/img/game_day.png" alt="白天的书房"> | <img src="docs/img/scenes.png" alt="场景图"> | <img src="docs/img/portraits.png" alt="头像"> |
 
-截图里的《追书人》是 CoC 7 版的入门模组，手绘场景和头像来自用 AutoKeeper 生成的原创模组《多一人》。仓库不附带任何官方模组。
+截图里的《追书人》就附在仓库里，改编自 Chaosium 入门套装里的 *Paper Chase*，装好就能开团。手绘场景和头像来自用 AutoKeeper 生成的原创模组《多一人》。
 
 ## 安装
 
@@ -129,14 +129,14 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>手上没有模组怎么办？</summary>
 
-用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本能直接玩的原创模组。仓库里也带着一个只有三个地点的小样例《钟楼》，开团时就能选到，可以先试试手。
+仓库自带《追书人》和一个只有三个地点的小样例《钟楼》，开团时都能直接选。想玩新的，就用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本原创模组。
 
 </details>
 
 <details>
 <summary>导入官方模组会被上传吗？</summary>
 
-不会。导入的结果只保存在本地的 `modules/local/`，已被 `.gitignore` 排除。CoC 官方模组受版权保护，请只导入你自己拥有的。
+不会。你自己导入的结果只保存在本地的 `modules/local/`，已被 `.gitignore` 排除。CoC 官方模组受版权保护，请只导入你自己拥有的。
 
 </details>
 
@@ -207,4 +207,4 @@ uv run ruff check src tests && uv run pytest
 
 ## 许可
 
-代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例，仓库不包含任何官方模组内容。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。
+代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例。《追书人》是 *Paper Chase*（Bret Kramer 著，Chaosium 出版）的同人改编，原作版权归 Chaosium，仓库不含原书的 PDF；它的场景照片来自 Wikimedia Commons，作者和授权见 [CREDITS](modules/zhuishuren/art/CREDITS.md)。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。

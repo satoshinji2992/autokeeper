@@ -57,3 +57,12 @@ def test_cli_prints_chinese_through_a_non_utf8_pipe():
     r = subprocess.run([sys.executable, "-m", "autokeeper", "check", str(EXAMPLE)], env=env, capture_output=True, timeout=120)
     assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
     assert "通过" in r.stdout.decode("utf-8")
+
+
+def test_the_bundled_paper_chase_is_playable():
+    from autokeeper import config
+
+    m = Module.load(config.MODULES / "zhuishuren")
+    assert not [i for i in graph.audit(m) if i.level == "error"]
+    assert len(m.locations) >= 8 and m.endings and m.pregens
+    assert all(m.art.get(loc.art) or m.pictures.get(loc.art) for loc in m.locations if loc.art)
