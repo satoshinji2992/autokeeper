@@ -65,12 +65,16 @@ def situation(m: Module, st: GameState) -> str:
     loc = m.location(st.location)
     exits = "、".join(f"{m.location(e).name}{'（去过）' if e in st.visited else ''}" for e in loc.exits)
     npcs = "、".join(n.name for n in m.npcs_at(loc.id)) or "无"
+    # People met elsewhere, and where: talking to someone who is not here wastes a turn.
+    away = [n for n in m.npcs if n.location and n.location != loc.id and st.npcs.get(n.id) and st.npcs[n.id].met]
+    elsewhere = "、".join(f"{n.name}（在{m.location(n.location).name}）" for n in away)
     lines = "\n".join(f"- {e.who or e.kind}：{e.text[:180]}" for e in recent)
     stay = sum(1 for e in st.log[-12:] if e.kind == "player")
     return (
         f"现在 {st.clock}，你们在{loc.name}。这里能查：{'、'.join(loc.features) or '无'}；在场的人：{npcs}。\n"
-        f"能去：{exits}。已有线索：{clues}。\n最近发生的事：\n{lines}\n"
-        f"（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？"
+        f"能去：{exits}。已有线索：{clues}。"
+        + (f"见过但不在这里的人：{elsewhere}，要找他们得先过去。" if elsewhere else "")
+        + f"\n最近发生的事：\n{lines}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？"
     )
 
 

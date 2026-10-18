@@ -139,6 +139,16 @@ async def test_walking_somewhere_to_act_moves_the_party_first(module, fake):
     assert game._heading(gaze) is None  # unknown places do not move anyone
 
 
+def test_ai_players_know_where_the_people_they_met_are(module, fake):
+    from autokeeper.engine.autoplay import situation
+
+    game, *_ = make(module, fake, {}, location="office")
+    assert "见过但不在这里的人" not in situation(module, game.state)
+    game.state.npc("warden").met = True
+    first, second = situation(module, game.state).split("\n")[:2]
+    assert "老守钟人（在钟楼）" in second and "见过" not in first  # the first line is what they remember
+
+
 async def test_narration_sets_the_sky_and_it_passes(module, fake):
     game, cast, events = make(module, fake, {})
     lines = iter(["钟楼背后滚过一声闷雷，雨点砸在广场的石板上。", "守钟人点起油灯。", "守钟人又打了个盹。"])
