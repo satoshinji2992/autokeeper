@@ -210,6 +210,7 @@ class NetGameScreen(GameScreen):
         self.pool_open = False
         self.pool: dict[str, Any] = {}  # the Hub's last word on it: capacity, count, by, done, waiting
         self.pooled: list[str] = []  # what you put in this round
+        self.held: list[str] = []  # what you said for the next round, where it goes in first
         self.waiting_on: list[str] = []
         self.settling = ""  # whose action the keeper is settling
         self.retry_due = False  # your settled action broke off: /retry goes on with it
@@ -249,7 +250,7 @@ class NetGameScreen(GameScreen):
         room = f"池子 {self.pool.get('count', 0)}/{self.pool.get('capacity', 0)}"
         fresh = self.my_turn and not self.pooled
         if self.pool_open and self.seat and not self.pooled and self.my_turn:
-            text = f" ▶ 新的一轮：说出你的行动（{room}，每人最多 2 条）"
+            text = f" ▶ 新的一轮：说出你的行动（{room}，每人一条，多出的一条先到先得）"
         elif self.pool_open and self.seat and self.my_turn:
             text = f" 已交：{self.pooled[-1][:24]} · 还能再交 1 条，或直接回车表示说完了 · {room}"
         elif self.pool_open and self.seat:
@@ -257,16 +258,23 @@ class NetGameScreen(GameScreen):
         elif self.pool_open:
             text = " 这一轮在收集行动" + (f"：还在等 {others}" if others else "") + f" · {room}"
         elif self.settling:
-            text = f" 守秘人正在结算本轮：{self.settling}……讲完才能继续"
+            text = f" 守秘人在结算：{self.settling}"
         else:
             text = " 等待开局…"
-        line.update(Text(text + " ", style="bold" if fresh else ""))
+        if self.seat and self.held:  # said meanwhile: it is not lost
+            first = self.held[0] if len(self.held[0]) <= 10 else self.held[0][:9] + "…"
+            more = f" 等 {len(self.held)} 条" if len(self.held) > 1 else ""
+            text += f" · 你下一轮先交：{first}{more}（/undo 撤回）"
+        elif self.seat and self.settling and not self.pool_open:
+            text += " · 现在说的话留到下一轮，最先交上"
+        line.update(Text(text + " ", style="bold" if fresh else "", no_wrap=True, overflow="ellipsis"))
         line.set_class(fresh, "mine")
         inp = self.query_one("#command", Input)
         inp.set_class(fresh, "mine")
         inp.placeholder = ("说出这一轮你要做什么，回车发送" if fresh else
                            "还能再交一条；什么都不写直接回车 = 这轮说完了" if self.my_turn else
-                           "守秘人讲完这一轮才能行动；全角括号开头是场外聊天，如（我去倒杯水）")
+                           "现在说的行动留到下一轮，最先交上；全角括号开头是场外聊天，如（我去倒杯水）" if self.seat else
+                           "你在观战；全角括号开头是场外聊天，如（我去倒杯水）")
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -302,19 +310,22 @@ class NetGameScreen(GameScreen):
         elif t == "sync":
             self._sync(msg["state"])
         elif t == "pool":
-            was_open = self.pool_open
+            was_open, held = self.pool_open, len(self.held)
             self.pool_open, self.pool = bool(msg["open"]), msg
             self.waiting_on = msg.get("waiting", [])
-            mine = int(msg.get("by", {}).get(self.seat or "", 0))
-            self.pooled = self.pooled[:mine] if self.pool_open and was_open else []
-            done = (self.seat or "") in msg.get("done", [])
-            self.my_turn = self.pool_open and bool(self.seat) and not done and mine < 2 and msg.get("count", 0) < msg.get("capacity", 0)
+            mine = msg.get("mine") or {}  # the Hub's word on your own lines
+            self.pooled = list(mine.get("now", [])) if self.pool_open else []
+            self.held = list(mine.get("next", []))
+            self.my_turn = self.pool_open and bool(self.seat) and self.seat in msg.get("open_to", [])
+            if len(self.held) > held:
+                why = "这一轮没有你的位置了" if self.pool_open else "守秘人还在讲"
+                self.app.notify(f"{why}：这条留到下一轮，最先交上；/undo 撤回", timeout=4)
             if self.pool_open and not was_open:
                 self.settling = ""
                 self.engine_label = "局域网联机 · 新的一轮"
                 self._topbar()
                 if self.seat:
-                    self.app.notify("新的一轮：说出你的行动", timeout=4)
+                    self.app.notify("新的一轮：你先说的已经交上了" if self.pooled else "新的一轮：说出你的行动", timeout=4)
                     self.query_one(Input).focus()
             self._turnline()
         elif t == "turn":  # the pool is closed: the keeper settles this seat's action
@@ -367,10 +378,11 @@ class NetGameScreen(GameScreen):
 
     def send_line(self, text: str) -> None:
         word = text.split()[0] if text.split() else ""
-        if word == "/undo" and self.pool_open and self.seat:
-            if self.pooled:
-                self.pooled.pop()
-            self.run_worker(partial(self.link.send, {"t": "undo"}))
+        if word == "/undo" and self.seat and not self.state.ending:
+            if self.pooled or self.held:  # the Hub takes back your latest: the next round's first
+                self.run_worker(partial(self.link.send, {"t": "undo"}))
+            else:
+                self.app.notify("没有可以撤回的行动")
         elif word in ("/done", "/pass"):
             self.empty_enter()
         elif text.startswith("/"):
@@ -379,17 +391,15 @@ class NetGameScreen(GameScreen):
             self.run_worker(partial(self.link.send, {"t": "say", "text": text}))
         elif not self.seat:
             self.app.notify("你在观战；全角括号开头的话是场外聊天")
-        elif self.state.ending and commands.instant(text):  # after the end: growth rolls (.en), the sheet
+        elif self.state.ending and not commands.instant(text):  # after the end: growth rolls (.en), the sheet
+            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定")
+        elif self.state.ending or commands.instant(text):  # .r, .st: not an action; while the keeper tells, right after
+            if not self.pool_open and not self.state.ending:
+                self.app.notify("守秘人讲完这一轮就掷", timeout=3)
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
-
-        elif commands.instant(text) and self.pool_open and self.seat:  # .r, .st: at once, not an action
-            self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
-        elif not self.my_turn:
-            self.app.notify("这一轮你交完了；/undo 撤回上一条" if self.pool_open and self.seat else "守秘人讲完这一轮才能行动")
-        else:
-            self.pooled.append(text)
-            self.my_turn = len(self.pooled) < 2
-            self._turnline()
+        elif not self.my_turn and len(self.held) >= 2:
+            self.app.notify("下一轮你已经先说了 2 条；/undo 撤回上一条")
+        else:  # in this round if it has room for you, else first in the next: the Hub says which
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
     def empty_enter(self) -> None:
