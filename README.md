@@ -11,7 +11,7 @@
 ![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C)
 ![Models](https://img.shields.io/badge/models-Claude%20%C2%B7%20Codex%20%C2%B7%20DeepSeek%20%C2%B7%20Ollama%20%C2%B7%20LangChain-D97757)
 ![GraphRAG](https://img.shields.io/badge/GraphRAG-LightRAG-7B61FF)
-![MCP](https://img.shields.io/badge/MCP-18%20tools-111111)
+![MCP](https://img.shields.io/badge/MCP-19%20tools-111111)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-spec%20compliant-0A7EA4)
 ![License](https://img.shields.io/badge/license-MIT-2EA44F)
 
@@ -258,7 +258,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | 命令 | 作用 |
 |---|---|
 | `autokeeper` / `play` / `serve` | 终端界面 / 浏览器 |
-| `--preset` `--model` `--fallback` `--search` `--budget` | 全局选项：模型预设、所有角色换成同一个模型、备用模型、搜索后端、花费上限 |
+| `--preset` `--model` `--fallback` `--search` `--budget` | 全局选项：模型预设、所有角色换成同一个模型（`deepseek:…`、`ollama:…`、`codex:…`、`claude-…`、`replay:录像`）、备用模型、搜索后端、花费上限 |
 | `import FILE --id ID [--pages 8-19]` | 导入 Agent：读原文、结构化、画图、自校验、编译、建库 |
 | `generate "种子" --id ID` | 考据 Agent 联网查资料（也可离线），再原创一个模组 |
 | `research DIR` | 联网逐条核实考据卡 |
@@ -266,15 +266,15 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `check DIR` / `compile DIR` | 校验 / 编译成 Agent Skill 包 |
 | `art color DIR` / `art show DIR NAME` | 美术 Agent 上色 / 终端预览 |
 | `autoplay DIR --party N [--record/--replay 录像]` | AI 调查员无界面自动跑团；录下整局，或不调模型回放一局 |
-| `eval context` / `eval rhetoric` / `eval lore` | 上下文账本 / 修辞诱导对照 / 原文细节问答 |
+| `eval context` / `eval rhetoric [--referee 模型@强度]` / `eval lore` | 上下文账本 / 修辞诱导对照（可比较裁定员的思考强度）/ 原文细节问答 |
 | `mcp` | 以 MCP 服务运行 |
-| `setup` / `doctor [--ping]` | 安装 / 环境检查：角色路由、密钥、搜索后端、花费，`--ping` 实测每个模型 |
-| `trace [--run last] [--by model] [--runs]` | 汇总模型调用追踪：每个 Agent 的调用、token、缓存命中、延迟 p50/p95、修复、重试、降级、花费 |
+| `setup` / `doctor [--ping]` | 安装 / 环境检查：角色路由（含备用模型）、密钥、Claude / Codex CLI、搜索后端、花费，`--ping` 实测每个模型 |
+| `trace [--run last] [--by model] [--runs] [--day all]` | 汇总模型调用追踪：每个 Agent 的调用、token、缓存命中、延迟 p50/p95、修复、重试、降级、花费 |
 
 </details>
 
 <details>
-<summary><b>MCP 工具（18 个）</b></summary>
+<summary><b>MCP 工具（19 个）</b></summary>
 
 - **开局与存档**：`list_modules`、`list_pregens`、`new_game`、`load_game`；
 - **场景与行动**：`scene`、`move`、`skill_check`、`push_or_luck`、`reveal_clue`、`npc_say`；
@@ -290,14 +290,19 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 src/autokeeper/
   rules/      BCDice 桥接、CoC 7 版结算、骰娘指令
   module/     模组 schema、图谱校验与检索、Skill 编译、导入与生成流水线、格式样例
-  harness/    模型通道、会话与上下文、Agent 循环、沙箱工具、搜索、预算、追踪
+  harness/    模型通道（Claude Code / Codex CLI / LangChain）、备用模型与熔断、会话与上下文、
+              Agent 循环、沙箱工具、搜索、预算、追踪、录制回放
   agents/     intent / arbiter / npc / keeper / chronicler / investigator / vision / artist
   engine/     游戏引擎、LangGraph 回合图、自动跑团（Send）
   tui/        Textual 界面、彩色 ASCII、骰子动画、手绘画布
   eval/       上下文账本、修辞诱导、原文问答
+  artkit.py · imagery.py      ASCII 配色与打光、照片转字符画
+  weather.py · atmosphere.py  天气从哪来（模组、描述、叙事）、逐帧天气动画
   knowledge.py  LightRAG 知识库     mcp_server.py  MCP 服务
 skills/       规则、叙事、美术、评书腔与玩法 Skill（Agent Skills 规范）
 bridge/       BCDice 的 Node 桥接
+docs/         harness.md（harness 设计与实测）、eval.md（评测）、module-format.md（模组格式）
+tests/        单元与界面测试；cassettes/ 是 DeepSeek 录的一盘《钟楼》，CI 不调模型回放
 ```
 
 </details>
