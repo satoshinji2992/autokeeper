@@ -104,7 +104,7 @@ uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id c
 uv run autokeeper autoplay modules/local/mymod --party 2
 ```
 
-第二条命令分别指定导入与读图模型。`generate` 从设定生成模组；`autoplay` 让 AI 调查员游玩指定模组，也可在标题页选“观战”。
+第二条命令分别指定导入与读图模型。导入完成后会在 Wikimedia Commons 查找有授权的照片并转成字符画，找不到的场景保留手绘；加 `--no-photos` 跳过，之后可用 `autokeeper art fetch` 补。`generate` 从设定生成模组；`autoplay` 让 AI 调查员游玩指定模组，也可在标题页选“观战”。
 
 </details>
 

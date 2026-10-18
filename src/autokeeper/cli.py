@@ -474,13 +474,10 @@ def art_fetch(
 ) -> None:
     """从 Wikimedia Commons 找真实图片（公有领域 / CC），读图员挑图裁剪，存成 art/<名字>.jpg 并记录署名。"""
     from .imagery import fetch_folder
+    from .imagery import targets as photo_targets
     from .module.schema import Module
 
-    m = Module.load(module)
-    era = f"{m.era}，{m.setting}"
-    targets = [(loc.art, f"{loc.name}（{era}）：{loc.read_aloud.strip()[:160]}", "scene") for loc in m.locations if loc.art]
-    targets += [(n.portrait, f"{n.name}，{n.role}；{n.look}（{era}）", "portrait") for n in m.npcs if n.portrait]
-    targets += [(p.portrait, f"{p.name}，{p.occupation}，{p.age} 岁，{p.backstory.get('个人描述', '')}（{era}）", "portrait") for p in m.pregens if p.portrait]
+    targets = photo_targets(Module.load(module))
     if only:
         targets = [t for t in targets if t[0] in only]
     done = asyncio.run(fetch_folder(config.load(), module / "art", targets, force=force, log=console.print))
@@ -512,6 +509,7 @@ def import_cmd(
     pages: Annotated[str | None, typer.Option(help="只取这些页，如 7-18")] = None,
     model: Annotated[str, typer.Option(help="这次导入的模型，如 codex:default、deepseek:deepseek-flash")] = "",
     vision_model: Annotated[str, typer.Option(help="这次导入的读图模型；留空沿用 vision 配置")] = "",
+    photos: Annotated[bool, typer.Option("--photos/--no-photos", help="导完去找真实照片转成字符画（同 art fetch）")] = True,
 ) -> None:
     """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。"""
     import tempfile
@@ -522,7 +520,8 @@ def import_cmd(
     from .module.importer import run_import
 
     module_id = id or sources.module_id(file.stem)
-    models = {key: value for key, value in (("model", model), ("vision_model", vision_model)) if value}
+    models: dict = {key: value for key, value in (("model", model), ("vision_model", vision_model)) if value}
+    models["photos"] = photos
     if not id:
         console.print(f"模组短名：{module_id}（用 --id 换一个）")
     if file.suffix.lower() not in sources.ARCHIVES:

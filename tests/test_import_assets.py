@@ -125,3 +125,27 @@ def test_pdf_embedded_images_are_extracted_once_with_all_page_references(tmp_pat
     assert count == 2 and len(images) == 1 and images[0]["pages"] == [1, 2]
     with Image.open(tmp_path / "module" / images[0]["path"]) as extracted:
         assert extracted.size == image.size and extracted.tobytes() == image.tobytes()
+
+
+async def test_an_import_ends_by_looking_for_photos_unless_offline(monkeypatch, tmp_path):
+    """Scenes and faces get real photos like 《追书人》's; offline, or without chafa, nothing is fetched."""
+    from autokeeper import imagery
+
+    m = Module.load(config.EXAMPLE)
+    asked: list[list[tuple[str, str, str]]] = []
+
+    async def fetch(cfg, folder, targets, **kwargs):
+        asked.append(targets)
+        return [targets[0][0]]
+
+    monkeypatch.setattr(imagery, "fetch_folder", fetch)
+    monkeypatch.setattr(imagery, "available", lambda: True)
+    output = io.StringIO()
+    done = await importer.find_photos(m, tmp_path, config.Config(search="auto"), Console(file=output))
+    assert done and asked and {kind for _, _, kind in asked[0]} == {"scene", "portrait"}
+    assert all(m.era in subject for _, subject, _ in asked[0])  # searched for the period, not today
+    assert "找到 1/" in output.getvalue()
+    assert await importer.find_photos(m, tmp_path, config.Config(search="none"), Console(file=io.StringIO())) == []
+    monkeypatch.setattr(imagery, "available", lambda: False)
+    assert await importer.find_photos(m, tmp_path, config.Config(search="auto"), Console(file=io.StringIO())) == []
+    assert len(asked) == 1

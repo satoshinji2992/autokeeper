@@ -342,6 +342,16 @@ async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kin
     return prepare(im, pick.crop), chosen
 
 
+def targets(m) -> list[tuple[str, str, str]]:
+    """What a module wants photos for: every scene and face that has an art key, described
+    with the era so the search finds a 1920s street, not today's (module.schema.Module)."""
+    era = f"{m.era}，{m.setting}"
+    out = [(loc.art, f"{loc.name}（{era}）：{loc.read_aloud.strip()[:160]}", "scene") for loc in m.locations if loc.art]
+    out += [(n.portrait, f"{n.name}，{n.role}；{n.look}（{era}）", "portrait") for n in m.npcs if n.portrait]
+    out += [(p.portrait, f"{p.name}，{p.occupation}，{p.age} 岁，{p.backstory.get('个人描述', '')}（{era}）", "portrait") for p in m.pregens if p.portrait]
+    return out
+
+
 async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print, on_reply=None) -> list[str]:
     """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json."""
     art_dir.mkdir(parents=True, exist_ok=True)

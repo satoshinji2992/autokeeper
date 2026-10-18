@@ -35,7 +35,7 @@ from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
-from .. import artkit, config, skills
+from .. import artkit, config, imagery, skills
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
@@ -338,6 +338,7 @@ async def pipeline(
     console: Console | None = None,
     cfg: config.Config | None = None,
     index: bool = True,
+    photos: bool = True,
 ) -> Path:
     """prepare → build → validate ⇄ fix → compile, shared by import and generation."""
     console = console or Console()
@@ -383,6 +384,8 @@ async def pipeline(
             f"[bold green]完成[/] 《{m.title}》：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、"
             f"{len(m.art)} 张 ASCII 图 → {root}"
         )
+        if photos:
+            await find_photos(m, work, cfg, console)
         from .. import knowledge
 
         if index and knowledge.available():
@@ -416,6 +419,23 @@ async def pipeline(
     return work
 
 
+async def find_photos(m: Module, work: Path, cfg: config.Config, console: Console) -> list[str]:
+    """The scenes and faces as real photos (Wikimedia Commons, licensed), drawn in characters
+    like 《追书人》's; whatever finds nothing keeps its hand-drawn art. Offline (search = none)
+    or without chafa there is nothing to do; `autokeeper art fetch` does the same later."""
+    wanted = imagery.targets(m)
+    if not wanted or cfg.search == "none" or not imagery.available():
+        return []
+    console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，找不到的保留手绘…")
+    try:
+        done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print)
+    except Exception as exc:  # the module is done either way
+        console.print(f"[yellow]照片没找成（{type(exc).__name__}），可以稍后用 autokeeper art fetch 补。[/]")
+        return []
+    console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/*.credit.json")
+    return done
+
+
 def import_config(model: str = "", vision_model: str = "") -> config.Config:
     """Per-import routing; keep the game's models and the user's saved configuration intact."""
     cfg = config.load()
@@ -436,7 +456,7 @@ def import_config(model: str = "", vision_model: str = "") -> config.Config:
 
 async def run_import(
     file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (),
-    console: Console | None = None, model: str = "", vision_model: str = "",
+    console: Console | None = None, model: str = "", vision_model: str = "", photos: bool = True,
 ) -> Path:
     work = config.LOCAL_MODULES / module_id
 
@@ -449,4 +469,4 @@ async def run_import(
             console.print(f"[bold]附图[/] {len(images)} 张 → {work}/source/images/")
 
     brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
-    return await pipeline(work, brief=brief, prepare=prepare, console=console, cfg=import_config(model, vision_model))
+    return await pipeline(work, brief=brief, prepare=prepare, console=console, cfg=import_config(model, vision_model), photos=photos)
