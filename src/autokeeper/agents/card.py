@@ -74,6 +74,8 @@ class Figure:
         return self.title or self.query
 
     def brief(self, limit: int = 4000) -> str:
+        if self.source == "描述":  # the player's own idea of a character: nothing to look up
+            return f"玩家想要的调查员：{self.extract}"
         about = f"{self.description}。" if self.description else ""
         parts = [f"{self.source}《{self.name}》：{about}{self.extract}"] if self.extract else []
         text = "\n".join(parts + self.web)[:limit]
@@ -156,7 +158,7 @@ READ_SYSTEM = """你把玩家已经做好的《克苏鲁的呼唤》第 7 版人
 REVISE_SYSTEM = """你在帮玩家改一张已经录进游戏的《克苏鲁的呼唤》第 7 版人物卡。按玩家的要求改，没提到的地方原样保留，输出改好的整张卡。
 属性在 1–99，技能最终值不超过 99。note 里一句话说改了什么。"""
 
-ASK_SYSTEM = f"""你在帮玩家把一位公众人物（或者一张角色卡里的人物）做成《克苏鲁的呼唤》第 7 版的调查员。先根据资料出三个问题，弄清玩家想要什么样的角色。
+ASK_SYSTEM = f"""你在帮玩家把一位公众人物、一张角色卡里的人物，或者玩家自己的一句描述，做成《克苏鲁的呼唤》第 7 版的调查员。先根据资料出三个问题，弄清玩家想要什么样的角色。
 
 - who：一句话介绍这个人，不超过 60 字。
 - 第一个问题：在这个模组的年代和地点，他是什么身份。给 3 个选项：一个尽量贴近本人（同一个人，或者本人在那个年代最可能的样子），两个是有趣的改编，比如把歌手写成 1920 年代舞厅里的钢琴师。
@@ -165,7 +167,8 @@ ASK_SYSTEM = f"""你在帮玩家把一位公众人物（或者一张角色卡里
 - 每个问题 2–4 个选项，每个选项不超过 24 字，写成玩家一眼能看懂的话。
 - {RESPECT}"""
 
-BUILD_SYSTEM = f"""你按《克苏鲁的呼唤》第 7 版的规则，把一位公众人物（或者一张角色卡里的人物）做成这个模组的调查员。
+BUILD_SYSTEM = f"""你按《克苏鲁的呼唤》第 7 版的规则，把一位公众人物、一张角色卡里的人物，或者玩家自己的一句描述，做成这个模组的调查员。
+玩家给的是描述时，名字由你起，符合模组的年代和地点。
 
 - 身份：按玩家选的来。职业、住处、随身物品都要符合模组的年代和地点，不出现那个年代没有的东西。可以用本人的名字；改编成别的身份时，可以用符合年代的化名。
 - 属性：把 80、70、60、60、50、50、50、40 分给力量、体质、体型、敏捷、外貌、智力、意志、教育，每个数用一次，按本人的特点分，比如运动员力量和敏捷高，学者智力和教育高。
@@ -301,6 +304,12 @@ def parse_st(text: str) -> dict | None:
     return {"characteristics": stats, "skills": skills, **pools} if len(stats) == len(CHARACTERISTICS) else None
 
 
+def is_description(text: str) -> bool:
+    """A phrase about someone rather than a name: it says 的, lists traits, or runs long."""
+    s = text.strip()
+    return "的" in s or any(p in s for p in "，,、；;。") or len(s) > (24 if s.isascii() else 10)
+
+
 def local_file(text: str) -> Path | None:
     """A file typed, pasted or dragged in (quoted, escaped, a file:// URI, a Windows path under WSL)."""
     p = sources.dropped_path(text)
@@ -420,7 +429,12 @@ class Builder:
         return "sheet"
 
     async def look_up(self, query: str) -> Figure:
-        self.figure = await research(query, self.cfg.search)
+        """A name is looked up on the web; a description ("在码头长大、胆子很大的女记者") is taken
+        as the player's idea, with nothing to search for."""
+        if is_description(query):
+            self.figure = Figure(query.strip(), source="描述", extract=query.strip())
+        else:
+            self.figure = await research(query, self.cfg.search)
         return self.figure
 
     async def propose(self) -> Proposal:

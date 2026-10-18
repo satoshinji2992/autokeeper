@@ -164,13 +164,18 @@ class CardScreen(Screen[Investigator | None]):
 
     def _ask_name(self) -> None:
         self.step = "name"
-        intro = Text("输入一位公众人物，AutoKeeper 会上网查他是谁、长什么样，再问你几个问题，把他做成这个模组的调查员。", style="dim")
-        self._type("用公众人物车卡", "名字就行，比如 鲁迅、居里夫人、立石凛", "回车开始查 · Esc 返回", intro)
+        intro = Text(
+            "说一位公众人物的名字，AutoKeeper 会上网查他是谁、找几张照片给你挑；也可以直接描述你想玩的人，"
+            "比如“在码头长大、胆子很大的女记者”。它再问你几个问题，按这个模组的年代做成调查员。",
+            style="dim",
+        )
+        self._type("AI 协助车卡", "一个名字，或者一句描述", "回车开始 · Esc 返回", intro)
 
     def _photos(self) -> None:
         fig = self.builder.figure
         if not fig or not fig.photos:
-            self.app.notify("没找到照片，这张卡就不带照片了")
+            if fig and fig.source != "描述":  # a description never had photos to find
+                self.app.notify("没找到照片，这张卡就不带照片了")
             self.chosen, self.portrait = None, None
             self._next_after_photo()
             return
@@ -209,7 +214,8 @@ class CardScreen(Screen[Investigator | None]):
         if b.kind == "sheet":  # brought as it was: no questions to answer again
             opts = [Option("就用这张卡", id="keep"), Option("提要求修改", id="tweak"), Option("配一张照片", id="find"), Option("重新导入", id="again")]
         else:
-            opts = [Option("就用这张卡", id="keep"), Option("提要求修改", id="tweak"), Option("换一张照片", id="photo"), Option("重新回答问题", id="redo")]
+            photo = Option("换一张照片", id="photo") if b.figure and b.figure.photos else Option("配一张照片", id="find")
+            opts = [Option("就用这张卡", id="keep"), Option("提要求修改", id="tweak"), photo, Option("重新回答问题", id="redo")]
         self._choose(f"{b.card.name} · {b.card.occupation}", opts, "Enter 或空格选定 · Esc 上一步", sheet(b.card, self.portrait, b.note, b.fixes))
 
     def _tweak(self) -> None:

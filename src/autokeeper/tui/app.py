@@ -258,7 +258,7 @@ class SetupScreen(Screen):
         roster.attach(self.module, self.cards)
         opts = [Option(f"{p.name}  {p.occupation}", id=p.id) for p in self.module.pregens]
         opts += [Option(f"{c.name}  {c.occupation}（我的卡）", id=c.id) for c in self.cards]
-        opts += [Option("＋ 用公众人物车卡", id="card:new"), Option("＋ 导入已有的卡", id="card:import")]
+        opts += [Option("＋ AI 协助车卡", id="card:new"), Option("＋ 导入已有的卡", id="card:import")]
         self._set(f"《{self.module.title}》· 选择你的调查员", opts, "Enter 或空格选择 · Esc 返回")
 
     def _investigator(self, inv_id: str) -> Investigator | None:
@@ -297,7 +297,7 @@ class SetupScreen(Screen):
             body.update(t)
         elif self.step == "investigator" and self.module and not self.spectate:
             if oid == "card:new":
-                body.update(Text("说一位公众人物的名字，AutoKeeper 上网查他是谁、长什么样，问你几个问题，再按这个模组的年代把他做成调查员。做好的卡会留着，下次开团还能选。", style="dim"))
+                body.update(Text("说一位公众人物的名字，或者描述你想玩的人。AutoKeeper 会查资料、问你几个问题，再按这个模组的年代做成调查员。做好的卡会留着，下次开团还能选。", style="dim"))
             elif oid == "card:import":
                 body.update(Text("带上你自己的卡：骰娘的 .st 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，或者酒馆（SillyTavern）的角色卡。数值照原样录入；只有人设的角色卡，会问你几个问题再车成调查员。", style="dim"))
             elif inv := self._investigator(oid):

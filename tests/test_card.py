@@ -202,3 +202,20 @@ async def test_a_dice_bot_card_is_brought_in(cards, skills_dir):
         await pilot.press("enter")  # 就用这张卡
         await _until(pilot, lambda: kept)
     assert kept[0].characteristics["外貌"] == 65 and kept[0].luck == 55 and CardModel.calls == []
+
+
+def test_a_description_is_not_searched_for():
+    from autokeeper.agents.card import is_description
+
+    assert is_description("在码头长大、胆子很大的女记者") and is_description("酗酒的退役海军军医")
+    assert not is_description("鲁迅") and not is_description("立石凛") and not is_description("Marie Curie")
+
+
+async def test_a_described_investigator_skips_the_web(cards, monkeypatch):
+    async def research(*a, **k):
+        raise AssertionError("a description must not be looked up")
+
+    monkeypatch.setattr(cardmod, "research", research)
+    b = Builder(cards, Module.load(EXAMPLE))
+    fig = await b.look_up("在码头长大、胆子很大的女记者")
+    assert fig.source == "描述" and not fig.photos and "女记者" in fig.brief()
