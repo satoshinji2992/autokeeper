@@ -40,7 +40,7 @@ from aiohttp import WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import config, roster
+from .. import __version__, config, roster
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -269,6 +269,7 @@ class Hub:
         return {
             "t": "welcome",
             "you": cid,
+            "version": __version__,  # a client on another version is told so (tui/net.py)
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},

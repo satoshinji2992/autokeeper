@@ -8,6 +8,7 @@ from typing import Any
 import aiohttp
 import pytest
 
+import autokeeper
 from autokeeper import config
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.config import EXAMPLE
@@ -115,6 +116,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         assert [s["investigator"] for s in welcome["seats"]] == ["zhouheng", "lin"] and not welcome["started"]
         book = welcome["module"]  # the keeper's book stays on the host
         assert m.truth and not book["truth"] and "transcripts" not in welcome["state"] and "improv" not in welcome["state"]
+        assert welcome["version"] == autokeeper.__version__  # a client on another version is warned
         assert any(n.secrets for n in m.npcs) and not any(n["secrets"] for n in book["npcs"])
         assert book["clues"] == []
         await b.send_json({"t": "hello", "name": "小红"})

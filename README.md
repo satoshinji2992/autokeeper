@@ -24,7 +24,7 @@
 
 <p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》深夜的公墓"></p>
 
-AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子与状态由程序结算。可以独自调查、带 AI 同伴，也可以和朋友联机，或旁观 AI 调查员跑团。终端和浏览器均可游玩，仓库自带入门模组《追书人》。
+AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子与状态由程序结算。可以独自调查、带 AI 同伴，也可以和朋友联机，或旁观 AI 调查员跑团。终端和浏览器均可游玩，仓库自带三本模组：入门的《追书人》，以及《冬雪之下》和《有些人油盐不进》。
 
 ## 功能
 
@@ -173,7 +173,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>手上没有模组怎么办？</summary>
 
-仓库自带《追书人》，开团时直接选，第一次玩也建议从它开始。想玩新的，可以在游戏里导入你手上的模组，或者就用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本原创模组。
+仓库自带《追书人》《冬雪之下》《有些人油盐不进》，开团时直接选，第一次玩建议从《追书人》开始。想玩新的，可以在游戏里导入你手上的模组，或者就用 `autokeeper generate` 给一句灵感，它会查资料、写剧情、画场景，生成一本原创模组。
 
 </details>
 
@@ -269,4 +269,4 @@ uv run ruff check src tests && uv run pytest
 
 ## 许可
 
-代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例。《追书人》是 *Paper Chase*（Bret Kramer 著，Chaosium 出版）的同人改编，原作版权归 Chaosium，仓库不含原书的 PDF；它的场景照片来自 Wikimedia Commons，作者和授权见 [CREDITS](modules/zhuishuren/art/CREDITS.md)。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。
+代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例。《追书人》是 *Paper Chase*（Bret Kramer 著，Chaosium 出版）的同人改编，原作版权归 Chaosium，仓库不含原书的 PDF；它的场景照片来自 Wikimedia Commons，作者和授权见 [CREDITS](modules/zhuishuren/art/CREDITS.md)。《冬雪之下》和《有些人油盐不进》同样是同人改编，原作版权归原作者，仓库不含原模组的文字和图片，照片来自 Wikimedia Commons（[冬雪之下](modules/dongxuezhixia/art/CREDITS.md)、[有些人油盐不进](modules/fallout3-youxierenyouyanbujin/art/CREDITS.md)）。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。

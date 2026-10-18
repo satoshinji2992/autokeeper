@@ -709,7 +709,11 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
         back.paste(front, where)
         return back
     ground = np.abs(np.asarray(front).astype(np.int16) - np.array(BACKDROP[::-1], dtype=np.int16)).sum(axis=2)  # BACKDROP is BGR
-    mask = Image.fromarray((np.clip(ground / 60, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.5))
+    alpha = np.clip(ground / 60, 0, 1)
+    if alpha.mean() < 0.15:  # the cut-out lost the person (the segmentation found nobody): the photo as it is
+        back.paste(photo.resize(front.size), where)
+        return back
+    mask = Image.fromarray((alpha * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.5))
     back.paste(front, where, mask)
     return back
 

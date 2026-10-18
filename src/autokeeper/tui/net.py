@@ -20,7 +20,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import config
+from .. import __version__, config
 from ..engine.game import RETELL
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
@@ -119,6 +119,9 @@ class LobbyScreen(Screen):
         t = msg["t"]
         if t == "welcome":
             self.welcome = msg
+            if (theirs := msg.get("version")) and theirs != __version__:
+                self.app.notify(f"房主用的是 {theirs}，你是 {__version__}。版本不同可能出错，双方更新到同一版再联机。",
+                                severity="warning", timeout=12)
             self.seats = msg["seats"]
             title = msg["module"].get("title", "")
             self.query_one("#lobby-title", Static).update(f"《{title}》 的房间")
