@@ -2,8 +2,8 @@
 
 Every agent role picks its own backend and model. A preset sets all of them at once:
 
-    claude    (default) local play on a Claude subscription: Opus 5.5 runs the game and
-              builds modules, Haiku 5.5 plays the NPCs.
+    claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story,
+              Opus 5.5 rules, directs and builds modules, Haiku 5.5 plays the NPCs.
     deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role). Needs
               DEEPSEEK_API_KEY.
 
@@ -82,10 +82,13 @@ def route(model: str) -> tuple[str, str]:
 
 
 OPUS = Role("claude", "claude-opus-5-5", "medium")
+SONNET = Role("claude", "claude-sonnet-5-5", "medium")
 HAIKU = Role("claude", "claude-haiku-5-5", "medium")
 
 DEFAULT_ROLES: dict[str, Role] = {
-    "keeper": OPUS,  # narrates the game
+    # Narrates the game. Against Opus on the same scripted turns (docs/eval.md): as few stock
+    # phrases, closer to the length asked for, half the latency, under half the price.
+    "keeper": SONNET,
     "arbiter": OPUS,  # rules on checks without seeing the player's wording
     "chronicler": OPUS,  # memory, recaps, replays
     "importer": OPUS,  # builds modules from PDFs, researches generated ones

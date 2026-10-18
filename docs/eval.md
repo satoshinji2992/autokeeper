@@ -109,6 +109,20 @@ uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-fl
 
 明细在 `saves/eval/rhetoric-deepseek-effort.json` 和 `rhetoric-deepseek-none.json`。
 
+## 守秘人用哪个 Claude 模型
+
+`eval style` 固定《追书人》9 段的行动、裁定、NPC 台词和骰子，只有守秘人真调用；每个模型跑 1 遍，样本很小。价格是 Claude Code 报出的等价 API 价，缓存命中后的每次调用。Opus、Sonnet、Haiku 在 2026-10-18 的工作树上测，Fable 只有早一版代码上的一遍。
+
+| | Opus 5.5 | Sonnet 5.5 | Fable 5.1 | Haiku 5.5 |
+|---|---|---|---|---|
+| 套话（前五项，每千字） | 0.81 | 0.54 | 0.45 | 0.00 |
+| 平均字数 · 超过 200 字的段 | 274 · 8/8 | 205 · 4/8 | 245 · — | 183 · 1/8 |
+| 中位延迟 | 10.5 s | 5.2 s | 11.0 s | 7.8 s |
+| 每次花费 | $0.027 | $0.011 | $0.060 | $0.001 |
+| 问题 | — | — | 17 处半角逗号，错字 | 段末漏出“〔输入〕”，不点出孤注一掷 |
+
+claude 预设的守秘人因此改用 Sonnet 5.5。裁定员四个模型在 6 个 `.ra` 请求上都是 6/6，但 Sonnet 有一遍在空书房“说服”时给了一条线索，裁定员先留在 Opus。导演 Opus 和 Sonnet 的方案都一次通过校验（4/4），导演在后台，留 Opus。
+
 ## 同一局，三种后端
 
 ```bash
