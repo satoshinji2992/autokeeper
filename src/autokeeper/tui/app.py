@@ -335,7 +335,12 @@ class SetupScreen(Screen):
 
     @work(exclusive=True, group="module-preview")
     async def _preview_original(self, m: Module, key: str, header: Text, oid: str) -> None:
-        picture = await asyncio.to_thread(art_text, m, key, (40, 18), "ascii")
+        # As wide as the preview pane (a fixed 40 columns left a small blur in a wide pane), cut
+        # to its shape, in the art style the player chose.
+        width = max(32, self.query_one("#preview-body", Static).content_size.width - 2)
+        size = (width, max(10, min(24, round(width * 0.38))))
+        style = self.app.art_style  # type: ignore[attr-defined]
+        picture = await asyncio.to_thread(lambda: Text.from_ansi(imagery.render(m.pictures[key], *size, style, fill=True)))
         choices = self.query_one("#choices", OptionList)
         if self.step != "module" or choices.highlighted is None or choices.get_option_at_index(choices.highlighted).id != oid:
             return

@@ -702,8 +702,8 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
     if not w or not h:
         return front
     size = (max(w, round(h * target)), h) if w / h < target else (w, max(h, round(w / target)))
-    back = ImageOps.fit(photo, size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(size) / 24))
-    back = ImageEnhance.Brightness(back).enhance(0.45)
+    back = ImageOps.fit(photo, size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(size) / 30))
+    back = ImageEnhance.Brightness(back).enhance(0.22)  # well back: brighter, its soft glyphs made the whole picture look blurred
     where = ((size[0] - w) // 2, (size[1] - h) // 2)
     if front is photo:
         back.paste(front, where)
