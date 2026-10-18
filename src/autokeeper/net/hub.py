@@ -186,6 +186,7 @@ class Hub:
         self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
         self.hosts: set[str] = set()  # clients that showed the key: the host may switch models
         self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
+        self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -347,6 +348,7 @@ class Hub:
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
             "seats": self._seats(),
             "started": self.started.is_set(),
+            "room": self.room,
         }
 
     def _art_keys(self, book: dict) -> set[str]:

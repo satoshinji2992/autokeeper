@@ -1,0 +1,154 @@
+/* 开房间 (host.py) and 准备房间 (lobby.py). #setup, #setup-title, #setup-body, #choices, #preview,
+   #setup-hint, .modal and .buttons come from app.tcss. Under 96 columns (-narrow) the
+   investigator's card goes: the lobby opens it as a sheet (c) instead. */
+
+/* ---------- 开房间 ---------- */
+HostScreen #host-steps {
+    height: 1fr;
+}
+HostScreen #host-room {
+    height: 1fr;
+}
+HostScreen #host-form {
+    width: 64;
+    height: 1fr;
+    padding-right: 1;
+    scrollbar-size-vertical: 1;
+}
+HostScreen.-narrow #host-form {
+    width: 1fr;
+}
+HostScreen #host-preview {
+    width: 1fr;
+    padding: 0 2;
+    border: round $secondary-darken-2;
+    background: $surface;
+}
+HostScreen.-narrow #host-preview {
+    display: none;
+}
+HostScreen #host-seats,
+HostScreen #host-saves {
+    height: auto;
+    max-height: 10;
+    margin-bottom: 1;
+    border: round $primary-darken-1;
+    border-title-color: $secondary;
+    background: $surface;
+}
+HostScreen #host-seats:focus,
+HostScreen #host-saves:focus {
+    border: round $primary;
+}
+HostScreen .field {
+    height: 1;
+    margin-bottom: 1;
+}
+HostScreen .field-label {
+    width: 10;
+    color: $secondary;
+    text-style: bold;
+}
+HostScreen .field Input {
+    width: 1fr;
+    max-width: 28;
+    padding: 0 1;
+    margin-right: 2;
+    background: $panel;
+}
+HostScreen #host-port,
+HostScreen #host-web-port {
+    width: 9;
+}
+HostScreen .field Input:focus {
+    background: $primary 30%;
+}
+HostScreen #host-web {
+    margin-bottom: 1;
+}
+HostScreen #host-note {
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+    border-left: thick $accent;
+}
+HostScreen #host-form .buttons {
+    height: 1;
+    align: left middle;
+}
+HostScreen #host-form .buttons Button {
+    min-width: 12;
+    margin-right: 2;
+}
+
+/* ---------- 准备房间 ---------- */
+LobbyScreen #lobby {
+    padding: 0 1;
+}
+LobbyScreen #lobby-head {
+    height: 1;
+    background: $primary-darken-3;
+    color: $foreground;
+    padding: 0 1;
+}
+LobbyScreen #lobby-body {
+    height: 1fr;
+    margin-top: 1;
+}
+LobbyScreen #lobby-left {
+    width: 56;
+}
+LobbyScreen.-narrow #lobby-left {
+    width: 1fr;
+}
+LobbyScreen #seats {
+    height: auto;
+    max-height: 60%;
+    border: round $primary-darken-1;
+    border-title-color: $secondary;
+    background: $surface;
+}
+LobbyScreen #seats:focus {
+    border: round $primary;
+}
+LobbyScreen #lobby-hint {
+    height: auto;
+    padding: 0 1;
+    color: $text-muted;
+}
+LobbyScreen #lobby-info {
+    height: 1fr;
+    padding: 0 1;
+    border: round $secondary-darken-2;
+    border-title-color: $secondary;
+    background: $surface;
+    scrollbar-size-vertical: 1;
+}
+LobbyScreen #lobby-rule,
+LobbyScreen #lobby-module {
+    margin-top: 1;
+}
+LobbyScreen #lobby-card {
+    width: 1fr;
+    margin-left: 1;
+    padding: 0 1;
+    border: round $secondary-darken-2;
+    border-title-color: $secondary;
+    background: $surface;
+    scrollbar-size-vertical: 1;
+}
+LobbyScreen.-narrow #lobby-card {
+    display: none;
+}
+LobbyScreen #lobby-actions {
+    height: 1;
+    margin: 1 0 0 1;
+}
+LobbyScreen #lobby-actions Button {
+    min-width: 0;
+    padding: 0 1;  /* and Button's own line-pad */
+    margin-right: 1;
+}
+LobbyScreen.-narrow #lobby-actions Button {
+    padding: 0;
+}

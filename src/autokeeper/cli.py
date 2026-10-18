@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -158,31 +157,10 @@ def _keypress():
 @app.command()
 def serve(port: int = 8000) -> None:
     """在浏览器里玩（textual-serve）。"""
-    from textual_serve.server import Server
+    from .net.web import Page, command
 
     os.environ["COLORTERM"] = "truecolor"  # the browser's terminal shows 24-bit colour; the game it starts inherits this
-
-    argv = [sys.executable, "-m", "autokeeper", "play", "--no-intro"]
-    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
-    Server(command, port=port, title="AutoKeeper").serve()
-
-
-def _lan_addresses() -> list[str]:
-    """This machine's addresses on the local network, for the others to type in."""
-    import socket
-
-    found: set[str] = set()
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))  # picks the outgoing interface; nothing is sent
-            found.add(s.getsockname()[0])
-    except OSError:
-        pass
-    try:
-        found.update(a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
-    except OSError:
-        pass
-    return sorted(ip for ip in found if not ip.startswith("127.")) or ["127.0.0.1"]
+    Page(command("play", "--no-intro"), port=port, title="AutoKeeper").serve()
 
 
 @app.command()
@@ -194,57 +172,46 @@ def host(
     load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
     web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页，朋友不用装任何东西")] = True,
 ) -> None:
-    """开一个局域网房间：同一个网络里的朋友用浏览器打开地址就能加入。"""
-    import threading
-    import time
-
-    from .engine.state import GameState
-    from .net.hub import Hub
+    """开一个局域网房间：同一个网络里的朋友用浏览器打开地址就能加入。标题画面的「开房间」开的是同样的房间。"""
+    from .net import room as lan
 
     plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
-    state = GameState.model_validate_json((config.SAVES / f"{load}.json").read_text(encoding="utf-8")) if load else None
-    room: dict = {}
-
-    def run_hub() -> None:
-        try:
-            room["hub"] = hub = Hub(module, seats=plan, state=state)
-            asyncio.run(hub.serve("0.0.0.0", hub_port))
-        except Exception as exc:  # a seat plan that makes no sense, the port already taken
-            room["error"] = exc
-
-    threading.Thread(target=run_hub, name="hub", daemon=True).start()
-    while not room.get("error") and not getattr(room.get("hub"), "port", 0):
-        time.sleep(0.05)
-    if room.get("error"):
-        console.print(f"[red]房间没开成：{room['error']}[/]")
-        raise typer.Exit(1)
-    hub: Hub = room["hub"]
-    ips = _lan_addresses()
+    try:
+        state = lan.saved(load) if load else None
+    except (OSError, ValueError):
+        console.print(f"[red]读不了存档 {load}（存档在 {config.SAVES}）[/]")
+        raise typer.Exit(1) from None
+    room = lan.Room(module, seats=plan, state=state, port=hub_port, web_port=port)
+    try:
+        hub = room.open()
+        if web_ui:
+            room.start_web()  # its log lines show here
+    except lan.RoomError as exc:
+        room.close()
+        console.print(f"[red]房间没开成：{exc}[/]")
+        raise typer.Exit(1) from None
+    rows = [(ip, label) for ip, label in room.shared["addresses"]]
     console.print(f"[bold]《{hub.m.title}》的房间开好了[/]")
     for inv in hub.state.investigators:
         console.print(f"  {inv.name}（{inv.occupation}）：{'玩家' if inv.id in hub.sits else 'AI'}")
     if web_ui:
-        console.print("把这个地址发给同一个网络里的朋友，用浏览器打开：")
-        for ip in ips:
-            console.print(f"  [bold]http://{ip}:{port}[/]")
-    console.print(f"装了 AutoKeeper 的人也可以在终端里加入：[bold]uv run autokeeper join {ips[0]}:{hub_port}[/]")
-    console.print(f"房主自己也要玩：另开一个终端 [bold]uv run autokeeper join 127.0.0.1:{hub_port}[/]，这样进来的就是房主，可以按 F9 换模型。")
-    console.print("[dim]人齐了自动开局；也可以在大厅里选“现在开始”，空座交给 AI。Ctrl+C 关闭房间。[/]")
+        console.print("把网址发给朋友，用浏览器打开：")
+        for ip, label in rows:
+            console.print(f"  [bold]{lan.page_url(ip, port)}[/]  {label}")
+    console.print(f"装了 AutoKeeper 的人也可以在终端里加入：[bold]uv run autokeeper join {lan.join_target(rows[0][0], room.port)}[/]，或者在标题画面选「加入房间」")
+    console.print(f"房主自己也要玩：另开一个终端 [bold]uv run autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，"
+                  "这样进来的就是房主，可以按 F9 换模型。下次也可以直接在标题画面选「开房间」。")
+    if room.shared.get("hint"):
+        console.print(f"[yellow]{room.shared['hint']}[/]")
+    console.print(f"[dim]{lan.RULE}。人齐了自动开局；也可以在大厅里选“现在开始”，空座交给 AI。Ctrl+C 关闭房间。[/]")
     console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。[/]")
-    if not web_ui:
-        try:
-            while not room.get("error"):
-                time.sleep(0.5)
-        except KeyboardInterrupt:
-            pass
-        return
-    from textual_serve.server import Server
-
-    argv = [sys.executable, "-m", "autokeeper", "join", f"127.0.0.1:{hub_port}"]
-    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
-    os.environ["COLORTERM"] = "truecolor"  # the friends' browsers show 24-bit colour
-    os.environ["AUTOKEEPER_GUEST"] = "1"  # browser seats run here too, but they are not the host
-    Server(command, host="0.0.0.0", port=port, title="AutoKeeper 联机", public_url=f"http://{ips[0]}:{port}").serve()
+    try:
+        room.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        console.print("[dim]正在关闭房间……[/]")
+        room.close()
 
 
 @app.command()

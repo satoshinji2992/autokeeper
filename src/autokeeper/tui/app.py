@@ -157,8 +157,9 @@ class TitleScreen(Screen):
         yield OptionList(
             Option("新的调查", id="new"),
             Option("继续调查", id="continue"),
-            Option("观战（AI 调查员）", id="watch"),
+            Option("开房间", id="host"),
             Option("加入房间", id="join"),
+            Option("观战（AI 调查员）", id="watch"),
             Option("角色卡", id="cards"),
             Option("导入模组", id="import"),
             Option("设置", id="settings"),
@@ -175,6 +176,11 @@ class TitleScreen(Screen):
 
     def on_resize(self, event) -> None:
         self._place(event.size.width, event.size.height)
+
+    def on_screen_resume(self) -> None:
+        room = getattr(self.app, "room", None)  # a LAN room this app opened (tui/host.py)
+        label = "回到房间" if room is not None and room.is_open else "开房间"
+        self.query_one("#menu", OptionList).replace_option_prompt("host", label)
 
     def _stack(self, cols: int, rows: int) -> tuple[int, int, int]:
         """Rows of the name, the tagline and the menu: one block standing on the hint line, as
@@ -272,6 +278,10 @@ class TitleScreen(Screen):
             self.app.push_screen(SetupScreen(spectate=True))
         elif choice == "continue":
             self.app.push_screen(LoadScreen())
+        elif choice == "host":
+            from .host import HostScreen, back_to_room
+
+            self.app.push_screen(back_to_room(self.app) or HostScreen())
         elif choice == "join":
             from .net import JoinScreen
 
@@ -1505,6 +1515,7 @@ class AutoKeeperApp(App):
         self.art_style = config.load().art_style
         self.dice_skin = config.load().dice
         self.join = join  # (host address, player name): straight to someone's table
+        self.room = None  # the LAN room opened from the title screen (net/room.py), closed with the app
 
     def on_mount(self) -> None:
         for th in THEMES:
@@ -1514,12 +1525,18 @@ class AutoKeeperApp(App):
             self.notify(f"没找到 chafa，照片显示不出来，只能看手绘字符画。安装：{imagery.install_hint()}，装完重开。",
                         title="缺少 chafa", severity="warning", timeout=15)
         if self.join:
-            from .net import JoinScreen, LobbyScreen
+            from .lobby import LobbyScreen
+            from .net import JoinScreen
 
             address, name = self.join
             self.push_screen(LobbyScreen(address, name) if address and name else JoinScreen(address, name))
         else:
             self.push_screen(TitleScreen())
+
+    async def on_unmount(self) -> None:
+        if self.room is not None:  # quitting closes the room: the page first, then the Hub
+            room, self.room = self.room, None
+            await asyncio.to_thread(room.close)
 
     def notify(self, message, *, title: str = "", severity="information", timeout: float | None = None, markup: bool = True) -> None:
         """The same notice twice while the first still shows (a key pressed again) is dropped:
