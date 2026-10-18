@@ -247,13 +247,27 @@ class Game:
         ruling = await self.cast.arbiter(self.state, action, at=heading)
         if ruling.scope != "模组内":  # the module is silent here: the director fills the gap
             kind = "展开" if ruling.scope == "可即兴" else "后果"
-            waiting = len(self.backstage)
-            applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
-            if applied is not None:
-                ruling = self._steer(ruling, applied)
-            elif len(self.backstage) > waiting:
-                ruling = ruling.model_copy(update={"note": LATER})
+            if kind != "展开" or self._may_expand(action, heading):
+                waiting = len(self.backstage)
+                applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
+                if applied is not None:
+                    ruling = self._steer(ruling, applied)
+                elif len(self.backstage) > waiting:
+                    ruling = ruling.model_copy(update={"note": LATER})
         return self._no_reroll(action, ruling, heading or self.state.location)
+
+    def _may_expand(self, action: Action, heading: str | None) -> bool:
+        """The director opens a new line (展开) in one place at most once in EXPAND_ROUNDS rounds.
+        The arbiter finds plenty unwritten (a question to someone not there, a fence to climb),
+        and without a cap one room was rewritten turn after turn: 29 of 31 director calls in
+        an 80-turn game. Moving on is never held back, to a place the module has or one it never
+        wrote; stuck-pushes, consequences and the opening adaptation are not 展开 at all."""
+        st = self.state
+        if action.kind == "move" or heading:
+            return True
+        last = st.expanded.get(st.location)
+        acting = max(1, sum(1 for inv in st.investigators if inv.can_act))  # a round: each of them acts once
+        return last is None or st.turn - last >= EXPAND_ROUNDS * acting
 
     # -- no re-rolls ------------------------------------------------------------------
     def _no_reroll(self, action: Action, ruling: Ruling, at: str) -> Ruling:
@@ -392,6 +406,8 @@ class Game:
             return None
         await self.emit({"type": "status", "text": "守秘人在想…"})
         where = at or st.location
+        if kind == "展开":  # asked for, whatever comes of it (_may_expand)
+            st.expanded[where] = st.turn
         task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where))
         wait = self.director_wait if patience is None or self.director_wait is None else min(patience, self.director_wait)
         if wait is None:
@@ -1181,6 +1197,7 @@ def _retold(old: str, nudge: str) -> str:
 
 
 BACKSTAGE_LIMIT = 2  # plans being written at once
+EXPAND_ROUNDS = 3  # rounds before the same place may 展开 again (Game._may_expand)
 # A turn at a screen does not wait for the director: measured, a plan takes 9 s and more
 # (DeepSeek) or 14 s (Opus), so any wait shorter than that only made turns slower. Plans
 # land in an interlude as soon as they are ready (Game.interlude).

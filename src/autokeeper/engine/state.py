@@ -96,6 +96,7 @@ class GameState(BaseModel):
     checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
     developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
+    expanded: dict[str, int] = Field(default_factory=dict)  # place -> turn the director was last asked to 展开 there (Game._may_expand)
     visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # per-save illustrations, reused after loading
     plugin_data: dict[str, dict] = Field(default_factory=dict)
     plugin_versions: dict[str, str] = Field(default_factory=dict)
