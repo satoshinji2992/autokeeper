@@ -49,11 +49,12 @@ THEMES = [
 
 # -- library and saves ---------------------------------------------------------------
 def modules() -> list[Path]:
+    """The player's modules, then the bundled sample, so a fresh clone has something to play."""
     found = []
     for base in (config.MODULES, config.LOCAL_MODULES):
         if base.is_dir():
             found += [p for p in sorted(base.iterdir()) if (p / "module.yaml").exists()]
-    return found
+    return [*found, config.EXAMPLE]
 
 
 def save_index() -> dict:
