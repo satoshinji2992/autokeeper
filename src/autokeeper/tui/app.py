@@ -116,6 +116,7 @@ class TitleScreen(Screen):
                     Option("  新的调查", id="new"),
                     Option("  继续调查", id="continue"),
                     Option("  AI 自动跑团（观战）", id="watch"),
+                    Option("  加入局域网房间", id="join"),
                     Option("  导入模组", id="import"),
                     Option("  离开", id="quit"),
                     id="menu",
@@ -142,6 +143,10 @@ class TitleScreen(Screen):
             self.app.push_screen(SetupScreen(spectate=True))
         elif choice == "continue":
             self.app.push_screen(LoadScreen())
+        elif choice == "join":
+            from .net import JoinScreen
+
+            self.app.push_screen(JoinScreen())
         elif choice == "import":
             self.app.push_screen(TextModal("导入模组", Text(
                 "把模组文件（PDF / Word / Markdown）放进 modules/_import/，然后在终端运行：\n\n"
@@ -525,9 +530,13 @@ class GameScreen(Screen):
         self.query_one("#topbar", Static).update(t)
         self.query_one(SceneArt).set_light(time_of_day(st.minutes))
 
+    def _viewer(self):
+        """Whose sheet the right column shows: here, whoever is acting."""
+        return self.state.investigator
+
     def _panels(self) -> None:
         st = self.state
-        inv = st.investigator
+        inv = self._viewer()
         self.query_one(SheetPanel).show(inv, art_text(self.m, inv.portrait, (30, 12), self.app.art_style))  # type: ignore[attr-defined]
         titles = [self.m.clue(c).title for c in st.clues]
         self.query_one(CluePanel).show(titles, len(self.m.clues))
@@ -687,8 +696,11 @@ class GameScreen(Screen):
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
         event.input.value = ""
-        if not text:
-            return
+        if text:
+            self.send_line(text)
+
+    def send_line(self, text: str) -> None:
+        """One line from the input box: a slash command, or the investigator's action."""
         if text.startswith("/"):
             self._slash(text)
             return
@@ -912,16 +924,23 @@ class AutoKeeperApp(App):
     TITLE = "AutoKeeper"
     BINDINGS = [Binding("ctrl+q", "quit", "离开"), Binding("ctrl+t", "next_theme", "换配色")]
 
-    def __init__(self, theme: str | None = None):
+    def __init__(self, theme: str | None = None, join: tuple[str, str] | None = None):
         super().__init__()
         self._theme_name = theme
         self.art_style = config.load().art_style
+        self.join = join  # (host address, player name): straight to someone's table
 
     def on_mount(self) -> None:
         for th in THEMES:
             self.register_theme(th)
         self.theme = self._theme_name or config.load().theme
-        self.push_screen(TitleScreen())
+        if self.join:
+            from .net import JoinScreen, LobbyScreen
+
+            address, name = self.join
+            self.push_screen(LobbyScreen(address, name) if address and name else JoinScreen(address, name))
+        else:
+            self.push_screen(TitleScreen())
 
     def action_next_theme(self) -> None:
         names = [th.name for th in THEMES]

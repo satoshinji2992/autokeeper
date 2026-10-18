@@ -19,13 +19,13 @@
 ![Models](https://img.shields.io/badge/models-Claude%20%C2%B7%20Codex%20%C2%B7%20DeepSeek%20%C2%B7%20Ollama-D97757)
 ![License](https://img.shields.io/badge/license-MIT-2EA44F)
 
-[功能](#功能) · [截图](#截图) · [安装](#安装) · [开始游戏](#开始游戏) · [模型与花费](#模型与花费) · [常见问题](#常见问题) · [文档](#文档)
+[功能](#功能) · [截图](#截图) · [安装](#安装) · [开始游戏](#开始游戏) · [和朋友一起玩](#和朋友一起玩) · [模型与花费](#模型与花费) · [常见问题](#常见问题) · [文档](#文档)
 
 </div>
 
 <p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》深夜的公墓"></p>
 
-AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑团。准备一本模组，它就替你当守秘人：描述场景，扮演每一个 NPC，按规则裁定检定，读档时再用评书腔讲一段“上回书说到”。你可以独自调查，可以带上 AI 队友，也可以泡杯茶，看 AI 调查员自己把整个模组跑完。
+AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑团。准备一本模组，它就替你当守秘人：描述场景，扮演每一个 NPC，按规则裁定检定，读档时再用评书腔讲一段“上回书说到”。你可以独自调查，可以带上 AI 队友，可以叫上朋友在局域网里同桌，也可以泡杯茶，看 AI 调查员自己把整个模组跑完。
 
 ## 功能
 
@@ -38,6 +38,7 @@ AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑
 - 彩色 ASCII 画面，照片也能转成字符画。天色随时间变化，墓地入夜起雾，隧道里只有一束手电光，理智下降时画面开始扭曲。
 - 兼容常见的骰娘指令，孤注一掷、幸运、理智、疯狂发作、成长一应俱全。
 - 线索本、手稿、地图、鼠标手绘，存档随时读取，说书人帮你回顾前情。
+- 和朋友在局域网里开一桌：朋友用浏览器打开一个地址就能入座，每位调查员由人或 AI 扮演，有人掉线，AI 先替他走。
 - 终端和浏览器都能玩。Claude、Codex、DeepSeek 和本地模型都能当守秘人，断了网也能玩，一局打到一半也能换。
 - 还能装进 Claude Code 或 Codex，让它们直接当守秘人。
 
@@ -94,6 +95,22 @@ uv run autokeeper autoplay modules/local/mymod --party 2   # 看 AI 调查员自
 | `.sc 1/1d6` `.st 侦查60 hp-2` `.r 1d6+1` `.coc` `.en` `.ti` | 理智、改人物卡、掷骰、掷属性、成长、疯狂发作 |
 | F1 · F2 · F3 · F4 · F5 · F6 | 帮助 · 线索本与手稿 · 换模型 · 手绘 · 地图 · 天气动画 |
 | Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T | 上回书说到 · 存档 · 换画法 · 换配色 |
+
+## 和朋友一起玩
+
+同一个网络里（比如同一个 Wi-Fi），一个人开房间，其他人用浏览器加入，什么都不用装。
+
+```bash
+uv run autokeeper host                                         # 默认《追书人》：第一位调查员留给玩家，其余交给 AI
+uv run autokeeper host modules/local/mymod --seats 玩家,玩家,AI   # 按预设调查员的顺序安排座位
+uv run autokeeper join 192.168.1.5                              # 装了 AutoKeeper 的朋友也可以在终端里加入
+```
+
+开好房间后，终端会打印一个地址，比如 `http://192.168.1.5:8000`。把它发给朋友，打开后填个名字，挑一个空座。人齐了自动开局，也可以选“现在开始”，空着的座位交给 AI 调查员。
+
+大家按座位轮流行动，轮到你时输入框才算数。全角括号开头的话是场外聊天，比如“（我去倒杯水）”，所有人都看得到，不算行动。有人掉线，AI 先替他走这一回合，他重新连上、坐回原来的座位就能接着玩。
+
+游戏跑在房主的电脑上，用房主的模型和额度，每回合自动存档，下次用 `--load` 接着玩。模组的真相、NPC 的秘密和还没找到的线索只留在房主那边，朋友的屏幕上只有调查员该看到的东西。
 
 ## 模型与花费
 
@@ -158,6 +175,13 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 </details>
 
 <details>
+<summary>朋友连不上房间？</summary>
+
+先确认大家在同一个网络里，再看房主电脑的防火墙有没有放行 8000（网页）和 8765（终端加入）这两个端口。在 WSL2 里开房间，需要在 Windows 的 `.wslconfig` 里打开镜像网络（`[wsl2]` 下写 `networkingMode=mirrored`），否则别的电脑连不进 WSL。
+
+</details>
+
+<details>
 <summary>画面颜色不对，或者右边一栏不见了？</summary>
 
 不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏，按 Ctrl+A 可以在照片和纯 ASCII 两种画法之间切换。
@@ -184,12 +208,13 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `index DIR` / `ask DIR "问题"` | 建模组知识库 / 向知识库提问 |
 | `art color DIR` / `art show DIR NAME` | 给 ASCII 图上色 / 预览 |
 | `autoplay DIR --party N` | AI 调查员自动跑团 |
+| `host [DIR] [--seats 玩家,AI]` / `join 地址` | 开局域网房间 / 加入房间 |
 | `setup` / `doctor [--ping]` | 安装 / 检查环境 |
 | `trace` | 查看每个 Agent 的用量和花费 |
 | `eval context` / `eval rhetoric` / `eval lore` | 跑评测 |
 | `mcp` | 以 MCP 服务运行 |
 
-全局选项有 `--preset`、`--model`、`--fallback`、`--search`、`--budget`。
+全局选项有 `--preset`、`--model`、`--fallback`、`--search`、`--budget`、`--improv`。
 
 </details>
 
@@ -200,7 +225,8 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 - [x] Claude、Codex、DeepSeek、本地模型都能当守秘人
 - [x] 彩色 ASCII、照片字符画、昼夜与天气
 - [ ] 完整的战斗与追逐规则
-- [ ] QQ / Discord 机器人，多人联机
+- [x] 局域网联机，人和 AI 调查员同桌
+- [ ] QQ / Discord 机器人
 - [ ] 语音叙事
 
 ## 参与贡献

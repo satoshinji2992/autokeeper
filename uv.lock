@@ -265,6 +265,7 @@ name = "autokeeper"
 version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "ddgs" },
     { name = "filelock" },
     { name = "httpx" },
@@ -321,6 +322,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9" },
     { name = "ascii-magic", marker = "extra == 'art'", specifier = ">=2.7.5" },
     { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.2.168" },
     { name = "ddgs", specifier = ">=9.16.0" },

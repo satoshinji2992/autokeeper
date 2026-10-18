@@ -85,6 +85,94 @@ def serve(port: int = 8000) -> None:
     Server(command, port=port, title="AutoKeeper").serve()
 
 
+def _lan_addresses() -> list[str]:
+    """This machine's addresses on the local network, for the others to type in."""
+    import socket
+
+    found: set[str] = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))  # picks the outgoing interface; nothing is sent
+            found.add(s.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        found.update(a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET))
+    except OSError:
+        pass
+    return sorted(ip for ip in found if not ip.startswith("127.")) or ["127.0.0.1"]
+
+
+@app.command()
+def host(
+    module: Annotated[Path, typer.Argument(help="模组目录")] = Path("modules/zhuishuren"),
+    seats: Annotated[str, typer.Option(help="按预设调查员的顺序填“玩家 / AI / 不上场”，逗号分隔；默认第一位玩家，其余 AI")] = "",
+    port: Annotated[int, typer.Option(help="网页端口：朋友用浏览器打开")] = 8000,
+    hub_port: Annotated[int, typer.Option(help="联机端口：终端里 autokeeper join 连这个")] = 8765,
+    load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
+    web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页，朋友不用装任何东西")] = True,
+) -> None:
+    """开一个局域网房间：同一个网络里的朋友用浏览器打开地址就能加入。"""
+    import threading
+    import time
+
+    from .engine.state import GameState
+    from .net.hub import Hub
+
+    plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
+    state = GameState.model_validate_json((config.SAVES / f"{load}.json").read_text(encoding="utf-8")) if load else None
+    room: dict = {}
+
+    def run_hub() -> None:
+        try:
+            room["hub"] = hub = Hub(module, seats=plan, state=state)
+            asyncio.run(hub.serve("0.0.0.0", hub_port))
+        except Exception as exc:  # a seat plan that makes no sense, the port already taken
+            room["error"] = exc
+
+    threading.Thread(target=run_hub, name="hub", daemon=True).start()
+    while not room.get("error") and not getattr(room.get("hub"), "port", 0):
+        time.sleep(0.05)
+    if room.get("error"):
+        console.print(f"[red]房间没开成：{room['error']}[/]")
+        raise typer.Exit(1)
+    hub: Hub = room["hub"]
+    ips = _lan_addresses()
+    console.print(f"[bold]《{hub.m.title}》的房间开好了[/]")
+    for inv in hub.state.investigators:
+        console.print(f"  {inv.name}（{inv.occupation}）：{'玩家' if inv.id in hub.sits else 'AI'}")
+    if web_ui:
+        console.print("把这个地址发给同一个网络里的朋友，用浏览器打开：")
+        for ip in ips:
+            console.print(f"  [bold]http://{ip}:{port}[/]")
+    console.print(f"装了 AutoKeeper 的人也可以在终端里加入：[bold]uv run autokeeper join {ips[0]}:{hub_port}[/]")
+    console.print("[dim]人齐了自动开局；也可以在大厅里选“现在开始”，空座交给 AI。Ctrl+C 关闭房间。[/]")
+    console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。[/]")
+    if not web_ui:
+        try:
+            while not room.get("error"):
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+        return
+    from textual_serve.server import Server
+
+    argv = [sys.executable, "-m", "autokeeper", "join", f"127.0.0.1:{hub_port}"]
+    command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    Server(command, host="0.0.0.0", port=port, title="AutoKeeper 联机", public_url=f"http://{ips[0]}:{port}").serve()
+
+
+@app.command()
+def join(
+    address: Annotated[str, typer.Argument(help="房主的地址，如 192.168.1.5 或 192.168.1.5:8765")] = "",
+    name: Annotated[str, typer.Option(help="你的名字")] = "",
+) -> None:
+    """加入局域网房间。"""
+    from .tui.app import AutoKeeperApp
+
+    AutoKeeperApp(join=(address, name)).run()
+
+
 @app.command()
 def setup() -> None:
     """安装 BCDice 桥接、编译已导入模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/。"""
