@@ -336,5 +336,6 @@ HELP = Text.from_markup(
 [b]界面[/b]
   F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关   F7 人物卡
   Ctrl+R 前情回顾   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
-  /draw /notes /map /sheet /recap /save 也可以在输入框里用"""
+  F9 叙事偏好：篇幅、恐怖浓度、节奏和不想看到的内容
+  /draw /notes /map /sheet /recap /save /prefs 也可以在输入框里用"""
 )

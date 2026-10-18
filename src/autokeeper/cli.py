@@ -609,6 +609,57 @@ def eval_lore(
     console.print(f"明细：{out}")
 
 
+@eval_app.command("cliche")
+def eval_cliche(files: Annotated[list[Path], typer.Argument(help="存档、autoplay 记录，或 AUTOKEEPER_TRACE=full 记下的追踪")]) -> None:
+    """数守秘人叙事里的套话：不是……而是……、仿佛、一丝、某种、似乎等，每千字多少次。"""
+    from rich import box
+    from rich.table import Table
+
+    from .eval.style import CLICHES, CORE, count, narration
+
+    stats = {f.name: count(narration(f)) for f in files}
+    table = Table(box=box.SIMPLE_HEAD, padding=(0, 1))
+    table.add_column("每千字")
+    for name in stats:
+        table.add_column(name, justify="right", overflow="fold")
+    for phrase in CLICHES:
+        table.add_row(phrase, *(f"{s['per_1000'][phrase]:.2f}（{s['hits'][phrase]}）" for s in stats.values()),
+                      style="bold" if phrase in CORE else "dim")  # fmt: skip
+    table.add_section()
+    table.add_row("前五项合计", *(f"{s['density']:.2f}（{s['core']}）" for s in stats.values()), style="bold")
+    table.add_row("全部套话", *(f"{s['all']:.2f}" for s in stats.values()))
+    table.add_row("比喻和揣测（像）", *(f"{s['similes_per_1000']:.2f}（{s['similes']}）" for s in stats.values()))
+    table.add_row("叙事段数 / 字数", *(f"{s['narrations']} / {s['chars']}" for s in stats.values()))
+    console.print(table)
+    if not any(s["narrations"] for s in stats.values()):
+        console.print("[dim]没找到守秘人的叙事：追踪要用 AUTOKEEPER_TRACE=full 记录才有原文。[/]")
+
+
+@eval_app.command("style")
+def eval_style(
+    module: Path = Path("modules/zhuishuren"),
+    label: Annotated[str, typer.Option(help="这次运行的名字，如 before / after")] = "",
+    runs: Annotated[int, typer.Option(help="跑几遍")] = 1,
+) -> None:
+    """守秘人文风：同样的行动、裁定、NPC 台词和骰子，只有守秘人是真的，数它的套话密度。"""
+    from .eval.style import run as run_style
+
+    async def go() -> None:  # one event loop for every run: the API clients outlive a single run
+        for i in range(runs):
+            name = f"{label or 'run'}-{i + 1}"
+            out = config.SAVES / "eval" / f"style-{name}.json"
+            s = await run_style(module, label=name, out=out)
+            u = s["usage"]
+            console.print(
+                f"[bold]{name}[/] 守秘人 {s['keeper']} · 提示词 {s['prompt']} · {s['narrations']} 段 {s['chars']} 字 · "
+                f"套话 {s['core']} 处，每千字 {s['density']:.2f}（全部 {s['all']:.2f}）· 比喻 {s['similes_per_1000']:.2f} · "
+                f"{int(u.get('calls', 0))} 次调用 ${u.get('cost_usd', 0.0):.4f}"
+            )
+            console.print(f"明细：{out}")
+
+    asyncio.run(go())
+
+
 @eval_app.command("context")
 def eval_context(modules: list[Path]) -> None:
     """渐进式披露的上下文账本：整本模组 vs 总览 + 当前地点文件。"""

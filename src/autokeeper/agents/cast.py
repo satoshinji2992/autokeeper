@@ -28,6 +28,7 @@ from ..harness import OnDelta, Reply, Session, Summarizer
 from ..module import graph as module_graph
 from ..module.compiler import skill_name
 from ..module.schema import NPC, Module
+from ..prefs import Prefs
 from ..rules import commands
 from . import guard
 from .director import DIRECTOR_SYSTEM, Improv
@@ -150,13 +151,13 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 1. 只能用系统给你的线索原文；没给你的线索、NPC 的秘密、模组真相，一个字都不能透露，也不能暗示。
 2. NPC 的台词已经直接展示给玩家。你只补一两句动作、神态和氛围，不复述台词，也不替 NPC 说新的话。
 3. 检定失败就写失败的样子。系统提示可以“孤注一掷”时，在叙事里自然地点出来。
-4. 每轮 80–200 字，第二人称，结尾留一个能行动的钩子。不要列选项，不要问“你要做什么”。
+4. 每轮 80–200 字，第二人称，结尾留一个能行动的钩子，下一步交给玩家，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
 6. 天色随时间自然变化，隔几轮写一笔就够，比如入夜起雾、下起小雨、雷声滚过、雨停了；画面上的天气会跟着你的描写变。
 7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
-   不要对玩家说“不能这么做”“模组里没有”；行不通的事，让后果和剧情去暗示。
-8. 保持张力：每轮收在一个悬念、一股压力或一个要做的选择上。情绪靠具体的细节和动作传达，克制，不煽情。
-   线索给到了，写出他是怎么发现的、看到了什么，不要故弄玄虚；也不要替他总结它意味着什么、指向哪里，那是玩家自己的推理。
+   行不通的事，让后果和剧情去暗示，叙事始终留在故事里。
+8. 保持张力：每轮收在一个悬念、一股压力或一个要做的选择上。情绪靠具体的细节和动作传达，写得克制。
+   线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；它意味着什么、指向哪里，留给玩家自己推理。
 
 {craft}
 
@@ -218,6 +219,7 @@ class Cast:
         self._arbiter_flags: set[str] = set(module.flags)
         self.summarizer = Summarizer(cfg.role("summarizer"))
         self.kb = None  # LightRAG knowledge base, opened on first lookup
+        self.prefs = Prefs.load()  # the player's narrative preferences; the settings screen swaps them mid-game
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -405,6 +407,7 @@ class Cast:
         key = f"npc:{npc_id}"
         s = self._npc(state, npc_id)
         mood = f"\n（你此刻的心境：{npc.arc}）" if npc.arc else ""  # the director's arc, current each time
+        mood += self.prefs.for_npc()  # the player's lines, told each time and never stored
         reply = await self._send(key, s, state, message, extra=mood)
         text = reply.text.strip()
         leaked = guard.leaks(text, self._protected(state, npc))
@@ -429,7 +432,7 @@ class Cast:
             f"调查员们今天做过的事如下，照实编进书里，不要编造他们没做过的事：\n{deeds}\n"
             "篇幅 250–400 字，直接输出表演内容。）"
         )
-        reply = await self._send(key, s, state, prompt)
+        reply = await self._send(key, s, state, prompt, extra=self.prefs.for_npc())
         return reply.text.strip()
 
     def _keeper(self, state: GameState) -> Session:
@@ -443,9 +446,11 @@ class Cast:
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
         """`lore` (knowledge-base hits) rides along this turn only: kept in the transcript, it
-        filled 65% of the keeper's window (8,241 of 12,752 characters, a 17-turn save)."""
+        filled 65% of the keeper's window (8,241 of 12,752 characters, a 17-turn save). The
+        player's narrative preferences ride along the same way, so changing them mid-game
+        leaves the cached prefix (system prompt and transcript) as it was."""
         s = self._keeper(state)
-        reply = await self._send("keeper", s, state, report, extra=lore, on_delta=on_delta)
+        reply = await self._send("keeper", s, state, report, extra=lore + self.prefs.for_keeper(), on_delta=on_delta)
         return reply.text.strip()
 
     async def chronicle(self, state: GameState, entries: str) -> str:
@@ -482,7 +487,8 @@ class Cast:
         it must respect is in the prompt."""
         s = self._open("director", "director", DIRECTOR_SYSTEM, schema=_schema(Improv))
         prompt = director_context(self.module, state, kind, action=action, reason=reason, at=at)  # type: ignore[arg-type]
-        extra = ("\n【上一个方案的问题，请改正】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
+        extra = self.prefs.for_director()  # its new scenes stay out of the player's lines
+        extra += ("\n【上一个方案的问题，请改正】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
         reply = await self._send("director", s, state, prompt, extra=extra)
         if not isinstance(reply.data, dict):
             return None

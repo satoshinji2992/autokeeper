@@ -294,3 +294,6 @@ class NetGameScreen(GameScreen):
 
     def action_save(self) -> None:
         self.app.notify("房主那边每回合都会自动存档")
+
+    def action_prefs(self) -> None:
+        self.app.notify("联机时按房主那边的叙事偏好来讲")
