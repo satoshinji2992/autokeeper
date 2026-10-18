@@ -489,8 +489,13 @@ async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fa
     record = game.state.checks[-1]
     assert (record.skill, record.aim, record.passed, game.state.turn) == ("恐吓", "warden", False, 1)
     cast.script["我盯着他"] = (SCARE.model_copy(update={"summary": "周衡盯着守钟人", "asked": Asked(skill="说服")}), Ruling(needs_roll=False))
-    await run_turn(app, "我盯着他", {"configurable": {"thread_id": "t-dice"}})
+    events, _ = await run_turn(app, "我盯着他", {"configurable": {"thread_id": "t-dice"}})
     assert cast.ruled[-1].asked is None  # only a dice command makes a request, whatever the model says
+    assert not [e for e in events if e["type"] == "waived"]
+    cast.script[".ra 侦查"] = (SCARE.model_copy(update={"kind": "investigate", "summary": "周衡看了看钟楼的门"}), Ruling(needs_roll=False))
+    events, _ = await run_turn(app, ".ra 侦查", {"configurable": {"thread_id": "t-dice"}})
+    assert [(e["who"], e["skill"]) for e in events if e["type"] == "waived"] == [(game.state.investigator.name, "侦查")]  # said, not swallowed
+    assert "玩家要求侦查检定，裁定这次不用掷" in cast.reports[-1]
 
 
 async def test_a_failed_check_is_not_rolled_again(module, fake):

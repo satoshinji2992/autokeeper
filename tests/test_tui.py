@@ -116,7 +116,11 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         app.push_screen(PushModal(offer))
         await pilot.pause()
         stakes = "".join(str(w.render()) for w in app.screen.query(Static))
-        assert "比这次更糟" in stakes and "幸运 55 → 52" in stakes and "关键发现还是会到手" in stakes
+        assert "比这次更糟" in stakes and "幸运 55 → 52" in stakes and "还在原处" in stakes and "会到手" not in stakes  # first miss
+        app.pop_screen()
+        app.push_screen(PushModal({**offer, "due": True}))  # missed before: giving up now finds it, at a price
+        await pilot.pause()
+        assert "关键发现还是会到手" in "".join(str(w.render()) for w in app.screen.query(Static))
 
 
 async def test_after_the_ending_only_the_dice_lookups_work(canned):
@@ -137,6 +141,8 @@ async def test_after_the_ending_only_the_dice_lookups_work(canned):
                 break
         assert "没有需要成长检定的技能" in story_text(screen) and "我再上一趟钟楼" not in story_text(screen)
         assert state.turn == 0 and state.developed == [lead.id] and "回顾这一局" not in story_text(screen)
+        await pilot.press("escape")  # as the last lines say: Esc goes back to the title
+        assert await until(pilot, lambda: not isinstance(app.screen, GameScreen))
 
 
 async def test_loading_a_save_opens_the_game_at_night(canned):
@@ -382,3 +388,45 @@ async def test_ctrl_b_shows_where_the_tokens_went(canned):
     console.print(usage_view(state))
     shown = console.export_text()
     assert "守秘人" in shown and "12.0k" in shown and "75%" in shown and "每回合" in shown
+
+
+async def test_typing_lands_in_the_command_box_wherever_the_focus_went(canned):
+    from textual import events
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="focus", human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        screen = app.screen
+        box = screen.query_one("#command", Input)
+        screen.query_one(StoryLog).focus()  # a click on the story
+        await pilot.pause()
+        assert not box.has_focus
+        await pilot.press("a", "b")
+        assert box.value == "ab" and box.has_focus
+        screen.query_one(StoryLog).focus()
+        await pilot.pause()
+        screen.post_message(events.Paste("侦查\n第二行"))
+        await pilot.pause()
+        assert box.value == "ab侦查" and box.has_focus
+
+
+async def test_meta_lines_stay_off_the_story_and_a_waived_check_is_said(canned):
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="meta", human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        screen = app.screen
+        await screen.handle({"type": "improv", "kind": "展开", "summary": "报童小六在钟楼下卖报", "reason": "想找人打听"})
+        await screen.handle({"type": "action", "kind": "investigate", "summary": "仔细看楼梯", "asked": {"skill": "侦查"}})
+        await screen.handle({"type": "ruling", "needs_roll": True, "skill": "侦查", "difficulty": "常规"})
+        await screen.handle({"type": "waived", "who": lead.name, "skill": "侦查"})
+        shown = story_text(screen)
+        assert "模组没写到" not in shown and "裁定员" not in shown and "需要检定" not in shown and "报童小六" not in shown
+        assert f"{lead.name} 的侦查不用掷" in shown

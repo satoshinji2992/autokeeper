@@ -65,13 +65,14 @@ TIPS: dict[str, Tip] = {
         "dice",
     ),
     "repeat": Tip("同一件事刚试过，情况又没变，就不会重掷，结果照旧。换个办法、换个人问，或者找到新的线索再来。", "dice"),
+    "waived": Tip("用 .ra 点名的检定是向守秘人申请：结果一眼就明白，或者这个技能在这里用不上，他就直接说结果，不用掷。", "dice"),
     "npc": Tip(
         "跟人说话就像平时聊天，问什么、怎么问，直接说。每个人只知道自己那一份，有人会撒谎，有人藏着话；"
         "想让人松口，可能要过说服、话术、魅惑或恐吓。",
         "play",
     ),
     "improv": Tip(
-        "守秘人在即兴：模组没写到的地方，合理的想法他会顺着往下编，太出格的举动也会招来后果。详见F1「守秘人会即兴」。",
+        "不必照着剧本走：说得通的想法，故事会顺着往下编；太出格的举动也会招来后果。详见F1「守秘人会即兴」。",
         "improv",
     ),
     "move": Tip("换地方要花游戏里的时间，最上面一行有钟。按F5看地图，去过的、听说过的地方都画在上面。", "screen"),
@@ -93,7 +94,7 @@ STUCK_AFTER = 4  # turns without a clue, an event or a new place before F8 is me
 # When several wait, the more urgent and the rarer go first; the rest keep for a later turn,
 # except those about this very turn, which no later one would make sense of.
 NOW = {"start", "offer"}
-ORDER = ("start", "offer", "hurt", "sanity", "handout", "clue", "check", "repeat", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
+ORDER = ("start", "offer", "hurt", "sanity", "handout", "clue", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
 
 
 class TipLine(Static):
@@ -206,8 +207,8 @@ def _called_for(st, player: Investigator, ev: dict) -> str | None:
         return "hurt" if ev.get("who") == player.name and 0 < player.hp * 3 <= player.hp_max else None
     if t == "sanity":
         return "sanity" if ev.get("loss") else None
-    if t == "repeat":
-        return "repeat" if ev.get("who") == player.name else None
+    if t in ("repeat", "waived"):
+        return t if ev.get("who") == player.name else None
     if t == "improv":  # the kinds the story tells; a consequence speaks for itself
         return "improv" if ev.get("kind") in ("开局改编", "展开", "推进") else None
     return {"handout": "handout", "clue": "clue", "dice": "check", "npc": "npc", "move": "move"}.get(t or "")

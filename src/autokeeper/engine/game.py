@@ -334,7 +334,7 @@ class Game:
             return None
         if len(self.backstage) >= BACKSTAGE_LIMIT:  # enough is being written already
             return None
-        await self.emit({"type": "status", "text": "守秘人在即兴…"})
+        await self.emit({"type": "status", "text": "守秘人在想…"})
         where = at or st.location
         task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where))
         wait = self.director_wait if patience is None or self.director_wait is None else min(patience, self.director_wait)
@@ -510,6 +510,8 @@ class Game:
                 st.checks.append(e)
                 e.turn = st.turn
                 await self.emit({"type": "repeat", "who": inv.name, "skill": e.skill, "text": e.text, "passed": e.passed})
+        elif action.asked and not (ruling.needs_roll and ruling.skill) and action.kind != "move":
+            await self.emit({"type": "waived", "who": inv.name, "skill": canonical(action.asked.skill)})
         elif ruling.needs_roll and ruling.skill:
             check = self.rules.check(inv, ruling.skill, DIFFICULTY_ZH.get(ruling.difficulty, Level.REGULAR), ruling.bonus)
             turn.checks.append(check)
@@ -533,7 +535,9 @@ class Game:
                         "can_push": check.can_push,
                         "luck": luck,
                         "left": inv.luck - (luck or 0),  # luck after paying for it
-                        "core": any(self.m.clue(c).core for c in wanted),  # dropping it still finds those, at a price
+                        "core": any(self.m.clue(c).core for c in wanted),
+                        # missed once before: dropping it now finds it at a price (_fail_forward)
+                        "due": any(self.m.clue(c).core and st.missed.get(c, 0) for c in wanted),
                         "npc": action.npc if action.kind in ("talk", "perform") else "",
                         "value": check.value,
                     }

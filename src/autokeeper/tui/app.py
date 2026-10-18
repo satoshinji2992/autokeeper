@@ -14,7 +14,7 @@ import aiosqlite
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle, Vertical, VerticalScroll
@@ -436,7 +436,7 @@ class GameScreen(Screen):
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command",
-                            suggester=command_suggester(self._viewer()))  # fmt: skip
+                            suggester=command_suggester(self._viewer()), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
@@ -492,6 +492,29 @@ class GameScreen(Screen):
         if getattr(self, "following", True):
             for s in self.query(StoryLog):
                 s.scroll_end(animate=False)
+        if self.focused is None and not self.spectate:
+            for box in self.query("#command").results(Input):
+                box.focus()
+
+    # A click on the story or the stage takes the focus off the command box. Whatever is typed
+    # or pasted then still goes into the box, instead of waiting for Esc to bring it back.
+    def _typing(self) -> Input | None:
+        box = self.query_one("#command", Input)
+        return None if self.spectate or box.has_focus or box.disabled else box
+
+    def on_key(self, event: events.Key) -> None:
+        if event.is_printable and event.character and (box := self._typing()):
+            box.focus()
+            box.insert_text_at_cursor(event.character)
+            event.prevent_default()
+            event.stop()
+
+    def on_paste(self, event: events.Paste) -> None:
+        if event.text and (box := self._typing()):
+            box.focus()
+            box.insert_text_at_cursor(event.text.splitlines()[0])  # as the box takes a paste
+            event.prevent_default()
+            event.stop()
 
     def _status(self, text: str) -> None:
         self.status_text = text
@@ -644,11 +667,7 @@ class GameScreen(Screen):
             self._topbar()
         elif t == "sky":
             self.query_one(SceneArt).set_sky(self._sky(self.state.location))
-        elif t == "improv":
-            told = {"开局改编": "守秘人根据你们的背景改编了这本模组", "展开": "模组没写到这里，守秘人即兴展开", "推进": "守秘人推了故事一把"}
-            if ev["kind"] in told:  # a consequence speaks for itself; the opening keeps its surprises
-                shown = ev["summary"] if ev["kind"] == "展开" else ""
-                story.add("system", Text(f"✦ {told[ev['kind']]}{('：' + shown) if shown else ''}", style="dim italic"))
+        elif t == "improv":  # what the director added is told in the story, never announced over it
             self._topbar()
         elif t == "damage":
             story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
@@ -665,11 +684,8 @@ class GameScreen(Screen):
         elif t == "keeper_end":
             story.end_keeper(ev["text"])
             self._status("")
-        elif t == "action":
-            story.add("system", Text(f"◇ 裁定员只看到：{ev['summary']}", style="dim"))
-        elif t == "ruling":
-            if ev.get("needs_roll") and ev.get("skill"):
-                story.add("system", Text(f"◇ 需要检定：{ev['skill']}（{ev.get('difficulty', '常规')}）", style="dim"))
+        elif t == "waived":  # a check asked for with .ra that the keeper needs no dice for
+            story.add("dice", Text(f"◈ {ev['who']} 的{ev['skill']}不用掷：守秘人直接说结果", style="dim"))
         elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
             story.add("dice", Text(f"◈ {ev['who']} 不重掷：{ev['text']}（刚才的结果不变）", style="dim"))
         elif t == "dice":
@@ -784,8 +800,13 @@ class GameScreen(Screen):
             pass
 
     def action_focus_input(self) -> None:
-        if not self.spectate:
+        if self.state.ending and not self.busy and not self.writing:  # the story is over: Esc leaves, as the last lines say
+            self._leave()
+        elif not self.spectate:
             self.query_one(Input).focus()
+
+    def _leave(self) -> None:
+        self.app.pop_screen() if len(self.app.screen_stack) > 1 else self.app.exit()
 
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
@@ -827,7 +848,7 @@ class GameScreen(Screen):
             names = [th.name for th in THEMES]
             self.app.theme = names[(names.index(self.app.theme) + 1) % len(names)] if self.app.theme in names else names[0]
         elif cmd == "/quit":
-            self.app.pop_screen() if len(self.app.screen_stack) > 1 else self.app.exit()
+            self._leave()
         else:
             self.app.notify(f"不认识的命令：{cmd}", severity="warning")
 
@@ -1002,7 +1023,7 @@ class GameScreen(Screen):
     async def _interlude(self) -> None:
         assert self.game
         self._busy(True)
-        self._status("守秘人插进来一段…")
+        self._status("守秘人正在讲述…")
         self.game.emit = self.handle
         await self.game.interlude()
         write_save(self.state, self.m)

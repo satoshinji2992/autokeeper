@@ -105,7 +105,12 @@ class PushModal(ModalScreen[str]):
                 body.append(f"幸运 {left + o['luck']} → {left}，" if left is not None else "")
                 body.append("花掉的不会回来，以后靠运气的时候更难。\n")
             body.append("放弃：", style="bold")
-            body.append("接受失败。" + ("这里的关键发现还是会到手，只是要付出代价（多花时间、弄出动静）。" if o.get("core") else "换条路。"))
+            if o.get("due"):
+                body.append("接受失败。这里的关键发现还是会到手，只是要付出代价（多花时间、弄出动静）。")
+            elif o.get("core"):
+                body.append("接受失败。要找的东西还在原处，换个办法或再仔细查一次还有机会。")
+            else:
+                body.append("接受失败，换条路。")
             yield Static(body, classes="modal-body")
             with Horizontal(classes="buttons"):
                 if o.get("can_push"):
