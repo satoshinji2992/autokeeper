@@ -126,6 +126,7 @@ class LobbyScreen(Screen):
 
     def _list_seats(self) -> None:
         ol = self.query_one(OptionList)
+        kept = ol.highlighted if ol.option_count else None  # someone else sitting down must not move your cursor
         ol.clear_options()
         mine = self.chosen
         for s in self.seats:
@@ -143,7 +144,7 @@ class LobbyScreen(Screen):
         hint = "游戏已经开始了，选个空位加入，或者观战。" if started else "选一个座位，人齐了就开局。"
         self.query_one("#lobby-hint", Static).update(Text(hint, style="dim"))
         free = next((i for i, s in enumerate(self.seats) if s["human"] and not s["online"]), len(self.seats))
-        ol.highlighted = free  # Enter takes the first free seat
+        ol.highlighted = kept if kept is not None and kept < ol.option_count else free  # first time: Enter takes the first free seat
         ol.focus()
 
     @on(OptionList.OptionSelected, "#choices")

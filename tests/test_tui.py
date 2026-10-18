@@ -8,7 +8,7 @@ import shutil
 import pytest
 from PIL import Image
 from rich.text import Text
-from textual.widgets import RadioButton
+from textual.widgets import Input, RadioButton
 
 from autokeeper import artkit, config, imagery
 from autokeeper.config import EXAMPLE, Role
@@ -28,20 +28,20 @@ async def test_title_and_setup_flow(monkeypatch, size, skills_dir):
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         assert isinstance(app.screen, TitleScreen)
-        await pilot.press("enter")
+        await pilot.press("space")  # space confirms like Enter
         await pilot.pause()
         assert isinstance(app.screen, SetupScreen)
         await pilot.press("enter")
         await pilot.pause()
         assert app.screen.step == "investigator"
-        await pilot.press("enter")
+        await pilot.press("space")
         await pilot.pause()
         assert app.screen.step == "companions"
 
 
 class Canned(hm.Model):
     async def _call(self, messages, *, schema, images, on_delta):
-        text = "上回书说到，诸位还在钟楼底下。"
+        text = "前情回顾：周衡还在钟楼底下。"
         if on_delta:
             await on_delta(text)
         return Reply(text=text, data={} if schema else None)
@@ -89,6 +89,13 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
         await pilot.pause(0.3)
         assert screen.cast is not before and screen.game.cast is screen.cast and os.environ["AUTOKEEPER_MODE"] == "高级剧情"
         assert screen.state.transcripts is memory  # the agents' memories carry over
+        screen.busy = True  # mid-turn: the next action can be typed, but waits for the turn
+        box = screen.query_one("#command", Input)
+        box.value = "我爬上钟楼"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert box.value == "我爬上钟楼" and not box.disabled
+        screen.busy = False
 
 
 def test_weather_is_read_off_the_place_and_the_hour():

@@ -184,6 +184,10 @@ class SceneArt(Static):
             return
         self._paint(art_text=self._atmo.frame())
 
+    def quiet(self, seconds: float) -> None:
+        """Hold the weather still for a while (the player is typing)."""
+        self._hold = max(self._hold, time.monotonic() + seconds)
+
     def glitch(self, frames: int = 14) -> None:
         self.add_class("dread")
         if self._uses_image():

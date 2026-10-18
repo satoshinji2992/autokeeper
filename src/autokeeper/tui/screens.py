@@ -262,6 +262,6 @@ HELP = Text.from_markup(
 
 [b]界面[/b]
   F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关
-  Ctrl+R 上回书说到   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
+  Ctrl+R 前情回顾   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
   /draw /notes /map /recap /save 也可以在输入框里用"""
 )

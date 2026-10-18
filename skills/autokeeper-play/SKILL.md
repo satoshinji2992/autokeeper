@@ -29,4 +29,4 @@ metadata:
 
 ## 风格
 
-叙事规范见 `keeper-craft`，规则见 `coc7-core` 和 `coc7-sanity`，说书人台词和回顾见 `pingshu-voice`。插图一律原样放进代码块，不要改动。
+叙事规范见 `keeper-craft`，规则见 `coc7-core` 和 `coc7-sanity`，说书人 NPC 的表演台词见 `pingshu-voice`；读档时的前情回顾用平实的现代汉语，不用评书腔。插图一律原样放进代码块，不要改动。

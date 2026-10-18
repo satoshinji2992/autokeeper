@@ -165,12 +165,10 @@ NPC_SYSTEM = """你在一场 1920 年代的中文跑团里扮演 NPC「{name}」
 - 不要替调查员说话，不要描写调查员的心理。
 {extra}"""
 
-CHRONICLER_SYSTEM = """你是这场跑团的记录员兼说书人。你会收到游戏记录，按要求写摘要或回顾。
+CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录，按要求写摘要或前情回顾。
 摘要：客观、紧凑，记下调查员去过哪里、见过谁、拿到哪些线索、做了哪些关键决定、身心状态。
-回顾：用说书人的口吻。
-只输出纯文本，界面不渲染 Markdown：不要加粗、标题和列表符号；定场诗直接写诗句，不加“定场诗”之类的标签。
-
-{voice}"""
+前情回顾：像守秘人开团前帮玩家接上进度。用平实的现代汉语，称呼调查员的名字，按时间讲清发生了什么、手上有哪些线索、现在在哪、还悬着什么问题。不用评书和说书人的套话，不写诗，不加感叹和评点。
+只输出纯文本，界面不渲染 Markdown：不要加粗、标题和列表符号。"""
 
 INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员「{name}」（{occupation}）。
 {sheet}
@@ -399,15 +397,15 @@ class Cast:
         return reply.text.strip()
 
     async def chronicle(self, state: GameState, entries: str) -> str:
-        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")))
+        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)
         prompt = f"把下面这段游戏记录并进摘要（已有摘要：{state.memory or '无'}）。输出新的完整摘要，不超过 400 字。\n\n{entries}"
         reply = await self._send("chronicler", s, state, prompt)
         return reply.text.strip()
 
     async def recap(self, state: GameState, on_delta: OnDelta = None) -> str:
-        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM.format(voice=skills.wrap("pingshu-voice")))
+        s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)
         recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:])
-        prompt = f"用说书人的口吻写“上回书说到”，150–300 字，只讲调查员已经知道的事。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
+        prompt = f"写一段前情回顾，150–250 字，只讲调查员已经知道的事，最后落在他们现在的处境上。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
         return reply.text.strip()
 

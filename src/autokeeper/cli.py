@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shlex
 import shutil
@@ -66,14 +67,51 @@ def _intro() -> None:
 
         from .tui import art
 
-        lines = "\n".join(art.title_lines(os.get_terminal_size().columns)) + "\n\n" + art.TAGLINE
+        lines = "\n".join(art.title_lines(os.get_terminal_size().columns)) + "\n\n" + art.TAGLINE + "\n\n按任意键跳过"
         effect = Decrypt(lines)
         effect.effect_config.typing_speed = 4
-        with effect.terminal_output() as terminal:
+        with _keypress() as pressed, effect.terminal_output() as terminal:
             for frame in effect:
+                if pressed():
+                    break
                 terminal.print(frame)
     except Exception:  # the intro is decoration; never block the game on it
         pass
+
+
+@contextlib.contextmanager
+def _keypress():
+    """A check for "was a key pressed", with the key swallowed so the game does not see it."""
+    if os.name == "nt":
+        import msvcrt
+
+        def pressed() -> bool:
+            hit = msvcrt.kbhit()
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+            return hit
+
+        yield pressed
+        return
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+
+    def pressed() -> bool:
+        hit = False
+        while select.select([fd], [], [], 0)[0]:
+            os.read(fd, 1024)
+            hit = True
+        return hit
+
+    try:
+        yield pressed
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 
 
 @app.command()

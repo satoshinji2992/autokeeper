@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Center, Horizontal, Middle, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.theme import Theme
-from textual.widgets import Footer, Input, OptionList, Static
+from textual.widgets import Button, Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .. import artkit, config, imagery, weather
@@ -121,7 +121,7 @@ class TitleScreen(Screen):
                     Option("  离开", id="quit"),
                     id="menu",
                 )
-            yield Static("↑↓ 选择 · Enter 确认 · Ctrl+T 换配色 · Ctrl+Q 离开", id="title-hint")
+            yield Static("↑↓ 选择 · Enter 或空格确认 · Ctrl+T 换配色 · Ctrl+Q 离开", id="title-hint")
 
     def on_mount(self) -> None:
         self.id = "title-screen"
@@ -218,17 +218,17 @@ class SetupScreen(Screen):
                 opts.append(Option(f"《{m.title}》 {m.players}", id=str(p)))
             except Exception as exc:  # broken module files should not crash the menu
                 opts.append(Option(f"{p.name}（无法读取：{exc.__class__.__name__}）", id=str(p), disabled=True))
-        self._set("选择模组" + ("（AI 观战）" if self.spectate else ""), opts, "Enter 选择 · Esc 返回")
+        self._set("选择模组" + ("（AI 观战）" if self.spectate else ""), opts, "Enter 或空格选择 · Esc 返回")
 
     def _show_investigators(self) -> None:
         assert self.module
         self.step = "investigator"
         if self.spectate:
             opts = [Option(f"{n} 名 AI 调查员", id=f"party-{n}") for n in (1, 2, 3) if n <= max(1, len(self.module.pregens))]
-            self._set(f"《{self.module.title}》· 观战人数", opts, "Enter 开始 · Esc 返回")
+            self._set(f"《{self.module.title}》· 观战人数", opts, "Enter 或空格开始 · Esc 返回")
             return
         opts = [Option(f"{p.name}  {p.occupation}", id=p.id) for p in self.module.pregens]
-        self._set(f"《{self.module.title}》· 选择你的调查员", opts, "Enter 选择 · Esc 返回")
+        self._set(f"《{self.module.title}》· 选择你的调查员", opts, "Enter 或空格选择 · Esc 返回")
 
     def _show_companions(self) -> None:
         assert self.module and self.lead
@@ -310,7 +310,7 @@ class LoadScreen(Screen):
         with Vertical(id="setup"):
             yield Static(Text("继续调查", style="bold"), id="setup-title")
             yield OptionList(id="choices", classes="saves")
-            yield Static("Enter 读档 · Esc 返回", id="setup-hint")
+            yield Static("Enter 或空格读档 · Esc 返回", id="setup-hint")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -345,7 +345,7 @@ class GameScreen(Screen):
         Binding("f3", "engine", "换模型"),
         Binding("f4", "sketch", "手绘"),
         Binding("f5", "map", "地图"),
-        Binding("ctrl+r", "recap", "上回书说到"),
+        Binding("ctrl+r", "recap", "前情回顾"),
         Binding("ctrl+s", "save", "存档"),
         Binding("ctrl+a", "art_style", "画法"),
         Binding("f6", "weather", "天气"),
@@ -426,13 +426,13 @@ class GameScreen(Screen):
             self.query_one("#status", Static).update(Text(line))
 
     def _busy(self, busy: bool) -> None:
+        """While a turn runs the box stays open: the next action can be typed ahead, and keys
+        pressed mid-narration are not lost."""
         self.busy = busy
-        inp = self.query_one(Input)
-        inp.disabled = busy or self.spectate
         if not busy:
             self.status_text = ""
             if not self.spectate:
-                inp.focus()
+                self.query_one(Input).focus()
 
     def _scene(self, loc_id: str) -> None:
         loc = self.m.location(loc_id)
@@ -657,8 +657,8 @@ class GameScreen(Screen):
         self._busy(True)
         warm = asyncio.create_task(self._warm())
         if self.resume:
-            self._status("说书人正在回顾…")
-            self.story.add("event", Text("━━━━ 上回书说到 ━━━━", style="bold"))
+            self._status("正在回顾前情…")
+            self.story.add("event", Text("━━━━ 前情回顾 ━━━━", style="bold"))
             self.story.begin_keeper()
             text = await self.cast.recap(self.state, on_delta=self._feed)
             self.story.end_keeper(text)
@@ -697,9 +697,18 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/help", "/theme"):
+            self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
+            return
         event.input.value = ""
         if text:
             self.send_line(text)
+
+    @on(Input.Changed, "#command")
+    def typing(self) -> None:
+        # Every weather frame moves the terminal cursor across the screen and back; on terminals
+        # without synchronized output that makes the caret and the IME box jump while typing.
+        self.query_one(SceneArt).quiet(4.0)
 
     def send_line(self, text: str) -> None:
         """One line from the input box: a slash command, or the investigator's action."""
@@ -707,7 +716,7 @@ class GameScreen(Screen):
             self._slash(text)
             return
         if self.state.ending:
-            self.app.notify("这局已经结束了。Ctrl+R 听说书人复盘，Esc 回到标题。")
+            self.app.notify("这局已经结束了。Ctrl+R 回顾这一局，Esc 回到标题。")
             return
         self.play(text)
 
@@ -824,7 +833,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("Ctrl+R 让说书人复盘这一局 · Esc 回到标题", style="dim")
+        t.append("Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------
@@ -844,8 +853,22 @@ class GameScreen(Screen):
     def action_map(self) -> None:
         self.app.push_screen(TextModal("地图", _map(self.m, self.state)))
 
+    def _turn_running(self) -> bool:
+        """Starting another turn-group worker would cancel the running turn."""
+        if self.busy:
+            self.app.notify("等这一回合结束再来", severity="warning", timeout=3)
+        return self.busy
+
+    def action_sketch(self) -> None:
+        if not self._turn_running():
+            self._sketch()
+
+    def action_recap(self) -> None:
+        if not self._turn_running():
+            self._recap()
+
     @work(exclusive=True, group="turn")
-    async def action_sketch(self) -> None:
+    async def _sketch(self) -> None:
         assert self.game
         st = self.state
         prompt = next((p for p in self.m.sketches if not p.after or p.after in st.clues), None)
@@ -861,11 +884,11 @@ class GameScreen(Screen):
         self._busy(False)
 
     @work(exclusive=True, group="turn")
-    async def action_recap(self) -> None:
+    async def _recap(self) -> None:
         assert self.cast
         self._busy(True)
-        self._status("说书人清了清嗓子…")
-        self.story.add("event", Text("━━━━ 上回书说到 ━━━━", style="bold"))
+        self._status("正在回顾前情…")
+        self.story.add("event", Text("━━━━ 前情回顾 ━━━━", style="bold"))
         self.story.begin_keeper()
         text = await self.cast.recap(self.state, on_delta=self._feed)
         self.story.end_keeper(text)
@@ -924,7 +947,11 @@ def _map(m: Module, st: GameState) -> Text:
 class AutoKeeperApp(App):
     CSS_PATH = "app.tcss"
     TITLE = "AutoKeeper"
-    BINDINGS = [Binding("ctrl+q", "quit", "离开"), Binding("ctrl+t", "next_theme", "换配色")]
+    BINDINGS = [
+        Binding("ctrl+q", "quit", "离开"),
+        Binding("ctrl+t", "next_theme", "换配色"),
+        Binding("space", "confirm", "确认", show=False),
+    ]
 
     def __init__(self, theme: str | None = None, join: tuple[str, str] | None = None):
         super().__init__()
@@ -943,6 +970,15 @@ class AutoKeeperApp(App):
             self.push_screen(LobbyScreen(address, name) if address and name else JoinScreen(address, name))
         else:
             self.push_screen(TitleScreen())
+
+    def action_confirm(self) -> None:
+        """Space confirms like Enter in lists and on buttons. Inputs keep their spaces: they
+        take the key before it ever reaches a binding."""
+        focused = self.focused
+        if isinstance(focused, OptionList):
+            focused.action_select()
+        elif isinstance(focused, Button):
+            focused.press()
 
     def action_next_theme(self) -> None:
         names = [th.name for th in THEMES]
