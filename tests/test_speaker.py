@@ -302,7 +302,7 @@ async def test_a_photo_portrait_follows_the_stage_and_the_art_style():
         assert panel.region.height == stage_box.size.height and panel._fitted[2][1] == panel.region.height - 1
         assert "圆框眼镜" not in story_text(screen) and "搓手" in story_text(screen)  # his look, the first time
         await pilot.press("ctrl+a")
-        assert await until(pilot, lambda: panel._fitted and panel._fitted[3] == "picture")  # drawn again in the new style
+        assert await until(pilot, lambda: panel._fitted and panel._fitted[3] == "ascii")  # drawn again in the new style (photo → ascii)
         await pilot.resize_terminal(80, 24)
         assert await until(pilot, lambda: panel._fitted and panel.region.height == stage_box.size.height and panel._fitted[2][1] == panel.region.height - 1)
         assert stage_box.size.height < before

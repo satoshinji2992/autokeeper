@@ -121,7 +121,7 @@ def load_module(path: Path) -> Module:
     return m
 
 
-def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "picture", *, face: bool = False) -> Text:
+def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "photo", *, face: bool = False) -> Text:
     """A picture (chafa) when the module has one and a size is given, else the hand-drawn art.
     `face`: a portrait, cropped round the face to fill `size`."""
     if name and size and name in m.pictures and imagery.available():
@@ -385,7 +385,7 @@ class SetupScreen(Screen):
         self.app.switch_screen(GameScreen(self.module, state, spectate=self.spectate))
 
 
-def _investigator_card(m: Module, inv: Investigator, style: str = "picture") -> Text:
+def _investigator_card(m: Module, inv: Investigator, style: str = "photo") -> Text:
     t = Text()
     t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style, face=True))
     t.append(f"\n\n{inv.name}", style="bold")

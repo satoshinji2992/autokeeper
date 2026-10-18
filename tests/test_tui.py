@@ -101,7 +101,7 @@ async def test_handout_keeps_full_text_ascii_preview_and_original_access(monkeyp
         paper = str(modal.query_one("#paper", Static).render())
         assert "病历第0项" in paper and "病历第99项" in paper
         if renderer:
-            assert rendered[0][3] == "ascii" and "/___\\" in str(modal.query_one("#handout-image-0", Static).render())
+            assert rendered[0][3] == "photo" and "/___\\" in str(modal.query_one("#handout-image-0", Static).render())
         else:
             assert "下方按钮" in str(modal.query_one("#handout-image-0", Static).render())
         modal.open_original(Button.Pressed(modal.query_one("#original-0", Button)))
@@ -212,9 +212,9 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
                 break
         assert scene._atmo is not None and scene._atmo.kinds == ["fog"] and scene._atmo.t > 1
         assert scene._fit()[1] == 17  # the art takes about 38% of the terminal's height
-        assert app.art_style == "ascii"
+        assert app.art_style == "photo"  # plain blocks by default: the style players read best
         await pilot.press("ctrl+a")  # the input box has focus, but Ctrl+A still changes the style
-        assert app.art_style == "picture" and scene.style_name == "picture"
+        assert app.art_style == "ascii" and scene.style_name == "ascii"
         await app.screen.run_action("weather")  # the switch in the Ctrl+P menu
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off

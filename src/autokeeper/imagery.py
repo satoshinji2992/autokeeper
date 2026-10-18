@@ -730,7 +730,7 @@ def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded:
 
 
 @lru_cache(maxsize=256)
-def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False, graded: str = "", face: bool = False) -> str:
+def render(path: str, width: int, height: int, style: str = "photo", when: str = "", fill: bool = False, graded: str = "", face: bool = False) -> str:
     """ANSI text for a picture at the given character size, lit for `when`, optionally
     cropped to fill the panel and graded for the weather layer (cached per combination).
     Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every
@@ -751,7 +751,7 @@ def render(path: str, width: int, height: int, style: str = "picture", when: str
     return overlay(out, _strokes(path, width, height, *size), under, np.asarray(stroke))
 
 
-def glitch(path: str, width: int, height: int, strength: float, style: str = "picture", when: str = "", fill: bool = False) -> str:
+def glitch(path: str, width: int, height: int, strength: float, style: str = "photo", when: str = "", fill: bool = False) -> str:
     """A glitched frame: RGB split and torn scanlines, rendered fresh (not cached)."""
     im = _prepared(path, width, height, when, fill)
     r, g, b = im.split()

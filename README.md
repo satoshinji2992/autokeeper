@@ -208,7 +208,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>画面颜色不对，或者右边一栏不见了？</summary>
 
-不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。默认使用彩色纯 ASCII；Ctrl+A 可切换块字符加轮廓线、更细的六分块（终端字体不支持时会显示成方框）、不描轮廓的照片和纯 ASCII，也可以在设置里选择。模组原图仍保留；发现地图、病历或信件后，手稿窗口提供完整文字、ASCII 预览和“查看原图”，F2 可重看。
+不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。默认用块字符画照片，最容易认出内容；Ctrl+A 可切换块字符加轮廓线、更细的六分块（终端字体不支持时会显示成方框）和纯 ASCII，也可以在设置里选择。模组原图仍保留；发现地图、病历或信件后，手稿窗口提供完整文字、ASCII 预览和“查看原图”，F2 可重看。
 
 </details>
 

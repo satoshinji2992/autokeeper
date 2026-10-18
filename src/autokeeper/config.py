@@ -195,7 +195,7 @@ class Config:
     preset: str = "claude"
     module: str = ""
     theme: str = "amber"
-    art_style: str = "ascii"  # imagery.STYLES: ascii, picture (blocks + outlines), fine (sextants + outlines), photo
+    art_style: str = "photo"  # imagery.STYLES: photo (plain blocks, the one players read best), picture, fine, ascii
     plugins: bool = True
     search: str = "auto"
     budget_usd: float | None = None

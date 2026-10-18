@@ -107,7 +107,7 @@ class CardScreen(Screen[Investigator | None]):
     # -- widgets ----------------------------------------------------------------------------
     @property
     def style(self) -> str:
-        return getattr(self.app, "art_style", "picture")
+        return getattr(self.app, "art_style", "photo")
 
     def _show(self, title: str, hint: str, preview: Text | None = None) -> None:
         self.query_one("#setup-title", Static).update(Text(title, style="bold"))

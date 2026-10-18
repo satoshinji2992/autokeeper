@@ -156,7 +156,7 @@ class HandoutModal(ModalScreen[None]):
     async def _load_pictures(self) -> None:
         for i, path in enumerate(self.pictures):
             try:
-                preview = await asyncio.to_thread(imagery.render, path, 56, 18, "ascii") if imagery.available() else ""
+                preview = await asyncio.to_thread(imagery.render, path, 56, 18, getattr(self.app, "art_style", "photo")) if imagery.available() else ""
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 preview = ""
             if not self.is_mounted:
