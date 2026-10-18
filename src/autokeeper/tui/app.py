@@ -51,12 +51,15 @@ from .widgets import (
     PORTRAIT,
     CluePanel,
     DiceTray,
+    HistoryPanel,
     ItemCard,
     RollCard,
     SceneArt,
     SheetPanel,
     StoryLog,
     command_suggester,
+    history_line,
+    log_line,
 )
 
 THEMES = [
@@ -602,10 +605,12 @@ class GameScreen(Screen):
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
+                yield HistoryPanel(id="history")
                 yield CluePanel(id="clues")
         yield Footer()
 
     async def on_mount(self) -> None:
+        self._start_history([e for e in self.state.log])
         cfg = config.load()
         self.engine_label = self._engine_label(cfg)
         self.cast = Cast(cfg, self.m)
@@ -824,6 +829,22 @@ class GameScreen(Screen):
         """Whose sheet the right column shows: here, whoever is acting."""
         return self.state.investigator
 
+    def _me(self) -> str | None:
+        """The investigator whose name is lit as yours: the one you play, if one."""
+        return self.state.human[0] if len(self.state.human) == 1 else None
+
+    def _start_history(self, entries) -> None:
+        """What happened before this screen came up, then every block the story adds."""
+        panel = self.query_one(HistoryPanel)
+        for e in entries:
+            if (line := log_line(e)) is not None:
+                panel.note(line, None, e.turn)
+        self.story.on_entry = self._history
+
+    def _history(self, kind: str, body, block) -> None:
+        if (line := history_line(kind, body, block)) is not None:
+            self.query_one(HistoryPanel).note(line, block, self.state.turn)
+
     def _panels(self) -> None:
         st = self.state
         inv = self._viewer()
@@ -831,6 +852,7 @@ class GameScreen(Screen):
         thumb = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
         face = art_text(self.m, inv.portrait, PORTRAIT, thumb, face=True) if tall else None
         self.query_one(SheetPanel).show(inv, face, st.investigators)
+        self.story.mark(st.investigators, self._me())
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
         self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))

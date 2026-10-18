@@ -213,6 +213,8 @@ class NetGameScreen(GameScreen):
 
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game
+        self._start_history(self.backlog)
+        self.query_one("#left").mount(Static(id="turnline"), before=self.query_one("#command", Input))
         self.query_one(SceneArt).effects = config.load().animations
         self.engine_label = "局域网联机" + ("" if self.seat else " · 观战")
         self._scene(self.state.location)
@@ -230,6 +232,22 @@ class NetGameScreen(GameScreen):
 
     async def on_unmount(self) -> None:
         await self.link.close()
+
+    def _me(self) -> str | None:
+        return self.seat or None
+
+    def _turnline(self, who: str = "", player: str = "") -> None:
+        line = self.query_one("#turnline", Static)
+        line.set_class(self.my_turn, "mine")
+        if self.my_turn:
+            line.update(Text(f" ▶ 轮到你了：{self.state.find(self.seat).name if self.seat else ''}，说出你的行动 ", style="bold"))
+        elif who:
+            line.update(Text(f" 轮到 {who}（{player or 'AI'}）行动，等一下… ", style=""))
+        else:
+            line.update(Text(" 等待开局… ", style="dim"))
+        inp = self.query_one("#command", Input)
+        inp.set_class(self.my_turn, "mine")
+        inp.placeholder = "轮到你了：输入行动或对话，回车发送" if self.my_turn else "还没轮到你；全角括号开头是场外聊天，如（我去倒杯水）"
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -270,6 +288,7 @@ class NetGameScreen(GameScreen):
             who = "你" if self.my_turn else f"{msg['name']}（{msg['player'] or 'AI'}）"
             self.engine_label = f"局域网联机 · 轮到{who}"
             self._topbar()
+            self._turnline(msg["name"], msg["player"])
             if self.my_turn:
                 self.app.notify("轮到你了", timeout=4)
                 self.query_one(Input).focus()
@@ -292,6 +311,7 @@ class NetGameScreen(GameScreen):
             if msg.get("retry"):
                 self.my_turn = bool(self.seat)
                 self.status_text = ""
+                self._turnline()
                 self.story.end_keeper("这一段暂时中断，输入 /retry 接着讲。")
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":

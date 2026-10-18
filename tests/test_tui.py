@@ -475,3 +475,22 @@ async def test_meta_lines_stay_off_the_story_and_a_waived_check_is_said(canned):
         shown = story_text(screen)
         assert "模组没写到" not in shown and "裁定员" not in shown and "需要检定" not in shown and "报童小六" not in shown
         assert f"{lead.name} 的侦查不用掷" in shown
+
+
+def test_names_light_up_in_the_telling_and_the_history_keeps_a_line_per_event():
+    from autokeeper.engine.state import LogEntry
+    from autokeeper.tui.widgets import HistoryPanel, StoryLog, history_line, log_line
+
+    m = Module.load(EXAMPLE)
+    me = m.pregens[0]
+    friend = me.model_copy(update={"id": "friend", "name": "贝蒂·康西丁"})
+    story = StoryLog()
+    story.mark([me, friend], me.id)
+    lit = story.lit(Text(f"贝蒂回头看了{me.name}一眼"))
+    styles = {lit.plain[s.start:s.end]: str(s.style) for s in lit.spans}
+    assert styles == {"贝蒂": StoryLog.OTHERS, me.name: StoryLog.MINE}  # "贝蒂" alone is still her
+    assert history_line("player", Text("▶ 贝蒂·康西丁（sq）：仔细听"), None).plain == "贝蒂·康西丁（sq）：仔细听"
+    assert history_line("keeper", Text("一大段叙述"), None) is None  # the telling stays in the story
+    clue = LogEntry(turn=5, time="19:20", kind="clue", text="〔有人入室〕后屋传来窗框被撬开的吱呀声")
+    assert log_line(clue).plain == "  ↳ 〔有人入室〕"
+    assert HistoryPanel.KEEP > 0

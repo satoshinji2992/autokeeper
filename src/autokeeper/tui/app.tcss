@@ -172,8 +172,31 @@ Screen {
     border-top: dashed $primary-darken-2;
     content-align: center middle;
 }
-#clues {
+#history {
     height: 1fr;
+    padding: 0 1;
+    border-top: dashed $primary-darken-2;
+}
+#history HistoryLine:hover {
+    background: $panel;
+}
+#turnline {
+    height: 1;
+    padding: 0 1;
+    background: $panel;
+    color: $text-muted;
+}
+#turnline.mine {
+    background: $accent;
+    color: $background;
+    text-style: bold;
+}
+#command.mine {
+    border: tall $accent;
+}
+#clues {
+    height: auto;
+    max-height: 12;
     padding: 0 1;
     border-top: dashed $primary-darken-2;
     overflow-y: auto;

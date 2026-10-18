@@ -282,12 +282,33 @@ class ItemCard(Static):
 class StoryLog(VerticalScroll):
     """Entries mount as static blocks; the keeper's narration types itself out."""
 
+    MINE, OTHERS = "bold #ffd166", "bold #7fd1b9"  # your investigator's name, the others'
+    MARKED = ("keeper", "npc", "performance", "echo", "opening")  # where names light up
+
     def __init__(self, **kw):
         super().__init__(**kw)
         self._live: Static | None = None
         self._shown = ""
         self._pending = ""
         self._typing = False
+        self.names: dict[str, str] = {}  # a name, or the part of it people go by -> its style
+        self.on_entry = None  # told of every block added: (kind, body, block); the history panel
+
+    def mark(self, party, me: str | None) -> None:
+        """Whose names to light up in the telling: yours in one colour, the party's in another.
+        "贝蒂·康西丁" is also called 贝蒂."""
+        names: dict[str, str] = {}
+        for inv in party:
+            style = self.MINE if inv.id == me else self.OTHERS
+            for part in [inv.name, *inv.name.split("·")]:
+                if len(part) >= 2:
+                    names.setdefault(part, style)
+        self.names = dict(sorted(names.items(), key=lambda kv: -len(kv[0])))  # the full name before its parts
+
+    def lit(self, text: Text) -> Text:
+        for name, style in self.names.items():
+            text.highlight_words([name], style)
+        return text
 
     def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "") -> Static:
         if isinstance(body, Static):  # a block that draws itself, such as a roll
@@ -300,9 +321,13 @@ class StoryLog(VerticalScroll):
                     text.append(f"{who}：", style="bold")
                 text.append(body)
                 body = text
+            if kind in self.MARKED and isinstance(body, Text):
+                body = self.lit(body.copy())
             block = Static(body, classes=f"entry {kind}")
         self.mount(block)
         self.scroll_end(animate=False)
+        if self.on_entry is not None:
+            self.on_entry(kind, body, block)
         return block
 
     # -- typewriter ----------------------------------------------------------------
@@ -331,7 +356,7 @@ class StoryLog(VerticalScroll):
         self._shown += self._pending[:step]
         self._pending = self._pending[step:]
         self._unfade(self._live)
-        self._live.update(Text(self._shown + "▌"))
+        self._live.update(self.lit(Text(self._shown + "▌")))
         self.scroll_end(animate=False)
         self.set_timer(0.03, self._type)
 
@@ -341,7 +366,7 @@ class StoryLog(VerticalScroll):
         self._pending = ""
         self._typing = False
         self._unfade(self._live)
-        self._live.update(Text(full))
+        self._live.update(self.lit(Text(full)))
         self._live = None
         self.scroll_end(animate=False)
 
@@ -564,6 +589,78 @@ def party_rows(party: list[Investigator], acting: str, width: int) -> Text:
         if n + 1 < len(party):
             out.append("\n")
     return out
+
+
+class HistoryPanel(VerticalScroll):
+    """What has happened, a line each: who did what, the checks and what they found, under
+    the round it was in. Not the telling (that is in the story); a line clicked scrolls the
+    story to it. Built from the blocks the story shows, so the LAN screen gets it too."""
+
+    KEEP = 80  # lines kept; the story has the rest
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.round = -1
+
+    def compose(self):
+        yield Static(Text.assemble(("经过", "bold"), ("   点一行跳到那里", "dim")), classes="history-head")
+
+    def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
+        if turn is not None and turn != self.round:
+            self.round = turn
+            self.mount(Static(Text(f"— 第 {turn + 1} 轮 —", style="dim"), classes="history-round"))  # the count of turns done; this is the next
+        entry = HistoryLine(line, block)
+        self.mount(entry)
+        lines = list(self.query(HistoryLine))
+        for old in lines[: max(0, len(lines) - self.KEEP)]:
+            old.remove()
+        self.scroll_end(animate=False)
+
+
+class HistoryLine(Static):
+    def __init__(self, line: Text, block: Static | None):
+        super().__init__(line)
+        self.block = block
+
+    def on_click(self) -> None:
+        if self.block is not None and self.block.parent is not None:
+            self.block.parent.scroll_to_widget(self.block, animate=False, top=True)
+
+
+def history_line(kind: str, body, block=None) -> Text | None:
+    """A story block as one line of the history panel, or None when it is not an event worth
+    a line (the narration, NPC talk, system notes)."""
+    if kind == "dice" and isinstance(block, RollCard):
+        d = block.dice
+        return Text.assemble(("  ◈ ", "dim"), (f"{d.get('skill', '')} ", ""), (str(d.get("level", "")), PASS if d.get("passed") else MISS))
+    plain = body.plain if isinstance(body, Text) else ""
+    first = plain.strip().split("\n", 1)[0]
+    if not first:
+        return None
+    if kind == "player":
+        line = Text(first.removeprefix("▶ "), style="bold")
+        line.truncate(120, overflow="ellipsis")
+        return line
+    if kind == "dice":
+        return Text("  " + first, style="dim")
+    if kind == "clue":
+        return Text.assemble(("  ↳ ", "dim"), (first, "bold #e9c46a"))
+    if kind in ("sanity", "handout", "ending") or (kind == "system" and first.startswith(("✚", "◎"))):
+        return Text("  " + first, style="bold" if kind == "ending" else "")
+    return None
+
+
+def log_line(entry) -> Text | None:
+    """A saved log entry (state.log, the LAN backlog) as a history line."""
+    if entry.kind == "player":
+        return Text(f"{entry.who}：{entry.text}"[:120], style="bold")
+    if entry.kind == "dice":
+        return Text(f"  ◈ {entry.text}", style="dim")
+    if entry.kind == "clue":
+        return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
+    if entry.kind in ("sanity", "damage", "ending"):
+        return Text("  " + entry.text.split("\n", 1)[0])
+    return None
 
 
 class CluePanel(Static):
