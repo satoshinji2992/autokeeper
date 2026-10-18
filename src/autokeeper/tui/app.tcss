@@ -105,12 +105,15 @@ Screen {
     border-left: tall $primary-darken-2;
     background: $surface;
 }
+#stage {
+    height: auto;
+    border-bottom: dashed $primary-darken-2;
+}
 #scene {
     height: auto;
     max-height: 28;
     padding: 0 1;
     color: $primary;
-    border-bottom: dashed $primary-darken-2;
 }
 #scene.dread {
     color: $error;

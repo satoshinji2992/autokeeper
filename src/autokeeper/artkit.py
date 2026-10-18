@@ -63,6 +63,17 @@ LIGHTS: dict[str, tuple[float, float, float, tuple[int, int, int] | None, float,
     "夜里": (0.55, 0.55, 1.12, (35, 55, 135), 0.36, 0.62),
     "深夜": (0.42, 0.42, 1.18, (18, 26, 88), 0.46, 0.78),
 }
+# A speaking NPC's mood (mood.py) on their portrait, the same six numbers as LIGHTS: cold and
+# dark for fear, a red cast for anger, drained and dim for sorrow, warm for a friendly word,
+# washed out for a fluster, closing in for a wary look. Calm is the portrait as it is.
+TONES: dict[str, tuple[float, float, float, tuple[int, int, int] | None, float, float]] = {
+    "警惕": (0.86, 0.75, 1.25, (150, 200, 170), 0.25, 0.55),
+    "害怕": (0.72, 0.45, 1.15, (70, 110, 230), 0.45, 0.60),
+    "发怒": (0.98, 1.30, 1.25, (255, 50, 30), 0.45, 0.30),
+    "难过": (0.76, 0.20, 0.90, (150, 165, 200), 0.25, 0.35),
+    "友善": (1.08, 1.12, 1.00, (255, 190, 120), 0.35, 0.10),
+    "慌乱": (1.12, 0.60, 0.85, (255, 245, 170), 0.30, 0.00),
+}
 _HEX = re.compile(r"#([0-9a-fA-F]{6})")
 DEFAULT_INK = "#c8c8c8"  # unmasked strokes, so they take the light too
 GLOW = set("oyYW")  # lamplight, candles, lit windows: they stay bright after dark
@@ -79,14 +90,28 @@ def fog_colour(when: str) -> tuple[int, int, int]:
     return (92, 104, 128) if when in DARK else (198, 204, 210)
 
 
+def _toned(rgb: list[float], bright: float, sat: float, tint: tuple[int, int, int] | None, amount: float) -> list[float]:
+    """Saturation, then a tint, then exposure: one colour under LIGHTS or TONES."""
+    grey = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    rgb = [grey + (c - grey) * sat for c in rgb]
+    if tint:
+        rgb = [c * (1 - amount) + t * amount for c, t in zip(rgb, tint, strict=True)]
+    return [c * bright for c in rgb]
+
+
 def regrade(color: str, grade: str, when: str = "") -> str:
-    """One colour in a graded copy of the scene (see GRADES; also "haze" and "flash")."""
+    """One colour in a graded copy of the scene (see GRADES; also "haze" and "flash"), or of
+    a hand-drawn portrait in a mood (TONES; lines on a dark terminal, so the exposure goes
+    only half as far, as in shade)."""
     if not grade:
         return color
 
     def one(m: re.Match) -> str:
         rgb = [int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4)]
-        if grade in GRADES:
+        if grade in TONES:
+            bright, sat, _, tint, amount, _ = TONES[grade]
+            rgb = _toned(rgb, 1 - (1 - bright) * 0.5, sat, tint, amount)
+        elif grade in GRADES:
             rgb = [c * GRADES[grade] for c in rgb]
         elif grade in HAZE:
             a = HAZE[grade]
@@ -113,12 +138,8 @@ def shade(color: str, when: str, *, strokes: bool = False) -> str:
         bright, amount = 1 - (1 - bright) * 0.5, amount * 0.6
 
     def one(m: re.Match) -> str:
-        r, g, b = (int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4))
-        grey = 0.299 * r + 0.587 * g + 0.114 * b
-        rgb = [grey + (c - grey) * sat for c in (r, g, b)]
-        if tint:
-            rgb = [c * (1 - amount) + t * amount for c, t in zip(rgb, tint, strict=True)]
-        return "#" + "".join(f"{max(0, min(255, round(c * bright))):02x}" for c in rgb)
+        rgb = _toned([int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4)], bright, sat, tint, amount)
+        return "#" + "".join(f"{max(0, min(255, round(c))):02x}" for c in rgb)
 
     return _HEX.sub(one, color)
 

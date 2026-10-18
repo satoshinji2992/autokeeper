@@ -301,3 +301,58 @@ async def test_the_director_s_reasoning_stays_on_the_host(skills_dir, fake):
         assert ev["ev"]["type"] == "improv" and "reason" not in ev["ev"]
         await ws.close()
     await closed(task)
+
+
+class PreacherCast(TableCast):
+    """Speaking to the preacher in the square gets a wary answer; anything else is looking around."""
+
+    async def intent(self, state, text):
+        if "布道者" in text:
+            return Action(kind="talk", summary=f"{state.investigator.name}问布道者", npc="preacher")
+        return await super().intent(state, text)
+
+    async def npc(self, state, npc_id, message):
+        return "（压低声音，四下张望）午夜之前，离开这里。"
+
+
+async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills_dir, fake):
+    from textual.widgets import Input
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.speaker import Speaker
+
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=PreacherCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause(0.5)
+        await pilot.press("enter")  # the free seat
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:
+                break
+        screen = app.screen
+        assert isinstance(screen, NetGameScreen) and screen.my_turn
+        panel = screen.query_one(Speaker)
+        screen.query_one(Input).value = "我问布道者在等什么"
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if panel.display and panel.feeling == "警惕":
+                break
+        assert panel.display and panel.who == "街头布道者" and panel.feeling == "警惕"  # his face, from the table's module
+        assert panel.portrait is not None and panel.portrait.art == hub.m.art["preacher"]
+        for _ in range(40):  # the next turn is told without him: he steps back
+            await pilot.pause(0.1)
+            if screen.my_turn:
+                break
+        screen.query_one(Input).value = "我四下看看"
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if not panel.display:
+                break
+        assert not panel.display
+    await closed(task)

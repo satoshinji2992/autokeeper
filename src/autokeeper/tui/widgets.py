@@ -31,11 +31,17 @@ LEVEL_STYLE = {
 LIGHT_MARK = {"清晨": "◌", "上午": "☀", "晌午": "☀", "下午": "☀", "傍晚": "◐", "夜里": "☾", "深夜": "☾"}
 
 
-def center(art_text: Text, width: int) -> Text:
-    """Centre a block of art in the panel."""
+def center(art_text: Text, width: int, covered: int = 0) -> Text:
+    """Centre a block of art in the panel; with the right `covered` columns hidden, move it over
+    just enough to stay clear of them."""
     lines = art_text.split("\n")
-    pad = max(0, (width - max((ln.cell_len for ln in lines), default=0)) // 2)
+    pad = _pad(width, max((ln.cell_len for ln in lines), default=0), covered)
     return Text("\n").join(Text(" " * pad) + ln for ln in lines) if pad else art_text
+
+
+def _pad(width: int, wide: int, covered: int = 0) -> int:
+    pad = (width - wide) // 2
+    return max(0, min(pad, width - covered - wide) if covered else pad)
 
 
 class SceneArt(Static):
@@ -65,6 +71,7 @@ class SceneArt(Static):
         self._atmo: atmosphere.Atmosphere | None = None
         self._hold = 0.0  # weather waits until then (a glitch or a flicker owns the panel)
         self._fitted = (0, 0)  # the size the art was last drawn for (not _size: Textual owns that)
+        self.covered = 0  # columns on the right that a speaker's portrait stands over (tui/speaker.py)
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
@@ -107,6 +114,17 @@ class SceneArt(Static):
             self.when = when
             self._refresh()
 
+    def cover(self, cols: int) -> None:
+        """A speaker's portrait stands over the right `cols` columns. Hand-drawn art moves over to
+        stay in sight; a picture fills the panel and stays put, the portrait in front of it."""
+        if cols == self.covered:
+            return
+        before, self.covered = self.covered, cols
+        if self.picture and not self._uses_image():
+            w, wide = self._fit()[0], max(map(len, self.picture.split("\n")))
+            if _pad(w, wide, before) != _pad(w, wide, cols):  # only if the drawing has to move
+                self._refresh()
+
     def toggle_effects(self) -> bool:
         self.effects = not self.effects
         self._refresh()
@@ -138,7 +156,7 @@ class SceneArt(Static):
         if self._uses_image():
             return center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded)), w)
         if self.picture:
-            return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w)
+            return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w, self.covered)
         return Text()
 
     def _title(self) -> Text:
