@@ -31,8 +31,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 import httpx
 from PIL import Image
@@ -42,6 +40,7 @@ from .. import imagery
 from ..config import Config
 from ..harness import Session, search
 from ..harness.search import resolve
+from ..module import sources
 from ..module.schema import Module
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
 from ..rules.coc import Investigator
@@ -303,18 +302,9 @@ def parse_st(text: str) -> dict | None:
 
 
 def local_file(text: str) -> Path | None:
-    """A path typed, pasted or dragged in (quoted, with escaped spaces, or a file:// URI)."""
-    s = text.strip().strip("\"'")
-    if s.startswith("file://"):
-        s = url2pathname(urlparse(s).path)  # also turns /C:/Users/... into C:\\Users\\... on Windows
-    s = s.replace("\\ ", " ")
-    if not s or "\n" in s or len(s) > 500:
-        return None
-    try:
-        p = Path(s).expanduser()
-        return p if p.is_file() else None
-    except OSError:  # not a path at all: a long pasted card is "too long a file name"
-        return None
+    """A file typed, pasted or dragged in (quoted, escaped, a file:// URI, a Windows path under WSL)."""
+    p = sources.dropped_path(text)
+    return p if p is not None and p.is_file() else None
 
 
 def _tavern(data: object) -> dict | None:

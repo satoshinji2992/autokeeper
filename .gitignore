@@ -9,7 +9,19 @@ wheels/
 # Virtual environments
 .venv
 
-# Copyrighted modules stay local: drop files in modules/_import/, imports land in modules/local/
+# Copyrighted modules stay local. Anything dropped straight into modules/ (PDF, zip, Word,
+# Markdown, text, pictures) is ignored, and so are PDFs, Word files and archives anywhere under
+# it; module folders such as modules/zhuishuren/ and modules/README.md stay tracked.
+# Imports land in modules/local/. Keep these lines in this order: the last match wins.
+/modules/*
+!/modules/*/
+!/modules/README.md
+/modules/**/*.pdf
+/modules/**/*.doc
+/modules/**/*.docx
+/modules/**/*.zip
+/modules/**/*.rar
+/modules/**/*.7z
 modules/_import/
 modules/local/
 skills/module-*

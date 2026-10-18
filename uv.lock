@@ -283,11 +283,14 @@ dependencies = [
     { name = "mcp" },
     { name = "networkx" },
     { name = "pillow" },
+    { name = "platformdirs" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyfiglet" },
     { name = "pypdfium2" },
+    { name = "pypinyin" },
     { name = "python-dotenv" },
+    { name = "python-slugify" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "terminaltexteffects" },
@@ -345,11 +348,14 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.7" },
     { name = "opencv-python-headless", marker = "extra == 'art'", specifier = ">=5.0.0.93" },
     { name = "pillow", specifier = ">=10.4" },
+    { name = "platformdirs", specifier = ">=4.13.3" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.16.0" },
     { name = "pyfiglet", specifier = ">=1.0.4" },
     { name = "pypdfium2", specifier = ">=5.14.0" },
+    { name = "pypinyin", specifier = ">=0.55.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "python-slugify", specifier = ">=9.1.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rembg", marker = "extra == 'art'", specifier = ">=2.0.50" },
     { name = "rich", specifier = ">=15.0.0" },
@@ -3398,6 +3404,18 @@ wheels = [
 ]
 
 [[package]]
+name = "python-slugify"
+version = "9.1.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "text-unidecode" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/e8/26b1af09d728d604dc16427a39f53985b22a170dbd61addac3f48db73f03/python_slugify-9.1.3.tar.gz", hash = "sha256:90e997f2e0987239ce95e12f700086eb18e1d1d3ee22624fbbdbd095afca42b6", size = 66093 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/67/5598c98725332a6a4084c7b622d5a1ebe7d6745c1d2f434c9e4e89e04cba/python_slugify-9.1.3-py3-none-any.whl", hash = "sha256:9aced0670e54c5603e2335c0fa9a4011ad4bc41ecb3c46e8097294c46fd60ed4", size = 16032 },
+]
+
+[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -4037,6 +4055,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3c/df/4fa04990d75cc27215159bf9edec7d56546fd72e1927c5753d0de0414e7b/terminaltexteffects-0.15.0.tar.gz", hash = "sha256:f4b31c86bfa943d5bf3b2c5ecbfaea0de65ed4a951028c40f8e4cb54efd06439", size = 261994 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/e8/89035cd56a3ef4fe1c2dbf790e1a2c78d4e922d3dbfc048e314e40c22b1a/terminaltexteffects-0.15.0-py3-none-any.whl", hash = "sha256:5503250dacae9a3c17e22b0010b2f5fa10332124019f485d517e0c9ebc51aa47", size = 224704 },
+]
+
+[[package]]
+name = "text-unidecode"
+version = "1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/e2/e9a00f0ccb71718418230718b3d900e71a5d16e701a3dae079a21e9cd8f8/text-unidecode-1.3.tar.gz", hash = "sha256:bad6603bb14d279193107714b288be206cac565dfa49aa5b105294dd5c4aab93", size = 76885 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/a5/c0b6468d3824fe3fde30dbb5e1f687b291608f9473681bbf7dabbf5a87d7/text_unidecode-1.3-py2.py3-none-any.whl", hash = "sha256:1311f10e8b895935241623731c2ba64f4c455287888b18189350b67134a822e8", size = 78154 },
 ]
 
 [[package]]

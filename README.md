@@ -29,7 +29,7 @@ AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑
 
 ## 功能
 
-- 导入你手上的模组，PDF、Word、Markdown 都行；没有模组，就给一句灵感，让它查资料、写一个原创的。
+- 导入你手上的模组：在标题画面选“导入模组”，挑一个文件或者直接拖进终端，PDF、Word、Markdown、打包的 zip 都行，导完就能开团。没有模组，就给一句灵感，让它查资料、写一个原创的。
 - AI 守秘人负责叙事和扮演，骰子交给 BCDice 掷，结果谁也改不了。你说得再动听，检定该掷还得掷。
 - 守秘人会即兴。你想做模组没写到的事，它不会说“不行”，而是顺势加人物、加线索、开支线，必要时多出一个结局；要是乱来，它会先演一段，再让你尝到后果。新剧情在后台构思，写好了直接插进来，不耽误守秘人回应你。
 - 开局时它会读你的调查员背景，把你牵挂的人和事织进故事，模组里体验不好的地方也会顺手补上。剧情里有大大小小的冲突，NPC 的态度会随着故事改变。
@@ -81,7 +81,7 @@ Windows 上请用 Windows Terminal，旧控制台对真彩色和鼠标的支持�
 ## 开始游戏
 
 ```bash
-uv run autokeeper import 模组.pdf --id mymod          # 导入一本模组
+uv run autokeeper import 模组.pdf                     # 导入一本模组（游戏里的“导入模组”也行）
 uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian   # 或者生成一本
 uv run autokeeper                                    # 开团
 uv run autokeeper serve                              # 在浏览器里玩
@@ -166,7 +166,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>导入官方模组会被上传吗？</summary>
 
-不会。你自己导入的结果只保存在本地的 `modules/local/`，已被 `.gitignore` 排除。CoC 官方模组受版权保护，请只导入你自己拥有的。
+不会。导入的成品只保存在本地的 `modules/local/`，随手丢进 `modules/` 的 PDF、zip 这些原文件也都在 `.gitignore` 里，不会进仓库。CoC 官方模组受版权保护，请只导入你自己拥有的。
 
 </details>
 

@@ -4,8 +4,9 @@
                          ↑        │
                          └─ fix ←─┘   (at most three rounds)
 
-`prepare` extracts the source here; module generation (generator.py) reuses the same
-pipeline with web research as its `prepare` step.
+`prepare` extracts the source here, plus any pictures that came with it (a zip's maps and
+handouts); module generation (generator.py) reuses the same pipeline with web research as
+its `prepare` step.
 
 `build` and `fix` are one harness Agent (harness/loop.py) on the importer role, so any
 model can do it: Claude through Claude Code, DeepSeek, or a local model with no
@@ -19,9 +20,10 @@ in modules/local/ and skills/module-<id>/, both git-ignored.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import TypedDict
 
@@ -81,6 +83,25 @@ def extract(file: Path, work: Path, pages: str | None) -> tuple[int, int]:
     text = MarkItDown().convert(str(file)).text_content
     (src / "source.md").write_text(text, encoding="utf-8")
     return 0, len(text)
+
+
+def attach(images: Sequence[Path], work: Path) -> None:
+    """Pictures that came with the document go to source/images/, listed at the top of
+    source.md so the agent knows they are there while it reads."""
+    folder = work / "source" / "images"
+    folder.mkdir(parents=True, exist_ok=True)
+    names: dict[str, str] = {}  # by lowercase name: some filesystems ignore case
+    for img in images:
+        name, n = img.name, 1
+        while name.lower() in names:  # the same name from two folders of a zip
+            n += 1
+            name = f"{img.stem}_{n}{img.suffix}"
+        names[name.lower()] = name
+        shutil.copy(img, folder / name)
+    md = work / "source" / "source.md"
+    listing = "\n".join(f"- source/images/{name}" for name in names.values())
+    head = f"（随模组附带 {len(names)} 张图片，地图、手稿、人物像可以用 view_image 看）\n{listing}\n\n"
+    md.write_text(head + md.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def _prepare(work: Path) -> None:
@@ -253,12 +274,16 @@ async def pipeline(
     return work
 
 
-async def run_import(file: Path, module_id: str, *, pages: str | None = None, console: Console | None = None) -> Path:
+async def run_import(file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (), console: Console | None = None) -> Path:
     work = config.LOCAL_MODULES / module_id
 
     async def prepare(console: Console) -> None:
-        n, size = extract(Path(file), work, pages)
+        # Rendering a long PDF takes a while; off the event loop, the TUI keeps drawing meanwhile.
+        n, size = await asyncio.to_thread(extract, Path(file), work, pages)
         console.print(f"[bold]提取[/] {Path(file).name}：{n} 页，{size} 字 → {work}/source/")
+        if images:
+            attach(images, work)
+            console.print(f"[bold]附图[/] {len(images)} 张 → {work}/source/images/")
 
     brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
     return await pipeline(work, brief=brief, prepare=prepare, console=console)
