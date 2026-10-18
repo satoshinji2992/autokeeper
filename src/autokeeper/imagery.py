@@ -24,7 +24,7 @@ from pathlib import Path
 
 import httpx
 import numpy as np
-from PIL import Image, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from pydantic import BaseModel, Field
 
 from . import artkit
@@ -392,10 +392,21 @@ def light(im: Image.Image, when: str) -> Image.Image:
     tint, and a vignette that closes in after dark."""
     if when not in artkit.LIGHTS:
         return im
-    bright, sat, contrast, tint, amount, vignette = artkit.LIGHTS[when]
+    return _expose(im, *artkit.LIGHTS[when])
+
+
+def _expose(
+    im: Image.Image, bright: float, sat: float, contrast: float, tint: tuple[int, int, int] | None, amount: float, vignette: float,
+    *, glaze: bool = False,
+) -> Image.Image:
+    """One row of artkit.LIGHTS (an hour) or artkit.TONES (a mood) on a picture. An hour's tint
+    fills the air; a mood's is a `glaze` over what is lit, so a portrait's dark backdrop stays
+    dark instead of turning brown or red."""
     im = ImageEnhance.Contrast(ImageEnhance.Color(ImageEnhance.Brightness(im).enhance(bright)).enhance(sat)).enhance(contrast)
     if tint and amount:
-        im = Image.blend(im, Image.new("RGB", im.size, tint), amount)
+        top = max(tint)
+        colour = ImageChops.multiply(im, Image.new("RGB", im.size, tuple(255 * c // top for c in tint))) if glaze else Image.new("RGB", im.size, tint)
+        im = Image.blend(im, colour, amount)
     if vignette:
         mask = Image.radial_gradient("L").resize(im.size).point(lambda v: int(v * vignette))
         im = Image.composite(Image.new("RGB", im.size, (0, 0, 0)), im, mask)
@@ -428,7 +439,10 @@ def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5, widest: f
 
 
 def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
-    """A copy for the weather layer: torchlight and flicker exposures, fog, lightning."""
+    """A copy for the weather layer: torchlight and flicker exposures, fog, lightning. Or a
+    portrait in a speaker's mood (artkit.TONES)."""
+    if name in artkit.TONES:
+        return _expose(im, *artkit.TONES[name], glaze=True)
     if name in artkit.GRADES:
         return ImageEnhance.Brightness(im).enhance(artkit.GRADES[name])
     if name in artkit.HAZE:

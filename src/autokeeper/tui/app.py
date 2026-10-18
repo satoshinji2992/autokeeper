@@ -17,7 +17,7 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Center, Horizontal, Middle, Vertical, VerticalScroll
+from textual.containers import Center, Container, Horizontal, Middle, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.theme import Theme
 from textual.widgets import Button, Footer, Input, OptionList, Static
@@ -40,6 +40,7 @@ from .debrief import DebriefModal
 from .mapview import MapModal
 from .retell import RetellModal
 from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
+from .speaker import Speaker
 from .suggest import Ideas
 from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
@@ -417,7 +418,9 @@ class GameScreen(Screen):
         yield Static(id="topbar")
         with Horizontal(id="main"):
             with Vertical(id="left"):
-                yield SceneArt(id="scene")
+                with Container(id="stage"):  # the scene, and over its right side whoever is talking
+                    yield SceneArt(id="scene")
+                    yield Speaker()
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command",
@@ -525,6 +528,7 @@ class GameScreen(Screen):
         right.display = width >= 96
         right.styles.width = 40 if width >= 130 else 34
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
+        self.query_one(Speaker).refit()
 
     def action_art_style(self) -> None:
         styles, now = list(imagery.STYLES), self.app.art_style  # type: ignore[attr-defined]
@@ -532,6 +536,7 @@ class GameScreen(Screen):
         self.app.notify(f"画面：{imagery.STYLE_NAMES[self.app.art_style]}")  # type: ignore[attr-defined]
         self._scene(self.state.location)
         self._panels()
+        self.query_one(Speaker).refit()
 
     @staticmethod
     def _engine_label(cfg: config.Config) -> str:
@@ -616,6 +621,7 @@ class GameScreen(Screen):
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")
         story = self.story
+        self.query_one(Speaker).follow(ev, self.m)  # before the scene changes, so it can scan in
         if t == "status":
             self._status(ev["text"])
         elif t == "move":
@@ -717,12 +723,10 @@ class GameScreen(Screen):
                 self.app.notify(ev["error"], severity="error", timeout=6)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
+        """Their face is on the stage while they talk (Speaker), so the story keeps to words."""
         npc = self.m.npc(ev["npc"])
         body = Text()
         first = npc.id not in self.met
-        if first and (npc.portrait in self.m.art or npc.portrait in self.m.pictures):
-            body.append_text(art_text(self.m, npc.portrait, (30, 12), self.app.art_style))  # type: ignore[attr-defined]
-            body.append("\n")
         self.met.add(npc.id)
         body.append(f"{ev['name']}", style="bold")
         # What they look like, the first time; never their role, which is the keeper's note
@@ -757,17 +761,10 @@ class GameScreen(Screen):
         self.story.feed(text)
 
     async def _warm(self) -> None:
-        """While the opening plays: start the agents' processes, and render the NPC portraits
-        (chafa, cached) so meeting someone does not stall the turn on the UI thread."""
+        """While the opening plays: start the agents' processes."""
         assert self.cast
-        style = self.app.art_style  # type: ignore[attr-defined]
-
-        def portraits() -> None:
-            for npc in self.m.npcs:
-                art_text(self.m, npc.portrait, (30, 12), style)
-
         try:
-            await asyncio.gather(self.cast.warm(self.state), asyncio.to_thread(portraits))
+            await self.cast.warm(self.state)
         except Exception:  # warming is an optimisation; failures surface on first real use
             pass
 

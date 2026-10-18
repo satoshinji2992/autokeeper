@@ -20,6 +20,7 @@ from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
 from autokeeper.tui.screens import HandoutModal, PushModal, RollModal
+from autokeeper.tui.speaker import Speaker
 from autokeeper.tui.widgets import SceneArt, StoryLog, command_suggester
 
 
@@ -338,3 +339,5 @@ async def test_an_npc_line_shows_their_face_never_the_keepers_note_on_them(canne
         shown = story_text(screen)
         assert "圆框眼镜" in shown and shown.count("圆框眼镜") == 1  # what they see, the first time
         assert "偷书贼" not in shown and "半食尸鬼" not in shown  # the role is the keeper's note
+        speaker = screen.query_one(Speaker)
+        assert await until(pilot, lambda: speaker.display and speaker.who == "道格拉斯")  # the face is on the stage
