@@ -246,16 +246,46 @@ class Model:
 HISTORY = "【下面是系统保存的对话记录，每次完整重发。“〔输入〕”是发给你的消息，“〔你的回复〕”是你之前的回答；只回应最后一条输入。】"
 
 
+# The prompt cache keeps a prefix only where a request marks it, and Claude Code marks the end
+# of the request: the new prompt, with its one-off extra (preferences, a correction) that the
+# transcript never keeps. So that mark never matched the next call and only the system prompt
+# hit (a keeper turn: 4,822 of ~21,000 tokens cached). A mark of our own after the last block
+# of history, which the next call repeats word for word, lets the whole history hit. Claude
+# Code's own marks last an hour on a subscription; ours must not outlast a mark after it, so
+# it steps down to five minutes, then to none, if the API says so (_cache_refused).
+CACHE_TTL: list[str | None] = ["1h"]
+
+
 def _blocks(messages: list[Msg], images: list[bytes] | None) -> list[dict]:
-    """One text block per message, append-only, so each call's prompt is a prefix of the
-    next and Claude's prompt cache keeps hitting."""
+    """One text block per message, history first; the last block of history carries a
+    cache mark, so the next call (which repeats all of it) reads it back from the cache."""
     rows = [messages[0]["content"]] if len(messages) == 1 else [HISTORY] + [
         ("〔你的回复〕" if m["role"] == "assistant" else "〔输入〕") + m["content"] for m in messages
     ]
     blocks: list[dict] = [{"type": "text", "text": r} for r in rows]
+    if len(blocks) >= 3 and CACHE_TTL[0]:  # header, some history, the new prompt
+        blocks[-2]["cache_control"] = {"type": "ephemeral", "ttl": CACHE_TTL[0]}
     for img in images or []:
         blocks.insert(-1, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(img).decode()}})
     return blocks
+
+
+class ClaudeError(Exception):
+    """An API error Claude Code reported as its reply (“API Error: 529 …”). The status code
+    lets `transient` retry overload and rate limits; anything else goes to the fallback."""
+
+    def __init__(self, text: str):
+        super().__init__(text[:500])
+        found = re.search(r"API Error:\s*(\d{3})", text)
+        self.status_code = int(found.group(1)) if found else None
+
+
+def _cache_refused(exc: ClaudeError) -> bool:
+    """The API turned our cache mark down: try a shorter one, or none."""
+    if exc.status_code != 400 or "cache_control" not in str(exc) or not CACHE_TTL[0]:
+        return False
+    CACHE_TTL[0] = "5m" if CACHE_TTL[0] == "1h" else None
+    return True
 
 
 async def _stream(content: list[dict]):
@@ -312,6 +342,14 @@ class ClaudeCodeModel(Model):
             await self._client("", None)
 
     async def _call(self, messages, *, schema, images, on_delta) -> Reply:
+        while True:
+            try:
+                return await self._once(messages, schema=schema, images=images, on_delta=on_delta)
+            except ClaudeError as exc:
+                if not _cache_refused(exc):
+                    raise
+
+    async def _once(self, messages, *, schema, images, on_delta) -> Reply:
         from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ThinkingBlock
         from claude_agent_sdk.types import StreamEvent
 
@@ -346,8 +384,8 @@ class ClaudeCodeModel(Model):
                         }
                         reply.cost_usd = msg.total_cost_usd or 0.0
                         reply.data = msg.structured_output
-                        if msg.is_error and not reply.text:
-                            reply.text = msg.result or ""
+                        if msg.is_error:  # never hand an API error on as the reply (it would be narrated)
+                            raise ClaudeError(msg.result or reply.text or "Claude Code reported an error")
             except BaseException:
                 self._discard(key)  # a half-read stream is unusable; a retry gets a fresh process
                 raise

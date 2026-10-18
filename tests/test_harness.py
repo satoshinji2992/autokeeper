@@ -207,10 +207,42 @@ def test_prompted_json_carries_schema_and_example():
     assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example
 
 
-def test_claude_prompt_is_append_only_for_prompt_caching():
+def test_claude_prompt_marks_the_end_of_history_for_the_prompt_cache():
+    """Claude Code marks only the end of a request, and the new prompt carries one-off extras
+    the transcript never keeps, so that mark never matched the next call. Ours sits after the
+    last block of history, which the next call repeats word for word."""
     turns = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"第{i}句"} for i in range(5)]
     shorter, longer = hm._blocks(turns[:3], None), hm._blocks(turns, None)
-    assert longer[: len(shorter)] == shorter
+    assert [b["text"] for b in longer[: len(shorter)]] == [b["text"] for b in shorter]  # append-only text
+    marked = [i for i, b in enumerate(longer) if "cache_control" in b]
+    assert marked == [len(longer) - 2] and longer[-2]["cache_control"] == {"type": "ephemeral", "ttl": hm.CACHE_TTL[0]}
+    assert "cache_control" not in hm._blocks(turns[:1], None)[0]  # nothing to keep yet
+
+
+def test_claude_api_errors_are_errors_and_a_refused_cache_mark_steps_down(monkeypatch):
+    overloaded, bad = hm.ClaudeError("API Error: 529 Overloaded"), hm.ClaudeError("API Error: 400 messages.0: bad")
+    assert hm.transient(overloaded) and not hm.transient(bad)  # retried, or on to the fallback; never narrated
+    monkeypatch.setattr(hm, "CACHE_TTL", ["1h"])
+    ttl = hm.ClaudeError("API Error: 400 messages.1.content.0.cache_control.ttl: a ttl='1h' block must not come after a ttl='5m' block")
+    assert hm._cache_refused(ttl) and hm.CACHE_TTL == ["5m"]
+    assert hm._cache_refused(ttl) and hm.CACHE_TTL == [None]
+    assert not hm._cache_refused(ttl) and not hm._cache_refused(bad)  # nothing left to drop
+
+
+async def test_claude_call_retries_once_without_the_refused_cache_mark(monkeypatch):
+    monkeypatch.setattr(hm, "CACHE_TTL", ["1h"])
+    model = hm.ClaudeCodeModel(Role("claude", "claude-haiku-5-5", "low"), "系统")
+    seen = []
+
+    async def once(messages, *, schema, images, on_delta):
+        seen.append(hm.CACHE_TTL[0])
+        if hm.CACHE_TTL[0] == "1h":
+            raise hm.ClaudeError("API Error: 400 messages.1.content.0.cache_control.ttl: a ttl='1h' cache_control block must not come after a ttl='5m'")
+        return Reply(text="好")
+
+    monkeypatch.setattr(model, "_once", once)
+    reply = await model._call([{"role": "user", "content": "你好"}], schema=None, images=None, on_delta=None)
+    assert reply.text == "好" and seen == ["1h", "5m"]
 
 
 async def test_session_keeps_a_window_and_folds_old_turns():
