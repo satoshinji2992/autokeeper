@@ -34,10 +34,10 @@ async def test_original_handout_retains_pixels_text_and_provenance(tmp_path):
     m.save(work)
     root = compile_module(m, tmp_path / "skills", source=work / "source")
     assert (root / "assets/images/map.png").read_bytes() == source.read_bytes()
-    assert json.loads((root / "assets/images/map.source.json").read_text())["original"] is True
-    assert (root / "assets/source/source.md").read_text() == "完整原文，包括未整理进摘要的细节。"
-    assert "完整原始资料" in (root / "SKILL.md").read_text()
-    handout = (root / f"references/handouts/{m.handouts[0].id}.md").read_text()
+    assert json.loads((root / "assets/images/map.source.json").read_text(encoding="utf-8"))["original"] is True
+    assert (root / "assets/source/source.md").read_text(encoding="utf-8") == "完整原文，包括未整理进摘要的细节。"
+    assert "完整原始资料" in (root / "SKILL.md").read_text(encoding="utf-8")
+    handout = (root / f"references/handouts/{m.handouts[0].id}.md").read_text(encoding="utf-8")
     assert m.handouts[0].text in handout and "../../assets/images/map.png" in handout
     assert not importer.validate(work)
     source.unlink()
@@ -67,7 +67,7 @@ def test_unknown_nested_fields_cannot_silently_disappear_during_import(tmp_path)
     work = tmp_path / "module"
     shutil.copytree(EXAMPLE, work)
     path = work / "module.yaml"
-    raw = yaml.safe_load(path.read_text())
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     raw["clues"][0]["sets"] = ["impossible_flag"]
     raw["pictures"] = {"map": "not a real file"}
     path.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
@@ -121,7 +121,7 @@ def test_pdf_embedded_images_are_extracted_once_with_all_page_references(tmp_pat
     doc.save(pdf)
     doc.close()
     count, _ = importer.extract(pdf, tmp_path / "module", None)
-    images = json.loads((tmp_path / "module/source/images/index.json").read_text())
+    images = json.loads((tmp_path / "module/source/images/index.json").read_text(encoding="utf-8"))
     assert count == 2 and len(images) == 1 and images[0]["pages"] == [1, 2]
     with Image.open(tmp_path / "module" / images[0]["path"]) as extracted:
         assert extracted.size == image.size and extracted.tobytes() == image.tobytes()

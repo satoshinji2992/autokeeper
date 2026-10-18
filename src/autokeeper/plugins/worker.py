@@ -41,6 +41,8 @@ class API:
 
 
 def main():
+    for stream in (sys.stdin, sys.stdout):  # -I ignores PYTHONIOENCODING; Windows would use its ANSI code page
+        stream.reconfigure(encoding="utf-8")
     payload = json.loads(sys.stdin.readline())
     limit_resources()
     sys.addaudithook(audit)

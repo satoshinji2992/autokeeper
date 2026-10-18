@@ -141,7 +141,7 @@ async def test_a_failing_model_hands_over_to_its_fallback(standby, monkeypatch):
     Flaky.failures.append(AssertionError("the tripped model must not be called again"))
     other = hm.make_model(spec, "NPC", label="npc")  # another agent on the same model skips it too
     assert (await other.complete([{"role": "user", "content": "你好"}])).text == "还是备用模型"
-    rows = [json.loads(line) for line in (config.SAVES / "traces").glob("*.jsonl").__next__().read_text().splitlines()]
+    rows = [json.loads(line) for line in (config.SAVES / "traces").glob("*.jsonl").__next__().read_text(encoding="utf-8").splitlines()]
     assert [r.get("fallback_for", "") for r in rows] == ["", "flaky-model", "flaky-model"]
     assert "ConnectionError" in rows[0]["error"]
 

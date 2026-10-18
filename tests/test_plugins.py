@@ -52,9 +52,9 @@ async def test_generated_plugin_tests_execute_and_source_survives_compilation(tm
     assert module.plugins == ["counter"] and not module.extension_errors
     assert module.extensions["counter"].code == COUNT and not await validate_all(work)
     skill = compile_module(module, tmp_path / "skills")
-    assert (skill / "assets/plugins/counter/plugin.py").read_text() == COUNT
-    assert "自定义规则插件" in (skill / "SKILL.md").read_text()
-    assert "api.roll" in (skill / "references/plugins.md").read_text()
+    assert (skill / "assets/plugins/counter/plugin.py").read_text(encoding="utf-8") == COUNT
+    assert "自定义规则插件" in (skill / "SKILL.md").read_text(encoding="utf-8")
+    assert "api.roll" in (skill / "references/plugins.md").read_text(encoding="utf-8")
     broken = plugin.model_copy(update={"code": "def handle(e, c, a):\n    return {'state':{},'effects':[]}"})
     with pytest.raises(ToolError, match="测试"):
         await tool.run(broken.model_copy(update={"version": "0.2.0"}).model_dump_json())
