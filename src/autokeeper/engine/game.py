@@ -21,7 +21,6 @@ from ..agents.cast import Action, Cast, Ruling
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
-from ..module.compiler import _location_md
 from ..module.schema import Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
 from ..rules import commands
@@ -999,11 +998,6 @@ class Game:
         rows += [f"[{e.time}] 线索：{e.text[:40]}" for e in st.log if e.kind == "clue"]
         head = f"（更早的经过：{st.memory}）\n" if st.memory else ""
         return head + "\n".join(sorted(rows)[-30:])
-
-    def _location_file(self, loc_id: str) -> str:
-        # Render the same reference format from this game's module: generated skill files
-        # may predate a scenario update or the director's new people and places.
-        return _location_md(self.m, self.m.location(loc_id)).strip()
 
     def _public_location(self, loc_id: str) -> str:
         loc = self.m.location(loc_id)

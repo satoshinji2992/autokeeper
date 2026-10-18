@@ -1,6 +1,8 @@
-"""Context ledger: what progressive disclosure saves the keeper.
+"""Context ledger: what progressive disclosure saves an agent that hosts the game from the
+compiled Skill package (Claude Code or Codex through skills/MCP). The built-in engine's keeper
+reads neither: it gets the public scene only (docs/harness.md).
 
-Compares the keeper's standing context in two designs:
+Compares the standing context in two designs:
 
     full         the whole module (every reference file of the Skill package) in the prompt
     progressive  SKILL.md overview + the file of the location the party is in
