@@ -1,112 +1,284 @@
-"""Keeper style: how often the narration leans on stock phrases.
+"""Keeper and NPC style, measured against human fiction.
 
-People who role-play on DeepSeek report two things: a list of phrases to avoid makes the
-model use them more, and the first reply's style carries through the whole game. So the
-keeper is shown two short narrations in the voice we want (skills/keeper-craft) instead
-of a ban list, and this counts what we did not want, per 1,000 字 of keeper narration:
+People who role-play on DeepSeek and Claude (SillyTavern, 酒馆) report two things: a list
+of phrases to avoid makes the model use them more, and whatever the first replies do
+carries through the whole game. So the prompts show the voice we want instead of a ban
+list, and code does the counting:
 
-    count     hedges and stock turns (不是……而是……, 仿佛, 一丝, 某种, 似乎, ...) in any
-              narration: a trace written with AUTOKEEPER_TRACE=full, an autoplay log, a save
+    count     narration per 1,000 字: each pattern as a multiple of its rate in human fiction
+              (Lu Xun, Lao She), and how far the lot goes past it; how much sentence lengths
+              vary; the example passages' props turning up in a game that never had them;
+              props carried over from the narration before
+    voice     NPC lines: how many open with an action in brackets, and how many repeat an
+              action or catchphrase from that NPC's two lines before
     run       a scripted game with a live keeper: the same actions, rulings, NPC lines and
               dice every time, the director off, so two runs differ only in the telling
+    talk      the same questions to three NPCs, the NPCs live and nothing else
+
+Read from any file: a trace written with AUTOKEEPER_TRACE=full, an autoplay log, a save,
+or what `run` and `talk` wrote. One run is a few thousand 字, where a pattern used once
+more or less moves its rate by half a point, so compare five runs or more, with spread.
 
     autokeeper eval cliche saves/autoplay/x.jsonl saves/x.json saves/traces/2026-10-18.jsonl
-    autokeeper --preset deepseek eval style --label before
+    autokeeper --preset deepseek eval style --label before --runs 5
+    autokeeper eval style --npc --label before --runs 5
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import random
 import re
-from collections import deque
+import statistics
+import warnings
+from collections import Counter, deque
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import config
+from .. import config, skills
 from ..agents.cast import Action, Cast, Ruling
 from ..engine import graph as turn_graph
-from ..engine.game import Game
+from ..engine.game import Game, Turn
 from ..module.compiler import compile_module, skill_name
-from ..module.schema import Module
+from ..module.schema import NPC, Module
 from ..prefs import Prefs
 from ..rules.bcdice import Roll
 from ..rules.coc import Rules
 
-# name -> pattern. The first five are the headline; the rest are counted alongside.
-CLICHES: dict[str, str] = {
-    "不是……而是……": r"(?<!是)不是[^。！？!?\n]{1,30}?(?:而是|[，,…]+\s*是|——)",  # also 不是X，是Y and 不是X——
-    "仿佛": "仿佛",
-    "一丝": "一丝",
-    "某种": "某种",
-    "似乎": "似乎",
-    "弥漫": "弥漫",
-    "寒意": "寒意",
-    "难以名状": "难以名状|不可名状",
-    "下意识": "下意识",
-    "喉结": "喉结",
-    "指节发白": "指节[发泛]白",
-    "涟漪": "涟漪",
-    "不易察觉": "不易察觉|微不可察|几不可察",
+with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
+    warnings.simplefilter("ignore", SyntaxWarning)
+    import jieba
+    import jieba.posseg as pseg
+
+jieba.setLogLevel(logging.WARNING)
+
+# name -> (pattern, uses per 1,000 字 in human fiction). The human rate is the mean of Lu Xun's
+# 22 stories in 呐喊 and 彷徨 (91,525 字) and the first eight chapters of Lao She's 骆驼祥子
+# (39,040 字), from Wikisource in simplified characters, counted with these same patterns.
+# Not every phrase role-players call stock is ours to avoid: both writers use 仿佛 and 似乎
+# more often than our keepers do. A pattern counts against a narration only as far as it
+# goes past the human rate.
+PATTERNS: dict[str, tuple[str, float]] = {
+    "不是……而是……": (r"(?<!是)(?:不是|并非)[^。！？!?\n]{1,30}?(?:而是|[，,…]+\s*是|——)", 0.119),  # also 不是X，是Y and 不是X——
+    "一下，又一下": (r"一下，又一下|一下又一下|一下一下|一寸一寸|一点一点|半拍", 0.013),  # counting out the beats
+    "破折号": (r"——", 1.781),
+    "X 混着 Y 的气味": (r"混着[^，。！？\n]{1,12}?(?:气味|味道|味儿|气息|味)|(?:气味|味道|味儿)[^，。！？\n]{0,8}混在一起", 0.0),
+    "静得能听见": (r"静得(?:能|可以)?听[见到得]|安静得能", 0.0),
+    "一丝": (r"一丝(?!不苟|不挂|一毫)", 0.0),
+    "喉结、指节发白": (r"喉结|指节[发泛]白", 0.0),
+    "有什么东西": (r"有什么东西", 0.005),
+    "说不清的": (r"说不清的|说不出的|难以言喻|莫名的", 0.022),
+    "嘴唇动了动": (r"嘴唇动了动|张了张嘴", 0.0),
+    "几乎听不见": (r"几乎听不见|几不可闻|低得听不见", 0.0),
+    "空气里、扑面而来": (r"空气(?:中|里)|扑面而来", 0.017),
+    "仿佛": (r"仿佛", 0.766),
+    "似乎": (r"似乎", 1.164),
+    "某种": (r"某种", 0.013),
+    "弥漫": (r"弥漫", 0.011),
+    "寒意": (r"寒意", 0.0),
+    "难以名状": (r"难以名状|不可名状", 0.0),
+    "下意识": (r"下意识", 0.0),
+    "涟漪": (r"涟漪", 0.0),
+    "不易察觉": (r"不易察觉|微不可察|几不可察", 0.0),
 }
-CORE = ("不是……而是……", "仿佛", "一丝", "某种", "似乎")
-# Similes and guesses (像, 好像, 像是, 像在……), counted on their own: not wrong in themselves,
-# but a keeper who reaches for one in every sentence is telling instead of showing.
-SIMILE = re.compile(r"(?<![画雕肖塑图影头偶佛神人想录])像(?![样素])")
+# Similes and guesses (像, 好像, 像是, 像在……), on their own and not in the headline: not wrong
+# in themselves, but a keeper who reaches for one in every sentence is telling instead of
+# showing. Lao She still wrote 象 for 像, and those are in the human rate.
+SIMILE = (r"(?<![画雕肖塑图影头偶佛神人想录])像(?![样素])", 2.2)
+FLOOR = 0.008  # per 1,000 字: one use in all 130,565 字, for what neither writer ever used
+# How much sentence lengths vary (standard deviation over the mean) and the share of sentences
+# of five 字 or fewer: Lu Xun 0.81 and 0.15, Lao She 0.69 and 0.07. Sentences end at 。！？….
+HUMAN_CV, HUMAN_SHORT = 0.75, 0.11
+RARE = 500  # jieba's dictionary count below which a noun is a prop, not a staple: 樟脑 70, 抽屉 560, 味道 2808
 _HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_SENTENCE = re.compile(r"[^。！？!?…\n]+[。！？!?…]*")
+_STRIP = re.compile(r"[\s，。、；：？！“”‘’「」『』（）()《》〈〉…—\-,.;:?!\"'`]+")
 
 
 def han(text: str) -> int:
-    """Chinese characters in a text: the 字 the densities are per thousand of."""
+    """Chinese characters in a text: the 字 the rates are per thousand of."""
     return len(_HAN.findall(text))
 
 
-def count(narrations: Iterable[str]) -> dict[str, Any]:
-    """Hits per phrase and per 1,000 字; `density` is the headline (CORE) per 1,000 字."""
+def sentences(text: str) -> list[int]:
+    """The length in 字 of each sentence."""
+    return [n for n in (han(s) for s in _SENTENCE.findall(text)) if n]
+
+
+@lru_cache(maxsize=512)
+def props(text: str) -> frozenset[str]:
+    """The rarer nouns of a text, what a passage is furnished with: words in jieba's dictionary
+    (樟脑, 油布, 座钟), not the staples (门, 桌子, 味道) or words for where (缝里)."""
+    return frozenset(
+        p.word for p in pseg.lcut(text, HMM=False)
+        if p.flag.startswith("n") and len(p.word) >= 2 and (jieba.get_FREQ(p.word) or 0) <= RARE
+        and p.word[-1] not in "里上下中内外边旁"
+    )  # fmt: skip
+
+
+def borrowed(narrations: list[str], examples: Iterable[str], own: str = "") -> dict[str, int]:
+    """The examples' props that turn up in the narration though nothing in this game has them
+    (`own`: the module and what the keeper was told): a keeper furnishing every room with the
+    樟脑 and 油布 of the passages it was shown. Word -> narrations it is in."""
+    found = {w: sum(w in t for t in narrations) for w in props("\n".join(examples)) if w not in own}
+    return dict(sorted(((w, n) for w, n in found.items() if n), key=lambda kv: (-kv[1], kv[0])))
+
+
+def carried(narrations: list[str], own: str = "") -> dict[str, int]:
+    """Props a narration takes over from the one before it though nothing in the game has them:
+    the keeper's own details coming back turn after turn. Word -> narrations that repeat it."""
+    out: Counter[str] = Counter()
+    for before, now in pairwise(narrations):
+        out.update(w for w in props(before) & props(now) if w not in own)
+    return dict(out.most_common())
+
+
+def count(narrations: Iterable[str], *, examples: Iterable[str] = (), own: str = "") -> dict[str, Any]:
+    """Each pattern per 1,000 字 and as a multiple of the human rate; `excess`, the headline, is
+    how many uses per 1,000 字 the patterns make past the human rates, all of them together."""
     texts = list(narrations)
     chars = sum(han(t) for t in texts)
-    hits = {name: sum(len(re.findall(p, t)) for t in texts) for name, p in CLICHES.items()}
-
-    def per_k(n: int) -> float:
-        return round(n * 1000 / chars, 2) if chars else 0.0
-
-    core = sum(hits[n] for n in CORE)
-    similes = sum(len(SIMILE.findall(t)) for t in texts)
+    hits = {name: sum(len(re.findall(p, t)) for t in texts) for name, (p, _) in PATTERNS.items()}
+    rate = {name: n * 1000 / chars if chars else 0.0 for name, n in hits.items()}
+    lengths = [n for t in texts for n in sentences(t)]
+    mean = statistics.mean(lengths) if lengths else 0.0
+    similes = sum(len(re.findall(SIMILE[0], t)) for t in texts)
     return {
         "narrations": len(texts),
         "chars": chars,
         "hits": hits,
-        "per_1000": {name: per_k(n) for name, n in hits.items()},
-        "core": core,
-        "density": per_k(core),
-        "all": per_k(sum(hits.values())),
+        "per_1000": {name: round(r, 2) for name, r in rate.items()},
+        "ratio": {name: round(r / max(PATTERNS[name][1], FLOOR), 1) for name, r in rate.items()},
+        "excess": round(sum(max(0.0, r - PATTERNS[name][1]) for name, r in rate.items()), 2),
         "similes": similes,
-        "similes_per_1000": per_k(similes),
+        "similes_per_1000": round(similes * 1000 / chars, 2) if chars else 0.0,
+        "sentence_cv": round(statistics.pstdev(lengths) / mean, 2) if mean else 0.0,
+        "short": round(sum(n <= 5 for n in lengths) / len(lengths), 3) if lengths else 0.0,
+        "borrowed": borrowed(texts, examples, own),
+        "carried": carried(texts, own),
     }
 
 
-def narration(path: Path) -> list[str]:
-    """The keeper's narration in a file: a save (its log; older turns are folded into
-    memory), an autoplay log (keeper_end events), a trace kept with AUTOKEEPER_TRACE=full,
-    or what `run` wrote."""
+# -- NPC lines ---------------------------------------------------------------------------------
+_BEAT = re.compile(r"[（(]([^（）()]{1,60})[）)]")
+_LITTLE = str.maketrans("", "", "着了过的地得一又再把将被往向在朝他她你我它们您这那个")
+
+
+def opens_with_action(line: str) -> bool:
+    return line.lstrip().startswith(("（", "("))
+
+
+def pairs(text: str) -> set[str]:
+    """Two-character runs within each clause, little words left out: 又搓了搓手 -> 搓搓, 搓手."""
+    out: set[str] = set()
+    for clause in _STRIP.split(text):
+        c = clause.translate(_LITTLE)
+        out |= {c[i : i + 2] for i in range(len(c) - 1)}
+    return out
+
+
+Habits = tuple[frozenset[str], tuple[str, ...]]
+
+
+def habits(npc: NPC) -> Habits:
+    """What the module has an NPC keep doing and saying: the two-character runs of its look and
+    voice (搓手, 铁铲, 藤篮), and its catchphrases, the quoted words."""
+    told = f"{npc.look}\n{npc.voice}"
+    phrases = tuple(p for p in re.findall(r"[“「]([^”」]{2,16})[”」]", told) if han(p) >= 2)
+    return frozenset(pairs(re.sub(r"[“「][^”」]*[”」]", "", told))), phrases
+
+
+def repeats(line: str, before: Iterable[str], habit: Habits = (frozenset(), ())) -> list[str]:
+    """The NPC's habits a line repeats from the lines before it: one of its actions done again (a
+    run of its look or voice in this line's bracketed actions and in one of theirs: 搓着手, 又搓了
+    搓手), or a catchphrase said again."""
+    before = list(before)
+    runs, phrases = habit
+
+    def acts(texts: list[str]) -> set[str]:
+        return {p for t in texts for b in _BEAT.findall(t) for p in pairs(b)}
+
+    flat = [_STRIP.sub("", t) for t in before]
+    said = [p for p in phrases if (q := _STRIP.sub("", p)) in _STRIP.sub("", line) and any(q in t for t in flat)]
+    return sorted(acts([line]) & acts(before) & runs) + said
+
+
+def voice(said: dict[str, list[str]], habit: dict[str, Habits] | None = None) -> dict[str, Any]:
+    """NPC lines by speaker, in order: the share that open with an action, overall and from each
+    NPC's second line on, and the share of those later lines that repeat one of the NPC's habits
+    (habits: by name) from its two lines before."""
+    habit = habit or {}
+    lines = [t for ts in said.values() for t in ts]
+    later = [(who, i) for who, ts in said.items() for i in range(1, len(ts))]
+
+    def share(n: int, of: int) -> float:
+        return round(n / of, 2) if of else 0.0
+
+    again = [r for who, i in later if (r := repeats(said[who][i], said[who][max(0, i - 2) : i], habit.get(who, (frozenset(), ()))))]
+    return {
+        "lines": len(lines),
+        "line_chars": round(sum(han(t) for t in lines) / len(lines)) if lines else 0,
+        "action_first": share(sum(opens_with_action(t) for t in lines), len(lines)),
+        "action_first_later": share(sum(opens_with_action(said[w][i]) for w, i in later), len(later)),
+        "repeats": share(len(again), len(later)),
+        "repeated": dict(Counter(x for r in again for x in r).most_common(8)),
+    }
+
+
+# -- reading files back ---------------------------------------------------------------------
+_PLAYS = re.compile(r"扮演 NPC「([^」]+)」")
+
+
+def _said(text: str) -> str:
+    """An NPC's line from a traced reply: the JSON it answered, or the text itself."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    return data.get("text", "") if isinstance(data, dict) else text
+
+
+def read(path: Path) -> tuple[list[str], dict[str, list[str]], str]:
+    """The keeper's narration, the NPCs' lines by name in order, and the module id when the file
+    says: a save (its log; older turns are folded into memory), an autoplay log (keeper_end and
+    npc events; the module from its summary), a trace kept with AUTOKEEPER_TRACE=full, or what
+    `run` and `talk` wrote."""
     text = path.read_text(encoding="utf-8")
+    told: list[str] = []
+    said: dict[str, list[str]] = {}
     if path.suffix == ".json":
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            return []
+            return [], {}, ""
         if not isinstance(data, dict):
-            return []
-        if "told" in data:
-            return [t for t in data["told"] if isinstance(t, str)]
-        return [e["text"] for e in data.get("log", []) if isinstance(e, dict) and e.get("kind") == "keeper"]
-    out = []
+            return [], {}, ""
+        if "told" in data or "said" in data:
+            told = [t for t in data.get("told", []) if isinstance(t, str)]
+            said = {k: [t for t in v if isinstance(t, str)] for k, v in data.get("said", {}).items() if isinstance(v, list)}
+            return told, said, str(data.get("module", ""))
+        for e in data.get("log", []):
+            if isinstance(e, dict) and e.get("kind") == "keeper":
+                told.append(e.get("text", ""))
+            elif isinstance(e, dict) and e.get("kind") == "npc":
+                said.setdefault(e.get("who", "?"), []).append(e.get("text", ""))
+        return told, said, str(data.get("module", ""))
+    module = ""
+    summary = path.with_name(path.name.removesuffix(".jsonl") + ".summary.json")
+    if summary.is_file():
+        try:
+            module = str(json.loads(summary.read_text(encoding="utf-8")).get("module", ""))
+        except (ValueError, AttributeError):
+            module = ""
     for line in text.splitlines():
         try:
             row = json.loads(line)
@@ -115,10 +287,58 @@ def narration(path: Path) -> list[str]:
         if not isinstance(row, dict):
             continue
         if row.get("type") == "keeper_end":
-            out.append(row.get("text", ""))
-        elif row.get("agent") == "keeper" and row.get("output") and not row.get("error"):
-            out.append(row["output"])
-    return out
+            told.append(row.get("text", ""))
+        elif row.get("type") == "npc":
+            said.setdefault(row.get("name") or row.get("npc", "?"), []).append(row.get("text", ""))
+        elif row.get("output") and not row.get("error"):
+            if row.get("agent") == "keeper":
+                told.append(row["output"])
+            elif row.get("agent") == "npc" and (who := _PLAYS.search(row.get("system", ""))):
+                said.setdefault(who.group(1), []).append(_said(row["output"]))
+    return told, said, module
+
+
+def narration(path: Path) -> list[str]:
+    """The keeper's narration in a file (read)."""
+    return read(path)[0]
+
+
+def module_of(module_id: str) -> Module | None:
+    """The module a file was played on, by its id (a module's folder is named after it)."""
+    for folder in (config.MODULES / module_id, config.LOCAL_MODULES / module_id, config.EXAMPLE):
+        if module_id and folder.name == module_id and (folder / "module.yaml").is_file():
+            return Module.load(folder)
+    return None
+
+
+def examples(system: str) -> list[str]:
+    """The example passages in a prompt (keeper-craft quotes them line by line with "> ")."""
+    return [line[2:] for line in system.splitlines() if line.startswith("> ") and len(line) > 10]
+
+
+def _own(m: Module | None, *more: str) -> str:
+    return "\n".join([json.dumps(m.model_dump(mode="json"), ensure_ascii=False) if m else "", *more])
+
+
+def score(path: Path) -> dict[str, Any]:
+    """One file measured: its narration (count) and NPC lines (voice). The example passages are
+    keeper-craft's as it is now; the props of the file's module do not count as borrowed."""
+    told, said, module_id = read(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.suffix == ".json" else {}
+    except json.JSONDecodeError:
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    m = module_of(module_id)
+    shown = data.get("examples") if isinstance(data.get("examples"), list) else examples(skills.body("keeper-craft"))
+    out = count(told, examples=shown, own=_own(m, *data.get("reports", [])))
+    names = {n.name: habits(n) for n in m.npcs} if m else {}
+    return out | {"voice": voice(said, names) if said else None}
+
+
+def spread(values: list[float]) -> tuple[float, float]:
+    """Mean and standard deviation (0 for a single value)."""
+    return statistics.mean(values), statistics.stdev(values) if len(values) > 1 else 0.0
 
 
 # -- a scripted game with a live keeper -------------------------------------------------------
@@ -213,6 +433,7 @@ class Scripted(Cast):
         self.prefs = Prefs()  # the defaults: this measures the keeper, not one player's taste
         self.beats = {b.say: b for b in beats}
         self.now: Beat | None = None
+        self.reports: list[str] = []  # what the keeper was told, turn by turn
 
     async def intent(self, state, text: str) -> Action:
         self.now = self.beats[text]
@@ -225,12 +446,22 @@ class Scripted(Cast):
     async def npc(self, state, npc_id: str, message: str) -> str:
         return self.now.npc if self.now and self.now.npc else "……"
 
+    async def keeper(self, state, report: str, on_delta=None, lore: str = "") -> str:
+        self.reports.append(report)
+        return await super().keeper(state, report, on_delta=on_delta, lore=lore)
+
     async def lore(self, state, query: str, keywords: list[str] | None = None, max_tokens: int = 1500) -> str:
         return ""
 
 
+def _write(out: Path | None, summary: dict[str, Any]) -> None:
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> dict[str, Any]:
-    """Play the module's script once with the configured keeper and count its narration."""
+    """Play the module's script once with the configured keeper and measure its narration."""
     m = Module.load(module_dir)
     if m.id not in SCRIPTS:
         raise ValueError(f"没有《{m.title}》的脚本（有：{'、'.join(SCRIPTS)}）")
@@ -268,18 +499,77 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
     finally:
         await cast.close()
     keeper = cfg.role("keeper")
+    shown = examples(system)
     summary = {
         "module": m.id,
         "label": label,
         "keeper": f"{keeper.model}@{keeper.effort or 'none'}",
         "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which keeper prompt told it
-        **count(told),
+        **count(told, examples=shown, own=_own(m, *cast.reports)),
         "lengths": [han(t) for t in told],
         "usage": state.usage.get("keeper", {}),
         "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),  # with any summaries
         "told": told,
+        "reports": cast.reports,
+        "examples": shown,
     }
-    if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    _write(out, summary)
+    return summary
+
+
+# -- the same questions to three NPCs ---------------------------------------------------------
+def _talk_zhuishuren() -> list[tuple[str, list[str]]]:
+    return [
+        ("thomas", ["您好，金博尔先生，我是哈罗德·布伦南，收到您的信就赶过来了。", "您叔叔平时是个什么样的人？",
+                    "他失踪前那几天，有没有什么反常的地方？", "这房子您打算怎么处理？"]),
+        ("jefferson", ["下午好，您就是这儿的守墓人吧？", "您在这公墓干了多少年了？",
+                       "听说道格拉斯·金博尔先生以前常来这儿读书？", "这活儿冬天不好干吧？"]),
+        ("odell", ["您好，夫人，打扰了。我叫哈罗德·布伦南，替金博尔家办点事。", "您在这条街上住了很久了吧？",
+                   "您认识道格拉斯·金博尔先生吗？", "这一带晚上太平吗？"]),
+    ]  # fmt: skip
+
+
+TALKS = {"zhuishuren": _talk_zhuishuren}
+
+
+async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) -> dict[str, Any]:
+    """Ask the module's NPCs the same questions with the configured NPC model, through the game's
+    own NPC call (its leak check included), and measure how they talk. No checks, no keeper."""
+    m = Module.load(module_dir)
+    if m.id not in TALKS:
+        raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(TALKS)}）")
+    cfg = replace(config.load(), improv="严格")
+    cast = Cast(cfg, m)
+    cast.prefs = Prefs()
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"talk-{m.id}-{label or 'run'}", human=[])
+    game = Game(m, state, cast, Rules(dice=Loaded(())))  # type: ignore[arg-type]
+    inv = state.investigator
+    said: dict[str, list[str]] = {}
+    asked: dict[str, list[str]] = {}
+    try:
+        for npc_id, questions in TALKS[m.id]():
+            npc = m.npc(npc_id)
+            state.location = npc.location or state.location
+            for q in questions:
+                state.turn += 1
+                state.add("player", q, who=inv.name)
+                turn = Turn(action=Action(kind="talk", summary=f"{inv.name}和{npc.name}说话", npc=npc_id, speech=q))
+                await game.talk(turn)
+                said.setdefault(npc.name, []).append(turn.npc_lines[-1][1])
+                asked.setdefault(npc.name, []).append(q)
+    finally:
+        await cast.close()
+    role = cfg.role("npc")
+    summary = {
+        "module": m.id,
+        "label": label,
+        "npc": f"{role.model}@{role.effort or 'none'}",
+        "prompt": hashlib.sha1("".join(s.system for s in cast.sessions.values()).encode("utf-8")).hexdigest()[:10],
+        **voice(said, {n.name: habits(n) for n in m.npcs}),
+        "usage": state.usage.get("npc", {}),
+        "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),
+        "said": said,
+        "asked": asked,
+    }
+    _write(out, summary)
     return summary
