@@ -355,13 +355,11 @@ async def test_failures_are_shown_plainly_and_an_import_can_be_stopped(monkeypat
         assert screen.query_one("#module-id", Input).value == "dongxue-zhixia"
         assert "覆盖" in shown(screen, "#id-note") and "warning" in screen.query_one("#id-note").classes
         screen.query_one("#module-id", Input).value = "zhuishuren 2"  # typed by hand: made into an id
-        await pilot.pause()
-        assert "modules/local/zhuishuren-2/" in shown(screen, "#id-note")
+        await until(pilot, lambda: "modules/local/zhuishuren-2/" in shown(screen, "#id-note"))
         field = screen.query_one("#module-id", Input)
         field.value = "example"  # a bundled module's name
         field.focus()
-        await pilot.pause()
-        assert "error" in screen.query_one("#id-note").classes
+        await until(pilot, lambda: "error" in screen.query_one("#id-note").classes)  # a slow runner takes more than a frame
         await pilot.press("enter")
         await pilot.pause()
         assert screen.step == "confirm"  # refused
