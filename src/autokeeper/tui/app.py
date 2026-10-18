@@ -1467,6 +1467,9 @@ class AutoKeeperApp(App):
         for th in THEMES:
             self.register_theme(th)
         self.theme = self._theme_name or config.load().theme
+        if not imagery.available():  # pictures fall back to the hand-drawn art without a word otherwise
+            self.notify(f"没找到 chafa，照片显示不出来，只能看手绘字符画。安装：{imagery.install_hint()}，装完重开。",
+                        title="缺少 chafa", severity="warning", timeout=15)
         if self.join:
             from .net import JoinScreen, LobbyScreen
 

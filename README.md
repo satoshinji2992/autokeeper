@@ -48,7 +48,7 @@ AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子�
 
 ## 安装
 
-需要 Python 3.12+、[uv](https://docs.astral.sh/uv/) 和 Node.js 18+。想把照片转成字符画，再装上 [chafa](https://hpjansson.org/chafa/)。
+需要 Python 3.12+、[uv](https://docs.astral.sh/uv/)、Node.js 18+ 和 [chafa](https://hpjansson.org/chafa/)。chafa 负责把场景和头像照片转成彩色字符画，没装的话画面只剩手绘字符画，启动时会提示；`autokeeper doctor` 也会检查。
 
 ```bash
 git clone https://github.com/satoshinji2992/autokeeper && cd autokeeper
@@ -120,7 +120,7 @@ uv run autokeeper autoplay modules/local/mymod --party 2
 
 ## 和朋友一起玩
 
-同一个网络里（比如同一个 Wi-Fi），一个人开房间，其他人用浏览器加入，什么都不用装。
+同一个网络里（比如同一个 Wi-Fi），一个人开房间，其他人用浏览器加入，什么都不用装。不在一个网络里，可以用 Radmin VPN、ZeroTier 这类虚拟局域网，地址换成房主在虚拟网络里的 IP。
 
 ```bash
 uv run autokeeper host                                         # 默认《追书人》：第一位调查员留给玩家，其余交给 AI
@@ -131,6 +131,13 @@ uv run autokeeper join 192.168.1.5                              # 装了 AutoKee
 开好房间后，终端会打印一个地址，比如 `http://192.168.1.5:8000`。把它发给朋友，打开后填个名字，挑一个空座。人齐了自动开局，也可以选“现在开始”，空着的座位交给 AI 调查员。
 
 大家按座位轮流行动，轮到你时输入框才算数。全角括号开头的话是场外聊天，比如“（我去倒杯水）”，所有人都看得到，不算行动。有人掉线，AI 先替他走这一回合，他重新连上、坐回原来的座位就能接着玩。
+
+几点要注意：
+
+- 房主开房间的那个终端只是服务，不占座位。房主自己也要玩的话，另开一个终端 `uv run autokeeper join 127.0.0.1`，或者浏览器打开 `http://localhost:8000`。
+- 朋友不用填 API key，也不用有这本模组。浏览器加入什么都不用装；用终端 `join` 加入的，要装 AutoKeeper 和 chafa，否则图片只显示手绘字符画（图片是在朋友自己的电脑上转成字符画的）。
+- 终端打印的地址是本机找到的第一块网卡，用虚拟局域网时换成虚拟网络里的 IP。连不上先查防火墙是否放行 8000 和 8765 端口；房主在 WSL 里开房间的话，要在 `.wslconfig` 里开 `networkingMode=mirrored`。
+- 目前座位只能是模组的预设调查员。
 
 游戏跑在房主的电脑上，用房主的模型和额度，每回合自动存档，下次用 `--load` 接着玩。模组的真相、NPC 的秘密和还没找到的线索只留在房主那边，朋友的屏幕上只有调查员该看到的东西。
 

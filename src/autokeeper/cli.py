@@ -303,6 +303,10 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     cfg = config.load()
     found = shutil.which("node")
     console.print(f"{'✓' if found else '✗'} node: {found or '未找到（BCDice 需要）'}")
+    from . import imagery
+
+    found = shutil.which("chafa")
+    console.print(f"{'✓' if found else '✗'} chafa: {found or '未找到：场景和头像只能显示手绘字符画，联机时朋友的终端也一样。安装：' + imagery.install_hint()}")
     ok &= bool(found)
     try:
         with BCDice() as dice:

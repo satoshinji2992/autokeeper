@@ -19,6 +19,7 @@ import random
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -31,11 +32,6 @@ from pydantic import BaseModel, Field
 from . import artkit
 from .config import Config
 from .harness import Session
-
-# rembg pulls in numba, whose default TBB layer prints "Attempted to fork from a non-main
-# thread" straight onto the terminal when a worker thread starts chafa. The workqueue layer
-# has no such check.
-os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
 
 COMMONS = "https://commons.wikimedia.org/w/api.php"
 USER_AGENT = "AutoKeeper/0.1 (https://github.com/satoshinji2992/autokeeper)"
@@ -411,6 +407,15 @@ async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str,
 # -- rendering ------------------------------------------------------------------
 def available() -> bool:
     return shutil.which("chafa") is not None
+
+
+def install_hint() -> str:
+    """How to get chafa on this system."""
+    if sys.platform == "win32":
+        return "scoop install chafa（没有 scoop：先在 PowerShell 运行 irm get.scoop.sh | iex）"
+    if sys.platform == "darwin":
+        return "brew install chafa"
+    return "sudo apt install chafa（其他发行版用自己的包管理器）"
 
 
 def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, work: int = 9) -> str:
