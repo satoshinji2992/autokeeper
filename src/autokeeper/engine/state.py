@@ -34,6 +34,7 @@ class GameState(BaseModel):
     active: int = 0
     location: str
     visited: list[str] = Field(default_factory=list)
+    heard: dict[str, str] = Field(default_factory=dict)  # places named in what the players saw: id -> the name heard (engine/fog.py)
     minutes: int = 0
     clues: list[str] = Field(default_factory=list)
     handouts: list[str] = Field(default_factory=list)

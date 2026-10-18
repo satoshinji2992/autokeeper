@@ -24,6 +24,7 @@ from ..module.schema import Event, Module
 from ..rules import commands
 from ..rules.bcdice import Level
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
+from . import fog
 from .state import GameState, parse_time, time_of_day
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -117,7 +118,9 @@ class Game:
         if happened:
             report += "【开场时发生的事】\n" + "\n".join(happened) + "\n"
         report += "请用 120–220 字开场：交代调查员为什么来到这里，描写眼前的地点，结尾落在一个能行动的细节上。"
-        return await self._narrate(report, on_delta)
+        text = await self._narrate(report, on_delta)
+        st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
+        return text
 
     # -- dice commands ------------------------------------------------------------------
     async def command(self, text: str) -> commands.CommandResult:
@@ -464,6 +467,7 @@ class Game:
 
     async def remember(self) -> None:
         st = self.state
+        st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]
         if len(recent) < 48:
             return
