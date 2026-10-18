@@ -5,6 +5,7 @@
 - harness：
   - **备用模型与熔断**：`Role.fallback`、`--fallback`、`AUTOKEEPER_FALLBACK`。主模型重试用完仍失败或超预算时改用备用模型；失败的模型冷却 5 分钟，期间所有 Agent 一起绕开它；叙事已经流出时不降级。
   - **`autokeeper trace`**：按 Agent / 模型 / 后端 / 运行汇总追踪，包括调用、token、缓存命中、延迟 p50/p95、修复、重试、降级、错误、花费。每行追踪记运行编号，autoplay 用存档名。
+  - **Codex 后端**：Codex CLI（`codex exec`）当传输层，用我们的系统提示替换它自带的指令，只读，不留会话；结构化输出走 `--output-schema`（先转成 OpenAI 严格 schema）。实测文本和结构化调用各约 9 秒，适合导入和生成。
   - **录制与回放**（`harness/replay.py`）：`autoplay --record` 录下每条回复和每颗骰子，`--replay` 不调用模型重放整局并比对结局；CI 回放一盘 DeepSeek 录的《钟楼》。
   - **`Session.send(remember=...)`**：记录里只存精简版提示。裁定员和 AI 调查员用它，摘要折叠少了六成多。
   - DeepSeek 预设关掉摘要员和记录员的思考：缓存按思考强度分区，开着思考换不来缓存；读档时“上回书说到”的第一个字从 1.6–3.8 秒提前到 0.5 秒。

@@ -9,7 +9,7 @@
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-1C3C3C)
-![Models](https://img.shields.io/badge/models-Claude%20%C2%B7%20DeepSeek%20%C2%B7%20Ollama%20%C2%B7%20LangChain-D97757)
+![Models](https://img.shields.io/badge/models-Claude%20%C2%B7%20Codex%20%C2%B7%20DeepSeek%20%C2%B7%20Ollama%20%C2%B7%20LangChain-D97757)
 ![GraphRAG](https://img.shields.io/badge/GraphRAG-LightRAG-7B61FF)
 ![MCP](https://img.shields.io/badge/MCP-18%20tools-111111)
 ![Agent Skills](https://img.shields.io/badge/Agent%20Skills-spec%20compliant-0A7EA4)
@@ -24,7 +24,7 @@
 ## 亮点
 
 - **自研 harness**（[docs/harness.md](docs/harness.md)）：
-  - **模型只是通道**：无状态，换一家照样玩。Claude Code 只当传输层，每次回复后 `/clear`；DeepSeek、OpenAI、Gemini、Ollama 走 LangChain。实测同一局中途从 DeepSeek 换到本地 gemma4，守秘人和 NPC 都记得换之前发生的事；游戏里按 F3 就能换。
+  - **模型只是通道**：无状态，换一家照样玩。Claude Code 和 Codex CLI 只当传输层（Claude 每次回复后 `/clear`，Codex 换掉自带指令、只读、不留会话）；DeepSeek、OpenAI、Gemini、Ollama 走 LangChain。实测同一局中途从 DeepSeek 换到本地 gemma4，守秘人和 NPC 都记得换之前发生的事；游戏里按 F3 就能换。
   - **上下文归 harness**：每个 Agent 的对话记录存进存档，按字符预算开窗，旧内容由摘要员折叠。窗口只往后追加，前缀缓存实测命中 60%–98%。
   - **结构化输出**：用厂商的 schema 模式或提示词 JSON，经 JSON Schema 校验，不合格修一轮。
   - **工具循环**：基于 LangGraph 的 think → act 循环，每步一个扁平 JSON，工作区沙箱化，不需要厂商的 tool calling。
@@ -98,7 +98,7 @@ flowchart LR
   T --> L --> S
   L --> TL
   S --> M --> B
-  M --> CC[Claude Code<br/>只当传输层]
+  M --> CC[Claude Code · Codex CLI<br/>只当传输层]
   M --> DS[DeepSeek]
   M --> OL[Ollama<br/>本地 · 离线]
   M --> LC[OpenAI · Gemini · Anthropic API<br/>OpenAI 兼容服务]
@@ -200,6 +200,7 @@ uv run autokeeper --preset deepseek                   # DeepSeek：flash，思�
 AUTOKEEPER_MODEL=ollama:qwen3:14b uv run autokeeper --search none    # 全部换成本地模型，完全离线
 uv run autokeeper --budget 5 --preset deepseek generate "1931 年上海，一张没有标签的唱片" --id changpian
 uv run autokeeper --preset deepseek --fallback ollama:qwen3:14b      # DeepSeek 连不上或花超了，就换本地模型接着玩
+uv run autokeeper --model codex:default import 模组.pdf --id mymod    # 用 Codex 订阅导入模组（每次调用约 9 秒）
 uv run autokeeper trace --run last                                   # 刚才那一局每个 Agent 花了多少、多快、缓存命中多少
 ```
 
@@ -308,7 +309,7 @@ bridge/       BCDice 的 Node 桥接
 - [x] 回合图、BCDice 结算、NPC 记忆隔离、孤注一掷中断
 - [x] 模组导入、原创生成、联网考据、Agent Skill 编译、LightRAG 知识库
 - [x] TUI、浏览器模式、手绘、彩色 ASCII、MCP 服务、Claude Code 插件
-- [ ] Codex 后端（目前只有接口）
+- [x] Codex 后端（Codex CLI 当传输层；每次约 9 秒，适合导入和生成）
 - [ ] 完整的战斗与追逐规则
 - [ ] QQ / Discord 机器人，多人联机
 - [ ] 语音叙事

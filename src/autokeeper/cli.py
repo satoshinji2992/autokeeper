@@ -150,6 +150,10 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     if any(b == "claude" for b, _ in routes):
         found = shutil.which("claude")
         console.print(f"{'✓' if found else '·'} claude CLI: {found or '未找到（用 Agent SDK 自带的 CLI）'}")
+    if any(b == "codex" for b, _ in routes):
+        found = shutil.which("codex")
+        console.print(f"{'✓' if found else '✗'} codex CLI: {found or '未找到（npm i -g @openai/codex，再 codex login）'}")
+        ok &= bool(found)
     for provider in sorted({m.partition(':')[0] for b, m in routes if b == 'langchain'}):
         names = KEYS.get(provider, ())
         have = [n for n in names if os.environ.get(n)]

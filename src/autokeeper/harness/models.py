@@ -10,7 +10,8 @@ session store.
     langchain  whatever init_chat_model builds: deepseek:, openai:, anthropic:,
                google_genai:, ollama: (local, offline), or any OpenAI-compatible server
                through base_url.
-    codex      interface reserved for the Codex SDK.
+    codex      the Codex CLI (`codex exec`) used the same way: its instructions replaced by
+               ours, read-only, nothing kept. Local Codex login.
 
 The contract belongs to the harness, not the provider:
 
@@ -479,9 +480,106 @@ class LangChainModel(Model):
         return reply
 
 
+# -- Codex --------------------------------------------------------------------------------
+CODEX_EFFORT = {"minimal": "minimal", "low": "low", "medium": "medium", "high": "high", "max": "high"}
+
+
+class CodexError(RuntimeError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        found = re.search(r'"status":\s*(\d{3})', message)
+        self.status_code = int(found.group(1)) if found else None  # lets transient() see 429 / 5xx
+
+
+def strict_schema(node: Any) -> Any:
+    """OpenAI's strict structured output: every object closed and every field required,
+    no defaults. Fields that had defaults simply get filled in by the model; the original
+    schema still validates the result."""
+    if isinstance(node, list):
+        return [strict_schema(n) for n in node]
+    if not isinstance(node, dict):
+        return node
+    out = {k: strict_schema(v) for k, v in node.items() if k != "default"}
+    if "properties" in out:
+        out["additionalProperties"] = False
+        out["required"] = list(out["properties"])
+    return out
+
+
+def _transcript(messages: list[Msg]) -> str:
+    """The window as one prompt, in the same tagged form the Claude Code channel uses."""
+    if len(messages) == 1:
+        return messages[0]["content"]
+    rows = [("〔你的回复〕" if m["role"] == "assistant" else "〔输入〕") + m["content"] for m in messages]
+    return "\n\n".join([HISTORY, *rows])
+
+
 class CodexModel(Model):
+    """The Codex CLI (`codex exec`) as a bare transport, like Claude Code: the harness's own
+    instructions replace Codex's (model_instructions_file), nothing is kept (--ephemeral),
+    the sandbox is read-only, and structured output goes through --output-schema. Each call
+    is a fresh process of about 9 s, so it suits imports and generation better than a live
+    turn. Runs on the local Codex login; spec.model "default" keeps the login's own model."""
+
     async def _call(self, messages, *, schema, images, on_delta) -> Reply:
-        raise NotImplementedError("Codex 后端的接口已预留（openai-codex SDK），目前请用 claude 或 langchain 后端。")
+        import tempfile
+
+        SESSIONS.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = os.path.realpath(tmp)
+            instructions = os.path.join(folder, "instructions.md")
+            with open(instructions, "w", encoding="utf-8") as f:
+                f.write(self.system)
+            args = [
+                "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
+                "-s", "read-only", "-C", str(SESSIONS),
+                "-c", f"model_instructions_file={json.dumps(instructions)}", "-c", "project_doc_max_bytes=0",
+            ]  # fmt: skip
+            if self.spec.model and self.spec.model != "default":
+                args += ["-m", self.spec.model]
+            if self.spec.effort:
+                args += ["-c", f'model_reasoning_effort="{CODEX_EFFORT.get(self.spec.effort, "medium")}"']
+            if schema is not None:
+                schema_file = os.path.join(folder, "schema.json")
+                with open(schema_file, "w", encoding="utf-8") as f:
+                    json.dump(strict_schema(schema), f, ensure_ascii=False)
+                args += ["--output-schema", schema_file]
+            for i, img in enumerate(images or []):
+                path = os.path.join(folder, f"image{i}.png")
+                with open(path, "wb") as f:
+                    f.write(img)
+                args += ["-i", path]
+            proc = await asyncio.create_subprocess_exec(
+                *args, "-", stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            out, err = await proc.communicate(_transcript(messages).encode("utf-8"))
+        reply, failure = Reply(), ""
+        for line in out.decode("utf-8", "replace").splitlines():
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            item = ev.get("item") or {}
+            if ev.get("type") == "item.completed" and item.get("type") == "agent_message":
+                reply.text += item.get("text", "")
+            elif ev.get("type") == "item.completed" and item.get("type") == "reasoning":
+                reply.thinking += item.get("text", "")
+            elif ev.get("type") == "turn.completed":
+                u = ev.get("usage") or {}
+                reply.usage = {
+                    "input_tokens": u.get("input_tokens", 0),
+                    "cache_read": u.get("cached_input_tokens", 0),
+                    "output_tokens": u.get("output_tokens", 0) + u.get("reasoning_output_tokens", 0),
+                }
+            elif ev.get("type") == "turn.failed":
+                failure = (ev.get("error") or {}).get("message", "")
+        if failure or (proc.returncode and not reply.text):
+            raise CodexError(failure or err.decode("utf-8", "replace")[-500:] or f"codex exec 退出码 {proc.returncode}")
+        if on_delta and reply.text and schema is None:
+            await on_delta(reply.text)
+        if schema is not None:
+            reply.data = parse_json(reply.text)
+        return reply
 
 
 MODELS: dict[str, type[Model]] = {"claude": ClaudeCodeModel, "langchain": LangChainModel, "codex": CodexModel}

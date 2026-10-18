@@ -189,6 +189,14 @@ def test_trace_summary_per_agent_and_run(monkeypatch):
     assert trace.summarize(rows, None)[0]["calls"] == 4
 
 
+def test_strict_schema_for_codex_closes_every_object():
+    strict = hm.strict_schema(Action.model_json_schema())
+    assert strict["additionalProperties"] is False and set(strict["required"]) == set(strict["properties"])
+    assert "default" not in json.dumps(strict)
+    full = {k: "" for k in strict["properties"]} | {"kind": "investigate", "summary": "翻抽屉"}
+    assert not hm.problems(full, Action.model_json_schema())  # what strict mode yields still passes our check
+
+
 def test_prompted_json_carries_schema_and_example():
     text = hm.json_instruction(Action.model_json_schema())
     assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example

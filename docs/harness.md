@@ -25,7 +25,9 @@ AutoKeeper 里所有 Agent 都跑在 `src/autokeeper/harness/` 上。模型只�
 | `langchain` · `deepseek:` | `ChatDeepSeek`，`base_url` 可改 | 提示词 JSON + `response_format: json_object` | `thinking.type` + `reasoning_effort`（low / high / max） |
 | `langchain` · `ollama:` | `ChatOllama`，默认 `num_ctx=16384` | Ollama 的 `format`（受约束解码） | `reasoning`，只在 high / max 时开 |
 | `langchain` · `openai:` / `anthropic:` / `google_genai:` | `init_chat_model` | 各家 schema 模式；带 `base_url` 的 OpenAI 兼容服务用提示词 JSON | `reasoning_effort` / `thinking.budget_tokens` / `thinking_level` |
-| `codex` | 接口预留 | | |
+| `codex` | Codex CLI（`codex exec`）同样只当传输层：用 `model_instructions_file` 换成我们的系统提示，只读沙箱，`--ephemeral` 不留会话 | `--output-schema`，schema 先转成 OpenAI 严格模式（对象封闭、字段全必填） | `model_reasoning_effort` |
+
+Codex 通道每次调用都起一个新进程，实测约 9 秒（`gpt-5.6-luna`），Codex 自身固定带着约 8.5k token 的工具定义，关不掉。所以它更适合导入、生成这类不赶时间的任务，不适合实时回合。模型串写 `codex:<模型>`，`codex:default` 用登录账号的默认模型。
 
 为什么要 `/clear`：同一个 Claude Code 进程里换 `session_id` 隔离不了上下文，实测会串到上一轮的内容；`/clear` 能清掉历史、保留系统提示，大约 0.4 秒。现在它在玩家读叙事的时候在后台跑，不占回合时间。
 

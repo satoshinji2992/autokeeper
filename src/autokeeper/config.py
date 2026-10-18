@@ -61,12 +61,15 @@ class Role:
 
 def route(model: str) -> tuple[str, str]:
     """The channel a model string goes through: a bare claude-* name is Claude Code,
-    replay:<cassette> a recorded game, anything else an init_chat_model string
+    codex:<model> the Codex CLI, replay:<cassette> a recorded game, anything else an
+    init_chat_model string
     (deepseek:, ollama:, openai:, ...)."""
     if model.startswith("claude:"):
         return "claude", model.removeprefix("claude:")
     if model.startswith("replay:"):  # a recorded game (harness/replay.py)
         return "replay", model.removeprefix("replay:")
+    if model.startswith("codex:"):  # the Codex CLI; "codex:default" keeps the login's model
+        return "codex", model.removeprefix("codex:")
     if ":" not in model and model.startswith("claude-"):
         return "claude", model
     return "langchain", model
