@@ -190,6 +190,23 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 6. 最后 finish，在 answer 里用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。"""
 
 
+ART_BY_ARTIST = """
+
+## 这次画图交给美术 Agent
+这次的字符画由美术 Agent（{model}）来画，取代上面“美术”一节里自己画图的要求和流程第 4 步：
+- 不要自己写 art/*.txt 和 .color，也没有 write_art。
+- 在 module.yaml 里写好 art 和 portrait 键之后，用 draw_art 提交 JSON：键是图名，值是一句画面描述。
+  场景写地点的样子、光线和最显眼的东西；头像写这个人的外貌、年纪和神情。不写剧透。
+- 原模组已有的图照样用 use_image 保存。"""
+
+
+def drawn_by_artist(cfg: config.Config) -> bool:
+    """Whether the art goes to the artist role: when another model builds the module, the
+    pictures still come from the art model (Opus 5.5 in every preset)."""
+    importer, artist = cfg.role("importer"), cfg.role("artist")
+    return (importer.backend, importer.model) != (artist.backend, artist.model)
+
+
 def validate(work: Path) -> list[str]:
     try:
         m = Module.load(work)
@@ -278,7 +295,8 @@ def builder(work: Path, cfg: config.Config, console: Console, *, writable=("modu
     async def checked():
         return report(await validate_all(work))
 
-    tools = [*file_tools(ws), artwork_tool(ws), original_image_tool(ws), plugin_tool(ws), image_tool(ws, see), check_tool(checked)]
+    art = artist_tool(ws, cfg) if drawn_by_artist(cfg) else artwork_tool(ws)
+    tools = [*file_tools(ws), art, original_image_tool(ws), plugin_tool(ws), image_tool(ws, see), check_tool(checked)]
     system = "你是一个仔细、守规矩的 TRPG 模组整理员。所有输出用简体中文。"
     agent = Agent("importer", system, tools, cfg=cfg, max_steps=max_steps, memory=150_000, on_event=printer(console, work))
     agent.closers.append(eye.close)
@@ -311,6 +329,52 @@ def artwork_tool(ws: Workspace) -> Tool:
         return f"已写入 {len(pictures)} 张图及其自动配色蒙版：{'、'.join(pictures)}"
 
     return Tool("write_art", "批量保存 ASCII 场景、头像与自动配色；先写 module.yaml，content 为图名到图文的 JSON 对象", ("content",), write_art, ("content",))
+
+
+def artist_tool(ws: Workspace, cfg: config.Config) -> Tool:
+    """The pictures drawn by the artist role from one line each; the tool checks and colours
+    them as write_art does. A few at a time, so a batch of thirty does not open thirty sessions."""
+    from ..agents import artist
+
+    async def draw_art(content: str) -> str:
+        try:
+            wanted = json.loads(content)
+            module = Module.load(ws.root)
+        except (ValueError, OSError) as exc:
+            raise ToolError(f"先写好 module.yaml；content 须为图名到画面描述的 JSON 对象：{type(exc).__name__}") from None
+        if not isinstance(wanted, dict) or not wanted or len(wanted) > 40:
+            raise ToolError("一次提交 1–40 张图，格式为图名到一句画面描述的 JSON 对象")
+        for name, subject in wanted.items():
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9_]+", name) or not isinstance(subject, str) or not subject.strip():
+                raise ToolError("图名只能用小写字母、数字与下划线，描述必须是非空字符串")
+        portraits = {n.portrait for n in module.npcs} | {p.portrait for p in module.pregens}
+        gate = asyncio.Semaphore(3)
+
+        async def one(name: str, subject: str) -> tuple[str, tuple[str, str] | None, str]:
+            async with gate:
+                try:
+                    drawing = await artist.draw(cfg, f"{subject}（{module.era}，{module.setting}）", portrait=name in portraits)
+                except Exception as exc:  # one picture failing leaves the rest
+                    return name, None, type(exc).__name__
+            return name, drawing, ""
+
+        done, failed = [], []
+        for name, drawing, why in await asyncio.gather(*(one(n, s) for n, s in wanted.items())):
+            if drawing is None:
+                failed.append(f"{name}（{why}）")
+                continue
+            for path, text in zip((f"art/{name}.txt", f"art/{name}.color"), drawing, strict=True):
+                target = ws.resolve(path, write=True)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text + "\n", encoding="utf-8")
+            done.append(name)
+        out = f"美术 Agent 画好 {len(done)} 张：{'、'.join(done) or '无'}"
+        return out + (f"；没画成：{'、'.join(failed)}，换个描述再交" if failed else "")
+
+    return Tool(
+        "draw_art", "让美术 Agent 画 ASCII 场景和头像并配色；先写 module.yaml，content 为图名到一句画面描述的 JSON 对象",
+        ("content",), draw_art, ("content",),
+    )
 
 
 def original_image_tool(ws: Workspace) -> Tool:
@@ -355,7 +419,12 @@ async def pipeline(
     async def n_build(_: ImportState) -> dict:
         role = cfg.role("importer")
         console.print(f"[bold]构建[/] {role.backend}:{role.model}（effort={role.effort}）开始读原文、写 module.yaml、画图…")
-        result = await agent.run(brief)
+        task = brief
+        if drawn_by_artist(cfg):
+            art = cfg.role("artist")
+            console.print(f"[bold]美术[/] 图由美术 Agent 画：{art.backend}:{art.model}")
+            task += ART_BY_ARTIST.format(model=art.model)
+        result = await agent.run(task)
         console.print(f"[bold]构建结束[/] {result.steps} 步{'' if result.finished else '（到步数上限）'}  {escape(result.answer[:300])}")
         return {}
 

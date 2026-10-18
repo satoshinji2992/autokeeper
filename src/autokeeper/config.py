@@ -5,7 +5,7 @@ Every agent role picks its own backend and model. A preset sets all of them at o
     claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story,
               Opus 5.5 rules, directs and builds modules, Haiku 5.5 plays the NPCs.
     deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role). Needs
-              DEEPSEEK_API_KEY.
+              DEEPSEEK_API_KEY. Art and vision stay on Opus 5.5, DeepSeek as their fallback.
 
 Pick one with `autokeeper --preset deepseek`, AUTOKEEPER_PRESET, or `preset = "deepseek"`
 in the config file. A mode moves the preset's thinking levels: 高级剧情 lets the roles that
@@ -108,16 +108,30 @@ def _deepseek(effort: str | None) -> Role:
     return Role("langchain", "deepseek:deepseek-flash", effort)
 
 
+# Pictures and how they look (drawing and colouring ASCII art, reading sketches and module
+# images, picking photos) run on Opus 5.5 whatever the preset. A preset on another vendor keeps
+# its own model as the fallback, so it still plays without a Claude login.
+ART = ("artist", "vision")
+
+
+def _opus_art(roles: dict[str, Role]) -> dict[str, Role]:
+    out = dict(roles)
+    for name in ART:
+        own = out.get(name)
+        out[name] = replace(OPUS, fallback=own.model if own and own.backend != "claude" else "")
+    return out
+
+
 PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
     "codex": {r: Role("codex", "default", None) for r in DEFAULT_ROLES},
-    "deepseek": {
+    "deepseek": _opus_art({
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
         **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director", "card")},
         # Summaries and recaps need no reasoning. With thinking on, half the summarizer's output
         # was thinking, and the recap's first word came after 1.6-3.8 s instead of 0.5 s.
         **{r: _deepseek(None) for r in ("summarizer", "chronicler")},
-    },
+    }),
 }
 
 
@@ -265,6 +279,7 @@ def load(path: Path | None = None) -> Config:
     if picked := os.environ.get("AUTOKEEPER_MODEL") or data.get("model"):
         backend, model = route(picked)
         every.update(backend=backend, model=model)
+        every.setdefault("fallback", "")  # one model for everything, art too: an offline game stays offline
     if fallback := os.environ.get("AUTOKEEPER_FALLBACK") or data.get("fallback"):
         every.update(fallback=fallback)
     for name in set(DEFAULT_ROLES) | set(roles) - {"all"}:

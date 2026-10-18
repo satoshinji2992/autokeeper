@@ -149,3 +149,50 @@ async def test_an_import_ends_by_looking_for_photos_unless_offline(monkeypatch, 
     monkeypatch.setattr(imagery, "available", lambda: False)
     assert await importer.find_photos(m, tmp_path, config.Config(search="auto"), Console(file=io.StringIO())) == []
     assert len(asked) == 1
+
+
+async def test_another_importer_hands_the_drawing_to_the_art_model(monkeypatch, tmp_path):
+    """Built by DeepSeek or Codex, a module still gets its pictures from the art model (Opus 5.5)."""
+    from autokeeper.agents import artist
+    from autokeeper.config import Role
+    from autokeeper.harness.tools import Workspace
+
+    work = tmp_path / "m"
+    shutil.copytree(EXAMPLE, work)
+    m = Module.load(work)
+    face = next(n.portrait for n in m.npcs if n.portrait)
+    deepseek = config.Config(roles={**config.DEFAULT_ROLES, "importer": Role("langchain", "deepseek:deepseek-flash", "high")})
+    assert importer.drawn_by_artist(deepseek) and not importer.drawn_by_artist(config.Config())
+    drawn = []
+
+    async def draw(cfg, subject, *, portrait=False, on_reply=None):
+        drawn.append((subject, portrait))
+        if "坏" in subject:
+            raise ValueError("twice invalid")
+        return "/\\\n||", "..\nWW"
+
+    monkeypatch.setattr(artist, "draw", draw)
+    tool = importer.artist_tool(Workspace(work, writable=("art/*",)), deepseek)
+    out = await tool.run(json.dumps({"tower_view": "雾里的钟楼", face: "一个驼背的老人", "broken": "坏图"}, ensure_ascii=False))
+    assert "画好 2 张" in out and "broken（ValueError）" in out
+    assert (work / "art/tower_view.txt").read_text(encoding="utf-8") == "/\\\n||\n"
+    assert (work / f"art/{face}.color").read_text(encoding="utf-8") == "..\nWW\n"
+    assert (f"一个驼背的老人（{m.era}，{m.setting}）", True) in drawn and ("雾里的钟楼（" + m.era + "，" + m.setting + "）", False) in drawn
+
+
+async def test_photo_search_words_come_from_the_art_model(monkeypatch):
+    from autokeeper import imagery
+
+    roles = []
+
+    class Stop(Exception):
+        pass
+
+    async def structured(cfg, role, *args, **kwargs):
+        roles.append(role)
+        raise Stop
+
+    monkeypatch.setattr(imagery, "_structured", structured)
+    with pytest.raises(Stop):
+        await imagery.find_picture(config.Config(), None, "雾里的钟楼", "scene")
+    assert roles == ["vision"]

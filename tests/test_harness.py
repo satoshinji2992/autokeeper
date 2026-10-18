@@ -446,11 +446,15 @@ def test_presets_and_environment(monkeypatch, tmp_path):
     cfg = config.load()
     assert cfg.role("keeper") == Role("langchain", "deepseek:deepseek-flash", "high")
     assert cfg.role("intent").effort == "low"
+    # pictures stay on Opus 5.5 in every preset, with the preset's own model to fall back on
+    assert cfg.role("artist") == Role("claude", "claude-opus-5-5", "medium", fallback="deepseek:deepseek-flash")
+    assert (cfg.role("vision").model, cfg.role("vision").fallback) == ("claude-opus-5-5", "deepseek:deepseek-flash")
     monkeypatch.setenv("AUTOKEEPER_MODEL", "ollama:qwen3:14b")
     toml = tmp_path / "ak.toml"
     toml.write_text('[roles.all]\nwindow = 4000\n[roles.npc]\neffort = "none"\n', encoding="utf-8")
     cfg = config.load(toml)
     assert {r.model for r in cfg.roles.values()} == {"ollama:qwen3:14b"}
+    assert not any(r.fallback for r in cfg.roles.values())  # one model for everything: nothing falls back to DeepSeek
     assert cfg.role("keeper").window == 4000 and cfg.role("npc").effort is None and cfg.role("keeper").effort == "high"
 
 

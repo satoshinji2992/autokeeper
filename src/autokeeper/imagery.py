@@ -311,7 +311,7 @@ async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: 
 
 async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kind: str, *, on_reply=None) -> tuple[Image.Image, Candidate] | None:
     label = {"portrait": "人物头像", "scene": "场景", "item": "物件特写"}.get(kind, "场景")
-    q = await _structured(cfg, "intent", QUERY_SYSTEM, f"{label}：{subject}", Queries, on_reply=on_reply)
+    q = await _structured(cfg, "vision", QUERY_SYSTEM, f"{label}：{subject}", Queries, on_reply=on_reply)  # art: Opus
     seen: dict[str, Candidate] = {}
     queries = list(q.queries[:3])
     for query in queries:
