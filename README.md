@@ -101,7 +101,7 @@ uv run autokeeper autoplay modules/local/mymod --party 2   # 看 AI 调查员自
 | `.en` | 结局后做成长检定，每局一次 |
 | F1 · F2 · F3 · F4 · F5 · F6 · F7 | 帮助 · 线索本与手稿 · 换模型 · 手绘 · 地图 · 天气动画 · 人物卡 |
 | F8 · F9 · F10 | 卡住时给三个思路 · 让守秘人换个讲法重讲最新一段（骰子和线索不变）· 结局后复盘 |
-| Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T · Ctrl+O | 前情回顾 · 存档 · 换画法 · 换配色 · 叙事偏好 |
+| Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T · Ctrl+O · Ctrl+B | 前情回顾 · 存档 · 换画法 · 换配色 · 叙事偏好 · 用量 |
 
 ## 和朋友一起玩
 

@@ -80,6 +80,8 @@ class GameState(BaseModel):
     epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)
     turn: int = 0
     usage: dict[str, dict[str, float]] = Field(default_factory=dict)
+    turn_usage: list[dict[str, float]] = Field(default_factory=list)  # what each turn cost (tally)
+    tally_at: dict[str, float] = Field(default_factory=dict)  # the totals when the last turn was counted
 
     @property
     def investigator(self) -> Investigator:
@@ -107,6 +109,15 @@ class GameState(BaseModel):
         """Checks of the last few turns: what the arbiter weighs a repeat against."""
         return [r for r in self.checks if self.turn - r.turn <= RECENT_TURNS]
 
+    def tally(self) -> None:
+        """What the turn just played cost, kept per turn for the usage view (usage holds the totals)."""
+        total = {k: sum(u.get(k, 0) for u in self.usage.values()) for k in ("calls", "input", "cache_read", "output", "cost_usd")}
+        before = self.tally_at or dict.fromkeys(total, 0)
+        spent = {k: total[k] - before.get(k, 0) for k in total}
+        if spent["calls"]:
+            self.turn_usage = [*self.turn_usage, {"turn": self.turn, **spent}][-TURNS_KEPT:]
+        self.tally_at = total
+
     def record_usage(self, role: str, reply) -> None:
         u = self.usage.setdefault(role, {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0, "seconds": 0.0})
         usage = reply.usage or {}
@@ -118,6 +129,7 @@ class GameState(BaseModel):
         u["seconds"] += reply.seconds or 0.0
 
 
+TURNS_KEPT = 200  # per-turn usage rows a save keeps
 RECENT_TURNS = 5  # how far back a check still counts as recent
 KEEP_CHECKS = 12  # check records a save keeps
 RECHECK_AFTER = 60  # game minutes after which the same attempt is no longer an immediate repeat

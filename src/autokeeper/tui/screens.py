@@ -338,6 +338,6 @@ HELP = Text.from_markup(
   F8 出主意：没头绪时给三个能做的事，选一个填进输入框，改不改、发不发由你
   F9 重讲上一段：骰子、线索和 NPC 的话都不变，只换讲法   F10 结局后复盘，还有后日谈
   Ctrl+R 前情回顾   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
-  Ctrl+O 叙事偏好：篇幅、恐怖浓度、节奏和不想看到的内容
+  Ctrl+O 叙事偏好：篇幅、恐怖浓度、节奏和不想看到的内容   Ctrl+B 用量：本局各个 Agent 用了多少 token、花了多少钱
   /draw /notes /map /sheet /suggest /recap /retell /debrief /save /prefs 也可以在输入框里用"""
 )

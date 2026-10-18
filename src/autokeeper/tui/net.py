@@ -343,3 +343,6 @@ class NetGameScreen(GameScreen):
 
     def action_prefs(self) -> None:
         self.app.notify("联机时按房主那边的叙事偏好来讲")
+
+    def action_usage(self) -> None:
+        self.app.notify("联机时模型跑在房主那边，用量由房主记账")

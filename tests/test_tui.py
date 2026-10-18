@@ -338,3 +338,44 @@ async def test_an_npc_line_shows_their_face_never_the_keepers_note_on_them(canne
         shown = story_text(screen)
         assert "圆框眼镜" in shown and shown.count("圆框眼镜") == 1  # what they see, the first time
         assert "偷书贼" not in shown and "半食尸鬼" not in shown  # the role is the keeper's note
+
+
+def test_each_turn_s_tokens_are_kept():
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    reply = Reply(text="", usage={"input_tokens": 1000, "cache_read": 800, "output_tokens": 100}, cost_usd=0.001)
+    st.record_usage("keeper", reply)
+    st.turn = 1
+    st.tally()
+    st.record_usage("keeper", reply)
+    st.record_usage("arbiter", reply)
+    st.turn = 2
+    st.tally()
+    st.tally()  # nothing new: no row
+    assert [(t["turn"], t["calls"], t["input"]) for t in st.turn_usage] == [(1, 1, 1000), (2, 2, 2000)]
+
+
+async def test_ctrl_b_shows_where_the_tokens_went(canned):
+    from autokeeper.tui.usage import UsageModal
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="usage", human=[lead.id])
+    state.record_usage("keeper", Reply(text="", usage={"input_tokens": 12000, "cache_read": 9000, "output_tokens": 800}, cost_usd=0.002))
+    state.turn = 1
+    state.tally()
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        await pilot.press("ctrl+b")
+        await pilot.pause()
+        assert isinstance(app.screen, UsageModal)
+    from rich.console import Console
+
+    from autokeeper.tui.usage import usage_view
+
+    console = Console(width=120, record=True)
+    console.print(usage_view(state))
+    shown = console.export_text()
+    assert "守秘人" in shown and "12.0k" in shown and "75%" in shown and "每回合" in shown

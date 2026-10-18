@@ -668,6 +668,7 @@ class Game:
 
     async def remember(self) -> None:
         st = self.state
+        st.tally()
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]
         if len(recent) < 48:

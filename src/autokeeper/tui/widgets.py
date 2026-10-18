@@ -399,7 +399,7 @@ def command_suggester(inv: Investigator | None = None) -> SuggestFromList:
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
-    slash = ["/draw", "/notes", "/map", "/suggest", "/recap", "/retell", "/debrief", "/save", "/help", "/theme", "/quit"]
+    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/debrief", "/save", "/usage", "/prefs", "/help", "/theme", "/quit"]
     return SuggestFromList([*checks, *lookups, *slash], case_sensitive=False)
 
 

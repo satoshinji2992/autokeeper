@@ -403,6 +403,7 @@ class GameScreen(Screen):
         Binding("f9", "retell", "重讲"),
         Binding("f10", "debrief", "复盘"),
         Binding("ctrl+o", "prefs", "叙事偏好"),
+        Binding("ctrl+b", "usage", "用量"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -604,8 +605,10 @@ class GameScreen(Screen):
         t.append(f"  《{self.m.title}》  ", style="bold")
         t.append(f"{moon} {st.clock} {time_of_day(st.minutes)}  ", style="bold")
         t.append(f"◆ {self.m.location(st.location).name}  ")
-        tokens = sum(int(u.get("output", 0)) for u in st.usage.values())
-        t.append(f"  第 {st.turn} 轮 · 输出 {tokens} tokens · {self.engine_label}", style="dim")
+        tokens = sum(int(u.get("input", 0) + u.get("output", 0)) for u in st.usage.values())
+        cost = sum(u.get("cost_usd", 0.0) for u in st.usage.values())
+        spent = f"{tokens / 1000:.1f}k tokens" + (f" ${cost:.3f}" if cost else "")
+        t.append(f"  第 {st.turn} 轮 · {spent} · {self.engine_label}", style="dim")
         self.query_one("#topbar", Static).update(t)
         self.query_one(SceneArt).set_light(time_of_day(st.minutes))
 
@@ -790,7 +793,7 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs"):
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage"):
             self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
             return
         event.input.value = ""
@@ -818,7 +821,7 @@ class GameScreen(Screen):
         cmd = cmd.lower()
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
-                   "/prefs": self.action_prefs, "/suggest": self.action_suggest}
+                   "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
         if cmd == "/retell":  # /retell 短一点 skips the list
             self.action_retell(args[0] if args else "")
         elif cmd in actions:
@@ -965,6 +968,11 @@ class GameScreen(Screen):
             return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style)
 
         self.app.push_screen(SheetModal(party, first, portrait))
+
+    def action_usage(self) -> None:
+        from .usage import UsageModal
+
+        self.app.push_screen(UsageModal(self.state))
 
     def action_map(self) -> None:
         self.app.push_screen(MapModal(self.m, self.state))
