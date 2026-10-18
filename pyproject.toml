@@ -58,7 +58,6 @@ graphrag = [
 art = [
     "ascii-magic>=2.7.5",
     "opencv-python-headless>=5.0.0.93",
-    "rembg>=2.0.50",
 ]
 
 [build-system]

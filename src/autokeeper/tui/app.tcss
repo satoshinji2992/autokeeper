@@ -5,45 +5,19 @@ Screen {
 
 /* ---------- title ---------- */
 #title-screen {
-    align: center middle;
+    layers: back front;
 }
-#title-box {
+#title-cover {
+    layer: front;
     width: 100%;
     height: 100%;
 }
-#title-box Center {
-    height: auto;
-}
-#title-art {
-    width: auto;
-}
-#title-eye {
-    width: auto;
-    margin-top: 1;
-}
-#tagline {
-    width: 100%;
-    content-align: center middle;
-    color: $secondary;
-    margin: 1 0;
-    text-style: bold;
-}
 #menu {
+    layer: back;  /* under the cover, which paints it see-through; it only takes the keys */
+    position: absolute;
     width: 36;
     height: auto;
-    max-height: 10;
-    margin-top: 1;
-    border: heavy $primary-darken-1;
-    background: $surface;
-}
-#menu > .option-list--option {
-    padding: 0 2;
-}
-#title-hint {
-    width: 100%;
-    content-align: center middle;
-    color: $text-muted;
-    margin-top: 1;
+    max-height: 11;
 }
 
 /* ---------- setup ---------- */

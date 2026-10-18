@@ -40,7 +40,8 @@ def skill_rows(inv: Investigator) -> list[tuple[str, int, bool, bool]]:
     return rows
 
 
-def sheet_view(inv: Investigator, portrait: Text | None = None) -> Group:
+def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | None = None) -> Group:
+    """`width`: the room it has, when narrower than the sheet window; fewer skill columns then."""
     head = Table.grid(padding=(0, 2))
     head.add_column()
     head.add_column()
@@ -54,7 +55,8 @@ def sheet_view(inv: Investigator, portrait: Text | None = None) -> Group:
     who.append(f" {inv.hp}/{inv.hp_max}\nSAN ")
     who.append(art.bar(inv.san, inv.san_max), style="bold magenta" if inv.san * 5 < inv.san_max * 3 else "bold")
     who.append(f" {inv.san}/{inv.san_max}\n")
-    who.append(f"MP {inv.mp}/{inv.mp_max}   幸运 {inv.luck}   MOV {inv.move}   DB {inv.damage_bonus}   体格 {inv.build}\n")
+    gap = "\n" if width is not None and width < 96 else "   "  # beside a portrait in a narrow pane: two lines
+    who.append(f"MP {inv.mp}/{inv.mp_max}   幸运 {inv.luck}   MOV {inv.move}{gap}DB {inv.damage_bonus}   体格 {inv.build}\n")
     if inv.conditions:
         who.append("状态：" + "、".join(inv.conditions) + "\n", style="bold red")
     head.add_row(portrait if portrait is not None and portrait.plain else Text(""), who)
@@ -73,14 +75,15 @@ def sheet_view(inv: Investigator, portrait: Text | None = None) -> Group:
         stats.add_row(*cells[i : i + 4])
 
     skills = Table.grid(padding=(0, 1))
-    for i in range(4):  # four (name, value) pairs, values right-aligned
+    n = 4 if width is None or width >= 96 else 3 if width >= 72 else 2
+    for i in range(n):  # n (name, value) pairs, values right-aligned
         skills.add_column(no_wrap=True)
         skills.add_column(justify="right", width=3)
-        if i < 3:
+        if i < n - 1:
             skills.add_column(width=2)
     rows = skill_rows(inv)
-    per = (len(rows) + 3) // 4
-    columns = [rows[i * per : (i + 1) * per] for i in range(4)]
+    per = (len(rows) + n - 1) // n
+    columns = [rows[i * per : (i + 1) * per] for i in range(n)]
     for r in range(per):
         line: list[Text] = []
         for c, col in enumerate(columns):
@@ -90,7 +93,7 @@ def sheet_view(inv: Investigator, portrait: Text | None = None) -> Group:
                 line += [Text.assemble(("✓" if ticked else " ", "bold green"), (name, style)), Text(str(value), style=style)]
             else:
                 line += [Text(""), Text("")]
-            if c < 3:
+            if c < n - 1:
                 line.append(Text(""))
         skills.add_row(*line)
 

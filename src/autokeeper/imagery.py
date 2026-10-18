@@ -187,45 +187,11 @@ def prepare(im: Image.Image, crop: list[float]) -> Image.Image:
 # colours and sharper texture turned the character grid into a grey mosaic. Their vignette
 # comes from light(), after frame() has picked the part of the picture that shows.
 PIPELINES: dict[str, tuple[str, ...]] = {
-    "portrait": ("face_crop", "remove_bg", "clahe", "saturate", "bilateral", "unsharp", "vignette"),
+    # no background removal: on old photos it cut holes in faces and lopped off shoulders,
+    # and the blurred backdrop (frame_blur) already keeps a bright studio wall out of the way
+    "portrait": ("clahe", "saturate", "bilateral", "unsharp", "vignette"),
     "scene": ("clahe", "bilateral", "saturate"),
 }
-BACKDROP = (6, 10, 12)  # BGR of the terminal background the art sits on
-
-
-def _face_crop(arr):
-    import cv2
-
-    gray = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
-    if len(faces) == 0:
-        return arr
-    x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-    H, W = arr.shape[:2]
-    x0, x1 = max(0, int(x - 0.9 * w)), min(W, int(x + 1.9 * w))
-    y0, y1 = max(0, int(y - 0.7 * h)), min(H, int(y + 2.1 * h))
-    return arr[y0:y1, x0:x1]
-
-
-@lru_cache(maxsize=2)
-def _rembg_session(model: str):
-    from rembg import new_session
-
-    return new_session(model)
-
-
-def _remove_bg(arr):
-    import cv2
-    import numpy as np
-    from rembg import remove
-
-    rgba = np.array(remove(Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)), session=_rembg_session("u2net_human_seg")))
-    alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
-    fg = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR).astype(np.float32)
-    bg = np.empty_like(fg)
-    bg[:] = BACKDROP
-    return (fg * alpha + bg * (1 - alpha)).astype(np.uint8)
 
 
 def _clahe(arr):
@@ -280,8 +246,6 @@ def _vignette(arr, strength: float = 0.45):
 
 
 STEPS = {
-    "face_crop": _face_crop,
-    "remove_bg": _remove_bg,
     "clahe": _clahe,
     "saturate": _saturate,
     "bilateral": _bilateral,
@@ -456,7 +420,10 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
         buf = io.BytesIO()
         source.save(buf, format="PNG")
         data, source = buf.getvalue(), "-"
-    cmd = ["chafa", "-f", "symbols", "-c", "full", "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), source]
+    # 24-bit when the terminal shows it; otherwise chafa dithers into the 240 fixed colours
+    # itself, rather than leaving the squeeze to the terminal's 16 theme colours (navy, teal).
+    colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
+    cmd = ["chafa", "-f", "symbols", "-c", colors, "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), source]
     out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
 
@@ -688,9 +655,7 @@ PORTRAIT_SHAPE = 1.0  # the widest a portrait's box gets (width over height); wi
 def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
     """The whole portrait in the middle of the panel's shape, the room round it filled with
     the same photo blown up, blurred and darkened, as a phone shows a tall photo on a wide
-    screen: a tall old studio portrait no longer stands between two black bands. A cut-out
-    portrait (preprocess) keeps its person and lets the blurred photo show where its dark
-    backdrop was, so a white studio wall does not light up the stage either."""
+    screen: a tall old studio portrait no longer stands between two black bands."""
     room = (max(64, cols * 12), max(64, rows * 24))  # a dozen pixels a cell is plenty for chafa: blurring more is slow
     photo = Image.open(path).convert("RGB")
     photo.thumbnail(room)
@@ -704,17 +669,7 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
     size = (max(w, round(h * target)), h) if w / h < target else (w, max(h, round(w / target)))
     back = ImageOps.fit(photo, size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(size) / 30))
     back = ImageEnhance.Brightness(back).enhance(0.22)  # well back: brighter, its soft glyphs made the whole picture look blurred
-    where = ((size[0] - w) // 2, (size[1] - h) // 2)
-    if front is photo:
-        back.paste(front, where)
-        return back
-    ground = np.abs(np.asarray(front).astype(np.int16) - np.array(BACKDROP[::-1], dtype=np.int16)).sum(axis=2)  # BACKDROP is BGR
-    alpha = np.clip(ground / 60, 0, 1)
-    if alpha.mean() < 0.15:  # the cut-out lost the person (the segmentation found nobody): the photo as it is
-        back.paste(photo.resize(front.size), where)
-        return back
-    mask = Image.fromarray((alpha * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.5))
-    back.paste(front, where, mask)
+    back.paste(front, ((size[0] - w) // 2, (size[1] - h) // 2))
     return back
 
 

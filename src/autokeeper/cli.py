@@ -151,6 +151,8 @@ def serve(port: int = 8000) -> None:
     """在浏览器里玩（textual-serve）。"""
     from textual_serve.server import Server
 
+    os.environ["COLORTERM"] = "truecolor"  # the browser's terminal shows 24-bit colour; the game it starts inherits this
+
     argv = [sys.executable, "-m", "autokeeper", "play", "--no-intro"]
     command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     Server(command, port=port, title="AutoKeeper").serve()
@@ -230,6 +232,7 @@ def host(
 
     argv = [sys.executable, "-m", "autokeeper", "join", f"127.0.0.1:{hub_port}"]
     command = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    os.environ["COLORTERM"] = "truecolor"  # the friends' browsers show 24-bit colour
     Server(command, host="0.0.0.0", port=port, title="AutoKeeper 联机", public_url=f"http://{ips[0]}:{port}").serve()
 
 

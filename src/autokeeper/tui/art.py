@@ -37,10 +37,33 @@ def title_lines(width: int) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def title(width: int, flicker: float = 0.0, palette: tuple[str, ...] = ("#ff2a2a", "#d11a1a", "#a10f0f", "#6e0909")) -> Text:
-    """The big title with a vertical colour gradient; flicker > 0 corrupts a few cells."""
-    out = Text()
+HALVES = {"▄": (" ", "█"), "▀": ("█", " ")}  # half blocks, split when a line is doubled
+
+
+@lru_cache(maxsize=8)
+def logo_lines(width: int, height: int) -> tuple[str, ...]:
+    """The title a little bigger on a big screen: stretched up to a quarter wider (columns
+    repeated), twice as tall only on a very tall one, keeping a margin each side."""
     lines = title_lines(width)
+    wide = max(map(len, lines), default=1)
+    across = max(1.0, min(1.25, (width - 8) / wide))
+    if height >= 60 and width >= wide * 2 + 8:
+        across = 2.0
+        doubled = []
+        for line in lines:
+            doubled.append("".join(HALVES.get(c, (c, c))[0] for c in line))
+            doubled.append("".join(HALVES.get(c, (c, c))[1] for c in line))
+        lines = tuple(doubled)
+    if across > 1.05:
+        lines = tuple("".join(line[int(i / across)] for i in range(int(len(line) * across))) for line in lines)
+    return tuple(line.rstrip() for line in lines)
+
+
+def title(width: int, flicker: float = 0.0, palette: tuple[str, ...] = ("#ff2a2a", "#d11a1a", "#a10f0f", "#6e0909"), height: int = 0) -> Text:
+    """The big title with a vertical colour gradient; flicker > 0 corrupts a few cells.
+    With the screen's `height`, as big as the screen allows (logo_lines)."""
+    out = Text()
+    lines = logo_lines(width, height) if height else title_lines(width)
     for i, line in enumerate(lines):
         color = palette[min(len(palette) - 1, i * len(palette) // max(1, len(lines)))]
         chars = []

@@ -20,7 +20,7 @@ from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
-from textual.containers import Center, Container, Horizontal, Middle, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.theme import Theme
 from textual.widgets import Button, Footer, Input, OptionList, Static
@@ -38,7 +38,7 @@ from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules import commands
 from ..rules.coc import Investigator, Rules
-from . import art, tips
+from . import art, cover, tips
 from .debrief import DebriefModal
 from .guide import GuideScreen
 from .mapview import MapModal
@@ -136,44 +136,129 @@ def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, s
 
 # -- title -------------------------------------------------------------------------------
 class TitleScreen(Screen):
+    """Cthulhu behind everything (cover.py), the name over the sky, a see-through menu in the
+    middle. The menu is painted into the cover so the painting shows through it; the real
+    OptionList sits underneath, out of sight, and takes the keys, and clicks are passed to it."""
+
     BINDINGS = [("f9", "settings", "设置")]
+    MENU = 36
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tick = 0
+        self.flash = 0
+        self.frames = 0  # how many of the loop's frames are drawn for the current size
+        self.size_key: tuple[int, int, float, str] | None = None
 
     def compose(self) -> ComposeResult:
-        with Middle(id="title-box"):
-            with Center():
-                yield Static(id="title-art")
-            with Center():
-                yield Static(artkit.colorize(art.EYE, _eye_mask()), id="title-eye")
-            yield Static(art.TAGLINE, id="tagline")
-            with Center():
-                yield OptionList(
-                    Option("  新的调查", id="new"),
-                    Option("  继续调查", id="continue"),
-                    Option("  观战（AI 调查员）", id="watch"),
-                    Option("  加入房间", id="join"),
-                    Option("  导入模组", id="import"),
-                    Option("  设置", id="settings"),
-                    Option("  玩法说明", id="guide"),
-                    Option("  离开", id="quit"),
-                    id="menu",
-                )
-            yield Static("↑↓ 选择 · Enter 确认 · F9 设置 · Ctrl+Q 离开", id="title-hint")
+        yield OptionList(
+            Option("新的调查", id="new"),
+            Option("继续调查", id="continue"),
+            Option("观战（AI 调查员）", id="watch"),
+            Option("加入房间", id="join"),
+            Option("角色卡", id="cards"),
+            Option("导入模组", id="import"),
+            Option("设置", id="settings"),
+            Option("玩法说明", id="guide"),
+            Option("离开", id="quit"),
+            id="menu",
+        )
+        yield Static(id="title-cover")
 
     def on_mount(self) -> None:
         self.id = "title-screen"
-        self._paint()
-        self.set_interval(0.12, self._paint)
+        self.set_interval(0.12, self._tick)
         self.query_one("#menu", OptionList).focus()
 
     def on_resize(self, event) -> None:
-        # Too short for the art, the eye, the tagline, the menu and the hint with their margins:
-        # the eye gives way, so the whole menu stays in view.
-        self.query_one("#title-eye").display = event.size.height >= len(art.title_lines(event.size.width)) + 28
+        self._place(event.size.width, event.size.height)
+
+    def _stack(self, cols: int, rows: int) -> tuple[int, int, int]:
+        """Rows of the name, the tagline and the menu: one block standing on the hint line, as
+        on a poster, so his head can loom in the room above the name."""
+        logo = len(art.logo_lines(cols, rows))
+        menu_y = max(0, rows - self.query_one("#menu", OptionList).option_count - 4)
+        top = max(0, menu_y - 3 - logo)
+        return top, top + logo + 1, max(menu_y, top + logo + 3)
+
+    def _menu_box(self, cols: int, rows: int) -> tuple[int, int, int, int]:
+        """(x, y, width, height) of the menu, in the middle across, under the tagline."""
+        h, w = self.query_one("#menu", OptionList).option_count + 2, min(self.MENU, cols)
+        return (cols - w) // 2, self._stack(cols, rows)[2], w, h
+
+    def _place(self, cols: int, rows: int) -> None:
+        x, y, _, _ = self._menu_box(cols, rows)
+        self.query_one("#menu", OptionList).styles.offset = (x, y)
+        key = (cols, rows, cover.focus(cols, rows, self._stack(cols, rows)[0] / 2), getattr(self.app, "art_style", "photo"))
+        if key != self.size_key:
+            self.size_key, self.frames = key, 0
+            if imagery.available() and cover.PICTURE.is_file():
+                self._draw(key)
+        self._paint()
+
+    @work(thread=True, exclusive=True, group="cover")
+    def _draw(self, key: tuple[int, int, float, str]) -> None:
+        """The loop's frames for this size, first frame first, so the screen fills at once."""
+        for k in range(cover.FRAMES + 1):  # the last one is the lightning
+            if key != self.size_key:
+                return
+            cover.frame(*key, k)
+            self.frames = k + 1
+
+    def _tick(self) -> None:
+        self.tick += 1
+        if self.frames > cover.FRAMES and not self.flash and random.random() < 0.012:
+            self.flash = 3  # about every ten seconds: lightning, twice
+        self._paint()
+        self.flash = max(0, self.flash - 1)
 
     def _paint(self) -> None:
-        width = self.app.size.width
-        rate = random.choice([0.0] * 14 + [0.02, 0.05, 0.12])
-        self.query_one("#title-art", Static).update(art.title(width, rate))
+        if self.size_key is None:
+            return
+        cols, rows, middle, _ = self.size_key
+        k = cover.FRAMES if self.flash in (3, 1) else (self.tick // 2) % cover.FRAMES
+        if self.frames > k or self.frames:
+            grid = [row[:] for row in cover.frame(*self.size_key, k if self.frames > k else 0)]
+        elif not imagery.available():
+            grid = cover.eye(cols, rows, middle)
+        else:
+            grid = []
+        grid = grid[:rows] + cover.blank(cols, rows - len(grid))  # chafa may come a row short
+        theme = self.app.current_theme
+        top, tag, _ = self._stack(cols, rows)
+        logo = cover.cells(art.title(cols, random.choice([0.0] * 14 + [0.02, 0.05, 0.12]), height=rows))
+        cover.put(grid, logo, (cols - max(map(len, logo), default=0)) // 2, top, keep_ground=True)
+        words = cover.cells(Text(f" {art.TAGLINE} ", style=f"bold {theme.secondary or '#d98e04'}"))
+        cover.put(grid, words, (cols - len(words[0])) // 2, tag, under=cover.PLAQUE)
+        menu = self.query_one("#menu", OptionList)
+        labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
+        cover.menu(grid, self._menu_box(cols, rows), labels, menu.highlighted, theme.primary, theme.foreground or "#f3d7a6", theme.surface or "#15110a")
+        hint = cover.cells(Text(" ↑↓ 选择 · Enter 确认 · F9 设置 · Ctrl+Q 离开 ", style="#8a7a66"))
+        cover.put(grid, hint, (cols - len(hint[0])) // 2, rows - 1, under=cover.PLAQUE)
+        self.query_one("#title-cover", Static).update(cover.compose(grid))
+
+    def _option_at(self, x: int, y: int) -> int | None:
+        if self.size_key is None:
+            return None
+        left, top, w, h = self._menu_box(*self.size_key[:2])
+        return y - top - 1 if left < x < left + w - 1 and top < y < top + h - 1 else None
+
+    def on_mouse_move(self, event: events.MouseMove) -> None:
+        at = self._option_at(event.screen_x, event.screen_y)
+        if at is not None and at != self.query_one("#menu", OptionList).highlighted:
+            self.query_one("#menu", OptionList).highlighted = at
+            self._paint()
+
+    def on_click(self, event: events.Click) -> None:
+        at = self._option_at(event.screen_x, event.screen_y)
+        if at is not None:
+            menu = self.query_one("#menu", OptionList)
+            menu.highlighted = at
+            menu.action_select()
+
+    @on(OptionList.OptionHighlighted, "#menu")
+    def _moved(self) -> None:
+        self._paint()  # the painted menu follows the keys at once, not at the next tick
 
     @on(OptionList.OptionSelected, "#menu")
     def choose(self, event: OptionList.OptionSelected) -> None:
@@ -188,6 +273,10 @@ class TitleScreen(Screen):
             from .net import JoinScreen
 
             self.app.push_screen(JoinScreen())
+        elif choice == "cards":
+            from .cards import CardsScreen
+
+            self.app.push_screen(CardsScreen())
         elif choice == "import":
             from .importing import ImportScreen
 
@@ -205,13 +294,6 @@ class TitleScreen(Screen):
         self.app.push_screen(SettingsModal())
 
 
-def _eye_mask() -> str:
-    rows = art.EYE.split("\n")
-    out = []
-    for i, row in enumerate(rows):
-        key = "P" if i < 2 else "p" if i < 6 else "R"
-        out.append("".join("y" if ch in "()" and 2 <= i <= 4 else key for ch in row))
-    return "\n".join(out)
 
 
 # -- setup ---------------------------------------------------------------------------------
@@ -340,7 +422,15 @@ class SetupScreen(Screen):
         width = max(32, self.query_one("#preview-body", Static).content_size.width - 2)
         size = (width, max(10, min(24, round(width * 0.38))))
         style = self.app.art_style  # type: ignore[attr-defined]
-        picture = await asyncio.to_thread(lambda: Text.from_ansi(imagery.render(m.pictures[key], *size, style, fill=True)))
+        def draw() -> Text:
+            if imagery.available():
+                try:
+                    return Text.from_ansi(imagery.render(m.pictures[key], *size, style, fill=True))
+                except (OSError, ValueError, subprocess.TimeoutExpired):
+                    pass  # an unreadable picture: its hand-drawn art instead
+            return art_text(m, key)
+
+        picture = await asyncio.to_thread(draw)
         choices = self.query_one("#choices", OptionList)
         if self.step != "module" or choices.highlighted is None or choices.get_option_at_index(choices.highlighted).id != oid:
             return

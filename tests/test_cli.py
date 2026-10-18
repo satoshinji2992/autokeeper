@@ -42,3 +42,19 @@ os.write(2, b'after game\\n')
     assert result.returncode == 0, result.stderr
     assert result.stderr == "visible game screen\nafter game\n"
     assert (tmp_path / "stderr.log").read_text(encoding="utf-8") == "native warning\n"
+
+
+def test_terminals_that_show_true_colour_are_told_so(monkeypatch):
+    """Windows Terminal inside WSL sets WT_SESSION but no COLORTERM: without it the photos were
+    squeezed into 256 colours and blue-greys came out navy and teal."""
+    import autokeeper
+
+    for key in ("COLORTERM", "WT_SESSION", "TERM_PROGRAM", "KONSOLE_VERSION", "VTE_VERSION", "AUTOKEEPER_TRUECOLOR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert not autokeeper.truecolor() and "COLORTERM" not in __import__("os").environ
+    monkeypatch.setenv("WT_SESSION", "abc")
+    assert autokeeper.truecolor() and __import__("os").environ["COLORTERM"] == "truecolor"
+    monkeypatch.delenv("COLORTERM")
+    monkeypatch.setenv("AUTOKEEPER_TRUECOLOR", "0")
+    assert not autokeeper.truecolor()
