@@ -240,9 +240,11 @@ async def test_fear_trembles_anger_flashes_and_f6_stills_them():
             return offsets, tints
 
         offsets, _ = await watch("（浑身哆嗦）别、别上去……")
-        assert panel.feeling == "害怕" and len(offsets) > 1 and portrait.styles.offset.x.value == 0  # trembled, then still
+        assert panel.feeling == "害怕" and len(offsets) > 1  # trembled
+        assert await until(pilot, lambda: portrait.styles.offset.x.value == 0, 60)  # then still (a slow runner takes longer)
         _, tints = await watch("（一拍桌子）滚！")
-        assert panel.feeling == "发怒" and max(tints) > 0.2 and portrait.styles.tint.a == 0  # flashed, then gone
+        assert panel.feeling == "发怒" and max(tints) > 0.2  # flashed
+        assert await until(pilot, lambda: portrait.styles.tint.a == 0, 60)  # then gone
         await pilot.press("f6")  # weather off: the portraits keep still too
         offsets, tints = await watch("（浑身哆嗦）别过来！")
         assert panel.feeling == "害怕" and offsets == {(0, 0)} and max(tints) == 0

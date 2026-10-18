@@ -524,7 +524,7 @@ def import_config(model: str = "", vision_model: str = "") -> config.Config:
         # on GPT-6-Astra); a reading model chosen for this import keeps its place.
         cfg.roles["artist"] = config.art_role(cfg.role("importer"))
         if not vision_model:
-            cfg.roles["vision"] = config.art_role(cfg.role("importer"))
+            cfg.roles["vision"] = config.art_role(cfg.role("importer"), seeing=True)
     return cfg
 
 

@@ -480,7 +480,7 @@ def test_presets_and_environment(monkeypatch, tmp_path):
     assert cfg.role("intent").effort == "low"
     # pictures go to the vendor's strongest model, never to another vendor's
     assert cfg.role("artist") == Role("langchain", "deepseek:deepseek-v4-pro", "high")
-    assert cfg.role("vision") == Role("langchain", "deepseek:deepseek-v4-pro", "low")
+    assert cfg.role("vision") == Role("langchain", "deepseek:deepseek-flash", "low")  # V4 Pro cannot read images
     assert not any(r.backend == "claude" for r in config.PRESETS["deepseek"].values())
     assert {config.PRESETS["codex"][r].model for r in config.ART} == {"gpt-6-astra"}
     assert not any(r.backend == "claude" for r in config.PRESETS["codex"].values())

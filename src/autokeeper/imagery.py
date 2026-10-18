@@ -675,62 +675,39 @@ def overlay(art: str, strokes: np.ndarray, under: np.ndarray, colour: np.ndarray
 
 @lru_cache(maxsize=32)
 def _framed(path: str, width: int, height: int, fill: bool, face: bool = False) -> Image.Image:
-    im = Image.open(picture_source(path)).convert("RGB")
     if face:
-        return frame_face(im, width, height)
+        return frame_blur(path, width, height)
+    im = Image.open(picture_source(path)).convert("RGB")
     return frame(im, width, height) if fill else im
 
 
-def _find_face(im: Image.Image) -> tuple[int, int, int, int] | None:
-    """The largest face (x, y, w, h), when OpenCV is installed and sees one. Finding it is a
-    nicety: anything going wrong just means the default framing."""
-    try:
-        import cv2
-
-        gray = cv2.cvtColor(np.asarray(im.convert("RGB")), cv2.COLOR_RGB2GRAY)
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24))
-    except Exception:  # not installed, a stripped build, an odd image
-        return None
-    return tuple(int(v) for v in max(faces, key=lambda f: f[2] * f[3])) if len(faces) else None  # type: ignore[return-value]
+PORTRAIT_SHAPE = 1.0  # the widest a portrait's box gets (width over height); wider panels keep it in the middle
 
 
-FACE_SHAPE = 0.9  # width over height of a head-and-shoulders crop, about a passport photo
-
-
-def _trim_backdrop(im: Image.Image, margin: float = 0.04) -> Image.Image:
-    """The person without the plain backdrop round them: a portrait with its background cut
-    out (preprocess) stands in a wide dark field, which on the stage reads as a hole."""
-    arr = np.asarray(im.convert("RGB")).astype(np.int16)
-    ground = np.abs(arr - np.array(BACKDROP[::-1], dtype=np.int16)).sum(axis=2) > 30  # BACKDROP is BGR
-    rows, cols = np.flatnonzero(ground.any(axis=1)), np.flatnonzero(ground.any(axis=0))
-    if not len(rows) or not len(cols):
-        return im
-    h, w = ground.shape
-    pad_x, pad_y = round(w * margin), round(h * margin)
-    box = (max(0, cols[0] - pad_x), max(0, rows[0] - pad_y), min(w, cols[-1] + 1 + pad_x), min(h, rows[-1] + 1 + pad_y))
-    return im.crop(box) if (box[2] - box[0]) * (box[3] - box[1]) < 0.9 * w * h else im
-
-
-def frame_face(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
-    """Crop a portrait round the face to a head-and-shoulders shape (the panel's, if that is
-    narrower), so a tall old studio photo no longer stands in the speaker's panel as a thin
-    strip between two black bands, and a wide panel does not get a face spread across it.
-    Without a face found, heads are taken to sit in the upper third."""
-    target = min(cols * cell / max(1, rows), FACE_SHAPE)  # width over height, in pixels
-    im = _trim_backdrop(im)
-    w, h = im.size
-    if not w or not h or abs(w / h - target) < 0.05:
-        return im
-    found = _find_face(im)
-    cx, cy = (found[0] + found[2] / 2, found[1] + found[3] / 2) if found else (w / 2, h * 0.33)
-    if w / h > target:  # wider than the panel: trim the sides
-        nw = h * target
-        left = min(max(0.0, cx - nw / 2), w - nw)
-        return im.crop((round(left), 0, round(left + nw), h))
-    nh = w / target  # taller: keep the head and shoulders, a little more below the face than above
-    top = min(max(0.0, cy - nh * 0.4), h - nh)
-    return im.crop((0, round(top), w, round(top + nh)))
+def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
+    """The whole portrait in the middle of the panel's shape, the room round it filled with
+    the same photo blown up, blurred and darkened, as a phone shows a tall photo on a wide
+    screen: a tall old studio portrait no longer stands between two black bands. A cut-out
+    portrait (preprocess) keeps its person and lets the blurred photo show where its dark
+    backdrop was, so a white studio wall does not light up the stage either."""
+    photo = Image.open(path).convert("RGB")
+    source = picture_source(path)
+    front = Image.open(source).convert("RGB") if source != str(path) else photo
+    target = min(cols * cell / max(1, rows), PORTRAIT_SHAPE)  # width over height, in pixels
+    w, h = front.size
+    if not w or not h:
+        return front
+    size = (max(w, round(h * target)), h) if w / h < target else (w, max(h, round(w / target)))
+    back = ImageOps.fit(photo, size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(size) / 24))
+    back = ImageEnhance.Brightness(back).enhance(0.45)
+    where = ((size[0] - w) // 2, (size[1] - h) // 2)
+    if front is photo:
+        back.paste(front, where)
+        return back
+    ground = np.abs(np.asarray(front).astype(np.int16) - np.array(BACKDROP[::-1], dtype=np.int16)).sum(axis=2)  # BACKDROP is BGR
+    mask = Image.fromarray((np.clip(ground / 60, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.5))
+    back.paste(front, where, mask)
+    return back
 
 
 @lru_cache(maxsize=32)
@@ -750,7 +727,7 @@ def render(path: str, width: int, height: int, style: str = "picture", when: str
     cropped to fill the panel and graded for the weather layer (cached per combination).
     Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every
     weather layer so fog veils them and the dark outside a torch beam swallows them."""
-    if face:  # a portrait: cropped round the face to the panel's shape, then coloured as asked
+    if face:  # a portrait: whole, centred, blurred copy behind it, then coloured as asked
         return _chafa(grade(light(_framed(path, width, height, False, face=True), when), graded, when), width, height, style)
     if not when and not fill and not graded:
         return _chafa(picture_source(path), width, height, style)

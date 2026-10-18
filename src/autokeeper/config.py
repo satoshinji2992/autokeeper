@@ -4,8 +4,8 @@ Every agent role picks its own backend and model. A preset sets all of them at o
 
     claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story,
               Opus 5.5 rules, directs and builds modules, Haiku 5.5 plays the NPCs.
-    deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role; art and vision on
-              deepseek-v4-pro). Needs DEEPSEEK_API_KEY.
+    deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role; ASCII art on
+              deepseek-v4-pro, which cannot read images). Needs DEEPSEEK_API_KEY.
 
 Pick one with `autokeeper --preset deepseek`, AUTOKEEPER_PRESET, or `preset = "deepseek"`
 in the config file. A mode moves the preset's thinking levels: 高级剧情 lets the roles that
@@ -114,22 +114,25 @@ def _deepseek(effort: str | None) -> Role:
 # calls Claude.
 ART = ("artist", "vision")
 TOP = {"claude": "claude-opus-5-5", "deepseek": "deepseek:deepseek-v4-pro", "codex": "gpt-6-astra"}
+# What reads pictures needs eyes: V4 Pro has none, so DeepSeek's reader stays on flash.
+SEEING = {**TOP, "deepseek": "deepseek:deepseek-flash"}
 
 
-def art_role(role: Role) -> Role:
-    """The same vendor's strongest model for this role, its thinking level kept; a vendor
-    without one here (a local model) as it is."""
+def art_role(role: Role, *, seeing: bool = False) -> Role:
+    """The same vendor's strongest model for this role (`seeing`: the strongest that reads
+    images), its thinking level kept; a vendor without one here (a local model) as it is."""
+    top = SEEING if seeing else TOP
     if role.backend == "claude":
-        return replace(role, model=TOP["claude"])
+        return replace(role, model=top["claude"])
     if role.backend == "codex":
-        return replace(role, model=TOP["codex"])
+        return replace(role, model=top["codex"])
     if role.model.startswith("deepseek:"):
-        return replace(role, model=TOP["deepseek"])
+        return replace(role, model=top["deepseek"])
     return role
 
 
 def _top_art(roles: dict[str, Role]) -> dict[str, Role]:
-    return {name: art_role(r) if name in ART else r for name, r in roles.items()}
+    return roles | {"artist": art_role(roles["artist"]), "vision": art_role(roles["vision"], seeing=True)}
 
 
 PRESETS: dict[str, dict[str, Role]] = {

@@ -230,3 +230,5 @@ def test_an_import_on_another_vendor_draws_with_that_vendors_strongest_model(mon
     chosen = importer.import_config("codex:default", "claude-opus-5-5")  # a reading model chosen by hand stays
     assert chosen.role("vision").model == "claude-opus-5-5" and chosen.role("artist").model == "gpt-6-astra"
     assert not importer.drawn_by_artist(config.Config())  # Opus builds and draws its own
+    deepseek = importer.import_config("deepseek:deepseek-flash")
+    assert deepseek.role("artist").model == "deepseek:deepseek-v4-pro" and deepseek.role("vision").model == "deepseek:deepseek-flash"
