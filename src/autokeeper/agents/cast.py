@@ -94,6 +94,10 @@ class Ideas(BaseModel):
     dare: str = Field(description="大胆或谨慎的一步：冒个险，或者稳妥地退一步、等一等，看眼下哪个更合适")
 
 
+def _storyteller(npc: NPC) -> bool:
+    return any(w in npc.role for w in ("说书", "评书"))
+
+
 def _schema(model: type[BaseModel]) -> dict:
     return model.model_json_schema()
 
@@ -197,9 +201,17 @@ NPC_SYSTEM = """你在一场 1920 年代的中文跑团里扮演 NPC「{name}」
 
 规则：
 - 你只知道上面写的事和你在这场戏里亲耳听见、亲眼见到的事。不知道就说不知道，不要编造新的重要事实。
-- 每次回复 1–4 句，口语化，带你的说话习惯；可以用（）写一个简短动作。
+- 像一个活人那样说话。你有自己的日子、心事和偏见：先想清楚此刻你对眼前这个人是什么态度（防着他、有求于他、嫌他烦、盼着有人来问），这件事碰到了你哪根神经，再开口。
+- 情绪放在话里：心慌的人絮叨、绕弯、说半截又改口；恼火的人话短、带刺；伤心的人说着说着就岔到旧事上。
+- 篇幅跟着情绪走：被惹恼了一两句就够；心里有事、正想找人倒一倒的时候，可以说上一大段，最多七八句。长句短句错开。
+- 说你自己的事：你的营生、家里人、身上的毛病、你在乎的东西，这些家常可以随口带出来。回答问题时带上你的看法和偏见，不光交代事实；但和案子有关的人、事、怪象，只说上面写着的，别添新的。
+- 大多数时候直接开口说话。动作和神态写在（）里，只在它比话更能说明问题时才写，一次最多一处。
+- 口头禅偶尔带一下就好；上一轮说过的话，换个说法或者干脆不提。
 - 系统消息会告诉你本轮检定结果：成功说明你被打动或被拆穿了，可以说出已解锁的线索；失败就回避、敷衍或撒谎。
-- 不要替调查员说话，不要描写调查员的心理。
+- 只说你自己的话、做你自己的事；调查员说了什么、做过什么、心里怎么想，不用你来讲。
+
+示例（人和事都与本局无关，只看说话的样子，不要照搬内容）。一个守杂货铺的寡妇，被问起对门那户人家：
+那家人？你可别在我这儿提他们。去年冬天他家小子偷了我两罐咸鱼，我追到街口，他娘倒先骂上我了，说我一个寡妇盯着人家孩子不放。打那以后我就不往那边看。不过你真想知道的话——他家那扇窗这一个月夜夜亮到两三点，烧的也不知道是谁的煤油。我男人在的时候，可没人敢这么欺负我。
 {extra}"""
 
 CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录，按要求写摘要或前情回顾。
@@ -416,7 +428,7 @@ class Cast:
             g = npc.gates.get(cid)
             clues.append(f"- {cid}「{c.title}」：{c.text.strip()}（{'门槛：' + g.skill + '·' + g.difficulty if g else '有人问起就可以说'}）")
         extra = ""
-        if any(e.performer == npc.id for e in m.events):
+        if _storyteller(npc):  # a teahouse storyteller in the module, not anyone the director puts on stage
             extra = "\n你是说书人，表演时用下面的评书腔：\n" + skills.wrap("pingshu-voice")
         return NPC_SYSTEM.format(
             name=npc.name,
@@ -466,13 +478,18 @@ class Cast:
         return text
 
     async def perform(self, state: GameState, npc_id: str, instruction: str, deeds: str) -> str:
+        """A storyteller's set works the investigators' day into the story; anyone else the
+        director puts on stage plays a scene of their own, without retelling that day."""
         key = f"npc:{npc_id}"
         s = self._npc(state, npc_id)
-        prompt = (
-            f"（系统：现在是{state.clock}，你登台表演。要求：{instruction}\n"
-            f"调查员们今天做过的事如下，照实编进书里，不要编造他们没做过的事：\n{deeds}\n"
-            "篇幅 250–400 字，直接输出表演内容。）"
-        )
+        if _storyteller(self.module.npc(npc_id)):
+            prompt = (
+                f"（系统：现在是{state.clock}，你登台表演。要求：{instruction}\n"
+                f"调查员们今天做过的事如下，照实编进书里，不要编造他们没做过的事：\n{deeds}\n"
+                "篇幅 250–400 字，直接输出表演内容。）"
+            )
+        else:
+            prompt = f"（系统：现在是{state.clock}，这一刻轮到你当场开口、动手。要求：{instruction}\n按你此刻的心境说话、做事，150–300 字，直接输出。）"
         reply = await self._send(key, s, state, prompt, extra=self.prefs.for_npc())
         return reply.text.strip()
 
