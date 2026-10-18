@@ -48,7 +48,7 @@ from aiohttp import WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import __version__, config, roster
+from .. import __version__, artkit, config, roster
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -188,6 +188,7 @@ class Hub:
         self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
         self.hosts: set[str] = set()  # clients that showed the key: the host may switch models
         self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
+        self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -344,7 +345,7 @@ class Hub:
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
-            "picture_data": self._pictures(book, keys),
+            "picture_data": self._shared(self._pictures(book, keys)),
             "state": self._view(),
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
             "seats": self._seats(),
@@ -361,12 +362,27 @@ class Hub:
         return {k: media.pack(v, max_size=1600 if k in handouts else 512)
                 for k, v in self.m.pictures.items() if k in keys}
 
+    def _shared(self, pictures: dict[str, str]) -> dict[str, str]:
+        self.sent.update({k: self.m.pictures[k] for k, data in pictures.items() if data})
+        return pictures
+
     async def _share_book(self) -> None:
         book = self._book()
         keys = self._art_keys(book)
         await self._broadcast({"t": "module", "module": book,
                                "art": {k: v for k, v in self.m.art.items() if k in keys},
                                "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
+        # Pictures that came into view (a place first visited, a face first met, one the story
+        # redrew while nobody could see it) arrive the way new pictures do: as an art event.
+        handouts = {key for h in book["handouts"] for key in h.get("images", [])}  # these travel with their handout
+        for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
+            path = self.m.pictures.get(key)
+            if path and self.sent.get(key) != path and (data := media.pack(path)):
+                self.sent[key] = path
+                art = self.m.art.get(key, "")
+                await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
+                                                            "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
+                                                            "picture_data": data}})
 
     def _book(self) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
@@ -406,6 +422,7 @@ class Hub:
             path = self.m.pictures.get(ev["key"])
             if path:
                 ev["picture_data"] = media.pack(path)
+                self.sent[ev["key"]] = path
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         await self._broadcast({"t": "event", "ev": ev})

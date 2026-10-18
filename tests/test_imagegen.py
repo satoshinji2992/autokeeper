@@ -34,7 +34,7 @@ from autokeeper.tui.net import table_module
 from .test_engine import FakeCast, Improvising
 from .test_net import TableCast
 
-REAL_STATUS = imagegen.status  # the conftest switches it off for every test
+REAL_CHECK = imagegen._status.__wrapped__  # the conftest switches pictures off for every test
 RED, BLUE = (200, 40, 30), (30, 60, 200)
 
 
@@ -216,7 +216,7 @@ async def test_a_module_gets_a_hundred_pictures_and_then_no_more(codex, tmp_path
 
 
 def test_without_a_logged_in_codex_that_can_draw_the_feature_is_off(monkeypatch):
-    check = REAL_STATUS.__wrapped__  # past the cache
+    check = REAL_CHECK  # past the cache
 
     def run(answers):
         def fake(args, **kwargs):
@@ -493,3 +493,51 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
         assert Path(screen.m.pictures["square"]).is_relative_to(config.SAVES / "art" / "table")  # the player's own copy
     await closed(task)
     await hub.game.close()
+
+
+async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_they_get_there(codex, fake):
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub.game.visuals.cfg = config.Config()
+    assert hub.m.location("tower").art is None  # no picture of its own at all
+    sent = []
+
+    async def collect(msg):
+        sent.append(msg)
+
+    hub._broadcast = collect
+    key = hub.game.visuals.look("tower", "钟楼的楼梯塌了一半，碎石堵着门")
+    hub.game.visuals.schedule()
+    await asyncio.gather(*(t for k, t in hub.game.visuals.tasks.items() if k.startswith("look:")))
+    assert not codex.attached and "碎石堵着门" in codex.prompts[0]  # nothing to start from: drawn from the words
+    assert hub.m.location("tower").art == key and not [m for m in sent if m["t"] == "event"]  # nobody has seen it yet
+    hub.state.location = "tower"
+    hub.state.visited.append("tower")
+    await hub._event({"type": "move", "location": "tower", "name": "钟楼", "art": ""})
+    kinds = [m["ev"]["type"] if m["t"] == "event" else m["t"] for m in sent]
+    assert kinds[:3] == ["module", "art", "move"]  # the picture is there before the scene is drawn
+    art = next(m["ev"] for m in sent if m["t"] == "event" and m["ev"]["type"] == "art")
+    assert art["key"] == key and near(colour_of(media.unpack(art["picture_data"])), RED)
+    sent.clear()
+    await hub._event({"type": "move", "location": "tower", "name": "钟楼", "art": ""})
+    assert not [m for m in sent if m["t"] == "event" and m["ev"]["type"] == "art"]  # sent once
+    await hub.game.close()
+
+
+async def test_an_import_stops_asking_after_codex_fails_twice(codex, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "local")
+    codex.fail = "usage limit reached"
+    m = Module.load(EXAMPLE)
+    fill = imagegen.filler(config.Config(), m, config.LOCAL_MODULES / "example" / "art")
+    assert fill is not None
+    assert [await fill(name, "广场", "scene") for name in ("a", "b", "c", "d")] == [False] * 4
+    assert len(codex.prompts) == imagegen.GIVE_UP and imagegen.used("example") == 0
+
+
+def test_a_picture_codex_names_elsewhere_in_its_home_counts_only_if_it_is_new(monkeypatch, tmp_path):
+    import time
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "home"))
+    old = picture(tmp_path / "home" / "generated_images" / "2026-10-19" / "old.png")
+    since = time.time() + 5
+    assert imagegen.generated("01a15006-0001-7401-ad01-cf3d77c0aaf4", str(old), since=since) is None
+    assert imagegen.generated("01a15006-0001-7401-ad01-cf3d77c0aaf4", str(old), since=since - 3600) == old

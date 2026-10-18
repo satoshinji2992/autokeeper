@@ -7,11 +7,11 @@
 Used where a picture is missing (a scene or a face no photo was found for, at import and for
 the director's new places and people) and where the story visibly changes a place or a person
 (engine/visuals.py). Codex runs with instructions of our own and without skills, shell or
-plugins, so it calls the tool at once: about 4k tokens of prompt where reading its imagegen
-skill first took 128k. Every preset uses this same path, and without a codex CLI that is
-logged in and has the image_generation feature it is simply off. Every picture counts against
-its module's LIMIT (import and every game together, saves/imagegen/<module>.json); a game
-also keeps to PER_GAME and an import to AT_IMPORT and LOOKS.
+plugins, so it calls the tool at once: measured, 7.6k input tokens and 45 s a picture, where
+reading its imagegen skill first took 128k. Every preset uses this same path; without a codex
+CLI that is logged in and has the image_generation feature it is simply off. Every picture
+counts against its module's LIMIT (import and every game together, kept in
+saves/imagegen/<module>.json); a game also keeps to PER_GAME, an import to AT_IMPORT and LOOKS.
 """
 
 from __future__ import annotations
@@ -42,7 +42,8 @@ PER_GAME = 12  # pictures one game (a save) may make
 AT_IMPORT = 40  # pictures an import may make for scenes and faces with no photo
 LOOKS = 6  # changed states (a fire, a death) an import may draw from the module's own pictures
 DRIVER = "gpt-5.6-luna"  # drives the tool; the login's default model may be one exec does not take
-TIMEOUT = 300.0  # seconds for one picture; measured, one takes about a minute
+TIMEOUT = 300.0  # seconds for one picture; measured, one takes about 45
+GIVE_UP = 2  # failures after which an import stops asking (a used-up image quota fails every time)
 LONG_SIDE = 1024
 LICENSE = "AI 生成（Codex image_gen）"
 KINDS = {"scene": "场景", "portrait": "人物头像", "item": "物件特写"}
@@ -91,10 +92,20 @@ class Status:
     exe: str = ""
 
 
-@lru_cache(maxsize=1)
 def status() -> Status:
     """Whether this machine can make pictures: a codex CLI on PATH, logged in, with the
     image_generation feature. Checked once per process (two quick local commands)."""
+    return _status()
+
+
+def recheck() -> Status:
+    """Check again, say after a `codex login` in another window."""
+    _status.cache_clear()
+    return status()
+
+
+@lru_cache(maxsize=1)
+def _status() -> Status:
     exe = shutil.which("codex")
     if not exe:
         return Status(False, "没有找到 codex 命令（npm i -g @openai/codex，再 codex login）")
@@ -244,16 +255,18 @@ def events(out: bytes) -> tuple[str, dict[str, int], str, str]:
 IMAGES = (".png", ".jpg", ".jpeg", ".webp")
 
 
-def generated(thread: str, said: str = "", folder: Path | None = None) -> Path | None:
+def generated(thread: str, said: str = "", folder: Path | None = None, since: float = 0.0) -> Path | None:
     """The picture Codex made in this thread: the path its reply names, else the newest in
-    $CODEX_HOME/generated_images/<thread>/ (or in the run's own folder). Only files in those
-    two places count, whatever the reply says."""
+    $CODEX_HOME/generated_images/<thread>/ (or in the run's own folder). A named file counts
+    only there, or elsewhere under CODEX_HOME when it was written during the run."""
     places = [p for p in (folder,) if p is not None]
     if re.fullmatch(r"[0-9A-Za-z-]{8,80}", thread):
         places.insert(0, codex_home() / "generated_images" / thread)
     for word in re.findall(r"[^\s`'\"<>()（）]+", said):
         path = Path(word.rstrip(".,;:，。；"))
-        if path.suffix.lower() in IMAGES and path.is_file() and any(_inside(path, place) for place in places):
+        if path.suffix.lower() not in IMAGES or not path.is_file():
+            continue
+        if any(_inside(path, place) for place in places) or (since and _inside(path, codex_home()) and path.stat().st_mtime >= since):
             return path
     found = [p for place in places if place.is_dir() for p in place.rglob("*")
              if p.suffix.lower() in IMAGES and p.is_file() and p.name != ATTACHED]
@@ -286,7 +299,7 @@ async def _run(text: str, image: Path | None, timeout: float) -> tuple[bytes, st
                 im = ImageOps.exif_transpose(im).convert("RGB")
                 im.thumbnail((LONG_SIDE, LONG_SIDE))
                 im.save(attached, "JPEG", quality=90)
-        start = time.monotonic()
+        start, began = time.monotonic(), time.time() - 2  # file times can lag the clock a little
         proc = await asyncio.create_subprocess_exec(
             *command(exe, folder, attached), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=folder, start_new_session=os.name == "posix",
@@ -297,7 +310,7 @@ async def _run(text: str, image: Path | None, timeout: float) -> tuple[bytes, st
             raise Failed(f"Codex 生图超过 {timeout:.0f} 秒没有完成") from None
         seconds = time.monotonic() - start
         thread, usage, failure, said = events(out)
-        picture = generated(thread, said, folder)
+        picture = generated(thread, said, folder, began)
         data = picture.read_bytes() if picture is not None else b""
     await _forget(exe, thread)
     if not data:
@@ -387,11 +400,11 @@ def filler(cfg: config.Config | None, module, art_dir: Path, *, cap: int = AT_IM
 
     if not enabled(cfg) or not imagery.private(art_dir):
         return None
-    made = 0
+    made = failed = 0
 
     async def generate(name: str, subject: str, kind: str) -> bool:
-        nonlocal made
-        if made >= cap:
+        nonlocal made, failed
+        if made >= cap or failed >= GIVE_UP:
             return False
         made += 1
         try:
@@ -400,6 +413,7 @@ def filler(cfg: config.Config | None, module, art_dir: Path, *, cap: int = AT_IM
             return True
         except (Unavailable, OverBudget, Failed, OSError, ValueError):
             made -= 1  # nothing was counted
+            failed += 1
             return False
 
     return generate
@@ -417,6 +431,7 @@ async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, 
     wanted += [(n.portrait, look, "portrait", f"{n.name}，{n.look or n.name}") for n in module.npcs if n.portrait for look in n.looks]
     wanted = [w for w in wanted if not (art_dir / f"{w[1].key(w[0])}.jpg").exists()][:cap]
     done: list[str] = []
+    failed = 0
     for base, look, kind, subject in wanted:
         key = look.key(base)
         original = next((p for p in (art_dir / f"{base}{ext}" for ext in IMAGES) if p.is_file()), None)
@@ -431,6 +446,9 @@ async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, 
             break
         except (Failed, OSError, ValueError) as exc:
             log(f"  ✗ {key}: {str(exc)[:120]}")
+            failed += 1
+            if failed >= GIVE_UP:
+                break
             continue
         done.append(key)
         log(f"  ✓ {key}: {look.change[:40]}")

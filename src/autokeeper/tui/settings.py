@@ -64,7 +64,7 @@ class SettingsModal(ModalScreen[None]):
                 with Horizontal(classes="settings-row"):
                     yield Static(label)
                     yield Switch(value, id=f"settings-{key}")
-            codex = imagegen.status()  # off without a logged-in Codex: the switch says why
+            codex = imagegen.recheck()  # off without a logged-in Codex: the switch says why
             with Horizontal(classes="settings-row"):
                 yield Static("剧情配图（Codex 生图）")
                 yield Switch(cfg.imagegen and codex.ok, id="settings-imagegen", disabled=not codex.ok)
