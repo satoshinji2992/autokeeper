@@ -69,6 +69,12 @@ Screen {
     height: auto;
     max-height: 1fr;
 }
+#card-left {
+    width: 38;
+}
+#card-left Input {
+    border: round $primary-darken-1;
+}
 #preview {
     width: 1fr;
     padding: 0 2;

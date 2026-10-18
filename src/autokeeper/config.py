@@ -95,6 +95,7 @@ DEFAULT_ROLES: dict[str, Role] = {
     "lore": replace(HAIKU, effort="low"),  # LightRAG entity extraction and lore answers
     "summarizer": replace(HAIKU, effort="low"),  # folds old conversation into summaries
     "director": OPUS,  # improvises where the module is silent (agents/director.py)
+    "card": OPUS,  # makes an investigator out of a public figure (agents/card.py)
 }
 
 
@@ -106,7 +107,7 @@ PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
     "deepseek": {
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
-        **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director")},
+        **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director", "card")},
         # Summaries and recaps need no reasoning. With thinking on, half the summarizer's output
         # was thinking, and the recap's first word came after 1.6-3.8 s instead of 0.5 s.
         **{r: _deepseek(None) for r in ("summarizer", "chronicler")},

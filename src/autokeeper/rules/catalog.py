@@ -95,7 +95,17 @@ SKILL_ALIASES = {
     "游说": "说服",
     "快速交谈": "话术",
     "信誉": "信用评级",
+    "信用": "信用评级",
     "克苏鲁": "克苏鲁神话",
+    "CM": "克苏鲁神话",
+    "汽车": "汽车驾驶",
+    "电脑": "计算机使用",
+    "计算机": "计算机使用",
+    "自然学": "博物学",
+    "领航": "导航",
+    "重型机械": "操作重型机械",
+    "重型操作": "操作重型机械",
+    "语言": "母语",
 }
 
 # Skills that never get an improvement tick.
@@ -108,9 +118,9 @@ UNPUSHABLE = {"理智", "幸运", "克苏鲁神话"}
 def canonical(name: str) -> str:
     """Normalise a skill or characteristic name typed by a player or produced by a model."""
     name = name.strip().replace("（", "(").replace("）", ")").replace(" ", "")
-    if name in CHARACTERISTIC_ALIASES:
-        return CHARACTERISTIC_ALIASES[name]
-    return SKILL_ALIASES.get(name, name)
+    if name in CHARACTERISTIC_ALIASES or name.upper() in CHARACTERISTIC_ALIASES:  # .st lines write str60 as often as STR60
+        return CHARACTERISTIC_ALIASES.get(name) or CHARACTERISTIC_ALIASES[name.upper()]
+    return SKILL_ALIASES.get(name) or SKILL_ALIASES.get(name.upper(), name)
 
 
 def base_value(skill: str, characteristics: dict[str, int]) -> int:

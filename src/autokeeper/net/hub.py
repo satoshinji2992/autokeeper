@@ -29,7 +29,7 @@ from aiohttp import WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import config
+from .. import config, roster
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, Game
@@ -97,6 +97,7 @@ class Hub:
             human = [p.id for p, s in chosen if s == "玩家"]
             state = Game.new(self.m, party, slot=slot or f"lan-{self.m.id}-{time.strftime('%m%d-%H%M%S')}", human=human)
         self.state = state
+        roster.attach(self.m, state.investigators)
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT

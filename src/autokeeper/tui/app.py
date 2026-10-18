@@ -22,7 +22,7 @@ from textual.theme import Theme
 from textual.widgets import Button, Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import artkit, config, imagery, weather
+from .. import artkit, config, imagery, roster, weather
 from ..agents.cast import Cast
 from ..engine import graph as turn_graph
 from ..engine.game import PLAY_WAIT, Game
@@ -177,6 +177,7 @@ class SetupScreen(Screen):
         self.step = "module"
         self.module: Module | None = None
         self.lead: Investigator | None = None
+        self.cards: list[Investigator] = []  # public-figure cards kept from before (roster.py)
         self.paths = modules()
 
     def compose(self) -> ComposeResult:
@@ -227,8 +228,23 @@ class SetupScreen(Screen):
             opts = [Option(f"{n} 名 AI 调查员", id=f"party-{n}") for n in (1, 2, 3) if n <= max(1, len(self.module.pregens))]
             self._set(f"《{self.module.title}》· 观战人数", opts, "Enter 或空格开始 · Esc 返回")
             return
+        self.cards = roster.saved()
+        roster.attach(self.module, self.cards)
         opts = [Option(f"{p.name}  {p.occupation}", id=p.id) for p in self.module.pregens]
+        opts += [Option(f"{c.name}  {c.occupation}（我的卡）", id=c.id) for c in self.cards]
+        opts += [Option("＋ 用公众人物车卡", id="card:new"), Option("＋ 导入已有的卡", id="card:import")]
         self._set(f"《{self.module.title}》· 选择你的调查员", opts, "Enter 或空格选择 · Esc 返回")
+
+    def _investigator(self, inv_id: str) -> Investigator | None:
+        assert self.module
+        return next((p for p in [*self.module.pregens, *self.cards] if p.id == inv_id), None)
+
+    def _carded(self, inv: Investigator | None) -> None:
+        if inv is None:
+            self._show_investigators()
+            return
+        self.lead = inv
+        self._show_companions()
 
     def _show_companions(self) -> None:
         assert self.module and self.lead
@@ -254,9 +270,12 @@ class SetupScreen(Screen):
             t.append(m.source, style="dim")
             body.update(t)
         elif self.step == "investigator" and self.module and not self.spectate:
-            inv = next((p for p in self.module.pregens if p.id == oid), None)
-            if inv:
-                body.update(_investigator_card(self.module, inv))
+            if oid == "card:new":
+                body.update(Text("说一位公众人物的名字，AutoKeeper 上网查他是谁、长什么样，问你几个问题，再按这个模组的年代把他做成调查员。做好的卡会留着，下次开团还能选。", style="dim"))
+            elif oid == "card:import":
+                body.update(Text("带上你自己的卡：骰娘的 .st 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，或者酒馆（SillyTavern）的角色卡。数值照原样录入；只有人设的角色卡，会问你几个问题再车成调查员。", style="dim"))
+            elif inv := self._investigator(oid):
+                body.update(_investigator_card(self.module, inv, self.app.art_style))  # type: ignore[attr-defined]
 
     @on(OptionList.OptionSelected, "#choices")
     def select(self, event: OptionList.OptionSelected) -> None:
@@ -273,8 +292,12 @@ class SetupScreen(Screen):
                 n = int(oid.split("-")[1])
                 party = [p.model_copy(deep=True) for p in self.module.pregens[:n]]
                 self._start(party, human=[])
+            elif oid in ("card:new", "card:import"):
+                from .card import CardScreen
+
+                self.app.push_screen(CardScreen(self.module, start="figure" if oid == "card:new" else "import"), self._carded)
             else:
-                self.lead = next(p for p in self.module.pregens if p.id == oid)
+                self.lead = self._investigator(oid)
                 self._show_companions()
         elif self.step == "companions":
             assert self.module and self.lead
@@ -290,9 +313,9 @@ class SetupScreen(Screen):
         self.app.switch_screen(GameScreen(self.module, state, spectate=self.spectate))
 
 
-def _investigator_card(m: Module, inv: Investigator) -> Text:
+def _investigator_card(m: Module, inv: Investigator, style: str = "picture") -> Text:
     t = Text()
-    t.append_text(art_text(m, inv.portrait))
+    t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style))
     t.append(f"\n\n{inv.name}", style="bold")
     t.append(f"  {inv.occupation} · {inv.age}岁\n", style="dim")
     for k, v in inv.backstory.items():
@@ -355,6 +378,7 @@ class GameScreen(Screen):
     def __init__(self, module: Module, state: GameState, *, resume: bool = False, spectate: bool = False):
         super().__init__()
         self.m, self.state, self.resume, self.spectate = module, state, resume, spectate
+        roster.attach(module, state.investigators)  # public-figure cards bring their own photos
         self.cast: Cast | None = None
         self.game: Game | None = None
         self.graph = None
