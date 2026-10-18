@@ -11,10 +11,12 @@ from autokeeper import config
 from autokeeper.agents.cast import Action, Cast
 from autokeeper.config import EXAMPLE, Role
 from autokeeper.engine.game import Game
+from autokeeper.engine.state import CheckRecord
 from autokeeper.harness import Agent, BudgetExceeded, Reply, Session, spend
 from autokeeper.harness import models as hm
 from autokeeper.harness.tools import Workspace, check_tool, file_tools, web_tools
 from autokeeper.module.schema import Module
+from autokeeper.rules.commands import Asked
 
 SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
 SEEN: list[dict] = []  # every call: system, messages, schema
@@ -309,6 +311,34 @@ async def test_the_first_beat_never_reaches_the_arbiter():
     await Cast(cfg, m).arbiter(state, action)
     sent = SEEN[-1]["messages"][-1]["content"]
     assert "周衡翻看告示栏" in sent and "泛黄" not in sent  # the player's flavour stays out of the ruling
+    assert '"asked"' not in sent  # no request, no empty field either
+
+
+async def test_a_dice_command_is_read_in_context_and_ruled_as_a_request():
+    """The intent agent reads `.ra 恐吓` against the last lines of play; the arbiter gets the
+    request as part of the structured action, with the recent checks to weigh a repeat."""
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    state.location, state.turn = "tower", 3
+    state.add("player", "我问守钟人：钟里到底有什么？", who="周衡")
+    state.add("npc", "钟有钟的规矩。", who="老守钟人")
+    cast = Cast(cfg, m)
+    SCRIPT.append({"kind": "talk", "summary": "周衡威吓守钟人说出钟里的事", "npc": "warden", "approach": "恐吓"})
+    action = await cast.intent(state, ".rab 恐吓")
+    sent = SEEN[-1]["messages"][-1]["content"]
+    assert "【刚才的经过】" in sent and "钟有钟的规矩" in sent and "想在这里用「恐吓」" in sent
+    state.checks.append(CheckRecord(turn=2, who="zhouheng", at="tower", skill="恐吓", npc="warden", text="恐吓 15 → 52 失败 ✗", passed=False, minutes=850))
+    SCRIPT.append({"needs_roll": False, "repeat": True, "skill": "恐吓", "reason": "同样的威吓刚失败过"})
+    action = action.model_copy(update={"asked": Asked(skill="恐吓", bonus=1)})  # as Game.parse sets it
+    ruling = await cast.arbiter(state, action)
+    sent = SEEN[-1]["messages"][-1]["content"]
+    assert '"asked":{"skill":"恐吓","difficulty":"常规","bonus":1}' in sent and ".rab" not in sent
+    assert "【最近的检定】\n- 刚才（D1 14:10，钟楼）周衡对老守钟人(warden)：恐吓 15 → 52 失败 ✗" in sent
+    assert ruling.repeat and not ruling.needs_roll
+    SCRIPT.append({"kind": "investigate", "summary": "周衡查看齿轮"})
+    await cast.intent(state, "我看看齿轮")
+    assert "【刚才的经过】" not in SEEN[-1]["messages"][-1]["content"]  # words carry their own context
 
 
 async def test_agent_loop_runs_sandboxed_tools(tmp_path):

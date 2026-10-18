@@ -18,7 +18,7 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
-from autokeeper.tui.widgets import SceneArt
+from autokeeper.tui.widgets import SceneArt, StoryLog
 
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
@@ -47,7 +47,9 @@ class Canned(hm.Model):
         return Reply(text=text, data={} if schema else None)
 
 
-async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, skills_dir):
+@pytest.fixture
+def canned(monkeypatch, tmp_path, skills_dir):
+    """Every agent answers from a can, saves go to a temp folder."""
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F3 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
@@ -56,6 +58,34 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
+    return cfg
+
+
+def story_text(screen) -> str:
+    return "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
+
+
+async def test_after_the_ending_only_the_dice_lookups_work(canned):
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="ended", human=[lead.id])
+    state.ending = "stopped"
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        screen = app.screen
+        screen.send_line("我再上一趟钟楼")  # the story is over
+        screen.send_line(".en")  # growth rolls are not
+        for _ in range(20):
+            await pilot.pause(0.1)
+            if "没有需要成长检定的技能" in story_text(screen):
+                break
+        assert "没有需要成长检定的技能" in story_text(screen) and "我再上一趟钟楼" not in story_text(screen)
+        assert state.turn == 0 and state.developed == [lead.id] and "回顾这一局" not in story_text(screen)
+
+
+async def test_loading_a_save_opens_the_game_at_night(canned):
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="night", human=[lead.id])

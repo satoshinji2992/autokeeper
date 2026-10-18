@@ -172,6 +172,14 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         screen = app.screen
         assert isinstance(screen, NetGameScreen) and screen.my_turn and screen.seat == "zhouheng"
         assert not screen.m.truth and not screen.m.clue("c_notice").text  # not found yet
+        fake.queue_totals(5)
+        screen.query_one(Input).value = ".r 1d6"
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if "1d6 → 5" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+                break
+        assert screen.my_turn  # a plain roll leaves the turn with you
         screen.query_one(Input).value = "我看看告示栏"
         await pilot.press("enter")
         for _ in range(40):
@@ -183,6 +191,60 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         notice = hub.m.clue("c_notice")
         assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
     await closed(task)
+
+
+class LeverCast(TableCast):
+    """Pulling the lever stops the bell: the sample module's happy ending."""
+
+    async def arbiter(self, state, action, at=None):
+        if "制动杆" in action.summary:
+            return Ruling(needs_roll=False, minutes=5, set_flags=["bell_stopped"])
+        return await super().arbiter(state, action, at)
+
+
+async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(update={"marks": ["侦查"]}, deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋", "marks": []}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-dice", human=[lead.id, "lin"])
+    hub = Hub(EXAMPLE, state=state, cast=LeverCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    url = f"ws://127.0.0.1:{hub.port}/ws"
+    async with aiohttp.ClientSession() as http:
+        a, b = await http.ws_connect(url), await http.ws_connect(url)
+        for ws, name, seat in ((a, "小明", "zhouheng"), (b, "小红", "lin")):
+            await ws.send_json({"t": "hello", "name": name})
+            await until(ws, lambda x: x["t"] == "welcome")
+            await ws.send_json({"t": "sit", "investigator": seat})
+        assert (await until(a, lambda x: x["t"] == "turn"))["investigator"] == "zhouheng"
+        fake.queue_totals(4)
+        await a.send_json({"t": "act", "text": ".r 1d6"})
+        assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command"))["ev"]["text"] == "1d6 → 4"
+        await a.send_json({"t": "act", "text": ".ra 侦查"})  # still 周衡's turn: the roll did not use it up
+        heard = []
+        while not heard or heard[-1] != "turn":
+            msg = await asyncio.wait_for(a.receive_json(), 5.0)
+            heard.append(msg["ev"]["type"] if msg["t"] == "event" else msg["t"])
+        assert "error" not in heard and heard.index("said") < heard.index("keeper_end")  # ruled and told: the turn is spent
+        await b.send_json({"t": "act", "text": ".en"})
+        early = await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "command" and x["ev"]["who"] == "林秋")
+        assert early["ev"]["kind"] == "refused" and "结局" in early["ev"]["text"]
+        await b.send_json({"t": "act", "text": "我四下看看"})  # refused, and still her turn
+        await until(a, lambda x: x["t"] == "turn" and x["investigator"] == "zhouheng")
+        fake.queue_totals(3, 2)  # the ending's 理智 +1D6, for each of them
+        await a.send_json({"t": "act", "text": "我拉下制动杆"})
+        await until(a, lambda x: x["t"] == "over")
+        fake.queue_totals(80, 6)  # 80 > 55: 侦查 grows by 6
+        await a.send_json({"t": "act", "text": ".en"})
+        grown = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command")
+        assert grown["ev"]["who"] == "周衡" and "侦查 成长检定 80 → +6" in grown["ev"]["text"]
+        await a.send_json({"t": "act", "text": ".en"})
+        assert "已经做过" in (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command"))["ev"]["text"]
+        await a.close()
+        await b.close()
+    await closed(task)
+    assert hub.state.investigators[0].skills["侦查"] == 61
 
 
 async def test_the_director_s_reasoning_stays_on_the_host(skills_dir, fake):

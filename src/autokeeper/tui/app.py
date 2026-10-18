@@ -30,6 +30,7 @@ from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
+from ..rules import commands
 from ..rules.coc import Investigator, Rules
 from . import art
 from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
@@ -586,6 +587,8 @@ class GameScreen(Screen):
         elif t == "ruling":
             if ev.get("needs_roll") and ev.get("skill"):
                 story.add("system", Text(f"◇ 需要检定：{ev['skill']}（{ev.get('difficulty', '常规')}）", style="dim"))
+        elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
+            story.add("dice", Text(f"◈ {ev['who']} 不重掷：{ev['text']}（刚才的结果不变）", style="dim"))
         elif t == "dice":
             self.query_one(DiceTray).roll(ev)
             line = Text()
@@ -719,8 +722,8 @@ class GameScreen(Screen):
         if text.startswith("/"):
             self._slash(text)
             return
-        if self.state.ending:
-            self.app.notify("这局已经结束了。Ctrl+R 回顾这一局，Esc 回到标题。")
+        if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
+            self.app.notify("这局已经结束了。.en 做成长检定，Ctrl+R 回顾这一局，Esc 回到标题。")
             return
         self.play(text)
 
@@ -744,12 +747,15 @@ class GameScreen(Screen):
         self._busy(True)
         inv = self.state.investigator
         self.story.add("player", Text(f"▶ {inv.name}：{text}"))
+        turn = self.state.turn
         await self._run_turn({"input": text})
-        await self._companions()
+        if self.state.turn != turn:  # an instant dice command (.r, .st) does not use up the turn
+            await self._companions()
         self._busy(False)
 
     async def _run_turn(self, inp, auto: bool = False) -> None:
         assert self.graph
+        ended = self.state.ending
         while True:
             offer = None
             async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
@@ -769,7 +775,7 @@ class GameScreen(Screen):
         self.game.emit = self.handle
         write_save(self.state, self.m)
         self._topbar()
-        if self.state.ending:
+        if self.state.ending and not ended:
             self._ending_summary()
 
     async def _companions(self) -> None:
@@ -837,7 +843,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
+        t.append(("" if self.spectate else ".en 做成长检定 · ") + "Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------

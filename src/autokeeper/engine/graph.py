@@ -5,6 +5,9 @@
                                       └──────────────┴─ talk → narrate → remember → END
 
 * parse / rule / talk / narrate call agents; resolve is pure engine code.
+* command answers the dice-bot commands that stand outside the story (.r, .st, .coc, ...)
+  at once. A check the player asks for (.ra 恐吓) is an action like any other: it goes
+  through parse, so the keeper rules it in context and the dice are rolled once.
 * offer_push pauses the graph with interrupt() and waits for the player to choose
   孤注一掷 / 花幸运 / 放弃; the UI resumes it with Command(resume=...).
 * Every node streams UI events through get_stream_writer(); the TUI consumes
@@ -22,7 +25,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from ..agents.cast import Action, Ruling
-from ..rules.commands import is_command
+from ..rules.commands import instant
 from .game import Game, Turn
 
 
@@ -50,7 +53,7 @@ def build(game: Game, checkpointer=None):
         return {"action": None, "ruling": None, "pending": False}
 
     def which(state: TurnState) -> str:
-        return "command" if is_command(state["input"]) else "parse"
+        return "command" if instant(state["input"]) else "parse"
 
     async def command(state: TurnState) -> dict:
         _bind(game)
