@@ -5,6 +5,10 @@ the turns in order, one seat at a time. Every player's screen connects over a we
 receives the engine's events as they happen, and sends its own action when its turn
 comes. Seats are humans or AI; a human who drops out is played by the AI until they
 sit down again. Lines in full-width brackets are table talk and reach everyone at once.
+A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
+leave the turn open, and once the game is over they still work, growth rolls (.en) too.
+A seated player throws their own dice: the roll prompt reaches them as an offer of kind
+"roll", like a push offer, and the turn goes on when they answer (or leave).
 
 Messages are JSON objects with a "t" field:
 
@@ -35,6 +39,7 @@ from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, Game
 from ..engine.state import GameState
 from ..module.schema import Module
+from ..rules import commands
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
 SEATS = ("玩家", "AI", "不上场")
@@ -110,6 +115,8 @@ class Hub:
         self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
         self.started = asyncio.Event()
         self.waiting: str | None = None  # the seat whose action the game waits for
+        self.over = False  # the game has ended and its last turn is told
+        self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.port = 0
 
     # -- connections --------------------------------------------------------------------
@@ -147,12 +154,15 @@ class Hub:
             self.started.set()
         elif t == "act":
             seat = self._seat_of(cid)
+            text = str(msg.get("text", ""))[:500]
             if seat is None:
                 await self._send(cid, {"t": "error", "text": "你在观战，没有自己的调查员"})
+            elif self.over and commands.instant(text):  # growth rolls (.en) and the sheet still work
+                await self._afterwards(seat, text)
             elif self.waiting != seat:
                 await self._send(cid, {"t": "error", "text": "还没轮到你"})
             else:
-                self.inbox[seat].put_nowait(str(msg.get("text", ""))[:500])
+                self.inbox[seat].put_nowait(text)
         elif t == "choice":
             seat = self._seat_of(cid)
             if seat is not None:
@@ -246,6 +256,7 @@ class Hub:
                     acted = True
             if not acted:  # nobody left standing
                 break
+        self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
 
     async def _turn(self, inv: Any) -> None:
@@ -275,10 +286,18 @@ class Hub:
                     continue
                 await self._event({"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv.id) or "", ""), "text": text})
                 await self._run(text, inv.id, ai=False)
-                if not text.startswith("."):  # a dice command does not use up the turn
+                if not commands.instant(text):  # a check (.ra) is an action; .r, .st and the like leave the turn open
                     return
         finally:
             self.waiting = None
+
+    async def _afterwards(self, seat: str, text: str) -> None:
+        """After the end a player can still read their sheet and make their growth rolls."""
+        async with self.desk:  # each command runs as its own investigator
+            st = self.state
+            st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == seat)
+            await self._event({"type": "said", "who": st.investigator.name, "player": self.names.get(self.sits.get(seat) or "", ""), "text": text})
+            await self._run(text, seat, ai=False)
 
     async def _interlude(self) -> None:
         if self.game.ready():
@@ -295,7 +314,7 @@ class Hub:
         await self._run(text, inv.id, ai=True)
 
     async def _run(self, text: str, inv_id: str, *, ai: bool) -> None:
-        inp: Any = {"input": text}
+        inp: Any = {"input": text, "by_hand": not ai and self.sits.get(inv_id) is not None}  # a seated player throws their own dice
         while True:
             offer = None
             async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
@@ -313,7 +332,9 @@ class Hub:
                     queue.get_nowait()
                 await self._send(who, {"t": "offer", "offer": offer})
                 choice = await queue.get()
-            if choice not in ("push", "luck", "drop"):
+            if offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
+                choice = "roll"
+            elif choice not in ("push", "luck", "drop"):
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
             inp = Command(resume=choice)
         self.game.emit = self._event

@@ -1,10 +1,17 @@
 """LangGraph orchestration of a turn.
 
-    START ─┬─ command ───────────────────────────────────────┐
-           └─ parse → rule → resolve ─┬─ offer_push ─┐        │
-                                      └──────────────┴─ talk → narrate → remember → END
+    START ─┬─ command ─────────────────────────────────────────────────────┐
+           └─ parse → rule ─┬─ ask_roll ─┬─ resolve ─┬─ offer_push ─┐       │
+                            └────────────┘           └──────────────┴─ talk → narrate → remember → END
 
 * parse / rule / talk / narrate call agents; resolve is pure engine code.
+* command answers the dice-bot commands that stand outside the story (.r, .st, .coc, ...)
+  at once. A check the player asks for (.ra 恐吓) is an action like any other: it goes
+  through parse, so the keeper rules it in context and the dice are rolled once.
+* ask_roll lets a player throw their own dice: when the turn came in with by_hand and the
+  ruling calls for a check, the graph pauses with interrupt() showing what is asked and
+  why, and resolve rolls once the UI resumes it. AI investigators, autoplay and replays
+  never set by_hand, so their dice fall at once, in the same order as ever.
 * offer_push pauses the graph with interrupt() and waits for the player to choose
   孤注一掷 / 花幸运 / 放弃; the UI resumes it with Command(resume=...).
 * Every node streams UI events through get_stream_writer(); the TUI consumes
@@ -22,12 +29,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from ..agents.cast import Action, Ruling
-from ..rules.commands import is_command
+from ..rules.commands import instant
 from .game import Game, Turn
 
 
 class TurnState(TypedDict, total=False):
     input: str
+    by_hand: bool  # a player at the screen throws this turn's dice; pass it with every input
     action: dict | None
     ruling: dict | None
     pending: bool
@@ -50,7 +58,7 @@ def build(game: Game, checkpointer=None):
         return {"action": None, "ruling": None, "pending": False}
 
     def which(state: TurnState) -> str:
-        return "command" if is_command(state["input"]) else "parse"
+        return "command" if instant(state["input"]) else "parse"
 
     async def command(state: TurnState) -> dict:
         _bind(game)
@@ -70,6 +78,17 @@ def build(game: Game, checkpointer=None):
             await game.emit({"type": "ruling", **ruling.model_dump()})
         return {"ruling": ruling.model_dump() if ruling else None}
 
+    def after_rule(state: TurnState) -> str:
+        r = state.get("ruling") or {}
+        rolls = r.get("needs_roll") and r.get("skill") and not r.get("repeat")
+        return "ask_roll" if rolls and state.get("by_hand") else "resolve"
+
+    async def ask_roll(state: TurnState) -> dict:
+        # Runs again from the top when resumed: nothing before interrupt() may change state.
+        _bind(game)
+        interrupt({"kind": "roll", **game.roll_prompt(Action.model_validate(state["action"]), Ruling.model_validate(state["ruling"]))})
+        return {}
+
     async def resolve(state: TurnState) -> dict:
         _bind(game)
         ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
@@ -81,7 +100,8 @@ def build(game: Game, checkpointer=None):
 
     async def offer_push(state: TurnState) -> dict:
         _bind(game)
-        choice = interrupt({"kind": "push", **(game.state.pending_push or {})})
+        offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}  # ids stay home
+        choice = interrupt({"kind": "push", **offer})
         extra = await game.push(str(choice))
         turn = holder["turn"]
         turn.checks += extra.checks
@@ -113,6 +133,7 @@ def build(game: Game, checkpointer=None):
     g.add_node("command", command)
     g.add_node("parse", parse)
     g.add_node("rule", rule)
+    g.add_node("ask_roll", ask_roll)
     g.add_node("resolve", resolve)
     g.add_node("offer_push", offer_push)
     g.add_node("talk", talk)
@@ -122,7 +143,8 @@ def build(game: Game, checkpointer=None):
     g.add_conditional_edges("route", which, ["command", "parse"])
     g.add_edge("command", "remember")
     g.add_edge("parse", "rule")
-    g.add_edge("rule", "resolve")
+    g.add_conditional_edges("rule", after_rule, ["ask_roll", "resolve"])
+    g.add_edge("ask_roll", "resolve")
     g.add_conditional_edges("resolve", after_resolve, ["offer_push", "talk"])
     g.add_edge("offer_push", "talk")
     g.add_edge("talk", "narrate")

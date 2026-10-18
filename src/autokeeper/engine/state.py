@@ -26,6 +26,27 @@ class NpcState(BaseModel):
     lines: int = 0
 
 
+class CheckRecord(BaseModel):
+    """A skill check, kept for a few turns: the arbiter reads them, and the engine does not
+    roll the same failed attempt again (Game._earlier). A repeat that was not rolled counts
+    as the latest attempt: turn, minutes and seen move up to it."""
+
+    turn: int
+    who: str  # investigator id
+    at: str  # location id
+    skill: str
+    npc: str = ""
+    target: str = ""
+    text: str  # Check.describe(), after any push or luck
+    passed: bool
+    minutes: int = 0  # game clock when the attempt was over
+    seen: int = 0  # clues + flags + events by then: a higher count later means something new came up
+
+    @property
+    def aim(self) -> str:
+        return self.npc or self.target
+
+
 class GameState(BaseModel):
     module: str
     slot: str = "default"
@@ -48,6 +69,8 @@ class GameState(BaseModel):
     log: list[LogEntry] = Field(default_factory=list)
     memory: str = ""  # chronicler's summary of everything before the recent log
     pending_push: dict | None = None
+    checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
+    developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
@@ -79,6 +102,10 @@ class GameState(BaseModel):
     def npc(self, npc_id: str) -> NpcState:
         return self.npcs.setdefault(npc_id, NpcState())
 
+    def recent_checks(self) -> list[CheckRecord]:
+        """Checks of the last few turns: what the arbiter weighs a repeat against."""
+        return [r for r in self.checks if self.turn - r.turn <= RECENT_TURNS]
+
     def record_usage(self, role: str, reply) -> None:
         u = self.usage.setdefault(role, {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0, "seconds": 0.0})
         usage = reply.usage or {}
@@ -88,6 +115,11 @@ class GameState(BaseModel):
         u["output"] += usage.get("output_tokens", 0)
         u["cost_usd"] += reply.cost_usd or 0.0
         u["seconds"] += reply.seconds or 0.0
+
+
+RECENT_TURNS = 5  # how far back a check still counts as recent
+KEEP_CHECKS = 12  # check records a save keeps
+RECHECK_AFTER = 60  # game minutes after which the same attempt is no longer an immediate repeat
 
 
 _TIME = re.compile(r"D(\d+)\s+(\d{1,2}):(\d{2})")

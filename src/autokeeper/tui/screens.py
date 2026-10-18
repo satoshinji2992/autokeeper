@@ -1,13 +1,16 @@
-"""Modal screens: push offer, handouts, notebook, sketch canvas, map, help, models, ending."""
+"""Modal screens: the roll prompt, push offer, handouts, notebook, sketch canvas, map, help,
+models, ending."""
 
 from __future__ import annotations
 
 import io
+import time
 
 from PIL import Image
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.color import Color
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import MouseDown, MouseMove, MouseUp
@@ -19,6 +22,65 @@ from textual_canvas import Canvas
 from . import art
 
 
+def roll_ask(a: dict) -> Text:
+    """What the keeper asks for, from a roll prompt (Game.roll_prompt): the attempt, why it
+    is in doubt, the skill and the number to beat, all three thresholds, and the extra dice."""
+    need = a.get("difficulty") or "常规"
+    body = Text()
+    if a.get("action"):
+        body.append(f"{a['action']}\n", style="italic")
+    if a.get("why"):
+        body.append(f"{a['why']}\n", style="dim")
+    body.append(f"\n{a.get('skill')} {a.get('target')}", style="bold")
+    body.append(f" · {need}：掷出 ≤{a.get('need')} 就算过\n", style="bold")
+    for name, limit in (("常规", a.get("target")), ("困难", a.get("hard")), ("极难", a.get("extreme"))):
+        body.append(f"{name} ≤{limit}", style="bold underline" if name == need else "dim")
+        body.append("   ")
+    bonus = int(a.get("bonus") or 0)
+    if bonus:
+        body.append(f"\n{'奖励' if bonus > 0 else '惩罚'}骰 {abs(bonus)} 颗：", style="bold")
+        body.append(f"多掷{'一' if abs(bonus) == 1 else '两'}个十位骰，取{'小' if bonus > 0 else '大'}的那个")
+    return body
+
+
+class RollModal(ModalScreen[str]):
+    """The keeper calls for a check and the player throws the dice. There is no backing out:
+    Escape only says so, and a key already on its way when the prompt opens does not count."""
+
+    BINDINGS = [
+        Binding("enter", "throw", "掷骰", priority=True),
+        Binding("space", "throw", "掷骰", priority=True),
+        Binding("escape", "stay", show=False),
+    ]
+    SETTLE = 0.4  # seconds before a key counts as a throw
+
+    def __init__(self, ask: dict):
+        super().__init__()
+        self.ask = ask
+        self.opened = time.monotonic()
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="modal"):
+            yield Static(f"守秘人要{self.ask.get('who') or '你'}掷骰", classes="modal-title")
+            yield Static(roll_ask(self.ask), classes="modal-body")
+            with Horizontal(classes="buttons"):
+                yield Button("掷骰（回车 / 空格）", id="throw", variant="primary")
+
+    def on_mount(self) -> None:
+        self.opened = time.monotonic()
+
+    def action_throw(self) -> None:
+        if time.monotonic() - self.opened >= self.SETTLE:
+            self.dismiss("roll")
+
+    def action_stay(self) -> None:
+        self.app.notify("这一掷躲不过去：按回车或空格掷骰", timeout=3)
+
+    @on(Button.Pressed, "#throw")
+    def thrown(self) -> None:
+        self.dismiss("roll")
+
+
 class PushModal(ModalScreen[str]):
     BINDINGS = [("escape", "dismiss('drop')", "放弃")]
 
@@ -28,17 +90,22 @@ class PushModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         o = self.offer
+        need = o.get("need", o.get("target"))
         with Vertical(classes="modal"):
-            yield Static(f"{o.get('skill')} 检定失败（{o.get('value')} / {o.get('target')}）", classes="modal-title")
+            yield Static(f"{o.get('skill')} 检定失败（掷出 {o.get('value')}，要 ≤{need}）", classes="modal-title")
             body = Text()
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
-                body.append("换个更冒险的做法再掷一次。再失败，后果一定发生。\n")
+                body.append(f"换个更冒险的做法再掷一次，还是要 ≤{need}。再失败，后果一定发生，而且比这次更糟；"
+                            "推过的检定不能再推，也不能花幸运补救。\n")  # fmt: skip
             if o.get("luck") is not None:
-                body.append("花费幸运：", style="bold")
-                body.append(f"花 {o['luck']} 点幸运，把这次检定变成恰好成功。\n")
+                left = o.get("left")
+                body.append(f"花 {o['luck']} 点幸运：", style="bold")
+                body.append("这次直接算恰好成功。")
+                body.append(f"幸运 {left + o['luck']} → {left}，" if left is not None else "")
+                body.append("花掉的不会回来，以后靠运气的时候更难。\n")
             body.append("放弃：", style="bold")
-            body.append("接受失败，换条路。")
+            body.append("接受失败。" + ("这里的关键发现还是会到手，只是要付出代价（多花时间、弄出动静）。" if o.get("core") else "换条路。"))
             yield Static(body, classes="modal-body")
             with Horizontal(classes="buttons"):
                 if o.get("can_push"):
@@ -255,10 +322,16 @@ HELP = Text.from_markup(
     """[b]直接说你想做什么[/b]，比如“我翻看书台上的折扇”“我去拾遗书局”“我问小顺子钥匙在哪”。
 
 [b]骰娘指令[/b]
-  .ra 侦查        技能检定        .ra 困难聆听     指定难度
-  .rab 侦查       奖励骰          .rap2 侦查       两颗惩罚骰
-  .sc 1/1d6       理智检定        .st 侦查60 hp-2   修改人物卡
-  .r 1d6+1        掷骰            .coc / .en       掷属性 / 成长
+  .ra 侦查        想在这里用侦查：对着谁、该不该掷，守秘人看场景裁定
+  .rab 侦查       请求奖励骰      .rap 侦查        请求惩罚骰
+  .ra 困难聆听    请求难度        （几颗骰、多难，最后由守秘人定）
+  .r 1d6+1        随手掷骰        .coc             掷一组属性
+  .st             看人物卡        .en              结局后成长检定，每局一次
+  .ti / .li       查疯狂发作表，只看不算
+
+  守秘人要你掷骰时会先说清掷什么、要掷到多少，按回车或空格自己掷。
+  失败的检定不能重掷：弹出“孤注一掷”时可以再搏一次，不然就换个办法。
+  理智检定由守秘人发起，人物卡在游戏中不能改。输入时按 → 补全指令和技能名。
 
 [b]界面[/b]
   F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关   F7 人物卡

@@ -98,6 +98,20 @@ def test_commands(rules, fake, inv):
     assert commands.run(".r 1d6", inv, rules).text.endswith("3")
     assert commands.run(".xyz", inv, rules).kind == "error"
     assert commands.run(".ra", inv, rules).kind == "error"
+    sheet = commands.run(".st", inv, rules)
+    assert sheet.kind == "sheet" and "侦查65" in sheet.text and "理智 61" in sheet.text
+
+
+def test_a_check_command_is_a_request_the_rest_are_answered_at_once():
+    assert commands.asked(".rab2 困难侦察") == commands.Asked(skill="侦查", difficulty="困难", bonus=2)
+    assert commands.asked("。RAP 恐吓") == commands.Asked(skill="恐吓", bonus=-1)
+    assert commands.asked(".ra 侦查50") == commands.Asked(skill="侦查")  # in a game the sheet says how good you are
+    assert [commands.asked(t) for t in (".ra", ".r 1d6", ".st", "我看看")] == [None] * 4
+    texts = (".ra 侦查", ".rc 困难聆听", ".r 1d6", ".st", ".en", ".ra", "我看看")
+    assert [commands.instant(t) for t in texts] == [False, False, True, True, True, True, False]
+    assert [commands.kind(t) for t in (".rab 侦查", ".r", ".sc 1/1d6", ".coc", ".li", ".x")] == [
+        "check", "roll", "sanity", "coc", "madness", "error",
+    ]
 
 
 @needs_node

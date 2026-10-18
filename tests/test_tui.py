@@ -8,7 +8,7 @@ import shutil
 import pytest
 from PIL import Image
 from rich.text import Text
-from textual.widgets import Input, RadioButton
+from textual.widgets import Input, RadioButton, Static
 
 from autokeeper import artkit, config, imagery
 from autokeeper.config import EXAMPLE, Role
@@ -16,9 +16,11 @@ from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
-from autokeeper.tui.widgets import SceneArt
+from autokeeper.tui.screens import HandoutModal, PushModal, RollModal
+from autokeeper.tui.widgets import SceneArt, StoryLog, command_suggester
 
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
@@ -47,7 +49,9 @@ class Canned(hm.Model):
         return Reply(text=text, data={} if schema else None)
 
 
-async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, skills_dir):
+@pytest.fixture
+def canned(monkeypatch, tmp_path, skills_dir):
+    """Every agent answers from a can, saves go to a temp folder."""
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F3 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
@@ -56,6 +60,85 @@ async def test_loading_a_save_opens_the_game_at_night(monkeypatch, tmp_path, ski
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
+    return cfg
+
+
+def story_text(screen) -> str:
+    return "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
+
+
+async def until(pilot, test, tries: int = 40) -> bool:
+    for _ in range(tries):
+        if test():
+            return True
+        await pilot.pause(0.1)
+    return test()
+
+
+async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
+    from .test_engine import HARD_TALK, PLEAD, FakeCast
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="roll", human=[lead.id])
+    state.location = "tower"
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = GameScreen(m, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and "钟楼底下" in story_text(screen) and not screen.busy)  # recap told
+        screen.game.cast, screen.game.rules = FakeCast({"我劝守钟人说实话": (PLEAD, HARD_TALK)}), Rules(dice=fake)
+        fake.queue(8)  # 说服 40, hard: an extreme success
+        screen.send_line("我劝守钟人说实话")
+        assert await until(pilot, lambda: isinstance(app.screen, RollModal))
+        modal = app.screen
+        shown = "".join(str(w.render()) for w in modal.query(Static))
+        assert "说服 40 · 困难：掷出 ≤20 就算过" in shown and "极难 ≤8" in shown and "守钟人就在一旁盯着你" in shown
+        assert fake.values  # the dice wait for the player
+        await pilot.pause(0.5)
+        await pilot.press("escape")  # no way out
+        assert app.screen is modal and fake.values
+        await pilot.press("enter")
+        assert await until(pilot, lambda: "↳ 老守钟人松了口：〔守钟人的日记〕" in story_text(screen))
+        assert "十位" in story_text(screen) and "极难成功" in story_text(screen) and not fake.values
+        assert await until(pilot, lambda: isinstance(app.screen, HandoutModal))  # the diary came with it
+        await pilot.press("escape")
+        assert await until(pilot, lambda: app.screen is screen and not screen.busy)
+        box = screen.query_one("#command", Input)
+        box.focus()
+        box.value = ".ra 侦"
+        box.cursor_position = len(box.value)  # as if typed
+        await pilot.pause(0.2)
+        await pilot.press("right")  # → takes the suggestion
+        assert box.value == ".ra 侦查"
+        offer = {"kind": "push", "skill": "图书馆使用", "target": 60, "need": 60, "value": 63, "can_push": True, "luck": 3, "left": 52, "core": True}
+        app.push_screen(PushModal(offer))
+        await pilot.pause()
+        stakes = "".join(str(w.render()) for w in app.screen.query(Static))
+        assert "比这次更糟" in stakes and "幸运 55 → 52" in stakes and "关键发现还是会到手" in stakes
+
+
+async def test_after_the_ending_only_the_dice_lookups_work(canned):
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="ended", human=[lead.id])
+    state.ending = "stopped"
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        screen = app.screen
+        screen.send_line("我再上一趟钟楼")  # the story is over
+        screen.send_line(".en")  # growth rolls are not
+        for _ in range(20):
+            await pilot.pause(0.1)
+            if "没有需要成长检定的技能" in story_text(screen):
+                break
+        assert "没有需要成长检定的技能" in story_text(screen) and "我再上一趟钟楼" not in story_text(screen)
+        assert state.turn == 0 and state.developed == [lead.id] and "回顾这一局" not in story_text(screen)
+
+
+async def test_loading_a_save_opens_the_game_at_night(canned):
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="night", human=[lead.id])
@@ -230,3 +313,12 @@ async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_pat
         await pilot.press("escape")
         await pilot.pause()
         assert isinstance(app.screen, GameScreen)
+
+
+async def test_the_command_box_completes_dice_commands_and_skills():
+    m = Module.load(EXAMPLE)
+    suggest = command_suggester(m.pregens[0]).get_suggestion
+    assert await suggest(".ra 侦") == ".ra 侦查"
+    assert await suggest(".rab 图") == ".rab 图书馆使用"  # the investigator's own skills first
+    assert await suggest(".ra 困难聆") == ".ra 困难聆听"  # every skill, not only theirs
+    assert await suggest(".s") == ".st" and await suggest("/n") == "/notes"

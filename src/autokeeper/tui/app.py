@@ -30,11 +30,12 @@ from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
+from ..rules import commands
 from ..rules.coc import Investigator, Rules
 from . import art
 from .mapview import MapModal
-from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, SketchModal, TextModal
-from .widgets import LEVEL_STYLE, CluePanel, DiceTray, SceneArt, SheetPanel, StoryLog
+from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
+from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
 THEMES = [
     Theme("amber", primary="#ffb000", secondary="#d98e04", accent="#ff6b35", foreground="#f3d7a6", background="#0c0a06",
@@ -401,7 +402,8 @@ class GameScreen(Screen):
                 yield SceneArt(id="scene")
                 yield StoryLog(id="story")
                 yield Static(id="status")
-                yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command")
+                yield Input(placeholder="说出你的行动，或 .ra 侦查 · /draw 手绘 · /notes 线索本 · F1 帮助", id="command",
+                            suggester=command_suggester(self._viewer()))  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
@@ -443,6 +445,16 @@ class GameScreen(Screen):
     @property
     def story(self) -> StoryLog:
         return self.query_one(StoryLog)
+
+    # A modal on top (a roll, a handout) holds the story still while the turn goes on under
+    # it; coming back, pick up the newest lines again unless the reader had scrolled away.
+    def on_screen_suspend(self) -> None:
+        self.following = all(s.is_vertical_scroll_end for s in self.query(StoryLog))
+
+    def on_screen_resume(self) -> None:
+        if getattr(self, "following", True):
+            for s in self.query(StoryLog):
+                s.scroll_end(animate=False)
 
     def _status(self, text: str) -> None:
         self.status_text = text
@@ -616,14 +628,16 @@ class GameScreen(Screen):
         elif t == "ruling":
             if ev.get("needs_roll") and ev.get("skill"):
                 story.add("system", Text(f"◇ 需要检定：{ev['skill']}（{ev.get('difficulty', '常规')}）", style="dim"))
+        elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
+            story.add("dice", Text(f"◈ {ev['who']} 不重掷：{ev['text']}（刚才的结果不变）", style="dim"))
         elif t == "dice":
             self.query_one(DiceTray).roll(ev)
-            line = Text()
-            line.append(f"◈ {ev.get('who', '')} ", style="bold")
-            line.append(ev["text"].rsplit(" ", 2)[0] + " ")
-            line.append(f" {ev['level']} ", style=LEVEL_STYLE.get(ev["level"], "bold"))
-            story.add("dice", line)
+            story.add("dice", RollCard(ev))
             self._panels()
+        elif t == "outcome":  # what the roll led to, under its card
+            cards = story.query(RollCard)
+            if cards:
+                cards.last().settle(ev["lines"])
         elif t == "command":
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
         elif t == "clue":
@@ -749,8 +763,8 @@ class GameScreen(Screen):
         if text.startswith("/"):
             self._slash(text)
             return
-        if self.state.ending:
-            self.app.notify("这局已经结束了。Ctrl+R 回顾这一局，Esc 回到标题。")
+        if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
+            self.app.notify("这局已经结束了。.en 做成长检定，Ctrl+R 回顾这一局，Esc 回到标题。")
             return
         self.play(text)
 
@@ -774,12 +788,15 @@ class GameScreen(Screen):
         self._busy(True)
         inv = self.state.investigator
         self.story.add("player", Text(f"▶ {inv.name}：{text}"))
-        await self._run_turn({"input": text})
-        await self._companions()
+        turn = self.state.turn
+        await self._run_turn({"input": text, "by_hand": True})  # their own dice
+        if self.state.turn != turn:  # an instant dice command (.r, .st) does not use up the turn
+            await self._companions()
         self._busy(False)
 
     async def _run_turn(self, inp, auto: bool = False) -> None:
         assert self.graph
+        ended = self.state.ending
         while True:
             offer = None
             async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
@@ -789,7 +806,10 @@ class GameScreen(Screen):
                     offer = chunk["__interrupt__"][0].value
             if offer is None:
                 break
-            if auto:
+            if offer.get("kind") == "roll":  # the player throws their own dice
+                self._status("等你掷骰…")
+                choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
+            elif auto:
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
                 self.story.add("system", Text(f"◇ AI 选择：{ {'push': '孤注一掷', 'luck': '花幸运', 'drop': '放弃'}[choice] }", style="dim"))
             else:
@@ -799,7 +819,7 @@ class GameScreen(Screen):
         self.game.emit = self.handle
         write_save(self.state, self.m)
         self._topbar()
-        if self.state.ending:
+        if self.state.ending and not ended:
             self._ending_summary()
 
     async def _companions(self) -> None:
@@ -825,7 +845,7 @@ class GameScreen(Screen):
         situation = self._situation()
         action = await self.cast.investigator(st, inv.id, situation)
         self.story.add("player", Text(f"▶ {inv.name}（AI）：{action}"))
-        await self._run_turn({"input": action}, auto=True)
+        await self._run_turn({"input": action, "by_hand": False}, auto=True)
 
     def _situation(self) -> str:
         from ..engine.autoplay import situation
@@ -853,7 +873,7 @@ class GameScreen(Screen):
                 st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == inv_id)
                 self._panels()
                 self.story.add("player", Text(f"▶ {st.investigator.name}（AI）：{text}"))
-                await self._run_turn({"input": text}, auto=True)
+                await self._run_turn({"input": text, "by_hand": False}, auto=True)
         self._busy(False)
 
     def _ending_summary(self) -> None:
@@ -867,7 +887,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
+        t.append(("" if self.spectate else ".en 做成长检定 · ") + "Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------

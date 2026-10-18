@@ -22,8 +22,9 @@ from textual.widgets.option_list import Option
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
 from ..net.link import Link
+from ..rules import commands
 from .app import GameScreen
-from .screens import PushModal
+from .screens import PushModal, RollModal
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
 
@@ -238,8 +239,9 @@ class NetGameScreen(GameScreen):
             if self.my_turn:
                 self.app.notify("轮到你了", timeout=4)
                 self.query_one(Input).focus()
-        elif t == "offer":
-            choice = await self.app.push_screen_wait(PushModal(msg["offer"]))
+        elif t == "offer":  # throw your own dice, or push / spend luck after a failure
+            offer = msg["offer"]
+            choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
             await self.link.send({"t": "choice", "mode": choice})
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
@@ -271,10 +273,13 @@ class NetGameScreen(GameScreen):
             self.run_worker(partial(self.link.send, {"t": "say", "text": text}))
         elif not self.seat:
             self.app.notify("你在观战；全角括号开头的话是场外聊天")
+        elif self.state.ending and commands.instant(text):  # after the end: growth rolls (.en), the sheet
+            self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
         elif not self.my_turn:
             self.app.notify("还没轮到你")
         else:
-            self.my_turn = False
+            if not commands.instant(text):  # .r, .st and the like leave the turn with you
+                self.my_turn = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
     # The host runs the agents: switching models, sketches, recaps and saving happen there.

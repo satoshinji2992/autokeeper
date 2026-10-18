@@ -18,21 +18,26 @@ from autokeeper.engine.game import LATER, PLAY_WAIT, Game
 from autokeeper.engine.state import parse_time
 from autokeeper.module.schema import Module
 from autokeeper.rules.coc import Rules
+from autokeeper.rules.commands import Asked
 
 
 class FakeCast:
     def __init__(self, script: dict[str, tuple[Action, Ruling]]):
         self.script = script
+        self.heard: list[str] = []  # what the intent agent was given
+        self.ruled: list[Action] = []  # what the arbiter was given
         self.npc_calls: list[tuple[str, str]] = []
         self.performances: list[str] = []
         self.reports: list[str] = []
 
     async def intent(self, state, text):
+        self.heard.append(text)
         return self.script[text][0]
 
     async def arbiter(self, state, action, at=None):
         self.ruled_at = at
-        return next(r for a, r in self.script.values() if a == action)
+        self.ruled.append(action)
+        return next(r for a, r in self.script.values() if a.summary == action.summary)
 
     async def npc(self, state, npc_id, message):
         self.npc_calls.append((npc_id, message))
@@ -461,3 +466,195 @@ async def test_a_look_around_does_not_empty_a_room(module, fake):
     pointed = Action(kind="investigate", summary="周衡翻看齿轮旁的日记", target="日记")
     await game.resolve(pointed, ruling)
     assert set(game.state.clues) == {"c_gears", "c_diary"}
+
+
+# -- dice commands -----------------------------------------------------------------------
+SCARE = Action(kind="talk", summary="周衡逼近一步，威吓守钟人说出钟里的事", target="老守钟人", npc="warden", approach="恐吓")
+
+
+async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fake):
+    """`.ra 恐吓` is the investigator's attempt, read in context and ruled like any action:
+    rolled once, and the NPC and the keeper both answer the outcome."""
+    game, cast, _ = make(module, fake, {".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5))}, location="tower")
+    fake.queue(52)  # 恐吓 15: a failure
+    app = turn_graph.build(game, InMemorySaver())
+    events, _ = await run_turn(app, ".ra 恐吓", {"configurable": {"thread_id": "t-dice"}})
+    assert cast.heard == [".ra 恐吓"] and cast.ruled[0].asked == Asked(skill="恐吓")  # the request, not the words
+    assert [e["text"] for e in events if e["type"] == "dice"] == ["恐吓 15 → 52 失败 ✗"]
+    assert not [e for e in events if e["type"] == "command"]
+    npc, said = cast.npc_calls[0]
+    assert npc == "warden" and "方式：恐吓" in said and "检定：恐吓 失败，你没有被打动" in said
+    assert "检定：恐吓 15 → 52 失败 ✗" in cast.reports[-1] and "老守钟人" in cast.reports[-1]
+    record = game.state.checks[-1]
+    assert (record.skill, record.aim, record.passed, game.state.turn) == ("恐吓", "warden", False, 1)
+    cast.script["我盯着他"] = (SCARE.model_copy(update={"summary": "周衡盯着守钟人", "asked": Asked(skill="说服")}), Ruling(needs_roll=False))
+    await run_turn(app, "我盯着他", {"configurable": {"thread_id": "t-dice"}})
+    assert cast.ruled[-1].asked is None  # only a dice command makes a request, whatever the model says
+
+
+async def test_a_failed_check_is_not_rolled_again(module, fake):
+    plead = Action(kind="talk", summary="周衡换了口气，好言相劝", npc="warden", approach="说服")
+    script = {
+        ".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5)),  # this arbiter wants a roll every time
+        ".ra 说服": (plead, Ruling(needs_roll=True, skill="说服", minutes=5)),
+    }
+    game, cast, _ = make(module, fake, script, location="tower")
+    app = turn_graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "t-again"}}
+    fake.queue(52)  # one die for 恐吓; a second roll would find the fake dice empty
+    await run_turn(app, ".ra 恐吓", thread)
+    for _ in range(2):  # the same attempt again, and again: the failure stands
+        events, _ = await run_turn(app, ".ra 恐吓", thread)
+        assert not [e for e in events if e["type"] == "dice"]
+        assert [e["text"] for e in events if e["type"] == "repeat"] == ["恐吓 15 → 52 失败 ✗"]
+        assert "同样的恐吓刚才已经试过，不重掷，结果照旧：你还是没有被打动" in cast.npc_calls[-1][1]
+        assert "不重掷" in cast.reports[-1] and "再试一次也不管用" in cast.reports[-1]
+    fake.queue(30)  # another skill is another attempt
+    events, _ = await run_turn(app, ".ra 说服", thread)
+    assert [e["skill"] for e in events if e["type"] == "dice"] == ["说服"]
+
+
+async def test_something_new_makes_it_a_fresh_attempt(module, fake):
+    """Only the plain re-roll is stopped: news, time gone or an action in between, and the
+    arbiter's call stands (this one asks for a roll every time)."""
+    search = Action(kind="investigate", summary="周衡搜查齿轮间", target="齿轮间")
+    glance = Action(kind="investigate", summary="周衡四下看看")
+    script = {".ra 侦查": (search, Ruling(needs_roll=True, skill="侦查", minutes=10)), "看看": (glance, Ruling(needs_roll=False, minutes=5))}
+    game, *_ = make(module, fake, script, location="tower")
+    app = turn_graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "t-fresh"}}
+
+    async def rolls(text: str) -> int:
+        events, _ = await run_turn(app, text, thread)
+        return len([e for e in events if e["type"] == "dice"])
+
+    fake.queue(99, 99, 99, 99)  # 侦查 55: failures
+    assert await rolls(".ra 侦查") == 1
+    assert await rolls(".ra 侦查") == 0  # a plain re-roll
+    game.state.clues.append("c_notice")  # something turned up meanwhile
+    assert await rolls(".ra 侦查") == 1
+    game.state.minutes += 90  # an hour and a half later
+    assert await rolls(".ra 侦查") == 1
+    assert await rolls("看看") == 0
+    assert await rolls(".ra 侦查") == 1  # they did something else in between
+    assert not fake.values
+
+
+async def test_the_arbiter_can_call_a_repeat_itself(module, fake):
+    """A repeat the engine's own rule would let through (an action in between) can still be
+    called by the arbiter: then the earlier result stands, for the NPC and the keeper too."""
+    nod = Action(kind="talk", summary="周衡点点头，没说话", npc="warden")
+    again = SCARE.model_copy(update={"summary": "周衡又一次威吓守钟人"})
+    script = {
+        ".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5)),
+        "点头": (nod, Ruling(needs_roll=False, minutes=1)),
+        "再吓他": (again, Ruling(needs_roll=False, repeat=True, skill="恐吓", clues_on_success=["c_diary"])),
+    }
+    game, cast, _ = make(module, fake, script, location="tower")
+    app = turn_graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "t-arbiter"}}
+    fake.queue(52)
+    for text in (".ra 恐吓", "点头"):
+        await run_turn(app, text, thread)
+    events, _ = await run_turn(app, "再吓他", thread)
+    assert [e["type"] for e in events if e["type"] in ("dice", "repeat")] == ["repeat"]
+    assert "c_diary" not in game.state.clues and "你还是没有被打动" in cast.npc_calls[-1][1]
+
+
+async def test_a_plain_roll_is_answered_at_once(module, fake):
+    game, cast, _ = make(module, fake, {})
+    fake.queue_totals(3)
+    app = turn_graph.build(game, InMemorySaver())
+    events, _ = await run_turn(app, ".r 1d6", {"configurable": {"thread_id": "t-r"}})
+    assert [e["text"] for e in events if e["type"] == "command"] == ["1d6 → 3"]
+    assert not cast.heard and not cast.reports and game.state.turn == 0  # no agent asked, no turn used
+
+
+async def test_the_sheet_and_sanity_stay_with_the_keeper(module, fake):
+    game, _, events = make(module, fake, {})
+    inv = game.state.investigator
+    refused = await game.command(".st 侦查99")
+    assert refused.kind == "refused" and "不能改人物卡" in refused.text and inv.skills["侦查"] == 55
+    assert (await game.command(".sc 1/1d6")).kind == "refused" and inv.san == 55  # nothing rolled
+    sheet = await game.command(".st")
+    assert sheet.kind == "sheet" and "侦查55" in sheet.text and "理智 55" in sheet.text
+    assert [e["kind"] for e in events if e["type"] == "command"] == ["refused", "refused", "sheet"]
+    assert game.state.turn == 0 and not game.state.log
+
+
+async def test_growth_waits_for_the_ending_and_comes_once(module, fake):
+    game, *_ = make(module, fake, {})
+    inv = game.state.investigator
+    inv.marks = ["侦查"]
+    early = await game.command(".en")
+    assert early.kind == "refused" and "结局" in early.text and inv.marks == ["侦查"]
+    game.state.ending = "stopped"
+    fake.queue_totals(80, 6)  # 80 > 55: 侦查 grows by 1D10 = 6
+    grown = await game.command(".en 图书馆使用")  # only what was ticked in play grows
+    assert grown.kind == "develop" and inv.skills["侦查"] == 61 and inv.skills["图书馆使用"] == 60
+    assert "已经做过" in (await game.command(".en")).text
+
+
+# -- the player's own roll ----------------------------------------------------------------
+PLEAD = Action(kind="talk", summary="周衡劝守钟人说出钟里的事", target="老守钟人", npc="warden", approach="说服")
+HARD_TALK = Ruling(
+    needs_roll=True, skill="说服", difficulty="困难", bonus=1, clues_on_success=["c_diary"], minutes=10,
+    reason="守钟人就在一旁盯着你，他护着钟楼；替代门槛，成功可取得 c_diary 守钟人的日记",
+)  # fmt: skip
+
+
+async def stream(app, inp, thread) -> tuple[list[dict], list[dict]]:
+    out, asks = [], []
+    async for mode, chunk in app.astream(inp, thread, stream_mode=["custom", "updates"]):
+        if mode == "custom":
+            out.append(chunk)
+        elif "__interrupt__" in chunk:
+            asks.append(chunk["__interrupt__"][0].value)
+    return out, asks
+
+
+async def test_the_player_throws_their_own_dice(module, fake):
+    """With someone at the screen the turn stops before the dice: the prompt shows what is
+    asked, the numbers and why, and only the throw rolls them. Under the result comes what
+    it led to."""
+    game, cast, _ = make(module, fake, {"劝他": (PLEAD, HARD_TALK)}, location="tower")
+    app = turn_graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "t-hand"}}
+    fake.queue(8)  # 说服 40, hard: 8 is an extreme success
+    out, asks = await stream(app, {"input": "劝他", "by_hand": True}, thread)
+    ask = asks[0]
+    assert ask["kind"] == "roll" and fake.values and not [e for e in out if e["type"] == "dice"]  # nothing thrown yet
+    assert (ask["skill"], ask["target"], ask["hard"], ask["extreme"], ask["need"], ask["bonus"]) == ("说服", 40, 20, 8, 20, 1)
+    assert ask["why"] == "守钟人就在一旁盯着你，他护着钟楼" and "c_diary" not in str(ask) and "日记" not in str(ask)
+    out, asks = await stream(app, Command(resume="roll"), thread)
+    kinds = [e["type"] for e in out]
+    assert not asks and kinds.index("dice") < kinds.index("outcome") < kinds.index("npc")
+    dice = next(e for e in out if e["type"] == "dice")
+    assert (dice["tens"], dice["units"], dice["kept"], dice["level"]) == ([0], 8, 0, "极难成功")
+    assert next(e for e in out if e["type"] == "outcome")["lines"] == ["老守钟人松了口：〔守钟人的日记〕"]
+    assert game.state.clues == ["c_diary"] and "已解锁" in cast.npc_calls[-1][1]
+
+
+async def test_ai_dice_do_not_wait(module, fake):
+    game, *_ = make(module, fake, {"劝他": (PLEAD, HARD_TALK)}, location="tower")
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90)
+    out, asks = await stream(app, {"input": "劝他", "by_hand": False}, {"configurable": {"thread_id": "t-ai"}})
+    assert [e["type"] for e in out].count("dice") == 1 and [a["kind"] for a in asks] == ["push"]  # rolled at once
+    assert "clues" not in asks[0] and asks[0]["need"] == 20 and asks[0]["left"] == 55 and asks[0]["luck"] is None
+    outcome = next(e for e in out if e["type"] == "outcome")["lines"]
+    assert outcome == ["还有一次机会：孤注一掷，或者花幸运"]  # ids stay home, the stakes travel
+
+
+def test_the_roll_prompt_never_gives_the_module_away(module, fake):
+    game, *_ = make(module, fake, {}, location="tower")
+
+    def why(reason: str) -> str:
+        return game._why(Ruling(needs_roll=True, skill="侦查", reason=reason))
+
+    assert why("守钟人就在场，绕到他柜前翻看需潜行避开注意；难度不低于说服·困难，成功可取得日记。") == "守钟人就在场，绕到他柜前翻看需潜行避开注意"
+    assert why("齿轮间里很暗，齿轮转得飞快") == "齿轮间里很暗，齿轮转得飞快"  # a place on screen, not a secret
+    assert why("c_gears 就在那里") == ""  # an id
+    assert why("他在钟里藏了东西，所以拦着人") == ""  # echoes a secret
+    assert why("守钟人的日记就锁在柜子里") == ""  # a clue not found yet
+    assert len(why("、".join(["守钟人坐在楼梯口打盹手里还攥着一块油布"] * 3))) == 40

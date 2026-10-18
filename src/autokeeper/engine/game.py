@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .. import skills, weather
+from ..agents import guard
 from ..agents.cast import Action, Cast, Ruling
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
@@ -23,9 +24,10 @@ from ..module.compiler import skill_name
 from ..module.schema import Event, Module
 from ..rules import commands
 from ..rules.bcdice import Level
+from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from . import fog
-from .state import GameState, parse_time, time_of_day
+from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, parse_time, time_of_day
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -47,6 +49,7 @@ class Turn:
     npc_lines: list[tuple[str, str]] = field(default_factory=list)
     performance: tuple[str, str] | None = None
     push: dict | None = None
+    earlier: CheckRecord | None = None  # a repeated attempt: this earlier check stands, nothing is rolled
     notes: list[str] = field(default_factory=list)
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
@@ -124,17 +127,31 @@ class Game:
 
     # -- dice commands ------------------------------------------------------------------
     async def command(self, text: str) -> commands.CommandResult:
+        """A dice-bot command answered at once, without using up a turn. A check (.ra) is not
+        one of them: it is an action like any other, ruled by the keeper (graph.which sends it
+        through parse). Nothing here changes the investigator behind the keeper's back: sanity
+        checks are the keeper's call, the sheet changes only in play, growth waits for the end."""
         st = self.state
-        st.turn += 1
         inv = st.investigator
-        result = commands.run(text, inv, self.rules)
-        st.add("dice", result.text, who=inv.name)
-        payload: dict[str, Any] = {"type": "command", "kind": result.kind, "text": result.text, "who": inv.name}
-        if result.kind == "check":
-            payload = {"type": "dice", "who": inv.name, **_check_view(result.data["check"])}
-        elif result.kind == "sanity":
-            payload = {"type": "sanity", "who": inv.name, **_sanity_view(result.data["sanity"])}
-        await self.emit(payload)
+        what = commands.kind(text)
+        if what == "check" and commands.asked(text):
+            result = _refused("检定要在回合里交给守秘人裁定。")
+        elif what == "sanity":
+            result = _refused("理智检定由守秘人发起：调查员撞见可怕的东西时，系统会替你掷。")
+        elif what == "set" and text.strip()[3:].strip():
+            result = _refused("游戏中不能改人物卡，技能和属性只随检定、受伤和成长变化。只打 .st 可以看人物卡。")
+        elif what == "develop" and not st.ending:
+            result = _refused("成长检定要等这局结束：结局出来以后再打 .en。")
+        elif what == "develop" and inv.id in st.developed:
+            result = _refused(f"{inv.name}这局的成长检定已经做过了。")
+        else:
+            # Growth covers the skills ticked in play: naming others does not add them.
+            result = commands.run(".en" if what == "develop" else text, inv, self.rules)
+            if what == "develop":
+                st.developed.append(inv.id)
+            if result.kind in ("roll", "develop"):  # things that happened at the table; lookups do not count
+                st.add("dice", result.text, who=inv.name)
+        await self.emit({"type": "command", "kind": result.kind, "text": result.text, "who": inv.name})
         await self.emit({"type": "sheet"})
         return result
 
@@ -145,6 +162,8 @@ class Game:
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
         action = await self.cast.intent(st, text)
+        # What a dice command asks for is read off the command, never taken from the model.
+        action = action.model_copy(update={"asked": commands.asked(text)})
         if action.echo and action.kind != "meta":  # something on screen at once, while the rest is worked out
             await self.emit({"type": "echo", "text": action.echo})
         return action
@@ -166,7 +185,129 @@ class Game:
                 ruling = self._steer(ruling, applied)
             elif len(self.backstage) > waiting:
                 ruling = ruling.model_copy(update={"note": LATER})
-        return ruling
+        return self._no_reroll(action, ruling, heading or self.state.location)
+
+    # -- no re-rolls ------------------------------------------------------------------
+    def _no_reroll(self, action: Action, ruling: Ruling, at: str) -> Ruling:
+        """CoC does not repeat a check: a failure may be pushed once, not rolled again while
+        nothing has changed. The arbiter sees the recent checks and marks a repeat; the engine
+        catches the plain re-roll even when the arbiter does not."""
+        earlier = self._earlier(action, ruling, at)
+        if earlier is not None:
+            return ruling.model_copy(update={"needs_roll": False, "repeat": True, "skill": earlier.skill})
+        return ruling.model_copy(update={"repeat": False}) if ruling.repeat else ruling  # nothing there to repeat
+
+    def _earlier(self, action: Action, ruling: Ruling, at: str) -> CheckRecord | None:
+        """The check this action repeats: the one the arbiter means, or an immediate re-roll.
+        That is the investigator's own last check, failed, of the same skill on the same
+        target at the same place, and nothing else done by them since; nothing found or
+        happened at the table meanwhile, and not much time gone. Another skill, another
+        target, something new, an action in between or time passed: a new attempt."""
+        st = self.state
+        inv = st.investigator
+        skill = canonical(ruling.skill or (action.asked.skill if action.asked else ""))
+        if ruling.repeat:
+            mine = [r for r in st.recent_checks() if r.who == inv.id]
+            return next((r for r in reversed(mine) if r.skill == skill or not skill), None)
+        last = next((r for r in reversed(st.checks) if r.who == inv.id), None)
+        if not ruling.needs_roll or last is None or last.passed:
+            return None
+        same = (last.turn, last.at, last.skill, last.aim) == (self._acted_before(), at, skill, _aim(action))
+        quiet = last.seen == self._seen() and st.minutes - last.minutes < RECHECK_AFTER
+        return last if same and quiet else None
+
+    def _acted_before(self) -> int:
+        """The turn of the acting investigator's previous action (0 if none is on record):
+        companions acting in between do not make a repeat any less immediate."""
+        st = self.state
+        name = st.investigator.name
+        return max((e.turn for e in st.log if e.kind == "player" and e.who == name and e.turn < st.turn), default=0)
+
+    def _seen(self) -> int:
+        """Clues found, flags set and events fired so far. It only grows: a different count
+        means something new has come up."""
+        st = self.state
+        return len(st.clues) + len(st.flags) + len(st.fired)
+
+    def _record(self, action: Action, check: Check) -> None:
+        st = self.state
+        st.checks.append(CheckRecord(
+            turn=st.turn, who=st.investigator.id, at=st.location, skill=check.name, npc=action.npc,
+            target=action.target.strip(), text=check.describe(), passed=check.passed, minutes=st.minutes,
+        ))  # fmt: skip
+        del st.checks[:-KEEP_CHECKS]
+
+    # -- the player's own roll -----------------------------------------------------------
+    def roll_prompt(self, action: Action, ruling: Ruling) -> dict[str, Any]:
+        """What a player sees before throwing their own dice (graph.ask_roll): the check the
+        keeper asks for, the numbers to beat, and one line on why. Nothing it shows is
+        anything the module keeps back."""
+        inv = self.state.investigator
+        skill = canonical(ruling.skill)
+        target = inv.value(skill)
+        return {
+            "who": inv.name,
+            "skill": skill,
+            "difficulty": ruling.difficulty,
+            "bonus": max(-2, min(2, ruling.bonus)),
+            "target": target,
+            "hard": target // 2,
+            "extreme": target // 5,
+            "need": _threshold(target, ruling.difficulty),
+            "action": action.summary,
+            "why": self._why(ruling),
+        }
+
+    def _why(self, ruling: Ruling) -> str:
+        """The arbiter's reason as far as a player may read it: its opening clauses, up to the
+        first one that names a clue, a flag, an id, what success would bring or anything that
+        echoes a secret. The reason is written for the keeper; this is its safe beginning."""
+        st, m = self.state, self.m
+        hidden = {f"clue:{c.id}": f"{c.title}。{c.text}" for c in m.clues if c.id not in st.clues}
+        hidden |= {f"secret:{n.id}:{i}": s for n in m.npcs for i, s in enumerate(n.secrets)}
+        hidden |= {f"flag:{k}": v for k, v in m.flags.items() if k not in st.flags}
+        hidden |= {"truth": m.truth, "notes": m.keeper_notes}
+        visible = {f for loc in m.locations for f in [loc.name, *loc.features]} | {n.name for n in m.npcs}  # on screen anyway
+        titles = [c.title for c in m.clues if c.id not in st.clues and len(c.title) >= 2 and c.title not in visible]
+        kept: list[str] = []
+        for clause in _CLAUSE.split(ruling.reason):
+            clause = clause.strip()
+            if not clause:
+                continue
+            if _BACKSTAGE.search(clause) or any(t in clause for t in titles) or guard.leaks(clause, hidden, n=4, hits=1):
+                break
+            if kept and len("，".join([*kept, clause])) > WHY_LEN:
+                break
+            kept.append(clause)
+        why = "，".join(kept)
+        return why if len(why) <= WHY_LEN else why[: WHY_LEN - 1] + "…"
+
+    def _led_to(self, won: list[str], done: list[str], passed: bool, npc: str = "", offer: dict | None = None) -> list[str]:
+        """What a roll led to, written under it: the clues it won and who gave them up, what it
+        set in motion, or that it came to nothing. Only what the investigator now knows."""
+        m = self.m
+        lines = []
+        for cid in won:
+            clue = m.clue(cid)
+            owner = next((n for n in m.npcs if cid in n.clues), None)
+            got = f"{owner.name}松了口：〔{clue.title}〕" if owner else f"获得线索〔{clue.title}〕"
+            lines.append(got if passed else f"没过，可关键线索还是到手了：〔{clue.title}〕，代价看叙述")
+        lines += [m.flags[f] for f in done if m.flags.get(f)]
+        if offer is not None:
+            lines.append("还有一次机会：孤注一掷，或者花幸运")
+        if not lines:
+            name = next((n.name for n in m.npcs if n.id == npc), "")
+            lines.append(f"{name}{'松动了' if passed else '不为所动'}" if name else "没有新的发现" if passed else "没有收获")
+        return lines
+
+    def _settle(self, record: CheckRecord | None, passed: bool | None = None, text: str = "") -> None:
+        """A check's final word once its turn is done: a push or luck may have changed the
+        result, and what the turn brought is not "something new" for the next attempt."""
+        if record is None:
+            return
+        if passed is not None:
+            record.passed, record.text = passed, text
+        record.minutes, record.seen = self.state.minutes, self._seen()
 
     # -- improvisation ----------------------------------------------------------------
     async def _improvise(
@@ -341,38 +482,57 @@ class Game:
                 st.minutes += minutes
                 await self._arrive(heading, turn)
 
-        # the check
-        passed = not ruling.needs_roll
-        if ruling.needs_roll and ruling.skill:
+        # the check: rolled once; a repeat is not rolled at all and gains nothing new
+        passed = not ruling.needs_roll and not ruling.repeat
+        if ruling.repeat:
+            turn.earlier = e = self._earlier(action, ruling, st.location)
+            if e is not None:  # tried again just now, to the same effect: the latest attempt
+                st.checks.remove(e)
+                st.checks.append(e)
+                e.turn = st.turn
+                await self.emit({"type": "repeat", "who": inv.name, "skill": e.skill, "text": e.text, "passed": e.passed})
+        elif ruling.needs_roll and ruling.skill:
             check = self.rules.check(inv, ruling.skill, DIFFICULTY_ZH.get(ruling.difficulty, Level.REGULAR), ruling.bonus)
             turn.checks.append(check)
             passed = check.passed
+            self._record(action, check)
             st.add("dice", check.describe(), who=inv.name)
             await self.emit({"type": "dice", "who": inv.name, **_check_view(check)})
             need = check.luck_needed()
             if not passed and (check.can_push or need is not None):
                 wanted = self._valid_clues(ruling.clues_on_success, action)
                 if wanted:
+                    luck = need if need is not None and need <= inv.luck else None
                     turn.push = {
                         "skill": check.name,
                         "target": check.target,
+                        "need": _threshold(check.target, ruling.difficulty),
                         "difficulty": ruling.difficulty,
                         "bonus": ruling.bonus,
                         "clues": wanted,
                         "flags": ruling.set_flags,
                         "can_push": check.can_push,
-                        "luck": need if need is not None and need <= inv.luck else None,
+                        "luck": luck,
+                        "left": inv.luck - (luck or 0),  # luck after paying for it
+                        "core": any(self.m.clue(c).core for c in wanted),  # dropping it still finds those, at a price
+                        "npc": action.npc if action.kind in ("talk", "perform") else "",
                         "value": check.value,
                     }
                     st.pending_push = turn.push
             if not passed and turn.push is None:  # no second chance offered: do not sit on core clues
                 await self._fail_forward(self._valid_clues(ruling.clues_on_success, action), turn)
 
+        known = set(st.flags)
         gained = self._valid_clues(ruling.auto_clues, action)
         if passed:
             gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             await self._flags(ruling.set_flags, turn)
         await self._gain(gained[: MAX_FOUND if action.target else 1], turn, action)  # one look around does not empty a room
+        if turn.checks:  # what the roll led to, written under it
+            won = [c for c in turn.clues if c in ruling.clues_on_success]
+            done = [f for f in ruling.set_flags if f in st.flags and f not in known]
+            npc = action.npc if action.kind in ("talk", "perform") else ""
+            await self.emit({"type": "outcome", "who": inv.name, "lines": self._led_to(won, done, passed, npc, offer=turn.push)})
         if ruling.now:  # the director's scene plays out, whatever the dice said
             await self._flags(ruling.now, turn)
         if ruling.note:
@@ -386,6 +546,8 @@ class Game:
         if self.improvising:
             await self._nudge(turn)
         await self._check_ending(turn)
+        if turn.checks or turn.earlier:
+            self._settle(st.checks[-1])
         return turn
 
     async def push(self, mode: str) -> Turn:
@@ -395,22 +557,29 @@ class Game:
         turn = Turn()
         if not pending:
             return turn
+        record = st.checks[-1] if st.checks and st.checks[-1].turn == st.turn else None  # the check on offer
+        inv, npc, known = st.investigator, pending.get("npc", ""), set(st.flags)
         if mode == "drop":
             await self._fail_forward(pending["clues"], turn)
+            won = [c for c in turn.clues if c in pending["clues"]]
+            await self.emit({"type": "outcome", "who": inv.name, "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]})
+            self._settle(record)
             return turn
-        inv = st.investigator
         diff = DIFFICULTY_ZH.get(pending["difficulty"], Level.REGULAR)
-        if mode == "luck" and pending.get("luck") is not None:
+        lucky = mode == "luck" and pending.get("luck") is not None
+        if lucky:
             inv.luck -= pending["luck"]
             passed = True
             st.add("dice", f"花费幸运 {pending['luck']} 点，{pending['skill']} 检定改为成功", who=inv.name)
             await self.emit({"type": "luck", "who": inv.name, "spent": pending["luck"], "left": inv.luck})
+            self._settle(record, True, f"{record.text}，花 {pending['luck']} 点幸运改为成功" if record else "")
         else:
             check = self.rules.check(inv, pending["skill"], diff, pending["bonus"], pushed=True, target=pending["target"])
             turn.checks.append(check)
             passed = check.passed
             st.add("dice", check.describe(), who=inv.name)
             await self.emit({"type": "dice", "who": inv.name, **_check_view(check)})
+            self._settle(record, check.passed, check.describe())
             if not passed:
                 turn.notes.append("孤注一掷失败：后果一定发生，而且要狠")
         if passed:
@@ -418,7 +587,16 @@ class Game:
             await self._gain(pending["clues"], turn, None)
         else:
             await self._fail_forward(pending["clues"], turn, pushed=True)  # a pushed roll was the last chance: the clue comes, at a price
+        won = [c for c in turn.clues if c in pending["clues"]]
+        done = [f for f in pending.get("flags", []) if f in st.flags and f not in known]
+        lines = self._led_to(won, done, passed, npc)
+        if lucky:
+            lines.insert(0, f"花了 {pending['luck']} 点幸运，算作成功")
+        elif not passed:
+            lines.insert(0, "孤注一掷也没成：后果会找上门")
+        await self.emit({"type": "outcome", "who": inv.name, "lines": lines})
         await self._check_ending(turn)
+        self._settle(record)
         return turn
 
     async def talk(self, turn: Turn) -> None:
@@ -660,14 +838,18 @@ class Game:
         inv = st.investigator
         action = turn.action
         assert action is not None
-        said = action.speech or action.summary
-        parts = [f"（系统：{st.clock}，{m.location(st.location).name}。{inv.name}（{inv.occupation}）对你说：「{said}」"]
+        said = f"对你说：「{action.speech}」" if action.speech else f"找上你：{action.summary}"  # a dice command says nothing
+        parts = [f"（系统：{st.clock}，{m.location(st.location).name}。{inv.name}（{inv.occupation}）{said}"]
         if action.approach:
             parts.append(f"方式：{action.approach}。")
         mine = [c for c in turn.clues if m.clue(c).npc == npc_id or c in m.npc(npc_id).clues]
         if turn.checks:
             c = turn.checks[-1]
             parts.append(f"检定：{c.name} {c.level.zh}，{'你被打动了或被拆穿了' if c.passed else '你没有被打动'}。")
+        elif turn.earlier is not None:
+            e = turn.earlier
+            moved = "你已经被打动了或被拆穿了" if e.passed else "你还是没有被打动"
+            parts.append(f"检定：同样的{e.skill}刚才已经试过，不重掷，结果照旧：{moved}。")
         if mine:
             parts.append("已解锁，现在可以说出：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine) + "。")
         else:
@@ -714,6 +896,18 @@ class Game:
                 out.append(f"回到了 {m.location(turn.arrived).name}。")
         if turn.checks:
             out += [f"检定：{c.describe()}" for c in turn.checks]
+        elif turn.earlier is not None:
+            e = turn.earlier
+            if e.passed:
+                out.append(f"检定：不重掷。这件事刚才已经检定成功（{e.text}），结果照旧，这次没有新的收获。")
+            else:
+                out.append(
+                    f"检定：不重掷。{inv.name}刚才已经这样试过，失败了（{e.text}），情况没变，结果照旧。"
+                    "写出再试一次也不管用：要换个办法，或者拿到新的线索、筹码，局面才会松动。"
+                )
+        elif a and a.asked and a.kind != "move":
+            why = turn.ruling.reason if turn.ruling else ""
+            out.append(f"检定：玩家要求{a.asked.skill}检定，裁定这次不用掷" + (f"（{why}）" if why else "") + "。")
         elif a and a.kind not in ("move",):
             out.append("检定：无需检定")
         if turn.push:
@@ -783,14 +977,41 @@ ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 
 
+WHY_LEN = 40  # characters of the arbiter's reason a roll prompt may show
+_CLAUSE = re.compile(r"[，,；;。！!？?\n]")
+# Backstage talk in a reason: ids and schema words, clues, gates, flags, rewards, dice mechanics.
+_BACKSTAGE = re.compile(r"[A-Za-z_]{2,}|线索|门槛|解锁|标记|获得|取得|拿到|得到|找到|发现|给出|交出|模组|剧情|难度|检定|骰")
+
+
+def _threshold(target: int, difficulty: str) -> int:
+    return {"困难": target // 2, "极难": target // 5}.get(difficulty, target)
+
+
+def _refused(text: str) -> commands.CommandResult:
+    return commands.CommandResult("refused", text)
+
+
+def _aim(action: Action) -> str:
+    """Who or what an action is aimed at, as a check record keeps it (CheckRecord.aim)."""
+    return action.npc or action.target.strip()
+
+
 def _check_view(c: Check) -> dict[str, Any]:
+    # Every candidate shares the units die; bonus or penalty dice add tens dice, and the
+    # value is the candidate that counted (BCDice picks it). 100 is tens 00 with units 0.
+    rolled = c.roll.candidates or [c.value]
     return {
         "skill": c.name,
         "target": c.target,
+        "hard": c.target // 2,
+        "extreme": c.target // 5,
         "difficulty": {Level.REGULAR: "常规", Level.HARD: "困难", Level.EXTREME: "极难"}.get(c.difficulty, "常规"),
         "bonus": c.bonus,
         "value": c.value,
         "candidates": c.roll.candidates,
+        "tens": [(v // 10) % 10 * 10 for v in rolled],
+        "units": rolled[0] % 10,
+        "kept": rolled.index(c.value) if c.value in rolled else 0,
         "level": c.level.zh,
         "passed": c.passed,
         "pushed": c.pushed,

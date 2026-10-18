@@ -156,10 +156,11 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
 
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens import RollModal
     from autokeeper.tui.widgets import StoryLog
 
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
     async with app.run_test(size=(140, 44)) as pilot:
@@ -172,16 +173,117 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         screen = app.screen
         assert isinstance(screen, NetGameScreen) and screen.my_turn and screen.seat == "zhouheng"
         assert not screen.m.truth and not screen.m.clue("c_notice").text  # not found yet
+        fake.queue_totals(5)
+        screen.query_one(Input).value = ".r 1d6"
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if "1d6 → 5" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+                break
+        assert screen.my_turn  # a plain roll leaves the turn with you
+        fake.queue(30)  # reading the board takes a 侦查 roll, thrown on this screen
         screen.query_one(Input).value = "我看看告示栏"
         await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)
-            if "周衡（小明）：我看看告示栏" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+            if isinstance(app.screen, RollModal):
                 break
+        assert isinstance(app.screen, RollModal) and fake.values
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if "↳ 获得线索〔广场告示〕" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+                break  # the dice have settled, and under them what they led to
         lines = "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
-        assert "周衡（小明）：我看看告示栏" in lines and "叙事" in lines
+        assert "周衡（小明）：我看看告示栏" in lines and "↳ 获得线索〔广场告示〕" in lines and "叙事" in lines
         notice = hub.m.clue("c_notice")
         assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
+    await closed(task)
+
+
+class LeverCast(TableCast):
+    """Pulling the lever stops the bell: the sample module's happy ending."""
+
+    async def arbiter(self, state, action, at=None):
+        if "制动杆" in action.summary:
+            return Ruling(needs_roll=False, minutes=5, set_flags=["bell_stopped"])
+        return await super().arbiter(state, action, at)
+
+
+async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(update={"marks": ["侦查"]}, deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋", "marks": []}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-dice", human=[lead.id, "lin"])
+    hub = Hub(EXAMPLE, state=state, cast=LeverCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    url = f"ws://127.0.0.1:{hub.port}/ws"
+    async with aiohttp.ClientSession() as http:
+        a, b = await http.ws_connect(url), await http.ws_connect(url)
+        for ws, name, seat in ((a, "小明", "zhouheng"), (b, "小红", "lin")):
+            await ws.send_json({"t": "hello", "name": name})
+            await until(ws, lambda x: x["t"] == "welcome")
+            await ws.send_json({"t": "sit", "investigator": seat})
+        assert (await until(a, lambda x: x["t"] == "turn"))["investigator"] == "zhouheng"
+        fake.queue_totals(4)
+        await a.send_json({"t": "act", "text": ".r 1d6"})
+        assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command"))["ev"]["text"] == "1d6 → 4"
+        await a.send_json({"t": "act", "text": ".ra 侦查"})  # still 周衡's turn: the roll did not use it up
+        heard = []
+        while not heard or heard[-1] != "turn":
+            msg = await asyncio.wait_for(a.receive_json(), 5.0)
+            heard.append(msg["ev"]["type"] if msg["t"] == "event" else msg["t"])
+        assert "error" not in heard and heard.index("said") < heard.index("keeper_end")  # ruled and told: the turn is spent
+        await b.send_json({"t": "act", "text": ".en"})
+        early = await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "command" and x["ev"]["who"] == "林秋")
+        assert early["ev"]["kind"] == "refused" and "结局" in early["ev"]["text"]
+        await b.send_json({"t": "act", "text": "我四下看看"})  # refused, and still her turn
+        await until(a, lambda x: x["t"] == "turn" and x["investigator"] == "zhouheng")
+        fake.queue_totals(3, 2)  # the ending's 理智 +1D6, for each of them
+        await a.send_json({"t": "act", "text": "我拉下制动杆"})
+        await until(a, lambda x: x["t"] == "over")
+        fake.queue_totals(80, 6)  # 80 > 55: 侦查 grows by 6
+        await a.send_json({"t": "act", "text": ".en"})
+        grown = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command")
+        assert grown["ev"]["who"] == "周衡" and "侦查 成长检定 80 → +6" in grown["ev"]["text"]
+        await a.send_json({"t": "act", "text": ".en"})
+        assert "已经做过" in (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "command"))["ev"]["text"]
+        await a.close()
+        await b.close()
+    await closed(task)
+    assert hub.state.investigators[0].skills["侦查"] == 61
+
+
+class NoticeCast(TableCast):
+    """Reading the notice board takes a 侦查 roll."""
+
+    async def arbiter(self, state, action, at=None):
+        if "告示栏" in action.summary and "c_notice" not in state.clues:
+            return Ruling(needs_roll=True, skill="侦查", minutes=5, clues_on_success=["c_notice"], reason="告示贴得很高，字又小")
+        return await super().arbiter(state, action, at)
+
+
+async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        ws = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await ws.send_json({"t": "hello", "name": "小明"})
+        await until(ws, lambda x: x["t"] == "welcome")
+        await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await until(ws, lambda x: x["t"] == "turn")
+        fake.queue(30)
+        await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        offer = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
+        assert offer["kind"] == "roll" and (offer["skill"], offer["target"], offer["why"]) == ("侦查", 55, "告示贴得很高，字又小")
+        assert fake.values  # the dice wait for the player
+        await ws.send_json({"t": "choice", "mode": "roll"})
+        led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome")
+        assert led["ev"]["lines"] == ["获得线索〔广场告示〕"] and not fake.values
+        await ws.close()
     await closed(task)
 
 

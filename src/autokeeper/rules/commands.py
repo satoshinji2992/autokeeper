@@ -2,16 +2,23 @@
 
     .r 1d6+1          plain roll           .ra 侦查 / .rc 困难侦查 / .ra 侦查50
     .rab 侦查 / .rap2 侦查  bonus / penalty dice
-    .sc 1/1d6         sanity check         .st 侦查60 hp-2 / .st 理智+3
+    .sc 1/1d6         sanity check         .st 侦查60 hp-2 / .st 理智+3 / .st (show the sheet)
     .coc [n]          roll characteristics .en [技能]  development roll
     .ti / .li         bout of madness (real time / summary)
+
+run() is the bare dice bot, as the MCP keeper uses it. In a game the player's commands
+go through Game.command, which keeps the keeper in charge: a check is only a request
+(asked() reads it, the turn pipeline rules it), and nothing changes the sheet behind
+the keeper's back.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel
 
 from .bcdice import Level
 from .catalog import canonical
@@ -20,40 +27,77 @@ from .coc import DIFFICULTY_ZH, Investigator, Rules
 
 @dataclass
 class CommandResult:
-    kind: str  # roll / check / sanity / set / coc / develop / madness / error
+    kind: str  # roll / check / sanity / set / sheet / coc / develop / madness / refused / error
     text: str
     data: dict[str, Any] = field(default_factory=dict)
 
 
+class Asked(BaseModel):
+    """The check a player asked for with .ra / .rc. Only a request: the arbiter decides
+    whether it is rolled, how hard, and with how many bonus or penalty dice."""
+
+    skill: str
+    difficulty: Literal["常规", "困难", "极难"] = "常规"
+    bonus: int = 0
+
+
 _CHECK = re.compile(
-    r"^\.(?:ra|rc)(?P<mode>[bp])?(?P<n>\d)?\s*(?P<diff>困难|极难)?\s*(?P<name>[^\d\s+-]+?)\s*(?P<value>\d+)?\s*$"
+    r"^\.(?:ra|rc)(?P<mode>[bp])?(?P<n>\d)?\s*(?P<diff>困难|极难)?\s*(?P<name>[^\d\s+-]+?)\s*(?P<value>\d+)?\s*$", re.IGNORECASE
 )
 _SC = re.compile(r"^\.sc\s*(?P<ok>[\dDd+\-]+)\s*/\s*(?P<bad>[\dDd+\-]+)\s*$")
 _ST_ITEM = re.compile(r"(?P<name>[^\d\s+\-]+?)\s*(?P<op>[+\-])?\s*(?P<value>\d+)")
+# Longer prefixes first: ".ra" before ".r".
+_KINDS = ((".ra", "check"), (".rc", "check"), (".sc", "sanity"), (".st", "set"), (".coc", "coc"), (".en", "develop"),
+          (".ti", "madness"), (".li", "madness"), (".r", "roll"))  # fmt: skip
 
 
 def is_command(text: str) -> bool:
     return text.strip().startswith((".", "。"))
 
 
+def kind(text: str) -> str:
+    """Which command this is, without running it; "error" for anything unknown."""
+    low = text.strip().replace("。", ".", 1).lower()
+    return next((k for prefix, k in _KINDS if low.startswith(prefix)), "error")
+
+
+def asked(text: str) -> Asked | None:
+    """The check a .ra / .rc command asks for, without rolling it. None for anything else,
+    and for a check typed wrong (run() explains the format). A number after the skill
+    (.ra 侦查50) is left out: in a game the sheet says how good the investigator is."""
+    text = text.strip().replace("。", ".", 1)
+    if kind(text) != "check":
+        return None
+    m = _match_check(text)
+    if not m:
+        return None
+    return Asked(skill=canonical(m["name"]), difficulty=m["diff"] or "常规", bonus=_bonus(m))  # type: ignore[arg-type]
+
+
+def instant(text: str) -> bool:
+    """A command answered at once, outside the story: everything but a check."""
+    return is_command(text) and asked(text) is None
+
+
 def run(text: str, inv: Investigator | None, rules: Rules) -> CommandResult:
     text = text.strip().replace("。", ".", 1)
     low = text.lower()
+    what = kind(text)
     try:
-        if low.startswith((".ra", ".rc")):
-            return _check(low[:3] + text[3:], inv, rules)
-        if low.startswith(".sc"):
+        if what == "check":
+            return _check(text, inv, rules)
+        if what == "sanity":
             return _sanity(text, inv, rules)
-        if low.startswith(".st"):
+        if what == "set":
             return _set(text[3:], inv)
-        if low.startswith(".coc"):
+        if what == "coc":
             return _coc(text[4:], rules)
-        if low.startswith(".en"):
+        if what == "develop":
             return _develop(text[3:], inv, rules)
-        if low.startswith((".ti", ".li")):
+        if what == "madness":
             table = "BMR" if low.startswith(".ti") else "BMS"
             return CommandResult("madness", rules.dice.table(table), {"table": table})
-        if low.startswith(".r"):
+        if what == "roll":
             expr = text[2:].strip() or "1D100"
             roll = rules.dice.roll(expr)
             return CommandResult("roll", f"{expr} → {roll.total if roll.total is not None else roll.text}", {"text": roll.text})
@@ -68,12 +112,20 @@ def _need(inv: Investigator | None) -> Investigator:
     return inv
 
 
+def _match_check(text: str) -> re.Match[str] | None:
+    return _CHECK.match(text.replace("（", "(").replace("）", ")"))
+
+
+def _bonus(m: re.Match[str]) -> int:
+    n, mode = int(m["n"] or 1), (m["mode"] or "").lower()
+    return n if mode == "b" else -n if mode == "p" else 0
+
+
 def _check(text: str, inv: Investigator | None, rules: Rules) -> CommandResult:
-    m = _CHECK.match(text.replace("（", "(").replace("）", ")"))
+    m = _match_check(text)
     if not m:
         raise ValueError("格式：.ra [困难|极难]技能[数值]，例如 .ra 侦查、.rab 图书馆使用、.ra 困难聆听")
-    n = int(m["n"] or 1)
-    bonus = n if m["mode"] == "b" else -n if m["mode"] == "p" else 0
+    bonus = _bonus(m)
     difficulty = DIFFICULTY_ZH.get(m["diff"] or "常规", Level.REGULAR)
     name = canonical(m["name"])
     if m["value"]:
@@ -100,6 +152,8 @@ def _sanity(text: str, inv: Investigator | None, rules: Rules) -> CommandResult:
 
 def _set(body: str, inv: Investigator | None) -> CommandResult:
     inv = _need(inv)
+    if not body.strip():
+        return CommandResult("sheet", sheet(inv))
     changes = []
     for m in _ST_ITEM.finditer(body):
         name, op, value = m["name"], m["op"], int(m["value"])
@@ -110,6 +164,20 @@ def _set(body: str, inv: Investigator | None) -> CommandResult:
     if not changes:
         raise ValueError("格式：.st 技能数值，例如 .st 侦查60 图书馆使用70 hp-2")
     return CommandResult("set", "已更新：" + "，".join(changes), {"changes": changes})
+
+
+def sheet(inv: Investigator) -> str:
+    """The investigator sheet as text (.st with nothing after it)."""
+    rows = [
+        f"{inv.name}（{inv.occupation}，{inv.age} 岁）HP {inv.hp}/{inv.hp_max} MP {inv.mp}/{inv.mp_max} 理智 {inv.san} 幸运 {inv.luck}",
+        " ".join(f"{k}{v}" for k, v in inv.characteristics.items()),
+        " ".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1])),
+    ]
+    if inv.conditions:
+        rows.append("状态：" + "、".join(inv.conditions))
+    if inv.marks:
+        rows.append("这局成功过、结局后可以成长：" + "、".join(inv.marks))
+    return "\n".join(rows)
 
 
 def _current(inv: Investigator, name: str) -> int:
