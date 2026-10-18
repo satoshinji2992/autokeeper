@@ -1,7 +1,8 @@
 """The agents of one game and what each of them is allowed to see.
 
     intent        player's words -> neutral structured action (strips rhetoric); a bare
-                  dice command (.ra 恐吓) becomes the attempt it stands for, aimed from the scene
+                  dice command (.ra 恐吓) becomes the attempt it stands for, aimed from the scene;
+                  sees the scene as the players know it (its words reach their screen)
     arbiter       structured action -> which check, how hard, which clues it can uncover;
                   sees the recent checks, so a repeated attempt is not rolled again
     npc:<id>      one session per NPC; knows only its own file and its own conversations
@@ -9,6 +10,7 @@
                   reads a location file only when the party walks in
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
     investigator  AI players (companions and autoplay); see only what players see
+                  (engine/autoplay.situation); also writes the ideas a player asks for (F8)
     vision        reads sketches
 """
 
@@ -23,13 +25,15 @@ from pydantic.json_schema import SkipJsonSchema
 
 from .. import skills
 from ..config import Config
+from ..engine import fog
 from ..engine.state import GameState, format_time, time_of_day
 from ..harness import OnDelta, Reply, Session, Summarizer
 from ..module import graph as module_graph
 from ..module.compiler import skill_name
 from ..module.schema import NPC, Module
-from ..prefs import Prefs
+from ..prefs import LINES, Prefs
 from ..rules import commands
+from ..rules.coc import Investigator
 from . import guard
 from .director import DIRECTOR_SYSTEM, Improv
 from .director import context as director_context
@@ -80,6 +84,14 @@ class Sketch(BaseModel):
     description: str = Field(description="画面内容的中文描述")
     resemblance: float = Field(description="与要求画的对象有多像，0 到 1")
     notes: str = Field("", description="值得守秘人注意的细节")
+
+
+class Ideas(BaseModel):
+    """Three things the player's own investigator could do next (F8, /suggest)."""
+
+    look: str = Field(description="调查：查看、翻找或检查一样具体的东西")
+    ask: str = Field(description="社交：问在场的人、去找见过的人打听，或者和同伴商量")
+    dare: str = Field(description="大胆或谨慎的一步：冒个险，或者稳妥地退一步、等一等，看眼下哪个更合适")
 
 
 def _schema(model: type[BaseModel]) -> dict:
@@ -197,6 +209,7 @@ CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录
 
 INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员「{name}」（{occupation}）。
 {sheet}
+开场时你知道的：{hook}
 
 你只知道守秘人告诉你的事。目标是查清真相、活下来。每次只说一个具体行动，用第一人称，不超过 40 字，
 比如“我翻看书台上的折扇”“我去拾遗书局”“我问小顺子：钥匙在哪？”。
@@ -207,6 +220,15 @@ INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员
 - 用你擅长的技能解决问题，别硬碰你不会的。时间紧时先追关键线索。
 - 这一带查完了、能去的地方也去过了，或者在等什么事（天黑、约好的明天），就等待或休息，
   让时间往前走，比如“我们等到天黑再来”“先回去睡一觉，明早再去报馆”。"""
+
+SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家想想调查员「{name}」（{occupation}）下一步可以做什么。
+{sheet}
+开场时玩家知道的：{hook}
+
+你只知道下面告诉你的情况：守秘人讲过的事，玩家见过的人，去过和听说过的地方，找到的线索。模组里还藏着什么，你不知道，也别去猜。
+想三个方向不同的行动，每个都是玩家在桌上会说的一句话：第一人称，{name}的口吻，具体到人、东西或地方，不超过 30 字，
+比如“我蹲下看看门槛上的泥印”“我问掌柜：昨晚谁来过？”“我先回客栈睡一觉，明早再来”。
+只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
 
 VISION_SYSTEM = "你是跑团里的读图员，负责看玩家画的草图或模组里的图片，用中文客观描述，并按要求判断相似度。"
 
@@ -269,6 +291,25 @@ class Cast:
             f"可调查：{'、'.join(loc.features) or '无'}\n在场 NPC：{npcs}\n相邻地点：{exits}\n其他地点（要多走一段路）：{known}"
         )
 
+    def bearings(self, state: GameState) -> str:
+        """The scene as the action parser gets it, no more than the players know: what they see
+        here, who is here, and the places they could head for (engine/fog.py), by the names
+        they know. The parser's summary and first beat go up on the player's screen, so a name
+        it was never given cannot leak there, and a secret place has no id to be guessed into.
+        Not the place's list of things to search either: some of those are the keeper's."""
+        m = self.module
+        loc = m.location(state.location)
+        here = m.npcs_at(loc.id)
+        met = {n.id for n in here if n.id in state.npcs and state.npcs[n.id].met}
+        people = "、".join(f"{n.name}({n.id})" for n in here if n.id in met) or "无"
+        if strangers := [f"{n.name}({n.id})" for n in here if n.id not in met]:
+            people += f"；还没通名：{'、'.join(strangers)}（summary 和 echo 里照玩家的叫法称呼他们）"
+        ways = "、".join(f"{name}({pid})" for pid, name in fog.bearings(m, state).items()) or "无"
+        return (
+            f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
+            f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}"
+        )
+
     # -- agents -------------------------------------------------------------------
     def _intent(self, state: GameState) -> Session:
         return self._open("intent", "intent", INTENT_SYSTEM, schema=_schema(Action))
@@ -294,12 +335,12 @@ class Cast:
         inv = state.investigator
         asked = commands.asked(text)
         if asked is None:
-            reply = await self._send("intent", s, state, f"【场景】\n{self.scene(state)}\n【调查员】{inv.name}\n【玩家】{text}")
+            reply = await self._send("intent", s, state, f"【场景】\n{self.bearings(state)}\n【调查员】{inv.name}\n【玩家】{text}")
             return _parse(Action, reply.data, {"kind": "other", "summary": text})
         # A bare dice command names a skill and nothing else: who or what it is aimed at has
         # to come from the scene and the last few lines of play.
         prompt = (
-            f"【场景】\n{self.scene(state)}\n【刚才的经过】\n{_recent(state)}\n【调查员】{inv.name}\n"
+            f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state)}\n【调查员】{inv.name}\n"
             f"【玩家】{text}（骰子指令：{inv.name}想在这里用「{asked.skill}」）"
         )
         reply = await self._send("intent", s, state, prompt)
@@ -496,12 +537,28 @@ class Cast:
     async def investigator(self, state: GameState, inv_id: str, situation: str) -> str:
         inv = state.find(inv_id)
         key = f"investigator:{inv_id}"
-        sheet = "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
-        system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=sheet)
+        system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
         s = self._open(key, "investigator", system)
         # Remember where and when each move was made; the latest events come with every situation.
         reply = await self._send(key, s, state, situation, remember=situation.split("\n", 1)[0])
         return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
+
+    async def suggest(self, state: GameState, inv_id: str, situation: str) -> list[str]:
+        """Ideas for a player's own investigator (F8, /suggest): three actions, written by the
+        investigator role from the same view the AI players get. A stateless call kept out of
+        the save, since asking for ideas is not a move in the game; only its cost is counted.
+        The player's lines (prefs.py) ride along: an idea is something they would say."""
+        inv = state.find(inv_id)
+        key = f"suggest:{inv_id}"
+        if key not in self.sessions:
+            system = SUGGEST_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
+            self.sessions[key] = Session("suggest", self.cfg.role("investigator"), system, schema=_schema(Ideas), key=key)
+        lines = "、".join(f"{k}（{LINES[k]}）" for k in self.prefs.lines)
+        reply = await self.sessions[key].send(situation, extra=f"\n（玩家不想碰的题材：{lines}。三个主意都别往这上面引。）" if lines else "")
+        state.record_usage("suggest", reply)
+        ideas = _parse(Ideas, reply.data, {"look": "", "ask": "", "dare": ""})
+        said = (" ".join(t.split()).strip("“”\"「」") for t in (ideas.look, ideas.ask, ideas.dare))
+        return [t for t in dict.fromkeys(said) if t]
 
     @property
     def improvising(self) -> bool:
@@ -535,6 +592,10 @@ def _recent(state: GameState, n: int = 6) -> str:
     """The last lines of play; a long narration keeps its end, where it left the scene."""
     rows = [e for e in state.log if e.kind in ("player", "npc", "keeper")][-n:]
     return "\n".join(f"- {e.who or e.kind}：{e.text if len(e.text) <= 160 else '…' + e.text[-160:]}" for e in rows) or "（刚开场）"
+
+
+def _skills(inv: Investigator) -> str:
+    return "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
 
 
 def _module_overview(m: Module) -> str:

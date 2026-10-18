@@ -322,3 +322,19 @@ async def test_the_command_box_completes_dice_commands_and_skills():
     assert await suggest(".rab 图") == ".rab 图书馆使用"  # the investigator's own skills first
     assert await suggest(".ra 困难聆") == ".ra 困难聆听"  # every skill, not only theirs
     assert await suggest(".s") == ".st" and await suggest("/n") == "/notes"
+
+
+async def test_an_npc_line_shows_their_face_never_the_keepers_note_on_them(canned):
+    m = Module.load(config.MODULES / "zhuishuren")
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="npc-line", human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        app.push_screen(GameScreen(m, state, resume=True))
+        await pilot.pause(0.5)
+        screen = app.screen
+        await screen.handle({"type": "npc", "npc": "douglas", "name": "道格拉斯", "text": "……走。"})
+        await screen.handle({"type": "npc", "npc": "douglas", "name": "道格拉斯", "text": "别回头。"})
+        shown = story_text(screen)
+        assert "圆框眼镜" in shown and shown.count("圆框眼镜") == 1  # what they see, the first time
+        assert "偷书贼" not in shown and "半食尸鬼" not in shown  # the role is the keeper's note

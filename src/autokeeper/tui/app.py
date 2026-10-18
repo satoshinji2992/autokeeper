@@ -40,6 +40,7 @@ from .debrief import DebriefModal
 from .mapview import MapModal
 from .retell import RetellModal
 from .screens import HELP, EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal, TextModal
+from .suggest import Ideas
 from .widgets import CluePanel, DiceTray, RollCard, SceneArt, SheetPanel, StoryLog, command_suggester
 
 THEMES = [
@@ -387,6 +388,7 @@ class GameScreen(Screen):
         Binding("ctrl+a", "art_style", "画法", priority=True),  # before the input box takes it as Home
         Binding("f6", "weather", "天气"),
         Binding("f7", "sheet", "人物卡"),
+        Binding("f8", "suggest", "出主意"),
         Binding("f9", "retell", "重讲"),
         Binding("f10", "debrief", "复盘"),
         Binding("ctrl+o", "prefs", "叙事偏好"),
@@ -409,6 +411,7 @@ class GameScreen(Screen):
         self.busy = False
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
+        self.ideas = Ideas(self)  # F8 (tui/suggest.py)
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -716,12 +719,15 @@ class GameScreen(Screen):
     def _npc_line(self, ev: dict, kind: str) -> None:
         npc = self.m.npc(ev["npc"])
         body = Text()
-        if npc.id not in self.met and (npc.portrait in self.m.art or npc.portrait in self.m.pictures):
+        first = npc.id not in self.met
+        if first and (npc.portrait in self.m.art or npc.portrait in self.m.pictures):
             body.append_text(art_text(self.m, npc.portrait, (30, 12), self.app.art_style))  # type: ignore[attr-defined]
             body.append("\n")
-            self.met.add(npc.id)
+        self.met.add(npc.id)
         body.append(f"{ev['name']}", style="bold")
-        body.append(f"  {npc.role}\n" if kind == "npc" else "  登台\n", style="dim")
+        # What they look like, the first time; never their role, which is the keeper's note
+        # ("失踪的叔叔，如今是半食尸鬼——那个偷书贼").
+        body.append("  登台\n" if kind != "npc" else f"  {npc.look}\n" if first and npc.look else "\n", style="dim")
         body.append(ev["text"])
         self.story.add(kind, body)
 
@@ -800,7 +806,7 @@ class GameScreen(Screen):
         cmd = cmd.lower()
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
-                   "/prefs": self.action_prefs}
+                   "/prefs": self.action_prefs, "/suggest": self.action_suggest}
         if cmd == "/retell":  # /retell 短一点 skips the list
             self.action_retell(args[0] if args else "")
         elif cmd in actions:
@@ -816,6 +822,7 @@ class GameScreen(Screen):
     @work(exclusive=True, group="turn")
     async def play(self, text: str) -> None:
         assert self.graph and self.game
+        self.ideas.drop()  # whatever F8 was still thinking of, this action came first
         self._busy(True)
         inv = self.state.investigator
         self.story.add("player", Text(f"▶ {inv.name}：{text}"))
@@ -959,6 +966,15 @@ class GameScreen(Screen):
         """Mid-turn is fine: the next narration reads them, and nothing already told changes."""
         if chosen is not None and self.cast is not None:
             self.cast.prefs = chosen
+
+    def action_suggest(self) -> None:
+        self.ideas.ask()
+
+    async def ideas_for(self, inv: Investigator) -> list[str]:
+        """Three things the player's investigator could do next (F8): the investigator role
+        reads what the players have seen, as the AI companions do."""
+        assert self.cast
+        return await self.cast.suggest(self.state, inv.id, self._situation())
 
     def _backstage(self) -> None:
         """The director finished a plan while nobody was mid-turn: play it now."""

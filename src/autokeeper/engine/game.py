@@ -464,11 +464,12 @@ class Game:
 
     def _heading(self, action: Action) -> str | None:
         """Where an action happens when the investigator walks somewhere to do it ("I go up to
-        the tomb door and check the seams"): a reachable place other than here."""
+        the tomb door and check the seams"): a reachable place other than here, which they know
+        of or can find from here (engine/fog.py)."""
         dst = action.destination
         if action.kind == "move" or not dst or dst == self.state.location or self._travel(self.state.location, dst) is None:
             return None
-        return dst
+        return dst if fog.findable(self.m, self.state, dst) else None
 
     async def resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         st, _m = self.state, self.m
@@ -484,9 +485,14 @@ class Game:
             return turn
 
         # movement: a plain move, walking somewhere to do something there (ruled there), or the
-        # director sending them somewhere new
+        # director sending them somewhere new. A place they have not heard of is found only from
+        # next door: a name guessed from across town takes no one anywhere (engine/fog.py).
         heading = ruling.go or (action.destination if action.kind == "move" else self._heading(action))
         heading = None if heading == st.location else heading
+        if heading and heading != ruling.go and not fog.findable(self.m, st, heading):
+            heading = None
+        if not heading and not ruling.go and (action.kind == "move" or action.destination) and action.destination != st.location:
+            turn.notes.append(NOWHERE)  # the keeper must not walk them there in words either
         if heading:
             minutes = self._travel(st.location, heading)
             if minutes is None:
@@ -1059,6 +1065,11 @@ BACKSTAGE_LIMIT = 2  # plans being written at once
 # land in an interlude as soon as they are ready (Game.interlude).
 PLAY_WAIT = 0.0
 LATER = "还在准备，这一轮只写行动直接、合理的结果，不要编新的人物、地点和线索，收在一个悬念上"
+NOWHERE = (
+    "这一轮人还在原地：调查员说要去的地方，没人告诉过他们在哪，从这儿也找不到路（或者没说清去哪）。"
+    "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"
+    "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
+)
 STALL_TURNS = 12  # turns without a clue, flag, event or new place before the director sends a lead
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take

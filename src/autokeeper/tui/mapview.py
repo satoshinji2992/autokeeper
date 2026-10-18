@@ -69,41 +69,16 @@ class Chart:
     rumours: dict[str, str] = field(default_factory=dict)  # heard of, the way there unknown: listed below the map
 
 
-def network(m: Module) -> nx.Graph:
-    g = nx.Graph()
-    g.add_nodes_from(loc.id for loc in m.locations)
-    g.add_edges_from((loc.id, e) for loc in m.locations for e in loc.exits if e in g and e != loc.id)
-    return g
-
-
-def walked(g: nx.Graph, visited: list[str], known: set[str]) -> list[str]:
-    """The places visited, and the ones walked through on the way: the engine takes the party
-    straight to where it is going and marks only that, but the way there leads somewhere.
-    Each new place is reached by the shortest way from where they have been; of two equally
-    short ways, the one through places they know of (not through an unknown one, which may
-    be a secret)."""
-    been = visited[:1]
-    for place in visited[1:]:
-        if place in been:
-            continue
-        try:
-            _, way = nx.multi_source_dijkstra(g, set(been), target=place, weight=lambda u, v, _: 1 if v in known else 1.01)
-        except nx.NetworkXNoPath:  # carried off by an event to a place cut off from the rest
-            way = [place]
-        been += [p for p in way if p not in been]
-    return been
-
-
 def chart(m: Module, st: GameState) -> Chart:
     """Only what the investigators know: places they have been to or heard of, never one they
     have not, not even as a blank (a door to nowhere gives a secret away). A road joins two
     places they have been to; a trail leads from where they stood to a place they saw or were
     shown from there. The rest of what they heard of has no known way there yet."""
     places = {loc.id: loc for loc in m.locations}
-    g = network(m)
+    g = fog.network(m)
     visited = [v for v in dict.fromkeys([*st.visited, st.location]) if v in places]
     heard = fog.heard(m, st)
-    been = walked(g, visited, set(heard) | set(visited))
+    been = fog.been(m, st, heard)
     trails: list[tuple[str, str]] = []
     for v in visited:  # they looked around where they stopped, not on the way through
         seen = [places[v].read_aloud, *(f"{c.title}\n{c.text}" for c in m.clues if c.where == v and c.id in st.clues)]

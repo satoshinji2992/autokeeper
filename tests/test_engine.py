@@ -149,10 +149,11 @@ def test_ai_players_know_where_the_people_they_met_are(module, fake):
     from autokeeper.engine.autoplay import situation
 
     game, *_ = make(module, fake, {}, location="office")
-    assert "见过但不在这里的人" not in situation(module, game.state)
+    assert "见过的人" not in situation(module, game.state)
     game.state.npc("warden").met = True
-    first, second = situation(module, game.state).split("\n")[:2]
-    assert "老守钟人（在钟楼）" in second and "见过" not in first  # the first line is what they remember
+    first, *rest = situation(module, game.state).split("\n")
+    met = next(line for line in rest if line.startswith("见过的人"))
+    assert "老守钟人（钟楼的守钟人，在钟楼）" in met and "见过" not in first  # the first line is what they remember
 
 
 async def test_narration_sets_the_sky_and_it_passes(module, fake):

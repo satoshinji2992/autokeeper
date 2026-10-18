@@ -335,8 +335,9 @@ HELP = Text.from_markup(
 
 [b]界面[/b]
   F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关   F7 人物卡
+  F8 出主意：没头绪时给三个能做的事，选一个填进输入框，改不改、发不发由你
   F9 重讲上一段：骰子、线索和 NPC 的话都不变，只换讲法   F10 结局后复盘，还有后日谈
   Ctrl+R 前情回顾   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
   Ctrl+O 叙事偏好：篇幅、恐怖浓度、节奏和不想看到的内容
-  /draw /notes /map /sheet /recap /retell /debrief /save /prefs 也可以在输入框里用"""
+  /draw /notes /map /sheet /suggest /recap /retell /debrief /save /prefs 也可以在输入框里用"""
 )

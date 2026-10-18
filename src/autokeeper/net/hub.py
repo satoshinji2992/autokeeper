@@ -10,13 +10,16 @@ leave the turn open, and once the game is over they still work, growth rolls (.e
 A seated player throws their own dice: the roll prompt reaches them as an offer of kind
 "roll", like a push offer, and the turn goes on when they answer (or leave). While the
 table waits for a seated player, any seated player may ask the keeper to tell the latest
-narration again (the turn loop does it, between actions); after the end, too.
+narration again (the turn loop does it, between actions); after the end, too. A seated
+player may also ask for ideas (F8) at any time: the host's investigator agent thinks for
+their seat from what the players have seen, and only they get the answer.
 
 Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
-                    · retell {nudge} · epilogue
-    hub -> client   welcome · seats · turn · event {ev} · module · sync {state} · offer · say · over · error
+                    · retell {nudge} · epilogue · suggest
+    hub -> client   welcome · seats · turn · event {ev} · module · sync {state} · offer · say · ideas {ideas}
+                    · over · error
 
 Players' screens never hold the keeper's book while the game is on: they get the module
 without its truth, keeper notes, NPC minds and anything not yet found, and a state without
@@ -61,7 +64,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     for loc in d["locations"]:
         loc["keeper"] = ""
     for n in d["npcs"]:
-        n.update(personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="")
+        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="")
     for c in d["clues"]:
         if c["id"] not in st.clues:
             c.update(title="", text="", feature="", check=None, npc=None, core=False, handout=None, points_to=[], sanity=None)
@@ -123,6 +126,7 @@ class Hub:
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
+        self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F8)
         self.port = 0
 
     # -- connections --------------------------------------------------------------------
@@ -183,6 +187,23 @@ class Hub:
             else:
                 async with self.desk:
                     await self._afterword()
+        elif t == "suggest":
+            seat = self._seat_of(cid)
+            if seat is None or self.state.ending:
+                await self._send(cid, {"t": "ideas", "ideas": []})
+            elif cid not in self.thinking:  # one at a time: each costs the host a call
+                self.thinking[cid] = asyncio.create_task(self._ideas(cid, seat))
+
+    async def _ideas(self, cid: str, seat: str) -> None:
+        """Three ideas for a seated player's next move, from the view the AI seats get. The game
+        does not wait for them, and they go to that player alone."""
+        try:
+            ideas = await self.cast.suggest(self.state, seat, situation(self.m, self.state))
+        except Exception:  # the table plays on without them; the player's screen says none came
+            ideas = []
+        finally:
+            self.thinking.pop(cid, None)
+        await self._send(cid, {"t": "ideas", "ideas": ideas})
 
     async def _sit(self, cid: str, inv_id: str) -> None:
         if inv_id not in self.sits:
