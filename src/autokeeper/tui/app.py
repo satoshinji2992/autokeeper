@@ -431,6 +431,10 @@ class GameScreen(Screen):
         self.boot()
 
     async def on_unmount(self) -> None:
+        # A turn may still be writing its checkpoint: stop it before the database closes, or it
+        # fails with "Cannot operate on a closed database" (leaving mid-turn, closing the app).
+        stopped = self.app.workers.cancel_node(self)
+        await asyncio.gather(*(w.wait() for w in stopped), return_exceptions=True)
         if self._fell_back in channels.listeners:
             channels.listeners.remove(self._fell_back)
         if self.cast:
