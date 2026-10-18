@@ -9,6 +9,7 @@ modules/<id>/
   art/<名字>.color   同形状的配色蒙版，每个字符一个颜色键，“.”为默认色
   art/<名字>.png     原作图片（也支持 jpg、jpeg、webp），与 ASCII 图可共用图片键
   art/<名字>.source.json  原图来源记录，编译时一并保留
+  art/<名字>.credit.json  照片或生成图的来源与授权（Codex 生成的写“AI 生成（Codex image_gen）”和所依据的原图）
   plugins/<id>/manifest.json  插件名称、版本、能力、动作与可执行测试
   plugins/<id>/plugin.py      自定义规则代码，独立进程执行
 ```
@@ -24,8 +25,8 @@ modules/<id>/
 | `cover` | 无剧透的原作封面图片键；选模组时显示 ASCII 预览，不作为开局场景 |
 | `plugins` | 已开发并通过测试的插件 id 列表；从 `plugins/<id>/` 加载代码，不能在 YAML 中填运行时 `extensions` |
 | `start` / `start_time` | 起始地点 id 和时间（如 `D1 14:00`） |
-| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数 |
-| `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait` |
+| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数；`looks` 是剧情变样后的场景图 |
+| `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait`、变样头像 `looks` |
 | `items` | 物件：`id`、`name`、公开外观 `description`、所在地点 `where`、初始持有者 `owner`（可空）、配图 `art`；后续归属随本局保存，不替代线索或授予隐藏效果 |
 | `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出 |
 | `handouts` | 手稿完整 `text`；`images: [病历图片键, 地图图片键]` 关联原图，仅发现后显示，支持滚动阅读全文、ASCII 预览和查看原图 |
@@ -35,6 +36,19 @@ modules/<id>/
 | `endings` | `condition: flag:x` 的结局按顺序判定；奖励里写 `理智 +1D6` 会自动结算 |
 | `sketches` | 让玩家手绘的东西：`target` 写真实样子，读图员相似度过 `threshold` 时触发理智检定或线索 |
 | `pregens` | 预设调查员（属性用中文名：力量、体质、体型、敏捷、外貌、智力、意志、教育） |
+
+## 剧情变样（looks）
+
+原文写明某个地点或人物会明显变样（被烧毁、被淹、受伤、死去），而且有标记表示这件事发生了，就在那个地点或 NPC 下写：
+
+```yaml
+looks:
+  - when: flag:church_burned        # 标记成立后换图
+    change: 礼拜堂烧成焦黑的空壳，屋顶塌了一半
+    art: church_burned              # 可省，默认 <原图键>_<标记>
+```
+
+导入时若本机有 Codex，就照原图画出 `art/church_burned.jpg`；没画成的，游戏里标记成立时再画。昼夜不用写，画面按时间自动调光。每个地点或人物一般最多两种，全模组最多画 6 处。
 
 ## 开局与日常
 

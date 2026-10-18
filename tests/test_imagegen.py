@@ -461,3 +461,35 @@ async def test_improvised_people_places_and_props_no_photo_was_found_for_are_dra
     assert visuals.made() == 3 and all(m.pictures[key] == r["picture"] for key, r in st.visuals.items())
     assert not any("有秘密" in p for p in codex.prompts) and any("围裙上沾着咖啡渍" in p for p in codex.prompts)
     await visuals.close()
+
+
+async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_dir, fake, tmp_path):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.net import NetGameScreen
+
+    from .test_net import closed, opened
+
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub.game.visuals.cfg = config.Config()
+    hub.m.pictures["square"] = str(picture(tmp_path / "art" / "square.jpg"))
+    task = await opened(hub)
+    app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause(0.5)
+        await pilot.press("enter")  # the free seat
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:
+                break
+        screen = app.screen
+        assert isinstance(screen, NetGameScreen) and near(colour_of(screen.m.pictures["square"]), BLUE)
+        hub.game.visuals.look("square", "广场被洪水淹了，水没过台阶")
+        hub.game.visuals.schedule()
+        for _ in range(50):
+            await pilot.pause(0.1)
+            if near(colour_of(screen.m.pictures["square"]), RED):
+                break
+        assert near(colour_of(screen.m.pictures["square"]), RED)  # through the table's art event
+        assert Path(screen.m.pictures["square"]).is_relative_to(config.SAVES / "art" / "table")  # the player's own copy
+    await closed(task)
+    await hub.game.close()
