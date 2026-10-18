@@ -199,7 +199,14 @@ class NetGameScreen(GameScreen):
     """The game screen at a shared table."""
 
     def action_plugins(self) -> None:
-        self.app.notify("扩展规则由房主管理，会随游戏同步结算结果。")
+        from .plugins import PluginsModal
+
+        def send(text: str) -> None:
+            self.run_worker(partial(self.link.send, {"t": "house_rule", "text": text}))
+
+        # Read-only view of the same public rule information, plus a box to ask the host for a
+        # house rule; the host drafts and installs it, and the result syncs back.
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.seat else None))
 
     SHOW_ENGINE = True  # "轮到谁" is on the top bar
 

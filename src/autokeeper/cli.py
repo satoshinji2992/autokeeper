@@ -466,6 +466,62 @@ def compile_cmd(module: Annotated[Path, typer.Argument(help="模组目录")]) ->
     console.print(f"已生成 {root}")
 
 
+plugin_app = typer.Typer(help="规则插件")
+app.add_typer(plugin_app, name="plugin")
+
+
+@plugin_app.command("list")
+def plugin_list(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
+    """列出模组里的规则插件：名称、版本、钩子、自定义动作。"""
+    from .module.schema import Module
+
+    m = Module.load(module)
+    if not m.plugins:
+        console.print("这个模组没有规则插件。")
+        return
+    for identity in m.plugins:
+        plugin = m.extensions.get(identity)
+        if plugin is None:
+            console.print(f"[red]{identity}[/]：{m.extension_errors.get(identity, '未载入')}")
+            continue
+        console.print(f"[bold]{plugin.name}[/] [dim]{identity} v{plugin.version}[/]")
+        console.print(f"  {plugin.description}")
+        console.print(f"  钩子：{'、'.join(plugin.hooks)}；能力：{'、'.join(plugin.capabilities) or '无'}")
+        for a in plugin.actions:
+            console.print(f"  动作 {a.name}：{a.description}")
+
+
+@plugin_app.command("test")
+def plugin_test(path: Annotated[Path, typer.Argument(help="插件目录（含 manifest.json）或模组目录")]) -> None:
+    """在沙箱里实际运行插件的测试。"""
+    import json
+
+    from .module.schema import Module
+    from .plugins.runtime import verify
+    from .plugins.schema import Plugin
+
+    if (path / "manifest.json").exists():
+        manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
+        code = (path / "plugin.py").read_text(encoding="utf-8")
+        plugins = [Plugin.model_validate({**manifest, "code": code})]
+    else:
+        plugins = list(Module.load(path).extensions.values())
+    if not plugins:
+        console.print("没有找到可测试的插件。")
+        raise typer.Exit(1)
+    failed = 0
+    for plugin in plugins:
+        problems = asyncio.run(verify(plugin))
+        if problems:
+            failed += 1
+            console.print(f"[red]{plugin.id} v{plugin.version} 未通过[/]：")
+            for problem in problems:
+                console.print(f"  - {problem}")
+        else:
+            console.print(f"[green]{plugin.id} v{plugin.version}[/]：{len(plugin.tests)} 项测试通过")
+    raise typer.Exit(1 if failed else 0)
+
+
 art_app = typer.Typer(help="ASCII 美术")
 app.add_typer(art_app, name="art")
 

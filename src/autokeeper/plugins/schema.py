@@ -72,6 +72,28 @@ class Output(BaseModel):
     state: dict[str, Any]
     effects: list[Effect] = Field(default_factory=list, max_length=40)
     repeat: bool = False
+    # An opt-in public one-liner for the Ctrl+K window, e.g. "风寒：第 2 天". The plugin
+    # decides what to show; private counters stay in state unless named here.
+    status: str = Field(default="", max_length=120)
+
+
+# Attributes that walk out of plain data into frames, code objects or module globals. They do
+# not start with an underscore, so the dunder rule misses them; forbidding them keeps a plugin
+# from reaching builtins through a generator's frame or a str.format traversal.
+ESCAPE_ATTRS = frozenset({
+    "gi_frame", "gi_code", "gi_yieldfrom", "gi_running", "cr_frame", "cr_code", "cr_await",
+    "cr_running", "cr_origin", "ag_frame", "ag_code", "ag_running", "f_globals", "f_locals",
+    "f_builtins", "f_back", "f_code", "f_trace", "f_lasti", "f_lineno", "tb_frame", "tb_next",
+    "tb_lasti", "tb_lineno", "func_globals", "func_code", "func_dict", "func_closure",
+    "func_defaults", "func_builtins", "format", "format_map",
+})
+# Names that reach introspection, class creation or the import machinery. Most are not in the
+# worker's allow-list either, but refusing them here gives a plain reason instead of a crash.
+BANNED_NAMES = frozenset({
+    "open", "exec", "eval", "compile", "getattr", "setattr", "delattr", "globals", "locals",
+    "vars", "input", "breakpoint", "type", "object", "super", "classmethod", "staticmethod",
+    "property", "memoryview", "bytearray", "bytes", "__import__", "help", "dir", "exit", "quit",
+})
 
 
 def check(plugin: Plugin) -> list[str]:
@@ -84,13 +106,12 @@ def check(plugin: Plugin) -> list[str]:
     if len(handlers) != 1 or len(handlers[0].args.args) != 3:
         problems.append("必须定义 handle(event, ctx, api)，返回 state 和 effects")
     forbidden = (ast.Import, ast.ImportFrom, ast.ClassDef, ast.AsyncFunctionDef, ast.Global, ast.Nonlocal)
-    banned = {"open", "exec", "eval", "compile", "getattr", "setattr", "delattr", "globals", "locals", "vars", "input", "breakpoint"}
     for node in ast.walk(tree):
         if isinstance(node, forbidden):
             problems.append(f"第 {node.lineno} 行不支持 {type(node).__name__}；使用纯 Python 与 api，不导入模块")
-        if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-            problems.append(f"第 {node.lineno} 行不能访问私有属性")
-        if isinstance(node, ast.Name) and (node.id in banned or node.id.startswith("__")):
+        if isinstance(node, ast.Attribute) and (node.attr.startswith("_") or node.attr in ESCAPE_ATTRS):
+            problems.append(f"第 {node.lineno} 行不能访问属性 {node.attr}")
+        if isinstance(node, ast.Name) and (node.id in BANNED_NAMES or node.id.startswith("__")):
             problems.append(f"第 {node.lineno} 行不能使用 {node.id}")
     if len({action.name for action in plugin.actions}) != len(plugin.actions):
         problems.append("插件动作名重复")
