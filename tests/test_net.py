@@ -34,7 +34,7 @@ class TableCast:
         board = "告示栏" in action.summary and "c_notice" not in state.clues
         return Ruling(needs_roll=False, minutes=5, auto_clues=["c_notice"] if board else [])
 
-    async def keeper(self, state, report, on_delta=None):
+    async def keeper(self, state, report, on_delta=None, lore=""):
         if on_delta:
             await on_delta("叙事")
         return "叙事"

@@ -394,9 +394,11 @@ class Cast:
         )
         return self._open("keeper", "keeper", system)
 
-    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None) -> str:
+    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
+        """`lore` (knowledge-base hits) rides along this turn only: kept in the transcript, it
+        filled 65% of the keeper's window (8,241 of 12,752 characters, a 17-turn save)."""
         s = self._keeper(state)
-        reply = await self._send("keeper", s, state, report, on_delta=on_delta)
+        reply = await self._send("keeper", s, state, report, extra=lore, on_delta=on_delta)
         return reply.text.strip()
 
     async def chronicle(self, state: GameState, entries: str) -> str:

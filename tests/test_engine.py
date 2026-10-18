@@ -42,7 +42,7 @@ class FakeCast:
         self.performances.append(deeds)
         return "诸位，钟声会替我们作证……"
 
-    async def keeper(self, state, report, on_delta=None):
+    async def keeper(self, state, report, on_delta=None, lore=""):
         self.reports.append(report)
         if on_delta:
             await on_delta("叙事")
@@ -154,7 +154,7 @@ async def test_narration_sets_the_sky_and_it_passes(module, fake):
     game, cast, events = make(module, fake, {})
     lines = iter(["钟楼背后滚过一声闷雷，雨点砸在广场的石板上。", "守钟人点起油灯。", "守钟人又打了个盹。"])
 
-    async def keeper(state, report, on_delta=None):
+    async def keeper(state, report, on_delta=None, lore=""):
         return next(lines)
 
     cast.keeper = keeper

@@ -436,14 +436,10 @@ class Game:
                 await self.emit({"type": "performance", "npc": npc.id, "name": npc.name, "text": text, "portrait": m.art.get(npc.portrait or "", "")})
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
-        report = self._report(turn)
         lore = await self._lore(turn)
         if lore:
-            report += (
-                "\n\n【模组知识库检索（LightRAG，只给守秘人参考：不要照念，不要透露玩家还没发现的东西）】\n"
-                + lore[:3000]
-            )
-        return await self._narrate(report, on_delta)
+            lore = "\n\n【模组知识库检索（LightRAG，只给守秘人参考：不要照念，不要透露玩家还没发现的东西）】\n" + lore[:3000]
+        return await self._narrate(self._report(turn), on_delta, lore=lore)
 
     async def _lore(self, turn: Turn) -> str:
         """GraphRAG context for this turn, keyed by what the structured action touched."""
@@ -736,7 +732,7 @@ class Game:
             out.append("请叙述。")
         return "\n".join(out)
 
-    async def _narrate(self, report: str, on_delta=None) -> str:
+    async def _narrate(self, report: str, on_delta=None, lore: str = "") -> str:
         await self.emit({"type": "keeper_start"})
 
         async def delta(text: str) -> None:
@@ -744,7 +740,7 @@ class Game:
             if on_delta:
                 await on_delta(text)
 
-        text = await self.cast.keeper(self.state, report, on_delta=delta)
+        text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
         self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
         await self._sky(text)

@@ -311,6 +311,16 @@ async def test_the_first_beat_never_reaches_the_arbiter():
     assert "周衡翻看告示栏" in sent and "泛黄" not in sent  # the player's flavour stays out of the ruling
 
 
+async def test_lore_reaches_the_keeper_but_not_its_memory():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    SCRIPT.append("钟声又响了一下。")
+    await Cast(cfg, m).keeper(state, "【第 1 轮】请叙述。", lore="【模组知识库检索】守钟人的旧事……")
+    assert "守钟人的旧事" in SEEN[-1]["messages"][-1]["content"]  # this turn sees it
+    assert "守钟人的旧事" not in json.dumps(state.transcripts, ensure_ascii=False)  # the window does not keep it
+
+
 async def test_agent_loop_runs_sandboxed_tools(tmp_path):
     (tmp_path / "source.md").write_text("第一行\n关键线索：井底的铜钥匙\n", encoding="utf-8")
     ws = Workspace(tmp_path, writable=("notes.md",))
