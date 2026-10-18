@@ -164,8 +164,8 @@ async def test_at_most_one_hint_a_turn_the_rest_wait(canned):
         await turn(screen)
         await turn(screen)
         assert len(shown(screen)) == 3 and "结果卡这样看" in shown(screen)[1] and "跟人说话" in shown(screen)[2]
-        await turn(screen)  # four turns and nothing found: there is F8
-        assert len(shown(screen)) == 4 and "F8" in shown(screen)[3]
+        await turn(screen)  # four turns and nothing found: there is F5
+        assert len(shown(screen)) == 4 and "F5" in shown(screen)[3]
         await turn(screen)
         assert len(shown(screen)) == 4  # nothing left waiting
 

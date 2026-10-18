@@ -136,7 +136,7 @@ def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, s
 
 # -- title -------------------------------------------------------------------------------
 class TitleScreen(Screen):
-    BINDINGS = [("f3", "settings", "设置")]
+    BINDINGS = [("f9", "settings", "设置")]
 
     def compose(self) -> ComposeResult:
         with Middle(id="title-box"):
@@ -157,7 +157,7 @@ class TitleScreen(Screen):
                     Option("  离开", id="quit"),
                     id="menu",
                 )
-            yield Static("↑↓ 选择 · Enter 确认 · F3 设置 · Ctrl+Q 离开", id="title-hint")
+            yield Static("↑↓ 选择 · Enter 确认 · F9 设置 · Ctrl+Q 离开", id="title-hint")
 
     def on_mount(self) -> None:
         self.id = "title-screen"
@@ -433,38 +433,38 @@ class LoadScreen(Screen):
 COMMANDS = (
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
-    ("地图", "F5", "去过和听说过的地方", "map"),
-    ("人物卡", "F7", "整张调查员卡，←→ 换队友", "sheet"),
-    ("出主意", "F8", "照眼下的情况想三件能做的事", "suggest"),
-    ("前情回顾", "Ctrl+R", "从头讲一遍到现在", "recap"),
-    ("重讲上一段", "F9", "骰子和线索不变，换个讲法", "retell"),
+    ("地图", "F3", "去过和听说过的地方", "map"),
+    ("人物卡", "F4", "整张调查员卡，←→ 换队友", "sheet"),
+    ("出主意", "F5", "照眼下的情况想三件能做的事", "suggest"),
+    ("重讲上一段", "F6", "骰子和线索不变，换个讲法", "retell"),
+    ("前情回顾", "F7", "从头讲一遍到现在", "recap"),
+    ("手绘", "F8", "画一张图给守秘人看", "sketch"),
+    ("换模型", "F9", "切换模型和思考强度", "engine"),
+    ("复盘", "F10", "结局以后：真相、漏掉的线索、后日谈", "debrief"),
     ("接着讲", "", "接续中断的一段，保留已发生的结果", "retry"),
-    ("手绘", "F4", "画一张图给守秘人看", "sketch"),
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
     ("换画法", "Ctrl+A", "块字符、六分块、照片、纯 ASCII", "art_style"),
-    ("天气动画", "F6", "开或关", "weather"),
-    ("换模型", "F3", "切换模型和思考强度", "engine"),
+    ("天气动画", "", "开或关；画面晃眼或卡顿时关掉", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
-    ("复盘", "F10", "结局以后：真相、漏掉的线索、后日谈", "debrief"),
     ("回到标题", "", "先存档，再回标题画面", "leave_game"),
 )
 
 
 class GameScreen(Screen):
     BINDINGS = [
+        # F1–F5 on the footer, the rest in order of use; the weather switch is in the Ctrl+P menu
         Binding("f1", "help", "帮助"),
         Binding("f2", "notes", "线索本"),
-        Binding("f5", "map", "地图"),
-        Binding("f7", "sheet", "人物卡"),
-        Binding("f8", "suggest", "出主意"),
-        Binding("f3", "engine", "换模型", show=False),
-        Binding("f4", "sketch", "手绘", show=False),
-        Binding("f6", "weather", "天气", show=False),
-        Binding("f9", "retell", "重讲", show=False),
+        Binding("f3", "map", "地图"),
+        Binding("f4", "sheet", "人物卡"),
+        Binding("f5", "suggest", "出主意"),
+        Binding("f6", "retell", "重讲", show=False),
+        Binding("f7,ctrl+r", "recap", "前情回顾", show=False),
+        Binding("f8", "sketch", "手绘", show=False),
+        Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
-        Binding("ctrl+r", "recap", "前情回顾", show=False),
         Binding("ctrl+s", "save", "存档", show=False),
         Binding("ctrl+a", "art_style", "画法", show=False, priority=True),  # before the input box takes it as Home
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
@@ -472,7 +472,7 @@ class GameScreen(Screen):
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
         Binding("escape", "focus_input", "输入", show=False),
     ]
-    SHOW_ENGINE = False  # the model is in Ctrl+B and F3; a LAN table says whose turn it is up there
+    SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
 
     def __init__(self, module: Module, state: GameState, *, resume: bool = False, spectate: bool = False):
         super().__init__()
@@ -491,7 +491,7 @@ class GameScreen(Screen):
         self._leave_when_ready = False
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
-        self.ideas = Ideas(self)  # F8 (tui/suggest.py)
+        self.ideas = Ideas(self)  # F5 (tui/suggest.py)
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -970,7 +970,7 @@ class GameScreen(Screen):
             self._slash(text)
             return
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
-            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，Ctrl+R 回顾这一局，Esc 回到标题。")
+            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，F7 回顾这一局，Esc 回到标题。")
             return
         self.play(text)
 
@@ -997,7 +997,7 @@ class GameScreen(Screen):
     @work(exclusive=True, group="turn")
     async def play(self, text: str) -> None:
         assert self.graph and self.game
-        self.ideas.drop()  # whatever F8 was still thinking of, this action came first
+        self.ideas.drop()  # whatever F5 was still thinking of, this action came first
         self._busy(True)
         inv = self.state.investigator
         self.story.add("player", Text(f"▶ {inv.name}：{text}"))
@@ -1129,7 +1129,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "Ctrl+R 回顾这一局 · Esc 回到标题", style="dim")
+        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "F7 回顾这一局 · Esc 回到标题", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------
@@ -1189,7 +1189,7 @@ class GameScreen(Screen):
         self.ideas.ask()
 
     async def ideas_for(self, inv: Investigator) -> list[str]:
-        """Three things the player's investigator could do next (F8): the investigator role
+        """Three things the player's investigator could do next (F5): the investigator role
         reads what the players have seen, as the AI companions do."""
         assert self.cast
         return await self.cast.suggest(self.state, inv.id, self._situation())
@@ -1256,7 +1256,7 @@ class GameScreen(Screen):
 
     # -- telling it again, and after the end -------------------------------------------------
     def action_retell(self, nudge: str = "") -> None:
-        """F9, /retell: the latest narration in other words; the dice and clues stay."""
+        """F6, /retell: the latest narration in other words; the dice and clues stay."""
         if self._turn_running() or self.game is None:
             return
         why = self.game.retell_blocked() or ("" if not nudge or nudge in RETELL else f"可以这样要：{'、'.join(RETELL)}")
@@ -1273,7 +1273,7 @@ class GameScreen(Screen):
         if not nudge or self._turn_running() or self.game is None:
             return
         if self.game.told is not told:
-            self.app.notify("守秘人已经讲到下一段了，想重讲就再按一次 F9", severity="warning", timeout=5)
+            self.app.notify("守秘人已经讲到下一段了，想重讲就再按一次 F6", severity="warning", timeout=5)
             return
         self._retell(nudge)
 
@@ -1330,7 +1330,7 @@ class Menu(Provider):
             for title, key, what, action in COMMANDS:
                 yield f"{title}  {key}".rstrip(), what, partial(self.screen.run_action, action)
         elif isinstance(self.screen, TitleScreen):
-            yield "设置  F3", "AI 模型、叙事偏好、画面和动画", self.screen.action_settings
+            yield "设置  F9", "AI 模型、叙事偏好、画面和动画", self.screen.action_settings
         yield "换配色  Ctrl+T", "琥珀、磷绿、薰衣草、血红轮换", app.action_next_theme  # type: ignore[attr-defined]
         yield "离开  Ctrl+Q", "关掉 AutoKeeper", app.action_quit
 

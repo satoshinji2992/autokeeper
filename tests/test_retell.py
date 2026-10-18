@@ -254,7 +254,7 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         screen = GameScreen(m, state, resume=True)
         app.push_screen(screen)
         assert await waits(pilot, lambda: screen.game is not None and "钟楼底下" in story_text(screen) and not screen.busy)
-        await pilot.press("f9")  # the recap is not a narration: nothing to tell again yet
+        await pilot.press("f6")  # the recap is not a narration: nothing to tell again yet
         assert app.screen is screen
         cast = screen.game.cast = teller(FakeCast({"看告示": (LOOK, BOARD)}))
         screen.game.rules = Rules(dice=fake)
@@ -263,10 +263,10 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         blocks = list(screen.story.query(".keeper"))
         assert screen.told is blocks[-1] and str(blocks[-1].render()) == "叙事"
         screen.busy = True  # mid-turn: refused
-        await pilot.press("f9")
+        await pilot.press("f6")
         assert app.screen is screen
         screen.busy = False
-        await pilot.press("f9")
+        await pilot.press("f6")
         assert await waits(pilot, lambda: isinstance(app.screen, RetellModal))
         await pilot.press("down", "enter")  # 短一点
         assert await waits(pilot, lambda: RETOLD in story_text(screen) and not screen.busy)
@@ -275,7 +275,7 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         assert RETOLD in (config.SAVES / "retell.json").read_text(encoding="utf-8")  # and saved
         screen.send_line("/retell 更阴森")  # straight from the box
         assert await waits(pilot, lambda: "（第 2 版）" in story_text(screen) and not screen.busy)
-        await pilot.press("f9")
+        await pilot.press("f6")
         assert await waits(pilot, lambda: isinstance(app.screen, RetellModal))
         screen.game.told = dataclasses.replace(screen.game.told)  # meanwhile the keeper went on (an interlude)
         await pilot.press("enter")
@@ -379,7 +379,7 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
         assert await waits(pilot, lambda: isinstance(app.screen, NetGameScreen) and app.screen.my_turn)
         screen = app.screen
         blocks = list(screen.story.query(".keeper"))
-        await pilot.press("f9")
+        await pilot.press("f6")
         assert await waits(pilot, lambda: isinstance(app.screen, RetellModal))
         await pilot.press("enter")  # 换个讲法: the host tells the opening again
         assert await waits(pilot, lambda: RETOLD in story_text(screen))

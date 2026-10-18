@@ -1,4 +1,4 @@
-"""Ideas for your next move, on demand: F8 or /suggest (SillyTavern calls it impersonate).
+"""Ideas for your next move, on demand: F5 or /suggest (SillyTavern calls it impersonate).
 
 The investigator agent reads the same view the AI companions play from (engine/autoplay.py
 situation: only what the players have seen) and offers three things your investigator
@@ -6,9 +6,9 @@ could do: look into something, talk to someone, and one bold or careful step. Th
 pick goes into the input box unsent, to send as it is or to change first.
 
 Nothing opens unasked. While it thinks, a line above the input box says so and the box
-stays open for typing; if you typed meanwhile, the ideas wait for the next F8 instead of
+stays open for typing; if you typed meanwhile, the ideas wait for the next F5 instead of
 jumping in front of what you were writing. Ideas belong to the moment they were asked for:
-once the game has moved on, F8 thinks again.
+once the game has moved on, F5 thinks again.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ class IdeasModal(ModalScreen[str | None]):
 
 
 class Ideas:
-    """F8 for one game screen. It thinks in a worker of its own, so a turn started meanwhile
+    """F5 for one game screen. It thinks in a worker of its own, so a turn started meanwhile
     is never held up (it cancels the thinking instead), and keeps what it came up with for
     the moment of play it was asked in. The screen supplies the ideas (GameScreen.ideas_for:
     its own cast, or the host's at a shared table)."""
@@ -132,20 +132,20 @@ class Ideas:
         try:
             texts = await s.ideas_for(inv)
         except Exception as exc:  # a failed call costs nothing but the ideas
-            s.app.notify(f"这回没想出来（{exc.__class__.__name__}），过一会儿再按 F8 试试", severity="warning")
+            s.app.notify(f"这回没想出来（{exc.__class__.__name__}），过一会儿再按 F5 试试", severity="warning")
             return
         finally:
             draft, self.draft = self.draft, None
             if s.status_text == line:
                 s._status("")
         if not texts:
-            s.app.notify("这回没想出来，过一会儿再按 F8 试试", severity="warning")
+            s.app.notify("这回没想出来，过一会儿再按 F5 试试", severity="warning")
         elif self.moment() != at:
-            s.app.notify("刚才情况变了，再按 F8 重新想")
+            s.app.notify("刚才情况变了，再按 F5 重新想")
         else:
             self.at, self.texts = at, texts
             if box.value != draft or s.app.screen is not s:  # typed meanwhile, or reading something else
-                s.app.notify("想好了三个主意，按 F8 看", timeout=4)
+                s.app.notify("想好了三个主意，按 F5 看", timeout=4)
             else:
                 self.show()
 

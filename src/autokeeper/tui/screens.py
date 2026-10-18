@@ -381,16 +381,16 @@ HELP = Text.from_markup(
 输入时按 → 补全指令和技能名。
 
 [b]按键[/b]
-  F1 玩法说明       F2 线索本与手稿    F3 模型
-  F4 手绘           F5 地图            F6 天气动画
-  F7 人物卡         F8 行动建议        F9 重讲上一段
+  F1 玩法说明       F2 线索本与手稿    F3 地图
+  F4 人物卡         F5 行动建议        F6 重讲上一段
+  F7 前情回顾       F8 手绘            F9 模型
   F10 结局后复盘
-  Ctrl+R 前情回顾   Ctrl+S 存档        Ctrl+Q 离开
-  Ctrl+A 画法       Ctrl+T 配色        Ctrl+O 叙事偏好
-  Ctrl+B 用量       Ctrl+K 规则插件    Ctrl+P 全部操作
+  Ctrl+S 存档       Ctrl+O 叙事偏好    Ctrl+Q 离开
+  Ctrl+A 画法       Ctrl+T 配色        Ctrl+B 用量
+  Ctrl+K 规则插件   Ctrl+P 全部操作（天气动画开关也在这里）
 
-F8 的建议只填入输入框，确认后再发送。
-F9 只改叙述，骰子、线索与 NPC 对话保留。
+F5 的建议只填入输入框，确认后再发送。
+F6 只改叙述，骰子、线索与 NPC 对话保留。
 
 [b]输入框命令[/b]
   /draw /notes /map /sheet /suggest /recap /retell

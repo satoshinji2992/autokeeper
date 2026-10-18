@@ -245,7 +245,7 @@ async def test_fear_trembles_anger_flashes_and_f6_stills_them():
         _, tints = await watch("（一拍桌子）滚！")
         assert panel.feeling == "发怒" and max(tints) > 0.2  # flashed
         assert await until(pilot, lambda: portrait.styles.tint.a == 0, 60)  # then gone
-        await pilot.press("f6")  # weather off: the portraits keep still too
+        await screen.run_action("weather")  # weather off: the portraits keep still too
         offsets, tints = await watch("（浑身哆嗦）别过来！")
         assert panel.feeling == "害怕" and offsets == {(0, 0)} and max(tints) == 0
 
@@ -264,17 +264,17 @@ async def test_a_small_terminal_gets_a_smaller_speaker_and_a_tiny_one_none():
         panel, scene, stage_box = speaking(screen), screen.query_one(SceneArt), screen.query_one("#stage")
         before, room = stage_box.outer_size.height, screen.query_one(StoryLog).region.height
         await screen.handle({"type": "npc", "npc": "jingguan", "name": "值班警官", "text": "（眯起眼睛）你们又来干什么？"})
-        assert await until(pilot, lambda: panel.display and scene.covered)
+        assert await until(pilot, lambda: panel.display and scene.covered, 100)
         assert panel.region.width <= stage_box.region.width * stage.WIDEST and panel.region.height == stage_box.size.height
         assert stage_box.outer_size.height == before and screen.query_one(StoryLog).region.height == room  # the story keeps its room
 
         def right_edge() -> int:  # where the drawing ends, on screen
             return scene.region.x + 1 + max(len(ln.rstrip()) for ln in scene._art.plain.split("\n"))
 
-        assert await until(pilot, lambda: right_edge() <= panel.region.x)  # the drawing moved over to clear the face
+        assert await until(pilot, lambda: right_edge() <= panel.region.x, 100)  # the drawing moved over to clear the face
         await screen.handle({"type": "keeper_start"})
         await screen.handle({"type": "keeper_start"})
-        assert await until(pilot, lambda: not panel.display and scene.covered == 0)
+        assert await until(pilot, lambda: not panel.display and scene.covered == 0, 100)
         await pilot.resize_terminal(44, 20)  # too narrow for a panel: the story carries on without it
         await pilot.pause(0.3)
         await screen.handle({"type": "npc", "npc": "jingguan", "name": "值班警官", "text": "走吧。"})

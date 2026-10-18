@@ -5,7 +5,7 @@ The portrait is the module's picture (chafa, in the art style Ctrl+A picks) or i
 art. It takes the colours of the line's mood (mood.py reads it off the NPC's own stage
 directions and words; artkit.TONES grades it), and three moods move for a moment: fear
 trembles, anger flashes red, a fluster jolts. Each motion is over within half a second and
-plays only while the weather is animated (F6 switches both).
+plays only while the weather is animated (one switch, in the Ctrl+P menu, stills both).
 
 The panel goes when the scene moves on:
 - the party moves, an event takes the stage, or the story ends;
@@ -247,7 +247,7 @@ class Speaker(Vertical):
     # -- motion ------------------------------------------------------------------------------
     def _move(self) -> None:
         scene = self.scene
-        if scene is None or not scene.effects:  # F6: no animation at all
+        if scene is None or not scene.effects:  # weather off: no animation at all
             return
         if self.feeling in MOTIONS:
             step, path = MOTIONS[self.feeling]

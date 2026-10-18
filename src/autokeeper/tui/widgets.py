@@ -67,7 +67,7 @@ class SceneArt(Static):
         self.sky = ""  # the narrated weather, for places under the open sky
         self.style_name = "picture"
         self.when = ""  # time of day, lights the art
-        self.effects = True  # weather animation, F6
+        self.effects = True  # weather animation (the Ctrl+P menu switches it)
         self.madness = 0.0
         self._burst = 0
         self._art: Text | None = None  # the current art, ready to paint
@@ -494,13 +494,13 @@ class DiceTray(Static):
         self.update(out)
 
 
-PORTRAIT = (16, 8)  # the side column's thumbnail; the whole card (F7) has the big one
+PORTRAIT = (16, 8)  # the side column's thumbnail; the whole card (F4) has the big one
 SKILLS_SHOWN = 10
 
 
 class SheetPanel(Static):
     """The acting investigator at a glance: a small portrait beside the name and the bars,
-    the best skills, and the rest of the party. A click opens the whole card (F7)."""
+    the best skills, and the rest of the party. A click opens the whole card (F4)."""
 
     async def on_click(self) -> None:
         await self.screen.run_action("sheet")

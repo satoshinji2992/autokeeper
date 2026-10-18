@@ -33,7 +33,7 @@ from .screens import PushModal, RollModal
 from .widgets import SceneArt
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
-IDEAS_WAIT = 60.0  # seconds F8 waits for the host's ideas
+IDEAS_WAIT = 60.0  # seconds F5 waits for the host's ideas
 
 
 def table_module(welcome: dict[str, Any]) -> Module:
@@ -204,7 +204,7 @@ class NetGameScreen(GameScreen):
         self.my_turn = False
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
-        self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F8
+        self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F5
 
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game

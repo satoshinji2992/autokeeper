@@ -1,4 +1,4 @@
-"""F9: the keeper tells the latest narration again (engine: Game.retell).
+"""F6: the keeper tells the latest narration again (engine: Game.retell).
 
 The dice, the clues and what the NPCs said stay as they were; only the keeper's words
 change. The player picks how from a short fixed list and never types a wish of their own:

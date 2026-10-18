@@ -54,7 +54,7 @@ class Canned(hm.Model):
 @pytest.fixture
 def canned(monkeypatch, tmp_path, skills_dir):
     """Every agent answers from a can, saves go to a temp folder."""
-    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F3 sets these; undo afterwards
+    for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F9 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
     monkeypatch.setattr(config, "SAVES", tmp_path)
@@ -215,12 +215,12 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
         assert app.art_style == "ascii"
         await pilot.press("ctrl+a")  # the input box has focus, but Ctrl+A still changes the style
         assert app.art_style == "picture" and scene.style_name == "picture"
-        await pilot.press("f6")
+        await app.screen.run_action("weather")  # the switch in the Ctrl+P menu
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off
         screen = app.screen
         before, memory = screen.cast, screen.state.transcripts
-        await pilot.press("f3")  # change models mid-game
+        await pilot.press("f9")  # change models mid-game
         await pilot.pause()
         app.screen.query(RadioButton).last().value = True  # 高级剧情
         await pilot.click("#apply")
@@ -356,7 +356,7 @@ async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_pat
         await pilot.pause()
         app.push_screen(GameScreen(m, state, resume=False))
         await pilot.pause(0.5)
-        await pilot.press("f7")
+        await pilot.press("f4")
         await pilot.pause()
         sheet = app.screen
         assert isinstance(sheet, SheetModal) and sheet.party[sheet.at].id == party[0].id

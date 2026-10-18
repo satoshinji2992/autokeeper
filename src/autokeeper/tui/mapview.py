@@ -1,4 +1,4 @@
-"""The map (F5): the places the investigators know, laid out in two dimensions.
+"""The map (F3): the places the investigators know, laid out in two dimensions.
 
 engine/fog.py knows which places those are. Here they become a chart (the places on the
 map, the roads walked, the trails seen but not taken, and the rumours whose way is still
@@ -560,7 +560,7 @@ def view(m: Module, st: GameState, width: int, height: int) -> Content:
 
 # -- on screen ----------------------------------------------------------------------------
 class MapModal(ModalScreen[None]):
-    """F5. Drawn for the screen it is on, and again when that changes size."""
+    """F3. Drawn for the screen it is on, and again when that changes size."""
 
     BINDINGS = [("escape", "dismiss", "关闭"), ("enter", "dismiss", "关闭")]
 

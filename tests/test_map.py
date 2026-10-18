@@ -1,4 +1,4 @@
-"""The F5 map: fog of war over the module's places, laid out and drawn (no model calls)."""
+"""The F3 map: fog of war over the module's places, laid out and drawn (no model calls)."""
 
 from __future__ import annotations
 

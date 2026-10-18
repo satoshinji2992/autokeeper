@@ -1,5 +1,5 @@
 """What the AI players and the action parser are shown, where a guessed name leads, and ideas
-on demand (F8). No model calls: scripted casts, canned models, a real Hub on localhost."""
+on demand (F5). No model calls: scripted casts, canned models, a real Hub on localhost."""
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ async def test_a_guessed_name_takes_no_one_anywhere(zhui, fake):
     assert st.location == "lingmu" and NOWHERE not in turn.notes
 
 
-# -- ideas on demand (F8) -------------------------------------------------------------------------
+# -- ideas on demand (F5) -------------------------------------------------------------------------
 class Thinker(hm.Model):
     """Answers the ideas call: one idea in quotes, one said twice. Keeps what it was asked."""
 
@@ -187,7 +187,7 @@ def playing(m: Module) -> tuple[GameScreen, GameState]:
 
 
 @pytest.mark.usefixtures("canned")
-async def test_f8_puts_the_chosen_idea_in_the_box_and_esc_leaves_it(monkeypatch):
+async def test_f5_puts_the_chosen_idea_in_the_box_and_esc_leaves_it(monkeypatch):
     asked: list[str] = []
 
     async def suggest(self, state, inv_id, view):
@@ -201,7 +201,7 @@ async def test_f8_puts_the_chosen_idea_in_the_box_and_esc_leaves_it(monkeypatch)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         box = screen.query_one("#command", Input)
-        await pilot.press("f8")
+        await pilot.press("f5")
         assert await until(pilot, lambda: isinstance(app.screen, IdeasModal))
         assert asked[0] == situation(screen.m, state)  # the AI players' view, nothing more
         await pilot.press("down", "enter")
@@ -213,13 +213,13 @@ async def test_f8_puts_the_chosen_idea_in_the_box_and_esc_leaves_it(monkeypatch)
         assert await until(pilot, lambda: app.screen is screen)
         assert box.value == IDEAS[1]  # Esc leaves the box as it was
         screen.busy = True  # mid-turn: no ideas until it is told
-        await pilot.press("f8")
+        await pilot.press("f5")
         await pilot.pause(0.2)
         assert app.screen is screen and len(asked) == 1
 
 
 @pytest.mark.usefixtures("canned")
-async def test_f8_thinks_without_getting_in_the_way_of_typing(monkeypatch):
+async def test_f5_thinks_without_getting_in_the_way_of_typing(monkeypatch):
     gate = asyncio.Event()
 
     async def suggest(self, state, inv_id, view):
@@ -233,14 +233,14 @@ async def test_f8_thinks_without_getting_in_the_way_of_typing(monkeypatch):
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         box = screen.query_one("#command", Input)
-        await pilot.press("f8")
+        await pilot.press("f5")
         assert await until(pilot, lambda: "在想下一步可以做什么" in screen.status_text)  # the spinner line
         await pilot.press("w", "o")  # the box is still open for typing
         gate.set()
         assert await until(pilot, lambda: not screen.status_text)
         await pilot.pause(0.2)
         assert app.screen is screen and box.value == "wo"  # done, but not in front of what was being typed
-        await pilot.press("f8")  # ready and waiting
+        await pilot.press("f5")  # ready and waiting
         assert await until(pilot, lambda: isinstance(app.screen, IdeasModal))
         await pilot.press("space")
         assert await until(pilot, lambda: app.screen is screen) and box.value == IDEAS[0]
@@ -256,7 +256,7 @@ class IdeaCast(TableCast):
         return IDEAS
 
 
-async def test_f8_at_a_shared_table_asks_the_host(monkeypatch, tmp_path, skills_dir, fake):
+async def test_f5_at_a_shared_table_asks_the_host(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
     cast = IdeaCast()
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
@@ -267,7 +267,7 @@ async def test_f8_at_a_shared_table_asks_the_host(monkeypatch, tmp_path, skills_
         await pilot.press("enter")  # the free seat
         assert await until(pilot, lambda: isinstance(app.screen, NetGameScreen) and app.screen.my_turn)
         screen = app.screen
-        await pilot.press("f8")
+        await pilot.press("f5")
         assert await until(pilot, lambda: isinstance(app.screen, IdeasModal))
         await pilot.press("enter")
         assert await until(pilot, lambda: app.screen is screen)

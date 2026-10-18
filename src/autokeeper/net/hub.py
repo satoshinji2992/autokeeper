@@ -11,7 +11,7 @@ A seated player throws their own dice: the roll prompt reaches them as an offer 
 "roll", like a push offer, and the turn goes on when they answer (or leave). While the
 table waits for a seated player, any seated player may ask the keeper to tell the latest
 narration again (the turn loop does it, between actions); after the end, too. A seated
-player may also ask for ideas (F8) at any time: the host's investigator agent thinks for
+player may also ask for ideas (F5) at any time: the host's investigator agent thinks for
 their seat from what the players have seen, and only they get the answer.
 
 Messages are JSON objects with a "t" field:
@@ -148,7 +148,7 @@ class Hub:
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
-        self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F8)
+        self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F5)
         self.port = 0
 
     # -- connections --------------------------------------------------------------------

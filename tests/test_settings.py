@@ -43,7 +43,7 @@ async def test_start_menu_has_settings_and_nested_pages_do_not_start_a_game(size
         await pilot.press("escape", "escape")
         await pilot.pause()
         assert app.screen is title
-        await pilot.press("f3")
+        await pilot.press("f9")
         await pilot.pause()
         assert isinstance(app.screen, SettingsModal)
 
@@ -51,7 +51,7 @@ async def test_start_menu_has_settings_and_nested_pages_do_not_start_a_game(size
 async def test_saved_settings_apply_after_restarting_without_environment_overrides(monkeypatch):
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(100, 36)) as pilot:
-        await pilot.press("f3")
+        await pilot.press("f9")
         await pilot.pause()
         settings = app.screen
         settings.query_one("#settings-improv", Select).value = "严格"
@@ -82,7 +82,7 @@ async def test_saved_settings_apply_after_restarting_without_environment_overrid
 async def test_model_choice_persists_and_narrative_preferences_stay_available(monkeypatch):
     app = AutoKeeperApp(theme="amber")
     async with app.run_test() as pilot:
-        await pilot.press("f3")
+        await pilot.press("f9")
         await pilot.pause()
         settings = app.screen
         settings.query_one("#settings-models", Button).press()

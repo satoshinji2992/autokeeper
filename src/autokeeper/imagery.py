@@ -684,15 +684,19 @@ def _framed(path: str, width: int, height: int, fill: bool, face: bool = False) 
 PORTRAIT_SHAPE = 1.0  # the widest a portrait's box gets (width over height); wider panels keep it in the middle
 
 
+@lru_cache(maxsize=64)
 def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
     """The whole portrait in the middle of the panel's shape, the room round it filled with
     the same photo blown up, blurred and darkened, as a phone shows a tall photo on a wide
     screen: a tall old studio portrait no longer stands between two black bands. A cut-out
     portrait (preprocess) keeps its person and lets the blurred photo show where its dark
     backdrop was, so a white studio wall does not light up the stage either."""
+    room = (max(64, cols * 12), max(64, rows * 24))  # a dozen pixels a cell is plenty for chafa: blurring more is slow
     photo = Image.open(path).convert("RGB")
+    photo.thumbnail(room)
     source = picture_source(path)
     front = Image.open(source).convert("RGB") if source != str(path) else photo
+    front.thumbnail(room)
     target = min(cols * cell / max(1, rows), PORTRAIT_SHAPE)  # width over height, in pixels
     w, h = front.size
     if not w or not h:

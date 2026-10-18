@@ -9,7 +9,7 @@
     keeper        narrates resolved, public facts; never carries the module's hidden truth
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
     investigator  AI players (companions and autoplay); see only what players see
-                  (engine/autoplay.situation); also writes the ideas a player asks for (F8)
+                  (engine/autoplay.situation); also writes the ideas a player asks for (F5)
     vision        reads sketches
 """
 
@@ -95,7 +95,7 @@ class Dialogue(BaseModel):
 
 
 class Ideas(BaseModel):
-    """Three things the player's own investigator could do next (F8, /suggest)."""
+    """Three things the player's own investigator could do next (F5, /suggest)."""
 
     look: str = Field(description="调查：查看、翻找或检查一样具体的东西")
     ask: str = Field(description="社交：问在场的人、去找见过的人打听，或者和同伴商量")
@@ -631,7 +631,7 @@ class Cast:
         return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
 
     async def suggest(self, state: GameState, inv_id: str, situation: str) -> list[str]:
-        """Ideas for a player's own investigator (F8, /suggest): three actions, written by the
+        """Ideas for a player's own investigator (F5, /suggest): three actions, written by the
         investigator role from the same view the AI players get. A stateless call kept out of
         the save, since asking for ideas is not a move in the game; only its cost is counted.
         The player's lines (prefs.py) ride along: an idea is something they would say."""
