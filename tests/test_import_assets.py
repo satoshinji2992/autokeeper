@@ -219,3 +219,14 @@ async def test_web_pictures_come_from_tavily_and_only_into_folders_kept_on_this_
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
     assert imagery.private(tmp_path / "modules" / "local" / "x" / "art") and imagery.private(tmp_path / "saves" / "art" / "y")
     assert not imagery.private(tmp_path / "modules" / "zhuishuren" / "art")  # the bundled module keeps licensed photos only
+
+
+def test_an_import_on_another_vendor_draws_with_that_vendors_strongest_model(monkeypatch):
+    """A Codex import draws and reads pictures on GPT-6-Astra, not on the game's Claude."""
+    monkeypatch.setattr(config, "load", lambda *a, **k: config.Config())
+    codex = importer.import_config("codex:default")
+    assert (codex.role("artist").backend, codex.role("artist").model) == ("codex", "gpt-6-astra")
+    assert codex.role("vision").model == "gpt-6-astra" and importer.drawn_by_artist(codex)
+    chosen = importer.import_config("codex:default", "claude-opus-5-5")  # a reading model chosen by hand stays
+    assert chosen.role("vision").model == "claude-opus-5-5" and chosen.role("artist").model == "gpt-6-astra"
+    assert not importer.drawn_by_artist(config.Config())  # Opus builds and draws its own

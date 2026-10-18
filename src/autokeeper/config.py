@@ -4,8 +4,8 @@ Every agent role picks its own backend and model. A preset sets all of them at o
 
     claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story,
               Opus 5.5 rules, directs and builds modules, Haiku 5.5 plays the NPCs.
-    deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role). Needs
-              DEEPSEEK_API_KEY. Art and vision stay on Opus 5.5, DeepSeek as their fallback.
+    deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role; art and vision on
+              deepseek-v4-pro). Needs DEEPSEEK_API_KEY.
 
 Pick one with `autokeeper --preset deepseek`, AUTOKEEPER_PRESET, or `preset = "deepseek"`
 in the config file. A mode moves the preset's thinking levels: 高级剧情 lets the roles that
@@ -109,23 +109,33 @@ def _deepseek(effort: str | None) -> Role:
 
 
 # Pictures and how they look (drawing and colouring ASCII art, reading sketches and module
-# images, picking photos) run on Opus 5.5 whatever the preset. A preset on another vendor keeps
-# its own model as the fallback, so it still plays without a Claude login.
+# images, picking photos) go to the strongest model of the vendor a game is on: Opus on Claude,
+# V4 Pro on DeepSeek, GPT-6-Astra on Codex. Always the vendor's own: a DeepSeek game never
+# calls Claude.
 ART = ("artist", "vision")
+TOP = {"claude": "claude-opus-5-5", "deepseek": "deepseek:deepseek-v4-pro", "codex": "gpt-6-astra"}
 
 
-def _opus_art(roles: dict[str, Role]) -> dict[str, Role]:
-    out = dict(roles)
-    for name in ART:
-        own = out.get(name)
-        out[name] = replace(OPUS, fallback=own.model if own and own.backend != "claude" else "")
-    return out
+def art_role(role: Role) -> Role:
+    """The same vendor's strongest model for this role, its thinking level kept; a vendor
+    without one here (a local model) as it is."""
+    if role.backend == "claude":
+        return replace(role, model=TOP["claude"])
+    if role.backend == "codex":
+        return replace(role, model=TOP["codex"])
+    if role.model.startswith("deepseek:"):
+        return replace(role, model=TOP["deepseek"])
+    return role
+
+
+def _top_art(roles: dict[str, Role]) -> dict[str, Role]:
+    return {name: art_role(r) if name in ART else r for name, r in roles.items()}
 
 
 PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
-    "codex": {r: Role("codex", "default", None) for r in DEFAULT_ROLES},
-    "deepseek": _opus_art({
+    "codex": _top_art({r: Role("codex", "default", None) for r in DEFAULT_ROLES}),
+    "deepseek": _top_art({
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
         **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director", "card")},
         # Summaries and recaps need no reasoning. With thinking on, half the summarizer's output
@@ -279,7 +289,6 @@ def load(path: Path | None = None) -> Config:
     if picked := os.environ.get("AUTOKEEPER_MODEL") or data.get("model"):
         backend, model = route(picked)
         every.update(backend=backend, model=model)
-        every.setdefault("fallback", "")  # one model for everything, art too: an offline game stays offline
     if fallback := os.environ.get("AUTOKEEPER_FALLBACK") or data.get("fallback"):
         every.update(fallback=fallback)
     for name in set(DEFAULT_ROLES) | set(roles) - {"all"}:

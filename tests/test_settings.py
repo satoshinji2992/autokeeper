@@ -86,10 +86,15 @@ async def test_model_choice_persists_and_narrative_preferences_stay_available(mo
         await pilot.pause()
         settings = app.screen
         settings.query_one("#settings-models", Button).press()
-        await pilot.pause()
+        for _ in range(100):  # the dialog highlights the current preset as it mounts: choose only after that
+            if app.screen is not settings and app.screen.is_mounted:
+                break
+            await pilot.pause(0.05)
         models = app.screen
         presets = models.query_one("#preset", OptionList)
         presets.highlighted = presets.get_option_index("codex")
+        await pilot.pause()
+        assert presets.get_option_at_index(presets.highlighted or 0).id == "codex"
         models.query_one("#apply", Button).press()
         for _ in range(100):  # the choice is saved in the dismiss callback: a slow runner takes more than a frame
             if app.screen is settings and config.load().role("keeper").backend == "codex":

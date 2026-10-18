@@ -201,8 +201,8 @@ ART_BY_ARTIST = """
 
 
 def drawn_by_artist(cfg: config.Config) -> bool:
-    """Whether the art goes to the artist role: when another model builds the module, the
-    pictures still come from the art model (Opus 5.5 in every preset)."""
+    """Whether the art goes to the artist role: when the module is built by a lesser model,
+    the pictures still come from its vendor's strongest one (config.art_role)."""
     importer, artist = cfg.role("importer"), cfg.role("artist")
     return (importer.backend, importer.model) != (artist.backend, artist.model)
 
@@ -520,6 +520,11 @@ def import_config(model: str = "", vision_model: str = "") -> config.Config:
         # Claude roles when the user has explicitly chosen another import backend.
         for name in ("summarizer", "lore"):
             cfg.roles[name] = replace(cfg.role("importer"), effort=None)
+        # Pictures go to that vendor's strongest model, not the game's (a Codex import draws
+        # on GPT-6-Astra); a reading model chosen for this import keeps its place.
+        cfg.roles["artist"] = config.art_role(cfg.role("importer"))
+        if not vision_model:
+            cfg.roles["vision"] = config.art_role(cfg.role("importer"))
     return cfg
 
 

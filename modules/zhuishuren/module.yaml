@@ -242,6 +242,7 @@ npcs:
       - 镇中心有图书馆、警察局和《阿诺兹堡广告报》报社
       - 站外小食铺早上卖热咖啡和煎面包，行李可以暂存在站里
     location: huochezhan
+    portrait: zhanwuyuan
   - id: thomas
     name: 托马斯·金博尔
     role: 委托人，道格拉斯的侄子，房子的继承人
