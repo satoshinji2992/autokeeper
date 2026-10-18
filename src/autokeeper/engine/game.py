@@ -754,23 +754,6 @@ class Game:
             return ""  # their reply is the scene; no second model retells a greeting
         return await self._narrate(self._report(turn), on_delta)
 
-    async def _lore(self, turn: Turn) -> str:
-        """GraphRAG context for this turn, keyed by what the structured action touched."""
-        a = turn.action
-        lore = getattr(self.cast, "lore", None)
-        if a is None or lore is None or a.kind in ("move", "wait", "daily"):
-            return ""
-        m, st = self.m, self.state
-        keywords = [a.target, m.location(st.location).name]
-        if a.npc and any(n.id == a.npc for n in m.npcs):
-            keywords.append(m.npc(a.npc).name)
-        await self.emit({"type": "status", "text": "检索模组知识库…"})
-        try:
-            return await lore(st, a.summary, keywords=[k for k in keywords if k])
-        except Exception as exc:  # retrieval is an enhancement; never break a turn over it
-            await self.emit({"type": "status", "text": f"知识库检索失败：{exc.__class__.__name__}"})
-            return ""
-
     async def remember(self) -> None:
         st = self.state
         st.tally()

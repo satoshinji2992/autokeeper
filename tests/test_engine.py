@@ -276,6 +276,18 @@ def test_leak_guard():
     assert guard.leaks("钟只是老了，您别多想。", {"s": secret}) == []
 
 
+def test_a_shared_place_name_is_not_a_leak_and_a_real_one_is_cut_out():
+    """The station clerk gives the way to 218 Aylesbury Street, which the truth also names:
+    that is directions, not a secret. What only the secret says still counts."""
+    truth = {"truth": "道格拉斯没有死，他住在艾尔斯伯里大街 218 号后面公墓底下的隧道里，夜里回来偷自己的书。"}
+    knows = "出站沿路到镇中心，再沿艾尔斯伯里大街走，218 号金博尔家在公墓旁"
+    directions = "您顺着这条路到镇中心，再沿艾尔斯伯里大街一直走，218 号就在公墓旁边。"
+    assert guard.leaks(directions, truth) == ["truth"]  # without knowing what is public: a false alarm
+    assert guard.leaks(directions, truth, public=knows) == []
+    slip = directions + "听说道格拉斯没有死，他住在公墓底下的隧道里。"
+    assert guard.leaks(slip, truth, public=knows) == ["truth"]
+    assert guard.redact(slip, truth, public=knows) == directions  # the safe sentence stays
+
 
 # -- improvisation ----------------------------------------------------------------------
 from autokeeper.agents.director import Improv, NewClue, NewEvent, NewFlag, NewLocation, NewNPC  # noqa: E402

@@ -74,8 +74,13 @@ def _aliases(names: tuple[tuple[str, str], ...]) -> dict[str, tuple[str, ...]]:
 
 def aliases(m: Module) -> dict[str, tuple[str, ...]]:
     """Every place's names as they can come up in text, longest first: the full name, then its
-    heads that name nothing else in the module."""
-    return _aliases(tuple((loc.id, loc.name) for loc in m.locations))
+    heads that name nothing else in the module, and the other names the module gives it
+    (an address, whose house it is)."""
+    out = dict(_aliases(tuple((loc.id, loc.name) for loc in m.locations)))
+    for loc in m.locations:
+        if loc.aliases:
+            out[loc.id] = tuple(sorted({*out[loc.id], *(plain(a) for a in loc.aliases if plain(a))}, key=len, reverse=True))
+    return out
 
 
 @lru_cache(maxsize=16)
@@ -92,7 +97,7 @@ def mentions(m: Module, texts: Iterable[str]) -> dict[str, str]:
             owners.setdefault(n, []).append(pid)
     if not owners:
         return {}
-    full = {plain(loc.name): loc.name for loc in m.locations}
+    full = {plain(a): a for loc in m.locations for a in loc.aliases} | {plain(loc.name): loc.name for loc in m.locations}
     pattern = _pattern(tuple(owners))
     found: dict[str, str] = {}
     for text in texts:

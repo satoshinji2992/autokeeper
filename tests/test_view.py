@@ -51,7 +51,7 @@ def begun(m: Module) -> GameState:
 def test_ai_players_see_what_the_players_were_shown_and_no_more(zhui):
     st = begun(zhui)
     view = situation(zhui, st)
-    assert "你们到这里时看到：一栋 L 形的旧木屋" in view and "图书馆（听说过）" in view
+    assert "你们到这里时看到：艾尔斯伯里大街走到头，218 号是一栋 L 形的旧木屋" in view and "图书馆（听说过）" in view
     assert not any(s in view for s in ("陵墓", "隧道", "食尸鬼", "屋后通往公墓的小路"))  # unheard places, the keeper's list of things to search
     st.visited.append("mudi")
     st.location = "mudi"
@@ -86,9 +86,24 @@ def test_the_parser_gets_only_where_they_could_head_and_by_the_names_they_know(z
     assert fog.bearings(zhui, st)["suidao"] == "隧道网" and "食尸鬼" not in Cast(config.load(), zhui).bearings(st)
 
 
+@pytest.mark.usefixtures("canned")
+def test_the_house_answers_to_the_address_on_the_letter(zhui):
+    """The letter gives 艾尔斯伯里大街 218 号; "I knock at 218" has to lead to the Kimballs' house."""
+    assert fog.mentions(zhui, ["信封上写着艾尔斯伯里大街 218 号"]) == {"jiefang": "艾尔斯伯里大街", "jinboer_jia": "218 号"}
+    st = Game.new(zhui, [zhui.pregens[0].model_copy(deep=True)])
+    st.location, st.visited = "jiefang", ["huochezhan", "zhenzhongxin", "jiefang"]
+    st.add("keeper", "托马斯的信上写着地址：艾尔斯伯里大街 218 号。")
+    assert "218 号(jinboer_jia，也叫托马斯家)" in Cast(config.load(), zhui).bearings(st)  # the name they have, then the rest
+    st.location, st.visited = "zhenzhongxin", ["huochezhan", "zhenzhongxin"]
+    st.log.clear()
+    assert "lingmu" not in Cast(config.load(), zhui).bearings(st)  # other names give away nothing new
+
 
 def test_plain_sight_is_what_is_seen_in_the_open(zhui):
-    assert fog.landmarks(zhui) == {"zhenzhongxin": "阿诺兹堡镇中心", "mudi": "公墓", "jinboer_jia": "金博尔家", "tushuguan": "图书馆", "jingju": "警察局"}
+    assert fog.landmarks(zhui) == {
+        "zhenzhongxin": "阿诺兹堡镇中心", "mudi": "公墓", "jinboer_jia": "金博尔家", "tushuguan": "图书馆", "jingju": "警察局",
+        "jiefang": "艾尔斯伯里大街",  # named from the end of the street, where the house stands
+    }  # fmt: skip
     zhui.location("suidao").read_aloud += "通道尽头，隐约是一座地下墓城。"  # seen only down a secret way
     zhui.locations.append(Location(id="city", name="地下墓城", read_aloud="", exits=["suidao"]))
     assert "city" not in fog.landmarks(zhui) and "city" not in fog.bearings(zhui, begun(zhui))

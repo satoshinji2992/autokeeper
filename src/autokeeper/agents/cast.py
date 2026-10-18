@@ -342,7 +342,13 @@ class Cast:
         people = "、".join(f"{n.name}({n.id})" for n in here if n.id in met) or "无"
         if strangers := [f"{n.name}({n.id})" for n in here if n.id not in met]:
             people += f"；还没通名：{'、'.join(strangers)}（summary 和 echo 里照玩家的叫法称呼他们）"
-        ways = "、".join(f"{name}({pid})" for pid, name in fog.bearings(m, state).items()) or "无"
+        known = {**fog.landmarks(m, state), **fog.known(m, state)}
+
+        def way(pid: str, name: str) -> str:  # other names only for places they already know
+            more = [a for a in m.location(pid).aliases if pid in known and fog.plain(a) != fog.plain(name)]
+            return f"{name}({pid}{'，也叫' + '、'.join(more) if more else ''})"
+
+        ways = "、".join(way(pid, name) for pid, name in fog.bearings(m, state).items()) or "无"
         return (
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
@@ -489,6 +495,17 @@ class Cast:
         out["truth"] = m.truth
         return out
 
+    def _public(self, state: GameState, npc: NPC) -> str:
+        """What this NPC may repeat whatever the protected texts share with it: its own sheet,
+        the hook and the opening, the places everyone knows or the party has seen, the clues
+        already found or unlocked with this NPC."""
+        m = self.module
+        own = [npc.name, npc.role, npc.look, npc.personality, npc.voice, npc.goal, *npc.knows, *npc.lies]
+        places = [f"{loc.name}\n{loc.read_aloud}" for loc in m.locations if loc.public or loc.id in state.visited]
+        shown = {*state.clues, *state.npc(npc.id).unlocked} | {c for c in npc.clues if c not in npc.gates}
+        found = [c.text for c in m.clues if c.id in shown]
+        return "\n".join([m.hook or "", m.opening or "", *own, *places, *found])
+
     async def npc(self, state: GameState, npc_id: str, message: str) -> str:
         npc = self.module.npc(npc_id)
         key = f"npc:{npc_id}"
@@ -501,7 +518,8 @@ class Cast:
         reply = await self._send(key, s, state, message, extra=mood)
         dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
         text = dialogue.text.strip()
-        leaked = guard.leaks(text, self._protected(state, npc))
+        protected, public = self._protected(state, npc), self._public(state, npc)
+        leaked = guard.leaks(text, protected, public=public)
         if leaked:
             # Drop the leaked exchange from the NPC's memory and answer again with a warning
             # that is not stored either, so the leak never becomes something it "said".
@@ -512,9 +530,9 @@ class Cast:
             reply = await self._send(key, s, state, message, extra=mood + fix)
             dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
             text = dialogue.text.strip()
-            if guard.leaks(text, self._protected(state, npc)):
+            if guard.leaks(text, protected, public=public):  # still: keep only the safe sentences
                 s.forget()
-                raise ValueError("NPC 回复仍包含未公开资料")
+                text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
         world.apply(self.module, state, dialogue.changes, source=npc_id, spoken=text)
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True

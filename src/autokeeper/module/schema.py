@@ -76,6 +76,7 @@ class Location(BaseModel):
     travel_minutes: dict[str, int] = Field(default_factory=dict, description="到相邻地点的分钟数；未写的路段为 10 分钟")
     art: str | None = None
     public: bool = Field(False, description="公开营业或可问路找到的地标，不包含秘密入口和待调查地点")
+    aliases: list[str] = Field(default_factory=list, description="玩家可能用的别的叫法，比如门牌地址、主人的名字（托马斯家）")
     weather: list[Literal["rain", "storm", "snow", "fog", "leaves", "dust", "embers", "flicker", "torch", "redlight", "warp"]] = Field(
         default_factory=list,
         description="画面上的天气与光：rain 雨、storm 雷雨、snow 雪、fog 雾或烟、leaves 风吹落叶、dust 光里的浮尘、"
