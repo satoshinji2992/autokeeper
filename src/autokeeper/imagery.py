@@ -428,7 +428,10 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
     # 24-bit when the terminal shows it; otherwise chafa dithers into the 240 fixed colours
     # itself, rather than leaving the squeeze to the terminal's 16 theme colours (navy, teal).
     colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
-    cmd = ["chafa", "-f", "symbols", "-c", colors, "--work", str(work), "--size", f"{width}x{height}", *STYLES.get(style, STYLES["picture"]), source]
+    # The picture is already cut to the panel's shape for cells half as wide as tall; say so,
+    # or chafa guesses the cell shape from the console font (Windows) and draws a thin strip.
+    cmd = ["chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
+           *STYLES.get(style, STYLES["picture"]), source]
     out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
 
