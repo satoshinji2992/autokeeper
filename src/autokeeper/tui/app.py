@@ -32,6 +32,7 @@ from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
 from ..module.compiler import compile_module, skill_name
 from ..module.schema import Module
+from ..prefs import Prefs
 from ..rules import commands
 from ..rules.coc import Investigator, Rules
 from . import art
@@ -124,6 +125,7 @@ class TitleScreen(Screen):
                     Option("  AI 自动跑团（观战）", id="watch"),
                     Option("  加入局域网房间", id="join"),
                     Option("  导入模组", id="import"),
+                    Option("  叙事偏好", id="prefs"),
                     Option("  离开", id="quit"),
                     id="menu",
                 )
@@ -157,6 +159,10 @@ class TitleScreen(Screen):
             from .importing import ImportScreen
 
             self.app.push_screen(ImportScreen())
+        elif choice == "prefs":
+            from .prefs import PrefsModal
+
+            self.app.push_screen(PrefsModal())
         elif choice == "quit":
             self.app.exit()
 
@@ -383,6 +389,7 @@ class GameScreen(Screen):
         Binding("f7", "sheet", "人物卡"),
         Binding("f9", "retell", "重讲"),
         Binding("f10", "debrief", "复盘"),
+        Binding("ctrl+o", "prefs", "叙事偏好"),
         Binding("escape", "focus_input", "输入", show=False),
     ]
 
@@ -765,7 +772,7 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme"):
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs"):
             self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
             return
         event.input.value = ""
@@ -792,7 +799,8 @@ class GameScreen(Screen):
         cmd, *args = text.split()
         cmd = cmd.lower()
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
-                   "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief}
+                   "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
+                   "/prefs": self.action_prefs}
         if cmd == "/retell":  # /retell 短一点 skips the list
             self.action_retell(args[0] if args else "")
         elif cmd in actions:
@@ -941,6 +949,16 @@ class GameScreen(Screen):
 
     def action_map(self) -> None:
         self.app.push_screen(MapModal(self.m, self.state))
+
+    def action_prefs(self) -> None:
+        from .prefs import PrefsModal
+
+        self.app.push_screen(PrefsModal(self.cast.prefs if self.cast else None), self._prefs_saved)
+
+    def _prefs_saved(self, chosen: Prefs | None) -> None:
+        """Mid-turn is fine: the next narration reads them, and nothing already told changes."""
+        if chosen is not None and self.cast is not None:
+            self.cast.prefs = chosen
 
     def _backstage(self) -> None:
         """The director finished a plan while nobody was mid-turn: play it now."""

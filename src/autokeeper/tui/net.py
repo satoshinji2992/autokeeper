@@ -321,3 +321,6 @@ class NetGameScreen(GameScreen):
 
     def _ask_epilogue(self) -> None:
         self.run_worker(partial(self.link.send, {"t": "epilogue"}))
+
+    def action_prefs(self) -> None:
+        self.app.notify("联机时按房主那边的叙事偏好来讲")

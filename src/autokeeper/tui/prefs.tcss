@@ -1,0 +1,45 @@
+/* 叙事偏好 (prefs.py); .modal, .modal-title, .buttons and .system come from app.tcss */
+
+#prefs-modal {
+    width: 92;
+    max-width: 96%;
+    height: auto;
+    max-height: 90%;
+}
+#prefs-body {
+    height: auto;
+    margin-top: 1;
+}
+#prefs-scales {
+    width: 36;
+    height: auto;
+    margin-right: 2;
+}
+#prefs-scales RadioSet {
+    layout: horizontal;
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+#prefs-scales RadioButton {
+    width: 1fr;
+}
+#prefs-lines-box {
+    width: 1fr;
+    height: auto;
+}
+.prefs-label {
+    color: $secondary;
+    text-style: bold;
+}
+#prefs-lines {
+    height: auto;
+    border: tall $border-blurred;
+    background: $surface;
+}
+#prefs-lines:focus {
+    border: tall $border;
+}
+#prefs-note {
+    margin-top: 1;
+}
