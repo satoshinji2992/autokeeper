@@ -1,0 +1,148 @@
+/* 导入模组 (importing.py); #setup, #setup-title and #setup-hint come from app.tcss */
+
+ImportScreen #import-steps {
+    height: 1fr;
+}
+
+/* ---------- browse ---------- */
+ImportScreen #browse-intro {
+    margin-bottom: 1;
+}
+ImportScreen #browse-body {
+    height: 1fr;
+}
+ImportScreen #places {
+    width: 24;
+    height: auto;
+    max-height: 100%;
+    margin-right: 1;
+    border: round $primary-darken-1;
+    background: $surface;
+}
+ImportScreen #files {
+    width: 1fr;
+    height: 1fr;
+    padding: 0 1;
+    border: round $secondary-darken-2;
+    border-title-color: $secondary;
+    background: $surface;
+}
+ImportScreen #files:focus {
+    border: round $secondary;
+}
+ImportScreen #drop {
+    margin-top: 1;
+    border: tall $primary-darken-1;
+    background: $surface;
+}
+ImportScreen #drop:focus {
+    border: tall $primary;
+}
+
+/* ---------- confirm ---------- */
+ImportScreen #confirm-body {
+    height: 1fr;
+}
+ImportScreen #picked {
+    padding: 0 1;
+    margin-bottom: 1;
+    border: round $secondary-darken-2;
+    background: $surface;
+}
+ImportScreen #documents {
+    height: auto;
+    max-height: 9;
+    margin-bottom: 1;
+    border: round $primary-darken-1;
+    border-title-color: $secondary;
+    background: $surface;
+}
+ImportScreen #extras {
+    margin-bottom: 1;
+}
+ImportScreen .field {
+    height: auto;
+}
+ImportScreen .field-label {
+    width: 10;
+    color: $secondary;
+    text-style: bold;
+}
+ImportScreen .field Input {
+    width: 1fr;
+    max-width: 56;
+    padding: 0 1;
+    background: $panel;
+}
+ImportScreen .field Input:focus {
+    background: $primary 30%;
+}
+ImportScreen .field Input:disabled {
+    background: $surface;
+}
+ImportScreen .field-note {
+    padding-left: 10;
+    margin-bottom: 1;
+    color: $text-muted;
+}
+ImportScreen .field-note.warning {
+    color: $warning;
+}
+ImportScreen .field-note.error {
+    color: $error;
+}
+ImportScreen #engine {
+    padding: 0 1;
+    border-left: thick $accent;
+}
+ImportScreen #confirm .buttons {
+    align: left middle;
+    margin-top: 0;
+}
+
+/* ---------- run ---------- */
+ImportScreen #stages {
+    height: 1;
+    margin-bottom: 1;
+}
+ImportScreen .stage {
+    width: auto;
+    padding: 0 1;
+    margin-right: 1;
+    color: $text-muted;
+}
+ImportScreen .stage.done {
+    color: $success;
+}
+ImportScreen .stage.current {
+    background: $primary;
+    color: $background;
+    text-style: bold;
+}
+ImportScreen .stage.current.failed {
+    background: $error;
+}
+ImportScreen #import-log {
+    height: 1fr;
+    padding: 0 1;
+    border: round $secondary-darken-2;
+    border-title-color: $text-muted;
+    background: $surface;
+    scrollbar-size-vertical: 1;
+}
+ImportScreen #import-status {
+    height: auto;
+    margin-top: 1;
+    color: $secondary;
+}
+ImportScreen #import-status.ok {
+    color: $success;
+    text-style: bold;
+}
+ImportScreen #import-status.bad {
+    color: $error;
+    text-style: bold;
+}
+ImportScreen #run .buttons {
+    align: left middle;
+}

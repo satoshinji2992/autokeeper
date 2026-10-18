@@ -472,14 +472,35 @@ def art_show(module: Path, name: str) -> None:
 
 @app.command(name="import")
 def import_cmd(
-    file: Annotated[Path, typer.Argument(help="模组文件：PDF / Word / Markdown")],
-    id: Annotated[str, typer.Option("--id", help="模组的英文短名，如 zhuishuren")],
+    file: Annotated[Path, typer.Argument(help="模组文件：PDF / Word / Markdown / 纯文本，或装着它们的 .zip")],
+    id: Annotated[str | None, typer.Option("--id", help="模组的英文短名，如 zhuishuren；不填就按文件名取，中文转拼音")] = None,
     pages: Annotated[str | None, typer.Option(help="只取这些页，如 7-18")] = None,
 ) -> None:
     """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。"""
+    import tempfile
+
+    import click
+
+    from .module import sources
     from .module.importer import run_import
 
-    asyncio.run(run_import(file, id, pages=pages, console=console))
+    module_id = id or sources.module_id(file.stem)
+    if not id:
+        console.print(f"模组短名：{module_id}（用 --id 换一个）")
+    if file.suffix.lower() not in sources.ARCHIVES:
+        asyncio.run(run_import(file, module_id, pages=pages, console=console))
+        return
+    with tempfile.TemporaryDirectory(prefix="autokeeper-zip-") as tmp:
+        found = sources.unpack(file, Path(tmp))
+        if not found.documents:
+            console.print(f"[red]{file.name} 里没有 PDF、Word、Markdown 或纯文本文件[/]")
+            raise typer.Exit(1)
+        doc = found.documents[0]
+        if len(found.documents) > 1:
+            for i, d in enumerate(found.documents, 1):
+                console.print(f"  {i}. {d.relative_to(tmp).as_posix()}")
+            doc = found.documents[typer.prompt("用哪一份作模组正文", default=1, type=click.IntRange(1, len(found.documents))) - 1]
+        asyncio.run(run_import(doc, module_id, pages=pages, images=found.images, console=console))
 
 
 @app.command()

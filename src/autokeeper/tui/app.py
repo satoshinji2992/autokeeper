@@ -148,12 +148,9 @@ class TitleScreen(Screen):
 
             self.app.push_screen(JoinScreen())
         elif choice == "import":
-            self.app.push_screen(TextModal("导入模组", Text(
-                "把模组文件（PDF / Word / Markdown）放进 modules/_import/，然后在终端运行：\n\n"
-                "    uv run autokeeper import modules/_import/你的模组.pdf --id 英文短名\n\n"
-                "导入 Agent 会读文本和页面图片，写出 module.yaml、给每个地点和 NPC 画彩色 ASCII 图，\n"
-                "跑校验直到没有错误，再编译成 Skill 包。导入的模组只留在本地 modules/local/。"
-            )))
+            from .importing import ImportScreen
+
+            self.app.push_screen(ImportScreen())
         elif choice == "quit":
             self.app.exit()
 
@@ -171,13 +168,14 @@ def _eye_mask() -> str:
 class SetupScreen(Screen):
     BINDINGS = [Binding("escape", "back", "返回")]
 
-    def __init__(self, spectate: bool):
+    def __init__(self, spectate: bool, module: Path | None = None):
         super().__init__()
         self.spectate = spectate  # AI players only; not `watch`, which is Textual's
         self.step = "module"
         self.module: Module | None = None
         self.lead: Investigator | None = None
         self.paths = modules()
+        self.preselected = module  # just imported: straight on to its investigators
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
@@ -191,6 +189,10 @@ class SetupScreen(Screen):
 
     def on_mount(self) -> None:
         self._show_modules()
+        if self.preselected in self.paths:
+            ol = self.query_one("#choices", OptionList)
+            ol.highlighted = self.paths.index(self.preselected)
+            ol.action_select()
 
     def action_back(self) -> None:
         if self.step == "module":
