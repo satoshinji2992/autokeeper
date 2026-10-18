@@ -14,9 +14,9 @@ from autokeeper.agents import guard
 from autokeeper.agents.cast import Action, Ruling, Sketch
 from autokeeper.config import EXAMPLE
 from autokeeper.engine import graph as turn_graph
-from autokeeper.engine.game import LATER, PLAY_WAIT, Game
+from autokeeper.engine.game import LATER, PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
-from autokeeper.module.schema import Module
+from autokeeper.module.schema import Event, Module
 from autokeeper.rules.coc import Rules
 from autokeeper.rules.commands import Asked
 
@@ -77,6 +77,32 @@ def make(module, fake, script, location: str | None = None):
 
     game = Game(module, state, cast, Rules(dice=fake), emit=emit)  # type: ignore[arg-type]
     return game, cast, events
+
+
+async def test_locked_clue_cannot_leak_its_handout_even_if_an_agent_requests_it(module, fake):
+    clue = module.clue("c_diary")
+    clue.requires = ["c_notice", "flag:ready"]
+    module.flags["ready"] = "已实际发生的前置事件"
+    game, _, events = make(module, fake, {}, location=clue.where)
+    assert game._valid_clues([clue.id], None) == []
+    await game._gain([clue.id], Turn(), None)
+    assert not game.state.clues and not game.state.handouts and not events
+    game.state.flags.append("ready")
+    assert game._valid_clues([clue.id], None) == []
+    game.state.clues.append("c_notice")
+    assert game._valid_clues([clue.id], None) == [clue.id]
+    await game._gain([clue.id], Turn(), None)
+    assert clue.handout in game.state.handouts
+    assert [event["type"] for event in events] == ["clue", "handout", "sheet"]
+
+
+async def test_start_fires_the_starting_locations_arrival_event_once(module, fake):
+    module.events.append(Event(id="arrival", title="必发开场", when=f"visit:{module.start}", text="事实", read_aloud="两位访客"))
+    game, cast, events = make(module, fake, {})
+    await game.start()
+    assert "arrival" in game.state.fired and "两位访客" in cast.reports[0]
+    await game._arrive(module.start, Turn())
+    assert sum(event["type"] == "event" and event.get("id") == "arrival" for event in events) == 1
 
 
 async def run_turn(app, text, thread, resume=None):
@@ -192,7 +218,7 @@ async def test_travel_time_and_timed_events(module, fake):
     game, *_ = make(module, fake, {}, location="tower")
     move = Action(kind="move", summary="去报社", destination="office")
     await game.resolve(move, Ruling(needs_roll=False, minutes=0))
-    assert game.state.location == "office" and game.state.clock == "D1 14:30"  # two hops
+    assert game.state.location == "office" and game.state.clock == "D1 14:20"  # two fixed ten-minute roads
     game.state.minutes = parse_time("D1 17:59")
     turn = await game.resolve(Action(kind="wait", summary="等待"), Ruling(needs_roll=False, minutes=5))
     assert [e.id for e in turn.events] == ["e_dusk"]
@@ -248,6 +274,7 @@ def test_leak_guard():
     secret = "他在钟里藏了东西，每到午夜它就多敲一下"
     assert guard.leaks("实话跟您说，我在钟里藏了东西，每到午夜……", {"s": secret}) == ["s"]
     assert guard.leaks("钟只是老了，您别多想。", {"s": secret}) == []
+
 
 
 # -- improvisation ----------------------------------------------------------------------
@@ -331,6 +358,64 @@ async def test_the_opening_weaves_in_the_investigators(module, fake):
     await game.start()
     assert cast.asked[0][0] == "开局改编" and module.npc("old_editor").location == "office"
     assert "钱伯" in cast.reports[-1]  # the opening narration knows about it
+
+
+async def test_opening_is_told_once_from_the_arrival_with_the_investigators_background(module, fake):
+    game, cast, events = make(module, fake, {})
+    game.state.investigator.backstory = {"信念": "答应的事一定办到"}
+    await game.start()
+    assert [e.text for e in game.state.log if e.kind in ("opening", "keeper")] == ["叙事"]
+    assert not any(e["type"] == "opening" for e in events)
+    assert module.opening.strip() in cast.reports[-1] and "答应的事一定办到" in cast.reports[-1]
+    assert game.state.location == module.start and game.state.visited == [module.start]
+
+
+async def test_paper_chase_arrives_at_the_station_and_can_walk_or_stop_along_the_way(fake):
+    from autokeeper import config
+
+    m = Module.load(config.MODULES / "zhuishuren")
+    game, cast, _ = make(m, fake, {})
+    await game.start()
+    assert game.state.location == "huochezhan" and game.state.visited == ["huochezhan"]
+    assert not game.state.clues and not game.state.npcs
+    assert "蒸汽" in cast.reports[-1] and "托马斯把你领进" not in cast.reports[-1]
+    go = Action(kind="move", summary="哈罗德直接按信上的地址去托马斯家", destination="jinboer_jia")
+    start = game.state.minutes
+    turn = await game.resolve(go, Ruling(needs_roll=False, minutes=0))
+    assert turn.route == ["huochezhan", "zhenzhongxin", "jiefang", "jinboer_jia"]
+    assert game.state.minutes - start == 45 and not game.state.clues
+    report = game._report(turn)
+    assert "【沿途】阿诺兹堡火车站 → 阿诺兹堡镇中心 → 艾尔斯伯里大街 → 金博尔家" in report
+    assert "图书馆的石阶" in report and "莉拉·奥黛尔" not in report.split("【进入新地点")[0]
+    assert "食尸鬼" not in report.split("【进入新地点")[0]
+    game, _, _ = make(m, fake, {})
+    turn = await game.resolve(Action(kind="move", summary="先去镇中心", destination="zhenzhongxin"), Ruling(needs_roll=False, minutes=0))
+    assert game.state.location == "zhenzhongxin" and "jinboer_jia" not in game.state.visited
+
+
+async def test_daily_life_is_not_stuck_and_npcs_can_chat_without_giving_clues(module, fake):
+    chat = Action(kind="daily", summary="周衡陪守钟人喝茶聊家常", npc="warden", speech="今天忙不忙？")
+    ruling = Ruling(needs_roll=False, minutes=20)
+    game, cast, events = improvised(module, fake, {}, [])
+    game.state.location, game.state.turn, game.state.progress_at = "tower", 10, 0
+    turn = await game.resolve(chat, ruling)
+    await game.talk(turn)
+    await game.narrate(turn)
+    assert game.state.progress_at == 10 and cast.asked == []
+    assert len(cast.npc_calls) == 1 and cast.npc_calls[0][0] == "warden"
+    assert "今天忙不忙？" in cast.npc_calls[0][1] and "没有新解锁的线索" in cast.npc_calls[0][1]
+    assert not game.state.clues and not turn.checks and not any(e["type"] == "dice" for e in events)
+    assert not cast.reports and "【日常】" in game._report(turn)  # the NPC's reply stands without a second retelling
+
+
+async def test_daily_life_still_takes_time_and_triggers_scheduled_events(module, fake):
+    game, _, events = make(module, fake, {})
+    game.state.minutes = 17 * 60 + 50
+    action = Action(kind="daily", summary="周衡坐在广场吃晚饭")
+    turn = await game.resolve(action, Ruling(needs_roll=False, minutes=20))
+    assert game.state.minutes == 18 * 60 + 10 and "e_dusk" in game.state.fired
+    assert [e.id for e in turn.events] == ["e_dusk"]
+    assert any(e["type"] == "event" for e in events)
 
 
 async def test_a_plan_that_does_not_fit_gets_one_chance_then_is_dropped(module, fake):

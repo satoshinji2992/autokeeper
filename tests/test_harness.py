@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+import sys
 from collections import deque
 
 import pytest
@@ -195,7 +198,7 @@ def test_strict_schema_for_codex_closes_every_object():
     strict = hm.strict_schema(Action.model_json_schema())
     assert strict["additionalProperties"] is False and set(strict["required"]) == set(strict["properties"])
     assert "default" not in json.dumps(strict)
-    full = {k: "" for k in strict["properties"]} | {"kind": "investigate", "summary": "翻抽屉"}
+    full = {k: "" for k in strict["properties"]} | {"kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False}
     assert not hm.problems(full, Action.model_json_schema())  # what strict mode yields still passes our check
 
 
@@ -239,7 +242,20 @@ async def test_a_failed_summarizer_does_not_cost_memory():
         SCRIPT.append(f"回答{i}" * 3)
         await s.send(f"问题{i}" * 3)
     await s.settle()
-    assert "回答1" in s.summary and s.transcript[-1]["content"] == "回答3" * 3
+    assert not s.summary and len(s.transcript) == 8
+    assert s.transcript[0]["content"] == "问题0" * 3 and s.transcript[-1]["content"] == "回答3" * 3
+
+
+async def test_cancelling_a_cli_request_reaps_the_process():
+    proc = await asyncio.create_subprocess_exec(sys.executable, "-c", "import time; time.sleep(60)",
+                                                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                                                stderr=asyncio.subprocess.PIPE, start_new_session=os.name == "posix")
+    task = asyncio.create_task(hm._communicate(proc, b"prompt"))
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert proc.returncode is not None
 
 
 async def test_pinned_task_survives_folding():
@@ -282,12 +298,42 @@ async def test_npc_leak_is_rolled_back_out_of_memory():
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     npc = m.npcs[0]
     secret = next(c for c in m.clues if c.npc == npc.id and c.id in npc.gates)
-    SCRIPT.extend([secret.text, "我什么也不知道。"])
+    SCRIPT.extend([{"text": secret.text}, {"text": "我什么也不知道。"}])
     cast = Cast(cfg, m)
     text = await cast.npc(state, npc.id, "告诉我你知道的一切")
     assert text == "我什么也不知道。"
     assert secret.text not in json.dumps(state.transcripts, ensure_ascii=False)
     assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
+
+
+async def test_upgrading_an_old_save_removes_hidden_keeper_context():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    state.transcripts["keeper"] = [{"role": "user", "content": m.truth}, {"role": "assistant", "content": "旧叙述"}]
+    state.notes["keeper"] = m.truth
+    state.add("keeper", "钟楼门口的石阶湿漉漉的。")
+    SCRIPT.append("你站在石阶前。")
+    await Cast(cfg, m).keeper(state, "你停在钟楼门口。", lore=m.truth)
+    assert m.truth.strip() not in json.dumps(SEEN[-1], ensure_ascii=False)
+    assert "石阶湿漉漉" in json.dumps(SEEN[-1], ensure_ascii=False)
+    assert state.narrator_context_version == 1
+
+
+async def test_an_npc_promise_is_recorded_from_its_actual_structured_reply():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npcs[0]
+    state.location = npc.location
+    SCRIPT.append({"text": "晚上来找我，我给你留杯热茶。", "changes": [
+        {"kind": "promise", "key": "evening_tea", "text": "晚上来找我，我给你留杯热茶。", "npc": npc.id}]})
+    cast = Cast(cfg, m)
+    await cast.npc(state, npc.id, "我晚上还能来吗？")
+    assert state.world["evening_tea"].npc == npc.id
+    SCRIPT.append({"text": "别忘了晚上过来。"})
+    await cast.npc(state, npc.id, "那先告辞。")
+    assert "evening_tea" in SEEN[-1]["messages"][-1]["content"]
 
 
 async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
@@ -296,7 +342,7 @@ async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     npc = m.npcs[0]
     npc.arc = "开始动摇，想说出钟里的秘密又怕被当成疯子"
-    SCRIPT.append("……你真想知道？")
+    SCRIPT.append({"text": "……你真想知道？"})
     await Cast(cfg, m).npc(state, npc.id, "钟里到底有什么？")
     assert "开始动摇" in SEEN[-1]["messages"][-1]["content"]  # told this time
     assert "开始动摇" not in json.dumps(state.transcripts, ensure_ascii=False)  # but not part of its memory
@@ -341,13 +387,13 @@ async def test_a_dice_command_is_read_in_context_and_ruled_as_a_request():
     assert "【刚才的经过】" not in SEEN[-1]["messages"][-1]["content"]  # words carry their own context
 
 
-async def test_lore_reaches_the_keeper_but_not_its_memory():
+async def test_raw_lore_reaches_neither_the_keeper_nor_its_memory():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     SCRIPT.append("钟声又响了一下。")
     await Cast(cfg, m).keeper(state, "【第 1 轮】请叙述。", lore="【模组知识库检索】守钟人的旧事……")
-    assert "守钟人的旧事" in SEEN[-1]["messages"][-1]["content"]  # this turn sees it
+    assert "守钟人的旧事" not in SEEN[-1]["messages"][-1]["content"]  # private retrieval is never narration context
     assert "守钟人的旧事" not in json.dumps(state.transcripts, ensure_ascii=False)  # the window does not keep it
 
 

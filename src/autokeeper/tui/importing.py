@@ -29,7 +29,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, ContentSwitcher, DirectoryTree, Footer, Input, OptionList, RichLog, Static
+from textual.widgets import Button, ContentSwitcher, DirectoryTree, Footer, Input, OptionList, RichLog, Select, Static
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState
 
@@ -132,6 +132,8 @@ class Job:
     pages: str | None
     images: list[Path]
     label: str
+    model: str = ""
+    vision_model: str = ""
 
 
 def look_inside(path: Path, scratch: Path | None) -> Choice:
@@ -183,16 +185,19 @@ def _reason(exc: BaseException) -> str:
     return f"{text}（{type(exc).__name__}）" if text else type(exc).__name__
 
 
-def _engine_note() -> Text:
+def _engine_note(model: str = "", vision_model: str = "") -> Text:
     try:
-        cfg = config.load()
+        cfg = importer.import_config(model, vision_model)
     except ValueError as exc:  # a preset or a mode that does not exist
         return Text(f"模型配置有问题：{exc}", style="bold red")
     role = cfg.role("importer")
     t = Text()
-    t.append("导入 Agent  ", style="bold")
+    t.append("整理模组  ", style="bold")
     t.append(role.model)
     t.append(f"（{role.backend}" + (f"，思考 {role.effort}" if role.effort else "") + "）\n", style="dim")
+    t.append(f"读图：{cfg.role('vision').model}（需要查看图片时才调用）\n", style="dim")
+    if model:
+        t.append("长文整理和知识库也使用这次选择的导入模型。\n", style="dim")
     t.append("它会通读全文，整理出地点、人物、线索和结局，给每个地点和人物画图，再自己校验到没有错误。", style="dim")
     t.append("一本几十页的模组大约要二十分钟。", style="dim")
     if cfg.budget_usd is not None:
@@ -227,7 +232,7 @@ class StopModal(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
             yield Static("停下导入？", classes="modal-title")
-            yield Static(f"导入 Agent 会马上停下。已经写好的部分留在 modules/local/{self.module_id}/，重新导入会从头来过。", classes="modal-body")
+            yield Static(f"将停止导入。已生成的文件保留在 modules/local/{self.module_id}/，重新导入会从头来过。", classes="modal-body")
             with Horizontal(classes="buttons"):
                 yield Button("停下", id="halt", variant="error")
                 yield Button("继续导入", id="keep", variant="primary")
@@ -268,7 +273,7 @@ class ImportScreen(Screen):
             with ContentSwitcher(initial="browse", id="import-steps"):
                 with Vertical(id="browse"):
                     yield Static(
-                        Text("PDF、Word（.docx）、Markdown、纯文本都行，也可以是装着它们的 .zip。导入的模组只存在你自己的电脑上。", style="dim"),
+                        Text("选择 PDF、Word（.docx）、Markdown、纯文本或 ZIP 文件。", style="dim"),
                         id="browse-intro",
                     )
                     with Horizontal(id="browse-body"):
@@ -288,6 +293,18 @@ class ImportScreen(Screen):
                             yield Static("页码", classes="field-label")
                             yield Input(placeholder="空着就是全部，比如 7-18", id="pages", compact=True)
                         yield Static(id="pages-note", classes="field-note")
+                        with Horizontal(classes="field"):
+                            yield Static("导入模型", classes="field-label")
+                            yield Select(
+                                [("沿用配置", ""), ("Codex 登录", "codex:default"),
+                                 ("DeepSeek", "deepseek:deepseek-flash"), ("自定义模型", "custom")],
+                                value="", allow_blank=False, id="import-model",
+                            )
+                        yield Input(placeholder="模型名，如 ollama:qwen3:14b、openai:模型名", id="custom-import-model", compact=True)
+                        with Horizontal(classes="field"):
+                            yield Static("读图模型", classes="field-label")
+                            yield Input(placeholder="留空沿用配置；可填 codex:default 等支持读图的模型", id="vision-model", compact=True)
+                        yield Static("此处选择仅用于本次导入。使用云端模型时，正文和图片会发送给对应服务。", classes="field-note")
                         yield Static(id="engine")
                     with Horizontal(classes="buttons"):
                         yield Button("开始导入", id="start", variant="primary")
@@ -308,6 +325,7 @@ class ImportScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one("#custom-import-model").display = False
         self.set_interval(0.1, self._tick)
         self._show_browse()
 
@@ -426,13 +444,13 @@ class ImportScreen(Screen):
         extras = Text()
         if choice.images:
             shown = "、".join(p.name for p in choice.images[:4]) + (" 等" if len(choice.images) > 4 else "")
-            extras.append(f"压缩包里的 {len(choice.images)} 张图片（{shown}）会一起交给导入 Agent，地图和手稿它会看。", style="dim")
+            extras.append(f"压缩包里的 {len(choice.images)} 张图片（{shown}）会一起导入。", style="dim")
         self.query_one("#extras", Static).update(extras)
         self.query_one("#extras", Static).display = bool(choice.images)
         self.derived = sources.module_id(f.stem)
         self.query_one("#module-id", Input).value = self.derived
         self.query_one("#pages", Input).value = ""
-        self.query_one("#engine", Static).update(_engine_note())
+        self.query_one("#engine", Static).update(_engine_note(*self._models()))
         self._document_changed()
         self.step = "confirm"
         self.query_one(ContentSwitcher).current = "confirm"
@@ -519,8 +537,26 @@ class ImportScreen(Screen):
             return
         doc = self._document()
         label = doc.label if doc.path == self.choice.file else f"{self.choice.file.name} 里的 {doc.path.name}"
-        self.job = Job(doc.path, self._module_id(), spec, list(self.choice.images), label)
+        model, vision = self._models()
+        if self.query_one("#import-model", Select).value == "custom" and not model:
+            self.app.notify("请填写自定义模型名", severity="error")
+            self.query_one("#custom-import-model", Input).focus()
+            return
+        self.job = Job(doc.path, self._module_id(), spec, list(self.choice.images), label, model, vision)
         self._run()
+
+    def _models(self) -> tuple[str, str]:
+        chosen = self.query_one("#import-model", Select).value
+        model = self.query_one("#custom-import-model", Input).value.strip() if chosen == "custom" else str(chosen)
+        return model, self.query_one("#vision-model", Input).value.strip()
+
+    @on(Select.Changed, "#import-model")
+    @on(Input.Changed, "#custom-import-model, #vision-model")
+    def models_changed(self) -> None:
+        if not self.is_mounted:
+            return
+        self.query_one("#custom-import-model").display = self.query_one("#import-model", Select).value == "custom"
+        self.query_one("#engine", Static).update(_engine_note(*self._models()))
 
     # -- run ---------------------------------------------------------------------------------------
     def _run(self) -> None:
@@ -545,7 +581,8 @@ class ImportScreen(Screen):
     @work(exclusive=True, group="import", exit_on_error=False)
     async def _import(self, job: Job) -> Path:
         console = Console(file=LogFile(self._logged), force_terminal=True, color_system="truecolor", width=200, soft_wrap=True, highlight=False)
-        return await importer.run_import(job.document, job.module_id, pages=job.pages, images=job.images, console=console)
+        models = {key: value for key, value in (("model", job.model), ("vision_model", job.vision_model)) if value}
+        return await importer.run_import(job.document, job.module_id, pages=job.pages, images=job.images, console=console, **models)
 
     def _logged(self, line: Text) -> None:
         plain = line.plain.strip()

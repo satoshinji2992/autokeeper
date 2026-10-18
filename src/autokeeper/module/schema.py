@@ -14,6 +14,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field
 
+from ..plugins.schema import Plugin
 from ..rules.coc import Investigator
 
 
@@ -33,8 +34,12 @@ class Clue(BaseModel):
     npc: str | None = Field(None, description="由哪个 NPC 提供")
     core: bool = Field(False, description="关键线索：拿不到就推进不下去")
     handout: str | None = None
+    requires: list[str] = Field(default_factory=list, description="全部前置条件：线索 id，或 flag:标记；未满足时不能发出线索或附图")
     points_to: list[str] = Field(default_factory=list, description="支持哪些结论 id")
     sanity: str | None = Field(None, description="发现时的理智检定，如 0/1D3")
+
+    def available(self, flags: list[str], clues: list[str]) -> bool:
+        return all(key[5:] in flags if key.startswith("flag:") else key in clues for key in self.requires)
 
 
 class Conclusion(BaseModel):
@@ -68,7 +73,9 @@ class Location(BaseModel):
     keeper: str = Field("", description="守秘人须知")
     features: list[str] = Field(default_factory=list, description="可以调查的东西")
     exits: list[str] = Field(default_factory=list)
+    travel_minutes: dict[str, int] = Field(default_factory=dict, description="到相邻地点的分钟数；未写的路段为 10 分钟")
     art: str | None = None
+    public: bool = Field(False, description="公开营业或可问路找到的地标，不包含秘密入口和待调查地点")
     weather: list[Literal["rain", "storm", "snow", "fog", "leaves", "dust", "embers", "flicker", "torch", "redlight", "warp"]] = Field(
         default_factory=list,
         description="画面上的天气与光：rain 雨、storm 雷雨、snow 雪、fog 雾或烟、leaves 风吹落叶、dust 光里的浮尘、"
@@ -77,11 +84,21 @@ class Location(BaseModel):
     )
 
 
+class Item(BaseModel):
+    id: str
+    name: str
+    description: str = Field(description="物件可见的样子，不包含隐藏线索或未发生的效果")
+    where: str
+    owner: str = Field("", description="初始持有者 NPC id；无人持有则留空，物品在 where")
+    art: str | None = None
+
+
 class Handout(BaseModel):
     id: str
     title: str
     kind: str = "信件"
     text: str
+    images: list[str] = Field(default_factory=list, description="原模组手稿/地图的图片键，对应 art/<键>.png 或 .jpg；只在该手稿解锁后展示")
 
 
 class Creature(BaseModel):
@@ -138,6 +155,10 @@ class Module(BaseModel):
     duration: str = ""
     source: str = ""
     license: str = ""
+    cover: str | None = Field(None, description="不含剧透的原作封面图片键；选择模组时以 ASCII 预览")
+    plugins: list[str] = Field(default_factory=list, max_length=8, description="plugins/<id>/ 下经过测试的自定义规则插件")
+    extensions: dict[str, Plugin] = Field(default_factory=dict, exclude=True)
+    extension_errors: dict[str, str] = Field(default_factory=dict, exclude=True)
     hook: str = Field(description="开场钩子（玩家可见）")
     truth: str = Field(description="真相（只有守秘人知道）")
     keeper_notes: str = ""
@@ -147,6 +168,7 @@ class Module(BaseModel):
     opening: str = ""
     locations: list[Location]
     npcs: list[NPC] = Field(default_factory=list)
+    items: list[Item] = Field(default_factory=list)
     clues: list[Clue] = Field(default_factory=list)
     conclusions: list[Conclusion] = Field(default_factory=list)
     handouts: list[Handout] = Field(default_factory=list)
@@ -185,11 +207,23 @@ class Module(BaseModel):
         folder = path if path.is_dir() else path.parent
         file = folder / "module.yaml" if path.is_dir() else path
         module = cls.model_validate(yaml.safe_load(file.read_text(encoding="utf-8")))
+        module.extensions, module.extension_errors = {}, {}
+        from ..plugins.storage import load as load_plugin
+
+        for identity in module.plugins:
+            try:
+                plugin = load_plugin(folder / "plugins", identity)
+                module.extensions[identity] = plugin
+                for key, meaning in plugin.flags.items():
+                    module.flags.setdefault(key, meaning)
+            except (OSError, ValueError, TypeError) as exc:
+                module.extension_errors[identity] = f"{type(exc).__name__}: {str(exc)[:500]}"
         art_dir = folder / "art"
         if art_dir.is_dir():
             module.art = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.txt"))}
             module.art_colors = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.color"))}
-            module.pictures = {p.stem: str(p) for p in sorted(art_dir.glob("*.jpg")) if not p.stem.endswith(".glitch")}
+            module.pictures = {p.stem: str(p) for p in sorted(art_dir.iterdir())
+                               if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and not p.stem.endswith((".glitch", ".prep"))}
         return module
 
     def save(self, folder: Path) -> Path:
@@ -198,6 +232,11 @@ class Module(BaseModel):
         data = self.model_dump(mode="json", exclude_defaults=False)
         file = folder / "module.yaml"
         file.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8")
+        if self.extensions:
+            from ..plugins.storage import save as save_plugin
+
+            for plugin in self.extensions.values():
+                save_plugin(plugin, folder / "plugins")
         if self.art:
             (folder / "art").mkdir(exist_ok=True)
             for name, text in self.art.items():

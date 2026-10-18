@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from .. import artkit, skills
 from ..config import Config
-from ..harness import Session
+from ..harness import Reply, Session
 
 
 class Mask(BaseModel):
@@ -47,16 +48,23 @@ async def color(cfg: Config, name: str, text: str, hint: str = "") -> str:
         await session.close()
 
 
-async def draw(cfg: Config, subject: str, *, portrait: bool = False) -> tuple[str, str]:
+async def draw(cfg: Config, subject: str, *, portrait: bool = False, on_reply: Callable[[Reply], None] | None = None) -> tuple[str, str]:
     w, h = artkit.MAX_PORTRAIT if portrait else artkit.MAX_SCENE
     session = Session("artist", cfg.role("artist"), SYSTEM, schema=Drawing.model_json_schema())
     try:
-        reply = await session.send(
-            f"画一张{'人物头像' if portrait else '场景插图'}：{subject}\n宽不超过 {w} 列，高不超过 {h} 行，只用 ASCII 字符。同时给出配色蒙版。"
-        )
-        data = reply.data or {}
-        text = str(data.get("art", "")).rstrip("\n")
-        return text, artkit.fit_mask(text, str(data.get("mask", "")))
+        prompt = f"画一张{'人物头像' if portrait else '场景或物件插图'}：{subject}\n宽不超过 {w} 列，高不超过 {h} 行，只用 ASCII 字符。同时给出配色蒙版。"
+        for _ in range(2):
+            reply = await session.send(prompt)
+            if on_reply:
+                on_reply(reply)
+            data = reply.data or {}
+            text = str(data.get("art", "")).rstrip("\n")
+            mask = artkit.fit_mask(text, str(data.get("mask", "")))
+            issues = artkit.check("illustration", text, mask, portrait=portrait)
+            if text.strip() and not issues:
+                return text, mask
+            prompt = "请修复并重新输出完整的 art 和 mask：" + ("；".join(i.text for i in issues) or "图画不能为空")
+        raise ValueError("Artist returned an invalid illustration twice")
     finally:
         await session.close()
 

@@ -115,6 +115,7 @@ class Speaker(Vertical):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.who = ""  # their name as the story gives it
+        self.npc_id = ""
         self.portrait: Portrait | None = None
         self.feeling = mood.CALM
         self.fresh = False  # they have spoken since the keeper's last narration
@@ -130,8 +131,12 @@ class Speaker(Vertical):
         self.run_worker(partial(asyncio.to_thread, mood.warm), group="speaker-warm", exit_on_error=False)
 
     @property
-    def scene(self) -> SceneArt:
-        return self.screen.query_one(SceneArt)
+    def scene(self) -> SceneArt | None:
+        # During teardown the scene sibling may be gone before this widget's worker
+        # returns from its thread. Treat that exactly like a stage with no room.
+        if not self.is_attached:
+            return None
+        return next(iter(self.screen.query(SceneArt)), None)
 
     # -- the rules ---------------------------------------------------------------------------
     def follow(self, ev: dict, m: Module) -> None:
@@ -139,6 +144,11 @@ class Speaker(Vertical):
         t = ev.get("type")
         if t in ("npc", "performance"):
             self.said(m, ev)
+        elif t == "art" and self.npc_id:
+            npc = next((n for n in m.npcs if n.id == self.npc_id), None)
+            if npc is not None and npc.portrait == ev.get("key"):
+                self.portrait = Portrait.of(m, npc)
+                self.refit()
         elif t in ("move", "event", "ending"):
             self.leave()
         elif t == "keeper_start" and not ev.get("again"):  # told again, it is still the same turn
@@ -153,6 +163,7 @@ class Speaker(Vertical):
             self.leave()
             return
         self.who, self.portrait = ev.get("name") or npc.name, portrait
+        self.npc_id = npc.id
         self.fresh, self.since = True, time.monotonic()
         performing = ev.get("type") == "performance"  # their words are a story about others
         self.run_worker(partial(self._speak, ev.get("text", ""), npc.look, performing), group="speaker", exclusive=True)
@@ -161,6 +172,7 @@ class Speaker(Vertical):
         self.workers.cancel_group(self, "speaker")
         self.workers.cancel_group(self, "speaker-fit")
         self.portrait, self.fresh = None, False
+        self.npc_id = ""
         self._hide()
 
     def _linger(self) -> None:
@@ -182,8 +194,10 @@ class Speaker(Vertical):
         as on a stage too narrow for a panel. The panel is as tall as the scene, or as the face
         needs on a bare or short stage; a picture gets the panel's height but the name's row."""
         p, scene = self.portrait, self.scene
+        if p is None or scene is None:
+            return ()
         width = scene.outer_size.width
-        if p is None or width < NARROWEST:
+        if width < NARROWEST:
             return ()
         here = scene.outer_size.height
         if not p.picture:
@@ -208,6 +222,8 @@ class Speaker(Vertical):
             if self.portrait is p and self._wanted() == wanted:
                 break
         scene, rows = self.scene, wanted[4]
+        if scene is None:
+            return False
         name = Text(self.who, style="bold")
         width = min(max(_width(art), name.cell_len) + CHROME, int(scene.outer_size.width * WIDEST))
         self.query_one(".face", Static).update(art)
@@ -223,12 +239,15 @@ class Speaker(Vertical):
         self._fitted = ()
         if self.display:
             self.display = False
-            self.parent.styles.min_height = None  # type: ignore[union-attr]
-            self.scene.cover(0)
+            if self.parent is not None:
+                self.parent.styles.min_height = None
+            if (scene := self.scene) is not None:
+                scene.cover(0)
 
     # -- motion ------------------------------------------------------------------------------
     def _move(self) -> None:
-        if not self.scene.effects:  # F6: no animation at all
+        scene = self.scene
+        if scene is None or not scene.effects:  # F6: no animation at all
             return
         if self.feeling in MOTIONS:
             step, path = MOTIONS[self.feeling]

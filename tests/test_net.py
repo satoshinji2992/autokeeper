@@ -116,7 +116,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         book = welcome["module"]  # the keeper's book stays on the host
         assert m.truth and not book["truth"] and "transcripts" not in welcome["state"] and "improv" not in welcome["state"]
         assert any(n.secrets for n in m.npcs) and not any(n["secrets"] for n in book["npcs"])
-        assert not any(c["text"] for c in book["clues"]) and len(book["clues"]) == len(m.clues)
+        assert book["clues"] == []
         await b.send_json({"t": "hello", "name": "小红"})
         await until(b, lambda x: x["t"] == "welcome")
         await a.send_json({"t": "sit", "investigator": "zhouheng"})
@@ -172,7 +172,7 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
                 break
         screen = app.screen
         assert isinstance(screen, NetGameScreen) and screen.my_turn and screen.seat == "zhouheng"
-        assert not screen.m.truth and not screen.m.clue("c_notice").text  # not found yet
+        assert not screen.m.truth and not screen.m.clues  # not found yet
         fake.queue_totals(5)
         screen.query_one(Input).value = ".r 1d6"
         await pilot.press("enter")
@@ -299,6 +299,61 @@ async def test_the_director_s_reasoning_stays_on_the_host(skills_dir, fake):
         assert first["t"] == "module" and not first["module"]["truth"]  # new places and people before the event
         ev = await until(ws, lambda x: x["t"] == "event")
         assert ev["ev"]["type"] == "improv" and "reason" not in ev["ev"]
+        await ws.close()
+    await closed(task)
+
+
+async def test_private_rulings_flags_and_pending_clues_never_reach_a_client(fake):
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    sent = []
+
+    async def collect(msg):
+        sent.append(msg)
+
+    hub._broadcast = collect
+    hub.state.pending_push = {"skill": "侦查", "clues": ["hidden_clue"], "flags": ["hidden_flag"], "can_push": True}
+    hub.state.flags.append("hidden_flag")
+    await hub._event({"type": "ruling", "reason": "幕后真相", "clues_on_success": ["hidden_clue"]})
+    assert not sent
+    await hub._event({"type": "flag", "flag": "hidden_flag", "meaning": "幕后真相"})
+    assert len(sent) == 1 and sent[0]["t"] == "sync"
+    view = sent[0]["state"]
+    assert not view["flags"] and not view["fired"]
+    assert "clues" not in view["pending_push"] and "flags" not in view["pending_push"]
+    await hub.game.close()
+
+
+async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+
+    class InterruptedTable(TableCast):
+        calls = 0
+
+        async def keeper(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise ConnectionError("offline")
+            return await super().keeper(*args, **kwargs)
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    hub = Hub(EXAMPLE, state=st, cast=InterruptedTable(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        ws = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await ws.send_json({"t": "hello", "name": "小明"})
+        await until(ws, lambda x: x["t"] == "welcome")
+        await ws.send_json({"t": "sit", "investigator": st.investigator.id})
+        await until(ws, lambda x: x["t"] == "turn")
+        await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        error = await until(ws, lambda x: x["t"] == "error")
+        assert error["retry"] and st.pending_turn and st.turn == 1
+        minute = st.minutes
+        await ws.send_json({"t": "act", "text": "/retry"})
+        await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
+        await until(ws, lambda x: x["t"] == "turn")
+        assert not st.pending_turn and st.turn == 1 and st.minutes == minute
+        assert st.clues.count("c_notice") == 1
         await ws.close()
     await closed(task)
 

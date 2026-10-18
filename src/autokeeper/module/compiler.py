@@ -18,6 +18,7 @@ loading logic.
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 from pathlib import Path
 
@@ -33,10 +34,11 @@ def skill_name(m: Module) -> str:
 
 def version(m: Module) -> str:
     raw = yaml.safe_dump(m.model_dump(mode="json"), allow_unicode=True, sort_keys=True)
+    raw += json.dumps({key: plugin.fingerprint for key, plugin in sorted(m.extensions.items())}, sort_keys=True)
     return hashlib.sha1(raw.encode()).hexdigest()[:10]
 
 
-def compile_module(m: Module, skills_root: Path) -> Path:
+def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) -> Path:
     root = Path(skills_root) / skill_name(m)
     if root.exists():
         shutil.rmtree(root)
@@ -49,7 +51,8 @@ def compile_module(m: Module, skills_root: Path) -> Path:
     for npc in m.npcs:
         _write(root / "references" / "npcs" / f"{npc.id}.md", _npc_md(m, npc))
     for h in m.handouts:
-        _write(root / "references" / "handouts" / f"{h.id}.md", f"# {h.title}（{h.kind}）\n\n```text\n{h.text.rstrip()}\n```\n")
+        images = "\n".join(f"![{h.title}](../../assets/images/{Path(m.pictures[key]).name})" for key in h.images if key in m.pictures)
+        _write(root / "references" / "handouts" / f"{h.id}.md", f"# {h.title}（{h.kind}）\n\n```text\n{h.text.rstrip()}\n```\n{images}\n")
     _write(root / "references" / "events.md", _events_md(m))
     _write(root / "references" / "endings.md", _endings_md(m))
     if m.pregens:
@@ -58,6 +61,28 @@ def compile_module(m: Module, skills_root: Path) -> Path:
         (root / "assets" / "ascii").mkdir(parents=True)
         for name, text in m.art.items():
             _write(root / "assets" / "ascii" / f"{name}.txt", text + "\n")
+    if m.pictures:
+        destination = root / "assets" / "images"
+        destination.mkdir(parents=True, exist_ok=True)
+        for path in m.pictures.values():
+            picture = Path(path)
+            shutil.copy2(picture, destination / picture.name)
+            for suffix in (".source.json", ".credit.json"):
+                if (sidecar := picture.with_suffix(suffix)).is_file():
+                    shutil.copy2(sidecar, destination / sidecar.name)
+    if m.extensions:
+        from ..plugins import api_text
+        from ..plugins.storage import save as save_plugin
+
+        for plugin in m.extensions.values():
+            save_plugin(plugin, root / "assets" / "plugins")
+        _write(root / "references" / "plugins.md", api_text())
+    if source is not None and source.is_dir():
+        shutil.copytree(source, root / "assets" / "source")
+        with (root / "SKILL.md").open("a", encoding="utf-8") as output:
+            output.write("\n## 完整原始资料（仅守秘人可读，含剧透）\n\n")
+            output.write("原文、逐页扫描和未展示图片保留在 `assets/source/`；细节有疑问时回查原文，不用整理摘要代替全部资料。\n")
+            output.write("- [原文](assets/source/source.md)\n- [逐页扫描](assets/source/pages/)\n- [原图档案](assets/source/images/)\n")
     return root
 
 
@@ -109,6 +134,13 @@ def _skill_md(m: Module) -> str:
         "",
         f"开局时间 {m.start_time}，开局地点 `{m.start}`。",
         "",
+        "## 开场素材与引入",
+        "",
+        m.opening.rstrip(),
+        "",
+        "从抵达、生活和来意自然引入，在起始地点把行动交给玩家；尚未发生的赶路、拜访和调查不能替玩家完成。",
+        "日常可以没有线索和危险，玩家想停留就展开，想赶路就简述。",
+        "",
         "## 地点（调查员进入时再读对应文件）",
         "",
         "| id | 地点 | 文件 |",
@@ -134,6 +166,14 @@ def _skill_md(m: Module) -> str:
         lines.append("- 预设调查员：[references/pregens.md](references/pregens.md)")
     if m.art:
         lines.append("- ASCII 插图：`assets/ascii/<name>.txt`")
+    if m.pictures:
+        lines += ["", "## 原作图片（按场景或手稿解锁，不提前展示）", ""]
+        lines += [f"- `{key}`：[原图](assets/images/{Path(path).name})" for key, path in m.pictures.items()]
+    if m.extensions:
+        lines += ["", "## 自定义规则插件（由引擎执行）", ""]
+        lines += [f"- `{p.id}` v{p.version}：{p.description}" for p in m.extensions.values()]
+        lines += ["", "源码与可执行测试见 `assets/plugins/<id>/`；接口见 [references/plugins.md](references/plugins.md)。",
+                  "引擎已结算的插件效果不能再口头重复结算；手动主持时先读源码和原文核对。"]
     lines += ["", "需要检定时配合 `coc7-core`，理智检定配合 `coc7-sanity`，叙事风格见 `keeper-craft`。", ""]
     return "\n".join(lines)
 
@@ -144,6 +184,9 @@ def _location_md(m: Module, loc: Location) -> str:
         out += ["## 守秘人须知", "", loc.keeper.rstrip(), ""]
     if loc.features:
         out += ["## 可调查", "", "、".join(loc.features), ""]
+    for item in m.items:
+        if item.where == loc.id:
+            out += [f"物件 {item.name}（{item.id}）：{item.description}", ""]
     exits = [f"`{e}` {m.location(e).name}" for e in loc.exits if any(x.id == e for x in m.locations)]
     if exits:
         out += ["## 出口", "", "；".join(exits), ""]
@@ -162,6 +205,8 @@ def _location_md(m: Module, loc: Location) -> str:
                 extra.append(f"理智 {c.sanity}")
             if c.handout:
                 extra.append(f"手稿 `{c.handout}`")
+            if c.requires:
+                extra.append("前置条件全部满足：" + "、".join(c.requires))
             tag = f"（{'，'.join(extra)}）" if extra else ""
             out.append(f"- `{c.id}` **{c.title}**｜{where}｜{_check(c)}{tag}")
             out.append(f"  {c.text.strip()}")

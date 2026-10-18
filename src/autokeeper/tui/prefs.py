@@ -18,7 +18,7 @@ from textual.widgets.selection_list import Selection
 
 from ..prefs import HORRORS, LENGTHS, LINES, PACES, Prefs
 
-SCALES = (("length", "叙事篇幅", LENGTHS), ("horror", "恐怖浓度", HORRORS), ("pace", "节奏", PACES))
+SCALES = (("length", "叙事篇幅", LENGTHS), ("horror", "恐怖程度", HORRORS), ("pace", "节奏", PACES))
 
 
 class PrefsModal(ModalScreen[Prefs | None]):
@@ -35,7 +35,7 @@ class PrefsModal(ModalScreen[Prefs | None]):
         p = self.current
         with VerticalScroll(classes="modal", id="prefs-modal"):
             yield Static("叙事偏好", classes="modal-title")
-            yield Static(Text("只改守秘人、NPC 和导演怎么讲；掷骰、线索和理智照常结算。", style="dim"))
+            yield Static(Text("调整叙述和对话的写法，不改变检定与剧情结果。", style="dim"))
             with Horizontal(id="prefs-body"):
                 with Vertical(id="prefs-scales"):
                     for key, title, choices in SCALES:
@@ -44,15 +44,15 @@ class PrefsModal(ModalScreen[Prefs | None]):
                             for choice in choices:
                                 yield RadioButton(choice, value=choice == getattr(p, key), name=choice)
                 with Vertical(id="prefs-lines-box"):
-                    yield Static("内容雷区", classes="prefs-label")
+                    yield Static("略去细节的内容", classes="prefs-label")
                     yield SelectionList[str](
                         *(Selection(Text.assemble((k, "bold"), "  ", (v, "dim")), k, k in p.lines) for k, v in LINES.items()),
                         id="prefs-lines",
                     )
             yield Static(
                 Text(
-                    "勾上的内容照样会发生、照样算数，只是不正面写：放到镜头外、一句带过，或者直接跳过。"
-                    "管的是守秘人、NPC 和导演临场写的话；模组里写好的段落（手稿、事件原文）照原样显示。",
+                    "勾选后，相关事件仍会发生，但叙述会省略细节。"
+                    "模组里写好的段落（手稿、事件原文）仍按原文显示。",
                     style="dim",
                 ),
                 id="prefs-note",
@@ -85,7 +85,7 @@ class PrefsModal(ModalScreen[Prefs | None]):
     def action_keep(self) -> None:
         chosen = self.chosen()
         chosen.save()
-        self.app.notify("叙事偏好已保存，下一段叙述起照新的来")
+        self.app.notify("叙事偏好已保存，从下一段生效。")
         self.dismiss(chosen)
 
     @on(Button.Pressed, "#keep")

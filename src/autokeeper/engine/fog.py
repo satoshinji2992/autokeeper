@@ -1,7 +1,7 @@
 """What the investigators know of the map: where they have been, and what they have only heard of.
 
 A place is heard of once its name comes up in something the players were shown: the
-module's title, hook, setting and opening, what they saw on arriving somewhere, the
+module's title, hook and setting, the opening actually told, what they saw on arriving somewhere, the
 keeper's narration and the NPCs' lines, who the people they met turned out to be, the
 clues and handouts they found, the new places the director announced. Their own words do
 not count, or typing a guess would put a secret on the map.
@@ -108,12 +108,12 @@ def shown(m: Module, st: GameState) -> list[str]:
     """Everything the players have been shown that can name a place."""
     places = {loc.id: loc for loc in m.locations}
     clues, handouts = {c.id: c for c in m.clues}, {h.id: h for h in m.handouts}
-    texts = [m.title, m.subtitle, m.hook, m.setting, m.opening]
+    texts = [m.title, m.subtitle, m.hook, m.setting]
     texts += [places[v].read_aloud for v in st.visited if v in places]  # what they saw on arriving
     texts += [e.text for e in st.log if e.kind in SHOWN]
     texts += [f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues]
     texts += [f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts]
-    texts += [n.role for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]  # shown beside their first line
+    texts += [n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
     # The director's new places are announced by name when they open a new line (tui: "improv").
     texts += [loc.get("name", "") for p in st.improv if p.get("kind") == "展开" for loc in p.get("plan", {}).get("locations", [])]
     return texts
@@ -173,7 +173,7 @@ def known(m: Module, st: GameState) -> dict[str, str]:
     return {loc.id: loc.name if loc.id in there else told[loc.id] for loc in m.locations if loc.id in there or loc.id in told}
 
 
-def landmarks(m: Module) -> dict[str, str]:
+def landmarks(m: Module, st: GameState | None = None) -> dict[str, str]:
     """Places in plain sight: named in what anyone sees on arriving somewhere else (the town
     centre's read-aloud names its police station), by the name used there. Anyone in town
     could point the way, so they need not have come up in play yet: the opening's 警局 does
@@ -182,6 +182,12 @@ def landmarks(m: Module) -> dict[str, str]:
     A place the investigation reveals (named in a clue or handout, not in the opening texts,
     like the mausoleum and the tunnels) is no landmark, and neither is anything only its own
     read-aloud names: what is seen down a secret way is a secret too."""
+    if st is not None:
+        out = {loc.id: loc.name for loc in m.locations if loc.public}
+        for loc in m.locations:
+            if loc.id == st.location or loc.id in st.visited:
+                out.update(mentions(m, [loc.read_aloud]))
+        return out
     opening = set(mentions(m, [m.title, m.subtitle, m.hook, m.setting, m.opening]))
     found = mentions(m, [f"{c.title}\n{c.text}" for c in m.clues] + [f"{h.title}\n{h.text}" for h in m.handouts])
     hidden = set(found) - opening
@@ -203,7 +209,7 @@ def findable(m: Module, st: GameState, place: str) -> bool:
         return True
     if not any(loc.id == place for loc in m.locations):
         return False
-    return place in m.location(st.location).exits or place in landmarks(m) or place in known(m, st)
+    return place in m.location(st.location).exits or place in landmarks(m, st) or place in known(m, st)
 
 
 def bearings(m: Module, st: GameState) -> dict[str, str]:
@@ -212,7 +218,7 @@ def bearings(m: Module, st: GameState) -> dict[str, str]:
     the plainest form of the name (隧道网, not 食尸鬼隧道网), which getting there would show
     them anyway. Here is left out."""
     out = known(m, st)
-    for pid, name in landmarks(m).items():
+    for pid, name in landmarks(m, st).items():
         out.setdefault(pid, name)
     names = aliases(m)
     for e in m.location(st.location).exits:

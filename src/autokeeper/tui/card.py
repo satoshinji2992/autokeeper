@@ -165,17 +165,17 @@ class CardScreen(Screen[Investigator | None]):
     def _ask_name(self) -> None:
         self.step = "name"
         intro = Text(
-            "说一位公众人物的名字，AutoKeeper 会上网查他是谁、找几张照片给你挑；也可以直接描述你想玩的人，"
-            "比如“在码头长大、胆子很大的女记者”。它再问你几个问题，按这个模组的年代做成调查员。",
+            "描述想扮演的人物，"
+            "比如“在码头长大、胆子很大的女记者”。也可以用公众人物作为参考。回答几个背景问题后，系统会按模组年代生成可修改的人物卡。",
             style="dim",
         )
-        self._type("AI 协助车卡", "一个名字，或者一句描述", "回车开始 · Esc 返回", intro)
+        self._type("创建调查员", "一个名字，或者一句描述", "回车开始 · Esc 返回", intro)
 
     def _photos(self) -> None:
         fig = self.builder.figure
         if not fig or not fig.photos:
             if fig and fig.source != "描述":  # a description never had photos to find
-                self.app.notify("没找到照片，这张卡就不带照片了")
+                self.app.notify("未找到照片，将继续创建人物卡。")
             self.chosen, self.portrait = None, None
             self._next_after_photo()
             return
@@ -340,12 +340,12 @@ class CardScreen(Screen[Investigator | None]):
         """The person (or character) is known: questions, and their photos meanwhile."""
         fig = self.builder.figure
         assert fig
-        self._wait("正在找照片，想几个问题问你…")
+        self._wait("正在准备照片和背景问题…")
         self.query_one("#preview-body", Static).update(Text(fig.brief(800), style="dim"))
         try:
             self.proposal, _ = await asyncio.gather(self.builder.propose(), self._fetch(range(min(4, len(fig.photos)))))
         except Exception as exc:  # the model is down or answered nonsense twice
-            self.app.notify(f"没想出问题：{exc.__class__.__name__}，再试一次", severity="error")
+            self.app.notify(f"未能生成问题：{exc.__class__.__name__}，请重试。", severity="error")
             self._restart()
             return
         self._photos()
@@ -396,7 +396,7 @@ class CardScreen(Screen[Investigator | None]):
         await self._fetch([i])
         path = self.shots.get(i)
         if path is None:
-            self.app.notify("这张照片打不开，换一张吧", severity="warning")
+            self.app.notify("无法打开照片，请换一张。", severity="warning")
             self._photos()
             return
         await asyncio.to_thread(imagery.preprocess, path, "portrait")  # face crop and cleanup, like module portraits
@@ -411,7 +411,7 @@ class CardScreen(Screen[Investigator | None]):
         try:
             await self.builder.build(request)
         except Exception as exc:
-            self.app.notify(f"车卡没成功：{exc.__class__.__name__}，再试一次", severity="error")
+            self.app.notify(f"未能创建人物卡：{exc.__class__.__name__}，请重试。", severity="error")
             self._extra() if back == "extra" else self._tweak()
             return
         self._card()

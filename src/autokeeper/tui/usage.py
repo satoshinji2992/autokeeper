@@ -65,20 +65,20 @@ def usage_view(st: GameState) -> Group:
     cap = spend.budget()
     across = Text(f"\n这台电脑上所有按量计费的调用：估算 ${book.get('total_usd', 0.0):.3f}", style="dim")
     across.append(f"，预算 ${cap:g}" if cap is not None else "，没设预算", style="dim")
-    parts += [across, Text("Claude Code 的花费是它报告的等价 API 价，订阅登录不另外计费。细看每次调用：autokeeper trace", style="dim")]
+    parts += [across, Text("金额为估算值；Claude Code 使用其报告的等价 API 价，不代表订阅账单。逐次记录：autokeeper trace", style="dim")]
     return Group(*parts)
 
 
 class UsageModal(ModalScreen[None]):
     BINDINGS = [Binding("escape", "dismiss", "关闭"), Binding("ctrl+b", "dismiss", "关闭", show=False)]
 
-    def __init__(self, state: GameState):
+    def __init__(self, state: GameState, engine: str = ""):
         super().__init__()
-        self.state = state
+        self.state, self.engine = state, engine
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Static(f"用量 · 第 {self.state.turn} 轮", classes="modal-title")
+            yield Static(f"用量 · 第 {self.state.turn} 轮" + (f" · {self.engine}" if self.engine else ""), classes="modal-title")
             with VerticalScroll(classes="modal-body"):
                 yield Static(usage_view(self.state))
             yield Static("Esc 关闭", classes="system")

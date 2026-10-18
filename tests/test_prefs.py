@@ -8,7 +8,7 @@ import json
 from collections import deque
 
 import pytest
-from textual.widgets import OptionList, RadioSet, SelectionList
+from textual.widgets import Button, OptionList, RadioSet, SelectionList
 
 from autokeeper import config
 from autokeeper.agents.cast import Action, Cast
@@ -21,6 +21,7 @@ from autokeeper.prefs import LINES, Prefs
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
 from autokeeper.tui.prefs import PrefsModal
+from autokeeper.tui.settings import SettingsModal
 
 SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
 SEEN: list[dict] = []  # every call: system and messages
@@ -96,7 +97,7 @@ async def test_the_keeper_hears_them_for_one_turn_and_the_rulers_never_do():
     intent, arbiter, keeper = await turn()
     assert _sent(intent) == _sent(plain[0]) and _sent(arbiter) == _sent(plain[1])  # rulings cannot depend on them
     asked = keeper["messages"][-1]["content"]
-    assert "守钟人的旧事" in asked and "雷区：虫（" in asked and "溺水（" in asked  # lore and preferences ride together
+    assert "守钟人的旧事" not in asked and "雷区：虫（" in asked and "溺水（" in asked  # preferences reach narration; private lore does not
     assert "篇幅短" in asked and "恐怖克制" in asked and "节奏紧凑" in asked and "照样发生" in asked
     assert keeper["system"] == plain[2]["system"]  # the cached prefix stays the same
     assert "雷区" not in json.dumps(state.transcripts, ensure_ascii=False)  # and the transcript never keeps them
@@ -116,10 +117,10 @@ async def test_npcs_talk_around_the_lines_and_do_not_remember_them():
     m, cast, state = _game()
     cast.prefs = TASTE
     warden = next(n for n in m.npcs if n.id == "warden")
-    SCRIPT.append("钟有钟的规矩。")
+    SCRIPT.append({"text": "钟有钟的规矩。"})
     await cast.npc(state, warden.id, "钟里到底有什么？")
     assert "玩家的雷区是虫、溺水" in SEEN[-1]["messages"][-1]["content"]
-    SCRIPT.append("诸位，钟声会替我们作证……")
+    SCRIPT.append({"text": "诸位，钟声会替我们作证……"})
     await cast.perform(state, warden.id, "讲讲今天的事", "周衡去了钟楼")
     assert "玩家的雷区是虫、溺水" in SEEN[-1]["messages"][-1]["content"]
     assert "雷区" not in json.dumps(state.transcripts, ensure_ascii=False)
@@ -140,7 +141,11 @@ async def test_the_settings_screen_works_from_the_keyboard(monkeypatch):
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause()
         menu = app.screen.query_one("#menu", OptionList)
-        menu.highlighted = menu.get_option_index("prefs")  # 叙事偏好, wherever it sits in the menu
+        menu.highlighted = menu.get_option_index("settings")
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, SettingsModal)
+        app.screen.query_one("#settings-prefs", Button).focus()
         await pilot.press("enter")
         await pilot.pause(0.2)
         assert isinstance(app.screen, PrefsModal)
@@ -149,16 +154,18 @@ async def test_the_settings_screen_works_from_the_keyboard(monkeypatch):
         await pilot.press("left", "enter", "tab", "right", "enter", "tab", "right", "enter", "tab", "down", "space", "down", "down", "space")
         await pilot.press("ctrl+s")
         await pilot.pause(0.2)
-        assert isinstance(app.screen, TitleScreen)
+        assert isinstance(app.screen, SettingsModal)
         assert Prefs.load() == Prefs(length="短", horror="浓烈", pace="紧凑", lines=["虫", "溺水"])
-        await pilot.press("enter")  # the menu is still on 叙事偏好
+        await pilot.press("enter")  # focus returns to the preferences button
         await pilot.pause(0.2)
         modal = app.screen
         assert isinstance(modal, PrefsModal) and modal.query_one("#prefs-length", RadioSet).pressed_button.name == "短"  # type: ignore[union-attr]
         assert modal.query_one(SelectionList).selected == ["虫", "溺水"]
         await pilot.press("tab", "tab", "tab", "space", "escape")  # a change, then Esc: nothing is saved
         await pilot.pause(0.2)
-        assert isinstance(app.screen, TitleScreen) and Prefs.load().lines == ("虫", "溺水")
+        assert isinstance(app.screen, SettingsModal) and Prefs.load().lines == ("虫", "溺水")
+        await pilot.press("escape")
+        assert isinstance(app.screen, TitleScreen)
 
 
 async def test_f9_changes_them_in_the_middle_of_a_game(monkeypatch):

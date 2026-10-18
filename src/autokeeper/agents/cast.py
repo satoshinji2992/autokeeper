@@ -6,8 +6,7 @@
     arbiter       structured action -> which check, how hard, which clues it can uncover;
                   sees the recent checks, so a repeated attempt is not rolled again
     npc:<id>      one session per NPC; knows only its own file and its own conversations
-    keeper        narrates what the engine resolved; carries the module overview and
-                  reads a location file only when the party walks in
+    keeper        narrates resolved, public facts; never carries the module's hidden truth
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
     investigator  AI players (companions and autoplay); see only what players see
                   (engine/autoplay.situation); also writes the ideas a player asks for (F8)
@@ -25,12 +24,12 @@ from pydantic.json_schema import SkipJsonSchema
 
 from .. import skills
 from ..config import Config
-from ..engine import fog
-from ..engine.state import GameState, format_time, time_of_day
+from ..engine import fog, world
+from ..engine.state import GameState, WorldChange, format_time, time_of_day
 from ..harness import OnDelta, Reply, Session, Summarizer
 from ..module import graph as module_graph
-from ..module.compiler import skill_name
 from ..module.schema import NPC, Module
+from ..plugins.schema import Call as PluginCall
 from ..prefs import LINES, Prefs
 from ..rules import commands
 from ..rules.coc import Investigator
@@ -38,7 +37,7 @@ from . import guard
 from .director import DIRECTOR_SYSTEM, Improv
 from .director import context as director_context
 
-ActionKind = Literal["investigate", "move", "talk", "use", "perform", "attack", "wait", "meta", "other"]
+ActionKind = Literal["investigate", "move", "talk", "use", "perform", "attack", "wait", "daily", "meta", "other"]
 
 
 class Action(BaseModel):
@@ -50,6 +49,8 @@ class Action(BaseModel):
     speech: str = Field("", description="对 NPC 说的话或登台讲的内容，原样摘录")
     approach: Literal["", "说服", "话术", "恐吓", "魅惑", "心理学"] = Field("", description="社交方式")
     echo: str = Field("", description="马上给玩家看的一句话：调查员开始做这件事的动作或感官细节，不写结果")
+    travel: Literal["direct", "stroll"] = Field("direct", description="明确直奔、赶路、跳过沿途填 direct；沿路看看或未要求略过时填 stroll")
+    casual: bool = Field(False, description="仅对已在场 NPC 的问候、闲聊、道谢，无调查、交易、约定、等待、风险、用物或说服目的")
     # The check a dice command asked for (.ra 恐吓). Filled in by the engine from the command
     # itself, never by the intent agent.
     asked: SkipJsonSchema[commands.Asked | None] = None
@@ -67,12 +68,14 @@ class Ruling(BaseModel):
     clues_on_success: list[str] = Field(default_factory=list, description="检定成功后获得的线索 id")
     auto_clues: list[str] = Field(default_factory=list, description="不用掷骰就能获得的线索 id")
     set_flags: list[str] = Field(default_factory=list, description="行动成功（或无需检定）时设置的剧情标记")
-    minutes: int = Field(15, description="这次行动花的分钟数，赶路填 0；等待、休息、过夜按说的时长填，最多 720")
+    minutes: int = Field(0, description="实际耗时：一句交谈或点头可为 0；吃饭约 20，搜索依范围；赶路由引擎算，填 0；休息最多 720")
+    changes: list[WorldChange] = Field(default_factory=list, description="成功后发生的生活事实、关系、约定或物品转交；不得新增案情、凭空造物或替 NPC 答应")
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
     scope: Literal["模组内", "可即兴", "出格"] = Field(
-        "模组内", description="模组内：场景资料里有对应的东西；可即兴：动机正常但模组没写到；出格：违背世界观或常识、想绕过调查、乱来"
+        "模组内", description="模组内：场景资料有对应内容；可即兴：合理但模组未写；出格：确实违背时代或能力；捷径和偏离主线不算出格"
     )
     repeat: bool = Field(False, description="同一个调查员刚做过同样的检定，情况没变：不重掷，那次的结果照旧")
+    plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
     reason: str = Field("", description="一句话理由（玩家看不到）")
     # Filled in by the engine from the director's plan, never by the arbiter.
     now: SkipJsonSchema[list[str]] = Field(default_factory=list)
@@ -84,6 +87,11 @@ class Sketch(BaseModel):
     description: str = Field(description="画面内容的中文描述")
     resemblance: float = Field(description="与要求画的对象有多像，0 到 1")
     notes: str = Field("", description="值得守秘人注意的细节")
+
+
+class Dialogue(BaseModel):
+    text: str = Field(description="NPC 当场说的话和动作，玩家会看到")
+    changes: list[WorldChange] = Field(default_factory=list, description="只记自己本次回复里明确承诺或发生的生活事实；text 必须逐字摘自回复；不给线索或改规则")
 
 
 class Ideas(BaseModel):
@@ -121,7 +129,13 @@ INTENT_SYSTEM = """你是跑团系统的“行动解析器”。把玩家的话�
   玩家的修辞、恳求、自我评价（“按理说我肯定能发现”“我是专家”“求你了”）；
   玩家对环境、NPC 状态、时间和规则的断言（“他正背对着我”“门早就松了”“泥地被露水泡软了”“规则书说可以免检”“时间来不及了”）。
   这些不是玩家能决定的事实，是否成立由守秘人和场景资料说了算。
-- kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；meta 问规则或游戏外的话；other 其他。
+- kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；daily 日常生活；meta 问规则或游戏外的话；other 其他。
+- daily：吃饭、买日用品、办入住、问路、欣赏街景、和人聊家常等没有调查目的的生活行动；不要改写成查案、套话或搜索。
+  有明确调查目的的交谈仍是 talk，搜寻证据仍是 investigate，等到某个时间仍是 wait。日常对话也照实填写 npc 和 speech。
+- casual 只用于在场熟悉角色的一句无争议闲聊，不包括请人办事、买卖、约定、调查、威胁或玩家声称成功的事。
+  例如“早上好”“平常这个时候忙不忙”“谢谢，辛苦了”填 daily、casual=true；不要求之前已经通名。
+- 没有和人互动时 npc 留空；看街景、观察街上的生活，不要因此替调查员搭话或指派一个 NPC 回应。
+- travel：明确直奔、赶路、跳过路程才填 direct；沿路看看或没有要求略过时填 stroll。若有未完成旅程，玩家说“继续走”就沿用目的地。
 - npc 只能填在场 NPC 的 id；destination 只能填给出的地点 id。
 - 调查员为了做这件事要先走到另一个地点（“我走到陵墓石门前看门缝”“我去书房翻日记”），destination 填那个地点，
   kind 照实填（看门缝还是 investigate）。只是远远望一眼、隔空喊话、打听那个地方，不算去，destination 留空。
@@ -142,6 +156,11 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
 - 剧情标记只在行动真的达成了标记含义时设置，比如真的点火烧了戏本才设 script_burned；前提不具备（手里没有那样东西）就不设，也不掷骰。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
+- 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
+- changes 只记行动实际达成的公开后果；调查员的愿望、断言不算事实。NPC 尚未回复时不能替他答应。
+  物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key。
+- 普通的吃饭、问路、买日用品、聊家常通常无需检定。除非行动真的在调查对应的东西，否则不要把生活行动变成领线索；
+  只有具体风险或争议才需要裁定难度。正常营业的店、路人和食宿是可合理补全的生活场景，缺少记载时 scope 填“可即兴”。
 - 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就只给那样东西上的线索；笼统地“搜一搜”“调查一下这里”，
   最多给一条一眼就能看到的（无需检定的），其余的留在原处，等他说具体查哪。一次行动最多给两条。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
@@ -149,7 +168,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
   比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
 - scope：行动在场景资料里有对应的东西，填“模组内”。调查员动机正常、合情合理，只是场景资料没写到（想去没写的地方、
   找没写的人、用模组没想到的办法），填“可即兴”，不要判它做不到，导演会补上内容。违背世界观或常识（那个年代没有的东西、
-  调查员做不到的事），想绕过调查直接拿结果，或者乱来（无故伤人、毁掉关键物件），填“出格”，导演会安排后果。
+  调查员做不到的事）填“出格”。合乎常理的捷径、拒绝委托、求助、离开或破坏物件都允许尝试，按实际风险处理，不因偏离主线惩罚玩家。
   “可即兴”和“出格”时线索仍然只从清单里给，清单里没有就不给；该花的时间照常填。
 - 行动里有 asked，是玩家用骰子指令点名要的检定（比如 .ra 恐吓），说明调查员想在这里用这个技能。多难、几颗奖励或惩罚骰、
   成功能得到什么，都按上面的规则由你定。这个技能在这里用得上，结果又有一点拿不准（光线暗、东西可能藏着、对方有戒心），
@@ -169,13 +188,16 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 1. 只能用系统给你的线索原文；没给你的线索、NPC 的秘密、模组真相，一个字都不能透露，也不能暗示。
 2. NPC 的台词已经直接展示给玩家。你只补一两句动作、神态和氛围，不复述台词，也不替 NPC 说新的话。
 3. 检定失败就写失败的样子。系统提示可以“孤注一掷”时，在叙事里自然地点出来。
-4. 每轮 80–200 字，第二人称，结尾留一个能行动的钩子，下一步交给玩家，不列选项。
+4. 通常每轮 80–200 字，第二人称；开场按本轮要求充分铺陈。结尾留下能接话或行动的细节，下一步交给玩家，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
 6. 天色随时间自然变化，隔几轮写一笔就够，比如入夜起雾、下起小雨、雷声滚过、雨停了；画面上的天气会跟着你的描写变。
 7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
    行不通的事，让后果和剧情去暗示，叙事始终留在故事里。
-8. 保持张力：每轮收在一个悬念、一股压力或一个要做的选择上。情绪靠具体的细节和动作传达，写得克制。
+8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
    线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；它意味着什么、指向哪里，留给玩家自己推理。
+9. 先让地方像有人生活：人有手头的活、口味、习惯和琐事；没给新线索的一顿饭、一次问路也可以完整成立。
+   可以补符合年代的气味、街边营生和普通过客的一两句应答；不借此新增案情、危险、物品效果或检定结果。
+   已有 NPC 的对话仍由对应角色说。玩家愿意停下来就展开，明确赶路或略过时压缩过渡；不能替调查员决定行动、态度或内心感受。
 
 {craft}
 
@@ -209,8 +231,10 @@ NPC_SYSTEM = """你在一场 1920 年代的中文跑团里扮演 NPC「{name}」
 - 说你自己的事：你的营生、家里人、身上的毛病、你在乎的东西，这些家常可以随口带出来。回答问题时带上你的看法和偏见，不光交代事实；但和案子有关的人、事、怪象，只说上面写着的，别添新的。
 - 大多数时候直接开口说话。动作和神态写在（）里，只在它比话更能说明问题时才写，一次最多一处。
 - 口头禅偶尔带一下就好；上一轮说过的话，换个说法或者干脆不提。
+- 日常闲聊通常一至三句。只回答他实际问的话，不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
 - 系统消息会告诉你本轮检定结果：成功说明你被打动或被拆穿了，可以说出已解锁的线索；失败就回避、敷衍或撒谎。
 - 只说你自己的话、做你自己的事；调查员说了什么、做过什么、心里怎么想，不用你来讲。
+- 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 
 示例（人和事都与本局无关，只看说话的样子，不要照搬内容）。一个守杂货铺的寡妇，被问起对门那户人家：
 那家人？你可别在我这儿提他们。去年冬天他家小子偷了我两罐咸鱼，我追到街口，他娘倒先骂上我了，说我一个寡妇盯着人家孩子不放。打那以后我就不往那边看。不过你真想知道的话——他家那扇窗这一个月夜夜亮到两三点，烧的也不知道是谁的煤油。我男人在的时候，可没人敢这么欺负我。
@@ -321,7 +345,8 @@ class Cast:
         ways = "、".join(f"{name}({pid})" for pid, name in fog.bearings(m, state).items()) or "无"
         return (
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
-            f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}"
+            f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
+            f"尚未走完的旅程目的地：{state.journey or '无'}"
         )
 
     # -- agents -------------------------------------------------------------------
@@ -336,7 +361,7 @@ class Cast:
         return self._open("arbiter", "arbiter", system, schema=_schema(Ruling))
 
     def _npc(self, state: GameState, npc_id: str) -> Session:
-        return self._open(f"npc:{npc_id}", "npc", self._npc_system(self.module.npc(npc_id)))
+        return self._open(f"npc:{npc_id}", "npc", self._npc_system(self.module.npc(npc_id)), schema=_schema(Dialogue))
 
     async def warm(self, state: GameState) -> None:
         """Spawn the sessions the next turns will need while the player is still reading."""
@@ -350,7 +375,7 @@ class Cast:
         asked = commands.asked(text)
         if asked is None:
             reply = await self._send("intent", s, state, f"【场景】\n{self.bearings(state)}\n【调查员】{inv.name}\n【玩家】{text}")
-            return _parse(Action, reply.data, {"kind": "other", "summary": text})
+            return Action.model_validate(reply.data)
         # A bare dice command names a skill and nothing else: who or what it is aimed at has
         # to come from the scene and the last few lines of play.
         prompt = (
@@ -358,7 +383,7 @@ class Cast:
             f"【玩家】{text}（骰子指令：{inv.name}想在这里用「{asked.skill}」）"
         )
         reply = await self._send("intent", s, state, prompt)
-        return _parse(Action, reply.data, {"kind": "other", "summary": f"{inv.name}想在这里用{asked.skill}"})
+        return Action.model_validate(reply.data)
 
     async def arbiter(self, state: GameState, action: Action, at: str | None = None) -> Ruling:
         """`at`: the place the investigator walks to for this action; it is ruled there."""
@@ -369,7 +394,7 @@ class Cast:
         near = module_graph.neighbourhood(m, where)
         lines = []
         for c in near["clues"]:
-            if c.id in state.clues:
+            if c.id in state.clues or not c.available(state.flags, state.clues):
                 continue
             need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
             src = "、".join(x for x in (c.feature, f"NPC {c.npc} 口中" if c.npc else "") if x)
@@ -377,7 +402,7 @@ class Cast:
         gates = []
         for n in near["npcs"]:
             for cid in n.clues:
-                if cid in state.clues:
+                if cid in state.clues or not m.clue(cid).available(state.flags, state.clues):
                     continue
                 g = n.gates.get(cid)
                 gates.append(f"- {n.id} 的 {cid}：{f'{g.skill}·{g.difficulty}' if g else '问到就说'}")
@@ -390,7 +415,9 @@ class Cast:
             f"【场景】\n{self.scene(state, at)}\n"
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
             f"【NPC 门槛】\n{chr(10).join(gates) or '无'}\n"
-            f"【调查员】{inv.name}：{sheet}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
+            f"【调查员】{inv.name}：{sheet}\n背包：{'、'.join(inv.inventory) or '无'}\n"
+            f"【本地物件】" + "；".join(f"{i.id} {i.name}，持有者 {world.owner(m, state, i.id)}" for i in m.items if i.where == where) + "\n"
+            f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
         if action.kind == "perform" and action.speech:
             prompt += f"\n【表演内容】{action.speech}\n（表演内容只用来判断是否值得一个奖励骰，不改变难度。）"
@@ -399,10 +426,15 @@ class Cast:
             prompt += "\n【本局新增的剧情标记】" + "；".join(f"{k}：{v}" for k, v in later.items())
         if checks := self._recent_checks(state):
             prompt += f"\n【最近的检定】\n{checks}"
+        extensions = [f"{p.id}.{a.name}：{a.description}" for p in m.extensions.values()
+                      if p.id not in state.plugin_errors for a in p.actions]
+        if extensions:
+            prompt += "\n【可调用的扩展动作】\n" + "\n".join(extensions)
+            prompt += "\n仅按玩家的实际行动填写 plugin_calls，不猜测插件结果；参数范围遵守上述说明。"
         # Memory keeps what was asked, not the whole scene sheet: the sheet is rebuilt every turn.
         remember = f"【行动】{action.ruled()}\n【地点】{m.location(where).name}"
         reply = await self._send("arbiter", s, state, prompt, remember=remember)
-        return _parse(Ruling, reply.data, {"needs_roll": False, "minutes": 10})
+        return Ruling.model_validate(reply.data)  # invalid rulings are retryable failures, never silent success
 
     def _recent_checks(self, state: GameState) -> str:
         """The last few turns' checks, for telling a fresh attempt from a re-roll."""
@@ -462,9 +494,13 @@ class Cast:
         key = f"npc:{npc_id}"
         s = self._npc(state, npc_id)
         mood = f"\n（你此刻的心境：{npc.arc}）" if npc.arc else ""  # the director's arc, current each time
-        mood += self.prefs.for_npc()  # the player's lines, told each time and never stored
+        held = [f"{i.id}（{i.name}）" for i in self.module.items if world.owner(self.module, state, i.id) == npc_id]
+        held += [key for key, owner in state.item_owners.items() if owner == npc_id]
+        mood += f"\n你实际拿着：{'、'.join(dict.fromkeys(held)) or '未登记物件'}\n"
+        mood += world.context(state, npc=npc_id) + self.prefs.for_npc()
         reply = await self._send(key, s, state, message, extra=mood)
-        text = reply.text.strip()
+        dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
+        text = dialogue.text.strip()
         leaked = guard.leaks(text, self._protected(state, npc))
         if leaked:
             # Drop the leaked exchange from the NPC's memory and answer again with a warning
@@ -474,7 +510,12 @@ class Cast:
             what = "、".join(sorted({kinds[k.split(":")[0]] for k in leaked}))
             fix = f"\n\n（系统提醒：上一次回答说出了{what}。这次只说你知道、而且已经可以说的事。）"
             reply = await self._send(key, s, state, message, extra=mood + fix)
-            text = reply.text.strip()
+            dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
+            text = dialogue.text.strip()
+            if guard.leaks(text, self._protected(state, npc)):
+                s.forget()
+                raise ValueError("NPC 回复仍包含未公开资料")
+        world.apply(self.module, state, dialogue.changes, source=npc_id, spoken=text)
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
         return text
@@ -493,24 +534,33 @@ class Cast:
         else:
             prompt = f"（系统：现在是{state.clock}，这一刻轮到你当场开口、动手。要求：{instruction}\n按你此刻的心境说话、做事，150–300 字，直接输出。）"
         reply = await self._send(key, s, state, prompt, extra=self.prefs.for_npc())
-        return reply.text.strip()
+        return Dialogue.model_validate(reply.data).text.strip() if isinstance(reply.data, dict) else reply.text.strip()
 
     def _keeper(self, state: GameState) -> Session:
+        if state.narrator_context_version < 1:
+            # Older reports contained the whole private location file. Rebuild from spoken
+            # history so upgrading a save does not reintroduce secrets through the transcript.
+            state.transcripts.pop("keeper", None)
+            state.notes.pop("keeper", None)
+            recent = _recent(state) if any(e.kind in ("player", "npc", "keeper") for e in state.log) else ""
+            if history := (state.memory + "\n" + recent).strip():
+                state.notes["keeper"] = history
+            state.narrator_context_version = 1
+        if "keeper" in self.sessions:
+            return self.sessions["keeper"]
         m = self.module
         system = KEEPER_SYSTEM.format(
             title=m.title,
             craft=skills.wrap("keeper-craft"),
-            module=skills.wrap(skill_name(m), _module_overview(m)),
+            module=f"年代：{m.era}\n地方：{m.setting}\n玩家已知的缘由：{m.hook}",
         )
         return self._open("keeper", "keeper", system)
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
-        """`lore` (knowledge-base hits) rides along this turn only: kept in the transcript, it
-        filled 65% of the keeper's window (8,241 of 12,752 characters, a 17-turn save). The
-        player's narrative preferences ride along the same way, so changing them mid-game
-        leaves the cached prefix (system prompt and transcript) as it was."""
+        """Public resolution only. Raw knowledge-base hits belong to the private agents.
+        Narrative preferences ride along this call without rewriting the cached prefix."""
         s = self._keeper(state)
-        reply = await self._send("keeper", s, state, report, extra=lore + self.prefs.for_keeper(), on_delta=on_delta)
+        reply = await self._send("keeper", s, state, report, extra=self.prefs.for_keeper(), on_delta=on_delta)
         return reply.text.strip()
 
     async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
@@ -588,7 +638,9 @@ class Cast:
     ) -> Improv | None:
         """A plan for where the module is silent (agents/director.py). Stateless: everything
         it must respect is in the prompt."""
-        s = self._open("director", "director", DIRECTOR_SYSTEM, schema=_schema(Improv))
+        from ..plugins import api_text
+
+        s = self._open("director", "director", DIRECTOR_SYSTEM + "\n\n" + api_text(), schema=_schema(Improv))
         prompt = director_context(self.module, state, kind, action=action, reason=reason, at=at)  # type: ignore[arg-type]
         extra = self.prefs.for_director()  # its new scenes stay out of the player's lines
         extra += ("\n【上一个方案的问题，请改正】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
@@ -619,8 +671,6 @@ def _skills(inv: Investigator) -> str:
 
 def _module_overview(m: Module) -> str:
     """The SKILL.md body the keeper carries all game long (level 2 of progressive disclosure)."""
-    if (skills.path(skill_name(m)) / "SKILL.md").exists():
-        return skills.body(skill_name(m))
     from ..module.compiler import _skill_md
 
     return _skill_md(m).split("---", 2)[2].strip()

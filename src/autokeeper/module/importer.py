@@ -21,19 +21,23 @@ in modules/local/ and skills/module-<id>/, both git-ignored.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import re
 import shutil
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import TypedDict
 
+import yaml
 from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
 from .. import artkit, config, skills
 from ..harness import Agent, make_model
-from ..harness.tools import Workspace, check_tool, file_tools, image_tool
+from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
 from .compiler import compile_module
 from .schema import Module
@@ -70,13 +74,37 @@ def extract(file: Path, work: Path, pages: str | None) -> tuple[int, int]:
         pdf = pdfium.PdfDocument(str(file))
         chosen = _pages(pages, len(pdf))
         parts = []
+        pictures, by_digest = [], {}
+        (src / "images").mkdir()
         for n in chosen:
             page = pdf[n - 1]
             text = page.get_textpage().get_text_range().replace("\r\n", "\n")
             parts.append(f"\n\n---------- 第 {n} 页（图片：source/pages/p{n:02d}.jpg）----------\n\n{text.strip()}")
             image = page.render(scale=1.25).to_pil().convert("RGB")
             image.save(src / "pages" / f"p{n:02d}.jpg", quality=72, optimize=True)
+            # Extract actual embedded artwork rather than a page containing keeper notes.
+            for index, obj in enumerate(page.get_objects(filter=[pdfium.raw.FPDF_PAGEOBJ_IMAGE]), 1):
+                try:
+                    bitmap = obj.get_bitmap().to_pil().convert("RGB")
+                    if min(bitmap.size) < 120 or bitmap.width * bitmap.height < 40000:
+                        continue
+                    digest = hashlib.sha256(f"{bitmap.width}x{bitmap.height}:".encode() + bitmap.tobytes()).hexdigest()
+                    if digest in by_digest:
+                        if n not in by_digest[digest]["pages"]:
+                            by_digest[digest]["pages"].append(n)
+                        continue
+                    name = f"p{n:02d}_image{index:02d}.png"
+                    bitmap.save(src / "images" / name)
+                    record = {"path": f"source/images/{name}", "pages": [n], "width": bitmap.width, "height": bitmap.height}
+                    pictures.append(record)
+                    by_digest[digest] = record
+                except (ValueError, RuntimeError):
+                    continue  # the rendered page remains available if an embedded object cannot be decoded
         (src / "source.md").write_text("".join(parts).strip() + "\n", encoding="utf-8")
+        (src / "images" / "index.json").write_text(json.dumps(pictures, ensure_ascii=False, indent=2), encoding="utf-8")
+        if pictures:
+            with (src / "source.md").open("a", encoding="utf-8") as output:
+                output.write("\n\n## 原模组内嵌图片清单\n见 source/images/index.json；优先用 use_image 保留原图，避免整页图片暴露周围的守秘人资料。\n")
         return len(chosen), sum(len(p) for p in parts)
     from markitdown import MarkItDown
 
@@ -112,6 +140,11 @@ def _prepare(work: Path) -> None:
     for f in (config.EXAMPLE / "art").glob("*"):
         shutil.copy(f, ex / f.name)
     (ex / "schema.json").write_text(json.dumps(Module.model_json_schema(), ensure_ascii=False, indent=1), encoding="utf-8")
+    from ..plugins import api_text
+    from ..plugins.schema import Output
+
+    (ex / "plugins.md").write_text(api_text(), encoding="utf-8")
+    (ex / "plugin-output.schema.json").write_text(json.dumps(Output.model_json_schema(), ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 CoC 7 版模组（页面图片在 source/pages/）
@@ -122,15 +155,25 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 模组 id 用 "{module_id}"。所有 id 用小写英文或拼音加下划线。
 - 只整理模组里有的东西；剧情、真相、线索内容、检定要求、理智损失、结局都按原文，不要改编。
   原文没写的细节（NPC 的说话方式、地点的可调查物）可以合理补全。
+- 保留原文的开局引入，别把调查员直接放进任务清单。原文直接从委托或调查开始时，可补一处不改变案情的抵达地点与日常接触，
+  在 keeper_notes 注明“AutoKeeper 补充”；start、opening、locations/exits 要一致，玩家可以问路、歇脚或直接赴约。
+  不补新的案情线索、怪异预兆和强制检定，不改原作必须发生的开局事件与时限。
 - clues 要全：写清在哪（where、feature）、要什么检定（check，技能名用中文，如 侦查、图书馆使用、外语(拉丁文)）、
   指向哪个结论（points_to），推进剧情必需的标 core: true。NPC 口中的线索写 npc，并在该 NPC 的 clues 和 gates 里登记。
 - NPC 的 knows / secrets / lies 分清楚，NPC 只知道原文里他知道的事。
+- 只使用 schema 声明的字段，不发明 clues.sets 等不会执行的字段；复杂条件和暂未支持的规则完整写入 keeper_notes。
 - 有时间点的事情写进 events（when 用 "D1 21:00"，或 visit:地点id、flag:标记）；结局 endings 和奖励照原文；
   用到的剧情标记都要在 flags 里声明。
 - 原文没有预设调查员的话，按模组的年代和地点设计两名，写进 pregens，backstory 里注明“AutoKeeper 补充”。
+- 原文有通用引擎未支持的持续机制时，读 _example/plugins.md，用 write_plugin 编写并运行测试，不能只在 keeper_notes 写“请手动执行”就宣称自动支持。
+  插件只补原文规则，不改写原作，不替玩家作决定；保留专属规则全文与具体限制。插件失败可修复后重试，不跳过校验。
 - 原文里如果有适合让玩家“画出来”的东西（符号、地图、人像），在 sketches 里写一两个。
 
 ## 美术
+- 先读 source/images/index.json（如果存在）。原模组已有的地图、病历、信件、人物或场景插图优先用 use_image 保存，不用新画的图替代原图。
+- 场景原图使用与 locations.art 相同的图片键，无剧透的原作封面用 cover 绑定。pictures/art/art_colors 是运行时加载字段，不在 YAML 里写图片描述。
+  use_image 的 name 是图片键；场景/NPC 用同一键的 art/portrait，手稿通过 images: [图片键] 关联。ASCII 图仍作为终端与离线回退。
+  不能把带守秘人笔记、未发现地点或后期标注的整页提前发给玩家。完整标注地图等资料在相应线索解锁时再给。
 - 每个地点写 art 字段，在 art/<名字>.txt 画场景图（≤56 列、≤14 行）；每个 NPC 和预设调查员写 portrait，画头像（≤18 列、7 行）。
 - 每张图配同名 .color 配色蒙版：与图同形状，每个字符一个颜色键，“.”为默认色。颜色键：{palette}
 - 只用 ASCII 字符，自己构图，不要照搬原书插图。_example/ 里有图和蒙版的格式样例。
@@ -142,6 +185,7 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 2. 需要看地图、手稿时，用 view_image 看 source/pages/ 下对应页的图片。
 3. 用 write_file 写 module.yaml（内容多就先写前半，再用 append_file 续写），之后用 edit_file 修改。
 4. 画 art/ 下的图和 .color 蒙版。
+   推荐用 write_art，一次提交多张 ASCII 图的 JSON 对象（键是图名，不含扩展名；值是图的文本），工具会校验尺寸并自动配色，省去逐个写蒙版。
 5. 调用 check 校验，按输出改到没有“错误”和“[图]”为止（“提醒”可以留着）。
 6. 最后 finish，在 answer 里用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。"""
 
@@ -151,13 +195,54 @@ def validate(work: Path) -> list[str]:
         m = Module.load(work)
     except Exception as exc:  # malformed YAML or schema errors go straight back to the agent
         return [f"[错误] module.yaml 读不进来：{exc}"[:2000]]
-    issues = [str(i) for i in module_graph.audit(m) if i.level == "error"]
+    raw = yaml.safe_load((work / "module.yaml").read_text(encoding="utf-8"))
+    schema = Module.model_json_schema()
+    issues = _unknown_fields(raw, schema, schema.get("$defs", {}))
+    for field in ("art", "art_colors", "pictures", "extensions", "extension_errors"):
+        if raw.get(field):
+            issues.append(f"[格式] {field} 是运行时自动加载字段，不应在 module.yaml 中填写描述或路径；用图片键或 plugins 列表关联")
+    issues += [str(i) for i in module_graph.audit(m) if i.level == "error"]
+    issues += [f"[插件] {key}：{error}" for key, error in m.extension_errors.items()]
     portraits = {n.portrait for n in m.npcs} | {p.portrait for p in m.pregens}
     for name, text in m.art.items():
         issues += [f"[图] {i}" for i in artkit.check(name, text, m.art_colors.get(name), portrait=name in portraits)]
     for name in [loc.art for loc in m.locations if loc.art] + [x for x in portraits if x]:
         if name not in m.art:
             issues.append(f"[图] 缺少 art/{name}.txt")
+    for handout in m.handouts:
+        for name in handout.images:
+            if name not in m.pictures:
+                issues.append(f"[图] 手稿 {handout.id} 缺少原图 art/{name}")
+    if m.cover and m.cover not in m.pictures:
+        issues.append(f"[图] 缺少封面原图 art/{m.cover}")
+    return issues
+
+
+async def validate_all(work: Path) -> list[str]:
+    issues = validate(work)
+    if not issues:
+        from ..plugins.runtime import verify
+
+        for plugin in Module.load(work).extensions.values():
+            issues += [f"[插件] {plugin.id}：{problem}" for problem in await verify(plugin)]
+    return issues
+
+
+def _unknown_fields(value: object, schema: dict, definitions: dict, path: str = "module") -> list[str]:
+    """Catch data that Pydantic would silently ignore before declaring an import complete."""
+    if reference := schema.get("$ref"):
+        schema = definitions.get(reference.rsplit("/", 1)[-1], {})
+    issues = []
+    if isinstance(value, dict) and "properties" in schema:
+        fields = schema["properties"]
+        for key, item in value.items():
+            if key not in fields:
+                issues.append(f"[格式] {path}.{key} 是未支持的字段；请用现有字段表达，专属规则完整记入 keeper_notes")
+            else:
+                issues += _unknown_fields(item, fields[key], definitions, f"{path}.{key}")
+    elif isinstance(value, list) and "items" in schema:
+        for index, item in enumerate(value):
+            issues += _unknown_fields(item, schema["items"], definitions, f"{path}[{index}]")
     return issues
 
 
@@ -181,18 +266,68 @@ def printer(console: Console, work: Path) -> Callable[[str, dict], None]:
     return on_event
 
 
-def builder(work: Path, cfg: config.Config, console: Console, *, writable=("module.yaml", "notes.md", "art/*"), max_steps: int = 160) -> Agent:
+def builder(work: Path, cfg: config.Config, console: Console, *, writable=("module.yaml", "notes.md", "art/*", "plugins/*"), max_steps: int = 160) -> Agent:
     ws = Workspace(work, writable=writable)
     eye = make_model(cfg.role("vision"), VISION, label="vision")
 
     async def see(png: bytes, query: str) -> str:
         return (await eye.complete([{"role": "user", "content": query}], images=[png])).text.strip()
 
-    tools = [*file_tools(ws), image_tool(ws, see), check_tool(lambda: report(validate(work)))]
+    from ..plugins.author import plugin_tool
+
+    async def checked():
+        return report(await validate_all(work))
+
+    tools = [*file_tools(ws), artwork_tool(ws), original_image_tool(ws), plugin_tool(ws), image_tool(ws, see), check_tool(checked)]
     system = "你是一个仔细、守规矩的 TRPG 模组整理员。所有输出用简体中文。"
     agent = Agent("importer", system, tools, cfg=cfg, max_steps=max_steps, memory=150_000, on_event=printer(console, work))
     agent.closers.append(eye.close)
     return agent
+
+
+def artwork_tool(ws: Workspace) -> Tool:
+    async def write_art(content: str) -> str:
+        try:
+            pictures = json.loads(content)
+            module = Module.load(ws.root)
+        except (ValueError, OSError) as exc:
+            raise ToolError(f"先写好 module.yaml；content 须为图名到图文的 JSON 对象：{type(exc).__name__}") from None
+        if not isinstance(pictures, dict) or not pictures or len(pictures) > 80:
+            raise ToolError("一次提交 1–80 张图，格式为图名到 ASCII 文本的 JSON 对象")
+        portraits = {n.portrait for n in module.npcs} | {p.portrait for p in module.pregens}
+        outputs = []
+        for name, art in pictures.items():
+            if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9_]+", name) or not isinstance(art, str):
+                raise ToolError("图名只能用小写字母、数字与下划线，图文必须是字符串")
+            art = "\n".join(line.rstrip() for line in art.strip("\n").splitlines())
+            mask = artkit.auto_mask(art)
+            if errors := artkit.check(name, art, mask, portrait=name in portraits):
+                raise ToolError("；".join(map(str, errors)))
+            outputs += [(ws.resolve(f"art/{name}.txt", write=True), art), (ws.resolve(f"art/{name}.color", write=True), mask)]
+        # Validate every path and illustration before writing any part of the batch.
+        for path, text in outputs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text + "\n", encoding="utf-8")
+        return f"已写入 {len(pictures)} 张图及其自动配色蒙版：{'、'.join(pictures)}"
+
+    return Tool("write_art", "批量保存 ASCII 场景、头像与自动配色；先写 module.yaml，content 为图名到图文的 JSON 对象", ("content",), write_art, ("content",))
+
+
+def original_image_tool(ws: Workspace) -> Tool:
+    async def use_image(path: str, name: str) -> str:
+        source = ws.resolve(path)
+        if not source.is_relative_to(ws.root / "source") or source.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"} or not source.is_file():
+            raise ToolError("只使用 source/ 内已有的原图文件")
+        if not re.fullmatch(r"[a-z0-9_]+", name):
+            raise ToolError("图片键只用小写字母、数字和下划线")
+        target = ws.resolve(f"art/{name}{source.suffix.lower()}", write=True)
+        record = ws.resolve(f"art/{name}.source.json", write=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        record.write_text(json.dumps({"source": ws.rel(source), "original": True}, ensure_ascii=False), encoding="utf-8")
+        return f"已保留原图 {ws.rel(target)}；场景或头像用键 {name}，手稿写 images: [{name}]；注意正确解锁时机。"
+
+    return Tool("use_image", "把 source/ 中的原模组图片原样保存到 art/，供场景、人物或手稿使用", ("path", "name"), use_image, ("path", "name"))
 
 
 async def pipeline(
@@ -201,10 +336,12 @@ async def pipeline(
     brief: str,
     prepare: Callable[[Console], Awaitable[None]] | None = None,
     console: Console | None = None,
+    cfg: config.Config | None = None,
+    index: bool = True,
 ) -> Path:
     """prepare → build → validate ⇄ fix → compile, shared by import and generation."""
     console = console or Console()
-    cfg = config.load()
+    cfg = cfg or config.load()
     work.mkdir(parents=True, exist_ok=True)
     agent = builder(work, cfg, console)
 
@@ -222,7 +359,7 @@ async def pipeline(
         return {}
 
     async def n_validate(_: ImportState) -> dict:
-        issues = validate(work)
+        issues = await validate_all(work)
         console.print(f"[bold]校验[/] {'通过' if not issues else f'{len(issues)} 个问题'}")
         for i in issues[:20]:
             console.print(f"  {escape(i)}")
@@ -241,18 +378,21 @@ async def pipeline(
 
     async def n_compile(_: ImportState) -> dict:
         m = Module.load(work)
-        root = compile_module(m, config.SKILLS)
+        root = compile_module(m, config.SKILLS, source=work / "source")
         console.print(
             f"[bold green]完成[/] 《{m.title}》：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、"
             f"{len(m.art)} 张 ASCII 图 → {root}"
         )
         from .. import knowledge
 
-        if knowledge.available():
+        if index and knowledge.available():
             console.print("[bold]建库[/] LightRAG：抽取原文实体与关系，并灌入模组图谱…")
-            async with knowledge.KnowledgeBase(m, cfg) as kb:
-                stats = await kb.build(work)
-            console.print(f"[bold green]知识库[/] {stats}")
+            try:
+                async with knowledge.KnowledgeBase(m, cfg) as kb:
+                    stats = await kb.build(work)
+                console.print(f"[bold green]知识库[/] {stats}")
+            except Exception as exc:
+                console.print(f"[yellow]模组与 Skill 已完成；可选知识库未建成（{type(exc).__name__}），可以稍后重建。[/]")
         return {}
 
     g = StateGraph(ImportState)
@@ -268,13 +408,36 @@ async def pipeline(
     g.add_edge("fix", "validate")
     g.add_edge("compile", END)
     try:
-        await g.compile().ainvoke({}, {"recursion_limit": 20})
+        result = await g.compile().ainvoke({}, {"recursion_limit": 20})
+        if result.get("issues"):
+            raise ValueError(f"模组仍有 {len(result['issues'])} 个问题，未编译；草稿保留在 {work}")
     finally:
         await agent.close()
     return work
 
 
-async def run_import(file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (), console: Console | None = None) -> Path:
+def import_config(model: str = "", vision_model: str = "") -> config.Config:
+    """Per-import routing; keep the game's models and the user's saved configuration intact."""
+    cfg = config.load()
+    cfg = replace(cfg, roles=dict(cfg.roles))
+    for name, choice in (("importer", model), ("vision", vision_model)):
+        if choice:
+            backend, routed = config.route(choice)
+            old = cfg.role(name)
+            same_provider = backend == old.backend and routed.split(":", 1)[0] == old.model.split(":", 1)[0]
+            cfg.roles[name] = replace(old, backend=backend, model=routed, base_url=old.base_url if same_provider else None)
+    if model:
+        # Long documents and optional indexing must not quietly fall back to the game's
+        # Claude roles when the user has explicitly chosen another import backend.
+        for name in ("summarizer", "lore"):
+            cfg.roles[name] = replace(cfg.role("importer"), effort=None)
+    return cfg
+
+
+async def run_import(
+    file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (),
+    console: Console | None = None, model: str = "", vision_model: str = "",
+) -> Path:
     work = config.LOCAL_MODULES / module_id
 
     async def prepare(console: Console) -> None:
@@ -286,4 +449,4 @@ async def run_import(file: Path, module_id: str, *, pages: str | None = None, im
             console.print(f"[bold]附图[/] {len(images)} 张 → {work}/source/images/")
 
     brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
-    return await pipeline(work, brief=brief, prepare=prepare, console=console)
+    return await pipeline(work, brief=brief, prepare=prepare, console=console, cfg=import_config(model, vision_model))

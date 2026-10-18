@@ -20,14 +20,17 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from .. import config
 from ..engine.game import RETELL
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
+from ..net import media
 from ..net.link import Link
 from ..rules import commands
 from .app import GameScreen
 from .retell import RetellModal
 from .screens import PushModal, RollModal
+from .widgets import SceneArt
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
 IDEAS_WAIT = 60.0  # seconds F8 waits for the host's ideas
@@ -39,6 +42,9 @@ def table_module(welcome: dict[str, Any]) -> Module:
     m = Module.model_validate(welcome["module"])
     m.art, m.art_colors = welcome.get("art", {}), welcome.get("colors", {})
     m.pictures = {k: v for k, v in welcome.get("pictures", {}).items() if Path(v).is_file()}
+    handouts = {key for h in m.handouts for key in h.images}
+    m.pictures.update({k: path for k, data in welcome.get("picture_data", {}).items()
+                       if (path := media.unpack(data, max_size=1600 if k in handouts else 512))})
     return m
 
 
@@ -187,6 +193,11 @@ class LobbyScreen(Screen):
 class NetGameScreen(GameScreen):
     """The game screen at a shared table."""
 
+    def action_plugins(self) -> None:
+        self.app.notify("扩展规则由房主管理，会随游戏同步结算结果。")
+
+    SHOW_ENGINE = True  # "轮到谁" is on the top bar
+
     def __init__(self, module: Module, state: GameState, link: Link, seat: str | None, backlog: list[LogEntry]):
         super().__init__(module, state, resume=True, spectate=False)
         self.link, self.seat, self.backlog = link, seat, backlog
@@ -197,6 +208,7 @@ class NetGameScreen(GameScreen):
 
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game
+        self.query_one(SceneArt).effects = config.load().animations
         self.engine_label = "局域网联机" + ("" if self.seat else " · 观战")
         self._scene(self.state.location)
         self._panels()
@@ -230,10 +242,20 @@ class NetGameScreen(GameScreen):
             return
         t = msg["t"]
         if t == "event":
+            pictures = msg["ev"].get("picture_data")
+            if isinstance(pictures, dict) and msg["ev"].get("type") == "handout":
+                allowed = {key for h in self.m.handouts for key in h.images}
+                self.m.pictures.update({k: path for k, data in pictures.items()
+                                        if k in allowed and (path := media.unpack(data, max_size=1600))})
+            elif pictures:
+                if path := media.unpack(pictures):
+                    msg["ev"]["picture"] = path
             await self.handle(msg["ev"])
         elif t == "module":  # the director added places and people
             m = Module.model_validate(msg["module"])
             m.art, m.art_colors, m.pictures = self.m.art, self.m.art_colors, self.m.pictures
+            m.art.update(msg.get("art", {}))
+            m.art_colors.update(msg.get("colors", {}))
             self.m = m
         elif t == "sync":
             self._sync(msg["state"])
@@ -262,6 +284,9 @@ class NetGameScreen(GameScreen):
             if msg.get("ending"):
                 self.story.add("system", Text("这一局结束了：F10 复盘，看真相、漏掉的线索和没走到的结局" + ("；.en 做成长检定" if self.seat else ""), style="dim"))
         elif t == "error":
+            if msg.get("retry"):
+                self.my_turn = bool(self.seat)
+                self.story.end_keeper("这一段暂时中断。")
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
             self.app.notify("和房主的连接断了", severity="error", timeout=10)
@@ -290,12 +315,20 @@ class NetGameScreen(GameScreen):
             self.app.notify("你在观战；全角括号开头的话是场外聊天")
         elif self.state.ending and commands.instant(text):  # after the end: growth rolls (.en), the sheet
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
+
         elif not self.my_turn:
             self.app.notify("还没轮到你")
         else:
             if not commands.instant(text):  # .r, .st and the like leave the turn with you
                 self.my_turn = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
+
+    def action_retry(self) -> None:
+        if self.seat and self.my_turn:
+            self.my_turn = False
+            self.run_worker(partial(self.link.send, {"t": "act", "text": "/retry"}))
+        else:
+            self.app.notify("等房主允许接续这一回合后再试。")
 
     def action_suggest(self) -> None:
         if self.seat:

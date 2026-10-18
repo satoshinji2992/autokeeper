@@ -63,26 +63,30 @@ def play(
 
 def _run(app) -> None:
     """Run a full-screen app with file descriptor 2 sent to saves/stderr.log: C libraries
-    (numba, onnxruntime) write warnings there directly, over the game. A crash's traceback
-    lands in the log too, and is shown once the screen is back."""
+    (numba, onnxruntime) write warnings there directly, over the game. Textual's Unix
+    driver writes to sys.__stderr__, so keep that stream connected to the terminal.
+    A crash's traceback lands in the log and is shown once the screen is back."""
     log = config.SAVES / "stderr.log"
-    try:
-        config.SAVES.mkdir(parents=True, exist_ok=True)
-        start = log.stat().st_size if log.exists() else 0
-        sink = open(log, "a", encoding="utf-8")  # held open while the app runs
-        sys.stderr.flush()
-        saved = os.dup(2)
-        os.dup2(sink.fileno(), 2)
-    except OSError:  # no saves folder, an odd terminal: run as is
-        app.run()
-        return
-    try:
-        app.run()
-    finally:
-        sys.stderr.flush()
-        os.dup2(saved, 2)
-        os.close(saved)
-        sink.close()
+    original = sys.__stderr__
+    with contextlib.ExitStack() as stack:
+        try:
+            config.SAVES.mkdir(parents=True, exist_ok=True)
+            start = log.stat().st_size if log.exists() else 0
+            sink = stack.enter_context(open(log, "a", encoding="utf-8"))
+            sys.stderr.flush()
+            terminal = stack.enter_context(os.fdopen(os.dup(2), "w", encoding="utf-8", buffering=1))
+            os.dup2(sink.fileno(), 2)
+        except OSError:  # no saves folder, an odd terminal: run as is
+            app.run()
+            return
+        try:
+            sys.__stderr__ = terminal
+            app.run()
+        finally:
+            terminal.flush()
+            sys.stderr.flush()
+            sys.__stderr__ = original
+            os.dup2(terminal.fileno(), 2)
     if app.return_code:
         with open(log, encoding="utf-8", errors="replace") as f:
             f.seek(start)
@@ -417,14 +421,12 @@ def trace_cmd(
 def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
     """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版。"""
     from .module import graph
+    from .module.importer import validate_all
     from .module.schema import Module
 
     m = Module.load(module)
-    issues = [str(i) for i in graph.audit(m)]
-    portraits = {n.portrait for n in m.npcs} | {p.portrait for p in m.pregens}
-    for name, text in m.art.items():
-        issues += [f"[图] {i}" for i in artkit.check(name, text, m.art_colors.get(name), portrait=name in portraits)]
-    errors = [i for i in issues if "错误" in i or i.startswith("[图]")]
+    errors = asyncio.run(validate_all(module))
+    issues = errors + [str(i) for i in graph.audit(m) if i.level != "error"]
     for i in issues:
         console.print(i)
     console.print(f"{'[red]有错误[/]' if errors else '[green]通过[/]'}：{len(issues)} 条提示，{len(errors)} 条需要修")
@@ -435,9 +437,14 @@ def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
 def compile_cmd(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
     """把模组编译成 Agent Skill 包（渐进式披露）。"""
     from .module.compiler import compile_module
+    from .module.importer import validate_all
     from .module.schema import Module
 
-    root = compile_module(Module.load(module), config.SKILLS)
+    if issues := asyncio.run(validate_all(module)):
+        for issue in issues:
+            console.print(issue)
+        raise typer.Exit(1)
+    root = compile_module(Module.load(module), config.SKILLS, source=module / "source")
     console.print(f"已生成 {root}")
 
 
@@ -503,6 +510,8 @@ def import_cmd(
     file: Annotated[Path, typer.Argument(help="模组文件：PDF / Word / Markdown / 纯文本，或装着它们的 .zip")],
     id: Annotated[str | None, typer.Option("--id", help="模组的英文短名，如 zhuishuren；不填就按文件名取，中文转拼音")] = None,
     pages: Annotated[str | None, typer.Option(help="只取这些页，如 7-18")] = None,
+    model: Annotated[str, typer.Option(help="这次导入的模型，如 codex:default、deepseek:deepseek-flash")] = "",
+    vision_model: Annotated[str, typer.Option(help="这次导入的读图模型；留空沿用 vision 配置")] = "",
 ) -> None:
     """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。"""
     import tempfile
@@ -513,10 +522,11 @@ def import_cmd(
     from .module.importer import run_import
 
     module_id = id or sources.module_id(file.stem)
+    models = {key: value for key, value in (("model", model), ("vision_model", vision_model)) if value}
     if not id:
         console.print(f"模组短名：{module_id}（用 --id 换一个）")
     if file.suffix.lower() not in sources.ARCHIVES:
-        asyncio.run(run_import(file, module_id, pages=pages, console=console))
+        asyncio.run(run_import(file, module_id, pages=pages, console=console, **models))
         return
     with tempfile.TemporaryDirectory(prefix="autokeeper-zip-") as tmp:
         found = sources.unpack(file, Path(tmp))
@@ -528,7 +538,7 @@ def import_cmd(
             for i, d in enumerate(found.documents, 1):
                 console.print(f"  {i}. {d.relative_to(tmp).as_posix()}")
             doc = found.documents[typer.prompt("用哪一份作模组正文", default=1, type=click.IntRange(1, len(found.documents))) - 1]
-        asyncio.run(run_import(doc, module_id, pages=pages, images=found.images, console=console))
+        asyncio.run(run_import(doc, module_id, pages=pages, images=found.images, console=console, **models))
 
 
 @app.command()
@@ -695,6 +705,24 @@ def eval_context(modules: list[Path]) -> None:
 
     for m in modules:
         console.print_json(data=ledger(m))
+
+
+@eval_app.command("experience")
+def eval_experience(
+    module: Path = Path("modules/zhuishuren"),
+    actions: Annotated[Path | None, typer.Option(help="每行一句玩家行动的 UTF-8 文件；默认使用追书人到站与日常路线")] = None,
+    turns: Annotated[int, typer.Option(min=1, help="最多体验多少轮")] = 12,
+    out: Annotated[Path, typer.Option(help="含全文、逐轮等待、调用量和待审问题的报告")] = Path("saves/eval/experience.json"),
+) -> None:
+    """用真实模型连续体验开场、闲逛和人情，不将文风分数当成好玩程度。"""
+    from .eval.experience import ARRIVAL, run
+
+    lines = [line.strip() for line in actions.read_text(encoding="utf-8").splitlines() if line.strip()] if actions else ARRIVAL
+    report = asyncio.run(run(module, lines[:turns], out))
+    console.print(f"完成 {report['completed']}/{report['requested']} 轮；报告：{out}")
+    if report["error"]:
+        console.print(f"[yellow]体验中断：{report['error']}；当前结果与恢复记录已保留。[/]")
+        raise typer.Exit(1)
 
 
 @app.command()

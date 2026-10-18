@@ -35,6 +35,7 @@ import base64
 import json
 import os
 import re
+import signal
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -491,6 +492,30 @@ class CodexError(RuntimeError):
         self.status_code = int(found.group(1)) if found else None  # lets transient() see 429 / 5xx
 
 
+async def _communicate(proc: asyncio.subprocess.Process, prompt: bytes) -> tuple[bytes, bytes]:
+    """Cancel the CLI process group as well as the request when a turn times out."""
+    try:
+        return await proc.communicate(prompt)
+    except BaseException:
+        if proc.returncode is None:
+            try:
+                if os.name == "posix":
+                    os.killpg(proc.pid, signal.SIGTERM)
+                else:
+                    proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), 2)
+                except TimeoutError:
+                    if os.name == "posix":
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    else:
+                        proc.kill()
+                    await proc.wait()
+            except ProcessLookupError:
+                pass
+        raise
+
+
 def strict_schema(node: Any) -> Any:
     """OpenAI's strict structured output: every object closed and every field required,
     no defaults. Fields that had defaults simply get filled in by the model; the original
@@ -550,9 +575,10 @@ class CodexModel(Model):
                     f.write(img)
                 args += ["-i", path]
             proc = await asyncio.create_subprocess_exec(
-                *args, "-", stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                *args, "-", stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                start_new_session=os.name == "posix",
             )
-            out, err = await proc.communicate(_transcript(messages).encode("utf-8"))
+            out, err = await _communicate(proc, _transcript(messages).encode("utf-8"))
         reply, failure = Reply(), ""
         for line in out.decode("utf-8", "replace").splitlines():
             try:

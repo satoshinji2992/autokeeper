@@ -7,13 +7,16 @@ import random
 import time
 from functools import partial
 
+from rich.cells import set_cell_size
 from rich.console import Group
+from rich.table import Table
 from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.suggester import SuggestFromList
 from textual.widgets import Static
 
 from .. import artkit, atmosphere, imagery, weather
+from ..module.schema import Module
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE
 from ..rules.coc import Investigator
 from . import art
@@ -159,13 +162,6 @@ class SceneArt(Static):
             return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w, self.covered)
         return Text()
 
-    def _title(self) -> Text:
-        t = Text()
-        t.append(f"◆ {self.place}", style="bold")
-        if self.when:
-            t.append(f"   {LIGHT_MARK.get(self.when, '')} {self.when}", style="dim")
-        return t
-
     def _paint(self, rate: float = 0.0, frame: str | None = None, rows: int | None = None, art_text: Text | None = None) -> None:
         if art_text is not None:
             pass
@@ -179,7 +175,7 @@ class SceneArt(Static):
             lines = art_text.split("\n")
             beam = Text("▔" * min(self._fit()[0], max((ln.cell_len for ln in lines), default=0)), style="dim")
             art_text = Text("\n").join([*lines[:rows], beam] if rows < len(lines) else lines)
-        self.update(Text("\n").join([self._title(), art_text]))
+        self.update(art_text)  # where and when are on the top bar
 
     def _refresh(self, reveal: bool = False) -> None:
         self.run_worker(partial(self._load, reveal), exclusive=True, group="art")
@@ -253,6 +249,34 @@ class SceneArt(Static):
         self._hold = time.monotonic() + 0.12
         self._paint(0.03 + self.madness * 0.08)
         self.set_timer(0.12, self._paint)
+
+
+class ItemCard(Static):
+    """A prop in the story; an illustration arriving later updates the same card."""
+
+    DEFAULT_CSS = "ItemCard { border-left: thick $secondary; padding: 0 1; height: auto; }"
+
+    def __init__(self, module: Module, event: dict, style: str):
+        super().__init__()
+        self.module, self.art_key, self.style_name = module, event.get("art") or "", style
+        self.item_id = event["id"]
+        self.title, self.description = event["name"], event["text"]
+
+    def on_mount(self) -> None:
+        self.redraw()
+
+    def _show(self, picture: Text) -> None:
+        self.update(Group(Text(self.title, style="bold"), picture, Text(self.description)))
+
+    def redraw(self) -> None:
+        self._show(artkit.colorize(self.module.art.get(self.art_key, ""), self.module.art_colors.get(self.art_key)))
+        if self.art_key in self.module.pictures and imagery.available():
+            self.run_worker(self._photo, group="item-picture", exclusive=True, exit_on_error=False)
+
+    async def _photo(self) -> None:
+        picture = await asyncio.to_thread(imagery.render, self.module.pictures[self.art_key], 42, 12, self.style_name)
+        if self.is_attached:
+            self._show(Text.from_ansi(picture))
 
 
 class StoryLog(VerticalScroll):
@@ -417,7 +441,7 @@ def command_suggester(inv: Investigator | None = None) -> SuggestFromList:
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
-    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/debrief", "/save", "/usage", "/prefs", "/help", "/theme", "/quit"]
+    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help", "/theme", "/quit"]
     return SuggestFromList([*checks, *lookups, *slash], case_sensitive=False)
 
 
@@ -425,11 +449,13 @@ class DiceTray(Static):
     """Two spinning d10s that settle on BCDice's result."""
 
     def __init__(self, **kw):
-        super().__init__(Text("  .ra 技能  想用某个技能\n  /draw 手绘  /notes 线索本", style="dim"), **kw)
+        super().__init__(**kw)
+        self.display = False  # nothing to show before the first roll
         self._frames = 0
         self._view: dict | None = None
 
     def roll(self, view: dict) -> None:
+        self.display = True
         self._view = view
         self._frames = 12
         self._spin()
@@ -468,46 +494,89 @@ class DiceTray(Static):
         self.update(out)
 
 
-class SheetPanel(Static):
-    async def on_click(self) -> None:
-        await self.screen.run_action("sheet")  # the whole card (F7)
+PORTRAIT = (16, 8)  # the side column's thumbnail; the whole card (F7) has the big one
+SKILLS_SHOWN = 10
 
-    def show(self, inv: Investigator, portrait: Text | None = None) -> None:
-        out = Text()
-        if portrait is not None and portrait.plain:
-            out.append_text(portrait)
-            out.append("\n")
-        out.append(f"{inv.name}", style="bold")
-        out.append(f"  {inv.occupation}  {inv.age}岁\n", style="dim")
+
+class SheetPanel(Static):
+    """The acting investigator at a glance: a small portrait beside the name and the bars,
+    the best skills, and the rest of the party. A click opens the whole card (F7)."""
+
+    async def on_click(self) -> None:
+        await self.screen.run_action("sheet")
+
+    def show(self, inv: Investigator, portrait: Text | None = None, party: list[Investigator] | None = None) -> None:
+        width = max(24, self.content_size.width or 32)
+        pictured = portrait is not None and bool(portrait.plain.strip())
+        beside = width - (PORTRAIT[0] + 1 if pictured else 0)
+        head = Text()
+        head.append(set_cell_size(inv.name, beside).rstrip() + "\n", style="bold")
+        head.append(set_cell_size(f"{inv.occupation.split('（')[0]}  {inv.age}岁", beside).rstrip() + "\n", style="dim")
+        long = max(5, min(12, beside - 11))
         hp_style = "bold red" if inv.hp * 3 <= inv.hp_max else "bold"
         san_ratio = inv.san / max(1, inv.characteristics.get("意志", 50))
         san_style = "bold red" if san_ratio < 0.6 else "bold magenta" if san_ratio < 0.85 else "bold"
-        out.append("HP  ")
-        out.append(art.bar(inv.hp, inv.hp_max), style=hp_style)
-        out.append(f" {inv.hp}/{inv.hp_max}\n")
-        out.append("SAN ")
-        out.append(art.bar(inv.san, inv.characteristics.get("意志", inv.san) or 1), style=san_style)
-        out.append(f" {inv.san}/{inv.san_max}\n")
-        out.append(f"MP {inv.mp}  幸运 {inv.luck}  MOV {inv.move}  DB {inv.damage_bonus}\n")
+        head.append("HP  ")
+        head.append(art.bar(inv.hp, inv.hp_max, long), style=hp_style)
+        head.append(f" {inv.hp}/{inv.hp_max}\n")
+        head.append("SAN ")
+        head.append(art.bar(inv.san, inv.characteristics.get("意志", inv.san) or 1, long), style=san_style)
+        head.append(f" {inv.san}\n")
+        head.append(f"MP {inv.mp}  幸运 {inv.luck}\nMOV {inv.move}  DB {inv.damage_bonus}")
         if inv.conditions:
-            out.append("状态：" + "、".join(inv.conditions) + "\n", style="bold red")
-        top = sorted(inv.skills.items(), key=lambda kv: -kv[1])[:10]
-        out.append("─" * 32 + "\n", style="dim")
-        for i in range(0, len(top), 2):
-            row = "".join(f"{k[:6]:　<6}{v:>3}  " for k, v in top[i : i + 2])
-            out.append(row.rstrip() + "\n")
-        self.update(out)
+            head.append("\n" + "、".join(inv.conditions), style="bold red")
+        parts: list = []
+        if pictured:
+            grid = Table.grid(padding=(0, 1))
+            grid.add_column(width=PORTRAIT[0], no_wrap=True)
+            grid.add_column(width=beside)
+            grid.add_row(portrait, head)
+            parts.append(grid)
+        else:
+            parts.append(head)
+        parts.append(Text("─" * width, style="dim"))
+        parts.append(skill_rows(inv, width))
+        others = [p for p in party or [] if p.id != inv.id]
+        if others:
+            parts.append(Text("─" * width, style="dim"))
+            parts.append(party_rows([inv, *others], inv.id, width))
+        self.update(Group(*parts))
+
+
+def skill_rows(inv: Investigator, width: int) -> Text:
+    """The best skills in two columns, lined up by display width (CJK takes two cells)."""
+    col = width // 2
+    out = Text()
+    top = sorted(inv.skills.items(), key=lambda kv: -kv[1])[:SKILLS_SHOWN]
+    for i in range(0, len(top), 2):
+        row = "".join(set_cell_size(k, col - 5) + f"{v:>3}  " for k, v in top[i : i + 2])
+        out.append(row.rstrip() + ("\n" if i + 2 < len(top) else ""))
+    return out
+
+
+def party_rows(party: list[Investigator], acting: str, width: int) -> Text:
+    out = Text()
+    for n, p in enumerate(party):
+        name = set_cell_size(p.name.split("（")[0], max(4, width - 18))
+        style = "bold" if p.id == acting else "dim" if not p.can_act else ""
+        out.append(("▸ " if p.id == acting else "  ") + name, style=style)
+        out.append(f" HP{p.hp:>3} SAN{p.san:>3}", style="bold red" if p.hp * 3 <= p.hp_max else style)
+        if n + 1 < len(party):
+            out.append("\n")
+    return out
 
 
 class CluePanel(Static):
-    def show(self, titles: list[str], total: int, clock: str = "") -> None:
+    """What has been found, newest last. How many there are to find is not the player's to know."""
+
+    def show(self, titles: list[str]) -> None:
         out = Text()
-        out.append(f"线索本  {len(titles)}/{total}", style="bold")
+        out.append(f"线索本 · {len(titles)} 条", style="bold")
         out.append("   F2 展开\n", style="dim")
         for t in titles[-12:]:
-            out.append("  〔", style="dim")
+            out.append("〔", style="dim")
             out.append(t, style="bold")
             out.append("〕\n", style="dim")
         if not titles:
-            out.append("  还什么都没有发现。\n", style="dim")
+            out.append("还什么都没有发现。\n", style="dim")
         self.update(out)

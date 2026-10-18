@@ -5,13 +5,12 @@
 *Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn.*
 
 *我以为，世上最仁慈的事，莫过于人类的心智无法把它所知的一切关联起来。*<br>
-*我们栖身在一座名为无知的平静小岛上，四周是无垠的黑色海洋，而我们本不该远航。*
 
 <sub><i>H. P. 洛夫克拉夫特，《克苏鲁的呼唤》</i></sub>
 
 <br>
 
-**一位会自己主持《克苏鲁的呼唤》跑团的 AI 守秘人**
+**在终端里玩《克苏鲁的呼唤》第 7 版**
 
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)
@@ -25,25 +24,17 @@
 
 <p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》深夜的公墓"></p>
 
-AutoKeeper 是一个在终端里玩的《克苏鲁的呼唤》第 7 版中文跑团。准备一本模组，它就替你当守秘人：描述场景，扮演每一个 NPC，按规则裁定检定，读档时再帮你回顾一遍前情。你可以独自调查，可以带上 AI 队友，可以叫上朋友在局域网里同桌，也可以泡杯茶，看 AI 调查员自己把整个模组跑完。
+AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子与状态由程序结算。可以独自调查、带 AI 同伴，也可以和朋友联机，或旁观 AI 调查员跑团。终端和浏览器均可游玩，仓库自带入门模组《追书人》。
 
 ## 功能
 
-- 导入你手上的模组：在标题画面选“导入模组”，挑一个文件或者直接拖进终端，PDF、Word、Markdown、打包的 zip 都行，导完就能开团。没有模组，就给一句灵感，让它查资料、写一个原创的。
-- AI 守秘人负责叙事和扮演，骰子交给 BCDice 掷，结果谁也改不了。你说得再动听，检定该掷还得掷。
-- 守秘人会即兴。你想做模组没写到的事，它不会说“不行”，而是顺势加人物、加线索、开支线，必要时多出一个结局；要是乱来，它会先演一段，再让你尝到后果。新剧情在后台构思，写好了直接插进来，不耽误守秘人回应你。
-- 开局时它会读你的调查员背景，把你牵挂的人和事织进故事，模组里体验不好的地方也会顺手补上。剧情里有大大小小的冲突，NPC 的态度会随着故事改变。
-- 线索不憋也不塞。查对了具体的东西就能拿到，笼统地看一圈只会注意到最显眼的；关键线索失败了还能再找，再失败也能到手，只是要付出代价。
-- 车卡不用从零填表：AI 协助车卡时，说一位公众人物的名字（比如鲁迅、居里夫人、立石凛），它会上网查这个人、找几张照片让你挑；也可以直接描述你想玩的人，比如“在码头长大、胆子很大的女记者”。它问你三个问题，再按模组的年代车成调查员；也可以直接导入你已有的卡，骰娘的 `.st` 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，甚至酒馆的角色卡都行。
-- 每个 NPC 只知道自己该知道的事，有秘密，会撒谎，也会守口如瓶。和 NPC 说话时，对方的立绘会站到场景右侧，跟着台词变表情：害怕时发冷发暗、微微发抖，发火时泛红，难过时褪色，友善时变暖。
-- 叙事偏好：篇幅、恐怖浓度、节奏，还能勾上不想看到的内容，比如虫、溺水、幽闭。勾上的事照样发生、照样结算，只是放到镜头外、一句带过。
-- 彩色 ASCII 画面：照片转成字符画铺满画面，再描一层 ASCII 轮廓线，深夜也认得出房子和墓碑，终端越大画面越大。天色随时间变化，墓地入夜起雾，隧道里只有一束手电光，理智下降时画面开始扭曲。
-- 兼容常见的骰娘指令，孤注一掷、幸运、理智、疯狂发作、成长一应俱全。
-- 线索本、手稿、只画出你知道的地方的地图、完整的人物卡、鼠标手绘，存档随时读取，读档时先回顾一遍前情。不满意守秘人刚讲的一段，可以请他换个讲法，骰子和线索都不变；一局结束后能复盘，看真相、漏掉的线索和没走到的结局，再听一段后日谈。
-- 卡住的时候按 F8，调查员会按眼下的情况想三件能做的事，选中的只填进输入框，改不改、发不发由你。AI 队友和你一样，只知道调查员见过、听说过的事，没人提过的地方也不能靠报出名字直接过去。
-- 和朋友在局域网里开一桌：朋友用浏览器打开一个地址就能入座，每位调查员由人或 AI 扮演，有人掉线，AI 先替他走。
-- 终端和浏览器都能玩。Claude、Codex、DeepSeek 和本地模型都能当守秘人，断了网也能玩，一局打到一半也能换。
-- 还能装进 Claude Code 或 Codex，让它们直接当守秘人。
+- **调查与即兴**：守秘人描述场景、扮演 NPC，按调查员背景安排开场。可以查案，也可以问路、吃饭、闲聊。选择即兴模式后，模组之外的人物、地点和支线会随本局保存。
+- **检定与规则**：使用 BCDice 掷骰，支持常见骰娘指令、孤注一掷、幸运、理智、疯狂与成长。完整战斗和追逐规则尚未实现。
+- **人物与记录**：可用描述或参考人物创建调查员，也可导入已有卡片。线索本记录发现、约定和物品往来，地图只展示已知地点；存档可继续，结局后可复盘。
+- **彩色 ASCII**：场景、人物和物件以字符画显示，支持昼夜、天气和人物表情。模组插图尽量沿用，手稿保留完整文字、ASCII 预览和原图入口。
+- **叙事调整**：可选篇幅、节奏、恐怖程度及需要略去的细节；F9 重讲最新一段，已结算的骰子和线索不变。F8 提供可修改的行动建议。
+- **导入与扩展**：支持 PDF、Word、Markdown、文本及 ZIP 模组，也可从一句设定生成原创模组。编译与即兴时可开发带测试的规则插件，补充疾病、资源消耗和自定义行动。见[插件说明](docs/plugins.md)。
+- **模型与联机**：支持 Claude、Codex、DeepSeek 和 Ollama，可分别选择游玩、导入和读图模型。朋友可通过浏览器加入房间，也可通过 MCP 在 Claude Code / Codex 中主持。
 
 ## 截图
 
@@ -83,16 +74,39 @@ Windows 上请用 Windows Terminal，旧控制台对真彩色和鼠标的支持�
 ## 开始游戏
 
 ```bash
-uv run autokeeper import 模组.pdf                     # 导入一本模组（游戏里的“导入模组”也行）
-uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian   # 或者生成一本
-uv run autokeeper                                    # 开团
-uv run autokeeper serve                              # 在浏览器里玩
-uv run autokeeper autoplay modules/local/mymod --party 2   # 看 AI 调查员自己跑团
+uv run autokeeper           # 在终端里玩
+uv run autokeeper serve     # 在浏览器里玩
 ```
 
-第一次玩就从《追书人》开始：还没有存档时，“新的调查”会把它标成新手教学并选好。标题画面和游戏里的 F1 都能打开新手指南；头一回碰到掷骰、线索、NPC、理智下降这些事，故事里会多一行提示，每种只说一次。
+第一次玩不必先导入模组：
 
-开团后直接用中文说你想做什么就行，比如“我拉开书桌抽屉”“我问守墓人最近见过谁”。要不要掷骰由守秘人决定，需要时会先告诉你掷什么、要掷到多少、为什么，你按回车或空格亲手掷。
+1. 选“新的调查”，选择标有“初次推荐”的《追书人》。
+2. 选一名预设调查员，或创建、导入自己的人物卡，再决定是否带 AI 同伴。
+3. 读完开场，在底部输入行动，按回车。例如“我向站务员问路”“我先买份早饭”。需要检定时，按弹窗提示掷骰。
+
+《追书人》从火车抵达小镇开始。沿途可以停留、交谈，也可以直接去托马斯家赴约。问路、歇脚不会因为没有找到线索就被当成卡关，游戏时间仍照常推进。
+
+标题页的“设置”（F3）可以调整模型、备用模型、自由度、叙事偏好和画面，选择会保存。导入界面可为本次导入另选模型；长文处理和建库沿用导入模型，读图模型可单独设置。
+
+F1 打开“玩法说明”。第一次遇到检定、线索等操作时，会出现简短提示，每种只显示一次，可关闭。即兴配图先显示简图，后台完成后更新；支持联网参考照片，离线时使用字符画。实现细节见[守秘人体验设计](docs/keeper-experience.md)。
+
+如果模型中断，输入 `/retry`，或在功能菜单中选择“接着讲”。系统会从未完成的阶段继续，保留已结算的骰子和 NPC 回答。
+
+<details>
+<summary>导入模组、生成模组和观战</summary>
+
+标题页选择“导入模组”，或使用以下命令：
+
+```bash
+uv run autokeeper import 模组.pdf
+uv run autokeeper import 模组.pdf --model codex:default --vision-model codex:default
+uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian
+uv run autokeeper autoplay modules/local/mymod --party 2
+```
+
+第二条命令分别指定导入与读图模型。`generate` 从设定生成模组；`autoplay` 让 AI 调查员游玩指定模组，也可在标题页选“观战”。
+
+</details>
 
 | 操作 | 作用 |
 |---|---|
@@ -101,7 +115,8 @@ uv run autokeeper autoplay modules/local/mymod --party 2   # 看 AI 调查员自
 | `.en` | 结局后做成长检定，每局一次 |
 | F1 · F2 · F3 · F4 · F5 · F6 · F7 | 帮助 · 线索本与手稿 · 换模型 · 手绘 · 地图 · 天气动画 · 人物卡 |
 | F8 · F9 · F10 | 卡住时给三个思路 · 让守秘人换个讲法重讲最新一段（骰子和线索不变）· 结局后复盘 |
-| Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T · Ctrl+O · Ctrl+B | 前情回顾 · 存档 · 换画法 · 换配色 · 叙事偏好 · 用量 |
+| Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T | 前情回顾 · 存档 · 换画法 · 换配色 |
+| Ctrl+O · Ctrl+B · Ctrl+K · Ctrl+P | 叙事偏好 · 用量与估算花费 · 规则插件 · 全部操作 |
 
 ## 和朋友一起玩
 
@@ -121,19 +136,19 @@ uv run autokeeper join 192.168.1.5                              # 装了 AutoKee
 
 ## 模型与花费
 
-默认用你本机 Claude Code 的登录，自己玩不用另外付费。部署给别人用时请设 `ANTHROPIC_API_KEY`，因为 Anthropic 不允许第三方产品提供 claude.ai 登录。
+默认使用本机 Claude Code 登录，也可设置 `ANTHROPIC_API_KEY` 使用 API。订阅额度和 API 费用由对应服务计算；使用 DeepSeek 等服务时需配置相应密钥。
 
 ```bash
 uv run autokeeper --preset deepseek                   # 用 DeepSeek（需要 DEEPSEEK_API_KEY）
-AUTOKEEPER_MODEL=ollama:qwen3:14b uv run autokeeper --search none    # 全部用本地模型，完全离线
+AUTOKEEPER_MODEL=ollama:qwen3:14b uv run autokeeper --search none    # 使用已下载的本地模型，关闭搜索
 uv run autokeeper --model codex:default import 模组.pdf --id mymod    # 用 Codex 订阅导入模组
 uv run autokeeper --preset deepseek --fallback ollama:qwen3:14b      # DeepSeek 连不上时换本地模型接着玩
 uv run autokeeper --preset deepseek --budget 5                       # 花费超过 5 美元就停
 ```
 
-想要剧情更细，就加 `--mode 高级剧情`，守秘人、导演、NPC 和 AI 队友都会多想一层；想要快一点，就加 `--mode 经济`。游戏里按 F3 也能换。用 DeepSeek 实测 12 回合，高级剧情多花七成的钱、六成的时间；经济模式每一步快一些，但省不了多少钱，因为钱主要花在读上下文上。
+`--mode 高级剧情` 提高叙事相关角色的思考强度，`--mode 经济` 降低思考强度，实际效果和速度取决于模型。游戏中按 F3 可切换。
 
-用 DeepSeek 跑完一整局入门模组大约一块钱人民币。每个角色用哪个模型，都可以在 `~/.config/autokeeper/config.toml` 里单独设，写法见[配置说明](docs/harness.md#换模型)。
+Ctrl+B 查看用量与估算花费。费用取决于模型、上下文长度和回合数；未标价模型可能没有金额估算。可在 `~/.config/autokeeper/config.toml` 中分别配置各角色的模型，见[配置说明](docs/harness.md#换模型)；历史测试数据见[评测](docs/eval.md)。
 
 ## 在 Claude Code / Codex 里玩
 
@@ -165,21 +180,21 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>想严格按模组玩，不要守秘人即兴？</summary>
 
-开团时加上 `--improv 严格`，或者在 `~/.config/autokeeper/config.toml` 里写 `improv = "严格"`。守秘人就只用模组里写好的人物、线索和结局。
+在标题页“设置”中将自由度改为“严格按模组已有内容”，或启动时加 `--improv 严格`。也可在 `~/.config/autokeeper/config.toml` 中设置 `improv = "严格"`。
 
 </details>
 
 <details>
-<summary>导入官方模组会被上传吗？</summary>
+<summary>导入的文件保存在哪里？会发送给模型吗？</summary>
 
-不会。导入的成品只保存在本地的 `modules/local/`，随手丢进 `modules/` 的 PDF、zip 这些原文件也都在 `.gitignore` 里，不会进仓库。CoC 官方模组受版权保护，请只导入你自己拥有的。
+导入成品保存在本地 `modules/local/`。使用云端模型时，导入与游玩所需的正文、图片会发送给所选服务；需要在本机处理时，应配置本地模型并关闭联网搜索。原文件的 `.gitignore` 规则只防止提交到 Git，不代表文件内容不会发送给模型。CoC 官方模组受版权保护，请只导入你拥有使用权的材料。
 
 </details>
 
 <details>
 <summary>没有网能玩吗？</summary>
 
-能。装好 [Ollama](https://ollama.com/) 和一个本地模型，加上 `--search none`，整局游戏都在本机完成。
+可以。需提前装好 [Ollama](https://ollama.com/)、下载模型和所需依赖，选择 `ollama:模型名` 并加 `--search none`。确认所有使用的模型都在本机运行；联网搜索、参考照片和云端模型在离线时不可用。
 
 </details>
 
@@ -193,13 +208,15 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 <details>
 <summary>画面颜色不对，或者右边一栏不见了？</summary>
 
-不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。Ctrl+A 在四种画法间切换：块字符加轮廓线（默认）、更细的六分块（终端字体不支持时会显示成方框，macOS 自带终端就是这样）、不描轮廓的照片、纯 ASCII；也可以在配置里写 `art_style = "fine"`。
+不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。默认使用彩色纯 ASCII；Ctrl+A 可切换块字符加轮廓线、更细的六分块（终端字体不支持时会显示成方框）、不描轮廓的照片和纯 ASCII，也可以在设置里选择。模组原图仍保留；发现地图、病历或信件后，手稿窗口提供完整文字、ASCII 预览和“查看原图”，F2 可重看。
 
 </details>
 
 ## 文档
 
-- [Harness 与 Agent 设计](docs/harness.md)
+- [守秘人体验设计](docs/keeper-experience.md)
+- [规则插件](docs/plugins.md)
+- [模型、上下文与 Agent 设计](docs/harness.md)
 - [评测](docs/eval.md)
 - [模组格式](docs/module-format.md)
 - [更新日志](CHANGELOG.md)

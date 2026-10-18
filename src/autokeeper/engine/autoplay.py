@@ -245,6 +245,7 @@ async def run(
                 game.emit = emit
     finally:
         channels.listeners.remove(fell_back)
+        await game.close()
         await cast.close()
         log.close()
 

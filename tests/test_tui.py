@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 
 import pytest
 from PIL import Image
 from rich.text import Text
-from textual.widgets import Input, RadioButton, Static
+from textual.widgets import Button, Input, RadioButton, Static
 
 from autokeeper import artkit, config, imagery
 from autokeeper.config import EXAMPLE, Role
@@ -76,6 +77,39 @@ async def until(pilot, test, tries: int = 40) -> bool:
     return test()
 
 
+@pytest.mark.parametrize("renderer", [True, False])
+async def test_handout_keeps_full_text_ascii_preview_and_original_access(monkeypatch, tmp_path, renderer):
+    original = tmp_path / "map.png"
+    Image.new("RGB", (800, 1200)).save(original)
+    rendered, opened = [], []
+
+    def render(*args):
+        rendered.append(args)
+        return "  /___\\\n  |___|"
+
+    monkeypatch.setattr(imagery, "available", lambda: renderer)
+    monkeypatch.setattr(imagery, "render", render)
+    app = AutoKeeperApp(theme="amber")
+    monkeypatch.setattr(app, "open_url", opened.append)
+    text = "\n".join(f"病历第{i}项：完整记录" for i in range(100))
+    async with app.run_test(size=(80, 24)) as pilot:
+        modal = HandoutModal("原作病历", text, [str(original)])
+        app.push_screen(modal)
+        await pilot.pause()
+        modal.revealed = len(modal.paper) - 1
+        modal._develop()
+        paper = str(modal.query_one("#paper", Static).render())
+        assert "病历第0项" in paper and "病历第99项" in paper
+        if renderer:
+            assert rendered[0][3] == "ascii" and "/___\\" in str(modal.query_one("#handout-image-0", Static).render())
+        else:
+            assert "下方按钮" in str(modal.query_one("#handout-image-0", Static).render())
+        modal.open_original(Button.Pressed(modal.query_one("#original-0", Button)))
+        assert opened == [original.as_uri()]
+        await pilot.press("escape")
+        assert isinstance(app.screen, TitleScreen)
+
+
 async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
     from .test_engine import HARD_TALK, PLEAD, FakeCast
 
@@ -123,7 +157,7 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         assert "关键发现还是会到手" in "".join(str(w.render()) for w in app.screen.query(Static))
 
 
-async def test_after_the_ending_only_the_dice_lookups_work(canned):
+async def test_after_the_ending_only_the_dice_lookups_work(canned, monkeypatch):
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="ended", human=[lead.id])
@@ -133,6 +167,14 @@ async def test_after_the_ending_only_the_dice_lookups_work(canned):
         app.push_screen(GameScreen(m, state, resume=True))
         await pilot.pause(0.5)
         screen = app.screen
+        settled = asyncio.Event()
+        run_turn = screen._run_turn
+
+        async def finish_then_wait(*args, **kwargs):
+            await run_turn(*args, **kwargs)
+            await settled.wait()  # the result is visible while the worker is still finishing
+
+        monkeypatch.setattr(screen, "_run_turn", finish_then_wait)
         screen.send_line("我再上一趟钟楼")  # the story is over
         screen.send_line(".en")  # growth rolls are not
         for _ in range(20):
@@ -142,6 +184,8 @@ async def test_after_the_ending_only_the_dice_lookups_work(canned):
         assert "没有需要成长检定的技能" in story_text(screen) and "我再上一趟钟楼" not in story_text(screen)
         assert state.turn == 0 and state.developed == [lead.id] and "回顾这一局" not in story_text(screen)
         await pilot.press("escape")  # as the last lines say: Esc goes back to the title
+        assert app.screen is screen  # the pending command finishes before the screen leaves
+        settled.set()
         assert await until(pilot, lambda: not isinstance(app.screen, GameScreen))
 
 
@@ -168,8 +212,9 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
                 break
         assert scene._atmo is not None and scene._atmo.kinds == ["fog"] and scene._atmo.t > 1
         assert scene._fit()[1] == 17  # the art takes about 38% of the terminal's height
+        assert app.art_style == "ascii"
         await pilot.press("ctrl+a")  # the input box has focus, but Ctrl+A still changes the style
-        assert app.art_style == "fine" and scene.style_name == "fine"
+        assert app.art_style == "picture" and scene.style_name == "picture"
         await pilot.press("f6")
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off

@@ -3,8 +3,11 @@ models, ending."""
 
 from __future__ import annotations
 
+import asyncio
 import io
+import subprocess
 import time
+from pathlib import Path
 
 from PIL import Image
 from rich.text import Text
@@ -19,6 +22,7 @@ from textual.widgets import Button, Input, OptionList, RadioButton, RadioSet, St
 from textual.widgets.option_list import Option
 from textual_canvas import Canvas
 
+from .. import imagery
 from . import art
 
 
@@ -74,7 +78,7 @@ class RollModal(ModalScreen[str]):
             self.dismiss("roll")
 
     def action_stay(self) -> None:
-        self.app.notify("这一掷躲不过去：按回车或空格掷骰", timeout=3)
+        self.app.notify("按回车或空格完成这次检定。", timeout=3)
 
     @on(Button.Pressed, "#throw")
     def thrown(self) -> None:
@@ -97,20 +101,20 @@ class PushModal(ModalScreen[str]):
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
                 body.append(f"换个更冒险的做法再掷一次，还是要 ≤{need}。再失败，后果一定发生，而且比这次更糟；"
-                            "推过的检定不能再推，也不能花幸运补救。\n")  # fmt: skip
+                            "同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
             if o.get("luck") is not None:
                 left = o.get("left")
                 body.append(f"花 {o['luck']} 点幸运：", style="bold")
                 body.append("这次直接算恰好成功。")
                 body.append(f"幸运 {left + o['luck']} → {left}，" if left is not None else "")
-                body.append("花掉的不会回来，以后靠运气的时候更难。\n")
+                body.append("花费后会降低当前幸运值。\n")
             body.append("放弃：", style="bold")
             if o.get("due"):
                 body.append("接受失败。这里的关键发现还是会到手，只是要付出代价（多花时间、弄出动静）。")
             elif o.get("core"):
                 body.append("接受失败。要找的东西还在原处，换个办法或再仔细查一次还有机会。")
             else:
-                body.append("接受失败，换条路。")
+                body.append("接受这次失败。")
             yield Static(body, classes="modal-body")
             with Horizontal(classes="buttons"):
                 if o.get("can_push"):
@@ -129,18 +133,48 @@ class HandoutModal(ModalScreen[None]):
 
     BINDINGS = [("escape", "dismiss", "关闭"), ("enter", "dismiss", "关闭")]
 
-    def __init__(self, title: str, text: str):
+    def __init__(self, title: str, text: str, pictures: list[str] | None = None):
         super().__init__()
         self.paper = art.frame(text, title, width=60)
         self.revealed = 0
+        self.pictures = pictures or []
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Static("", id="paper")
+            with VerticalScroll(classes="modal-body"):
+                for i, _ in enumerate(self.pictures):
+                    yield Static("正在加载原图……", id=f"handout-image-{i}")
+                    yield Button(f"查看原图 {i + 1}", id=f"original-{i}")
+                yield Static("", id="paper")
             yield Static("Esc 收起", classes="system")
 
     def on_mount(self) -> None:
         self.set_interval(0.02, self._develop)
+        if self.pictures:
+            self.run_worker(self._load_pictures())
+
+    async def _load_pictures(self) -> None:
+        for i, path in enumerate(self.pictures):
+            try:
+                preview = await asyncio.to_thread(imagery.render, path, 56, 18, "ascii") if imagery.available() else ""
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                preview = ""
+            if not self.is_mounted:
+                return
+            self.query_one(f"#handout-image-{i}", Static).update(
+                Text.from_ansi(preview) if preview else Text("原图可通过下方按钮查看。", style="dim")
+            )
+
+    @on(Button.Pressed)
+    def open_original(self, event: Button.Pressed) -> None:
+        if (key := event.button.id or "").startswith("original-"):
+            path = Path(self.pictures[int(key.removeprefix("original-"))]).resolve()
+            if not path.is_file():
+                self.app.notify("原图暂时不可用，正文仍可阅读。", severity="warning")
+            elif self.app.is_web:
+                self.app.deliver_binary(path, open_method="browser")
+            else:
+                self.app.open_url(path.as_uri())
 
     def _develop(self) -> None:
         if self.revealed >= len(self.paper):
@@ -154,21 +188,26 @@ class HandoutModal(ModalScreen[None]):
 class NotebookModal(ModalScreen[str | None]):
     BINDINGS = [("escape", "dismiss(None)", "关闭")]
 
-    def __init__(self, clues: list[tuple[str, str]], handouts: list[tuple[str, str]]):
+    def __init__(self, clues: list[tuple[str, str]], handouts: list[tuple[str, str]], facts: list[str] | None = None):
         super().__init__()
         self.clues, self.handouts = clues, handouts
+        self.facts = facts or []
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
             yield Static(f"线索本 · {len(self.clues)} 条", classes="modal-title")
             with VerticalScroll(classes="modal-body"):
                 if not self.clues:
-                    yield Static("还什么都没有发现。", classes="system")
+                    yield Static("还没有记录线索。", classes="system")
                 for title, text in self.clues:
                     t = Text()
                     t.append(f"〔{title}〕\n", style="bold")
                     t.append(text)
                     yield Static(t, classes="entry clue")
+                if self.facts:
+                    yield Static("人情、约定与物品往来", classes="modal-title")
+                    for fact in self.facts:
+                        yield Static(Text(fact), classes="entry")
             if self.handouts:
                 with Horizontal(classes="buttons"):
                     for hid, title in self.handouts:
@@ -276,9 +315,9 @@ class TextModal(ModalScreen[None]):
 
 
 MODE_NOTES = {
-    "经济": "所有角色少想一层：更快，更省",
-    "标准": "按预设的分工",
-    "高级剧情": "守秘人、导演、NPC 和 AI 队友多想一层：剧情更细，也更慢、更贵",
+    "经济": "降低各角色的思考强度",
+    "标准": "使用各角色的预设强度",
+    "高级剧情": "提高叙事相关角色的思考强度，可能增加等待和用量",
 }
 
 
@@ -288,14 +327,15 @@ class EngineModal(ModalScreen[dict | None]):
 
     BINDINGS = [("escape", "dismiss(None)", "取消")]
 
-    def __init__(self, presets: dict[str, str], preset: str, model: str, fallback: str, mode: str = "标准"):
+    def __init__(self, presets: dict[str, str], preset: str, model: str, fallback: str, mode: str = "标准", *, in_game: bool = True):
         super().__init__()
         self.presets, self.preset, self.model, self.fallback, self.mode = presets, preset, model, fallback, mode
+        self.in_game = in_game
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Static("换模型", classes="modal-title")
-            yield Static(Text("每个 Agent 的记忆都在存档里，换完接着玩，谁也不会忘事。", style="dim"))
+        with VerticalScroll(classes="modal"):
+            yield Static("模型", classes="modal-title")
+            yield Static(Text("切换模型后保留本局记录。" if self.in_game else "选择模型方案，可另设思考强度和备用模型。", style="dim"))
             options = [Option(Text.assemble((f"{name:<9}", "bold"), desc), id=name) for name, desc in self.presets.items()]
             yield OptionList(*options, id="preset")
             with RadioSet(id="mode"):
@@ -324,25 +364,36 @@ class EngineModal(ModalScreen[dict | None]):
 
 
 HELP = Text.from_markup(
-    """[b]直接说你想做什么[/b]，比如“我翻看书台上的折扇”“我去拾遗书局”“我问小顺子钥匙在哪”。
+    """[b]输入行动或对话，按回车发送。[/b]
+例如：“我查看柜台上的账本”“我去警察局”“我向店主问路”。
 
 [b]骰娘指令[/b]
-  .ra 侦查        想在这里用侦查：对着谁、该不该掷，守秘人看场景裁定
+  .ra 侦查        请求技能检定，由守秘人按情境裁定
   .rab 侦查       请求奖励骰      .rap 侦查        请求惩罚骰
-  .ra 困难聆听    请求难度        （几颗骰、多难，最后由守秘人定）
-  .r 1d6+1        随手掷骰        .coc             掷一组属性
-  .st             看人物卡        .en              结局后成长检定，每局一次
-  .ti / .li       查疯狂发作表，只看不算
+  .ra 困难聆听    请求困难检定
+  .r 1d6+1        掷骰            .coc             掷一组属性
+  .st             查看人物卡      .en              结局后成长，每局一次
+  .ti / .li       查看疯狂发作表，不改变人物状态
 
-  守秘人要你掷骰时会先说清掷什么、要掷到多少，按回车或空格自己掷。
-  失败的检定不能重掷：弹出“孤注一掷”时可以再搏一次，不然就换个办法。
-  理智检定由守秘人发起，人物卡在游戏中不能改。输入时按 → 补全指令和技能名。
+需要检定时，弹窗会说明技能、理由和目标值，按回车或空格掷骰。
+同一尝试不能反复重掷；可用的补救选项会在失败后列出。
+理智检定由守秘人发起。人物卡在游戏中不能直接改数值。
+输入时按 → 补全指令和技能名。
 
-[b]界面[/b]
-  F1 帮助   F2 线索本与手稿   F3 换模型   F4 手绘   F5 地图   F6 天气动画开关   F7 人物卡
-  F8 出主意：没头绪时给三个能做的事，选一个填进输入框，改不改、发不发由你
-  F9 重讲上一段：骰子、线索和 NPC 的话都不变，只换讲法   F10 结局后复盘，还有后日谈
-  Ctrl+R 前情回顾   Ctrl+A 画法   Ctrl+T 配色   Ctrl+S 存档   Ctrl+Q 离开
-  Ctrl+O 叙事偏好：篇幅、恐怖浓度、节奏和不想看到的内容   Ctrl+B 用量：本局各个 Agent 用了多少 token、花了多少钱
-  /draw /notes /map /sheet /suggest /recap /retell /debrief /save /prefs 也可以在输入框里用"""
+[b]按键[/b]
+  F1 玩法说明       F2 线索本与手稿    F3 模型
+  F4 手绘           F5 地图            F6 天气动画
+  F7 人物卡         F8 行动建议        F9 重讲上一段
+  F10 结局后复盘
+  Ctrl+R 前情回顾   Ctrl+S 存档        Ctrl+Q 离开
+  Ctrl+A 画法       Ctrl+T 配色        Ctrl+O 叙事偏好
+  Ctrl+B 用量       Ctrl+K 规则插件    Ctrl+P 全部操作
+
+F8 的建议只填入输入框，确认后再发送。
+F9 只改叙述，骰子、线索与 NPC 对话保留。
+
+[b]输入框命令[/b]
+  /draw /notes /map /sheet /suggest /recap /retell
+  /debrief /save /prefs /usage /help /theme /quit
+  /retry  接续模型中断的回合"""
 )

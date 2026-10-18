@@ -298,17 +298,20 @@ def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, ke
     return out
 
 
-async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: type[BaseModel], images: list[bytes] | None = None):
+async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: type[BaseModel], images: list[bytes] | None = None, on_reply=None):
     s = Session(role, cfg.role(role), system, schema=schema.model_json_schema())
     try:
         reply = await s.send(prompt, images=images)
+        if on_reply:
+            on_reply(role, reply)
         return schema.model_validate(reply.data or {})
     finally:
         await s.close()
 
 
-async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kind: str) -> tuple[Image.Image, Candidate] | None:
-    q = await _structured(cfg, "intent", QUERY_SYSTEM, f"{'人物头像' if kind == 'portrait' else '场景'}：{subject}", Queries)
+async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kind: str, *, on_reply=None) -> tuple[Image.Image, Candidate] | None:
+    label = {"portrait": "人物头像", "scene": "场景", "item": "物件特写"}.get(kind, "场景")
+    q = await _structured(cfg, "intent", QUERY_SYSTEM, f"{label}：{subject}", Queries, on_reply=on_reply)
     seen: dict[str, Candidate] = {}
     queries = list(q.queries[:3])
     for query in queries:
@@ -325,8 +328,8 @@ async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kin
     for c in cands:
         thumbs.append(Image.open(io.BytesIO((await _get(client, c.thumb)).content)))
     pick = await _structured(
-        cfg, "vision", PICK_SYSTEM, f"描述（{'头像' if kind == 'portrait' else '场景'}）：{subject}\n候选编号 0–{len(cands) - 1}。",
-        Pick, images=[contact_sheet(thumbs)],
+        cfg, "vision", PICK_SYSTEM, f"描述（{label}）：{subject}\n候选编号 0–{len(cands) - 1}。",
+        Pick, images=[contact_sheet(thumbs)], on_reply=on_reply,
     )
     if not 0 <= pick.index < len(cands):
         return None
@@ -339,7 +342,7 @@ async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kin
     return prepare(im, pick.crop), chosen
 
 
-async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print) -> list[str]:
+async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print, on_reply=None) -> list[str]:
     """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json."""
     art_dir.mkdir(parents=True, exist_ok=True)
     sem = asyncio.Semaphore(parallel)
@@ -351,7 +354,10 @@ async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str,
                 return
             async with sem:
                 try:
-                    found = await find_picture(cfg, client, subject, kind)
+                    if on_reply is None:
+                        found = await find_picture(cfg, client, subject, kind)
+                    else:
+                        found = await find_picture(cfg, client, subject, kind, on_reply=on_reply)
                 except Exception as exc:  # one bad download should not stop the batch
                     log(f"  ✗ {name}: {exc.__class__.__name__}")
                     return

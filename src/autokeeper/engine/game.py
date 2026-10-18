@@ -8,26 +8,29 @@ or structure into words (NPCs, keeper).
 from __future__ import annotations
 
 import asyncio
+import heapq
 import re
-from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Any
 
-from .. import skills, weather
+from .. import weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Ruling
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
-from ..module.compiler import skill_name
-from ..module.schema import Event, Module
+from ..module.compiler import _location_md
+from ..module.schema import Event, Item, Module
+from ..plugins.engine import Manager as PluginManager
 from ..rules import commands
 from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from . import fog
+from . import fog, world
 from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, parse_time, time_of_day
+from .visuals import Visuals
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -46,8 +49,10 @@ class Turn:
     events: list[Event] = field(default_factory=list)
     arrived: str | None = None
     first_visit: bool = False
+    route: list[str] = field(default_factory=list)
     npc_lines: list[tuple[str, str]] = field(default_factory=list)
     performance: tuple[str, str] | None = None
+    performed: list[str] = field(default_factory=list)
     push: dict | None = None
     earlier: CheckRecord | None = None  # a repeated attempt: this earlier check stands, nothing is rolled
     notes: list[str] = field(default_factory=list)
@@ -62,6 +67,7 @@ class Backstage:
     kind: str
     task: asyncio.Task
     at: str  # where the investigators were when it was asked for
+    turn: int = 0
 
 
 @dataclass
@@ -80,6 +86,8 @@ class Game:
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         self.emit: Emit = emit or _silent
+        self.checkpoint: Callable[[], None] | None = None
+        self.turn_checkpoint: Callable[[Turn], None] | None = None
         if state.improv:  # a loaded game brings its own branches
             improv.restore(module, state.improv)
         # How long a turn waits for the director before the keeper goes on without it. None
@@ -89,6 +97,25 @@ class Game:
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
+        self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
+        self.plugins = PluginManager(self)
+        self.visuals.schedule()
+
+    async def close(self) -> None:
+        """Stop work owned by this game before the model sessions and screen disappear."""
+        for pending in self.backstage:
+            pending.task.cancel()
+        await asyncio.gather(*(p.task for p in self.backstage), return_exceptions=True)
+        self.backstage.clear()
+        await self.visuals.close()
+
+    async def replace_cast(self, cast: Cast) -> None:
+        """A model switch also replaces the game's outstanding background work."""
+        await self.close()
+        self.cast = cast
+        self.visuals.cfg = getattr(cast, "cfg", None)
+        self.visuals.tasks.clear()
+        self.visuals.schedule()
 
     @property
     def improvising(self) -> bool:
@@ -110,32 +137,49 @@ class Game:
 
     async def start(self, on_delta=None) -> str:
         st, m = self.state, self.m
+        st.pending_turn = {"input": "/opening", "opening": True}
+        self.visuals.pause()
+        if self.checkpoint:
+            self.checkpoint()
         # The director may rework the module around these investigators. At a screen the
         # opening does not wait for it: the adaptation lands at the start of a later turn.
         adapted = await self._improvise("开局改编", patience=0.0) if not st.improv else None
-        loc = m.location(st.location)
-        await self.emit({"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", "")})
         opening = Turn()
+        await self.plugins.run("start", opening)
+        await self._arrive(st.location, opening)
+        loc = m.location(st.location)
         await self._time(opening)
-        if m.opening:
-            st.add("opening", m.opening.strip())
-            await self.emit({"type": "opening", "text": m.opening.strip()})
         if adapted is not None:
             await self._flags(adapted.now, opening)
-        party = "、".join(f"{i.name}（{i.occupation}）" for i in st.investigators)
+        party = "\n".join(
+            f"- {i.name}（{i.occupation}）：" + ("；".join(f"{k}：{v}" for k, v in i.backstory.items() if k != "说明" and v) or "未写背景")
+            for i in st.investigators
+        )
         report = (
-            f"【开场｜{st.clock}｜{loc.name}】\n调查员：{party}\n"
+            f"【开场｜{st.clock}｜{loc.name}】\n年代与地方：{m.era}，{m.setting}\n调查员：\n{party}\n"
             f"开场钩子（玩家已经知道）：{m.hook.strip()}\n"
-            f"【进入地点】\n{self._location_file(loc.id)}\n"
+            f"【开场素材（尚未朗读，融入叙事，不要先照抄再重讲）】\n{m.opening.strip()}\n"
+            f"【进入地点】\n{self._public_location(loc.id)}\n"
         )
         if adapted is not None and adapted.note:
             report += f"导演为这几位调查员改编了模组：{adapted.note}\n"
         happened = [e.read_aloud.strip() or e.title for e in opening.events]
         if happened:
             report += "【开场时发生的事】\n" + "\n".join(happened) + "\n"
-        report += "请用 120–220 字开场：交代调查员为什么来到这里，描写眼前的地点，结尾落在一个能行动的细节上。"
+        report += (
+            "请用 180–320 字、两到四个自然段引入故事（有玩家篇幅偏好时以偏好为准）："
+            "先用来信、旅途、职业或已写的关系自然交代为何而来，再让调查员看见眼前的生活和地方。"
+            "不要把钩子念成任务简报，不要一开口就列调查方向或制造恐怖。"
+            "原作开场中已写明的人数、物件数量与必发事实必须保留；只有一位调查员时称‘你’，不要凭空加队友。"
+            f"叙事停在当前地点“{loc.name}”能接话或行动的一刻，之后由玩家决定去哪、是否停留。"
+            "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
+        )
         text = await self._narrate(report, on_delta)
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
+        st.pending_turn.clear()
+        if self.checkpoint:
+            self.checkpoint()
+        self.visuals.resume()
         return text
 
     # -- dice commands ------------------------------------------------------------------
@@ -170,6 +214,7 @@ class Game:
 
     # -- the turn pipeline --------------------------------------------------------------
     async def parse(self, text: str) -> Action:
+        self.visuals.schedule()  # resumes unfinished illustration work after loading, including MCP play
         st = self.state
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
@@ -177,6 +222,11 @@ class Game:
         action = await self.cast.intent(st, text)
         # What a dice command asks for is read off the command, never taken from the model.
         action = action.model_copy(update={"asked": commands.asked(text)})
+        if (action.kind == "daily" and action.npc and not action.approach and not action.destination
+                and re.fullmatch(r"[，。！？、\s]*(早上好|早安|你好|您好|午安|晚安|谢谢|多谢|辛苦了|今天忙不忙|平常这个时候忙不忙)[，。！？、\s]*", action.speech)):
+            action = action.model_copy(update={"casual": True})
+        if action.kind == "daily":
+            st.progress_at = st.turn  # do not suggest the player is stuck while choosing everyday life
         if action.echo and action.kind != "meta":  # something on screen at once, while the rest is worked out
             await self.emit({"type": "echo", "text": action.echo})
         return action
@@ -187,6 +237,12 @@ class Game:
             return None
         if action.kind == "move" and action.destination:
             return Ruling(needs_roll=False, minutes=0, reason="移动")
+        if self._stop_on_route(action):
+            return Ruling(needs_roll=False, minutes=0, reason="先走到沿途地点，之后由玩家决定是否继续")
+        if (action.kind == "daily" and action.casual and action.npc and not action.asked
+                and not action.destination and not action.approach
+                and any(n.id == action.npc for n in self.m.npcs_at(self.state.location))):
+            return Ruling(needs_roll=False, minutes=0, reason="普通闲聊，不必另作裁定")
         await self.emit({"type": "status", "text": "裁定中…"})
         heading = self._heading(action)
         ruling = await self.cast.arbiter(self.state, action, at=heading)
@@ -305,7 +361,8 @@ class Game:
             owner = next((n for n in m.npcs if cid in n.clues), None)
             got = f"{owner.name}松了口：〔{clue.title}〕" if owner else f"获得线索〔{clue.title}〕"
             lines.append(got if passed else f"没过，可关键线索还是到手了：〔{clue.title}〕，代价看叙述")
-        lines += [m.flags[f] for f in done if m.flags.get(f)]
+        if done:
+            lines.append("行动奏效了")  # flag descriptions are private notes, not player-facing outcomes
         if offer is not None:
             lines.append("还有一次机会：孤注一掷，或者花幸运")
         if not lines:
@@ -330,7 +387,7 @@ class Game:
         longer than the turn can wait keeps being written backstage and lands at the start of
         a later turn (_curtain); meanwhile, and without a usable plan, the turn goes on."""
         st = self.state
-        if not self.improvising or (kind != "开局改编" and sum(p["kind"] != "开局改编" for p in st.improv) >= IMPROV_LIMIT):
+        if not self.improvising:
             return None
         if len(self.backstage) >= BACKSTAGE_LIMIT:  # enough is being written already
             return None
@@ -344,7 +401,7 @@ class Game:
             try:
                 plan = await asyncio.wait_for(asyncio.shield(task), wait)
             except TimeoutError:
-                self.backstage.append(Backstage(kind, task, where))
+                self.backstage.append(Backstage(kind, task, where, self.state.turn))
                 return None
         return await self._land(kind, plan) if plan is not None else None
 
@@ -364,12 +421,20 @@ class Game:
             plan.kind = kind  # type: ignore[assignment]
             problems = improv.check(self.m, plan, at=at)
             if not problems:
+                from ..plugins.runtime import verify
+
+                for plugin in plan.plugins:
+                    problems += [f"插件 {plugin.id}：{problem}" for problem in await verify(plugin)]
+            if not problems:
                 return plan
         return None
 
     async def _land(self, kind: str, plan: Improv) -> improv.Applied:
         applied = improv.apply(self.m, plan)
+        for plugin in plan.plugins:
+            self.state.plugin_sources[plugin.id] = plugin.model_dump(mode="json")
         self.state.improv.append({"turn": self.state.turn, "kind": kind, "plan": plan.model_dump()})
+        self.visuals.schedule()
         await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
         return applied
 
@@ -400,7 +465,8 @@ class Game:
         for b in [b for b in self.backstage if b.task.done()]:
             self.backstage.remove(b)
             plan = None if b.task.cancelled() or b.task.exception() else b.task.result()
-            if plan is None or improv.check(self.m, plan, at=b.at):  # the story moved on since: let it go
+            if (plan is None or st.location != b.at or st.turn > b.turn + 1
+                    or improv.check(self.m, plan, at=b.at)):
                 continue
             applied = await self._land(b.kind, plan)
             if applied.go and applied.go != st.location and st.location == b.at:  # they were on their way
@@ -451,6 +517,8 @@ class Game:
     async def _nudge(self, turn: Turn) -> None:
         """Stuck for a while: the director sends a lead."""
         st = self.state
+        if turn.action and turn.action.kind == "daily":
+            return
         if st.ending or st.turn - st.progress_at < STALL_TURNS:
             return
         applied = await self._improvise("推进")
@@ -494,12 +562,26 @@ class Game:
         if not heading and not ruling.go and (action.kind == "move" or action.destination) and action.destination != st.location:
             turn.notes.append(NOWHERE)  # the keeper must not walk them there in words either
         if heading:
+            intended = heading
+            stopping = self._stop_on_route(action) and heading != ruling.go
+            if stopping:
+                heading = self._route(st.location, heading)[1]
+                st.journey = intended
             minutes = self._travel(st.location, heading)
             if minutes is None:
                 turn.notes.append(f"去不了“{heading}”")
             else:
+                turn.route = self._route(st.location, heading) or []
                 st.minutes += minutes
                 await self._arrive(heading, turn)
+                if intended == heading:
+                    st.journey = ""
+                if stopping:
+                    turn.notes.append(f"路途暂歇，尚未抵达{self.m.location(intended).name}；只描写眼前，不能替玩家继续赶路或执行目的地的行动。")
+                    await self.plugins.run("turn", turn, action=action.model_dump(mode="json"))
+                    await self._time(turn)
+                    await self._check_ending(turn)
+                    return turn
 
         # the check: rolled once; a repeat is not rolled at all and gains nothing new
         passed = not ruling.needs_roll and not ruling.repeat
@@ -550,6 +632,7 @@ class Game:
         if passed:
             gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             await self._flags(ruling.set_flags, turn)
+            world.apply(self.m, st, ruling.changes, source="arbiter")
         await self._gain(gained[: MAX_FOUND if action.target else 1], turn, action)  # one look around does not empty a room
         if turn.checks:  # what the roll led to, written under it
             won = [c for c in turn.clues if c in ruling.clues_on_success]
@@ -565,10 +648,18 @@ class Game:
         # says when it is a rest: "先回去睡一觉" said to a partner parses as talk, not wait.
         resting = action.kind == "wait" or ruling.rest
         st.minutes += max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
+        if passed:
+            for call in ruling.plugin_calls:
+                await self.plugins.run("action", turn, **call.model_dump(mode="json"))
+        await self.plugins.run("turn", turn, action=action.model_dump(mode="json"))
         await self._time(turn)
+        if action.kind == "daily":
+            st.progress_at = st.turn
         if self.improvising:
             await self._nudge(turn)
         await self._check_ending(turn)
+        for item in self._items_for(action):
+            await self.emit({"type": "item", "id": item.id, "name": item.name, "text": item.description, "art": item.art})
         if turn.checks or turn.earlier:
             self._settle(st.checks[-1])
         return turn
@@ -604,7 +695,7 @@ class Game:
             await self.emit({"type": "dice", "who": inv.name, **_check_view(check)})
             self._settle(record, check.passed, check.describe())
             if not passed:
-                turn.notes.append("孤注一掷失败：后果一定发生，而且要狠")
+                turn.notes.append("孤注一掷失败：兑现检定前已明确的风险，后果与行动相称，不另加无关惩罚")
         if passed:
             await self._flags(pending.get("flags", []), turn)
             await self._gain(pending["clues"], turn, None)
@@ -626,8 +717,12 @@ class Game:
         """NPC replies and stage performances, after the engine has resolved checks."""
         st, m = self.state, self.m
         action = turn.action
-        if action and action.kind in ("talk", "perform") and action.npc:
-            if not any(n.id == action.npc for n in m.npcs_at(st.location)):
+        speaking = (action and action.npc and (action.kind in ("talk", "perform")
+                    or (action.kind == "daily" and (action.speech or action.casual))))
+        if speaking:
+            if any(nid == action.npc for nid, _ in turn.npc_lines):
+                pass  # a resumed narration never asks an NPC to answer the same question twice
+            elif not any(n.id == action.npc for n in m.npcs_at(st.location)):
                 turn.notes.append(f"{action.npc} 不在这里")
             else:
                 npc = m.npc(action.npc)
@@ -636,28 +731,34 @@ class Game:
                 turn.npc_lines.append((npc.id, line))
                 st.npc(npc.id).met = True
                 st.add("npc", line, who=npc.name)
+                if self.turn_checkpoint:
+                    self.turn_checkpoint(turn)
                 await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
         for ev in turn.events:
-            if ev.performer:
+            if ev.performer and ev.id not in turn.performed:
                 npc = m.npc(ev.performer)
                 await self.emit({"type": "status", "text": f"{npc.name}登台了…"})
                 text = await self.cast.perform(st, npc.id, ev.performance, self._deeds())
                 turn.performance = (npc.id, text)
                 st.npc(npc.id).met = True
                 st.add("npc", text, who=npc.name)
+                turn.performed.append(ev.id)
+                if self.turn_checkpoint:
+                    self.turn_checkpoint(turn)
                 await self.emit({"type": "performance", "npc": npc.id, "name": npc.name, "text": text, "portrait": m.art.get(npc.portrait or "", "")})
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
-        lore = await self._lore(turn)
-        if lore:
-            lore = "\n\n【模组知识库检索（LightRAG，只给守秘人参考：不要照念，不要透露玩家还没发现的东西）】\n" + lore[:3000]
-        return await self._narrate(self._report(turn), on_delta, lore=lore)
+        if (turn.action and turn.action.kind == "daily" and turn.npc_lines and not turn.events
+                and not turn.clues and not turn.notes and not turn.ending and not turn.arrived
+                and not turn.checks and not (turn.ruling and (turn.ruling.changes or turn.ruling.set_flags))):
+            return ""  # their reply is the scene; no second model retells a greeting
+        return await self._narrate(self._report(turn), on_delta)
 
     async def _lore(self, turn: Turn) -> str:
         """GraphRAG context for this turn, keyed by what the structured action touched."""
         a = turn.action
         lore = getattr(self.cast, "lore", None)
-        if a is None or lore is None or a.kind in ("move", "wait"):
+        if a is None or lore is None or a.kind in ("move", "wait", "daily"):
             return ""
         m, st = self.m, self.state
         keywords = [a.target, m.location(st.location).name]
@@ -709,22 +810,47 @@ class Game:
         return await self.narrate(turn)
 
     # -- helpers --------------------------------------------------------------------------
-    def _travel(self, src: str, dst: str) -> int | None:
+    def _items_for(self, action: Action) -> list[Item]:
+        if not action.target:
+            return []
+        return [
+            item for item in self.m.items if world.owner(self.m, self.state, item.id) in (self.state.location, self.state.investigator.id)
+            and (item.name in action.target or item.id == action.target or (len(action.target) >= 2 and action.target in item.name))
+        ]
+
+    def _route(self, src: str, dst: str) -> list[str] | None:
         if dst == src:
-            return 0
+            return [src]
         ids = {loc.id for loc in self.m.locations}
         if dst not in ids:
             return None
-        if dst in self.m.location(src).exits:
-            return 10
-        seen, queue = {src: 0}, deque([src])
+        seen, queue, order = set(), [(0, 0, [src])], 0
         while queue:
-            cur = queue.popleft()
-            for nxt in self.m.location(cur).exits:
+            cost, _, path = heapq.heappop(queue)
+            if path[-1] in seen:
+                continue
+            seen.add(path[-1])
+            if path[-1] == dst:
+                return path
+            for nxt in self.m.location(path[-1]).exits:
                 if nxt in ids and nxt not in seen:
-                    seen[nxt] = seen[cur] + 1
-                    queue.append(nxt)
-        return seen[dst] * 15 if dst in seen else None
+                    order += 1
+                    heapq.heappush(queue, (cost + self._edge_time(path[-1], nxt), order, [*path, nxt]))
+        return None
+
+    def _travel(self, src: str, dst: str) -> int | None:
+        route = self._route(src, dst)
+        if route is None:
+            return None
+        return sum(self._edge_time(a, b) for a, b in pairwise(route))
+
+    def _edge_time(self, src: str, dst: str) -> int:
+        return max(0, min(720, self.m.location(src).travel_minutes.get(dst,
+                         self.m.location(dst).travel_minutes.get(src, 10))))
+
+    def _stop_on_route(self, action: Action) -> bool:
+        path = self._route(self.state.location, action.destination) if action.destination else None
+        return bool(action.travel == "stroll" and path and len(path) > 2)
 
     async def _arrive(self, loc_id: str, turn: Turn) -> None:
         st, m = self.state, self.m
@@ -739,13 +865,14 @@ class Game:
         for ev in m.events:
             if ev.id not in st.fired and ev.when == f"visit:{loc_id}":
                 await self._fire(ev, turn)
+        await self.plugins.run("visit", turn, location=loc_id)
 
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
         st, m = self.state, self.m
         here = {c.id for c in m.clues_at(st.location)}
         for n in m.npcs_at(st.location):
             here |= set(n.clues)
-        known = {c.id for c in m.clues}
+        known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
         return [c for c in dict.fromkeys(ids) if c in known and c in here and c not in st.clues]
 
     async def _gain(self, ids: list[str], turn: Turn, action: Action | None) -> None:
@@ -754,6 +881,8 @@ class Game:
             if cid in st.clues:
                 continue
             clue = m.clue(cid)
+            if not clue.available(st.flags, st.clues):
+                continue
             st.clues.append(cid)
             st.progress_at = st.turn
             turn.clues.append(cid)
@@ -889,18 +1018,20 @@ class Game:
         return head + "\n".join(sorted(rows)[-30:])
 
     def _location_file(self, loc_id: str) -> str:
-        name = skill_name(self.m)
-        try:
-            return skills.reference(name, f"references/locations/{loc_id}.md")
-        except FileNotFoundError:
-            loc = self.m.location(loc_id)
-            return f"{loc.name}\n{loc.read_aloud}\n守秘人须知：{loc.keeper}"
+        # Render the same reference format from this game's module: generated skill files
+        # may predate a scenario update or the director's new people and places.
+        return _location_md(self.m, self.m.location(loc_id)).strip()
+
+    def _public_location(self, loc_id: str) -> str:
+        loc = self.m.location(loc_id)
+        people = "\n".join(f"{n.name}：{n.look}" for n in self.m.npcs_at(loc_id))
+        return f"{loc.name}\n{loc.read_aloud.strip()}\n{people}"
 
     def _report(self, turn: Turn) -> str:
         st, m = self.state, self.m
         inv = st.investigator
         loc = m.location(st.location)
-        out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）"]
+        out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）", world.context(st)]
         if st.sky and st.minutes - st.sky_at < weather.LASTS:
             out.append(f"天气：{weather.KINDS[st.sky]}（你之前写到的）")
         a = turn.action
@@ -911,11 +1042,19 @@ class Game:
             return "\n".join(out)
         if a:
             out.append(f"行动：{a.summary}")
+            for item in self._items_for(a):
+                out.append(f"【眼前物件】{item.name}：{item.description}（配图卡已展示外观，接着动作讲，不另添隐藏标记或效果。）")
+            if a.kind == "daily":
+                out.append("【日常】接住玩家眼下的生活意图，写具体的人情和应答；不催查案、不强添线索或怪异。已触发的事件仍照实讲。")
             if a.echo:
                 out.append(f"屏幕上已经先写了一句：「{a.echo}」，从这里接着往下写，不要重复它。")
+        if len(turn.route) > 2:
+            out.append("【沿途】" + " → ".join(m.location(pid).name for pid in turn.route))
+            out += [f"路过{m.location(pid).name}：{m.location(pid).read_aloud.strip()}" for pid in turn.route[1:-1]]
+            out.append("按行进顺序带出一两处路边生活，再衔接目的地；只是路过，没有进门调查、获得线索或与人交谈。")
         if turn.arrived:
             if turn.first_visit:
-                out.append(f"【进入新地点，以下是守秘人资料】\n{self._location_file(turn.arrived)}")
+                out.append(f"【进入新地点】\n{self._public_location(turn.arrived)}")
             else:
                 out.append(f"回到了 {m.location(turn.arrived).name}。")
         if turn.checks:
@@ -951,7 +1090,8 @@ class Game:
         if turn.performance:
             out.append(f"NPC 表演（已展示给玩家）：{m.npc(turn.performance[0]).name} 刚刚说完这一段书。")
         for ev in turn.events:
-            out.append(f"事件〔{ev.title}〕：{ev.read_aloud.strip()}\n守秘人须知：{ev.text.strip()}")
+            if ev.read_aloud.strip():
+                out.append(f"眼前发生：{ev.read_aloud.strip()}")
         out += [f"备注：{n}" for n in turn.notes]
         if turn.ending:
             end = next(e for e in m.endings if e.id == turn.ending)
@@ -1063,7 +1203,6 @@ def _retold(old: str, nudge: str) -> str:
     )
 
 
-IMPROV_LIMIT = 16  # plans per game besides the opening one, so a game cannot sprawl forever
 BACKSTAGE_LIMIT = 2  # plans being written at once
 # A turn at a screen does not wait for the director: measured, a plan takes 9 s and more
 # (DeepSeek) or 14 s (Opus), so any wait shorter than that only made turns slower. Plans

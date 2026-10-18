@@ -38,6 +38,7 @@ Keys come from the environment; ~/.config/autokeeper/.env and ./.env are read to
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from dataclasses import dataclass, field, fields, replace
@@ -106,6 +107,7 @@ def _deepseek(effort: str | None) -> Role:
 
 PRESETS: dict[str, dict[str, Role]] = {
     "claude": DEFAULT_ROLES,
+    "codex": {r: Role("codex", "default", None) for r in DEFAULT_ROLES},
     "deepseek": {
         **{r: _deepseek("high") for r in ("keeper", "arbiter", "importer", "artist")},
         **{r: _deepseek("low") for r in ("vision", "npc", "intent", "investigator", "lore", "director", "card")},
@@ -163,12 +165,16 @@ class Config:
     preset: str = "claude"
     module: str = ""
     theme: str = "amber"
-    art_style: str = "picture"  # imagery.STYLES: picture (blocks + outlines), fine (sextants + outlines), photo, ascii
+    art_style: str = "ascii"  # imagery.STYLES: ascii, picture (blocks + outlines), fine (sextants + outlines), photo
+    plugins: bool = True
     search: str = "auto"
     budget_usd: float | None = None
+    visual_budget_usd: float = 1.0  # separate estimated allowance; jobs already in flight may finish
+    visual_limit: int = 24  # illustration attempts per save, including unmetered backends
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/tips.py)
+    animations: bool = True
 
     @property
     def improvising(self) -> bool:
@@ -185,6 +191,43 @@ def load_env() -> None:
     for f in (USER_DIR / ".env", ROOT / ".env"):
         if f.is_file():
             load_dotenv(f, override=False)
+
+
+def ui_settings() -> dict:
+    """UI choices persist separately; advanced TOML and secrets are never rewritten."""
+    try:
+        data = json.loads((USER_DIR / "settings.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    choices = {"preset": PRESETS, "mode": MODES, "improv": IMPROV,
+               "art_style": ("picture", "fine", "photo", "ascii"),
+               "theme": ("amber", "phosphor", "lavender", "blood"),
+               "search": ("auto", "tavily", "ddgs", "wikipedia", "none")}
+    for key, values in choices.items():
+        if isinstance(data.get(key), str) and data[key] in values:
+            out[key] = data[key]
+    for key in ("tips", "animations", "plugins"):
+        if type(data.get(key)) is bool:
+            out[key] = data[key]
+    for key in ("model", "fallback"):
+        if isinstance(data.get(key), str) and len(data[key]) <= 512:
+            out[key] = data[key].strip()
+    for key in ("visual_limit", "visual_budget_usd"):
+        value = data.get(key)
+        if type(value) in (float, int) and 0 <= value <= 10000:
+            out[key] = int(value) if key == "visual_limit" else float(value)
+    return out
+
+
+def save_ui_settings(changes: dict) -> None:
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    target = USER_DIR / "settings.json"
+    temporary = target.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(ui_settings() | changes, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(target)
 
 
 def _role(base: Role, spec: dict) -> Role:
@@ -206,6 +249,7 @@ def load(path: Path | None = None) -> Config:
                         data.setdefault("roles", {}).setdefault(name, {}).update(spec)
                 else:
                     data[key] = value
+    data.update(ui_settings())
     preset = os.environ.get("AUTOKEEPER_PRESET") or data.get("preset", "claude")
     if preset not in PRESETS:
         raise ValueError(f"未知预设：{preset}（可选：{', '.join(PRESETS)}）")
@@ -215,20 +259,24 @@ def load(path: Path | None = None) -> Config:
     cfg = Config(roles=moded(PRESETS[preset], mode), preset=preset, mode=mode)
     roles = data.get("roles", {})
     every = dict(roles.get("all", {}))
-    if os.environ.get("AUTOKEEPER_MODEL"):
-        backend, model = route(os.environ["AUTOKEEPER_MODEL"])
+    if picked := os.environ.get("AUTOKEEPER_MODEL") or data.get("model"):
+        backend, model = route(picked)
         every.update(backend=backend, model=model)
-    if os.environ.get("AUTOKEEPER_FALLBACK"):
-        every.update(fallback=os.environ["AUTOKEEPER_FALLBACK"])
+    if fallback := os.environ.get("AUTOKEEPER_FALLBACK") or data.get("fallback"):
+        every.update(fallback=fallback)
     for name in set(DEFAULT_ROLES) | set(roles) - {"all"}:
         cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
     cfg.module = data.get("module", cfg.module)
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)
+    cfg.plugins = data.get("plugins", cfg.plugins)
     cfg.tips = data.get("tips", cfg.tips) is not False
+    cfg.animations = data.get("animations", cfg.animations) is not False
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None
+    cfg.visual_budget_usd = max(0.0, float(data.get("visual_budget_usd", cfg.visual_budget_usd)))
+    cfg.visual_limit = max(0, int(data.get("visual_limit", cfg.visual_limit)))
     cfg.improv = os.environ.get("AUTOKEEPER_IMPROV") or data.get("improv", cfg.improv)
     if cfg.improv not in IMPROV:
         raise ValueError(f"未知的自由度：{cfg.improv}（可选：{'、'.join(IMPROV)}）")

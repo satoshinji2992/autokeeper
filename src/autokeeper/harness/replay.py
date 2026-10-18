@@ -138,6 +138,9 @@ class ReplayModel(Model):
     async def _call(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
         row = cassette(self.spec.model).reply(self.label)
         data = row.get("data")
+        if schema is not None and schema.get("title") == "Dialogue" and data is None:
+            # Recordings before structured social memory stored NPC replies as plain text.
+            data = {"text": row["text"], "changes": []}
         if schema is not None and data is None:
             data = parse_json(row["text"])
         if on_delta and schema is None and row["text"]:

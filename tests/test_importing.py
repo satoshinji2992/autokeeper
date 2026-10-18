@@ -15,7 +15,7 @@ import pytest
 from PIL import Image
 from rich.console import Console
 from textual import events
-from textual.widgets import Button, Input, OptionList, RichLog, Static
+from textual.widgets import Button, Input, OptionList, RichLog, Select, Static
 
 from autokeeper import config
 from autokeeper.config import EXAMPLE
@@ -156,7 +156,8 @@ def test_zips_with_utf8_names_flagged_or_not(tmp_path):
 async def test_pictures_from_a_zip_reach_the_importer(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "local")
 
-    async def no_agent(work, *, brief, prepare, console):  # prepare only: no model is called
+    async def no_agent(work, *, brief, prepare, console, cfg):  # prepare only: no model is called
+        assert all(cfg.role(name).backend == "codex" for name in ("importer", "vision", "summarizer", "lore"))
         await prepare(console)
         return work
 
@@ -168,7 +169,9 @@ async def test_pictures_from_a_zip_reach_the_importer(monkeypatch, tmp_path):
         m.parent.mkdir()
         m.write_bytes(png())
     out = io.StringIO()
-    work = await importer.run_import(doc, "dongxuezhixia", images=maps, console=Console(file=out))
+    work = await importer.run_import(
+        doc, "dongxuezhixia", images=maps, console=Console(file=out), model="codex:default", vision_model="codex:default",
+    )
     assert sorted(p.name for p in (work / "source" / "images").iterdir()) == ["地图.png", "地图_2.png"]
     text = (work / "source" / "source.md").read_text(encoding="utf-8")
     assert text.startswith("（随模组附带 2 张图片") and "source/images/地图_2.png" in text and "山村" in text
@@ -236,6 +239,44 @@ async def open_import(app, pilot) -> ImportScreen:
     await pilot.pause()
     assert isinstance(app.screen, ImportScreen)
     return app.screen
+
+
+def test_import_models_are_independent_of_game_models(monkeypatch):
+    original = config.Config()
+    monkeypatch.setattr(config, "load", lambda: original)
+    chosen = importer.import_config("codex:default", "openai:reader-model")
+    assert chosen.role("importer").backend == "codex" and chosen.role("importer").model == "default"
+    assert chosen.role("vision").backend == "langchain" and chosen.role("vision").model == "openai:reader-model"
+    assert chosen.role("keeper") == original.role("keeper")
+    assert chosen.role("summarizer").backend == "codex" and chosen.role("lore").backend == "codex"
+    assert original.role("importer").backend == "claude" and original.role("vision").backend == "claude"
+    assert original.role("summarizer").backend == "claude" and original.role("lore").backend == "claude"
+
+
+async def test_import_screen_passes_separate_models_to_the_job(monkeypatch, library):
+    doc = library / "抵达.md"
+    doc.write_text("# 一座小镇", encoding="utf-8")
+    calls = []
+
+    async def fake_import(file, module_id, **kwargs):
+        calls.append(kwargs)
+        return finished_module(module_id)
+
+    monkeypatch.setattr(importer, "run_import", fake_import)
+    original = config.load().role("keeper")
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = await open_import(app, pilot)
+        screen._pick(doc)
+        await until(pilot, lambda: screen.step == "confirm")
+        screen.query_one("#import-model", Select).value = "codex:default"
+        screen.query_one("#vision-model", Input).value = "codex:default"
+        await pilot.pause()
+        assert "default" in shown(screen, "#engine")
+        screen._begin()
+        await until(pilot, lambda: screen.step == "done")
+        assert calls[0]["model"] == "codex:default" and calls[0]["vision_model"] == "codex:default"
+        assert config.load().role("keeper") == original
 
 
 async def test_import_a_zip_from_the_title_screen_and_start_playing(monkeypatch, library, skills_dir):

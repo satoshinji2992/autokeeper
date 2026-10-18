@@ -26,6 +26,25 @@ class NpcState(BaseModel):
     lines: int = 0
 
 
+class WorldChange(BaseModel):
+    kind: Literal["fact", "relationship", "promise", "fulfill", "transfer"]
+    key: str = Field(description="同一事实或约定沿用同一个简短 id")
+    text: str = Field(description="已经实际发生或明确答应的事情；不是玩家的愿望或推测")
+    npc: str = Field("", description="亲历此事的 NPC id；没有就留空")
+    item: str = Field("", description="transfer 时填已存在的物件 id 或背包里的完整名称")
+    owner: str = Field("", description="transfer 时填新持有者的调查员/NPC/地点 id")
+
+
+class WorldFact(BaseModel):
+    kind: str
+    text: str
+    who: str
+    npc: str = ""
+    status: Literal["active", "fulfilled"] = "active"
+    turn: int
+    source: str
+
+
 class CheckRecord(BaseModel):
     """A skill check, kept for a few turns: the arbiter reads them, and the engine does not
     roll the same failed attempt again (Game._earlier). A repeat that was not rolled counts
@@ -54,6 +73,7 @@ class GameState(BaseModel):
     human: list[str] = Field(default_factory=list)  # investigator ids played by humans; the rest are AI
     active: int = 0
     location: str
+    journey: str = ""  # intended destination when the player pauses along the way
     visited: list[str] = Field(default_factory=list)
     heard: dict[str, str] = Field(default_factory=dict)  # places named in what the players saw: id -> the name heard (engine/fog.py)
     minutes: int = 0
@@ -62,6 +82,10 @@ class GameState(BaseModel):
     flags: list[str] = Field(default_factory=list)
     fired: list[str] = Field(default_factory=list)
     npcs: dict[str, NpcState] = Field(default_factory=dict)
+    world: dict[str, WorldFact] = Field(default_factory=dict)
+    item_owners: dict[str, str] = Field(default_factory=dict)
+    pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
+    narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
     # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.
     transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
@@ -72,6 +96,12 @@ class GameState(BaseModel):
     checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
     developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
+    visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # per-save illustrations, reused after loading
+    plugin_data: dict[str, dict] = Field(default_factory=dict)
+    plugin_versions: dict[str, str] = Field(default_factory=dict)
+    plugin_sources: dict[str, dict] = Field(default_factory=dict)
+    plugin_receipts: list[str] = Field(default_factory=list)
+    plugin_errors: dict[str, str] = Field(default_factory=dict)
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog

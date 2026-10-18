@@ -17,7 +17,7 @@ async def test_mcp_tools_play_a_short_scene(monkeypatch, tmp_path):
     monkeypatch.setattr(srv.config, "SAVES", tmp_path)
     monkeypatch.setattr(srv.config, "SKILLS", tmp_path / "skills")
     monkeypatch.setattr(srv, "_dirs", lambda: {"example": EXAMPLE})
-    started = srv.new_game("example", "zhouheng", slot="t")
+    started = await srv.new_game("example", "zhouheng", slot="t")
     assert started["location"]["id"] == "square" and started["art"]
     check = await srv.skill_check("侦查", clues_on_success=["c_notice"], minutes=30)
     assert check["checks"] and check["time"] == "D1 14:30"
@@ -27,3 +27,7 @@ async def test_mcp_tools_play_a_short_scene(monkeypatch, tmp_path):
     found = await srv.lookup("老守钟人")
     assert any(h["id"] == "warden" for h in found["graph"])
     assert (tmp_path / "t.json").exists()
+    loaded = await srv.load_game("t")
+    assert loaded["location"]["id"] == "tower"
+    await srv.S.game.close()
+    await srv.S.game.cast.close()

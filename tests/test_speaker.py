@@ -4,6 +4,7 @@ in that mood, and the panel that shows it while they talk (no model calls)."""
 from __future__ import annotations
 
 import shutil
+import threading
 import time
 
 import numpy as np
@@ -118,6 +119,35 @@ def test_picture_portraits_are_rendered_once_per_mood_size_and_style(tmp_path):
 
 def speaking(screen) -> Speaker:
     return screen.query_one(Speaker)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_portrait_finishing_after_the_scene_is_removed_does_not_crash(monkeypatch):
+    started, release = threading.Event(), threading.Event()
+
+    def delayed(*args, **kwargs):
+        started.set()
+        release.wait(timeout=5)
+        return mood.CALM
+
+    monkeypatch.setattr(mood, "read", delayed)
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    app = AutoKeeperApp(theme="amber")
+    try:
+        async with app.run_test(size=(140, 44)) as pilot:
+            screen = GameScreen(m, state, resume=True)
+            app.push_screen(screen)
+            assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+            await screen.handle({"type": "npc", "npc": "warden", "name": "守钟人", "text": "坐下喝茶吧。"})
+            assert await until(pilot, started.is_set)
+            panel = speaking(screen)
+            await screen.query_one(SceneArt).remove()
+            release.set()
+            await app.workers.wait_for_complete()
+            assert not panel.display
+    finally:
+        release.set()
 
 
 @pytest.mark.usefixtures("canned")
@@ -256,6 +286,7 @@ async def test_a_photo_portrait_follows_the_stage_and_the_art_style():
     m = Module.load(config.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="photo", human=[lead.id])
+    state.location, state.visited = "jinboer_jia", ["jinboer_jia"]
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         screen = GameScreen(m, state, resume=True)
@@ -269,7 +300,7 @@ async def test_a_photo_portrait_follows_the_stage_and_the_art_style():
         assert panel.region.height == stage_box.size.height and panel._fitted[2][1] == panel.region.height - 1
         assert "圆框眼镜" not in story_text(screen) and "搓手" in story_text(screen)  # his look, the first time
         await pilot.press("ctrl+a")
-        assert await until(pilot, lambda: panel._fitted and panel._fitted[3] == "fine")  # drawn again in the new style
+        assert await until(pilot, lambda: panel._fitted and panel._fitted[3] == "picture")  # drawn again in the new style
         await pilot.resize_terminal(80, 24)
         assert await until(pilot, lambda: panel._fitted and panel.region.height == stage_box.size.height and panel._fitted[2][1] == panel.region.height - 1)
         assert stage_box.size.height < before

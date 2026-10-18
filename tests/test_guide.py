@@ -63,7 +63,7 @@ async def open_game(app, pilot, *, resume: bool = False, location: str = "") -> 
     state.location = location or state.location
     screen = GameScreen(m, state, resume=resume)
     app.push_screen(screen)
-    assert await until(pilot, lambda: screen.game is not None and not screen.busy and len(screen.story.children) > 1)
+    assert await until(pilot, lambda: screen.game is not None and not screen.busy and len(screen.story.children) > 0)
     await pilot.pause(0.2)
     return screen
 
@@ -93,7 +93,8 @@ async def test_the_guide_opens_from_the_title_and_turns_its_pages(size, monkeypa
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         menu = app.screen.query_one("#menu", OptionList)
-        assert menu.region.bottom <= size[1]  # every item in view, the guide too, on a short terminal as well
+        assert menu.region.bottom <= size[1]
+        assert menu.max_scroll_y == 0  # all title options, including Quit, fit without scrolling
         menu.highlighted = menu.get_option_index("guide")
         await pilot.press("enter")
         await pilot.pause()
@@ -224,7 +225,7 @@ async def test_a_new_player_is_pointed_to_the_tutorial(monkeypatch, tmp_path, sk
         app.push_screen(SetupScreen(spectate=False))
         await pilot.pause()
         choices = app.screen.query_one("#choices", OptionList)
-        assert choices.highlighted == 1 and "新手教学：《追书人》" in str(choices.get_option(str(TUTORIAL)).prompt)
+        assert choices.highlighted == 1 and "《追书人》 · 初次推荐" in str(choices.get_option(str(TUTORIAL)).prompt)
         await pilot.press("enter")  # Enter takes it
         await pilot.pause()
         assert app.screen.module and app.screen.module.id == "zhuishuren"
@@ -235,7 +236,7 @@ async def test_a_new_player_is_pointed_to_the_tutorial(monkeypatch, tmp_path, sk
         app.push_screen(SetupScreen(spectate=False))
         await pilot.pause()
         choices = app.screen.query_one("#choices", OptionList)
-        assert choices.highlighted == 0 and "新手教学" not in str(choices.get_option(str(TUTORIAL)).prompt)
+        assert choices.highlighted == 0 and "初次推荐" not in str(choices.get_option(str(TUTORIAL)).prompt)
 
 
 def test_the_tutorial_is_not_given_away():

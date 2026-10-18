@@ -8,6 +8,13 @@ import pytest
 from autokeeper.rules.bcdice import BCDice, Roll, _default_bridge
 from autokeeper.rules.coc import Investigator, Rules
 
+
+@pytest.fixture(autouse=True)
+def isolated_user_settings(monkeypatch, tmp_path):
+    from autokeeper import config
+
+    monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
+
 LABEL = {"critical": "大成功", "extreme": "極限成功", "hard": "困難成功", "regular": "一般成功", "failure": "失敗", "fumble": "大失敗"}
 
 

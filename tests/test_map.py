@@ -50,7 +50,7 @@ def overlaps(p: mapview.Plan) -> list[tuple[str, str]]:
 
 def test_secret_places_stay_off_the_map_until_heard_of(zhui):
     st = opened(zhui)
-    assert known(zhui, st) == {"jinboer_jia", "shufang", "jiefang", "mudi", "tushuguan", "baoshe"}  # what Thomas offered to show
+    assert known(zhui, st) == {"huochezhan", "jinboer_jia", "jiefang", "mudi", "zhenzhongxin"}  # the platform and the address, before meeting Thomas
     st.add("player", "我直接去食尸鬼隧道网，再去墓地深处的陵墓看看", who="哈罗德")  # a guess is not knowledge
     assert not known(zhui, st) & SECRETS
     drawn = mapview.view(zhui, st, 88, 22).plain
@@ -89,6 +89,7 @@ def test_names_match_in_full_or_by_their_head_never_by_a_plain_word(zhui):
 
 def test_the_way_walked_shows_the_places_passed_through(zhui):
     st = opened(zhui)
+    st.location, st.visited = "jinboer_jia", ["jinboer_jia"]
     st.visited.append("tushuguan")  # straight from the house to the library
     st.location = "tushuguan"
     c = mapview.chart(zhui, st)

@@ -40,9 +40,10 @@ def zhui() -> Module:
 
 
 def begun(m: Module) -> GameState:
-    """A game of 《追书人》 just after its opening: the house, Thomas's offer to show the way."""
+    """After the arrival: settled at the house, Thomas has offered to show the way."""
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    st.add("opening", m.opening.strip())
+    st.location, st.visited = "jinboer_jia", ["jinboer_jia"]
+    st.add("keeper", "托马斯把你领进空卧室，提起书房、邻居、墓地、图书馆、警局和报社，可以随时为你指路。")
     return st
 
 
@@ -72,7 +73,7 @@ def test_ai_players_see_what_the_players_were_shown_and_no_more(zhui):
 def test_the_parser_gets_only_where_they_could_head_and_by_the_names_they_know(zhui):
     st = begun(zhui)
     assert fog.bearings(zhui, st) == {  # what Thomas offered, and the police station the town centre shows
-        "shufang": "书房", "jiefang": "艾尔斯伯里大街", "mudi": "公墓", "tushuguan": "图书馆", "jingju": "警察局", "baoshe": "报社",
+        "shufang": "书房", "jiefang": "艾尔斯伯里大街", "mudi": "公墓", "zhenzhongxin": "阿诺兹堡镇中心", "tushuguan": "图书馆", "jingju": "阿诺兹堡警察局", "baoshe": "报社", "huochezhan": "阿诺兹堡火车站",
     }  # fmt: skip
     st.visited.append("mudi")
     st.location = "mudi"
@@ -85,11 +86,20 @@ def test_the_parser_gets_only_where_they_could_head_and_by_the_names_they_know(z
     assert fog.bearings(zhui, st)["suidao"] == "隧道网" and "食尸鬼" not in Cast(config.load(), zhui).bearings(st)
 
 
+
 def test_plain_sight_is_what_is_seen_in_the_open(zhui):
-    assert fog.landmarks(zhui) == {"shufang": "书房", "mudi": "公墓", "jinboer_jia": "金博尔家", "tushuguan": "图书馆", "jingju": "警察局"}
+    assert fog.landmarks(zhui) == {"zhenzhongxin": "阿诺兹堡镇中心", "mudi": "公墓", "jinboer_jia": "金博尔家", "tushuguan": "图书馆", "jingju": "警察局"}
     zhui.location("suidao").read_aloud += "通道尽头，隐约是一座地下墓城。"  # seen only down a secret way
     zhui.locations.append(Location(id="city", name="地下墓城", read_aloud="", exits=["suidao"]))
     assert "city" not in fog.landmarks(zhui) and "city" not in fog.bearings(zhui, begun(zhui))
+
+
+def test_opening_material_is_not_knowledge_until_the_keeper_says_it(zhui):
+    st = Game.new(zhui, [zhui.pregens[0].model_copy(deep=True)])
+    zhui.opening += " 路人告诉你食尸鬼隧道网就在脚下。"
+    assert "suidao" not in fog.known(zhui, st)
+    st.add("keeper", "路人告诉你地下有一片隧道网。")
+    assert fog.known(zhui, st)["suidao"] == "隧道网"
 
 
 # -- where a name leads -----------------------------------------------------------------------

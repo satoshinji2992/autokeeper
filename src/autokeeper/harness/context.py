@@ -128,8 +128,8 @@ class Session:
 
     async def compact(self) -> None:
         """Fold the oldest turns into the summary. The old turns are removed only once the new
-        summary exists, so a save taken meanwhile loses nothing, and a failed summarizer falls
-        back to keeping the latest part verbatim."""
+        summary exists, so a save taken meanwhile loses nothing. A failed summarizer leaves
+        the original transcript intact for a later attempt."""
         transcript, notes = self.transcript, self.notes  # the objects in the state, even if rebound
         size = sum(len(m["content"]) for m in transcript)
         if size <= self.memory or len(transcript) < 4:
@@ -147,8 +147,10 @@ class Session:
                 summary = await self.summarizer(text, self.key)
             except Exception:  # never lose memory because the summarizer failed
                 summary = ""
-        notes[self.key] = summary or text[-max(2000, self.memory // 4) :]
-        del transcript[:cut]
+        if summary:
+            notes[self.key] = summary
+            del transcript[:cut]
+        # A failed summary leaves the source intact. Truncating it silently loses promises.
 
     async def warm(self) -> None:
         await self.model.warm()
@@ -156,5 +158,6 @@ class Session:
     async def close(self) -> None:
         if self._folding is not None:  # nothing is removed before the summary lands, so cancelling is safe
             self._folding.cancel()
+            await asyncio.gather(self._folding, return_exceptions=True)
             self._folding = None
         await self.model.close()

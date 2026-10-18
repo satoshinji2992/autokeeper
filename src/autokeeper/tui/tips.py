@@ -42,51 +42,27 @@ class Tip:
 
 
 TIPS: dict[str, Tip] = {
-    "start": Tip(
-        "轮到你了。想做什么，就在下面打一句中文，回车发出去，比如“我先看看屋里的摆设”“我问她昨晚听见了什么”。"
-        "不懂规则，按F1看新手指南。",
-        "play",
-    ),
+    "start": Tip("轮到你了。在底部输入行动或对话，按回车发送。F1 查看玩法说明。", "play"),
     "offer": Tip(
-        "检定没过时那三个选择怎么挑：线索要紧、幸运也够，就花幸运；孤注一掷再失败，后果更重；拿不准就放弃，故事不会因此卡住。"
-        "详见F1「孤注一掷与幸运」。",
+        "检定失败后，可以接受结果；符合条件时，也可花幸运或孤注一掷。孤注一掷再次失败会有更严重的后果。F1 查看规则。",
         "push",
     ),
-    "hurt": Tip("HP只剩三分之一了。再挨一下可能就倒下，HP到0会昏迷，伤得太重会送命。能躲就躲，F7看人物卡。", "screen"),
-    "sanity": Tip(
-        "理智（SAN）掉了。看见不该看的东西就会掉，一次掉5点以上可能当场发疯，掉到0就是永久疯狂。详见F1「理智与疯狂」。",
-        "sanity",
-    ),
-    "handout": Tip("手稿能反复看：按F2打开线索本，最下面那排按钮就是你拿到的手稿。", "clues"),
-    "clue": Tip("找到的线索都记在线索本里，按F2随时翻看。线索之间怎么串起来，没人会替你说破。", "clues"),
-    "check": Tip(
-        "结果卡这样看：掷出的数越小越好，常规、困难、极难三条线，打勾的就是过了；↳后面是这一掷带来的东西。"
-        "掷出来就算数，不能重掷。详见F1「检定与骰子」。",
-        "dice",
-    ),
-    "repeat": Tip("同一件事刚试过，情况又没变，就不会重掷，结果照旧。换个办法、换个人问，或者找到新的线索再来。", "dice"),
-    "waived": Tip("用 .ra 点名的检定是向守秘人申请：结果一眼就明白，或者这个技能在这里用不上，他就直接说结果，不用掷。", "dice"),
-    "npc": Tip(
-        "跟人说话就像平时聊天，问什么、怎么问，直接说。每个人只知道自己那一份，有人会撒谎，有人藏着话；"
-        "想让人松口，可能要过说服、话术、魅惑或恐吓。",
-        "play",
-    ),
-    "improv": Tip(
-        "不必照着剧本走：说得通的想法，故事会顺着往下编；太出格的举动也会招来后果。详见F1「守秘人会即兴」。",
-        "improv",
-    ),
-    "move": Tip("换地方要花游戏里的时间，最上面一行有钟。按F5看地图，去过的、听说过的地方都画在上面。", "screen"),
-    "stuck": Tip("没头绪的时候按F8，调查员会照眼下的情况想三件能做的事，挑一件填进输入框，改不改、发不发由你。", "play"),
-    # 《追书人》: only what the hook and the opening say (Thomas, his missing uncle, the stolen
-    # books, the study, and the places Thomas offers to point out). Nothing found later.
-    f"{TUTORIAL}:outside": Tip(
-        "想出门查，就说去哪，比如“我去街上找邻居聊聊”“我去城里的图书馆看看”。托马斯提过的墓地、警局和报社也一样，说了就会走过去。",
-        "play",
-    ),
+    "hurt": Tip("HP 已降至三分之一以下。HP 到 0 可能昏迷或濒死，具体取决于伤势。F7 查看人物状态。", "screen"),
+    "sanity": Tip("这是理智（SAN）损失。一次损失达到 5 点时，可能触发临时疯狂。F1 查看理智规则。", "sanity"),
+    "handout": Tip("F2 打开线索本，可重看已获得的手稿、完整文字和原图。", "clues"),
+    "clue": Tip("这条线索已记入线索本，按 F2 查看。", "clues"),
+    "check": Tip("结果卡这样看：骰值不超过目标值即通过；↳ 一行记录本次检定的结果。F1 查看成功等级与奖励骰。", "dice"),
+    "repeat": Tip("情况没有变化，同一尝试沿用上次结果。改变做法或获得新信息后，可以再试。", "dice"),
+    "waived": Tip(".ra 是检定请求。结果明确，或技能不适用时，守秘人会直接说明，不掷骰。", "dice"),
+    "npc": Tip("跟人说话时，直接输入要问的内容或你的原话。需要说服对方时，守秘人才会要求检定。", "play"),
+    "improv": Tip("你可以探索模组没写到的事，守秘人会按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
+    "move": Tip("赶路会花游戏时间，顶部显示当前时间。F5 查看已知地点。", "screen"),
+    "stuck": Tip("需要思路时按 F8。选中的建议只会填入输入框，确认后再发送。", "play"),
+    # Only places already mentioned in the opening or hook; no later discoveries.
+    f"{TUTORIAL}:outside": Tip("想出门时，直接说要去的地点；F5 可以查看目前已知的地方。", "play"),
 }
-OPENINGS = {  # a module's own words for "start"
-    TUTORIAL: "轮到你了。想做什么，就在下面打一句中文，回车发出去，比如“我问托马斯，他叔叔最后一次出门是什么时候”"
-    "“我去书房看看少了哪些书”。托马斯说的邻居、墓地、图书馆、警局、报社都能去查。不懂规则，按F1看新手指南。",
+OPENINGS = {
+    TUTORIAL: "轮到你了。可以向站务员问路、先买份早饭，或按信上的地址找托马斯。在底部输入行动，回车发送；F1 查看玩法说明。",
 }
 HOUSE = {"jinboer_jia", "shufang"}  # 《追书人》: the Kimballs' house and the uncle's study
 OUTSIDE_AFTER = 4  # turns spent in the house before the nudge out of the door
@@ -255,11 +231,10 @@ def first_game(setup) -> None:
     if path is None:
         return
     choices = setup.query_one("#choices", OptionList)
-    choices.replace_option_prompt(str(path), Text.assemble(("新手教学", "bold"), f"：《{Module.load(path).title}》"))
+    choices.replace_option_prompt(str(path), Text.assemble((f"《{Module.load(path).title}》", "bold"), " · 初次推荐"))
     choices.highlighted = setup.paths.index(path)
-    hint = "第一次玩，推荐先玩《追书人》：一位调查员就能开局"
-    hint += "，第一次掷骰、第一次找到线索时，故事里会提示怎么玩" if enabled() else ""
-    setup.query_one("#setup-hint", Static).update(hint + "。 · Enter 或空格选择 · Esc 返回")
+    hint = "《追书人》适合初次游玩，可独自调查。"
+    setup.query_one("#setup-hint", Static).update(hint + " Enter 选择 · Esc 返回")
 
 
 def _played() -> bool:

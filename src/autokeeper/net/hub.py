@@ -41,42 +41,63 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import config, roster
-from ..engine import debrief
+from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules import commands
+from . import media
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
 SEATS = ("玩家", "AI", "不上场")
-PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed"}  # agent memory, bookkeeping and the director's plans
+PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
+PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:
     """The module as a player's screen may hold it: places, names, faces, pictures, and the
     clues and handouts already found (the rest arrive with the events that reveal them)."""
     d = m.model_dump(mode="json")
-    d.update(truth="", keeper_notes="", flags=dict.fromkeys(d["flags"], ""), creatures=[])
-    for k in d["conclusions"]:
-        k["text"] = ""
+    d["plugins"] = []
+    known = fog.bearings(m, st) | {st.location: m.location(st.location).name}
+    visited = set(st.visited) | {st.location}
+    d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
+    d["opening"] = ""  # material not yet spoken is not part of a player's knowledge
+    d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
     for loc in d["locations"]:
         loc["keeper"] = ""
+        loc["exits"] = [pid for pid in loc["exits"] if pid in known]
+        loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if pid in loc["exits"]}
+        if loc["id"] not in visited:
+            loc.update(name=known[loc["id"]], read_aloud="", features=[], exits=[], travel_minutes={}, art=None, weather=[])
+        else:
+            loc["features"] = []  # a keeper's searchable inventory is not a player's observation
+    d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     for n in d["npcs"]:
         n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="")
+        if n["location"] not in visited:
+            n["location"] = None
     for c in d["clues"]:
         if c["id"] not in st.clues:
             c.update(title="", text="", feature="", check=None, npc=None, core=False, handout=None, points_to=[], sanity=None)
+            c["where"] = ""
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
+    d["items"] = [item for item in d["items"] if item["where"] == st.location or item["where"] in st.visited]
     for e in d["events"]:
         e.update(title="", text="", read_aloud="", performance="")
     for e in d["endings"]:
         e.update(title="", text="", reward="")
     for sk in d["sketches"]:
         sk["target"] = ""
+    d["clues"] = [c for c in d["clues"] if c["id"] in st.clues]
+    for c in d["clues"]:
+        c.update(check=None, points_to=[], core=False, npc=None)
+    d["handouts"] = [h for h in d["handouts"] if h["id"] in st.handouts]
+    d["sketches"] = [sk for sk in d["sketches"] if not sk["after"] or sk["after"] in st.clues]
     return d
 
 
@@ -115,6 +136,7 @@ class Hub:
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
         self.graph = turn_graph.build(self.game, InMemorySaver())
+        self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}
         self.clients: dict[str, web.WebSocketResponse] = {}
         self.names: dict[str, str] = {}
@@ -225,7 +247,11 @@ class Hub:
 
     # -- what clients see ------------------------------------------------------------------
     def _view(self) -> dict[str, Any]:
-        return self.state.model_dump(mode="json", exclude=PRIVATE)
+        view = self.state.model_dump(mode="json", exclude=PRIVATE)
+        view["flags"], view["fired"] = [], []
+        if view.get("pending_push"):
+            view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
+        return view
 
     def _seats(self) -> list[dict[str, Any]]:
         out = []
@@ -238,18 +264,37 @@ class Hub:
         return out
 
     def _welcome(self, cid: str) -> dict[str, Any]:
+        book = self._book()
+        keys = self._art_keys(book)
         return {
             "t": "welcome",
             "you": cid,
-            "module": self._book(),
-            "art": self.m.art,
-            "colors": self.m.art_colors,
-            "pictures": self.m.pictures,  # paths on the host: only screens running there can open them
+            "module": book,
+            "art": {k: v for k, v in self.m.art.items() if k in keys},
+            "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
+            "picture_data": self._pictures(book, keys),
             "state": self._view(),
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
             "seats": self._seats(),
             "started": self.started.is_set(),
         }
+
+    def _art_keys(self, book: dict) -> set[str]:
+        return ({x.get("art") for x in book["locations"] + book["items"]}
+                | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
+                | {key for h in book["handouts"] for key in h.get("images", [])})
+
+    def _pictures(self, book: dict, keys: set[str]) -> dict[str, str]:
+        handouts = {key for h in book["handouts"] for key in h.get("images", [])}
+        return {k: media.pack(v, max_size=1600 if k in handouts else 512)
+                for k, v in self.m.pictures.items() if k in keys}
+
+    async def _share_book(self) -> None:
+        book = self._book()
+        keys = self._art_keys(book)
+        await self._broadcast({"t": "module", "module": book,
+                               "art": {k: v for k, v in self.m.art.items() if k in keys},
+                               "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
 
     def _book(self) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
@@ -269,9 +314,26 @@ class Hub:
             await self._send(cid, msg)
 
     async def _event(self, ev: dict[str, Any]) -> None:
-        if ev.get("type") == "improv":  # new places and people first, so later events can name them
-            await self._broadcast({"t": "module", "module": table(self.m, self.state)})
+        if ev.get("type") in ("ruling", "plugin_status"):
+            return  # the arbiter's private explanation and unrevealed clue ids stay on the host
+        if ev.get("type") == "flag":
+            await self._broadcast({"t": "sync", "state": self._view()})
+            return
+        if ev.get("type") in ("improv", "move", "npc", "performance", "clue", "handout"):
+            await self._share_book()
             ev = {k: v for k, v in ev.items() if k != "reason"}  # the director's reasoning is for the keeper
+            if ev.get("type") == "handout":
+                book = self._book()
+                handout = next((h for h in book["handouts"] if h["id"] == ev.get("id")), None)
+                if handout:
+                    ev["picture_data"] = self._pictures(book, set(handout.get("images", [])))
+        elif ev.get("type") == "art":
+            if ev["key"] not in self._art_keys(self._book()):
+                return
+            ev = {k: v for k, v in ev.items() if k in ("type", "key", "art", "mask", "status")}
+            path = self.m.pictures.get(ev["key"])
+            if path:
+                ev["picture_data"] = media.pack(path)
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         await self._broadcast({"t": "event", "ev": ev})
@@ -328,7 +390,12 @@ class Hub:
                 if not text.strip():  # nothing said (a request waking the loop)
                     continue
                 await self._event({"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv.id) or "", ""), "text": text})
-                await self._run(text, inv.id, ai=False)
+                try:
+                    await self._run(text, inv.id, ai=False)
+                except Exception as exc:
+                    self.game.visuals.resume()
+                    await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
+                    continue
                 if not commands.instant(text):  # a check (.ra) is an action; .r, .st and the like leave the turn open
                     return
         finally:
@@ -453,6 +520,7 @@ class Hub:
             if linger:
                 await asyncio.Event().wait()
         finally:
+            await self.game.close()
             await self.cast.close()
             await runner.cleanup()
 

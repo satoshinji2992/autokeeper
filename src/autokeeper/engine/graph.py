@@ -27,10 +27,13 @@ from typing import Any, TypedDict
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
+from pydantic import TypeAdapter
 
 from ..agents.cast import Action, Ruling
 from ..rules.commands import instant
 from .game import Game, Turn
+
+TURN = TypeAdapter(Turn)
 
 
 class TurnState(TypedDict, total=False):
@@ -54,8 +57,34 @@ def _bind(game: Game) -> None:
 def build(game: Game, checkpointer=None):
     holder: dict[str, Turn] = {}
 
+    def keep(turn: Turn | None = None) -> None:
+        if turn is not None:
+            game.state.pending_turn["turn"] = TURN.dump_python(turn, mode="json")
+        if game.checkpoint:
+            game.checkpoint()
+
+    game.turn_checkpoint = keep
+
+    def held() -> Turn:
+        if "turn" not in holder:
+            holder["turn"] = TURN.validate_python(game.state.pending_turn["turn"])
+        return holder["turn"]
+
     async def route(state: TurnState) -> dict:
-        return {"action": None, "ruling": None, "pending": False}
+        holder.clear()
+        journal = game.state.pending_turn
+        if journal:
+            if state["input"] not in (journal["input"], "/retry", "继续这一回合"):
+                raise ValueError("上一回合尚未讲完，请输入 /retry 继续，避免重复结算")
+        else:
+            if state["input"] in ("/retry", "继续这一回合"):
+                raise ValueError("目前没有未完成的回合")
+            journal.update(input=state["input"], by_hand=state.get("by_hand", False), active=game.state.active)
+            keep()
+        game.state.active = journal.get("active", game.state.active)
+        game.visuals.pause()
+        return {"input": journal["input"], "by_hand": journal.get("by_hand", False),
+                "action": None, "ruling": None, "pending": False}
 
     def which(state: TurnState) -> str:
         return "command" if instant(state["input"]) else "parse"
@@ -67,13 +96,29 @@ def build(game: Game, checkpointer=None):
 
     async def parse(state: TurnState) -> dict:
         _bind(game)
-        action = await game.parse(state["input"])
+        journal = game.state.pending_turn
+        if "action" in journal:
+            return {"action": journal["action"]}
+        turn, count = game.state.turn, len(game.state.log)
+        try:
+            action = await game.parse(state["input"])
+        except BaseException:
+            game.state.turn = turn
+            del game.state.log[count:]
+            raise
+        journal["action"] = action.model_dump(mode="json")
+        keep()
         await game.emit({"type": "action", **action.model_dump()})
         return {"action": action.model_dump()}
 
     async def rule(state: TurnState) -> dict:
         _bind(game)
+        journal = game.state.pending_turn
+        if "ruling" in journal:
+            return {"ruling": journal["ruling"]}
         ruling = await game.rule(Action.model_validate(state["action"]))
+        journal["ruling"] = ruling.model_dump(mode="json") if ruling else None
+        keep()
         if ruling:
             await game.emit({"type": "ruling", **ruling.model_dump()})
         return {"ruling": ruling.model_dump() if ruling else None}
@@ -86,14 +131,17 @@ def build(game: Game, checkpointer=None):
     async def ask_roll(state: TurnState) -> dict:
         # Runs again from the top when resumed: nothing before interrupt() may change state.
         _bind(game)
-        interrupt({"kind": "roll", **game.roll_prompt(Action.model_validate(state["action"]), Ruling.model_validate(state["ruling"]))})
+        if "turn" not in game.state.pending_turn:
+            interrupt({"kind": "roll", **game.roll_prompt(Action.model_validate(state["action"]), Ruling.model_validate(state["ruling"]))})
         return {}
 
     async def resolve(state: TurnState) -> dict:
         _bind(game)
-        ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
-        holder["turn"] = await game.resolve(Action.model_validate(state["action"]), ruling)
-        return {"pending": bool(holder["turn"].push)}
+        if "turn" not in game.state.pending_turn:
+            ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
+            holder["turn"] = await game.resolve(Action.model_validate(state["action"]), ruling)
+            keep(holder["turn"])
+        return {"pending": bool(held().push)}
 
     def after_resolve(state: TurnState) -> str:
         return "offer_push" if state.get("pending") else "talk"
@@ -103,28 +151,38 @@ def build(game: Game, checkpointer=None):
         offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}  # ids stay home
         choice = interrupt({"kind": "push", **offer})
         extra = await game.push(str(choice))
-        turn = holder["turn"]
+        turn = held()
         turn.checks += extra.checks
         turn.clues += extra.clues
         turn.sanity += extra.sanity
         turn.notes += extra.notes
         turn.ending = turn.ending or extra.ending
         turn.push = None
+        keep(turn)
         return {"pending": False}
 
     async def talk(state: TurnState) -> dict:
         _bind(game)
-        await game.talk(holder["turn"])
+        if not game.state.pending_turn.get("talk_done"):
+            await game.talk(held())
+            game.state.pending_turn["talk_done"] = True
+            keep(held())
         return {}
 
     async def narrate(state: TurnState) -> dict:
         _bind(game)
-        await game.narrate(holder["turn"])
+        if not game.state.pending_turn.get("narrated"):
+            await game.narrate(held())
+            game.state.pending_turn["narrated"] = True
+            keep(held())
         return {}
 
     async def remember(state: TurnState) -> dict:
         _bind(game)
         await game.remember()
+        game.state.pending_turn.clear()
+        keep()
+        game.visuals.resume()
         await game.emit({"type": "sheet"})
         return {"snapshot": game.state.model_dump(mode="json")}
 

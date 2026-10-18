@@ -64,6 +64,16 @@ def _art(name: str | None) -> str:
     return m.art.get(name or "", "") if m else ""
 
 
+async def _replace_game(module: Module, state: GameState) -> None:
+    if S.game is not None:
+        await S.game.close()
+        await S.game.cast.close()
+
+    S.module = module
+    S.game = Game(module, state, Cast(config.load(), module), Rules())
+    S.game.visuals.schedule()
+
+
 def _turn_report(turn: Turn) -> dict:
     g = _need()
     m = g.m
@@ -73,6 +83,7 @@ def _turn_report(turn: Turn) -> dict:
         "sanity": [f"{who}：{s.describe()}" + (f"；疯狂发作（日文表，请用中文演出）：{s.bout}" if s.bout else "") for who, s in turn.sanity],
         "events": [{"title": e.title, "read_aloud": e.read_aloud.strip(), "keeper": e.text.strip()} for e in turn.events],
         "arrived": turn.arrived,
+        "route": [{"name": m.location(pid).name, "read_aloud": m.location(pid).read_aloud} for pid in turn.route[1:-1]],
         "ending": turn.ending,
         "notes": turn.notes,
         "time": g.state.clock,
@@ -97,16 +108,16 @@ def list_pregens(module: str) -> list[dict]:
 
 
 @server.tool()
-def new_game(module: str, investigator: str, slot: str = "mcp") -> dict:
+async def new_game(module: str, investigator: str, slot: str = "mcp") -> dict:
     """开局：选择模组和一名预设调查员。返回开场朗读、钩子、起始地点和插图（插图请原样放进代码块）。"""
     path = _dirs()[module]
     m = Module.load(path)
     if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
-        compile_module(m, config.SKILLS)
+        compile_module(m, config.SKILLS, source=path / "source")
     inv = next(p for p in m.pregens if p.id == investigator).model_copy(deep=True)
     state = Game.new(m, [inv], slot=slot)
-    S.module = m
-    S.game = Game(m, state, Cast(config.load(), m), Rules())
+    await _replace_game(m, state)
+    await S.game.plugins.run("start", Turn())
     loc = m.location(state.location)
     _save()
     return {
@@ -121,12 +132,11 @@ def new_game(module: str, investigator: str, slot: str = "mcp") -> dict:
 
 
 @server.tool()
-def load_game(slot: str) -> dict:
+async def load_game(slot: str) -> dict:
     """读档。"""
     state = GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
     m = Module.load(_dirs()[state.module])
-    S.module = m
-    S.game = Game(m, state, Cast(config.load(), m), Rules())
+    await _replace_game(m, state)
     return scene()
 
 
@@ -143,6 +153,7 @@ def scene() -> dict:
         "npcs": [{"id": n.id, "name": n.name, "role": n.role} for n in m.npcs_at(loc.id)],
         "exits": [{"id": e, "name": m.location(e).name} for e in loc.exits],
         "clues_found": [m.clue(c).title for c in st.clues],
+        "items": [{"id": i.id, "name": i.name, "description": i.description, "art": _art(i.art)} for i in m.items if i.where == st.location],
         "flags": st.flags,
         "investigator": {"name": inv.name, "hp": f"{inv.hp}/{inv.hp_max}", "san": inv.san, "luck": inv.luck, "conditions": inv.conditions},
         "ending": st.ending,
@@ -255,8 +266,11 @@ def dice(command: str) -> dict:
 async def advance_time(minutes: int) -> dict:
     """推进游戏时间，返回期间触发的事件（及可能的结局）。"""
     g = _need()
+    await g.plugins.run("start", Turn())
+    g.state.turn += 1
     g.state.minutes += max(0, minutes)
     turn = Turn()
+    await g.plugins.run("turn", turn, action={"kind": "wait", "summary": "推进游戏时间"})
     await g._time(turn)
     await g._check_ending(turn)
     _save()
@@ -281,7 +295,30 @@ def handout(handout_id: str) -> dict:
     if handout_id not in g.state.handouts:
         raise ValueError("调查员还没拿到这份手稿")
     h = g.m.handout(handout_id)
-    return {"title": h.title, "kind": h.kind, "text": h.text}
+    return {"title": h.title, "kind": h.kind, "text": h.text,
+            "images": [{"key": key, "path": g.m.pictures[key]} for key in h.images if key in g.m.pictures]}
+
+
+@server.tool()
+def list_plugins() -> list[dict]:
+    """列出本局的规则插件及可调用动作；源码与私有计数不展示给玩家。"""
+    g = _need()
+    return [{"id": p.id, "name": p.name, "version": p.version, "actions": [a.model_dump() for a in p.actions],
+             "enabled": p.id not in g.state.plugin_errors} for p in g.m.extensions.values()]
+
+
+@server.tool()
+async def plugin_action(plugin: str, action: str, arguments: dict | None = None) -> dict:
+    """按实际发生的行动调用插件已声明的动作；不要编造插件尚未给出的结果。"""
+    g = _need()
+    if plugin not in g.m.extensions or action not in {a.name for a in g.m.extensions[plugin].actions}:
+        raise ValueError("插件或动作不存在，请先 list_plugins")
+    g.state.turn += 1
+    turn = Turn()
+    await g.plugins.run("action", turn, plugin=plugin, action=action, arguments=arguments or {})
+    await g._check_ending(turn)
+    _save()
+    return {**_turn_report(turn), "error": g.state.plugin_errors.get(plugin, "")}
 
 
 @server.tool()

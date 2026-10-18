@@ -74,6 +74,14 @@ ImportScreen .field Input {
     padding: 0 1;
     background: $panel;
 }
+ImportScreen .field Select {
+    width: 1fr;
+    max-width: 56;
+}
+ImportScreen #custom-import-model {
+    margin-left: 10;
+    max-width: 56;
+}
 ImportScreen .field Input:focus {
     background: $primary 30%;
 }

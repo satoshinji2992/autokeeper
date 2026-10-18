@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .schema import NPC, Check, Clue, Ending, Event, Location, Module
+from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module
 
 LIMITS = {  # npcs, locations, clues, events, endings
     "开局改编": (2, 1, 3, 3, 1),
@@ -36,12 +36,23 @@ def _now_flag(event_id: str) -> str:
 def check(m: Module, plan: Any, *, at: str) -> list[str]:
     """What is wrong with a plan, in words the director can fix; empty when it can go in."""
     problems: list[str] = []
+    from ..plugins.schema import check as check_plugin
+
+    for plugin in plan.plugins:
+        problems += [f"插件 {plugin.id}：{problem}" for problem in check_plugin(plugin)]
+        if existing := m.extensions.get(plugin.id):
+            if tuple(map(int, plugin.version.split("."))) <= tuple(map(int, existing.version.split("."))):
+                problems.append(f"更新插件 {plugin.id} 必须增加 version，并兼容已有 state")
+        elif len(m.plugins) >= 8:
+            problems.append("每局最多 8 个插件")
     limit = LIMITS.get(plan.kind, LIMITS["default"])
     for name, items, cap in zip(("NPC", "地点", "线索", "事件", "结局"), (plan.npcs, plan.locations, plan.clues, plan.events, plan.endings), limit, strict=True):
         if len(items) > cap:
             problems.append(f"新{name}最多 {cap} 个，这次有 {len(items)} 个")
-    taken = {x.id for x in m.locations} | {x.id for x in m.npcs} | {x.id for x in m.clues} | {x.id for x in m.events} | {x.id for x in m.endings}
-    new_ids = [x.id for group in (plan.locations, plan.npcs, plan.clues, plan.events, plan.endings) for x in group]
+    if len(plan.items) > 3:
+        problems.append("新物件最多 3 件")
+    taken = {x.id for group in (m.locations, m.npcs, m.clues, m.events, m.endings, m.items) for x in group}
+    new_ids = [x.id for group in (plan.locations, plan.npcs, plan.clues, plan.events, plan.endings, plan.items) for x in group]
     for i in new_ids:
         if i in taken:
             problems.append(f"id {i} 已经存在")
@@ -50,6 +61,7 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
     locs = {x.id for x in m.locations} | {x.id for x in plan.locations}
     npcs = {x.id for x in m.npcs} | {x.id for x in plan.npcs}
     flags = set(m.flags) | {f.id for f in plan.flags}
+    flags |= {key for plugin in plan.plugins for key in plugin.flags}
     endings = {x.id for x in m.endings} | {x.id for x in plan.endings}
     conclusions = {x.id for x in m.conclusions}
     for loc in plan.locations:
@@ -59,6 +71,11 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
     for n in plan.npcs:
         if n.location not in locs:
             problems.append(f"新 NPC {n.id} 所在地点 {n.location} 不存在")
+    for item in plan.items:
+        if item.where not in locs:
+            problems.append(f"新物件 {item.id} 所在地点 {item.where} 不存在")
+        if item.owner and item.owner not in npcs:
+            problems.append(f"新物件 {item.id} 的持有者 {item.owner} 不存在")
     for c in plan.clues:
         if c.where not in locs:
             problems.append(f"新线索 {c.id} 所在地点 {c.where} 不存在")
@@ -100,17 +117,22 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
 def apply(m: Module, plan: Any) -> Applied:
     """Merge a checked plan into the module in place. Ids already present are skipped, so
     applying the same plans again after a load is harmless."""
-    have = {x.id for x in m.locations} | {x.id for x in m.npcs} | {x.id for x in m.clues} | {x.id for x in m.events} | {x.id for x in m.endings}
+    have = {x.id for group in (m.locations, m.npcs, m.clues, m.events, m.endings, m.items) for x in group}
     out = Applied(note=plan.note)
+    for plugin in plan.plugins:
+        if plugin.id not in m.plugins:
+            m.plugins.append(plugin.id)
+        m.extensions[plugin.id] = plugin
+        for key, meaning in plugin.flags.items():
+            m.flags.setdefault(key, meaning)
     for f in plan.flags:
         m.flags.setdefault(f.id, f.meaning)
     for loc in plan.locations:
         if loc.id in have:
             continue
-        nearby = next((m.location(e) for e in loc.exits if any(x.id == e for x in m.locations)), None)
         m.locations.append(
             Location(id=loc.id, name=loc.name, read_aloud=loc.read_aloud, keeper=loc.keeper, features=loc.features,
-                     exits=list(loc.exits), art=nearby.art if nearby else None)
+                     exits=list(loc.exits), art=visual_key("scene", loc.id))
         )  # fmt: skip
         for e in loc.exits:
             other = next((x for x in m.locations if x.id == e), None)
@@ -120,9 +142,15 @@ def apply(m: Module, plan: Any) -> Applied:
         if n.id in have:
             continue
         m.npcs.append(
-            NPC(id=n.id, name=n.name, role=n.role, personality=n.personality, voice=n.voice, goal=n.goal,
-                knows=n.knows, secrets=n.secrets, lies=n.lies, location=n.location)
+            NPC(id=n.id, name=n.name, role=n.role, look=n.look, personality=n.personality, voice=n.voice, goal=n.goal,
+                knows=n.knows, secrets=n.secrets, lies=n.lies, location=n.location, portrait=visual_key("portrait", n.id))
         )  # fmt: skip
+    for item in plan.items:
+        if item.id not in have:
+            m.items.append(Item(**item.model_dump(), art=visual_key("item", item.id)))
+            loc = m.location(item.where)
+            if item.name not in loc.features:
+                loc.features.append(item.name)
     for c in plan.clues:
         if c.id in have:
             continue
@@ -160,6 +188,12 @@ def apply(m: Module, plan: Any) -> Applied:
     shown = [f"新人物 {n.name}" for n in plan.npcs] + [f"新地点 {x.name}" for x in plan.locations]
     out.summary = "、".join(shown)
     return out
+
+
+def visual_key(kind: str, identity: str) -> str:
+    import hashlib
+
+    return f"improv_{kind}_{hashlib.sha256(identity.encode()).hexdigest()[:16]}"
 
 
 def restore(m: Module, plans: list[dict[str, Any]]) -> None:

@@ -22,6 +22,9 @@ def build(m: Module) -> nx.MultiDiGraph:
         g.add_node(loc.id, kind="location", name=loc.name)
     for h in m.handouts:
         g.add_node(h.id, kind="handout", name=h.title)
+    for item in m.items:
+        g.add_node(item.id, kind="item", name=item.name)
+        g.add_edge(item.id, item.where, rel="at")
     for k in m.conclusions:
         g.add_node(k.id, kind="conclusion", name=k.text)
     for loc in m.locations:
@@ -119,6 +122,8 @@ def _describe(m: Module, node: str, kind: str) -> str:
         return f"{m.npc(node).role}；知道：{'；'.join(m.npc(node).knows)}"
     if kind == "location":
         return m.location(node).read_aloud.strip()[:160]
+    if kind == "item":
+        return next(i.description for i in m.items if i.id == node)
     if kind == "conclusion":
         return next(k.text for k in m.conclusions if k.id == node)
     if kind == "handout":
@@ -155,7 +160,19 @@ def audit(m: Module) -> list[Issue]:
 
     if m.start not in locs:
         err(f"起始地点 {m.start} 不存在")
+    for item in m.items:
+        if item.where not in locs:
+            err(f"物件 {item.id} 所在地点 {item.where} 不存在")
+        if item.owner and item.owner not in npcs:
+            err(f"物件 {item.id} 的持有者 {item.owner} 不存在")
+        if item.art and item.art not in m.art:
+            warn(f"物件 {item.id} 的插图 {item.art} 还没画")
     for loc in m.locations:
+        for target, minutes in loc.travel_minutes.items():
+            if target not in loc.exits or not 0 <= minutes <= 720:
+                err(f"地点 {loc.id} 的路程 {target} 必须指向出口且耗时在 0–720 分钟内")
+            elif target in locs and loc.id in m.location(target).travel_minutes and m.location(target).travel_minutes[loc.id] != minutes:
+                err(f"地点 {loc.id} 与 {target} 的双向路程耗时不一致")
         for ex in loc.exits:
             if ex not in locs:
                 err(f"地点 {loc.id} 的出口 {ex} 不存在")
@@ -173,6 +190,12 @@ def audit(m: Module) -> list[Issue]:
         if n.portrait and n.portrait not in m.art:
             warn(f"NPC {n.id} 的头像 {n.portrait} 还没画")
     for c in m.clues:
+        for requirement in c.requires:
+            if requirement.startswith("flag:"):
+                if requirement[5:] not in m.flags:
+                    err(f"线索 {c.id} 依赖未声明的标记 {requirement[5:]}")
+            elif requirement not in clues or requirement == c.id:
+                err(f"线索 {c.id} 的前置线索 {requirement} 不存在或指向自己")
         if c.where not in locs:
             err(f"线索 {c.id} 所在地点 {c.where} 不存在")
         if c.npc and c.npc not in npcs:
