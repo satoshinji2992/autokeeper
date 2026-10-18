@@ -73,15 +73,16 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
     visuals.schedule()
     assert len(visuals.tasks) == 3 and len(st.visuals) == 3
     assert m.location("cafe").art != m.location("square").art
-    assert all(m.art[key].strip() for key in st.visuals)
+    face = next(key for key in st.visuals if "portrait" in key)
+    assert all(m.art[key].strip() for key in st.visuals if key != face) and not m.art[face].strip()  # no stick figure for a face
     pending_save = st.model_dump_json()
     await asyncio.sleep(0)
-    assert not any(t.done() for t in visuals.tasks.values())
+    assert not any(t.done() for key, t in visuals.tasks.items() if key != face)
     gate.set()
     await asyncio.gather(*visuals.tasks.values())
-    assert len(events) == 6 and len(m.pictures) == 3
+    assert len(events) == 5 and len(m.pictures) == 3  # a face: its photo; a place and a prop: a drawing, then a photo
     assert "有秘密" not in "\n".join(subjects)
-    assert st.usage["visual:artist"]["calls"] == 3
+    assert st.usage["visual:artist"]["calls"] == 2 and not m.art[face].strip()  # the face was never drawn
     assert visuals.folder.is_relative_to(tmp_path / "art")
     saved = GameState.model_validate_json(pending_save)  # the last complete turn, before the images finished
     loaded = Module.load(EXAMPLE)
@@ -105,7 +106,7 @@ async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypat
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
     await asyncio.gather(*visuals.tasks.values())
-    assert all(record["status"] == "failed" and record["art"] for record in st.visuals.values())
+    assert all(record["status"] == "failed" and (record["art"] or "portrait" in key) for key, record in st.visuals.items())
     assert all(record["error"] == "ConnectionError" for record in st.visuals.values())
     await visuals.close()
 
@@ -190,7 +191,7 @@ async def test_art_waits_for_the_player_turn_and_obeys_a_separate_job_allowance(
     await asyncio.gather(*visuals.tasks.values())
     assert len(calls) == 1
     assert sum(v["status"] == "ready" for v in st.visuals.values()) == 1
-    assert all(v["art"] for v in st.visuals.values())
+    assert all(v["art"] for k, v in st.visuals.items() if "portrait" not in k)  # a face has no placeholder
     await visuals.close()
 
 

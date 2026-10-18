@@ -196,3 +196,26 @@ async def test_photo_search_words_come_from_the_art_model(monkeypatch):
     with pytest.raises(Stop):
         await imagery.find_picture(config.Config(), None, "雾里的钟楼", "scene")
     assert roles == ["vision"]
+
+
+async def test_web_pictures_come_from_tavily_and_only_into_folders_kept_on_this_machine(monkeypatch, tmp_path):
+    import httpx
+
+    from autokeeper import imagery
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.tavily.com" and json.loads(request.content)["include_images"] is True
+        return httpx.Response(200, json={"images": [
+            {"url": "https://example.org/a.jpg", "description": None},  # a null description must not break the search
+            "https://example.org/b.jpg", {"url": None}, {"url": "ftp://example.org/c.jpg", "description": "x"},
+        ]})
+
+    monkeypatch.setenv("TAVILY_API_KEY", "test")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        found = await imagery.web_images(client, "portrait old man 1920s")
+    assert [c.thumb for c in found] == ["https://example.org/a.jpg", "https://example.org/b.jpg"]
+    assert all(c.license == imagery.WEB_LICENCE for c in found)
+    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "modules" / "local")
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    assert imagery.private(tmp_path / "modules" / "local" / "x" / "art") and imagery.private(tmp_path / "saves" / "art" / "y")
+    assert not imagery.private(tmp_path / "modules" / "zhuishuren" / "art")  # the bundled module keeps licensed photos only

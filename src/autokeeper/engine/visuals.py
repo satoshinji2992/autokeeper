@@ -15,7 +15,7 @@ from ..module.schema import Module
 from .state import GameState
 
 FALLBACKS = {
-    "portrait": "    ___\n   /   \\\n  | o o |\n   \\_~_/\n  __| |__\n /       \\\n/_________\\",
+    "portrait": "",  # no stick figure in the meantime: a face shows once there is a real one
     "scene": "       /\\\n  ____/  \\____\n /            \\\n/______________\\\n|  []  __  []  |\n|     |  |     |\n|_____|__|_____|",
     "item": "     ______\n    /_____/|\n   |     | |\n   |     | /\n   |_____|/",
 }
@@ -59,10 +59,11 @@ class Visuals:
             try:
                 cached = json.loads((self.folder / f"{key}.json").read_text(encoding="utf-8"))
                 valid = isinstance(cached, dict) and all(isinstance(value, str) for value in cached.values())
+                photo_only = bool(cached.get("picture")) and not cached.get("art", "").strip() if valid else False
                 if (
-                    valid and cached.get("status") in ("ready", "failed") and cached.get("art", "").strip()
+                    valid and cached.get("status") in ("ready", "failed") and (cached.get("art", "").strip() or photo_only)
                     and int(cached.get("attempts", "0")) >= int(self.state.visuals[key].get("attempts", "0"))
-                    and not artkit.check(key, cached["art"], cached["mask"], portrait=kind == "portrait")
+                    and (photo_only or not artkit.check(key, cached["art"], cached["mask"], portrait=kind == "portrait"))
                 ):
                     self.state.visuals[key] = cached
                     self._attach(key, cached)
@@ -90,6 +91,16 @@ class Visuals:
                 if ((record["status"] != "ready" and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
                     return  # keep the placeholder; foreground narration owns the remaining budget
+                if kind == "portrait" and record["status"] != "ready" and self.cfg.search != "none" and not record.get("picture"):
+                    # a face reads best as a photo: look for one first, draw only if none turns up
+                    record["photo_attempts"] = str(int(record.get("photo_attempts", "0")) + 1)
+                    async with asyncio.timeout(90):
+                        await self._photo(key, record, subject, kind)
+                    if record.get("picture"):
+                        record.update(status="ready", photo_status="done")
+                        record.pop("error", None)
+                        await self._cache(key)
+                        return
                 async with asyncio.timeout(90):
                     if record["status"] != "ready":
                         record["status"] = "pending"

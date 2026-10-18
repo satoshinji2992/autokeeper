@@ -121,11 +121,12 @@ def load_module(path: Path) -> Module:
     return m
 
 
-def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "picture") -> Text:
-    """A picture (chafa) when the module has one and a size is given, else the hand-drawn art."""
+def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "picture", *, face: bool = False) -> Text:
+    """A picture (chafa) when the module has one and a size is given, else the hand-drawn art.
+    `face`: a portrait, cropped round the face to fill `size`."""
     if name and size and name in m.pictures and imagery.available():
         try:
-            return Text.from_ansi(imagery.render(m.pictures[name], *size, style))
+            return Text.from_ansi(imagery.render(m.pictures[name], *size, style, face=face))
         except (OSError, ValueError, subprocess.TimeoutExpired):
             pass  # a missing or unreadable picture must not break selection or hide its ASCII fallback
     if not name or name not in m.art:
@@ -381,7 +382,7 @@ class SetupScreen(Screen):
 
 def _investigator_card(m: Module, inv: Investigator, style: str = "picture") -> Text:
     t = Text()
-    t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style))
+    t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style, face=True))
     t.append(f"\n\n{inv.name}", style="bold")
     t.append(f"  {inv.occupation} · {inv.age}岁\n", style="dim")
     for k, v in inv.backstory.items():
@@ -733,7 +734,7 @@ class GameScreen(Screen):
         inv = self._viewer()
         tall = self.app.size.height >= 34  # room for a face beside the bars
         thumb = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
-        face = art_text(self.m, inv.portrait, PORTRAIT, thumb) if tall else None
+        face = art_text(self.m, inv.portrait, PORTRAIT, thumb, face=True) if tall else None
         self.query_one(SheetPanel).show(inv, face, st.investigators)
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
@@ -1154,7 +1155,7 @@ class GameScreen(Screen):
         style = self.app.art_style  # type: ignore[attr-defined]
 
         def portrait(inv: Investigator) -> Text:
-            return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style)
+            return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style, face=True)
 
         self.app.push_screen(SheetModal(party, first, portrait))
 

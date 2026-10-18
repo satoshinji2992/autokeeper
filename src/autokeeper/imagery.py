@@ -123,6 +123,33 @@ async def search(client: httpx.AsyncClient, query: str, limit: int = 8, width: i
     return out
 
 
+WEB_LICENCE = "网页图片，版权归原作者，只在本机使用"
+
+
+async def web_images(client: httpx.AsyncClient, query: str, limit: int = 8) -> list[Candidate]:
+    """Pictures from a web image search: Tavily when there is a key, else ddgs. They carry
+    no licence, so they are only for what stays on this machine (see fetch_folder)."""
+    found: list[tuple[str, str, str]] = []  # (image url, page, title)
+    if key := os.environ.get("TAVILY_API_KEY"):
+        r = await client.post(
+            "https://api.tavily.com/search", headers={"Authorization": f"Bearer {key}"}, timeout=30,
+            json={"query": query, "include_images": True, "include_image_descriptions": True, "max_results": 5},
+        )
+        r.raise_for_status()
+        for item in r.json().get("images", []):
+            url, said = (item, "") if isinstance(item, str) else (item.get("url") or "", item.get("description") or "")  # either may be null
+            found.append((url, url, said[:80]))
+    else:
+        import importlib.util
+
+        if importlib.util.find_spec("ddgs"):
+            from ddgs import DDGS
+
+            rows = await asyncio.to_thread(lambda: DDGS().images(query, max_results=limit))
+            found += [(r.get("image", ""), r.get("url", ""), r.get("title", "")[:80]) for r in rows or []]
+    return [Candidate(title or url.rsplit("/", 1)[-1][:80], page, url, WEB_LICENCE, "", 0, 0) for url, page, title in found if url.startswith("http")][:limit]
+
+
 def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()[:120]
 
@@ -309,7 +336,10 @@ async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: 
         await s.close()
 
 
-async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kind: str, *, on_reply=None) -> tuple[Image.Image, Candidate] | None:
+async def find_picture(
+    cfg: Config, client: httpx.AsyncClient, subject: str, kind: str, *, on_reply=None, web: bool = False,
+) -> tuple[Image.Image, Candidate] | None:
+    """Commons first (licensed); with `web`, a web image search when Commons has nothing that fits."""
     label = {"portrait": "人物头像", "scene": "场景", "item": "物件特写"}.get(kind, "场景")
     q = await _structured(cfg, "vision", QUERY_SYSTEM, f"{label}：{subject}", Queries, on_reply=on_reply)  # art: Opus
     seen: dict[str, Candidate] = {}
@@ -321,23 +351,42 @@ async def find_picture(cfg: Config, client: httpx.AsyncClient, subject: str, kin
         for query in {" ".join(x.split()[:2]) for x in queries}:
             for c in await search(client, query):
                 seen.setdefault(c.title, c)
-    cands = list(seen.values())[:6]
-    if not cands:
+    found = await _pick(cfg, client, list(seen.values())[:6], subject, kind, label, on_reply)
+    if found is None and web:
+        pictures: dict[str, Candidate] = {}
+        for query in queries[:2]:
+            try:
+                for c in await web_images(client, query + (" vintage photograph" if kind == "portrait" else "")):
+                    pictures.setdefault(c.thumb, c)
+            except httpx.HTTPError:
+                continue
+        found = await _pick(cfg, client, list(pictures.values())[:6], subject, kind, label, on_reply)
+    return found
+
+
+async def _pick(cfg, client, cands: list[Candidate], subject: str, kind: str, label: str, on_reply) -> tuple[Image.Image, Candidate] | None:
+    """The vision model's choice from a contact sheet, cropped; None if nothing fits."""
+    shown, thumbs = [], []
+    for c in cands:  # a picture that will not download or open is left out
+        try:
+            thumbs.append(Image.open(io.BytesIO((await _get(client, c.thumb)).content)).convert("RGB"))
+            shown.append(c)
+        except (httpx.HTTPError, OSError, ValueError):
+            continue
+    if not shown:
         return None
-    thumbs = []
-    for c in cands:
-        thumbs.append(Image.open(io.BytesIO((await _get(client, c.thumb)).content)))
+    stand_in = "\n这是虚构人物，不必是本人：年代、性别、年龄段和身份气质大致对得上就选，脸要清楚。" if kind == "portrait" else ""
     pick = await _structured(
-        cfg, "vision", PICK_SYSTEM, f"描述（{label}）：{subject}\n候选编号 0–{len(cands) - 1}。",
+        cfg, "vision", PICK_SYSTEM, f"描述（{label}）：{subject}\n候选编号 0–{len(shown) - 1}。{stand_in}",
         Pick, images=[contact_sheet(thumbs)], on_reply=on_reply,
     )
-    if not 0 <= pick.index < len(cands):
+    if not 0 <= pick.index < len(shown):
         return None
-    chosen = cands[pick.index]
+    chosen = shown[pick.index]
     big = chosen.thumb.replace("/360px-", "/1024px-") if "/360px-" in chosen.thumb else chosen.thumb
     try:
-        im = Image.open(io.BytesIO((await _get(client, big)).content))
-    except httpx.HTTPError:
+        im = Image.open(io.BytesIO((await _get(client, big)).content)) if big != chosen.thumb else thumbs[pick.index]
+    except (httpx.HTTPError, OSError):
         im = thumbs[pick.index]
     return prepare(im, pick.crop), chosen
 
@@ -352,9 +401,19 @@ def targets(m) -> list[tuple[str, str, str]]:
     return out
 
 
+def private(folder: Path) -> bool:
+    """A folder that stays on this machine (an imported module, a save), where a web picture
+    without a licence may go; the bundled modules in the repository get licensed ones only."""
+    from . import config
+
+    where = folder.resolve()
+    return any(where.is_relative_to(p.resolve()) for p in (config.LOCAL_MODULES, config.SAVES))
+
+
 async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print, on_reply=None) -> list[str]:
     """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json."""
     art_dir.mkdir(parents=True, exist_ok=True)
+    web = private(art_dir) and cfg.search != "none"
     sem = asyncio.Semaphore(parallel)
     done: list[str] = []
     async with httpx.AsyncClient() as client:
@@ -365,9 +424,9 @@ async def fetch_folder(cfg: Config, art_dir: Path, targets: list[tuple[str, str,
             async with sem:
                 try:
                     if on_reply is None:
-                        found = await find_picture(cfg, client, subject, kind)
+                        found = await find_picture(cfg, client, subject, kind, web=web)
                     else:
-                        found = await find_picture(cfg, client, subject, kind, on_reply=on_reply)
+                        found = await find_picture(cfg, client, subject, kind, on_reply=on_reply, web=web)
                 except Exception as exc:  # one bad download should not stop the batch
                     log(f"  ✗ {name}: {exc.__class__.__name__}")
                     return
@@ -615,9 +674,63 @@ def overlay(art: str, strokes: np.ndarray, under: np.ndarray, colour: np.ndarray
 
 
 @lru_cache(maxsize=32)
-def _framed(path: str, width: int, height: int, fill: bool) -> Image.Image:
+def _framed(path: str, width: int, height: int, fill: bool, face: bool = False) -> Image.Image:
     im = Image.open(picture_source(path)).convert("RGB")
+    if face:
+        return frame_face(im, width, height)
     return frame(im, width, height) if fill else im
+
+
+def _find_face(im: Image.Image) -> tuple[int, int, int, int] | None:
+    """The largest face (x, y, w, h), when OpenCV is installed and sees one. Finding it is a
+    nicety: anything going wrong just means the default framing."""
+    try:
+        import cv2
+
+        gray = cv2.cvtColor(np.asarray(im.convert("RGB")), cv2.COLOR_RGB2GRAY)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24))
+    except Exception:  # not installed, a stripped build, an odd image
+        return None
+    return tuple(int(v) for v in max(faces, key=lambda f: f[2] * f[3])) if len(faces) else None  # type: ignore[return-value]
+
+
+FACE_SHAPE = 0.9  # width over height of a head-and-shoulders crop, about a passport photo
+
+
+def _trim_backdrop(im: Image.Image, margin: float = 0.04) -> Image.Image:
+    """The person without the plain backdrop round them: a portrait with its background cut
+    out (preprocess) stands in a wide dark field, which on the stage reads as a hole."""
+    arr = np.asarray(im.convert("RGB")).astype(np.int16)
+    ground = np.abs(arr - np.array(BACKDROP[::-1], dtype=np.int16)).sum(axis=2) > 30  # BACKDROP is BGR
+    rows, cols = np.flatnonzero(ground.any(axis=1)), np.flatnonzero(ground.any(axis=0))
+    if not len(rows) or not len(cols):
+        return im
+    h, w = ground.shape
+    pad_x, pad_y = round(w * margin), round(h * margin)
+    box = (max(0, cols[0] - pad_x), max(0, rows[0] - pad_y), min(w, cols[-1] + 1 + pad_x), min(h, rows[-1] + 1 + pad_y))
+    return im.crop(box) if (box[2] - box[0]) * (box[3] - box[1]) < 0.9 * w * h else im
+
+
+def frame_face(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
+    """Crop a portrait round the face to a head-and-shoulders shape (the panel's, if that is
+    narrower), so a tall old studio photo no longer stands in the speaker's panel as a thin
+    strip between two black bands, and a wide panel does not get a face spread across it.
+    Without a face found, heads are taken to sit in the upper third."""
+    target = min(cols * cell / max(1, rows), FACE_SHAPE)  # width over height, in pixels
+    im = _trim_backdrop(im)
+    w, h = im.size
+    if not w or not h or abs(w / h - target) < 0.05:
+        return im
+    found = _find_face(im)
+    cx, cy = (found[0] + found[2] / 2, found[1] + found[3] / 2) if found else (w / 2, h * 0.33)
+    if w / h > target:  # wider than the panel: trim the sides
+        nw = h * target
+        left = min(max(0.0, cx - nw / 2), w - nw)
+        return im.crop((round(left), 0, round(left + nw), h))
+    nh = w / target  # taller: keep the head and shoulders, a little more below the face than above
+    top = min(max(0.0, cy - nh * 0.4), h - nh)
+    return im.crop((0, round(top), w, round(top + nh)))
 
 
 @lru_cache(maxsize=32)
@@ -632,11 +745,13 @@ def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded:
 
 
 @lru_cache(maxsize=256)
-def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False, graded: str = "") -> str:
+def render(path: str, width: int, height: int, style: str = "picture", when: str = "", fill: bool = False, graded: str = "", face: bool = False) -> str:
     """ANSI text for a picture at the given character size, lit for `when`, optionally
     cropped to fill the panel and graded for the weather layer (cached per combination).
     Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every
     weather layer so fog veils them and the dark outside a torch beam swallows them."""
+    if face:  # a portrait: cropped round the face to the panel's shape, then coloured as asked
+        return _chafa(grade(light(_framed(path, width, height, False, face=True), when), graded, when), width, height, style)
     if not when and not fill and not graded:
         return _chafa(picture_source(path), width, height, style)
     lit = light(_framed(path, width, height, fill), when)

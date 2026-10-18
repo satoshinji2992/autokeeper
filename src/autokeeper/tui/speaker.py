@@ -75,7 +75,7 @@ def face(p: Portrait, feeling: str, size: tuple[int, int] = (0, 0), style: str =
     art keeps its own size and has no style."""
     graded = feeling if feeling in artkit.TONES else ""
     if p.picture:
-        return Text.from_ansi(imagery.render(p.picture, *size, style, graded=graded))
+        return Text.from_ansi(imagery.render(p.picture, *size, style, graded=graded, face=True))
     return artkit.colorize(p.art, p.mask, grade=graded)
 
 
