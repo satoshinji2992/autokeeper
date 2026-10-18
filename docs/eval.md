@@ -65,6 +65,29 @@ uv run autokeeper eval rhetoric
 
 两版明细都在 `saves/eval/`（`rhetoric_v1_zhuishuren.json`、`rhetoric_v2_zhuishuren.json`），里面有每条话术、两次裁定和理由。
 
+### 换成 DeepSeek，比较思考强度
+
+```bash
+uv run autokeeper --preset deepseek eval rhetoric \
+    --referee deepseek:deepseek-flash@high --referee deepseek:deepseek-flash@low
+uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-flash@none
+```
+
+同样 20 个场景、40 组对照，裁定员都是 deepseek-flash，只换思考强度。延迟取自追踪里每次裁定的耗时：
+
+| 裁定员的思考 | baseline（看原话） | split（intent → arbiter） | 裁定延迟 p50 / p95 | 每次裁定输出 token |
+|---|---|---|---|---|
+| high | 11 | 2 | 2.4 s / 4.7 s | 317 |
+| low | 9 | 0 | 2.0 s / 4.1 s | 293 |
+| 不思考 | 6 | 2 | 1.1 s / 1.6 s | 101 |
+
+- 换了厂商，结论不变：split 让被说动的次数从 6–11 次降到 0–2 次。挡住话术靠的是“裁定员看不到原话”这个结构，跟思考强度关系不大。
+- baseline 里开着思考反而被说动得更多，像是思考在替玩家的说法找理由。不过对抗话术每轮都重新生成，这个差别可能是噪声。
+- 不思考的裁定快一倍、便宜近一半，但是不是一样准，上面这个评测量不出来。拿 20 个平实行动的裁定比较（要不要掷骰、技能、难度、给哪些线索全部一致才算一致）：high 和 low 一致 14/20，high 和不思考也是 14/20；同一档跑两次本身就有差异。细看分歧，不思考有两次一次社交检定成功就给了 2–3 条各自带门槛的线索，high 只给 1 条。
+- 所以 DeepSeek 预设的裁定员仍用 high。在乎速度的话，配置里写 `[roles.arbiter] effort = "none"`，每回合少等一秒多。
+
+明细在 `saves/eval/rhetoric-deepseek-effort.json` 和 `rhetoric-deepseek-none.json`。
+
 ## 同一局，三种后端
 
 ```bash
