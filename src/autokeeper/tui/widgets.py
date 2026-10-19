@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+import weakref
 from functools import partial
 
 from rich.cells import set_cell_size
@@ -331,11 +332,26 @@ class ItemCard(Static):
             self._show(Text.from_ansi(picture))
 
 
+class Folded(Static):
+    """The top of a long story: how many earlier blocks are folded away. A click brings the
+    latest of them back."""
+
+    def on_click(self) -> None:
+        if isinstance(self.parent, StoryLog):
+            self.parent.unfold()
+
+
 class StoryLog(VerticalScroll):
-    """Entries mount as static blocks; the keeper's narration types itself out."""
+    """Entries mount as static blocks; the keeper's narration types itself out.
+
+    Every layout of the screen (a block added, the narration taking another line) walks all
+    the blocks, so a long story keeps its latest KEEP mounted: past KEEP + FOLD the oldest fold
+    into one line at the top, which brings them back a batch per click, as does a click on
+    their line in the history panel (bring_back)."""
 
     MINE, OTHERS = "bold #ffd166", "bold #7fd1b9"  # your investigator's name, the others'
     MARKED = ("keeper", "npc", "performance", "echo", "opening")  # where names light up
+    KEEP, FOLD = 160, 40  # about forty turns stay mounted; blocks fold forty at a time
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -345,6 +361,9 @@ class StoryLog(VerticalScroll):
         self._typing = False
         self.names: dict[str, str] = {}  # a name, or the part of it people go by -> its style
         self.on_entry = None  # told of every block added: (kind, body, block); the history panel
+        self._folded: list[list] = []  # [classes, content, block] of each folded block, oldest first
+        self._origin: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()  # a block -> its record
+        self._header: Folded | None = None
 
     def mark(self, party, me: str | None) -> None:
         """Whose names to light up in the telling: yours in one colour, the party's in another.
@@ -378,9 +397,72 @@ class StoryLog(VerticalScroll):
             block = Static(body, classes=f"entry {kind}")
         self.mount(block)
         self.scroll_end(animate=False)
+        self._trim()
         if self.on_entry is not None:
             self.on_entry(kind, body, block)
         return block
+
+    # -- a long story --------------------------------------------------------------
+    def _folded_away(self, block) -> bool:
+        record = self._origin.get(block)
+        return record is not None and record[2] is not block  # still among the children until its removal is done
+
+    def _trim(self) -> None:
+        blocks = [w for w in self.children if w is not self._header and not self._folded_away(w)]
+        if len(blocks) <= self.KEEP + self.FOLD:
+            return
+        old = [w for w in blocks[: len(blocks) - self.KEEP] if w is not self._live]
+        for block in old:
+            record = self._origin.get(block) or [" ".join(sorted(block.classes)), None, None]
+            record[1:] = [block.content if isinstance(block, Static) else Text(), None]
+            self._origin[block] = record
+            self._folded.append(record)
+        self.remove_children(old)
+        self._head()
+
+    def _head(self) -> None:
+        if not self._folded:
+            if self._header is not None:
+                self._header.remove()
+                self._header = None
+            return
+        line = Text(f"▲ 更早的 {len(self._folded)} 段已收起 · 点这里展开", style="dim")
+        if self._header is None:
+            self._header = Folded(line, classes="entry system")
+            self.mount(self._header, before=0)
+        else:
+            self._header.update(line)
+
+    def unfold(self, count: int = 0) -> None:
+        """The latest `count` folded blocks (a batch) back at the top of the story; the block
+        that was first stays where it was on the page."""
+        back = self._folded[-(count or self.FOLD) :]
+        if not back:
+            return
+        del self._folded[-len(back) :]
+        anchor = next((w for w in self.children if w is not self._header and not self._folded_away(w)), None)
+        blocks = []
+        for record in back:
+            record[2] = Static(record[1], classes=record[0])
+            self._origin[record[2]] = record
+            blocks.append(record[2])
+        if self._header is not None:
+            self.mount_all(blocks, after=self._header)
+        else:
+            self.mount_all(blocks, before=0)
+        self._head()
+        if anchor is not None:
+            self.call_after_refresh(self.scroll_to_widget, anchor, animate=False, top=True)
+
+    def bring_back(self, block: Static) -> None:
+        """Scroll to the block a history line points at, mounted again if it was folded away."""
+        record = self._origin.get(block)
+        if record is None:
+            return
+        if record[2] is None and record in self._folded:
+            self.unfold(len(self._folded) - self._folded.index(record))
+        if record[2] is not None:
+            self.call_after_refresh(self.scroll_to_widget, record[2], animate=False, top=True)
 
     # -- typewriter ----------------------------------------------------------------
     def begin_keeper(self, again: Static | None = None) -> Static:
@@ -408,9 +490,18 @@ class StoryLog(VerticalScroll):
         self._shown += self._pending[:step]
         self._pending = self._pending[step:]
         self._unfade(self._live)
-        self._live.update(self.lit(Text(self._shown + "▌")))
-        self.scroll_end(animate=False)
+        self._live.update(self.lit(Text(self._shown + "▌")), layout=False)
+        if self._grown(self._live):  # another line: lay the story out again, keep the end in view
+            self._live.refresh(layout=True)
+            self.scroll_end(animate=False)
         self.set_timer(0.03, self._type)
+
+    @staticmethod
+    def _grown(block: Static) -> bool:
+        """The block's words now take more (or fewer) lines than it has room for. Most ticks
+        only add words to its last line: a repaint, not a layout of every block."""
+        size = block.content_size
+        return not size.width or block.get_content_height(size, size, size.width) != size.height
 
     def end_keeper(self, full: str) -> None:
         if self._live is None:
@@ -684,6 +775,9 @@ class HistoryLine(Static):
     def on_click(self) -> None:
         if self.block is not None and self.block.parent is not None:
             self.block.parent.scroll_to_widget(self.block, animate=False, top=True)
+        elif self.block is not None:  # folded away, early in a long story
+            for story in self.screen.query(StoryLog):
+                story.bring_back(self.block)
 
 
 def history_line(kind: str, body, block=None) -> Text | None:

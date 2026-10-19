@@ -13,7 +13,7 @@ from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
-from autokeeper.tui.widgets import SceneArt
+from autokeeper.tui.widgets import Folded, HistoryLine, SceneArt, StoryLog
 
 from .test_speaker import drawn
 from .test_tui import canned, until  # noqa: F401  (canned: a fixture, used by name)
@@ -97,3 +97,70 @@ async def test_the_title_stands_still_under_another_screen():
         app.pop_screen()
         await pilot.pause(0.6)
         assert title.tick > still
+
+
+async def story_screen(app, pilot) -> GameScreen:
+    m, state = square()
+    screen = GameScreen(m, state, resume=True)
+    app.push_screen(screen)
+    assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+    return screen
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_long_story_keeps_its_latest_blocks_and_folds_the_rest():
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = await story_screen(app, pilot)
+        story = screen.story
+        before = len(story.children)  # the recap's
+        clue = story.add("clue", Text("〔旧报〕\n钟楼十年前也停过一次。"))  # a line in the history panel too
+        for i in range(400):
+            story.add("system", Text(f"第 {i} 段"))
+        await pilot.pause()
+        blocks = [w for w in story.children if not isinstance(w, Folded) and w.is_attached]
+        assert len(blocks) <= StoryLog.KEEP + StoryLog.FOLD  # every layout walks these, not four hundred
+        assert "第 399 段" in str(blocks[-1].render()) and story.is_vertical_scroll_end
+        header = story.query_one(Folded)
+        folded = before + 401 - len(blocks)
+        assert f"更早的 {folded} 段" in str(header.render())
+
+        header.on_click()  # a batch comes back above, the page stays put
+        await pilot.pause()
+        assert len([w for w in story.children if not isinstance(w, Folded)]) == len(blocks) + StoryLog.FOLD
+        assert f"更早的 {folded - StoryLog.FOLD} 段" in str(header.render())
+
+        line = next(h for h in screen.query(HistoryLine) if h.block is clue)
+        assert clue.parent is None  # folded away
+        line.on_click()  # the history panel still takes you there
+        await pilot.pause()
+        await pilot.pause()
+        back = next(w for w in story.children if "钟楼十年前也停过一次" in str(w.render()))
+        assert back.has_class("clue") and story.scroll_offset.y <= back.virtual_region.y <= story.scroll_offset.y + story.size.height
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_narration_is_laid_out_once_a_line_not_once_a_tick(monkeypatch):
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = await story_screen(app, pilot)
+        story = screen.story
+        layouts = []
+        real = Screen._refresh_layout
+
+        def counted(self, *a, **k):
+            layouts.append(1)
+            return real(self, *a, **k)
+
+        monkeypatch.setattr(Screen, "_refresh_layout", counted)
+        story.begin_keeper()
+        words = "钟声停了很久，广场上的鸽子却一只也没有飞走，它们都朝着钟楼的方向站着。" * 8
+        for i in range(0, len(words), 6):
+            story.feed(words[i : i + 6])
+        assert await until(pilot, lambda: not story._typing, 100)
+        lines = story._live.size.height
+        story.end_keeper(words)
+        await pilot.pause()
+        # A layout (and a scroll) when it takes another line; the other ticks only repaint it.
+        assert lines >= 3 and len(layouts) <= 2 * lines + 4
+        assert words in str(story.children[-1].render())
