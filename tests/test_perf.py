@@ -14,6 +14,7 @@ from autokeeper import config, imagery
 from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
+from autokeeper.tui import cover
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
 from autokeeper.tui.widgets import PORTRAIT, Folded, HistoryLine, SceneArt, StoryLog
 
@@ -96,9 +97,12 @@ async def test_the_title_stands_still_under_another_screen():
         still = title.tick
         await pilot.pause(0.6)
         assert title.tick == still  # not painted behind the game, eight times a second
+        assert not title.painted and cover.frame.cache_info().currsize <= 1  # nor kept, for each GC of the game to walk
         app.pop_screen()
         await pilot.pause(0.6)
         assert title.tick > still
+        if imagery.available():
+            assert await until(pilot, lambda: title.frames > 0)  # the painting again, without chafa
 
 
 async def story_screen(app, pilot) -> GameScreen:

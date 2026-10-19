@@ -6,7 +6,11 @@ Commons: https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg
 
 A few frames are drawn once per screen size (chafa, in a thread) and looped; the words go
 over them cell by cell, keeping the painting's colour behind the title's letters. Without
-chafa the hand-drawn eye stands in for the painting."""
+chafa the hand-drawn eye stands in for the painting.
+
+The screen shows them through Cover, a widget of ready-made rows (Textual's line API): a
+frame is turned into rows once, and moving the menu's bar or glitching the name redoes the
+rows it touches, not the six thousand cells of the screen."""
 
 from __future__ import annotations
 
@@ -17,8 +21,11 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
+from textual.strip import Strip
+from textual.widget import Widget
 
 from .. import artkit, imagery
 from . import art
@@ -122,14 +129,27 @@ def _canvas(cols: int, rows: int, middle: float) -> Image.Image:
 
 
 @lru_cache(maxsize=48)
-def frame(cols: int, rows: int, middle: float, style: str, k: int) -> Cells:
-    """Frame k as cells (k == FRAMES: the lightning frame), cached per screen size."""
+def picture(cols: int, rows: int, middle: float, style: str, k: int) -> str:
+    """Frame k as chafa drew it (k == FRAMES: the lightning frame), cached per screen size:
+    text, which the garbage collector never walks, where the cells made from it are a hundred
+    thousand tuples."""
     im = moment(_canvas(cols, rows, middle), k % FRAMES, flash=k == FRAMES)
     try:
-        ansi = imagery._chafa(im, cols, rows, style, work=5)
+        return imagery._chafa(im, cols, rows, style, work=5)
     except (OSError, subprocess.TimeoutExpired):
-        return []
-    return cells(Text.from_ansi(ansi), cols)
+        return ""
+
+
+@lru_cache(maxsize=FRAMES + 1)
+def frame(cols: int, rows: int, middle: float, style: str, k: int) -> Cells:
+    """Frame k as cells, for the title on screen; it lets them go while a game is on (clear)."""
+    ansi = picture(cols, rows, middle, style, k)
+    return cells(Text.from_ansi(ansi), cols) if ansi else []
+
+
+def clear() -> None:
+    """Let the cells go; the pictures stay, so the title comes back without chafa."""
+    frame.cache_clear()
 
 
 def eye(cols: int, rows: int, _focus: float = 0.0) -> Cells:
@@ -184,6 +204,43 @@ def compose(grid: Cells) -> Text:
         if i < len(grid) - 1:
             out.append("\n")
     return out
+
+
+def strips(grid: Cells) -> list[Strip]:
+    """The grid as Textual rows, a run of one style a segment, as compose() makes its lines."""
+    rows = []
+    for row in grid:
+        segments, run, style = [], [], None
+        for ch, st in row:
+            if st != style and run:
+                segments.append(Segment("".join(run), style))
+                run = []
+            run.append(ch)
+            style = st
+        if run:
+            segments.append(Segment("".join(run), style))
+        rows.append(Strip(segments))
+    return rows
+
+
+class Cover(Widget):
+    """The title's picture, a frame at a time: whole rows, made once each and shown in turn."""
+
+    def __init__(self, **kw) -> None:
+        super().__init__(**kw)
+        self.rows: list[Strip] = []
+
+    def show(self, rows: list[Strip]) -> None:
+        self.rows = rows
+        self.refresh()
+
+    def render_line(self, y: int) -> Strip:
+        return self.rows[y] if y < len(self.rows) else Strip.blank(self.size.width)
+
+    @property
+    def plain(self) -> str:
+        """What it shows, as text."""
+        return "\n".join(row.text for row in self.rows)
 
 
 def _mix(a, b: str, amount: float):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rich.style import Style
 from rich.text import Text
-from textual.widgets import OptionList, Static
+from textual.widgets import OptionList
 
 from autokeeper import config, imagery, roster
 from autokeeper.config import EXAMPLE
@@ -41,7 +41,7 @@ async def test_title_without_chafa_shows_the_eye_and_the_whole_menu(monkeypatch)
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause(0.3)
         assert isinstance(app.screen, TitleScreen)
-        shown = str(app.screen.query_one("#title-cover", Static).render())
+        shown = app.screen.query_one(cover.Cover).plain
         assert "( () )" in shown and "Ctrl+Q" in shown and "新的调查" in shown and "离开" in shown
         menu = app.screen.query_one("#menu", OptionList)
         assert menu.region.bottom <= 24 and menu.region.x >= 0
