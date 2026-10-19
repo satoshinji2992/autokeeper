@@ -331,6 +331,7 @@ data/
     models/       本地向量模型（约 90 MB）
     kb/           各模组的 LightRAG 知识库
     showcases/    各模组的大场景图
+    pictures/     照片的预处理副本，画面上显示的是它
     sessions/     Claude Code、Codex 进程的工作目录
   logs/           traces/<日期>.jsonl、stderr.log、web.log
   preferences.json  tips.json  spend.json  imagegen/<模组>.json
