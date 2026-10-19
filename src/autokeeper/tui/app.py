@@ -1174,7 +1174,7 @@ class GameScreen(Screen):
                "guide": lambda: self.app.push_screen(GuideScreen("play")),
                "keys": lambda: self.app.push_screen(GuideScreen("keys")),
                "title": self.action_leave_game, "quit": self.action_quit_game}  # fmt: skip
-        run[choice]()
+        run[choice]() if choice in run else self.run_action(choice)  # a screen's own entry (tui/net.py)
 
     def action_settings(self) -> None:
         from .settings import SettingsModal
@@ -1222,7 +1222,7 @@ class GameScreen(Screen):
         or go now (the turn is saved as far as it got, and loading goes on with it)."""
 
         def now() -> None:
-            if not self.spectate:
+            if self.game is not None and not self.spectate:  # at a LAN table the host keeps the save
                 write_save(self.state, self.m)
             go()
 

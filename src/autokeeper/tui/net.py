@@ -140,7 +140,10 @@ class NetGameScreen(GameScreen):
     def menu_items(self) -> list[tuple[str, str]]:
         """The Esc menu at a shared table: the host saves and tells; only the host changes models."""
         off = {"save", "load", "prefs"} | (set() if self.link.host else {"engine"})
-        return [item for item in super().menu_items() if item[0] not in off]
+        items = [item for item in super().menu_items() if item[0] not in off]
+        if getattr(self.app, "room", None) is not None:  # the room was opened in this app
+            items.insert(len(items) - 2, ("close_room", "关闭房间"))
+        return items
 
     def __init__(self, module: Module, state: GameState, link: Link, seat: str | None, backlog: list[LogEntry]):
         super().__init__(module, state, resume=True, spectate=False)
