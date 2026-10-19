@@ -6,11 +6,12 @@
     <meta name="theme-color" content="#090705">
     <meta name="description" content="AutoKeeper：在终端里玩《克苏鲁的呼唤》第 7 版。AI 守秘人、模组编译、物理十面骰、彩色字符画与好友联机。">
     <meta property="og:title" content="AutoKeeper · 自动守秘人">
-    <meta property="og:description" content="早班火车就要进站。带上你的调查员，故事从这里开始。">
+    <meta property="og:description" content="中文 CoC 7 版终端跑团：AI 守秘人、自由调查、模组编译与多人联机。">
     <meta property="og:image" content="https://satoshinji2992.github.io/autokeeper/img/title.png">
     <meta property="og:url" content="https://satoshinji2992.github.io/autokeeper/">
     <link rel="canonical" href="https://satoshinji2992.github.io/autokeeper/">
     <link rel="icon" href="site/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href="site/fonts/fusion-pixel-12px-sc.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="site/style.css">
     <script src="site/main.js" defer></script>
     <title>AutoKeeper · 自动守秘人</title>
@@ -23,51 +24,52 @@
         <header><h1>AutoKeeper</h1><p>Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn.</p><blockquote>我以为，世上最仁慈的事，莫过于人类的心智无法把它所知的一切关联起来。</blockquote><p>H. P. 洛夫克拉夫特，《克苏鲁的呼唤》</p></header>
         <nav aria-label="内容"><a href="#about">项目介绍</a> · <a href="#gallery">实机画面</a> · <a href="#modules">模组与规则</a> · <a href="#party">人物与联机</a> · <a href="#install">安装开团</a> · <a href="#credits">文档与署名</a></nav>
         <section id="about" data-title="项目介绍">
-            <h2>从早班火车进站开始</h2>
-            <p>AutoKeeper 把《克苏鲁的呼唤》第 7 版的跑团桌面搬进了终端。你扮演调查员，用中文说出想做的事；AI 担任守秘人，铺陈场景、扮演遇到的人，在需要检定时请你掷骰。可以独自调查，带上 AI 同伴，也可以叫朋友凑一桌。</p>
-            <p>挑好模组和调查员，守秘人会顺着角色背景拉开序幕。以《追书人》为例，早班火车驶入阿诺兹堡，托马斯的家在小镇尽头的公墓旁，走过去还有一段路。你可以向站务员打听方向、找家餐馆吃早饭，或拐进图书馆查查旧报纸。走到原作没写的地方，守秘人会即兴补出人物、地点和支线，保存在这一局里；偏爱原作的话，也能切回严格模式。</p>
-            <p>需要检定时，桌面会请你亲手掷出物理模拟的十面骰。失败之后要不要花幸运、要不要孤注一掷，由你当场决定。理智、伤势与成长也按规则结算，找到的线索、手稿、见过的人都会留下记录。每回合自动存档，下次接着往下查。</p>
-            <h3>照片、字符与天气</h3>
-            <p>老照片和模组插图会转成彩色字符画，雨雪、雾气与灯影随场景变化。NPC 开口时立绘登场，重要时刻展开整屏大场景。即兴的人物与地点也能配图；本机装有并登录 Codex 时，还可以开启 AI 画图，按剧情变化重绘着火的房屋、受伤的人物。</p>
+            <h2>中文 CoC 7 版终端跑团</h2>
+            <p>AutoKeeper 是基于《克苏鲁的呼唤》第 7 版规则的中文终端跑团程序。玩家扮演调查员，以自然语言描述行动；AI 担任守秘人，负责场景叙述、NPC 扮演与检定裁定。支持单人游玩、AI 同伴和多人联机。</p>
+            <p>开局叙事结合模组背景与调查员经历展开，调查过程保留主线之外的日常活动与探索空间。《追书人》以早班火车抵达阿诺兹堡为起点：托马斯的家位于小镇尽头的公墓旁，玩家可在途中问路、用餐，或前往图书馆查阅旧报。对于原作未覆盖的行动，守秘人可即兴补充人物、地点和支线，并将其写入本局记录；严格模式则限制对原作的扩展。</p>
+            <p>检定采用物理模拟的十面骰，由玩家操作；消耗幸运与孤注一掷也由玩家决定。系统按规则结算理智、伤势和成长，记录已发现的线索、手稿及人物信息，并在每回合结束后自动保存进度。</p>
+            <h3>彩色字符画与场景表现</h3>
+            <p>历史照片与模组插图经转换后以彩色字符画呈现，配合随场景变化的雨雪、雾气和灯影。NPC 对话显示人物立绘，重要场景可展开为整屏画面，即兴生成的人物与地点也支持配图。本机安装并登录 Codex 后，可启用 AI 图像生成，根据剧情变化重绘受损建筑、受伤人物等内容。</p>
             <a data-action href="#gallery">查看实机</a><a data-action href="https://github.com/satoshinji2992/autokeeper#readme">完整 README</a>
         </section>
         <section id="gallery" data-title="实机画面"><h2>调查桌面与实机图集</h2><p>十二张实机画面，可以用左右方向键切换，点击画面或按回车打开原图。</p><p><a href="img/game.png">调查桌面</a> · <a href="img/map.png">地图</a> · <a href="img/cards.png">角色库</a> · <a href="img/plugins.png">插件</a> · <a href="img/lobby.png">开房间</a></p><img src="img/game.png" alt="追书人：图书馆、物理骰子与人物状态" width="1800" height="1171" loading="lazy"></section>
         <section id="modules" data-title="模组与规则">
-            <h2>把你手上的模组拿来跑</h2>
-            <p>仓库自带《追书人》《冬雪之下》和《有些人油盐不进》，装好就能开第一局。想跑自己攒下的任意 CoC 模组，可以导入 PDF、Word、Markdown、文本或 ZIP。AI 会通读原文，整理人物、地点、线索和事件，保留插图与手稿，校验后编译成能直接开团的模组。</p>
+            <h2>模组导入与原创生成</h2>
+            <p>仓库附带《追书人》《冬雪之下》和《有些人油盐不进》三个模组，也支持导入其他 CoC 模组。可接受的文件格式包括 PDF、Word、Markdown、文本和 ZIP。AI 通读原文后整理人物、地点、线索与事件，保留插图和手稿，经校验后编译为可游玩的模组。</p>
             <pre id="import-code">uv run autokeeper import 模组.pdf</pre>
-            <p>没有现成剧本，也可以给一句设定。生成器会联网考据、写剧情、配图，生成一本原创模组。导入、读图和游玩可以各选各的模型，不绑死某一家服务。</p>
+            <p>原创生成支持从简短设定开始，通过联网考据、剧情编写与配图构建模组。导入、图像理解和游玩可分别配置模型，无须使用同一家服务。</p>
             <pre id="generate-code">uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian</pre>
-            <h3>专属规则和一句话家规</h3>
-            <p>疾病蔓延、倒计时、资源消耗或书架机关，可以用规则插件处理。AI 能在编译时编写插件，跑通隔离沙箱中的测试后再加载；开团后按 Ctrl+K，也能用一句话加家规。插件可以挂载状态面板、注册自定义行动，还能出选择、填空、排序和棋盘小游戏。</p>
+            <h3>模组规则与自定义插件</h3>
+            <p>规则插件用于实现疾病蔓延、倒计时、资源消耗及场景机关等特殊机制。AI 可在模组编译阶段编写插件，通过隔离沙箱中的测试后加载。游玩时按 Ctrl+K，可用自然语言添加自定义规则。插件支持挂载状态面板、注册行动，以及选择、填空、排序和棋盘小游戏。</p>
             <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/module-format.md">模组格式</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/plugins.md">规则插件</a>
         </section>
         <section id="party" data-title="人物与联机">
-            <h2>一个人随时开，或者叫朋友凑一桌</h2>
-            <p>开局可以用模组预设，也能给一句人设，让 AI 协助车卡。输入历史、公众人物的名字时，程序会检索资料和肖像，结合人物经历与模组年代问背景，再按七版规则核算属性和技能点。手上的老卡也能带来：骰娘 .st、表格、PDF、纸质卡照片和酒馆卡都有对应的导入方式。</p>
-            <p>想约朋友，就由房主在标题页开房间，把网址发过去。朋友用浏览器打开就能车卡入座，不用安装 Python 或配置密钥；模型和存档由房主负责，没坐满的座位可以交给 AI。人齐后各自提交行动，守秘人按顺序往下讲，讲述时也能先输入下一轮的行动。</p>
-            <p>掉线后重新入座即可继续。支持局域网，也可以通过虚拟局域网异地联机。只是想看故事的话，还有观战模式，让 AI 调查员自己跑完整局。</p>
+            <h2>调查员管理与多人联机</h2>
+            <p>调查员可采用模组预设，也可根据简短人设由 AI 协助创建。以历史或公众人物为原型时，程序检索相关资料与肖像，结合人物经历和模组年代确认背景，再按七版规则核算属性及技能点。已有角色卡支持通过骰娘 .st、表格、PDF、纸质卡照片或酒馆卡导入。</p>
+            <p>多人游戏由房主在标题页创建房间，并分享访问地址。其他玩家通过浏览器创建角色并加入，无须安装 Python 或配置密钥；模型调用与存档保存在房主设备上，空余席位可由 AI 接替。玩家分别提交行动，守秘人依次处理；叙事期间可提前输入下一轮行动。</p>
+            <p>联机支持断线后重新入座，可在局域网内使用，也可通过虚拟局域网连接异地玩家。观战模式由 AI 调查员完成整局游戏。</p>
             <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#联机">联机说明</a><a data-action href="#gallery">查看角色库与房间</a>
         </section>
         <section id="install" data-title="安装开团">
             <h2>安装与启动</h2>
-            <p>需要 Python 3.12+、uv 和 Node.js 18+，建议一起装上 chafa 来显示照片字符画。克隆仓库后安装依赖、准备模组，再让 doctor 检查一下环境。</p>
+            <p>运行环境为 Python 3.12+、uv 和 Node.js 18+；建议安装 chafa 以显示照片字符画。克隆仓库后安装依赖、准备模组，并运行 doctor 检查环境。</p>
             <pre id="install-code">git clone https://github.com/satoshinji2992/autokeeper
 cd autokeeper
 uv sync --extra claude --extra graphrag
 uv run autokeeper setup
 uv run autokeeper doctor</pre>
-            <h3>选择模型，再启动</h3>
-            <p>支持 Claude、DeepSeek、Codex、Ollama 和兼容接口，也能按职责混搭模型。进入标题页选“新的调查”，挑好模组和调查员，就能开始。</p>
+            <h3>模型配置与启动</h3>
+            <p>支持 Claude、DeepSeek、Codex、Ollama 及兼容接口，可按职责分别配置模型。在标题页选择“新的调查”，指定模组与调查员后开始游戏。</p>
             <pre id="launch-code">uv run autokeeper</pre>
-            <p>想在浏览器里玩，运行 uv run autokeeper serve。这里是项目展示页，实际游戏和模型运行在你自己的电脑上。</p>
+            <p>浏览器游玩使用 uv run autokeeper serve 启动。本网站仅提供项目介绍，实际游戏与模型调用在用户设备上运行。</p>
             <h3>从 0.0.1 升级</h3><p>升级前请备份 saves/。0.0.2 将数据整理到 data/，自己的调查员、本地模型和知识库会自动迁移，但旧版存档不能继续读取。</p>
             <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#安装依赖">各系统安装说明</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#模型与花费">模型与花费</a>
         </section>
         <section id="credits" data-title="文档与署名">
             <h2>文档、源码和署名</h2>
-            <p>代码以 MIT 协议发布。界面基于 Textual，照片转字符画使用 chafa，其他掷骰和骰娘指令使用 BCDice；模型编排与检索用到 LangGraph、LangChain 和 LightRAG。开发约定、模组格式、插件与评测记录都在仓库里。</p>
+            <p>代码以 MIT 协议发布。界面基于 Textual，照片转字符画使用 chafa，其他掷骰和骰娘指令使用 BCDice；模型编排与检索使用 LangGraph、LangChain 和 LightRAG。开发约定、模组格式、插件说明及评测记录见仓库文档。</p>
             <p>本网页直接使用游戏的 ASCII 标题字和标题画字符绘制数据。原画是 Dominique Signoret 的 Cthulhu and R'lyeh，来自 Wikimedia Commons，按 CC BY-SA 3.0 使用，经过裁剪、调色与字符化处理。</p>
+            <p>界面字体采用 Fusion Pixel 12px Monospaced，作者 TakWolf，按 SIL Open Font License 1.1 使用。字体文件与许可证随网页一同提供。</p>
             <p>自带模组为同人改编，原作版权归各自作者与出版方。模组中的历史照片署名见各自的 art/credits.yaml。Call of Cthulhu 是 Chaosium 的商标，本项目与 Chaosium 无关。</p>
             <a data-action href="https://github.com/satoshinji2992/autokeeper">GitHub 源码</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a><a data-action href="https://github.com/satoshinji2992/autokeeper#致谢与许可">图片与模组署名</a><a data-action href="https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg">原画来源</a><a data-action href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>
         </section>

@@ -29,7 +29,7 @@
     let audio = null, noiseSource = null, master = null;
     const imageCache = new Map();
     const metric = document.createElement("canvas").getContext("2d");
-    const fontFamily = '"SFMono-Regular", Consolas, "Liberation Mono", "Noto Sans Mono CJK SC", monospace';
+    const fontFamily = '"AK Pixel", "Noto Sans Mono CJK SC", monospace';
 
     function palette() { return themes[state.theme]; }
     function wide(char) { const n = char.codePointAt(0); return n >= 0x2e80 && !(n >= 0xff61 && n <= 0xffdc) ? 2 : 1; }
@@ -37,9 +37,19 @@
     function fit(text, size) { let out = "", used = 0; for (const char of text) { if (used + wide(char) > size) break; out += char; used += wide(char); } return out; }
     function wrap(text, size) {
         const lines = []; let line = "", used = 0;
+        const closing = /^[，。；：！？、）》」』】”’…,.!?;:)\]]/;
+        const opening = /[（《「『【“‘(\[]$/;
         for (const char of text) {
             if (char === "\n") { lines.push(line); line = ""; used = 0; continue; }
-            if (used + wide(char) > size) { lines.push(line); line = ""; used = 0; }
+            if (used + wide(char) > size) {
+                let carry = "";
+                if (closing.test(char) || opening.test(line)) {
+                    const previous = [...line]; carry = previous.pop() || "";
+                    while (previous.length && closing.test(carry)) carry = previous.pop() + carry;
+                    line = previous.join("");
+                }
+                lines.push(line); line = carry; used = length(carry);
+            }
             line += char; used += wide(char);
         }
         if (line || !lines.length) lines.push(line);
@@ -47,7 +57,7 @@
     }
     function fill(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.round(x * cw), Math.round(y * ch), Math.ceil(w * cw), Math.ceil(h * ch)); }
     function text(value, x, y, color = palette().fg, max = cols - x, bold = false) {
-        ctx.fillStyle = color; ctx.font = `${bold ? 700 : 400} ${fontSize}px ${fontFamily}`;
+        ctx.fillStyle = color; ctx.font = `400 ${fontSize}px ${fontFamily}`;
         let column = x;
         for (const char of value) {
             const cells = wide(char);
@@ -108,7 +118,7 @@
 
     function resize() {
         width = innerWidth; height = window.visualViewport?.height || innerHeight;
-        fontSize = width < 500 ? (width < 350 ? 11 : 12) : width < 900 ? 14 : 16;
+        fontSize = width < 500 ? 12 : width < 900 ? 16 : 18;
         metric.font = `${fontSize}px ${fontFamily}`; cw = metric.measureText("M").width; ch = Math.round(fontSize * 1.45);
         cols = Math.max(32, Math.floor(width / cw)); rows = Math.max(14, Math.floor(height / ch));
         const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -547,6 +557,10 @@
         else { dirty = true; if (!raf) raf = requestAnimationFrame(tick); if (audio && !state.muted) audio.resume().catch(() => {}); }
     });
     document.body.classList.add("canvas-mode"); resize(); screen(location.hash.slice(1) || "home", false); raf = requestAnimationFrame(tick);
+    document.fonts.load('12px "AK Pixel"').then(() => {
+        canvas.dataset.typeface = document.fonts.check('12px "AK Pixel"') ? "Fusion Pixel" : "fallback";
+        resize();
+    }).catch(() => { canvas.dataset.typeface = "fallback"; });
     Promise.all([
         fetch("site/cover-data.json").then(response => { if (!response.ok) throw new Error("Art unavailable"); return response.json(); }).then(value => { art = value; artCache = null; dirty = true; }),
         fetch("site/gallery.json").then(response => { if (!response.ok) throw new Error("Gallery unavailable"); return response.json(); }).then(value => { frames = value; if (state.page === "gallery") loadImage(state.image); dirty = true; })

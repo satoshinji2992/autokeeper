@@ -1,4 +1,5 @@
-:root { color-scheme: dark; --ink: #090705; --paper: #e6cda2; --amber: #c39b5b; font-family: "SFMono-Regular", Consolas, "Liberation Mono", "Noto Sans Mono CJK SC", monospace; }
+@font-face { font-family: "AK Pixel"; src: url("fonts/fusion-pixel-12px-sc.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+:root { color-scheme: dark; --ink: #090705; --paper: #e6cda2; --amber: #c39b5b; font-family: "AK Pixel", "Noto Sans Mono CJK SC", monospace; font-synthesis: none; }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--paper); }
 body { overscroll-behavior: none; }
@@ -8,10 +9,10 @@ button { cursor: pointer; }
 :focus-visible { outline: 1px solid var(--amber); outline-offset: 3px; }
 #terminal { display: none; }
 #reader-toggle { display: none; }
-#reader { max-width: 960px; padding: 32px; margin: auto; font-size: 15px; line-height: 2; }
+#reader { max-width: 960px; padding: 32px; margin: auto; font-size: 18px; line-height: 1.85; }
 #reader h1 { color: #d65536; }
-#reader h2 { border-bottom: 1px solid #775626; color: #ddb367; padding-bottom: 8px; font-size: 23px; }
-#reader h3 { font-size: 17px; color: #ddb367; }
+#reader h2 { border-bottom: 1px solid #775626; color: #ddb367; padding-bottom: 8px; font-size: 24px; }
+#reader h3 { font-size: 18px; color: #ddb367; }
 #reader section { margin-block: 50px; }
 #reader pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 20px; background: #171008; border: 1px solid #715225; font-size: 13px; }
 #reader img { display: block; max-width: 100%; height: auto; }
