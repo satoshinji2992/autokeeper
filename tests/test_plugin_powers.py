@@ -4,6 +4,7 @@ what it shows or asks for is data the app draws (plugins/schema.py, tui/plugin_u
 
 from __future__ import annotations
 
+import io
 import json
 import time
 
@@ -333,7 +334,7 @@ PANELS = {"仪式": [{"key": "ritual", "title": "仪式倒数", "rows": [
 def rendered(renderable) -> str:
     from rich.console import Console
 
-    console = Console(width=36, record=True, color_system=None)
+    console = Console(file=io.StringIO(), width=36, record=True, color_system=None)
     console.print(renderable)
     return console.export_text()
 

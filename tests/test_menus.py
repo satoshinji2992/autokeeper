@@ -4,6 +4,7 @@ model calls, saves in a temp folder."""
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import time
 
@@ -49,7 +50,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
 
 
 def plain(renderable) -> str:
-    console = Console(width=120, record=True)
+    console = Console(file=io.StringIO(), width=120, record=True)
     console.print(renderable)
     return console.export_text()
 

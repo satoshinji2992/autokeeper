@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import shutil
 
@@ -463,7 +464,7 @@ async def test_ctrl_b_shows_where_the_tokens_went(canned):
 
     from autokeeper.tui.modals.usage import usage_view
 
-    console = Console(width=120, record=True)
+    console = Console(file=io.StringIO(), width=120, record=True)
     console.print(usage_view(state))
     shown = console.export_text()
     assert "守秘人" in shown and "12.0k" in shown and "75%" in shown and "每回合" in shown
@@ -552,7 +553,7 @@ def test_a_sheet_s_photo_keeps_its_rows_in_a_narrow_pane(width):
 
     inv = Module.load(EXAMPLE).pregens[0]
     face = Text("\n".join("▓" * 30 for _ in range(14)))
-    console = Console(width=width, record=True, color_system=None)
+    console = Console(file=io.StringIO(), width=width, record=True, color_system=None)
     console.print(sheet_view(inv, face, width))
     rows = [line for line in console.export_text().splitlines() if "▓" in line]
     assert len(rows) == 14 and all("▓" * 30 in line for line in rows)
