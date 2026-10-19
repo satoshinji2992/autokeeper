@@ -118,6 +118,8 @@ class GameState(BaseModel):
     # threads, important NPCs and the event stream. Private at a LAN table (net/hub.py PRIVATE).
     record: WorldRecord = Field(default_factory=WorldRecord)
     pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
+    pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
+    pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
     # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.
@@ -133,7 +135,7 @@ class GameState(BaseModel):
     checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
     developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
-    expanded: dict[str, int] = Field(default_factory=dict)  # place -> turn the director was last asked to 展开 there (Game._may_expand)
+    expanded: dict[str, int] = Field(default_factory=dict)  # place -> latest requested expansion, for diagnostics
     visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # per-save illustrations, reused after loading
     looks: dict[str, dict[str, str]] = Field(default_factory=dict)  # art key -> what it shows since the story changed it (engine/visuals.py)
     shown: list[str] = Field(default_factory=list)  # big scenes whose moment has come, shown or not (engine/showcase.py)
@@ -156,6 +158,9 @@ class GameState(BaseModel):
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
+    view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own
+    view_kind: str = ""  # "" the place's picture for the hour, "focus" a view of what they look at, "moment" an event's
+    hinted: list[str] = Field(default_factory=list)  # foreshadowing the keeper has been given (Module.foreshadow)
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
     epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)

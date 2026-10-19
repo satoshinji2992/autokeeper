@@ -300,6 +300,7 @@ async def _run(text: str, image: Path | None, timeout: float) -> tuple[bytes, st
     """One codex exec: the picture it made (read before its folder goes), the thread, the
     token usage and the seconds it took."""
     from .harness.models import _communicate  # kills the process group on cancel or time-out
+    from .harness.trace import progress
 
     exe = status().exe or "codex"
     with tempfile.TemporaryDirectory(prefix="autokeeper-imagegen-") as tmp:
@@ -322,6 +323,8 @@ async def _run(text: str, image: Path | None, timeout: float) -> tuple[bytes, st
         except TimeoutError:
             raise Failed(f"Codex 生图超过 {timeout:.0f} 秒没有完成") from None
         seconds = time.monotonic() - start
+        progress("imagegen.response", output=out.decode("utf-8", "replace"),
+                 stderr=err.decode("utf-8", "replace"), seconds=seconds, returncode=proc.returncode)
         thread, usage, failure, said = events(out)
         picture = generated(thread, said, folder, began)
         data = picture.read_bytes() if picture is not None else b""
@@ -374,8 +377,12 @@ async def make(
     with its credit and the preprocessed copy the renderer reads. Raises Unavailable,
     OverBudget or Failed; nothing is counted unless a picture comes back."""
     from . import imagery
+    from .harness.trace import progress
 
+    progress("imagegen.started", input=text, system=INSTRUCTIONS, original=str(original) if original else "",
+             target=str(target), kind=kind, module=module)
     if not status().ok:
+        progress("imagegen.failed", error=status().reason)
         raise Unavailable(status().reason)
     target = Path(target)
     if target.suffix.lower() != ".jpg":
@@ -389,6 +396,9 @@ async def make(
         await asyncio.to_thread(_store, data, target, credit)
         made = {"at": dt.datetime.now().isoformat(timespec="seconds"), "kind": kind, "where": where,
                 "file": str(target), "thread": thread}
+    except BaseException as exc:
+        progress("imagegen.failed", error=f"{type(exc).__name__}: {exc}")
+        raise
     finally:
         _settle(module, made)
     if on_reply is not None:
@@ -396,6 +406,7 @@ async def make(
 
         on_reply(Reply(usage=usage, seconds=seconds))
     await asyncio.to_thread(imagery.preprocess, target, kind if kind in imagery.PIPELINES else "scene")
+    progress("imagegen.complete", target=str(target), thread=thread, usage=usage, seconds=seconds)
     return target
 
 

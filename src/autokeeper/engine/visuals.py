@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -23,9 +24,15 @@ from ..module.schema import Module
 from .state import GameState
 
 FALLBACKS = {
-    "portrait": "",  # no stick figure in the meantime: a face shows once there is a real one
-    "scene": "       /\\\n  ____/  \\____\n /            \\\n/______________\\\n|  []  __  []  |\n|     |  |     |\n|_____|__|_____|",
-    "item": "     ______\n    /_____/|\n   |     | |\n   |     | /\n   |_____|/",
+    "portrait": "",  # no generic stand-ins: wait for an illustration of the actual subject
+    "scene": "",
+    "item": "",
+}
+
+COMPOSITION = {
+    "portrait": "人物肖像：以头肩为主体，保持资料中的年龄、外貌和衣着，不画通用火柴人。",
+    "scene": "场景全景：表现空间布局、建筑、陈设与光线，主体是地点，不画人物头像或以人形代替场景。",
+    "item": "物件特写：表现该物件的轮廓、材质与可见细节，不以人物或通用盒子代替。",
 }
 
 
@@ -60,11 +67,13 @@ class Visuals:
             self.module.pictures[key] = record["picture"]
         self._show(key)  # a place or a person the story changed keeps its new picture in front
 
-    def schedule(self) -> None:
+    def schedule(self, keys: set[str] | None = None) -> None:
         targets = [(x.art, x.read_aloud, "scene") for x in self.module.locations]
         targets += [(n.portrait, f"{n.name}，{n.look or '衣着朴素的当地成年人'}", "portrait") for n in self.module.npcs]
         targets += [(i.art, f"{i.name}，{i.description}", "item") for i in self.module.items]
         for key, subject, kind in targets:
+            if keys is not None and key not in keys:
+                continue
             if not key or not re.fullmatch(r"improv_(?:scene|portrait|item)_[0-9a-f]{16}", key):
                 continue
             if key in self.tasks:
@@ -79,7 +88,8 @@ class Visuals:
             # half-resolved game state over the last completed turn.
             try:
                 cached = json.loads((self.folder / f"{key}.json").read_text(encoding="utf-8"))
-                valid = isinstance(cached, dict) and all(isinstance(value, str) for value in cached.values())
+                valid = (isinstance(cached, dict) and cached.get("brief") == subject
+                         and all(isinstance(value, str) for value in cached.values()))
                 photo_only = bool(cached.get("picture")) and not cached.get("art", "").strip() if valid else False
                 if (
                     valid and cached.get("status") in ("ready", "failed") and (cached.get("art", "").strip() or photo_only)
@@ -100,9 +110,38 @@ class Visuals:
                 except RuntimeError:
                     continue
                 self.tasks[key] = asyncio.create_task(self._make(key, subject, kind), name=f"illustrate:{key}")
-        self._looks()
+        if keys is None:
+            self._looks()
+
+    async def prepare(self, keys: set[str]) -> list[str]:
+        """Finish first illustrations before exposing a new scene. Redraws keep their old art.
+        Returns the ones still missing that another attempt could draw: once the game's attempts
+        or picture budget are spent, a scene goes on without its picture instead of waiting."""
+        if self.cfg is None or not keys or self.cfg.visual_limit == 0 or self.cfg.visual_budget_usd == 0:
+            return []
+        paused = not self.idle.is_set()
+        self.idle.set()
+        try:
+            self.schedule(keys)
+            await asyncio.gather(*(task for key, task in self.tasks.items() if key in keys))
+        finally:
+            if paused:
+                self.idle.clear()
+        missing = [key for key in keys if not self.module.art.get(key) and not self.module.pictures.get(key)]
+        spent = sum(v.get("cost_usd", 0) for k, v in self.state.usage.items() if k.startswith("visual:"))
+        attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
+        if attempts >= self.cfg.visual_limit or spent >= self.cfg.visual_budget_usd:
+            return []
+        return missing
 
     async def _make(self, key: str, subject: str, kind: str) -> None:
+        journal = getattr(self, "debug_journal", None)
+        context = journal.task(f"illustrate:{key}", turn=self.state.turn,
+                               details={"subject": subject, "kind": kind}) if journal else nullcontext()
+        with context:
+            await self._make_inner(key, subject, kind)
+
+    async def _make_inner(self, key: str, subject: str, kind: str) -> None:
         assert self.cfg is not None
         record = self.state.visuals[key]
         try:
@@ -110,45 +149,49 @@ class Visuals:
                 await self.idle.wait()
                 spent = sum(v.get("cost_usd", 0) for k, v in self.state.usage.items() if k.startswith("visual:"))
                 attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
-                if ((record["status"] != "ready" and attempts >= self.cfg.visual_limit)
+                if ((record["status"] != "ready" and not record.get("phase") and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
-                    return  # keep the placeholder; foreground narration owns the remaining budget
-                if kind == "portrait" and record["status"] != "ready" and self.cfg.search != "none" and not record.get("picture"):
-                    # a face reads best as a photo: look for one first, draw only if none turns up
+                    return  # foreground narration owns the remaining budget
+                if record["status"] != "ready" and not record.get("phase"):
+                    record["attempts"] = str(int(record.get("attempts", "0")) + 1)
+                record["phase"] = "picture"
+                if not record.get("picture") and self.cfg.search != "none" and int(record.get("photo_attempts", "0")) < 2:
+                    record["photo_status"] = "pending"
                     record["photo_attempts"] = str(int(record.get("photo_attempts", "0")) + 1)
-                    async with asyncio.timeout(90):
-                        await self._photo(key, record, subject, kind)
-                    if not record.get("picture"):
-                        await self._drawn(key, record, subject, kind)
-                    if record.get("picture"):
-                        record.update(status="ready", photo_status="done")
-                        record.pop("error", None)
-                        await self._cache(key)
+                    try:
+                        async with asyncio.timeout(90):
+                            await self._photo(key, record, subject, kind)
+                    except Exception as exc:
+                        record["photo_error"] = type(exc).__name__
+                await self.idle.wait()
+                if not record.get("picture"):
+                    spent = sum(v.get("cost_usd", 0) for k, v in self.state.usage.items() if k.startswith("visual:"))
+                    if spent >= self.cfg.visual_budget_usd:
                         return
-                async with asyncio.timeout(90):
-                    if record["status"] != "ready":
-                        record["status"] = "pending"
-                        record["attempts"] = str(int(record.get("attempts", "0")) + 1)
+                    await self._drawn(key, record, subject, kind)
+                if record.get("picture"):
+                    record.update(status="ready", photo_status="done")
+                    record.pop("phase", None)
+                    record.pop("error", None)
+                    await self._cache(key)
+                    return
+                # Only use hand-drawn ASCII when neither a reference image nor image
+                # generation supplied a picture. Never publish a crude intermediate first.
+                if record["status"] != "ready":
+                    record["phase"] = "ascii"
+                    async with asyncio.timeout(90):
                         text, mask = await artist.draw(
-                            self.cfg, f"统一美术：简洁黑白钢笔插画，固定外貌与衣着，不改人物身份。{self.module.era}，"
+                            self.cfg, f"{COMPOSITION[kind]}使用有层次的彩色字符插图。{self.module.era}，"
                             f"{self.module.setting}。{record.get('brief', subject)}", portrait=kind == "portrait",
                             on_reply=lambda reply: self.state.record_usage("visual:artist", reply),
                         )
                         if not text.strip() or artkit.check(key, text, mask, portrait=kind == "portrait"):
                             raise ValueError("Invalid illustration")
-                        record.update(art=text, mask=mask, status="ready", photo_status="pending")
+                        record.update(art=text, mask=mask, status="ready", photo_status="done")
                         self._attach(key, record)
                         await self._publish(key)
-                    await self.idle.wait()
-                    spent = sum(v.get("cost_usd", 0) for k, v in self.state.usage.items() if k.startswith("visual:"))
-                    if spent >= self.cfg.visual_budget_usd:
-                        return
-                    if self.cfg.search != "none":
-                        record["photo_attempts"] = str(int(record.get("photo_attempts", "0")) + 1)
-                        await self._photo(key, record, subject, kind)
-                if self.cfg.search != "none" and not record.get("picture"):
-                    await self._drawn(key, record, subject, kind)
                 record["photo_status"] = "done"
+                record.pop("phase", None)
                 record.pop("error", None)
                 await self._cache(key)
         except asyncio.CancelledError:
@@ -157,6 +200,7 @@ class Visuals:
             # Keep the illustration already on screen, and make the failure inspectable
             # in the save instead of breaking play or leaking an unobserved task error.
             record.update(status="ready" if record["status"] == "ready" else "failed", error=type(exc).__name__)
+            record.pop("phase", None)
             await self._cache(key)
 
     async def _photo(self, key, record, subject, kind) -> None:
@@ -300,6 +344,12 @@ class Visuals:
             self.tasks[f"look:{key}"] = asyncio.create_task(self._vary(key), name=f"look:{key}")
 
     async def _vary(self, key: str) -> None:
+        journal = getattr(self, "debug_journal", None)
+        context = journal.task(f"redraw:{key}", turn=self.state.turn) if journal else nullcontext()
+        with context:
+            await self._vary_inner(key)
+
+    async def _vary_inner(self, key: str) -> None:
         record = self.state.looks[key]
         try:
             async with self.limit:

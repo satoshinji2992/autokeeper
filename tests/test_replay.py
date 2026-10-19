@@ -7,6 +7,10 @@ Re-record after a deliberate change to the game's flow:
 
     uv run autokeeper --preset deepseek autoplay src/autokeeper/module/example \\
         --party 1 --turns 8 --record tests/cassettes/clocktower.jsonl
+
+The fixture's three redundant keeper replies after dialogue-only turns were removed
+offline when those calls were eliminated; the remaining replies, dice and final state
+are unchanged. This is a migrated recording, not a fresh model playtest.
 """
 
 from __future__ import annotations

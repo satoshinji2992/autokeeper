@@ -584,7 +584,7 @@ async def test_the_right_column_turns_its_pages(writer):
         heads = [w.content.plain for w in screen.query(".history-round")][rounds:]
         assert heads == ["— 第 5 轮 —", "— 第 6 轮 —"]
         await pilot.press("ctrl+g", "ctrl+g")  # 经过
-        for n in range(12):
+        for n in range(40):
             screen._history("player", Text(f"▶ 周衡：第{n}件事"), None)
         await pilot.pause()
         screen.query_one(CluePanel).show([f"线索{n}" for n in range(10)])  # the list below grows, the page shrinks
@@ -642,6 +642,36 @@ async def test_without_room_for_the_column_the_pages_open_over_the_story(writer)
         await pilot.press("escape")
         await pilot.pause()
         assert app.screen is screen
+
+
+@pytest.mark.parametrize("height", [24, 30, 34, 40, 44])
+async def test_dice_and_clues_leave_the_sidebar_pages_readable(writer, height):
+    from autokeeper.tui.widgets.panels import DiceTray, SheetPanel
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="sidebar-fit")
+    st.progress = Progress(text="\n".join(f"第{i}条调查进展" for i in range(30)), turn=3)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, height)) as pilot:
+        screen = GameScreen(m, st, resume=True)
+        app.push_screen(screen)
+        await until_idle(pilot, screen)
+        screen.query_one(DiceTray).display = True
+        screen.query_one(CluePanel).show([f"很长的线索标题第{i}条" for i in range(20)])
+        await pilot.pause()
+        tabs = screen.query_one("#pages", TabbedContent)
+        assert tabs.outer_size.height >= 8
+        assert tabs.region.bottom <= screen.query_one("#right").region.bottom
+        await pilot.click(tabs.get_tab("progress-page"))
+        await pilot.pause()
+        page = screen.query_one("#progress", Page)
+        assert tabs.active == "progress-page" and page.size.height >= 5
+        assert page.max_scroll_y > 0
+        page.scroll_end(animate=False)
+        await pilot.pause()
+        assert page.scroll_y == page.max_scroll_y
+        assert "第29条调查进展" in shown(screen, "#progress")
+        assert screen.query_one(SheetPanel).region.bottom <= tabs.region.y
 
 
 async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(writer, monkeypatch):

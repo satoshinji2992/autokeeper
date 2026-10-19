@@ -15,18 +15,21 @@ Register it with Claude Code via the plugin's .mcp.json, or with Codex:
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
 from . import artkit, config, paths
-from .agents.cast import Action, Cast
-from .engine.game import Game, Turn
+from .agents.cast import Action, Cast, Ruling
+from .engine.game import TURN_RECORD, Game, Turn
 from .engine.state import GameState
 from .module.compiler import ensure_compiled, skill_name
 from .module.schema import Module
 from .rules import commands
 from .rules.coc import DIFFICULTY_ZH, Rules
+from .world.record import DIRECTOR
+from .world.tools import Gateway
 
 server = FastMCP("autokeeper", instructions="CoC 7 版跑团引擎：掷骰、线索、理智、时间与结局都在这里结算，叙事由你负责。")
 
@@ -34,6 +37,8 @@ server = FastMCP("autokeeper", instructions="CoC 7 版跑团引擎：掷骰、�
 class _Session:
     module: Module | None = None
     game: Game | None = None
+    lock: asyncio.Lock | None = None
+    lock_game: Game | None = None
 
 
 S = _Session()
@@ -52,7 +57,58 @@ def _need() -> Game:
 def _save() -> None:
     g = _need()
     paths.games().mkdir(parents=True, exist_ok=True)
-    paths.save(g.state.slot).write_text(g.state.model_dump_json(indent=1), encoding="utf-8")
+    target = paths.save(g.state.slot)
+    temporary = target.with_suffix(".json.tmp")
+    temporary.write_text(g.state.model_dump_json(indent=1), encoding="utf-8")
+    temporary.replace(target)
+
+
+def _keep_turn(turn: Turn) -> None:
+    g = _need()
+    if g.state.pending_mcp:
+        g.state.pending_mcp["turn"] = TURN_RECORD.dump_python(turn, mode="json")
+        _save()
+
+
+async def _resolved(tool: str, arguments: dict, action: Action, ruling: Ruling, *, talk: bool = False) -> Turn:
+    """One MCP operation owns its saved action and ruling until every stage has finished."""
+    g = _need()
+    if S.lock_game is not g:
+        S.lock, S.lock_game = asyncio.Lock(), g
+    async with S.lock:
+        st = g.state
+        request = {"tool": tool, "arguments": arguments}
+        journal = st.pending_mcp
+        if journal and journal["request"] != request:
+            raise ValueError("上一项操作尚未完成，请先用原参数重试原工具。")
+        if not journal:
+            if st.pending_turn:
+                raise ValueError("存档中有尚未完成的游戏回合，请先在原游玩界面继续。")
+            # MCP actions are turns too. This keeps world budgets and event identities
+            # separate without repeating the increment when the client retries.
+            st.turn += 1
+            journal = {"request": request, "active": st.active, "action": action.model_dump(mode="json"),
+                       "ruling": ruling.model_dump(mode="json")}
+            st.pending_mcp = journal
+            _save()
+        st.active = journal["active"]
+        if "turn" in journal:
+            turn = TURN_RECORD.validate_python(journal["turn"])
+        else:
+            # Use the original ruling even when a partially settled clue changed which
+            # gates would be offered by a new invocation of the same tool.
+            turn = await g.resolve(Action.model_validate(journal["action"]), Ruling.model_validate(journal["ruling"]))
+            _keep_turn(turn)
+        if talk:
+            await g.talk(turn)
+            _keep_turn(turn)
+        st.pending_mcp = {}
+        try:
+            _save()
+        except BaseException:
+            st.pending_mcp = journal
+            raise
+        return turn
 
 
 def _art(name: str | None) -> str:
@@ -69,6 +125,8 @@ async def _replace_game(module: Module, state: GameState) -> None:
     cfg = config.load()
     cfg.imagegen = cfg.showcase = False  # these tools hand back ASCII art: a big picture would never be seen
     S.game = Game(module, state, Cast(cfg, module), Rules())
+    S.game.checkpoint = _save
+    S.game.turn_checkpoint = _keep_turn
     S.game.visuals.schedule()
 
 
@@ -161,7 +219,8 @@ def scene() -> dict:
 async def move(location: str) -> dict:
     """带调查员去另一个地点（按路程扣时间，触发到达事件）。返回地点朗读文字和插图。"""
     g = _need()
-    turn = await g.resolve(Action(kind="move", summary=f"前往 {location}", destination=location), _no_roll())
+    turn = await _resolved("move", {"location": location},
+                           Action(kind="move", summary=f"前往 {location}", destination=location), _no_roll())
     loc = g.m.location(g.state.location)
     _save()
     return {**_turn_report(turn), "read_aloud": loc.read_aloud.strip(), "art": _art(loc.art)}
@@ -179,10 +238,11 @@ async def skill_check(skill: str, difficulty: str = "常规", bonus: int = 0, cl
     clues_on_success 填成功后交出的线索 id（只能是当前地点的线索）。"""
     from .agents.cast import Ruling
 
-    g = _need()
     ruling = Ruling(needs_roll=True, skill=skill, difficulty=difficulty if difficulty in DIFFICULTY_ZH else "常规",  # type: ignore[arg-type]
                     bonus=bonus, clues_on_success=clues_on_success or [], minutes=minutes)
-    turn = await g.resolve(Action(kind="investigate", summary=skill), ruling)
+    turn = await _resolved("skill_check", {"skill": skill, "difficulty": difficulty, "bonus": bonus,
+                                         "clues_on_success": clues_on_success or [], "minutes": minutes},
+                           Action(kind="investigate", summary=skill), ruling)
     _save()
     report = _turn_report(turn)
     if turn.push:
@@ -204,8 +264,8 @@ async def reveal_clue(clue_id: str) -> dict:
     """交出一条不需要检定的线索（必须在当前地点或在场 NPC 手里）。"""
     from .agents.cast import Ruling
 
-    g = _need()
-    turn = await g.resolve(Action(kind="investigate", summary=clue_id), Ruling(needs_roll=False, auto_clues=[clue_id], minutes=5))
+    turn = await _resolved("reveal_clue", {"clue_id": clue_id}, Action(kind="investigate", summary=clue_id),
+                           Ruling(needs_roll=False, auto_clues=[clue_id], minutes=5))
     _save()
     return _turn_report(turn)
 
@@ -224,8 +284,8 @@ async def npc_say(npc: str, line: str, approach: str = "", check_skill: str = ""
                     clues_on_success=[c for c in gated if c in n.gates], auto_clues=[c for c in gated if c not in n.gates], minutes=10)
     action = Action(kind="talk", summary=f"对 {n.name} 说话", npc=npc, speech=line, approach=approach)  # type: ignore[arg-type]
 
-    turn = await g.resolve(action, ruling)
-    await g.talk(turn)
+    turn = await _resolved("npc_say", {"npc": npc, "line": line, "approach": approach,
+                                     "check_skill": check_skill, "difficulty": difficulty}, action, ruling, talk=True)
     _save()
     return {**_turn_report(turn), "npc_lines": [{"name": m.npc(i).name, "line": t} for i, t in turn.npc_lines], "portrait": _art(n.portrait)}
 
@@ -317,6 +377,42 @@ async def plugin_action(plugin: str, action: str, arguments: dict | None = None)
     await g._check_ending(turn)
     _save()
     return {**_turn_report(turn), "error": g.state.plugin_errors.get(plugin, "")}
+
+
+@server.tool()
+async def world_query(query: str = "", limit: int = 30) -> dict:
+    """查询本局世界的真实位置、事实、事件、人物目标和计划，返回提交所需读取版本。
+    仅供本机守秘人；隐藏信息不得直接讲给调查员。不会推进时钟或调用模型。"""
+    g = _need()
+    result = Gateway(g.world, DIRECTOR).inspect(query, limit)
+    g._debug("world-tool", {"action": "query", "query": query, "result": result})
+    return result
+
+
+@server.tool()
+async def world_schema() -> dict:
+    """世界操作的字段定义；身份由本机宿主绑定，不能通过参数切换为其他角色。"""
+    return Gateway(_need().world, DIRECTOR).schema()
+
+
+@server.tool()
+async def world_preview(ops: list[dict], reads: dict[str, int] | None = None) -> dict:
+    """在副本中校验整组世界操作，返回预计的位置、事件与计划状态；不改动本局，不掷骰。"""
+    result = Gateway(_need().world, DIRECTOR).preview(ops, reads)
+    _need()._debug("world-tool", {"action": "preview", "result": result})
+    return result
+
+
+@server.tool()
+async def world_commit(request_id: str, ops: list[dict], reads: dict[str, int]) -> dict:
+    """以查询/预演返回的读取版本原子提交操作。稳定 request_id 可安全重试；旧版本或任一无效操作使整组拒绝。
+    不改时钟、不重掷；新增场景、插件和图片应通过游戏引擎准备，不能在此跳过验证。"""
+    g = _need()
+    result = Gateway(g.world, DIRECTOR).commit(ops, reads=reads, request_id=request_id)
+    g._debug("world-tool", {"action": "commit", "request_id": request_id, "result": result})
+    if result["ok"] and not result.get("repeat"):
+        _save()
+    return result
 
 
 @server.tool()

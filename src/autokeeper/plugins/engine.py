@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
 from ..rules.catalog import CHARACTERISTICS, canonical
@@ -35,6 +35,30 @@ class Prepared:
     timers: list[Effect] = field(default_factory=list)
     shows: list[Effect] = field(default_factory=list)
     prompts: list[tuple[str, Effect]] = field(default_factory=list)  # (who, prompt)
+
+    def dump(self) -> dict:
+        return {
+            "party": [person.model_dump(mode="json") for person in self.party],
+            "events": self.events, "flags": self.flags, "clues": self.clues, "notes": self.notes, "hints": self.hints,
+            "world": [[key, fact.model_dump(mode="json")] for key, fact in self.world],
+            "timers": [effect.model_dump(mode="json") for effect in self.timers],
+            "shows": [effect.model_dump(mode="json") for effect in self.shows],
+            "prompts": [[who, effect.model_dump(mode="json")] for who, effect in self.prompts],
+        }
+
+    @classmethod
+    def load(cls, saved: dict) -> Prepared:
+        from ..engine.state import WorldFact
+        from ..rules.coc import Investigator
+
+        return cls(
+            party=[Investigator.model_validate(person) for person in saved["party"]],
+            **{key: saved[key] for key in ("events", "flags", "clues", "notes", "hints")},
+            world=[(key, WorldFact.model_validate(fact)) for key, fact in saved["world"]],
+            timers=[Effect.model_validate(effect) for effect in saved["timers"]],
+            shows=[Effect.model_validate(effect) for effect in saved["shows"]],
+            prompts=[(who, Effect.model_validate(effect)) for who, effect in saved["prompts"]],
+        )
 
 
 class Manager:
@@ -76,7 +100,8 @@ class Manager:
         if hook == "action" and isinstance(args, dict) and "who" in args:  # the arbiter writes names; rules use ids
             details = {**details, "arguments": {**args, "who": self._who(args["who"])}}
         for plugin in list(game.m.extensions.values()):
-            if hook == "start" and plugin.id in game.state.plugin_data:
+            active = game.state.plugin_marks.get(plugin.id, {}).get("_settlement")
+            if hook == "start" and plugin.id in game.state.plugin_data and not active:
                 continue
             if hook in TARGETED and details.get("plugin") != plugin.id:
                 continue
@@ -100,24 +125,61 @@ class Manager:
                         continue
                     await self._invoke(plugin, {"hook": hook, **details}, turn)
             except Exception as exc:
+                active = game.state.plugin_marks.get(plugin.id, {}).get("_settlement")
+                # A disconnected display or an interrupted engine effect is not broken plugin
+                # code. Keep its journal and let the original action resume the late effects.
+                if not isinstance(exc, PluginError) or (active and active.get("committed")):
+                    raise
+                game.state.plugin_marks.get(plugin.id, {}).pop("_settlement", None)
                 game.state.plugin_errors[plugin.id] = str(exc)[:1000]
                 await game.emit({"type": "plugin_status", "plugin": plugin.id, "ok": False})
         await self._unattended()
 
     async def _invoke(self, plugin: Plugin, event: dict, turn: Turn) -> None:
-        state = self.game.state
-        batch = hashlib.sha256(json.dumps([
+        from ..engine.game import TURN_RECORD
+
+        game, state = self.game, self.game.state
+        marks = state.plugin_marks.setdefault(plugin.id, {})
+        active = marks.get("_settlement")
+        if active and active["event"] != event:
+            raise RuntimeError(f"规则插件“{plugin.name}”仍有未完成的结算，请先继续原操作")
+        batch = active["batch"] if active else hashlib.sha256(json.dumps([
             plugin.fingerprint, event, state.turn, state.minutes, state.location,
         ], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         if batch in state.plugin_receipts:
             return
-        for step in range(8):
-            token = f"{batch}/{step}"
-            if token in state.plugin_receipts:
-                continue
-            if not await self._once(plugin, event, turn, token, batch):
-                return
-        raise PluginError("单事件连续结算超过 8 段，插件已暂停")
+        if not active:
+            active = marks["_settlement"] = {"batch": batch, "event": event, "resolution": {"steps": {}}}
+        # Commands and prompts also run outside resolve(). Give their nested flags, clues and
+        # notifications the same durable stage journal, stored in existing host-only marks.
+        outer, scope = game._resolution, game._resolution_scope
+        if outer is None:
+            game._resolution = active["resolution"]
+            game._resolution_scope = []
+            if saved := game._resolution.get("turn"):
+                restored = TURN_RECORD.validate_python(saved)
+                for part in fields(turn):
+                    setattr(turn, part.name, getattr(restored, part.name))
+        try:
+            game._resolution_save(turn)
+            for step in range(8):
+                token = f"{batch}/{step}"
+                if token in state.plugin_receipts:
+                    continue
+                repeat = await game._resolution_step(
+                    f"plugin:{token}", turn, lambda token=token: self._once(plugin, event, turn, token, batch),
+                )
+                state.plugin_receipts = [*state.plugin_receipts, token, *([] if repeat else [batch])][-256:]
+                if not repeat:
+                    marks.pop("_settlement", None)
+                else:
+                    active.pop("committed", None)
+                game._resolution_save(turn)
+                if not repeat:
+                    return
+            raise PluginError("单事件连续结算超过 8 段，插件已暂停")
+        finally:
+            game._resolution, game._resolution_scope = outer, scope
 
     def _context(self, plugin: Plugin) -> dict:
         game, state = self.game, self.game.state
@@ -138,64 +200,110 @@ class Manager:
         from ..engine.game import _check_view
 
         game, state = self.game, self.game.state
-        checks = []
+        step = game._resolution_step
+        checks, serial = [], 0
+        context = await step("context", turn, lambda: self._context(plugin))
 
         async def request(message):
-            if message["request"] == "roll":
-                count, sides = dice_expression(message.get("expression"))
-                return [game.rules.dice.total(f"1D{sides}") for _ in range(count)]
-            identity = self._who(message.get("who"))
-            if identity not in {inv.id for inv in state.investigators} or message.get("difficulty", "常规") not in DIFFICULTY_ZH:
-                raise PluginError("检定的人物或难度不存在")
-            inv = state.find(identity)
-            check = game.rules.check(inv, str(message.get("skill", "")), DIFFICULTY_ZH[message.get("difficulty", "常规")], mark=False)
-            checks.append({"type": "dice", "who": inv.name, **_check_view(check), "text": check.describe()})
-            return {"passed": check.passed, "target": check.target, "value": check.value, "text": check.describe()}
+            nonlocal serial
+            number = serial
+            serial += 1
 
-        result = await execute(plugin, event, self._context(plugin), request)
-        ready = self._prepare(plugin, result)
-        # All references, capabilities, sheet changes and rule effects are checked before committing.
-        state.investigators = ready.party
-        state.plugin_data[plugin.id] = result.state
-        state.plugin_versions[plugin.id] = plugin.version
-        state.plugin_receipts = [*state.plugin_receipts, token, *([] if result.repeat else [batch])][-256:]
-        if result.status:  # the plugin's opt-in public one-liner, keyed by name so a LAN table shares it
-            state.plugin_status[plugin.name] = result.status
-        for key, fact in ready.world:
-            state.world[key] = fact
-        self._time(plugin, ready.timers)
-        notes = ready.notes
-        turn.notes += notes
-        turn.notes += [f"{ev['who']}：{ev['text']}" for ev in checks]
-        turn.hints += [f"〔{plugin.name}〕{hint}" for hint in ready.hints]
-        # A compact, recognisable line in the story when the rule does something public, and a
-        # short public record for the Ctrl+K window (no counters, no id, safe at a shared table).
-        if line := "；".join(notes)[:200]:
-            state.plugin_log = [*state.plugin_log, {"turn": state.turn, "name": plugin.name, "line": line}][-PLUGIN_LOG_KEEP:]
-            await game.emit({"type": "plugin_effect", "plugin": plugin.id, "name": plugin.name, "line": line})
-        if result.panels is not None:  # public, keyed by name like the status
-            if result.panels:
-                state.plugin_panels[plugin.name] = [p.model_dump(mode="json") for p in result.panels]
-            else:
-                state.plugin_panels.pop(plugin.name, None)
-            await game.emit({"type": "plugin_panel", "plugin": plugin.id, "name": plugin.name})
-        marks = state.plugin_marks.setdefault(plugin.id, {})
-        for show in ready.shows[:1]:  # one show a turn per plugin; more are dropped
-            if marks.get("shown") == state.turn:
-                break
-            marks["shown"] = state.turn
-            await game.emit({"type": "plugin_show", "plugin": plugin.id, "name": plugin.name, "title": show.title,
-                             "shape": show.shape, "frames": [f.model_dump(mode="json") for f in show.frames]})
-        for who, prompt in ready.prompts:
-            await self._ask(plugin, who, prompt, event, turn)
-        for ev in checks + ready.events:
-            if ev["type"] in ("dice", "sanity", "damage"):
-                state.add(ev["type"], ev.get("text", "") or f"{ev.get('skill', '检定')}：{ev.get('value', '')}", who=ev.get("who", ""))
-            await game.emit(ev)
-        await game._flags(ready.flags, turn)
-        await game._gain(ready.clues, turn, None)
-        if game.checkpoint:
-            game.checkpoint()
+            def roll():
+                if message["request"] == "roll":
+                    count, sides = dice_expression(message.get("expression"))
+                    answer = [game.rules.dice.total(f"1D{sides}") for _ in range(count)]
+                    return {"request": message, "answer": answer}
+                identity = self._who(message.get("who"))
+                if (identity not in {inv.id for inv in state.investigators}
+                        or message.get("difficulty", "常规") not in DIFFICULTY_ZH):
+                    raise PluginError("检定的人物或难度不存在")
+                inv = state.find(identity)
+                check = game.rules.check(inv, str(message.get("skill", "")),
+                                         DIFFICULTY_ZH[message.get("difficulty", "常规")], mark=False)
+                return {"request": message,
+                        "answer": {"passed": check.passed, "target": check.target,
+                                   "value": check.value, "text": check.describe()},
+                        "check": {"type": "dice", "who": inv.name, **_check_view(check), "text": check.describe()}}
+
+            saved = await step(f"request:{number}", turn, roll)
+            if saved["request"] != message:
+                raise PluginError("恢复时插件的掷骰请求发生变化，已停止结算")
+            if saved.get("check"):
+                checks.append(saved["check"])
+            return saved["answer"]
+
+        async def execute_once():
+            result = await execute(plugin, event, context, request)
+            return {"output": result.model_dump(mode="json"), "checks": checks}
+
+        executed = await step("execute", turn, execute_once)
+        result = Output.model_validate(executed["output"])
+        checks = executed["checks"]
+
+        def prepare():
+            ready = self._prepare(plugin, result)
+            return {"ready": ready.dump(), "timers": self._timers(plugin, ready.timers)}
+
+        prepared = await step("prepare", turn, prepare)
+        ready = Prepared.load(prepared["ready"])
+        line = "；".join(ready.notes)[:200]
+
+        def commit():
+            # This phase and its receipt are checkpointed together before any notification.
+            # All rule rolls and validation already happened in the persisted prepare phase.
+            state.investigators = ready.party
+            state.plugin_data[plugin.id] = result.state
+            state.plugin_versions[plugin.id] = plugin.version
+            state.plugin_marks[plugin.id]["_settlement"]["committed"] = True
+            if result.status:
+                state.plugin_status[plugin.name] = result.status
+            for key, fact in ready.world:
+                state.world[key] = fact
+            state.plugin_timers = prepared["timers"]
+            turn.notes += ready.notes
+            turn.notes += [f"{ev['who']}：{ev['text']}" for ev in checks]
+            turn.hints += [f"〔{plugin.name}〕{hint}" for hint in ready.hints]
+            if line:
+                state.plugin_log = [*state.plugin_log,
+                                    {"turn": state.turn, "name": plugin.name, "line": line}][-PLUGIN_LOG_KEEP:]
+            if result.panels is not None:
+                if result.panels:
+                    state.plugin_panels[plugin.name] = [panel.model_dump(mode="json") for panel in result.panels]
+                else:
+                    state.plugin_panels.pop(plugin.name, None)
+
+        await step("commit", turn, commit)
+        if line:
+            await step("effect", turn, lambda: game.emit(
+                {"type": "plugin_effect", "plugin": plugin.id, "name": plugin.name, "line": line}))
+        if result.panels is not None:
+            await step("panel", turn, lambda: game.emit(
+                {"type": "plugin_panel", "plugin": plugin.id, "name": plugin.name}))
+        for show in ready.shows[:1]:
+            def mark_show():
+                marks = state.plugin_marks[plugin.id]
+                if marks.get("shown") == state.turn:
+                    return False
+                marks["shown"] = state.turn
+                return True
+
+            if await step("show:mark", turn, mark_show):
+                await step("show:emit", turn, lambda show=show: game.emit(
+                    {"type": "plugin_show", "plugin": plugin.id, "name": plugin.name, "title": show.title,
+                     "shape": show.shape, "frames": [frame.model_dump(mode="json") for frame in show.frames]}))
+        for i, (who, prompt) in enumerate(ready.prompts):
+            await step(f"prompt:{i}", turn, lambda who=who, prompt=prompt: self._ask(plugin, who, prompt, event, turn))
+        for i, ev in enumerate(checks + ready.events):
+            def log_event(ev=ev):
+                if ev["type"] in ("dice", "sanity", "damage"):
+                    state.add(ev["type"], ev.get("text", "") or f"{ev.get('skill', '检定')}：{ev.get('value', '')}",
+                              who=ev.get("who", ""))
+
+            await step(f"event:{i}:log", turn, log_event)
+            await step(f"event:{i}:emit", turn, lambda ev=ev: game.emit(ev))
+        await step("flags", turn, lambda: game._flags(ready.flags, turn))
+        await step("clues", turn, lambda: game._gain(ready.clues, turn, None))
         return result.repeat
 
     def _prepare(self, plugin: Plugin, output: Output) -> Prepared:
@@ -290,12 +398,13 @@ class Manager:
         return out
 
     # -- timers ---------------------------------------------------------------------------
-    def _time(self, plugin: Plugin, timers: list[Effect]) -> None:
+    def _timers(self, plugin: Plugin, timers: list[Effect]) -> list[dict]:
         from ..engine.state import parse_time
 
         st = self.game.state
+        pending = list(st.plugin_timers)
         for effect in timers:
-            st.plugin_timers = [t for t in st.plugin_timers if (t["plugin"], t["key"]) != (plugin.id, effect.key)]
+            pending = [t for t in pending if (t["plugin"], t["key"]) != (plugin.id, effect.key)]
             due: dict[str, Any] = {"plugin": plugin.id, "key": effect.key}
             if effect.kind == "schedule":
                 due["minutes"] = parse_time(effect.at)
@@ -305,9 +414,10 @@ class Manager:
                 due["turn"] = st.turn + effect.rounds
             else:  # neither: the timer is called off
                 continue
-            if sum(t["plugin"] == plugin.id for t in st.plugin_timers) >= TIMERS:
+            if sum(t["plugin"] == plugin.id for t in pending) >= TIMERS:
                 raise PluginError(f"一个插件最多同时有 {TIMERS} 个计时")
-            st.plugin_timers.append(due)
+            pending.append(due)
+        return pending
 
     async def due(self, turn: Turn) -> None:
         """Timers whose game minute or round has come fire a "timer" event, once."""
@@ -316,9 +426,14 @@ class Manager:
                  if ("minutes" in t and t["minutes"] <= st.minutes) or ("turn" in t and t["turn"] <= st.turn)]
         if not ready:
             return
-        st.plugin_timers = [t for t in st.plugin_timers if t not in ready]
         for t in ready:
             await self.run("timer", turn, plugin=t["plugin"], key=t["key"])
+            # The plugin may replace its own key with a new timer. Remove only the original
+            # due entry, after the entire invocation (including flags and clues) completed.
+            if t in st.plugin_timers:
+                st.plugin_timers.remove(t)
+            if self.game.checkpoint:
+                self.game.checkpoint()
 
     async def settled(self, turn: Turn) -> None:
         """After a check and when clues turn up: the roll and clue hooks."""
@@ -333,47 +448,67 @@ class Manager:
 
     # -- prompts --------------------------------------------------------------------------
     async def _ask(self, plugin: Plugin, who: str, prompt: Effect, event: dict, turn: Turn) -> None:
-        """Open a prompt for one investigator. Answers to a plugin's own game may chain up to
-        STEPS; anything else counts against PROMPTS_PER_TURN. One prompt is open per player: the
-        same plugin's newer one replaces its older one, another plugin's waits its turn."""
+        """Commit the question before notifying its player, preserving its id on retry."""
         st = self.game.state
-        marks = st.plugin_marks.setdefault(plugin.id, {})
-        if event.get("hook") == "answer":
-            chain = int(event.get("step", 0)) + 1
-            if chain > STEPS:
-                await self.game.emit({"type": "plugin_effect", "plugin": plugin.id, "name": plugin.name, "line": "这个小游戏到此为止"})
-                return
-        else:
-            chain = 1
-            asked = marks.get("asked", [st.turn, 0])
-            asked = asked if asked[0] == st.turn else [st.turn, 0]
-            if asked[1] >= PROMPTS_PER_TURN:
-                return
-            marks["asked"] = [st.turn, asked[1] + 1]
-        st.plugin_serial += 1
-        place = len(st.plugin_prompts)  # a newer question takes its older one's place in the line
-        for old in [p for p in st.plugin_prompts if p["who"] == who and p["plugin"] == plugin.id]:
-            place = min(place, st.plugin_prompts.index(old))
-            st.plugin_prompts.remove(old)
-            await self.game.emit({"type": "plugin_closed", "id": old["id"], "who": who})
-        if sum(p["who"] == who for p in st.plugin_prompts) > QUEUED:
-            return
-        st.plugin_prompts.insert(place, {"id": f"p{st.plugin_serial}", "plugin": plugin.id, "name": plugin.name, "who": who,
-                                         "key": prompt.key, "spec": prompt.model_dump(mode="json"), "chain": chain,
-                                         "open": False, "deadline": 0.0})
-        if chain == 1 and not turn.interlude:
-            turn.notes.append(f"〔{plugin.name}〕给{st.find(who).name}出了一道题，玩家会自己作答；叙述不要替他回答，也别说出答案")
-        await self._promote(who)
+        step = self.game._resolution_step
 
-    async def _promote(self, who: str) -> None:
+        def commit():
+            marks = st.plugin_marks.setdefault(plugin.id, {})
+            if event.get("hook") == "answer":
+                chain = int(event.get("step", 0)) + 1
+                if chain > STEPS:
+                    return {"limit": True}
+            else:
+                chain = 1
+                asked = marks.get("asked", [st.turn, 0])
+                asked = asked if asked[0] == st.turn else [st.turn, 0]
+                if asked[1] >= PROMPTS_PER_TURN:
+                    return {}
+                marks["asked"] = [st.turn, asked[1] + 1]
+            st.plugin_serial += 1
+            place = len(st.plugin_prompts)
+            old = [p for p in st.plugin_prompts if p["who"] == who and p["plugin"] == plugin.id]
+            for previous in old:
+                place = min(place, st.plugin_prompts.index(previous))
+                st.plugin_prompts.remove(previous)
+            if sum(p["who"] == who for p in st.plugin_prompts) > QUEUED:
+                return {"closed": [p["id"] for p in old]}
+            st.plugin_prompts.insert(place, {"id": f"p{st.plugin_serial}", "plugin": plugin.id,
+                                             "name": plugin.name, "who": who, "key": prompt.key,
+                                             "spec": prompt.model_dump(mode="json"), "chain": chain,
+                                             "open": False, "deadline": 0.0})
+            if chain == 1 and not turn.interlude:
+                turn.notes.append(f"〔{plugin.name}〕给{st.find(who).name}出了一道题，玩家会自己作答；叙述不要替他回答，也别说出答案")
+            return {"closed": [p["id"] for p in old], "created": True}
+
+        result = await step("commit", turn, commit)
+        if result.get("limit"):
+            await step("limit", turn, lambda: self.game.emit(
+                {"type": "plugin_effect", "plugin": plugin.id, "name": plugin.name, "line": "这个小游戏到此为止"}))
+        for i, pid in enumerate(result.get("closed", [])):
+            await step(f"close:{i}", turn, lambda pid=pid: self.game.emit({"type": "plugin_closed", "id": pid, "who": who}))
+        if result.get("created"):
+            await self._promote(who, turn)
+
+    async def _promote(self, who: str, turn: Turn | None = None) -> None:
         st = self.game.state
+        turn = turn or self.game._late
         mine = [p for p in st.plugin_prompts if p["who"] == who]
-        if not mine or any(p["open"] for p in mine):
-            return
-        prompt = mine[0]
-        spec = Effect.model_validate(prompt["spec"])
-        prompt["open"], prompt["deadline"] = True, time.time() + spec.timeout
-        await self.game.emit(public_prompt(prompt))
+        identity = mine[0]["id"] if mine else "empty"
+
+        def commit():
+            mine = [p for p in st.plugin_prompts if p["who"] == who]
+            if not mine or any(p["open"] for p in mine):
+                return None
+            prompt = mine[0]
+            spec = Effect.model_validate(prompt["spec"])
+            prompt["open"], prompt["deadline"] = True, time.time() + spec.timeout
+            return prompt
+
+        opened = await self.game._resolution_step(f"promote:{who}:{identity}:commit", turn, commit)
+        if opened:
+            await self.game._resolution_step(f"promote:{who}:{identity}:emit", turn,
+                                             lambda: self.game.emit(public_prompt(opened)))
 
     def open_prompts(self) -> list[dict]:
         return [p for p in self.game.state.plugin_prompts if p["open"]]

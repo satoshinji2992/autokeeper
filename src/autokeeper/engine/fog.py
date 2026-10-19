@@ -337,6 +337,11 @@ def things(m: Module, st: GameState) -> dict[str, str]:
     """The things the investigators know are lying at a place: item id -> place. They saw it
     there (named in what they saw on arriving, or in a clue found there) or left it there. What
     an investigator holds is on their sheet; what someone was handed goes with them."""
+    from ..world import knowledge
+    from ..world.record import PLAYERS
+    from ..world.store import World
+
+    view = World(m, st, initialize=False)
     places = {loc.id for loc in m.locations}
     seen: dict[str, list[str]] = {}
     for v in dict.fromkeys([*st.visited, st.location]):
@@ -347,6 +352,11 @@ def things(m: Module, st: GameState) -> dict[str, str]:
             seen.setdefault(c.where, []).append(plain(f"{c.title}{c.text}"))
     out: dict[str, str] = {}
     for item in m.items:
+        recorded = st.record.entities.get(item.id)
+        if recorded and not knowledge.item_known(view, recorded, PLAYERS):
+            continue
+        if not recorded and (item.hidden or item.equipment == "concealed"):
+            continue
         holder = world.owner(m, st, item.id)
         place = holder if holder in places else item.where if item.owner and holder == item.owner and item.id not in st.item_owners else ""
         if place and (st.item_owners.get(item.id) == place or any(h in text for text in seen.get(place, []) for h in _heads(item.name))):

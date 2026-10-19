@@ -14,7 +14,7 @@ from autokeeper import paths
 from autokeeper.agents import guard
 from autokeeper.agents.cast import Action, Ruling, Sketch
 from autokeeper.engine import graph as turn_graph
-from autokeeper.engine.game import LATER, PLAY_WAIT, Game, Turn
+from autokeeper.engine.game import PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
 from autokeeper.module.schema import Event, Module
 from autokeeper.paths import EXAMPLE
@@ -234,7 +234,7 @@ async def test_timed_event_moves_party_and_npc_performs(module, fake):
     assert {"e_dusk", "e_sermon"} <= {e.id for e in turn.events}
     assert game.state.location == "square"
     await game.talk(turn)
-    assert turn.performance and "旧报" in cast.performances[0]
+    assert turn.performance and "旧报" not in cast.performances[0]  # the performer did not witness that private trip
     assert game.state.npc(turn.performance[0]).met  # the map lists who you have met
     assert any(e["type"] == "performance" for e in events)
 
@@ -415,9 +415,30 @@ async def test_daily_life_is_not_stuck_and_npcs_can_chat_without_giving_clues(mo
     await game.narrate(turn)
     assert game.state.progress_at == 10 and cast.asked == []
     assert len(cast.npc_calls) == 1 and cast.npc_calls[0][0] == "warden"
-    assert "今天忙不忙？" in cast.npc_calls[0][1] and "没有新解锁的线索" in cast.npc_calls[0][1]
+    assert "今天忙不忙？" in cast.npc_calls[0][1] and "尚无可公开的门槛线索" in cast.npc_calls[0][1]
     assert not game.state.clues and not turn.checks and not any(e["type"] == "dice" for e in events)
     assert not cast.reports and "【日常】" in game._report(turn)  # the NPC's reply stands without a second retelling
+
+
+@pytest.mark.parametrize("kind", ["talk", "daily"])
+async def test_a_conversation_does_not_get_a_second_narration(module, fake, kind):
+    action = Action(kind=kind, summary="询问守钟人", npc="warden", speech="钟楼几点关门？")
+    game, cast, events = make(module, fake, {}, location="tower")
+    turn = await game.resolve(action, Ruling(needs_roll=False, minutes=0))
+    await game.talk(turn)
+    assert await game.narrate(turn) == ""
+    assert len(cast.npc_calls) == 1 and not cast.reports
+    assert [ev["type"] for ev in events].count("npc") == 1
+    assert not any(ev["type"] == "keeper_start" for ev in events)
+
+
+async def test_a_conversation_keeps_new_world_events_without_repeating_the_reply(module, fake):
+    game, cast, _ = make(module, fake, {}, location="tower")
+    turn = Turn(npc_lines=[("warden", "钟楼晚上八点关门。")], world=["守钟人放下工具，开始检查门锁"])
+    await game.narrate(turn)
+    assert "开始检查门锁" in cast.reports[-1]
+    assert "钟楼晚上八点关门" not in cast.reports[-1]
+    assert "不要引用、概述或解释刚才的对话" in cast.reports[-1]
 
 
 async def test_daily_life_still_takes_time_and_triggers_scheduled_events(module, fake):
@@ -430,14 +451,41 @@ async def test_daily_life_still_takes_time_and_triggers_scheduled_events(module,
     assert any(e["type"] == "event" for e in events)
 
 
-async def test_a_plan_that_does_not_fit_gets_one_chance_then_is_dropped(module, fake):
+async def test_a_plan_that_does_not_fit_is_written_again_then_the_action_settles_without_it(module, fake):
     broken = NEWSSTAND.model_copy(update={"clues": [NewClue(id="c_rumor", title="传闻", text="……", where="nowhere")]})
     ask = Action(kind="investigate", summary="周衡向路人打听传闻")
     ruling = Ruling(needs_roll=False, scope="可即兴")
     game, cast, _ = improvised(module, fake, {"x": (ask, ruling)}, [broken, broken])
-    assert await game.rule(ask) == ruling  # nothing usable came of it: the turn goes on as ruled
+    assert await game.rule(ask) is not None  # no usable scene: the action still settles, no /retry
     assert cast.asked[1][2] and "nowhere" in cast.asked[1][2][0]  # the second call saw what was wrong
+    assert len(cast.asked) == 3  # then a fresh plan was asked for (this director had nothing more)
     assert not game.state.improv and not any(loc.id == "newsstand" for loc in module.locations)
+
+
+class FailingDirector(Improvising):
+    """A director whose every call fails outright."""
+
+    async def director(self, state, kind, **kw):
+        self.asked.append((kind, kw.get("at", ""), kw.get("problems")))
+        raise ConnectionError("service down")
+
+
+async def test_a_scene_that_cannot_be_prepared_in_time_lets_the_action_settle_once(module, fake, monkeypatch):
+    import autokeeper.engine.game as engine
+
+    monkeypatch.setattr(engine, "PREPARE_LIMIT", 0.3)
+    monkeypatch.setattr(engine, "PREPARE_PAUSE", 0.05)
+    ask = Action(kind="investigate", summary="周衡向路人打听传闻")
+    script = {"x": (ask, Ruling(needs_roll=False, minutes=10, scope="可即兴"))}
+    game, _, _ = make(module, fake, script)
+    game.cast = cast = FailingDirector(script, [])
+    game.state.pending_turn = {"input": "x"}
+    before = game.state.minutes
+    ruling = await game.rule(ask)
+    assert ruling is not None and 1 < len(cast.asked) < 10  # tried again, with pauses, then gave up
+    assert game.state.pending_turn["scene_package"]["given_up"] and game.state.minutes == before
+    asked = len(cast.asked)
+    assert await game.rule(ask) is not None and len(cast.asked) == asked  # a resumed turn does not wait again
 
 
 class SlowDirector(Improvising):
@@ -448,20 +496,21 @@ class SlowDirector(Improvising):
         return await super().director(state, kind, **kw)
 
 
-async def test_a_slow_director_does_not_hold_up_the_turn(module, fake):
+async def test_a_current_action_waits_for_its_scene_without_advancing_time(module, fake):
     ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
     look = Action(kind="investigate", summary="周衡四下看看")
     script = {"x": (ask, Ruling(needs_roll=False, minutes=10, scope="可即兴")), "y": (look, Ruling(needs_roll=False))}
-    game, *_ = make(module, fake, script)
+    game, _, events = make(module, fake, script)
     game.cast, game.director_wait = SlowDirector(script, [NEWSSTAND]), 0.01
-    steered = await game.rule(ask)
-    assert steered.note == LATER and not steered.auto_clues  # the keeper tells what happens now
-    await game.resolve(ask, steered)
-    assert not game.state.improv and len(game.backstage) == 1
-    await asyncio.sleep(0.3)
-    await game.rule(look)  # the plan lands before the next action is ruled
+    before = game.state.minutes
+    pending = asyncio.create_task(game.rule(ask))
+    await asyncio.sleep(0.02)
+    assert not pending.done() and game.state.minutes == before and not game.state.improv
+    steered = await pending
+    assert steered.auto_clues == ["c_rumor"] and not game.backstage
+    assert any(e.get("text") == "KP 正在构思…" for e in events)
     assert [p["kind"] for p in game.state.improv] == ["展开"] and module.npc("paperboy").location == "newsstand"
-    turn = await game.resolve(look, Ruling(needs_roll=False))
+    turn = await game.resolve(ask, steered)
     assert turn.clues == ["c_rumor"] and any("报童凑上来" in n for n in turn.notes)  # and that turn's narration tells it
 
 
@@ -471,7 +520,7 @@ async def test_a_finished_plan_plays_out_between_turns(module, fake):
     game, *_ = make(module, fake, script)
     cast = SlowDirector(script, [NEWSSTAND])
     game.cast, game.director_wait = cast, PLAY_WAIT
-    await game.narrate(await game.resolve(ask, await game.rule(ask)))
+    await game._improvise("推进", at=game.state.location, patience=0.0)
     assert await game.interlude() is None  # still being written
     await asyncio.sleep(0.3)
     turn = await game.interlude()  # nobody has to act for it to happen
@@ -479,25 +528,24 @@ async def test_a_finished_plan_plays_out_between_turns(module, fake):
     assert "插曲" in cast.reports[-1] and "报童凑上来" in cast.reports[-1]
 
 
-async def test_the_opening_does_not_wait_for_the_director_at_a_screen(module, fake):
+async def test_the_opening_waits_for_its_adaptation_before_introducing_the_story(module, fake):
     friend = Improv(kind="开局改编", reason="把老上司写进来", npcs=[NewNPC(id="old_editor", name="老编辑钱伯", role="老上司", location="office")])
     look = Action(kind="investigate", summary="周衡四下看看")
     game, _, _ = make(module, fake, {"y": (look, Ruling(needs_roll=False))})
     game.cast, game.director_wait = SlowDirector({"y": (look, Ruling(needs_roll=False))}, [friend]), PLAY_WAIT
-    await game.start()  # the opening is told right away
-    assert not game.state.improv and game.backstage
-    await asyncio.sleep(0.3)
-    await game.rule(look)
+    await game.start()
+    assert game.state.improv and not game.backstage
     assert module.npc("old_editor").location == "office" and game.state.improv[0]["kind"] == "开局改编"
 
 
-async def test_the_first_beat_shows_before_the_ruling(module, fake):
+async def test_unresolved_flavour_never_becomes_a_player_action(module, fake):
     look = Action(kind="investigate", summary="周衡翻看告示栏", echo="周衡凑近告示栏")
     game, cast, events = make(module, fake, {"x": (look, Ruling(needs_roll=False))})
     action = await game.parse("x")
-    assert events[-1] == {"type": "echo", "text": "周衡凑近告示栏"}
+    assert not action.echo and not any(e["type"] == "echo" for e in events)
     await game.narrate(await game.resolve(action, await game.rule(action)))
-    assert "「周衡凑近告示栏」" in cast.reports[-1]  # the keeper carries on from it
+    assert "周衡凑近告示栏" not in cast.reports[-1]
+    assert "周衡翻看告示栏" in cast.reports[-1]
 
 
 async def test_improvised_branches_survive_a_reload(module, fake):
@@ -521,6 +569,8 @@ async def test_a_stuck_party_gets_a_lead(module, fake):
     game, cast, _ = improvised(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))}, [lead])
     game.state.turn = 12  # nothing found since the start
     turn = await game.resolve(wait, await game.rule(wait))
+    await game._curtain(wait)
+    turn.notes += game._late.notes
     assert cast.asked[0][0] == "推进" and "e_letter" in game.state.fired
     assert game.state.progress_at == 12 and any("没署名的信" in n for n in turn.notes)
 
@@ -536,16 +586,16 @@ async def _asked_on(game, cast, plays):
     return on
 
 
-async def test_one_place_opens_a_new_line_at_most_once_in_three_rounds(module, fake):
+async def test_explicit_unwritten_actions_are_not_blocked_by_expansion_cooldown(module, fake):
     ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
     phone = Action(kind="other", summary="周衡掏出手机给警察打电话")
     script = {"x": (ask, Ruling(needs_roll=False, scope="可即兴")), "p": (phone, Ruling(needs_roll=False, scope="出格"))}
     game, cast, _ = improvised(module, fake, script, [])  # the director has nothing to add: asking still counts
-    assert await _asked_on(game, cast, [(t, ask) for t in range(1, 8)]) == [1, 4, 7]
+    assert await _asked_on(game, cast, [(t, ask) for t in range(1, 8)]) == list(range(1, 8))
     assert game.state.expanded == {"square": 7}
     assert await _asked_on(game, cast, [(8, phone)]) == [8]  # a consequence is not a new line
     game.state.investigators.append(game.state.investigator.model_copy(update={"id": "li", "name": "李雁"}, deep=True))
-    assert await _asked_on(game, cast, [(t, ask) for t in range(9, 15)]) == [13]  # two of them: three rounds are six turns
+    assert await _asked_on(game, cast, [(t, ask) for t in range(9, 15)]) == list(range(9, 15))
 
 
 async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
@@ -555,8 +605,8 @@ async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
     script = {"x": (ask, Ruling(needs_roll=False, scope="可即兴")), "a": (away, Ruling(needs_roll=False, scope="可即兴")),
               "t": (there, Ruling(needs_roll=False, scope="可即兴"))}  # fmt: skip
     game, cast, _ = improvised(module, fake, script, [])
-    assert await _asked_on(game, cast, [(1, ask), (2, away), (3, there), (4, ask)]) == [1, 2, 3]
-    assert game.state.expanded == {"square": 2, "tower": 3}
+    assert await _asked_on(game, cast, [(1, ask), (2, away), (3, there), (4, ask)]) == [1, 2, 3, 4]
+    assert game.state.expanded == {"square": 4, "tower": 3}
     game.state.turn = game.state.progress_at + 12  # and nothing found for a long while
     await game._nudge(Turn())
     assert cast.asked[-1][0] == "推进"
@@ -570,7 +620,7 @@ async def test_a_failed_roll_neither_sits_on_a_core_clue_nor_hands_it_out(module
     turn = await game.resolve(look, ruling)
     assert turn.push and "c_gears" not in game.state.clues
     first = await game.push("drop")
-    assert "c_gears" not in game.state.clues and any("差一点" in n for n in first.notes)  # still there, and they felt it
+    assert "c_gears" not in game.state.clues and any("尚未取得线索" in n for n in first.notes)
     fake.queue(99)  # looking again, and failing again
     await game.resolve(look, ruling)
     before = game.state.minutes
@@ -609,7 +659,7 @@ SCARE = Action(kind="talk", summary="周衡逼近一步，威吓守钟人说出�
 
 async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fake):
     """`.ra 恐吓` is the investigator's attempt, read in context and ruled like any action:
-    rolled once, and the NPC and the keeper both answer the outcome."""
+    rolled once, and the NPC answers the outcome without a second telling."""
     game, cast, _ = make(module, fake, {".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5))}, location="tower")
     fake.queue(52)  # 恐吓 15: a failure
     app = turn_graph.build(game, InMemorySaver())
@@ -618,8 +668,8 @@ async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fa
     assert [e["text"] for e in events if e["type"] == "dice"] == ["恐吓 15 → 52 失败 ✗"]
     assert not [e for e in events if e["type"] == "command"]
     npc, said = cast.npc_calls[0]
-    assert npc == "warden" and "方式：恐吓" in said and "检定：恐吓 失败，你没有被打动" in said
-    assert "检定：恐吓 15 → 52 失败 ✗" in cast.reports[-1] and "老守钟人" in cast.reports[-1]
+    assert npc == "warden" and "方式：恐吓" in said and "检定：恐吓 失败，本次交涉未达成" in said
+    assert not cast.reports and any(e["type"] == "npc" for e in events)
     record = game.state.checks[-1]
     assert (record.skill, record.aim, record.passed, game.state.turn) == ("恐吓", "warden", False, 1)
     cast.script["我盯着他"] = (SCARE.model_copy(update={"summary": "周衡盯着守钟人", "asked": Asked(skill="说服")}), Ruling(needs_roll=False))
@@ -647,8 +697,8 @@ async def test_a_failed_check_is_not_rolled_again(module, fake):
         events, _ = await run_turn(app, ".ra 恐吓", thread)
         assert not [e for e in events if e["type"] == "dice"]
         assert [e["text"] for e in events if e["type"] == "repeat"] == ["恐吓 15 → 52 失败 ✗"]
-        assert "同样的恐吓刚才已经试过，不重掷，结果照旧：你还是没有被打动" in cast.npc_calls[-1][1]
-        assert "不重掷" in cast.reports[-1] and "再试一次也不管用" in cast.reports[-1]
+        assert "同样的恐吓刚才已经试过，不重掷，结果照旧：本次请求仍未达成" in cast.npc_calls[-1][1]
+        assert not cast.reports  # the repeat notice and NPC reply already convey the result
     fake.queue(30)  # another skill is another attempt
     events, _ = await run_turn(app, ".ra 说服", thread)
     assert [e["skill"] for e in events if e["type"] == "dice"] == ["说服"]
@@ -698,7 +748,7 @@ async def test_the_arbiter_can_call_a_repeat_itself(module, fake):
         await run_turn(app, text, thread)
     events, _ = await run_turn(app, "再吓他", thread)
     assert [e["type"] for e in events if e["type"] in ("dice", "repeat")] == ["repeat"]
-    assert "c_diary" not in game.state.clues and "你还是没有被打动" in cast.npc_calls[-1][1]
+    assert "c_diary" not in game.state.clues and "本次请求仍未达成" in cast.npc_calls[-1][1]
 
 
 async def test_a_plain_roll_is_answered_at_once(module, fake):

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
 
@@ -171,6 +172,12 @@ class Showcases:
         self.task = asyncio.create_task(self._prepare(), name="showcases")
 
     async def _prepare(self) -> None:
+        journal = getattr(self, "debug_journal", None)
+        context = journal.task("showcases", turn=self.state.turn) if journal else nullcontext()
+        with context:
+            await self._prepare_inner()
+
+    async def _prepare_inner(self) -> None:
         while True:
             due = [sc for sc in self.order()
                    if sc.id not in self.state.shown and sc.id not in self.tried and not self.picture(sc)]

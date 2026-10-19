@@ -63,8 +63,9 @@ BOARD = Ruling(needs_roll=False, auto_clues=["c_notice"], minutes=5)
 
 # -- telling again ------------------------------------------------------------------------
 async def test_retelling_keeps_the_dice_the_clues_and_the_state(module, fake):
-    game, _, events = make(module, fake, {"劝他": (PLEAD, HARD)}, location="tower")
-    cast = game.cast = teller(FakeCast({"劝他": (PLEAD, HARD)}))
+    ruling = HARD.model_copy(update={"note": "守钟人交出日记后，楼上传来敲门声"})
+    game, _, events = make(module, fake, {"劝他": (PLEAD, ruling)}, location="tower")
+    cast = game.cast = teller(FakeCast({"劝他": (PLEAD, ruling)}))
     fake.queue(8)  # 说服 40, hard: an extreme success
     emit = game.emit
     await run_turn(turn_graph.build(game, InMemorySaver()), "劝他", {"configurable": {"thread_id": "r1"}})
@@ -124,7 +125,7 @@ async def test_an_interlude_can_be_told_again(module, fake):
     game, *_ = make(module, fake, script)
     cast = teller(SlowDirector(script, [NEWSSTAND]))
     game.cast, game.director_wait = cast, PLAY_WAIT
-    await game.narrate(await game.resolve(ask, await game.rule(ask)))
+    await game._improvise("推进", at=game.state.location, patience=0.0)
     await asyncio.sleep(0.3)
     assert (await game.interlude()).interlude
     await game.retell()

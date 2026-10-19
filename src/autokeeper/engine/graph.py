@@ -32,6 +32,7 @@ from pydantic import TypeAdapter
 from ..agents.cast import Action, Ruling
 from ..rules.commands import instant
 from .game import Game, Turn
+from .observability import record_event
 
 TURN = TypeAdapter(Turn)
 
@@ -49,6 +50,7 @@ def _bind(game: Game) -> None:
     writer = get_stream_writer()
 
     async def emit(event: dict[str, Any]) -> None:
+        record_event(game, event)
         writer(event)
 
     game.emit = emit
@@ -123,6 +125,11 @@ def build(game: Game, checkpointer=None):
             await game.emit({"type": "ruling", **ruling.model_dump()})
         return {"ruling": ruling.model_dump() if ruling else None}
 
+    async def prepare(state: TurnState) -> dict:
+        _bind(game)
+        await game.prepare(Action.model_validate(state["action"]))
+        return {}
+
     def after_rule(state: TurnState) -> str:
         r = state.get("ruling") or {}
         rolls = r.get("needs_roll") and r.get("skill") and not r.get("repeat")
@@ -131,8 +138,12 @@ def build(game: Game, checkpointer=None):
     async def ask_roll(state: TurnState) -> dict:
         # Runs again from the top when resumed: nothing before interrupt() may change state.
         _bind(game)
-        if "turn" not in game.state.pending_turn:
+        journal = game.state.pending_turn
+        rolled = journal.get("resolution", {}).get("steps", {}).get("check", {}).get("done")
+        if "turn" not in journal and not journal.get("roll_confirmed") and not rolled:
             interrupt({"kind": "roll", **game.roll_prompt(Action.model_validate(state["action"]), Ruling.model_validate(state["ruling"]))})
+            journal["roll_confirmed"] = True
+            keep()
         return {}
 
     async def resolve(state: TurnState) -> dict:
@@ -148,9 +159,14 @@ def build(game: Game, checkpointer=None):
 
     async def offer_push(state: TurnState) -> dict:
         _bind(game)
-        offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}  # ids stay home
-        choice = interrupt({"kind": "push", **offer})
-        extra = await game.push(str(choice))
+        journal = game.state.pending_turn
+        if journal.get("push_merged"):
+            return {"pending": False}
+        if "push_choice" not in journal:
+            offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}
+            journal["push_choice"] = str(interrupt({"kind": "push", **offer}))
+            keep()
+        extra = await game.push(journal["push_choice"])
         turn = held()
         turn.checks += extra.checks
         turn.clues += extra.clues
@@ -158,6 +174,7 @@ def build(game: Game, checkpointer=None):
         turn.notes += extra.notes
         turn.ending = turn.ending or extra.ending
         turn.push = None
+        journal["push_merged"] = True
         keep(turn)
         return {"pending": False}
 
@@ -191,6 +208,7 @@ def build(game: Game, checkpointer=None):
     g.add_node("command", command)
     g.add_node("parse", parse)
     g.add_node("rule", rule)
+    g.add_node("prepare", prepare)
     g.add_node("ask_roll", ask_roll)
     g.add_node("resolve", resolve)
     g.add_node("offer_push", offer_push)
@@ -200,7 +218,8 @@ def build(game: Game, checkpointer=None):
     g.add_edge(START, "route")
     g.add_conditional_edges("route", which, ["command", "parse"])
     g.add_edge("command", "remember")
-    g.add_edge("parse", "rule")
+    g.add_edge("parse", "prepare")
+    g.add_edge("prepare", "rule")
     g.add_conditional_edges("rule", after_rule, ["ask_roll", "resolve"])
     g.add_edge("ask_roll", "resolve")
     g.add_conditional_edges("resolve", after_resolve, ["offer_push", "talk"])

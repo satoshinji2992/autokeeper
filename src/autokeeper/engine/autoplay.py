@@ -127,6 +127,26 @@ def _tail(text: str, limit: int) -> str:
     return out if len(out) <= limit else "…" + out[-limit:]
 
 
+def world_summary(state: GameState) -> dict[str, Any]:
+    """What the world did in this run (world/): the important NPCs, what they did on their own
+    and where it was seen, the director's backstage requests, rewrites, refusals."""
+    rec = state.record
+    npcs = set(rec.agents)
+    own = [e for e in rec.events if e.actor in npcs]
+    agents = {n: {"at": rec.entities[n].at, "plan": [s.text for s in a.plan if s.status == "pending"], "memories": len(a.memory)}
+              for n, a in rec.agents.items()}  # fmt: skip
+    return {
+        "agents": agents,
+        "npc_events": len(own),
+        "npc_events_seen": sum(e.visibility == "public" for e in own),
+        "by_kind": {k: sum(e.kind == k for e in own) for k in sorted({e.kind for e in own})},
+        "requests": [r.status for r in rec.requests.values()],
+        "revisions": len(rec.revisions),
+        "promises": {p.id: p.status for p in rec.promises.values()},
+        "simulated": rec.simulated,
+    }
+
+
 def fingerprint(state: GameState) -> dict[str, Any]:
     """What a game came to: compared between a recording and its replay."""
     return {
@@ -262,10 +282,12 @@ async def run(
         "investigators": [{"name": i.name, "hp": i.hp, "san": i.san, "conditions": i.conditions} for i in state.investigators],
         "usage": state.usage,
         "seconds": round(time.monotonic() - started, 1),
+        "world": world_summary(state),
         "fingerprint": fingerprint(state),
     }
     if recorder is not None:
         recorder.close(summary["fingerprint"])
     (out_dir / f"{slot}.summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out_dir / f"{slot}.world.json").write_text(state.record.model_dump_json(indent=1), encoding="utf-8")  # the backstage, for a playtest
     console.print(f"\n[bold]本局小结[/] {json.dumps({k: v for k, v in summary.items() if k != 'usage'}, ensure_ascii=False)}")
     return summary

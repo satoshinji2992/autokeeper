@@ -368,10 +368,16 @@ async def _pick(cfg, client, cands: list[Candidate], subject: str, kind: str, la
 
 
 def targets(m) -> list[tuple[str, str, str]]:
-    """What a module wants photos for: every scene and face that has an art key, described
-    with the era so the search finds a 1920s street, not today's (module.schema.Module)."""
+    """What a module wants photos for: every scene and face that has an art key, the other views
+    of its places, its props and the moments its events have a picture key for, described with
+    the era so the search finds a 1920s street, not today's (module.schema.Module)."""
     era = f"{m.era}，{m.setting}"
     out = [(loc.art, f"{loc.name}（{era}）：{loc.read_aloud.strip()[:160]}", "scene") for loc in m.locations if loc.art]
+    out += [(v.key, f"{loc.name}·{v.label}（{era}{'，夜里' if v.time == 'night' else ''}）：{v.prompt or loc.read_aloud.strip()[:120]}", "scene")
+            for loc in m.locations for v in loc.views]  # fmt: skip
+    out += [(i.art, f"{i.name}（{era}）：{i.description}", "item") for i in m.items if i.art]
+    out += [(c.art, f"{c.feature or c.title}（{era}）", "item") for c in m.clues if c.art]
+    out += [(e.art, f"{e.title}（{era}）：{e.read_aloud.strip()[:160]}", "scene") for e in m.events if e.art and e.read_aloud.strip()]
     out += [(n.portrait, f"{n.name}，{n.role}；{n.look}（{era}）", "portrait") for n in m.npcs if n.portrait]
     out += [(p.portrait, f"{p.name}，{p.occupation}，{p.age} 岁，{p.backstory.get('个人描述', '')}（{era}）", "portrait") for p in m.pregens if p.portrait]
     return out
@@ -695,6 +701,7 @@ def _framed(path: str, width: int, height: int, fill: bool, face: bool = False) 
     return frame(im, width, height) if fill else im
 
 
+
 PORTRAIT_SHAPE = 1.0  # the widest a portrait's box gets (width over height); wider panels keep it in the middle
 
 
@@ -732,7 +739,8 @@ def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded:
 
 
 @lru_cache(maxsize=256)
-def render(path: str, width: int, height: int, style: str = "photo", when: str = "", fill: bool = False, graded: str = "", face: bool = False) -> str:
+def render(path: str, width: int, height: int, style: str = "photo", when: str = "", fill: bool = False, graded: str = "",
+           face: bool = False) -> str:  # fmt: skip
     """ANSI text for a picture at the given character size, lit for `when`, optionally
     cropped to fill the panel and graded for the weather layer (cached per combination).
     Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every

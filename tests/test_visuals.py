@@ -60,6 +60,7 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
         return text, artkit.auto_mask(text)
 
     async def photos(cfg, folder, targets, **kwargs):
+        await gate.wait()
         folder.mkdir(parents=True, exist_ok=True)
         for key, _, _ in targets:
             Image.new("RGB", (16, 16), (30, 40, 50)).save(folder / f"{key}.jpg")
@@ -75,15 +76,15 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
     assert len(visuals.tasks) == 3 and len(st.visuals) == 3
     assert m.location("cafe").art != m.location("square").art
     face = next(key for key in st.visuals if "portrait" in key)
-    assert all(m.art[key].strip() for key in st.visuals if key != face) and not m.art[face].strip()  # no stick figure for a face
+    assert not any(m.art[key].strip() for key in st.visuals)  # no generic stand-ins while images load
     pending_save = st.model_dump_json()
     await asyncio.sleep(0)
     assert not any(t.done() for key, t in visuals.tasks.items() if key != face)
     gate.set()
     await asyncio.gather(*visuals.tasks.values())
-    assert len(events) == 5 and len(m.pictures) == 3  # a face: its photo; a place and a prop: a drawing, then a photo
+    assert len(events) == 3 and len(m.pictures) == 3
     assert "有秘密" not in "\n".join(subjects)
-    assert st.usage["visual:artist"]["calls"] == 2 and not m.art[face].strip()  # the face was never drawn
+    assert not subjects and "visual:artist" not in st.usage  # no temporary ASCII call before a real image
     assert visuals.folder.is_relative_to(paths.games() / "art")
     saved = GameState.model_validate_json(pending_save)  # the last complete turn, before the images finished
     loaded = Module.load(EXAMPLE)
@@ -107,7 +108,7 @@ async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypat
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
     await asyncio.gather(*visuals.tasks.values())
-    assert all(record["status"] == "failed" and (record["art"] or "portrait" in key) for key, record in st.visuals.items())
+    assert all(record["status"] == "failed" and not record["art"] for record in st.visuals.values())
     assert all(record["error"] == "ConnectionError" for record in st.visuals.values())
     await visuals.close()
 
@@ -137,7 +138,7 @@ async def test_inspecting_an_improvised_prop_shows_its_picture_without_giving_a_
     turn = await game.resolve(Action(kind="daily", summary="看看瓷杯", target="蓝边瓷杯"), Ruling(needs_roll=False))
     shown = [event for event in events if event["type"] == "item"]
     assert len(shown) == 1 and shown[0]["name"] == "蓝边瓷杯"
-    assert m.art[shown[0]["art"]] and not turn.clues and not turn.checks
+    assert shown[0]["art"] in m.art and not turn.clues and not turn.checks
     assert "杯沿一圈靛蓝色的细线" in game._report(turn)
     await game.close()
 
@@ -192,7 +193,7 @@ async def test_art_waits_for_the_player_turn_and_obeys_a_separate_job_allowance(
     await asyncio.gather(*visuals.tasks.values())
     assert len(calls) == 1
     assert sum(v["status"] == "ready" for v in st.visuals.values()) == 1
-    assert all(v["art"] for k, v in st.visuals.items() if "portrait" not in k)  # a face has no placeholder
+    assert sum(bool(v["art"]) for v in st.visuals.values()) == 1  # only the completed drawing is shown
     await visuals.close()
 
 
@@ -216,7 +217,7 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
     await visuals.close()
 
 
-async def test_cancelling_photo_search_keeps_the_drawing_and_resumes_only_the_photo(monkeypatch, tmp_path):
+async def test_cancelling_photo_search_resumes_the_picture_without_a_temporary_drawing(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path)
     drawing, started = [], asyncio.Event()
 
@@ -236,17 +237,20 @@ async def test_cancelling_photo_search_keeps_the_drawing_and_resumes_only_the_ph
     visuals.schedule()
     await asyncio.wait_for(started.wait(), 1)
     await visuals.close()
-    assert len(drawing) == 1
+    assert not drawing
     count = []
 
-    async def found(*args, **kwargs):
+    async def found(cfg, folder, targets, **kwargs):
         count.append(1)
+        folder.mkdir(parents=True, exist_ok=True)
+        for key, _, _ in targets:
+            Image.new("RGB", (16, 16), (30, 40, 50)).save(folder / f"{key}.jpg")
 
     monkeypatch.setattr(imagery, "fetch_folder", found)
     again = Visuals(m, GameState.model_validate_json(st.model_dump_json()), cfg, silent)
     again.schedule()
     await asyncio.gather(*again.tasks.values())
-    assert len(drawing) == len(count) == 1
+    assert not drawing and len(count) == 1
     await again.close()
 
 
