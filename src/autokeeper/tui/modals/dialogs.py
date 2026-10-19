@@ -299,21 +299,6 @@ class SketchModal(ModalScreen[bytes | None]):
         self.dismiss(None)
 
 
-class TextModal(ModalScreen[None]):
-    BINDINGS = [("escape", "dismiss", "关闭"), ("enter", "dismiss", "关闭")]
-
-    def __init__(self, title: str, body: Text | str):
-        super().__init__()
-        self.title_, self.body = title, body
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Static(self.title_, classes="modal-title")
-            with VerticalScroll(classes="modal-body"):
-                yield Static(self.body)
-            yield Static("Esc 关闭", classes="system")
-
-
 MODE_NOTES = {
     "经济": "降低各角色的思考强度",
     "标准": "使用各角色的预设强度",

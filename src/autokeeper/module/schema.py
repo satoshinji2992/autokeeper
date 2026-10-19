@@ -162,9 +162,6 @@ class Ending(BaseModel):
     reward: str = ""
 
 
-SHOWCASE_KINDS = ("开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局")
-
-
 class Showcase(BaseModel):
     """大场景: one big picture over the whole screen at a turning point (engine/showcase.py)."""
 

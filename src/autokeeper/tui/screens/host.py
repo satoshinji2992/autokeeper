@@ -28,9 +28,9 @@ from ... import imagery, paths
 from ...module.schema import Module
 from ...net import room as lan
 from ...rules.coc import Investigator
-from ..library import art_text, load_module
+from ..library import art_text, face_text, load_module
 from ..modals.sheet import sheet_view
-from .lobby import FACE, NARROW
+from .lobby import NARROW
 
 CYCLE = {"玩家": "AI", "AI": "不上场", "不上场": "玩家"}
 ROOM_KEYS = "Enter 换座位 · Tab 下一项 · Esc 换模组"
@@ -262,13 +262,7 @@ class HostScreen(Screen):
         assert self.module is not None
         m = self.module
 
-        def draw() -> Text:
-            try:
-                return Text.from_ansi(imagery.render(m.pictures[inv.portrait], *FACE, style, face=True))
-            except (OSError, ValueError, subprocess.TimeoutExpired):
-                return art_text(m, inv.portrait)
-
-        self.faces[(inv.portrait, style)] = await asyncio.to_thread(draw)
+        self.faces[(inv.portrait, style)] = await asyncio.to_thread(face_text, m, inv.portrait, style)
         seats = self.query_one("#host-seats", OptionList)
         if seats.highlighted is not None and seats.get_option_at_index(seats.highlighted).id == inv.id:
             self._seat_card(inv.id)

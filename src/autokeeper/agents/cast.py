@@ -769,12 +769,5 @@ def _skills(inv: Investigator) -> str:
     return "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
 
 
-def _module_overview(m: Module) -> str:
-    """The SKILL.md body the keeper carries all game long (level 2 of progressive disclosure)."""
-    from ..module.compiler import _skill_md
-
-    return _skill_md(m).split("---", 2)[2].strip()
-
-
 def dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False)

@@ -67,6 +67,14 @@ def load_module(path: Path) -> Module:
     return m
 
 
+FACE = (30, 14)  # an investigator's portrait on the sheet (F4, the room, the cards)
+
+
+def face_text(m: Module, key: str | None, style: str = "photo") -> Text:
+    """An investigator's portrait at sheet size: the photo when there is one, else the art."""
+    return art_text(m, key, FACE if key in m.pictures else None, style, face=True)
+
+
 def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "photo", *, face: bool = False) -> Text:
     """A picture (chafa) when the module has one and a size is given, else the hand-drawn art.
     `face`: a portrait, cropped round the face to fill `size`."""

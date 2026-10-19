@@ -34,11 +34,11 @@ from ... import artkit, credits, imagery, paths, roster
 from ...engine.state import GameState
 from ...module.schema import Module
 from ...rules.coc import Investigator
+from ..library import FACE
 from ..modals.menu import AskText, Confirm, GameMenu
 from ..modals.sheet import SheetModal, sheet_view
 from .saves import to_trash, when
 
-FACE = (30, 14)
 ROOM = 31  # the list's width inside its border, padding and scrollbar: longer lines are cut, not wrapped
 
 
@@ -116,10 +116,6 @@ def update_kept(inv: Investigator, changes: dict, photo_file: Path | None = None
     f.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     os.utime(f, (stat.st_atime, stat.st_mtime))
     return card
-
-
-def rename_kept(inv: Investigator, name: str) -> None:
-    update_kept(inv, {"name": name})
 
 
 def delete_kept(inv: Investigator) -> Path:

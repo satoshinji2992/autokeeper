@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import subprocess
 from typing import Any
 from urllib.parse import urlparse
 
@@ -34,12 +33,11 @@ from ...net import media
 from ...net import room as lan
 from ...net.link import Link
 from ...rules.coc import Investigator
-from ..library import art_text
+from ..library import art_text, face_text
 from ..modals.sheet import SheetModal, sheet_view
 from .net import NetGameScreen, leave, table_module
 
 NARROW = 96  # fewer columns than this: no sheet beside the seats (人物卡 opens it)
-FACE = (30, 14)  # the portrait on the sheet, as in the game's F4
 
 
 def gist(inv: Investigator, width: int = 40) -> str:
@@ -400,13 +398,7 @@ class LobbyScreen(Screen):
         assert self.m is not None
         m = self.m
 
-        def draw() -> Text:
-            try:
-                return Text.from_ansi(imagery.render(m.pictures[inv.portrait], *FACE, style, face=True))
-            except (OSError, ValueError, subprocess.TimeoutExpired):
-                return art_text(m, inv.portrait)  # an unreadable picture: its hand-drawn art
-
-        self.faces[(inv.portrait, style)] = await asyncio.to_thread(draw)
+        self.faces[(inv.portrait, style)] = await asyncio.to_thread(face_text, m, inv.portrait, style)
         seat = self._highlighted()
         if seat and seat["investigator"] == inv.id:
             self._card()
@@ -527,7 +519,7 @@ class LobbyScreen(Screen):
         first = next((i for i, inv in enumerate(party) if seat and inv.id == seat["investigator"]), 0)
 
         def portrait(inv: Investigator) -> Text:
-            return self.faces.get((inv.portrait, style)) or art_text(m, inv.portrait, FACE if inv.portrait in m.pictures else None, style, face=True)
+            return self.faces.get((inv.portrait, style)) or face_text(m, inv.portrait, style)
 
         self.app.push_screen(SheetModal(party, first, portrait))
 

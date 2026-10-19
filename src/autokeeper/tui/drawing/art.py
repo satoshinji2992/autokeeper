@@ -81,14 +81,6 @@ def big_digit(d: str) -> tuple[str, ...]:
     return tuple(pyfiglet.figlet_format(d, font="small").rstrip("\n").splitlines()[:4])
 
 
-def die_face(value: str) -> list[str]:
-    """A die drawn as an 8-column box around a big digit."""
-    glyph = [line[:6].ljust(6) for line in big_digit(value)]
-    while len(glyph) < 4:
-        glyph.append(" " * 6)
-    return [".------.", *[f"|{g}|" for g in glyph], "'------'"]
-
-
 def corrupt(text: str, rate: float) -> str:
     """Replace a fraction of visible characters with noise (used for SAN-loss glitches)."""
     if rate <= 0:

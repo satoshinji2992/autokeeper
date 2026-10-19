@@ -32,7 +32,7 @@ from ...module.schema import Module
 from ...prefs import Prefs
 from ...rules import commands
 from ...rules.coc import Investigator, Rules
-from ..library import THEMES, art_text, write_save
+from ..library import THEMES, art_text, face_text, write_save
 from ..modals.debrief import DebriefModal
 from ..modals.dialogs import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from ..modals.guide import GuideScreen
@@ -1054,7 +1054,7 @@ class GameScreen(Screen):
         style = self.app.art_style  # type: ignore[attr-defined]
 
         def portrait(inv: Investigator) -> Text:
-            return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style, face=True)
+            return face_text(self.m, inv.portrait, style)
 
         self.app.push_screen(SheetModal(party, first, portrait, self.state))
 
