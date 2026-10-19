@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c0a06">
+    <meta name="description" content="在终端里玩《克苏鲁的呼唤》第 7 版。AI 守秘人、物理十面骰、彩色 ASCII 场景，支持自己的模组、AI 同伴与好友联机。">
+    <meta property="og:title" content="AutoKeeper · 在终端里开团">
+    <meta property="og:description" content="你扮演调查员，用中文说出想做的事。守秘人接着讲，骰子已经放在桌上。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://satoshinji2992.github.io/autokeeper/">
+    <meta property="og:image" content="https://satoshinji2992.github.io/autokeeper/img/game.png">
+    <link rel="canonical" href="https://satoshinji2992.github.io/autokeeper/">
+    <link rel="icon" href="site/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="site/style.css">
+    <script src="site/main.js" defer></script>
+    <title>AutoKeeper · 在终端里开团</title>
+</head>
+<body>
+    <div class="screen-grain" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">跳到正文</a>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <a class="wordmark" href="#" aria-label="AutoKeeper 首页"><span class="brand-mark" aria-hidden="true">[✦]</span> AutoKeeper<span class="cursor" aria-hidden="true">_</span></a>
+            <nav aria-label="页面导航">
+                <a href="#investigation">桌面</a><a href="#modules">模组</a><a href="#company">同伴</a><a href="#start">开始玩</a>
+            </nav>
+            <a class="repo-link" href="https://github.com/satoshinji2992/autokeeper">GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+    </header>
+
+    <main id="main">
+        <section class="opening wrap" aria-labelledby="page-title">
+            <div class="invocation">
+                <p class="chant" lang="en">Ph'nglui mglw'nafh Cthulhu R'lyeh wgah'nagl fhtagn.</p>
+                <blockquote>我以为，世上最仁慈的事，莫过于人类的心智<br class="desktop-break">无法把它所知的一切关联起来。</blockquote>
+                <p class="attribution">H. P. 洛夫克拉夫特 ·《克苏鲁的呼唤》</p>
+            </div>
+            <div class="hero">
+                <div class="hero-copy">
+                    <p class="eyebrow"><span class="small-cross" aria-hidden="true">+</span> CALL OF CTHULHU / 7TH EDITION</p>
+                    <h1 id="page-title"><span class="sr-only">AutoKeeper</span><span class="ascii-logo" aria-hidden="true">   _  _   _ _____ ___  _  _____ ___ ___ ___ ___
+  /_\| | | |_   _/ _ \| |/ / __| __| _ \ __| _ \
+ / _ \ |_| | | || (_) | &#x27; &lt;| _|| _||  _/ _||   /
+/_/ \_\___/  |_| \___/|_|\_\___|___|_| |___|_|_\</span></h1>
+                    <p class="hero-heading">在终端里，开一场调查。</p>
+                    <p class="hero-description">你扮演调查员，用中文说出想做的事。AI 担任守秘人，铺陈场景、扮演遇到的人，在需要检定时请你掷骰。可以独自出发，带上 AI 同伴，也可以叫朋友凑一桌。</p>
+                    <div class="hero-actions"><a class="button primary" href="#start">安装开团 <span aria-hidden="true">↗</span></a><a class="text-link" href="#investigation">看看实机 <span aria-hidden="true">↓</span></a></div>
+                    <p class="hero-note">中文 CoC 7 版 <span>·</span> 终端 / 浏览器 <span>·</span> 开源 MIT</p>
+                </div>
+                <figure class="hero-picture">
+                    <a href="img/title.png" data-enlarge data-caption="AutoKeeper 标题画面" aria-label="放大查看 AutoKeeper 标题画面"><img src="img/title.png" alt="克苏鲁与拉莱耶的彩色字符画，AutoKeeper 的标题菜单叠在画面上" width="1800" height="1246" fetchpriority="high"></a>
+                    <figcaption><span class="live-dot" aria-hidden="true"></span> 守秘人已就座 <span class="picture-note">实机画面 / 点击放大</span></figcaption>
+                </figure>
+            </div>
+            <div class="opening-bottom"><span>掷骰之前，先听一段故事。</span><a href="https://github.com/satoshinji2992/autokeeper/releases/latest">版本 0.0.2 <span aria-hidden="true">↗</span></a></div>
+        </section>
+
+        <section class="chapter wrap" id="investigation" aria-labelledby="investigation-title">
+            <div class="chapter-heading"><span class="folio" aria-hidden="true">01 / PLAY</span><h2 id="investigation-title">从早班火车进站开始</h2></div>
+            <div class="prose">
+                <p>挑好模组和调查员，守秘人会顺着角色背景拉开序幕。《追书人》从早班火车驶入阿诺兹堡讲起：托马斯的家在小镇尽头的公墓旁，走过去还有一段路。你可以先向站务员问路、找家餐馆吃早饭，或拐进图书馆查查旧报纸。走到原作没写的地方，守秘人会即兴补出人物、地点和支线，写进这一局的存档；偏爱原作的话，也能切回严格模式。</p>
+                <p>需要检定时，桌面会请你投掷物理十面骰。失败之后要不要花幸运、要不要孤注一掷，由你当场决定。剪报和信件可以展开读原文、看原图，见过的人和找到的线索也会留在地图、线索本与人物卡里。每回合自动存档，下次接着往下查。</p>
+            </div>
+            <div class="gallery" id="screenshots">
+                <div class="gallery-bar"><span class="terminal-label"><span class="live-dot" aria-hidden="true"></span> 调查进行中</span><span class="gallery-count" id="gallery-count">01 / 12</span></div>
+                <div class="gallery-tabs" role="tablist" aria-label="选择实机画面" hidden></div>
+                <figure class="gallery-figure" role="tabpanel" id="gallery-panel" tabindex="0" aria-label="调查桌面">
+                    <a id="gallery-link" href="img/game.png" data-enlarge data-caption="在阿诺兹堡图书馆查阅旧报，完成一次图书馆使用检定。"><img id="gallery-image" src="img/game.png" alt="追书人调查桌面：图书馆、旧报手稿、物理骰子和右侧的人物状态与经过" width="1800" height="1171" loading="lazy" decoding="async"></a>
+                    <figcaption><span id="gallery-caption">在阿诺兹堡图书馆查阅旧报，完成一次图书馆使用检定。</span><span class="picture-note">点击查看大图 ↗</span></figcaption>
+                </figure>
+                <noscript><p class="gallery-fallback">其他画面：<a href="img/map.png">地图</a> · <a href="img/cards.png">角色库</a> · <a href="img/plugins.png">规则插件</a> · <a href="img/lobby.png">开房间</a> · <a href="https://github.com/satoshinji2992/autokeeper#readme">完整图集</a></p></noscript>
+            </div>
+            <div class="aside-note"><span aria-hidden="true">[ ASCII ]</span><p>老照片与插图会转成彩色字符画，雨雪、雾气和灯影随场景变化，NPC 开口时立绘登场。关键时刻则展开整屏大场景。即兴的人物与地点也能配图；开启 AI 画图后，老宅失火、NPC 受伤，还可以按原图重绘。这项功能需要本机安装并登录 Codex。</p></div>
+        </section>
+
+        <section class="chapter chapter-tinted" id="modules" aria-labelledby="modules-title">
+            <div class="wrap">
+                <div class="chapter-heading"><span class="folio" aria-hidden="true">02 / STORIES</span><h2 id="modules-title">把你手上的模组拿来跑</h2></div>
+                <div class="prose">
+                    <p>仓库自带《追书人》《冬雪之下》和《有些人油盐不进》，装好就能开第一局。想跑自己的收藏，把 PDF、Word、Markdown、文本或 ZIP 模组拖进导入界面就行，也可以用下面这行命令。AI 会通读原文，整理人物、地点、线索和事件，保留插图与手稿，校验后编译成可以直接游玩的模组。</p>
+                </div>
+                <div class="command-line"><span class="prompt" aria-hidden="true">❯</span><code id="import-command">uv run autokeeper import 模组.pdf</code><button type="button" class="copy-button" data-copy="import-command" hidden>复制</button></div>
+                <div class="story-columns">
+                    <div><h3>原作里的特殊规则，也带进来</h3><p>疾病蔓延、资源消耗、倒计时，或者一段书架机关，都可以用规则插件处理。AI 能在编译时编写插件，跑通沙箱测试后再加载；开团后临时想加家规，也能用一句话提出。插件还可以出选择、填空、排序与棋盘小游戏。</p><a class="text-link" href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/plugins.md">看看规则插件 <span aria-hidden="true">↗</span></a></div>
+                    <div><h3>只有一句设定，也可以开写</h3><p>比如“1931 年上海，一张没有标签的唱片”。把这句设定交给生成器，它会联网考据、编写剧情并配好插图。导入、生成和游玩可以按职责选择模型，不必绑定同一家服务。</p><a class="text-link" href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#导入生成与观战">导入与生成说明 <span aria-hidden="true">↗</span></a></div>
+                </div>
+                <div class="module-shelf" aria-label="仓库自带模组">
+                    <a href="https://github.com/satoshinji2992/autokeeper/tree/main/modules/zhuishuren"><span class="shelf-number">I</span><span><strong>追书人</strong><small>一封求助信，公墓旁的一栋房子。</small></span><span class="shelf-tag">初次推荐</span></a>
+                    <a href="https://github.com/satoshinji2992/autokeeper/tree/main/modules/dongxuezhixia"><span class="shelf-number">II</span><span><strong>冬雪之下</strong><small>暴风雪中的小镇，一场来历不明的疾病。</small></span><span class="shelf-arrow" aria-hidden="true">↗</span></a>
+                    <a href="https://github.com/satoshinji2992/autokeeper/tree/main/modules/fallout3-youxierenyouyanbujin"><span class="shelf-number">III</span><span><strong>有些人油盐不进</strong><small>斯托威尔镇上，熟悉的人正在变得陌生。</small></span><span class="shelf-arrow" aria-hidden="true">↗</span></a>
+                </div>
+            </div>
+        </section>
+
+        <section class="chapter wrap" id="company" aria-labelledby="company-title">
+            <div class="chapter-heading"><span class="folio" aria-hidden="true">03 / INVESTIGATORS</span><h2 id="company-title">一个人随时开，<br class="mobile-break">或者叫朋友凑一桌</h2></div>
+            <div class="prose">
+                <p>开局前可以直接用模组预设，也能建自己的调查员。给一句人设，或填一个历史、公众人物的名字，AI 会协助找肖像、问背景，再按七版规则核算属性与技能点。手上的老卡也能带来：骰娘 <code>.st</code>、表格、PDF、纸质卡照片和酒馆卡都有对应的导入方式。建好的角色留在角色库，下次还能用。</p>
+                <p>想约朋友，就在标题页开房间，把网址发过去。朋友用浏览器打开就能车卡入座，不用装环境或配密钥；模型和存档由房主负责，没坐满的座位可以交给 AI。人齐后各自提交行动，守秘人按顺序往下讲。支持局域网，也可以通过虚拟局域网异地联机。<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#联机">连接说明 ↗</a></p>
+            </div>
+            <a class="room-preview" href="img/lobby.png" data-enlarge data-caption="冬雪之下：分配真人与 AI 调查员的座位，开启浏览器加入。"><img src="img/lobby.png" alt="冬雪之下开房间界面，设置玩家与 AI 座位、查看人物卡，开启网页加入" width="1800" height="1187" loading="lazy" decoding="async"><span>《冬雪之下》开房界面 <span aria-hidden="true">↗</span></span></a>
+            <p class="quiet-note">想单纯看看故事，也有观战模式，让 AI 调查员自己跑完整局。</p>
+        </section>
+
+        <section class="chapter chapter-tinted" id="start" aria-labelledby="start-title">
+            <div class="wrap">
+                <div class="chapter-heading"><span class="folio" aria-hidden="true">04 / GET STARTED</span><h2 id="start-title">骰子放好了，开团吧。</h2></div>
+                <div class="setup-intro"><p>需要 Python 3.12+、uv 和 Node.js 18+。建议一起装上 chafa，把照片画成彩色字符。准备好之后，克隆仓库、安装依赖，再让 <code>doctor</code> 检查一下环境。</p><a class="text-link" href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#安装依赖">各系统安装说明 ↗</a></div>
+                <div class="install-terminal">
+                    <div class="terminal-bar"><span><i></i><i></i><i></i></span><span>autokeeper / 安装</span><button type="button" class="copy-button" data-copy="install-command" hidden>复制命令</button></div>
+                    <pre><code id="install-command">git clone https://github.com/satoshinji2992/autokeeper
+cd autokeeper
+uv sync --extra claude --extra graphrag
+uv run autokeeper setup
+uv run autokeeper doctor</code></pre>
+                </div>
+                <div class="launch-heading"><h3>用手头的模型启动</h3><div class="model-tabs" role="tablist" aria-label="选择启动模型" hidden><button type="button" role="tab" id="model-claude" aria-selected="true" aria-controls="launch-panel" data-model="claude">Claude</button><button type="button" role="tab" id="model-deepseek" aria-selected="false" aria-controls="launch-panel" tabindex="-1" data-model="deepseek">DeepSeek</button><button type="button" role="tab" id="model-codex" aria-selected="false" aria-controls="launch-panel" tabindex="-1" data-model="codex">Codex</button><button type="button" role="tab" id="model-ollama" aria-selected="false" aria-controls="launch-panel" tabindex="-1" data-model="ollama">Ollama</button></div></div>
+                <div id="launch-panel" role="tabpanel" aria-labelledby="model-claude" tabindex="0"><div class="command-line"><span class="prompt" aria-hidden="true">❯</span><code id="launch-command">uv run autokeeper</code><button type="button" class="copy-button" data-copy="launch-command" hidden>复制</button></div><p id="model-note" class="model-note">使用本机已登录的 Claude Code，也可以设置 ANTHROPIC_API_KEY。</p></div>
+                <p class="setup-outro">进入标题页，选「新的调查」，挑好模组和调查员就能开场。想用浏览器玩，运行 <code>uv run autokeeper serve</code>。模型配置、用量和预算都可以在设置里调整，详细操作见<a href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md">游玩指南</a>。</p>
+                <details class="release-note"><summary>从 0.0.1 升级？先备份旧存档。</summary><p>0.0.2 将数据整理到 <code>data/</code>，自己的调查员、本地模型和知识库会自动迁移，但旧版存档不能继续读取。升级前请备份 <code>saves/</code>。<a href="https://github.com/satoshinji2992/autokeeper/blob/main/CHANGELOG.md">完整更新记录 ↗</a></p></details>
+                <div class="end-links"><a class="button primary" href="https://github.com/satoshinji2992/autokeeper">去 GitHub 看源码 <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/satoshinji2992/autokeeper/issues">玩到不合理的地方，来提个 Issue ↗</a></div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer wrap">
+        <div class="footer-top"><a class="wordmark" href="#">[✦] AutoKeeper_</a><p>愿调查员平安归来。</p><a href="https://github.com/satoshinji2992/autokeeper/blob/main/LICENSE">代码 / MIT ↗</a></div>
+        <p>本页展示的是游戏实机画面。AutoKeeper 与 Chaosium 无关，自带模组为同人改编，原作版权归各自作者与出版方。<a href="https://github.com/satoshinji2992/autokeeper#致谢与许可">模组及图片署名</a></p>
+        <p>标题画面使用 Dominique Signoret 的 <a href="https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg" lang="en">Cthulhu and R'lyeh</a>，在游戏中经过裁剪、调暗与字符化处理，依据 <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a> 使用。</p>
+    </footer>
+
+    <dialog class="image-viewer" id="image-viewer" aria-labelledby="viewer-caption">
+        <div class="viewer-toolbar"><span id="viewer-caption">实机画面</span><button type="button" class="viewer-close" aria-label="关闭大图">关闭 <span aria-hidden="true">×</span></button></div>
+        <div class="viewer-image"><img id="viewer-image" alt=""></div>
+        <p class="viewer-hint">Esc 关闭 · <a id="viewer-original" href="img/game.png" target="_blank" rel="noopener">打开原图 ↗</a></p>
+    </dialog>
+    <nav class="keybar" aria-label="快捷操作">
+        <a href="#start" aria-keyshortcuts="1" data-shortcut="1"><kbd>1</kbd> 安装开团</a>
+        <a href="#screenshots" aria-keyshortcuts="2" data-shortcut="2"><kbd>2</kbd> 实机图集</a>
+        <a href="https://github.com/satoshinji2992/autokeeper" aria-keyshortcuts="3" data-shortcut="3"><kbd>3</kbd> GitHub ↗</a>
+        <span>AutoKeeper 0.0.2 <span aria-hidden="true">│</span> 中文 CoC 7 版</span>
+    </nav>
+    <div id="copy-status" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

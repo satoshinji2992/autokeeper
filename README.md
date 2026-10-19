@@ -18,7 +18,7 @@
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-[游玩体验](#从早班火车进站开始) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
+[项目网页](https://satoshinji2992.github.io/autokeeper/) · [游玩体验](#从早班火车进站开始) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
 
 </div>
 

@@ -26,3 +26,15 @@ uv run pytest tests/test_public_gateway.py -q
 ```
 
 参考：[Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)、[WebSocket 支持](https://developers.cloudflare.com/network/websockets/)。
+
+## 项目展示页
+
+GitHub Pages 的源码在 `docs/index.html` 和 `docs/site/`，直接复用 `docs/img/` 的实机图。网页用 HTML/CSS 延续 Textual 的琥珀色字符面板，复用游戏的 ASCII 标题字，叠加静态 SVG 颗粒与扫描线纹理。纯静态页面，无须安装前端依赖。本地预览：
+
+```bash
+python -m http.server 8080 --bind 127.0.0.1 --directory docs
+```
+
+打开 `http://127.0.0.1:8080/`。页面的链接和资源均按项目子目录编写，部署到 `/autokeeper/` 时也能正常使用。修改图片后，更新 `docs/site/main.js` 中图集的尺寸和说明；正文、模型启动示例与 README 保持一致。
+
+发布地址为 <https://satoshinji2992.github.io/autokeeper/>。仓库 Pages 使用 `main` 分支的 `/docs`，提交并推送网页改动后会自动发布，`docs/.nojekyll` 用于直接发布静态文件。运行中的游戏、API 密钥和存档仍留在玩家本机。
