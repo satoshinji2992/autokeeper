@@ -526,11 +526,13 @@ class SetupScreen(Screen):
         header.append(m.source, style="dim")
         self.query_one("#preview-body", Static).update(header)
 
-    @work(exclusive=True, group="card-preview")
+    @work(exclusive=True, group="card-preview", exit_on_error=False)
     async def _preview_card(self, m: Module, inv: Investigator, oid: str) -> None:
         """The card with its photo, drawn in a thread: ↑↓ through the investigators no longer
         waits for chafa at each new face."""
         card = await asyncio.to_thread(_investigator_card, m, inv, self.app.art_style)  # type: ignore[attr-defined]
+        if not self.is_attached:  # chosen meanwhile, and on to the game
+            return
         choices = self.query_one("#choices", OptionList)
         if self.step == "investigator" and choices.highlighted is not None and choices.get_option_at_index(choices.highlighted).id == oid:
             self.query_one("#preview-body", Static).update(card)
