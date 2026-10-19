@@ -27,6 +27,7 @@ from ..module.schema import Module
 from ..rules.coc import Investigator
 
 PAGES = {"history": "经过", "progress": "进展", "background": "背景"}
+PLUGINS = "plugins"  # the rule plugins' panels (tui/plugin_ui.py): a fourth page, only while they have one
 FRESH = "进展·新"  # the 进展 tab while a new account waits to be read
 DIGEST = ("思想与信念", "重要之人", "意义非凡之地", "宝贵之物")  # why they would go into this: what they hold to
 # A space between Chinese and a number ("1922 年") is where Rich breaks a narrow line: the
@@ -57,11 +58,28 @@ def pages(history: Widget, first: str = "history") -> ComposeResult:
             yield Page(id="progress", classes="page")
         with TabPane(PAGES["background"], id="background-page"):
             yield Page(id="background", classes="page")
+        with TabPane("更多", id=f"{PLUGINS}-page"):
+            yield Page(id="plugin-panels", classes="page")
+
+
+def panels(tabs: TabbedContent, page: Page, body: RenderableType | None, label: str = "") -> None:
+    """The plugins' page: shown under `label` with `body`, or hidden when there is nothing on it."""
+    tab = tabs.get_tab(f"{PLUGINS}-page")
+    if body is None:
+        if tab.display:
+            if tabs.active == f"{PLUGINS}-page":
+                tabs.active = "history-page"
+            tabs.hide_tab(f"{PLUGINS}-page")
+        return
+    page.show(body)
+    tab.label = label
+    if not tab.display:
+        tabs.show_tab(f"{PLUGINS}-page")
 
 
 def turn(tabs: TabbedContent, step: int = 1) -> str:
     """The next page (or the one before); its name."""
-    names = list(PAGES)
+    names = [*PAGES, *([PLUGINS] if tabs.get_tab(f"{PLUGINS}-page").display else [])]
     now = tabs.active.removesuffix("-page")
     name = names[(names.index(now) + step) % len(names)] if now in names else names[0]
     tabs.active = f"{name}-page"
@@ -155,10 +173,12 @@ class PagesModal(ModalScreen[None]):
         Binding("ctrl+g,tab", "turn_page", "翻页"),
     ]
 
-    def __init__(self, history: Iterable[RenderableType], progress: RenderableType, background: RenderableType, first: str = "progress"):
+    def __init__(self, history: Iterable[RenderableType], progress: RenderableType, background: RenderableType, first: str = "progress",
+                 extra: tuple[str, RenderableType] | None = None):
         super().__init__()
         self.history, self.first = list(history), first
         self.progress, self.background = progress, background
+        self.extra = extra  # the plugins' page: its tab label and what is on it
 
     def compose(self) -> ComposeResult:
         lines = Text("\n").join(r for r in self.history if isinstance(r, Text)) if self.history else Text("还没有发生什么。", style="dim")
@@ -169,6 +189,8 @@ class PagesModal(ModalScreen[None]):
     def on_mount(self) -> None:
         self.query_one("#progress", Page).show(self.progress)
         self.query_one("#background", Page).show(self.background)
+        label, body = self.extra or ("", None)
+        panels(self.query_one(TabbedContent), self.query_one("#plugin-panels", Page), body, label)
 
     def action_turn_page(self) -> None:
         turn(self.query_one(TabbedContent))

@@ -25,6 +25,7 @@ from textual.widgets import Button, Input, Static
 
 from ..engine.state import GameState
 from ..module.schema import Module
+from ..plugins.schema import does
 
 Drafter = Callable[[str, Callable[[str], Awaitable[None]]], Awaitable[tuple[bool, str]]]
 
@@ -39,11 +40,13 @@ def _rows(module: Module, state: GameState, *, manage: bool) -> list[dict[str, A
             plugin = module.extensions.get(identity)
             if plugin is None:
                 rows.append({"name": identity, "version": "未加载", "description": module.extension_errors.get(identity, ""),
-                             "actions": [], "paused": True, "error": "这条规则没能载入", "id": identity, "loaded": False})
+                             "actions": [], "commands": [], "does": [], "paused": True, "error": "这条规则没能载入",
+                             "id": identity, "loaded": False})
                 continue
             rows.append({
                 "name": plugin.name, "version": plugin.version, "description": plugin.description,
                 "actions": [(a.name, a.description) for a in plugin.actions],
+                "commands": [(c.name, c.description) for c in plugin.commands], "does": does(plugin.capabilities),
                 "paused": identity in state.plugin_errors, "error": state.plugin_errors.get(identity, ""),
                 "id": identity, "loaded": True,
             })
@@ -52,6 +55,7 @@ def _rows(module: Module, state: GameState, *, manage: bool) -> list[dict[str, A
             rows.append({
                 "name": info.get("name", ""), "version": info.get("version", ""),
                 "description": info.get("description", ""), "actions": [tuple(a) for a in info.get("actions", [])],
+                "commands": [tuple(c) for c in info.get("commands", [])], "does": list(info.get("does", [])),
                 "paused": bool(info.get("paused")), "error": "", "id": None, "loaded": True,
             })
     for row in rows:
@@ -109,6 +113,16 @@ class PluginsModal(ModalScreen[None]):
             t.append("\n可以尝试：", style="bold")
             for _name, desc in row["actions"]:
                 t.append(f"\n  · {_when(desc)}", style="dim")
+        if row["commands"]:
+            t.append("\n可以输入：", style="bold")
+            for name, desc in row["commands"]:
+                t.append(f"\n  · /{name}  {desc}", style="dim")
+        if row["does"]:
+            t.append("\n它会：", style="bold")
+            t.append("、".join(row["does"]), style="dim")
+            if row["name"] in self.state.plugin_panels:
+                titles = "、".join(p.get("title", "") for p in self.state.plugin_panels[row["name"]])
+                t.append(f"（右栏的「{titles}」就是它的）", style="dim")
         if row["recent"]:
             t.append("\n最近：", style="bold")
             for line in row["recent"]:
@@ -174,6 +188,23 @@ class PluginsModal(ModalScreen[None]):
         else:
             self.state.plugin_errors[identity] = "已手动暂停"
         event.button.label = "启用 / 重试" if identity in self.state.plugin_errors else "暂停"
+
+
+def plugin_commands(module: Module, state: GameState) -> list[tuple[str, str]]:
+    """The slash commands the active rule plugins add (/占卜 …), as (name, description), for the
+    command box's completion, the Ctrl+K window and the in-game menu. A LAN screen reads them
+    from the hub's public summaries."""
+    out: list[tuple[str, str]] = []
+    if module.extensions:
+        for identity in module.plugins:
+            plugin = module.extensions.get(identity)
+            if plugin is not None and identity not in state.plugin_errors:
+                out += [(c.name, c.description) for c in plugin.commands]
+    else:
+        for info in module.plugin_info:
+            if not info.get("paused"):
+                out += [(name, desc) for name, desc in info.get("commands", [])]
+    return list(dict.fromkeys(out))
 
 
 def action_hints(module: Module, state: GameState) -> list[str]:

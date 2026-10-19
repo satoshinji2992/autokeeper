@@ -55,6 +55,7 @@ class Turn:
     push: dict | None = None
     earlier: CheckRecord | None = None  # a repeated attempt: this earlier check stands, nothing is rolled
     notes: list[str] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)  # a rule plugin's one line the keeper must weave in
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
 
@@ -460,7 +461,7 @@ class Game:
             return None
         await self._curtain()
         turn, self._late = self._late, Turn()
-        if not (turn.events or turn.clues or turn.notes or turn.arrived or turn.sanity):
+        if not (turn.events or turn.clues or turn.notes or turn.hints or turn.arrived or turn.sanity):
             return None
         turn.interlude = True
         await self._time(turn)
@@ -558,6 +559,7 @@ class Game:
         turn.clues += late.clues
         turn.sanity += late.sanity
         turn.notes += late.notes
+        turn.hints += late.hints
         turn.arrived, turn.first_visit = late.arrived, late.first_visit
         inv = st.investigator
         if action.kind == "meta" or ruling is None:
@@ -662,6 +664,7 @@ class Game:
         if passed:
             for call in ruling.plugin_calls:
                 await self.plugins.run("action", turn, **call.model_dump(mode="json"))
+        await self.plugins.settled(turn)  # the roll and clue hooks
         await self.plugins.run("turn", turn, action=action.model_dump(mode="json"))
         await self._time(turn)
         if action.kind == "daily":
@@ -712,6 +715,7 @@ class Game:
             await self._gain(pending["clues"], turn, None)
         else:
             await self._fail_forward(pending["clues"], turn, pushed=True)  # a pushed roll was the last chance: the clue comes, at a price
+        await self.plugins.settled(turn)
         won = [c for c in turn.clues if c in pending["clues"]]
         done = [f for f in pending.get("flags", []) if f in st.flags and f not in known]
         lines = self._led_to(won, done, passed, npc)
@@ -958,6 +962,7 @@ class Game:
         for ev in due:
             if parse_time(ev.when) <= st.minutes:
                 await self._fire(ev, turn)
+        await self.plugins.due(turn)  # rule plugins' timers
         await self.emit({"type": "time", "clock": st.clock, "phase": time_of_day(st.minutes)})
 
     async def _fire(self, ev: Event, turn: Turn) -> None:
@@ -1118,6 +1123,7 @@ class Game:
             if ev.read_aloud.strip():
                 out.append(f"眼前发生：{ev.read_aloud.strip()}")
         out += [f"备注：{n}" for n in turn.notes]
+        out += [f"规则提示（来自本局规则，这一轮的叙述要用一句话自然写到）：{h}" for h in turn.hints]
         if turn.ending:
             end = next(e for e in m.endings if e.id == turn.ending)
             out.append(f"【结局：{end.title}】{end.text.strip()}\n请用 150–250 字为这个结局收尾，不再留行动钩子。")
