@@ -100,7 +100,7 @@ async def test_an_import_leaves_the_module_package_and_its_notes_in_source(monke
             pass
 
     monkeypatch.setattr(importer, "builder", lambda *a: Builder())
-    await importer.pipeline(work, brief="test", cfg=config.Config(), console=Console(file=io.StringIO()), index=False, photos=False)
+    await importer.pipeline(work, brief="test", cfg=config.Config(), console=Console(file=io.StringIO()), index=False, photos=False, adapting=False)
     assert sorted(p.name for p in work.iterdir()) == ["art", "clues.yaml", "module.yaml", "people.yaml", "places.yaml", "source", "story.yaml"]
     assert sorted(p.name for p in (work / "art").iterdir()) == ["ascii"] and (work / "source" / "notes.md").is_file()
     assert Module.load(work).model_dump() == Module.load(EXAMPLE).model_dump()
@@ -255,3 +255,53 @@ def test_an_import_on_another_vendor_draws_with_that_vendors_strongest_model(mon
     assert not importer.drawn_by_artist(config.Config())  # Opus builds and draws its own
     deepseek = importer.import_config("deepseek:deepseek-flash")
     assert deepseek.role("artist").model == "deepseek:deepseek-v4-pro" and deepseek.role("vision").model == "deepseek:deepseek-flash"
+
+
+async def test_an_interrupted_import_goes_on_from_its_notes_and_draft(monkeypatch, tmp_path, skills_dir):
+    """Run again on the same source: no second extraction, and the agent is told to take up its
+    own notes.md and draft instead of reading the whole text again (importer.RESUME)."""
+    work = tmp_path / "local" / "example"
+    briefs: list[str] = []
+    extracted: list[int] = []
+
+    class Crashing:
+        async def run(self, brief):
+            briefs.append(brief)
+            (work / "notes.md").write_text("读到第 3 页：钟楼、守钟人", encoding="utf-8")
+            raise RuntimeError("连接断了")
+
+        async def close(self):
+            pass
+
+    class Finishing(Crashing):
+        async def run(self, brief):
+            briefs.append(brief)
+            (work / "module.yaml").write_text(package.joined_text(EXAMPLE), encoding="utf-8")
+            (work / "art").mkdir(exist_ok=True)
+            for f in (EXAMPLE / "art" / "ascii").iterdir():
+                shutil.copy(f, work / "art" / f.name)
+            return SimpleNamespace(steps=1, finished=True, answer="done")
+
+    async def prepare(console):
+        extracted.append(1)
+        (work / "source").mkdir(parents=True, exist_ok=True)
+        (work / "source" / "source.md").write_text("原文", encoding="utf-8")
+
+    quiet = {"cfg": config.Config(), "console": Console(file=io.StringIO()), "index": False, "photos": False, "adapting": False}
+    monkeypatch.setattr(importer, "builder", lambda *a: Crashing())
+    with pytest.raises(RuntimeError):
+        await importer.pipeline(work, brief="整理模组", prepare=prepare, key="import:example:abc", **quiet)
+    assert importer.progress(work)["stage"] == "prepared" and extracted == [1]
+    monkeypatch.setattr(importer, "builder", lambda *a: Finishing())
+    await importer.pipeline(work, brief="整理模组", prepare=prepare, key="import:example:abc", **quiet)
+    assert extracted == [1]  # the text was not extracted again
+    assert "接着上次做" not in briefs[0] and "接着上次做" in briefs[1]
+    assert importer.progress(work)["stage"] == "compiled" and (work / "source" / "notes.md").is_file()
+
+
+async def test_an_import_of_another_file_starts_afresh(monkeypatch, tmp_path):
+    work = tmp_path / "local" / "example"
+    work.mkdir(parents=True)
+    importer.mark(work, "import:example:abc", "built")
+    assert importer.reached(work, "import:example:abc") == 2
+    assert importer.reached(work, "import:example:another") == 0 and importer.reached(work, "") == 0

@@ -289,7 +289,7 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     table = Table(title=f"角色路由（预设：{cfg.preset} · 模式：{cfg.mode}）", title_justify="left")
     for col in ("角色", "后端", "模型", "思考", "上下文窗口", "备用"):
         table.add_column(col)
-    for name in sorted(cfg.roles):
+    for name in sorted(cfg.role_names):
         r = cfg.role(name)
         table.add_row(name, r.backend, r.model, str(r.effort or "关"), str(r.window or "默认"), r.fallback or "—")
     console.print(table)
@@ -413,14 +413,15 @@ def trace_cmd(
 
 @app.command()
 def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
-    """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版。"""
+    """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版，再不用模型推演一遍：走不到的地方、到不了的结局、只靠一处的结论。"""
     from .module import graph
     from .module.importer import validate_all
     from .module.schema import Module
+    from .module.simulate import playthrough
 
     m = Module.load(module)
     errors = asyncio.run(validate_all(module))
-    issues = errors + [str(i) for i in graph.audit(m) if i.level != "error"]
+    issues = errors + [str(i) for i in graph.audit(m) if i.level != "error"] + [f"[推演] {i}" for i in playthrough(m).issues]
     for i in issues:
         console.print(i)
     console.print(f"{'[red]有错误[/]' if errors else '[green]通过[/]'}：{len(issues)} 条提示，{len(errors)} 条需要修")
@@ -569,6 +570,45 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
     console.print(f"准备好 {len(done)}/{len(m.showcases)} 个" + ("" if off else f"；这个模组还能用 AI 画 {imagegen.left(m.id)} 张"))
 
 
+@app.command()
+def upgrade(
+    module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")],
+    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,foreshadow,clueweb,ties,endings,mechanics")] = "",
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="只看打算补多少，不写文件")] = False,
+    review: Annotated[bool, typer.Option("--review", help="补完后请模型像守秘人那样审读一遍（一次调用），列出跑起来会出问题的地方")] = False,
+) -> None:
+    """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单）。只补没有的，原作不改；中断了再跑一次就接着补。"""
+    from .module import adapt
+    from .module.schema import Module
+    from .module.simulate import playthrough
+
+    path = Path(module)
+    if not (path / "module.yaml").is_file():
+        path = next((p for p in paths.module_folders() if p.name == module), path)
+    if not (path / "module.yaml").is_file():
+        console.print(f"[red]找不到模组：{module}[/]")
+        raise typer.Exit(1)
+    chosen = tuple(x.strip() for x in only.split(",") if x.strip()) or adapt.PASSES
+    if unknown := [x for x in chosen if x not in adapt.PASSES]:
+        console.print(f"[red]没有这一步：{'、'.join(unknown)}（可选：{','.join(adapt.PASSES)}）[/]")
+        raise typer.Exit(1)
+    before = adapt.score(Module.load(path))
+    asyncio.run(adapt.adapt(path, passes=chosen, log=console.print, dry=dry_run))
+    after = adapt.score(Module.load(path))
+    console.print(f"[bold]可玩度[/] {before.total} → {after.total} / 100")
+    for name, (got, out_of, why) in after.parts.items():
+        console.print(f"  {name} {got}/{out_of}  [dim]{why}[/]")
+    if found := playthrough(Module.load(path)).issues:
+        console.print(f"[bold]推演[/]（不用模型，把能走的路都走一遍）{len(found)} 处")
+        for line in found:
+            console.print(f"  · {line}")
+    if review:
+        found = asyncio.run(adapt.review(path))
+        console.print(f"[bold]审读[/] {len(found.findings)} 条")
+        for f in found.findings:
+            console.print(f"  [{'red' if f.severity == '高' else 'yellow'}]{f.severity}[/] {f.where}：{f.problem}\n     [dim]补：{f.fix}[/]")
+
+
 @art_app.command("credits")
 def art_credits(module: Path) -> None:
     """列出模组里真实图片的来源与授权。"""
@@ -595,8 +635,9 @@ def import_cmd(
     model: Annotated[str, typer.Option(help="这次导入的模型，如 codex:default、deepseek:deepseek-flash")] = "",
     vision_model: Annotated[str, typer.Option(help="这次导入的读图模型；留空沿用 vision 配置")] = "",
     photos: Annotated[bool, typer.Option("--photos/--no-photos", help="导完去找真实照片转成字符画（同 art fetch）")] = True,
+    fresh: Annotated[bool, typer.Option("--fresh", help="上次没导完也从头来；默认同一个文件接着上次做")] = False,
 ) -> None:
-    """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。"""
+    """导入 Agent 读模组、写 module.yaml、画彩色 ASCII 图，校验通过后编译成 Skill 包（模型看 importer 角色）。同一个文件再导一次，从上次停下的地方接着做。"""
     import tempfile
 
     import click
@@ -607,6 +648,7 @@ def import_cmd(
     module_id = id or sources.module_id(file.stem)
     models: dict = {key: value for key, value in (("model", model), ("vision_model", vision_model)) if value}
     models["photos"] = photos
+    models["fresh"] = fresh
     if not id:
         console.print(f"模组短名：{module_id}（用 --id 换一个）")
     if file.suffix.lower() not in sources.ARCHIVES:
@@ -705,12 +747,15 @@ def eval_rhetoric(
     limit: int | None = None,
     referee: Annotated[list[str] | None, typer.Option(help="裁定员模型，可写多个；“模型@强度”比较思考强度，如 deepseek:deepseek-flash@low")] = None,
     out: Annotated[Path | None, typer.Option(help="明细写到哪里")] = None,
+    system: Annotated[list[str] | None, typer.Option(help="比哪几种：baseline（单 Agent 读原话）、split（裁定员只看解析后的行动）")] = None,
 ) -> None:
     """修辞诱导对照：单 Agent 裁定 vs 叙事与裁定分离。"""
     from .eval.rhetoric import run as run_rhetoric
 
     out = out or paths.dev_output("eval", "rhetoric.json")
-    kw = {"referees": tuple(referee)} if referee else {}
+    kw: dict = {"referees": tuple(referee)} if referee else {}
+    if system:
+        kw["systems"] = tuple(system)
     summary = asyncio.run(run_rhetoric(module, out, limit=limit, **kw))
     console.print_json(data=summary)
     console.print(f"明细：{out}")
@@ -886,6 +931,45 @@ def eval_experience(
     if report["error"]:
         console.print(f"[yellow]体验中断：{report['error']}；当前结果与恢复记录已保留。[/]")
         raise typer.Exit(1)
+
+
+@eval_app.command("session")
+def eval_session(
+    slot: Annotated[str, typer.Argument(help="存档名，如 zhuishuren-1019-224053")],
+    turns: Annotated[str, typer.Option(help="只看这些回合，如 70-80,99")] = "",
+    recorded: Annotated[bool, typer.Option("--recorded", help="只核对当时的记录，不重放（只调用核对模型）")] = False,
+    parallel: Annotated[int, typer.Option(min=1, max=8, help="同时重放几轮")] = 3,
+    out: Annotated[Path | None, typer.Option(help="报告写到哪里；默认 dev/output/eval/session-<存档>-<时间>.json")] = None,
+) -> None:
+    """拿一局真人存档逐轮重放：从每轮之前的局面、用玩家原话和当时的骰子，跑现在的流程；核对叙述和世界记录对不对得上，和当时比。"""
+    from .eval.session import run
+
+    report = asyncio.run(run(slot, turns=turns, recorded_only=recorded, parallel=parallel, out=out, log=console.print))
+    for side, label in (("recorded", "当时"), ("replayed", "现在")):
+        got = report["summary"].get(side)
+        if not got:
+            continue
+        line = (f"[bold]{label}[/] {got['turns']} 轮：{got['turns_with_problems']} 轮有矛盾（共 {got['problems']} 处 {got['by_kind']}），"
+                f"换了玩家点名的人 {got['target_swaps']} 轮，NPC 开口后叙述复述 {got['echo_when_npc_spoke']:.0%}，叙述平均 {got['keeper_chars']} 字")
+        if "cost_usd" in got:
+            line += (f"；每轮 {got['calls_per_turn']} 次调用，模型耗时 {got['model_seconds_per_turn']} 秒，"
+                     f"其中玩家要等的 {got['wait_seconds_per_turn']} 秒；共 ${got['cost_usd']}")
+        console.print(line)
+    if report["summary"]["failed"]:
+        console.print(f"[yellow]{report['summary']['failed']} 轮重放失败，见报告[/]")
+    console.print(f"报告：{report['out']}")
+
+
+@eval_app.command("rejudge")
+def eval_rejudge(report: Annotated[Path, typer.Argument(help="eval session 写的报告")]) -> None:
+    """用现在的核对模型重新核对一份 eval session 报告（不重放，只调用核对模型）。"""
+    from .eval.session import rejudge
+
+    done = asyncio.run(rejudge(report))
+    for side, label in (("recorded", "当时"), ("replayed", "重放")):
+        if got := done["summary"].get(side):
+            console.print(f"[bold]{label}[/] {got['turns']} 轮：{got['turns_with_problems']} 轮有矛盾（共 {got['problems']} 处 {got['by_kind']}）")
+    console.print(f"报告：{done['out']}")
 
 
 @app.command()

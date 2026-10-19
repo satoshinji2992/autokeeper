@@ -84,6 +84,11 @@ def checkpoints() -> Path:
     return games() / "checkpoints.sqlite"
 
 
+def game_debug(slot: str) -> Path:
+    """Complete private developer records, kept beside saves rather than in shared state."""
+    return games() / "debug" / f"{_safe(slot)}.jsonl"
+
+
 def game_art(digest: str) -> Path:
     """Pictures one game made as the story changed places and people."""
     return games() / "art" / digest

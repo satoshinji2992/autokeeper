@@ -157,7 +157,7 @@ def test_zips_with_utf8_names_flagged_or_not(tmp_path):
 async def test_pictures_from_a_zip_reach_the_importer(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
 
-    async def no_agent(work, *, brief, prepare, console, cfg, photos=True):  # prepare only: no model is called
+    async def no_agent(work, *, brief, prepare, console, cfg, photos=True, key=""):  # prepare only: no model is called
         assert all(cfg.role(name).backend == "codex" for name in ("importer", "vision", "summarizer", "lore"))
         await prepare(console)
         return work
@@ -190,7 +190,7 @@ def test_the_cli_imports_a_zip_and_names_the_module(monkeypatch, tmp_path):
     )
     seen = {}
 
-    async def fake_import(file, module_id, *, pages=None, images=(), console=None, photos=False):
+    async def fake_import(file, module_id, *, pages=None, images=(), console=None, photos=False, fresh=False):
         seen.update(file=Path(file).name, module_id=module_id, images=[Path(p).name for p in images], photos=photos)
 
     monkeypatch.setattr(importer, "run_import", fake_import)

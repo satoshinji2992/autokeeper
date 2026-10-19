@@ -9,6 +9,7 @@ modules/<id>/
   people.yaml        NPC、怪物、预设调查员（npcs、creatures、pregens）
   clues.yaml         线索、物件、手稿、手绘题（clues、items、handouts、sketches）
   story.yaml         事件、结论、结局、大场景（events、conclusions、endings、showcases）
+  situation.yaml     局面：人物关系、各人的打算、伏笔、私人牵连、插件清单（relations、agendas、foreshadow、ties、mechanics）
   art/places/<键>.jpg   场景照片和原作场景图（也支持 png、jpeg、webp）
   art/people/<键>.jpg   人物头像
   art/items/<键>.png    手稿、地图、封面和其他图
@@ -35,14 +36,14 @@ modules/<id>/
 | `cover` | 无剧透的原作封面图片键；选模组时显示 ASCII 预览，不作为开局场景 |
 | `plugins` | 已开发并通过测试的插件 id 列表；从 `plugins/<id>/` 加载代码，不能在 YAML 中填运行时 `extensions` |
 | `start` / `start_time` | 起始地点 id 和时间（如 `D1 14:00`） |
-| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数；`within` 填外层地点 id，表示确实在它里面（书房在宅子里、陵墓在公墓里），地图上画在外层地点里，可留空；`looks` 是剧情变样后的场景图 |
+| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数；`within` 填外层地点 id，表示确实在它里面（书房在宅子里、陵墓在公墓里），地图上画在外层地点里，可留空；`looks` 是剧情变样后的场景图；`views` 是同一个地点的另外几张图（见下文） |
 | `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait`、变样头像 `looks`；`important: true` 标出重要 NPC（最多 6 个），他们有自己的目标和打算，调查员不在时也会行动（见 [持久世界](world.md)） |
-| `items` | 物件：`id`、`name`、公开外观 `description`、所在地点 `where`、初始持有者 `owner`（可空）、配图 `art`；后续归属随本局保存，不替代线索或授予隐藏效果 |
-| `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出 |
+| `items` | 重要物品：`id`、`name`、外观 `description`、所在地点 `where`、初始人物持有者 `owner`（可空）、配图 `art`；支持后台携带状态 `equipment`、数量 `quantity`、状况 `status` 和隐藏标记 `hidden`，不替代线索或授予隐藏效果 |
+| `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出；`art` 是找到的那样东西的照片，配在线索卡上 |
 | `handouts` | 手稿完整 `text`；`images: [病历图片键, 地图图片键]` 关联原图，仅发现后显示，支持滚动阅读全文、ASCII 预览和查看原图 |
 | `conclusions` | 玩家需要推出的结论，校验时要求每个结论至少两条线索 |
 | `flags` | 剧情标记及其含义；裁定员只会在行动真正达成含义时设置 |
-| `events` | 定时（`D1 21:00`）、到达（`visit:地点`）或标记（`flag:x`）触发；可以移动队伍、要求理智检定、让 NPC 登台表演（`performer` + `performance`）、直接进入结局 |
+| `events` | 定时（`D1 21:00`）、到达（`visit:地点`）或标记（`flag:x`）触发；可以移动队伍、要求理智检定、让 NPC 登台表演（`performer` + `performance`）、直接进入结局；`art` 是这一刻的图，事件发生时场景换成它，到调查员下一次行动为止 |
 | `endings` | `condition: flag:x` 的结局按顺序判定；奖励里写 `理智 +1D6` 会自动结算 |
 | `sketches` | 让玩家手绘的东西：`target` 写真实样子，读图员相似度过 `threshold` 时触发理智检定或线索 |
 | `showcases` | 大场景：在重要节点整屏展示一张大图，每个模组 5–15 个，见下文 |
@@ -60,6 +61,61 @@ looks:
 ```
 
 导入时若本机有 Codex，就照原图画出 `art/places/church_burned.jpg`；没画成的，游戏里标记成立时再画。昼夜不用写，画面按时间自动调光。每个地点或人物一般最多两种，全模组最多画 6 处。
+
+## 一个地点的几张图（views）
+
+场景区默认放地点自己的图（`art`）。同一个地点还可以有最多 4 张别的图：
+
+```yaml
+views:
+  - key: shufang_2              # 图片键，art/places/shufang_2.jpg
+    label: 书桌与窗              # 拍的是哪儿
+    features: [写字台]           # 调查员查看写字台时换成这张；不对着具体东西就不写
+    prompt: 窗下一张旧写字台，抽屉半开，散着纸   # 给找照片和画图用，不写人名和剧透
+  - key: mudi_3
+    label: 夜里的墓地
+    time: night                  # 夜里到这里时默认放这张
+```
+
+行动对着的东西名字里有 `features` 里的一项，场景就换成那一张；转去对别的东西做事、和人说话时换回来，等待和闲逛不换。只有名字完整出现才算：查看“陵墓”不会换成对着“陵墓内部”的那张。事件的 `art` 和这里一样放在场景区，下一次行动后换回。
+
+这几张图要模组作者自己放进 `art/places/` 并在这里登记，导入时不会自动去找。
+
+## 局面（situation.yaml）
+
+模组写的是局面，不是剧情：谁想要什么、彼此怎样、没人插手时事情会怎么发展。不分幕，也不预设调查员会怎么走。
+
+```yaml
+relations:                      # 冲突图：谁怎样看谁，开局就在本局的世界记录里
+  - a: jefferson                # NPC id
+    b: douglas                  # NPC id，或 players 表示调查员们
+    kind: 恐惧
+    value: -55                  # -100..100
+    why: 深夜在墓碑旁见过人影，认定是老金博尔的鬼魂
+agendas:                        # 重要 NPC 的打算：调查员不在时照着做
+  - npc: douglas
+    goals: [在出口封死前把剩下的书搬走]
+    steps:
+      - id: take_books
+        text: 等屋里人睡熟，从书房松动的窗户翻进去，抱走几本书
+        when: D2 23:00          # 到这个时间去做；也可以写条件 flag:标记、at:谁:地点
+foreshadow:                     # 伏笔：到这个地点时交给守秘人，一笔带过
+  - id: f_mud
+    hint: 书房窗台外沿蹭着一道干了的湿泥
+    where: shufang
+    pays_off: k_not_burglar     # 最后指向的结论、事件或结局
+ties:                           # 私人牵连：导演开局改编时按调查员背景挑着用
+  - id: t_grave
+    hook: 调查员小时候在这片公墓给祖父上过坟
+    place: mudi
+    fits: [意义非凡之地]
+mechanics:                      # 引擎自己不管、要插件来管的规则
+  - name: 最后一夜
+    rules: 道格拉斯只剩今晚能回来取书……
+    plugin: ""                  # 写好的插件 id；没写就留空，导演看得到这条
+```
+
+写了 `agendas` 的 NPC 自动算重要 NPC（每局最多 6 个）。`autokeeper upgrade <模组>` 会让导入模型补上模组缺的这几项，并补人物性格和口吻、凑够每个结论三条线索、补一两个玩家很可能走到的结局；只补没有的，原作不改，补完校验不过的那一步整步撤掉。
 
 ## 大场景（showcases）
 
@@ -99,10 +155,20 @@ showcases:
 编译 Agent 可以用 `write_plugin` 实现疾病、计数器和自定义行动；即兴导演也可以提交带代码与测试的 `plugins`，通过校验后加入当前存档。插件在开局、到达、回合结束和已声明的自定义动作时执行。详见 [插件开发](plugins.md)。
 
 ```bash
-uv run autokeeper check modules/<id>      # 引用、可达性、线索冗余、ASCII 尺寸与蒙版
+uv run autokeeper check modules/<id>      # 引用、可达性、线索冗余、ASCII 尺寸与蒙版，再推演一遍（见下）
+uv run autokeeper upgrade modules/<id>    # 编译期改编：补上模组缺的人物、关系、打算、伏笔、线索、牵连、结局（调用导入模型）
 uv run autokeeper art color modules/<id>  # 让美术 Agent 给还没上色的图画蒙版
 uv run autokeeper compile modules/<id>    # 生成 skills/module-<id>/（Agent Skill 包）
 ```
+
+`check` 和 `upgrade` 都会做一次**推演**（`module/simulate.py`），不调用模型：从起点出发，把模组里所有能走的路一起走一遍——去得了的地点、满足了前置条件的线索、条件到了的事件、它们设下的标记、因此打开的新地方——直到什么都不再增加。模组里的东西只会越来越多（地点被找到、线索被拿到、标记被设下），所以几轮就走完，一秒以内。它报告：
+
+- 走不到的地点、拿不到的线索、不会发生的事件、到不了的结局（比如结局条件写成了一句话而不是 `flag:标记`，或者线索在一个没有所在地点的 NPC 口中）；
+- 能拿到的线索不到三条的结论（三线索原则）；
+- 离不开某一处或某一个人的结论：把那个地方或那个人拿掉，这个结论就一条线索都不剩。公开的地点不算，谁都能问路找到；
+- 所有结局都要靠调查员自己做到、没有一个会随时间或事件自己到来的模组。
+
+推演看不到先后（某个时限在找到线索之前就过了）和导演在游戏里补的东西，只看模组自己写下的。它的结果算进 `upgrade` 打的可玩度分。
 
 编译出的 Skill 包遵循 [Agent Skills 规范](https://agentskills.io/specification)：`SKILL.md` 是守秘人随身带的总览，
 `references/locations/*.md`、`references/npcs/*.md`、`references/handouts/*.md` 等到需要时才读，`assets/ascii/` 放字符画，`assets/images/` 保留原图和来源。导入模组还会把完整原文、逐页扫描和图片档案复制到 `assets/source/`，只供守秘人回查；整理稿不代替完整原始资料。

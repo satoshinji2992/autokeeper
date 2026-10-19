@@ -10,6 +10,7 @@ can verify them later when a network is available.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from rich.console import Console
@@ -79,7 +80,8 @@ async def run_generate(seed: str, module_id: str, *, console: Console | None = N
 
     work.mkdir(parents=True, exist_ok=True)
     brief = GENERATE.format(seed=seed, module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
-    return await pipeline(work, brief=brief, prepare=research, console=console)
+    key = f"generate:{module_id}:{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"  # the same seed goes on where it stopped
+    return await pipeline(work, brief=brief, prepare=research, console=console, key=key)
 
 
 VERIFY = """逐条核实 research.md 里的考据卡：用 web_search 找出处，必要时用 fetch_url 打开核对。

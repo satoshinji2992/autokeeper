@@ -1,6 +1,6 @@
 """Import a published scenario: PDF / Word / Markdown -> module.yaml + coloured ASCII art -> Skill package.
 
-    prepare ─→ build ─→ validate ─┬─→ compile ─→ END
+    prepare ─→ build ─→ validate ─┬─→ compile (adapt, then the skill) ─→ END
                          ↑        │
                          └─ fix ←─┘   (at most three rounds)
 
@@ -46,6 +46,35 @@ from .compiler import compile_module
 from .schema import Module
 
 MAX_FIX_ROUNDS = 3
+PROGRESS = ".import.json"  # how far an import came, so running it again goes on from there
+STAGES = ("prepared", "built", "validated", "compiled")
+RESUME = """
+
+## 接着上次做
+上一次构建在中途停下了。工作区里已经有上次写的 notes.md、module.yaml，和 art/ 里画好的图。
+先读 notes.md 和 module.yaml，弄清已经做到哪一步，再接着把剩下的做完：不要从头重读整份原文，
+不要重写已经写好的部分，不要删掉已经画好的图。还缺什么、哪里没核对，可以回原文查对应的段落。"""
+
+
+def progress(work: Path) -> dict:
+    try:
+        data = json.loads((work / PROGRESS).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def mark(work: Path, key: str, stage: str) -> None:
+    """Record that an import of this source got this far (key: what it was made from)."""
+    (work / PROGRESS).write_text(json.dumps({"key": key, "stage": stage}, ensure_ascii=False), encoding="utf-8")
+
+
+def reached(work: Path, key: str) -> int:
+    """How many stages an earlier import of the same source got through (0: start afresh)."""
+    done = progress(work)
+    if not key or done.get("key") != key or done.get("stage") not in STAGES:
+        return 0
+    return STAGES.index(done["stage"]) + 1
 VISION = "你是跑团模组整理员的读图助手。看图，用简体中文如实回答问题；看不清的地方直说。"
 
 
@@ -414,21 +443,37 @@ async def pipeline(
     cfg: config.Config | None = None,
     index: bool = True,
     photos: bool = True,
+    adapting: bool = True,
+    key: str = "",
 ) -> Path:
-    """prepare → build → validate ⇄ fix → compile, shared by import and generation."""
+    """prepare → build → validate ⇄ fix → compile, shared by import and generation.
+
+    `key` names what the module is made from (the source file and pages, or the seed). Each stage
+    that finishes is written down in the workspace (PROGRESS); running the same import again goes
+    on from there: no new extraction or research, and an interrupted build is taken up by the
+    agent from its own notes.md and draft (RESUME), not started over. Without a key: from scratch."""
     console = console or Console()
     cfg = cfg or config.load()
     work.mkdir(parents=True, exist_ok=True)
     agent = builder(work, cfg, console)
+    done = reached(work, key)  # stages an earlier run of the same import got through
 
     async def n_prepare(_: ImportState) -> dict:
-        if prepare:
-            await prepare(console)
-        package.start_draft(work)
+        if done and (work / "source").is_dir():
+            console.print(f"[bold]接着上次[/] 已经做到「{STAGES[done - 1]}」，原文不再重新提取")
+        else:
+            if prepare:
+                await prepare(console)
+            package.start_draft(work)
         _prepare(work)
+        if key and not done:
+            mark(work, key, "prepared")
         return {"work": str(work), "rounds": 0}
 
     async def n_build(_: ImportState) -> dict:
+        if done >= STAGES.index("built") + 1:
+            console.print("[bold]构建[/] 上次已经完成，接着校验")
+            return {}
         role = cfg.role("importer")
         console.print(f"[bold]构建[/] {role.backend}:{role.model}（effort={role.effort}）开始读原文、写 module.yaml、画图…")
         task = brief
@@ -436,8 +481,14 @@ async def pipeline(
             art = cfg.role("artist")
             console.print(f"[bold]美术[/] 图由美术 Agent 画：{art.backend}:{art.model}")
             task += ART_BY_ARTIST.format(model=art.model)
+        notes = work / "notes.md"
+        if done and ((work / "module.yaml").is_file() or (notes.is_file() and notes.read_text(encoding="utf-8").strip())):
+            console.print("[bold]构建[/] 接着上次的笔记和草稿做")
+            task += RESUME
         result = await agent.run(task)
         console.print(f"[bold]构建结束[/] {result.steps} 步{'' if result.finished else '（到步数上限）'}  {escape(result.answer[:300])}")
+        if key:
+            mark(work, key, "built")
         return {}
 
     async def n_validate(_: ImportState) -> dict:
@@ -445,6 +496,8 @@ async def pipeline(
         console.print(f"[bold]校验[/] {'通过' if not issues else f'{len(issues)} 个问题'}")
         for i in issues[:20]:
             console.print(f"  {escape(i)}")
+        if key and not issues and STAGES.index(progress(work).get("stage", "prepared")) < STAGES.index("validated"):
+            mark(work, key, "validated")
         return {"issues": issues}
 
     def after_validate(state: ImportState) -> str:
@@ -460,6 +513,16 @@ async def pipeline(
 
     async def n_compile(_: ImportState) -> dict:
         package.normalize(work)
+        from .adapt import adapt, score
+
+        if adapting:
+            console.print("[bold]改编[/] 补上跑团用得着、原文没写的：人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局…")
+            await adapt(work, cfg=cfg, log=console.print)  # added only, checked pass by pass
+            console.print(f"[bold]可玩度[/] {score(Module.load(work)).total}/100")
+        from .simulate import playthrough
+
+        for line in playthrough(Module.load(work)).issues:  # what a playthrough with no model finds: for the author to look at
+            console.print(f"  [yellow]推演[/] {escape(line)}")
         m = Module.load(work)
         root = compile_module(m, paths.SKILLS, source=work / "source")
         console.print(
@@ -479,6 +542,8 @@ async def pipeline(
                 console.print(f"[bold green]知识库[/] {stats}")
             except Exception as exc:
                 console.print(f"[yellow]模组与 Skill 已完成；可选知识库未建成（{type(exc).__name__}），可以稍后重建。[/]")
+        if key:
+            mark(work, key, "compiled")
         return {}
 
     g = StateGraph(ImportState)
@@ -571,9 +636,13 @@ def import_config(model: str = "", vision_model: str = "") -> config.Config:
 
 async def run_import(
     file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (),
-    console: Console | None = None, model: str = "", vision_model: str = "", photos: bool = True,
+    console: Console | None = None, model: str = "", vision_model: str = "", photos: bool = True, fresh: bool = False,
 ) -> Path:
+    """`fresh`: forget an earlier, unfinished import of this module and start over."""
     work = paths.LOCAL_MODULES / module_id
+    if fresh:
+        for name in (PROGRESS, "notes.md", "module.yaml"):
+            (work / name).unlink(missing_ok=True)
 
     async def prepare(console: Console) -> None:
         # Rendering a long PDF takes a while; off the event loop, the TUI keeps drawing meanwhile.
@@ -584,4 +653,7 @@ async def run_import(
             console.print(f"[bold]附图[/] {len(images)} 张 → {work}/source/images/")
 
     brief = BRIEF.format(module_id=module_id, palette=artkit.PALETTE_DOC, art_skill=skills.body("ascii-art"))
-    return await pipeline(work, brief=brief, prepare=prepare, console=console, cfg=import_config(model, vision_model), photos=photos)
+    digest = hashlib.sha256(Path(file).read_bytes()).hexdigest()[:16]
+    key = f"import:{module_id}:{digest}:{pages or ''}:{len(images)}"  # the same file again goes on where it stopped
+    return await pipeline(work, brief=brief, prepare=prepare, console=console, cfg=import_config(model, vision_model), photos=photos,
+                          key=key)  # fmt: skip

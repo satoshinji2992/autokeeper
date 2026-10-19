@@ -164,7 +164,7 @@ def audit(m: Module) -> list[Issue]:
     for item in m.items:
         if item.where not in locs:
             err(f"物件 {item.id} 所在地点 {item.where} 不存在")
-        if item.owner and item.owner not in npcs:
+        if item.owner and item.owner not in npcs | {inv.id for inv in m.pregens}:
             err(f"物件 {item.id} 的持有者 {item.owner} 不存在")
         if item.art and item.art not in m.art:
             warn(f"物件 {item.id} 的插图 {item.art} 还没画")
@@ -188,6 +188,16 @@ def audit(m: Module) -> list[Issue]:
                 err(f"地点 {loc.id} 的 within 绕回了它自己")
         if loc.art and loc.art not in m.art:
             warn(f"地点 {loc.id} 的插图 {loc.art} 还没画")
+        if len({v.key for v in loc.views}) != len(loc.views):
+            err(f"地点 {loc.id} 的几张图用了同一个图片键")
+        for v in loc.views:
+            if not re.fullmatch(r"[a-z0-9_]+", v.key):
+                err(f"地点 {loc.id} 的图 {v.key} 的键只能用小写字母、数字和下划线")
+            for f in v.features:
+                if f not in loc.features:
+                    warn(f"地点 {loc.id} 的图 {v.key} 对着的“{f}”不在它可调查的东西里")
+            if v.key not in m.pictures and v.key not in m.art:
+                warn(f"地点 {loc.id} 的图 {v.key} 还没有")
     for n in m.npcs:
         if n.location and n.location not in locs:
             err(f"NPC {n.id} 所在地点 {n.location} 不存在")
@@ -225,6 +235,8 @@ def audit(m: Module) -> list[Issue]:
         for f in e.sets:
             if f not in m.flags:
                 err(f"事件 {e.id} 设置了未声明的标记 {f}")
+        if e.art and e.art not in m.pictures:
+            warn(f"事件 {e.id} 的图 {e.art} 还没有")
         if e.when.startswith("visit:") and e.when[6:] not in locs:
             err(f"事件 {e.id} 的触发地点 {e.when[6:]} 不存在")
         if e.when.startswith("flag:") and e.when[5:] not in m.flags:
@@ -255,6 +267,35 @@ def audit(m: Module) -> list[Issue]:
             err(f"大场景 {sc.id} 的 when 要写成 opening、visit:地点、event:事件、creature:怪物、flag:标记或 ending:结局，现在是 {sc.when}")
         if sc.art and sc.art not in m.pictures:
             warn(f"大场景 {sc.id} 的图 {sc.art} 不在 art/ 里，会改用生成的图")
+
+    people = npcs | {"players"}
+    for bond in m.relations:
+        if bond.a not in npcs or bond.b not in people or bond.a == bond.b:
+            err(f"人物关系 {bond.a}→{bond.b} 要写两个不同的 NPC（b 也可以是 players）")
+    if len({a.npc for a in m.agendas}) != len(m.agendas):
+        err("同一个 NPC 写了两份打算")
+    for a in m.agendas:
+        if a.npc not in npcs:
+            err(f"打算里的 NPC {a.npc} 不存在")
+        for step in a.steps:
+            if step.when.startswith("flag:") and step.when[5:] not in m.flags:
+                err(f"{a.npc} 的打算 {step.id} 依赖未声明的标记 {step.when[5:]}")
+    if len(m.agendas) > 6:
+        warn(f"写了 {len(m.agendas)} 份打算；每局最多 6 个重要 NPC，多出的不会自己行动")
+    targets = concl | {e.id for e in m.events} | endings
+    for f in m.foreshadow:
+        if f.where not in locs:
+            err(f"伏笔 {f.id} 的地点 {f.where} 不存在")
+        if f.pays_off not in targets:
+            err(f"伏笔 {f.id} 指向的 {f.pays_off} 不是结论、事件或结局")
+    for t in m.ties:
+        if t.npc and t.npc not in npcs:
+            err(f"牵连 {t.id} 的 NPC {t.npc} 不存在")
+        if t.place and t.place not in locs:
+            err(f"牵连 {t.id} 的地点 {t.place} 不存在")
+    for mech in m.mechanics:
+        if mech.plugin and mech.plugin not in m.plugins:
+            err(f"规则「{mech.name}」的插件 {mech.plugin} 不在 plugins 里")
 
     reach = reachable_locations(m) if m.start in locs else set()
     for loc in m.locations:

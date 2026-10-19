@@ -36,7 +36,7 @@ def _now_flag(event_id: str) -> str:
     return event_id if event_id.startswith("now_") else f"now_{event_id}"
 
 
-def check(m: Module, plan: Any, *, at: str) -> list[str]:
+def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> list[str]:
     """What is wrong with a plan, in words the director can fix; empty when it can go in."""
     problems: list[str] = []
     from ..plugins.schema import check as check_plugin
@@ -81,7 +81,7 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
     for item in plan.items:
         if item.where not in locs:
             problems.append(f"新物件 {item.id} 所在地点 {item.where} 不存在")
-        if item.owner and item.owner not in npcs:
+        if item.owner and item.owner not in npcs | {inv.id for inv in m.pregens} | (actors or set()):
             problems.append(f"新物件 {item.id} 的持有者 {item.owner} 不存在")
     for c in plan.clues:
         if c.where not in locs:
@@ -169,7 +169,7 @@ def apply(m: Module, plan: Any) -> Applied:
         if item.id not in have:
             m.items.append(Item(**item.model_dump(), art=visual_key("item", item.id)))
             loc = m.location(item.where)
-            if item.name not in loc.features:
+            if not item.owner and not item.hidden and item.equipment != "concealed" and item.name not in loc.features:
                 loc.features.append(item.name)
     for c in plan.clues:
         if c.id in have:

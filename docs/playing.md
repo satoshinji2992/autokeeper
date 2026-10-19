@@ -163,7 +163,7 @@ uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id c
 uv run autokeeper autoplay modules/local/mymod --party 2
 ```
 
-`--model` 和 `--vision-model` 分别选择导入与读图模型。导入结束会查找 Wikimedia Commons 上有授权的照片，转成字符画；加 `--no-photos` 跳过，之后可用 `autokeeper art fetch 模组目录` 补图。模组原图和手稿尽量保留；`generate` 从设定生成原创模组，`autoplay` 让 AI 调查员自动游玩，标题页「观战」也能看。
+`--model` 和 `--vision-model` 分别选择导入与读图模型。导入中途断了（断网、额度用完、关了窗口），同一个文件再导一次会接着做：原文不再重新提取，导入 Agent 先读自己上次记的笔记和写了一半的草稿，接着往下写；加 `--fresh` 从头来。导入结束会查找 Wikimedia Commons 上有授权的照片，转成字符画；加 `--no-photos` 跳过，之后可用 `autokeeper art fetch 模组目录` 补图。模组原图和手稿尽量保留；`generate` 从设定生成原创模组，`autoplay` 让 AI 调查员自动游玩，标题页「观战」也能看。
 
 **导入成品在 `modules/local/`，原文在对应模组的 `source/`。** 使用云端模型时，导入和游玩所需的正文、图片会发送给所选服务。Git 忽略规则只防止提交文件，不代表内容不会发送给模型。请只导入自己有权使用的材料，不要公开分享受版权保护的原文和图片。
 
