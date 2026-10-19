@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from rich.style import Style
-from rich.text import Text
+from rich.text import Span, Text
 
 from . import artkit
 
@@ -224,7 +224,11 @@ class Atmosphere:
                 dots[x, y] = m
         rows, fog_rows = index.tolist(), veil.tolist()
         src = self.warp().tolist() if "warp" in self.kinds else None
-        out = Text()
+        # The text and its spans are put together by hand: Text.append for each run of a style
+        # (over a thousand a frame) was most of a frame's time.
+        parts: list[str] = []
+        spans: list[Span] = []
+        at = 0
         for y in range(self.h):
             run: list[str] = []
             run_style: Style | None = None
@@ -238,15 +242,24 @@ class Atmosphere:
                 if mote is not None and (which != dark or mote.kind == "embers"):
                     ch, style = mote.glyph, self._over(mote.color, style)
                 if style is not run_style and run:
-                    out.append("".join(run), run_style)
+                    at = self._run(parts, spans, at, run, run_style)
                     run = []
                 run_style = style
                 run.append(ch)
             if run:
-                out.append("".join(run), run_style)
+                at = self._run(parts, spans, at, run, run_style)
             if y < self.h - 1:
-                out.append("\n")
-        return out
+                parts.append("\n")
+                at += 1
+        return Text("".join(parts), spans=spans)
+
+    @staticmethod
+    def _run(parts: list[str], spans: list[Span], at: int, run: list[str], style: Style | None) -> int:
+        piece = "".join(run)
+        parts.append(piece)
+        if style is not None:
+            spans.append(Span(at, at + len(piece), style))
+        return at + len(piece)
 
     def _over(self, colour: str, under: Style | None) -> Style:
         """A particle's colour over whatever background the cell already has."""

@@ -10,9 +10,12 @@ from functools import partial
 
 from rich.cells import set_cell_size
 from rich.console import Group
+from rich.style import Style as RichStyle
 from rich.table import Table
 from rich.text import Text
 from textual.containers import VerticalScroll
+from textual.content import Content, Span
+from textual.style import Style as TextualStyle
 from textual.suggester import SuggestFromList
 from textual.widgets import Static
 
@@ -95,6 +98,7 @@ class SceneArt(Static):
         self._reveal = False  # an arrival waiting for the panel's first size, to scan in then
         self._asked: tuple | None = None  # what the latest load was asked to draw
         self._painted = 0  # rows on screen, so a frame of the same height skips the layout
+        self._styles: dict = {}  # rich style -> Textual's, for this scene's weather frames
 
     def on_mount(self) -> None:
         self.set_interval(1.6, self._idle_flicker)
@@ -250,13 +254,26 @@ class SceneArt(Static):
             if self._asked is asked:  # cut short by a glitch, not by a newer load: show() may ask again
                 self._asked = None
             raise
-        self._atmo = atmo
-        self._paint(art_text=atmo.compose() if atmo else None)
+        self._atmo, self._styles = atmo, {}
+        self._paint(art_text=self._content(atmo.compose()) if atmo else None)
 
     def _weather(self) -> None:
         if self._atmo is None or self._burst or time.monotonic() < self._hold:
             return
-        self._paint(art_text=self._atmo.frame())
+        self._paint(art_text=self._content(self._atmo.frame()))
+
+    def _content(self, frame: Text) -> Content:
+        """A weather frame as Textual content. Turning each run's style into Textual's took half
+        a frame's time; a scene's frames reuse the same few hundred styles, so each is turned
+        once (the cache goes with the scene)."""
+        styles = self._styles
+        spans = []
+        for start, end, style in frame.spans:
+            done = styles.get(style)
+            if done is None:
+                done = styles[style] = TextualStyle.from_rich_style(RichStyle.parse(style) if isinstance(style, str) else style, self.app.ansi_theme)
+            spans.append(Span(start, end, done))
+        return Content(frame.plain, spans)
 
     def quiet(self, seconds: float) -> None:
         """Hold the weather still for a while (the player is typing)."""

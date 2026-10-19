@@ -9,6 +9,7 @@ import threading
 
 import pytest
 from rich.text import Text
+from textual.content import Content
 from textual.screen import Screen
 
 from autokeeper import config, imagery
@@ -198,3 +199,17 @@ async def test_no_picture_is_rendered_on_the_ui_thread_when_a_game_starts(monkey
 def test_the_ui_lets_a_frames_objects_die_young():
     AutoKeeperApp(theme="amber")
     assert gc.get_threshold()[0] >= 10_000  # not a full collection every second or two of play
+
+
+@pytest.mark.usefixtures("canned")
+async def test_weather_frames_become_the_same_content_with_each_style_turned_once():
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = await story_screen(app, pilot)  # the square, in fog
+        scene = screen.query_one(SceneArt)
+        assert await until(pilot, lambda: scene._atmo is not None)
+        for _ in range(3):
+            frame = scene._atmo.frame()
+            mine, theirs = scene._content(frame), Content.from_rich_text(frame, console=app.console)
+            assert mine.plain == theirs.plain and mine.spans == theirs.spans
+        assert len(scene._styles) < len(frame.spans) * 3  # turned once each, not once a frame
