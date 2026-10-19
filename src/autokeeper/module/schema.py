@@ -13,6 +13,7 @@ from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from ..plugins.schema import Plugin
 from ..rules.coc import Investigator
@@ -174,7 +175,7 @@ class Showcase(BaseModel):
     prompt: str = Field(description="画面描述，写给画师：画什么、构图、光线和气氛；只写看得见的，不写名字和幕后真相")
     art: str = Field("", description="模组自带的、正好合适的图片键（art/<键>.jpg），有就直接用这张")
     base: str = Field("", description="参考图的图片键：照着这张原图重画，比如这个地点或怪物的原图；留空就用触发的地点")
-    improvised: bool = Field(False, exclude=True)  # added by the director in this game: its picture is kept per save
+    improvised: SkipJsonSchema[bool] = Field(False, exclude=True)  # the director's, in this game: its picture is kept per save
 
 
 class Module(BaseModel):
