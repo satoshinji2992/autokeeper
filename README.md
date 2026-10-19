@@ -12,6 +12,7 @@
 
 **在终端里玩《克苏鲁的呼唤》第 7 版**
 
+[![Release](https://img.shields.io/github/v/release/satoshinji2992/autokeeper?label=%E7%89%88%E6%9C%AC&color=B8860B)](https://github.com/satoshinji2992/autokeeper/releases/latest)
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-555555)
@@ -29,12 +30,12 @@ AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子�
 ## 功能
 
 - **调查与即兴**：守秘人描述场景、扮演 NPC，按调查员背景安排开场。可以查案，也可以问路、吃饭、闲聊。选择即兴模式后，模组之外的人物、地点和支线会随本局保存。
-- **检定与规则**：使用 BCDice 掷骰，支持常见骰娘指令、孤注一掷、幸运、理智、疯狂与成长。完整战斗和追逐规则尚未实现。
-- **人物与记录**：可用描述或参考人物创建调查员，也可导入已有卡片；标题画面的「角色卡」能翻看所有调查员，在那里新建角色，把预设或存档里的调查员复制成自己的，编辑数值以外的内容、导出或删除。线索本记录发现、约定和物品往来，地图只画已知的地点和路，地点里面的地方可以展开；存档可继续、改名、复制和删除，结局后可复盘。
-- **彩色 ASCII**：场景、人物和物件以字符画显示，支持昼夜、天气和人物表情。模组插图尽量沿用，手稿保留完整文字、ASCII 预览和原图入口。
+- **检定与规则**：检定用 3D 十面骰，点数由物理模拟决定，有六种皮肤；其他骰子和常见骰娘指令走 BCDice。支持孤注一掷、幸运、理智、疯狂与成长。完整战斗和追逐规则尚未实现。
+- **人物与记录**：可用描述或参考人物创建调查员，也可导入已有卡片；标题画面的「角色卡」能翻看所有调查员，在那里新建角色，把预设或存档里的调查员复制成自己的，编辑数值以外的内容、导出或删除。人物卡里有「本局经历」：做过的事、检定、线索、理智和伤势。线索本记录发现、约定和物品往来，地图只画已知的地点和路，地点里面的地方可以展开；存档可继续、改名、复制和删除，结局后可复盘。
+- **彩色 ASCII**：场景、人物和物件以字符画显示，支持昼夜、天气和人物表情。开场、危机、怪物和结局时整屏放一张大图。模组插图尽量沿用，手稿保留完整文字、ASCII 预览和原图入口；装了 Codex 时，失火、受伤这类变化会照原图重画。
 - **叙事调整**：可选篇幅、节奏、恐怖程度及需要略去的细节；F6 重讲最新一段，已结算的骰子和线索不变。F5 提供可修改的行动建议。
-- **导入与扩展**：支持 PDF、Word、Markdown、文本及 ZIP 模组，也可从一句设定生成原创模组。编译与即兴时可开发带测试的规则插件，补充疾病、资源消耗和自定义行动。见[插件说明](docs/plugins.md)。
-- **模型与联机**：支持 Claude、Codex、DeepSeek 和 Ollama，可分别选择游玩、导入和读图模型。画字符画、读图、挑照片用各家最强的模型：Claude 是 Opus 5.5，Codex 是 GPT-6-Astra；DeepSeek 画图用 V4 Pro，读图用 flash（V4 Pro 不能看图）。朋友可通过浏览器加入房间，也可通过 MCP 在 Claude Code / Codex 中主持。
+- **导入与扩展**：支持 PDF、Word、Markdown、文本及 ZIP 模组，也可从一句设定生成原创模组。编译与即兴时可开发带测试的规则插件，补充疾病、资源消耗、自定义行动和小游戏；游戏里按 Ctrl+K 用一句话加家规，测试通过才生效。见[插件说明](docs/plugins.md)。
+- **模型与联机**：支持 Claude、Codex、DeepSeek 和 Ollama，可分别选择游玩、导入和读图模型。画字符画、读图、挑照片用各家最强的模型：Claude 是 Opus 5.5，Codex 是 GPT-6-Astra；DeepSeek 画图用 V4 Pro，读图用 flash（V4 Pro 不能看图）。标题画面就能开房间，朋友用浏览器加入，带自己的角色卡或当场车卡；也可通过 MCP 在 Claude Code / Codex 中主持。
 
 ## 截图
 
@@ -80,7 +81,7 @@ uv run autokeeper serve     # 在浏览器里玩
 
 1. 选“新的调查”，选择标有“初次推荐”的《追书人》。
 2. 选一名预设调查员，或创建、导入自己的人物卡，再决定是否带 AI 同伴。
-3. 读完开场，在底部输入行动，按回车。例如“我向站务员问路”“我先买份早饭”。需要检定时，按弹窗提示掷骰。
+3. 读完开场，在底部输入行动，按回车。例如“我向站务员问路”“我先买份早饭”。需要检定时，按弹窗提示掷骰。守秘人还在讲时也可以先打字回车，讲完自动交上。
 
 《追书人》从火车抵达小镇开始。沿途可以停留、交谈，也可以直接去托马斯家赴约。问路、歇脚不会因为没有找到线索就被当成卡关，游戏时间仍照常推进。
 
@@ -115,7 +116,7 @@ uv run autokeeper autoplay modules/local/mymod --party 2
 | F6 · F7 · F8 · F9 · F10 | 让守秘人换个讲法重讲最新一段（骰子和线索不变）· 前情回顾 · 手绘 · 换模型 · 结局后复盘 |
 | Ctrl+R · Ctrl+S · Ctrl+A · Ctrl+T | 前情回顾 · 存档 · 换画法 · 换配色 |
 | Ctrl+O · Ctrl+B · Ctrl+K | 叙事偏好 · 用量与估算花费 · 规则插件 |
-| Esc | 菜单：存档、读档、设置、叙事偏好、换模型、新手指南、按键说明、回到标题、退出游戏 |
+| Esc | 菜单：存档、读档、设置、叙事偏好、规则插件、换模型、新手指南、按键说明、回到标题、退出游戏 |
 | Ctrl+G · Ctrl+Y | 右栏翻页：经过 · 进展（故事至今，有新进展时更新）· 背景（开场时知道的事）· 现在整理进展 |
 
 ## 和朋友一起玩
@@ -235,7 +236,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 
 都在 AutoKeeper 文件夹里的 `data/`：存档在 `data/games/`，自己的调查员在 `data/cards/`，运行记录在 `data/logs/`。`data/cache/` 里是本地模型、知识库和大场景图，删掉也没关系，用到时会重新准备。完整的说明见[文件放在哪里](docs/harness.md#文件放在哪里)。
 
-以前的版本把这些放在 `saves/`。更新后第一次启动时，本地模型、知识库和自己的调查员会自动挪到 `data/`；旧存档读不了了，`saves/` 可以整个删掉。
+0.0.1 把这些放在 `saves/`。更新后第一次启动时，本地模型、知识库和自己的调查员会自动挪到 `data/`；旧存档读不了了，`saves/` 可以整个删掉。
 
 </details>
 
@@ -253,6 +254,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 - [模型、上下文与 Agent 设计](docs/harness.md)
 - [评测](docs/eval.md)
 - [模组格式](docs/module-format.md)
+- [世界引擎（开发中）](docs/world.md)
 - [更新日志](CHANGELOG.md)
 
 <details>
@@ -269,10 +271,11 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `art color DIR` / `art show DIR NAME` | 给 ASCII 图上色 / 预览 |
 | `showcase 模组` | 提前准备模组的大场景图（有 Codex 时生成） |
 | `autoplay DIR --party N` | AI 调查员自动跑团 |
+| `plugin list DIR` / `plugin test DIR` | 列出模组的规则插件 / 在沙箱里跑插件测试 |
 | `host [DIR] [--seats 玩家,AI]` / `join 地址` | 开局域网房间（同标题画面「开房间」）/ 加入房间 |
 | `setup` / `doctor [--ping]` | 安装 / 检查环境 |
 | `trace` | 查看每个 Agent 的用量和花费 |
-| `eval context` / `eval rhetoric` / `eval lore` | 跑评测 |
+| `eval context` / `eval rhetoric` / `eval lore` / `eval style` | 跑评测 |
 | `mcp` | 以 MCP 服务运行 |
 
 全局选项有 `--preset`、`--model`、`--fallback`、`--search`、`--budget`、`--improv`。
@@ -287,6 +290,8 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 - [x] 彩色 ASCII、照片字符画、昼夜与天气
 - [ ] 完整的战斗与追逐规则
 - [x] 局域网联机，人和 AI 调查员同桌
+- [x] 规则插件与一句话家规
+- [ ] 会自己运转的世界：NPC 按自己的打算行动
 - [ ] QQ / Discord 机器人
 - [ ] 语音叙事
 
