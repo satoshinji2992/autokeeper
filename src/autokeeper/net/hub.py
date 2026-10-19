@@ -87,6 +87,7 @@ PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "me
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
+PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:
