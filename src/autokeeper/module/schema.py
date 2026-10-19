@@ -160,6 +160,9 @@ class Module(BaseModel):
     plugins: list[str] = Field(default_factory=list, max_length=8, description="plugins/<id>/ 下经过测试的自定义规则插件")
     extensions: dict[str, Plugin] = Field(default_factory=dict, exclude=True)
     extension_errors: dict[str, str] = Field(default_factory=dict, exclude=True)
+    # Redacted public summaries of the active rule plugins, set only for a LAN table's copy
+    # (net/hub.py). Excluded from the module's own files; a host's loaded module leaves it empty.
+    plugin_info: list[dict] = Field(default_factory=list, exclude=True)
     hook: str = Field(description="开场钩子（玩家可见）")
     truth: str = Field(description="真相（只有守秘人知道）")
     keeper_notes: str = ""
