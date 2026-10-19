@@ -47,7 +47,10 @@ class ShowcaseScreen(ModalScreen[None]):
         except (OSError, ValueError, subprocess.TimeoutExpired):
             self.leave()  # an unreadable picture: no big scene, not a broken screen
             return
-        shown = self.query_one("#showcase-picture", Static)
+        found = self.query("#showcase-picture").results(Static)
+        shown = next(found, None)
+        if shown is None:  # dismissed while it was being drawn
+            return
         if self.fade:
             shown.styles.opacity = 0.0
         shown.update(Text.from_ansi(art))

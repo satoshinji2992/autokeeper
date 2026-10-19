@@ -289,6 +289,8 @@ async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_it
     from autokeeper.tui.modals.dialogs import RollModal
     from autokeeper.tui.screens.game import GameScreen
 
+    from .test_tui import until
+
     drawn = []
 
     def render(path, width, height, style="photo", when="", fill=False, graded="", face=False):
@@ -297,7 +299,7 @@ async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_it
 
     monkeypatch.setattr(imagery, "available", lambda: True)
     monkeypatch.setattr(imagery, "render", render)
-    monkeypatch.setattr(screen_module, "SHOWN", 0.4)
+    monkeypatch.setattr(screen_module, "SHOWN", 30.0)  # long enough for a slow runner; shortened below
     m = Module.load(EXAMPLE)
     big = str(picture(tmp_path / "big.jpg"))
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="fullscreen")
@@ -311,21 +313,19 @@ async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_it
                 break
         ev = {"type": "showcase", "id": "a", "kind": "怪物", "title": "细碎的脚步声", "picture": big}
         await screen.handle(ev)
-        await pilot.pause(0.2)
-        assert isinstance(app.screen, screen_module.ShowcaseScreen)
+        assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(drawn))  # up, and drawn
         assert drawn[-1] == (big, 120, 39, app.art_style, True)  # the whole screen but the title strip, like the scene
         assert "细碎的脚步声" in str(app.screen.query_one("#showcase-title").render())
         await pilot.press("x")
-        await pilot.pause(0.1)
-        assert app.screen is screen  # any key
+        assert await until(pilot, lambda: app.screen is screen)  # any key
         await screen.handle(ev)
-        await pilot.pause(0.2)
+        assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(app.screen.query("#showcase-picture")))
         await pilot.click("#showcase-picture")
-        await pilot.pause(0.1)
-        assert app.screen is screen  # a click
+        assert await until(pilot, lambda: app.screen is screen)  # a click
+        monkeypatch.setattr(screen_module, "SHOWN", 0.4)
         await screen.handle(ev)
-        await pilot.pause(0.8)
-        assert app.screen is screen  # by itself
+        assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(app.screen.query("#showcase-picture")))
+        assert await until(pilot, lambda: app.screen is screen)  # by itself
         await screen.handle(ev)
         await pilot.pause(0.1)
         await screen.make_way()  # a roll prompt comes up: the big scene gives way
