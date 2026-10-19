@@ -445,7 +445,7 @@ async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game():
         screen.send_line("/通灵")
         assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=150)
         await pilot.press("escape")  # 先不玩
-        assert await until(pilot, lambda: state.plugin_data["ouija"]["by"] == "skip", tries=150)
+        assert await until(pilot, lambda: state.plugin_data.get("ouija", {}).get("by") == "skip", tries=150)  # a new command clears the state first
 
 
 # -- a LAN table ---------------------------------------------------------------------------------
