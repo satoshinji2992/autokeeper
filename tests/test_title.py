@@ -6,14 +6,14 @@ from rich.style import Style
 from rich.text import Text
 from textual.widgets import OptionList
 
-from autokeeper import config, imagery, roster
-from autokeeper.config import EXAMPLE
+from autokeeper import imagery, paths, roster
 from autokeeper.module.schema import Module
-from autokeeper.tui import app as tui
-from autokeeper.tui import cover
-from autokeeper.tui.app import AutoKeeperApp, TitleScreen
-from autokeeper.tui.cards import CardsScreen
-from autokeeper.tui.sheet import SheetModal
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.drawing import cover
+from autokeeper.tui.modals.sheet import SheetModal
+from autokeeper.tui.screens.cards import CardsScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 
 def test_words_go_over_the_picture_cell_by_cell():
@@ -51,9 +51,9 @@ async def test_title_without_chafa_shows_the_eye_and_the_whole_menu(monkeypatch)
 
 
 async def test_cards_list_kept_cards_and_pregens(monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(imagery, "available", lambda: False)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     m = Module.load(EXAMPLE)
     mine = m.pregens[0].model_copy(update={"id": "mine", "name": "我自己的人"})
     roster.keep(mine, {"made": "test"})

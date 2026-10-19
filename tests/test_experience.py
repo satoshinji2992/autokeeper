@@ -7,7 +7,7 @@ from itertools import pairwise
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from autokeeper import config
+from autokeeper import paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.engine import graph, world
 from autokeeper.engine.game import Game
@@ -22,11 +22,11 @@ from .test_tui import canned, until  # noqa: F401
 
 @pytest.fixture
 def module():
-    return Module.load(config.EXAMPLE)
+    return Module.load(paths.EXAMPLE)
 
 
 async def test_walking_the_same_roads_never_changes_distance(fake):
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     game, *_ = make(m, fake, {})
     route = game._route(m.start, "jinboer_jia")
     direct = game._travel(route[0], route[-1])
@@ -36,7 +36,7 @@ async def test_walking_the_same_roads_never_changes_distance(fake):
 
 
 async def test_strolling_does_not_complete_the_action_at_the_far_destination(fake):
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     game, _, events = make(m, fake, {})
     action = Action(kind="investigate", summary="沿路走走，到金博尔家看看书房", destination="jinboer_jia", travel="stroll")
     ruling = await game.rule(action)
@@ -125,7 +125,7 @@ async def test_a_saved_failed_narration_resumes_without_rolls_time_or_npc_duplic
     await game.close()
     # A completely new graph, process and cast can resume the serialized stage journal.
     cast = FakeCast({})
-    again = Game(Module.load(config.EXAMPLE), loaded, cast, Rules(dice=fake))
+    again = Game(Module.load(paths.EXAMPLE), loaded, cast, Rules(dice=fake))
     other = graph.build(again)
     await other.ainvoke({"input": "/retry"})
     assert not cast.heard and not cast.ruled and not cast.npc_calls and len(cast.reports) == 1
@@ -169,14 +169,14 @@ async def test_resuming_an_ai_companion_uses_the_original_investigator(module, f
 
 
 def test_network_projection_omits_unseen_content_and_its_art(fake):
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     st = Game.new(m, m.pregens)
     book = table(m, st)
     assert "suidao" not in {loc["id"] for loc in book["locations"]}
     assert all(not loc["read_aloud"] and not loc["features"] for loc in book["locations"] if loc["id"] != st.location)
     assert {n["id"] for n in book["npcs"]} == {"zhanwuyuan"}
     assert not book["events"] and not book["clues"] and not book["handouts"] and not book["flags"]
-    hub = Hub(config.MODULES / "zhuishuren", state=st, cast=FakeCast({}), rules=Rules(dice=fake))
+    hub = Hub(paths.MODULES / "zhuishuren", state=st, cast=FakeCast({}), rules=Rules(dice=fake))
     welcome = hub._welcome("player")
     assert "suidao" not in welcome["art"] and "douglas" not in welcome["art"]
     assert "pending_turn" not in welcome["state"]
@@ -214,7 +214,8 @@ async def test_twenty_turns_of_daily_life_keep_promises_and_leave_the_case_open(
 async def test_the_screen_recovers_from_a_provider_failure_and_accepts_retry(module):
     from textual.widgets import Input
 
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
 
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     app = AutoKeeperApp(theme="amber")

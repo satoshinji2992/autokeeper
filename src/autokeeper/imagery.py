@@ -1,26 +1,28 @@
 """Real pictures for scenes and portraits, rendered as terminal character art.
 
     queries (Haiku)  ->  Wikimedia Commons search (licence-filtered)  ->  contact sheet
-    ->  vision agent picks one and a crop box (Opus)  ->  art/<name>.jpg + art/<name>.credit.json
+    ->  vision agent picks one and a crop box (Opus)  ->  art/<kind>/<name>.jpg + its line in art/credits.yaml
 
 At play time a scene is cropped to the panel's shape and chafa renders it in Unicode block
 characters, with ASCII strokes drawn along its lines so the shapes still read ("picture",
 the default). STYLES has the others: finer 2×3 sextants, no outlines, plain ASCII glyphs.
 Where no photo fits, Codex can draw one from the description (imagegen.py, fetch_folder's
-`generate`). Hand-drawn art/<name>.txt stays as the fallback when there is no picture or no chafa.
+`generate`). Hand-drawn art/ascii/<name>.txt stays as the fallback when there is no picture or no chafa.
+The renderer reads a prepared copy of each photo (preprocess), kept in data/cache/pictures/.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
-import json
 import os
 import random
 import re
 import shutil
 import subprocess
 import sys
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from functools import lru_cache
@@ -31,7 +33,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from pydantic import BaseModel, Field
 
-from . import artkit
+from . import artkit, credits
 from .config import Config
 from .harness import Session
 
@@ -261,16 +263,27 @@ def preprocessing_available() -> bool:
     return True
 
 
+def prepared(src: Path) -> Path:
+    """Where the prepared copy of a picture is cached: by its path, so a photo replaced in
+    place is prepared again (its mtime is newer)."""
+    from . import paths
+
+    digest = hashlib.sha1(str(Path(src).resolve()).encode()).hexdigest()[:24]
+    return paths.prepared_pictures() / f"{digest}.png"
+
+
 def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, keep_stages: bool = False) -> Path:
-    """Run the pipeline for `kind` and cache the result next to the source as <name>.prep.png."""
+    """Run the pipeline for `kind` and cache the result (prepared())."""
     src = Path(src)
-    out = src.with_name(src.stem + ".prep.png")
+    out = prepared(src)
+    out.parent.mkdir(parents=True, exist_ok=True)
     if out.exists() and out.stat().st_mtime >= src.stat().st_mtime and not keep_stages:
         return out
     im = Image.open(src).convert("RGB")
     if not preprocessing_available():
         im = ImageEnhance.Contrast(ImageOps.autocontrast(im, cutoff=1)).enhance(1.1)
-        im.save(out)
+        im.save(temporary := out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.png"))
+        temporary.replace(out)  # whole, for a renderer reading it at the same moment
         return out
     import cv2
     import numpy as np
@@ -282,8 +295,9 @@ def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, ke
         except Exception:  # a missing model or odd image skips that step, never the picture
             continue
         if keep_stages:
-            cv2.imwrite(str(src.with_name(f"{src.stem}.{i}-{step}.png")), arr)
-    cv2.imwrite(str(out), arr)
+            cv2.imwrite(str(out.with_name(f"{out.stem}.{i}-{step}.png")), arr)
+    cv2.imwrite(str(temporary := out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.png")), arr)
+    temporary.replace(out)
     return out
 
 
@@ -366,18 +380,20 @@ def targets(m) -> list[tuple[str, str, str]]:
 def private(folder: Path) -> bool:
     """A folder that stays on this machine (an imported module, a save), where a web picture
     without a licence may go; the bundled modules in the repository get licensed ones only."""
-    from . import config
+    from . import paths
 
     where = folder.resolve()
-    return any(where.is_relative_to(p.resolve()) for p in (config.LOCAL_MODULES, config.SAVES))
+    return any(where.is_relative_to(p.resolve()) for p in (paths.LOCAL_MODULES, paths.DATA))
 
 
 async def fetch_folder(
     cfg: Config, art_dir: Path, targets: list[tuple[str, str, str]], *, force: bool = False, parallel: int = 3, log=print,
     on_reply=None, generate: Callable[[str, str, str], Awaitable[bool]] | None = None,
 ) -> list[str]:
-    """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes <name>.jpg and <name>.credit.json.
-    `generate` (imagegen.filler) makes one from the description when no photo fits."""
+    """targets: (name, subject, kind) with kind 'scene' or 'portrait'. Writes art/<kind>/<name>.jpg
+    and its credit. `generate` (imagegen.filler) makes one from the description when no photo fits."""
+    from .module.package import picture_target
+
     art_dir.mkdir(parents=True, exist_ok=True)
     web = private(art_dir) and cfg.search != "none"
     sem, drawing = asyncio.Semaphore(parallel), asyncio.Semaphore(2)  # a few Codex runs at a time
@@ -385,7 +401,8 @@ async def fetch_folder(
     async with httpx.AsyncClient() as client:
 
         async def one(name: str, subject: str, kind: str) -> None:
-            if (art_dir / f"{name}.jpg").exists() and not force:
+            target = picture_target(art_dir, name, kind)
+            if target.exists() and not force:
                 return
             async with sem:
                 try:
@@ -407,9 +424,10 @@ async def fetch_folder(
                 log(f"  · {name}: 没有合适的图，保留手绘")
                 return
             im, c = found
-            im.save(art_dir / f"{name}.jpg", quality=92)
-            (art_dir / f"{name}.credit.json").write_text(json.dumps(asdict(c) | {"kind": kind}, ensure_ascii=False, indent=1), encoding="utf-8")
-            await asyncio.to_thread(preprocess, art_dir / f"{name}.jpg", kind)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            im.save(target, quality=92)
+            credits.put(target, asdict(c) | {"kind": kind})
+            await asyncio.to_thread(preprocess, target, kind)
             done.append(name)
             log(f"  ✓ {name}: {c.title}（{c.license}）")
 
@@ -450,10 +468,18 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
 
 
 def picture_source(path: str | Path) -> str:
-    """The preprocessed image if there is one, else the original."""
+    """The prepared copy (made now when it is missing or older than the picture), else the
+    original."""
     p = Path(path)
-    prep = p.with_name(p.stem + ".prep.png")
-    return str(prep if prep.exists() else p)
+    prep = prepared(p)
+    try:
+        if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
+            return str(prep)
+        record = credits.get(p) or {}
+        kind = record.get("kind") if record.get("kind") in PIPELINES else "portrait" if p.parent.name == "people" else "scene"
+        return str(preprocess(p, kind))
+    except (OSError, ValueError, Image.UnidentifiedImageError):
+        return str(p)
 
 
 def light(im: Image.Image, when: str) -> Image.Image:
@@ -740,5 +766,3 @@ def glitch(path: str, width: int, height: int, strength: float, style: str = "ph
     return _chafa(im, width, height, style, work=3)
 
 
-def credits(art_dir: Path) -> list[dict]:
-    return [json.loads(p.read_text(encoding="utf-8")) | {"name": p.name.split(".")[0]} for p in sorted(Path(art_dir).glob("*.credit.json"))]

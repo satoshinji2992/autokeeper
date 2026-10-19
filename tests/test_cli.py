@@ -7,6 +7,8 @@ import sys
 
 import pytest
 
+from autokeeper import paths
+
 
 @pytest.mark.parametrize("crash", [False, True])
 def test_game_output_stays_visible_while_native_warnings_go_to_log(tmp_path, crash):
@@ -14,9 +16,10 @@ def test_game_output_stays_visible_while_native_warnings_go_to_log(tmp_path, cra
 import os
 import sys
 from pathlib import Path
-from autokeeper import cli, config
+from autokeeper import paths
+from autokeeper import cli, paths
 
-config.SAVES = Path(sys.argv[1])
+paths.DATA = Path(sys.argv[1])
 original = sys.__stderr__
 
 class App:
@@ -41,7 +44,7 @@ os.write(2, b'after game\\n')
     )
     assert result.returncode == 0, result.stderr
     assert result.stderr == "visible game screen\nafter game\n"
-    assert (tmp_path / "stderr.log").read_text(encoding="utf-8") == "native warning\n"
+    assert (tmp_path / "logs" / "stderr.log").read_text(encoding="utf-8") == "native warning\n"
 
 
 def test_terminals_that_show_true_colour_are_told_so(monkeypatch):
@@ -71,13 +74,33 @@ def test_version_flag_prints_the_version():
 
 
 def test_only_a_join_from_the_host_machine_carries_the_room_key(monkeypatch, tmp_path):
-    from autokeeper import config
     from autokeeper.net.hub import room_key, room_key_file
 
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.delenv("AUTOKEEPER_GUEST", raising=False)
+    room_key_file(8765).parent.mkdir(parents=True)
     room_key_file(8765).write_text("secret", encoding="utf-8")
     assert room_key("ws://127.0.0.1:8765/ws") == "secret"
     assert room_key("ws://26.1.2.3:8765/ws") == ""  # a friend's machine has no such file anyway
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # the browser seats the host command starts
     assert room_key("ws://127.0.0.1:8765/ws") == ""
+
+
+def test_slow_things_move_once_from_the_old_saves_folder():
+    (paths.OLD_SAVES / "models" / "bge").mkdir(parents=True)
+    (paths.OLD_SAVES / "investigators").mkdir()
+    (paths.OLD_SAVES / "investigators" / "chen.json").write_text("{}", encoding="utf-8")
+    (paths.OLD_SAVES / "old-game.json").write_text("{}", encoding="utf-8")
+    assert sorted(paths.adopt_old()) == ["investigators", "models"]
+    assert (paths.models() / "bge").is_dir() and (paths.cards() / "chen.json").is_file()
+    assert (paths.OLD_SAVES / "old-game.json").is_file() and not paths.save("old-game").exists()  # games stay behind
+    assert paths.adopt_old() == []
+
+
+def test_the_claude_code_plugin_has_the_package_version():
+    import json
+
+    from autokeeper import __version__
+
+    manifest = json.loads((paths.ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == __version__

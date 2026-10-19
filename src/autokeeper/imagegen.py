@@ -2,7 +2,7 @@
 
     the picture it shows now (or none) + what to draw  ->  codex exec: one image_gen call
     ->  $CODEX_HOME/generated_images/<thread>/*.png  ->  <target>.jpg (at most 1024 px)
-        + <target>.credit.json (based_on: the original's credit)  ->  imagery.preprocess
+        + its credit in credits.yaml (based_on: the original's credit)  ->  imagery.preprocess
 
 Used where a picture is missing (a scene or a face no photo was found for, at import and for
 the director's new places and people) and where the story visibly changes a place or a person
@@ -11,7 +11,7 @@ plugins, so it calls the tool at once: measured, 7.6k input tokens and 45 s a pi
 reading its imagegen skill first took 128k. Every preset uses this same path; without a codex
 CLI that is logged in and has the image_generation feature it is simply off. Every picture
 counts against its module's LIMIT (import and every game together, kept in
-saves/imagegen/<module>.json); a game also keeps to PER_GAME, an import to AT_IMPORT and LOOKS.
+data/imagegen/<module>.json); a game also keeps to PER_GAME, an import to AT_IMPORT and LOOKS.
 """
 
 from __future__ import annotations
@@ -35,7 +35,8 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from . import config
+from . import config, credits, paths
+from .module.package import find_picture, picture_target
 
 LIMIT = 100  # pictures one module may ever get: its import and all its games together
 PER_GAME = 12  # pictures one game (a save) may make
@@ -141,7 +142,7 @@ _held: dict[str, int] = {}  # module -> pictures being made right now
 
 
 def ledger(module: str) -> Path:
-    return config.SAVES / "imagegen" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', module) or '_'}.json"
+    return paths.imagegen_ledger(module)
 
 
 def _read(module: str) -> dict[str, Any]:
@@ -349,16 +350,11 @@ def _credit(picture: Path | None) -> dict[str, Any] | None:
     """The credit of the picture a new one is made from, so the chain of sources stays."""
     if picture is None:
         return None
-    record = picture.with_name(picture.stem + ".credit.json")
-    try:
-        data = json.loads(record.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {"title": picture.name}
-    return data if isinstance(data, dict) else {"title": picture.name}
+    return credits.get(picture) or {"title": picture.name}
 
 
 def _store(data: bytes, target: Path, credit: dict[str, Any]) -> Path:
-    """The picture at a sane size as <target>.jpg, with <target>.credit.json beside it."""
+    """The picture at a sane size as <target>.jpg, and its credit."""
     target.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(io.BytesIO(data)) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
@@ -366,7 +362,7 @@ def _store(data: bytes, target: Path, credit: dict[str, Any]) -> Path:
         im.save(target, "JPEG", quality=90)
         size = im.size
     record = credit | {"width": size[0], "height": size[1]}
-    target.with_name(target.stem + ".credit.json").write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
+    credits.put(target, record)
     return target
 
 
@@ -420,7 +416,7 @@ def filler(cfg: config.Config | None, module, art_dir: Path, *, cap: int = AT_IM
             return False
         made += 1
         try:
-            await make(prompt(subject, kind, era=module.era, setting=module.setting), art_dir / f"{name}.jpg",
+            await make(prompt(subject, kind, era=module.era, setting=module.setting), picture_target(art_dir, name, kind),
                        kind=kind, module=module.id, title=subject[:80], where=where, on_reply=on_reply)
             return True
         except (Unavailable, OverBudget, Failed, OSError, ValueError):
@@ -441,17 +437,17 @@ async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, 
         return []
     wanted = [(x.art, look, "scene", f"{x.name}：{x.read_aloud.strip()[:160]}") for x in module.locations if x.art for look in x.looks]
     wanted += [(n.portrait, look, "portrait", f"{n.name}，{n.look or n.name}") for n in module.npcs if n.portrait for look in n.looks]
-    wanted = [w for w in wanted if not (art_dir / f"{w[1].key(w[0])}.jpg").exists()][:cap]
+    wanted = [w for w in wanted if find_picture(art_dir, w[1].key(w[0])) is None][:cap]
     done: list[str] = []
     failed = 0
     for base, look, kind, subject in wanted:
         key = look.key(base)
-        original = next((p for p in (art_dir / f"{base}{ext}" for ext in IMAGES) if p.is_file()), None)
+        original = find_picture(art_dir, base)
         world = {"era": module.era, "setting": module.setting}
         text = (prompt(subject, kind, change=look.change, **world) if original is not None
                 else prompt(f"{subject}。现在：{look.change}", kind, **world))
         try:
-            await make(text, art_dir / f"{key}.jpg", kind=kind, module=module.id, original=original,
+            await make(text, picture_target(art_dir, key, kind), kind=kind, module=module.id, original=original,
                        title=f"{subject[:40]}（{look.change[:40]}）", where="import")
         except (Unavailable, OverBudget) as exc:
             log(f"  · 变样图先画到这里：{exc}")

@@ -10,15 +10,16 @@ import pytest
 from textual.widgets import Input, Static
 
 from autokeeper.agents.director import Improv, NewLocation
-from autokeeper.config import EXAMPLE
 from autokeeper.engine import fog
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.module import graph, improv
 from autokeeper.module.schema import Location, Module
 from autokeeper.net.hub import PRIVATE, table
-from autokeeper.tui import mapview
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals import mapview
+from autokeeper.tui.screens.game import GameScreen
 
 from .test_tui import canned  # noqa: F401  (a fixture: every agent answers from a can)
 

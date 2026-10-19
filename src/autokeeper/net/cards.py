@@ -5,7 +5,7 @@ characteristics and skills in the 7th edition's ranges, its text cut to size; HP
 SAN ceiling are worked out again by the rules code, never taken from the card.
 
 A friend often has no model of their own, so 车卡 for a seated player runs on the host: the
-player's screen is the ordinary card screen (tui/card.py), its Builder a RemoteBuilder that
+player's screen is the ordinary card screen (tui/screens/card.py), its Builder a RemoteBuilder that
 sends each step to the Hub, where a real Builder does it (step). The messages:
 
     client -> hub   card {op: begin | look_up | read | propose | build | find | photo | cancel | end, n, ...}
@@ -24,7 +24,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .. import roster
+from .. import credits, roster
 from ..agents.card import Builder, CardError, Figure, Photo, Proposal, download, local_file
 from ..module.schema import Module
 from ..rules.catalog import CHARACTERISTICS, canonical
@@ -289,7 +289,7 @@ class RemoteBuilder:
             return False
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
-        dest.with_suffix(".credit.json").write_text(json.dumps(asdict(photo) | {"kind": "portrait"}, ensure_ascii=False), encoding="utf-8")
+        credits.put(dest, asdict(photo) | {"kind": "portrait"})
         return True
 
     def keep(self, photo: Path | None) -> None:

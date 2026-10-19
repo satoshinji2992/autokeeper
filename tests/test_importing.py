@@ -17,13 +17,14 @@ from rich.console import Console
 from textual import events
 from textual.widgets import Button, Input, OptionList, RichLog, Select, Static
 
-from autokeeper import config
-from autokeeper.config import EXAMPLE
+from autokeeper import config, paths
 from autokeeper.module import importer, sources
 from autokeeper.module.sources import dropped_path, from_windows
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import AutoKeeperApp, SetupScreen, TitleScreen
-from autokeeper.tui.importing import ImportScreen, ModuleFiles, StopModal, page_spec
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.importing import ImportScreen, ModuleFiles, StopModal, page_spec
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 
 def png() -> bytes:
@@ -154,7 +155,7 @@ def test_zips_with_utf8_names_flagged_or_not(tmp_path):
 
 # -- the importer's side -----------------------------------------------------------------------
 async def test_pictures_from_a_zip_reach_the_importer(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "local")
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
 
     async def no_agent(work, *, brief, prepare, console, cfg, photos=True):  # prepare only: no model is called
         assert all(cfg.role(name).backend == "codex" for name in ("importer", "vision", "summarizer", "lore"))
@@ -205,15 +206,15 @@ def library(monkeypatch, tmp_path):
     """modules/ and saves/ in a temp folder."""
     modules = tmp_path / "modules"
     modules.mkdir()
-    monkeypatch.setattr(config, "MODULES", modules)
-    monkeypatch.setattr(config, "LOCAL_MODULES", modules / "local")
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "MODULES", modules)
+    monkeypatch.setattr(paths, "LOCAL_MODULES", modules / "local")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     return modules
 
 
 def finished_module(module_id: str) -> Path:
     """What a successful import leaves behind: here, the format sample under the new id."""
-    work = config.LOCAL_MODULES / module_id
+    work = paths.LOCAL_MODULES / module_id
     shutil.copytree(EXAMPLE, work)
     yaml = work / "module.yaml"
     yaml.write_text(yaml.read_text(encoding="utf-8").replace("id: example", f"id: {module_id}", 1), encoding="utf-8")
@@ -293,7 +294,7 @@ async def test_import_a_zip_from_the_title_screen_and_start_playing(monkeypatch,
     async def fake_import(file, module_id, *, pages=None, images=(), console=None):
         text = Path(file).read_text(encoding="utf-8")
         calls.append({"file": Path(file), "module_id": module_id, "pages": pages, "images": [Path(p) for p in images], "text": text})
-        console.print(f"[bold]提取[/] {Path(file).name}：0 页，{len(text)} 字 → {config.LOCAL_MODULES / module_id}/source/")
+        console.print(f"[bold]提取[/] {Path(file).name}：0 页，{len(text)} 字 → {paths.LOCAL_MODULES / module_id}/source/")
         console.print("[bold]构建[/] fake:fake 开始读原文、写 module.yaml、画图…")
         console.print("  [cyan]· read_file[/] source/source.md  [dim]（共 81 行）[/]")
         await asyncio.sleep(0.2)
@@ -325,7 +326,7 @@ async def test_import_a_zip_from_the_title_screen_and_start_playing(monkeypatch,
         log = "\n".join(line.text for line in screen.query_one("#import-log", RichLog).lines)
         assert "提取 正文.md" in log and "· read_file" in log
         assert screen.steps == 1 and all("done" in screen.query_one(f"#stage-{i}").classes for i in range(4))
-        assert config.LOCAL_MODULES / "dongxuezhixia" in tui.modules()  # in the module list now
+        assert paths.LOCAL_MODULES / "dongxuezhixia" in paths.module_folders()  # in the module list now
         assert app.focused is screen.query_one("#play", Button)
         await pilot.press("enter")  # 开始游戏
         await until(pilot, lambda: isinstance(app.screen, SetupScreen) and app.screen.step == "investigator")
@@ -371,7 +372,7 @@ async def test_failures_are_shown_plainly_and_an_import_can_be_stopped(monkeypat
         assert screen.query_one("#retry").display and not screen.query_one("#play").display
 
         async def gave_up(file, module_id, **kw):  # ran out of fix rounds: the module still has errors
-            work = config.LOCAL_MODULES / module_id
+            work = paths.LOCAL_MODULES / module_id
             shutil.rmtree(work, ignore_errors=True)
             yaml = finished_module(module_id) / "module.yaml"
             yaml.write_text(yaml.read_text(encoding="utf-8").replace("start: square", "start: nowhere", 1), encoding="utf-8")

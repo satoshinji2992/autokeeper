@@ -9,7 +9,7 @@ import json
 from typer.testing import CliRunner
 
 from autokeeper import cli as cli_module
-from autokeeper import config, skills
+from autokeeper import config, paths, skills
 from autokeeper.cli import app as cli
 from autokeeper.config import Role
 from autokeeper.eval import style
@@ -124,7 +124,7 @@ class Canned(hm.Model):
 
 
 def _canned(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
@@ -137,7 +137,7 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
     reports = []
     for _ in range(2):
         Canned.told = []
-        s = await style.run(config.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
+        s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
     assert s["narrations"] == 9 and s["hits"]["仿佛"] == 9 and s["usage"]["calls"] == 9
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
@@ -154,7 +154,7 @@ async def test_the_npcs_hear_the_same_questions_every_time(monkeypatch, tmp_path
     runs = []
     for _ in range(2):
         Canned.told = []
-        s = await style.talk(config.MODULES / "zhuishuren", label="t", out=tmp_path / "talk.json")
+        s = await style.talk(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "talk.json")
         runs.append(Canned.told)
     assert runs[0] == runs[1] and len(runs[0]) == 12 and s["lines"] == 12
     assert set(s["said"]) == {"托马斯·金博尔", "梅洛迪亚斯·杰弗逊", "莉拉·奥黛尔"}
@@ -187,11 +187,10 @@ class Judge(hm.Model):
 async def test_the_blind_judge_pairs_runs_and_does_not_reward_going_first(monkeypatch, tmp_path):
     from autokeeper.eval import blind
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
     monkeypatch.setitem(hm.MODELS, "judge", Judge)
     monkeypatch.setattr(blind, "route", lambda model: ("judge", model))
-    folder = tmp_path / "saves" / "eval"
+    folder = paths.dev_output("eval")
     folder.mkdir(parents=True)
     for i in (1, 2):
         for label, told in (("old", ["雾还没散。", "门开着。"]), ("new", ["一盏灯亮着。", "灯下有人。"])):

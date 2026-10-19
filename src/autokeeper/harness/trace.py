@@ -1,4 +1,4 @@
-"""One JSON line per model call, in saves/traces/<date>.jsonl.
+"""One JSON line per model call, in data/logs/traces/<date>.jsonl.
 
 Metadata by default: who called which model, how (text / native / json), how many
 characters went in, tokens, cache hits, cost, latency, repair rounds, errors.
@@ -15,7 +15,7 @@ import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from .. import config
+from .. import paths
 
 if TYPE_CHECKING:
     from .models import Model, Reply
@@ -63,7 +63,7 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
     if level == "full":
         row.update(system=model.system, input=messages, output=reply.text, thinking=reply.thinking)
     try:
-        folder = config.SAVES / "traces"
+        folder = paths.traces()
         folder.mkdir(parents=True, exist_ok=True)
         with (folder / f"{dt.date.today().isoformat()}.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -74,7 +74,7 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
 # -- reading traces back (`autokeeper trace`) ----------------------------------------------
 def read(day: str | None = None) -> list[dict[str, Any]]:
     """Rows from one day's file (default: the latest), or every file with day="all"."""
-    files = sorted((config.SAVES / "traces").glob("*.jsonl"))
+    files = sorted(paths.traces().glob("*.jsonl"))
     if day != "all":
         files = [f for f in files if f.stem == day] if day else files[-1:]
     out = []

@@ -9,9 +9,9 @@ import aiohttp
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Action, Cast, Ruling
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.engine import debrief
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
@@ -19,6 +19,7 @@ from autokeeper.harness import Reply, spend
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
 from .test_engine import NEWSSTAND, FakeCast, SlowDirector, make, run_turn
@@ -151,8 +152,8 @@ class Scripted(hm.Model):
 @pytest.fixture
 def scripted(monkeypatch, tmp_path):
     monkeypatch.setitem(hm.MODELS, "scripted", Scripted)
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    monkeypatch.setattr(paths, "USER_DIR", tmp_path / "user")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
     spend.budget.cache_clear()
     Scripted.replies, Scripted.seen = [], []
@@ -239,9 +240,10 @@ async def test_the_epilogue_is_told_once_after_the_ending(module, fake):
 async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
     from textual.widgets import Static
 
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.debrief import DebriefModal
-    from autokeeper.tui.retell import RetellModal
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.debrief import DebriefModal
+    from autokeeper.tui.modals.retell import RetellModal
+    from autokeeper.tui.screens.game import GameScreen
 
     from .test_tui import story_text
     from .test_tui import until as waits
@@ -272,7 +274,7 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         assert await waits(pilot, lambda: RETOLD in story_text(screen) and not screen.busy)
         assert list(screen.story.query(".keeper")) == blocks and str(blocks[-1].render()) == RETOLD  # rewritten in place
         assert "砍到上一版的一半" in cast.retold[0][2]
-        assert RETOLD in (config.SAVES / "retell.json").read_text(encoding="utf-8")  # and saved
+        assert RETOLD in paths.save("retell").read_text(encoding="utf-8")  # and saved
         screen.send_line("/retell 更阴森")  # straight from the box
         assert await waits(pilot, lambda: "（第 2 版）" in story_text(screen) and not screen.busy)
         await pilot.press("f6")
@@ -306,7 +308,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
 
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -315,7 +317,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
 
 # -- at a shared table --------------------------------------------------------------------------
 async def test_a_shared_table_hears_it_again_and_gets_the_book_at_the_end(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     cast = teller(LeverCast())
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
     task = await opened(hub)
@@ -363,14 +365,14 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
     from textual.widgets import Input, Static
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.debrief import DebriefModal
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.retell import RetellModal
+    from autokeeper.tui.modals.debrief import DebriefModal
+    from autokeeper.tui.modals.retell import RetellModal
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_tui import story_text
     from .test_tui import until as waits
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     cast = teller(LeverCast())
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
     task = await opened(hub)

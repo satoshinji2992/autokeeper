@@ -6,7 +6,7 @@ paired with run i of B. A pair is one narration of the same beat (with the narra
 it, so a repeat shows), or one NPC's whole exchange. It is judged twice, A as 甲 and then B
 as 甲; a verdict that turns with the order is a tie. Wins go to a sign test, ties left out.
 
-    autokeeper eval blind --a before --b after           # saves/eval/style-before-*.json vs style-after-*.json
+    autokeeper eval blind --a before --b after           # dev/output/eval/style-before-*.json vs style-after-*.json
     autokeeper eval blind --a before --b after --npc     # talk-*.json
 """
 
@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .. import config
+from .. import config, paths
 from ..config import route
 from ..harness.models import ModelPool
 from .style import module_of
@@ -52,7 +52,7 @@ NPC_JUDGE = """你在给跑团里的 NPC 台词做盲评。同一个 NPC 被问�
 def runs(kind: str, label: str) -> list[dict[str, Any]]:
     """What eval style wrote for a label, in run order: style-<label>-1.json, -2, ..."""
     out = []
-    while (f := config.SAVES / "eval" / f"{kind}-{label}-{len(out) + 1}.json").is_file():
+    while (f := paths.dev_output("eval", f"{kind}-{label}-{len(out) + 1}.json")).is_file():
         out.append(json.loads(f.read_text(encoding="utf-8")))
     return out
 
@@ -112,7 +112,7 @@ async def judge(a: str, b: str, *, npc: bool = False, model: str = "claude-opus-
     kind = "talk" if npc else "style"
     first, second = runs(kind, a), runs(kind, b)
     if not first or not second:
-        raise ValueError(f"没找到 saves/eval/{kind}-{a if not first else b}-1.json")
+        raise ValueError(f"没找到 dev/output/eval/{kind}-{a if not first else b}-1.json")
     pairs = _npc_pairs(first, second, first[0].get("module", "")) if npc else _keeper_pairs(first, second)
     backend, name = route(model)
     pool = ModelPool(config.Role(backend, name, "medium"), size=4, label="judge")

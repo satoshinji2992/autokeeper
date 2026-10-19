@@ -1,0 +1,185 @@
+locations:
+- id: main_street
+  name: 主街
+  read_aloud: 主街只有两个街区长。雪犁推出来的雪墙比人还高，杂货铺的窗玻璃上结着霜花， 马车和一辆卡车停在路边，车辙很快就又被风抹平。诊所的方向有人压着帽子快步走过。
+  keeper: AutoKeeper 补充的中转地点，只用于问路、歇脚和辨认方向，不放新线索、怪兆或强制检定。 镇民这时只当是一场凶险的流感，愿意指路，也乐于谈谁家又倒了人。
+  features:
+  - 杂货铺门口
+  - 铲雪的人
+  - 街角告示板
+  exits:
+  - ratger_house
+  - clinic
+  - church
+  - post_office
+  - brucker_farm
+  - darvill_house
+  - satin_hill
+  travel_minutes:
+    ratger_house: 5
+    clinic: 8
+    church: 10
+    post_office: 6
+    darvill_house: 20
+    brucker_farm: 40
+    satin_hill: 60
+  art: main_street
+  public: true
+  weather:
+  - snow
+- id: ratger_house
+  name: 拉特格出租屋
+  read_aloud: 门廊的木板被踩得发亮，屋里烧着炉子。多琳·拉特格一边擦手一边迎出来，说房间收拾好了， 晚饭六点。弗朗西斯把一只搪瓷壶放在桌上，说这阵子镇上不太平，你们来得不是时候。
+  keeper: 开局地点。务必让调查员一到这里就注意到几个房子外抬上卡车的两具蒙白布尸体。 拉特格夫妇终生住在这里，退休后靠出租房间贴补，认识几乎所有受影响的家庭，能把调查员介绍过去， 也能手绘一张地图指路到安特医生的诊所（分发材料
+    1）。
+  features:
+  - 客厅的餐桌
+  - 弗朗西斯的抽屉
+  - 后廊
+  - 楼上的客房
+  exits:
+  - main_street
+  - clinic
+  travel_minutes: {}
+  art: ratger_house
+  public: true
+  weather:
+  - snow
+- id: clinic
+  name: 安特医生的诊所
+  read_aloud: 诊所是一栋改过的宅子，候诊室里坐满了人，有人靠着墙睡，有人低声咳。诊室里有六张床， 都躺着人；床单洗得发白。杰里迈亚·安特医生把听诊器挂在脖子上，抬头看了你们一眼，说： “州里终于来人了。”两名护士在换水盆，其中一位年轻女子动作最利落。
+  keeper: 安特医生会把详尽的病历笔记交给来协助的县府人员（分发材料 2a、2b）。 诊所里 6 名患者正在接受治疗，其他患者在家休养；两名护士轮班，其中一位正是卡洛琳·达维尔。 安特笃信科学，即使证据堆积如山也不肯接受超自然的解释。
+  features:
+  - 六张病床
+  - 安特的病历本
+  - 药柜里的威士忌
+  - 护士的值班记录
+  exits:
+  - main_street
+  travel_minutes: {}
+  art: clinic
+  public: true
+  weather:
+  - snow
+  - flicker
+- id: church
+  name: 埃斯内尔的教堂
+  read_aloud: 教堂不大，长椅上还留着上一场礼拜的赞美诗本。牧师迎接你们时手上还带着灰，说地下室出了点麻烦， 这几天的死者都停在那里等雪停了下葬。
+  keeper: 镇上唯一一座教堂，死者停放在地下室。地下室远端的墙壁因水管爆裂而损坏，长满霉菌，看起来摇摇欲坠； 牧师非常震惊，因为本周早些时候还没有任何损坏或爆裂的迹象。
+  features:
+  - 地下室
+  - 远端那面渗水的墙
+  - 停放的棺木
+  exits:
+  - main_street
+  travel_minutes: {}
+  art: church
+  public: true
+  weather:
+  - snow
+  - flicker
+- id: post_office
+  name: 邮局
+  read_aloud: 邮局里只有一位职员，安娜·伊斯特曼，正在给一叠信盖戳。炉子忽然“砰”地响了一声， 靠炉子那半边热得发烫，离炉子两步就冷得让人缩脖子。她抬头，问你们要寄什么。
+  keeper: 邮局里非常令人不适：炉子时不时发出刺耳响声，屋子温度忽冷忽热。 安娜起初不愿交谈，但调查员的问题很快会让她滔滔不绝——这是她发泄悲伤的出口。
+  features:
+  - 安娜的柜台
+  - 分信格
+  - 炉子
+  exits:
+  - main_street
+  - eastman_house
+  travel_minutes: {}
+  art: post_office
+  public: true
+  weather:
+  - snow
+  - flicker
+- id: eastman_house
+  name: 伊斯特曼家
+  read_aloud: 屋子拉着窗帘，门口堆着没人扫的雪。门厅里有一股久未开窗的气味，安娜的钥匙在锁孔里转了半圈才转动。 马路对面就是那栋破败的农舍，半埋在雪里。
+  keeper: 萨缪尔·伊斯特曼是第一个患病的人，在调查员抵达前就已身亡。安娜会尽可能避免回家， 但愿意给调查员一把钥匙去看那本日记。日记并非真正的克苏鲁神话典籍， 翻阅笔记需要理智检定（0/1）；成功的克苏鲁神话检定能在速写中辨认出与犹格-索托斯相关的图像。
+  features:
+  - 萨缪尔的书桌
+  - 那本潦草的日记
+  - 卧室
+  exits:
+  - post_office
+  - cardwell_farm
+  travel_minutes: {}
+  art: eastman_house
+  public: false
+  weather:
+  - snow
+- id: cardwell_farm
+  name: 原卡德威尔家
+  read_aloud: 农舍被雪压得微微倾斜，门没有锁，一推就开。屋里积着厚厚的灰，墙壁和地板都已腐朽， 能看到动物筑过巢的痕迹。空气里除了霉味，还有某种更冷的、像土一样的气味。
+  keeper: 世纪之交废弃的老宅，被传成鬼屋、常有怪异的光、有撒旦教徒出没。事实是这家族长崇拜犹格-索托斯， 本身也小有法力；他曾奇迹般从重伤中恢复，同时儿媳死于重病，于是儿子杀了他，尸体丢进壁炉。
+    正是从这位族长的日记和书籍中，卡洛琳和埃里开始接触法术。屋内更近的活动痕迹是多年前两人留下的。
+  features:
+  - 铺在卧室地板上的野餐毯
+  - 墙角泡过水的课本
+  - 刻着字母的书柜
+  - 剥落墙皮的墙面
+  - 壁炉
+  exits:
+  - eastman_house
+  travel_minutes: {}
+  art: cardwell_farm
+  public: false
+  weather:
+  - snow
+  - dust
+- id: darvill_house
+  name: 达维尔家
+  read_aloud: 房子属于卡洛琳的父母，院子里没人扫雪。窗后没有灯，但屋后雪地上有一道被清理过的痕迹，通向地下室的门。 客厅里堆着许多古怪物件，地上散落着关于咒语、符文和药剂的笔记。
+  keeper: 卡洛琳大部分法术都在地下室进行，包括死者复活。房子里住着卡洛琳的父母——他们被卡洛琳试图分享典籍知识后发疯， 又染上西班牙流感，被卡洛琳“治疗”之后成了眼神呆滞、洋洋自得、流口水的模样。
+    证据齐全：典籍原本、床畔的信件与军方电报、父母那番关于面具的话。
+  features:
+  - 客厅的笔记
+  - 地下室的门
+  - 卡洛琳的床畔
+  - 楼上的房间
+  - 地下室里的香炉
+  exits:
+  - main_street
+  travel_minutes: {}
+  art: darvill_house
+  public: false
+  weather:
+  - snow
+  - flicker
+- id: brucker_farm
+  name: 布鲁彻农场
+  read_aloud: 农场在镇外西北方向，雪把栅栏埋了半截。牛棚里传出断断续续的哀叫，几头牛躺在地上起不来， 肋骨一根根支出来。雷吉·布鲁彻拎着一只酒瓶走过来，问你们是不是也来看他倒霉的。
+  keeper: “掩藏者”的法术不只影响人。雷吉把牛的病和镇上人的病联系起来，称这是对城镇全部弊病的神圣超自然审判； 他以酗酒应对，这个人醉醺醺的恶劣状态正是埃斯内尔未来的预示。征得他同意查看牛只，能证实牛的症状与镇民相似。
+    地图上的“西北农场”即这一带的农场区。
+  features:
+  - 牛棚
+  - 病倒的牛
+  - 雷吉的威士忌瓶
+  exits:
+  - main_street
+  - satin_hill
+  travel_minutes: {}
+  art: brucker_farm
+  public: true
+  weather:
+  - snow
+- id: satin_hill
+  name: 绸缎山
+  read_aloud: 山坡上只有雪、风和一丛丛矮树。风把脚印抹平，往上看是一片白，往下看是整个埃斯内尔， 烟囱的细烟像插在雪里的针。走到这里，连呼吸都像在喝冰水。
+  keeper: 绸缎山因春夏山坡盛开大片黄色绸缎花而得名；这是“掩藏者”埋尸之处，也是埃斯内尔苦痛的中心。 地图上的传播路径圈线、萨缪尔·伊斯特曼的描述、魂灵提到的黄色峰顶、卡洛琳的法术都指向这里。
+    确切地点很难找，只有极难侦查检定能发现雪中埋尸地的微小差异；靠近时法术影响加重（见线索）。 除非调查员尽力阻止，否则他们抵达埋尸地点的同时或不久后，卡洛琳和“埃里”会前来，但不立即引发冲突。 卡洛琳此时也显出明显病状，“埃里”完全不受影响。
+  features:
+  - 那片矮树林
+  - 被从下方翻动过的雪
+  - 山脊
+  exits:
+  - main_street
+  - brucker_farm
+  travel_minutes: {}
+  art: satin_hill
+  public: false
+  weather:
+  - snow

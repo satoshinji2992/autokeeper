@@ -9,21 +9,24 @@ import json
 import pytest
 from textual.widgets import Checkbox, ContentSwitcher, OptionList
 
-from autokeeper import config
-from autokeeper.config import EXAMPLE, Role
+from autokeeper import config, paths
+from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui import tips
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
-from autokeeper.tui.guide import PAGES, GuideScreen
-from autokeeper.tui.screens import HandoutModal, RollModal
-from autokeeper.tui.tips import TipLine
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.dialogs import HandoutModal, RollModal
+from autokeeper.tui.modals.guide import PAGES, GuideScreen
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
+from autokeeper.tui.widgets import tips
+from autokeeper.tui.widgets.tips import TipLine
 
-TUTORIAL = config.MODULES / tips.TUTORIAL
+TUTORIAL = paths.MODULES / tips.TUTORIAL
 
 
 class Canned(hm.Model):
@@ -37,7 +40,7 @@ class Canned(hm.Model):
 @pytest.fixture
 def canned(monkeypatch, tmp_path, skills_dir):
     """Every agent answers from a can; saves, and the hints already shown, go to a temp folder."""
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -88,7 +91,7 @@ async def turn(screen: GameScreen, *events: dict) -> None:
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
 async def test_the_guide_opens_from_the_title_and_turns_its_pages(size, monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
@@ -141,7 +144,7 @@ async def test_a_hint_comes_once_per_player(canned):
         assert len(shown(screen)) == 2 and "结果卡这样看" in shown(screen)[-1]
         await turn(screen, dice(name, 80))
         assert len(shown(screen)) == 2  # the second roll: nothing new to say
-    assert sorted(json.loads((config.SAVES / tips.FILE).read_text(encoding="utf-8"))["seen"]) == ["check", "start"]
+    assert sorted(json.loads(paths.tips().read_text(encoding="utf-8"))["seen"]) == ["check", "start"]
 
     app = AutoKeeperApp(theme="amber")  # the same player, another day
     async with app.run_test(size=(140, 44)) as pilot:
@@ -207,7 +210,7 @@ async def test_hints_off_means_none_and_the_guide_switches_them_back_on(canned):
         await pilot.pause()
         await turn(screen, dice(screen.state.investigator.name))
         assert len(shown(screen)) == 1 and "结果卡这样看" in shown(screen)[0]
-    assert tips.enabled() and json.loads((config.SAVES / tips.FILE).read_text(encoding="utf-8"))["on"] is True
+    assert tips.enabled() and json.loads(paths.tips().read_text(encoding="utf-8"))["on"] is True
 
 
 def test_the_config_file_turns_hints_off(tmp_path):
@@ -217,8 +220,8 @@ def test_the_config_file_turns_hints_off(tmp_path):
 
 
 async def test_a_new_player_is_pointed_to_the_tutorial(monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE, TUTORIAL])
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE, TUTORIAL])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
@@ -229,7 +232,8 @@ async def test_a_new_player_is_pointed_to_the_tutorial(monkeypatch, tmp_path, sk
         await pilot.press("enter")  # Enter takes it
         await pilot.pause()
         assert app.screen.module and app.screen.module.id == "zhuishuren"
-    (tmp_path / "index.json").write_text(json.dumps({"zhuishuren-1": {"module": "zhuishuren"}}), encoding="utf-8")
+    paths.games().mkdir(parents=True, exist_ok=True)
+    paths.save_index().write_text(json.dumps({"zhuishuren-1": {"module": "zhuishuren"}}), encoding="utf-8")
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(80, 24)) as pilot:  # played before: no suggestion
         await pilot.pause()

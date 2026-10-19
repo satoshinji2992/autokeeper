@@ -1,0 +1,33 @@
+npcs:
+  - id: warden
+    name: 老守钟人
+    role: 钟楼的守钟人
+    look: 驼背，手上全是油污
+    personality: 寡言，护着钟楼
+    voice: 说话慢，爱说“钟有钟的规矩”
+    goal: 不让人上齿轮间
+    knows: [钟每到午夜多敲一下]
+    secrets: [他在钟里藏了东西]
+    lies: [钟只是老了]
+    clues: [c_diary]
+    gates:
+      c_diary: {skill: 说服, difficulty: 困难}
+    location: tower
+    portrait: warden
+  - id: preacher
+    name: 街头布道者
+    role: 每晚在广场布道的人
+    voice: 嗓门大，爱引经据典
+    goal: 让镇上的人听他讲完
+    knows: [午夜的钟声不对劲]
+    location: square
+    portrait: preacher
+pregens:
+  - id: zhouheng
+    name: 周衡
+    occupation: 记者
+    age: 28
+    portrait: zhouheng
+    characteristics: {力量: 45, 体质: 55, 体型: 60, 敏捷: 65, 外貌: 60, 智力: 75, 意志: 55, 教育: 70}
+    luck: 55
+    skills: {图书馆使用: 60, 侦查: 55, 心理学: 45, 话术: 50, 说服: 40, 外语(英语): 40}

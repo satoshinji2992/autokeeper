@@ -10,15 +10,16 @@ from collections import deque
 
 import pytest
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Action, Cast
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import CheckRecord
 from autokeeper.harness import Agent, BudgetExceeded, Reply, Session, spend
 from autokeeper.harness import models as hm
 from autokeeper.harness.tools import Workspace, check_tool, file_tools, web_tools
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.commands import Asked
 
 SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
@@ -44,8 +45,8 @@ SCRIPTED = Role("scripted", "scripted-model", None)
 @pytest.fixture(autouse=True)
 def harness_sandbox(monkeypatch, tmp_path):
     monkeypatch.setitem(hm.MODELS, "scripted", Scripted)
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    monkeypatch.setattr(paths, "USER_DIR", tmp_path / "user")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "meta")
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_SEARCH", "AUTOKEEPER_BUDGET_USD"):
         monkeypatch.delenv(var, raising=False)
@@ -141,7 +142,7 @@ async def test_a_failing_model_hands_over_to_its_fallback(standby, monkeypatch):
     Flaky.failures.append(AssertionError("the tripped model must not be called again"))
     other = hm.make_model(spec, "NPC", label="npc")  # another agent on the same model skips it too
     assert (await other.complete([{"role": "user", "content": "你好"}])).text == "还是备用模型"
-    rows = [json.loads(line) for line in (config.SAVES / "traces").glob("*.jsonl").__next__().read_text(encoding="utf-8").splitlines()]
+    rows = [json.loads(line) for line in paths.traces().glob("*.jsonl").__next__().read_text(encoding="utf-8").splitlines()]
     assert [r.get("fallback_for", "") for r in rows] == ["", "flaky-model", "flaky-model"]
     assert "ConnectionError" in rows[0]["error"]
 
@@ -554,7 +555,7 @@ def _spend_in(saves: str, n: int) -> None:
     """Runs in a child process: n metered calls recorded against the ledger in `saves`."""
     from pathlib import Path
 
-    config.SAVES = Path(saves)
+    paths.DATA = Path(saves)
     for _ in range(n):
         spend.record("deepseek:deepseek-flash", {"input_tokens": 1000, "cache_read": 0, "output_tokens": 0})
 

@@ -36,7 +36,7 @@ import httpx
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import imagery
+from .. import credits, imagery
 from ..config import Config
 from ..harness import Session, search
 from ..harness.search import resolve
@@ -279,8 +279,7 @@ async def download(photo: Photo, dest: Path) -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
     im.thumbnail((1024, 1024))
     im.save(dest, quality=92)
-    credit = asdict(photo) | {"kind": "portrait"}
-    dest.with_suffix(".credit.json").write_text(json.dumps(credit, ensure_ascii=False, indent=1), encoding="utf-8")
+    credits.put(dest, asdict(photo) | {"kind": "portrait"})
     return True
 
 

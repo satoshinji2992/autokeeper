@@ -14,14 +14,15 @@ from rich.style import Style
 from rich.text import Text
 from textual.widgets import Static
 
-from autokeeper import artkit, config, imagery, mood
-from autokeeper.config import EXAMPLE
+from autokeeper import artkit, imagery, mood, paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import NPC, Module
-from autokeeper.tui import speaker as stage
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.speaker import Portrait, Speaker, face
-from autokeeper.tui.widgets import SceneArt, StoryLog
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets import speaker as stage
+from autokeeper.tui.widgets.panels import SceneArt, StoryLog
+from autokeeper.tui.widgets.speaker import Portrait, Speaker, face
 
 from .test_tui import canned, story_text, until  # noqa: F401  (canned: a fixture, used by name)
 
@@ -265,7 +266,7 @@ async def test_fear_trembles_anger_flashes_and_f6_stills_them():
 
 @pytest.mark.usefixtures("canned")
 async def test_a_small_terminal_gets_a_smaller_speaker_and_a_tiny_one_none():
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="small", human=[lead.id])
     state.location = "jingju"  # the police station: a wide hand-drawn scene
@@ -298,7 +299,7 @@ async def test_a_small_terminal_gets_a_smaller_speaker_and_a_tiny_one_none():
 @pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
 @pytest.mark.usefixtures("canned")
 async def test_a_photo_portrait_follows_the_stage_and_the_art_style():
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="photo", human=[lead.id])
     state.location, state.visited = "jinboer_jia", ["jinboer_jia"]

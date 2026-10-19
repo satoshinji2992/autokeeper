@@ -2,7 +2,7 @@
 
 A module is the keeper's whole book in data: locations, NPCs, clues and what they
 point to, handouts, timed events and endings. Imported modules and generated ones
-end up in the same format, are stored as modules/<id>/module.yaml and compiled into
+end up in the same format, are stored as a folder (module/package.py) and compiled into
 an Agent Skill package for progressive disclosure.
 """
 
@@ -162,9 +162,6 @@ class Ending(BaseModel):
     reward: str = ""
 
 
-SHOWCASE_KINDS = ("开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局")
-
-
 class Showcase(BaseModel):
     """大场景: one big picture over the whole screen at a turning point (engine/showcase.py)."""
 
@@ -245,10 +242,16 @@ class Module(BaseModel):
     # -- io -------------------------------------------------------------------
     @classmethod
     def load(cls, path: Path) -> Module:
+        """A module folder (module/package.py), or one YAML file holding the whole module."""
+        from . import package
+
         path = Path(path)
         folder = path if path.is_dir() else path.parent
-        file = folder / "module.yaml" if path.is_dir() else path
-        module = cls.model_validate(yaml.safe_load(file.read_text(encoding="utf-8")))
+        if path.is_dir() or path.name == package.MAIN:
+            data = package.read(folder)
+        else:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        module = cls.model_validate(data)
         module.extensions, module.extension_errors = {}, {}
         from ..plugins.storage import load as load_plugin
 
@@ -260,31 +263,28 @@ class Module(BaseModel):
                     module.flags.setdefault(key, meaning)
             except (OSError, ValueError, TypeError) as exc:
                 module.extension_errors[identity] = f"{type(exc).__name__}: {str(exc)[:500]}"
-        art_dir = folder / "art"
-        if art_dir.is_dir():
-            module.art = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.txt"))}
-            module.art_colors = {p.stem: p.read_text(encoding="utf-8").rstrip("\n") for p in sorted(art_dir.glob("*.color"))}
-            module.pictures = {p.stem: str(p) for p in sorted(art_dir.iterdir())
-                               if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and not p.stem.endswith((".glitch", ".prep"))}
+        module.art, module.art_colors = package.ascii_art(folder / "art")
+        module.pictures = package.pictures(folder / "art")
         return module
 
     def save(self, folder: Path) -> Path:
+        """The YAML split into its files, the plugins and the ASCII art (art/ascii/); photos are
+        files already and stay where they are."""
+        from . import package
+
         folder = Path(folder)
-        folder.mkdir(parents=True, exist_ok=True)
-        data = self.model_dump(mode="json", exclude_defaults=False)
-        file = folder / "module.yaml"
-        file.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=100), encoding="utf-8")
+        file = package.write(folder, self.model_dump(mode="json", exclude_defaults=False))
         if self.extensions:
             from ..plugins.storage import save as save_plugin
 
             for plugin in self.extensions.values():
                 save_plugin(plugin, folder / "plugins")
         if self.art:
-            (folder / "art").mkdir(exist_ok=True)
+            (folder / "art" / "ascii").mkdir(parents=True, exist_ok=True)
             for name, text in self.art.items():
-                (folder / "art" / f"{name}.txt").write_text(text + "\n", encoding="utf-8")
+                (folder / "art" / "ascii" / f"{name}.txt").write_text(text + "\n", encoding="utf-8")
             for name, mask in self.art_colors.items():
-                (folder / "art" / f"{name}.color").write_text(mask + "\n", encoding="utf-8")
+                (folder / "art" / "ascii" / f"{name}.color").write_text(mask + "\n", encoding="utf-8")
         return file
 
 

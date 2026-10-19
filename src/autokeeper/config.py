@@ -1,4 +1,4 @@
-"""Paths, role -> model routing, web search and the spending cap.
+"""Role -> model routing, web search and the spending cap. Locations on disk are in paths.py.
 
 Every agent role picks its own backend and model. A preset sets all of them at once:
 
@@ -46,15 +46,7 @@ import tomllib
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
-ROOT = Path(os.environ.get("AUTOKEEPER_HOME", Path(__file__).resolve().parents[2]))
-MODULES = ROOT / "modules"
-LOCAL_MODULES = MODULES / "local"
-IMPORT_INBOX = MODULES / "_import"
-SKILLS = ROOT / "skills"
-SAVES = ROOT / "saves"
-SESSIONS = SAVES / "claude"  # cwd for Claude Code processes, keeps them out of other projects
-EXAMPLE = Path(__file__).resolve().parent / "module" / "example"  # format sample for tests and the importer
-USER_DIR = Path.home() / ".config" / "autokeeper"
+from . import paths
 
 
 @dataclass(frozen=True)
@@ -207,9 +199,9 @@ class Config:
     showcase: bool = True  # 大场景: one big picture over the screen at the story's turning points (engine/showcase.py)
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
-    tips: bool = True  # first-time hints for new players (tui/tips.py)
+    tips: bool = True  # first-time hints for new players (tui/widgets/tips.py)
     animations: bool = True
-    dice: str = "bone"  # tui/dice.py SKINS
+    dice: str = "bone"  # tui/drawing/dice.py SKINS
 
     @property
     def improvising(self) -> bool:
@@ -223,7 +215,7 @@ def load_env() -> None:
     """Read keys from ~/.config/autokeeper/.env and ./.env; the real environment wins."""
     from dotenv import load_dotenv
 
-    for f in (USER_DIR / ".env", ROOT / ".env"):
+    for f in (paths.USER_DIR / ".env", paths.ROOT / ".env"):
         if f.is_file():
             load_dotenv(f, override=False)
 
@@ -231,7 +223,7 @@ def load_env() -> None:
 def ui_settings() -> dict:
     """UI choices persist separately; advanced TOML and secrets are never rewritten."""
     try:
-        data = json.loads((USER_DIR / "settings.json").read_text(encoding="utf-8"))
+        data = json.loads((paths.USER_DIR / "settings.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     if not isinstance(data, dict):
@@ -259,8 +251,8 @@ def ui_settings() -> dict:
 
 
 def save_ui_settings(changes: dict) -> None:
-    USER_DIR.mkdir(parents=True, exist_ok=True)
-    target = USER_DIR / "settings.json"
+    paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+    target = paths.USER_DIR / "settings.json"
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(ui_settings() | changes, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(target)
@@ -277,7 +269,7 @@ def _role(base: Role, spec: dict) -> Role:
 def load(path: Path | None = None) -> Config:
     load_env()
     data: dict = {}
-    for candidate in (USER_DIR / "config.toml", ROOT / "autokeeper.toml", path):
+    for candidate in (paths.USER_DIR / "config.toml", paths.ROOT / "autokeeper.toml", path):
         if candidate and Path(candidate).is_file():
             for key, value in tomllib.loads(Path(candidate).read_text(encoding="utf-8")).items():
                 if key == "roles":

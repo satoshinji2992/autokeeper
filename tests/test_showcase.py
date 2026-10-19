@@ -10,10 +10,9 @@ from pathlib import Path
 
 from PIL import Image
 
-from autokeeper import config, imagegen, imagery
+from autokeeper import config, credits, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewShowcase
-from autokeeper.config import EXAMPLE
 from autokeeper.engine import showcase
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
@@ -21,6 +20,7 @@ from autokeeper.module import graph
 from autokeeper.module.schema import Creature, Module, Showcase
 from autokeeper.net import media
 from autokeeper.net.hub import Hub, table
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
 from .test_engine import FakeCast, Improvising
@@ -60,7 +60,7 @@ def test_modules_and_saves_load_with_and_without_big_scenes():
     old = Module.load(EXAMPLE)
     assert old.showcases == [] and not [i for i in graph.audit(old) if i.level == "error"]
     for mid in ("zhuishuren", "dongxuezhixia", "fallout3-youxierenyouyanbujin"):  # written by hand, 5–15 each
-        m = Module.load(config.MODULES / mid)
+        m = Module.load(paths.MODULES / mid)
         assert 5 <= len(m.showcases) <= 15 and not [i for i in graph.audit(m) if i.level == "error"]
         assert any(sc.when == "opening" for sc in m.showcases)
         assert {f"ending:{e.id}" for e in m.endings} <= {sc.when for sc in m.showcases}  # every ending has one
@@ -76,7 +76,7 @@ def test_modules_and_saves_load_with_and_without_big_scenes():
 
 # -- the moments ------------------------------------------------------------------------------
 async def test_each_kind_of_moment_shows_its_big_scene_once(tmp_path, fake, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = moments(tmp_path)
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="moments")
     events, emit = collector()
@@ -113,7 +113,7 @@ async def test_each_kind_of_moment_shows_its_big_scene_once(tmp_path, fake, monk
 
 
 async def test_a_big_scene_without_its_picture_is_skipped_never_waited_for(tmp_path, fake, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     m.showcases = [Showcase(id="tower", kind="重要场景", when="visit:tower", title="钟楼", prompt="窄楼梯")]
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="skip")
@@ -132,7 +132,7 @@ async def test_a_big_scene_without_its_picture_is_skipped_never_waited_for(tmp_p
 
 
 async def test_the_opening_waits_for_its_picture_until_someone_acts(tmp_path, fake, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     gate = asyncio.Event()
 
     async def slow(cfg, m, sc, target, **kwargs):
@@ -173,7 +173,7 @@ async def test_the_opening_waits_for_its_picture_until_someone_acts(tmp_path, fa
 
 # -- where the pictures come from ---------------------------------------------------------------
 async def test_pictures_come_from_the_module_then_codex_from_a_reference_then_codex_alone(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
     calls = []
 
@@ -201,16 +201,16 @@ async def test_pictures_come_from_the_module_then_codex_from_a_reference_then_co
     assert calls[-1][0] == Path(m.pictures["square"]) and "made from the attached picture" in calls[-1][1]
     assert await showcase.prepare(cfg, m, searched, target(searched)) == "AI 照原图画"
     assert calls[-1][0] == showcase.photo(target(searched))  # found through imagery's search, then redrawn
-    credit = json.loads(showcase.photo(target(searched)).with_name(showcase.photo(target(searched)).stem + ".credit.json").read_text(encoding="utf-8"))
+    credit = credits.get(showcase.photo(target(searched)))
     assert credit["license"] == "CC0"
     cfg_offline = config.Config(search="none")
     assert await showcase.prepare(cfg_offline, m, alone, target(alone)) == "AI 照描述画" and calls[-1][0] is None
     assert len(calls) == 3 and all(showcase.ready(cfg, m, sc, target(sc)) for sc in (own, placed, searched, alone))
-    assert target(placed).is_relative_to(config.SAVES / "showcases")  # outside the module, for every game of it
+    assert target(placed).is_relative_to(paths.cache() / "showcases")  # outside the module, for every game of it
 
 
 async def test_without_codex_nothing_is_generated_found_or_own_pictures_are_shown_as_they_are(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
 
     async def make(*args, **kwargs):
         raise AssertionError("no generation without Codex")
@@ -235,7 +235,7 @@ async def test_without_codex_nothing_is_generated_found_or_own_pictures_are_show
 
 
 async def test_big_scenes_are_counted_in_the_module_s_hundred_and_stop_there(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
     fake = FakeCodex(tmp_path / "codex-home", asyncio.create_subprocess_exec)
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
@@ -255,7 +255,7 @@ async def test_big_scenes_are_counted_in_the_module_s_hundred_and_stop_there(tmp
 
 # -- the director --------------------------------------------------------------------------------
 async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp_path, fake, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
     made = []
 
@@ -284,9 +284,10 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
 
 # -- on screen -------------------------------------------------------------------------------------
 async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_itself(canned, monkeypatch, tmp_path):  # noqa: F811
-    from autokeeper.tui import showcase as screen_module
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.screens import RollModal
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals import showcase as screen_module
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.screens.game import GameScreen
 
     drawn = []
 
@@ -346,7 +347,7 @@ async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_it
 
 # -- LAN -------------------------------------------------------------------------------------------
 async def test_lan_players_get_a_big_scene_only_at_its_moment(tmp_path, fake, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
     hub.game.showcases.cfg = config.Config()
     hub.m.pictures["boss"] = str(picture(tmp_path / "art" / "boss.jpg", RED))
@@ -373,12 +374,12 @@ async def test_lan_players_get_a_big_scene_only_at_its_moment(tmp_path, fake, mo
 
 async def test_a_player_at_a_shared_table_sees_the_big_scene(skills_dir, fake, tmp_path, monkeypatch):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.showcase import ShowcaseScreen
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_net import closed, opened
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(imagery, "available", lambda: True)
     monkeypatch.setattr(imagery, "render", lambda *a, **k: "大图")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
@@ -403,7 +404,7 @@ async def test_a_player_at_a_shared_table_sees_the_big_scene(skills_dir, fake, t
             if isinstance(app.screen, ShowcaseScreen):
                 break
         assert isinstance(app.screen, ShowcaseScreen) and near(colour_of(app.screen.picture), RED)
-        assert Path(app.screen.picture).is_relative_to(config.SAVES / "art" / "table")  # the player's own copy
+        assert Path(app.screen.picture).is_relative_to(paths.table_art())  # the player's own copy
     await closed(task)
     await hub.game.close()
 

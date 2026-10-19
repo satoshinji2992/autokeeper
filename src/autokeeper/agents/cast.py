@@ -722,7 +722,7 @@ class Cast:
             return None
 
     async def author_plugin(self, state: GameState, request: str, problems: list[str] | None = None):
-        """Turn a player's one-sentence house rule into one tested plugin (tui/plugins.py, the
+        """Turn a player's one-sentence house rule into one tested plugin (tui/modals/plugins.py, the
         LAN hub). Uses the director's model; stateless, so a retry carries the failures back in
         the prompt rather than in memory. Returns a Plugin or None."""
         from ..plugins import api_text
@@ -767,13 +767,6 @@ def _recent(state: GameState, n: int = 6) -> str:
 
 def _skills(inv: Investigator) -> str:
     return "技能：" + "，".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1]))
-
-
-def _module_overview(m: Module) -> str:
-    """The SKILL.md body the keeper carries all game long (level 2 of progressive disclosure)."""
-    from ..module.compiler import _skill_md
-
-    return _skill_md(m).split("---", 2)[2].strip()
 
 
 def dumps(obj) -> str:

@@ -252,7 +252,7 @@ def bearings(m: Module, st: GameState) -> dict[str, str]:
 # -- the map ----------------------------------------------------------------------------------
 @dataclass
 class Chart:
-    """The places the investigators know and the ways between them (tui/mapview.py draws it)."""
+    """The places the investigators know and the ways between them (tui/modals/mapview.py draws it)."""
 
     here: str
     names: dict[str, str]  # every place on the map -> the name it has there

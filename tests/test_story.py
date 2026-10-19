@@ -14,9 +14,9 @@ from rich.console import Console
 from rich.text import Text
 from textual.widgets import Static, TabbedContent
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine import progress
 from autokeeper.engine.game import Game
@@ -25,13 +25,14 @@ from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import PRIVATE, Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import COMMANDS, AutoKeeperApp, GameScreen
-from autokeeper.tui.pages import Page, PagesModal
-from autokeeper.tui.sheet import SheetModal, sheet_view
-from autokeeper.tui.usage import usage_view
-from autokeeper.tui.widgets import CluePanel, HistoryPanel
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.sheet import SheetModal, sheet_view
+from autokeeper.tui.modals.usage import usage_view
+from autokeeper.tui.screens.game import COMMANDS, GameScreen
+from autokeeper.tui.widgets.pages import Page, PagesModal
+from autokeeper.tui.widgets.panels import CluePanel, HistoryPanel
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened, pool_open, until
@@ -63,8 +64,8 @@ def writer(monkeypatch, tmp_path, skills_dir):
     """Every role on the canned writer; saves, traces and the spend ledger in a temp folder."""
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     monkeypatch.setattr(Writer, "asked", [])
     monkeypatch.setattr(Writer, "gate", None)
     monkeypatch.setattr(Writer, "fail", False)
@@ -346,7 +347,7 @@ def test_an_account_is_shown_as_plain_lines_near_its_length():
 
 # -- the record ------------------------------------------------------------------------------
 def deeds_game() -> tuple[Module, GameState]:
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     party = [p.model_copy(deep=True) for p in m.pregens]
     me, her = party
     st = Game.new(m, party, slot="record", human=[me.id])
@@ -429,7 +430,7 @@ class StoryCast(TableCast):
 
 
 async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_sync(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     cast = StoryCast()
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
     assert not {"progress", "deeds", "prologue", "logged"} & PRIVATE
@@ -469,12 +470,12 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         assert len(cast.material) == 2
         await ws.close()
     await closed(task)
-    saved = GameState.model_validate_json((tmp_path / "saves" / f"{hub.state.slot}.json").read_text(encoding="utf-8"))
+    saved = GameState.model_validate_json(paths.save(hub.state.slot).read_text(encoding="utf-8"))
     assert saved.progress.text == ACCOUNT  # the host keeps it in the save
 
 
 async def test_a_client_screen_shows_what_the_sync_brings(writer):
-    from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     class Link:
         host = False
@@ -556,7 +557,7 @@ async def test_the_right_column_turns_its_pages(writer):
         await screen.handle({"type": "progress", "text": st.progress.text, "turn": 6})
         assert "第二段故事至今" in shown(screen, "#progress") and "更新于第 6 轮" in shown(screen, "#progress")
         assert tabs.get_tab("progress-page").label.plain == "进展·新" and len(said) == notices  # silent
-        assert (config.SAVES / "pages.json").exists()  # idle: kept at once
+        assert paths.save("pages").exists()  # idle: kept at once
         await pilot.press("ctrl+g")  # 背景 → 经过: still waiting
         assert tabs.get_tab("progress-page").label.plain == "进展·新"
         await pilot.press("ctrl+g")  # opened: read
@@ -597,7 +598,7 @@ async def test_the_right_column_turns_its_pages(writer):
 
 
 def test_the_opening_is_on_the_background_page_only_once_told():
-    from autokeeper.tui.pages import background_view
+    from autokeeper.tui.widgets.pages import background_view
 
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
@@ -612,7 +613,7 @@ def test_the_opening_is_on_the_background_page_only_once_told():
 
 def test_a_saved_line_reads_as_the_live_one_did():
     from autokeeper.engine.state import LogEntry
-    from autokeeper.tui.widgets import log_line
+    from autokeeper.tui.widgets.panels import log_line
 
     hurt = LogEntry(turn=2, time="D1 14:20", kind="damage", who="周衡", text="受到 2 点伤害（HP 12 → 10）")
     lost = LogEntry(turn=2, time="D1 14:20", kind="sanity", who="周衡", text="理智检定 50 → 77 失败，损失 1D3 = 2（50 → 48）")
@@ -647,8 +648,8 @@ async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(
     from textual.widgets import OptionList
 
     from autokeeper import imagery
-    from autokeeper.tui.app import write_save
-    from autokeeper.tui.cards import CardsScreen
+    from autokeeper.tui.library import write_save
+    from autokeeper.tui.screens.cards import CardsScreen
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     m = Module.load(EXAMPLE)

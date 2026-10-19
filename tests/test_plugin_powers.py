@@ -11,18 +11,19 @@ import pytest
 from pydantic import ValidationError
 from textual.widgets import Button, Static
 
-from autokeeper import config
+from autokeeper import paths
 from autokeeper.agents.director import Improv
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game, Turn
 from autokeeper.module import improv
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub, public_plugins
+from autokeeper.paths import EXAMPLE
 from autokeeper.plugins.runtime import verify
 from autokeeper.plugins.schema import Case, Command, Effect, Output, Panel, Plugin, check
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.plugin_ui import PromptModal, ShowPlayer, panel_view, tab_label
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets.plugin_ui import PromptModal, ShowPlayer, panel_view, tab_label
 
 from .test_engine import make
 from .test_net import TableCast
@@ -364,7 +365,7 @@ async def test_the_plugins_page_shows_its_panels_in_the_right_column():
         await pilot.pause()
         page = rendered(screen.query_one("#plugin-panels").body.content)
         assert "烛火" in page and "〔仪式〕" in page
-        app.save_screenshot("plugin-panel.svg", path=str(config.SAVES))
+        app.save_screenshot("plugin-panel.svg", path=str(paths.DATA))
         state.plugin_panels = {}
         await screen.handle({"type": "plugin_panel", "name": "仪式"})
         await pilot.pause()
@@ -392,7 +393,7 @@ async def test_a_show_plays_over_the_scene_can_be_skipped_and_shows_only_its_end
         player = screen.query_one(ShowPlayer)
         assert not scene.display and player.index == 0 and "ARNOLDSBURG" in str(player.render())
         assert await until(pilot, lambda: player.index == 1)  # the next frame comes by itself
-        app.save_screenshot("plugin-show.svg", path=str(config.SAVES))
+        app.save_screenshot("plugin-show.svg", path=str(paths.DATA))
         assert "〔号外〕" in story_text(screen)  # labelled in the story too
         screen.action_menu()  # Esc: skip
         await pilot.pause()
@@ -435,7 +436,7 @@ async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game():
         modal = app.screen
         shown = "".join(str(w.render()) for w in modal.query(Static))
         assert "〔通灵板〕" in shown and "点一个字母" in shown and "没答就按默认算" in shown
-        app.save_screenshot("plugin-prompt.svg", path=str(config.SAVES))
+        app.save_screenshot("plugin-prompt.svg", path=str(paths.DATA))
         modal.query_one("#cell-1-1", Button).press()
         assert await until(pilot, lambda: state.plugin_data.get("ouija", {}).get("cell") == [1, 1], tries=150)
         assert await until(pilot, lambda: "指针停住了" in story_text(screen), tries=150)
@@ -465,7 +466,7 @@ def lan(fake) -> tuple[Hub, list[tuple[str, dict]]]:
 
 
 async def test_at_a_lan_table_a_question_goes_to_its_player_and_the_answer_back_to_the_host(monkeypatch, tmp_path, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     hub, sent = lan(fake)
     mate = hub.state.investigators[1].id
     await hub._on("c2", {"t": "command", "name": "开锁", "text": ""})
@@ -491,7 +492,7 @@ async def test_at_a_lan_table_a_question_goes_to_its_player_and_the_answer_back_
 
 
 async def test_lan_screens_get_panels_shows_and_commands_but_no_hidden_plugin_state(monkeypatch, tmp_path, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     hub, sent = lan(fake)
     hub.state.plugin_panels = PANELS
     await hub.game.plugins.command("开锁", who=hub.state.investigators[0].id)
@@ -512,7 +513,7 @@ async def test_lan_screens_get_panels_shows_and_commands_but_no_hidden_plugin_st
 
 # -- the bundled example ---------------------------------------------------------------------------
 async def test_the_paper_chase_bookshelf_is_a_panel_and_a_little_game_that_spoils_nothing(fake):
-    module = Module.load(config.MODULES / "zhuishuren")
+    module = Module.load(paths.MODULES / "zhuishuren")
     shelf = module.extensions["shujia"]
     assert not await verify(shelf)  # its own tests pass in the sandbox
     assert not shelf.flags and "clue" not in shelf.capabilities and "flag" not in shelf.capabilities  # nothing to finish the case with

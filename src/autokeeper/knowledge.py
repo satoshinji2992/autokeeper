@@ -10,7 +10,7 @@ What goes in:
 Models: extraction and answers use the "lore" role (Claude Haiku by default) through
 the same session layer as every other agent; embeddings come from a local
 BAAI/bge-small-zh-v1.5 via fastembed (ONNX on CPU), so no extra API is needed.
-Storage: saves/kb/<module>/ (LightRAG's default JSON, NetworkX and nano-vectordb files).
+Storage: data/cache/kb/<module>/ (LightRAG's default JSON, NetworkX and nano-vectordb files).
 
 In play the keeper's retrieval passes keywords taken from the structured action
 (target, NPC, location), which skips LightRAG's LLM keyword step: a lookup is
@@ -24,11 +24,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import config
+from . import config, paths
 from .config import Config
 from .harness import ModelPool
 from .module import graph as module_graph
-from .module.compiler import compile_module, skill_name
+from .module.compiler import ensure_compiled
 from .module.schema import Module
 
 EMBED_MODEL = "BAAI/bge-small-zh-v1.5"
@@ -44,7 +44,7 @@ def _model():
     if _embedder is None:
         from fastembed import TextEmbedding
 
-        _embedder = TextEmbedding(EMBED_MODEL, cache_dir=str(config.SAVES / "models"))
+        _embedder = TextEmbedding(EMBED_MODEL, cache_dir=str(paths.models()))
     return _embedder
 
 
@@ -65,7 +65,7 @@ def available() -> bool:
 
 
 def kb_dir(module_id: str) -> Path:
-    return config.SAVES / "kb" / module_id
+    return paths.kb(module_id)
 
 
 def exists(module_id: str) -> bool:
@@ -78,9 +78,7 @@ def documents(m: Module, module_dir: Path) -> list[tuple[str, str]]:
     source = Path(module_dir) / "source" / "source.md"
     if source.exists():
         docs.append(("source/source.md", source.read_text(encoding="utf-8")))
-    root = config.SKILLS / skill_name(m)
-    if not (root / "SKILL.md").exists():
-        compile_module(m, config.SKILLS)
+    root = ensure_compiled(m, module_dir)
     for p in sorted((root / "references").rglob("*.md")):
         docs.append((str(p.relative_to(root)), p.read_text(encoding="utf-8")))
     return docs

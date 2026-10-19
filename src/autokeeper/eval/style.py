@@ -19,7 +19,7 @@ Read from any file: a trace written with AUTOKEEPER_TRACE=full, an autoplay log,
 or what `run` and `talk` wrote. One run is a few thousand 字, where a pattern used once
 more or less moves its rate by half a point, so compare five runs or more, with spread.
 
-    autokeeper eval cliche saves/autoplay/x.jsonl saves/x.json saves/traces/2026-10-18.jsonl
+    autokeeper eval cliche dev/output/autoplay/x.jsonl data/games/x.json data/logs/traces/2026-10-18.jsonl
     autokeeper --preset deepseek eval style --label before --runs 5
     autokeeper eval style --npc --label before --runs 5
 """
@@ -44,12 +44,12 @@ from typing import Any
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import config, skills
+from .. import config, paths, skills
 from ..agents.cast import Action, Cast, Ruling
 from ..agents.guard import Habits, habits, opens_with_action, repeats
 from ..engine import graph as turn_graph
 from ..engine.game import Game, Turn
-from ..module.compiler import compile_module, skill_name
+from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules.bcdice import Roll
@@ -262,7 +262,7 @@ def narration(path: Path) -> list[str]:
 
 def module_of(module_id: str) -> Module | None:
     """The module a file was played on, by its id (a module's folder is named after it)."""
-    for folder in (config.MODULES / module_id, config.LOCAL_MODULES / module_id, config.EXAMPLE):
+    for folder in (paths.MODULES / module_id, paths.LOCAL_MODULES / module_id, paths.EXAMPLE):
         if module_id and folder.name == module_id and (folder / "module.yaml").is_file():
             return Module.load(folder)
     return None
@@ -422,8 +422,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
     m = Module.load(module_dir)
     if m.id not in SCRIPTS:
         raise ValueError(f"没有《{m.title}》的脚本（有：{'、'.join(SCRIPTS)}）")
-    if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
-        compile_module(m, config.SKILLS)
+    ensure_compiled(m, module_dir)
     beats = SCRIPTS[m.id]()
     cfg = replace(config.load(), improv="严格", imagegen=False, showcase=False)  # the director would write different scenes each time
     cast = Scripted(cfg, m, beats)

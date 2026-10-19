@@ -64,13 +64,14 @@ from aiohttp import WSCloseCode, WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import __version__, artkit, config, roster
+from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
+from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
@@ -102,7 +103,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
     d["opening"] = ""  # material not yet spoken is not part of a player's knowledge
     d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
-    # The screens draw their own map from this copy (tui/mapview.py): the ways on it, what lies
+    # The screens draw their own map from this copy (tui/modals/mapview.py): the ways on it, what lies
     # in what on it, the minutes of the roads walked, and no other way out of anywhere.
     c = fog.chart(m, st)
     ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
@@ -175,7 +176,7 @@ def _builder(cast: Any, m: Module) -> Any:
 
 def room_key_file(port: int):
     """Where a running room keeps its host key: only someone on this machine can read it."""
-    return config.SAVES / f".room-{port}.key"
+    return paths.room_key(port)
 
 
 def room_key(url: str) -> str:
@@ -208,6 +209,7 @@ class Hub:
 
         self.dir = Path(module_dir)
         self.m = Module.load(self.dir)
+        ensure_compiled(self.m, self.dir)  # the keeper reads the module's skill package
         self.fresh = state is None
         extra: list[str] = []
         if state is None:
@@ -229,7 +231,7 @@ class Hub:
         self.blank: list[str] = [f"seat-{i + 1}" for i in range(len(extra))] if self.fresh else []  # player seats with nobody's card yet
         roster.attach(self.m, state.investigators)
         for inv in state.investigators:  # brought to an earlier session of this game (bring)
-            face = config.SAVES / "art" / "table" / f"{inv.portrait}.jpg"
+            face = paths.table_art() / f"{inv.portrait}.jpg"
             if inv.portrait and inv.portrait not in self.m.pictures and face.is_file():
                 self.m.pictures[inv.portrait] = str(face)
         self.cast = cast or Cast(config.load(), self.m)
@@ -621,7 +623,7 @@ class Hub:
         await self._send(cid, {"t": "card", "n": n, **reply})
 
     def _card_dir(self, builder: Any) -> Path:
-        return config.SAVES / "investigators" / ".work" / f"lan-{builder.id}"
+        return paths.card_work(f"lan-{builder.id}")
 
     def _drop_card(self, cid: str) -> None:
         if task := self.carding.pop(cid, None):
@@ -669,7 +671,7 @@ class Hub:
             "t": "welcome",
             "you": cid,
             "host": cid in self.hosts,
-            "version": __version__,  # a client on another version is told so (tui/net.py)
+            "version": __version__,  # a client on another version is told so (tui/screens/net.py)
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
@@ -1081,7 +1083,7 @@ class Hub:
         await self._broadcast({"t": "sync", "state": self._view()})
 
     def _save(self) -> None:
-        from ..tui.app import write_save
+        from ..tui.library import write_save
 
         write_save(self.state, self.m)
 

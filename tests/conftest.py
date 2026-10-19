@@ -10,10 +10,14 @@ from autokeeper.rules.coc import Investigator, Rules
 
 
 @pytest.fixture(autouse=True)
-def isolated_user_settings(monkeypatch, tmp_path):
-    from autokeeper import config
+def isolated_user_data(monkeypatch, tmp_path):
+    """Settings, saves, caches and developer output all go to the test's own folder."""
+    from autokeeper import paths
 
-    monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
+    monkeypatch.setattr(paths, "USER_DIR", tmp_path / "user")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "data")
+    monkeypatch.setattr(paths, "DEV_OUTPUT", tmp_path / "dev-output")
+    monkeypatch.setattr(paths, "OLD_SAVES", tmp_path / "old-saves")
 
 
 @pytest.fixture(autouse=True)
@@ -77,14 +81,14 @@ def fake() -> FakeDice:
     return FakeDice()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def skills_dir(monkeypatch, tmp_path):
     """Module skills compile into a temp folder, not the repo; the shared ones come along."""
-    from autokeeper import config
+    from autokeeper import paths
 
     target = tmp_path / "skills"
-    shutil.copytree(config.SKILLS, target, ignore=shutil.ignore_patterns("module-*"))
-    monkeypatch.setattr(config, "SKILLS", target)
+    shutil.copytree(paths.SKILLS, target, ignore=shutil.ignore_patterns("module-*"))
+    monkeypatch.setattr(paths, "SKILLS", target)
     return target
 
 

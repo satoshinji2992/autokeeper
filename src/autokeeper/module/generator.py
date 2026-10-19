@@ -14,7 +14,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from .. import artkit, config, skills
+from .. import artkit, config, paths, skills
 from ..harness import Agent
 from ..harness.search import resolve
 from ..harness.tools import Workspace, file_tools, web_tools
@@ -65,7 +65,7 @@ def _researcher(work: Path, cfg: config.Config, console: Console, writable: tupl
 async def run_generate(seed: str, module_id: str, *, console: Console | None = None) -> Path:
     console = console or Console()
     cfg = config.load()
-    work = config.LOCAL_MODULES / module_id
+    work = paths.LOCAL_MODULES / module_id
 
     async def research(console: Console) -> None:
         console.print(f"[bold]考据[/] {seed}（搜索：{resolve(cfg.search)}）")

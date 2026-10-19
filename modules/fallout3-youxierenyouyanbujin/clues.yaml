@@ -1,0 +1,295 @@
+clues:
+- id: c_intruder
+  title: 有人入室
+  where: meeting_house
+  feature: 门窗
+  check:
+    skill: 聆听
+  points_to:
+  - k_broken
+  text: 后屋传来窗框被撬开的吱呀声，有人正绕着房子找没关的门窗。
+- id: c_mccurdy_body
+  title: 麦克迪的尸体
+  where: meeting_house
+  feature: 门廊
+  requires:
+  - flag:mccurdy_dead
+  check:
+    skill: 侦查
+  sanity: 0/1D3
+  points_to:
+  - k_broken
+  text: 死者是杂货店理货员肯尼思·麦克迪。衣服千疮百孔，浑身污秽和伤疤；他的眼睛结膜充血、眼眶淤青，像是盯着什么强光看了太久。
+- id: c_jensen_pickup
+  title: 不像验尸官的收尸人
+  where: meeting_house
+  feature: 门廊
+  requires:
+  - flag:mccurdy_dead
+  points_to:
+  - k_cover_up
+  text: 来收尸的是农民弗雷迪·詹森，开的是一辆破皮卡，既不是法医中心的车也不是医院的车。他把尸体卷进床单扔上车斗，往镇东头开走了。
+- id: c_broken_words
+  title: 崩溃者的胡话
+  where: main_street
+  feature: 路过的镇民
+  check:
+    skill: 心理学
+  core: true
+  points_to:
+  - k_broken
+  - k_sky
+  text: 街边一个眼神发直的人反复念叨：“天上的眼睛……星星来的害怕……大智慧！”他一只眼睛长了白翳，眼球转动也不灵便。
+- id: c_flyer
+  title: 布道传单
+  where: main_street
+  feature: 街角传单
+  handout: h_flyer
+  points_to:
+  - k_church
+  text: 路口一个姑娘竭力劝你们去听菲茨杰拉德牧师布道，说听道的人有福，日子会更好。传单上写着雷蒙德·劳里将负责演奏管风琴。
+- id: c_pearson_rumors
+  title: 电话线杆上的谣传
+  where: main_street
+  npc: pearson
+  points_to:
+  - k_hart_house
+  text: 皮尔森老头从线杆上笑嘻嘻地说：这几天夜里，总有人被领着往镇西哈特教授家去，电话里谈的也全是那边的事。
+- id: c_herman_disguise
+  title: 认错的人
+  where: main_street
+  npc: herman
+  check:
+    skill: 侦查
+    difficulty: 极难
+  points_to:
+  - k_blessed
+  text: 刚才和你们打招呼的那位熟面孔，走路的姿势不对——那根本不是本人，是有人扮的，而且扮得几乎天衣无缝。
+- id: c_brady_telescope
+  title: 布雷迪太太的话
+  where: main_street
+  npc: brady
+  core: true
+  points_to:
+  - k_telescope
+  text: 布雷迪太太放下电烙铁：“哈特教授的望远镜，同学，你看过就明白了。我看了一眼，电子学就全通了。”
+- id: c_ferguson_pets
+  title: 空狗窝
+  where: ferguson_house
+  feature: 空狗窝
+  points_to:
+  - k_blessed
+  text: 弗格森家的狗不见了，狗窝里还放着食盆。格兰达对此只字不提。
+- id: c_twins_frogs
+  title: 双胞胎的青蛙
+  where: ferguson_house
+  npc: twins
+  sanity: 0/1D2
+  points_to:
+  - k_blessed
+  text: 雪莉和马克辛端来一盘剖得极其精细的青蛙，用远超年龄的术语讲解器官，又一个接一个地考问你们的学问。
+- id: c_basement
+  title: 地下室
+  where: ferguson_house
+  feature: 地下室门
+  check:
+    skill: 聆听
+  sanity: 1/1D6
+  core: true
+  points_to:
+  - k_blessed
+  - k_broken
+  text: 地下室门后传来含混的呻吟。下面是一张绑着唐纳德·弗格森的桌子，旁边摆着解剖刀和骨锯——他被打了镇静剂，伤得不可能还活着，却还活着。
+- id: c_mcdermott_table
+  title: 冷掉的晚饭
+  where: mcdermott_house
+  feature: 餐桌
+  points_to:
+  - k_broken
+  text: 两副餐具摆好了却没动过，像是夫妻俩出门“去去就回”，从此没再回来。日历上四天前的那格画了个圈。
+- id: c_fitz_talk
+  title: 牧师的单独谈话
+  where: church
+  npc: fitzgerald
+  core: true
+  points_to:
+  - k_church
+  - k_hart_house
+  text: 牧师的话里透出来：被他看中的人，要在半夜来参加“特别弥撒”，之后会被带去拜访他的老朋友哈特教授，“更加接近上帝”。
+- id: c_organ_music
+  title: 雷蒙德的音乐
+  where: lowry_house
+  feature: 客厅乐器堆
+  check:
+    skill: 聆听
+  points_to:
+  - k_blessed
+  text: 起初只是噪音，听了几分钟却甘之如饴，好像能听出一套精密的旋律；再听下去，你眼前隐约浮现出乐曲的颜色。
+- id: c_raymond_telescope
+  title: 雷蒙德的话
+  where: lowry_house
+  npc: raymond
+  core: true
+  points_to:
+  - k_telescope
+  text: 雷蒙德停下手里的轮毂：“你该去哈特教授那儿看看他的望远镜，孩子。看过之后，我才听见了真正的音乐。”
+- id: c_arnold_talk
+  title: 阿诺德的恳求
+  where: steakhouse
+  npc: arnold
+  points_to:
+  - k_jensen
+  text: 阿诺德在后门压低声音：“别问了……他们抓了格拉迪斯，关在詹森的农场。我多说一句，她就没命。”
+- id: c_leonard_talk
+  title: 伦纳德的怨恨
+  where: steakhouse
+  npc: leonard
+  core: true
+  points_to:
+  - k_telescope
+  - k_hart_house
+  text: 伦纳德盯着盘子嘟囔：“是菲利克斯拉我去的……镇西，教授家，那架望远镜。他看完就成了老板，我看完就成了这样。”
+- id: c_steakhouse_slaves
+  title: 店员的恐惧
+  where: steakhouse
+  feature: 厨房
+  check:
+    skill: 心理学
+  points_to:
+  - k_broken
+  text: 后厨的人除了点单什么都不敢回答，有人身上带着新伤。他们怕的不是你们，是那个领班。
+- id: c_bingham_meeting
+  title: 宾汉的账本
+  where: bank
+  npc: bingham
+  points_to:
+  - k_blessed
+  text: 宾汉头也不抬，飞快地算着：收回的房子早已有了新主人，名单上的名字你们都认识，而且都是最近“变了样”的那些人。
+- id: c_eviction_notice
+  title: 收房封条
+  where: bank
+  feature: 职员
+  handout: h_eviction
+  points_to:
+  - k_blessed
+  text: 银行开始派执行员挨家赶人，门上贴着封条，限 12 小时内搬离。
+- id: c_police_cells
+  title: 牢房里的人
+  where: police_station
+  feature: 牢房
+  check:
+    skill: 侦查
+  points_to:
+  - k_cover_up
+  text: 四间牢房里关着几个镇民，有的发狂撞门，有的呆坐流口水，没有一个被解送到县里。卡瓦诺局长端着咖啡，等斯坦利示意才敢开口。
+- id: c_mine_workers
+  title: 挖矿的人
+  where: park_mine
+  feature: 挖掘的人
+  check:
+    skill: 侦查
+  points_to:
+  - k_broken
+  text: 挖掘的人里有你们认识的镇民，个个面无表情，日夜不停，好几个人眼睛红肿、眼眶淤青。
+- id: c_massey_telescope
+  title: 马西的话
+  where: park_mine
+  npc: massey
+  points_to:
+  - k_telescope
+  text: 马西被逼急了，脱口而出：“去问哈特！他的望远镜给了我岩层的眼睛，金子不过是开始。”
+- id: c_farm_cars
+  title: 田里的车
+  where: jensen_farm
+  feature: 停车的田地
+  points_to:
+  - k_jensen
+  text: 田里并排停着十几辆车，其中一辆正是阿诺德·麦克德莫特的。
+- id: c_farm_house
+  title: 钉住的农舍
+  where: jensen_farm
+  feature: 农舍
+  check:
+    skill: 潜行
+  sanity: 0/1D4
+  points_to:
+  - k_jensen
+  text: 透过钉住的窗缝，屋里关着几个神情呆滞的人，格拉迪斯·麦克德莫特也在其中。
+- id: c_hart_talk
+  title: 教授的邀请
+  where: hart_house
+  npc: hart
+  core: true
+  points_to:
+  - k_telescope
+  - k_sky
+  text: 教授笑容满面地比划着：“我在昴星团旁找到一颗前所未见的暗星，透过它，有一个伟大的心智在说话。我叫它‘大智慧’。您一定得亲眼看看。”
+- id: c_greenhouse_scope
+  title: 望远镜
+  where: greenhouse
+  feature: 望远镜
+  core: true
+  points_to:
+  - k_telescope
+  - k_sky
+  text: 铜管望远镜指着昴星团附近，头顶那块天空晴得反常。镜旁的记录本写满了每晚来访者的名字，后面标着两种记号。
+- id: c_workshop_parts
+  title: 工作室的备件
+  where: hart_house
+  feature: 工作室
+  check:
+    skill: 侦查
+  points_to:
+  - k_cut
+  text: 工作室里堆满透镜毛坯、镜筒和磨镜工具——要修一架望远镜，离了这些可不行。
+handouts:
+- id: h_town_map
+  title: 斯托威尔镇地图
+  kind: 地图
+  images: []
+  text: 斯托威尔镇地图。1 阿尔的顶级车行 2 美以美会堂 3 杰克发廊 4 法庭 5 火车站 6 埃尔默牛排馆 7 劳瑞小甜甜的店 8 警察局 9 贝克妈妈菜 10 斯托威尔商业信托储蓄银行；另有公园、医院、墓地、锯木厂、罐头厂。
+- id: h_relationship_map
+  title: 人物关系图
+  kind: 守秘人资料
+  images: []
+  text: 镇民与调查员之间的关系图，标出了谁有福（▲）、谁崩溃（*）。
+- id: h_flyer
+  title: 布道传单
+  kind: 传单
+  text: '来听菲茨杰拉德牧师布道！
+
+    美以美会堂，每日两次，欢迎所有人。
+
+    雷蒙德·劳里先生亲奏管风琴。
+
+    听道者有福！
+
+    '
+- id: h_eviction
+  title: 银行封条
+  kind: 告示
+  text: 奉斯托威尔商业信托储蓄银行命收回此房产，12 小时内搬离，否则后果自负。
+- id: h_leviticus
+  title: 牧师引用的经文
+  kind: 经文
+  text: '至于你的奴仆、婢女、可以从你四围的国中买。
+
+    并且那寄居在你们中间的外人、和他们的家属、在你们地上所生的、你们也可以从其中买人、他们要作你们的产业。
+
+    你们要将他们遗留给你们的子孙为产业．要永远从他们中间拣出奴仆．只是你们的弟兄以色列人、你们不可严严的辖管。
+
+    ——利未记 25:44-46（牧师礼拜日早上的布道）
+
+    '
+sketches:
+- id: sk_scope_sky
+  ask: 把你从望远镜旁看到的那片天画出来：昴星团和它旁边那颗暗星
+  target: 一小簇六七颗亮星挤在一起（昴星团），旁边偏下方一颗几乎看不见的暗弱小星，周围的天空异常晴朗
+  threshold: 0.6
+  sanity: 0/1D2
+  after: c_greenhouse_scope
+- id: sk_town_map
+  ask: 凭记忆画出斯托威尔：大街、牛排馆、银行、警察局，以及镇西的教授家和镇东的詹森农场
+  target: 一条主街贯穿镇中心，沿街是牛排馆、银行、警察局、教堂；镇西一栋带温室的老宅，镇东一条土路通向农场
+  threshold: 0.5
+  after: c_pearson_rumors

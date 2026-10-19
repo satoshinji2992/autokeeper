@@ -9,7 +9,7 @@ A picture comes, in this order, from the module itself (`art`), from Codex redra
 reference (`base`, the place its trigger names, or a photo imagery's search finds), or from
 Codex and the words alone. Without Codex nothing is generated: the module's own picture of
 that place, or a found photo when picture search is on, is shown as it is; else the big scene
-is skipped. A module's big-scene pictures are kept in saves/showcases/<module>/ (never in the
+is skipped. A module's big-scene pictures are kept in data/cache/showcases/<module>/ (never in the
 repository) for every game of it; the director's are kept with their save.
 """
 
@@ -17,13 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
-import re
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
 
-from .. import config, imagegen, imagery
+from .. import config, credits, imagegen, imagery, paths
 from ..module.schema import Module, Showcase
 from .state import GameState
 
@@ -33,7 +31,7 @@ MOST = 15  # big scenes one module may have
 
 def cache(module_id: str) -> Path:
     """Where a module's big-scene pictures are kept: outside its folder, for all its games."""
-    return config.SAVES / "showcases" / (re.sub(r"[^A-Za-z0-9_.-]", "_", module_id) or "_")
+    return paths.showcases(module_id)
 
 
 def name(sc: Showcase) -> str:
@@ -110,8 +108,7 @@ async def _search(cfg: config.Config, sc: Showcase, target: Path, on_reply=None)
         return None
     im, c = found
     im.save(found_file, quality=92)
-    found_file.with_name(found_file.stem + ".credit.json").write_text(
-        json.dumps(asdict(c) | {"kind": "scene"}, ensure_ascii=False, indent=1), encoding="utf-8")
+    credits.put(found_file, asdict(c) | {"kind": "scene"})
     return found_file
 
 

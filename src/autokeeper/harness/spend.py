@@ -2,7 +2,7 @@
 
 Claude Code reports its own cost. For API backends the harness estimates from token
 usage at peak list prices, so the estimate errs high; `budget_usd` in the config stops
-further calls once the running total crosses it. The ledger is saves/spend.json.
+further calls once the running total crosses it. The ledger is data/spend.json.
 
 Several processes may spend at once (an autoplay next to the TUI), so each update holds a
 file lock around read-modify-write and lands by atomic rename: a reader never sees half a
@@ -19,7 +19,7 @@ from typing import Any
 
 from filelock import FileLock
 
-from .. import config
+from .. import config, paths
 
 # USD per million tokens: (input, cached input, output). DeepSeek peak rates (off-peak is half).
 PRICES: dict[str, tuple[float, float, float]] = {
@@ -36,7 +36,7 @@ class BudgetExceeded(RuntimeError):
 
 
 def _file():
-    return config.SAVES / "spend.json"
+    return paths.spend()
 
 
 def ledger() -> dict[str, Any]:
@@ -70,7 +70,7 @@ def guard(model: str) -> None:
         return
     spent = ledger()["total_usd"]
     if spent >= cap:
-        raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（saves/spend.json；在配置里调 budget_usd）")
+        raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（data/spend.json；在配置里调 budget_usd）")
 
 
 def record(model: str, usage: dict) -> float:

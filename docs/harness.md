@@ -155,7 +155,7 @@ START → think ─┬─ finish ─────────→ END
 | `check` | 在进程里跑模组校验器 |
 | `web_search` `fetch_url` | 联网搜索，网页用 MarkItDown 转成 Markdown 分段读 |
 
-工作区（`Workspace`）把路径解析到根目录之下，越界直接拒绝。写入只允许落在白名单里，导入时是 `module.yaml`、`notes.md`、`art/*`。
+工作区（`Workspace`）把路径解析到根目录之下，越界直接拒绝。写入只允许落在白名单里，导入时是 `module.yaml`、`notes.md`、`art/*`；校验通过后由程序把草稿整理成模组目录（`module/package.py`）。
 
 ### 搜索 `search.py`
 
@@ -225,13 +225,13 @@ START → think ─┬─ finish ─────────→ END
 
 ## 局域网联机 `net/`
 
-房主那边跑一个 Hub（`net/hub.py`，aiohttp websocket）。它持有唯一一份模组、状态和 Agent，按座位顺序推进同一张回合图；每块玩家屏幕只是客户端（`tui/net.py`），收事件、发行动，界面和单机共用一个 `GameScreen`。
+房主那边跑一个 Hub（`net/hub.py`，aiohttp websocket）。它持有唯一一份模组、状态和 Agent，按座位顺序推进同一张回合图；每块玩家屏幕只是客户端（`tui/screens/net.py`），收事件、发行动，界面和单机共用一个 `GameScreen`。
 
 - **座位**：每位调查员是玩家座或 AI 座。轮到 AI 座时 AI 调查员行动，轮到玩家座就等那位玩家的输入。玩家掉线时，Hub 往他的输入队列里放一个空值，这一回合交给 AI；他坐回来以后，下一回合又由他行动。
 - **孤注一掷和幸运**：回合图在检定失败时用 LangGraph 的 interrupt 停下，Hub 只把选项发给正在行动的玩家；AI 座和掉线的人按默认选择。
 - **客户端拿到什么**：事件照原样转发，线索、移动、时间、理智这类会改状态的事件之后补一份状态快照。快照里没有 Agent 的对话记录、守秘人笔记、用量和导演的方案；模组是脱敏副本，没有真相、守秘人须知、NPC 的心思、事件和结局的正文，没找到的线索和手稿只剩编号，找到时随事件补全。导演加了地点和人物，Hub 先发一份新的副本，再发即兴事件，事件里去掉导演的理由。
-- **房间**：标题画面的「开房间」（`tui/host.py`）和 `autokeeper host` 开的是同一种房间（`net/room.py`）。Hub 在自己的线程和事件循环里跑，回合和模型调用不占界面的循环；房主自己的界面和朋友一样连 127.0.0.1 的 websocket，带着房间密钥进来就是房主。房间活到房主关掉它或退出程序。
-- **准备房间**（`tui/lobby.py`）：座位、每位调查员的头像和整张卡、谁坐在哪，都来自 Hub 的 welcome 里那份脱敏模组和状态；房间信息（`Hub.room`）列出房主机器的每个 IPv4 地址，`ifaddr` 列网卡，按网卡名和网段标出局域网、Radmin VPN（26.x）、ZeroTier、Tailscale，容器、虚拟机和代理的 TUN 不列。
+- **房间**：标题画面的「开房间」（`tui/screens/host.py`）和 `autokeeper host` 开的是同一种房间（`net/room.py`）。Hub 在自己的线程和事件循环里跑，回合和模型调用不占界面的循环；房主自己的界面和朋友一样连 127.0.0.1 的 websocket，带着房间密钥进来就是房主。房间活到房主关掉它或退出程序。
+- **准备房间**（`tui/screens/lobby.py`）：座位、每位调查员的头像和整张卡、谁坐在哪，都来自 Hub 的 welcome 里那份脱敏模组和状态；房间信息（`Hub.room`）列出房主机器的每个 IPv4 地址，`ifaddr` 列网卡，按网卡名和网段标出局域网、Radmin VPN（26.x）、ZeroTier、Tailscale，容器、虚拟机和代理的 TUN 不列。
 - **网页**：一个单独的进程（`python -m autokeeper.net.web`），textual-serve 给每个浏览器标签在房主机器上起一个 `autokeeper join 127.0.0.1` 进程，朋友什么都不用装。页面用自己的模板（`net/page/app_index.html`）：琥珀暗色，中文等宽字体（载入 textual.js 时换掉它写死的 Roboto Mono），地址跟着访客输入的走，经虚拟局域网打开的也连得上。网页进程的 stdin 一关就退；关房间时先关网页，访客的游戏有 3 秒退出，再停 Hub，所有 websocket 当场关掉。
 - **测试**：`tests/test_net.py` 用真实 websocket 和一套立即应答的假 Agent，覆盖抢座、抢答、场外聊天、掉线由 AI 代打、终端界面从大厅入座到行动，以及客户端拿不到真相和导演的理由；`tests/test_room.py` 覆盖从标题画面开房间到入座、关房间，准备房间显示的内容，网页进程，以及 `autokeeper host`。
 
@@ -249,8 +249,8 @@ START → think ─┬─ finish ─────────→ END
 
 ## 预算与追踪
 
-- `spend.py`：按 token 估价（DeepSeek 按峰时价，所以估高不估低）。配置了 `budget_usd`，超出后按量计费的调用全部拒绝。账本在 `saves/spend.json`。几个进程可能同时花钱（比如自动跑团和 TUI 一起开），所以每次记账都持文件锁读改写，写完用原子改名替换，读的人看不到写了一半的文件；账本真坏了就挪成 `.bad` 留证据，不会悄悄从零记起（要是从零记起，预算护栏就形同虚设）。测试里 4 个进程各记 40 笔，一笔不丢。
-- `trace.py`：每次调用一行 JSON，写进 `saves/traces/<日期>.jsonl`。记录运行编号（进程，或 autoplay 的存档名）、Agent、后端、模型、思考强度、输出方式（text / native / json）、输入字数、token、缓存命中、思考字数、耗时、修复和重试次数、是否降级、错误。`AUTOKEEPER_TRACE=full` 还会记下完整的提示、输出和思考内容。
+- `spend.py`：按 token 估价（DeepSeek 按峰时价，所以估高不估低）。配置了 `budget_usd`，超出后按量计费的调用全部拒绝。账本在 `data/spend.json`。几个进程可能同时花钱（比如自动跑团和 TUI 一起开），所以每次记账都持文件锁读改写，写完用原子改名替换，读的人看不到写了一半的文件；账本真坏了就挪成 `.bad` 留证据，不会悄悄从零记起（要是从零记起，预算护栏就形同虚设）。测试里 4 个进程各记 40 笔，一笔不丢。
+- `trace.py`：每次调用一行 JSON，写进 `data/logs/traces/<日期>.jsonl`。记录运行编号（进程，或 autoplay 的存档名）、Agent、后端、模型、思考强度、输出方式（text / native / json）、输入字数、token、缓存命中、思考字数、耗时、修复和重试次数、是否降级、错误。`AUTOKEEPER_TRACE=full` 还会记下完整的提示、输出和思考内容。
 - `autokeeper trace`：把追踪按 Agent（或模型、后端、运行）汇总成表：调用、输入、缓存命中、输出、延迟 p50/p95、花费；出现过修复、重试、降级、错误时自动多出这几列。`--run last` 只看最近一次运行，`--runs` 列出每次运行。
 
 ### 用追踪找到的问题
@@ -315,6 +315,32 @@ fallback = "ollama:qwen3:14b"  # 备用模型；不带前缀的 claude-* 走 Cla
 
 密钥从环境变量读（`DEEPSEEK_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、`ANTHROPIC_API_KEY`），也会读 `~/.config/autokeeper/.env` 和仓库根目录的 `.env`（已被 gitignore）。
 
+### 文件放在哪里
+
+所有位置都由 `src/autokeeper/paths.py` 给出，别的代码不自己拼路径。游戏运行时写的东西都在仓库根目录的 `data/` 下（设了 `AUTOKEEPER_HOME` 就在那个目录下）：
+
+```text
+data/
+  games/          存档 <slot>.json、index.json、checkpoints.sqlite
+    art/          本局生成的图、联机玩家传来的头像
+    rooms/        正在开的联机房间的密钥
+    trash/        删掉的存档和角色卡，挪回去就能恢复
+  cards/          自己的调查员
+  角色卡导出/      导出角色卡的默认位置
+  cache/          可以整个删掉，用到时重建
+    models/       本地向量模型（约 90 MB）
+    kb/           各模组的 LightRAG 知识库
+    showcases/    各模组的大场景图
+    pictures/     照片的预处理副本，画面上显示的是它
+    sessions/     Claude Code、Codex 进程的工作目录
+  logs/           traces/<日期>.jsonl、stderr.log、web.log
+  preferences.json  tips.json  spend.json  imagegen/<模组>.json
+```
+
+界面里改的设置在 `~/.config/autokeeper/settings.json`。评测报告、自动跑团记录和公网分享的运行文件在 `dev/output/`。
+
+0.0.1 把这些都放在 `saves/` 里。第一次启动新版本时，本地模型、知识库、大场景图和自己的调查员会从 `saves/` 挪到新位置；旧存档不再读取，`saves/` 可以直接删掉。
+
 ### 同一局中途换厂商
 
 游戏里按 F9 可以换预设、换所有角色的模型、设备用模型。换的时候只是给每个 Agent 新建通道，对话记录本来就在存档里，新模型接着用。
@@ -330,7 +356,7 @@ fallback = "ollama:qwen3:14b"  # 备用模型；不带前缀的 claude-* 走 Cla
 
 ## 实测
 
-同一个模组（《追书人》）、同一个 AI 调查员，用 `autokeeper autoplay` 跑，数字取自 `saves/traces/`：
+同一个模组（《追书人》）、同一个 AI 调查员，用 `autokeeper autoplay` 跑，数字取自 `data/logs/traces/`：
 
 | 后端 | 回合 | 调用 | 输入 token | 缓存命中 | 修复 | 耗时 | 花费 |
 |---|---|---|---|---|---|---|---|

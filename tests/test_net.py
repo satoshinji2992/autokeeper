@@ -9,13 +9,13 @@ import aiohttp
 import pytest
 
 import autokeeper
-from autokeeper import config
+from autokeeper import paths
 from autokeeper.agents.cast import Action, Ruling
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
 from autokeeper.net.link import address
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
 
@@ -103,7 +103,7 @@ def test_addresses_accept_what_people_type():
 
 
 async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
@@ -166,11 +166,11 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await until(a, pool_open)
         await a.close()
     await closed(task)
-    assert (tmp_path / "saves" / "lan-test.json").exists()  # the host saves after every turn
+    assert paths.save("lan-test").exists()  # the host saves after every turn
 
 
 async def test_only_the_host_adds_a_house_rule(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     async with aiohttp.ClientSession() as http:
@@ -220,7 +220,7 @@ class GatedCast(TableCast):
 
 
 async def test_what_is_said_while_the_keeper_tells_goes_in_first_next_round(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
@@ -261,11 +261,11 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
     from textual.widgets import Input
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.screens import RollModal
-    from autokeeper.tui.widgets import StoryLog
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.screens.net import NetGameScreen
+    from autokeeper.tui.widgets.panels import StoryLog
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
@@ -321,7 +321,7 @@ class LeverCast(TableCast):
 
 
 async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(update={"marks": ["侦查"]}, deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋", "marks": []}, deep=True)
@@ -380,7 +380,7 @@ class NoticeCast(TableCast):
 
 
 async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     async with aiohttp.ClientSession() as http:
@@ -440,7 +440,7 @@ async def test_private_rulings_flags_and_pending_clues_never_reach_a_client(fake
 
 
 async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
 
     class InterruptedTable(TableCast):
         calls = 0
@@ -491,10 +491,10 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
     from textual.widgets import Input
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.speaker import Speaker
+    from autokeeper.tui.screens.net import NetGameScreen
+    from autokeeper.tui.widgets.speaker import Speaker
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=PreacherCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))

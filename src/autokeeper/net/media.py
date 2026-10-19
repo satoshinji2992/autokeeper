@@ -8,7 +8,7 @@ import io
 
 from PIL import Image
 
-from .. import config
+from .. import paths
 
 LIMIT = 256_000
 
@@ -52,7 +52,7 @@ def unpack(encoded: str, *, max_size: int = 512) -> str:
     if not data:
         return ""
     try:
-        folder = config.SAVES / "art" / "table"
+        folder = paths.table_art()
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / f"{hashlib.sha256(data).hexdigest()}.jpg"
         target.write_bytes(data)

@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
-from .. import config
+from .. import paths
 
 if TYPE_CHECKING:
     from ..engine.state import GameState
@@ -134,26 +134,26 @@ def page_url(ip: str, port: int) -> str:
 
 # -- saves and settings -----------------------------------------------------------------------
 def lan_saves(module_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
-    """LAN games kept in saves/index.json (slots named lan-*), newest first."""
+    """LAN games kept in the save index (slots named lan-*), newest first."""
     try:
-        index = json.loads((config.SAVES / "index.json").read_text(encoding="utf-8"))
+        index = json.loads(paths.save_index().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     rows = [(slot, meta) for slot, meta in index.items() if slot.startswith("lan-") and isinstance(meta, dict)
-            and (config.SAVES / f"{slot}.json").is_file() and module_id in (None, meta.get("module"))]
+            and paths.save(slot).is_file() and module_id in (None, meta.get("module"))]
     return sorted(rows, key=lambda row: str(row[1].get("updated", "")), reverse=True)
 
 
 def saved(slot: str) -> GameState:
     from ..engine.state import GameState
 
-    return GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
+    return GameState.model_validate_json(paths.save(slot).read_text(encoding="utf-8"))
 
 
 def recall() -> dict[str, Any]:
     """The last room opened or joined on this machine: name, address, ports, page on or off."""
     try:
-        data = json.loads((config.USER_DIR / "lan.json").read_text(encoding="utf-8"))
+        data = json.loads((paths.USER_DIR / "lan.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -161,8 +161,8 @@ def recall() -> dict[str, Any]:
 
 def remember(**changes: Any) -> None:
     with contextlib.suppress(OSError):
-        config.USER_DIR.mkdir(parents=True, exist_ok=True)
-        target = config.USER_DIR / "lan.json"
+        paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+        target = paths.USER_DIR / "lan.json"
         target.write_text(json.dumps(recall() | changes, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
@@ -290,12 +290,12 @@ class Room:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.page.poll() is not None:
-                raise RoomError("网页版没开起来", f"网页进程退出了（退出码 {self.page.returncode}），记录在 {config.SAVES / 'web.log'}")
+                raise RoomError("网页版没开起来", f"网页进程退出了（退出码 {self.page.returncode}），记录在 {paths.web_log()}")
             with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", self.web_port), 0.3):
                 self.shared["web"] = self.web_port
                 return url
             time.sleep(0.1)
-        raise RoomError("网页版没开起来", f"{timeout:.0f} 秒还没开好，记录在 {config.SAVES / 'web.log'}")
+        raise RoomError("网页版没开起来", f"{timeout:.0f} 秒还没开好，记录在 {paths.web_log()}")
 
     def wait(self) -> None:
         """Until the room closes; Ctrl+C gets through."""

@@ -8,20 +8,21 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from autokeeper import artkit, config, imagery
+from autokeeper import artkit, config, imagery, paths
 from autokeeper.agents import artist
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewItem, NewLocation, NewNPC
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.engine.visuals import Visuals
 from autokeeper.harness import Reply
 from autokeeper.module import improv
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.widgets import ItemCard
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets.panels import ItemCard
 
 from .test_engine import FakeCast
 from .test_tui import canned, until  # noqa: F401
@@ -47,7 +48,7 @@ async def silent(_):
 
 
 async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     gate = asyncio.Event()
     subjects, events = [], []
 
@@ -83,7 +84,7 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
     assert len(events) == 5 and len(m.pictures) == 3  # a face: its photo; a place and a prop: a drawing, then a photo
     assert "有秘密" not in "\n".join(subjects)
     assert st.usage["visual:artist"]["calls"] == 2 and not m.art[face].strip()  # the face was never drawn
-    assert visuals.folder.is_relative_to(tmp_path / "art")
+    assert visuals.folder.is_relative_to(paths.games() / "art")
     saved = GameState.model_validate_json(pending_save)  # the last complete turn, before the images finished
     loaded = Module.load(EXAMPLE)
     improv.restore(loaded, saved.improv)
@@ -96,7 +97,7 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
 
 
 async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
 
     async def broken(*args, **kwargs):
         raise ConnectionError("offline")
@@ -149,7 +150,7 @@ def test_items_are_validated_as_world_entities():
 
 
 async def test_switching_models_also_restarts_pending_art_on_the_new_model(monkeypatch, tmp_path, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     gate = asyncio.Event()
     configs = []
 
@@ -173,7 +174,7 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
 
 
 async def test_art_waits_for_the_player_turn_and_obeys_a_separate_job_allowance(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     calls = []
 
     async def draw(*args, **kwargs):
@@ -196,7 +197,7 @@ async def test_art_waits_for_the_player_turn_and_obeys_a_separate_job_allowance(
 
 
 async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     calls = 0
 
     async def broken(*args, **kwargs):
@@ -216,7 +217,7 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
 
 
 async def test_cancelling_photo_search_keeps_the_drawing_and_resumes_only_the_photo(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     drawing, started = [], asyncio.Event()
 
     async def draw(*args, **kwargs):

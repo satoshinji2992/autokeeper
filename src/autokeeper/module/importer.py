@@ -14,7 +14,9 @@ internet. It works inside modules/local/<id>/ with sandboxed file tools (it may 
 only module.yaml, notes.md and art/), a view_image tool backed by the vision role, and
 a check tool that runs the module validator in-process. It reads the extracted text,
 keeps notes, writes module.yaml, draws every location and portrait as ASCII art with
-colour masks, and checks its own work until the module passes. Imported material stays
+colour masks, and checks its own work until the module passes. Its draft is one
+module.yaml and a flat art/ folder; `compile` files it into the module layout
+(package.normalize), the original text and the notes in source/. Imported material stays
 in modules/local/ and skills/module-<id>/, both git-ignored.
 """
 
@@ -30,15 +32,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TypedDict
 
-import yaml
 from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
-from .. import artkit, config, imagegen, imagery, skills
+from .. import artkit, config, credits, imagegen, imagery, paths, skills
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
+from . import package
 from .compiler import compile_module
 from .schema import Module
 
@@ -136,8 +138,8 @@ def _prepare(work: Path) -> None:
     """Reference material the agent may read: an example module and the schema."""
     ex = work / "_example"
     ex.mkdir(exist_ok=True)
-    shutil.copy(config.EXAMPLE / "module.yaml", ex / "module.yaml")
-    for f in (config.EXAMPLE / "art").glob("*"):
+    (ex / "module.yaml").write_text(package.joined_text(paths.EXAMPLE), encoding="utf-8")  # the agent writes one file
+    for f in (paths.EXAMPLE / "art" / "ascii").glob("*"):
         shutil.copy(f, ex / f.name)
     (ex / "schema.json").write_text(json.dumps(Module.model_json_schema(), ensure_ascii=False, indent=1), encoding="utf-8")
     from ..plugins import api_text
@@ -221,7 +223,7 @@ def validate(work: Path) -> list[str]:
         m = Module.load(work)
     except Exception as exc:  # malformed YAML or schema errors go straight back to the agent
         return [f"[错误] module.yaml 读不进来：{exc}"[:2000]]
-    raw = yaml.safe_load((work / "module.yaml").read_text(encoding="utf-8"))
+    raw = package.read(work)
     schema = Module.model_json_schema()
     issues = _unknown_fields(raw, schema, schema.get("$defs", {}))
     for field in ("art", "art_colors", "pictures", "extensions", "extension_errors"):
@@ -394,10 +396,9 @@ def original_image_tool(ws: Workspace) -> Tool:
         if not re.fullmatch(r"[a-z0-9_]+", name):
             raise ToolError("图片键只用小写字母、数字和下划线")
         target = ws.resolve(f"art/{name}{source.suffix.lower()}", write=True)
-        record = ws.resolve(f"art/{name}.source.json", write=True)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-        record.write_text(json.dumps({"source": ws.rel(source), "original": True}, ensure_ascii=False), encoding="utf-8")
+        credits.put(target, {"source": ws.rel(source), "original": True})
         return f"已保留原图 {ws.rel(target)}；场景或头像用键 {name}，手稿写 images: [{name}]；注意正确解锁时机。"
 
     return Tool("use_image", "把 source/ 中的原模组图片原样保存到 art/，供场景、人物或手稿使用", ("path", "name"), use_image, ("path", "name"))
@@ -422,6 +423,7 @@ async def pipeline(
     async def n_prepare(_: ImportState) -> dict:
         if prepare:
             await prepare(console)
+        package.start_draft(work)
         _prepare(work)
         return {"work": str(work), "rounds": 0}
 
@@ -456,8 +458,9 @@ async def pipeline(
         return {"rounds": rounds}
 
     async def n_compile(_: ImportState) -> dict:
+        package.normalize(work)
         m = Module.load(work)
-        root = compile_module(m, config.SKILLS, source=work / "source")
+        root = compile_module(m, paths.SKILLS, source=work / "source")
         console.print(
             f"[bold green]完成[/] 《{m.title}》：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、"
             f"{len(m.art)} 张 ASCII 图 → {root}"
@@ -516,7 +519,7 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
     except Exception as exc:  # the module is done either way
         console.print(f"[yellow]照片没找成（{type(exc).__name__}），可以稍后用 autokeeper art fetch 补。[/]")
         return []
-    console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/*.credit.json")
+    console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/credits.yaml")
     if fill and any(x.looks for x in [*m.locations, *m.npcs]):
         console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
         drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
@@ -526,7 +529,7 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
 
 async def find_showcases(m: Module, cfg: config.Config, console: Console) -> list[str]:
     """The big scenes' pictures (engine/showcase.py), one at a time, the opening first, kept
-    in saves/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
+    in data/cache/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
     from ..engine.showcase import prepare_module
 
     if not m.showcases or not imagery.available() or not (imagegen.enabled(cfg) or cfg.search != "none"):
@@ -569,7 +572,7 @@ async def run_import(
     file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (),
     console: Console | None = None, model: str = "", vision_model: str = "", photos: bool = True,
 ) -> Path:
-    work = config.LOCAL_MODULES / module_id
+    work = paths.LOCAL_MODULES / module_id
 
     async def prepare(console: Console) -> None:
         # Rendering a long PDF takes a while; off the event loop, the TUI keeps drawing meanwhile.

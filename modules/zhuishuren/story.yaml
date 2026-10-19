@@ -1,0 +1,247 @@
+conclusions:
+  - id: k_reader
+    text: 道格拉斯生前总在墓地里一块特定的低矮墓碑上读书
+  - id: k_creatures
+    text: 多年来墓地一带一直有犬面蹄足、浑身泥土的怪人出没
+  - id: k_not_burglar
+    text: 偷书的不是寻常窃贼：只拿了道格拉斯的书，从朝向公墓的书房窗户进出
+  - id: k_figure
+    text: 最近深夜有人影在道格拉斯最喜欢的墓碑旁出没
+  - id: k_underground
+    text: 公墓地下有隧道网，住着道格拉斯所说的“地下的朋友们”
+  - id: k_joined
+    text: 道格拉斯是自己“做出决定”，去地下加入了那些生物
+  - id: k_tunnel
+    text: 墓碑旁的蹄状足迹通向一座陵墓，陵墓里有挖向地底的隧道
+  - id: k_ghoul
+    text: 偷书贼就是正在变成食尸鬼的道格拉斯·金博尔本人
+  - id: k_last_night
+    text: 食尸鬼们要封闭这处出入口，道格拉斯不会再回来
+events:
+  - id: e_thomas_suggests
+    title: 托马斯的建议
+    when: D2 18:00
+    text: |
+      若调查员到这时还没想到监视屋子或墓地，托马斯会请他们说明一下迄今为止发现了什么，并在谈话中建议监视屋子，
+      万一窃贼再来书房偷书，就能抓个现行。（时间点为 AutoKeeper 补充，可视进度提前或推后）
+    read_aloud: 晚饭后，托马斯给你倒了杯咖啡：“说实在的，查到哪一步了？要不……今晚咱们守着书房，看那贼还来不来？”
+    sets: []
+  - id: e_jailed
+    title: 牢房里的一夜
+    when: flag:jailed
+    move_to: jingju
+    text: 调查员因找私酒被捕，整晚关在牢房里，挨一顿严肃训话，第二天早晨无罪释放。
+    read_aloud: 铁门咣当一声关上。隔壁的醉汉打起了呼噜。
+    sets: []
+  - id: e_locked_in
+    title: 被锁在图书馆
+    when: flag:locked_in_library
+    move_to: tushuguan
+    text: |
+      调查员找到了那篇报道，但错过闭馆，被锁在馆里，要到第二天早上八点管理员来开门才能出去。
+      可用机械维修或锁匠开正门，用力量撞破门窗，或给一次幸运检定看巡逻警察是否听见呼救。
+    read_aloud: 你抬起头，台灯一盏一盏都灭了，大门那边传来钥匙转动的声音——然后是一片寂静。
+    sets: []
+  - id: e_fainted
+    title: 墓碑上的身影
+    when: flag:fainted
+    move_to: mudi
+    text: 被恶臭熏昏的调查员在晚上苏醒，道格拉斯就坐在一旁的墓碑上。照“如果调查员试图和人影交谈”处理。
+    read_aloud: 你在冰冷的草地上醒来，天已经黑透了。月光下，旁边那块矮墓碑上坐着一个人，膝上摊着一本书。
+    sanity: 0/1D4
+    sets: []
+  - id: e_tunnel_maze
+    title: 迷宫中的相遇
+    when: visit:suidao
+    text: |
+      导航检定决定是否迷路；失败则兜转到精疲力竭必须休息。无论如何，时间流逝，夜晚降临。
+      调查员在返回地面途中与道格拉斯·金博尔不期而遇（照“如果调查员试图和人影交谈”处理）。
+    read_aloud: 手电的光圈里，前方拐角处有什么东西停住了。它抱着一摞书，慢慢转过头来。
+    sanity: 0/1D4
+    sets: []
+  - id: e_night_visit
+    title: 深夜来客
+    when: flag:tunnel_ignored
+    move_to: jinboer_jia
+    text: |
+      调查员找到隧道却没下去，当晚道格拉斯会来到地面进入金博尔家。若调查员设岗监视，转“监视屋子或墓地”；
+      若调查员正在熟睡，道格拉斯会来到他的房间唤醒他，因为他想和调查员交谈。
+    read_aloud: 有什么东西轻轻碰了碰你的肩膀。你睁开眼，床边站着一个弯腰的黑影，一股泥土味。“你好。”
+    sanity: 0/1D4
+    sets: []
+  - id: e_figure
+    title: 离开公墓的人影
+    when: flag:watching
+    text: |
+      设岗监视时，调查员每晚做一次幸运检定。成功的那一夜，一条人影离开公墓，径直走向金博尔宅，从书房窗户进屋；
+      若窗户被锁上，它会用肩膀撞开，顶坏木条、撞碎玻璃，响动可能惊醒熟睡的调查员。
+      几分钟后它满载着书本重新现身，返回公墓。调查员若正面拦截、追赶或攻击，它会试图带着书逃进墓地。
+      只是大声呼喊，它最多回头瞥一眼；喊出“道格拉斯·金博尔”，它会停顿一下，再缓缓走向墓地，像是希望调查员跟上。
+    read_aloud: 午夜过后，墓地那边的树影动了一下。一个佝偻的身影翻过矮墙，径直朝书房的窗户走来。
+    sets: [figure_seen]
+  - id: e_hello
+    title: “你好。”
+    when: flag:called_name
+    move_to: mudi
+    text: |
+      人影走到道格拉斯最喜欢的墓碑前，高坐其上，开口说：“你好。”调查员看清这个食尸鬼般的人形、认出他就是道格拉斯·金博尔，
+      须过理智检定，失败损失 1D4 并发出一声尖叫（强制行动）。道格拉斯等他冷静下来，之后回答任何礼貌的问题。
+      他说完后矮身钻进陵墓、下到隧道，拖动一块巨大石板封住入口。调查员若想跟随他去地下，可以，但也会从此失踪。
+    read_aloud: 那身影在矮墓碑上坐下，把书摞在膝头，抬起一张不该属于人的脸。圆框眼镜的位置上，是一双温和的眼睛。“你好。”
+    sanity: 0/1D4
+    sets: [talked_douglas]
+  - id: e_unmasked
+    title: 熟悉的脸
+    when: flag:douglas_down
+    text: |
+      调查员杀死或击晕人影后凑近观察它的脸，要做两次理智检定。第一次（遭遇食尸鬼的震惊）：成功无损失，
+      失败失去 1D6 并做一个守秘人决定的强制动作（扔下武器或手电、放声尖叫）。随后进入“认出道格拉斯”的第二次检定。
+    sanity: 0/1D6
+    sets: [unmasked]
+  - id: e_recognized
+    title: 是他
+    when: flag:unmasked
+    text: 第二次理智检定（意识到这头食尸鬼正是失踪的道格拉斯）：成功损失 1 点，失败损失 1D4 并做强制动作（如尖叫）。
+    sanity: 1/1D4
+    sets: [recognized]
+  - id: e_horde
+    title: 细碎的脚步声
+    when: flag:recognized
+    text: |
+      调查员站在死去或昏迷的道格拉斯身旁，听见周围传来细碎的脚步声，几十只食尸鬼从夜幕中缓缓现身逼近，再做一次理智检定。
+      失败：失去 6 点，须做智力检定；智力成功则陷入临时性疯狂，尖叫后昏倒——进入“疗养院”结局。
+      理智成功（或智力失败、震惊但保持理智）：告诉玩家一群食尸鬼正扑向他，问他怎么做。搏斗或开枪会被数量淹没、带走（“人间蒸发”）；
+      逃跑则它们不追，带走道格拉斯返回墓地（“空墓”）。
+    read_aloud: 四周的灌木里响起细碎的脚步声，一下，又一下，越来越多。月光里，一张又一张犬一样的脸从墓碑后面探了出来。
+    sanity: 0/6
+    sets: [horde_arrived]
+endings:
+  - id: asylum
+    title: 疗养院
+    condition: flag:asylum
+    text: |
+      一段时间之后，你在阿诺兹堡疗养院醒来。你被发现时正昏迷不醒，周围没有任何食尸鬼或道格拉斯·金博尔留下的痕迹。
+      托马斯听到一声尖叫，找到了正语无伦次地叫嚷着墓地里有一群怪物的你，叫了救护车。你在疗养院享受了一周的护理。
+      此后再也没人闯入金博尔家，一切归于平静。托马斯认为你一定是赶走了那个窃贼，很乐意为这出色的工作支付酬金。
+      是否把叔叔的真相告诉他，由你决定。
+    reward: 托马斯支付 10 美元（损坏过贵重物品则减 5 美元）；曾陷入临时性疯狂，克苏鲁神话 +5%；为用过的技能做成长检定
+  - id: vanished
+    title: 人间蒸发
+    condition: flag:taken_by_ghouls
+    text: |
+      你挥拳、开枪，打中了一只、两只——可它们太多了。无数只胶皮般的手把你按倒在泥里。
+      你被带回食尸鬼的地下洞穴，从此人间蒸发。
+    reward: 无（调查员失踪）
+  - id: below
+    title: 地下的图书馆
+    condition: flag:followed_douglas
+    text: |
+      你跟着道格拉斯矮身钻进陵墓，石板在身后轰然合拢。地下有太多可看、可体验的事。
+      地面上的人再也没有见过你——在《克苏鲁的呼唤》里，有时就连调查员自己都会失踪。
+    reward: 无（调查员从外界失踪）
+  - id: farewell
+    title: 最后一晚
+    condition: flag:talked_douglas
+    text: |
+      道格拉斯说完，矮身爬进陵墓，下到隧道之中，最后拖动一块巨大的石板封住了入口。
+      食尸鬼们封闭了这处隧道，一去不返。托马斯·金博尔又可以安然入睡，不用担心再有盗窃发生。
+      是否把叔叔的真相告诉他，由你决定。
+    reward: 听取真相时损失 1D4 理智、克苏鲁神话 +3%；得知它不会再回来，恢复 1D6 理智；托马斯支付 10 美元（损坏过贵重物品则减 5 美元）；曾陷入临时性疯狂则克苏鲁神话 +5%；为用过的技能做成长检定
+  - id: emptied
+    title: 空墓
+    condition: flag:fled_ghouls
+    text: |
+      你转身就跑，身后没有追赶的声音。它们带走了道格拉斯·金博尔——无论是死是活——回到了墓地。
+      第二天早晨你回来时，所有痕迹都已不见。食尸鬼们离开了，一去不返，再没人来打扰托马斯·金博尔。
+    reward: 托马斯支付 10 美元（损坏过贵重物品则减 5 美元）；曾陷入临时性疯狂则克苏鲁神话 +5%；为用过的技能做成长检定
+  - id: unsolved
+    title: 未解之谜
+    condition: 以上都没有发生（例如道格拉斯带着书逃回了墓地）
+    text: |
+      那个身影抱着书消失在墓碑之间。没人干扰的情况下，道格拉斯和食尸鬼群封闭了这处隧道入口，一去不返。
+      此后再也没有书从书房里丢失，可你始终没弄清那是什么——并不是每一个谜团都会揭开面纱。
+    reward: 托马斯支付 10 美元（损坏过贵重物品则减 5 美元）；曾陷入临时性疯狂则克苏鲁神话 +5%；为用过的技能做成长检定
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 阿诺兹堡的早班车
+    prompt: 1922 年密歇根小城的清晨，木站台上蒸汽从火车底下散开，一位提着行李的旅人刚走下车厢，远处小镇的屋顶和公墓的老树隐在薄雾里，冷清而安静
+    base: huochezhan
+  - id: sc_library
+    kind: 重要场景
+    when: visit:shufang
+    title: 缺了牙的书架
+    prompt: 四壁顶天立地的书架，每本书都包着整齐的书皮，其中一面空出好几格，像缺了牙；窗下一张旧书桌，窗外是公墓的树影，午后的斜光里浮尘飘动
+    base: shufang
+  - id: sc_tomb
+    kind: 重要场景
+    when: visit:lingmu
+    title: 半埋的陵墓
+    prompt: 半埋在土坡里的石砌陵墓，门楣上的字早被苔藓吃掉，石门紧闭，门缝里塞满了泥，门前的泥地上满是凌乱的脚印；阴天，四周的老树低垂
+    base: lingmu
+  - id: sc_figure
+    kind: 突发
+    when: event:e_figure
+    title: 离开公墓的人影
+    prompt: 午夜的公墓，月光下一个佝偻的黑色人影翻过矮墙，径直走向一栋房子里还亮着灯的书房窗户，只看得见剪影
+    base: mudi
+  - id: sc_maze
+    kind: 危机
+    when: event:e_tunnel_maze
+    title: 迷宫中的相遇
+    prompt: 又低又窄的泥土隧道，四壁满是爪痕，手电筒的光圈里，拐角处一个抱着一摞书的佝偻身影正慢慢回过头，脸藏在阴影里
+    base: suidao
+  - id: sc_hello
+    kind: 怪物
+    when: event:e_hello
+    title: “你好。”
+    prompt: 月光下的墓地，一个佝偻的身影坐在矮墓碑上，膝头摞着几本旧书，抬起一张犬一样、皮肤像胶皮的脸，却有一双温和的眼睛
+    base: mudi
+  - id: sc_unmasked
+    kind: 怪物
+    when: event:e_unmasked
+    title: 熟悉的脸
+    prompt: 墓地的泥地上倒着一个佝偻的身影，手电光照着一张介于人与犬之间的脸，皮肤像胶皮，旁边掉着一副圆框眼镜
+    base: mudi
+  - id: sc_horde
+    kind: 最终boss
+    when: event:e_horde
+    title: 细碎的脚步声
+    prompt: 月光下的墓地，几十张犬一样的脸从墓碑和灌木后面探出来，皮肤像胶皮，身上挂着墓地的苔藓，正从四面八方慢慢围拢过来
+    base: mudi
+  - id: sc_end_farewell
+    kind: 结局
+    when: ending:farewell
+    title: 最后一晚
+    prompt: 黎明前的陵墓入口，一个佝偻的身影把一块巨大的石板拖过去，封住通往地下的洞口；墓地里升起清晨的薄雾
+    base: lingmu
+  - id: sc_end_below
+    kind: 结局
+    when: ending:below
+    title: 地下的图书馆
+    prompt: 地底深处的巨大洞穴，书堆成一座座小山，昏暗的烛光里，几个佝偻的身影在书山之间安静地翻读
+  - id: sc_end_asylum
+    kind: 结局
+    when: ending:asylum
+    title: 疗养院
+    prompt: 1920 年代疗养院的单人病房，铁架床，白色床单，窗外是灰白的天，床头柜上放着一杯水，安静得让人不安
+  - id: sc_end_vanished
+    kind: 结局
+    when: ending:vanished
+    title: 人间蒸发
+    prompt: 清晨空无一人的墓地，泥地里留着挣扎和拖拽的痕迹，一只熄灭的手电筒掉在墓碑旁
+    base: mudi
+  - id: sc_end_emptied
+    kind: 结局
+    when: ending:emptied
+    title: 空墓
+    prompt: 清晨的陵墓，石门大开，里面空空荡荡，泥地上的脚印一直通进黑暗的地下
+    base: lingmu
+  - id: sc_end_unsolved
+    kind: 结局
+    when: ending:unsolved
+    title: 未解之谜
+    prompt: 黄昏的公墓，一个抱着书的模糊背影消失在远处的墓碑之间；近处一栋老房子的书房窗户亮着灯
+    base: mudi

@@ -231,6 +231,15 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 </details>
 
 <details>
+<summary>存档和角色卡存在哪里？</summary>
+
+都在 AutoKeeper 文件夹里的 `data/`：存档在 `data/games/`，自己的调查员在 `data/cards/`，运行记录在 `data/logs/`。`data/cache/` 里是本地模型、知识库和大场景图，删掉也没关系，用到时会重新准备。完整的说明见[文件放在哪里](docs/harness.md#文件放在哪里)。
+
+以前的版本把这些放在 `saves/`。更新后第一次启动时，本地模型、知识库和自己的调查员会自动挪到 `data/`；旧存档读不了了，`saves/` 可以整个删掉。
+
+</details>
+
+<details>
 <summary>画面颜色不对，或者右边一栏不见了？</summary>
 
 不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。默认用块字符画照片，最容易认出内容；Ctrl+A 可切换块字符加轮廓线、更细的六分块（终端字体不支持时会显示成方框）和纯 ASCII，也可以在设置里选择。模组原图仍保留；发现地图、病历或信件后，手稿窗口提供完整文字、ASCII 预览和“查看原图”，F2 可重看。
@@ -295,4 +304,4 @@ uv run ruff check src tests && uv run pytest
 
 ## 许可
 
-代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例。《追书人》是 *Paper Chase*（Bret Kramer 著，Chaosium 出版）的同人改编，原作版权归 Chaosium，仓库不含原书的 PDF；它的场景照片来自 Wikimedia Commons，作者和授权见 [CREDITS](modules/zhuishuren/art/CREDITS.md)。《冬雪之下》和《有些人油盐不进》同样是同人改编，原作版权归原作者，仓库不含原模组的文字和图片，照片来自 Wikimedia Commons（[冬雪之下](modules/dongxuezhixia/art/CREDITS.md)、[有些人油盐不进](modules/fallout3-youxierenyouyanbujin/art/CREDITS.md)）。标题画面的克苏鲁是 Dominique Signoret 的画作 *Cthulhu and R'lyeh*（[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)，来自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg)），游戏里会裁剪、调暗并做成动画。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。
+代码以 [MIT](LICENSE) 协议发布，`src/autokeeper/module/example/` 是 CC0 的格式样例。《追书人》是 *Paper Chase*（Bret Kramer 著，Chaosium 出版）的同人改编，原作版权归 Chaosium，仓库不含原书的 PDF；它的场景照片来自 Wikimedia Commons，作者和授权见 [credits.yaml](modules/zhuishuren/art/credits.yaml)。《冬雪之下》和《有些人油盐不进》同样是同人改编，原作版权归原作者，仓库不含原模组的文字和图片，照片来自 Wikimedia Commons（[冬雪之下](modules/dongxuezhixia/art/credits.yaml)、[有些人油盐不进](modules/fallout3-youxierenyouyanbujin/art/credits.yaml)）。标题画面的克苏鲁是 Dominique Signoret 的画作 *Cthulhu and R'lyeh*（[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)，来自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cthulhu_and_R%27lyeh.jpg)），游戏里会裁剪、调暗并做成动画。Call of Cthulhu 是 Chaosium Inc. 的商标，本项目与 Chaosium 无关。

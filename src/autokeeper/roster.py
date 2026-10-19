@@ -1,7 +1,7 @@
 """Investigators made outside a module (public-figure cards), kept between games.
 
-    saves/investigators/<id>.json         the sheet, and how it was made
-    saves/investigators/<id>.jpg          its photo, with .credit.json and .prep.png beside it
+    data/cards/<id>.json         the sheet, and how it was made
+    data/cards/<id>.jpg          its photo; where it came from is in data/cards/credits.yaml
 """
 
 from __future__ import annotations
@@ -11,21 +11,22 @@ import shutil
 from collections.abc import Iterable
 from pathlib import Path
 
-from . import config
+from . import credits, paths
 from .module.schema import Module
 from .rules.coc import Investigator
 
 
 def folder() -> Path:
-    return config.SAVES / "investigators"
+    return paths.cards()
 
 
 def keep(inv: Investigator, made: dict, photo: Path | None = None) -> None:
     d = folder()
     d.mkdir(parents=True, exist_ok=True)
     if photo is not None and photo.exists():
-        for f in photo.parent.glob(photo.stem + ".*"):  # the photo, its credit, its prepared copy
-            shutil.copy2(f, d / (inv.portrait + f.name[len(photo.stem) :]))
+        target = d / (inv.portrait + photo.suffix)
+        shutil.copy2(photo, target)
+        credits.put(target, credits.get(photo))
     record = {"investigator": inv.model_dump(mode="json"), **made}
     (d / f"{inv.id}.json").write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -33,7 +34,7 @@ def keep(inv: Investigator, made: dict, photo: Path | None = None) -> None:
 def saved() -> list[Investigator]:
     """Every kept card, newest first."""
     out = []
-    files = [f for f in folder().glob("*.json") if not f.name.endswith(".credit.json")] if folder().is_dir() else []
+    files = list(folder().glob("*.json")) if folder().is_dir() else []
     for f in sorted(files, key=lambda f: f.stat().st_mtime, reverse=True):
         try:
             out.append(Investigator.model_validate(json.loads(f.read_text(encoding="utf-8"))["investigator"]))

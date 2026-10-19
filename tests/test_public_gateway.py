@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from aiohttp import ClientSession, CookieJar, WSServerHandshakeError, web
 
-from deploy.public_gateway import COOKIE, PublicServer
+from dev.public_gateway import COOKIE, PublicServer
 
 PASSWORD = "test-only-access-password"
 

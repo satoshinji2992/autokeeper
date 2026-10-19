@@ -9,10 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
-# Copyrighted modules stay local. Anything dropped straight into modules/ (PDF, zip, Word,
-# Markdown, text, pictures) is ignored, and so are PDFs, Word files and archives anywhere under
-# it; module folders such as modules/zhuishuren/ and modules/README.md stay tracked.
-# Imports land in modules/local/. Keep these lines in this order: the last match wins.
+# Copyrighted modules stay local. Drop module files into modules/inbox/; anything dropped
+# straight into modules/ (PDF, zip, Word, Markdown, text, pictures) is ignored too, and so are
+# PDFs, Word files and archives anywhere under it; module folders such as modules/zhuishuren/
+# and modules/README.md stay tracked. Imports land in modules/local/<id>/, their originals in
+# its source/. Keep these lines in this order: the last match wins.
 /modules/*
 !/modules/*/
 !/modules/README.md
@@ -22,10 +23,14 @@ wheels/
 /modules/**/*.zip
 /modules/**/*.rar
 /modules/**/*.7z
-modules/_import/
+modules/inbox/
 modules/local/
+modules/*/source/
 skills/module-*
+# What the game writes (src/autokeeper/paths.py); saves/ is the folder 0.0.1 used
+data/
 saves/
+dev/output/
 .env
 bridge/node_modules/
 

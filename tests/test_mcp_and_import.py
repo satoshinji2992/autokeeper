@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from autokeeper import mcp_server as srv
-from autokeeper.config import EXAMPLE
+from autokeeper import paths
 from autokeeper.module.importer import _pages, validate
+from autokeeper.paths import EXAMPLE
 
 from .conftest import needs_node
 
@@ -14,8 +15,8 @@ def test_import_validation_accepts_the_format_example():
 
 @needs_node
 async def test_mcp_tools_play_a_short_scene(monkeypatch, tmp_path):
-    monkeypatch.setattr(srv.config, "SAVES", tmp_path)
-    monkeypatch.setattr(srv.config, "SKILLS", tmp_path / "skills")
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "SKILLS", tmp_path / "skills")
     monkeypatch.setattr(srv, "_dirs", lambda: {"example": EXAMPLE})
     started = await srv.new_game("example", "zhouheng", slot="t")
     assert started["location"]["id"] == "square" and started["art"]
@@ -26,7 +27,7 @@ async def test_mcp_tools_play_a_short_scene(monkeypatch, tmp_path):
     assert srv.scene()["location"]["id"] == "tower"
     found = await srv.lookup("老守钟人")
     assert any(h["id"] == "warden" for h in found["graph"])
-    assert (tmp_path / "t.json").exists()
+    assert paths.save("t").exists()
     loaded = await srv.load_game("t")
     assert loaded["location"]["id"] == "tower"
     await srv.S.game.close()

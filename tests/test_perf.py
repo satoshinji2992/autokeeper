@@ -12,14 +12,16 @@ from rich.text import Text
 from textual.content import Content
 from textual.screen import Screen
 
-from autokeeper import config, imagery
-from autokeeper.config import EXAMPLE
+from autokeeper import imagery, paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
-from autokeeper.tui import app as tui
-from autokeeper.tui import cover
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
-from autokeeper.tui.widgets import PORTRAIT, Folded, HistoryLine, SceneArt, StoryLog
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.drawing import cover
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
+from autokeeper.tui.widgets.panels import PORTRAIT, Folded, HistoryLine, SceneArt, StoryLog
 
 from .test_speaker import drawn
 from .test_tui import canned, until  # noqa: F401  (canned: a fixture, used by name)
@@ -185,7 +187,7 @@ async def test_no_picture_is_rendered_on_the_ui_thread_when_a_game_starts(monkey
         return real(*args, **kwargs)
 
     monkeypatch.setattr(imagery, "render", render)
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="thumb", human=[lead.id])
     app = AutoKeeperApp(theme="amber")
@@ -225,7 +227,7 @@ async def test_going_through_the_investigators_never_waits_for_chafa(monkeypatch
         return real(*args, **kwargs)
 
     monkeypatch.setattr(imagery, "render", render)
-    monkeypatch.setattr(tui, "modules", lambda: [config.MODULES / "zhuishuren"])
+    monkeypatch.setattr(paths, "module_folders", lambda: [paths.MODULES / "zhuishuren"])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause()

@@ -6,11 +6,11 @@ from pathlib import Path
 
 from PIL import Image
 
-from autokeeper import config
-from autokeeper.config import EXAMPLE
+from autokeeper import paths
 from autokeeper.net import media
 from autokeeper.net.hub import Hub
-from autokeeper.tui.net import table_module
+from autokeeper.paths import EXAMPLE
+from autokeeper.tui.screens.net import table_module
 
 from .test_net import TableCast
 
@@ -21,9 +21,9 @@ def test_a_remote_player_can_open_a_picture_without_the_hosts_filesystem(monkeyp
     Image.new("RGB", (1920, 1080), (30, 40, 50)).save(host)
     wire = media.pack(str(host))
     host.unlink()
-    monkeypatch.setattr(config, "SAVES", tmp_path / "player")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "player")
     cached = Path(media.unpack(wire))
-    assert cached.is_file() and cached.is_relative_to(config.SAVES)
+    assert cached.is_file() and cached.is_relative_to(paths.DATA)
     with Image.open(cached) as image:
         assert max(image.size) <= 512
     assert not media.unpack("not a photo")
@@ -34,7 +34,7 @@ def test_a_remote_player_can_open_a_picture_without_the_hosts_filesystem(monkeyp
 
 
 def test_unlocked_handout_images_keep_more_detail_than_scene_thumbnails(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "player")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "player")
     original = tmp_path / "map.png"
     Image.new("RGB", (1500, 2000), (30, 40, 50)).save(original)
     encoded = media.pack(str(original), max_size=1600)
@@ -46,7 +46,7 @@ def test_unlocked_handout_images_keep_more_detail_than_scene_thumbnails(monkeypa
 async def test_original_handouts_only_travel_to_players_after_discovery(monkeypatch, tmp_path, fake):
     from autokeeper.rules.coc import Rules
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "cache")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "cache")
     image = tmp_path / "private-map.png"
     Image.new("RGB", (1000, 1400), (30, 40, 50)).save(image)
     hub = Hub(EXAMPLE, cast=TableCast(), rules=Rules(dice=fake))
