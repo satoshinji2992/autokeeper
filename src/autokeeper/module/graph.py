@@ -176,6 +176,15 @@ def audit(m: Module) -> list[Issue]:
         for ex in loc.exits:
             if ex not in locs:
                 err(f"地点 {loc.id} 的出口 {ex} 不存在")
+        if loc.within is not None:
+            outer, seen = loc.within, {loc.id}
+            while outer in locs and outer not in seen:
+                seen.add(outer)
+                outer = m.location(outer).within
+            if loc.within not in locs:
+                err(f"地点 {loc.id} 所在的 {loc.within} 不存在")
+            elif outer == loc.id:
+                err(f"地点 {loc.id} 的 within 绕回了它自己")
         if loc.art and loc.art not in m.art:
             warn(f"地点 {loc.id} 的插图 {loc.art} 还没画")
     for n in m.npcs:

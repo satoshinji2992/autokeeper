@@ -12,6 +12,8 @@ from .schema import Output, Plugin
 if TYPE_CHECKING:
     from ..engine.game import Game, Turn
 
+PLUGIN_LOG_KEEP = 80  # public plugin-effect lines a save keeps for the Ctrl+K window
+
 
 class Manager:
     def __init__(self, game: Game):
@@ -118,8 +120,15 @@ class Manager:
         state.plugin_data[plugin.id] = result.state
         state.plugin_versions[plugin.id] = plugin.version
         state.plugin_receipts = [*state.plugin_receipts, token, *([] if result.repeat else [batch])][-256:]
+        if result.status:  # the plugin's opt-in public one-liner, keyed by name so a LAN table shares it
+            state.plugin_status[plugin.name] = result.status
         turn.notes += notes
         turn.notes += [f"{event['who']}：{event['text']}" for event in checks]
+        # A compact, recognisable line in the story when the rule does something public, and a
+        # short public record for the Ctrl+K window (no counters, no id, safe at a shared table).
+        if line := "；".join(notes)[:200]:
+            state.plugin_log = [*state.plugin_log, {"turn": state.turn, "name": plugin.name, "line": line}][-PLUGIN_LOG_KEEP:]
+            await game.emit({"type": "plugin_effect", "plugin": plugin.id, "name": plugin.name, "line": line})
         for event in checks + events:
             if event["type"] in ("dice", "sanity", "damage"):
                 state.add(event["type"], event.get("text", "") or f"{event.get('skill', '检定')}：{event.get('value', '')}", who=event.get("who", ""))

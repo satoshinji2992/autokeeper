@@ -335,3 +335,283 @@ async def test_the_arbiter_may_name_the_investigator_and_a_slip_does_not_pause_t
     wrong = Ruling(needs_roll=False, minutes=0, plugin_calls=[Call(plugin="counter", action="run_away")])
     turn = await game.resolve(Action(kind="other", summary="再跑"), wrong)
     assert "counter" not in game.state.plugin_errors and any("run_away" in n for n in turn.notes)
+
+
+# -- sandbox: typical escape attempts are refused --------------------------------------------
+ESCAPES = {
+    "import a module": "import os",
+    "import inside a function body": "def f():\n        import socket",
+    "dunder attribute": 'ctx["x"] = {}.__class__',
+    "subclasses chain": 'ctx["x"] = ().__class__.__bases__',
+    "generator frame": 'g = (i for i in [1])\n    ctx["x"] = g.gi_frame',
+    "frame globals": 'ctx["x"] = ctx.f_globals',
+    "str.format traversal": 'ctx["x"] = "{0.__class__}".format(api)',
+    "getattr": 'ctx["x"] = getattr(api, "roll")',
+    "eval": 'eval("1")',
+    "exec": 'exec("x = 1")',
+    "compile": 'compile("1", "x", "eval")',
+    "open a file": 'open("/etc/passwd")',
+    "type introspection": 'ctx["x"] = type(1)',
+    "object base": 'ctx["x"] = object()',
+    "dunder name": 'ctx["x"] = __builtins__',
+}
+
+
+@pytest.mark.parametrize("snippet", list(ESCAPES.values()), ids=list(ESCAPES))
+def test_escape_attempts_are_refused_before_a_plugin_runs(snippet):
+    body = COUNT.replace('    return', f"    {snippet}\n    return")
+    assert check(counter(code=body)), f"未拦截：{snippet}"
+
+
+def test_the_audit_hook_refuses_file_network_subprocess_and_import():
+    """The worker's third wall: even if a builtin leaked, these events are refused. The second
+    wall is the allow-list (open/__import__/socket are simply absent for plugin code)."""
+    from autokeeper.plugins import worker
+
+    for event in ("open", "import", "os.system", "socket.connect", "subprocess.Popen", "ctypes.dlopen", "shutil.rmtree"):
+        with pytest.raises(PermissionError):
+            worker.audit(event, ())
+    worker.audit("compile", ())  # the worker compiles the plugin itself; that is allowed
+
+
+def test_the_worker_has_no_open_import_or_type_even_fed_code_that_skips_the_ast_check():
+    """Feed the worker code the AST check would reject, straight into the subprocess: the
+    allow-listed builtins mean open/__import__/type are not defined, so nothing dangerous runs."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from autokeeper.plugins import worker as worker_mod
+
+    path = str(Path(worker_mod.__file__).resolve())
+    for attempt in ("open('/etc/passwd')", "__import__('os')", "type(1)"):
+        probe = f"def handle(e, c, a):\n    {attempt}\n    return {{'state': {{}}, 'effects': []}}"
+        payload = json.dumps({"code": probe, "event": {"hook": "turn"}, "context": {"state": {}}})
+        done = subprocess.run([sys.executable, "-I", "-S", path], input=payload + "\n",
+                              capture_output=True, text=True, env={"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"})
+        message = json.loads(done.stdout.strip().splitlines()[-1])
+        assert "error" in message and "NameError" in message["error"], (attempt, message)
+
+
+async def test_a_memory_blowup_does_not_bring_down_the_host():
+    pytest.importorskip("resource")  # the cap is a POSIX resource limit; the wall-clock kill guards elsewhere
+    plugin = counter(code="def handle(e, c, a):\n    big = [0] * 500000000\n    return {'state': {}, 'effects': []}")
+
+    async def no_requests(message):
+        raise AssertionError("no RPC")
+
+    with pytest.raises(PluginError):
+        await execute(plugin, {"hook": "turn"}, {"state": {}}, no_requests, timeout=5)
+
+
+# -- public status, a recognisable line, and the recent-effects log --------------------------
+async def test_a_public_status_and_a_compact_effect_line_reach_the_story_and_the_ctrl_k_log(fake):
+    module = Module.load(EXAMPLE)
+    code = ('def handle(event, ctx, api):\n'
+            '    return {"state": {}, "status": "风寒：第 2 天", "effects": [{"kind": "note", "text": "夜里更冷了"}]}')
+    plugin = counter(code=code, capabilities=["note"], tests=[Case(
+        name="tick", expected_state={}, expected_effects=[{"kind": "note", "text": "夜里更冷了"}])])
+    assert not await verify(plugin)
+    module.extensions = {plugin.id: plugin}
+    game, _, events = make(module, fake, {})
+    await game.plugins.run("turn", Turn())
+    assert game.state.plugin_status[plugin.name] == "风寒：第 2 天"
+    assert game.state.plugin_log and game.state.plugin_log[-1]["name"] == plugin.name
+    assert "夜里更冷了" in game.state.plugin_log[-1]["line"]
+    effect = next(e for e in events if e["type"] == "plugin_effect")
+    assert effect["name"] == plugin.name and "夜里更冷了" in effect["line"]
+
+
+# -- house rules from a sentence -------------------------------------------------------------
+class AuthorCast:
+    """A canned author: hands back prepared plugins in order (None once exhausted), recording
+    the request and the problems it was told to fix. Stands in for cast.author_plugin in tests."""
+
+    def __init__(self, *plugins):
+        self.plugins = list(plugins)
+        self.seen: list[tuple[str, list | None]] = []
+
+    async def author_plugin(self, state, request, problems=None):
+        self.seen.append((request, problems))
+        return self.plugins.pop(0) if self.plugins else None
+
+
+async def test_a_house_rule_is_tested_and_installed_into_this_save_only(fake):
+    from autokeeper.plugins.author import house_rule
+
+    module = Module.load(EXAMPLE)
+    before = module.model_dump_json()
+    cast = AuthorCast(counter(id="meals", name="吃饭", description="每过一夜要吃一顿饭。"))
+    ok, message = await house_rule(cast, module, Game.new(module, [module.pregens[0].model_copy(deep=True)]), "每过一夜要吃饭")
+    assert ok and "吃饭" in message
+    assert module.plugins == ["meals"] and "meals" in module.extensions
+    assert not (EXAMPLE / "plugins" / "meals").exists()  # never written into the module's files
+    assert Module.load(EXAMPLE).model_dump_json() == before  # the module on disk is untouched
+
+
+async def test_an_installed_house_rule_rides_the_save_and_runs(fake):
+    from autokeeper.plugins.author import house_rule
+
+    module = Module.load(EXAMPLE)
+    cast = AuthorCast(counter(id="meals"))
+    game, _, _ = make(module, fake, {})
+    ok, _ = await house_rule(cast, module, game.state, "每过一夜要吃饭")
+    assert ok and game.state.plugin_sources["meals"]
+    restored = GameState.model_validate_json(game.state.model_dump_json())
+    fresh = Module.load(EXAMPLE)
+    resumed = Game(fresh, restored, game.cast, game.rules)
+    assert fresh.extensions["meals"].id == "meals"  # the Manager rebuilt it from the save
+    await resumed.plugins.run("turn", Turn())
+    assert restored.plugin_data["meals"] == {"count": 1}
+
+
+async def test_a_failing_house_rule_is_retried_then_explained(fake):
+    from autokeeper.plugins.author import house_rule
+
+    broken = counter(id="bad", code="def handle(e, c, a):\n    return {'state': {}, 'effects': []}")  # count never set
+    good = counter(id="bad")
+
+    retry = AuthorCast(broken, good)  # first draft fails its tests, the rewrite passes
+    m1 = Module.load(EXAMPLE)
+    ok, _ = await house_rule(retry, m1, Game.new(m1, [m1.pregens[0].model_copy(deep=True)]), "加个计数")
+    assert ok and len(retry.seen) == 2 and retry.seen[1][1]  # the second try was handed the problems
+
+    fail = AuthorCast(broken, broken)  # both drafts fail
+    m2 = Module.load(EXAMPLE)
+    ok2, message = await house_rule(fail, m2, Game.new(m2, [m2.pregens[0].model_copy(deep=True)]), "加个计数")
+    assert not ok2 and "没能装上" in message and not m2.plugins
+
+
+async def test_a_house_rule_cannot_silently_replace_a_rule_of_the_same_version(fake):
+    from autokeeper.plugins.author import house_rule
+
+    module = Module.load(EXAMPLE)
+    module.extensions = {"counter": counter()}
+    module.plugins = ["counter"]
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    changed = counter(code=COUNT.replace("+ 1", "+ 2"))  # same id and version, different code
+    ok, message = await house_rule(AuthorCast(changed, changed), module, state, "改计数")
+    assert not ok and "version" in message
+    assert module.extensions["counter"].code == COUNT  # the installed rule is unchanged
+
+
+# -- custom actions are discoverable ---------------------------------------------------------
+def test_command_suggester_and_f5_know_the_custom_actions():
+    from autokeeper.tui.plugins import action_hints
+    from autokeeper.tui.widgets import command_suggester
+
+    module = Module.load(EXAMPLE)
+    plugin = counter(hooks=["action"], actions=[PluginAction(name="hide", description="躲起来避开追兵。arguments: who")])
+    module.extensions = {plugin.id: plugin}
+    module.plugins = [plugin.id]
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    hints = action_hints(module, state)
+    assert hints == ["躲起来避开追兵"]
+    suggester = command_suggester(module.pregens[0], hints)
+    assert "躲起来避开追兵" in suggester._suggestions
+    state.plugin_errors["counter"] = "已手动暂停"  # a paused rule's actions drop out
+    assert action_hints(module, state) == []
+
+
+# -- the Ctrl+K window explains each rule in player terms ------------------------------------
+async def test_ctrl_k_explains_rules_without_exposing_private_state():
+    module = Module.load(EXAMPLE)
+    plugin = counter(hooks=["action"], description="追踪体温，太冷会受伤。",
+                     actions=[PluginAction(name="warm", description="靠近火堆取暖时调用。arguments: who")])
+    module.plugins = ["counter"]
+    module.extensions = {"counter": plugin}
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    state.plugin_data["counter"] = {"secret_counter": 4321}  # private: must not show
+    state.plugin_status["计数"] = "体温：偏低"
+    state.plugin_log = [{"turn": 1, "name": "计数", "line": "陈墨冻得发抖"}]
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(90, 40)) as pilot:
+        modal = PluginsModal(module, state, manage=True)
+        app.push_screen(modal)
+        await pilot.pause()
+        shown = "".join(str(w.render()) for w in modal.query(Static))
+        assert "追踪体温，太冷会受伤。" in shown  # what it does
+        assert "靠近火堆取暖时调用" in shown  # a custom action a player can try
+        assert "体温：偏低" in shown and "陈墨冻得发抖" in shown  # public status and recent effect
+        assert "4321" not in shown  # the private counter never leaks
+
+
+async def test_ctrl_k_shows_a_paused_rule_reason_in_plain_words():
+    module = Module.load(EXAMPLE)
+    module.plugins = ["counter"]
+    module.extensions = {"counter": counter()}
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    state.plugin_errors["counter"] = "插件执行超时"
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(90, 30)) as pilot:
+        modal = PluginsModal(module, state, manage=True)
+        app.push_screen(modal)
+        await pilot.pause()
+        shown = "".join(str(w.render()) for w in modal.query(Static))
+        assert "已暂停" in shown and "插件执行超时" in shown
+        assert "Traceback" not in shown
+
+
+async def test_ctrl_k_house_rule_box_installs_through_the_drafter():
+    module = Module.load(EXAMPLE)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+
+    async def drafter(text, progress):
+        await progress("写规则…")
+        from autokeeper.plugins.author import install
+
+        install(module, state, counter(id="meals", name="吃饭", description="每夜一餐。"))
+        return True, "已装上「吃饭」"
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(90, 30)) as pilot:
+        modal = PluginsModal(module, state, manage=True, drafter=drafter)
+        app.push_screen(modal)
+        await pilot.pause()
+        from textual.widgets import Input
+
+        box = modal.query_one("#house-rule", Input)
+        box.value = "每过一夜要吃饭"
+        box.post_message(Input.Submitted(box, box.value))  # as if the player pressed Enter
+        await pilot.pause()
+        await modal.workers.wait_for_complete()
+        await pilot.pause()
+        shown = "".join(str(w.render()) for w in modal.query(Static))
+        assert "吃饭" in shown and "meals" in module.plugins
+
+
+# -- a LAN table sees the same public information, redacted ----------------------------------
+def test_network_players_get_redacted_public_plugin_info_but_no_id_or_source(fake):
+    hub = Hub(EXAMPLE, cast=TableCast(), rules=Rules(dice=fake))
+    plugin = counter(id="private_rule", name="家规", description="玩家看得见的说明。",
+                     hooks=["action"], actions=[PluginAction(name="try_it", description="合适时调用。")])
+    hub.m.plugins = [plugin.id]
+    hub.m.extensions = {plugin.id: plugin}
+    hub.state.plugin_sources[plugin.id] = plugin.model_dump()
+    hub.state.plugin_data[plugin.id] = {"hidden": 54321}
+    hub.state.plugin_status["家规"] = "进行中"
+    hub.state.plugin_log = [{"turn": 1, "name": "家规", "line": "发生了一件事"}]
+    welcome = json.dumps(hub._welcome("player"), ensure_ascii=False)
+    assert not any(secret in welcome for secret in ("private_rule", "hidden", "54321", "def handle"))
+    info = hub._book()["plugin_info"]
+    assert info and info[0]["name"] == "家规" and info[0]["description"] == "玩家看得见的说明。"
+    assert info[0]["actions"] == [["try_it", "合适时调用。"]] and "id" not in info[0]
+    view = hub._view()  # the public status and recent effects are shared, keyed by name
+    assert view["plugin_status"] == {"家规": "进行中"} and view["plugin_log"][0]["name"] == "家规"
+
+
+async def test_a_lan_house_rule_is_drafted_and_installed_by_the_host(monkeypatch, tmp_path, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+
+    class HostCast(TableCast, AuthorCast):
+        def __init__(self, *plugins):
+            TableCast.__init__(self)
+            AuthorCast.__init__(self, *plugins)
+
+    hub = Hub(EXAMPLE, cast=HostCast(counter(id="meals", name="一日三餐", description="每夜一餐。")), rules=Rules(dice=fake))
+    hub.rules.put_nowait(("host", "每过一夜要吃饭"))
+    await hub._house_rules()
+    assert "meals" in hub.m.extensions and "meals" in hub.m.plugins
+    assert hub.state.plugin_sources["meals"]
+    info = {i["name"] for i in hub._book()["plugin_info"]}
+    assert "一日三餐" in info  # the new rule reaches the table's redacted book, by name

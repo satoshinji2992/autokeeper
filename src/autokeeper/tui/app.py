@@ -28,7 +28,7 @@ from textual.screen import Screen
 from textual.strip import Strip
 from textual.theme import Theme
 from textual.timer import Timer
-from textual.widgets import Button, Footer, Input, OptionList, Static
+from textual.widgets import Button, Footer, Input, OptionList, Static, TabbedContent
 from textual.widgets.option_list import Option
 
 from .. import artkit, config, imagery, roster, weather
@@ -47,6 +47,7 @@ from . import art, cover, tips
 from .debrief import DebriefModal
 from .guide import GuideScreen
 from .mapview import MapModal
+from .pages import Page, PagesModal, background_view, mark, pages, progress_view, turn
 from .retell import RetellModal
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from .speaker import Speaker
@@ -608,6 +609,10 @@ COMMANDS = (
     ("出主意", "F5", "照眼下的情况想三件能做的事", "suggest"),
     ("重讲上一段", "F6", "骰子和线索不变，换个讲法", "retell"),
     ("前情回顾", "F7", "从头讲一遍到现在", "recap"),
+    ("经过", "Ctrl+G", "右栏：每一步做了什么、掷了什么、找到了什么", "page('history')"),
+    ("进展", "Ctrl+G", "右栏：故事至今，有新进展时更新", "page('progress')"),
+    ("背景", "Ctrl+G", "右栏：开场时知道的事，你们是谁", "page('background')"),
+    ("整理进展", "Ctrl+Y", "现在把故事至今整理一遍，每轮一次", "recount"),
     ("手绘", "F8", "画一张图给守秘人看", "sketch"),
     ("换模型", "F9", "切换模型和思考强度", "engine"),
     ("复盘", "F10", "结局以后：真相、漏掉的线索、后日谈", "debrief"),
@@ -621,6 +626,9 @@ COMMANDS = (
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
     ("回到标题", "", "先存档，再回标题画面", "leave_game"),
 )
+
+
+PAGE_ROWS = 8  # rows the right column's pages need to be read there; with fewer, they open over the story
 
 
 class GameScreen(Screen):
@@ -641,6 +649,8 @@ class GameScreen(Screen):
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
         Binding("ctrl+b", "usage", "用量", show=False),
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
+        Binding("ctrl+g", "turn_page", "翻页", show=False),  # 经过 / 进展 / 背景 in the right column
+        Binding("ctrl+y", "recount", "整理进展", show=False),
         Binding("escape", "focus_input", "输入", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
@@ -676,11 +686,11 @@ class GameScreen(Screen):
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield Input(placeholder="输入行动或对话 · Ctrl+P 查看操作", id="command",
-                            suggester=command_suggester(self._viewer()), select_on_focus=False)  # fmt: skip
+                            suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
-                yield HistoryPanel(id="history")
+                yield from pages(HistoryPanel(id="history"))
                 yield CluePanel(id="clues")
         yield Footer()
 
@@ -692,6 +702,7 @@ class GameScreen(Screen):
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         self.query_one(SceneArt).effects = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
+        self.game.write_progress = True  # someone reads it: the 进展 page
         channels.listeners.append(self._fell_back)
         config.SAVES.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(config.SAVES / "checkpoints.sqlite")
@@ -949,7 +960,8 @@ class GameScreen(Screen):
 
     def _history(self, kind: str, body, block) -> None:
         if (line := history_line(kind, body, block)) is not None:
-            self.query_one(HistoryPanel).note(line, block, self.state.turn)
+            turn = self.state.turn + (kind == "player")  # an action is shown before its turn is counted
+            self.query_one(HistoryPanel).note(line, block, turn)
 
     def _panels(self) -> None:
         st = self.state
@@ -961,6 +973,7 @@ class GameScreen(Screen):
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
         self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))
+        self._pages()
         self._topbar()
 
     def _thumb(self, inv: Investigator) -> Text | None:
@@ -986,6 +999,46 @@ class GameScreen(Screen):
         self._thumbs[key] = face
         if self.is_attached:
             self._panels()
+
+    def _pages(self) -> None:
+        """进展 and 背景 as the state has them now (经过 grows with the story)."""
+        self.query_one("#progress", Page).show(progress_view(self.state))
+        self.query_one("#background", Page).show(background_view(self.m, self.state, self._viewer()))
+
+    def _roomy(self) -> bool:
+        """The right column is up and its pages have room to be read."""
+        return bool(self.query_one("#right").display) and self.query_one("#pages").size.height >= PAGE_ROWS
+
+    def action_turn_page(self) -> None:
+        """Ctrl+G: the next page of the right column; without room for it, the pages over the story."""
+        if self._roomy():
+            turn(self.query_one("#pages", TabbedContent))
+        else:
+            self.action_page("progress")
+
+    def action_page(self, name: str) -> None:
+        tabs = self.query_one("#pages", TabbedContent)
+        if self._roomy():
+            tabs.active = f"{name}-page"
+            return
+        if name == "progress":  # read over the story: nothing new waits on the tab
+            mark(tabs, False)
+        history = [w.content for w in self.query_one(HistoryPanel).query(Static) if not w.has_class("history-head")]
+        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name))
+
+    @on(TabbedContent.TabActivated, "#pages")
+    def _paged(self, event: TabbedContent.TabActivated) -> None:
+        if event.pane.id == "history-page":  # lines came in while another page was up
+            self.query_one(HistoryPanel).scroll_end(animate=False)
+        elif event.pane.id == "progress-page":
+            mark(event.tabbed_content, False)
+
+    def action_recount(self) -> None:
+        """Ctrl+Y: the story so far, written now (between turns, once a turn)."""
+        if self.game is None or self._turn_running():
+            return
+        why = self.game.recount()
+        self.app.notify(why or "正在整理进展", severity="warning" if why else "information", timeout=3)
 
     # -- event handling ----------------------------------------------------------------------
     async def handle(self, ev: dict) -> None:
@@ -1029,6 +1082,11 @@ class GameScreen(Screen):
             self._panels()
         elif t == "plugin_status":
             self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
+        elif t == "plugin_effect":  # a rule did something public: a compact, recognisable line
+            body = Text()
+            body.append(f"⚙ 〔{ev['name']}〕", style="bold #8ec7d6")
+            body.append(ev["line"])
+            story.add("system", body)
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "echo":  # the first beat, while the ruling and the narration are worked out
@@ -1041,6 +1099,7 @@ class GameScreen(Screen):
         elif t == "keeper_end":
             story.end_keeper(ev["text"])
             self._status("")
+            self._pages()  # the opening, once told, is on the 背景 page
         elif t == "waived":  # a check asked for with .ra that the keeper needs no dice for
             story.add("dice", Text(f"◈ {ev['who']} 的{ev['skill']}不用掷：守秘人直接说结果", style="dim"))
         elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
@@ -1102,6 +1161,13 @@ class GameScreen(Screen):
             story.add("ending", body)
         elif t == "sheet":
             self._panels()
+        elif t == "progress":  # the story so far, written again in the background: a mark on its tab, no notice
+            self._pages()
+            tabs = self.query_one("#pages", TabbedContent)
+            if tabs.active != "progress-page" or not self._roomy():
+                mark(tabs, True)
+            if self.game and not self.busy:
+                write_save(self.state, self.m)
         elif t == "epilogue_start":
             self.afterword, self.writing = "", True
         elif t == "epilogue_delta":
@@ -1417,15 +1483,38 @@ class GameScreen(Screen):
         def portrait(inv: Investigator) -> Text:
             return art_text(self.m, inv.portrait, (30, 14) if inv.portrait in self.m.pictures else None, style, face=True)
 
-        self.app.push_screen(SheetModal(party, first, portrait))
+        self.app.push_screen(SheetModal(party, first, portrait, self.state))
+
+    def _suggester(self):
+        from .plugins import action_hints
+
+        return command_suggester(self._viewer(), action_hints(self.m, self.state))
+
+    def _sync_suggester(self) -> None:
+        for box in self.query("#command").results(Input):
+            box.suggester = self._suggester()
 
     def action_plugins(self) -> None:
         from .plugins import PluginsModal
 
-        self.app.push_screen(PluginsModal(self.m, self.state), self._plugins_changed)
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=True, drafter=self._house_rule), self._plugins_changed)
+
+    async def _house_rule(self, text: str, progress) -> tuple[bool, str]:
+        """Draft, test and install a player's house rule into this save (tui/plugins.py). The
+        author uses the configured models; only a plugin whose tests pass in the sandbox lands."""
+        from ..plugins.author import house_rule
+
+        assert self.game is not None
+        ok, message = await house_rule(self.game.cast, self.m, self.state, text, on_step=progress)
+        if ok:
+            write_save(self.state, self.m)
+            self._sync_suggester()
+            self.story.add("system", Text(f"◆ 新规则：{message}", style="bold"))
+        return ok, message
 
     def _plugins_changed(self, _) -> None:
         write_save(self.state, self.m)
+        self._sync_suggester()
 
     def action_usage(self) -> None:
         from .usage import UsageModal
@@ -1433,7 +1522,15 @@ class GameScreen(Screen):
         self.app.push_screen(UsageModal(self.state, self.engine_label))
 
     def action_map(self) -> None:
-        self.app.push_screen(MapModal(self.m, self.state))
+        self.app.push_screen(MapModal(self.m, self.state, go=not self.spectate), self._head_for)
+
+    def _head_for(self, place: str | None) -> None:
+        """G on the map: 「我去…」 in the command box, for the player to send or change."""
+        box = self.query_one("#command", Input)
+        if place and not self.spectate and not box.disabled:
+            box.value = f"我去{place}"
+            box.cursor_position = len(box.value)
+            box.focus()
 
     def action_prefs(self) -> None:
         from .prefs import PrefsModal

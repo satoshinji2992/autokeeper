@@ -20,6 +20,33 @@ class LogEntry(BaseModel):
     text: str
 
 
+class Deed(BaseModel):
+    """A line of one investigator's own record, the sheet's 本局经历: what they did and rolled,
+    what turned up on their turn, what it cost them. Only what the table saw, so it goes to
+    every screen at a shared table; and it is kept after the log is folded into memory."""
+
+    turn: int
+    time: str
+    who: str  # investigator id
+    kind: Literal["act", "check", "clue", "handout", "sanity", "damage"]
+    text: str
+
+
+DEEDS = {"player": "act", "dice": "check", "clue": "clue", "handout": "handout", "sanity": "sanity", "damage": "damage"}
+
+
+class Progress(BaseModel):
+    """The players' 故事至今 (engine/progress.py): the text and the turn it was written after;
+    the turn it was last asked for (written or not), how many log lines had been read by then
+    and what had turned up (progress.marks), to tell what is new since."""
+
+    text: str = ""
+    turn: int = 0
+    asked: int = -1  # -1: never yet
+    seen: int = 0  # GameState.logged when it was asked for
+    marks: dict[str, int] = Field(default_factory=dict)
+
+
 class NpcState(BaseModel):
     met: bool = False
     unlocked: list[str] = Field(default_factory=list)  # gated clues the NPC may now give
@@ -91,7 +118,11 @@ class GameState(BaseModel):
     transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
     notes: dict[str, str] = Field(default_factory=dict)
     log: list[LogEntry] = Field(default_factory=list)
+    logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
+    deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)
+    progress: Progress = Field(default_factory=Progress)  # the players' 故事至今, on the 进展 page
+    prologue: str = ""  # the keeper's opening as the table heard it, on the 背景 page
     pending_push: dict | None = None
     checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
     developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
@@ -102,6 +133,10 @@ class GameState(BaseModel):
     plugin_sources: dict[str, dict] = Field(default_factory=dict)
     plugin_receipts: list[str] = Field(default_factory=list)
     plugin_errors: dict[str, str] = Field(default_factory=dict)
+    # Public, shareable at a LAN table (the hub keeps the rest of the plugin_* fields private):
+    # a plugin's opt-in one-line status, and the last few public effects it produced this game.
+    plugin_status: dict[str, str] = Field(default_factory=dict)
+    plugin_log: list[dict] = Field(default_factory=list)
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
@@ -112,6 +147,15 @@ class GameState(BaseModel):
     usage: dict[str, dict[str, float]] = Field(default_factory=dict)
     turn_usage: list[dict[str, float]] = Field(default_factory=list)  # what each turn cost (tally)
     tally_at: dict[str, float] = Field(default_factory=dict)  # the totals when the last turn was counted
+
+    def model_post_init(self, _context) -> None:
+        # A save from before the record and the count: start them from the log it has.
+        self.logged = max(self.logged, len(self.log))
+        if not self.deeds and self.log:
+            acting = ""
+            for e in self.log:
+                acting = e.who if e.kind == "player" else acting
+                self._deed(e, acting)
 
     @property
     def investigator(self) -> Investigator:
@@ -130,7 +174,21 @@ class GameState(BaseModel):
     def add(self, kind: LogKind, text: str, who: str = "") -> LogEntry:
         entry = LogEntry(turn=self.turn, time=self.clock, kind=kind, who=who, text=text)
         self.log.append(entry)
+        self.logged += 1
+        self._deed(entry, self.investigator.name if 0 <= self.active < len(self.investigators) else "")
         return entry
+
+    def _deed(self, e: LogEntry, acting: str) -> None:
+        """A log line about one investigator goes into their record too: what was done and
+        rolled under their name; a clue or a handout goes to `acting`, whose turn it was."""
+        kind = DEEDS.get(e.kind)
+        name = acting if e.kind in ("clue", "handout") else e.who
+        who = next((i.id for i in self.investigators if i.name == name), "") if kind else ""
+        if not who:
+            return
+        text = e.text.split("〕", 1)[0].lstrip("〔") if e.kind == "clue" else e.text[:120]  # a clue's title; F2 has the rest
+        self.deeds.append(Deed(turn=e.turn, time=e.time, who=who, kind=kind, text=text))  # type: ignore[arg-type]
+        del self.deeds[:-KEEP_DEEDS]
 
     def npc(self, npc_id: str) -> NpcState:
         return self.npcs.setdefault(npc_id, NpcState())
@@ -160,6 +218,7 @@ class GameState(BaseModel):
 
 
 TURNS_KEPT = 200  # per-turn usage rows a save keeps
+KEEP_DEEDS = 300  # record lines a save keeps, the whole party's
 RECENT_TURNS = 5  # how far back a check still counts as recent
 KEEP_CHECKS = 12  # check records a save keeps
 RECHECK_AFTER = 60  # game minutes after which the same attempt is no longer an immediate repeat
