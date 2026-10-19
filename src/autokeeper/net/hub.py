@@ -83,18 +83,17 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     # in what on it, the minutes of the roads walked, and no other way out of anywhere.
     c = fog.chart(m, st)
     ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
-    read = fog.plain("".join([m.title, m.hook, m.setting, *(m.location(v).read_aloud for v in visited if v in known),
-                              *(f"{x.title}{x.text}" for x in m.clues if x.id in st.clues),
-                              *(f"{h.title}{h.text}" for h in m.handouts if h.id in st.handouts)]))
+    read, names = [fog.plain(text) for text in fog.kept(m, st)], fog.aliases(m)
     for loc in d["locations"]:
         here = loc["id"]
         loc["keeper"] = ""
         loc["exits"] = [pid for pid in loc["exits"] if frozenset((here, pid)) in ways]
         loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if frozenset((here, pid)) in roads}
         loc["within"] = c.within.get(here)
-        if here not in visited:
+        if here not in visited:  # of its other names, those the players have read (and the map goes by)
+            spelled = {fog.plain(a): a for a in [loc["name"], *loc["aliases"]]}
+            loc["aliases"] = [spelled.get(a, a) for a in names.get(here, ()) if any(a in text for text in read)]
             loc.update(name=known[here], read_aloud="", features=[], art=None, weather=[])
-            loc["aliases"] = [a for a in loc["aliases"] if fog.plain(a) and fog.plain(a) in read]  # only the names they read
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
     d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]

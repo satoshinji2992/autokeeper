@@ -129,6 +129,18 @@ def shown(m: Module, st: GameState) -> list[str]:
     return texts
 
 
+def kept(m: Module, st: GameState) -> list[str]:
+    """What the players' screens hold that can name a place, a shared table's too (they never
+    get the log): the module's title, hook and setting, what they saw on arriving somewhere,
+    the clues and handouts found, who the people they met turned out to be."""
+    places = {loc.id: loc for loc in m.locations}
+    clues, handouts = {c.id: c for c in m.clues}, {h.id: h for h in m.handouts}
+    return [m.title, m.subtitle, m.hook, m.setting, *(places[v].read_aloud for v in st.visited if v in places),
+            *(f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues),
+            *(f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts),
+            *(n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met)]
+
+
 def heard(m: Module, st: GameState) -> dict[str, str]:
     """Places the investigators have heard of, visited or not (id -> the name they heard it by):
     what the engine kept in st.heard, and anything the players were shown since."""

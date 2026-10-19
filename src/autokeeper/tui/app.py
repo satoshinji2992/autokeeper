@@ -1337,7 +1337,15 @@ class GameScreen(Screen):
         self.app.push_screen(UsageModal(self.state, self.engine_label))
 
     def action_map(self) -> None:
-        self.app.push_screen(MapModal(self.m, self.state))
+        self.app.push_screen(MapModal(self.m, self.state, go=not self.spectate), self._head_for)
+
+    def _head_for(self, place: str | None) -> None:
+        """G on the map: 「我去…」 in the command box, for the player to send or change."""
+        box = self.query_one("#command", Input)
+        if place and not self.spectate and not box.disabled:
+            box.value = f"我去{place}"
+            box.cursor_position = len(box.value)
+            box.focus()
 
     def action_prefs(self) -> None:
         from .prefs import PrefsModal
