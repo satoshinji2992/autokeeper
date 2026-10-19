@@ -21,6 +21,7 @@
 - 存档是一个 JSON（`tui/app.write_save` 先写临时文件再替换），记录跟着同一次写入落盘，天然同一个事务。
 - LangGraph 每个检查点都快照 `GameState`；回合重试（`pending_turn`）回到的状态里，记录和其他字段是同一时刻的。
 - 存档管理（`tui/saves.py`）复制就是复制 JSON，删除就是移进回收站：记录跟着走，不需要额外的文件同步。
+- 以前的存档不再兼容（用户确认可以作废），所以不做旧存档迁移；`GameState.world` 只为现在的游戏代码保留，第二阶段改完读写后可以删掉。
 - 联机时 `record` 在 `net/hub.py` 的 `PRIVATE` 里，不会发到玩家屏幕。
 
 代价是存档变大。事件流最多留 6000 条、操作日志 4000 条、每个重要 NPC 40 条记忆，几千条事件也就一两 MB。真的嫌大，第二阶段再把旧事件归档。
@@ -137,7 +138,7 @@
 
 | 现有 | 世界 |
 |---|---|
-| `engine/world.py` 的 `WorldChange` / `WorldFact`（事实、关系、约定、履约、转交） | `adapters.settle_changes`：同样的取舍（`admissible`），落成 `fact` / `relate` / `promise` / `fulfil` / `transfer`，同时让 `GameState.world`、物主、背包保持和原来一模一样；`adapters.mirror` 把旧存档的 `GameState.world` 搬进记录一次 |
+| `engine/world.py` 的 `WorldChange` / `WorldFact`（事实、关系、约定、履约、转交） | `adapters.settle_changes`：同样的取舍（`admissible`），落成 `fact` / `relate` / `promise` / `fulfil` / `transfer`，同时让 `GameState.world`、物主、背包保持和原来一模一样 |
 | `module/improv.py` 的 `check` / `apply` | `improvise` 操作；新内容以 `origin="improv"` 播种，“展开”“后果”两类即兴自动开一条线头 |
 | 插件效果 | `adapters.plugin_ops`：`flag`、`condition`、`note`；属性、伤害、理智和线索仍由引擎结算 |
 | `engine/fog.py`（玩家知道的地图） | 揭示判断复用 `fog.shown` 的“玩家看过的内容” |

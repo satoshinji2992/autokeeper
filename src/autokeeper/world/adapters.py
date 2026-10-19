@@ -4,7 +4,6 @@
                      changes are taken (engine/world.admissible, in order), and each lands as
                      ops that also keep GameState.world, item owners and inventories exactly
                      as engine/world.apply leaves them
-    mirror           an older save's GameState.world brought into the record once
     improvise        the director's plan (module/improv.py) as an Improvise op
     plugin_ops       a rule plugin's effects that touch the world (flags, conditions, notes)
 
@@ -58,31 +57,11 @@ def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken:
         if not legacy_world.admissible(w.m, w.st, c, source=source, spoken=spoken, present=present):
             continue
         ops = change_ops(w, c, source=source, spoken=spoken)
-        if not ops:  # a promise kept from before the record, or restated: as engine/world.apply leaves it
-            fact = w.st.world.get(c.key)
-            if c.kind == "fulfill" and fact:
-                fact.status, fact.turn = "fulfilled", w.st.turn
-            elif c.kind == "promise":
+        if not ops:  # a promise restated: as engine/world.apply leaves it
+            if c.kind == "promise":
                 w.legacy(c.key, "promise", c.text, c.npc, source)
             continue
         out += w.apply_all(ops)
-    return out
-
-
-def mirror(w: World) -> list[Result]:
-    """An older save's GameState.world, brought into the record once (GameState.world is left as it is)."""
-    out = []
-    for key, f in w.st.world.items():
-        oid = f"mirror:{key}"
-        if f.kind == "promise" and key not in w.rec.promises:
-            by, to = (f.npc, f.who) if f.source == f.npc and f.npc else (f.who, f.npc or PLAYERS)
-            out.append(w.apply(MakePromise(id=oid, promise=key, by=by, to=to, text=f.text, actor=f.source or "engine")))
-            if f.status != "active" and out[-1].ok:
-                out.append(w.apply(Fulfil(id=f"{oid}:done", promise=key, actor="engine")))
-        elif f.kind != "promise" and f"wc:{key}" not in w.rec.facts:
-            out.append(w.apply(AddFact(id=oid, fact=f"wc:{key}", text=f.text, fact_kind="relation" if f.kind == "relationship" else "state",
-                                       about=[x for x in (f.who, f.npc) if x and x in w.rec.entities], public=True,
-                                       known_by=[f.npc] if f.npc in w.rec.entities else [], actor="engine")))  # fmt: skip
     return out
 
 

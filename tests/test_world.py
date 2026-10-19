@@ -331,16 +331,6 @@ def test_world_changes_through_ops_leave_the_game_state_exactly_as_before():
     assert len(rec.journal) == journal
 
 
-def test_an_older_saves_world_is_mirrored_once():
-    w = fresh("tower")
-    legacy_world.apply(w.m, w.st, [WorldChange(kind="promise", key="evening", npc="warden", text="今晚我在塔门口等你。")],
-                       source="warden", spoken="今晚我在塔门口等你。")  # fmt: skip
-    legacy_world.apply(w.m, w.st, [WorldChange(kind="fact", key="chat", text="聊了天气。")], source="arbiter")
-    assert all(r.ok for r in adapters.mirror(w))
-    assert w.rec.promises["evening"].by == "warden" and w.rec.facts["wc:chat"].revealed is not None
-    assert adapters.mirror(w) == []
-
-
 def test_an_improvisation_lands_through_the_world_api():
     from autokeeper.agents.director import Improv, NewClue, NewNPC
 
