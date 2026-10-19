@@ -133,6 +133,10 @@ class GameState(BaseModel):
     plugin_sources: dict[str, dict] = Field(default_factory=dict)
     plugin_receipts: list[str] = Field(default_factory=list)
     plugin_errors: dict[str, str] = Field(default_factory=dict)
+    # Public, shareable at a LAN table (the hub keeps the rest of the plugin_* fields private):
+    # a plugin's opt-in one-line status, and the last few public effects it produced this game.
+    plugin_status: dict[str, str] = Field(default_factory=dict)
+    plugin_log: list[dict] = Field(default_factory=list)
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
