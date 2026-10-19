@@ -12,13 +12,14 @@
 
 from .context import Session, Summarizer
 from .loop import Agent, AgentResult
-from .models import Model, ModelPool, Msg, OnDelta, Reply, make_model
+from .models import ContextBudgetExceeded, Model, ModelPool, Msg, OnDelta, Reply, make_model
 from .spend import BudgetExceeded
 
 __all__ = [
     "Agent",
     "AgentResult",
     "BudgetExceeded",
+    "ContextBudgetExceeded",
     "Model",
     "ModelPool",
     "Msg",

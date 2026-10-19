@@ -14,7 +14,7 @@ import inspect
 import io
 import re
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -44,6 +44,7 @@ class Tool:
     args: tuple[str, ...]
     run: Callable[..., Awaitable[str]]
     required: tuple[str, ...] = ()
+    argument_schema: dict[str, dict] = field(default_factory=dict)
 
 
 class Workspace:

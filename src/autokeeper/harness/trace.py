@@ -12,7 +12,10 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from .. import paths
@@ -21,6 +24,64 @@ if TYPE_CHECKING:
     from .models import Model, Reply
 
 taps: list[Callable[[Model, Reply, dict | None], None]] = []  # told of every answered call (replay.Recorder)
+_observer: ContextVar[Callable[[dict[str, Any]], None] | None] = ContextVar("call_observer", default=None)
+_call: ContextVar[str] = ContextVar("observed_call", default="")
+_context: ContextVar[dict | None] = ContextVar("input_context", default=None)
+_context_owner: ContextVar[object | None] = ContextVar("input_context_owner", default=None)
+
+
+@contextmanager
+def input_context(parts: dict, *, owner: object | None = None):
+    token = _context.set(dict(parts))
+    owner_token = _context_owner.set(owner)
+    try:
+        yield
+    finally:
+        _context.reset(token)
+        _context_owner.reset(owner_token)
+
+
+def context_for(owner: object) -> dict:
+    """A nested model may not borrow its caller's session breakdown."""
+    current = _context_owner.get()
+    return dict(_context.get() or {}) if current is None or current is owner else {}
+
+
+@contextmanager
+def capture(observer: Callable[[dict[str, Any]], None]):
+    """Observe this task's calls without changing disk tracing or observing another game."""
+    token = _observer.set(observer)
+    try:
+        yield
+    finally:
+        _observer.reset(token)
+
+
+def _notify(row: dict[str, Any]) -> None:
+    if observer := _observer.get():
+        try:
+            observer(row)
+        except Exception:  # observing must never change the operation being observed
+            pass
+
+
+def begin(model: Model, messages: list[dict], schema: dict | None, images: list[bytes] | None):
+    token = _call.set(uuid.uuid4().hex)
+    progress("started", agent=model.label, model=model.spec.model, backend=model.spec.backend,
+             system=model.system, input=[dict(m) for m in messages], schema=schema,
+             context=_context.get(),
+             image_bytes=[len(b) for b in images or []])
+    return token
+
+
+def progress(phase: str, **data: Any) -> None:
+    _notify({"phase": phase, "call_id": _call.get(),
+             "at": dt.datetime.now().isoformat(timespec="milliseconds"), **data})
+
+
+def finish(token) -> None:
+    _call.reset(token)
+
 
 RUN = os.environ.get("AUTOKEEPER_RUN") or f"{dt.datetime.now():%m%d-%H%M%S}-{os.getpid()}"
 
@@ -36,8 +97,6 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
         for tap in taps:
             tap(model, reply, schema)
     level = os.environ.get("AUTOKEEPER_TRACE", "meta")
-    if level == "off":
-        return
     row: dict[str, Any] = {
         "at": dt.datetime.now().isoformat(timespec="seconds"),
         "run": RUN,
@@ -47,7 +106,7 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
         "effort": model.spec.effort,
         "mode": "text" if schema is None else model.mode,
         "messages": len(messages),
-        "chars_in": len(model.system) + sum(len(m["content"]) for m in messages),
+        "chars_in": (_context.get() or {}).get("total_chars", len(model.system) + sum(len(m["content"]) for m in messages)),
         "chars_out": len(reply.text),
         "thinking_chars": len(reply.thinking),
         **reply.usage,
@@ -58,8 +117,15 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
     }
     if model.standby_for:
         row["fallback_for"] = model.standby_for
+    if parts := _context.get():
+        row["context"] = dict(parts)
     if error:
         row["error"] = error[:500]
+    _notify({**row, "phase": "complete", "call_id": _call.get(), "system": model.system,
+             "input": [dict(m) for m in messages], "output": reply.text,
+             "thinking": reply.thinking, "data": reply.data, "schema": schema})
+    if level == "off":
+        return
     if level == "full":
         row.update(system=model.system, input=messages, output=reply.text, thinking=reply.thinking)
     try:

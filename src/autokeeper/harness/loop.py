@@ -41,6 +41,8 @@ def step_schema(tools: list[Tool]) -> dict:
     for t in tools:
         for arg in t.args:
             props.setdefault(arg, {"type": "integer" if arg in INTEGER_ARGS else "string", "description": ARGS.get(arg, arg)})
+            if arg in t.argument_schema:
+                props[arg] = {"description": ARGS.get(arg, arg), **t.argument_schema[arg]}
     props["answer"] = {"type": "string", "description": "调用 finish 时的最终说明"}
     return {"title": "Step", "description": "下一步调用哪个工具、用什么参数", "type": "object", "properties": props, "required": ["thought", "tool"]}
 

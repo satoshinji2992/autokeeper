@@ -49,6 +49,15 @@ OnDelta = Callable[[str], Awaitable[None]] | None
 Msg = dict[str, str]  # {"role": "user" | "assistant", "content": str}
 
 
+class ContextBudgetExceeded(RuntimeError):
+    """The configured text budget refused a request before contacting its provider."""
+
+    def __init__(self, parts: dict):
+        self.parts = dict(parts)
+        super().__init__(f"本次输入 {parts['total_chars']} 字符，超过配置的 {parts['max_input_chars']} 字符预算；"
+                         "超限请求尚未发送，当前行动与已有记录已保留。请调整预算或本次资料范围。")
+
+
 @dataclass
 class Reply:
     text: str = ""
@@ -145,6 +154,12 @@ def problems(data: Any, schema: dict) -> list[str]:
     return [f"{'/'.join(map(str, e.path)) or '(根)'}：{e.message}" for e in errors[:8]]
 
 
+def spoken(schema: dict) -> bool:
+    """A schema whose one required field is `text`, the rest optional (an NPC's line and what it
+    changed): a reply in plain words can stand for it."""
+    return schema.get("required") == ["text"]
+
+
 REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完整、正确的 JSON 对象（json），只输出 JSON。"
 
 
@@ -160,6 +175,32 @@ class Model:
     async def _call(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
         raise NotImplementedError
 
+    def input_size(self, messages: list[Msg], schema: dict | None = None) -> dict:
+        """Count known text/schema once, without guessing a provider's token window."""
+        contract = json.dumps(schema, ensure_ascii=False) if schema is not None else ""
+        formatting = json_instruction(schema) if schema and self.mode == "json" else ""
+        body = "".join(message["content"] for message in messages)
+        payload = self.system + (formatting or contract) + body
+        return {"system_chars": len(self.system), "messages_chars": len(body), "schema_chars": len(contract),
+                "format_chars": len(formatting) - len(contract) if formatting else 0,
+                "json_instruction_chars": len(formatting), "total_chars": len(payload),
+                "utf8_bytes": len(payload.encode("utf-8")), "max_input_chars": self.spec.max_input_chars,
+                "notice": "字符预算，不是模型token窗口；schema仅计一次，不含图片token与提供方隐藏包装。"}
+
+    def _input_parts(self, messages: list[Msg], schema: dict | None = None) -> dict:
+        supplied = trace.context_for(self)
+        measured = self.input_size(messages, schema)
+        if supplied and measured["messages_chars"] != supplied.get("messages_chars"):
+            supplied["additional_messages_chars"] = measured["messages_chars"] - supplied.get("messages_chars", 0)
+        return {**supplied, **measured}
+
+    def _guard_input(self, messages: list[Msg], schema: dict | None = None) -> dict:
+        parts = self._input_parts(messages, schema)
+        if self.spec.max_input_chars > 0 and parts["total_chars"] > self.spec.max_input_chars:
+            trace.progress("context_blocked", agent=self.label, context=parts)
+            raise ContextBudgetExceeded(parts)
+        return parts
+
     async def complete(
         self, messages: list[Msg], *, schema: dict | None = None, images: list[bytes] | None = None, on_delta: OnDelta = None
     ) -> Reply:
@@ -167,6 +208,7 @@ class Model:
             return await self._complete(messages, schema=schema, images=images, on_delta=on_delta)
         key = (self.spec.backend, self.spec.model, self.spec.base_url)
         if time.monotonic() < _down.get(key, 0.0):
+            self._guard_input(messages, schema)  # a cooldown cannot bypass the role's configured budget
             return await self.fallback.complete(messages, schema=schema, images=images, on_delta=on_delta)
         shown = False
 
@@ -177,6 +219,8 @@ class Model:
 
         try:
             return await self._complete(messages, schema=schema, images=images, on_delta=watch if on_delta else None)
+        except ContextBudgetExceeded:
+            raise  # input size is a local request policy, not a provider failure
         except Exception as exc:
             if shown:  # the player already read part of this reply; starting over would repeat it
                 raise
@@ -186,31 +230,43 @@ class Model:
             return await self.fallback.complete(messages, schema=schema, images=images, on_delta=on_delta)
 
     async def _complete(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
-        spend.guard(self.spec.model)
+        with trace.input_context(self._input_parts(messages, schema), owner=self):
+            return await self._complete_traced(messages, schema=schema, images=images, on_delta=on_delta)
+
+    async def _complete_traced(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
+        observed = trace.begin(self, messages, schema, images)
         started = time.monotonic()
         reply, error = Reply(), ""
         try:
+            self._guard_input(messages, schema)
+            spend.guard(self.spec.model)
             reply = await self._attempt(messages, schema=schema, images=images, on_delta=on_delta)
+            if schema is not None and reply.data is None and reply.text.strip() and spoken(schema):
+                reply.data = {"text": reply.text.strip()}  # a line said in plain words is a line: no repair call
             if schema is not None and (errors := problems(reply.data, schema)):
                 fix = [
                     *messages,
                     {"role": "assistant", "content": reply.text or "（空）"},
                     {"role": "user", "content": REPAIR.format(errors="\n".join(errors))},
                 ]
+                trace.progress("repair", input=fix, problems=errors, context=self._input_parts(fix, schema))
                 second = await self._attempt(fix, schema=schema, images=None, on_delta=None)
                 reply.add(second)
                 reply.repairs += 1
                 if not problems(second.data, schema) or (reply.data is None and second.data is not None):
                     reply.data, reply.text = second.data, second.text
             return reply
-        except Exception as exc:
+        except BaseException as exc:
             error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
             reply.seconds = time.monotonic() - started
             if not reply.cost_usd:
                 reply.cost_usd = spend.record(self.spec.model, reply.usage)
-            trace.emit(self, messages, reply, schema=schema, error=error)
+            try:
+                trace.emit(self, messages, reply, schema=schema, error=error)
+            finally:
+                trace.finish(observed)
 
     async def _attempt(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
         """One call under a time limit, retried with back-off on transient failures. Once
@@ -222,6 +278,7 @@ class Model:
         async def delta(piece: str) -> None:
             nonlocal streamed
             streamed = True
+            trace.progress("delta", text=piece)
             await on_delta(piece)  # type: ignore[misc]
 
         reply = Reply()
@@ -229,9 +286,15 @@ class Model:
             stop=stop_after_attempt(ATTEMPTS),
             wait=wait_exponential_jitter(initial=RETRY_WAIT[0], max=RETRY_WAIT[1]),
             retry=retry_if_exception(lambda e: transient(e) and not streamed),
+            before_sleep=lambda attempt: trace.progress(
+                "retry", attempt=attempt.attempt_number,
+                error=str(attempt.outcome.exception()) if attempt.outcome else "",
+                delay=attempt.next_action.sleep if attempt.next_action else 0),
             reraise=True,
         ):
             with attempt:
+                parts = self._guard_input(messages, schema)
+                trace.progress("attempt", attempt=attempt.retry_state.attempt_number, context=parts)
                 async with asyncio.timeout(CALL_TIMEOUT):
                     reply = await self._call(messages, schema=schema, images=images, on_delta=delta if on_delta else None)
                 reply.retries = attempt.retry_state.attempt_number - 1
@@ -507,7 +570,10 @@ class LangChainModel(Model):
                     reply.usage = _usage(chunk.usage_metadata)
             return reply
         if self.mode == "json":
-            runnable = self.chat.bind(response_format={"type": "json_object"}) if self.provider in JSON_SWITCH else self.chat
+            # DeepSeek's JSON mode now and then answers with whitespace alone, about one NPC line in five in
+            # a playtest, each one a second call to repair; a spoken line is taken as plain words instead.
+            switch = self.provider in JSON_SWITCH and not spoken(schema)
+            runnable = self.chat.bind(response_format={"type": "json_object"}) if switch else self.chat
             msg = await runnable.ainvoke(history)
             reply.text, reply.thinking, reply.usage = msg.text, _thinking(msg), _usage(msg.usage_metadata)
             reply.data = parse_json(reply.text)
@@ -665,7 +731,8 @@ def make_model(spec: Role, system: str, *, label: str = "") -> Model:
     model = cls(spec, system, label=label)
     if spec.fallback:
         backend, name = route(spec.fallback)
-        model.fallback = make_model(Role(backend, name, spec.effort, window=spec.window), system, label=label)
+        model.fallback = make_model(Role(backend, name, spec.effort, window=spec.window,
+                                         max_input_chars=spec.max_input_chars), system, label=label)
         model.fallback.standby_for = spec.model
     return model
 
