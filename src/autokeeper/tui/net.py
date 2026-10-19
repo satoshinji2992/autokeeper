@@ -51,24 +51,28 @@ def table_module(welcome: dict[str, Any]) -> Module:
 
 
 class JoinScreen(Screen):
-    """The host's address and your name; the last ones you used are filled in."""
+    """The host's address and your name; the last ones you used are filled in. In a browser's
+    seat the address is the page's own and the name is the visitor's: neither is the host's."""
 
     BINDINGS = [("escape", "back", "返回")]
 
     def __init__(self, address: str = "", name: str = ""):
         super().__init__()
-        last = lan.recall()
+        self.guest = bool(address and os.environ.get("AUTOKEEPER_GUEST"))  # started by the room's page
+        last = {} if self.guest else lan.recall()  # the host's own settings live on this machine too
         self.address, self.name_ = address or last.get("address", ""), name or last.get("name", "")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
             yield Static("加入局域网房间", classes="modal-title")
-            yield Static(Text("填房主给你的地址（比如 192.168.1.5），再起个名字，回车加入。", style="dim"))
+            hint = "起个名字，回车加入。" if self.guest else "填房主给你的地址（比如 192.168.1.5），再起个名字，回车加入。"
+            yield Static(Text(hint, style="dim"))
             yield Input(self.address, placeholder="房主的地址", id="addr")
-            yield Input(self.name_, placeholder="你的名字", id="name")
+            yield Input(self.name_, placeholder="你的名字", id="name", max_length=16)
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one("#addr", Input).display = not self.guest
         self.query_one("#name" if self.address else "#addr", Input).focus()
 
     @on(Input.Submitted)
@@ -81,7 +85,8 @@ class JoinScreen(Screen):
         else:
             from .lobby import LobbyScreen
 
-            lan.remember(address=addr, name=name)
+            if not self.guest:
+                lan.remember(address=addr, name=name)
             self.app.switch_screen(LobbyScreen(addr, name))
 
     def action_back(self) -> None:
