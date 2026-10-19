@@ -70,7 +70,7 @@ async def draw(cfg: Config, subject: str, *, portrait: bool = False, on_reply: C
 
 
 async def color_folder(cfg: Config, art_dir: Path, hints: dict[str, str], *, force: bool = False, parallel: int = 4) -> list[str]:
-    """Paint masks for every art/*.txt that has none yet."""
+    """Paint masks for every art/ascii/*.txt (or art/*.txt in a draft) that has none yet."""
     sem = asyncio.Semaphore(parallel)
     done: list[str] = []
 
@@ -84,5 +84,5 @@ async def color_folder(cfg: Config, art_dir: Path, hints: dict[str, str], *, for
             mask_path.write_text(mask + "\n", encoding="utf-8")
             done.append(path.stem)
 
-    await asyncio.gather(*(one(p) for p in sorted(art_dir.glob("*.txt"))))
+    await asyncio.gather(*(one(p) for p in sorted([*art_dir.glob("*.txt"), *art_dir.glob("ascii/*.txt")])))
     return done

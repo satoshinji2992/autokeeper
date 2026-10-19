@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from autokeeper import config, imagegen, imagery, paths
+from autokeeper import config, credits, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewShowcase
 from autokeeper.engine import showcase
@@ -201,7 +201,7 @@ async def test_pictures_come_from_the_module_then_codex_from_a_reference_then_co
     assert calls[-1][0] == Path(m.pictures["square"]) and "made from the attached picture" in calls[-1][1]
     assert await showcase.prepare(cfg, m, searched, target(searched)) == "AI 照原图画"
     assert calls[-1][0] == showcase.photo(target(searched))  # found through imagery's search, then redrawn
-    credit = json.loads(showcase.photo(target(searched)).with_name(showcase.photo(target(searched)).stem + ".credit.json").read_text(encoding="utf-8"))
+    credit = credits.get(showcase.photo(target(searched)))
     assert credit["license"] == "CC0"
     cfg_offline = config.Config(search="none")
     assert await showcase.prepare(cfg_offline, m, alone, target(alone)) == "AI 照描述画" and calls[-1][0] is None

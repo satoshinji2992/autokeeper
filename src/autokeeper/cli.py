@@ -572,10 +572,10 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
 @art_app.command("credits")
 def art_credits(module: Path) -> None:
     """列出模组里真实图片的来源与授权。"""
-    from .imagery import credits
+    from .credits import listing
 
-    for c in credits(module / "art"):
-        console.print(f"{c['name']}: {c['title']}  {c['license']}  {c['artist']}  {c['page']}")
+    for c in listing(module / "art"):
+        console.print(f"{c['name']}: " + "  ".join(str(c.get(k) or "") for k in ("title", "license", "artist", "page", "source")).strip())
 
 
 @art_app.command("show")

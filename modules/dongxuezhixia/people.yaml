@@ -1,0 +1,355 @@
+npcs:
+- id: doreen_ratger
+  name: 多琳·拉特格
+  role: 出租屋的女主人，退休在家
+  look: 围裙上永远有面粉，头发挽得一丝不乱
+  personality: 热心、话多，用忙碌压住害怕
+  voice: 边说边收拾东西，“你们先吃，吃完再说”
+  goal: 让客人住得安稳，别在饭桌上谈死人
+  knows:
+  - 镇上哪家有人病了、哪家刚办完丧事
+  - 安特医生的诊所怎么走，能画一张地图
+  - 卡洛琳·达维尔小姐和埃里·赫琴斯先生当年“没结婚就那样来往”的旧事
+  - 原卡德威尔家那栋破农舍的种种传闻
+  secrets:
+  - 她自己也咳了两天，瞒着没说
+  lies:
+  - “我们这儿就是普通流感，年年都有。”
+  clues:
+  - c_map
+  - c_gossip
+  - c_cardwell_story
+  gates: {}
+  location: ratger_house
+  portrait: doreen
+  stats: {}
+  arc: ''
+- id: francis_ratger
+  name: 弗朗西斯·拉特格
+  role: 出租屋的男主人，退休工人
+  look: 背有点驼，手上一层老茧，走路慢
+  personality: 寡言，实在，认命
+  voice: 短句，常以“嗯”开头
+  goal: 把房子撑住，把日子过下去
+  knows:
+  - 埃里·赫琴斯从战场上回来后整个人都不对
+  - 埃里如今替人拉尸体、跑殡葬的活
+  - 原卡德威尔家的老故事
+  secrets:
+  - 后廊的屋顶他早就看出不对劲，没钱修
+  lies:
+  - “屋顶结实着呢。”
+  clues:
+  - c_map
+  - c_cardwell_story
+  - c_hauling
+  gates: {}
+  location: ratger_house
+  portrait: francis
+  stats: {}
+  arc: ''
+- id: ante
+  name: 杰里迈亚·安特
+  role: 埃斯内尔唯一的医生
+  look: 白大褂外面套着毛背心，眼下一片青，下巴上胡茬没刮净
+  personality: 笃信科学，疲惫而固执
+  voice: 说话像写病历，短、准、爱报数字
+  goal: 把这场病按流感治下去，不让镇子慌起来
+  knows:
+  - 病人的全部病程与体温记录（分发材料 2a、2b）
+  - 没有任何病人出现二次感染或肺炎迹象
+  - 西班牙流感最凶时，镇上曾有十几个人奇迹般康复
+  - 那个康复名单上的病人，都是卡洛琳·达维尔护理的
+  - 他自己上报了州卫生部门
+  secrets:
+  - 他给几个病人开镇静剂助眠，不知道这会让病更快夺走人命
+  - 他开始怀疑自己控制不住局面，但不愿说出口
+  lies:
+  - “这只是流感，我们会压下去的。”
+  clues:
+  - c_notes
+  - c_examine
+  - c_cure_records
+  - c_ante_cure
+  - c_theft
+  gates:
+    c_notes:
+      skill: 说服
+      difficulty: 常规
+      bonus: 0
+  location: clinic
+  portrait: ante
+  stats: {}
+  arc: 从“按流感处理”一点点被证据逼到墙角
+- id: caroline
+  name: 卡洛琳·达维尔
+  role: 诊所的护士，达维尔家的女儿
+  look: 白护士服，脸色白得几乎透明，眼下有淡青，笑容得体
+  personality: 善良热心又自信的表象之下是多年研习典籍带来的疯狂，而她真心相信自己只是个关心家人的好姑娘
+  voice: 温和、清楚，爱说“交给我”“让一切都恢复正常”
+  goal: 查明是什么法术抵消了自己的法术，必要时再要一具尸体
+  knows:
+  - 病人的梦有可怕的相似性（若调查员没发现，她会指出）
+  - 自己有一套“自创的治疗方法”，能救活濒死的病人
+  - 埃里从战场回来后性格变了，她认为那是战争的缘故
+  - 原卡德威尔家农舍里的典籍
+  secrets:
+  - 典籍是她的，法术是她施的，埃里是她召唤来的
+  - 她用同一路法术把濒死的父母“治”成了如今的模样
+  - 她认不出“掩藏者”是谁，因为那张脸是她自己给的
+  lies:
+  - “我用的只是家传的熏香方子。”
+  - “埃里只是被战争改变了。”
+  clues:
+  - c_cure_offer
+  - c_nightmares
+  - c_shadow
+  - c_theft_suspect
+  gates:
+    c_cure_offer:
+      skill: 说服
+      difficulty: 常规
+      bonus: 0
+  location: clinic
+  portrait: caroline
+  stats:
+    STR: 50
+    CON: 60
+    SIZ: 50
+    INT: 70
+    POW: 90
+    DEX: 60
+    APP: 50
+    EDU: 65
+    SAN: 0
+    HP: 11
+    MP: 18
+  arc: 从热心的护士逐步露出操纵和疯狂
+- id: erie
+  name: “埃里”
+  role: 卡洛琳召来的异界存在，顶着埃里·赫琴斯的外表与声音
+  look: 一个瘦高的年轻人，面容清秀却总让人说不上哪里不对；不太眨眼，动作比常人慢半拍
+  personality: 只听卡洛琳的命令，一举一动严格照她的指示；没有指示时偶尔按自己的想法行动
+  voice: 少言，说话时总先发出一阵软弱却刺耳的咳嗽
+  goal: 服从卡洛琳；被问起咳嗽时说自己胸腔里卡着一片弹片
+  knows:
+  - 卡洛琳交代的一切
+  - 绸缎山上埋了什么（但不会说）
+  secrets:
+  - 它不是埃里；真正的埃里被它杀死埋在绸缎山下
+  lies:
+  - “弹片卡在里头，取不出来。”
+  - “我就是埃里，我从法国回来了。”
+  clues:
+  - c_hauling
+  - c_erie_odd
+  gates: {}
+  location: null
+  portrait: erie
+  stats:
+    STR: 90
+    CON: 120
+    SIZ: 65
+    INT: 45
+    POW: 45
+    DEX: 80
+    HP: 18
+    MP: 9
+  arc: 越接近绸缎山，越不像一个人
+- id: anna
+  name: 安娜·伊斯特曼
+  role: 邮局职员，萨缪尔·伊斯特曼的遗孀
+  look: 黑衣，袖口磨得发亮，头发挽得紧，眼睛红着
+  personality: 用工作压住悲痛；一旦开口就停不下来
+  voice: 说着说着声音会低下去，“你别笑话我”
+  goal: 找个人说说她丈夫临死前究竟怎么了
+  knows:
+  - 萨缪尔是镇上第一个病死的，死前还没有任何症状就开始胡言乱语
+  - 萨缪尔说“他回家了。他本来就在这，但他现在又回来了。”
+  - 萨缪尔说打猎时遇到一个包裹全身的人
+  - 萨缪尔与埃里从战场回来后关系有些紧张
+  - 家里那本写满潦草字迹的日记
+  secrets:
+  - 她怕回家，也怕那本日记
+  lies: []
+  clues:
+  - c_anna_tale
+  - c_samuel_diary
+  gates: {}
+  location: post_office
+  portrait: anna
+  stats: {}
+  arc: ''
+- id: darvill_parents
+  name: 达维尔夫妇
+  role: 卡洛琳的父母，房子的主人
+  look: 两人并排坐在楼上，眼神呆滞，嘴角挂着口涎，衣着却被照顾得很干净
+  personality: 洋洋自得，说的话大半毫不相干
+  voice: 断断续续的嘟囔，突然笑起来
+  goal: 没有人知道他们想要什么
+  knows:
+  - 那个戴面具的男人不是真正的埃里
+  - 他夜里浑身是血地回来，发现他们在看他，便对着他们笑
+  - 他说面具是他的了，他杀掉了面具的主人，会永远戴着这面具
+  secrets:
+  - 这段记忆被埋在妄想和呓语底下，要有耐心才挖得出来
+  lies:
+  - 许多毫无意义的胡话
+  clues:
+  - c_parents_tale
+  gates:
+    c_parents_tale:
+      skill: 说服
+      difficulty: 常规
+      bonus: 0
+  location: darvill_house
+  portrait: darvill_parents
+  stats: {}
+  arc: ''
+- id: reggie
+  name: 雷吉·布鲁彻
+  role: 镇西北的农场主
+  look: 皮袄上沾着草屑，手抖，眼睛发红
+  personality: 阴郁、迷信，把一切都归给天罚
+  voice: 咬着字说，时不时灌一口酒
+  goal: 别让牛群死光，别让人看出他怕
+  knows:
+  - 他的牛开始一头头倒下，症状和人一样
+  - 他认定这是对镇子全部弊病的神圣审判
+  secrets:
+  - 他已经开始盘算把农场抵出去
+  lies:
+  - “我没事，我清醒得很。”
+  clues:
+  - c_cattle
+  gates: {}
+  location: brucker_farm
+  portrait: reggie
+  stats: {}
+  arc: ''
+- id: pastor
+  name: 黑尔牧师
+  role: 教堂的牧师
+  look: 黑袍袖口有灰，手里还拿着抹布
+  personality: 温和、震动于眼前的事
+  voice: 压低声音，习惯说“主自有安排”
+  goal: 让死者体面下葬，让活人别慌
+  knows:
+  - 这几天的死者都停在地下室等雪停
+  - 地下室远端的墙因为水管爆裂坏了，长满霉菌
+  - 本周早些时候那里还没有任何损坏或爆裂的迹象
+  secrets: []
+  lies: []
+  clues:
+  - c_cellar
+  gates: {}
+  location: church
+  portrait: pastor
+  stats: {}
+  arc: ''
+creatures:
+- id: erie_entity
+  name: “埃里”（异界存在）
+  description: 卡洛琳召来的无定形存在，被固定成埃里·赫琴斯的外表与声音。以埃里外貌出现时没有理智损失， 但一旦攻击或造成伤害，会暂时显露异界形态（理智损失 1/1D4+1）。
+  sanity: 0/1D4+1
+  stats:
+    STR: 90
+    CON: 120
+    SIZ: 65
+    INT: 45
+    POW: 45
+    DEX: 80
+    HP: 18
+    MP: 9
+  attacks:
+  - 格斗（剥皮爪击）60%，伤害 1D4+2+DB
+  - 射击（步枪）30%，春田 M1903 栓式猎枪，1 发/轮，弹夹 5，射程 110 码，2D6+4；弹夹里只有 1 发
+  notes: 体格 1，移动 10，伤害加成 +1D4。技能：汽车驾驶 20%，聆听 40%，侦查 40%，潜行 25%，追踪 50%。 护甲：无，但每轮恢复 1 点 HP。法术：戈尔戈罗斯形体扭曲术。代表性台词：软弱但刺耳的咳嗽声。
+    它只能听从卡洛琳的命令，没有指示时偶尔按自己的想法行动，比如击倒“掩藏者”。
+pregens:
+- id: agnes_bell
+  name: 艾格尼丝·贝尔
+  occupation: 公共卫生护士（沃德县卫生部门）
+  age: 31
+  sex: 女
+  residence: 北达科他州法戈
+  birthplace: 明尼苏达州德卢斯
+  portrait: agnes
+  backstory:
+    why: AutoKeeper 补充：1918 年流感时她在野战医院值过班，这次县里点名让她随队来埃斯内尔评估疫情。
+    tie: 她与安特医生通过两封信，对方在信里反复强调“这不像流感”。
+  characteristics:
+    力量: 45
+    体质: 60
+    体型: 55
+    敏捷: 65
+    外貌: 60
+    智力: 70
+    意志: 65
+    教育: 75
+  luck: 55
+  hp: 11
+  hp_max: 11
+  mp: 13
+  mp_max: 13
+  san: 65
+  san_start_of_day: 65
+  san_lost_today: 0
+  skills:
+    急救: 70
+    医学: 60
+    心理学: 55
+    侦查: 50
+    说服: 55
+    图书馆使用: 50
+    聆听: 45
+  inventory:
+  - 出诊包
+  - 体温计
+  - 一叠空白病例表
+  - 县卫生部门的委任状
+  conditions: []
+  marks: []
+- id: thomas_reed
+  name: 托马斯·里德
+  occupation: 县卫生部门调查员，前陆军军医
+  age: 38
+  sex: 男
+  residence: 北达科他州 Valley City
+  birthplace: 俄亥俄州哥伦布
+  portrait: thomas
+  backstory:
+    why: AutoKeeper 补充：他在法国做过救护队的军医，习惯在雪天出勤，也习惯在报告里写下最坏的可能。
+    tie: 他追踪过从军营带回来的疫病，对“官方说法”一向不肯全信。
+  characteristics:
+    力量: 60
+    体质: 55
+    体型: 65
+    敏捷: 55
+    外貌: 50
+    智力: 65
+    意志: 60
+    教育: 70
+  luck: 50
+  hp: 12
+  hp_max: 12
+  mp: 12
+  mp_max: 12
+  san: 60
+  san_start_of_day: 60
+  san_lost_today: 0
+  skills:
+    医学: 55
+    侦查: 60
+    心理学: 50
+    说服: 45
+    汽车驾驶: 50
+    话术: 50
+    格斗(拳击): 45
+  inventory:
+  - 笔记本
+  - 柯尔特左轮手枪
+  - 县府通行文件
+  - 一瓶劣质威士忌
+  conditions: []
+  marks: []

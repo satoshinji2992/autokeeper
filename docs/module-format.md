@@ -4,15 +4,25 @@
 
 ```text
 modules/<id>/
-  module.yaml        剧情、地点、NPC、线索、事件、结局、预设调查员
-  art/<名字>.txt     ASCII 图（只用可打印 ASCII；场景 ≤56×14，头像 ≤18×7）
-  art/<名字>.color   同形状的配色蒙版，每个字符一个颜色键，“.”为默认色
-  art/<名字>.png     原作图片（也支持 jpg、jpeg、webp），与 ASCII 图可共用图片键
-  art/<名字>.source.json  原图来源记录，编译时一并保留
-  art/<名字>.credit.json  照片或生成图的来源与授权（Codex 生成的写“AI 生成（Codex image_gen）”和所依据的原图）
+  module.yaml        标题、年代、背景、钩子、真相、守秘人须知、开场、标记、起点、插件列表
+  places.yaml        地点（locations）
+  people.yaml        NPC、怪物、预设调查员（npcs、creatures、pregens）
+  clues.yaml         线索、物件、手稿、手绘题（clues、items、handouts、sketches）
+  story.yaml         事件、结论、结局、大场景（events、conclusions、endings、showcases）
+  art/places/<键>.jpg   场景照片和原作场景图（也支持 png、jpeg、webp）
+  art/people/<键>.jpg   人物头像
+  art/items/<键>.png    手稿、地图、封面和其他图
+  art/ascii/<键>.txt    ASCII 图（只用可打印 ASCII；场景 ≤56×14，头像 ≤18×7）
+  art/ascii/<键>.color  同形状的配色蒙版，每个字符一个颜色键，“.”为默认色
+  art/credits.yaml      每张图的来源与授权，按图片键记；Codex 生成的写“AI 生成（Codex image_gen）”和所依据的原图
   plugins/<id>/manifest.json  插件名称、版本、能力、动作与可执行测试
   plugins/<id>/plugin.py      自定义规则代码，独立进程执行
+  source/            导入的原文、逐页扫描和导入时的笔记（只在本机，不进 Git）
 ```
+
+几个 YAML 文件读进来时合并成一个模组，字段放错文件也能读。只有一个 `module.yaml`、图都平放在 `art/` 下的小模组也能直接读，手写一个小模组不必拆文件。导入 Agent 就是这样写草稿的，校验通过后再整理成上面的结构。
+
+从模组算出来的东西不放在模组目录里：编译出的 Skill 包在 `skills/module-<id>/`，知识库、大场景图和渲染用的照片预处理副本在 `data/cache/` 下，删掉会在用到时重建。
 
 完整字段见 `src/autokeeper/module/schema.py`；字段齐全的格式样例见 `src/autokeeper/module/example/`（只用于测试和给导入 Agent 参考，不是可玩的模组）。
 
@@ -49,7 +59,7 @@ looks:
     art: church_burned              # 可省，默认 <原图键>_<标记>
 ```
 
-导入时若本机有 Codex，就照原图画出 `art/church_burned.jpg`；没画成的，游戏里标记成立时再画。昼夜不用写，画面按时间自动调光。每个地点或人物一般最多两种，全模组最多画 6 处。
+导入时若本机有 Codex，就照原图画出 `art/places/church_burned.jpg`；没画成的，游戏里标记成立时再画。昼夜不用写，画面按时间自动调光。每个地点或人物一般最多两种，全模组最多画 6 处。
 
 ## 大场景（showcases）
 

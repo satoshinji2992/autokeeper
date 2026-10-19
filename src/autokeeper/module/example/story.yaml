@@ -1,0 +1,36 @@
+conclusions:
+  - id: k_tower
+    text: 钟里藏着会动的东西，多出的钟声是它在敲
+  - id: k_motive
+    text: 守钟人知道钟里有什么，并在替它遮掩
+events:
+  - id: e_dusk
+    title: 黄昏
+    when: D1 18:00
+    read_aloud: 天黑了，钟楼的影子吞没了半个广场。
+    text: 时间提醒。
+  - id: e_sermon
+    title: 午夜前的布道
+    when: D1 21:00
+    move_to: square
+    performer: preacher
+    performance: 把调查员今天做过的事编进布道词里，最后说“钟声会替我们作证”。
+    read_aloud: 布道者登上台阶，所有人都抬头看钟。
+    sanity: 0/1D3
+    text: 布道者登台。
+  - id: e_finale
+    title: 午夜
+    when: D1 22:00
+    text: 钟多敲了一下。
+    ending: toll
+endings:
+  - id: stopped
+    title: 钟停了
+    condition: flag:bell_stopped
+    text: 钟停在十一点五十九分，镇上第一次安静地过了一夜。
+    reward: 理智 +1D6
+  - id: toll
+    title: 多出的那一下
+    condition: 以上都没有发生
+    text: 午夜，钟声多敲了一下。
+    reward: 在场的调查员过理智检定 1/1D6

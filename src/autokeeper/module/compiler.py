@@ -25,6 +25,7 @@ from pathlib import Path
 
 import yaml
 
+from .. import credits
 from .graph import supporting_clues
 from .schema import NPC, Clue, Location, Module
 
@@ -99,9 +100,8 @@ def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) 
         for path in m.pictures.values():
             picture = Path(path)
             shutil.copy2(picture, destination / picture.name)
-            for suffix in (".source.json", ".credit.json"):
-                if (sidecar := picture.with_suffix(suffix)).is_file():
-                    shutil.copy2(sidecar, destination / sidecar.name)
+            if (record := credits.get(picture)) is not None:
+                credits.put(destination / picture.name, record)
     if m.extensions:
         from ..plugins import api_text
         from ..plugins.storage import save as save_plugin

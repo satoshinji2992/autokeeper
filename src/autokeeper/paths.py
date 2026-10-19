@@ -3,7 +3,9 @@ paths itself.
 
 The repository (or AUTOKEEPER_HOME, for an installed copy):
 
-    modules/            bundled modules; modules/local/ holds imports, modules/_import/ the inbox
+    modules/<id>/       bundled modules (module/package.py has the layout of one)
+    modules/local/<id>/ your imports and generated modules, each with its original in source/
+    modules/inbox/      drop module files here to find them in 导入模组
     skills/             shared skills; skills/module-<id>/ are compiled from the modules
     data/               everything the game writes while you play (below)
     dev/output/         evaluation runs, autoplay logs and other developer output
@@ -21,6 +23,7 @@ The data folder:
         models/         local embedding models (about 90 MB)
         kb/             LightRAG knowledge base per module
         showcases/      big-scene pictures per module
+        pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
       logs/             traces/<date>.jsonl, stderr.log, web.log
       preferences.json  tips.json  spend.json  imagegen/<module>.json
@@ -41,7 +44,7 @@ from pathlib import Path
 ROOT = Path(os.environ.get("AUTOKEEPER_HOME", Path(__file__).resolve().parents[2]))
 MODULES = ROOT / "modules"
 LOCAL_MODULES = MODULES / "local"
-IMPORT_INBOX = MODULES / "_import"
+INBOX = MODULES / "inbox"
 SKILLS = ROOT / "skills"
 DATA = ROOT / "data"
 DEV_OUTPUT = ROOT / "dev" / "output"
@@ -128,6 +131,10 @@ def kb(module_id: str) -> Path:
 
 def showcases(module_id: str) -> Path:
     return cache() / "showcases" / _safe(module_id)
+
+
+def prepared_pictures() -> Path:
+    return cache() / "pictures"
 
 
 def sessions() -> Path:

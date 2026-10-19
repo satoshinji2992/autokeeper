@@ -50,11 +50,15 @@ WINDOWS_ACCOUNTS = {"Public", "Default", "Default User", "All Users"}  # under C
 
 # -- where files come from ----------------------------------------------------------------------
 def places() -> list[tuple[str, Path]]:
-    """Where module files usually are: the modules folder, downloads, home, and under WSL the
-    Windows downloads, where the browser saved them."""
+    """Where module files usually are: the inbox (modules/inbox/), downloads, home, and under
+    WSL the Windows downloads, where the browser saved them."""
     from platformdirs import user_downloads_dir
 
-    spots = [("模组文件夹", paths.MODULES), ("下载", Path(user_downloads_dir())), ("主目录", Path.home())]
+    try:
+        paths.INBOX.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    spots = [("模组文件夹", paths.INBOX), ("下载", Path(user_downloads_dir())), ("主目录", Path.home())]
     if "microsoft" in platform.uname().release.lower():
         found = [p for p in sorted(Path("/mnt/c/Users").glob("*/Downloads")) if p.parent.name not in WINDOWS_ACCOUNTS]
         spots += [("Windows 下载" + (f"（{p.parent.name}）" if len(found) > 1 else ""), p) for p in found]

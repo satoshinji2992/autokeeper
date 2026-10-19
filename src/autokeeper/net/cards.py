@@ -24,7 +24,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .. import roster
+from .. import credits, roster
 from ..agents.card import Builder, CardError, Figure, Photo, Proposal, download, local_file
 from ..module.schema import Module
 from ..rules.catalog import CHARACTERISTICS, canonical
@@ -289,7 +289,7 @@ class RemoteBuilder:
             return False
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
-        dest.with_suffix(".credit.json").write_text(json.dumps(asdict(photo) | {"kind": "portrait"}, ensure_ascii=False), encoding="utf-8")
+        credits.put(dest, asdict(photo) | {"kind": "portrait"})
         return True
 
     def keep(self, photo: Path | None) -> None:

@@ -10,9 +10,9 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config, paths
+from autokeeper import config, credits, paths
 from autokeeper.harness.tools import ToolError, Workspace
-from autokeeper.module import importer
+from autokeeper.module import importer, package
 from autokeeper.module.compiler import compile_module
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Module
@@ -34,7 +34,7 @@ async def test_original_handout_retains_pixels_text_and_provenance(tmp_path):
     m.save(work)
     root = compile_module(m, tmp_path / "skills", source=work / "source")
     assert (root / "assets/images/map.png").read_bytes() == source.read_bytes()
-    assert json.loads((root / "assets/images/map.source.json").read_text(encoding="utf-8"))["original"] is True
+    assert credits.get(root / "assets/images/map.png")["original"] is True
     assert (root / "assets/source/source.md").read_text(encoding="utf-8") == "完整原文，包括未整理进摘要的细节。"
     assert "完整原始资料" in (root / "SKILL.md").read_text(encoding="utf-8")
     handout = (root / f"references/handouts/{m.handouts[0].id}.md").read_text(encoding="utf-8")
@@ -66,7 +66,7 @@ async def test_art_batch_rejects_invalid_drawings_without_partial_writes(tmp_pat
 def test_unknown_nested_fields_cannot_silently_disappear_during_import(tmp_path):
     work = tmp_path / "module"
     shutil.copytree(EXAMPLE, work)
-    path = work / "module.yaml"
+    path = work / "clues.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     raw["clues"][0]["sets"] = ["impossible_flag"]
     raw["pictures"] = {"map": "not a real file"}
@@ -82,6 +82,29 @@ def test_clue_requirements_must_reference_existing_clues_or_declared_flags():
     clue.requires = [clue.id, "missing_clue", "flag:missing_flag"]
     errors = [issue.text for issue in audit(module) if issue.level == "error"]
     assert len(errors) == 3
+
+
+async def test_an_import_leaves_the_module_package_and_its_notes_in_source(monkeypatch, tmp_path, skills_dir):
+    work = tmp_path / "local" / "example"
+
+    class Builder:  # writes what the importer's agent writes: one module.yaml, flat art/, notes.md
+        async def run(self, brief):
+            (work / "module.yaml").write_text(package.joined_text(EXAMPLE), encoding="utf-8")
+            (work / "notes.md").write_text("要点", encoding="utf-8")
+            (work / "art").mkdir(exist_ok=True)
+            for f in (EXAMPLE / "art" / "ascii").iterdir():
+                shutil.copy(f, work / "art" / f.name)
+            return SimpleNamespace(steps=1, finished=True, answer="done")
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(importer, "builder", lambda *a: Builder())
+    await importer.pipeline(work, brief="test", cfg=config.Config(), console=Console(file=io.StringIO()), index=False, photos=False)
+    assert sorted(p.name for p in work.iterdir()) == ["art", "clues.yaml", "module.yaml", "people.yaml", "places.yaml", "source", "story.yaml"]
+    assert sorted(p.name for p in (work / "art").iterdir()) == ["ascii"] and (work / "source" / "notes.md").is_file()
+    assert Module.load(work).model_dump() == Module.load(EXAMPLE).model_dump()
+    assert (skills_dir / "module-example" / "SKILL.md").is_file()
 
 
 async def test_import_failure_keeps_the_draft_and_never_reports_compile_success(monkeypatch, tmp_path):

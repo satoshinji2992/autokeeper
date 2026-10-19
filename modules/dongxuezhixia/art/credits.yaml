@@ -1,0 +1,182 @@
+note: 场景和人物照片都来自 Wikimedia Commons，按原授权使用；CC BY-SA 的图片经过裁剪、调色和转字符画，改编后的版本沿用同一授权。
+pictures:
+  agnes:
+    title: File:CoraElm1918.png
+    page: https://commons.wikimedia.org/wiki/File:CoraElm1918.png
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/CoraElm1918.png/500px-CoraElm1918.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: No photographer credited
+    width: 746
+    height: 1142
+    kind: portrait
+  anna:
+    title: File:Jan de Bray - Portrait of a Woman in a Black Cap.jpg
+    page: https://commons.wikimedia.org/wiki/File:Jan_de_Bray_-_Portrait_of_a_Woman_in_a_Black_Cap.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Jan_de_Bray_-_Portrait_of_a_Woman_in_a_Black_Cap.jpg/500px-Jan_de_Bray_-_Portrait_of_a_Woman_in_a_Black_Cap.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Jan de Bray
+    width: 842
+    height: 1100
+    kind: portrait
+  ante:
+    title: File:Nathan Francis Mossell (1856-1946), M.D. 1882, portrait photograph by H.D. Carns & Co; Image ID 27593990.jpg
+    page: https://commons.wikimedia.org/wiki/File:Nathan_Francis_Mossell_(1856-1946),_M.D._1882,_portrait_photograph_by_H.D._Carns_%26_Co;_Image_ID_27593990.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0a/Nathan_Francis_Mossell_%281856-1946%29%2C_M.D._1882%2C_portrait_photograph_by_H.D._Carns_%26_Co%3B_Image_ID_27593990.jpg/500px-Nathan_Francis_Mossell_%281856-1946%29%2C_M.D._1882%2C_portrait_photograph_by_H.D._Carns_%26_Co%3B_Image_ID_27593990.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Adam Cuerden
+    width: 1852
+    height: 3007
+    kind: portrait
+  brucker_farm:
+    title: File:Jacob Gløersen - A Farm at Lysaker - NG.M.00420 - National Museum of Art, Architecture and Design.jpg
+    page: https://commons.wikimedia.org/wiki/File:Jacob_Gl%C3%B8ersen_-_A_Farm_at_Lysaker_-_NG.M.00420_-_National_Museum_of_Art,_Architecture_and_Design.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/17/Jacob_Gl%C3%B8ersen_-_A_Farm_at_Lysaker_-_NG.M.00420_-_National_Museum_of_Art%2C_Architecture_and_Design.jpg/500px-Jacob_Gl%C3%B8ersen_-_A_Farm_at_Lysaker_-_NG.M.00420_-_National_Museum_of_Art%2C_Architecture_and_Design.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Jacob Gløersen
+    width: 3000
+    height: 2303
+    kind: scene
+  cardwell_farm:
+    title: File:Abandoned farmhouse at High Dalblair - geograph.org.uk - 5621497.jpg
+    page: https://commons.wikimedia.org/wiki/File:Abandoned_farmhouse_at_High_Dalblair_-_geograph.org.uk_-_5621497.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/Abandoned_farmhouse_at_High_Dalblair_-_geograph.org.uk_-_5621497.jpg/500px-Abandoned_farmhouse_at_High_Dalblair_-_geograph.org.uk_-_5621497.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: Alan O'Dowd
+    width: 4608
+    height: 3456
+    kind: scene
+  caroline:
+    title: File:Baby Hack and nurse, 24 Nov 1911 (16941732823).jpg
+    page: https://commons.wikimedia.org/wiki/File:Baby_Hack_and_nurse,_24_Nov_1911_(16941732823).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Baby_Hack_and_nurse%2C_24_Nov_1911_%2816941732823%29.jpg/500px-Baby_Hack_and_nurse%2C_24_Nov_1911_%2816941732823%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: David Knights-Whittome
+    width: 633
+    height: 800
+    kind: portrait
+  church:
+    title: File:Manordeifi old church, box pews at rear - geograph.org.uk - 1377878.jpg
+    page: https://commons.wikimedia.org/wiki/File:Manordeifi_old_church,_box_pews_at_rear_-_geograph.org.uk_-_1377878.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Manordeifi_old_church%2C_box_pews_at_rear_-_geograph.org.uk_-_1377878.jpg/500px-Manordeifi_old_church%2C_box_pews_at_rear_-_geograph.org.uk_-_1377878.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 2.0
+    artist: ceridwen
+    width: 640
+    height: 480
+    kind: scene
+  clinic:
+    title: File:A line of hospital beds in the Women's Ward Wellcome L0038278.jpg
+    page: https://commons.wikimedia.org/wiki/File:A_line_of_hospital_beds_in_the_Women%27s_Ward_Wellcome_L0038278.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/A_line_of_hospital_beds_in_the_Women%27s_Ward_Wellcome_L0038278.jpg/500px-A_line_of_hospital_beds_in_the_Women%27s_Ward_Wellcome_L0038278.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 4.0
+    artist: ''
+    width: 3840
+    height: 3138
+    kind: scene
+  darvill_house:
+    title: File:Vihorlat Museum in Humenné - Ethnographic open-air museum - Farmhouse from Nechválova Polianka, winter (December 2010) 01.jpg
+    page: https://commons.wikimedia.org/wiki/File:Vihorlat_Museum_in_Humenn%C3%A9_-_Ethnographic_open-air_museum_-_Farmhouse_from_Nechv%C3%A1lova_Polianka,_winter_(December_2010)_01.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/6/65/Vihorlat_Museum_in_Humenn%C3%A9_-_Ethnographic_open-air_museum_-_Farmhouse_from_Nechv%C3%A1lova_Polianka%2C_winter_%28December_2010%29_01.jpg/500px-Vihorlat_Museum_in_Humenn%C3%A9_-_Ethnographic_open-air_museum_-_Farmhouse_from_Nechv%C3%A1lova_Polianka%2C_winter_%28December_2010%29_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: ZemplinTemplar
+    width: 2816
+    height: 2112
+    kind: scene
+  darvill_parents:
+    title: File:Portrait of an elderly couple (I0052999).tif
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_an_elderly_couple_(I0052999).tif
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Portrait_of_an_elderly_couple_%28I0052999%29.tif/lossy-page1-500px-Portrait_of_an_elderly_couple_%28I0052999%29.tif.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: ''
+    width: 5254
+    height: 7128
+    kind: portrait
+  doreen:
+    title: File:Nathaniel Hill - ecd4ebc8b0 (2).jpg
+    page: https://commons.wikimedia.org/wiki/File:Nathaniel_Hill_-_ecd4ebc8b0_(2).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5e/Nathaniel_Hill_-_ecd4ebc8b0_%282%29.jpg/500px-Nathaniel_Hill_-_ecd4ebc8b0_%282%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Nathaniel Hill
+    width: 677
+    height: 1000
+    kind: portrait
+  eastman_house:
+    title: File:Husmannsplassen Lysgård 04.jpg
+    page: https://commons.wikimedia.org/wiki/File:Husmannsplassen_Lysg%C3%A5rd_04.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/38/Husmannsplassen_Lysg%C3%A5rd_04.jpg/500px-Husmannsplassen_Lysg%C3%A5rd_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Øyvind Holmstad
+    width: 6000
+    height: 4000
+    kind: scene
+  erie:
+    title: File:Portrait of a Young Boy - Perugino.jpg
+    page: https://commons.wikimedia.org/wiki/File:Portrait_of_a_Young_Boy_-_Perugino.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ad/Portrait_of_a_Young_Boy_-_Perugino.jpg/500px-Portrait_of_a_Young_Boy_-_Perugino.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY-SA 4.0
+    artist: Pietro Perugino
+    width: 4332
+    height: 6432
+    kind: portrait
+  francis:
+    title: File:Finn Blakstad.jpg
+    page: https://commons.wikimedia.org/wiki/File:Finn_Blakstad.jpg
+    thumb: https://upload.wikimedia.org/wikipedia/commons/c/ce/Finn_Blakstad.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled
+    license: Public domain
+    artist: Anders Beer Wilse
+    width: 473
+    height: 640
+    kind: portrait
+  main_street:
+    title: File:Northwest Intersection of Franklin Street and Main Street, 1912 - Valparaiso, Indiana (4184009343).jpg
+    page: https://commons.wikimedia.org/wiki/File:Northwest_Intersection_of_Franklin_Street_and_Main_Street,_1912_-_Valparaiso,_Indiana_(4184009343).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bf/Northwest_Intersection_of_Franklin_Street_and_Main_Street%2C_1912_-_Valparaiso%2C_Indiana_%284184009343%29.jpg/500px-Northwest_Intersection_of_Franklin_Street_and_Main_Street%2C_1912_-_Valparaiso%2C_Indiana_%284184009343%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: CC BY 2.0
+    artist: Steve Shook from Moscow, Idaho, USA
+    width: 2157
+    height: 1347
+    kind: scene
+  pastor:
+    title: File:1854, Portrait of a Priest by Hermenegildo Bustos.jpg
+    page: https://commons.wikimedia.org/wiki/File:1854,_Portrait_of_a_Priest_by_Hermenegildo_Bustos.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d8/1854%2C_Portrait_of_a_Priest_by_Hermenegildo_Bustos.jpg/500px-1854%2C_Portrait_of_a_Priest_by_Hermenegildo_Bustos.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Hermenegildo Bustos
+    width: 2610
+    height: 3434
+    kind: portrait
+  ratger_house:
+    title: File:Domestic architecture of the American colonies and of the early republic (1922) (14781758362).jpg
+    page: https://commons.wikimedia.org/wiki/File:Domestic_architecture_of_the_American_colonies_and_of_the_early_republic_(1922)_(14781758362).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Domestic_architecture_of_the_American_colonies_and_of_the_early_republic_%281922%29_%2814781758362%29.jpg/500px-Domestic_architecture_of_the_American_colonies_and_of_the_early_republic_%281922%29_%2814781758362%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Internet Archive Book Images
+    width: 1937
+    height: 1447
+    kind: scene
+  reggie:
+    title: File:Man, possibly a farmer or agricultural laborer1a34434v.jpg
+    page: https://commons.wikimedia.org/wiki/File:Man,_possibly_a_farmer_or_agricultural_laborer1a34434v.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ac/Man%2C_possibly_a_farmer_or_agricultural_laborer1a34434v.jpg/500px-Man%2C_possibly_a_farmer_or_agricultural_laborer1a34434v.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: Unknown authorUnknown author
+    width: 738
+    height: 1024
+    kind: portrait
+  satin_hill:
+    title: File:Barn doors and byways (1913) (14757804686).jpg
+    page: https://commons.wikimedia.org/wiki/File:Barn_doors_and_byways_(1913)_(14757804686).jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Barn_doors_and_byways_%281913%29_%2814757804686%29.jpg/500px-Barn_doors_and_byways_%281913%29_%2814757804686%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: No restrictions
+    artist: Internet Archive Book Images
+    width: 1790
+    height: 2730
+    kind: scene
+  thomas:
+    title: File:Middle aged man.jpg
+    page: https://commons.wikimedia.org/wiki/File:Middle_aged_man.jpg
+    thumb: https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/Middle_aged_man.jpg/500px-Middle_aged_man.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail
+    license: Public domain
+    artist: British School
+    width: 1200
+    height: 1566
+    kind: portrait

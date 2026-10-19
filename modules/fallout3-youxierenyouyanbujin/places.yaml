@@ -1,0 +1,270 @@
+locations:
+- id: meeting_house
+  name: 聚会的小屋
+  art: meeting_house
+  weather:
+  - flicker
+  public: true
+  aliases:
+  - 小屋
+  - 调查员家
+  - 聚会的地方
+  read_aloud: 一间带门廊的木板小屋，客厅里摆着旧沙发和茶几，厨房的炉子上煮着咖啡。后门通向院子，卫生间在走廊尽头。窗外是大街的路灯。
+  keeper: AutoKeeper 补充的开局地点（原文只说“某调查员家”）。开局麦克迪会绕屋找没关的门窗突入，先对落单者（煮咖啡、上厕所）动手；聆听成功可发现有人入室。之后可在这里歇脚、商量、打电话。
+  features:
+  - 门窗
+  - 厨房
+  - 电话
+  - 门廊
+  exits:
+  - main_street
+- id: main_street
+  name: 斯托威尔大街
+  art: main_street
+  public: true
+  aliases:
+  - 大街
+  - 主街
+  - 镇中心
+  - 街上
+  read_aloud: 斯托威尔的大街两旁是面包店、杂货店、药店、糖果店和五金店，阿尔的顶级车行的橱窗里摆着新福特。高高的电话线杆一路排开，街角有人在发传单。
+  keeper: 枢纽地点，可问路。老头皮尔森常坐在电话线杆顶上窃听，对路人微笑挥手。可能遇到眼部带伤、喃喃说“天上的眼睛”的崩溃者，也可能遇到布拉德和托德在争论物理。
+  features:
+  - 电话线杆
+  - 街角传单
+  - 商店橱窗
+  - 路过的镇民
+  exits:
+  - meeting_house
+  - ferguson_house
+  - mcdermott_house
+  - church
+  - lowry_house
+  - steakhouse
+  - bank
+  - police_station
+  - mother_bakers
+  - gregson_store
+  - park_mine
+  - hospital
+  - jensen_farm
+  - hart_house
+  travel_minutes:
+    jensen_farm: 20
+    hart_house: 15
+- id: ferguson_house
+  name: 弗格森家
+  art: ferguson_house
+  aliases:
+  - 格兰达家
+  - 卫斯理姐姐家
+  read_aloud: 一栋整洁的两层住宅，厨房里飘出烤蛋糕的香味。门口的狗窝空着。
+  keeper: 格兰达（崩溃，痴傻）会应门，不冷不热地请人吃蛋糕喝咖啡。熟人会发现家里的宠物不见了（已被解剖）。双胞胎雪莉和马克辛（有福）很快端来一盘解剖好的青蛙，拉调查员一起研究，摸底他们的文化水平；能学到东西就学，学不到就赶人走，或设法拘禁调查员当实验材料。地下室里，被打了镇静剂的唐纳德是双胞胎的解剖对象。
+  features:
+  - 厨房
+  - 空狗窝
+  - 地下室门
+  - 青蛙标本盘
+  exits:
+  - main_street
+- id: mcdermott_house
+  name: 麦克德莫特家
+  art: mcdermott_house
+  aliases:
+  - 阿诺德家
+  read_aloud: 屋里没人。餐桌上还摆着两副餐具，灶里的柴早已燃尽，锅里的肉烧成了炭，蔬菜干枯发黑。门口不见那辆车。
+  keeper: 阿诺德夫妇四天前看完望远镜就再没回家。
+  features:
+  - 餐桌
+  - 灶台
+  - 门口车位
+  exits:
+  - main_street
+- id: church
+  name: 美以美会堂
+  art: church
+  public: true
+  aliases:
+  - 教堂
+  - 菲茨杰拉德的教堂
+  - 美以美会
+  read_aloud: 白色尖顶的木结构教堂，长椅排得整整齐齐，管风琴立在讲坛一侧。门口告示写着：每日两次布道，欢迎所有人。
+  keeper: 菲茨杰拉德牧师每天布道两次，礼拜后巡视会众、挑人单独谈话，觉得行的人被叫来参加半夜的特别弥撒，然后被送到教授家看望远镜。镇上另有圣家族天主堂与公理会堂，与此事无关。
+  features:
+  - 讲坛
+  - 管风琴
+  - 长椅
+  - 牧师书房
+  exits:
+  - main_street
+- id: lowry_house
+  name: 劳里家
+  art: lowry_house
+  aliases:
+  - 伯特家
+  - 雷蒙德家
+  read_aloud: 客厅里堆满乐器：钢琴、小提琴，还有奶酪刨、搓衣板、轮毂、油壶改成的怪东西。一阵没有规律的声音从里面传出来。
+  keeper: 露希尔趴在餐桌上哭。雷蒙德会探头叫“嘿！来听！”，然后回客厅演奏。乍听是噪音，听几分钟就会甘之如饴、感到精密的旋律；听久了可能产生共感，看到乐曲的颜色。
+  features:
+  - 客厅乐器堆
+  - 餐桌
+  - 钢琴
+  exits:
+  - main_street
+- id: steakhouse
+  name: 埃尔默牛排馆
+  art: steakhouse
+  public: true
+  aliases:
+  - 牛排馆
+  - 埃尔默
+  - 饭店
+  read_aloud: 镇上最好的饭店，红格子桌布，墙上挂着牛头。今天菜不如从前，服务员们低着头，不敢多说一句。后门对着一条堆垃圾的小巷。
+  keeper: 菲利克斯（有福）铁腕掌店，用崩溃者做清洁工、洗碗工和厨师（含阿诺德）。除点单外的任何问题都会让菲利克斯以外的店员非常紧张，谁被怀疑乱说话就会被暗中痛殴；奴隶们知道走漏教授和望远镜的事，亲朋就会遭报复。原店主伦纳德只是反复洗那点盘子，等待报仇。晚上很多有福者来此吃几乎没煎的久久熟成牛排。
+  features:
+  - 厨房
+  - 洗碗池
+  - 后门小巷
+  - 餐厅
+  exits:
+  - main_street
+- id: bank
+  name: 斯托威尔商业信托储蓄银行
+  art: bank
+  public: true
+  aliases:
+  - 银行
+  - 储蓄银行
+  read_aloud: 大理石柜台后，职员们埋头算账，没人抬头。经理室的门关着，门里传来不停翻动账本的声音。
+  keeper: 宾汉经理（有福）提高贷款门槛，派执行员收回房产。信用评级不到 50 的人通过职员安排会见基本不可能。职员不愿和欠银行钱的人接触，逼问可能吓瘫、逃跑或大叫逼债不怪他们。
+  features:
+  - 柜台
+  - 经理室
+  - 职员
+  exits:
+  - main_street
+- id: police_station
+  name: 警察局
+  art: police_station
+  public: true
+  aliases:
+  - 警局
+  read_aloud: 一栋砖砌小楼，工作时间总有人值班。后面只有四间牢房。
+  keeper: 副警长斯坦利（有福）实际掌权，原局长马丁·卡瓦诺（崩溃）成了替他打杂的傀儡。报案不会有用，只会让调查员被盯上。被俘调查员可能关在这里。
+  features:
+  - 值班台
+  - 牢房
+  - 局长办公室
+  exits:
+  - main_street
+- id: mother_bakers
+  name: 贝克妈妈菜
+  art: mother_bakers
+  public: true
+  aliases:
+  - 贝克妈妈
+  - 餐厅
+  - 贝克太太的店
+  read_aloud: 主道边一家热闹的餐厅，华夫饼上浇着新糖浆，汉堡里夹着说不清是什么的馅料，客人们吃得眯起眼睛。
+  keeper: 贝克太太看了望远镜后推出新菜，好评如潮，但不是问题根源（红鲱鱼）。贝蒂在这里工作了十年。
+  features:
+  - 新菜单
+  - 厨房
+  - 柜台
+  exits:
+  - main_street
+- id: gregson_store
+  name: 格雷格森商店
+  art: gregson_store
+  public: true
+  aliases:
+  - 杂货店
+  - 格雷格森
+  read_aloud: 一家货架堆得满满的杂货店，柜台边有汽水机，孩子们常在这儿买汽水。
+  keeper: 麦克迪原本在镇上杂货店理货。阿诺德可能来这里买食材；布拉德和托德聊腻了物理会来喝汽水。
+  features:
+  - 货架
+  - 汽水机
+  - 柜台
+  exits:
+  - main_street
+- id: park_mine
+  name: 公园和金矿
+  art: park_mine
+  public: true
+  aliases:
+  - 公园
+  - 金矿
+  - 裸石山
+  read_aloud: 公园里有秋千和人力旋转木马。旁边的裸石山脚下新搭了一排棚子，日夜传出锤凿声，一群面无表情的人在挖。
+  keeper: 克劳德·马西（有福）指挥崩溃者奴隶日夜挖掘，刚发现金矿脉；金子也是某些有福者不可或缺的实验材料。
+  features:
+  - 棚子
+  - 挖掘的人
+  - 秋千
+  exits:
+  - main_street
+- id: hospital
+  name: 斯托威尔医院
+  art: hospital
+  public: true
+  aliases:
+  - 医院
+  read_aloud: 一座不大的医院，有住院部，走廊里飘着消毒水味。
+  keeper: 常见病都能治，疑难杂症和大手术要去市里。可在这里处理伤口。
+  features:
+  - 病房
+  - 急诊室
+  exits:
+  - main_street
+- id: jensen_farm
+  name: 詹森农场
+  art: jensen_farm
+  aliases:
+  - 詹森家
+  - 农场
+  - 养猪场
+  read_aloud: 镇东头一条烂泥路通到一座破农场。田里停满了各式汽车，猪圈里的猪拱着泥。农舍的窗户钉着木板。
+  keeper: 詹森和三个喽啰的据点。场院里停着从崩溃者那里弄来的车，包括阿诺德的车。屋里关着供詹森一伙使唤和欺凌的崩溃者，包括格拉迪斯。开局的尸体会被拉到这里，最后喂猪。伯奇平时从这里买私酿原浆。
+  features:
+  - 停车的田地
+  - 猪圈
+  - 农舍
+  - 被钉住的窗户
+  exits:
+  - main_street
+- id: hart_house
+  name: 哈特教授宅
+  art: hart_house
+  aliases:
+  - 教授家
+  - 哈特家
+  - 镇西老宅
+  read_aloud: 镇西一栋漂亮的老宅，几只猫在门廊上打盹。房后连着一座玻璃温室，夜里亮着灯，头顶那片天总是晴的。
+  keeper: 教授与若干有福者研究助手同住，崩溃者奴隶伺候起居。全天有有福者和崩溃者守卫，发现闯入会尽力抵挡并呼叫增援。猫是教授的命根子。工作室里有修望远镜所需的大量备件。
+  features:
+  - 门廊的猫
+  - 工作室
+  - 守卫
+  - 温室入口
+  exits:
+  - main_street
+  - greenhouse
+- id: greenhouse
+  name: 温室天文台
+  within: hart_house
+  art: greenhouse
+  weather:
+  - dust
+  aliases:
+  - 温室
+  - 天文台
+  - 望远镜
+  read_aloud: 玻璃温室里立着一架铜管望远镜，镜筒斜斜指向夜空中昴星团附近。不管外面天气如何，那块天空总是晴的。
+  keeper: 望远镜要先由教授校准；从接目镜看约 1 分钟即有感觉，异象异声，如被催眠，抓住不放，最后受福或崩溃各半。毁掉它（或让教授一夜无法操作）即设置 telescope_destroyed。
+  features:
+  - 望远镜
+  - 接目镜
+  - 校准装置
+  exits:
+  - hart_house

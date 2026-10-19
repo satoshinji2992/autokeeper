@@ -17,7 +17,7 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config, imagegen, imagery, paths
+from autokeeper import config, credits, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewLook
 from autokeeper.engine.game import Game
@@ -151,15 +151,15 @@ def test_the_thread_and_the_picture_are_read_off_codex_output(monkeypatch, tmp_p
 
 async def test_a_picture_is_stored_small_with_its_credit_chain_and_the_codex_session_is_forgotten(codex, tmp_path):
     original = picture(tmp_path / "art" / "square.jpg", size=(1600, 900))
-    (tmp_path / "art" / "square.credit.json").write_text(json.dumps({"title": "Old square", "license": "CC0"}), encoding="utf-8")
+    credits.put(original, {"title": "Old square", "license": "CC0"})
     usage = []
     out = await imagegen.make("广场失火", tmp_path / "saves" / "square.look1.jpg", kind="scene", module="example",
                               original=original, title="广场（失火后）", on_reply=usage.append)
     assert out == tmp_path / "saves" / "square.look1.jpg" and near(colour_of(out), RED)
     with Image.open(out) as im:
         assert max(im.size) == imagegen.LONG_SIDE  # 1716 × 916 from Codex, cut down
-    assert out.with_name("square.look1.prep.png").is_file()  # preprocessed like every other picture
-    credit = json.loads(out.with_name("square.look1.credit.json").read_text(encoding="utf-8"))
+    assert imagery.prepared(out).is_file()  # preprocessed like every other picture
+    credit = credits.get(out)
     assert credit["license"] == imagegen.LICENSE and credit["title"] == "广场（失火后）"
     assert credit["based_on"] == {"title": "Old square", "license": "CC0"}
     assert max(codex.attached[0]) <= imagegen.LONG_SIDE and codex.prompts == ["广场失火"]
@@ -376,9 +376,9 @@ async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_mo
     monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
     work = paths.LOCAL_MODULES / "example"
     shutil.copytree(EXAMPLE, work)
-    raw = yaml.safe_load((work / "module.yaml").read_text(encoding="utf-8"))
+    raw = yaml.safe_load((work / "places.yaml").read_text(encoding="utf-8"))
     raw["locations"][0]["looks"] = [{"when": "flag:bell_stopped", "change": "钟停了，广场上的人都抬头望着它"}]
-    (work / "module.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    (work / "places.yaml").write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
 
     async def nothing(*args, **kwargs):
         return None
@@ -390,9 +390,10 @@ async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_mo
     log = io.StringIO()
     done = await find_photos(m, work, config.Config(), Console(file=log, width=200))
     assert sorted(done) == sorted(name for name, _, _ in imagery.targets(m))
-    drawn = work / "art" / "square_bell_stopped.jpg"
+    drawn = work / "art" / "places" / "square_bell_stopped.jpg"
     assert drawn.is_file() and "square_bell_stopped" in Module.load(work).pictures
-    credit = json.loads((work / "art" / "square_bell_stopped.credit.json").read_text(encoding="utf-8"))
+    assert (work / "art" / "people" / "warden.jpg").is_file()  # a portrait goes with the people
+    credit = credits.get(drawn)
     assert credit["based_on"]["license"] == imagegen.LICENSE  # made from the square's own (generated) picture
     assert imagegen.used("example") == len(done) + 1 and "AI 画了一张" in log.getvalue()
     # the repository's own modules never get generated pictures

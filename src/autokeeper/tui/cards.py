@@ -30,7 +30,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import artkit, imagery, paths, roster
+from .. import artkit, credits, imagery, paths, roster
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
@@ -107,8 +107,7 @@ def update_kept(inv: Investigator, changes: dict, photo_file: Path | None = None
         target = roster.folder() / f"{card.portrait}.jpg"
         with Image.open(photo_file) as im:
             im.convert("RGB").save(target, "JPEG", quality=92)
-        for stale in (".credit.json", ".prep.png"):  # they were about the old photo
-            target.with_name(card.portrait + stale).unlink(missing_ok=True)
+        credits.put(target, None)  # it was about the old photo
         try:
             imagery.preprocess(target, "portrait")  # face crop, as 车卡 does
         except (OSError, ValueError):

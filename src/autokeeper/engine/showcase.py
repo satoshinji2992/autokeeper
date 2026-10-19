@@ -17,12 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from pathlib import Path
 
-from .. import config, imagegen, imagery, paths
+from .. import config, credits, imagegen, imagery, paths
 from ..module.schema import Module, Showcase
 from .state import GameState
 
@@ -109,8 +108,7 @@ async def _search(cfg: config.Config, sc: Showcase, target: Path, on_reply=None)
         return None
     im, c = found
     im.save(found_file, quality=92)
-    found_file.with_name(found_file.stem + ".credit.json").write_text(
-        json.dumps(asdict(c) | {"kind": "scene"}, ensure_ascii=False, indent=1), encoding="utf-8")
+    credits.put(found_file, asdict(c) | {"kind": "scene"})
     return found_file
 
 

@@ -155,7 +155,7 @@ START → think ─┬─ finish ─────────→ END
 | `check` | 在进程里跑模组校验器 |
 | `web_search` `fetch_url` | 联网搜索，网页用 MarkItDown 转成 Markdown 分段读 |
 
-工作区（`Workspace`）把路径解析到根目录之下，越界直接拒绝。写入只允许落在白名单里，导入时是 `module.yaml`、`notes.md`、`art/*`。
+工作区（`Workspace`）把路径解析到根目录之下，越界直接拒绝。写入只允许落在白名单里，导入时是 `module.yaml`、`notes.md`、`art/*`；校验通过后由程序把草稿整理成模组目录（`module/package.py`）。
 
 ### 搜索 `search.py`
 
