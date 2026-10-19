@@ -14,8 +14,10 @@ import time
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-FOLDER = ROOT / "saves" / "public-share"
+from autokeeper import paths
+
+ROOT = paths.ROOT
+FOLDER = paths.dev_output("public-share")
 STATUS = FOLDER / "status.json"
 
 
@@ -30,7 +32,7 @@ def stop() -> None:
     if not STATUS.exists():
         return
     info = json.loads(STATUS.read_text())
-    for name, marker in (("gateway_pid", "deploy/public_gateway.py"), ("tunnel_pid", "cloudflared")):
+    for name, marker in (("gateway_pid", "dev/public_gateway.py"), ("tunnel_pid", "cloudflared")):
         pid = info.get(name, 0)
         if pid and owned(pid, marker):
             try:
@@ -44,7 +46,7 @@ def start(port: int) -> None:
     FOLDER.mkdir(parents=True, exist_ok=True)
     if STATUS.exists():
         old = json.loads(STATUS.read_text())
-        if owned(old.get("gateway_pid", 0), "deploy/public_gateway.py") and owned(old.get("tunnel_pid", 0), "cloudflared"):
+        if owned(old.get("gateway_pid", 0), "dev/public_gateway.py") and owned(old.get("tunnel_pid", 0), "cloudflared"):
             print(json.dumps({"url": old["url"], "status": "already running"}))
             return
         stop()
@@ -55,7 +57,7 @@ def start(port: int) -> None:
             json.dump({"password": secrets.token_urlsafe(18)}, f)
     binary = FOLDER / "bin" / "cloudflared"
     if not binary.is_file():
-        raise SystemExit("cloudflared is not installed in saves/public-share/bin/")
+        raise SystemExit("cloudflared is not installed in dev/output/public-share/bin/")
     with (FOLDER / "tunnel.log").open("w") as log:
         tunnel = subprocess.Popen([str(binary), "tunnel", "--url", f"http://127.0.0.1:{port}",
                                    "--protocol", "http2", "--no-autoupdate"], cwd=ROOT,
@@ -71,21 +73,21 @@ def start(port: int) -> None:
                 url = found.group()
                 break
             if tunnel.poll() is not None:
-                raise RuntimeError("Tunnel process exited; see saves/public-share/tunnel.log")
+                raise RuntimeError("Tunnel process exited; see dev/output/public-share/tunnel.log")
             time.sleep(0.5)
         if not url:
             raise TimeoutError("No public URL returned within 60 seconds")
         info["url"] = url
         STATUS.write_text(json.dumps(info))
         with (FOLDER / "gateway.log").open("a") as log:
-            proc = subprocess.Popen([sys.executable, str(ROOT / "deploy" / "public_gateway.py")], cwd=ROOT,
+            proc = subprocess.Popen([sys.executable, str(ROOT / "dev" / "public_gateway.py")], cwd=ROOT,
                                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
         info["gateway_pid"] = proc.pid
         STATUS.write_text(json.dumps(info))
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if proc.poll() is not None:
-                raise RuntimeError("Gateway process exited; see saves/public-share/gateway.log")
+                raise RuntimeError("Gateway process exited; see dev/output/public-share/gateway.log")
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1) as response:
                     if response.status == 200:

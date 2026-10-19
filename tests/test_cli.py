@@ -95,3 +95,12 @@ def test_slow_things_move_once_from_the_old_saves_folder():
     assert (paths.models() / "bge").is_dir() and (paths.cards() / "chen.json").is_file()
     assert (paths.OLD_SAVES / "old-game.json").is_file() and not paths.save("old-game").exists()  # games stay behind
     assert paths.adopt_old() == []
+
+
+def test_the_claude_code_plugin_has_the_package_version():
+    import json
+
+    from autokeeper import __version__
+
+    manifest = json.loads((paths.ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["version"] == __version__
