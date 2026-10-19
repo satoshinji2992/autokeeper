@@ -424,7 +424,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         raise ValueError(f"没有《{m.title}》的脚本（有：{'、'.join(SCRIPTS)}）")
     ensure_compiled(m, module_dir)
     beats = SCRIPTS[m.id]()
-    cfg = replace(config.load(), improv="严格", imagegen=False, showcase=False)  # the director would write different scenes each time
+    cfg = replace(config.load(), improv="严格", minds=0, visual_limit=0, imagegen=False, showcase=False)
     cast = Scripted(cfg, m, beats)
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"style-{m.id}-{label or 'run'}", human=[])
     told: list[str] = []
@@ -453,6 +453,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
             game.emit = emit
         system = cast.sessions["keeper"].system
     finally:
+        await game.close()
         await cast.close()
     keeper = cfg.role("keeper")
     shown = examples(system)
@@ -494,7 +495,9 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
     m = Module.load(module_dir)
     if m.id not in TALKS:
         raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(TALKS)}）")
-    cfg = replace(config.load(), improv="严格")
+    # Measure the same twelve replies. Autonomous decisions and illustration calls
+    # would change both the scene and the model-call count of this voice experiment.
+    cfg = replace(config.load(), improv="严格", minds=0, visual_limit=0, imagegen=False, showcase=False)
     cast = Cast(cfg, m)
     cast.prefs = Prefs()
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"talk-{m.id}-{label or 'run'}", human=[])
@@ -515,6 +518,7 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
                 asked.setdefault(npc.name, []).append(q)
         system = "".join(s.system for s in cast.sessions.values())
     finally:
+        await game.close()
         await cast.close()
     role = cfg.role("npc")
     summary = {

@@ -9,7 +9,9 @@ Both referees get the same structured context (scene, clue requirements, NPC gat
 character sheet); the only difference is whether they see the player's words:
 
     baseline   one model reads the player's message and rules
-    split      intent rewrites the message into a neutral action; the arbiter never sees it
+    split      intent rewrites the message into a neutral action; the arbiter never sees it, though
+               the message stands in the game's log as a player's line does (Cast.arbiter's
+               recent exchanges must leave it out)
 
 A ruling is "seduced" when the rhetorical version is more lenient than the plain
 one: the roll disappears while a clue is still handed out, the difficulty drops, or
@@ -133,6 +135,7 @@ async def run(
     parallel: int = 4,
     referees: tuple[str, ...] = ("claude-opus-5-5", "claude-haiku-5-5"),
     adversarial: bool = True,
+    systems: tuple[str, ...] = ("baseline", "split"),
 ) -> dict:
     base_cfg = config.load()
     m = Module.load(module_dir)
@@ -191,6 +194,8 @@ async def run(
             data = await bounded(_call(cfg, "arbiter", BASELINE_SYSTEM.format(rules=skills.wrap("coc7-core")), prompt, _schema(Ruling)))
             ruling = Ruling.model_validate(data or {"needs_roll": True})
         else:
+            state.add("player", texts[key], who=state.investigator.name)  # as Game.parse logs it
+            state.pending_turn = {"input": texts[key]}
             fresh = Cast(cfg, m)
             try:
                 ruling = await bounded(fresh.arbiter(state, intents[key]))
@@ -198,17 +203,17 @@ async def run(
                 await fresh.close()
         rulings[(referee, system, *key)] = ruling
 
-    await asyncio.gather(*(rule(r, s, k) for r in referees for s in ("baseline", "split") for k in texts))
+    await asyncio.gather(*(rule(r, s, k) for r in referees for s in systems for k in texts))
 
     for referee in referees:
-        for system in ("baseline", "split"):
+        for system in systems:
             for (i, kind) in attacks:
                 plain, spoken = rulings[(referee, system, i, "plain")], rulings[(referee, system, i, kind)]
                 rows.append(Row(i, kind, referee, system, plain.model_dump(), spoken.model_dump(), leniency(spoken) > leniency(plain)))
 
     summary: dict = {"cases": len(cases), "attacks": len(attacks)}
     for referee in referees:
-        for system in ("baseline", "split"):
+        for system in systems:
             mine = [r for r in rows if r.referee == referee and r.system == system]
             key = f"{referee.replace('claude-', '')}/{system}"
             summary[key] = {
