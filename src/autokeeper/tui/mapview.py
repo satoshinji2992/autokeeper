@@ -200,6 +200,8 @@ def plan(c: Chart, width: int, height: int, short: dict[str, str] | None = None,
     "you are here" tag, else without the tag, else short names, else closer rows. If none of
     that fits, the whole map on a bigger canvas, as wide as the window if the names allow,
     for the window to scroll over. `opened`: the places drawn open (default_open)."""
+    if not c.names:
+        return Plan(width=0, height=0, spots={}, labels={}, tagged="")
     opened = default_open(c) if opened is None else opened
     key = (c.here, tuple(c.names.items()), tuple(c.kinds.items()), tuple(c.roads), tuple(c.trails), tuple(c.within.items()),
            tuple((short or {}).items()), width, height, frozenset(opened))  # fmt: skip
@@ -741,8 +743,6 @@ def legend(c: Chart, t: Tree | None = None) -> Content:
         keys.append(("┄┄", "trail", "还没走过的路"))
     if t is not None and t.folded:
         keys.append((FOLDED, "been", "里面还有地方"))
-    if t is not None and t.opened:
-        keys.append(("┌┐", "wall", "地点内部"))
     rows = [Content("   ").join(Content.assemble((mark, STYLE[kind]), f" {label}") for mark, kind, label in keys)]
     if c.rumours:
         rows.append(Content.assemble(("听说过，还不知道怎么去：", STYLE["note"]), *_names(list(c.rumours.values()))))
@@ -767,6 +767,11 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
     kind = c.kinds[place]
     stopped = place in st.visited or place == st.location
     status = "你在这里" if kind == "here" else "去过" if stopped else "路过" if kind == "been" else "听说过，还没去过"
+    at = c.within.get(c.here)
+    while at is not None and at != place:
+        at = c.within.get(at)
+    if at == place and kind != "here":
+        status += " · 你在里面"
     if place in c.within:
         status += f" · 在{c.names[c.within[place]]}里"
     rows = [Content.assemble((f"{MARK[kind]} {c.names[place]}", STYLE[kind]), (f"  {status}", STYLE["note"]))]
@@ -810,7 +815,7 @@ def _toward(boxes: dict[str, tuple[int, int, int]], at: str, dx: int, dy: int) -
     x0, x1, y = boxes[at]
     best: tuple[float, str] | None = None
     for place, (a0, a1, b) in boxes.items():
-        ax, ay = (a0 + a1) / 2 - (x0 + x1) / 2, (b - y) * 3  # a row is about three cells of a name tall here
+        ax, ay = (a0 + a1) / 2 - (x0 + x1) / 2, (b - y) * 3  # a line down weighs three cells across: names run wide
         ahead, aside = (ax, abs(ay)) if dx else (ay, abs(ax))
         ahead *= dx or dy
         if place != at and ahead > 0 and (best is None or ahead + 2 * aside < best[0]):
@@ -970,10 +975,11 @@ class MapModal(ModalScreen[str | None]):
         self.call_after_refresh(self._follow, center)
 
     def _keys(self) -> tuple[str, str]:
-        """The keys, in full and for a narrow window."""
+        """The few keys that matter (Tab, Shift+arrows and dragging are in the guide), in full
+        and for a narrow window."""
         go = self.can_go and any(p != self.c.here for p in self.c.names)
-        long = ["方向键/Tab 选地方", "回车 展开/收起", "G 填「我去…」" if go else "", "Shift+方向键/拖动 移动地图", "Esc 关闭"]
-        short = ["方向键 选", "回车 展开", "G 去" if go else "", "拖动 移动", "Esc 关闭"]
+        long = ["方向键 选地点", "回车 展开", "G 去这里" if go else "", "Esc 关闭"]
+        short = ["方向键 选", "回车 展开", "G 去" if go else "", "Esc 关闭"]
         return " · ".join(k for k in long if k), " · ".join(k for k in short if k)
 
     def _follow(self, center: bool = False) -> None:
@@ -999,7 +1005,8 @@ class MapModal(ModalScreen[str | None]):
     def action_cycle(self, step: int) -> None:
         if self.laid is None or not self.picked:
             return
-        order = sorted(self.laid.spots, key=lambda p: (self.laid.spots[p][1], self.laid.spots[p][0]))  # type: ignore[union-attr]
+        spots = self.laid.spots
+        order = sorted(spots, key=lambda p: (spots[p][1], spots[p][0]))  # reading order
         self.picked = order[(order.index(self.picked) + step) % len(order)]
         self._show()
 

@@ -190,6 +190,10 @@ def _location_md(m: Module, loc: Location) -> str:
     exits = [f"`{e}` {m.location(e).name}" for e in loc.exits if any(x.id == e for x in m.locations)]
     if exits:
         out += ["## 出口", "", "；".join(exits), ""]
+    outer = next((x for x in m.locations if x.id == loc.within), None)
+    inner = [f"`{x.id}` {x.name}" for x in m.locations if x.within == loc.id]
+    if outer or inner:  # what lies in what: the players' map draws it once they know both
+        out += ["## 位置", "", *([f"在 `{outer.id}` {outer.name} 里面"] if outer else []), *([f"里面有 {'；'.join(inner)}"] if inner else []), ""]
     npcs = m.npcs_at(loc.id)
     if npcs:
         out += ["## 在场 NPC", ""] + [f"- `{n.id}` {n.name}：{n.role}" for n in npcs] + [""]

@@ -343,7 +343,7 @@ def test_the_example_says_who_was_met_where_and_the_weather_over_it():
     square = mapview.about(m, st, c, "square").plain
     assert "里面 钟楼" in square and "线索 广场告示" in square and "天气 ≋ 雾" in square
     legend = mapview.legend(c, mapview.tree(c, mapview.default_open(c))).plain
-    assert "听说过，还不知道怎么去：○ 报社" in legend and "地点内部" in legend
+    assert "听说过，还不知道怎么去：○ 报社" in legend and "▸" not in legend  # the tower's square is open: nothing folded
 
 
 # -- a shared table --------------------------------------------------------------------------
