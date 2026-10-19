@@ -664,7 +664,7 @@ class GameScreen(Screen):
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
         self.ideas = Ideas(self)  # F5 (tui/suggest.py)
-        self._thumbs: dict[tuple[str | None, str], Text | None] = {}  # side-column faces; None: being drawn
+        self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -966,22 +966,23 @@ class GameScreen(Screen):
     def _thumb(self, inv: Investigator) -> Text | None:
         """The side column's face. A picture goes through chafa in a thread (a game started, or
         Ctrl+A, used to wait for it); the sheet shows without it until it is in."""
-        key = (inv.portrait, "ascii" if self.app.art_style == "ascii" else "photo")  # type: ignore[attr-defined]  # outlines are noise this small
+        style = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
+        key = (inv.portrait, self.m.pictures.get(inv.portrait or ""), style)
         if key in self._thumbs:
             return self._thumbs[key]
-        if not (inv.portrait in self.m.pictures and imagery.available()):
+        if not (key[1] and imagery.available()):
             return art_text(self.m, inv.portrait)  # hand-drawn, or nothing
         self._thumbs[key] = None
         self._draw_thumb(key)
         return None
 
     @work(thread=True, group="thumb", exit_on_error=False)  # a game left meanwhile: nobody to show it to
-    def _draw_thumb(self, key: tuple[str | None, str]) -> None:
-        face = art_text(self.m, key[0], PORTRAIT, key[1], face=True)
+    def _draw_thumb(self, key: tuple) -> None:
+        face = art_text(self.m, key[0], PORTRAIT, key[2], face=True)
         if self.is_attached:
             self.app.call_from_thread(self._thumb_drawn, key, face)
 
-    def _thumb_drawn(self, key: tuple[str | None, str], face: Text) -> None:
+    def _thumb_drawn(self, key: tuple, face: Text) -> None:
         self._thumbs[key] = face
         if self.is_attached:
             self._panels()
