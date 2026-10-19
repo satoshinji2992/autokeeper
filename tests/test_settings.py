@@ -106,3 +106,32 @@ async def test_model_choice_persists_and_narrative_preferences_stay_available(mo
     monkeypatch.delenv("AUTOKEEPER_MODE", raising=False)
     assert config.load().preset == "codex" and config.load().role("npc").model == "default"
     assert Prefs.load() == Prefs()
+
+
+async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_draw(monkeypatch):
+    from textual.widgets import Static
+
+    from autokeeper import imagegen
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 36)) as pilot:
+        await pilot.press("f9")
+        await pilot.pause()
+        switch = app.screen.query_one("#settings-imagegen", Switch)
+        assert switch.disabled and not switch.value
+        assert str(app.screen.query_one("#settings-imagegen-why", Static).render()) == "测试里不生图"  # one plain line
+        app.screen.query_one("#settings-save", Button).press()
+        await pilot.pause()
+    assert config.load().imagegen  # the choice stays for when Codex is back
+    monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
+    again = AutoKeeperApp(theme="amber")
+    async with again.run_test(size=(100, 36)) as pilot:
+        await pilot.press("f9")
+        await pilot.pause()
+        switch = again.screen.query_one("#settings-imagegen", Switch)
+        assert not switch.disabled and switch.value  # on by default where Codex can draw
+        assert not again.screen.query("#settings-imagegen-why")  # nothing to explain when it works
+        switch.value = False
+        again.screen.query_one("#settings-save", Button).press()
+        await pilot.pause()
+    assert not config.load().imagegen

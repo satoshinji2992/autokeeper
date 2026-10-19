@@ -1,8 +1,8 @@
 """CoC 7th edition bookkeeping on top of BCDice.
 
-BCDice rolls the dice and judges success levels; this module only applies the
-consequences: sanity loss and insanity, damage and wounds, luck, pushing,
-opposed rolls and skill improvement.
+Percentile checks are thrown with physical dice (physdice.py); BCDice rolls everything else
+and the tables. This module only applies the consequences: sanity loss and insanity, damage
+and wounds, luck, pushing, opposed rolls and skill improvement.
 """
 
 from __future__ import annotations
@@ -12,8 +12,9 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 
-from .bcdice import BCDice, Level, Roll, shared
+from .bcdice import BCDice, Level, Roll
 from .catalog import CHARACTERISTICS, NO_IMPROVEMENT, UNPUSHABLE, base_value, canonical
+from .physdice import PhysDice, physical
 
 DIFFICULTY_ZH = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
 DIFFICULTY_NAME = {v: k for k, v in DIFFICULTY_ZH.items()}
@@ -296,7 +297,7 @@ def max_of(expr: str) -> int:
 # -- the rules ------------------------------------------------------------------
 @dataclass
 class Rules:
-    dice: BCDice = field(default_factory=shared)
+    dice: BCDice | PhysDice = field(default_factory=physical)
 
     def check(
         self,

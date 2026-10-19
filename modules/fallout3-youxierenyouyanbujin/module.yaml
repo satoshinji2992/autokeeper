@@ -1239,6 +1239,72 @@ sketches:
   target: 一条主街贯穿镇中心，沿街是牛排馆、银行、警察局、教堂；镇西一栋带温室的老宅，镇东一条土路通向农场
   threshold: 0.5
   after: c_pearson_rumors
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 斯托威尔的傍晚
+    prompt: 1920 年代美国小镇的傍晚，一间带门廊的木板小屋，客厅里亮着暖黄的灯，几个老同学围着茶几坐着，咖啡壶冒着热气，窗外的街灯一盏盏亮起，安静得过了头
+    base: meeting_house
+  - id: sc_attack
+    kind: 突发
+    when: event:e_mccurdy_attack
+    title: 窗户被撞开了
+    prompt: 厨房的窗户被撞开，一个衣衫褴褛、浑身污秽的人影翻进屋里，两眼空洞，张着嘴像野兽一样低吼，玻璃碎片四处飞溅
+    base: meeting_house
+  - id: sc_shots
+    kind: 危机
+    when: event:e_stanley_shoots
+    title: 三声枪响
+    prompt: 木屋门口站着一个戴警徽的副警长，枪口还冒着烟，地板上扑倒着一个衣衫褴褛的人影，门外是夜色和路灯
+    base: meeting_house
+  - id: sc_pickup
+    kind: 突发
+    when: event:e_jensen_arrives
+    title: 收尸的皮卡
+    prompt: 夜里一辆破旧的皮卡颠簸着停在木屋门口，车灯刺眼，一个粗壮的养猪人拎着一张床单走向地上的尸体，看都不看旁人
+    base: meeting_house
+  - id: sc_church
+    kind: 重要场景
+    when: visit:church
+    title: 美以美会堂
+    prompt: 白色尖顶的木结构小教堂里，长椅排得整整齐齐，管风琴立在讲坛一侧，信众们坐得笔直、脸上挂着一模一样的微笑，光线亮得有些刺眼
+    base: church
+  - id: sc_mine
+    kind: 重要场景
+    when: visit:park_mine
+    title: 公园和金矿
+    prompt: 小镇公园的秋千和旋转木马旁边，裸石山脚下新搭了一排棚子，一群面无表情的人在灯下日夜挖掘，锤凿声不停
+    base: park_mine
+  - id: sc_telescope
+    kind: 最终boss
+    when: visit:greenhouse
+    title: 温室天文台
+    prompt: 夜里的玻璃温室，一架铜管望远镜斜斜指向夜空中昴星团的方向，头顶那片天出奇地晴，星光冷得发蓝，四周的植物在暗处一动不动
+    base: hart_house
+  - id: sc_dawn
+    kind: 危机
+    when: event:e_chaos_dawn
+    title: 混沌黎明
+    prompt: 日出时分的小镇大街，有人一头栽倒在地，像睡着了一样；另一些人发出不像人声的嚎叫，抄起手边的东西冲向邻居的家门
+    base: main_street
+  - id: sc_end_cut
+    kind: 结局
+    when: ending:e_cut_off
+    title: 黎明之后
+    prompt: 满目疮痍的小镇清晨，街上一片狼藉，窗户破碎，汽车翻倒，晨雾里有人扶着头慢慢站起来
+    base: main_street
+  - id: sc_end_left
+    kind: 结局
+    when: ending:e_abandoned
+    title: 抛下小镇
+    prompt: 夜里一辆老式汽车的后视镜，镜子里是灯火如常的小镇渐渐远去，镇西一栋房子后面的玻璃温室还亮着灯
+  - id: sc_end_viewed
+    kind: 结局
+    when: ending:e_viewed
+    title: 看见大智慧
+    prompt: 望远镜的接目镜里，昴星团附近的星空裂开一道深渊，一个庞大、冰冷、非人的意识的轮廓压过整片星空
 pregens:
 - id: betty
   name: 贝蒂·康西丁

@@ -51,11 +51,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from aiohttp import WSMsgType, web
+from aiohttp import WSCloseCode, WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import __version__, config, roster
+from .. import __version__, artkit, config, roster
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -70,6 +70,7 @@ SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
+PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 
@@ -79,6 +80,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     clues and handouts already found (the rest arrive with the events that reveal them)."""
     d = m.model_dump(mode="json")
     d["plugins"] = []
+    d["showcases"] = []  # big scenes (a final boss, the endings) spoil: each travels only when it comes (Hub._event)
     d["plugin_info"] = public_plugins(m, st)
     known = fog.bearings(m, st) | {st.location: m.location(st.location).name}
     visited = set(st.visited) | {st.location}
@@ -93,6 +95,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     for loc in d["locations"]:
         here = loc["id"]
         loc["keeper"] = ""
+        loc["looks"] = []  # what will become of a place is the keeper's to know
         loc["exits"] = [pid for pid in loc["exits"] if frozenset((here, pid)) in ways]
         loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if frozenset((here, pid)) in roads}
         loc["within"] = c.within.get(here)
@@ -104,7 +107,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
     d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     for n in d["npcs"]:
-        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="")
+        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
         if n["location"] not in visited:
             n["location"] = None
     for c in d["clues"]:
@@ -229,6 +232,8 @@ class Hub:
         self.rules: asyncio.Queue = asyncio.Queue()  # house rules asked for, drafted and installed between actions
         self.plays: asyncio.Queue = asyncio.Queue()  # answers to plugins' questions and /commands, done between actions
         self.game.plugins.away = lambda seat: self.sits.get(seat) is None  # an empty seat's questions take the default
+        self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
+        self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -264,6 +269,9 @@ class Hub:
                 self.names[cid] += "·房主"
             await self._send(cid, self._welcome(cid))
             await self._broadcast({"t": "seats", "seats": self._seats()})
+            if (theirs := msg.get("version")) and theirs != __version__:  # the host hears it; the friend's own lobby says so too
+                for host in self.hosts - {cid}:
+                    await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
         elif t == "start":
@@ -422,11 +430,12 @@ class Hub:
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
-            "picture_data": self._pictures(book, keys),
+            "picture_data": self._shared(self._pictures(book, keys)),
             "state": self._view(),
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
             "seats": self._seats(),
             "started": self.started.is_set(),
+            "room": self.room,
         }
 
     def _art_keys(self, book: dict) -> set[str]:
@@ -439,17 +448,33 @@ class Hub:
         return {k: media.pack(v, max_size=1600 if k in handouts else 512)
                 for k, v in self.m.pictures.items() if k in keys}
 
+    def _shared(self, pictures: dict[str, str]) -> dict[str, str]:
+        self.sent.update({k: self.m.pictures[k] for k, data in pictures.items() if data})
+        return pictures
+
     async def _share_book(self) -> None:
         book = self._book()
         keys = self._art_keys(book)
         await self._broadcast({"t": "module", "module": book,
                                "art": {k: v for k, v in self.m.art.items() if k in keys},
                                "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
+        # Pictures that came into view (a place first visited, a face first met, one the story
+        # redrew while nobody could see it) arrive the way new pictures do: as an art event.
+        handouts = {key for h in book["handouts"] for key in h.get("images", [])}  # these travel with their handout
+        for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
+            path = self.m.pictures.get(key)
+            if path and self.sent.get(key) != path and (data := media.pack(path)):
+                self.sent[key] = path
+                art = self.m.art.get(key, "")
+                await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
+                                                            "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
+                                                            "picture_data": data}})
 
     def _book(self) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
-        whole book once it has ended (the debrief lays it open anyway)."""
-        return self.m.model_dump(mode="json") if self.state.ending else table(self.m, self.state)
+        whole book once it has ended (the debrief lays it open anyway), but for big scenes
+        that never came."""
+        return self.m.model_dump(mode="json", exclude={"showcases"}) | {"showcases": []} if self.state.ending else table(self.m, self.state)
 
     async def _send(self, cid: str, msg: dict[str, Any]) -> None:
         ws = self.clients.get(cid)
@@ -489,10 +514,16 @@ class Hub:
             path = self.m.pictures.get(ev["key"])
             if path:
                 ev["picture_data"] = media.pack(path)
+                self.sent[ev["key"]] = path
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         elif ev.get("type") in ("plugin_effect", "plugin_show", "plugin_panel", "plugin_answered"):  # public; the id stays on the host
             ev = {k: v for k, v in ev.items() if k != "plugin"}
+        elif ev.get("type") == "showcase":  # its moment has come: the picture itself, never the host's path
+            data = media.pack(ev.get("picture", ""))
+            if not data:
+                return
+            ev = {"type": "showcase", "id": ev.get("id", ""), "kind": ev.get("kind", ""), "title": ev.get("title", ""), "picture_data": data}
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})
@@ -816,10 +847,14 @@ class Hub:
         app = web.Application()
         app.router.add_get("/ws", self.ws)
         app.router.add_get("/", self._status)
-        runner = web.AppRunner(app)
+        runner = web.AppRunner(app, shutdown_timeout=2.0)  # a closing room does not wait a minute for open sockets
         await runner.setup()
         site = web.TCPSite(runner, host, port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError:  # the port is taken
+            await runner.cleanup()
+            raise
         self.port = site._server.sockets[0].getsockname()[1] if site._server else port  # type: ignore[union-attr]
         key_file = room_key_file(self.port)
         key_file.parent.mkdir(parents=True, exist_ok=True)
@@ -830,6 +865,9 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            # Every screen hears the room close at once (their link pumps end with "closed").
+            await asyncio.gather(*(asyncio.wait_for(ws.close(code=WSCloseCode.GOING_AWAY, message=b"closed"), 2.0)
+                                   for ws in list(self.clients.values())), return_exceptions=True)
             await self.game.close()
             await self.cast.close()
             await runner.cleanup()

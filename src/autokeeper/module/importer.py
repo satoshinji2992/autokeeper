@@ -35,7 +35,7 @@ from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
-from .. import artkit, config, imagery, skills
+from .. import artkit, config, imagegen, imagery, skills
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
@@ -171,6 +171,12 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
   这些玩家都看得见，只放玩家能知道的内容；小游戏可玩可不玩，原文的关键线索照旧有别的来路。
   例：原文有三位数密码锁。commands 写 [{"name":"开锁","description":"拨保险箱的三位密码"}]，用 style 为 number 的 prompt 一位一位问，三位都对时给出原文那条线索（clue）。
 - 原文里如果有适合让玩家“画出来”的东西（符号、地图、人像），在 sketches 里写一两个。
+- 原文明确写到某个地点或人物之后会明显变样（被烧毁、被水淹、被洗劫、受伤、变异、死去），而且有剧情标记表示这件事发生了，
+  可以在那个地点或 NPC 的 looks 里登记：when 写 flag:标记，change 写画面上看得见的变化。全模组最多 6 处；昼夜不用登记（画面按时间自动调光）。
+- 在故事的重要节点写 5–15 个 showcases（大场景：整屏展示一张大图，每局每个只出现一次）：开场氛围（when: opening）、
+  突发事件和危机（event:事件id）、关键地点（visit:地点id）、怪物现身（event:事件id 或 creature:怪物id）、最终 boss、
+  每个结局（ending:结局id）。title 是此刻玩家看得见的短标题，不剧透；prompt 写画面。原模组有正好合适的插图就用 art 指向它，
+  想照某张原图重画就把它写进 base。
 
 ## 美术
 - 先读 source/images/index.json（如果存在）。原模组已有的地图、病历、信件、人物或场景插图优先用 use_image 保存，不用新画的图替代原图。
@@ -458,6 +464,7 @@ async def pipeline(
         )
         if photos:
             await find_photos(m, work, cfg, console)
+            await find_showcases(Module.load(work), cfg, console)  # with the photos just found as references
         from .. import knowledge
 
         if index and knowledge.available():
@@ -493,18 +500,45 @@ async def pipeline(
 
 async def find_photos(m: Module, work: Path, cfg: config.Config, console: Console) -> list[str]:
     """The scenes and faces as real photos (Wikimedia Commons, licensed), drawn in characters
-    like 《追书人》's; whatever finds nothing keeps its hand-drawn art. Offline (search = none)
-    or without chafa there is nothing to do; `autokeeper art fetch` does the same later."""
+    like 《追书人》's. Whatever finds nothing gets a picture Codex draws from its description
+    (imagegen.py, when codex is here), else keeps its hand-drawn art; then the changed states
+    the module describes (Location.looks, NPC.looks) are drawn from those pictures. Offline
+    (search = none) or without chafa there is nothing to do; `autokeeper art fetch` does the
+    same later."""
     wanted = imagery.targets(m)
     if not wanted or cfg.search == "none" or not imagery.available():
         return []
-    console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，找不到的保留手绘…")
+    fill = imagegen.filler(cfg, m, work / "art")
+    rest = "找不到的由 AI 画" if fill else "找不到的保留手绘"
+    console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，{rest}…")
     try:
-        done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print)
+        done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print, generate=fill)
     except Exception as exc:  # the module is done either way
         console.print(f"[yellow]照片没找成（{type(exc).__name__}），可以稍后用 autokeeper art fetch 补。[/]")
         return []
     console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/*.credit.json")
+    if fill and any(x.looks for x in [*m.locations, *m.npcs]):
+        console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
+        drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
+        console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张")
+    return done
+
+
+async def find_showcases(m: Module, cfg: config.Config, console: Console) -> list[str]:
+    """The big scenes' pictures (engine/showcase.py), one at a time, the opening first, kept
+    in saves/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
+    from ..engine.showcase import prepare_module
+
+    if not m.showcases or not imagery.available() or not (imagegen.enabled(cfg) or cfg.search != "none"):
+        return []
+    console.print(f"[bold]大场景[/] {len(m.showcases)} 个，" + (
+        "AI 一张一张画，每张大约一分钟…" if imagegen.enabled(cfg) else "不用 AI 画，只用模组里的图和找到的照片…"))
+    try:
+        done = await prepare_module(cfg, m, log=console.print)
+    except Exception:  # the module is done either way
+        console.print("[yellow]大场景的图没准备好，可以稍后用 autokeeper showcase 补。[/]")
+        return []
+    console.print(f"[bold green]大场景[/] 准备好 {len(done)}/{len(m.showcases)} 个")
     return done
 
 

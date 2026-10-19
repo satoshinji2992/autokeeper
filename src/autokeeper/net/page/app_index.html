@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<!-- AutoKeeper's page for textual-serve (net/web.py): the game's dark amber, a monospace font
+     that keeps Chinese in its cells, and a line on the keys a browser keeps for itself. Every
+     address is taken from the one the visitor typed, so a room reached over a virtual LAN
+     (Radmin VPN, ZeroTier) works as well as one on the Wi-Fi. -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ application.name or 'AutoKeeper' }}</title>
+    <link rel="stylesheet" href="/static/css/xterm.css" />
+    <style>
+      :root {
+        --bg: #0c0a06;
+        --surface: #15110a;
+        --panel: #211a0f;
+        --amber: #ffb000;
+        --amber-dim: #d98e04;
+        --fg: #f3d7a6;
+        --muted: #8a7a66;
+        --mono: "Sarasa Mono SC", "Noto Sans Mono CJK SC", "Microsoft YaHei Mono", monospace;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--mono);
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #terminal.textual-terminal {
+        flex: 1 1 0;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+      }
+      .xterm,
+      .xterm .xterm-viewport {
+        background-color: var(--bg) !important;
+      }
+      .note {
+        flex: none;
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        padding: 5px 12px;
+        background: var(--surface);
+        border-top: 1px solid var(--panel);
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .note code {
+        color: var(--amber);
+        font-family: inherit;
+      }
+      .note button {
+        margin-left: auto;
+        padding: 0 4px;
+        background: none;
+        border: 0;
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+      }
+      .note button:hover {
+        color: var(--amber);
+      }
+      body.-quiet .note {
+        display: none;
+      }
+
+      /* while the game starts, and after it is gone */
+      .cover {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+      }
+      .cover .box {
+        min-width: 280px;
+        max-width: calc(100vw - 64px);
+        padding: 28px 36px;
+        border: 1px solid var(--amber-dim);
+        background: var(--surface);
+        text-align: center;
+      }
+      .cover .name {
+        color: var(--amber);
+        font-size: 20px;
+        font-weight: bold;
+        letter-spacing: 0.08em;
+      }
+      .cover .sub {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .cover button {
+        margin-top: 18px;
+        padding: 8px 24px;
+        background: var(--amber);
+        border: 0;
+        color: var(--bg);
+        font: inherit;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .cover button:hover {
+        background: var(--fg);
+      }
+      body.-first-byte .starting {
+        display: none;
+      }
+      .ended {
+        display: none;
+      }
+      body.-closed .ended {
+        display: flex;
+      }
+      #start {
+        display: none;
+      }
+      #start.-delay {
+        display: inline-block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cover starting">
+      <div class="box">
+        <div class="name">{{ application.name or 'AutoKeeper' }}</div>
+        <div class="sub">正在打开……</div>
+        <button type="button" id="start" onclick="restart()">开始</button>
+      </div>
+    </div>
+    <div class="cover ended">
+      <div class="box">
+        <div class="name">连接断开了</div>
+        <div class="sub">游戏关了，或者网络断了</div>
+        <button type="button" onclick="restart()">重新连接</button>
+      </div>
+    </div>
+
+    <div
+      id="terminal"
+      class="textual-terminal"
+      data-session-websocket-url="{{ app_websocket_url }}"
+      data-font-size="{{ font_size }}"
+    ></div>
+    <div class="note">
+      <span>
+        F5 会刷新网页。输入 <code>/suggest</code> 出主意，<code>/sheet</code> 看人物卡，<code>/notes</code> 看线索本，
+        <code>/map</code> 看地图，<code>/help</code> 看帮助。底栏也能点
+      </span>
+      <button type="button" onclick="quiet()" title="收起">×</button>
+    </div>
+
+    <script>
+      let leaving = false;
+
+      function restart() {
+        leaving = true;
+        const url = new URL(window.location.href);
+        url.searchParams.delete("delay");
+        window.location.href = url.pathname + url.search;
+      }
+
+      function quiet() {
+        document.body.classList.add("-quiet");
+        try {
+          localStorage.setItem("autokeeper-note", "off");
+        } catch (e) {}
+        window.dispatchEvent(new Event("resize")); // the terminal takes the line back
+      }
+
+      try {
+        if (localStorage.getItem("autokeeper-note") === "off") document.body.classList.add("-quiet");
+      } catch (e) {}
+
+      (function () {
+        // The address the visitor typed, not the one the server guessed: a room reached over
+        // Radmin VPN or ZeroTier connects back the same way.
+        const terminal = document.getElementById("terminal");
+        terminal.dataset.sessionWebsocketUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+
+        // textual.js names its own font, which has no Chinese: run it with ours instead.
+        const fonts = getComputedStyle(document.documentElement).getPropertyValue("--mono").trim();
+        const started = () => {
+          if (document.readyState === "complete" && typeof window.onload === "function") window.onload(new Event("load"));
+        };
+        const run = (code) => {
+          const script = document.createElement("script");
+          script.text = code;
+          document.head.appendChild(script);
+          started();
+        };
+        const plain = () => {
+          const script = document.createElement("script");
+          script.src = "/static/js/textual.js";
+          script.onload = started;
+          document.head.appendChild(script);
+        };
+        fetch("/static/js/textual.js")
+          .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+          .then((code) => run(code.replace(/fontFamily:"'Roboto Mono'[^"]*"/, "fontFamily:" + JSON.stringify(fonts))))
+          .catch(plain);
+      })();
+
+      // The keys go to the game: once it is on screen, after a click beside it, and when the tab comes back.
+      const keys = () => document.querySelector("#terminal .xterm-helper-textarea")?.focus();
+      new MutationObserver((changes, watch) => {
+        if (document.body.classList.contains("-first-byte")) {
+          keys();
+          watch.disconnect();
+        }
+      }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      window.addEventListener("focus", keys);
+      document.addEventListener("mouseup", (event) => {
+        if (event.target.closest("#terminal") || event.target.closest("button") || String(window.getSelection())) return;
+        keys();
+      });
+
+      // Reloading or closing the tab leaves the seat: ask first while the game is on.
+      window.addEventListener("beforeunload", (event) => {
+        const body = document.body.classList;
+        if (leaving || !body.contains("-first-byte") || body.contains("-closed")) return;
+        event.preventDefault();
+        event.returnValue = "";
+      });
+    </script>
+  </body>
+</html>

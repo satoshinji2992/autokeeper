@@ -173,6 +173,7 @@ async def run(
         if record is not None:
             recorder = tapes.Recorder(record, meta={"improv": cfg.improv})
             dice = tapes.RecordingDice(dice, recorder)
+    cfg.imagegen = cfg.showcase = False  # no screen to show a picture on, and a replay calls nothing at all
     cast = Cast(cfg, m)
     out_dir = config.SAVES / "autoplay"
     out_dir.mkdir(parents=True, exist_ok=True)
