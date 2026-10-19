@@ -42,7 +42,7 @@ class Tip:
 
 
 TIPS: dict[str, Tip] = {
-    "start": Tip("轮到你了。在底部输入行动或对话，按回车发送。F1 查看玩法说明。", "play"),
+    "start": Tip("轮到你了。在底部输入行动或对话，按回车发送。F1 查看玩法说明，Esc 打开菜单。", "play"),
     "offer": Tip(
         "检定失败后，可以接受结果；符合条件时，也可花幸运或孤注一掷。孤注一掷再次失败会有更严重的后果。F1 查看规则。",
         "push",
@@ -62,7 +62,7 @@ TIPS: dict[str, Tip] = {
     f"{TUTORIAL}:outside": Tip("想出门时，直接说要去的地点；F3 可以查看目前已知的地方。", "play"),
 }
 OPENINGS = {
-    TUTORIAL: "轮到你了。可以向站务员问路、先买份早饭，或按信上的地址找托马斯。在底部输入行动，回车发送；F1 查看玩法说明。",
+    TUTORIAL: "轮到你了。可以向站务员问路、先买份早饭，或按信上的地址找托马斯。在底部输入行动，回车发送；F1 查看玩法说明，Esc 打开菜单。",
 }
 HOUSE = {"jinboer_jia", "shufang"}  # 《追书人》: the Kimballs' house and the uncle's study
 OUTSIDE_AFTER = 4  # turns spent in the house before the nudge out of the door

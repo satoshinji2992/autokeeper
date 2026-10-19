@@ -57,6 +57,7 @@ class Turn:
     push: dict | None = None
     earlier: CheckRecord | None = None  # a repeated attempt: this earlier check stands, nothing is rolled
     notes: list[str] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)  # a rule plugin's one line the keeper must weave in
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
 
@@ -271,13 +272,27 @@ class Game:
         ruling = await self.cast.arbiter(self.state, action, at=heading)
         if ruling.scope != "模组内":  # the module is silent here: the director fills the gap
             kind = "展开" if ruling.scope == "可即兴" else "后果"
-            waiting = len(self.backstage)
-            applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
-            if applied is not None:
-                ruling = self._steer(ruling, applied)
-            elif len(self.backstage) > waiting:
-                ruling = ruling.model_copy(update={"note": LATER})
+            if kind != "展开" or self._may_expand(action, heading):
+                waiting = len(self.backstage)
+                applied = await self._improvise(kind, action=action, ruling=ruling, at=heading or self.state.location)
+                if applied is not None:
+                    ruling = self._steer(ruling, applied)
+                elif len(self.backstage) > waiting:
+                    ruling = ruling.model_copy(update={"note": LATER})
         return self._no_reroll(action, ruling, heading or self.state.location)
+
+    def _may_expand(self, action: Action, heading: str | None) -> bool:
+        """The director opens a new line (展开) in one place at most once in EXPAND_ROUNDS rounds.
+        The arbiter finds plenty unwritten (a question to someone not there, a fence to climb),
+        and without a cap one room was rewritten turn after turn: 29 of 31 director calls in
+        an 80-turn game. Moving on is never held back, to a place the module has or one it never
+        wrote; stuck-pushes, consequences and the opening adaptation are not 展开 at all."""
+        st = self.state
+        if action.kind == "move" or heading:
+            return True
+        last = st.expanded.get(st.location)
+        acting = max(1, sum(1 for inv in st.investigators if inv.can_act))  # a round: each of them acts once
+        return last is None or st.turn - last >= EXPAND_ROUNDS * acting
 
     # -- no re-rolls ------------------------------------------------------------------
     def _no_reroll(self, action: Action, ruling: Ruling, at: str) -> Ruling:
@@ -416,6 +431,8 @@ class Game:
             return None
         await self.emit({"type": "status", "text": "守秘人在想…"})
         where = at or st.location
+        if kind == "展开":  # asked for, whatever comes of it (_may_expand)
+            st.expanded[where] = st.turn
         task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where))
         wait = self.director_wait if patience is None or self.director_wait is None else min(patience, self.director_wait)
         if wait is None:
@@ -478,7 +495,7 @@ class Game:
             return None
         await self._curtain()
         turn, self._late = self._late, Turn()
-        if not (turn.events or turn.clues or turn.notes or turn.arrived or turn.sanity):
+        if not (turn.events or turn.clues or turn.notes or turn.hints or turn.arrived or turn.sanity):
             return None
         turn.interlude = True
         await self._time(turn)
@@ -576,6 +593,7 @@ class Game:
         turn.clues += late.clues
         turn.sanity += late.sanity
         turn.notes += late.notes
+        turn.hints += late.hints
         turn.arrived, turn.first_visit = late.arrived, late.first_visit
         inv = st.investigator
         if action.kind == "meta" or ruling is None:
@@ -680,6 +698,7 @@ class Game:
         if passed:
             for call in ruling.plugin_calls:
                 await self.plugins.run("action", turn, **call.model_dump(mode="json"))
+        await self.plugins.settled(turn)  # the roll and clue hooks
         await self.plugins.run("turn", turn, action=action.model_dump(mode="json"))
         await self._time(turn)
         if action.kind == "daily":
@@ -730,6 +749,7 @@ class Game:
             await self._gain(pending["clues"], turn, None)
         else:
             await self._fail_forward(pending["clues"], turn, pushed=True)  # a pushed roll was the last chance: the clue comes, at a price
+        await self.plugins.settled(turn)
         won = [c for c in turn.clues if c in pending["clues"]]
         done = [f for f in pending.get("flags", []) if f in st.flags and f not in known]
         lines = self._led_to(won, done, passed, npc)
@@ -979,6 +999,7 @@ class Game:
         for ev in due:
             if parse_time(ev.when) <= st.minutes:
                 await self._fire(ev, turn)
+        await self.plugins.due(turn)  # rule plugins' timers
         await self.emit({"type": "time", "clock": st.clock, "phase": time_of_day(st.minutes)})
 
     async def _fire(self, ev: Event, turn: Turn) -> None:
@@ -1143,6 +1164,7 @@ class Game:
             if ev.read_aloud.strip():
                 out.append(f"眼前发生：{ev.read_aloud.strip()}")
         out += [f"备注：{n}" for n in turn.notes]
+        out += [f"规则提示（来自本局规则，这一轮的叙述要用一句话自然写到）：{h}" for h in turn.hints]
         if turn.ending:
             end = next(e for e in m.endings if e.id == turn.ending)
             out.append(f"【结局：{end.title}】{end.text.strip()}\n请用 150–250 字为这个结局收尾，不再留行动钩子。")
@@ -1257,6 +1279,7 @@ def _retold(old: str, nudge: str) -> str:
 
 
 BACKSTAGE_LIMIT = 2  # plans being written at once
+EXPAND_ROUNDS = 3  # rounds before the same place may 展开 again (Game._may_expand)
 # A turn at a screen does not wait for the director: measured, a plan takes 9 s and more
 # (DeepSeek) or 14 s (Opus), so any wait shorter than that only made turns slower. Plans
 # land in an interlude as soon as they are ready (Game.interlude).

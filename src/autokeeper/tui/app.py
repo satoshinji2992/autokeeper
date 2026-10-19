@@ -10,6 +10,7 @@ import random
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -47,8 +48,13 @@ from . import art, cover, tips
 from .debrief import DebriefModal
 from .guide import GuideScreen
 from .mapview import MapModal
+from .menu import MENU, Confirm, GameMenu
 from .pages import Page, PagesModal, background_view, mark, pages, progress_view, turn
+from .pages import panels as plugin_page
+from .plugin_ui import Plays, panel_view, tab_label
+from .plugins import plugin_commands
 from .retell import RetellModal
+from .saves import LoadScreen
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from .showcase import ShowcaseScreen
 from .speaker import Speaker
@@ -105,6 +111,7 @@ def write_save(state: GameState, module: Module) -> None:
     temporary.replace(target)
     idx = save_index()
     idx[state.slot] = {
+        "label": state.label,
         "module": module.id,
         "title": module.title,
         "party": "、".join(i.name for i in state.investigators),
@@ -385,7 +392,7 @@ class TitleScreen(Screen):
 class SetupScreen(Screen):
     BINDINGS = [Binding("escape", "back", "返回")]
 
-    def __init__(self, spectate: bool, module: Path | None = None):
+    def __init__(self, spectate: bool, module: Path | None = None, card: str | None = None):
         super().__init__()
         self.spectate = spectate  # AI players only; not `watch`, which is Textual's
         self.step = "module"
@@ -394,6 +401,7 @@ class SetupScreen(Screen):
         self.cards: list[Investigator] = []  # public-figure cards kept from before (roster.py)
         self.paths = modules()
         self.preselected = module  # just imported: straight on to its investigators
+        self.card = card  # from 角色卡: this investigator comes up highlighted
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
@@ -454,6 +462,8 @@ class SetupScreen(Screen):
         opts += [Option(f"{c.name}  {c.occupation}（我的卡）", id=c.id) for c in self.cards]
         opts += [Option("＋ 创建调查员", id="card:new"), Option("＋ 导入已有的卡", id="card:import")]
         self._set(f"《{self.module.title}》· 选择你的调查员", opts, "Enter 或空格选择 · Esc 返回")
+        if self.card in [o.id for o in opts]:
+            self.query_one("#choices", OptionList).highlighted = [o.id for o in opts].index(self.card)
 
     def _investigator(self, inv_id: str) -> Investigator | None:
         assert self.module
@@ -587,40 +597,6 @@ def _investigator_card(m: Module, inv: Investigator, style: str = "photo", *, ph
     return t
 
 
-class LoadScreen(Screen):
-    BINDINGS = [Binding("escape", "app.pop_screen", "返回")]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="setup"):
-            yield Static(Text("继续调查", style="bold"), id="setup-title")
-            yield OptionList(id="choices", classes="saves")
-            yield Static("Enter 或空格读档 · Esc 返回", id="setup-hint")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        ol = self.query_one("#choices", OptionList)
-        idx = save_index()
-        for slot, meta in sorted(idx.items(), key=lambda kv: kv[1].get("updated", ""), reverse=True):
-            label = f"《{meta['title']}》 {meta['party']} · {meta['clock']} · {meta['location']}"
-            if meta.get("ending"):
-                label += " · 已结局"
-            ol.add_option(Option(f"{label}   [{meta['updated']}]", id=slot))
-        if not idx:
-            ol.add_option(Option("还没有存档", disabled=True))
-        else:
-            ol.highlighted = 0  # Enter loads the newest save straight away
-        ol.focus()
-
-    @on(OptionList.OptionSelected, "#choices")
-    def load(self, event: OptionList.OptionSelected) -> None:
-        slot = event.option.id or ""
-        meta = save_index()[slot]
-        path = Path(meta["path"])
-        module = load_module(path if path.exists() else _module_dir(meta["module"]))  # the module may have moved
-        state = GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
-        self.app.switch_screen(GameScreen(module, state, resume=True, spectate=not state.human))
-
-
 # -- the game -------------------------------------------------------------------------------
 # Everything the game screen can do, for the Ctrl+P menu: (title, key, what it does, action).
 # The footer shows the first few; the rest are a search away.
@@ -656,7 +632,8 @@ PAGE_ROWS = 8  # rows the right column's pages need to be read there; with fewer
 
 class GameScreen(Screen):
     BINDINGS = [
-        # F1–F5 on the footer, the rest in order of use; the weather switch is in the Ctrl+P menu
+        # Esc and F1–F5 on the footer, the rest in order of use; everything common is in the Esc menu
+        Binding("escape", "menu", "菜单", key_display="Esc"),
         Binding("f1", "help", "帮助"),
         Binding("f2", "notes", "线索本"),
         Binding("f3", "map", "地图"),
@@ -674,7 +651,6 @@ class GameScreen(Screen):
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
         Binding("ctrl+g", "turn_page", "翻页", show=False),  # 经过 / 进展 / 背景 in the right column
         Binding("ctrl+y", "recount", "整理进展", show=False),
-        Binding("escape", "focus_input", "输入", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
 
@@ -693,10 +669,11 @@ class GameScreen(Screen):
         self.engine_label = ""
         self.busy = False
         self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
-        self._leave_when_ready = False
+        self._leave_when_ready: Callable[[], None] | None = None  # 讲完再走: where to go once the turn is over
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
         self.ideas = Ideas(self)  # F5 (tui/suggest.py)
+        self.plays = Plays(self)  # rule plugins' shows and prompts (tui/plugin_ui.py)
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
 
     def compose(self) -> ComposeResult:
@@ -708,7 +685,7 @@ class GameScreen(Screen):
                     yield Speaker()
                 yield StoryLog(id="story")
                 yield Static(id="status")
-                yield Input(placeholder="输入行动或对话 · Ctrl+P 查看操作", id="command",
+                yield Input(placeholder="输入行动或对话 · Esc 菜单", id="command",
                             suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
@@ -776,6 +753,7 @@ class GameScreen(Screen):
         if self.focused is None and not self.spectate:
             for box in self.query("#command").results(Input):
                 box.focus()
+        self.call_later(self.plays.ready)  # a plugin's question that waited behind another window
 
     # A click on the story or the stage takes the focus off the command box. Whatever is typed
     # or pasted then still goes into the box, instead of waiting for Esc to bring it back.
@@ -819,11 +797,13 @@ class GameScreen(Screen):
             self.status_text = ""
             if not self.spectate:
                 self.query_one(Input).focus()
-            if self._leave_when_ready:
-                self._leave_when_ready = False
-                self.app.call_later(self._leave)
+            if self._leave_when_ready is not None:
+                go, self._leave_when_ready = self._leave_when_ready, None
+                self.app.call_later(go)
             elif self.queued is not None:
                 self.set_timer(0.05, self._send_queued)
+            else:
+                self.plays.ready()  # a plugin's question waited for the turn to end
 
     def _send_queued(self) -> None:
         """The keeper is done: the action typed ahead goes in. A turn that broke off goes on
@@ -1052,6 +1032,9 @@ class GameScreen(Screen):
         """进展 and 背景 as the state has them now (经过 grows with the story)."""
         self.query_one("#progress", Page).show(progress_view(self.state))
         self.query_one("#background", Page).show(background_view(self.m, self.state, self._viewer()))
+        shown = self.state.plugin_panels
+        plugin_page(self.query_one("#pages", TabbedContent), self.query_one("#plugin-panels", Page),
+                    panel_view(shown, self.app.current_theme) if shown else None, tab_label(shown) if shown else "")
 
     def _roomy(self) -> bool:
         """The right column is up and its pages have room to be read."""
@@ -1072,7 +1055,9 @@ class GameScreen(Screen):
         if name == "progress":  # read over the story: nothing new waits on the tab
             mark(tabs, False)
         history = [w.content for w in self.query_one(HistoryPanel).query(Static) if not w.has_class("history-head")]
-        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name))
+        shown = self.state.plugin_panels
+        extra = (tab_label(shown), panel_view(shown, self.app.current_theme)) if shown else None
+        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name, extra))
 
     @on(TabbedContent.TabActivated, "#pages")
     def _paged(self, event: TabbedContent.TabActivated) -> None:
@@ -1226,6 +1211,10 @@ class GameScreen(Screen):
             self.afterword, self.writing = ev["text"], False
             if ev.get("error"):
                 self.app.notify(ev["error"], severity="error", timeout=6)
+        elif t == "plugin_panel":
+            self._pages()
+        elif t in ("plugin_show", "plugin_prompt", "plugin_closed", "plugin_answered"):
+            self.plays.handle(ev)
         tips.after(self, ev)  # the first time something happens: one line on how it works
 
     def _npc_line(self, ev: dict, kind: str) -> None:
@@ -1290,25 +1279,91 @@ class GameScreen(Screen):
         except Exception:  # warming is an optimisation; failures surface on first real use
             pass
 
-    def action_focus_input(self) -> None:
-        if self.state.ending and not self.writing:  # finish saving a last dice command before leaving
-            if self.busy:
-                self._leave_when_ready = True
-            else:
-                self._leave()
-        elif not self.spectate:
-            self.query_one(Input).focus()
+    # -- the Esc menu --------------------------------------------------------------------------
+    def menu_items(self) -> list[tuple[str, str]]:
+        """What the Esc menu offers on this screen (a LAN table leaves some out, tui/net.py);
+        规则插件 only when this game has any."""
+        return [item for item in MENU if item[0] != "plugins" or self.m.plugins]
+
+    def action_menu(self) -> None:
+        if self.plays.skip():  # Esc first ends a plugin's show
+            return
+        first = "title" if self.state.ending else "continue"  # after the end, Esc and Enter go back to the title
+        self.app.push_screen(GameMenu(self.menu_items(), first), self._menu_chosen)
+
+    def _menu_chosen(self, choice: str | None) -> None:
+        if choice in (None, "continue"):
+            if not self.spectate:
+                self.query_one("#command", Input).focus()
+            return
+        run = {"save": self.action_save, "load": self.action_load, "settings": self.action_settings,
+               "prefs": self.action_prefs, "engine": self.action_engine,
+               "guide": lambda: self.app.push_screen(GuideScreen("play")),
+               "keys": lambda: self.app.push_screen(GuideScreen("keys")),
+               "title": self.action_leave_game, "quit": self.action_quit_game}  # fmt: skip
+        run[choice]() if choice in run else self.run_action(choice)  # a screen's own entry (tui/net.py)
+
+    def action_settings(self) -> None:
+        from .settings import SettingsModal
+
+        style = self.app.art_style  # type: ignore[attr-defined]
+        self.app.push_screen(SettingsModal(), lambda _: self._settings_saved(style))
+
+    def _settings_saved(self, style: str) -> None:
+        """What the settings change on this screen shows at once: the pictures, the weather."""
+        if self.app.art_style != style:  # type: ignore[attr-defined]
+            self._scene(self.state.location)
+            self._panels()
+            self.query_one(Speaker).refit()
+        scene = self.query_one(SceneArt)
+        if scene.effects != config.load().animations:
+            scene.toggle_effects()
+
+    def action_load(self) -> None:
+        if self._turn_running():
+            return
+        if not self.spectate:
+            write_save(self.state, self.m)
+        self.app.push_screen(LoadScreen(playing=self), self.load_other)
+
+    def load_other(self, chosen: tuple[Module, GameState] | None) -> None:
+        """Another save, picked from 读档: this game is saved and makes way for it."""
+        if chosen is None:
+            return
+        if not self.spectate:
+            write_save(self.state, self.m)
+        module, state = chosen
+        self.app.switch_screen(GameScreen(module, state, resume=True, spectate=not state.human))
 
     def _leave(self) -> None:
         self.app.pop_screen() if len(self.app.screen_stack) > 1 else self.app.exit()
 
     def action_leave_game(self) -> None:
-        if self.busy:
-            self.app.notify("等这一回合结束再走", severity="warning")
+        self._away(self._leave)
+
+    def action_quit_game(self) -> None:
+        self._away(self.app.exit)
+
+    def _away(self, go: Callable[[], None]) -> None:
+        """Save, then go. While the keeper is still telling, ask first: wait for the end of it,
+        or go now (the turn is saved as far as it got, and loading goes on with it)."""
+
+        def now() -> None:
+            if self.game is not None and not self.spectate:  # at a LAN table the host keeps the save
+                write_save(self.state, self.m)
+            go()
+
+        if not self.busy:
+            now()
             return
-        if not self.spectate:
-            self.action_save()
-        self._leave()
+
+        def answer(choice: str | None) -> None:
+            if choice == "wait":
+                self._leave_when_ready = now
+            elif choice == "now":
+                now()
+
+        self.app.push_screen(Confirm("守秘人还没讲完", [("wait", "讲完再走"), ("now", "现在就走"), ("no", "取消")]), answer)
 
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
@@ -1341,7 +1396,7 @@ class GameScreen(Screen):
             self._slash(text)
             return
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
-            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，F7 回顾这一局，Esc 回到标题。")
+            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，F7 回顾这一局，Esc 菜单里可以回到标题。")
             return
         self.play(text)
 
@@ -1367,6 +1422,8 @@ class GameScreen(Screen):
             self.app.theme = names[(names.index(self.app.theme) + 1) % len(names)] if self.app.theme in names else names[0]
         elif cmd == "/quit":
             self._leave()
+        elif any(name == cmd[1:] for name, _ in plugin_commands(self.m, self.state)):
+            self.plugin_command(cmd[1:], " ".join(args))
         else:
             self.app.notify(f"不认识的命令：{cmd}", severity="warning")
 
@@ -1481,14 +1538,14 @@ class GameScreen(Screen):
         st = self.state
         party = party_graph(self.cast, st)
         self._busy(True)
-        while not st.ending and st.turn < 60:
+        while not st.ending and st.turn < 60 and self._leave_when_ready is None:
             alive = [inv.id for inv in st.investigators if inv.can_act]
             if not alive:
                 break
             self._status("AI 调查员在商量…")
             result = await party.ainvoke({"situation": situation(self.m, st), "ids": alive, "proposals": []})
             for inv_id, text in result["proposals"]:
-                if st.ending:
+                if st.ending or self._leave_when_ready is not None:  # 讲完再走: after this one
                     break
                 st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == inv_id)
                 self._panels()
@@ -1507,7 +1564,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "F7 回顾这一局 · Esc 回到标题", style="dim")
+        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "F7 回顾这一局 · Esc 菜单", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------
@@ -1540,7 +1597,45 @@ class GameScreen(Screen):
     def _suggester(self):
         from .plugins import action_hints
 
-        return command_suggester(self._viewer(), action_hints(self.m, self.state))
+        slash = [f"/{name}" for name, _ in plugin_commands(self.m, self.state)]
+        return command_suggester(self._viewer(), [*slash, *action_hints(self.m, self.state)])
+
+    # -- rule plugins: their questions and slash commands (tui/plugin_ui.py) -------------------
+    def prompt_is_mine(self, who: str) -> bool:
+        """A plugin's question for this screen: the investigator a player plays here."""
+        return not self.spectate and who in self.state.human
+
+    def plugin_answer(self, pid: str, value, by: str) -> None:
+        self._plugin("answer", pid, value, by)
+
+    def plugin_command(self, name: str, text: str) -> None:
+        if self._turn_running():
+            return
+        self._plugin("command", name, text)
+
+    @work(group="plugin")
+    async def _plugin(self, kind: str, *args) -> None:
+        """An answer, a slash command or a timeout, outside the turn: what it brings is told
+        with the next narration, and the rule's own lines show at once."""
+        assert self.game
+        self._busy(True)
+        try:
+            self.game.emit = self.handle
+            plugins = self.game.plugins
+            if kind == "answer":
+                pid, value, by = args
+                why = await plugins.answer(pid, value, by=by)
+            elif kind == "command":
+                why = await plugins.command(*args)
+            else:
+                why = ""
+                await plugins.expire()
+            if why:
+                self.app.notify(why, severity="warning", timeout=4)
+            write_save(self.state, self.m)
+            self._panels()
+        finally:
+            self._busy(False)
 
     def _sync_suggester(self) -> None:
         for box in self.query("#command").results(Input):
@@ -1604,9 +1699,12 @@ class GameScreen(Screen):
         return await self.cast.suggest(self.state, inv.id, self._situation())
 
     def _backstage(self) -> None:
-        """The director finished a plan while nobody was mid-turn: play it now."""
+        """The director finished a plan while nobody was mid-turn: play it now. A plugin's
+        question nobody answered in time takes its default."""
         if self.game and not self.busy and self.game.ready():
             self._interlude()
+        elif self.game and not self.busy and any(p["deadline"] <= time.time() for p in self.game.plugins.open_prompts()):
+            self._plugin("expire")
 
     @work(exclusive=True, group="turn")
     async def _interlude(self) -> None:
@@ -1661,7 +1759,7 @@ class GameScreen(Screen):
 
     def action_save(self) -> None:
         write_save(self.state, self.m)
-        self.app.notify(f"已存档：{self.state.slot}")
+        self.app.notify("已存档")
 
     # -- telling it again, and after the end -------------------------------------------------
     def action_retell(self, nudge: str = "") -> None:

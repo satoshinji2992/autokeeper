@@ -198,6 +198,7 @@ class Module(BaseModel):
     # Redacted public summaries of the active rule plugins, set only for a LAN table's copy
     # (net/hub.py). Excluded from the module's own files; a host's loaded module leaves it empty.
     plugin_info: list[dict] = Field(default_factory=list, exclude=True)
+    directed: list[str] = Field(default_factory=list, exclude=True)  # plugins the director wrote this game (module/improv.py)
     hook: str = Field(description="开场钩子（玩家可见）")
     truth: str = Field(description="真相（只有守秘人知道）")
     keeper_notes: str = ""

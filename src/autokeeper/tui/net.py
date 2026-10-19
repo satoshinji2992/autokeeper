@@ -137,6 +137,14 @@ class NetGameScreen(GameScreen):
 
     SHOW_ENGINE = True  # "轮到谁" is on the top bar
 
+    def menu_items(self) -> list[tuple[str, str]]:
+        """The Esc menu at a shared table: the host saves and tells; only the host changes models."""
+        off = {"save", "load", "prefs"} | (set() if self.link.host else {"engine"})
+        items = [item for item in super().menu_items() if item[0] not in off]
+        if getattr(self.app, "room", None) is not None:  # the room was opened in this app
+            items.insert(len(items) - 2, ("close_room", "关闭房间"))
+        return items
+
     def __init__(self, module: Module, state: GameState, link: Link, seat: str | None, backlog: list[LogEntry]):
         super().__init__(module, state, resume=True, spectate=False)
         self.link, self.seat, self.backlog = link, seat, backlog
@@ -347,6 +355,20 @@ class NetGameScreen(GameScreen):
             self.run_worker(partial(self.link.send, {"t": "act", "text": "/retry"}))
         else:
             self.app.notify("等房主允许接续这一回合后再试。")
+
+    # A rule plugin's question comes to this screen only when it is for your seat (Hub._event);
+    # the answer and a plugin's /command go to the host, where the plugin runs.
+    def prompt_is_mine(self, who: str) -> bool:
+        return bool(self.seat) and who == self.seat
+
+    def plugin_answer(self, pid: str, value, by: str) -> None:
+        self.run_worker(partial(self.link.send, {"t": "answer", "prompt": pid, "value": value, "skip": by == "skip"}))
+
+    def plugin_command(self, name: str, text: str) -> None:
+        if not self.seat:
+            self.app.notify("你在观战，没有自己的调查员")
+            return
+        self.run_worker(partial(self.link.send, {"t": "command", "name": name, "text": text}))
 
     def action_suggest(self) -> None:
         if self.seat:

@@ -525,6 +525,43 @@ async def test_a_stuck_party_gets_a_lead(module, fake):
     assert game.state.progress_at == 12 and any("没署名的信" in n for n in turn.notes)
 
 
+async def _asked_on(game, cast, plays):
+    """The turns on which the director was asked, playing (turn, action) in order."""
+    on = []
+    for turn, action in plays:
+        game.state.turn = turn
+        before = len(cast.asked)
+        await game.rule(action)
+        on += [turn] * (len(cast.asked) > before)
+    return on
+
+
+async def test_one_place_opens_a_new_line_at_most_once_in_three_rounds(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
+    phone = Action(kind="other", summary="周衡掏出手机给警察打电话")
+    script = {"x": (ask, Ruling(needs_roll=False, scope="可即兴")), "p": (phone, Ruling(needs_roll=False, scope="出格"))}
+    game, cast, _ = improvised(module, fake, script, [])  # the director has nothing to add: asking still counts
+    assert await _asked_on(game, cast, [(t, ask) for t in range(1, 8)]) == [1, 4, 7]
+    assert game.state.expanded == {"square": 7}
+    assert await _asked_on(game, cast, [(8, phone)]) == [8]  # a consequence is not a new line
+    game.state.investigators.append(game.state.investigator.model_copy(update={"id": "li", "name": "李雁"}, deep=True))
+    assert await _asked_on(game, cast, [(t, ask) for t in range(9, 15)]) == [13]  # two of them: three rounds are six turns
+
+
+async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
+    ask = Action(kind="investigate", summary="周衡向路人打听镇上关于钟楼的传闻")
+    away = Action(kind="move", summary="周衡去找传闻里说的那家茶馆")  # a place the module never wrote
+    there = Action(kind="investigate", summary="周衡走进钟楼，打听守钟人的徒弟", destination="tower")
+    script = {"x": (ask, Ruling(needs_roll=False, scope="可即兴")), "a": (away, Ruling(needs_roll=False, scope="可即兴")),
+              "t": (there, Ruling(needs_roll=False, scope="可即兴"))}  # fmt: skip
+    game, cast, _ = improvised(module, fake, script, [])
+    assert await _asked_on(game, cast, [(1, ask), (2, away), (3, there), (4, ask)]) == [1, 2, 3]
+    assert game.state.expanded == {"square": 2, "tower": 3}
+    game.state.turn = game.state.progress_at + 12  # and nothing found for a long while
+    await game._nudge(Turn())
+    assert cast.asked[-1][0] == "推进"
+
+
 async def test_a_failed_roll_neither_sits_on_a_core_clue_nor_hands_it_out(module, fake):
     look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
     ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)

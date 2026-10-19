@@ -339,6 +339,42 @@ async def test_npc_leak_is_rolled_back_out_of_memory():
     assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
 
 
+async def test_an_npc_falling_into_its_habits_is_asked_once_more_on_claude(monkeypatch):
+    """Past the first meeting, a line that opens with an action again or repeats a habit is asked
+    for once more and never stored; a clean line, or a first meeting, goes through as it is."""
+    monkeypatch.setitem(hm.MODELS, "claude", Scripted)
+    m = Module.load(EXAMPLE)
+    warden = m.npc("warden")  # 驼背，手上全是油污；说话慢，爱说“钟有钟的规矩”
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    cast = Cast(config.Config(roles={r: Role("claude", "scripted-model", None) for r in config.DEFAULT_ROLES}), m)
+
+    async def says(*replies: str) -> str:
+        SCRIPT.extend({"text": r} for r in replies)
+        line = await cast.npc(state, warden.id, "钟楼几点关门？")
+        state.add("npc", line, who=warden.name)  # as Game.talk does
+        return line
+
+    assert await says("（在围裙上擦了擦油污）钟有钟的规矩，天黑就关。") == "（在围裙上擦了擦油污）钟有钟的规矩，天黑就关。"
+    asked = len(SEEN)
+    assert await says("（又擦了擦手上的油污）钟有钟的规矩。", "天一黑就落锁，你赶早来。") == "天一黑就落锁，你赶早来。"
+    fix = SEEN[-1]["messages"][-1]["content"]
+    assert len(SEEN) == asked + 2 and "开头又先写了动作" in fix and "又用了刚用过的“油污”" in fix
+    stored = json.dumps(state.transcripts, ensure_ascii=False)
+    assert "又擦了擦" not in stored and "系统提醒" not in stored and "天一黑就落锁" in stored
+    asked = len(SEEN)
+    assert await says("你明早再来。") == "你明早再来。" and len(SEEN) == asked + 1  # nothing to fix: one call
+    secret = next(c for c in m.clues if c.npc == warden.id and c.id in warden.gates)
+    assert await says("（摆了摆手）明早再来。", secret.text) == "（摆了摆手）明早再来。"  # asked again, it leaked: the first stands
+    stored = json.dumps(state.transcripts, ensure_ascii=False)
+    assert secret.text not in stored and "摆了摆手" in stored
+    elsewhere = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    other = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    SCRIPT.extend([{"text": "（擦了擦油污）钟有钟的规矩。"}, {"text": "（又擦了擦油污）钟有钟的规矩。"}])
+    for _ in range(2):
+        elsewhere.add("npc", await other.npc(elsewhere, warden.id, "钟楼几点关门？"), who=warden.name)
+    assert not SCRIPT  # not on Claude: no second ask
+
+
 async def test_upgrading_an_old_save_removes_hidden_keeper_context():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})

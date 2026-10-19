@@ -16,6 +16,7 @@ TIMEOUT = 3.0
 MAX_REQUESTS = 40
 MAX_OUTPUT = 64000
 Request = Callable[[dict], Awaitable[Any]]
+NEEDS = {"schedule": "timer"}  # effect kinds that come with another kind's capability
 
 
 class PluginError(Exception):
@@ -58,8 +59,10 @@ async def execute(plugin: Plugin, event: dict, context: dict, request: Request, 
                         if len(json.dumps(result.state, allow_nan=False)) > 32000:
                             raise PluginError("插件状态超过 32000 字符")
                         for effect in result.effects:
-                            if effect.kind not in plugin.capabilities:
-                                raise PluginError(f"未声明能力：{effect.kind}")
+                            if NEEDS.get(effect.kind, effect.kind) not in plugin.capabilities:
+                                raise PluginError(f"未声明能力：{NEEDS.get(effect.kind, effect.kind)}")
+                        if result.panels is not None and "panel" not in plugin.capabilities:
+                            raise PluginError("未声明能力：panel")
                         await process.wait()
                         return result
                     if "dice" not in plugin.capabilities or message.get("request") not in ("roll", "check"):
@@ -92,10 +95,25 @@ def contains(actual: Any, expected: Any) -> bool:
     return actual == expected
 
 
+def _like(actual: Any, expected: Any) -> bool:
+    """contains(), with lists compared item by item: a panel's rows need not repeat every default."""
+    if isinstance(expected, list):
+        return isinstance(actual, list) and len(actual) == len(expected) and all(map(_like, actual, expected))
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(key in actual and _like(actual[key], value) for key, value in expected.items())
+    return actual == expected
+
+
+# Hooks a plugin must show in its own tests when it listens to them: the answer loop, timers,
+# commands, rolls and clues each come with an event of their own.
+COVERED = ("answer", "timer", "command", "roll", "clue")
+
+
 async def verify(plugin: Plugin) -> list[str]:
     if problems := check(plugin):
         return problems
-    problems = []
+    problems = [f"tests 没有覆盖 {hook} 事件：加一项 event 为 {{\"hook\": \"{hook}\", …}} 的测试"
+                for hook in COVERED if hook in plugin.hooks and not any(case.event.get("hook") == hook for case in plugin.tests)]
     for case in plugin.tests:
         dice, checks = deque(case.dice), deque(case.checks)
 
@@ -114,7 +132,8 @@ async def verify(plugin: Plugin) -> list[str]:
             return {"passed": passed, "value": 1 if passed else 100, "target": 50, "text": "测试检定"}
 
         try:
-            context = {"turn": 1, "minutes": 0, "location": "", "flags": [], "clues": [], "investigators": [], **case.context}
+            context = {"turn": 1, "minutes": 0, "location": "", "flags": [], "clues": [], "investigators": [],
+                       "acting": "", "npcs": [], "avoid": [], **case.context}
             context["state"] = json.loads(json.dumps(case.state))
             output = await execute(plugin, case.event, context, request)
             if not contains(output.state, case.expected_state):
@@ -122,6 +141,10 @@ async def verify(plugin: Plugin) -> list[str]:
             expected = [Effect.model_validate(effect) for effect in case.expected_effects]
             if output.effects != expected:
                 problems.append(f"测试 {case.name}：effects 与 expected_effects 不符；实际 {output.model_dump()['effects']}；预期 {case.expected_effects}")
+            if case.expected_panels is not None:
+                panels = [p.model_dump(mode="json") for p in output.panels or []]
+                if not _like(panels, case.expected_panels):
+                    problems.append(f"测试 {case.name}：panels 与 expected_panels 不符；实际 {panels}")
             if dice or checks:
                 problems.append(f"测试 {case.name}：预设骰值/检定没有全部使用")
         except (PluginError, ValueError) as exc:

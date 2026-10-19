@@ -2,6 +2,10 @@ Screen {
     background: $background;
     color: $foreground;
 }
+/* Ctrl+P still opens the command palette; the footers point to the Esc menu instead */
+Footer FooterKey.-command-palette {
+    display: none;
+}
 
 /* ---------- title ---------- */
 #title-screen {
@@ -39,9 +43,7 @@ Screen {
 }
 #choices.saves {
     width: 1fr;
-    max-width: 110;
-    height: auto;
-    max-height: 1fr;
+    max-width: 60;
 }
 #card-left {
     width: 38;
@@ -59,6 +61,64 @@ Screen {
 #setup-hint {
     color: $text-muted;
     margin-top: 1;
+}
+#setup-hint {
+    link-color: $text-muted;
+    link-style: none;
+    link-color-hover: $primary;
+    link-background-hover: transparent;
+    link-style-hover: bold;
+}
+
+/* ---------- the Esc menu and its dialogs (menu.py) ---------- */
+#game-menu {
+    width: 32;
+}
+#game-menu OptionList {
+    height: auto;
+    max-height: 14;
+    border: none;
+    margin-bottom: 1;
+}
+#confirm {
+    width: 62;
+    max-width: 96%;
+}
+#ask-text {
+    width: 64;
+    max-width: 96%;
+}
+#ask-text Input {
+    width: 100%;
+}
+
+/* ---------- 编辑 a kept card (cardedit.py) ---------- */
+#card-edit {
+    width: 80;
+    max-width: 96%;
+}
+#card-edit .edit-row {
+    height: 1;
+    margin-bottom: 1;
+}
+#card-edit .edit-tall {
+    height: 3;
+}
+#card-edit .edit-label {
+    width: 14;
+    color: $text-muted;
+}
+#card-edit Input, #card-edit TextArea {
+    width: 1fr;
+    background: $panel;
+}
+#card-edit .edit-note {
+    margin-bottom: 1;
+}
+#card-edit .edit-head {
+    color: $primary;
+    text-style: bold;
+    margin: 1 0;
 }
 
 /* ---------- game ---------- */
