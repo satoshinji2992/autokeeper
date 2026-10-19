@@ -376,3 +376,11 @@ def test_an_npc_learning_through_an_event_keeps_it_in_memory():
     assert "preacher" in w.rec.facts["f_key"].known_by
     assert any("钥匙" in m.text for m in w.agent("preacher").memory)
     assert knowledge.sees(w.rec.facts["f_key"], "preacher") and not knowledge.sees(w.rec.facts["f_key"], PLAYERS)
+
+
+def test_what_an_npc_learns_reaches_its_sheet_even_when_it_knew_nothing_before():
+    w = staged()
+    w.m.npc("preacher").knows.clear()
+    w.rec.facts.pop("npc:preacher:knows:0")
+    w.apply(O.AddFact(fact="f_rumour", text="报社的档案室晚上不锁门", known_by=["preacher"]))
+    assert w.m.npc("preacher").knows == ["报社的档案室晚上不锁门"]

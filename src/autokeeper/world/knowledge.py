@@ -173,14 +173,17 @@ def project(m: Module, rec: WorldRecord) -> None:
             prefix = f"npc:{n.id}:{field}:"
             base = sorted((f for f in facts.values() if f.id.startswith(prefix) and f.origin != "game"),
                           key=lambda f: int(f.id.rsplit(":", 1)[1]))  # fmt: skip
-            if not base and not getattr(n, field):
-                continue
-            kept = [f.text for f in base if not f.retracted] if base else list(getattr(n, field))
+            kept = [f.text for f in base if not f.retracted]  # every module NPC is seeded before it is projected
             if field == "knows":  # what it learned in this game, the newest few
                 learned = [f.text for f in facts.values() if f.origin == "game" and n.id in f.known_by and not f.retracted
                            and f.kind not in ("secret", "lie", "goal") and f.true]  # fmt: skip
-                kept += learned[-PROJECTED_KNOWS:]
+                extra = learned[-PROJECTED_KNOWS:]
             elif field == "secrets":
-                kept += [f.text for f in facts.values() if f.origin == "game" and f.kind == "secret" and n.id in f.known_by
+                extra = [f.text for f in facts.values() if f.origin == "game" and f.kind == "secret" and n.id in f.known_by
                          and n.id in f.about and not f.retracted]  # fmt: skip
+            else:
+                extra = []
+            if not base and not extra:
+                continue
+            kept += extra
             setattr(n, field, list(dict.fromkeys(kept)))

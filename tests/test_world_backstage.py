@@ -254,3 +254,13 @@ async def test_the_cast_brain_asks_one_stateless_session_per_group_and_reads_its
     assert scene.summary == "两人碰了个头" and scene.decisions[0].ops[0].rel == "戒备"
     schema = json.dumps(Scene.model_json_schema(), ensure_ascii=False)
     assert '"tag"' not in schema and '"key"' not in schema  # the adapters' bookkeeping is not offered to the model
+
+
+def test_npcs_the_module_marks_important_are_enlisted_once():
+    from autokeeper.world.agents import marked
+
+    w = fresh()
+    w.m.npc("warden").important = True
+    assert [r.ok for r in w.apply_all(marked(w))] == [True]
+    assert list(w.rec.agents) == ["warden"] and w.agent("warden").goals == ["不让人上齿轮间"]
+    assert marked(w) == []

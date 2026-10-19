@@ -20,9 +20,11 @@ from pydantic import BaseModel, Field
 from ..engine import world as legacy_world
 from . import knowledge
 from .ops import (
+    MAX_AGENTS,
     AdvancePlan,
     Break,
     Condition,
+    Enlist,
     Fulfil,
     Learn,
     MakePromise,
@@ -124,6 +126,11 @@ class CastBrain:
             return Scene.model_validate(reply.data) if isinstance(reply.data, dict) else None
         except ValueError:
             return None
+
+
+def marked(w: World) -> list[Enlist]:
+    """Enlist ops for the NPCs the module marks important and the record does not have yet."""
+    return [Enlist(id=f"enlist:{n.id}", npc=n.id, actor="director") for n in w.m.npcs if n.important and n.id not in w.rec.agents][:MAX_AGENTS]
 
 
 # -- what an NPC can reach ---------------------------------------------------------------------

@@ -77,6 +77,7 @@ class NPC(BaseModel):
     stats: dict[str, int] = Field(default_factory=dict)
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
     looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
+    important: bool = Field(False, description="重要 NPC：有自己的目标和打算，调查员不在时也会行动；每个模组最多标 6 个，普通角色不标")
 
 
 class Location(BaseModel):
