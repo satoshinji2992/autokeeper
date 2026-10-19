@@ -533,6 +533,21 @@ class Cast:
             if guard.leaks(text, protected, public=public):  # still: keep only the safe sentences
                 s.forget()
                 text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
+        elif (self.cfg.role("npc").backend == "claude" and state.npc(npc_id).lines
+              and (slips := guard.slips(text, [e.text for e in state.log if e.kind == "npc" and e.who == npc.name], npc))):
+            # Past the first meeting, a line that opens with an action again or repeats a habit
+            # from the two before is asked for once more, the same way and just as unstored.
+            # Blind, Claude's NPCs read better for it 13 to 0; DeepSeek's not clearly (docs/eval.md).
+            first, kept = dialogue, s.transcript[-2:]
+            s.forget()
+            fix = f"\n\n（系统提醒：上一次回答{'，'.join(slips)}。这次直接开口说话，换个说法。）"
+            reply = await self._send(key, s, state, message, extra=mood + fix)
+            dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
+            text = dialogue.text.strip()
+            if not text or guard.leaks(text, protected, public=public):  # the first answer was clean: it stands
+                s.forget()
+                s.transcript += kept
+                dialogue, text = first, first.text.strip()
         world.apply(self.module, state, dialogue.changes, source=npc_id, spoken=text)
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True

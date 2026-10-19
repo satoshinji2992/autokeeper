@@ -120,18 +120,19 @@ async def judge(a: str, b: str, *, npc: bool = False, model: str = "claude-opus-
     prompt = _npc_prompt if npc else _keeper_prompt
     schema = Verdict.model_json_schema()
 
-    async def ask(p: dict, lead: str) -> str:
+    async def ask(p: dict, lead: str) -> tuple[str, str]:
         reply = await pool.complete(system, [{"role": "user", "content": prompt(p, lead)}], schema=schema)
-        said = Verdict.model_validate(reply.data).better if isinstance(reply.data, dict) else "相当"
-        return {"甲": lead, "乙": "b" if lead == "a" else "a"}.get(said, "tie")
+        said = Verdict.model_validate(reply.data) if isinstance(reply.data, dict) else Verdict(better="相当")
+        return {"甲": lead, "乙": "b" if lead == "a" else "a"}.get(said.better, "tie"), said.why
 
     try:
         both = await asyncio.gather(*(asyncio.gather(ask(p, "a"), ask(p, "b")) for p in pairs))
     finally:
         await pool.close()
     verdicts = []
-    for p, (x, y) in zip(pairs, both, strict=True):
-        verdicts.append({**{k: v for k, v in p.items() if k in ("run", "beat", "npc")}, "orders": [x, y], "verdict": x if x == y else "tie"})
+    for p, ((x, why_x), (y, why_y)) in zip(pairs, both, strict=True):
+        verdicts.append({**{k: v for k, v in p.items() if k in ("run", "beat", "npc")},
+                         "orders": [x, y], "verdict": x if x == y else "tie", "why": [why_x, why_y]})  # fmt: skip
     wins = sum(v["verdict"] == "b" for v in verdicts)
     losses = sum(v["verdict"] == "a" for v in verdicts)
     summary = {

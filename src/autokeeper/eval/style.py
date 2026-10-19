@@ -46,10 +46,11 @@ from langgraph.types import Command
 
 from .. import config, skills
 from ..agents.cast import Action, Cast, Ruling
+from ..agents.guard import Habits, habits, opens_with_action, repeats
 from ..engine import graph as turn_graph
 from ..engine.game import Game, Turn
 from ..module.compiler import compile_module, skill_name
-from ..module.schema import NPC, Module
+from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules.bcdice import Roll
 from ..rules.coc import Rules
@@ -101,7 +102,6 @@ HUMAN_CV, HUMAN_SHORT = 0.75, 0.11
 RARE = 500  # jieba's dictionary count below which a noun is a prop, not a staple: 樟脑 70, 抽屉 560, 味道 2808
 _HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _SENTENCE = re.compile(r"[^。！？!?…\n]+[。！？!?…]*")
-_STRIP = re.compile(r"[\s，。、；：？！“”‘’「」『』（）()《》〈〉…—\-,.;:?!\"'`]+")
 
 
 def han(text: str) -> int:
@@ -169,49 +169,6 @@ def count(narrations: Iterable[str], *, examples: Iterable[str] = (), own: str =
 
 
 # -- NPC lines ---------------------------------------------------------------------------------
-_BEAT = re.compile(r"[（(]([^（）()]{1,60})[）)]")
-_LITTLE = str.maketrans("", "", "着了过的地得一又再把将被往向在朝他她你我它们您这那个")
-
-
-def opens_with_action(line: str) -> bool:
-    return line.lstrip().startswith(("（", "("))
-
-
-def pairs(text: str) -> set[str]:
-    """Two-character runs within each clause, little words left out: 又搓了搓手 -> 搓搓, 搓手."""
-    out: set[str] = set()
-    for clause in _STRIP.split(text):
-        c = clause.translate(_LITTLE)
-        out |= {c[i : i + 2] for i in range(len(c) - 1)}
-    return out
-
-
-Habits = tuple[frozenset[str], tuple[str, ...]]
-
-
-def habits(npc: NPC) -> Habits:
-    """What the module has an NPC keep doing and saying: the two-character runs of its look and
-    voice (搓手, 铁铲, 藤篮), and its catchphrases, the quoted words."""
-    told = f"{npc.look}\n{npc.voice}"
-    phrases = tuple(p for p in re.findall(r"[“「]([^”」]{2,16})[”」]", told) if han(p) >= 2)
-    return frozenset(pairs(re.sub(r"[“「][^”」]*[”」]", "", told))), phrases
-
-
-def repeats(line: str, before: Iterable[str], habit: Habits = (frozenset(), ())) -> list[str]:
-    """The NPC's habits a line repeats from the lines before it: one of its actions done again (a
-    run of its look or voice in this line's bracketed actions and in one of theirs: 搓着手, 又搓了
-    搓手), or a catchphrase said again."""
-    before = list(before)
-    runs, phrases = habit
-
-    def acts(texts: list[str]) -> set[str]:
-        return {p for t in texts for b in _BEAT.findall(t) for p in pairs(b)}
-
-    flat = [_STRIP.sub("", t) for t in before]
-    said = [p for p in phrases if (q := _STRIP.sub("", p)) in _STRIP.sub("", line) and any(q in t for t in flat)]
-    return sorted(acts([line]) & acts(before) & runs) + said
-
-
 def voice(said: dict[str, list[str]], habit: dict[str, Habits] | None = None) -> dict[str, Any]:
     """NPC lines by speaker, in order: the share that open with an action, overall and from each
     NPC's second line on, and the share of those later lines that repeat one of the NPC's habits
