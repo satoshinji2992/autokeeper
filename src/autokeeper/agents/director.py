@@ -150,7 +150,13 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - id 用英文小写加下划线，不和已有的重复。引用的地点、NPC、线索、标记、结论、结局，要么已经存在，要么在这次方案里新建；用到的新标记要写进 flags。
 - 新地点通过 exits 和已有地点相连。调查员这一轮要去某个地点（新建的或已有的），go 填那个地点。
 - give 只能放这次新建的、这一轮能拿到的线索，线索要在调查员所在的地点（填了 go 就是 go 的地点）。
-- 写短：reason 不超过 60 字，read_aloud 不超过 150 字，note 不超过 40 字，比如“奥马利的电报到了，顺势引出他”。"""
+- 写短：reason 不超过 60 字，read_aloud 不超过 150 字，note 不超过 40 字，比如“奥马利的电报到了，顺势引出他”。
+
+插件（面板、演出、小游戏）：
+- 场面需要一个机制、一个小游戏、一段演出或一个进度条时，比如仪式倒数、调查板、追逐、谜题、降神会，主动考虑在 plugins 写一个插件，别只写一段 read_aloud。插件能在右栏放面板，在场景上放几秒演出，给玩家出选择、填空、排序或棋盘小游戏，答案回到插件里接着算。
+- 面板、演出和题目玩家都看得见：只放已经发生、可以公开的东西，不泄露真相、秘密和没找到的线索。小游戏可玩可不玩，不卡主线，不凭空送关键线索。
+- 每局最多写 6 个插件；已有的插件合用就升级它（提高 version）。
+- 例子：调查员要在阁楼守夜等仪式开始。写一个插件，start 时放面板 {"key":"ritual","title":"仪式倒数","rows":[{"kind":"bar","text":"烛火","value":6,"max":6,"color":"warning"}]}，每个 turn 减一格，到 0 时返回一段 {"kind":"show","shape":"stage","frames":[...]}。"""
 
 
 def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: str = "", at: str = "") -> str:
@@ -185,6 +191,8 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
         f"【到目前为止】{st.memory or '刚开始'}",
         f"【最近发生的事】\n{recent or '无'}",
         f"【之前的即兴】\n{before}",
+        "【本局的规则插件】" + ("；".join(f"{x.id} v{x.version}「{x.name}」" for x in m.extensions.values()) or "无")
+        + f"（导演已写 {len(m.directed)}/6 个）",
     ]
     if action:
         lines.append(f"【调查员的行动】{action}")
