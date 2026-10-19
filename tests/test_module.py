@@ -108,7 +108,8 @@ def test_a_draft_is_filed_into_the_package_layout(tmp_path):
 
 
 def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
-    """Against the single-file modules of 0.0.1 (commit 9589c4d), where git history is here."""
+    """Against the single-file modules of 0.0.1 (commit 9589c4d), where git history is here; the
+    important NPCs and the looks were added by hand after the split."""
     for folder in sorted(p.parent for p in paths.MODULES.glob("*/module.yaml")):
         rel = folder.relative_to(paths.ROOT).as_posix()
         old = subprocess.run(["git", "show", f"9589c4d:{rel}/module.yaml"], cwd=paths.ROOT, capture_output=True, text=True, encoding="utf-8")
@@ -118,6 +119,10 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
         (tmp_path / folder.name / "module.yaml").write_text(old.stdout, encoding="utf-8")
         shutil.copytree(folder / "plugins", tmp_path / folder.name / "plugins")
         then, now = Module.load(tmp_path / folder.name), Module.load(folder)
+        for old, new in zip([*then.npcs, *then.locations], [*now.npcs, *now.locations], strict=True):  # marked by hand since
+            if hasattr(old, "important"):
+                old.important = new.important
+            old.looks = new.looks
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 

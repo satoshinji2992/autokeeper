@@ -6,6 +6,7 @@
 - 大场景：开场、突发、危机、关键地点、怪物、最终 boss 和结局时整屏放一张大图，标题压在底部，叙述照常在后面进行，任意键、点击或 8 秒后收起，掷骰时让路。模组里写 `showcases`（导入时由导入 Agent 写，自带三本模组手写了 11–14 个），导演即兴每局最多加三个。图先用模组原图，有 Codex 就照参考图或描述生成，计入每个模组 100 张；后台一张一张提前准备，到点没好就跳过。`autokeeper showcase <模组>` 提前准备，设置里可以单独关。
 - 文件位置：游戏写的东西从 `saves/` 搬到 `data/`，分成存档（`games/`）、自己的调查员（`cards/`）、可以删的缓存（`cache/`）和记录（`logs/`）；评测和自动跑团的输出放到 `dev/output/`。第一次启动时，本地模型、知识库、大场景图和调查员自动从 `saves/` 挪过来，旧存档不再读取。
 - 模组目录：`module.yaml` 拆成 `module.yaml`、`places.yaml`、`people.yaml`、`clues.yaml`、`story.yaml`；图按用途放进 `art/places/`、`art/people/`、`art/items/`、`art/ascii/`，来源和授权合成一个 `art/credits.yaml`，不再有每张图一个 `.credit.json` 和重复的 `CREDITS.md`。渲染用的预处理副本（`.prep.png`）移到 `data/cache/pictures/`，用到时生成。只有一个 `module.yaml` 的小模组照样能读。导入的原文和笔记放在 `modules/local/<id>/source/`，要导入的文件可以放进 `modules/inbox/`。三本自带模组已转换，内容不变。
+- 自带模组标出重要 NPC（《追书人》托马斯、道格拉斯；《冬雪之下》安特医生、卡洛琳、“埃里”；《有些人油盐不进》哈特教授、斯坦利副警长、菲茨杰拉德牧师、弗雷迪·詹森），并加了两处变样图：《追书人》陵墓被打开、《有些人油盐不进》混沌黎明后的大街。
 - 模组的 Skill 包过期就重新编译：以前只在没有 SKILL.md 时才编译，改了 module.yaml、插件或编译器后用的还是旧包。
 
 ## 0.0.1（2026-10-18）

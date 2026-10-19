@@ -52,6 +52,9 @@ locations:
   travel_minutes:
     jensen_farm: 20
     hart_house: 15
+  looks:
+    - when: flag:chaos_dawn
+      change: 大街上一片狼藉：橱窗破碎，门板被砸开，路上散落着翻倒的杂物
 - id: ferguson_house
   name: 弗格森家
   art: ferguson_house

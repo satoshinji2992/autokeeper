@@ -2,6 +2,7 @@ npcs:
 - id: hart
   name: 梅尔文·哈特教授
   role: 业余天文家，望远镜的制造者（有福者，2 月 14 日）
+  important: true
   look: 58 岁，慈眉善目、风度翩翩，穿一身胳膊肘磨薄的旧西装
   personality: 热情，真心相信自己在分享宇宙的奥妙
   voice: 说话面带微笑，手势丰富夸张，爱说“您一定得亲眼看看”
@@ -40,6 +41,7 @@ npcs:
 - id: stanley
   name: 斯坦利·亚历山大
   role: 副警长，镇上治安的实际掌控者（有福者，2 月 17 日）
+  important: true
   look: 29 岁，穿警服的彪形糙汉
   personality: 喜欢别人服从，冷静而危险
   voice: 说话时总皱眉，听完一句话要想很久才回答
@@ -93,6 +95,7 @@ npcs:
 - id: jensen
   name: 弗雷迪·詹森
   role: 农民、匪首，替有福者干脏活（崩溃者，2 月 20 日）
+  important: true
   look: 32 岁，精瘦、长相凶狠的养猪人，开一辆皮卡
   personality: 目中无人，想让调查员怕他；对想要的东西不择手段
   voice: 粗声粗气，爱盯着别人的车、枪和威士忌说“这玩意儿不错”
@@ -186,6 +189,7 @@ npcs:
 - id: fitzgerald
   name: 菲茨杰拉德牧师
   role: 美以美会牧师，哈特教授的朋友（有福者，2 月 16 日）
+  important: true
   look: 德高望重的老牧师，目光炯炯
   personality: 智慧而虔诚，如今把奴役崩溃者当作上帝的旨意
   voice: 引经据典，爱讲撒种的比喻：“有落在土浅石头地上的”

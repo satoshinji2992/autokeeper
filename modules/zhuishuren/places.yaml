@@ -86,6 +86,9 @@ locations:
       否则他会在里面找到一条徒“手”挖掘、通向地底的隧道。下去转“探索隧道网”；不下去则当晚道格拉斯会出来进入金博尔家。
     features: [石门, 门前的足迹, 陵墓内部, 隧道口]
     exits: [mudi, suidao]
+    looks:
+      - when: flag:tomb_opened
+        change: 陵墓的石门被推开了，门缝里的泥掉了一地，门后是一片漆黑
   - id: suidao
     name: 食尸鬼隧道网
     within: mudi
