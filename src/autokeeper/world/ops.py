@@ -44,10 +44,11 @@ class Base(BaseModel):
     model_config = ConfigDict(extra="forbid")
     undoable: ClassVar[bool] = True
 
-    id: str = Field("", description="同一件事重试时用同一个 id，留空则按内容生成")
-    actor: str = Field(ENGINE, description="谁做的：NPC id、调查员 id，或 director / keeper / engine")
+    # Filled in by whoever lands it (the scheduler, the desk, the game), so a model is not asked for them.
+    id: SkipJsonSchema[str] = Field("", description="同一件事重试时用同一个 id，留空则按内容生成")
+    actor: SkipJsonSchema[str] = Field(ENGINE, description="谁做的：NPC id、调查员 id，或 director / keeper / engine")
     reason: str = Field("", description="为什么，玩家看不到")
-    visibility: Visibility = Field("auto", description="auto：调查员在场就公开；public 公开；private 暗中进行")
+    visibility: Visibility = Field("auto", description="auto：调查员在场就公开；public：当地可见，调查员不在场仍不向玩家展示；private 暗中进行")
 
     def check(self, w: World) -> list[str]:
         return []
@@ -86,14 +87,57 @@ class Move(Base):
     def settle(self, w: World, oid: str):
         e = w.rec.entities[self.entity]
         src = e.at
+        if self.actor != ENGINE:  # choosing another journey ends the earlier agreement
+            e.following, e.follow_to = "", ""
         seeing = [] if self.visibility == "private" else [*w.present(src), *w.present(self.to)]  # who saw it go and arrive
         e.at = self.to
         w.touch(e)
         vis = self.visibility
         if vis == "auto":
             vis = "public" if w.st.location in (src, self.to) else "private"
-        return w.emit("move", f"{e.name}从{w.name(src)}去了{w.name(self.to)}", actor=self.actor if self.actor not in STAFF else e.id,
-                      participants=[e.id], place=self.to, visibility=vis, witnesses=seeing, trace=self.trace, op=oid), None  # fmt: skip
+        actor = self.actor if self.actor not in STAFF else e.id
+        place = self.to
+        text = f"{e.name}从{w.name(src)}去了{w.name(self.to)}"
+        if vis != "private" and w.st.location == src:
+            place, text = src, f"{e.name}离开了{w.name(src)}"
+        elif vis != "private" and w.st.location == self.to:
+            text = f"{e.name}来到{w.name(self.to)}"
+        moved = w.emit("move", text, actor=actor, participants=[e.id], place=place,
+                       visibility=vis, witnesses=seeing, op=oid)  # fmt: skip
+        if self.trace and src:  # what it left behind stays where it was, for whoever comes there next
+            w.emit("trace", self.trace, actor=actor, participants=[e.id], place=src, visibility="private", witnesses=[],
+                   trace=self.trace, op=oid)  # fmt: skip
+        return moved, None
+
+
+class Follow(Base):
+    kind: Literal["follow"] = "follow"
+    npc: str = Field(description="同意同行的 NPC id，只能替自己同意")
+    leader: str = Field("", description="同行的调查员 id；结束同行时留空")
+    destination: str = Field("", description="同意同行的目的地 id；结束同行时留空")
+
+    def check(self, w: World) -> list[str]:
+        e = _npc(w, self.npc)
+        if e is None:
+            return [f"{self.npc} 不是 NPC"]
+        if self.actor not in (*STAFF, self.npc):
+            return ["不能替其他 NPC 同意同行"]
+        if not self.leader and not self.destination:
+            return []
+        if self.leader not in {i.id for i in w.st.investigators}:
+            return ["同行者不是调查员"]
+        if e.at != w.st.location or e.status in ("死亡", "失踪"):
+            return ["NPC 不在调查员身边，不能开始同行"]
+        dest = w.rec.entities.get(self.destination)
+        return [] if dest and dest.kind == "location" else ["同行目的地不存在"]
+
+    def settle(self, w: World, oid: str):
+        e = w.rec.entities[self.npc]
+        e.following, e.follow_to = self.leader, self.destination
+        w.touch(e)
+        text = (f"{e.name}同意与{w.name(self.leader)}同行至{w.name(self.destination)}"
+                if self.leader else f"{e.name}结束了同行")
+        return w.emit("follow", text, actor=self.npc, place=e.at, visibility=self.visibility, op=oid), None
 
 
 class Relate(Base):
@@ -104,7 +148,7 @@ class Relate(Base):
     value: int | None = Field(None, ge=-100, le=100, description="直接设成多少，-100..100")
     delta: int | None = Field(None, ge=-100, le=100, description="增减多少")
     note: str = Field("", description="一句话：因为什么")
-    known_by: list[str] | None = Field(None, description="谁知道这层关系；默认双方")
+    known_by: list[str] | None = Field(None, description="谁知道这层关系；默认只有持有看法的人，公开表态时才列入对方")
     key: SkipJsonSchema[str] = Field("", exclude=True)  # its GameState.world key and NPC (adapters.py)
     tag: SkipJsonSchema[str] = Field("", exclude=True)
 
@@ -129,10 +173,11 @@ class Relate(Base):
         r.value = max(-100, min(100, self.value if self.value is not None else old + (self.delta or 0)))
         r.note = self.note or r.note
         people = [x for x in (self.a, self.b) if _npc(w, x)]
-        r.known_by = list(dict.fromkeys([*r.known_by, *(self.known_by if self.known_by is not None else people)]))
+        informed = self.known_by if self.known_by is not None else [self.a]
+        r.known_by = list(dict.fromkeys([*r.known_by, *informed]))
         text = f"{w.name(self.a)}对{w.name(self.b)}的{self.rel}：{old}→{r.value}" + (f"（{self.note}）" if self.note else "")
-        e = w.emit("relate", text, actor=self.actor, participants=[self.a, self.b], place=w.place(self.a),
-                   visibility=self.visibility, op=oid)  # fmt: skip
+        e = w.emit("relate", text, actor=self.actor, participants=informed, place=w.place(self.a),
+                   visibility="private" if self.visibility == "auto" else self.visibility, op=oid)  # fmt: skip
         if e.visibility == "public" and PLAYERS not in r.known_by:
             r.known_by.append(PLAYERS)
         w.legacy(self.key, "relationship", self.note or text, self.tag or next(iter(people), ""), self.actor)
@@ -156,29 +201,113 @@ class Transfer(Base):
             return [f"{self.item} 现在不在 {self.giver} 手里"]
         if not _who(w, self.to, players=False):
             return [f"{self.to} 不存在"]
+        if (item := w.rec.entities.get(self.item)) is not None and item.quantity <= 0:
+            return [f"物件 {self.item} 已耗尽，不能转交"]
         return [f"{self.item} 已经在 {self.to} 手里"] if before == self.to else []
 
     def settle(self, w: World, oid: str):
         st, m = w.st, w.m
         before = legacy_world.owner(m, st, self.item)
         item = next((x for x in m.items if x.id == self.item), None)
-        name = item.name if item else self.item
+        ent = w.rec.entities.get(self.item)
+        name = ent.name if ent is not None else item.name if item else self.item
         for inv in st.investigators:  # the same bookkeeping as engine/world.apply
             if inv.id == before and name in inv.inventory:
                 inv.inventory.remove(name)
             if inv.id == self.to and name not in inv.inventory:
                 inv.inventory.append(name)
         st.item_owners[self.item] = self.to
-        ent = w.rec.entities.get(self.item)
-        if ent is None:
+        if ent is None and item is not None and item.important:
             ent = w.rec.entities[self.item] = Entity(id=self.item, kind="item", name=name, origin="game", changed=w.rec.seq)
-        else:
+        elif ent is not None:
             w.touch(ent)
-        ent.at = self.to
+        if ent is not None:
+            ent.at, ent.equipment = self.to, "carried"
+            destination = w.rec.entities.get(self.to)
+            ent.hidden = self.visibility == "private" and destination is not None and destination.kind == "location"
         text = self.text or f"{name}从{w.name(before)}到了{w.name(self.to)}手里"
         w.legacy(self.key, "transfer", text, self.tag or next((x for x in (before, self.to) if _npc(w, x)), ""), self.actor)
-        return w.emit("transfer", text, actor=self.actor, participants=[before, self.to, self.item], place=w.place(before),
-                      visibility=self.visibility, op=oid), None  # fmt: skip
+        event = w.emit("transfer", text, actor=self.actor, participants=[before, self.to, self.item], place=w.place(before),
+                       visibility=self.visibility, op=oid)
+        if ent is not None:
+            ent.observed_by = list(dict.fromkeys([before, self.to, *event.witnesses,
+                                                  *([PLAYERS] if event.visibility == "public" else [])]))
+        return event, None
+
+
+class Equip(Base):
+    """Important equipment stays backstage until a witnessed action explicitly reveals it."""
+
+    kind: Literal["equip"] = "equip"
+    item: str = Field(description="已登记的重要物品 id，不登记普通生活杂物")
+    equipment: Literal["carried", "worn", "held", "concealed"] | None = Field(None, description="携带、穿戴、手持或藏匿")
+    quantity: int | None = Field(None, ge=0, description="重要物品余量；NPC只能减少自己已有的数量")
+    status: str | None = Field(None, max_length=100, description="物件的实际状况，不凭空增加能力")
+    reveal: bool = Field(False, description="明确发现、搜身或主动出示时才公开，不因NPC在场就揭示装备")
+    evidence: str = Field("", max_length=200, description="公开时必须写实际可见的发现或出示经过")
+
+    def _item(self, w: World) -> Entity | None:
+        if existing := w.rec.entities.get(self.item):
+            return existing
+        holder = w.st.item_owners.get(self.item) or next(
+            (inv.id for inv in w.st.investigators if self.item in inv.inventory), "")
+        if holder and _who(w, holder, players=False):
+            # Explicit promotion adds metadata for an actual carried object, never a
+            # new possession. Using its original name preserves old inventory keys.
+            return Entity(id=self.item, kind="item", name=self.item, origin="game", at=holder)
+        return None
+
+    def check(self, w: World) -> list[str]:
+        item = self._item(w)
+        if item is None or item.kind != "item" or not item.important:
+            return [f"重要物品 {self.item} 未登记"]
+        if self.equipment is None and self.quantity is None and self.status is None and not self.reveal:
+            return ["装备操作必须改变携带方式、数量、状况，或明确公开"]
+        if self.actor not in STAFF and item.at != self.actor:
+            return ["只能整理自己实际持有的装备"]
+        if self.actor not in STAFF and self.quantity is not None and self.quantity > item.quantity:
+            return ["不能凭空增加装备数量"]
+        if self.reveal and (not self.evidence.strip() or w.place(item.at) != w.st.location):
+            return ["公开装备需要当前场景中实际发生的发现或出示记录"]
+        holder = w.rec.entities.get(item.at)
+        if self.equipment in {"held", "worn"} and (holder is None or holder.kind not in {"npc", "investigator"}):
+            return ["手持或穿戴的物品必须实际由人物持有"]
+        if self.equipment in {"held", "worn"} and (self.quantity if self.quantity is not None else item.quantity) <= 0:
+            return ["耗尽的物品不能作为可用装备"]
+        return []
+
+    def settle(self, w: World, oid: str):
+        item = w.rec.entities.get(self.item)
+        if item is None:
+            item = self._item(w)
+            assert item is not None  # check verified the original inventory or ownership record
+            w.rec.entities[self.item] = item
+            w.st.item_owners.setdefault(self.item, item.at)
+        changed = self.equipment is not None or self.quantity is not None or self.status is not None
+        if self.equipment is not None:
+            item.equipment = self.equipment
+            item.hidden = self.equipment == "concealed"
+        if self.quantity is not None:
+            item.quantity = self.quantity
+            if not item.quantity:
+                item.equipment = "carried"
+            for inv in w.st.investigators:
+                if inv.id == item.at:
+                    if not item.quantity and item.name in inv.inventory:
+                        inv.inventory.remove(item.name)
+                    elif item.quantity and item.name not in inv.inventory:
+                        inv.inventory.append(item.name)
+        if self.status is not None:
+            item.status = self.status
+        if changed:
+            item.observed_by = [item.at]  # previous observers do not magically learn a private change
+        vis = ("private" if self.visibility == "private" else "public") if self.reveal else "private"
+        text = self.evidence if self.reveal else f"整理重要装备：{item.name}（{item.equipment}，数量{item.quantity}）"
+        event = w.emit("equip", text, actor=self.actor, participants=[item.at], place=w.place(item.id), visibility=vis, op=oid)
+        if self.reveal:
+            item.observed_by = list(dict.fromkeys([*item.observed_by, *event.witnesses, PLAYERS]))
+        w.touch(item)
+        return event, None
 
 
 class Condition(Base):
@@ -239,7 +368,7 @@ class AddFact(Base):
     kind: Literal["fact"] = "fact"
     fact: str = Field(description="新事实的 id，英文小写加下划线")
     text: str = Field(description="一句话，已经发生或确实如此的事")
-    fact_kind: Literal["state", "secret", "knows", "rumor", "relation", "event", "setting"] = "state"
+    fact_kind: Literal["state", "secret", "knows", "lie", "rumor", "relation", "event", "setting"] = "state"
     about: list[str] = Field(default_factory=list)
     known_by: list[str] = Field(default_factory=list, description="哪些 NPC 知道")
     true: bool = True
@@ -263,9 +392,15 @@ class AddFact(Base):
                                           true=self.true, known_by=[x for x in self.known_by if x != PLAYERS], explains=list(self.explains),
                                           t=w.now, key=self.key, changed=w.rec.seq)  # fmt: skip
         public = self.public or PLAYERS in self.known_by
-        vis = "public" if public else ("private" if self.visibility == "auto" else self.visibility)
+        # Being known to the investigators does not make a private conversation audible
+        # to every NPC in the room. Its event keeps only the actual participants.
+        vis = "private" if self.visibility == "private" else ("public" if public else ("private" if self.visibility == "auto" else self.visibility))
         e = w.emit("fact", self.text, actor=self.actor, participants=list(self.about), place=w.place(self.actor) or w.st.location,
                    visibility=vis, witnesses=f.known_by, facts=[f.id], op=oid)  # fmt: skip
+        if public and vis == "private" and e.place == w.st.location:
+            from .knowledge import reveal
+
+            reveal(w.rec, f, w.st.turn, source=f"private-event:{e.id}", excerpt=e.text)
         w.legacy(self.key, "relationship" if self.fact_kind == "relation" else "fact", self.text,
                  self.tag or next((x for x in self.known_by if _npc(w, x)), ""), self.actor)
         return e, None
@@ -295,9 +430,15 @@ class Learn(Base):
         names = "、".join(w.name(x) for x in self.who)
         teller = "" if self.actor in STAFF else w.name(self.actor)
         text = f"{teller + '告诉' if teller else ''}{names}{'' if teller else '得知'}：{f.text}" + (f"（{self.how}）" if self.how else "")
-        vis = "public" if PLAYERS in self.who else ("private" if self.visibility == "auto" else self.visibility)
-        e = w.emit("learn", text, actor=self.actor, participants=tell, place=w.place(self.actor) or w.place(next(iter(tell), "")),
+        private = self.visibility == "private"
+        vis = "private" if private else ("public" if PLAYERS in self.who else ("private" if self.visibility == "auto" else self.visibility))
+        place = w.place(self.actor) or w.place(next(iter(tell), "")) or (w.st.location if PLAYERS in self.who else "")
+        e = w.emit("learn", text, actor=self.actor, participants=tell, place=place,
                    visibility=vis, witnesses=tell, facts=[f.id], op=oid)  # fmt: skip
+        if PLAYERS in self.who and private and e.place == w.st.location:
+            from .knowledge import reveal
+
+            reveal(w.rec, f, w.st.turn, source=f"private-event:{e.id}", excerpt=e.text)
         return e, None
 
 
@@ -334,9 +475,13 @@ class Occur(Base):
     participants: list[str] = Field(default_factory=list)
     facts: list[str] = Field(default_factory=list, description="这件事让在场的人知道了哪些事实 id")
     trace: str = Field("", description="之后在这里还看得出来的痕迹")
+    reactive: SkipJsonSchema[bool] = True  # engine classification of greeting-only dialogue, not an NPC discretion
+    transcript: SkipJsonSchema[bool] = False  # complete investigator/NPC exchange, supplied only by the engine
 
     def check(self, w: World) -> list[str]:
-        problems = [] if self.text.strip() and len(self.text) <= 300 else ["要写发生了什么，不超过 300 字"]
+        problems = [] if self.text.strip() and (self.transcript or len(self.text) <= 300) else ["要写发生了什么，不超过 300 字"]
+        if self.transcript and self.actor not in {i.id for i in w.st.investigators}:
+            problems.append("完整对话记录只能由系统登记调查员实际参与的交流")
         if self.place and self.place not in w.rec.entities:
             problems.append(f"地点 {self.place} 不存在")
         problems += [f"{x} 不存在" for x in self.participants if not _who(w, x)]
@@ -345,7 +490,8 @@ class Occur(Base):
 
     def settle(self, w: World, oid: str):
         return w.emit("occur", self.text, actor=self.actor, participants=self.participants, place=self.place,
-                      visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid), None  # fmt: skip
+                      visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid,
+                      reactive=self.reactive, verbatim=self.transcript), None  # fmt: skip
 
 
 # -- promises and threads ----------------------------------------------------------------------
@@ -488,11 +634,11 @@ class Schedule(Base):
     kind: Literal["schedule"] = "schedule"
     event: str = Field(description="安排的 id")
     at: int = Field(description="在第几分钟发生（游戏时间）")
-    text: str
-    place: str = ""
-    participants: list[str] = Field(default_factory=list)
+    text: str = Field(description="到时发生什么，一两句")
+    place: str = Field("", description="在哪个地点")
+    participants: list[str] = Field(default_factory=list, description="谁参与")
     ops: list[dict[str, Any]] = Field(default_factory=list, description="到时结算的操作")
-    reads: dict[str, int] = Field(default_factory=dict)
+    reads: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict)
 
     def check(self, w: World) -> list[str]:
         problems = [f"安排 {self.event} 已经存在"] if self.event in w.rec.scheduled else []
@@ -508,19 +654,19 @@ class Schedule(Base):
     def settle(self, w: World, oid: str):
         w.rec.scheduled[self.event] = Scheduled(id=self.event, at=self.at, text=self.text, actor=self.actor, place=self.place,
                                                 participants=list(self.participants), ops=list(self.ops), reads=dict(self.reads))  # fmt: skip
-        return w.emit("schedule", f"安排：{self.text}", actor=self.actor, participants=self.participants, place=self.place,
-                      visibility="private", op=oid), None  # fmt: skip
+        # Bookkeeping, not something that happened: the people it names learn of it when it comes about.
+        return w.emit("schedule", f"安排：{self.text}", actor=self.actor, place=self.place, visibility="private", witnesses=[], op=oid), None
 
 
 class Enlist(Base):
     """Make an NPC an important one, with goals of its own (or update them)."""
 
     kind: Literal["enlist"] = "enlist"
-    npc: str
-    goals: list[str] = Field(default_factory=list)
-    resources: list[str] = Field(default_factory=list)
-    places: list[str] = Field(default_factory=list)
-    mood: str = ""
+    npc: str = Field(description="NPC id")
+    goals: list[str] = Field(default_factory=list, description="他想要的，一两条")
+    resources: list[str] = Field(default_factory=list, description="他能动用的人和东西")
+    places: list[str] = Field(default_factory=list, description="除了公开的地方，他还知道哪些地点 id")
+    mood: str = Field("", description="此刻的心境")
 
     def check(self, w: World) -> list[str]:
         if _npc(w, self.npc) is None:
@@ -546,18 +692,24 @@ class Enlist(Base):
 
 class SetPlan(Base):
     kind: Literal["plan"] = "plan"
-    npc: str
-    steps: list[Step] = Field(max_length=6)
-    goals: list[str] | None = None
-    mood: str = ""
-    reads: dict[str, int] = Field(default_factory=dict, description="这个计划依据的事实和人物的版本")
+    npc: str = Field(description="重要 NPC 的 id")
+    steps: list[Step] = Field(max_length=6, description="接下来几步，按先后排")
+    goals: list[str] | None = Field(None, description="目标也变了才写")
+    mood: str = Field("", description="此刻的心境")
+    reads: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict)  # versions the plan was made from (scheduler fills them)
 
     def check(self, w: World) -> list[str]:
+        from .agents import condition_problems
+
         if self.npc not in w.rec.agents:
             return [f"{self.npc} 不是重要 NPC"]
         ids = [s.id for s in self.steps]
         problems = ["步骤 id 重复"] if len(set(ids)) != len(ids) else []
         for s in self.steps:
+            if s.status != "pending":
+                problems.append(f"步骤 {s.id} 是新计划，不能预先标记为 {s.status}")
+            problems += [f"步骤 {s.id}：{p}" for p in condition_problems(w, s.when)]
+            problems += [f"步骤 {s.id} 完成条件：{p}" for p in condition_problems(w, s.achieved)]
             for raw in s.ops:
                 try:
                     parse(raw)
@@ -567,9 +719,26 @@ class SetPlan(Base):
 
     def settle(self, w: World, oid: str):
         a = w.rec.agents[self.npc]
-        done = [s for s in a.plan if s.status != "pending"]
-        a.plan = [*done[-6:], *(s.model_copy(deep=True) for s in self.steps)]
-        a.reads = dict(self.reads)
+        incoming = {s.id for s in self.steps}
+        done = [s for s in a.plan if s.status != "pending" and s.id not in incoming]
+        steps = []
+        for s in self.steps:
+            s = s.model_copy(deep=True, update={"started": w.rec.seq})
+            if not s.achieved:
+                final = {}
+                for raw in s.ops:
+                    op = parse(raw)
+                    if isinstance(op, Move):
+                        final[f"at:{op.entity}"] = op.to
+                    elif isinstance(op, Transfer):
+                        final[f"owner:{op.item}"] = op.to
+                s.achieved = " & ".join(f"{key}:{value}" for key, value in final.items())
+            steps.append(s)
+        a.plan = [*done[-6:], *steps]
+        # Its agent version validates the decision's input, but writing this very
+        # plan (and its subsequent mood/seen bookkeeping) changes that version.
+        # Keep actual external dependencies for future execution, not this self-write.
+        a.reads = {ref: version for ref, version in self.reads.items() if ref != f"agent:{self.npc}"}
         if self.goals is not None:
             a.goals = list(self.goals)
         a.mood = self.mood or a.mood
@@ -589,14 +758,29 @@ class AdvancePlan(Base):
         a = w.rec.agents.get(self.npc)
         if a is None:
             return [f"{self.npc} 不是重要 NPC"]
-        s = next((s for s in a.plan if s.id == self.step), None)
+        s = next((s for s in reversed(a.plan) if s.id == self.step), None)
         if s is None:
             return [f"{self.npc} 的计划里没有步骤 {self.step}"]
-        return [] if s.status in ("pending", "blocked") else [f"步骤 {self.step} 已经{s.status}"]
+        if s.status not in ("pending", "blocked"):
+            return [f"步骤 {self.step} 已经{s.status}"]
+        if self.status != "done":
+            return []
+        from .agents import holds
+
+        if not s.started and not s.achieved and not s.ops:
+            return [f"步骤 {self.step} 是缺少完成依据的旧计划；先重新规划并明确 achieved 条件或执行操作"]
+        if s.achieved:
+            return [] if holds(w, s.achieved) else [f"步骤 {self.step} 的实际完成条件尚未满足：{s.achieved}"]
+        # Old plans have no declared outcome. Require an actual action, not another plan,
+        # memory, private note, or the model merely saying that it was done.
+        actions = {"move", "follow", "transfer", "occur", "learn", "promise", "fulfil", "break", "condition"}
+        if any(e.seq > s.started and e.actor == self.npc and e.kind in actions and e.t == w.now for e in w.rec.events):
+            return []
+        return [f"步骤 {self.step} 尚无实际执行记录；先执行行动，或为计划填写可验证的 achieved 条件"]
 
     def settle(self, w: World, oid: str):
         a = w.rec.agents[self.npc]
-        s = next(s for s in a.plan if s.id == self.step)
+        s = next(s for s in reversed(a.plan) if s.id == self.step)
         s.status, s.note = self.status, self.note or s.note
         w.touch(a)
         word = {"done": "做成了", "blocked": "受阻", "dropped": "放弃了"}[self.status]
@@ -646,7 +830,7 @@ class Improvise(Base):
             plan = Improv.model_validate(self.plan)
         except ValueError as exc:
             return [f"方案格式不对：{str(exc)[:200]}"]
-        return improv.check(w.m, plan, at=self.at or w.st.location)
+        return improv.check(w.m, plan, at=self.at or w.st.location, actors={inv.id for inv in w.st.investigators})
 
     def settle(self, w: World, oid: str):
         from ..agents.director import Improv
@@ -668,12 +852,12 @@ class Improvise(Base):
 
 
 Op = Annotated[
-    Move | Relate | Transfer | Condition | SetFlag | AddFact | Learn | Remember | Occur | MakePromise | Fulfil | Break
+    Move | Follow | Relate | Transfer | Equip | Condition | SetFlag | AddFact | Learn | Remember | Occur | MakePromise | Fulfil | Break
     | OpenThread | AdvanceThread | CloseThread | Schedule | Enlist | SetPlan | AdvancePlan | Rewrite | Improvise,
     Field(discriminator="kind"),
 ]
 OPS: TypeAdapter[Op] = TypeAdapter(Op)
-KINDS = [m.model_fields["kind"].default for m in (Move, Relate, Transfer, Condition, SetFlag, AddFact, Learn, Remember, Occur,
+KINDS = [m.model_fields["kind"].default for m in (Move, Follow, Relate, Transfer, Equip, Condition, SetFlag, AddFact, Learn, Remember, Occur,
                                                   MakePromise, Fulfil, Break, OpenThread, AdvanceThread, CloseThread, Schedule,
                                                   Enlist, SetPlan, AdvancePlan, Rewrite, Improvise)]  # fmt: skip
 

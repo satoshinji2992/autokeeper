@@ -44,8 +44,10 @@ def staged(location: str = "office") -> World:
 def VALID(me: str, now: int) -> list:
     return [
         O.Move(entity="warden", to="square"),
+        O.Follow(npc="warden"),
         O.Relate(a="warden", b=me, rel="信任", delta=10, note="帮他修了钟"),
         O.Transfer(item="coat", to=me, giver="warden"),
+        O.Equip(item="coat", equipment="worn", actor="warden"),
         O.Condition(entity=me, add="受伤"),
         O.Condition(entity="warden", status="受伤"),
         O.SetFlag(flag="bell_stopped"),
@@ -62,12 +64,15 @@ def VALID(me: str, now: int) -> list:
         O.Schedule(event="s1", at=now + 60, text="布道者去钟楼", ops=[{"kind": "move", "entity": "preacher", "to": "tower"}]),
         O.Enlist(npc="preacher", goals=["让全镇听他讲完"]),
         O.SetPlan(npc="warden", steps=[Step(id="s1", text="去报社", due=now + 120)]),
-        O.AdvancePlan(npc="preacher", step="a1", status="done"),
+        O.AdvancePlan(npc="preacher", step="a1", status="blocked"),
         O.Rewrite(target="fact:npc:warden:secrets:0", text="他在钟里藏了亡子的怀表", reason="更有人情味"),
     ]
 
 
 INVALID = [
+    O.Equip(item="coat", equipment="held", actor="preacher"),
+    O.Follow(npc="preacher", leader="not_a_player", destination="tower"),
+    O.Follow(npc="warden", leader="zhouheng", destination="tower", actor="preacher"),
     O.Move(entity="warden", to="nowhere"),
     O.Move(entity="coat", to="square"),
     O.Relate(a="warden", b="warden", rel="信任", delta=1),
@@ -131,6 +136,30 @@ def test_the_same_op_id_with_another_payload_is_refused():
     assert w.entity("warden").at == "square"
 
 
+def test_public_events_elsewhere_are_not_player_knowledge_or_narration():
+    w = fresh(location="tower")
+    w.apply(O.Enlist(npc="preacher"))
+    w.apply(O.AddFact(fact="f_station", text="站务员收到了一张短笺", known_by=["preacher"]))
+    since = w.rec.seq
+    w.apply(O.Occur(id="remote-public", actor="preacher", place="square", visibility="public",
+                    text="布道者向站务员打听短笺", facts=["f_station"]))
+    event = w.rec.events[-1]
+    assert event.visibility == "private" and event.place == "square"
+    assert context.happened(w, since) == []
+    assert PLAYERS not in w.rec.facts["f_station"].known_by and w.rec.facts["f_station"].revealed is None
+    assert "打听短笺" not in context.keeper_view(w)
+    assert any("打听短笺" in m.text for m in w.agent("preacher").memory)  # local witnesses still remember
+
+
+def test_watching_someone_leave_does_not_reveal_their_destination():
+    w = fresh(location="tower")
+    since = w.rec.seq
+    w.apply(O.Move(entity="warden", to="office", actor="warden", visibility="public"))
+    assert w.place("warden") == "office"
+    assert context.happened(w, since) == ["老守钟人离开了钟楼"]
+    assert w.rec.events[-1].place == "tower" and "报社" not in w.rec.events[-1].text
+
+
 def test_a_settle_that_fails_halfway_leaves_nothing(monkeypatch):
     w = staged()
     before = json.dumps(w.domain(), sort_keys=True)
@@ -172,11 +201,12 @@ def test_undo_to_restores_several_ops_in_order_and_keeps_the_trace():
 def test_moving_an_npc_moves_it_in_this_games_module_and_who_saw_it():
     w = staged(location="office")
     w.apply(O.Move(entity="warden", to="square", trace="钟楼的门没锁"))
-    e = w.rec.events[-1]
+    e = next(x for x in reversed(w.rec.events) if x.kind == "move")
     assert w.m.npcs_at("square") and {n.id for n in w.m.npcs_at("square")} == {"warden", "preacher"}
     assert e.visibility == "private" and "preacher" in e.witnesses  # the preacher was there; the party was not
     assert "钟楼的门没锁" not in context.keeper_view(w)
-    assert "钟楼的门没锁" not in context.keeper_view(w, "tower")  # traces are left where the event happened
+    assert "钟楼的门没锁" in context.keeper_view(w, "tower")  # a trace stays where it was left
+    assert "钟楼的门没锁" not in context.keeper_view(w, "square")
     assert "老守钟人" in context.keeper_view(w, "square")
 
 

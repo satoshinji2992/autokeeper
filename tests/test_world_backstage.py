@@ -16,19 +16,43 @@ SECRET = "fact:npc:warden:secrets:0"
 
 
 # -- rewrites -----------------------------------------------------------------------------------------
-def test_a_revealed_fact_is_frozen():
+def test_a_found_clue_keeps_its_words():
     w = staged(location="tower")
     w.st.clues.append("c_gears")
     w.sync()
-    r = w.apply(O.Rewrite(target="fact:clue:c_gears", text="齿轮背后什么都没有"))
-    assert not r.ok and "玩家已经知道" in r.problems[0]
+    r = w.apply(O.Rewrite(target="fact:clue:c_gears", text="齿轮背后什么都没有", reason="齿轮是伪造的"))
+    assert not r.ok and "原文不能改" in r.problems[0]
 
 
-def test_words_the_players_saw_are_frozen_even_without_a_mark():
+def test_what_the_players_heard_can_turn_out_a_lie_and_stays_what_they_heard():
+    w = staged(location="square")
+    w.st.add("npc", "守钟人？他在钟里藏了东西，我亲眼见过。", who="布道者")
+    w.sync()
+    assert w.rec.facts["npc:warden:secrets:0"].revealed is not None
+    r = w.apply(O.Rewrite(target=SECRET, text="他什么都没藏，钟里的东西是布道者放的"))
+    assert not r.ok and "听布道者说的" in r.problems[0] and "reason" in r.problems[0]
+    r = w.apply(O.Rewrite(target=SECRET, text="他什么都没藏，钟里的东西是布道者放的", reason="布道者想把调查员引向钟楼"))
+    assert r.ok, r.problems
+    secret = w.rec.facts["npc:warden:secrets:0"]
+    told = w.rec.facts["told:npc:warden:secrets:0:1"]
+    assert secret.revealed is None and "players" not in secret.known_by
+    assert (told.text, told.true, told.revealed is not None) == ("他在钟里藏了东西", False, True)
+    w.sync()  # the new truth was never shown, so it stays backstage
+    assert w.rec.facts["npc:warden:secrets:0"].revealed is None
+    assert "他在钟里藏了东西（听布道者说的）" in context.keeper_view(w)
+    view = context.director_view(w).text
+    assert "布道者放的" in view.split("【玩家还不知道的")[1].split("【")[0]
+    assert "他在钟里藏了东西" in view.split("不能改）】")[1].split("【")[0]
+    assert w.undo() == [] and w.rec.facts["npc:warden:secrets:0"].revealed is not None  # recoverable
+
+
+def test_words_the_players_saw_need_a_reason_to_be_rewritten():
     w = staged(location="tower")
     w.st.add("keeper", "守钟人低声说，他在钟里藏了东西，求你别声张。")
     r = w.apply(O.Rewrite(target=SECRET, text="他什么都没藏"))
-    assert not r.ok and "出现过" in r.problems[0]
+    assert not r.ok and "叙述里说过" in r.problems[0]
+    assert w.apply(O.Rewrite(target=SECRET, text="他什么都没藏，那是说给布道者听的", reason="守钟人在演给偷听的布道者看")).ok
+    assert w.rec.facts["told:npc:warden:secrets:0:1"].text == "他在钟里藏了东西"
 
 
 def test_a_found_clue_keeps_an_explanation():
@@ -64,11 +88,19 @@ def test_a_rewrite_updates_what_rests_on_it_and_is_logged():
     assert w.undo() == [] and w.m.npc("warden").secrets == ["他在钟里藏了东西"]  # recoverable
 
 
-def test_events_the_players_lived_through_cannot_be_rewritten():
+def test_an_event_the_players_lived_through_keeps_its_words():
     w = staged(location="tower")
     w.apply(O.Occur(text="钟突然停了一下", place="tower"))
     public = w.rec.events[-1]
-    assert not w.apply(O.Rewrite(target=f"event:{public.id}", text="钟一直在走")).ok
+    assert not w.apply(O.Rewrite(target=f"event:{public.id}", text="钟一直在走")).ok  # no reason given
+    assert not w.apply(O.Rewrite(target=f"event:{public.id}", retract=True, reason="没这回事")).ok
+    r = w.apply(O.Rewrite(target=f"event:{public.id}", text="是守钟人故意卡住了齿轮", reason="守钟人想吓走调查员",
+                          memories={"warden": "我卡住了齿轮，让钟停了一下"}))
+    assert r.ok, r.problems
+    assert w.rec.event(public.id).text == "钟突然停了一下" and w.rec.event(public.id).version == 1
+    behind = w.rec.facts[f"behind:{public.id}:1"]
+    assert behind.revealed is None and behind.known_by == ["warden"] and "卡住了齿轮" in behind.text
+    assert "我卡住了齿轮" in context.npc_view(w, "warden").text
     w.st.location = "office"
     w.apply(O.Occur(text="守钟人在齿轮间里自言自语", place="tower", participants=["warden"]))
     private = w.rec.events[-1]
@@ -145,8 +177,8 @@ async def test_a_player_turn_spends_at_most_its_budget():
     brain = Canned(nothing)
     report = await scheduler.advance(w, brain, w.now, w.now + 10, budget=Budget(turn=2))
     assert report.calls == 2 == len(brain.asks) and report.chunks == 1
-    assert len(report.woke) == 2 and len(report.deferred) == 1  # the third waits; the warden is with the party
-    assert not any("warden" in x for x in report.woke + report.deferred)
+    assert len(report.woke) == 2 and len(report.deferred) == 2  # onscreen NPCs share the same budget
+    assert any("warden" in x for x in report.woke)
 
 
 async def test_a_long_skip_is_simulated_in_chunks_on_its_own_budget():
@@ -155,7 +187,7 @@ async def test_a_long_skip_is_simulated_in_chunks_on_its_own_budget():
     start = w.now
     w.st.minutes += 8 * 60
     report = await scheduler.advance(w, brain, start, w.st.minutes, budget=Budget(skip=4, chunk=240))
-    assert report.chunks == 2 and report.calls == 3 and not report.deferred
+    assert report.chunks == 2 and report.calls == 4 and not report.deferred
     w.st.minutes += 3 * 1440
     report = await scheduler.advance(w, None, start + 480, w.st.minutes, budget=Budget(chunks=12))
     assert report.chunks == 12 and report.calls == 0
@@ -169,6 +201,8 @@ async def test_npcs_in_one_place_are_one_offscreen_scene():
     w.apply(O.Move(entity="preacher", to="square"))
 
     def scene(ask):
+        if ask.npcs == ["warden"]:
+            return nothing(ask)
         assert set(ask.npcs) == {"clerk", "cook", "preacher"}
         assert "齿轮间的钥匙" not in ask.views["clerk"]
         return Scene(summary="三个人在广场上吵了起来", decisions=[
@@ -177,11 +211,12 @@ async def test_npcs_in_one_place_are_one_offscreen_scene():
         ])  # fmt: skip
 
     brain = Canned(scene)
-    report = await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=1))
-    assert report.calls == 1 and w.relation("clerk", "cook", "敌对").value == -20
+    report = await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=2))
+    assert report.calls == 2 and w.relation("clerk", "cook", "敌对").value == -20
     assert w.relation("clerk", "cook", "盟友") is None and any("只能改变自己" in x for x in report.refused)
-    scene_event = w.rec.events[-1]
-    assert scene_event.text == "三个人在广场上吵了起来" and set(scene_event.participants) == {"clerk", "cook", "preacher"}
+    # A summary must not claim the whole scene happened after one participant's
+    # proposed actions were refused (or another participant gave no decision).
+    assert not any(e.text == "三个人在广场上吵了起来" for e in w.rec.events)
 
 
 async def test_prepared_steps_land_without_a_call_while_the_plan_is_fresh():
@@ -219,6 +254,18 @@ async def test_scheduled_events_land_or_fall_through_when_what_they_read_changed
     report = await scheduler.advance(w, None, w.now, w.now + 120)
     assert report.fired == ["sermon"] and report.dropped == ["gossip"]
     assert w.entity("preacher").at == "tower" and w.entity("warden").at == "tower"
+
+
+async def test_an_arrangement_does_not_pull_a_companion_away_from_the_investigators():
+    w = staged(location="tower")
+    me = w.st.investigator.id
+    assert w.apply(O.Follow(npc="warden", actor="warden", leader=me, destination="square")).ok
+    w.apply(O.Schedule(event="meeting", at=w.now + 60, text="守钟人和布道者在报社碰头", place="office",
+                       participants=["warden", "preacher"], actor="director"))
+    report = await scheduler.advance(w, None, w.now, w.now + 120)
+    assert report.fired == ["meeting"]
+    assert w.entity("warden").at == "tower" and w.entity("warden").following == me  # still walking with them
+    assert w.entity("preacher").at == "office"
 
 
 def test_an_npc_can_only_do_what_it_can_reach():
@@ -264,3 +311,14 @@ def test_npcs_the_module_marks_important_are_enlisted_once():
     assert [r.ok for r in w.apply_all(marked(w))] == [True]
     assert list(w.rec.agents) == ["warden"] and w.agent("warden").goals == ["不让人上齿轮间"]
     assert marked(w) == []
+
+
+async def test_a_scheduled_scene_brings_its_people_who_learn_of_it_only_when_it_happens():
+    w = staged(location="tower")
+    before = len(w.agent("preacher").memory)
+    assert w.apply(O.Schedule(event="visit", at=w.now + 60, text="布道者走进报社，打听那个记者", place="office",
+                              participants=["preacher"], actor="director")).ok  # fmt: skip
+    assert len(w.agent("preacher").memory) == before  # an arrangement is not something that happened to him
+    report = await scheduler.advance(w, None, w.now, w.now + 90)
+    assert report.fired == ["visit"] and w.entity("preacher").at == "office"
+    assert any("打听那个记者" in m.text for m in w.agent("preacher").memory)

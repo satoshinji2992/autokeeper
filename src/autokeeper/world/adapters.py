@@ -49,7 +49,7 @@ def change_ops(w: World, c: WorldChange, *, source: str, spoken: str = "") -> li
                     public=True, **common)]  # fmt: skip
 
 
-def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken: str = "") -> list[Result]:
+def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken: str = "", private: bool = False) -> list[Result]:
     """engine/world.apply through the world API."""
     present = legacy_world.actors(w.m, w.st)
     out: list[Result] = []
@@ -57,6 +57,8 @@ def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken:
         if not legacy_world.admissible(w.m, w.st, c, source=source, spoken=spoken, present=present):
             continue
         ops = change_ops(w, c, source=source, spoken=spoken)
+        if private:
+            ops = [op.model_copy(update={"visibility": "private"}) for op in ops]
         if not ops:  # a promise restated: as engine/world.apply leaves it
             if c.kind == "promise":
                 w.legacy(c.key, "promise", c.text, c.npc, source)

@@ -77,17 +77,19 @@ async def play(kept: bool):
     st.turn = 4
     st.location, st.minutes = "square", st.minutes + 10
     w.sync()
-    morning = await scheduler.advance(w, brain, st.minutes - 10, st.minutes + 70)
-    st.minutes += 70
+    # Different places think from the same instant: the preacher learns of the
+    # warden's committed complaint on his next decision, then needs an hour to prepare.
+    morning = await scheduler.advance(w, brain, st.minutes - 10, st.minutes + 200, budget=scheduler.Budget(chunk=70))
+    st.minutes += 200
     return w, brain, overnight, morning, left
 
 
 async def test_npcs_act_after_the_players_leave():
-    w, brain, overnight, _, left = await play(kept=False)
+    w, brain, overnight, morning, left = await play(kept=False)
     acted = [e for e in w.rec.events if e.actor in ("warden", "preacher") and e.t > left]
     assert acted and all(e.visibility == "private" for e in acted if e.t < parse_time("D2 09:10"))
     assert w.entity("warden").at == "square"  # he went down to the square in the night
-    assert overnight.calls <= 4 and len(brain.asks) == overnight.calls + 0 and overnight.chunks == 5
+    assert overnight.calls <= 4 and len(brain.asks) == overnight.calls + morning.calls and overnight.chunks == 5
     assert any("约定的时间到了" in a.reasons.get("warden", "") for a in brain.asks)
     # Back in the square, the keeper sees him there; it never sees his plans.
     view = context.keeper_view(w, "square")

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 PLAYERS = "players"  # the table: what was told or shown to the investigators
 DIRECTOR = "director"
@@ -38,6 +39,13 @@ class Entity(Versioned):
     at: str = ""  # an NPC's or an item's place; an item's holder when someone has it
     status: str = ""  # "", 受伤, 失踪, 死亡 ...
     conditions: list[str] = Field(default_factory=list)
+    following: str = ""  # investigator this NPC agreed to accompany, until follow_to
+    follow_to: str = ""
+    important: bool = True  # equipment bookkeeping is reserved for important items
+    equipment: Literal["carried", "worn", "held", "concealed"] = "carried"
+    quantity: int = Field(1, ge=0)
+    hidden: bool = False
+    observed_by: list[str] = Field(default_factory=list)  # who confirmed this item's current ownership/equipment state
 
 
 class Fact(Versioned):
@@ -49,6 +57,10 @@ class Fact(Versioned):
     true: bool = True  # a lie or a rumour records that it is said, not that it is so
     known_by: list[str] = Field(default_factory=list)  # NPC ids; PLAYERS once revealed
     revealed: int | None = None  # the turn it reached the table; frozen from then on
+    reveal_source: str = ""  # clue:<id>, event:<id>, log:<turn>:<kind>:<index>, etc.; never inferred by overlap
+    reveal_excerpt: str = ""  # the displayed words, retained after the public log is folded
+    legacy_revealed: int | None = None  # an old, unverified reveal marker; not permission to disclose its text
+    reveal_note: str = ""  # why an old marker could not be verified; visible to developer diagnostics
     explains: list[str] = Field(default_factory=list)  # clue ids this fact accounts for
     retracted: bool = False
     t: int = 0
@@ -106,14 +118,18 @@ class Thread(Versioned):
 
 
 class Step(BaseModel):
-    id: str
-    text: str
-    due: int | None = None  # game minutes; None: whenever its condition holds
-    when: str = ""  # condition (world/agents.holds); empty: none
-    ops: list[dict[str, Any]] = Field(default_factory=list)  # lands without a model call while the plan is fresh
-    status: Literal["pending", "done", "blocked", "dropped"] = "pending"
-    note: str = ""
-    woke: int | None = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there
+    id: str = Field(description="步骤 id，英文小写加下划线")
+    text: str = Field(description="这一步做什么，一句话")
+    due: int | None = Field(None, description="最早在第几分钟做（游戏时间）；不限时留空")  # None: whenever its condition holds
+    when: str = Field("", description="开始条件；& 表示且，| 表示或：flag:标记、!flag:标记、at:谁:地点、promise:约定:状态、"
+                                       "owner:物件:持有者、knows:NPC:事实、after:分钟；状态为 active/fulfilled/broken；调查员集体用 players")
+    achieved: str = Field("", description="完成后必须实际成立的条件，语法同 when；移动填 at:NPC:目的地，交物填 owner:物品:接收者；不能以打算或口头宣称代替")
+    # Lands without a model call while the plan is fresh.
+    ops: list[dict[str, Any]] = Field(default_factory=list, description="到时直接结算的操作，格式同操作；要到时再想就留空")
+    status: SkipJsonSchema[Literal["pending", "done", "blocked", "dropped"]] = "pending"
+    note: SkipJsonSchema[str] = ""
+    woke: SkipJsonSchema[int | None] = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there
+    started: SkipJsonSchema[int] = 0  # record seq when this plan was installed; completion needs a real outcome since then
 
 
 class Memory(BaseModel):
@@ -153,12 +169,13 @@ class Event(BaseModel):
     participants: list[str] = Field(default_factory=list)
     place: str = ""
     text: str
-    visibility: Literal["public", "private"] = "private"
+    visibility: Literal["public", "private"] = "private"  # public: witnessed by the investigators at emission time
     witnesses: list[str] = Field(default_factory=list)  # NPC ids who saw it
     facts: list[str] = Field(default_factory=list)
     trace: str = ""  # what can still be noticed at the place afterwards
     op: str = ""
     version: int = 1
+    reactive: bool = True  # ordinary greeting-only exchanges remain memories without waking autonomous decisions
 
 
 class Scheduled(BaseModel):
@@ -236,7 +253,13 @@ class WorldRecord(BaseModel):
     revisions: list[Revision] = Field(default_factory=list)
     requests: dict[str, Request] = Field(default_factory=dict)
     ticks: list[str] = Field(default_factory=list)  # time advances already simulated
+    simulated: int | None = None  # game minutes the world has been simulated up to (engine/game.py)
+    left: dict[str, int] = Field(default_factory=dict)  # place -> record seq when the party last left it
     journal: list[Entry] = Field(default_factory=list)
+    npc_budget_turn: int = -1
+    npc_budget_calls: int = 0
+    npc_budget_limit: int = 0
+    npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

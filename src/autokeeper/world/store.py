@@ -36,7 +36,8 @@ UNDO_KEEP = 64  # entries that keep their undo patch
 JOURNAL_KEEP = 4000  # entries kept for repeats and the trace
 EVENTS_KEEP = 6000
 MEMORY_KEEP = 40  # memories an important NPC keeps
-BOOKKEEPING = {"journal", "requests", "ticks"}  # the journal's, the desk's and the scheduler's own: undo leaves them
+# The journal's, the desk's, the scheduler's and the game's own clocks: undo leaves them.
+BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "npc_budget_turn", "npc_budget_calls", "npc_budget_limit", "npc_work"}
 
 
 @dataclass
@@ -54,11 +55,14 @@ def digest(data: Any) -> str:
 
 
 class World:
-    def __init__(self, m: Module, st: GameState, *, checker=None):
+    def __init__(self, m: Module, st: GameState, *, checker=None, initialize: bool = True):
         self.m, self.st = m, st
         self.checker = checker  # rewrite consistency hook (world/rewrite.py), an LLM check in phase 2
         self.clock: int | None = None  # game minutes ops happen at, while the scheduler runs a time skip
-        self.sync()
+        if initialize:
+            if self.rec.simulated is None:  # a new game: the world starts with the story
+                self.rec.simulated = st.minutes
+            self.sync()
 
     # -- basics ------------------------------------------------------------------------------
     @property
@@ -122,6 +126,11 @@ class World:
         if kind == "event":
             e = self.rec.event(ident)
             return e.version if e else 0
+        if kind == "scheduled":
+            scheduled = self.rec.scheduled.get(ident)
+            # Schedules are plain records rather than Versioned objects; their status
+            # changes during simulation, so use a stable, JSON-safe content revision.
+            return int(digest(scheduled.model_dump(mode="json"))[:12], 16) if scheduled else 0
         if kind == "flag":
             return int(ident in self.st.flags)
         return 0
@@ -129,21 +138,23 @@ class World:
     # -- what ops call ---------------------------------------------------------------------
     def emit(self, kind: str, text: str, *, actor: str = ENGINE, participants: list[str] | None = None, place: str = "",
              visibility: str = "auto", witnesses: list[str] | None = None, facts: list[str] | None = None,
-             trace: str = "", op: str = "") -> Event:  # fmt: skip
+             trace: str = "", op: str = "", reactive: bool = True, verbatim: bool = False) -> Event:  # fmt: skip
         """Log an event. auto: public where the party is, private elsewhere. NPCs at the place see
         it; important NPCs keep it as a memory, and every witness learns the facts it carries."""
         rec = self.rec
         place = place or self.place(actor)
         people = list(dict.fromkeys(x for x in [actor, *(participants or [])] if x and x != ENGINE))
-        public = visibility == "public" or (visibility == "auto" and place == self.st.location and place != "")
+        # A public event elsewhere is visible to people there, not an omniscient cutaway
+        # for the players. Only events in their scene reach the table.
+        public = visibility != "private" and place == self.st.location and place != ""
         npcs = [p for p in people if (x := rec.entities.get(p)) is not None and x.kind == "npc"]
         around = [] if visibility == "private" else self.present(place)  # covert: only who took part or was named
         seeing = list(dict.fromkeys([*npcs, *around, *(witnesses or [])]))
         base = f"ev:{op or rec.seq}"
         n = sum(1 for x in rec.events[-8:] if x.id.split("#")[0] == base)
         e = Event(id=base if not n else f"{base}#{n + 1}", seq=rec.seq, t=self.now, turn=self.st.turn, kind=kind, actor=actor,
-                  participants=people, place=place, text=text[:300], visibility="public" if public else "private",
-                  witnesses=seeing, facts=list(facts or []), trace=trace[:120], op=op)  # fmt: skip
+                  participants=people, place=place, text=text if verbatim else text[:300], visibility="public" if public else "private",
+                  witnesses=seeing, facts=list(facts or []), trace=trace[:120], op=op, reactive=reactive)  # fmt: skip
         rec.events.append(e)
         del rec.events[:-EVENTS_KEEP]
         for npc in dict.fromkeys([*seeing, *(p for p in people if p in rec.agents)]):
@@ -156,7 +167,7 @@ class World:
         if public:
             for fid in e.facts:
                 if f := rec.facts.get(fid):
-                    knowledge.reveal(rec, f, self.st.turn)
+                    knowledge.reveal(rec, f, self.st.turn, source=f"event:{e.id}", excerpt=e.text)
         return e
 
     def legacy(self, key: str, kind: str, text: str, npc: str, source: str) -> None:
