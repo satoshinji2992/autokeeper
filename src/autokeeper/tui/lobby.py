@@ -301,7 +301,8 @@ class LobbyScreen(Screen):
         rule = Table.grid(padding=(0, 1))
         rule.add_column(no_wrap=True, style="dim")
         rule.add_column()
-        for line in (lan.RULE, "/undo 撤回上一条；全角括号开头是场外聊天", "检定自己掷骰；掉线了 AI 先替你走，回来坐回原座"):
+        for line in (lan.RULE, "每人先有一条，多出的一条先到先得", "守秘人讲的时候说的，留到下一轮最先交上",
+                     "/undo 撤回上一条；全角括号开头是场外聊天", "检定自己掷骰；掉线了 AI 先替你走，回来坐回原座"):
             rule.add_row("·", line)
         self.query_one("#lobby-rule", Static).update(Group(Text("规则", style="bold"), rule))
         book = w.get("module") or {}

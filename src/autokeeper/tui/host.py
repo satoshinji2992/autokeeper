@@ -198,8 +198,8 @@ class HostScreen(Screen):
         who = self.plan.get(inv.id, "AI")
         colour = {"玩家": f"bold {theme.accent or 'yellow'}", "AI": f"bold {theme.secondary or 'cyan'}", "不上场": "dim"}[who]
         t = Text()
-        t.append(who + " " * (6 - cell_len(who)), style=colour)
-        t.append(f"  {inv.name}", style="bold" if who != "不上场" else "dim strike")
+        t.append(who + " " * (8 - cell_len(who)), style=colour)
+        t.append(inv.name, style="bold" if who != "不上场" else "dim strike")
         t.append(f"  {inv.occupation} · {inv.age} 岁", style="dim")
         return t
 
