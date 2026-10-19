@@ -65,7 +65,7 @@ class CloseRoomModal(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal", id="close-room"):
             yield Static("关闭房间？", classes="modal-title")
-            yield Static("所有人都会断开，网页版也会关掉。存档还在，下次开房间可以接着玩。", classes="modal-body")
+            yield Static("关闭后所有玩家断开连接，网页版同时停止。存档保留，可在下次创建房间时继续。", classes="modal-body")
             with Horizontal(classes="buttons"):
                 yield Button("关闭房间", id="yes", variant="error")
                 yield Button("取消", id="no")
@@ -88,7 +88,7 @@ class LobbyScreen(Screen):
         Binding("s", "start", "现在开始"),
         Binding("c", "sheet", "人物卡"),
         Binding("r", "pick", "选角色"),
-        Binding("y", "ready", "准备好了"),
+        Binding("y", "ready", "准备"),
         Binding("x", "close_room", "关闭房间"),
         Binding("h", "help", "遇到问题"),
     ]
@@ -124,9 +124,9 @@ class LobbyScreen(Screen):
                 with VerticalScroll(id="lobby-card"):
                     yield Static(id="lobby-sheet")
             with Horizontal(id="lobby-actions"):
-                yield Button("坐这个位置", id="sit", variant="primary", compact=True)
+                yield Button("入座", id="sit", variant="primary", compact=True)
                 yield Button("选角色", id="pick", variant="primary", compact=True)
-                yield Button("准备好了", id="ready", compact=True)
+                yield Button("准备", id="ready", compact=True)
                 yield Button("观战", id="watch", compact=True)
                 yield Button("现在开始", id="start", compact=True)
                 yield Button("人物卡", id="sheet", compact=True)
@@ -139,13 +139,13 @@ class LobbyScreen(Screen):
         self.query_one("#seats", OptionList).border_title = "座位"
         self.query_one("#close_room", Button).display = self.room is not None
         if self.room is not None:
-            self.query_one("#help", Button).label = "朋友进不来？"
+            self.query_one("#help", Button).label = "联机故障排查"
         self.query_one("#lobby-info").border_title = "房间"
         try:
             await self.link.connect()
         except Exception as exc:  # wrong address, host not up yet
             await self.link.close()
-            self.app.notify(str(exc) or type(exc).__name__, title="连不上房间", severity="error", timeout=8)
+            self.app.notify(str(exc) or type(exc).__name__, title="连接房间失败", severity="error", timeout=8)
             if self.room is not None:
                 self.app.pop_screen()
             else:
@@ -172,7 +172,7 @@ class LobbyScreen(Screen):
             self.welcome = msg
             self.link.host = bool(msg.get("host"))
             if (theirs := msg.get("version")) and theirs != __version__:
-                self.app.notify("房主的版本和你不一样，可能会出错", severity="warning", timeout=12)
+                self.app.notify("客户端与房主版本不一致，可能影响联机。", severity="warning", timeout=12)
             self.m = table_module(msg)
             self.state = GameState.model_validate(msg["state"])
             self.seats = msg["seats"]
@@ -211,7 +211,7 @@ class LobbyScreen(Screen):
         if t == "closed" and not self.gone:
             self.gone = True
             self.app.notify("房主关闭了房间", severity="error")
-            self.query_one("#lobby-hint", Static).update(Text("房间关了，Esc 离开", style="bold"))
+            self.query_one("#lobby-hint", Static).update(Text("房间已关闭，按 Esc 离开。", style="bold"))
             self._buttons()
         if t in ("begin", "turn", "event") and self.chosen is not None and self.welcome is not None and not self.gone:
             self._enter([msg])
@@ -249,7 +249,7 @@ class LobbyScreen(Screen):
         if self.link.host:
             right.append("你是房主 · ", style="bold")
         right.append(f"{sum(s['online'] for s in players)}/{len(players)} 位玩家在座 · ")
-        right.append("已开局" if self.started else "等人入座")
+        right.append("已开局" if self.started else "等待玩家入座")
         bar = Table.grid(expand=True)
         bar.add_column(no_wrap=True, overflow="ellipsis", ratio=1)
         bar.add_column(justify="right", no_wrap=True)
@@ -264,7 +264,7 @@ class LobbyScreen(Screen):
         t.append(seat["name"] or "空座位", style="bold")
         if inv:
             t.append(f"  {seat['occupation']} · {inv.age} 岁", style="" if lit else "dim")
-        ready = " · 准备好了" if seat.get("ready") else " · 还没选角色" if seat.get("blank") else ""
+        ready = " · 已准备" if seat.get("ready") else " · 未选择角色" if seat.get("blank") else ""
         if not seat["human"]:
             t.append("\n  ◆ AI 扮演", style="" if lit else "dim")
         elif seat["investigator"] == self.chosen:
@@ -272,8 +272,8 @@ class LobbyScreen(Screen):
         elif seat["online"]:
             t.append(f"\n  ● {seat['player']}{ready}", style="" if lit else "green")
         else:
-            t.append("\n  ○ 空座" + ("，AI 代打" if self.started else ""), style="bold" if lit else "bold yellow")
-        brought = {"own": "自带的卡", "new": "现车的卡"}.get(seat.get("origin", ""), "")
+            t.append("\n  ○ 空座" + ("，AI 暂代" if self.started else ""), style="bold" if lit else "bold yellow")
+        brought = {"own": "自有角色", "new": "新建角色"}.get(seat.get("origin", ""), "")
         if self.link.host and (brought or seat.get("note")):  # who brought what, for the host
             t.append("  " + " · ".join(x for x in (brought, seat.get("note", "")) if x), style="" if lit else "dim")
         if inv and not self.short and (line := gist(inv, 60)):
@@ -298,21 +298,21 @@ class LobbyScreen(Screen):
         if self.gone:
             return
         if self.started:
-            hint = "已经开局了，选个空座或者观战"
+            hint = "游戏已开始，可选择空座加入或观战。"
         elif self.chosen == "":
             hint = "观战中，开局后自动进入"
         elif self.chosen and self.bring:
             mine = next((s for s in self.seats if s["investigator"] == self.chosen), {})
             if mine.get("blank"):
-                hint = "R 选角色 · 选好了按 Y 准备好了"
+                hint = "R 选择角色 · Y 准备"
             elif mine.get("ready"):
-                hint = "等大家准备好就开局 · Y 取消准备"
+                hint = "等待所有玩家准备 · Y 取消准备"
             else:
-                hint = "R 换角色 · Y 准备好了 · 大家都准备好就开局"
+                hint = "R 更换角色 · Y 准备 · 全员准备后开始"
         elif self.chosen:
-            hint = "人齐了自动开局，也可以现在开始，空座交给 AI"
+            hint = "全员准备后自动开始；也可立即开始，空座由 AI 接替。"
         else:
-            hint = "选个空座，回车坐下"
+            hint = "选择空座，回车入座。"
         self.query_one("#lobby-hint", Static).update(Text(hint, style="dim"))
         self._buttons()
 
@@ -335,7 +335,7 @@ class LobbyScreen(Screen):
         self.query_one("#sit", Button).display = not choosing
         for button in ("#pick", "#ready"):
             self.query_one(button, Button).display = choosing
-        self.query_one("#ready", Button).label = "取消准备" if mine and mine.get("ready") else "准备好了"
+        self.query_one("#ready", Button).label = "取消准备" if mine and mine.get("ready") else "准备"
         self.refresh_bindings()
 
     def _info(self) -> None:
@@ -366,9 +366,9 @@ class LobbyScreen(Screen):
         if web:
             t.append("发给朋友：", style="bold")
             t.append(lan.page_url(rows[0], web), style="bold underline")
-            t.append("\n朋友用浏览器打开", style="dim")
+            t.append("\n浏览器访问地址", style="dim")
         else:
-            t.append("朋友在「加入房间」里填：", style="bold")
+            t.append("客户端加入地址：", style="bold")
             t.append(lan.join_target(rows[0], port), style="bold underline")
         return t
 
@@ -380,7 +380,7 @@ class LobbyScreen(Screen):
         inv = self._investigator(seat["investigator"]) if seat else None
         if seat and seat.get("blank") and not self.has_class("-narrow"):
             pane.border_title = "人物卡"
-            self.query_one("#lobby-sheet", Static).update(Text("空座位。坐下的人自己选角色。", style="dim"))
+            self.query_one("#lobby-sheet", Static).update(Text("空座位。入座后可选择角色。", style="dim"))
             return
         if inv is None or self.m is None or self.has_class("-narrow"):
             return
@@ -426,7 +426,7 @@ class LobbyScreen(Screen):
             self.app.notify("这个座位由 AI 扮演", severity="warning")
             return
         if seat["online"] and seat["investigator"] != self.chosen:
-            self.app.notify(f"{seat['player']} 坐在这里了", severity="warning")
+            self.app.notify(f"{seat['player']} 已占用此座位", severity="warning")
             return
         self.chosen = seat["investigator"]
         await self.link.send({"t": "sit", "investigator": self.chosen})
@@ -446,7 +446,7 @@ class LobbyScreen(Screen):
         if self.gone or self.m is None or not self.bring:
             return
         if seat is None:
-            self.app.notify("先坐下再选角色", severity="warning")
+            self.app.notify("入座后可选择角色。", severity="warning")
             return
         mine = None if self.guest else roster.saved()  # a browser seat: the cards on this machine are the host's
         taken = {s["investigator"] for s in self.seats} - {seat["investigator"]}
@@ -484,14 +484,14 @@ class LobbyScreen(Screen):
         if card is not None:
             self.run_worker(self._bring(card, remote.portrait_data, made=True))
             if remote.save:
-                self.app.notify(f"{card.name} 也放进了我的角色", timeout=4)
+                self.app.notify(f"{card.name} 已保存至“我的角色”", timeout=4)
 
     async def action_ready(self) -> None:
         seat = self._my_seat()
         if self.gone or seat is None or not self.bring:
             return
         if seat.get("blank"):
-            self.app.notify("先选一个角色", severity="warning")
+            self.app.notify("请先选择角色。", severity="warning")
             return
         await self.link.send({"t": "ready", "on": not seat.get("ready")})
 
@@ -540,7 +540,7 @@ class LobbyScreen(Screen):
         self.gone = True
         await self.link.close()
         if self.room is not None and self.room.is_open:
-            self.app.notify("房间还开着，标题画面「回到房间」可以回来", timeout=8)
+            self.app.notify("房间保持运行，可从标题页选择“回到房间”。", timeout=8)
         leave(self.app)
 
     def action_help(self) -> None:
@@ -575,4 +575,4 @@ async def close_room(app: Any) -> None:
     room, app.room = getattr(app, "room", None), None
     if room is not None:
         await asyncio.to_thread(room.close)
-        app.notify(f"《{room.title}》的房间关了" if room.title else "房间关了")
+        app.notify(f"《{room.title}》的房间已关闭" if room.title else "房间已关闭")

@@ -24,6 +24,7 @@
     ];
     const state = {page: "home", menu: 1, theme: 0, image: 0, model: 0, scroll: 0, targetScroll: 0, maxScroll: 0, help: false, command: false, suggestion: 0, muted: true, lamp: true, notice: "", noticeUntil: 0, transition: 0, pointer: null, reader: false};
     let art = null, frames = [], artCache = null, brightCache = null, dirty = true;
+    let artCellWidth = 8, artRowHeight = 16;
     let cw = 9, ch = 22, cols = 100, rows = 40, fontSize = 16, width = 0, height = 0;
     let hits = [], layout = null, lastDraw = 0, start = performance.now(), raf = 0, composing = false;
     let audio = null, noiseSource = null, master = null;
@@ -56,13 +57,36 @@
         return lines;
     }
     function fill(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.round(x * cw), Math.round(y * ch), Math.ceil(w * cw), Math.ceil(h * ch)); }
+    function block(painter, glyph, x, y, w, h) {
+        const rect = (left, top, right, bottom) => {
+            const x0 = Math.round(x + left * w), y0 = Math.round(y + top * h);
+            painter.fillRect(x0, y0, Math.round(x + right * w) - x0, Math.round(y + bottom * h) - y0);
+        };
+        const code = glyph.codePointAt(0);
+        if (glyph === "▀") rect(0, 0, 1, .5);
+        else if (code >= 0x2581 && code <= 0x2588) rect(0, 1 - (code - 0x2580) / 8, 1, 1);
+        else if (code >= 0x2589 && code <= 0x258f) rect(0, 0, (0x2590 - code) / 8, 1);
+        else if (glyph === "▐") rect(.5, 0, 1, 1);
+        else if (glyph === "▔") rect(0, 0, 1, .125);
+        else if (glyph === "▕") rect(.875, 0, 1, 1);
+        else if (code >= 0x2596 && code <= 0x259f) {
+            const quadrants = [4, 8, 1, 13, 9, 7, 11, 2, 6, 14][code - 0x2596];
+            for (let i = 0; i < 4; i++) if (quadrants & (1 << i)) rect((i % 2) / 2, Math.floor(i / 2) / 2, (i % 2 + 1) / 2, (Math.floor(i / 2) + 1) / 2);
+        } else if (code >= 0x2591 && code <= 0x2593) {
+            for (let row = 0; row < 8; row++) for (let col = 0; col < 4; col++) {
+                const dot = (col + row * 3) % 4;
+                if (dot < code - 0x2590) rect(col / 4, row / 8, (col + 1) / 4, (row + 1) / 8);
+            }
+        } else return false;
+        return true;
+    }
     function text(value, x, y, color = palette().fg, max = cols - x, bold = false) {
         ctx.fillStyle = color; ctx.font = `400 ${fontSize}px ${fontFamily}`;
         let column = x;
         for (const char of value) {
             const cells = wide(char);
             if (column + cells > x + max) break;
-            if (char !== " ") ctx.fillText(char, Math.round(column * cw), Math.round((y + .78) * ch), cells * cw + .4);
+            if (char !== " " && !block(ctx, char, column * cw, y * ch, cells * cw, ch)) ctx.fillText(char, Math.round(column * cw), Math.round((y + .78) * ch), cells * cw + .4);
             column += cells;
         }
     }
@@ -130,25 +154,36 @@
     }
     function makeArt() {
         if (!art) return;
-        const source = art.scenes[cols < 90 ? "tall" : "wide"];
-        const result = document.createElement("canvas"); result.width = Math.ceil(cols * cw); result.height = Math.ceil(rows * ch);
-        const painter = result.getContext("2d"); painter.font = `${fontSize}px ${fontFamily}`; painter.textBaseline = "alphabetic";
-        const scale = Math.max(cols / source.cols, rows / source.rows);
-        const sx = (source.cols - cols / scale) / 2;
-        const sy = Math.max(0, Math.min(source.rows - rows / scale, source.rows * .28 - rows * .28 / scale));
-        for (let row = 0; row < rows; row++) {
-            const sourceRow = source.cells[Math.min(source.rows - 1, Math.floor(sy + row / scale))];
-            for (let col = 0; col < cols; col++) {
-                const cell = sourceRow?.[Math.min(source.cols - 1, Math.max(0, Math.floor(sx + col / scale)))];
-                if (!cell) continue;
-                painter.fillStyle = source.palette[cell[2]]; painter.fillRect(col * cw, row * ch, cw + .5, ch + .5);
-                if (cell[0] !== " ") { painter.fillStyle = source.palette[cell[1]]; painter.fillText(cell[0], col * cw, (row + .78) * ch, cw + .4); }
+        const source = art.scenes[width < height ? "tall" : "wide"];
+        const result = document.createElement("canvas"); result.width = Math.ceil(width); result.height = Math.ceil(height);
+        const painter = result.getContext("2d");
+        const scale = Math.max(width / (source.cols * 8), height / (source.rows * 16));
+        artCellWidth = 8 * scale; artRowHeight = 16 * scale;
+        const left = (width - source.cols * artCellWidth) / 2;
+        const top = Math.min(0, Math.max(height - source.rows * artRowHeight, height * .28 - source.rows * artRowHeight * .28));
+        for (let row = 0; row < source.rows; row++) {
+            for (let col = 0; col < source.cols; col++) {
+                const cell = source.cells[row][col];
+                const x = Math.round(left + col * artCellWidth), y = Math.round(top + row * artRowHeight);
+                const w = Math.round(left + (col + 1) * artCellWidth) - x, h = Math.round(top + (row + 1) * artRowHeight) - y;
+                painter.fillStyle = source.palette[cell[2]]; painter.fillRect(x, y, w, h);
+                if (cell[0] !== " ") { painter.fillStyle = source.palette[cell[1]]; block(painter, cell[0], x, y, w, h); }
             }
         }
         artCache = result;
         brightCache = document.createElement("canvas"); brightCache.width = result.width; brightCache.height = result.height;
         const bright = brightCache.getContext("2d"); bright.filter = "brightness(2.2) saturate(.7)"; bright.drawImage(result, 0, 0);
         canvas.dataset.sceneReady = "true";
+        canvas.dataset.artRenderer = "block-cells";
+    }
+    function paintScene(painter, source, now) {
+        painter.imageSmoothingEnabled = false;
+        for (let row = 0; row * artRowHeight < source.height; row++) {
+            const y = Math.round(row * artRowHeight), end = Math.min(source.height, Math.round((row + 1) * artRowHeight));
+            const depth = Math.max(0, (y / source.height - .5) * 2);
+            const shift = reduced.matches ? 0 : Math.round(Math.sin(now / 2600 + row * .15) * depth * artCellWidth * .3);
+            painter.drawImage(source, 0, y, source.width, end - y, shift, y, source.width, end - y);
+        }
     }
     const beam = document.createElement("canvas");
     function background(now) {
@@ -156,15 +191,11 @@
         if (art && !artCache) makeArt();
         if (artCache) {
             ctx.globalAlpha = state.page === "home" ? .92 : .18;
-            for (let r = 0; r < rows; r++) {
-                const depth = Math.max(0, (r / rows - .4) / .6);
-                const shift = reduced.matches ? 0 : Math.round(Math.sin(now / 2300 + r * .22) * depth * 1.1) * cw;
-                ctx.drawImage(artCache, 0, r * ch, artCache.width, ch, shift, r * ch, artCache.width, ch + .2);
-            }
+            paintScene(ctx, artCache, now);
             ctx.globalAlpha = 1;
             if (state.page === "home" && state.lamp && state.pointer) {
-                beam.width = artCache.width; beam.height = artCache.height;
-                const lamp = beam.getContext("2d"); lamp.drawImage(brightCache, 0, 0);
+                if (beam.width !== artCache.width || beam.height !== artCache.height) { beam.width = artCache.width; beam.height = artCache.height; }
+                const lamp = beam.getContext("2d"); lamp.globalCompositeOperation = "source-over"; lamp.clearRect(0, 0, beam.width, beam.height); paintScene(lamp, brightCache, now);
                 lamp.globalCompositeOperation = "destination-in";
                 const radius = Math.min(width, height) * .26;
                 const gradient = lamp.createRadialGradient(state.pointer.x, state.pointer.y, 0, state.pointer.x, state.pointer.y, radius);
@@ -380,7 +411,7 @@
         {name: "about", label: "项目介绍", run: () => screen("about")},
         {name: "gallery", label: "十二张实机图", run: () => screen("gallery")},
         {name: "modules", label: "模组编译与插件", run: () => screen("modules")},
-        {name: "party", label: "车卡与好友联机", run: () => screen("party")},
+        {name: "party", label: "角色创建与多人联机", run: () => screen("party")},
         {name: "install", label: "安装与启动", run: () => screen("install")},
         {name: "credits", label: "文档与图片署名", run: () => screen("credits")},
         {name: "theme", label: "切换配色", run: changeTheme},
@@ -392,7 +423,7 @@
     function commandMatches() { const value = input.value.replace(/^[/：:]*/, "").toLowerCase().trim(); return commands.filter(item => item.name.startsWith(value) || item.label.includes(value)); }
     function openCommand() { state.command = true; state.suggestion = 0; input.hidden = false; input.value = "/"; input.focus({preventScroll: true}); dirty = true; }
     function closeCommand() { state.command = false; input.hidden = true; input.blur(); canvas.focus({preventScroll: true}); dirty = true; }
-    function executeCommand(item = null) { const chosen = item || commandMatches()[state.suggestion]; closeCommand(); if (chosen) chosen.run(); else announce("没有这个命令，试试 /help。"); }
+    function executeCommand(item = null) { const chosen = item || commandMatches()[state.suggestion]; closeCommand(); if (chosen) chosen.run(); else announce("未知命令。输入 /help 查看帮助。"); }
     function commandPanel(now) {
         hits = [];
         const p = palette(); const matches = commandMatches(); const shown = Math.min(6, matches.length); state.suggestion = Math.min(state.suggestion, Math.max(0, matches.length - 1));
@@ -425,7 +456,7 @@
             for (let i = 0; i < data.length; i++) { previous = (previous + (Math.random() * 2 - 1) * .025) / 1.025; data[i] = previous * 3; }
             noiseSource = audio.createBufferSource(); noiseSource.buffer = buffer; noiseSource.loop = true; noiseSource.connect(filter); filter.connect(master); master.connect(audio.destination); noiseSource.start();
         }
-        try { await audio.resume(); state.muted = !state.muted; master.gain.setTargetAtTime(state.muted ? 0 : .12, audio.currentTime, .3); announce(state.muted ? "声景已关闭。" : "声景已开启：低风与远处的电流声。"); }
+        try { await audio.resume(); state.muted = !state.muted; master.gain.setTargetAtTime(state.muted ? 0 : .12, audio.currentTime, .3); announce(state.muted ? "声景已关闭。" : "声景已开启。"); }
         catch { announce("点击声景开关后可开启声音。"); }
     }
     function tone() {

@@ -319,7 +319,7 @@ async def test_import_a_zip_from_the_title_screen_and_start_playing(monkeypatch,
         assert "地图.png" in shown(screen, "#extras") and "modules/local/dongxuezhixia/" in shown(screen, "#id-note")
         await pilot.press("enter", "enter")  # this document, then 开始导入
         await until(pilot, lambda: screen.step == "done")
-        assert "《格式样例·钟楼》导入好了" in shown(screen, "#import-status")
+        assert "《格式样例·钟楼》导入完成" in shown(screen, "#import-status")
         (call,) = calls
         assert call["file"].name == "正文.md" and call["module_id"] == "dongxuezhixia" and call["pages"] is None
         assert [p.name for p in call["images"]] == ["地图.png"] and "调查员们来到山村" in call["text"]
@@ -381,7 +381,7 @@ async def test_failures_are_shown_plainly_and_an_import_can_be_stopped(monkeypat
         monkeypatch.setattr(importer, "run_import", gave_up)
         await pilot.press("enter")  # 重新导入 has the focus
         await until(pilot, lambda: screen.step == "done" and "问题" in shown(screen, "#import-status"))
-        assert "还有 3 个问题没修好" in shown(screen, "#import-status") and not screen.query_one("#play").display
+        assert "3 项问题未通过校验" in shown(screen, "#import-status") and not screen.query_one("#play").display
         log = "\n".join(line.text for line in screen.query_one("#import-log", RichLog).lines)
         assert "起始地点 nowhere 不存在" in log
 
@@ -406,7 +406,7 @@ async def test_failures_are_shown_plainly_and_an_import_can_be_stopped(monkeypat
         await pilot.pause()
         await pilot.click("#halt")
         await until(pilot, lambda: screen.step == "done")
-        assert "导入已停下" in shown(screen, "#import-status")
+        assert "导入已停止" in shown(screen, "#import-status")
         await pilot.press("escape")
         await pilot.pause()
         assert isinstance(app.screen, TitleScreen)

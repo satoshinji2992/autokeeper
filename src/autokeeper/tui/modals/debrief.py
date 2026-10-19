@@ -26,7 +26,7 @@ def view(d: Debrief) -> Text:
     if d.ending_text:
         t.append(f"{d.ending_text}\n", style="italic")
     _head(t, "真相")
-    t.append(f"{d.truth or '（模组没有写）'}\n")
+    t.append(f"{d.truth or '（模组未提供）'}\n")
 
     _head(t, f"线索：找到 {len(d.found)} 条，共 {len(d.found) + len(d.missed)} 条")
     for c in d.found:
@@ -35,7 +35,7 @@ def view(d: Debrief) -> Text:
         _clue(t, c, found=False)
 
     if d.deductions:
-        _head(t, "能拼出来的事")
+        _head(t, "线索关联")
         for text, got, total in d.deductions:
             t.append(f"  {text}")
             t.append(f"（线索 {got}/{total}）\n" if total else "\n", style="dim")
@@ -44,13 +44,13 @@ def view(d: Debrief) -> Text:
         _head(t, "人物")
         for p in d.people:
             t.append(f"  {p.name}", style="bold")
-            t.append(f"  {p.role} · {'见过' if p.met else '没见过'}\n", style="dim")
-            for label, items in (("想要", [p.goal] if p.goal else []), ("瞒着", p.secrets), ("谎话", p.lies)):
+            t.append(f"  {p.role} · {'已遇见' if p.met else '未遇见'}\n", style="dim")
+            for label, items in (("目标", [p.goal] if p.goal else []), ("秘密", p.secrets), ("谎言", p.lies)):
                 for item in items:
                     t.append(f"    {label}：{item}\n")
 
     if d.roads:
-        _head(t, "没走到的结局")
+        _head(t, "其他结局")
         for r in d.roads:
             t.append(f"  {r.title}\n", style="bold")
             for line in r.how:
@@ -59,11 +59,11 @@ def view(d: Debrief) -> Text:
                 t.append(f"    {r.text}\n", style="dim italic")
 
     if d.turns:
-        _head(t, "这一局里发生过的事")
+        _head(t, "本局事件")
         for line in d.turns:
             t.append(f"  {line}\n")
     if d.unvisited:
-        t.append(f"\n没去过的地方：{'、'.join(d.unvisited)}\n", style="dim")
+        t.append(f"\n未到访地点：{'、'.join(d.unvisited)}\n", style="dim")
     return t
 
 
@@ -88,7 +88,7 @@ def epilogue_view(text: str, writing: bool) -> Text:
     t = Text()
     _head(t, "后日谈")
     if not text:
-        t.append("守秘人在想……" if writing else "按 E，请守秘人讲讲后来的事：你们见过的人，还有每位调查员。", style="dim")
+        t.append("正在生成后日谈……" if writing else "按 E 生成后日谈，查看已遇见人物与调查员的后续经历。", style="dim")
         return t
     for para in text.strip().split("\n"):
         name, sep, rest = para.partition("：")

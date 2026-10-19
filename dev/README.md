@@ -41,7 +41,7 @@ python -m http.server 8080 --bind 127.0.0.1 --directory docs
 
 网页使用本地提供的 Fusion Pixel 中文点阵字体，文件、版本来源和许可证位于 `docs/site/fonts/`。字体加载完成后会重新计算字符网格；更换字体时需同时检查中文宽度、字符画对齐和手机排版。
 
-标题画作的字符与颜色存在 `docs/site/cover-data.json`，由游戏的 `drawing.cover.frame` 导出。改动标题渲染器后，安装 chafa，再运行：
+标题画作的字符与颜色存在 `docs/site/cover-data.json`，由游戏的 `drawing.cover.frame` 导出。网页按字块几何形状绘制，并保留原始单元格比例，不使用正文字体重绘画作；背景与手电共用相同的水面位移。改动标题渲染器后，安装 chafa，再运行：
 
 ```bash
 uv run python dev/export_site_art.py

@@ -293,7 +293,7 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         def shown() -> str:
             return "".join(str(w.render()) for w in app.screen.query(Static))
 
-        assert "没走到的结局" in shown() and "多出的那一下" in shown() and "✗ 〔齿轮间〕钟楼 · 齿轮间 · 侦查（困难） · 关键" in shown()
+        assert "其他结局" in shown() and "多出的那一下" in shown() and "✗ 〔齿轮间〕钟楼 · 齿轮间 · 侦查（困难） · 关键" in shown()
         assert "按 E" in shown()
         await pilot.press("e")
         assert await waits(pilot, lambda: "再没上过楼" in shown())
@@ -394,7 +394,7 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
         screen.query_one(Input).value = "我拉下制动杆"
         await pilot.press("enter")
         await pilot.press("enter")  # that's all from me this round
-        assert await waits(pilot, lambda: "F10 复盘" in story_text(screen))
+        assert await waits(pilot, lambda: "F10 查看复盘" in story_text(screen))
         assert screen.state.ending == "stopped" and screen.m.truth == hub.m.truth  # the book came with the ending
         await pilot.press("f10")
         assert await waits(pilot, lambda: isinstance(app.screen, DebriefModal))

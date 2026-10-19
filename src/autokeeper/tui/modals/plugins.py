@@ -40,7 +40,7 @@ def _rows(module: Module, state: GameState, *, manage: bool) -> list[dict[str, A
             plugin = module.extensions.get(identity)
             if plugin is None:
                 rows.append({"name": identity, "version": "未加载", "description": module.extension_errors.get(identity, ""),
-                             "actions": [], "commands": [], "does": [], "paused": True, "error": "这条规则没能载入",
+                             "actions": [], "commands": [], "does": [], "paused": True, "error": "规则加载失败",
                              "id": identity, "loaded": False})
                 continue
             rows.append({
@@ -77,14 +77,14 @@ class PluginsModal(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(classes="modal"):
             yield Static("规则插件", classes="modal-title")
-            lead = ("这一局额外的规则。暂停不会丢掉已有的进度。" if self.manage else
-                    "这些规则在你的电脑上运行，结果会同步给所有人。" if self.send else
-                    "规则由房主管理。想加家规，跟房主说一声。")
+            lead = ("本局启用的附加规则。暂停后保留已有状态。" if self.manage else
+                    "规则在本机运行，结果同步至所有玩家。" if self.send else
+                    "规则由房主管理，添加自定义规则需由房主操作。")
             yield Static(Text(lead, style="dim"), id="plugin-lead")
             yield from self._list()
             if self.drafter or self.send:
-                yield Static(Text("\n加一条家规，比如：每过一夜要吃一顿饭，不吃 HP 减 1", style="bold"))
-                yield Input(placeholder="写下规则，回车添加", id="house-rule")
+                yield Static(Text("\n添加自定义规则，例如：每夜需进食一次，否则 HP 减 1", style="bold"))
+                yield Input(placeholder="输入规则内容，回车添加", id="house-rule")
                 yield Static("", id="house-status")
             yield Button("返回", id="plugin-back")
 
@@ -92,7 +92,7 @@ class PluginsModal(ModalScreen[None]):
         # Built without a `with` block so it can also be re-run by _refresh(), outside compose.
         rows = _rows(self.module, self.state, manage=self.manage)
         if not rows:
-            yield Static("这一局没有规则插件。", classes="plugin-card")
+            yield Static("本局未启用规则插件。", classes="plugin-card")
             return
         for i, row in enumerate(rows):
             yield Static(self._card(row), classes="plugin-card")
@@ -110,11 +110,11 @@ class PluginsModal(ModalScreen[None]):
         if row["description"]:
             t.append(f"\n{row['description']}", style="")
         if row["actions"]:
-            t.append("\n可以尝试：", style="bold")
+            t.append("\n可用行动：", style="bold")
             for _name, desc in row["actions"]:
                 t.append(f"\n  · {_when(desc)}", style="dim")
         if row["commands"]:
-            t.append("\n可以输入：", style="bold")
+            t.append("\n可用命令：", style="bold")
             for name, desc in row["commands"]:
                 t.append(f"\n  · /{name}  {desc}", style="dim")
         if row["does"]:
@@ -139,7 +139,7 @@ class PluginsModal(ModalScreen[None]):
         if self.send is not None:  # LAN: the host drafts and installs, the result syncs back
             self.send(text)
             self.query_one("#house-rule", Input).value = ""
-            self._status("已发给房主，装好后重新打开这里就能看到。")
+            self._status("请求已发送至房主，安装完成后重新打开此页查看。")
         elif self.drafter is not None:
             self._draft(text)
 
@@ -156,13 +156,13 @@ class PluginsModal(ModalScreen[None]):
         try:
             ok, message = await self.drafter(text, progress)
         except Exception as exc:  # the house rule is a bonus; a failed call must not break the screen
-            ok, message = False, f"没能添加（{exc.__class__.__name__}），稍后再试"
+            ok, message = False, f"添加失败（{exc.__class__.__name__}），可稍后重试。"
         self.working = False
         box.disabled = False
         if ok:
             box.value = ""
             self._refresh()
-        self._status(message + ("" if ok else "。改一下说法再试试。"))
+        self._status(message)
 
     def _status(self, text: str) -> None:
         if self.is_mounted:

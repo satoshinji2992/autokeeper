@@ -41,7 +41,7 @@ class Tip:
 
 
 TIPS: dict[str, Tip] = {
-    "start": Tip("轮到你了。在底部输入行动或对话，按回车发送。F1 查看玩法说明，Esc 打开菜单。", "play"),
+    "start": Tip("在底部输入行动或对话，按回车发送。F1 查看玩法说明，Esc 打开菜单。", "play"),
     "offer": Tip(
         "检定失败后，可以接受结果；符合条件时，也可花幸运或孤注一掷。孤注一掷再次失败会有更严重的后果。F1 查看规则。",
         "push",
@@ -50,18 +50,18 @@ TIPS: dict[str, Tip] = {
     "sanity": Tip("这是理智（SAN）损失。一次损失达到 5 点时，可能触发临时疯狂。F1 查看理智规则。", "sanity"),
     "handout": Tip("F2 打开线索本，可重看已获得的手稿、完整文字和原图。", "clues"),
     "clue": Tip("这条线索已记入线索本，按 F2 查看。", "clues"),
-    "check": Tip("结果卡这样看：骰值不超过目标值即通过；↳ 一行记录本次检定的结果。F1 查看成功等级与奖励骰。", "dice"),
+    "check": Tip("检定结果：骰值不超过目标值即通过；↳ 一行记录本次检定的结果。F1 查看成功等级与奖励骰。", "dice"),
     "repeat": Tip("情况没有变化，同一尝试沿用上次结果。改变做法或获得新信息后，可以再试。", "dice"),
     "waived": Tip(".ra 是检定请求。结果明确，或技能不适用时，守秘人会直接说明，不掷骰。", "dice"),
-    "npc": Tip("跟人说话时，直接输入要问的内容或你的原话。需要说服对方时，守秘人才会要求检定。", "play"),
-    "improv": Tip("你可以探索模组没写到的事，守秘人会按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
-    "move": Tip("赶路会花游戏时间，顶部显示当前时间。F3 查看已知地点。", "screen"),
+    "npc": Tip("与 NPC 对话时，可直接输入问题或台词。需要说服对方时，守秘人才会要求检定。", "play"),
+    "improv": Tip("模组未覆盖的行动可由守秘人按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
+    "move": Tip("移动消耗游戏内时间，顶部显示当前时间。F3 查看已知地点。", "screen"),
     "stuck": Tip("需要思路时按 F5。选中的建议只会填入输入框，确认后再发送。", "play"),
     # Only places already mentioned in the opening or hook; no later discoveries.
-    f"{TUTORIAL}:outside": Tip("想出门时，直接说要去的地点；F3 可以查看目前已知的地方。", "play"),
+    f"{TUTORIAL}:outside": Tip("输入目的地可前往其他地点，按 F3 查看已知地点。", "play"),
 }
 OPENINGS = {
-    TUTORIAL: "轮到你了。可以向站务员问路、先买份早饭，或按信上的地址找托马斯。在底部输入行动，回车发送；F1 查看玩法说明，Esc 打开菜单。",
+    TUTORIAL: "在底部输入行动，回车发送。可与站务员交谈、在车站用餐，或按信件地址前往托马斯住处。F1 查看玩法说明，Esc 打开菜单。",
 }
 HOUSE = {"jinboer_jia", "shufang"}  # 《追书人》: the Kimballs' house and the uncle's study
 OUTSIDE_AFTER = 4  # turns spent in the house before the nudge out of the door

@@ -121,7 +121,7 @@ async def test_f1_opens_the_guide_where_the_last_hint_pointed(canned):
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         screen = await open_game(app, pilot)
-        assert [t.startswith("轮到你了") for t in shown(screen)] == [True]  # after the opening: how to begin
+        assert [t.startswith("在底部输入行动") for t in shown(screen)] == [True]  # after the opening: how to begin
         await pilot.press("f1")
         await pilot.pause()
         assert isinstance(app.screen, GuideScreen) and app.screen.query_one(ContentSwitcher).current == "guide-play"
@@ -141,7 +141,7 @@ async def test_a_hint_comes_once_per_player(canned):
         screen = await open_game(app, pilot)
         name = screen.state.investigator.name
         await turn(screen, dice(name))
-        assert len(shown(screen)) == 2 and "结果卡这样看" in shown(screen)[-1]
+        assert len(shown(screen)) == 2 and "检定结果" in shown(screen)[-1]
         await turn(screen, dice(name, 80))
         assert len(shown(screen)) == 2  # the second roll: nothing new to say
     assert sorted(json.loads(paths.tips().read_text(encoding="utf-8"))["seen"]) == ["check", "start"]
@@ -166,7 +166,7 @@ async def test_at_most_one_hint_a_turn_the_rest_wait(canned):
         assert len(shown(screen)) == 1
         await turn(screen)
         await turn(screen)
-        assert len(shown(screen)) == 3 and "结果卡这样看" in shown(screen)[1] and "跟人说话" in shown(screen)[2]
+        assert len(shown(screen)) == 3 and "检定结果" in shown(screen)[1] and "与 NPC 对话" in shown(screen)[2]
         await turn(screen)  # four turns and nothing found: there is F5
         assert len(shown(screen)) == 4 and "F5" in shown(screen)[3]
         await turn(screen)
@@ -209,7 +209,7 @@ async def test_hints_off_means_none_and_the_guide_switches_them_back_on(canned):
         await pilot.press("escape")
         await pilot.pause()
         await turn(screen, dice(screen.state.investigator.name))
-        assert len(shown(screen)) == 1 and "结果卡这样看" in shown(screen)[0]
+        assert len(shown(screen)) == 1 and "检定结果" in shown(screen)[0]
     assert tips.enabled() and json.loads(paths.tips().read_text(encoding="utf-8"))["on"] is True
 
 

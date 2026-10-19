@@ -57,12 +57,12 @@ def _host(url: str) -> str:
 
 
 IMPORTS = Text.assemble(
-    ("能读的卡\n", "bold"),
+    ("支持的导入格式\n", "bold"),
     "· 骰娘的 .st 指令，比如 .st 力量60敏捷50…侦查60\n",
     "· 车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片\n",
-    "· 酒馆（SillyTavern）的角色卡 PNG 或 JSON：按人设重新车成这个模组的调查员\n",
+    "· 酒馆（SillyTavern）的角色卡 PNG 或 JSON：依据人设创建符合模组年代的调查员\n",
     "· 一段人物描述\n\n",
-    ("原卡的数值照原样录入，不合规则的地方会标出来。文件可以直接拖进终端。", "dim"),
+    ("原卡数值按原样录入，不符合规则的项目将予以标注。支持将文件直接拖入终端。", "dim"),
 )
 
 
@@ -155,12 +155,12 @@ class CardScreen(Screen[Investigator | None]):
 
     def _source(self) -> None:
         self.step = "source"
-        self._type("导入已有的卡", "粘贴人物卡文字，或者把卡片文件拖进来", "回车读卡 · Esc 返回", IMPORTS)
+        self._type("导入已有的卡", "粘贴人物卡文字或拖入文件", "回车读卡 · Esc 返回", IMPORTS)
 
     def _find_photo(self) -> None:
         self.step = "find"
-        hint = Text("输入一个人名，上网找他的照片；或者把一张图片文件拖进来。", style="dim")
-        self._type("配一张照片", "人名，或者图片文件", "回车 · Esc 返回", hint)
+        hint = Text("输入姓名以检索照片，或拖入本地图片文件。", style="dim")
+        self._type("配一张照片", "姓名或图片文件路径", "回车 · Esc 返回", hint)
 
     def _ask_name(self) -> None:
         self.step = "name"
@@ -169,7 +169,7 @@ class CardScreen(Screen[Investigator | None]):
             "比如“在码头长大、胆子很大的女记者”。也可以用公众人物作为参考。回答几个背景问题后，系统会按模组年代生成可修改的人物卡。",
             style="dim",
         )
-        self._type("创建调查员", "一个名字，或者一句描述", "回车开始 · Esc 返回", intro)
+        self._type("创建调查员", "人物姓名或简短描述", "回车开始 · Esc 返回", intro)
 
     def _photos(self) -> None:
         fig = self.builder.figure
@@ -181,9 +181,9 @@ class CardScreen(Screen[Investigator | None]):
             return
         self.step = "photo"
         opts = [Option(f"照片 {i + 1} · {_host(p.page or p.url)}", id=f"photo-{i}") for i, p in enumerate(fig.photos[:SHOWN])]
-        again = "不是这个人，换个名字" if self.start == "figure" else "重新导入"
-        opts += [Option("不用照片", id="photo-none"), Option(again, id="again")]
-        self._choose("是这个人吗？挑一张照片", opts, "↑↓ 看照片 · Enter 或空格选定 · Esc 返回")
+        again = "重新输入姓名" if self.start == "figure" else "重新导入"
+        opts += [Option("不使用照片", id="photo-none"), Option(again, id="again")]
+        self._choose("选择人物照片", opts, "↑↓ 预览 · Enter 或空格选定 · Esc 返回")
 
     def _next_after_photo(self) -> None:
         if self.from_card and self.builder.card:
@@ -205,17 +205,17 @@ class CardScreen(Screen[Investigator | None]):
 
     def _extra(self) -> None:
         self.step = "extra"
-        self._type("还有什么要求？", "比如“让她会开枪”“年纪大一点”，没有就直接回车", "回车生成人物卡 · Esc 上一步", self._about())
+        self._type("补充人物设定", "例如“擅长射击”“年龄 40 岁”；无补充可直接回车", "回车生成人物卡 · Esc 上一步", self._about())
 
     def _card(self) -> None:
         b = self.builder
         assert b.card
         self.step = "card"
         if b.kind == "sheet":  # brought as it was: no questions to answer again
-            opts = [Option("就用这张卡", id="keep"), Option("提要求修改", id="tweak"), Option("配一张照片", id="find"), Option("重新导入", id="again")]
+            opts = [Option("确认人物卡", id="keep"), Option("修改人物卡", id="tweak"), Option("配一张照片", id="find"), Option("重新导入", id="again")]
         else:
             photo = Option("换一张照片", id="photo") if b.figure and b.figure.photos else Option("配一张照片", id="find")
-            opts = [Option("就用这张卡", id="keep"), Option("提要求修改", id="tweak"), photo, Option("重新回答问题", id="redo")]
+            opts = [Option("确认人物卡", id="keep"), Option("修改人物卡", id="tweak"), photo, Option("重新回答问题", id="redo")]
         self._choose(f"{b.card.name} · {b.card.occupation}", opts, "Enter 或空格选定 · Esc 上一步", sheet(b.card, self.portrait, b.note, b.fixes))
 
     def _tweak(self) -> None:
@@ -223,7 +223,7 @@ class CardScreen(Screen[Investigator | None]):
         self.step = "tweak"
         preview = sheet(self.builder.card, self.portrait, self.builder.note, self.builder.fixes)
         example = "比如“名字叫沈芸，职业记者”“侦查改成 70”" if self.builder.kind == "sheet" else "比如“射击加到 60”“改成女性”“更年轻些”"
-        self._type("想怎么改？", example, "回车 · Esc 返回", preview)
+        self._type("修改要求", example, "回车 · Esc 返回", preview)
 
     # -- input --------------------------------------------------------------------------------
     @on(Input.Submitted, "#card-input")
@@ -318,17 +318,17 @@ class CardScreen(Screen[Investigator | None]):
 
     @work(exclusive=True, group="card")
     async def look_up(self, query: str) -> None:
-        self._wait(f"正在查 {query} 是谁…")
+        self._wait(f"正在检索 {query} 的人物资料…")
         await self.builder.look_up(query)
         await self._questions()
 
     @work(exclusive=True, group="card")
     async def read_card(self, source: str) -> None:
-        self._wait("正在读卡…")
+        self._wait("正在读取人物卡…")
         try:
             kind = await self.builder.read(source)
         except Exception as exc:  # an unreadable file, a model that cannot see images, a dropped call
-            self.app.notify(f"读不了这张卡：{exc}", severity="error", timeout=8)
+            self.app.notify(f"无法读取人物卡：{exc}", severity="error", timeout=8)
             self._source()
             return
         if kind == "sheet":
@@ -360,11 +360,11 @@ class CardScreen(Screen[Investigator | None]):
             self.from_card = True
             self.pick_photo(0)
             return
-        self._wait(f"正在找 {text} 的照片…")
+        self._wait(f"正在检索 {text} 的照片…")
         fig = await self.builder.find(text)
         self.shots, self.from_card = {}, True
         if not fig.photos:
-            self.app.notify("没找到照片", severity="warning")
+            self.app.notify("未找到照片", severity="warning")
             self._card()
             return
         self._photos()
@@ -378,9 +378,9 @@ class CardScreen(Screen[Investigator | None]):
         t = Text(f"{self.proposal.who if self.proposal else fig.name}\n\n", style="bold")
         shown = await self._picture(path) if path else None
         if path is None:
-            t.append("这张打不开，换一张吧。", style="dim")
+            t.append("无法加载此照片，请选择其他图片。", style="dim")
         elif shown is None:
-            t.append("装上 chafa 才能在终端里看照片，选了照片照样会存下来。", style="dim")
+            t.append("安装 chafa 后可显示照片预览。当前照片仍可选择并保存。", style="dim")
         else:
             t.append_text(shown)
         photo = fig.photos[i]
@@ -396,7 +396,7 @@ class CardScreen(Screen[Investigator | None]):
         await self._fetch([i])
         path = self.shots.get(i)
         if path is None:
-            self.app.notify("无法打开照片，请换一张。", severity="warning")
+            self.app.notify("无法打开照片，请选择其他图片。", severity="warning")
             self._photos()
             return
         await asyncio.to_thread(imagery.preprocess, path, "portrait")  # face crop and cleanup, like module portraits
@@ -407,7 +407,7 @@ class CardScreen(Screen[Investigator | None]):
     @work(exclusive=True, group="card")
     async def build(self, request: str = "") -> None:
         back = self.step
-        self._wait("正在车卡…" if not self.builder.card else "正在按你的要求改…")
+        self._wait("正在创建人物卡…" if not self.builder.card else "正在修改人物卡…")
         try:
             await self.builder.build(request)
         except Exception as exc:

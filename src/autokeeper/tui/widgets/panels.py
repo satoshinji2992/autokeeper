@@ -444,7 +444,7 @@ class StoryLog(VerticalScroll):
                 self._header.remove()
                 self._header = None
             return
-        line = Text(f"▲ 前面还有 {len(self._folded)} 段，点这里展开", style="dim")
+        line = Text(f"▲ 前面还有 {len(self._folded)} 段，点击展开", style="dim")
         if self._header is None:
             self._header = Folded(line, classes="entry system")
             self.mount(self._header, before=0)

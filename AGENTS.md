@@ -28,7 +28,7 @@ Prerequisites: Python 3.12+, uv, Node.js 18+.
 
 ## Coding Style & Naming Conventions
 
-Use four-space indentation, annotate new interfaces, and use `snake_case` functions/modules, `PascalCase` classes, and `UPPER_CASE` constants. Preserve Chinese UI terminology and the colored ASCII aesthetic. Retain original module images and readable text; unlock spoiler images with their clues. Ruff targets 120-character lines and checks imports, modernization, and bugs; its configuration permits Chinese punctuation. Keep Textual styles in `.tcss` files. Write concise Chinese UI copy: explain actions and outcomes, put detailed rules in help, and avoid internal agent names, marketing claims, or tactical coaching.
+Use four-space indentation, annotate new interfaces, and use `snake_case` functions/modules, `PascalCase` classes, and `UPPER_CASE` constants. Preserve Chinese UI terminology and the colored ASCII aesthetic. Retain original module images and readable text; unlock spoiler images with their clues. Ruff targets 120-character lines and checks imports, modernization, and bugs; its configuration permits Chinese punctuation. Keep Textual styles in `.tcss` files. Write concise, professional Chinese UI copy: state the action, status or outcome directly; avoid chatty phrasing, personified loading messages, redundant instructions and generic requests to rephrase after technical errors. Put detailed rules in help, and avoid internal agent names, marketing claims, or tactical coaching. Preserve the narrative voice in story text and NPC dialogue.
 
 ## Testing Guidelines
 

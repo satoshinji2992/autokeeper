@@ -65,7 +65,7 @@ class RollModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Static(f"守秘人要{self.ask.get('who') or '你'}掷骰", classes="modal-title")
+            yield Static(f"等待掷骰 · {self.ask.get('who') or '当前调查员'}", classes="modal-title")
             yield Static(roll_ask(self.ask), classes="modal-body")
             with Horizontal(classes="buttons"):
                 yield Button("掷骰（回车 / 空格）", id="throw", variant="primary")
@@ -96,23 +96,23 @@ class PushModal(ModalScreen[str]):
         o = self.offer
         need = o.get("need", o.get("target"))
         with Vertical(classes="modal"):
-            yield Static(f"{o.get('skill')} 检定失败（掷出 {o.get('value')}，要 ≤{need}）", classes="modal-title")
+            yield Static(f"{o.get('skill')} 检定失败（掷出 {o.get('value')}，目标 ≤{need}）", classes="modal-title")
             body = Text()
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
-                body.append(f"换个更冒险的做法再掷一次，还是要 ≤{need}。再失败，后果一定发生，而且比这次更糟；"
+                body.append(f"采用更冒险的方式重试，目标仍为 ≤{need}。再次失败将触发更严重的后果；"
                             "同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
             if o.get("luck") is not None:
                 left = o.get("left")
                 body.append(f"花 {o['luck']} 点幸运：", style="bold")
-                body.append("这次直接算恰好成功。")
+                body.append("本次结果调整为恰好成功。")
                 body.append(f"幸运 {left + o['luck']} → {left}，" if left is not None else "")
                 body.append("花费后会降低当前幸运值。\n")
             body.append("放弃：", style="bold")
             if o.get("due"):
-                body.append("接受失败。这里的关键发现还是会到手，只是要付出代价（多花时间、弄出动静）。")
+                body.append("接受失败。仍可取得关键发现，但需承担额外代价，如消耗时间或引起注意。")
             elif o.get("core"):
-                body.append("接受失败。要找的东西还在原处，换个办法或再仔细查一次还有机会。")
+                body.append("接受失败。关键线索仍可调查，可改变方式或再次搜索。")
             else:
                 body.append("接受这次失败。")
             yield Static(body, classes="modal-body")
@@ -280,7 +280,7 @@ class SketchModal(ModalScreen[bytes | None]):
         with Vertical(classes="modal"):
             yield Static(f"手绘 · {self.ask}", classes="modal-title")
             yield SketchCanvas(id="canvas")
-            yield Static("左键画，右键擦。画完点“交给守秘人”。", classes="system")
+            yield Static("左键绘制，右键擦除。完成后选择“交给守秘人”。", classes="system")
             with Horizontal(classes="buttons"):
                 yield Button("交给守秘人", id="done", variant="primary")
                 yield Button("清空", id="clear")
@@ -326,8 +326,8 @@ class EngineModal(ModalScreen[dict | None]):
             with RadioSet(id="mode"):
                 for name, note in MODE_NOTES.items():
                     yield RadioButton(Text.assemble((name.ljust(4, "　"), "bold"), "  ", note), value=name == self.mode, name=name)
-            yield Input(self.model, placeholder="所有角色改用同一个模型（可空），如 ollama:qwen3:14b", id="model")
-            yield Input(self.fallback, placeholder="备用模型（可空）：主模型出错或超预算时改用它", id="fallback")
+            yield Input(self.model, placeholder="统一模型（可选），例如 ollama:qwen3:14b", id="model")
+            yield Input(self.fallback, placeholder="备用模型（可选）：主模型出错或超出预算时使用", id="fallback")
             with Horizontal(classes="buttons"):
                 yield Button("应用", id="apply", variant="primary")
                 yield Button("取消", id="cancel")

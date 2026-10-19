@@ -68,26 +68,26 @@ COMMANDS = (
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
-    ("人物卡", "F4", "整张调查员卡，←→ 换队友", "sheet"),
-    ("出主意", "F5", "照眼下的情况想三件能做的事", "suggest"),
-    ("重讲上一段", "F6", "骰子和线索不变，换个讲法", "retell"),
-    ("前情回顾", "F7", "从头讲一遍到现在", "recap"),
-    ("经过", "Ctrl+G", "右栏：每一步做了什么、掷了什么、找到了什么", "page('history')"),
-    ("进展", "Ctrl+G", "右栏：故事至今，有新进展时更新", "page('progress')"),
-    ("背景", "Ctrl+G", "右栏：开场时知道的事，你们是谁", "page('background')"),
-    ("整理进展", "Ctrl+Y", "现在把故事至今整理一遍，每轮一次", "recount"),
-    ("手绘", "F8", "画一张图给守秘人看", "sketch"),
+    ("人物卡", "F4", "完整人物卡，←→ 切换调查员", "sheet"),
+    ("行动建议", "F5", "根据当前情况生成三条行动建议", "suggest"),
+    ("重讲上一段", "F6", "调整叙述方式，保留检定与线索", "retell"),
+    ("前情回顾", "F7", "回顾本局已发生的事件", "recap"),
+    ("经过", "Ctrl+G", "右栏：行动、检定与发现记录", "page('history')"),
+    ("进展", "Ctrl+G", "右栏：当前调查进展，有新进展时更新", "page('progress')"),
+    ("背景", "Ctrl+G", "右栏：开局已知信息与调查员背景", "page('background')"),
+    ("整理进展", "Ctrl+Y", "整理当前调查进展，每轮一次", "recount"),
+    ("手绘", "F8", "绘制并提交草图", "sketch"),
     ("换模型", "F9", "切换模型和思考强度", "engine"),
-    ("复盘", "F10", "结局以后：真相、漏掉的线索、后日谈", "debrief"),
-    ("接着讲", "", "接续中断的一段，保留已发生的结果", "retry"),
+    ("复盘", "F10", "结局后查看真相、未发现线索与后日谈", "debrief"),
+    ("继续叙述", "", "接续中断的一段，保留已发生的结果", "retry"),
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
     ("换画法", "Ctrl+A", "块字符、六分块、照片、纯 ASCII", "art_style"),
     ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、青石、磷光", "dice_skin"),
-    ("天气动画", "", "开或关；画面晃眼或卡顿时关掉", "weather"),
+    ("天气动画", "", "画面闪烁或卡顿时可关闭", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
-    ("回到标题", "", "先存档，再回标题画面", "leave_game"),
+    ("回到标题", "", "保存进度并返回标题页", "leave_game"),
 )
 
 
@@ -102,7 +102,7 @@ class GameScreen(Screen):
         Binding("f2", "notes", "线索本"),
         Binding("f3", "map", "地图"),
         Binding("f4", "sheet", "人物卡"),
-        Binding("f5", "suggest", "出主意"),
+        Binding("f5", "suggest", "行动建议"),
         Binding("f6", "retell", "重讲", show=False),
         Binding("f7,ctrl+r", "recap", "前情回顾", show=False),
         Binding("f8", "sketch", "手绘", show=False),
@@ -247,7 +247,7 @@ class GameScreen(Screen):
         self.spinner = (self.spinner + 1) % len(frames)
         line = f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""
         if self.queued is not None:
-            wait = "这一段中断了，/retry 讲完再交" if self.state.pending_turn and not self.busy else "讲完就交"
+            wait = "当前叙述已中断，/retry 继续后提交" if self.state.pending_turn and not self.busy else "待叙述结束后提交"
             line += f"{'  · ' if line else ' '}{wait}：{self.queued[:24]}（/undo 撤回）"
         if line != self._spun:  # an idle status line is not repainted ten times a second
             self._spun = line
@@ -827,7 +827,7 @@ class GameScreen(Screen):
             elif choice == "now":
                 now()
 
-        self.app.push_screen(Confirm("守秘人还没讲完", [("wait", "讲完再走"), ("now", "现在就走"), ("no", "取消")]), answer)
+        self.app.push_screen(Confirm("当前叙述尚未结束", [("wait", "叙述结束后离开"), ("now", "立即离开"), ("no", "取消")]), answer)
 
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
@@ -837,7 +837,7 @@ class GameScreen(Screen):
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
                 event.input.value = ""
             else:  # the line stays in the box
-                self.app.notify("已经记下一条了，讲完先交那条；/undo 撤回它" if self.queued else "这一回合还没结束，等它讲完再按回车", timeout=3)
+                self.app.notify("已有待提交行动，可用 /undo 撤回。" if self.queued else "本回合尚未结束，请在叙述结束后提交。", timeout=3)
             return
         event.input.value = ""
         if text:
@@ -860,7 +860,7 @@ class GameScreen(Screen):
             self._slash(text)
             return
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
-            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定，F7 回顾这一局，Esc 菜单里可以回到标题。")
+            self.app.notify("本局已结束。F10 查看复盘，.en 进行成长检定，F7 查看前情回顾，Esc 打开菜单。")
             return
         self.play(text)
 
@@ -982,7 +982,7 @@ class GameScreen(Screen):
         assert self.cast
         st = self.state
         inv = st.investigators[idx]
-        self._status(f"{inv.name}在想下一步…")
+        self._status(f"{inv.name} 正在决定行动…")
         situation = self._situation()
         action = await self.cast.investigator(st, inv.id, situation)
         self.story.add("player", Text(f"▶ {inv.name}（AI）：{action}"))
@@ -1244,7 +1244,7 @@ class GameScreen(Screen):
         if not nudge or self._turn_running() or self.game is None:
             return
         if self.game.told is not told:
-            self.app.notify("守秘人已经讲到下一段了，想重讲就再按一次 F6", severity="warning", timeout=5)
+            self.app.notify("叙述已更新，按 F6 重新选择重述内容。", severity="warning", timeout=5)
             return
         self._retell(nudge)
 
@@ -1257,7 +1257,7 @@ class GameScreen(Screen):
             await self.game.retell(nudge)
         except Exception as exc:  # the old telling is back on screen
             why = str(exc) if isinstance(exc, ValueError) else exc.__class__.__name__
-            self.app.notify(f"没能重讲（{why}），原来那段还在", severity="error", timeout=6)
+            self.app.notify(f"重述失败（{why}），原叙述已保留。", severity="error", timeout=6)
         else:
             write_save(self.state, self.m)
         self._busy(False)

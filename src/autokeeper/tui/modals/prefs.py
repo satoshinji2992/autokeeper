@@ -52,7 +52,7 @@ class PrefsModal(ModalScreen[Prefs | None]):
             yield Static(
                 Text(
                     "勾选后，相关事件仍会发生，但叙述会省略细节。"
-                    "模组里写好的段落（手稿、事件原文）仍按原文显示。",
+                    "模组已有的手稿与事件文本仍按原文显示。",
                     style="dim",
                 ),
                 id="prefs-note",
@@ -60,7 +60,7 @@ class PrefsModal(ModalScreen[Prefs | None]):
             with Horizontal(classes="buttons"):
                 yield Button("保存", id="keep", variant="primary")
                 yield Button("取消", id="cancel")
-            yield Static("Tab 换一栏 · 方向键移动 · 回车或空格选定 · Ctrl+S 保存 · Esc 取消", classes="system")
+            yield Static("Tab 切换栏目 · 方向键移动 · 回车或空格选定 · Ctrl+S 保存 · Esc 取消", classes="system")
 
     def on_mount(self) -> None:
         self.query_one("#prefs-length", RadioSet).focus()

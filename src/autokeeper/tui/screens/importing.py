@@ -184,7 +184,7 @@ def _reason(exc: BaseException) -> str:
     if isinstance(exc, zipfile.BadZipFile):
         return "不是完好的 zip 压缩包"
     if isinstance(exc, PermissionError):
-        return "没有权限读这个文件"
+        return "无权读取此文件"
     text = str(exc).strip()
     return f"{text}（{type(exc).__name__}）" if text else type(exc).__name__
 
@@ -202,8 +202,8 @@ def _engine_note(model: str = "", vision_model: str = "") -> Text:
     t.append(f"读图：{cfg.role('vision').model}（需要查看图片时才调用）\n", style="dim")
     if model:
         t.append("长文整理和知识库也使用这次选择的导入模型。\n", style="dim")
-    t.append("它会通读全文，整理出地点、人物、线索和结局，给每个地点和人物画图，再自己校验到没有错误。", style="dim")
-    t.append("一本几十页的模组大约要二十分钟。", style="dim")
+    t.append("导入过程包括原文阅读、地点与人物整理、线索及结局提取、配图与校验。", style="dim")
+    t.append("数十页模组的预计处理时间约为二十分钟。", style="dim")
     if cfg.budget_usd is not None:
         t.append(f"按量计费的 API 花费上限 ${cfg.budget_usd:g}。", style="dim")
     return t
@@ -235,10 +235,10 @@ class StopModal(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Static("停下导入？", classes="modal-title")
-            yield Static(f"将停止导入。已生成的文件保留在 modules/local/{self.module_id}/，重新导入会从头来过。", classes="modal-body")
+            yield Static("停止导入？", classes="modal-title")
+            yield Static(f"将停止导入。已生成的文件保留在 modules/local/{self.module_id}/，重新导入将从头开始。", classes="modal-body")
             with Horizontal(classes="buttons"):
-                yield Button("停下", id="halt", variant="error")
+                yield Button("停止", id="halt", variant="error")
                 yield Button("继续导入", id="keep", variant="primary")
 
     def on_mount(self) -> None:
@@ -283,7 +283,7 @@ class ImportScreen(Screen):
                     with Horizontal(id="browse-body"):
                         yield OptionList(*(Option(label, id=str(path)) for label, path in self.spots), id="places")
                         yield ModuleFiles(start, id="files")
-                    yield Input(placeholder="或者把模组文件拖进终端、粘贴它的路径，回车", id="drop")
+                    yield Input(placeholder="拖入模组文件或粘贴文件路径，回车确认", id="drop")
                 with Vertical(id="confirm"):
                     with VerticalScroll(id="confirm-body"):
                         yield Static(id="picked")
@@ -295,7 +295,7 @@ class ImportScreen(Screen):
                         yield Static(id="id-note", classes="field-note")
                         with Horizontal(classes="field"):
                             yield Static("页码", classes="field-label")
-                            yield Input(placeholder="空着就是全部，比如 7-18", id="pages", compact=True)
+                            yield Input(placeholder="留空导入全部页码，例如 7-18", id="pages", compact=True)
                         yield Static(id="pages-note", classes="field-note")
                         with Horizontal(classes="field"):
                             yield Static("导入模型", classes="field-label")
@@ -312,7 +312,7 @@ class ImportScreen(Screen):
                         yield Static(id="engine")
                     with Horizontal(classes="buttons"):
                         yield Button("开始导入", id="start", variant="primary")
-                        yield Button("换个文件", id="rechoose")
+                        yield Button("更换文件", id="rechoose")
                 with Vertical(id="run"):
                     with Horizontal(id="stages"):
                         for i, label in enumerate(STAGES):
@@ -320,10 +320,10 @@ class ImportScreen(Screen):
                     yield RichLog(id="import-log", wrap=True, min_width=1, max_lines=5000)
                     yield Static(id="import-status")
                     with Horizontal(classes="buttons"):
-                        yield Button("停下导入", id="stop", variant="error")
+                        yield Button("停止导入", id="stop", variant="error")
                         yield Button("开始游戏", id="play", variant="primary")
                         yield Button("重新导入", id="retry", variant="primary")
-                        yield Button("换个文件", id="another")
+                        yield Button("更换文件", id="another")
                         yield Button("返回标题", id="leave")
             yield Static(id="setup-hint")
         yield Footer()
@@ -354,7 +354,7 @@ class ImportScreen(Screen):
     def _show_browse(self) -> None:
         self.step = "browse"
         self.query_one(ContentSwitcher).current = "browse"
-        self._frame("导入模组 · 选一个模组文件", "↑↓ 选择 · Enter 打开 · Backspace 上一级 · 文件可以直接拖进来 · Esc 返回")
+        self._frame("导入模组 · 选一个模组文件", "↑↓ 选择 · Enter 打开 · Backspace 上一级 · 支持拖入文件 · Esc 返回")
         self.query_one(ModuleFiles).focus()
 
     @on(OptionList.OptionSelected, "#places")
@@ -373,7 +373,7 @@ class ImportScreen(Screen):
             return
         path = sources.dropped_path(event.value)
         if path is None:
-            self.app.notify(f"找不到这个文件：{event.value.strip()}", severity="error")
+            self.app.notify(f"未找到文件：{event.value.strip()}", severity="error")
             return
         event.input.value = ""
         self._pick(path)
@@ -384,7 +384,7 @@ class ImportScreen(Screen):
             return
         path = sources.dropped_path(event.text)
         if path is None:
-            self.app.notify(f"找不到这个文件：{event.text.strip()[:200]}", severity="error")
+            self.app.notify(f"未找到文件：{event.text.strip()[:200]}", severity="error")
         else:
             self._pick(path)
 
@@ -394,7 +394,7 @@ class ImportScreen(Screen):
             self._show_browse()
         elif path.suffix.lower() not in READABLE:
             instead = INSTEAD.get(path.suffix.lower(), "只认 PDF、Word（.docx）、Markdown、纯文本，和装着它们的 .zip")
-            self.app.notify(f"导入不了 {path.name}：{instead}", severity="error", timeout=6)
+            self.app.notify(f"无法导入 {path.name}：{instead}", severity="error", timeout=6)
         else:
             self._open(path)
 
@@ -407,7 +407,7 @@ class ImportScreen(Screen):
         if path.suffix.lower() in sources.ARCHIVES:
             self.unpacked = tempfile.TemporaryDirectory(prefix="autokeeper-zip-", ignore_cleanup_errors=True)
             scratch = Path(self.unpacked.name)
-            self._frame("导入模组", f"正在解开 {path.name} …")
+            self._frame("导入模组", f"正在解压 {path.name} …")
         try:
             choice = await asyncio.to_thread(look_inside, path, scratch)
         except Exception as exc:  # a damaged zip, a password, no permission: say so and stay
@@ -458,7 +458,7 @@ class ImportScreen(Screen):
         self._document_changed()
         self.step = "confirm"
         self.query_one(ContentSwitcher).current = "confirm"
-        self._frame("导入模组 · 确认", "Enter 开始导入 · Tab 切换 · Esc 换个文件")
+        self._frame("导入模组 · 确认", "Enter 开始导入 · Tab 切换 · Esc 更换文件")
         (docs if docs.display else self.query_one("#start", Button)).focus()
 
     def _document(self) -> Document:
@@ -513,10 +513,10 @@ class ImportScreen(Screen):
         if doc.broken:
             return None, "error", doc.broken
         if doc.pages is None:
-            return None, "", "只有 PDF 能挑页导入"
+            return None, "", "仅 PDF 支持按页码导入"
         spec = page_spec(self.query_one("#pages", Input).value)
         if not spec:
-            return None, "", f"共 {doc.pages} 页，全部导入；只要正文的话填页码，比如 7-18"
+            return None, "", f"共 {doc.pages} 页，默认全部导入；可指定正文页码，例如 7-18"
         if not PAGES.fullmatch(spec):
             return None, "error", "页码写成 7-18，或者 3,5,7-9"
         chosen = importer._pages(spec, doc.pages)
@@ -575,7 +575,7 @@ class ImportScreen(Screen):
         status.update("")
         self.step = "run"
         self.query_one(ContentSwitcher).current = "run"
-        self._frame(f"正在导入 {self.job.label}", "导入要一阵子，别关游戏 · Esc 停下导入")
+        self._frame(f"正在导入 {self.job.label}", "导入期间请保持程序运行 · Esc 停止导入")
         if self._fell_back not in channels.listeners:
             channels.listeners.append(self._fell_back)
         self.importing = self._import(self.job)
@@ -617,7 +617,7 @@ class ImportScreen(Screen):
         if self.step != "run":
             return
         self.spin = (self.spin + 1) % len(SPINNER)
-        doing = "正在停下" if self.importing and self.importing.is_cancelled else STAGES[self.stage]
+        doing = "正在停止" if self.importing and self.importing.is_cancelled else STAGES[self.stage]
         parts = [doing, *([f"第 {self.steps} 步"] if self.steps else []), f"已用 {self._elapsed()}"]
         self.query_one("#import-status", Static).update(Text(f"{SPINNER[self.spin]} " + " · ".join(parts)))
 
@@ -642,7 +642,7 @@ class ImportScreen(Screen):
         elif event.state == WorkerState.ERROR:
             self._failed(event.worker.error)
         elif event.state == WorkerState.CANCELLED:
-            self._done("导入已停下", f"■ 导入已停下（{self._elapsed()}）。写好的部分留在 modules/local/{self.job.module_id}/。", ok=False)
+            self._done("导入已停止", f"■ 导入已停止（{self._elapsed()}）。已生成的文件保存在 modules/local/{self.job.module_id}/。", ok=False)
 
     def _succeeded(self, job: Job) -> None:
         work = paths.LOCAL_MODULES / job.module_id
@@ -652,7 +652,7 @@ class ImportScreen(Screen):
                 log.write(Text(f"  {issue}", style="red"))
             self._done(
                 "导入没有完成",
-                f"✗ 导入跑完了，还有 {len(issues)} 个问题没修好（见上面的日志）。半成品留在 modules/local/{job.module_id}/，可以重新导入再试一次。",
+                f"✗ 导入结束，仍有 {len(issues)} 项问题未通过校验，详情见日志。当前文件保存在 modules/local/{job.module_id}/，可重新导入。",
                 ok=False,
             )
             return
@@ -661,8 +661,8 @@ class ImportScreen(Screen):
         self._stages(len(STAGES))
         self._done(
             "导入完成",
-            f"✓ 《{m.title}》导入好了：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、{len(m.art)} 张图，"
-            f"用时 {self._elapsed()}。以后在“新的调查”里也能找到它。",
+            f"✓ 《{m.title}》导入完成：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、{len(m.art)} 张图，"
+            f"用时 {self._elapsed()}。可从“新的调查”选择此模组。",
             ok=True,
         )
 
@@ -681,7 +681,7 @@ class ImportScreen(Screen):
         status.set_classes("ok" if ok else "bad")
         if not ok:
             self.query_one(f"#stage-{self.stage}", Static).add_class("failed")
-        self.query_one("#another", Button).label = "再导入一个" if ok else "换个文件"
+        self.query_one("#another", Button).label = "继续导入其他模组" if ok else "更换文件"
         self._buttons(*(("play", "another", "leave") if ok else ("retry", "another", "leave")))
         self._frame(title, "Esc 返回标题")
         self.query_one("#play" if ok else "#retry", Button).focus()

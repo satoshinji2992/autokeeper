@@ -258,13 +258,13 @@ class NetGameScreen(GameScreen):
             self.held = list(mine.get("next", []))
             self.my_turn = self.pool_open and bool(self.seat) and self.seat in msg.get("open_to", [])
             if len(self.held) > held:
-                self.app.notify("这一轮满了，这条留到下一轮" if self.pool_open else "守秘人还在讲，这条留到下一轮", timeout=4)
+                self.app.notify("本轮行动名额已满，已排入下一轮。" if self.pool_open else "正在叙述，行动已排入下一轮。", timeout=4)
             if self.pool_open and not was_open:
                 self.settling = ""
                 self.engine_label = "局域网联机 · 新的一轮"
                 self._topbar()
                 if self.seat:
-                    self.app.notify("新的一轮，你先说的已经交上" if self.pooled else "新的一轮", timeout=4)
+                    self.app.notify("新回合已开始，预先输入的行动已提交。" if self.pooled else "新的一轮", timeout=4)
                     self.query_one(Input).focus()
             self._turnline()
         elif t == "turn":  # the pool is closed: the keeper settles this seat's action
@@ -291,15 +291,15 @@ class NetGameScreen(GameScreen):
             self.engine_label = "局域网联机 · 本局结束"
             self._topbar()
             if msg.get("ending"):
-                self.story.add("system", Text("这一局结束了：F10 复盘，看真相、漏掉的线索和没走到的结局" + ("；.en 做成长检定" if self.seat else ""), style="dim"))
+                self.story.add("system", Text("本局已结束：F10 查看复盘、真相、未发现线索与其他结局" + ("；.en 做成长检定" if self.seat else ""), style="dim"))
         elif t == "error":
             if msg.get("retry"):
                 self.status_text = ""
                 self.retry_due = True
-                self.story.end_keeper("这一段暂时中断，输入 /retry 接着讲。")
+                self.story.end_keeper("叙述已中断，输入 /retry 继续。")
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
-            self.app.notify("和房主的连接断了", severity="error", timeout=10)
+            self.app.notify("与房主的连接已断开。", severity="error", timeout=10)
 
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")
@@ -332,13 +332,13 @@ class NetGameScreen(GameScreen):
         elif not self.seat:
             self.app.notify("观战中，全角括号开头是场外聊天")
         elif self.state.ending and not commands.instant(text):  # after the end: growth rolls (.en), the sheet
-            self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定")
+            self.app.notify("本局已结束。F10 查看复盘，.en 进行成长检定。")
         elif self.state.ending or commands.instant(text):  # .r, .st: not an action; while the keeper tells, right after
             if not self.pool_open and not self.state.ending:
-                self.app.notify("守秘人讲完这一轮就掷", timeout=3)
+                self.app.notify("本轮叙述结束后可掷骰。", timeout=3)
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
         elif not self.my_turn and len(self.held) >= 2:
-            self.app.notify("下一轮已经有你 2 条了")
+            self.app.notify("下一轮已有两条行动，无法继续添加。")
         else:  # in this round if it has room for you, else first in the next: the Hub says which
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
@@ -366,7 +366,7 @@ class NetGameScreen(GameScreen):
 
     def plugin_command(self, name: str, text: str) -> None:
         if not self.seat:
-            self.app.notify("你在观战，没有自己的调查员")
+            self.app.notify("观战模式下无可操作的调查员。")
             return
         self.run_worker(partial(self.link.send, {"t": "command", "name": name, "text": text}))
 
@@ -374,14 +374,14 @@ class NetGameScreen(GameScreen):
         if self.seat:
             super().action_suggest()
         else:
-            self.app.notify("你在观战，没有自己的调查员")
+            self.app.notify("观战模式下无可操作的调查员。")
 
     def action_recount(self) -> None:
         """Ctrl+Y: the host writes the story so far now; every screen gets it with the state."""
         if self.seat:
             self.run_worker(partial(self.link.send, {"t": "recount"}))
         else:
-            self.app.notify("你在观战；有新进展时房主那边会整理")
+            self.app.notify("观战模式下由房主自动整理调查进展。")
 
     async def ideas_for(self, inv) -> list[str]:
         """The host's investigator agent thinks for this seat (Hub._ideas), from the same view
@@ -393,7 +393,7 @@ class NetGameScreen(GameScreen):
     # The host runs the agents: switching models, sketches, recaps and saving happen there.
     def action_engine(self) -> None:
         if not self.link.host:
-            self.app.notify("联机时由房主决定用哪个模型")
+            self.app.notify("联机模型由房主配置。")
             return
         from ..modals.settings import model_choices
 
@@ -406,20 +406,20 @@ class NetGameScreen(GameScreen):
             self.run_worker(partial(self.link.send, {"t": "engine", "choice": choice}))
 
     def action_sketch(self) -> None:
-        self.app.notify("联机时暂时不能手绘")
+        self.app.notify("联机模式暂不支持手绘。")
 
     def action_recap(self) -> None:
-        self.app.notify("联机时由房主那边回顾前情")
+        self.app.notify("前情回顾由房主发起。")
 
     def action_save(self) -> None:
-        self.app.notify("房主那边每回合都会自动存档")
+        self.app.notify("房主设备每回合自动保存进度。")
 
     # Telling again and the epilogue happen on the host too, asked for from here.
     def action_retell(self, nudge: str = "") -> None:
         if not self.seat:
-            self.app.notify("你在观战，不能请守秘人重讲")
+            self.app.notify("观战模式不支持请求重述。")
         elif nudge and nudge not in RETELL:
-            self.app.notify(f"可以这样要：{'、'.join(RETELL)}", severity="warning")
+            self.app.notify(f"可选重述方式：{'、'.join(RETELL)}", severity="warning")
         elif nudge:
             self._ask_retell(nudge)
         else:
@@ -433,7 +433,7 @@ class NetGameScreen(GameScreen):
         self.run_worker(partial(self.link.send, {"t": "epilogue"}))
 
     def action_prefs(self) -> None:
-        self.app.notify("联机时按房主那边的叙事偏好来讲")
+        self.app.notify("联机叙事偏好由房主配置。")
 
     def _leave(self) -> None:
         leave(self.app)
@@ -454,4 +454,4 @@ class NetGameScreen(GameScreen):
             self._leave()
 
     def action_usage(self) -> None:
-        self.app.notify("联机时模型跑在房主那边，用量由房主记账")
+        self.app.notify("模型调用由房主设备发起，用量记录保存在房主设备。")

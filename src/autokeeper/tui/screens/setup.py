@@ -140,9 +140,9 @@ class SetupScreen(Screen):
                 self._preview_original(m, first, header, oid)
         elif self.step == "investigator" and self.module and not self.spectate:
             if oid == "card:new":
-                body.update(Text("说一位公众人物的名字，或者描述你想玩的人。AutoKeeper 会查资料、问你几个问题，再按这个模组的年代做成调查员。做好的卡会留着，下次开团还能选。", style="dim"))
+                body.update(Text("输入公众人物姓名或人物描述。系统将检索资料、确认背景，并结合模组年代创建调查员。保存的人物卡可在之后的游戏中使用。", style="dim"))
             elif oid == "card:import":
-                body.update(Text("带上你自己的卡：骰娘的 .st 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，或者酒馆（SillyTavern）的角色卡。数值照原样录入；只有人设的角色卡，会问你几个问题再车成调查员。", style="dim"))
+                body.update(Text("支持导入骰娘 .st 指令、人物表格、PDF、Word、纸质人物卡照片，以及酒馆（SillyTavern）角色卡。已有数值按原样录入；仅含人设的角色卡将通过背景问答创建为调查员。", style="dim"))
             elif inv := self._investigator(oid):
                 body.update(_investigator_card(self.module, inv, self.app.art_style, photo=False))  # type: ignore[attr-defined]
                 if inv.portrait in self.module.pictures and imagery.available():

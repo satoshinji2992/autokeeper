@@ -177,9 +177,9 @@ def line(save: Save, playing: bool = False) -> Group:
     top = Text(save.name, style="bold" if save.state else "dim", no_wrap=True, overflow="ellipsis")
     tags = Text()
     if save.state is None:
-        tags.append(" 读不了", style="bold red")
+        tags.append(" 无法读取", style="bold red")
     if playing:
-        tags.append(" 正在玩", style="bold")
+        tags.append(" 当前游戏", style="bold")
     if save.lan:
         tags.append(" 联机", style="bold")
     if save.state is not None and save.state.ending:
@@ -191,7 +191,7 @@ def line(save: Save, playing: bool = False) -> Group:
     grid.add_row(top, Text(when(str(save.meta.get("updated", ""))), style="dim"))
     st = save.state
     if st is None:
-        below = Text("这个存档读不了，可以删除", style="dim")
+        below = Text("无法读取此存档，可选择删除。", style="dim")
     else:
         party = "、".join(inv.name for inv in st.investigators)
         place = save.meta.get("location", "")
@@ -208,7 +208,7 @@ def details(save: Save, m: Module | None) -> Text:
     out = Text()
     if st is None:
         out.append(f"{save.name}\n\n", style="bold")
-        out.append("这个存档读不了。按 D 可以删除它。", style="dim")
+        out.append("无法读取此存档。按 D 删除。", style="dim")
         return out
     out.append(save.name + "\n", style="bold")
     if st.label:
@@ -381,7 +381,7 @@ class LoadScreen(Screen):
         if save is None:
             return
         if save.state is None:
-            self.app.notify("这个存档读不了，只能删除", severity="warning")
+            self.app.notify("无法读取此存档，当前仅支持删除。", severity="warning")
             return
         if save.slot == self.current:
             self.dismiss(None)
@@ -390,7 +390,7 @@ class LoadScreen(Screen):
         try:
             module = load_module(path if (path / "module.yaml").exists() else module_dir(str(save.meta.get("module", save.state.module))))
         except Exception:  # the module was removed or will not read
-            self.app.notify("找不到这个存档用的模组", severity="error")
+            self.app.notify("未找到存档对应的模组。", severity="error")
             return
         if self.playing is not None:
             self.dismiss((module, save.state))
@@ -411,13 +411,13 @@ class LoadScreen(Screen):
             try:
                 rename(save.slot, name)
             except (OSError, ValueError):
-                self.app.notify("没能改名", severity="error")
+                self.app.notify("重命名失败", severity="error")
                 return
             if save.slot == self.current:
                 self.playing.state.label = name  # or its next autosave would bring the old name back
             self._fill(save.slot)
 
-        self.app.push_screen(AskText("给这个存档起个名字", save.state.label, f"不填就叫《{save.meta.get('title', '')}》"), done)
+        self.app.push_screen(AskText("重命名存档", save.state.label, f"留空使用《{save.meta.get('title', '')}》"), done)
 
     def action_copy(self) -> None:
         save = self._chosen()
@@ -426,17 +426,17 @@ class LoadScreen(Screen):
         try:
             slot = copy(save)
         except (OSError, ValueError):
-            self.app.notify("没能复制", severity="error")
+            self.app.notify("复制失败", severity="error")
             return
         self._fill(slot)
-        self.app.notify("复制好了")
+        self.app.notify("存档已复制")
 
     def action_delete(self) -> None:
         save = self._chosen()
         if save is None:
             return
         if save.slot == self.current:
-            self.app.notify("正在玩的存档不能删", severity="warning")
+            self.app.notify("无法删除当前游戏的存档。", severity="warning")
             return
 
         def done(answer: str | None) -> None:
@@ -445,7 +445,7 @@ class LoadScreen(Screen):
             try:
                 delete(save.slot)
             except OSError:
-                self.app.notify("没能删除", severity="error")
+                self.app.notify("删除失败", severity="error")
                 return
             self._fill()
             self.app.notify("已删除")

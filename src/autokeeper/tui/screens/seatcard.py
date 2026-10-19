@@ -85,7 +85,7 @@ class SeatCardScreen(Screen[tuple[str, object] | None]):
             self._show(oid)
         else:
             self.workers.cancel_group(self, "card")
-            self.query_one("#preview-body", Static).update(Text("让 AI 帮你车一张卡，或者导入你已有的卡。车卡用的是房主的模型。", style="dim"))
+            self.query_one("#preview-body", Static).update(Text("由 AI 协助创建调查员，或导入已有的人物卡。创建过程使用房主配置的模型。", style="dim"))
 
     @work(exclusive=True, group="card")
     async def _show(self, oid: str) -> None:

@@ -157,11 +157,11 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         app.push_screen(PushModal(offer))
         await pilot.pause()
         stakes = "".join(str(w.render()) for w in app.screen.query(Static))
-        assert "比这次更糟" in stakes and "幸运 55 → 52" in stakes and "还在原处" in stakes and "会到手" not in stakes  # first miss
+        assert "更严重的后果" in stakes and "幸运 55 → 52" in stakes and "仍可调查" in stakes and "仍可取得" not in stakes  # first miss
         app.pop_screen()
         app.push_screen(PushModal({**offer, "due": True}))  # missed before: giving up now finds it, at a price
         await pilot.pause()
-        assert "关键发现还是会到手" in "".join(str(w.render()) for w in app.screen.query(Static))
+        assert "仍可取得关键发现" in "".join(str(w.render()) for w in app.screen.query(Static))
 
 
 async def test_after_the_ending_only_the_dice_lookups_work(canned, monkeypatch):
@@ -248,7 +248,7 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
         await pilot.pause(0.2)
         status = screen.query_one("#status", Static)
         assert box.value == "" and not box.disabled and screen.queued == "我爬上钟楼"
-        assert "讲完就交：我爬上钟楼" in str(status.render())
+        assert "待叙述结束后提交：我爬上钟楼" in str(status.render())
         box.value = "我再去报社"
         await pilot.press("enter")
         await pilot.pause()

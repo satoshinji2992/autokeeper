@@ -41,7 +41,7 @@ class CardEditModal(ModalScreen[dict | None]):
         inv = self.inv
         with VerticalScroll(id="card-edit", classes="modal"):
             yield Static(f"编辑 {inv.name}", classes="modal-title")
-            yield Static(Text("数值不能改", style="dim"), classes="edit-note")
+            yield Static(Text("属性与技能数值不可手动修改。", style="dim"), classes="edit-note")
             for key, label in FIELDS:
                 with Horizontal(classes="edit-row"):
                     yield Static(label, classes="edit-label")
@@ -57,7 +57,7 @@ class CardEditModal(ModalScreen[dict | None]):
             with Horizontal(classes="edit-row"):
                 yield Static("照片", classes="edit-label")
                 yield Input(id="edit-photo", compact=True,
-                            placeholder="换一张：图片文件拖进来" + ("；不填就用现在这张" if self.has_photo else ""))  # fmt: skip
+                            placeholder="拖入图片文件以更换照片" + ("；留空保留当前照片" if self.has_photo else ""))  # fmt: skip
             with Horizontal(classes="buttons"):
                 yield Button("保存", id="edit-save", variant="primary")
                 yield Button("取消", id="edit-cancel")
@@ -76,14 +76,14 @@ class CardEditModal(ModalScreen[dict | None]):
 
         values = {key: self.query_one(f"#edit-{key}", Input).value.strip() for key, _ in FIELDS}
         if not values["name"]:
-            self.app.notify("名字不能空着", severity="warning")
+            self.app.notify("姓名不能为空。", severity="warning")
             return
         try:
             age = int(values["age"])
         except ValueError:
             age = 0
         if not 1 <= age <= 120:
-            self.app.notify("年龄写一个数，比如 30", severity="warning")
+            self.app.notify("年龄须为整数，例如 30。", severity="warning")
             return
         values["age"] = age
         story = {}
@@ -96,6 +96,6 @@ class CardEditModal(ModalScreen[dict | None]):
         if typed := self.query_one("#edit-photo", Input).value.strip():
             photo = local_file(typed)
             if photo is None:
-                self.app.notify("找不到这张图片，拖进来或者写完整的位置", severity="warning")
+                self.app.notify("未找到图片，请拖入文件或填写完整路径。", severity="warning")
                 return
         self.dismiss({"investigator": values, "photo": photo})

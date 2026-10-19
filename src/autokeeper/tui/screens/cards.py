@@ -277,7 +277,7 @@ class CardsScreen(Screen):
             self._show(oid)
         elif event.option.id == "create":
             self.workers.cancel_group(self, "card")
-            self.query_one("#preview-body", Static).update(Text("让 AI 帮你车一张卡，或者导入你已有的卡。做好的卡放在我的角色里。", style="dim"))
+            self.query_one("#preview-body", Static).update(Text("由 AI 协助创建调查员，或导入已有的人物卡。保存后可在“我的角色”中查看。", style="dim"))
 
     def _game(self, oid: str) -> GameState | None:
         """The save a card comes from, for its 本局经历; None for kept cards and pregens."""
@@ -324,7 +324,7 @@ class CardsScreen(Screen):
         if oid is None:
             return None
         if not oid.startswith("r"):
-            self.app.notify("这张卡不能改，可以按 C 复制成新角色再改", severity="warning")
+            self.app.notify("此人物卡不可直接编辑，按 C 创建副本后修改。", severity="warning")
             return None
         return self.cards[oid][0]
 
@@ -341,7 +341,7 @@ class CardsScreen(Screen):
             try:
                 update_kept(inv, changes["investigator"], changes["photo"])
             except (OSError, ValueError, KeyError):
-                self.app.notify("没能保存", severity="error")
+                self.app.notify("保存失败", severity="error")
                 return
             self._fill(f"r:{inv.id}")
             self.app.notify("已保存")
@@ -359,7 +359,7 @@ class CardsScreen(Screen):
             try:
                 delete_kept(inv)
             except OSError:
-                self.app.notify("没能删除", severity="error")
+                self.app.notify("删除失败", severity="error")
                 return
             self._fill()
             self.app.notify(f"已删除 {inv.name}")
@@ -371,16 +371,16 @@ class CardsScreen(Screen):
         if oid is None:
             return
         if oid.startswith("r"):
-            self.app.notify("这张已经是你的角色了")
+            self.app.notify("此人物卡已保存在“我的角色”中。")
             return
         inv, _, m = self.cards[oid]
         try:
             card = keep_copy(inv, m, self.titles.get(oid.split(":", 1)[0], ""))
         except OSError:
-            self.app.notify("没能复制", severity="error")
+            self.app.notify("复制失败", severity="error")
             return
         self._fill(f"r:{card.id}")
-        self.app.notify(f"{card.name} 已放进我的角色")
+        self.app.notify(f"{card.name} 已保存至“我的角色”")
 
     def action_export(self) -> None:
         oid = self._chosen()
@@ -394,11 +394,11 @@ class CardsScreen(Screen):
             try:
                 target = export(inv, m, Path(where).expanduser() if where else paths.card_exports())
             except OSError:
-                self.app.notify("这个文件夹写不进去，换一个试试", severity="error")
+                self.app.notify("无法写入该文件夹，请检查权限或选择其他位置。", severity="error")
                 return
             self.app.notify(f"已导出到 {target}", timeout=10)
 
-        self.app.push_screen(AskText("导出到哪个文件夹", str(paths.card_exports())), done)
+        self.app.push_screen(AskText("选择导出文件夹", str(paths.card_exports())), done)
 
     def action_create(self) -> None:
         items = [("figure", "AI 协助车卡"), ("import", "导入已有的卡")]
@@ -416,7 +416,7 @@ class CardsScreen(Screen):
         try:
             screen = CardScreen(Module.load(paths.module_folders()[0]), start=start)
         except (IndexError, OSError, ValueError):
-            self.app.notify("要先有一个模组才能车卡", severity="error")
+            self.app.notify("创建调查员前需先导入或选择模组。", severity="error")
             return
         self.app.push_screen(screen, lambda card: self._fill(f"r:{card.id}" if card else None))
 
@@ -430,7 +430,7 @@ class CardsScreen(Screen):
             return
         tag, inv_id = oid.split(":", 1)
         if tag.startswith("s"):
-            self.app.notify("先按 C 复制成新角色，再用它开新游戏", severity="warning")
+            self.app.notify("按 C 创建角色副本后，可用于新的调查。", severity="warning")
         elif tag.startswith("m"):
             self.app.switch_screen(SetupScreen(spectate=False, module=self.paths[tag], card=inv_id))
         else:

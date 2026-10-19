@@ -168,7 +168,7 @@ class ShowPlayer(Static):
         if frame.get("text"):
             body.append(frame["text"], style=style if not frame.get("art") else "")
         if self.stage:
-            body.append(f"\n\n〔{self.ev.get('name', '')}〕{self.ev.get('title', '')} · 点一下或按 Esc 跳过", style=f"dim {LABEL}")
+            body.append(f"\n\n〔{self.ev.get('name', '')}〕{self.ev.get('title', '')} · 点击或按 Esc 跳过", style=f"dim {LABEL}")
         self.update(body)
 
     def skip(self) -> None:

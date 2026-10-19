@@ -71,9 +71,9 @@ class IdeasModal(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Static(f"{self.who}可以……", classes="modal-title")
+            yield Static(f"行动建议 · {self.who}", classes="modal-title")
             yield OptionList(*(Option(Text.assemble((f"{i + 1}  ", "dim"), idea)) for i, idea in enumerate(self.ideas)))
-            yield Static("↑↓ 选 · 回车或空格填进输入框，不会发出去 · Esc 关闭", classes="system")
+            yield Static("↑↓ 选择 · 回车或空格填入草稿 · Esc 关闭", classes="system")
 
     def on_mount(self) -> None:
         ol = self.query_one(OptionList)
@@ -111,13 +111,13 @@ class Ideas:
     def ask(self) -> None:
         s = self.screen
         if s.spectate:
-            s.app.notify("观战时没有你的调查员")
+            s.app.notify("观战模式不提供行动建议。")
         elif s.state.ending:
-            s.app.notify("这局已经结束了")
+            s.app.notify("本局已结束。")
         elif s.busy:
-            s.app.notify("等这一回合讲完再出主意", timeout=3)
+            s.app.notify("本回合结束后可生成行动建议。", timeout=3)
         elif self.draft is not None:
-            s.app.notify("还在想，稍等", timeout=2)
+            s.app.notify("正在生成行动建议。", timeout=2)
         elif self.texts and self.at == self.moment():
             self.show()
         else:
@@ -126,26 +126,26 @@ class Ideas:
     async def think(self) -> None:
         s = self.screen
         inv, at, box = s._viewer(), self.moment(), s.query_one("#command", Input)
-        line = f"{inv.name}在想下一步可以做什么…"
+        line = f"正在为 {inv.name} 生成行动建议…"
         self.draft = box.value
         s._status(line)  # the spinner above the input box
         try:
             texts = await s.ideas_for(inv)
         except Exception as exc:  # a failed call costs nothing but the ideas
-            s.app.notify(f"这回没想出来（{exc.__class__.__name__}），过一会儿再按 F5 试试", severity="warning")
+            s.app.notify(f"行动建议生成失败（{exc.__class__.__name__}），可按 F5 重试。", severity="warning")
             return
         finally:
             draft, self.draft = self.draft, None
             if s.status_text == line:
                 s._status("")
         if not texts:
-            s.app.notify("这回没想出来，过一会儿再按 F5 试试", severity="warning")
+            s.app.notify("未生成有效建议，可按 F5 重试。", severity="warning")
         elif self.moment() != at:
-            s.app.notify("刚才情况变了，再按 F5 重新想")
+            s.app.notify("场景已变化，可按 F5 重新生成建议。")
         else:
             self.at, self.texts = at, texts
             if box.value != draft or s.app.screen is not s:  # typed meanwhile, or reading something else
-                s.app.notify("想好了三个主意，按 F5 看", timeout=4)
+                s.app.notify("行动建议已生成，按 F5 查看。", timeout=4)
             else:
                 self.show()
 
