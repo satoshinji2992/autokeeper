@@ -574,6 +574,31 @@ def art_fetch(
                   + (f"（本模组 Codex 生图已用 {imagegen.used(m.id)}/{imagegen.LIMIT}）" if fill else ""))
 
 
+@app.command()
+def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
+    """提前准备模组的大场景图：一次一张，开场优先；有 Codex 就照参考图或描述生成（计入每个模组 100 张的额度）。"""
+    from . import imagegen
+    from .engine.showcase import cache, prepare_module
+    from .module.schema import Module
+
+    path = Path(module)
+    if not (path / "module.yaml").is_file():
+        path = next((p for p in _module_dirs() if p.name == module), path)
+    if not (path / "module.yaml").is_file():
+        console.print(f"[red]找不到模组：{module}[/]")
+        raise typer.Exit(1)
+    m, cfg = Module.load(path), config.load()
+    if not m.showcases:
+        console.print(f"《{m.title}》没有写大场景（module.yaml 的 showcases）")
+        return
+    off = imagegen.why_off(cfg)
+    console.print(f"[bold]大场景[/] 《{m.title}》{len(m.showcases)} 个，"
+                  + ("用 Codex 生成，一张约一分钟" if not off else f"不生成（{off}），只用模组原图和找到的照片"))
+    done = asyncio.run(prepare_module(cfg, m, log=console.print))
+    console.print(f"准备好 {len(done)}/{len(m.showcases)} 个，图在 {cache(m.id)}"
+                  + ("" if off else f"；本模组 Codex 生图已用 {imagegen.used(m.id)}/{imagegen.LIMIT}"))
+
+
 @art_app.command("credits")
 def art_credits(module: Path) -> None:
     """列出模组里真实图片的来源与授权。"""

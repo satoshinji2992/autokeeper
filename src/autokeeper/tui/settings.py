@@ -59,6 +59,7 @@ class SettingsModal(ModalScreen[None]):
             for label, key, value in (("天气与场景动画", "animations", cfg.animations),
                                       ("模组与即兴规则插件", "plugins", cfg.plugins),
                                       ("操作提示", "tips", cfg.tips),
+                                      ("大场景：关键时刻整屏一张大图", "showcase", cfg.showcase),
                                       ("即兴人物、场景与物品配图", "pictures", cfg.visual_limit > 0),
                                       ("联网搜索与参考配图", "search", cfg.search != "none")):
                 with Horizontal(classes="settings-row"):
@@ -106,7 +107,7 @@ class SettingsModal(ModalScreen[None]):
     @on(Button.Pressed, "#settings-save")
     def keep(self) -> None:
         cfg = config.load()
-        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins")}
+        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins", "showcase")}
         choice |= {"improv": self.query_one("#settings-improv", Select).value,
                    "art_style": self.query_one("#settings-art", Select).value,
                    "theme": self.query_one("#settings-theme", Select).value,

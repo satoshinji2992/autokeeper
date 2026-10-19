@@ -740,6 +740,90 @@ sketches:
     ask: 画出托马斯描述的叔叔道格拉斯·金博尔的样子，好拿去问人
     target: 一个中年男人的头像：白发、秃顶、中等身材、戴圆框眼镜
     threshold: 0.5
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 阿诺兹堡的早班车
+    prompt: 1922 年密歇根小城的清晨，木站台上蒸汽从火车底下散开，一位提着行李的旅人刚走下车厢，远处小镇的屋顶和公墓的老树隐在薄雾里，冷清而安静
+    base: huochezhan
+  - id: sc_library
+    kind: 重要场景
+    when: visit:shufang
+    title: 缺了牙的书架
+    prompt: 四壁顶天立地的书架，每本书都包着整齐的书皮，其中一面空出好几格，像缺了牙；窗下一张旧书桌，窗外是公墓的树影，午后的斜光里浮尘飘动
+    base: shufang
+  - id: sc_tomb
+    kind: 重要场景
+    when: visit:lingmu
+    title: 半埋的陵墓
+    prompt: 半埋在土坡里的石砌陵墓，门楣上的字早被苔藓吃掉，石门紧闭，门缝里塞满了泥，门前的泥地上满是凌乱的脚印；阴天，四周的老树低垂
+    base: lingmu
+  - id: sc_figure
+    kind: 突发
+    when: event:e_figure
+    title: 离开公墓的人影
+    prompt: 午夜的公墓，月光下一个佝偻的黑色人影翻过矮墙，径直走向一栋房子里还亮着灯的书房窗户，只看得见剪影
+    base: mudi
+  - id: sc_maze
+    kind: 危机
+    when: event:e_tunnel_maze
+    title: 迷宫中的相遇
+    prompt: 又低又窄的泥土隧道，四壁满是爪痕，手电筒的光圈里，拐角处一个抱着一摞书的佝偻身影正慢慢回过头，脸藏在阴影里
+    base: suidao
+  - id: sc_hello
+    kind: 怪物
+    when: event:e_hello
+    title: “你好。”
+    prompt: 月光下的墓地，一个佝偻的身影坐在矮墓碑上，膝头摞着几本旧书，抬起一张犬一样、皮肤像胶皮的脸，却有一双温和的眼睛
+    base: mudi
+  - id: sc_unmasked
+    kind: 怪物
+    when: event:e_unmasked
+    title: 熟悉的脸
+    prompt: 墓地的泥地上倒着一个佝偻的身影，手电光照着一张介于人与犬之间的脸，皮肤像胶皮，旁边掉着一副圆框眼镜
+    base: mudi
+  - id: sc_horde
+    kind: 最终boss
+    when: event:e_horde
+    title: 细碎的脚步声
+    prompt: 月光下的墓地，几十张犬一样的脸从墓碑和灌木后面探出来，皮肤像胶皮，身上挂着墓地的苔藓，正从四面八方慢慢围拢过来
+    base: mudi
+  - id: sc_end_farewell
+    kind: 结局
+    when: ending:farewell
+    title: 最后一晚
+    prompt: 黎明前的陵墓入口，一个佝偻的身影把一块巨大的石板拖过去，封住通往地下的洞口；墓地里升起清晨的薄雾
+    base: lingmu
+  - id: sc_end_below
+    kind: 结局
+    when: ending:below
+    title: 地下的图书馆
+    prompt: 地底深处的巨大洞穴，书堆成一座座小山，昏暗的烛光里，几个佝偻的身影在书山之间安静地翻读
+  - id: sc_end_asylum
+    kind: 结局
+    when: ending:asylum
+    title: 疗养院
+    prompt: 1920 年代疗养院的单人病房，铁架床，白色床单，窗外是灰白的天，床头柜上放着一杯水，安静得让人不安
+  - id: sc_end_vanished
+    kind: 结局
+    when: ending:vanished
+    title: 人间蒸发
+    prompt: 清晨空无一人的墓地，泥地里留着挣扎和拖拽的痕迹，一只熄灭的手电筒掉在墓碑旁
+    base: mudi
+  - id: sc_end_emptied
+    kind: 结局
+    when: ending:emptied
+    title: 空墓
+    prompt: 清晨的陵墓，石门大开，里面空空荡荡，泥地上的脚印一直通进黑暗的地下
+    base: lingmu
+  - id: sc_end_unsolved
+    kind: 结局
+    when: ending:unsolved
+    title: 未解之谜
+    prompt: 黄昏的公墓，一个抱着书的模糊背影消失在远处的墓碑之间；近处一栋老房子的书房窗户亮着灯
+    base: mudi
 pregens:
   - id: brennan
     name: 哈罗德·布伦南

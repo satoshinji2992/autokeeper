@@ -202,6 +202,17 @@ def prompt(subject: str, kind: str, *, era: str = "", setting: str = "", change:
     return f"{head}\n{FRAMING.get(kind, FRAMING['scene'])}\nSubject ({KINDS.get(kind, '场景')}): {subject}\n{STYLE}"
 
 
+def staged(scene: str, *, era: str = "", setting: str = "", reference: bool = False) -> str:
+    """A big scene (engine/showcase.py): one cinematic picture of a moment, made from the
+    attached picture of its place when there is one."""
+    world = "，".join(x for x in (era, setting) if x)
+    head = f"A picture for a Call of Cthulhu horror game set in {world}." if world else "A picture for a Call of Cthulhu horror game."
+    frame = "A big cinematic picture that fills a wide screen (about 16:9), the one image of this moment"
+    if reference:
+        frame += ", made from the attached picture: keep its place and its look, and stage the moment in it"
+    return f"{head}\n{frame}: {scene}\n{STYLE}"
+
+
 # -- running Codex ----------------------------------------------------------------------------
 def codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")

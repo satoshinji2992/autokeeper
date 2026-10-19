@@ -35,7 +35,7 @@ ARRIVAL = [
 
 
 async def run(module: Path, actions: list[str], out: Path, *, timeout: float = 120) -> dict:
-    cfg = replace(config.load(), visual_limit=0, imagegen=False)  # story evaluation has no incidental illustration calls
+    cfg = replace(config.load(), visual_limit=0, imagegen=False, showcase=False)  # story evaluation has no incidental illustration calls
     m = Module.load(module)
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="experience-eval")
     cast = Cast(cfg, m)

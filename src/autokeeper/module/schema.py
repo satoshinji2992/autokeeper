@@ -158,6 +158,25 @@ class Ending(BaseModel):
     reward: str = ""
 
 
+SHOWCASE_KINDS = ("开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局")
+
+
+class Showcase(BaseModel):
+    """大场景: one big picture over the whole screen at a turning point (engine/showcase.py)."""
+
+    id: str
+    kind: Literal["开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局"] = Field(
+        description="开场 开局的氛围；突发 突然发生的事；危机 生死关头；重要场景 关键地点；怪物 怪物现身；最终boss 最后的对手；结局 每个结局一张")
+    when: str = Field(
+        description="什么时候展示，每局最多一次：opening 开局；visit:地点id 第一次到达；event:事件id 事件发生；"
+        "creature:怪物id 怪物的名字第一次出现在事件或叙述里；flag:标记 标记成立；ending:结局id 进入这个结局")
+    title: str = Field(description="画面下方的短标题，不超过 12 个字；只说此刻玩家看得见的，不剧透")
+    prompt: str = Field(description="画面描述，写给画师：画什么、构图、光线和气氛；只写看得见的，不写名字和幕后真相")
+    art: str = Field("", description="模组自带的、正好合适的图片键（art/<键>.jpg），有就直接用这张")
+    base: str = Field("", description="参考图的图片键：照着这张原图重画，比如这个地点或怪物的原图；留空就用触发的地点")
+    improvised: bool = Field(False, exclude=True)  # added by the director in this game: its picture is kept per save
+
+
 class Module(BaseModel):
     id: str
     title: str
@@ -193,6 +212,7 @@ class Module(BaseModel):
     events: list[Event] = Field(default_factory=list)
     endings: list[Ending] = Field(default_factory=list)
     sketches: list[SketchPrompt] = Field(default_factory=list)
+    showcases: list[Showcase] = Field(default_factory=list, description="大场景：在重要节点整屏展示一张大图，每个模组 5–15 个")
     pregens: list[Investigator] = Field(default_factory=list)
     art: dict[str, str] = Field(default_factory=dict, exclude=True)
     art_colors: dict[str, str] = Field(default_factory=dict, exclude=True)

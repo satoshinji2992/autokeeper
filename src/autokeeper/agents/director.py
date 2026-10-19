@@ -97,6 +97,14 @@ class NewLook(BaseModel):
     change: str = Field(description="画面上看得见的变化，比如“书店烧成焦黑的空壳，橱窗全碎了”“他左臂缠着渗血的绷带，脸色灰白”；只写外观，不写剧透")
 
 
+class NewShowcase(BaseModel):
+    id: str
+    kind: Literal["突发", "危机", "重要场景", "怪物", "最终boss", "结局"]
+    when: str = Field(description="之后才会到的时刻：event:事件id、visit:地点id（还没去过的）、flag:标记、ending:结局id")
+    title: str = Field(description="画面下方不剧透的短标题，不超过 12 个字")
+    prompt: str = Field(description="画面描述：画什么、构图、光线和气氛，只写看得见的")
+
+
 class NewArc(BaseModel):
     npc: str = Field(description="NPC id（已有的或这次新建的）")
     arc: str = Field(description="这个 NPC 此刻的心境和正在发生的变化，比如“从戒备开始动摇，想说又怕被当成疯子”")
@@ -114,6 +122,7 @@ class Improv(BaseModel):
     endings: list[NewEnding] = Field(default_factory=list)
     arcs: list[NewArc] = Field(default_factory=list, description="NPC 的角色弧光：此刻的心境和变化")
     looks: list[NewLook] = Field(default_factory=list, description="这件事让已有地点或 NPC 的样子明显变了才写，最多一条；配图会照现在的图改画")
+    showcases: list[NewShowcase] = Field(default_factory=list, max_length=1, description="大场景：这次的安排造出重大的新节点时才写，平常留空")
     plugins: list[Plugin] = Field(default_factory=list, max_length=1, description="确有缺失的持续玩法时编写一个经过测试的纯 Python 插件；普通闲聊留空")
     go: str = Field("", description="这一轮调查员去到哪个地点（新建的或已有的 id），不移动就留空")
     give: list[str] = Field(default_factory=list, description="这一轮马上交给调查员的线索 id")
@@ -140,6 +149,7 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - 给出答案的同时留下新的问题。调查员查对了地方、方法合理，就让他拿到东西；但不要为了推进剧情硬塞线索。
 - 有必要时给 NPC 一条角色弧光：在 arcs 里写这个 NPC 此刻的心境和正在发生的变化（从戒备到信任、从隐瞒到崩溃），他之后的言行会随之变化。
 - 这一轮的事让某个已有地点或 NPC 的样子明显变了（失火烧毁、被水淹、被洗劫一空、受了重伤、变异、死去），在 looks 里写一条：target 填它的 id，change 写画面上看得见的变化。心情、天气和昼夜不算。
+- 这次的安排造出一个重大的新节点（要现身的怪物、逼近的危机、新的结局），而且它要过一阵才到，可以在 showcases 里加一个大场景：when 写它到来的时刻，画面整屏展示。每局最多三个，平常留空。
 - 可以调动情绪，靠具体的细节和动作，写得克制。
 
 按触发原因安排：

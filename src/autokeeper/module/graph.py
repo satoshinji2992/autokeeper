@@ -234,6 +234,18 @@ def audit(m: Module) -> list[Issue]:
                 err(f"{who} 的变样图键 {look.key(base)} 只能用小写字母、数字和下划线")
         if len(looks) > 2:
             warn(f"{who} 写了 {len(looks)} 种变样，一般最多两种")
+    moments = {"visit": locs, "event": {e.id for e in m.events}, "creature": {c.id for c in m.creatures},
+               "flag": set(m.flags), "ending": endings}
+    if len(m.showcases) > 15:
+        err(f"大场景最多 15 个，现在有 {len(m.showcases)} 个")
+    if len({sc.id for sc in m.showcases}) != len(m.showcases):
+        err("大场景的 id 有重复")
+    for sc in m.showcases:
+        side, _, ident = sc.when.partition(":")
+        if sc.when != "opening" and ident not in moments.get(side, set()):
+            err(f"大场景 {sc.id} 的 when 要写成 opening、visit:地点、event:事件、creature:怪物、flag:标记或 ending:结局，现在是 {sc.when}")
+        if sc.art and sc.art not in m.pictures:
+            warn(f"大场景 {sc.id} 的图 {sc.art} 不在 art/ 里，会改用生成的图")
 
     reach = reachable_locations(m) if m.start in locs else set()
     for loc in m.locations:

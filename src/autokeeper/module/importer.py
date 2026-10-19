@@ -170,6 +170,10 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 原文里如果有适合让玩家“画出来”的东西（符号、地图、人像），在 sketches 里写一两个。
 - 原文明确写到某个地点或人物之后会明显变样（被烧毁、被水淹、被洗劫、受伤、变异、死去），而且有剧情标记表示这件事发生了，
   可以在那个地点或 NPC 的 looks 里登记：when 写 flag:标记，change 写画面上看得见的变化。全模组最多 6 处；昼夜不用登记（画面按时间自动调光）。
+- 在故事的重要节点写 5–15 个 showcases（大场景：整屏展示一张大图，每局每个只出现一次）：开场氛围（when: opening）、
+  突发事件和危机（event:事件id）、关键地点（visit:地点id）、怪物现身（event:事件id 或 creature:怪物id）、最终 boss、
+  每个结局（ending:结局id）。title 是此刻玩家看得见的短标题，不剧透；prompt 写画面。原模组有正好合适的插图就用 art 指向它，
+  想照某张原图重画就把它写进 base。
 
 ## 美术
 - 先读 source/images/index.json（如果存在）。原模组已有的地图、病历、信件、人物或场景插图优先用 use_image 保存，不用新画的图替代原图。
@@ -457,6 +461,7 @@ async def pipeline(
         )
         if photos:
             await find_photos(m, work, cfg, console)
+            await find_showcases(Module.load(work), cfg, console)  # with the photos just found as references
         from .. import knowledge
 
         if index and knowledge.available():
@@ -513,6 +518,24 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
         console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
         drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
         console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张；本模组已用 Codex 生图 {imagegen.used(m.id)}/{imagegen.LIMIT} 张")
+    return done
+
+
+async def find_showcases(m: Module, cfg: config.Config, console: Console) -> list[str]:
+    """The big scenes' pictures (engine/showcase.py), one at a time, the opening first, kept
+    in saves/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
+    from ..engine.showcase import prepare_module
+
+    if not m.showcases or not imagery.available() or not (imagegen.enabled(cfg) or cfg.search != "none"):
+        return []
+    console.print(f"[bold]大场景[/] {len(m.showcases)} 个，" + (
+        "Codex 照参考图或描述画，一张约一分钟…" if imagegen.enabled(cfg) else "没有 Codex，只用原图和找到的照片…"))
+    try:
+        done = await prepare_module(cfg, m, log=console.print)
+    except Exception as exc:  # the module is done either way
+        console.print(f"[yellow]大场景的图没准备成（{type(exc).__name__}），可以稍后用 autokeeper showcase 补。[/]")
+        return []
+    console.print(f"[bold green]大场景[/] 准备好 {len(done)}/{len(m.showcases)} 个")
     return done
 
 

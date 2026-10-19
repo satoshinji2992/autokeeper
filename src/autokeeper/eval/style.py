@@ -237,7 +237,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
     if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
         compile_module(m, config.SKILLS)
     beats = SCRIPTS[m.id]()
-    cfg = replace(config.load(), improv="严格", imagegen=False)  # the director would write different scenes each time
+    cfg = replace(config.load(), improv="严格", imagegen=False, showcase=False)  # the director would write different scenes each time
     cast = Scripted(cfg, m, beats)
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"style-{m.id}-{label or 'run'}", human=[])
     told: list[str] = []

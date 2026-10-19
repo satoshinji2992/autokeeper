@@ -66,7 +66,7 @@ SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
-PRIVATE |= {"looks"}  # what the story changed reaches the screens as pictures (art events), not as notes
+PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
 
 
@@ -75,6 +75,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     clues and handouts already found (the rest arrive with the events that reveal them)."""
     d = m.model_dump(mode="json")
     d["plugins"] = []
+    d["showcases"] = []  # big scenes (a final boss, the endings) spoil: each travels only when it comes (Hub._event)
     d["plugin_info"] = public_plugins(m, st)
     known = fog.bearings(m, st) | {st.location: m.location(st.location).name}
     visited = set(st.visited) | {st.location}
@@ -435,8 +436,9 @@ class Hub:
 
     def _book(self) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
-        whole book once it has ended (the debrief lays it open anyway)."""
-        return self.m.model_dump(mode="json") if self.state.ending else table(self.m, self.state)
+        whole book once it has ended (the debrief lays it open anyway), but for big scenes
+        that never came."""
+        return self.m.model_dump(mode="json", exclude={"showcases"}) | {"showcases": []} if self.state.ending else table(self.m, self.state)
 
     async def _send(self, cid: str, msg: dict[str, Any]) -> None:
         ws = self.clients.get(cid)
@@ -476,6 +478,11 @@ class Hub:
             await self._broadcast({"t": "module", "module": self._book()})
         elif ev.get("type") == "plugin_effect":  # public line in the story; the id stays on the host
             ev = {k: v for k, v in ev.items() if k != "plugin"}
+        elif ev.get("type") == "showcase":  # its moment has come: the picture itself, never the host's path
+            data = media.pack(ev.get("picture", ""))
+            if not data:
+                return
+            ev = {"type": "showcase", "id": ev.get("id", ""), "kind": ev.get("kind", ""), "title": ev.get("title", ""), "picture_data": data}
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})

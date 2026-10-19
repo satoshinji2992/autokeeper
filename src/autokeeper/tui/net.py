@@ -346,6 +346,7 @@ class NetGameScreen(GameScreen):
             self._turnline()
         elif t == "offer":  # throw your own dice, or push / spend luck after a failure
             offer = msg["offer"]
+            await self.make_way()  # a big scene steps aside
             choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
             await self.link.send({"t": "choice", "mode": choice})
         elif t == "say":

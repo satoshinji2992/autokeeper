@@ -71,7 +71,7 @@ async def _replace_game(module: Module, state: GameState) -> None:
 
     S.module = module
     cfg = config.load()
-    cfg.imagegen = False  # these tools hand back ASCII art: a Codex picture would never be seen
+    cfg.imagegen = cfg.showcase = False  # these tools hand back ASCII art: a big picture would never be seen
     S.game = Game(module, state, Cast(cfg, module), Rules())
     S.game.visuals.schedule()
 
