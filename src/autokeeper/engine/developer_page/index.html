@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoKeeper / 开发者记录</title><link rel="stylesheet" href="style.css"><script defer src="app.js"></script></head>
+<body>
+<header><div class="brand">AUTOKEEPER <span>/ 开发者记录</span></div><div id="status" role="status">连接中</div>
+<div class="notice">本机私有资料 · 含模组真相 · 终端继续游玩</div></header>
+<nav aria-label="记录类别">
+<button data-tab="overview" class="active">概况</button><button data-tab="world">世界与计划</button>
+<button data-tab="module">模组</button><button data-tab="sessions">会话</button>
+<button data-tab="records">调用与任务</button><button data-tab="analysis">AI 排查</button>
+<a href="api/export" download="autokeeper-diagnostics.json">下载完整记录 ↓</a></nav>
+<main>
+<section id="overview" class="active"><div class="metrics" id="metrics"></div><h1>当前后台</h1><div id="activity"></div>
+<div class="overview-grid"><article><h2>导演准备</h2><div id="director-jobs"></div></article><article><h2>图像与规则</h2><div id="asset-jobs"></div></article></div>
+<h2>一致性巡检</h2><div id="maintenance-summary"></div><details><summary>全部巡检依据</summary><pre id="maintenance-report"></pre></details>
+<details><summary>完整后台快照</summary><pre id="backstage"></pre></details>
+<details><summary>游戏状态</summary><pre id="state"></pre></details><p id="capture-note"></p></section>
+<section id="world"><h1>NPC 与世界记录</h1><div id="actors"></div><details><summary>完整世界数据</summary><pre id="world-json"></pre></details></section>
+<section id="module"><h1>当前模组</h1><pre id="module-json"></pre></section>
+<section id="sessions"><h1>会话、提示词与摘要</h1><pre id="sessions-json"></pre></section>
+<section id="records"><div class="toolbar"><h1>完整调用与任务</h1>
+<label>类型 <select id="record-kind"><option value="">全部记录</option><option value="call">模型完整请求</option>
+<option value="model">模型进展与重试</option><option value="task">后台任务</option><option value="director">导演</option>
+<option value="world">世界操作</option><option value="world-tool">世界工具</option><option value="tool">智能体查询</option>
+<option value="retrieval">知识检索</option><option value="diagnostic">排查记录</option><option value="event">游戏事件</option></select></label>
+<button id="latest-records">最新记录</button><button id="reload-records">从头读取</button></div>
+<p>记录按发生顺序保存。展开条目可查看实际输入、输出、格式修复、错误与提供方返回的思考。未返回的内容无法还原。</p>
+<div id="record-list"></div><button id="more-records">读取更早记录</button><span id="record-count"></span></section>
+<section id="analysis"><h1>独立排查</h1>
+<p>点击“提交排查”才调用模型，计入本局的 diagnostic 用量。排查读取后台证据，不操作剧情或角色记忆。</p>
+<form id="analysis-form"><label for="question">异常描述</label><textarea id="question" rows="4" maxlength="4000" required placeholder="例如：第 82 轮托马斯答应同行，第 84 轮却不在公墓。请核对行动、位置与后台计划。"></textarea>
+<div class="toolbar"><label>起始回合 <input id="from-turn" type="number" min="0" placeholder="全部"></label>
+<label>结束回合 <input id="to-turn" type="number" min="0" placeholder="当前"></label><button id="ask" type="submit">提交排查</button></div></form>
+<div id="analysis-status" role="status"></div><p id="analysis-scope"></p><pre id="analysis-answer"></pre>
+<p>提交资料有长度上限；排查结果会注明选取范围与缺失记录。完整历史始终保留，可在“调用与任务”或下载文件中核对。</p></section>
+</main><footer id="connection">只读检查 / 自动刷新</footer></body></html>
