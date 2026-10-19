@@ -305,7 +305,8 @@ def handout(handout_id: str) -> dict:
 def list_plugins() -> list[dict]:
     """列出本局的规则插件及可调用动作；源码与私有计数不展示给玩家。"""
     g = _need()
-    return [{"id": p.id, "name": p.name, "version": p.version, "actions": [a.model_dump() for a in p.actions],
+    return [{"id": p.id, "name": p.name, "version": p.version, "description": p.description,
+             "actions": [a.model_dump() for a in p.actions],
              "enabled": p.id not in g.state.plugin_errors} for p in g.m.extensions.values()]
 
 

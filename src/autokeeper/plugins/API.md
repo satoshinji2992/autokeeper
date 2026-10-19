@@ -6,7 +6,7 @@
 
 必填：`id`（小写字母数字下划线）、`name`、`description`、`code`、`tests`（至少一个实际运行的测试）。可选 `version: "0.1.0"`、`api_version: 1`、`hooks`、`capabilities`、`actions`、`flags`、`initial`。
 
-`code` 是纯 Python，定义 `handle(event, ctx, api)`，返回 `{"state": {...}, "effects": [...]}`。不导入模块，不读写文件或联网。只能调用普通容器/算术内建及 api。单次有时间、内存、输出大小和检定次数限制，错误会暂停该插件，不覆盖主游戏状态。不是完整 Python/第三方包运行环境。
+`code` 是纯 Python，定义 `handle(event, ctx, api)`，返回 `{"state": {...}, "effects": [...]}`，可加 `status` 公开一行状态。不导入模块，不读写文件或联网；不用 eval/exec/compile/getattr/open、`__xxx__` 私有属性、帧/全局（`gi_frame`、`f_globals` 等）、`str.format`、type/object/super 这类。只能调用允许的容器/算术内建与 api。在独立隔离进程、清空环境中运行，单次有时间、内存、输出大小和检定次数限制，越界或出错会暂停该插件，不覆盖主游戏状态。不是完整 Python/第三方包运行环境。
 
 一次行动跨过多个周期时，可返回 `repeat: true`，宿主先完成这段效果，再以更新后的属性和状态重新调用，最多连续 8 段。下一段的检定会使用上一段扣减后的真实属性；不要把数天的检定在一次输出内用旧属性重复掷完。每段和整个事件分别保存执行记录，恢复时不重复结算。
 
@@ -16,6 +16,7 @@
 - `api.check(who, "体质", "常规") -> {passed, value, target, text}` 由房主 CoC 规则裁定，需要 `dice`。难度可为常规、困难、极难。
 - `effects` 是声明效果的列表；每种效果必须在 capabilities 声明。`note`：公开叙事 `text`；`flag`：`key` 已声明剧情标记；`attribute`：`who`、`key` 中文属性名、`amount` 增减；`condition`：`who`、`key` 状态名、`amount: 1` 添加或 `-1` 移除；`damage`：`who`、`amount` 非负伤害；`sanity`：`who`、`success: "0"`、`failure: "1D6"`；`clue`：`key` 当前地点且满足前置条件的已有线索。
 - 只输出已发生的事实；私有计数器写 state，不用 note 公开。不要通过 attribute 改写 HP/SAN；用宿主的 damage/sanity 以保留重伤、疯狂等规则。
+- `status`（可选）：一行面向玩家的公开状态，例如 `"风寒：第 2 天"`，会显示在玩家的规则插件窗口（Ctrl+K），联机时也同步给所有人。默认不显示；只放可以公开的进度，不要把私有计数直接 status。effects 每次产生公开内容时，会在故事里生成一行以插件名标注的简短提示。
 - 插件 actions 用 `[{"name":"buy", "description":"何时可以调用；arguments 的键、类型和范围"}]` 声明，hooks 包含 action；宿主裁定员会按玩家实际行动调用。函数自行检查参数，不能相信愿望已经达成。
 
 测试结构：`{name, event, state, context, dice, checks, expected_state, expected_effects}`。dice 是 api.roll 依次消耗的预设单骰，checks 是 api.check 依次返回的通过/失败。context 覆盖默认场景；expected_state 按子集断言，expected_effects 按补全默认字段后的完整列表断言。预设骰值必须用完。至少覆盖正常流程与边界/失败，不能写只验证空输出的假测试。完整返回类型见 `_example/plugin-output.schema.json`。

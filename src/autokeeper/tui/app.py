@@ -587,6 +587,7 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
         self._leave_when_ready = False
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
@@ -602,7 +603,7 @@ class GameScreen(Screen):
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield Input(placeholder="输入行动或对话 · Ctrl+P 查看操作", id="command",
-                            suggester=command_suggester(self._viewer()), select_on_focus=False)  # fmt: skip
+                            suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
@@ -695,6 +696,9 @@ class GameScreen(Screen):
         frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         self.spinner = (self.spinner + 1) % len(frames)
         line = f"{frames[self.spinner]} {self.status_text}" if self.status_text else ""
+        if self.queued is not None:
+            wait = "这一段中断了，/retry 讲完再交" if self.state.pending_turn and not self.busy else "讲完就交"
+            line += f"{'  · ' if line else ' '}{wait}：{self.queued[:24]}（/undo 撤回）"
         if line != self._spun:  # an idle status line is not repainted ten times a second
             self._spun = line
             self.query_one("#status", Static).update(Text(line))
@@ -710,6 +714,20 @@ class GameScreen(Screen):
             if self._leave_when_ready:
                 self._leave_when_ready = False
                 self.app.call_later(self._leave)
+            elif self.queued is not None:
+                self.set_timer(0.05, self._send_queued)
+
+    def _send_queued(self) -> None:
+        """The keeper is done: the action typed ahead goes in. A turn that broke off goes on
+        first (/retry); after the end the line goes back in the box."""
+        if self.busy or self.queued is None or self.state.pending_turn:
+            return
+        text, self.queued = self.queued, None
+        if self.state.ending and not commands.instant(text):
+            box = self.query_one("#command", Input)
+            box.value = box.value or text
+            return
+        self.send_line(text)
 
     def _scene(self, loc_id: str) -> None:
         loc = self.m.location(loc_id)
@@ -915,6 +933,11 @@ class GameScreen(Screen):
             self._panels()
         elif t == "plugin_status":
             self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
+        elif t == "plugin_effect":  # a rule did something public: a compact, recognisable line
+            body = Text()
+            body.append(f"⚙ 〔{ev['name']}〕", style="bold #8ec7d6")
+            body.append(ev["line"])
+            story.add("system", body)
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "echo":  # the first beat, while the ruling and the narration are worked out
@@ -1083,8 +1106,12 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage"):
-            self.app.notify("这一回合还没结束，等它讲完再按回车", timeout=3)  # the line stays in the box
+        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
+            if not text.startswith("/") and self.queued is None and not self.state.ending:
+                self.queued = text  # typed ahead: it goes in as soon as the keeper is done
+                event.input.value = ""
+            else:  # the line stays in the box
+                self.app.notify("已经记下一条了，讲完先交那条；/undo 撤回它" if self.queued else "这一回合还没结束，等它讲完再按回车", timeout=3)
             return
         event.input.value = ""
         if text:
@@ -1119,6 +1146,11 @@ class GameScreen(Screen):
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
         if cmd == "/retry":
             self.action_retry()
+        elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop
+            if self.queued is None:
+                self.app.notify("没有可以撤回的行动")
+            else:
+                self.query_one("#command", Input).value, self.queued = self.queued, None
         elif cmd == "/retell":  # /retell 短一点 skips the list
             self.action_retell(args[0] if args else "")
         elif cmd in actions:
@@ -1296,13 +1328,36 @@ class GameScreen(Screen):
 
         self.app.push_screen(SheetModal(party, first, portrait))
 
+    def _suggester(self):
+        from .plugins import action_hints
+
+        return command_suggester(self._viewer(), action_hints(self.m, self.state))
+
+    def _sync_suggester(self) -> None:
+        for box in self.query("#command").results(Input):
+            box.suggester = self._suggester()
+
     def action_plugins(self) -> None:
         from .plugins import PluginsModal
 
-        self.app.push_screen(PluginsModal(self.m, self.state), self._plugins_changed)
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=True, drafter=self._house_rule), self._plugins_changed)
+
+    async def _house_rule(self, text: str, progress) -> tuple[bool, str]:
+        """Draft, test and install a player's house rule into this save (tui/plugins.py). The
+        author uses the configured models; only a plugin whose tests pass in the sandbox lands."""
+        from ..plugins.author import house_rule
+
+        assert self.game is not None
+        ok, message = await house_rule(self.game.cast, self.m, self.state, text, on_step=progress)
+        if ok:
+            write_save(self.state, self.m)
+            self._sync_suggester()
+            self.story.add("system", Text(f"◆ 新规则：{message}", style="bold"))
+        return ok, message
 
     def _plugins_changed(self, _) -> None:
         write_save(self.state, self.m)
+        self._sync_suggester()
 
     def action_usage(self) -> None:
         from .usage import UsageModal
