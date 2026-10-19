@@ -312,6 +312,12 @@ class LoadScreen(Screen):
         keys.append(("back", "Esc 返回"))
         self.query_one("#setup-hint", Static).update(" · ".join(f"[@click=screen.{a}]{w}[/]" for a, w in keys))
 
+    @staticmethod
+    def _played(save: Save) -> str:
+        """（今天 21:30）: which of several saves of one module is meant."""
+        played = when(str(save.meta.get("updated", "")))
+        return f"（{played}）" if played else ""
+
     def _module(self, save: Save) -> Module | None:
         """The save's module for its picture and clue names (not compiled: only to look at)."""
         from .app import _module_dir
@@ -443,4 +449,4 @@ class LoadScreen(Screen):
             self._fill()
             self.app.notify("已删除")
 
-        self.app.push_screen(Confirm(f"删除「{save.name}」？", [("yes", "删除"), ("no", "取消")]), done)
+        self.app.push_screen(Confirm(f"删除 {save.name}{self._played(save)}？", [("yes", "删除"), ("no", "取消")]), done)

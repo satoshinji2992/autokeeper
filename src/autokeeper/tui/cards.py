@@ -37,7 +37,7 @@ from .saves import to_trash, when
 from .sheet import SheetModal, sheet_view
 
 FACE = (30, 14)
-ROOM = 34  # the list's width inside its border and padding: longer lines are cut, not wrapped
+ROOM = 31  # the list's width inside its border, padding and scrollbar: longer lines are cut, not wrapped
 EXPORTS = "角色卡导出"  # the folder in saves/ an export goes to unless another is typed
 
 

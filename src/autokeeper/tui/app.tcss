@@ -81,7 +81,8 @@ Footer FooterKey.-command-palette {
     margin-bottom: 1;
 }
 #confirm {
-    min-width: 40;
+    width: 62;
+    max-width: 96%;
 }
 #ask-text {
     width: 64;
