@@ -603,7 +603,7 @@ class GameScreen(Screen):
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield Input(placeholder="输入行动或对话 · Ctrl+P 查看操作", id="command",
-                            suggester=command_suggester(self._viewer()), select_on_focus=False)  # fmt: skip
+                            suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
@@ -933,6 +933,11 @@ class GameScreen(Screen):
             self._panels()
         elif t == "plugin_status":
             self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
+        elif t == "plugin_effect":  # a rule did something public: a compact, recognisable line
+            body = Text()
+            body.append(f"⚙ 〔{ev['name']}〕", style="bold #8ec7d6")
+            body.append(ev["line"])
+            story.add("system", body)
         elif t == "opening":
             story.add("system", Text(ev["text"], style="italic"))
         elif t == "echo":  # the first beat, while the ruling and the narration are worked out
@@ -1323,13 +1328,36 @@ class GameScreen(Screen):
 
         self.app.push_screen(SheetModal(party, first, portrait))
 
+    def _suggester(self):
+        from .plugins import action_hints
+
+        return command_suggester(self._viewer(), action_hints(self.m, self.state))
+
+    def _sync_suggester(self) -> None:
+        for box in self.query("#command").results(Input):
+            box.suggester = self._suggester()
+
     def action_plugins(self) -> None:
         from .plugins import PluginsModal
 
-        self.app.push_screen(PluginsModal(self.m, self.state), self._plugins_changed)
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=True, drafter=self._house_rule), self._plugins_changed)
+
+    async def _house_rule(self, text: str, progress) -> tuple[bool, str]:
+        """Draft, test and install a player's house rule into this save (tui/plugins.py). The
+        author uses the configured models; only a plugin whose tests pass in the sandbox lands."""
+        from ..plugins.author import house_rule
+
+        assert self.game is not None
+        ok, message = await house_rule(self.game.cast, self.m, self.state, text, on_step=progress)
+        if ok:
+            write_save(self.state, self.m)
+            self._sync_suggester()
+            self.story.add("system", Text(f"◆ 新规则：{message}", style="bold"))
+        return ok, message
 
     def _plugins_changed(self, _) -> None:
         write_save(self.state, self.m)
+        self._sync_suggester()
 
     def action_usage(self) -> None:
         from .usage import UsageModal

@@ -62,7 +62,7 @@ from ..module.schema import Module
 from ..rules import commands
 from . import media
 
-SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending"}
+SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
@@ -74,6 +74,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     clues and handouts already found (the rest arrive with the events that reveal them)."""
     d = m.model_dump(mode="json")
     d["plugins"] = []
+    d["plugin_info"] = public_plugins(m, st)
     known = fog.bearings(m, st) | {st.location: m.location(st.location).name}
     visited = set(st.visited) | {st.location}
     d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
@@ -112,6 +113,23 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d["handouts"] = [h for h in d["handouts"] if h["id"] in st.handouts]
     d["sketches"] = [sk for sk in d["sketches"] if not sk["after"] or sk["after"] in st.clues]
     return d
+
+
+def public_plugins(m: Module, st: GameState) -> list[dict[str, Any]]:
+    """The active rule plugins as a player's screen may hold them: the name, version, plain
+    description and the custom actions with their descriptions. No id, source, counters or error
+    text — those stay on the host."""
+    out = []
+    for identity in m.plugins:
+        plugin = m.extensions.get(identity)
+        if plugin is None:
+            continue
+        out.append({
+            "name": plugin.name, "version": plugin.version, "description": plugin.description,
+            "actions": [[a.name, a.description] for a in plugin.actions],
+            "paused": identity in st.plugin_errors,
+        })
+    return out
 
 
 def room_key_file(port: int):
@@ -191,6 +209,7 @@ class Hub:
         self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
         self.hosts: set[str] = set()  # clients that showed the key: the host may switch models
         self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
+        self.rules: asyncio.Queue = asyncio.Queue()  # house rules asked for, drafted and installed between actions
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -305,6 +324,14 @@ class Hub:
                 await self._send(cid, {"t": "ideas", "ideas": []})
             elif cid not in self.thinking:  # one at a time: each costs the host a call
                 self.thinking[cid] = asyncio.create_task(self._ideas(cid, seat))
+        elif t == "house_rule":
+            text = str(msg.get("text", "")).strip()[:500]
+            if self._seat_of(cid) is None and cid not in self.hosts:
+                await self._send(cid, {"t": "error", "text": "你在观战，不能加规则"})
+            elif text:
+                self.rules.put_nowait((cid, text))
+                self.wake.set()
+                await self._send(cid, {"t": "error", "text": "这一段讲完就写这条规则"})
 
     async def _ideas(self, cid: str, seat: str) -> None:
         """Three ideas for a seated player's next move, from the view the AI seats get. The game
@@ -428,6 +455,8 @@ class Hub:
                 ev["picture_data"] = media.pack(path)
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
+        elif ev.get("type") == "plugin_effect":  # public line in the story; the id stays on the host
+            ev = {k: v for k, v in ev.items() if k != "plugin"}
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})
@@ -507,6 +536,7 @@ class Hub:
         try:
             while True:  # once at least: a .r sent while the keeper told runs even if the round is already full
                 await self._swap()
+                await self._house_rules()
                 await self._asks()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
@@ -618,6 +648,30 @@ class Hub:
             await old.close()
             keeper = cfg.role("keeper").model.split(":", 1)[-1]
             await self._broadcast({"t": "say", "from": "系统", "text": f"房主换了模型：{cfg.preset} · 守秘人 {keeper}"})
+
+    async def _house_rules(self) -> None:
+        """Draft and install the house rules players asked for, one at a time, between actions.
+        The author runs on the host; the whole table hears the progress and the outcome, and the
+        new rule reaches every screen through the shared book and the synced state."""
+        from ..plugins.author import house_rule
+
+        while not self.rules.empty():
+            cid, text = self.rules.get_nowait()
+            who = self.names.get(cid, "有人")
+            await self._broadcast({"t": "say", "from": "系统", "text": f"{who}想加一条规则：{text}"})
+
+            async def step(message: str) -> None:
+                await self._broadcast({"t": "say", "from": "系统", "text": message})
+
+            try:
+                ok, message = await house_rule(self.cast, self.m, self.state, text, on_step=step)
+            except Exception as exc:  # the table plays on; the rule just did not land
+                ok, message = False, f"没能添加（{exc.__class__.__name__}）"
+            await self._broadcast({"t": "say", "from": "系统", "text": message})
+            if ok:
+                self._save()
+                await self._share_book()
+                await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _asks(self) -> None:
         while not self.asks.empty():
