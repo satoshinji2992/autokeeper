@@ -2,7 +2,8 @@
 session here is and how to act, the screen, checks and dice, pushing and luck, sanity,
 clues and handouts, the keeper's improvising, how it is told (preferences, telling it
 again), saving and models, the ending and the debrief, investigators, playing with
-friends, dice-bot commands, and the compact key reference (screens.HELP).
+friends, dice-bot commands, what to do when something does not work (AI pictures, big
+scenes), and the compact key reference (screens.HELP).
 
 Every page says what the player sees and decides. Its examples come from no module, the
 tutorial's least of all: they must not tell a new player what to look for (test_guide.py)."""
@@ -238,7 +239,7 @@ PAGES = [
 
 ## 入座和行动
 
-选空座后，人齐自动开始；也可选“现在开始”，空座交给 AI。每一轮有个行动池：容量是玩家数加一，每人一条，多出的一条先到先得，不分先后。/undo 撤回上一条，空行回车表示这轮说完了。池子满了或大家都说完，守秘人按交上来的顺序一次讲完；讲的时候也能打字，这时交的行动留到下一轮最先交上。检定仍由你确认掷骰。
+选空座后，人齐自动开始；也可选“现在开始”，空座交给 AI。每一轮大家各说一件要做的事，先后不限，另外空着的一个位置谁先说归谁。说错了输入 /undo 撤回，没别的事就在空输入框里按回车。大家都说完，守秘人按先后一口气讲完；他讲的时候也能先打字，会排到下一轮的最前面。检定仍由你确认掷骰。
 
 全角括号开头的话是场外聊天，例如“（我去倒杯水）”，所有人可见，不占行动。
 
@@ -280,6 +281,25 @@ F5 会刷新网页，刷新后要重新入座。出主意、人物卡、线索�
 **Ctrl+K** 查看本局插件，可暂停或重新启用；暂停不清空已有状态。标题页“设置”也可整体关闭插件。联机由房主管理。
 
 插件出错时会暂停，游戏可继续。需要这些规则时，先查看插件是否仍在运行。
+"""),
+    Page("trouble", "遇到问题", """
+## AI 画图用不了
+
+AI 画图用的是这台电脑上的 Codex。设置里「AI 画图」是灰的时候，下面那行写着原因：
+
+- **没装 Codex**：先装好 Node.js，在终端运行 `npm i -g @openai/codex`，再运行 `codex login` 登录。
+- **Codex 还没登录**：在终端运行 `codex login`。
+- **这个版本的 Codex 不能画图**：在终端运行 `codex update`。
+
+弄好以后重新打开设置，就能打开 AI 画图。在终端运行 `autokeeper doctor` 也能看到哪里不对。
+
+一个模组最多用 AI 画 100 张（导入和每一局加在一起），每局最多 12 张；画满了就只用现成的图。
+
+## 大场景没出现
+
+大场景的图要提前画好，一张大约一分钟，开局后在后台一张一张画。到时候还没画好就跳过这一次，不会让你等。想在开局前全部画好，在终端运行 `autokeeper showcase 模组名`。
+
+终端里没装 chafa 时显示不了大图；设置里关掉「大场景」也不会出现。
 """),
     Page("keys", "按键", ""),
 ]

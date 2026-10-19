@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module
+from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module, Showcase
 
 LIMITS = {  # npcs, locations, clues, events, endings
     "开局改编": (2, 1, 3, 3, 1),
@@ -27,6 +27,7 @@ class Applied:
     give: list[str] = field(default_factory=list)  # clues handed over this turn
     note: str = ""
     summary: str = ""  # player-safe: names of new people and places only
+    looks: list[tuple[str, str]] = field(default_factory=list)  # (place or NPC id, what visibly changed) for the picture
 
 
 def _now_flag(event_id: str) -> str:
@@ -101,6 +102,18 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
         if e.ending and e.ending not in endings:
             problems.append(f"事件 {e.id} 的结局 {e.ending} 不存在")
     problems += [f"角色弧光里的 NPC {a.npc} 不存在" for a in plan.arcs if a.npc not in npcs]
+    if len(plan.looks) > 2:
+        problems.append(f"looks 最多 2 条，这次有 {len(plan.looks)} 条")
+    known = {x.id for x in m.locations} | {x.id for x in m.npcs}  # a new place or person is drawn from its own description
+    problems += [f"looks 里的 {look.target} 不是已有的地点或 NPC" for look in plan.looks if look.target not in known]
+    problems += [f"looks 里 {look.target} 的 change 是空的" for look in plan.looks if not look.change.strip()]
+    moments = {"event": {e.id for e in m.events} | {e.id for e in plan.events}, "visit": locs, "flag": flags, "ending": endings}
+    for sc in plan.showcases:
+        side, _, ident = sc.when.partition(":")
+        if ident not in moments.get(side, set()):
+            problems.append(f"大场景 {sc.id} 的 when 要写成 event:/visit:/flag:/ending: 加已有或这次新建的 id，现在是 {sc.when}")
+        if any(x.id == sc.id for x in m.showcases):
+            problems.append(f"大场景 id {sc.id} 已经存在")
     for end in plan.endings:
         if not end.condition.startswith("flag:") or end.condition[5:] not in flags:
             problems.append(f"结局 {end.id} 的条件要写成 flag:已声明的标记，现在是 {end.condition}")
@@ -188,6 +201,10 @@ def apply(m: Module, plan: Any) -> Applied:
         if any(n.id == a.npc for n in m.npcs):
             m.npc(a.npc).arc = a.arc
     out.give, out.go = list(plan.give), plan.go
+    out.looks = [(look.target, look.change.strip()) for look in plan.looks]
+    for sc in plan.showcases:
+        if not any(x.id == sc.id for x in m.showcases):
+            m.showcases.append(Showcase(**sc.model_dump(), improvised=True))
     shown = [f"新人物 {n.name}" for n in plan.npcs] + [f"新地点 {x.name}" for x in plan.locations]
     out.summary = "、".join(shown)
     return out
