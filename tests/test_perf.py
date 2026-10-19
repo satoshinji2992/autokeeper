@@ -16,8 +16,9 @@ from autokeeper import config, imagery
 from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
+from autokeeper.tui import app as tui
 from autokeeper.tui import cover
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
+from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
 from autokeeper.tui.widgets import PORTRAIT, Folded, HistoryLine, SceneArt, StoryLog
 
 from .test_speaker import drawn
@@ -213,3 +214,25 @@ async def test_weather_frames_become_the_same_content_with_each_style_turned_onc
             mine, theirs = scene._content(frame), Content.from_rich_text(frame, console=app.console)
             assert mine.plain == theirs.plain and mine.spans == theirs.spans
         assert len(scene._styles) < len(frame.spans) * 3  # turned once each, not once a frame
+
+
+@pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
+async def test_going_through_the_investigators_never_waits_for_chafa(monkeypatch, skills_dir):
+    runs, real = [], imagery.render.__wrapped__
+
+    def render(*args, **kwargs):
+        runs.append((args[1:3], threading.current_thread() is threading.main_thread()))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(imagery, "render", render)
+    monkeypatch.setattr(tui, "modules", lambda: [config.MODULES / "zhuishuren"])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        app.push_screen(SetupScreen(spectate=False))
+        await pilot.pause()
+        await pilot.press("enter")  # 《追书人》
+        assert await until(pilot, lambda: getattr(app.screen, "step", "") == "investigator")
+        await pilot.press("down")
+        assert await until(pilot, lambda: sum(size == (32, 14) for size, _ in runs) >= 2)  # both faces, photos
+        assert not any(on_ui for _, on_ui in runs)

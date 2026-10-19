@@ -489,7 +489,9 @@ class SetupScreen(Screen):
             elif oid == "card:import":
                 body.update(Text("带上你自己的卡：骰娘的 .st 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，或者酒馆（SillyTavern）的角色卡。数值照原样录入；只有人设的角色卡，会问你几个问题再车成调查员。", style="dim"))
             elif inv := self._investigator(oid):
-                body.update(_investigator_card(self.module, inv, self.app.art_style))  # type: ignore[attr-defined]
+                body.update(_investigator_card(self.module, inv, self.app.art_style, photo=False))  # type: ignore[attr-defined]
+                if inv.portrait in self.module.pictures and imagery.available():
+                    self._preview_card(self.module, inv, oid)
 
     @work(exclusive=True, group="module-preview")
     async def _preview_original(self, m: Module, key: str, header: Text, oid: str) -> None:
@@ -514,6 +516,15 @@ class SetupScreen(Screen):
         header.append("\n\n" + m.hook.strip() + "\n\n", style="italic")
         header.append(m.source, style="dim")
         self.query_one("#preview-body", Static).update(header)
+
+    @work(exclusive=True, group="card-preview")
+    async def _preview_card(self, m: Module, inv: Investigator, oid: str) -> None:
+        """The card with its photo, drawn in a thread: ↑↓ through the investigators no longer
+        waits for chafa at each new face."""
+        card = await asyncio.to_thread(_investigator_card, m, inv, self.app.art_style)  # type: ignore[attr-defined]
+        choices = self.query_one("#choices", OptionList)
+        if self.step == "investigator" and choices.highlighted is not None and choices.get_option_at_index(choices.highlighted).id == oid:
+            self.query_one("#preview-body", Static).update(card)
 
     @on(OptionList.OptionSelected, "#choices")
     def select(self, event: OptionList.OptionSelected) -> None:
@@ -551,9 +562,10 @@ class SetupScreen(Screen):
         self.app.switch_screen(GameScreen(self.module, state, spectate=self.spectate))
 
 
-def _investigator_card(m: Module, inv: Investigator, style: str = "photo") -> Text:
+def _investigator_card(m: Module, inv: Investigator, style: str = "photo", *, photo: bool = True) -> Text:
+    """`photo=False`: the hand-drawn face (or none) in its place, without waiting for chafa."""
     t = Text()
-    t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style, face=True))
+    t.append_text(art_text(m, inv.portrait, (32, 14) if photo and inv.portrait in m.pictures else None, style, face=True))
     t.append(f"\n\n{inv.name}", style="bold")
     t.append(f"  {inv.occupation} · {inv.age}岁\n", style="dim")
     for k, v in inv.backstory.items():
