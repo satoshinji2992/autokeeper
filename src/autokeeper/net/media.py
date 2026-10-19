@@ -30,21 +30,32 @@ def pack(path: str, *, max_size: int = 512) -> str:
         return ""
 
 
-def unpack(encoded: str, *, max_size: int = 512) -> str:
+def picture(encoded: str, *, max_size: int = 512) -> bytes:
+    """The JPEG a packed picture holds, checked (size, format, a real image); b"" if not one."""
     if not isinstance(encoded, str) or len(encoded) > LIMIT * 2:
-        return ""
+        return b""
     try:
         data = base64.b64decode(encoded, validate=True)
         if len(data) > LIMIT:
-            return ""
-        with Image.open(io.BytesIO(data)) as picture:
-            if picture.format != "JPEG" or max(picture.size) > min(1600, max(1, max_size)):
-                return ""
-            picture.verify()
+            return b""
+        with Image.open(io.BytesIO(data)) as shown:
+            if shown.format != "JPEG" or max(shown.size) > min(1600, max(1, max_size)):
+                return b""
+            shown.verify()
+        return data
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return b""
+
+
+def unpack(encoded: str, *, max_size: int = 512) -> str:
+    data = picture(encoded, max_size=max_size)
+    if not data:
+        return ""
+    try:
         folder = config.SAVES / "art" / "table"
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / f"{hashlib.sha256(data).hexdigest()}.jpg"
         target.write_bytes(data)
         return str(target)
-    except (OSError, ValueError, Image.DecompressionBombError):
+    except OSError:
         return ""

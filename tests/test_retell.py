@@ -327,6 +327,7 @@ async def test_a_shared_table_hears_it_again_and_gets_the_book_at_the_end(monkey
         await b.send_json({"t": "hello", "name": "小红"})  # watching
         await until(b, lambda x: x["t"] == "welcome")
         await a.send_json({"t": "sit", "investigator": "zhouheng"})  # the only seat: the game begins
+        await a.send_json({"t": "ready"})
         await until(a, lambda x: x["t"] == "pool" and x["open"])
         await b.send_json({"t": "retell", "nudge": "更阴森"})
         assert "观战" in (await until(b, lambda x: x["t"] == "error"))["text"]
@@ -377,6 +378,8 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")  # the free seat
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         assert await waits(pilot, lambda: isinstance(app.screen, NetGameScreen) and app.screen.my_turn)
         screen = app.screen
         blocks = list(screen.story.query(".keeper"))

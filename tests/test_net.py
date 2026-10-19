@@ -272,6 +272,8 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")  # the free seat is highlighted
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         for _ in range(40):
             await pilot.pause(0.1)
             if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:
@@ -386,6 +388,7 @@ async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skil
         await ws.send_json({"t": "hello", "name": "小明"})
         await until(ws, lambda x: x["t"] == "welcome")
         await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await ws.send_json({"t": "ready"})
         await until(ws, pool_open)
         fake.queue(30)
         await ws.send_json({"t": "act", "text": "我看看告示栏"})
@@ -498,6 +501,8 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")  # the free seat
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         for _ in range(40):
             await pilot.pause(0.1)
             if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:

@@ -440,6 +440,7 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         welcome = await until(ws, lambda x: x["t"] == "welcome")
         assert "log" not in welcome["state"] and welcome["state"]["progress"]["text"] == ""
         await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await ws.send_json({"t": "ready"})
         heard: list[dict] = []
         await keep(ws, heard, pool_open)
         acts = ["我看看告示栏", *(f"我四下看看{n}" for n in range(1, 6))]  # a clue first, then six turns in

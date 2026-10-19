@@ -479,6 +479,8 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")  # the free seat
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         for _ in range(40):
             await pilot.pause(0.1)
             if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:

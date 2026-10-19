@@ -166,7 +166,7 @@ def serve(port: int = 8000) -> None:
 @app.command()
 def host(
     module: Annotated[Path, typer.Argument(help="模组目录")] = Path("modules/zhuishuren"),
-    seats: Annotated[str, typer.Option(help="按预设调查员的顺序填“玩家 / AI / 不上场”，逗号分隔；默认第一位玩家，其余 AI")] = "",
+    seats: Annotated[str, typer.Option(help="按预设调查员的顺序填“玩家 / AI / 不上场”，逗号分隔；多填的“玩家”是空座位，玩家自己带角色；默认第一位玩家，其余 AI")] = "",
     port: Annotated[int, typer.Option(help="网页端口：朋友用浏览器打开")] = 8000,
     hub_port: Annotated[int, typer.Option(help="联机端口：终端里 autokeeper join 连这个")] = 8765,
     load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
@@ -197,6 +197,8 @@ def host(
     for inv in hub.state.investigators:
         who = "玩家" if inv.id in hub.sits else "AI"
         console.print(f"  {who}{' ' * (6 - cell_len(who))}{inv.name}（{inv.occupation}）")
+    for _ in hub.blank:
+        console.print("  玩家  空座位（自己带角色）")
     if web_ui:
         console.print("网页版")
         for ip, label in rows:
@@ -206,8 +208,10 @@ def host(
     console.print(f"房主自己要玩就另开一个终端，运行 [bold]uv run autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，进来的是房主，可以按 F9 换模型。")
     if room.shared.get("hint"):
         console.print(f"[yellow]{room.shared['hint']}[/]")
-    players = sum(1 for inv in hub.state.investigators if inv.id in hub.sits)
-    if players:
+    players = len(hub.sits)
+    if players and hub.bringing:
+        console.print(f"[dim]每轮 {lan.round_size(players)} 条行动。每位玩家可以在准备房间里换成自己的角色，都准备好了就开局。[/]")
+    elif players:
         console.print(f"[dim]每轮 {lan.round_size(players)} 条行动。人齐了自动开局，也可以在准备房间里现在开始，空座交给 AI。[/]")
     console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。Ctrl+C 关闭房间。[/]")
     try:

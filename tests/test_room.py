@@ -247,6 +247,14 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert screen.plan == {"zhouheng": "不上场"}
         await pilot.press("enter")  # → 玩家
         assert "玩家" in shown(screen, "#host-seats") and "1 位玩家" in shown(screen, "#host-note")
+        seats = screen.query_one("#host-seats", OptionList)
+        seats.highlighted = seats.get_option_index("add-blank")
+        await pilot.press("enter")  # an empty seat, for a friend who brings their own
+        assert screen.blanks == 1 and "2 位玩家" in shown(screen, "#host-note") and "空座位" in shown(screen, "#host-seats")
+        seats.highlighted = seats.get_option_index("blank-0")
+        await pilot.press("enter")  # and gone again
+        assert screen.blanks == 0 and "1 位玩家" in shown(screen, "#host-note")
+        seats.highlighted = 0
         assert not screen.query("#host-port")  # no ports on the form: a taken one is swapped by itself
         await pilot.press("f1")  # 遇到问题
         await pilot.pause(0.2)
@@ -269,7 +277,9 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert "你是房主" in text and "朋友在「加入房间」里填" in text
         assert str(lobby.query_one("#help").label) == "朋友进不来？"
         assert lobby.query_one("#close_room").display
-        await pilot.press("enter")  # the only seat: every seat taken, the game begins
+        await pilot.press("enter")  # the only seat
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: every seat taken and ready, the game begins
         for _ in range(60):
             await pilot.pause(0.1)
             if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:

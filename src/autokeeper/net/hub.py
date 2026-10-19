@@ -27,11 +27,20 @@ Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
                     · retell {nudge} · epilogue · suggest · recount
+    client -> hub   (before the start) bring {investigator, portrait} or {pregen} · ready {on} · card {op ...}
     client -> hub   (in a round) done · undo
-    hub -> client   welcome · seats · turn (the action being settled)
+    hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
                     · event {ev} · module · sync {state} · offer · say · ideas {ideas}
                     · over · error
+
+Seats come from the host's plan: each of the module's pregens is a player's, an AI's or left out,
+and there may be empty player seats besides. Before a new game starts, whoever sits in a player's
+seat may put their own investigator there instead (bring: one of their cards, checked by
+net/cards.py vet, with its portrait), another free pregen, or one made at the table on the host's
+models (card; net/cards.py). The game starts when every player seat is taken and everyone says
+they are ready, or when someone starts it now: an empty seat then gets a free pregen, or goes.
+A saved game goes on with the investigators it has.
 
 Players' screens never hold the keeper's book while the game is on: they get the module
 without its truth, keeper notes, NPC minds and anything not yet found, and a state without
@@ -55,6 +64,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import __version__, artkit, config, roster
+from ..agents.card import CardError
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -62,11 +72,15 @@ from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules import commands
-from . import media
+from ..rules.coc import Investigator
+from . import cards, media
+from .room import BLANKS
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
+CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
+COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
@@ -147,6 +161,13 @@ def public_plugins(m: Module, st: GameState) -> list[dict[str, Any]]:
     return out
 
 
+def _builder(cast: Any, m: Module) -> Any:
+    """A Builder on the host's models, for one player's 车卡."""
+    from ..agents.card import Builder
+
+    return Builder(getattr(cast, "cfg", None) or config.load(), m)
+
+
 def room_key_file(port: int):
     """Where a running room keeps its host key: only someone on this machine can read it."""
     return config.SAVES / f".room-{port}.key"
@@ -183,20 +204,29 @@ class Hub:
         self.dir = Path(module_dir)
         self.m = Module.load(self.dir)
         self.fresh = state is None
+        extra: list[str] = []
         if state is None:
             plan = [("AI" if s.lower() == "ai" else s) for s in seats] if seats else ["玩家"] + ["AI"] * (len(self.m.pregens) - 1)
             if odd := [s for s in plan if s not in SEATS]:
                 raise ValueError(f"座位只能填 {' / '.join(SEATS)}，看不懂：{'、'.join(odd)}")
-            if len(plan) > len(self.m.pregens):
-                raise ValueError(f"这个模组只有 {len(self.m.pregens)} 位预设调查员，座位填多了")
+            extra = plan[len(self.m.pregens):]  # beyond the pregens: empty seats for players' own cards
+            if any(s != "玩家" for s in extra):
+                raise ValueError(f"这个模组只有 {len(self.m.pregens)} 位预设调查员，多出来的座位只能填玩家")
+            if len(extra) > BLANKS:
+                raise ValueError(f"空座位最多 {BLANKS} 个")
             chosen = [(p, s) for p, s in zip(self.m.pregens, plan, strict=False) if s != "不上场"]
-            if not chosen:
+            if not chosen and not extra:
                 raise ValueError("至少要有一位调查员上场")
             party = [p.model_copy(deep=True) for p, _ in chosen]
             human = [p.id for p, s in chosen if s == "玩家"]
             state = Game.new(self.m, party, slot=slot or f"lan-{self.m.id}-{time.strftime('%m%d-%H%M%S')}", human=human)
         self.state = state
+        self.blank: list[str] = [f"seat-{i + 1}" for i in range(len(extra))] if self.fresh else []  # player seats with nobody's card yet
         roster.attach(self.m, state.investigators)
+        for inv in state.investigators:  # brought to an earlier session of this game (bring)
+            face = config.SAVES / "art" / "table" / f"{inv.portrait}.jpg"
+            if inv.portrait and inv.portrait not in self.m.pictures and face.is_file():
+                self.m.pictures[inv.portrait] = str(face)
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
@@ -206,9 +236,16 @@ class Hub:
         self.thread = {"configurable": {"thread_id": state.slot}}
         self.clients: dict[str, web.WebSocketResponse] = {}
         self.names: dict[str, str] = {}
-        self.sits: dict[str, str | None] = {inv_id: None for inv_id in state.human}  # human seat -> client
-        self.inbox: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
-        self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in state.human}
+        self.sits: dict[str, str | None] = {inv_id: None for inv_id in [*state.human, *self.blank]}  # human seat -> client
+        self.inbox: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in self.sits}
+        self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in self.sits}
+        self.ready: set[str] = set()  # player seats whose player is happy with their card
+        self.origin: dict[str, str] = {}  # seat -> "own" (a card of the player's) or "new" (made at the table)
+        self.notes: dict[str, str] = {}  # seat -> a word for the host about the card (era_note)
+        self.builders: dict[str, Any] = {}  # client -> the card being made for them (net/cards.py)
+        self.carding: dict[str, asyncio.Task] = {}  # client -> the 车卡 step under way
+        self.card_steps: dict[str, list[float]] = {}  # client -> when their costly 车卡 steps began
+        self.card_builder = lambda: _builder(self.cast, self.m)
         self.started = asyncio.Event()
         self.open = False  # the round's action pool takes actions
         self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
@@ -244,14 +281,16 @@ class Hub:
                         await self._send(cid, {"t": "error", "text": f"看不懂的消息：{exc}"})
         finally:
             self.clients.pop(cid, None)
+            self._drop_card(cid)
             for inv_id, who in self.sits.items():
                 if who == cid:  # whoever waits for them gets an empty answer: the AI plays on
                     self.sits[inv_id] = None
+                    self.ready.discard(inv_id)
                     self.early = [(seat, text) for seat, text in self.early if seat != inv_id]
                     self.inbox[inv_id].put_nowait(None)
                     self.choices[inv_id].put_nowait(None)
                     self.wake.set()
-            await self._broadcast({"t": "seats", "seats": self._seats()})
+            await self._share_seats()
         return ws
 
     async def _on(self, cid: str, msg: dict[str, Any]) -> None:
@@ -262,14 +301,20 @@ class Hub:
                 self.hosts.add(cid)
                 self.names[cid] += "·房主"
             await self._send(cid, self._welcome(cid))
-            await self._broadcast({"t": "seats", "seats": self._seats()})
+            await self._share_seats()
             if (theirs := msg.get("version")) and theirs != __version__:  # the host hears it; the friend's own lobby says so too
                 for host in self.hosts - {cid}:
                     await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
         elif t == "start":
-            self.started.set()
+            await self._begin(cid)
+        elif t == "bring":
+            await self._bring(cid, msg)
+        elif t == "ready":
+            await self._ready(cid, bool(msg.get("on", True)))
+        elif t == "card":
+            await self._card(cid, msg)
         elif t == "act":
             seat = self._seat_of(cid)
             text = str(msg.get("text", ""))[:500]
@@ -380,13 +425,196 @@ class Hub:
         for seat, who in self.sits.items():
             if who == cid and seat != inv_id:
                 self.sits[seat] = None
+                self.ready.discard(seat)
         self.sits[inv_id] = cid
-        await self._broadcast({"t": "seats", "seats": self._seats()})
-        if all(self.sits.values()):  # every human seat is taken: the game begins
+        await self._share_seats()
+        if not self.bringing and all(self.sits.values()):  # a saved game: every human seat is taken, it goes on
             self.started.set()
+        await self._maybe_begin()
 
     def _seat_of(self, cid: str) -> str | None:
         return next((seat for seat, who in self.sits.items() if who == cid), None)
+
+    # -- choosing investigators, before the start -----------------------------------------------
+    @property
+    def bringing(self) -> bool:
+        """Seats may still change their investigator: a new game that has not begun."""
+        return self.fresh and not self.started.is_set() and not self.state.log
+
+    async def _no(self, cid: str, text: str) -> None:
+        await self._send(cid, {"t": "error", "text": text})
+
+    async def _ready(self, cid: str, on: bool) -> None:
+        seat = self._seat_of(cid)
+        if seat is None or not self.bringing:
+            return
+        if on and seat in self.blank:
+            await self._no(cid, "先选一个角色")
+            return
+        (self.ready.add if on else self.ready.discard)(seat)
+        await self._share_seats()
+        await self._maybe_begin()
+
+    async def _maybe_begin(self) -> None:
+        """Every player seat taken, with a card, and everyone ready: the game begins."""
+        if self.bringing and all(self.sits.values()) and not self.blank and set(self.sits) <= self.ready:
+            await self._begin(None)
+
+    async def _begin(self, cid: str | None) -> None:
+        """Start now. An empty seat someone sits in gets a pregen nobody plays; the others go."""
+        if self.started.is_set():
+            return
+        if self.bringing:
+            changed = False
+            for seat in list(self.blank):
+                who = self.sits.get(seat)
+                spare = next((p for p in self.m.pregens if p.id not in {i.id for i in self.state.investigators}), None)
+                if who is not None and spare is not None:
+                    await self._send(who, {"t": "seated", "investigator": self._install(seat, spare.model_copy(deep=True), "")})
+                else:
+                    self.blank.remove(seat)
+                    for table in (self.sits, self.inbox, self.choices):
+                        table.pop(seat, None)
+                    if who is not None:
+                        await self._no(who, "没有空的预设角色了，你先观战")
+                changed = True
+            if not self.state.investigators:
+                if cid is not None:
+                    await self._no(cid, "还没有人选角色，开不了局")
+                return
+            for client in list(self.builders):
+                self._drop_card(client)
+            if changed:
+                await self._broadcast({"t": "sync", "state": self._view()})
+                await self._share_seats()
+        self.started.set()
+
+    def _install(self, seat: str, inv: Investigator, origin: str) -> str:
+        """`inv` into a player's seat in place of whoever was there: the party, the human seats
+        and the seat's queues under its new id. Only before the start, so nothing waits on them."""
+        st = self.state
+        taken = {i.id for i in st.investigators} - {seat}
+        if origin or inv.id in taken:  # a brought card gets an id of its own
+            inv.id = f"pc-{uuid.uuid4().hex[:6]}"
+        if seat in self.blank:
+            self.blank.remove(seat)
+            st.investigators.append(inv)
+            st.human.append(inv.id)
+        else:
+            st.investigators[next(i for i, x in enumerate(st.investigators) if x.id == seat)] = inv
+            st.human = [inv.id if h == seat else h for h in st.human]
+        for table in (self.sits, self.inbox, self.choices):
+            table[inv.id] = table.pop(seat)
+        self.ready.discard(seat)
+        self.notes.pop(seat, None)
+        self.origin.pop(seat, None)
+        if origin:
+            self.origin[inv.id] = origin
+        return inv.id
+
+    async def _bring(self, cid: str, msg: dict[str, Any]) -> None:
+        """A player puts an investigator in their seat: their own card, or a free pregen."""
+        seat = self._seat_of(cid)
+        if not self.bringing:
+            await self._no(cid, "接着玩的存档不能换角色" if not self.fresh else "已经开局了，不能换角色")
+            return
+        if seat is None:
+            await self._no(cid, "先坐下再选角色")
+            return
+        face = ""
+        if pregen := msg.get("pregen"):
+            found = next((p for p in self.m.pregens if p.id == pregen), None)
+            if found is None:
+                await self._no(cid, "没有这个角色")
+                return
+            if found.id == seat:
+                return
+            if found.id in {i.id for i in self.state.investigators}:
+                await self._no(cid, "这个角色已经在别的座位上了")
+                return
+            inv, origin = found.model_copy(deep=True), ""
+        else:
+            try:
+                inv = cards.vet(msg.get("investigator"), "")
+            except cards.Refused as exc:
+                await self._no(cid, str(exc))
+                return
+            origin = "new" if msg.get("made") else "own"
+            picture = media.unpack(msg.get("portrait") or "")
+            inv.portrait = Path(picture).stem if picture else ""
+            if picture:
+                self.m.pictures[inv.portrait] = self.sent[inv.portrait] = picture
+                face = str(msg["portrait"])
+        note = "" if origin == "" else cards.era_note(inv, self.m)
+        new = self._install(seat, inv, origin)
+        if note:
+            self.notes[new] = note
+        if face:
+            await self._broadcast({"t": "face", "key": inv.portrait, "picture_data": face})
+        await self._broadcast({"t": "sync", "state": self._view()})
+        await self._send(cid, {"t": "seated", "investigator": new})
+        await self._share_seats()
+
+    # -- 车卡 for a seated player, on the host's models --------------------------------------------
+    async def _card(self, cid: str, msg: dict[str, Any]) -> None:
+        op, n = str(msg.get("op", "")), msg.get("n")
+        if op in ("cancel", "end"):
+            if task := self.carding.pop(cid, None):
+                task.cancel()
+            if op == "end":
+                self._drop_card(cid)
+            return
+        why = ""
+        if not self.bringing or self._seat_of(cid) is None:
+            why = "开局前坐下的玩家才能车卡"
+        elif op == "begin":
+            self._drop_card(cid)  # one card at a time for each player
+            self.builders[cid] = self.card_builder()
+            return
+        elif cid not in self.builders:
+            why = "先开始车卡"
+        elif cid in self.carding:
+            why = "上一步还没做完，等一下"
+        elif op in COSTLY:
+            now = time.monotonic()
+            recent = [at for at in self.card_steps.get(cid, []) if now - at < 60]
+            if len(recent) >= CARD_STEPS:
+                why = "太快了，歇一会儿再试"
+            self.card_steps[cid] = recent + ([] if why else [now])
+        if why:
+            if n is not None:
+                await self._send(cid, {"t": "card", "n": n, "error": why})
+            return
+        self.carding[cid] = asyncio.create_task(self._card_step(cid, self.builders[cid], op, msg, n))
+
+    async def _card_step(self, cid: str, builder: Any, op: str, msg: dict[str, Any], n: Any) -> None:
+        from ..harness import BudgetExceeded
+
+        try:
+            reply = await cards.step(builder, op, msg, self._card_dir(builder))
+        except asyncio.CancelledError:
+            return
+        except CardError as exc:
+            reply = {"error": str(exc)}
+        except BudgetExceeded:
+            reply = {"error": "房主设的花费上限到了，车不了卡"}
+        except Exception:  # the model is down, or answered nonsense twice
+            reply = {"error": "读不了这张卡，换一种写法试试" if op == "read" else "房主那边没能做好，再试一次"}
+        finally:
+            if self.carding.get(cid) is asyncio.current_task():
+                self.carding.pop(cid, None)
+        await self._send(cid, {"t": "card", "n": n, **reply})
+
+    def _card_dir(self, builder: Any) -> Path:
+        return config.SAVES / "investigators" / ".work" / f"lan-{builder.id}"
+
+    def _drop_card(self, cid: str) -> None:
+        if task := self.carding.pop(cid, None):
+            task.cancel()
+        if (builder := self.builders.pop(cid, None)) is not None:
+            import shutil
+
+            shutil.rmtree(self._card_dir(builder), ignore_errors=True)
 
     # -- what clients see ------------------------------------------------------------------
     def _view(self) -> dict[str, Any]:
@@ -396,15 +624,28 @@ class Hub:
             view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
         return view
 
-    def _seats(self) -> list[dict[str, Any]]:
+    def _seats(self, cid: str | None = None) -> list[dict[str, Any]]:
+        """Who sits where, as everyone sees it; the host (cid) also gets a word on brought cards."""
         out = []
         for inv in self.state.investigators:
             who = self.sits.get(inv.id)
             out.append({
                 "investigator": inv.id, "name": inv.name, "occupation": inv.occupation,
                 "human": inv.id in self.sits, "player": self.names.get(who or "", ""), "online": who is not None,
+                "origin": self.origin.get(inv.id, ""), "ready": inv.id in self.ready,
             })  # fmt: skip
+        for seat in self.blank:
+            who = self.sits.get(seat)
+            out.append({"investigator": seat, "name": "", "occupation": "", "human": True, "blank": True,
+                        "player": self.names.get(who or "", ""), "online": who is not None, "origin": "", "ready": False})
+        if cid in self.hosts:
+            for row in out:
+                row["note"] = self.notes.get(row["investigator"], "")
         return out
+
+    async def _share_seats(self) -> None:
+        for cid in list(self.clients):
+            await self._send(cid, {"t": "seats", "seats": self._seats(cid), "bring": self.bringing})
 
     def _welcome(self, cid: str) -> dict[str, Any]:
         book = self._book()
@@ -420,13 +661,14 @@ class Hub:
             "picture_data": self._shared(self._pictures(book, keys)),
             "state": self._view(),
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
-            "seats": self._seats(),
+            "seats": self._seats(cid),
+            "bring": self.bringing,  # seats may still change their investigator
             "started": self.started.is_set(),
             "room": self.room,
         }
 
     def _art_keys(self, book: dict) -> set[str]:
-        return ({x.get("art") for x in book["locations"] + book["items"]}
+        return ({x.get("art") for x in book["locations"] + book["items"]} | {p.portrait for p in self.m.pregens}
                 | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
                 | {key for h in book["handouts"] for key in h.get("images", [])})
 

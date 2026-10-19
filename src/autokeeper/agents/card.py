@@ -49,6 +49,11 @@ from ..rules.creation import FORMULAS, accept, make
 RESPECT = "尊重本人：只用公开的身份和经历，写正面或中性的内容；不编造丑闻、罪行和私生活，不写住址和家人等隐私，不评价政治立场。"
 
 
+class CardError(Exception):
+    """A step that did not work, already said in one plain sentence (a card made on the
+    host's models at a LAN table, net/cards.py)."""
+
+
 @dataclass
 class Photo:
     url: str
@@ -389,12 +394,13 @@ class Builder:
         finally:
             await s.close()
 
-    async def read(self, source: str) -> str:
+    async def read(self, source: str, *, files: bool = True) -> str:
         """A card the player brings: pasted text or a file. "sheet" when it carries CoC numbers
         (self.card is ready); "persona" for a character without them, set up as self.figure
-        to go through the questions like a public figure."""
+        to go through the questions like a public figure. `files`: False when the text came
+        from someone else's machine, so a path in it is never opened here."""
         persona, text, images = None, source, None
-        if path := local_file(source):
+        if files and (path := local_file(source)):
             persona, text, images = await asyncio.to_thread(read_file, path)
             if persona and images is None and path.suffix.lower() in (".png", ".webp", ".jpg", ".jpeg"):
                 self.figure = Figure(persona["name"], title=persona["name"], source="角色卡", extract=persona["text"], photos=[Photo(str(path), title="角色卡的图")])
@@ -486,6 +492,22 @@ class Builder:
         )  # fmt: skip
         self.card, self.note = card, d.note
         return card
+
+    async def find(self, query: str) -> Figure:
+        """Photos for a card that came without one, by name (the card screen's 配一张照片)."""
+        self.figure = await research(query, self.cfg.search)
+        return self.figure
+
+    async def download(self, i: int, dest: Path) -> bool:
+        """Photo candidate `i` of the figure, saved at dest."""
+        return bool(self.figure and 0 <= i < len(self.figure.photos)) and await download(self.figure.photos[i], dest)
+
+    def keep(self, photo: Path | None) -> None:
+        """The finished card into 我的角色, with the photo the player picked."""
+        from .. import roster
+
+        assert self.card
+        roster.keep(self.card, self.record(), photo)
 
     def record(self) -> dict:
         """How the card was made, kept next to it."""

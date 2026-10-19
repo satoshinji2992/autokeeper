@@ -4,11 +4,15 @@ and the round's rule, and the module as the players may read it: the Hub's table
 table()), never the truth, the keeper's notes or anyone's secrets.
 
 Take a free seat, watch, or start with the empty seats played by the AI; the host who opened the
-room in this app can also close it."""
+room in this app can also close it. Before a new game starts, the player in a seat may choose who
+they play (选角色, tui/seatcard.py): one of their own cards, a free pregen, or one made here on the
+host's models (the card screen of tui/card.py with a net/cards.py RemoteBuilder); then say they are
+ready. Everyone ready, the game begins."""
 
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 from typing import Any
 from urllib.parse import urlparse
@@ -23,9 +27,10 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import __version__, imagery
+from .. import __version__, imagery, roster
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
+from ..net import media
 from ..net import room as lan
 from ..net.link import Link
 from ..rules.coc import Investigator
@@ -84,6 +89,8 @@ class LobbyScreen(Screen):
         Binding("w", "watch", "观战"),
         Binding("s", "start", "现在开始"),
         Binding("c", "sheet", "人物卡"),
+        Binding("r", "pick", "选角色"),
+        Binding("y", "ready", "准备好了"),
         Binding("x", "close_room", "关闭房间"),
         Binding("h", "help", "遇到问题"),
     ]
@@ -102,6 +109,9 @@ class LobbyScreen(Screen):
         self.width, self.short = 40, False  # the seat list's lines: how wide, and whether two a seat
         self.lit: int | None = None  # the seat drawn for the cursor
         self._game_handler: Any = None  # the game screen's, once the link is handed on to it
+        self.bring = False  # seats may still change their investigator (a new game, not begun)
+        self.remote: Any = None  # net/cards.py RemoteBuilder  # the card being made on the host's models
+        self.guest = bool(os.environ.get("AUTOKEEPER_GUEST"))  # a browser's seat, on the host's machine
 
     def compose(self) -> ComposeResult:
         with Vertical(id="lobby"):
@@ -117,6 +127,8 @@ class LobbyScreen(Screen):
                     yield Static(id="lobby-sheet")
             with Horizontal(id="lobby-actions"):
                 yield Button("坐这个位置", id="sit", variant="primary", compact=True)
+                yield Button("选角色", id="pick", variant="primary", compact=True)
+                yield Button("准备好了", id="ready", compact=True)
                 yield Button("观战", id="watch", compact=True)
                 yield Button("现在开始", id="start", compact=True)
                 yield Button("人物卡", id="sheet", compact=True)
@@ -166,11 +178,21 @@ class LobbyScreen(Screen):
             self.m = table_module(msg)
             self.state = GameState.model_validate(msg["state"])
             self.seats = msg["seats"]
+            self.bring = bool(msg.get("bring"))
             self._show_all()
         elif t == "seats":
             self.seats = msg["seats"]
+            self.bring = bool(msg.get("bring", self.bring))
             self._list_seats()
             self._head()
+            self._card()
+        elif t == "seated":  # your seat's investigator changed: the seat goes by its id
+            self.chosen = msg["investigator"]
+        elif t == "face" and self.m is not None:  # the picture of a card someone brought
+            if path := media.unpack(msg.get("picture_data", "")):
+                self.m.pictures[str(msg.get("key", ""))] = path
+        elif t == "card" and self.remote is not None:
+            self.remote.reply(msg)
         elif t in ("sync", "turn") and self.welcome is not None:
             self.welcome["state"] = msg["state"]  # keep up while still choosing
             self.state = GameState.model_validate(msg["state"])
@@ -186,7 +208,9 @@ class LobbyScreen(Screen):
                 self._show_all()
         elif t == "error":
             self.app.notify(msg["text"], severity="warning")
-        elif t == "closed" and not self.gone:
+        elif t == "closed" and self.remote is not None:
+            self.remote.reply(msg)
+        if t == "closed" and not self.gone:
             self.gone = True
             self.app.notify("房主关闭了房间", severity="error")
             self.query_one("#lobby-hint", Static).update(Text("房间关了，Esc 离开", style="bold"))
@@ -239,16 +263,21 @@ class LobbyScreen(Screen):
         cursor, where only the cursor's own colours read well."""
         inv = self._investigator(seat["investigator"])
         t = Text()
-        t.append(seat["name"], style="bold")
-        t.append(f"  {seat['occupation']}" + (f" · {inv.age} 岁" if inv else ""), style="" if lit else "dim")
+        t.append(seat["name"] or "空座位", style="bold")
+        if inv:
+            t.append(f"  {seat['occupation']} · {inv.age} 岁", style="" if lit else "dim")
+        ready = " · 准备好了" if seat.get("ready") else " · 还没选角色" if seat.get("blank") else ""
         if not seat["human"]:
             t.append("\n  ◆ AI 扮演", style="" if lit else "dim")
         elif seat["investigator"] == self.chosen:
-            t.append("\n  ● 你", style="bold" if lit else "bold green")
+            t.append("\n  ● 你" + ready, style="bold" if lit else "bold green")
         elif seat["online"]:
-            t.append(f"\n  ● {seat['player']}", style="" if lit else "green")
+            t.append(f"\n  ● {seat['player']}{ready}", style="" if lit else "green")
         else:
             t.append("\n  ○ 空座" + ("，AI 代打" if self.started else ""), style="bold" if lit else "bold yellow")
+        brought = {"own": "自带的卡", "new": "现车的卡"}.get(seat.get("origin", ""), "")
+        if self.link.host and (brought or seat.get("note")):  # who brought what, for the host
+            t.append("  " + " · ".join(x for x in (brought, seat.get("note", "")) if x), style="" if lit else "dim")
         if inv and not self.short and (line := gist(inv, 60)):
             t.append(f"\n  {line}", style="italic" if lit else "dim italic")
         return clip(t, self.width)
@@ -274,6 +303,14 @@ class LobbyScreen(Screen):
             hint = "已经开局了，选个空座或者观战"
         elif self.chosen == "":
             hint = "观战中，开局后自动进入"
+        elif self.chosen and self.bring:
+            mine = next((s for s in self.seats if s["investigator"] == self.chosen), {})
+            if mine.get("blank"):
+                hint = "R 选角色 · 选好了按 Y 准备好了"
+            elif mine.get("ready"):
+                hint = "等大家准备好就开局 · Y 取消准备"
+            else:
+                hint = "R 换角色 · Y 准备好了 · 大家都准备好就开局"
         elif self.chosen:
             hint = "人齐了自动开局，也可以现在开始，空座交给 AI"
         else:
@@ -295,6 +332,13 @@ class LobbyScreen(Screen):
         self.query_one("#sit", Button).disabled = not sittable or self.gone
         self.query_one("#start", Button).disabled = self.started or self.gone
         self.query_one("#watch", Button).disabled = self.gone
+        mine = next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
+        choosing = bool(self.bring and mine and not self.gone)
+        self.query_one("#sit", Button).display = not choosing
+        for button in ("#pick", "#ready"):
+            self.query_one(button, Button).display = choosing
+        self.query_one("#ready", Button).label = "取消准备" if mine and mine.get("ready") else "准备好了"
+        self.refresh_bindings()
 
     def _info(self) -> None:
         w = self.welcome or {}
@@ -336,6 +380,10 @@ class LobbyScreen(Screen):
         seat = self._highlighted()
         pane = self.query_one("#lobby-card")
         inv = self._investigator(seat["investigator"]) if seat else None
+        if seat and seat.get("blank") and not self.has_class("-narrow"):
+            pane.border_title = "人物卡"
+            self.query_one("#lobby-sheet", Static).update(Text("空座位。坐下的人自己选角色。", style="dim"))
+            return
         if inv is None or self.m is None or self.has_class("-narrow"):
             return
         pane.border_title = f"人物卡 · {inv.name}"
@@ -392,6 +440,68 @@ class LobbyScreen(Screen):
         await self.link.send({"t": "sit", "investigator": self.chosen})
         if self.started:
             self._enter([])
+        elif seat.get("blank") and self.bring:  # nobody to play yet: choose first
+            self.action_pick()
+
+    # -- your investigator, before the start ------------------------------------------------
+    def _my_seat(self) -> dict[str, Any] | None:
+        return next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
+
+    def action_pick(self) -> None:
+        from .seatcard import SeatCardScreen
+
+        seat = self._my_seat()
+        if self.gone or self.m is None or not self.bring:
+            return
+        if seat is None:
+            self.app.notify("先坐下再选角色", severity="warning")
+            return
+        mine = None if self.guest else roster.saved()  # a browser seat: the cards on this machine are the host's
+        taken = {s["investigator"] for s in self.seats} - {seat["investigator"]}
+        self.app.push_screen(SeatCardScreen(self.m, mine, taken, seat["investigator"]), self._picked_card)
+
+    def _picked_card(self, choice: tuple[str, object] | None) -> None:
+        if choice is None:
+            return
+        kind, value = choice
+        if kind == "pregen":
+            self.run_worker(self.link.send({"t": "bring", "pregen": value}))
+        elif kind == "mine":
+            self.run_worker(self._bring(value))  # type: ignore[arg-type]
+        else:
+            from ..net.cards import RemoteBuilder
+            from .card import CardScreen
+
+            assert self.m is not None
+            self.remote = RemoteBuilder(self.link, self.m, save=not self.guest, files=not self.guest,
+                                        notify=lambda text: self.app.notify(text, severity="warning"))
+            self.app.push_screen(CardScreen(self.m, self.remote, start=str(kind)), self._made)  # type: ignore[arg-type]
+
+    async def _bring(self, inv: Investigator, picture: str = "", made: bool = False) -> None:
+        from .cards import photo
+
+        if not picture and (path := photo(inv, None)) is not None:
+            picture = await asyncio.to_thread(media.pack, str(path))
+        await self.link.send({"t": "bring", "investigator": inv.model_dump(mode="json"), "portrait": picture, "made": made})
+
+    def _made(self, card: Investigator | None) -> None:
+        remote, self.remote = self.remote, None
+        if remote is None:
+            return
+        self.run_worker(remote.end())
+        if card is not None:
+            self.run_worker(self._bring(card, remote.portrait_data, made=True))
+            if remote.save:
+                self.app.notify(f"{card.name} 也放进了我的角色", timeout=4)
+
+    async def action_ready(self) -> None:
+        seat = self._my_seat()
+        if self.gone or seat is None or not self.bring:
+            return
+        if seat.get("blank"):
+            self.app.notify("先选一个角色", severity="warning")
+            return
+        await self.link.send({"t": "ready", "on": not seat.get("ready")})
 
     async def action_watch(self) -> None:
         if self.gone:
@@ -423,6 +533,8 @@ class LobbyScreen(Screen):
 
     def _enter(self, first: list[dict[str, Any]]) -> None:
         assert self.welcome is not None
+        while self.app.screen is not self and len(self.app.screen_stack) > 1:  # still choosing a card: the game has begun
+            self.app.pop_screen()
         w = self.welcome
         state = GameState.model_validate(w["state"])
         screen = NetGameScreen(self.m or table_module(w), state, self.link, self.chosen or None,
@@ -448,6 +560,8 @@ class LobbyScreen(Screen):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "close_room":
             return self.room is not None
+        if action in ("pick", "ready"):
+            return self.bring and self._my_seat() is not None
         return True
 
     def action_close_room(self) -> None:
