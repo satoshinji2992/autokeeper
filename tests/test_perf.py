@@ -3,6 +3,7 @@ layout holds still while the scene loads (no model calls)."""
 
 from __future__ import annotations
 
+import gc
 import shutil
 import threading
 
@@ -129,12 +130,12 @@ async def test_a_long_story_keeps_its_latest_blocks_and_folds_the_rest():
         assert "第 399 段" in str(blocks[-1].render()) and story.is_vertical_scroll_end
         header = story.query_one(Folded)
         folded = before + 401 - len(blocks)
-        assert f"更早的 {folded} 段" in str(header.render())
+        assert f"前面还有 {folded} 段" in str(header.render())
 
         header.on_click()  # a batch comes back above, the page stays put
         await pilot.pause()
         assert len([w for w in story.children if not isinstance(w, Folded)]) == len(blocks) + StoryLog.FOLD
-        assert f"更早的 {folded - StoryLog.FOLD} 段" in str(header.render())
+        assert f"前面还有 {folded - StoryLog.FOLD} 段" in str(header.render())
 
         line = next(h for h in screen.query(HistoryLine) if h.block is clue)
         assert clue.parent is None  # folded away
@@ -192,3 +193,8 @@ async def test_no_picture_is_rendered_on_the_ui_thread_when_a_game_starts(monkey
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         assert await until(pilot, lambda: any(size == PORTRAIT for size, _ in runs))  # the side column's face too
         assert not any(on_ui for _, on_ui in runs)
+
+
+def test_the_ui_lets_a_frames_objects_die_young():
+    AutoKeeperApp(theme="amber")
+    assert gc.get_threshold()[0] >= 10_000  # not a full collection every second or two of play

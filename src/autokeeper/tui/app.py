@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import os
 import random
@@ -1620,6 +1621,11 @@ class AutoKeeperApp(App):
 
     def __init__(self, theme: str | None = None, join: tuple[str, str] | None = None):
         super().__init__()
+        # Each frame (weather, a narration's tick, the title's sea) makes thousands of short-lived
+        # objects; at Python's default thresholds (700, 10, 10) they kept reaching the old
+        # generation, and a game stopped for a 150-250 ms full collection every second or two.
+        # A larger young generation lets them die young: a full collection every few minutes.
+        gc.set_threshold(10_000, 20, 20)
         self._theme_name = theme
         self.art_style = config.load().art_style
         self.dice_skin = config.load().dice
