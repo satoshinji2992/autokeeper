@@ -48,6 +48,11 @@ def text(info: dict[str, Any] | None = None, *, theirs: str = "", detail: str = 
     out.append("## 版本不一样\n\n"
                "1. 大家更新到同一版：在 AutoKeeper 的文件夹里运行 git pull，再运行 uv sync。\n"
                f"2. 你的版本是 {__version__}" + (f"，房主的是 {theirs}" if theirs and theirs != __version__ else "") + "。\n")
+    out.append("## 选不了角色\n\n"
+               "1. 先坐下，再按 R 选角色。开局以后就不能换了。\n"
+               "2. 接着玩的存档沿用原来的调查员，换不了。\n"
+               "3. 车卡用房主的模型：房主要配好模型，花费上限到了也车不了。车卡一分钟内点太多次，要歇一会儿。\n"
+               "4. 导入的文件太大传不过去，换一个小一点的，或者直接粘贴文字。\n")
     out.append("## 房间开不起来\n\n"
                "1. 可能已经开着一个房间：看标题画面有没有「回到房间」，或者关掉另一个开着的 AutoKeeper。\n"
                "2. 命令行开的房间（autokeeper host）也算，在那个窗口按 Ctrl+C 关掉。\n"

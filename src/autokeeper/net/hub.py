@@ -465,6 +465,11 @@ class Hub:
         if self.started.is_set():
             return
         if self.bringing:
+            spares = [p for p in self.m.pregens if p.id not in {i.id for i in self.state.investigators}]
+            if not self.state.investigators and not (spares and any(self.sits.get(seat) for seat in self.blank)):
+                if cid is not None:
+                    await self._no(cid, "还没有人选角色，开不了局")
+                return
             changed = False
             for seat in list(self.blank):
                 who = self.sits.get(seat)
@@ -478,10 +483,6 @@ class Hub:
                     if who is not None:
                         await self._no(who, "没有空的预设角色了，你先观战")
                 changed = True
-            if not self.state.investigators:
-                if cid is not None:
-                    await self._no(cid, "还没有人选角色，开不了局")
-                return
             for client in list(self.builders):
                 self._drop_card(client)
             if changed:
