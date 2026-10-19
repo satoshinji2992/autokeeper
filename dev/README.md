@@ -29,12 +29,22 @@ uv run pytest tests/test_public_gateway.py -q
 
 ## 项目展示页
 
-GitHub Pages 的源码在 `docs/index.html` 和 `docs/site/`，直接复用 `docs/img/` 的实机图。网页用 HTML/CSS 延续 Textual 的琥珀色字符面板，复用游戏的 ASCII 标题字，叠加静态 SVG 颗粒与扫描线纹理。纯静态页面，无须安装前端依赖。本地预览：
+GitHub Pages 的源码在 `docs/index.html` 和 `docs/site/`。页面由 Canvas 字符网格绘制，使用游戏原有的标题字和画作渲染数据；水面、雾气和手电在字符画上变化。方向键选页、滚动和切图，`/` 打开命令输入，`Tab` 补全，`?` 查看操作。声景默认关闭。减少动态效果和文字阅读模式均可用，关闭 JavaScript 也能读正文。
+
+纯静态页面，无须安装前端依赖。本地预览：
 
 ```bash
 python -m http.server 8080 --bind 127.0.0.1 --directory docs
 ```
 
-打开 `http://127.0.0.1:8080/`。页面的链接和资源均按项目子目录编写，部署到 `/autokeeper/` 时也能正常使用。修改图片后，更新 `docs/site/main.js` 中图集的尺寸和说明；正文、模型启动示例与 README 保持一致。
+打开 `http://127.0.0.1:8080/`。页面资源使用相对路径，部署到 `/autokeeper/` 时也能正常使用。正文取自 HTML，修改介绍时直接编辑 `docs/index.html`；模型切换示例在 `docs/site/main.js`，与 README 保持一致。图集使用 `docs/img/` 的完整实机截图，尺寸和说明在 `docs/site/gallery.json`。
+
+标题画作的字符与颜色存在 `docs/site/cover-data.json`，由游戏的 `drawing.cover.frame` 导出。改动标题渲染器后，安装 chafa，再运行：
+
+```bash
+uv run python dev/export_site_art.py
+```
+
+结果默认写入 `dev/output/site/cover-data.json`，检查后复制到 `docs/site/cover-data.json`。原画署名与许可链接保留在网页的「文档与署名」中。
 
 发布地址为 <https://satoshinji2992.github.io/autokeeper/>。仓库 Pages 使用 `main` 分支的 `/docs`，提交并推送网页改动后会自动发布，`docs/.nojekyll` 用于直接发布静态文件。运行中的游戏、API 密钥和存档仍留在玩家本机。
