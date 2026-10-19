@@ -21,8 +21,10 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.content import Content
 from textual.screen import Screen
 from textual.theme import Theme
+from textual.timer import Timer
 from textual.widgets import Button, Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -152,6 +154,12 @@ class TitleScreen(Screen):
         self.flash = 0
         self.frames = 0  # how many of the loop's frames are drawn for the current size
         self.size_key: tuple[int, int, float, str] | None = None
+        self.ticker: Timer | None = None
+        # Finished frames, words and menu laid over the painting, for the menu as it is now:
+        # composing one is most of a tick's work, and the loop shows each again and again.
+        self.painted: dict[int, Content] = {}
+        self.painted_for: tuple | None = None
+        self.shown: tuple | None = None  # the frame on screen
 
     def compose(self) -> ComposeResult:
         yield OptionList(
@@ -170,8 +178,20 @@ class TitleScreen(Screen):
 
     def on_mount(self) -> None:
         self.id = "title-screen"
-        self.set_interval(0.12, self._tick)
+        self.ticker = self.set_interval(0.12, self._tick)
         self.query_one("#menu", OptionList).focus()
+
+    # Under another screen (the setup, a whole game) the sea stands still: repainted behind a
+    # game eight times a second, the title took a third of a core and fed long GC pauses.
+    def on_screen_suspend(self) -> None:
+        if self.ticker is not None:
+            self.ticker.pause()
+
+    def on_screen_resume(self) -> None:
+        if self.ticker is not None:
+            self.ticker.resume()
+        if self.size_key is not None:  # the art style may have changed meanwhile (F9)
+            self._place(*self.size_key[:2])
 
     def on_resize(self, event) -> None:
         self._place(event.size.width, event.size.height)
@@ -216,12 +236,34 @@ class TitleScreen(Screen):
         self.flash = max(0, self.flash - 1)
 
     def _paint(self) -> None:
+        """The frame for this tick, unless it is the one on screen: the picture changes every
+        other tick, the name glitches now and then."""
         if self.size_key is None:
             return
-        cols, rows, middle, _ = self.size_key
         k = cover.FRAMES if self.flash in (3, 1) else (self.tick // 2) % cover.FRAMES
-        if self.frames > k or self.frames:
-            grid = [row[:] for row in cover.frame(*self.size_key, k if self.frames > k else 0)]
+        picture = (k if self.frames > k else 0) if self.frames else -1  # -1: nothing drawn yet
+        flicker = random.choice([0.0] * 14 + [0.02, 0.05, 0.12])
+        menu = self.query_one("#menu", OptionList)
+        base = (self.size_key, menu.highlighted, self.app.theme)
+        if base != self.painted_for:
+            self.painted, self.painted_for = {}, base
+        if not flicker and (base, picture) == self.shown:
+            return
+        frame = self.painted.get(picture) if not flicker else None
+        if frame is None:
+            frame = Content.from_rich_text(self._overlaid(picture, flicker, menu), console=self.app.console)
+            if not flicker:
+                self.painted[picture] = frame
+        self.query_one("#title-cover", Static).update(frame, layout=False)  # the cover fills the screen whatever it shows
+        self.shown = None if flicker else (base, picture)
+
+    def _overlaid(self, picture: int, flicker: float, menu: OptionList) -> Text:
+        """Frame `picture` of the painting (-1: the eye, or nothing yet) with the name, the
+        tagline, the menu and the hint laid over it."""
+        assert self.size_key is not None
+        cols, rows, middle, _ = self.size_key
+        if picture >= 0:
+            grid = [row[:] for row in cover.frame(*self.size_key, picture)]
         elif not imagery.available():
             grid = cover.eye(cols, rows, middle)
         else:
@@ -229,16 +271,15 @@ class TitleScreen(Screen):
         grid = grid[:rows] + cover.blank(cols, rows - len(grid))  # chafa may come a row short
         theme = self.app.current_theme
         top, tag, _ = self._stack(cols, rows)
-        logo = cover.cells(art.title(cols, random.choice([0.0] * 14 + [0.02, 0.05, 0.12]), height=rows))
+        logo = cover.cells(art.title(cols, flicker, height=rows))
         cover.put(grid, logo, (cols - max(map(len, logo), default=0)) // 2, top, keep_ground=True)
         words = cover.cells(Text(f" {art.TAGLINE} ", style=f"bold {theme.secondary or '#d98e04'}"))
         cover.put(grid, words, (cols - len(words[0])) // 2, tag, under=cover.PLAQUE)
-        menu = self.query_one("#menu", OptionList)
         labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
         cover.menu(grid, self._menu_box(cols, rows), labels, menu.highlighted, theme.primary, theme.foreground or "#f3d7a6", theme.surface or "#15110a")
         hint = cover.cells(Text(" ↑↓ 选择 · Enter 确认 · F9 设置 · Ctrl+Q 离开 ", style="#8a7a66"))
         cover.put(grid, hint, (cols - len(hint[0])) // 2, rows - 1, under=cover.PLAQUE)
-        self.query_one("#title-cover", Static).update(cover.compose(grid))
+        return cover.compose(grid)
 
     def _option_at(self, x: int, y: int) -> int | None:
         if self.size_key is None:

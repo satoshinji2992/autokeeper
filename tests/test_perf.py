@@ -7,11 +7,12 @@ import threading
 
 import pytest
 from rich.text import Text
+from textual.screen import Screen
 
 from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
+from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
 from autokeeper.tui.widgets import SceneArt
 
 from .test_speaker import drawn
@@ -78,3 +79,21 @@ async def test_just_after_a_resize_the_old_art_is_cropped_not_wrapped(monkeypatc
             gate.set()
         assert await until(pilot, lambda: drawn(scene) and scene._fitted == scene._fit())
         assert scene.outer_size.height == tall
+
+
+async def test_the_title_stands_still_under_another_screen():
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        title = app.screen
+        assert isinstance(title, TitleScreen)
+        await pilot.pause(0.3)
+        assert title.tick > 0  # the sea swells
+        app.push_screen(Screen())  # a game, the setup: anything over it
+        await pilot.pause(0.1)
+        still = title.tick
+        await pilot.pause(0.6)
+        assert title.tick == still  # not painted behind the game, eight times a second
+        app.pop_screen()
+        await pilot.pause(0.6)
+        assert title.tick > still
