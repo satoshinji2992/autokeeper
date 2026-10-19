@@ -252,6 +252,12 @@ def kite(k: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return mid, right * np.linalg.norm(verts[side] - mid), up
 
 
+@lru_cache(maxsize=1)
+def kites() -> np.ndarray:
+    """Every kite's frame at once (10, 3, 3): middle, right, up."""
+    return np.array([np.stack(kite(k)) for k in range(10)])
+
+
 def on_kite(k: int, uv: np.ndarray) -> np.ndarray:
     """Points (u, v) on kite k (n, 2) in the die's space (n, 3)."""
     mid, right, up = kite(k)
@@ -350,13 +356,21 @@ def die(img: np.ndarray, cam: Camera, skin: str, kind: str, x: np.ndarray, r: np
     for paint in (False, True):
         if paint is False and m.glow:
             continue  # a screen's lines have no cut
-        im = Image.new("L", size, 0)
-        dr = ImageDraw.Draw(im)
+        squares, owner = [], []
         for k in visible:
             grow = 0.0 if paint else m.cut if gold and k == top else GROOVE  # the yellow gets a wide dark rim
-            for square in digits(label(kind, k), size_px, at_v, grow):
-                pts, _ = cam.project(x + on_kite(k, square) @ r.T)
-                poly(dr, pts, (x0, y0), k + 1)
+            cut = digits(label(kind, k), size_px, at_v, grow)
+            squares += cut
+            owner += [k] * len(cut)
+        if not squares:
+            continue
+        uv, frames = np.stack(squares), kites()[owner]  # (squares, 4 corners, u v), (squares, mid right up, 3)
+        body = frames[:, None, 0] + uv[..., :1] * frames[:, None, 1] + uv[..., 1:] * frames[:, None, 2]
+        pts, _ = cam.project(x + body.reshape(-1, 3) @ r.T)
+        im = Image.new("L", size, 0)
+        dr = ImageDraw.Draw(im)
+        for quad, k in zip(pts.reshape(-1, 4, 2) - (x0, y0), owner, strict=True):
+            dr.polygon([(float(a), float(b)) for a, b in quad], fill=k + 1)
         mark = np.asarray(im).astype(np.int16)
         on = (mark > 0) & (mark == ids_a)
         if not on.any():
@@ -366,8 +380,8 @@ def die(img: np.ndarray, cam: Camera, skin: str, kind: str, x: np.ndarray, r: np
         if not paint:
             tile[on] = np.array(m.groove) * lit
             continue
-        paint_colour = np.where((gold & (faces_on == top))[:, None], np.array(GOLD), np.array(m.ink))
-        tile[on] = paint_colour if m.glow else paint_colour * lit
+        yellow = (gold & (faces_on == top))[:, None]  # the same yellow on every die and skin, whatever the light
+        tile[on] = np.where(yellow, np.array(GOLD), np.array(m.ink) if m.glow else np.array(m.ink) * lit)
     if over is not None:
         over(tile, cam, skin, x, r, visible, (x0, y0), sel, ids_a, gold, top)
     if skin == "phosphor":

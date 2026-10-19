@@ -543,7 +543,7 @@ COMMANDS = (
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
     ("换画法", "Ctrl+A", "块字符、六分块、照片、纯 ASCII", "art_style"),
-    ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、旧日、磷光", "dice_skin"),
+    ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、青石、磷光", "dice_skin"),
     ("天气动画", "", "开或关；画面晃眼或卡顿时关掉", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
@@ -618,6 +618,7 @@ class GameScreen(Screen):
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         self.query_one(SceneArt).effects = cfg.animations
+        self.query_one(DiceTray).tumbling = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         channels.listeners.append(self._fell_back)
         config.SAVES.mkdir(parents=True, exist_ok=True)
@@ -755,6 +756,11 @@ class GameScreen(Screen):
         width = event.size.width
         right.display = width >= 96
         right.styles.width = 40 if width >= 130 else 34
+        # the dice tray as tall as the column can spare: ten rows of picture on a tall screen
+        tray = self.query_one(DiceTray)
+        tray.styles.height = 13 if event.size.height >= 40 else 12 if event.size.height >= 34 else 11
+        if right.display:
+            self.call_after_refresh(tray.prepare)
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
         self.query_one(Speaker).refit()
         self.call_after_refresh(self._panels)  # the sheet fits the new column; HP and SAN go up top without it
@@ -767,8 +773,9 @@ class GameScreen(Screen):
         self.app.dice_skin = names[(names.index(now) + 1) % len(names)] if now in names else names[0]  # type: ignore[attr-defined]
         config.save_ui_settings({"dice": self.app.dice_skin})  # type: ignore[attr-defined]
         tray = self.query_one(DiceTray)
-        if tray._view is None:  # nothing rolled yet: a look at the skin
-            tray.roll({"skill": "皮肤预览", "target": 50, "value": 37, "level": "常规成功"})
+        tray.prepare()
+        if tray._view is None:  # nothing rolled yet: a throw to look at the skin
+            tray.roll(dice.preview())
         else:
             tray.redraw()
         self.app.notify(f"骰子皮肤：{dice.SKINS[self.app.dice_skin].name}")  # type: ignore[attr-defined]
@@ -780,6 +787,7 @@ class GameScreen(Screen):
         self._scene(self.state.location)
         self._panels()
         self.query_one(Speaker).refit()
+        self.query_one(DiceTray).redraw()
 
     @staticmethod
     def _engine_label(cfg: config.Config) -> str:
@@ -830,6 +838,7 @@ class GameScreen(Screen):
 
     def action_weather(self) -> None:
         on = self.query_one(SceneArt).toggle_effects()
+        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
         self.app.notify(f"天气动画：{'开' if on else '关'}")
 
     def _topbar(self) -> None:

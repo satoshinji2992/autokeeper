@@ -17,6 +17,7 @@ from the viewer and z up; the tray's floor is z = 0.
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 import time
@@ -27,6 +28,9 @@ from typing import Any
 import numpy as np
 
 from .bcdice import BCDice, Level, Roll, shared
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())  # recorded if logging is set up, never printed over the game
 
 FPS = 25  # frames a second in the recording
 STEP = 1 / 150  # the simulation's step
@@ -481,7 +485,8 @@ class PhysDice:
         target, bonus = max(1, int(target)), max(-2, min(2, int(bonus)))
         try:
             t = throw(self.seeds.getrandbits(63), tens=1 + abs(bonus))
-        except Exception:  # a broken throw must never break a turn
+        except Exception:  # a broken throw must never break a turn: plain dice, and a line in the log
+            log.warning("the physical dice failed; BCDice rolls this check", exc_info=True)
             self.last = None
             return self.inner.check(target, bonus)
         self.last = t
