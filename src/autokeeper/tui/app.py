@@ -633,6 +633,7 @@ class GameScreen(Screen):
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
         self.ideas = Ideas(self)  # F5 (tui/suggest.py)
+        self._thumbs: dict[tuple[str | None, str], Text | None] = {}  # side-column faces; None: being drawn
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -742,7 +743,7 @@ class GameScreen(Screen):
             line += f"{'  · ' if line else ' '}{wait}：{self.queued[:24]}（/undo 撤回）"
         if line != self._spun:  # an idle status line is not repainted ten times a second
             self._spun = line
-            self.query_one("#status", Static).update(Text(line))
+            self.query_one("#status", Static).update(Text(line), layout=False)  # one row, whatever it says
 
     def _busy(self, busy: bool) -> None:
         """While a turn runs the box stays open: the next action can be typed ahead, and keys
@@ -896,7 +897,7 @@ class GameScreen(Screen):
         bar.add_column(no_wrap=True, overflow="ellipsis", ratio=1)
         bar.add_column(justify="right", no_wrap=True)
         bar.add_row(left, right)
-        self.query_one("#topbar", Static).update(bar)
+        self.query_one("#topbar", Static).update(bar, layout=False)  # one row
         self.query_one(SceneArt).set_light(when)
 
     def _viewer(self):
@@ -923,14 +924,36 @@ class GameScreen(Screen):
         st = self.state
         inv = self._viewer()
         tall = self.app.size.height >= 34  # room for a face beside the bars
-        thumb = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
-        face = art_text(self.m, inv.portrait, PORTRAIT, thumb, face=True) if tall else None
+        face = self._thumb(inv) if tall else None
         self.query_one(SheetPanel).show(inv, face, st.investigators)
         self.story.mark(st.investigators, self._me())
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
         self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))
         self._topbar()
+
+    def _thumb(self, inv: Investigator) -> Text | None:
+        """The side column's face. A picture goes through chafa in a thread (a game started, or
+        Ctrl+A, used to wait for it); the sheet shows without it until it is in."""
+        key = (inv.portrait, "ascii" if self.app.art_style == "ascii" else "photo")  # type: ignore[attr-defined]  # outlines are noise this small
+        if key in self._thumbs:
+            return self._thumbs[key]
+        if not (inv.portrait in self.m.pictures and imagery.available()):
+            return art_text(self.m, inv.portrait)  # hand-drawn, or nothing
+        self._thumbs[key] = None
+        self._draw_thumb(key)
+        return None
+
+    @work(thread=True, group="thumb", exit_on_error=False)  # a game left meanwhile: nobody to show it to
+    def _draw_thumb(self, key: tuple[str | None, str]) -> None:
+        face = art_text(self.m, key[0], PORTRAIT, key[1], face=True)
+        if self.is_attached:
+            self.app.call_from_thread(self._thumb_drawn, key, face)
+
+    def _thumb_drawn(self, key: tuple[str | None, str], face: Text) -> None:
+        self._thumbs[key] = face
+        if self.is_attached:
+            self._panels()
 
     # -- event handling ----------------------------------------------------------------------
     async def handle(self, ev: dict) -> None:

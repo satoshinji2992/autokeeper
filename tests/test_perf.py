@@ -3,17 +3,19 @@ layout holds still while the scene loads (no model calls)."""
 
 from __future__ import annotations
 
+import shutil
 import threading
 
 import pytest
 from rich.text import Text
 from textual.screen import Screen
 
+from autokeeper import config, imagery
 from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
-from autokeeper.tui.widgets import Folded, HistoryLine, SceneArt, StoryLog
+from autokeeper.tui.widgets import PORTRAIT, Folded, HistoryLine, SceneArt, StoryLog
 
 from .test_speaker import drawn
 from .test_tui import canned, until  # noqa: F401  (canned: a fixture, used by name)
@@ -164,3 +166,25 @@ async def test_a_narration_is_laid_out_once_a_line_not_once_a_tick(monkeypatch):
         # A layout (and a scroll) when it takes another line; the other ticks only repaint it.
         assert lines >= 3 and len(layouts) <= 2 * lines + 4
         assert words in str(story.children[-1].render())
+
+
+@pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
+@pytest.mark.usefixtures("canned")
+async def test_no_picture_is_rendered_on_the_ui_thread_when_a_game_starts(monkeypatch):
+    runs, real = [], imagery.render.__wrapped__
+
+    def render(*args, **kwargs):  # every chafa run, uncached: its size, and whether it ran on the UI thread
+        runs.append((args[1:3], threading.current_thread() is threading.main_thread()))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(imagery, "render", render)
+    m = Module.load(config.MODULES / "zhuishuren")
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="thumb", human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = GameScreen(m, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        assert await until(pilot, lambda: any(size == PORTRAIT for size, _ in runs))  # the side column's face too
+        assert not any(on_ui for _, on_ui in runs)
