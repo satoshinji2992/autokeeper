@@ -41,8 +41,11 @@ REST_DAMPING = 8.0  # once it lies flat on a kite
 INERTIA = 0.24  # a solid this round turns like a ball: one number, the same about every axis (mass 1)
 KNOCK = 0.84  # dice knock each other as balls this big; cheap, and their corners hide the difference
 FLAT = math.cos(math.radians(4))  # how level the top face must lie to be read
+TURN = (110.0, 16.0, 220.0, 9.0)  # a die lying flat turns its top number to the viewer: stiffness, damping, most a second², most a second
+SETTLING = math.cos(math.radians(10))  # it starts turning once this level
+UPRIGHT = math.radians(7)  # how near upright it must lie before it rests
 NUDGE_AFTER, NUDGE_EVERY, GIVE_UP = 2.5, 1.0, 6.0  # seconds
-TRAYS = {1: (1.3, 1.1), 2: (2.15, 1.2), 3: (2.75, 1.5), 4: (3.15, 1.7)}  # half width and depth for that many dice
+TRAYS = {1: (1.3, 1.1), 2: (2.15, 1.12), 3: (2.95, 1.55), 4: (3.6, 1.9)}  # half width and depth for that many dice
 
 
 # -- the solid -------------------------------------------------------------------------------
@@ -66,6 +69,20 @@ def d10() -> tuple[np.ndarray, tuple[tuple[int, ...], ...], np.ndarray]:
             faces.append(tuple(f))
             normals.append(n / np.linalg.norm(n))
     return verts, tuple(faces), np.array(normals)
+
+
+@lru_cache(maxsize=1)
+def apexes() -> np.ndarray:
+    """Each kite's way up, in the die's space: from the middle of its side corners to its apex,
+    the way its number reads."""
+    verts, faces, _ = d10()
+    out = []
+    for f in faces:
+        i = next(j for j, v in enumerate(f) if v in (0, 1))
+        mid = (verts[f[(i + 1) % 4]] + verts[f[(i + 3) % 4]]) / 2
+        up = verts[f[i]] - mid
+        out.append(up / np.linalg.norm(up))
+    return np.array(out)
 
 
 @lru_cache(maxsize=1)
@@ -94,16 +111,16 @@ def lying() -> float:
 
 
 # -- rotations -------------------------------------------------------------------------------
+SKEW = ([0, 0, 1, 1, 2, 2], [1, 2, 0, 2, 0, 1])
+
+
 def turns(v: np.ndarray) -> np.ndarray:
     """Rotation matrices for rotation vectors (n, 3): axis times angle."""
-    angle = np.linalg.norm(v, axis=1)
-    safe = np.where(angle > 1e-12, angle, 1.0)
-    a = v / safe[:, None]
+    angle = np.sqrt((v * v).sum(axis=1))
+    a = v / np.maximum(angle, 1e-12)[:, None]
     k = np.zeros((len(v), 3, 3))
-    k[:, 0, 1], k[:, 0, 2], k[:, 1, 0] = -a[:, 2], a[:, 1], a[:, 2]
-    k[:, 1, 2], k[:, 2, 0], k[:, 2, 1] = -a[:, 0], -a[:, 1], a[:, 0]
-    s, c = np.sin(angle)[:, None, None], (1 - np.cos(angle))[:, None, None]
-    return np.eye(3) + s * k + c * (k @ k)
+    k[:, SKEW[0], SKEW[1]] = np.stack([-a[:, 2], a[:, 1], a[:, 2], -a[:, 0], -a[:, 1], a[:, 0]], axis=1)
+    return np.eye(3) + np.sin(angle)[:, None, None] * k + (1 - np.cos(angle))[:, None, None] * (k @ k)
 
 
 def quaternions(r: np.ndarray) -> np.ndarray:
@@ -134,7 +151,11 @@ def matrices(q: np.ndarray) -> np.ndarray:
 
 
 def cross(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.stack([a[:, 1] * b[:, 2] - a[:, 2] * b[:, 1], a[:, 2] * b[:, 0] - a[:, 0] * b[:, 2], a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]], axis=1)
+    out = np.empty_like(a)
+    out[:, 0] = a[:, 1] * b[:, 2] - a[:, 2] * b[:, 1]
+    out[:, 1] = a[:, 2] * b[:, 0] - a[:, 0] * b[:, 2]
+    out[:, 2] = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0]
+    return out
 
 
 # -- the world -------------------------------------------------------------------------------
@@ -149,6 +170,7 @@ class World:
     tray: np.ndarray  # each die's tray: half width and half depth (n, 2)
     pairs: tuple[np.ndarray, np.ndarray]  # dice that share a tray
     rng: np.random.Generator
+    aim: np.ndarray = field(default=None)  # type: ignore[assignment]  # how far from upright each die's number settles, radians
     still: np.ndarray = field(default=None)  # type: ignore[assignment]  # seconds lain still, face up
     asleep: np.ndarray = field(default=None)  # type: ignore[assignment]
     time: float = 0.0
@@ -156,6 +178,7 @@ class World:
 
     def __post_init__(self) -> None:
         n = len(self.x)
+        self.aim = np.zeros(n) if self.aim is None else self.aim
         self.still = np.zeros(n) if self.still is None else self.still
         self.asleep = np.zeros(n, dtype=bool) if self.asleep is None else self.asleep
 
@@ -177,66 +200,97 @@ def launch(rng: np.random.Generator, count: int, trays: int = 1) -> World:
     group = np.repeat(np.arange(trays), count)
     i, j = np.triu_indices(n, 1)
     keep = group[i] == group[j]
-    return World(x, v, matrices(q), w, np.tile(half, (n, 1)), (i[keep], j[keep]), rng)
+    return World(x, v, matrices(q), w, np.tile(half, (n, 1)), (i[keep], j[keep]), rng, rng.uniform(-0.08, 0.08, n))
+
+
+SURFACES = np.array([(0.0, 0.0, 1.0), (1.0, 0.0, 0.0), (-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)])  # inward
+SURFACE_BOUNCE = (BOUNCE[0], *[BOUNCE[1]] * 4)  # the floor, then the walls at -x, +x, -y, +y
 
 
 def advance(s: World, dt: float = STEP) -> None:
     """One step: gravity and motion for the dice still moving, then the knocks, the floor, the
-    walls, and whether each die has come to rest."""
-    live = np.flatnonzero(~s.asleep)
-    if not len(live):
+    walls, and whether each die has come to rest. A throw's few dice are stepped in place, all of
+    them (one at rest does not move); a big batch only its moving dice."""
+    moving = ~s.asleep
+    if not moving.any():
         return
-    x, v, r, w, half = s.x[live], s.v[live], s.r[live], s.w[live], s.tray[live]
-    v[:, 2] -= GRAVITY * dt
+    small = len(s.x) <= 16
+    live = np.arange(len(s.x)) if small else np.flatnonzero(moving)
+    if small:
+        x, v, w, half, aim = s.x, s.v, s.w, s.tray, s.aim
+        v[:, 2] -= GRAVITY * dt * moving
+    else:
+        x, v, w, half, aim = s.x[live], s.v[live], s.w[live], s.tray[live], s.aim[live]
+        v[:, 2] -= GRAVITY * dt
     x += v * dt
-    r = turns(w * dt) @ r
     w *= math.exp(-SPIN_DAMPING * dt)
-    s.x[live], s.v[live], s.r[live], s.w[live] = x, v, r, w
-    knock(s)
-    x, v, r, w = s.x[live], s.v[live], s.r[live], s.w[live]
-    verts = d10()[0]
-    p = x[:, None, :] + np.einsum("vj,nij->nvi", verts, r)  # the corners in the world
-    floor = np.zeros(len(live), dtype=bool)
-    surfaces = ((p[..., 2], (0.0, 0.0, 1.0), BOUNCE[0]),
-                (p[..., 0] + half[:, :1], (1.0, 0.0, 0.0), BOUNCE[1]), (half[:, :1] - p[..., 0], (-1.0, 0.0, 0.0), BOUNCE[1]),
-                (p[..., 1] + half[:, 1:], (0.0, 1.0, 0.0), BOUNCE[1]), (half[:, 1:] - p[..., 1], (0.0, -1.0, 0.0), BOUNCE[1]))
-    for k, (depth, normal, bounce) in enumerate(surfaces):
-        into = depth < 0
-        hit = into.any(axis=1)
-        if not hit.any():
-            continue
-        if k == 0:
-            floor |= hit
-        c = np.flatnonzero(hit)
-        n = np.array(normal)
-        inside = into[c]
+    r = turns(w * dt) @ (s.r if small else s.r[live])
+    if small:
+        s.r = r
+    else:
+        s.x[live], s.v[live], s.r[live], s.w[live] = x, v, r, w
+    if len(s.pairs[0]):
+        knock(s)
+        if not small:
+            x, v, w = s.x[live], s.v[live], s.w[live]
+    p = x[:, None, :] + np.einsum("vj,nij->nvi", d10()[0], r)  # the corners in the world
+    depth = p @ SURFACES.T  # (dice, corners, surfaces): below zero is inside the floor or a wall
+    depth[..., 1:3] += half[:, None, :1]
+    depth[..., 3:5] += half[:, None, 1:]
+    into = depth < 0
+    hit = into.any(axis=1)
+    floor = hit[:, 0].copy()
+    level = (r[:, 2, :] @ d10()[2].T).max(axis=1) > FLAT  # lying on a kite
+    for k in np.flatnonzero(hit.any(axis=0)):
+        c = np.flatnonzero(hit[:, k])
+        n = SURFACES[k]
+        inside = into[c, :, k]
         point = (p[c] * inside[..., None]).sum(axis=1) / inside.sum(axis=1)[:, None]  # where it touches: the middle of the corners in
+        if k == 0:  # a die lying on a kite stands on all of it: held up from right under its centre, it does not rock
+            point = np.where(level[c][:, None], x[c] * np.array([1.0, 1.0, 0.0]), point)
         arm = point - x[c]
         vc = v[c] + cross(w[c], arm)
         vn = vc @ n
         an = cross(arm, np.broadcast_to(n, arm.shape))
-        jn = np.where(vn < 0, -(1 + np.where(vn < -SLOW, bounce, 0.0)) * vn / (1 + (an * an).sum(axis=1) / INERTIA), 0.0)
+        jn = np.where(vn < 0, -(1 + np.where(vn < -SLOW, SURFACE_BOUNCE[k], 0.0)) * vn / (1 + (an * an).sum(axis=1) / INERTIA), 0.0)
         slide = vc - vn[:, None] * n
-        speed = np.linalg.norm(slide, axis=1)
-        along = slide / np.where(speed > 1e-9, speed, 1.0)[:, None]
+        speed = np.sqrt((slide * slide).sum(axis=1))
+        along = slide / np.maximum(speed, 1e-9)[:, None]
         at = cross(arm, along)
         jt = np.minimum(FRICTION * jn, speed / (1 + (at * at).sum(axis=1) / INERTIA))
         impulse = jn[:, None] * n - jt[:, None] * along
         v[c] += impulse
         w[c] += cross(arm, impulse) / INERTIA
-        x[c] -= depth[c].min(axis=1)[:, None] * n  # out of the surface
-    top = (r @ d10()[2].T)[:, 2].max(axis=1)  # how level the most level kite lies (its normal's height)
+        x[c] -= depth[c, :, k].min(axis=1)[:, None] * n  # out of the surface
+    heights = r[:, 2, :] @ d10()[2].T  # how level each kite lies (its normal's height)
+    face = heights.argmax(axis=1)
+    top = heights[np.arange(len(face)), face]
+    way = np.einsum("nij,nj->ni", r[:, :2, :], apexes()[face])  # the top kite's way up, on the floor
+    off = (np.arctan2(way[:, 1], way[:, 0]) - math.pi / 2 - aim + math.pi) % (2 * math.pi) - math.pi  # from upright
+    flat = floor & (top > FLAT)
     if floor.any():
         f = np.flatnonzero(floor)
-        flat = (top[f] > FLAT)[:, None]  # lying on a kite: the felt holds it
-        w[f] *= np.where(flat, math.exp(-REST_DAMPING * dt), math.exp(-ROLL_DAMPING * dt))
-        v[f, :2] *= np.where(flat, math.exp(-REST_DAMPING * dt), math.exp(-SLIDE_DAMPING * dt))
-    s.x[live], s.v[live], s.w[live] = x, v, w
-    s.r[live] = orthonormal(r) if round(s.time / dt) % 16 == 0 else r
-    # flat on a kite and barely moving (what is left is the contacts' jitter) for a moment: at rest
-    calm = floor & (top > FLAT) & (np.linalg.norm(v, axis=1) < 0.5) & (np.linalg.norm(w, axis=1) < 1.5)
+        lying = flat[f][:, None]  # on a kite: the felt holds it, but for the turn about the upright
+        w[f, :2] *= np.where(lying, math.exp(-REST_DAMPING * dt), math.exp(-ROLL_DAMPING * dt))
+        w[f, 2:] *= np.where(lying, 1.0, math.exp(-ROLL_DAMPING * dt))
+        v[f, :2] *= np.where(lying, math.exp(-REST_DAMPING * dt), math.exp(-SLIDE_DAMPING * dt))
+        turning = np.flatnonzero(floor & (top > SETTLING) & moving[live])
+        if len(turning):  # lying on a kite, a die turns where it lies until its number faces the viewer
+            stiff, damp, most, fastest = TURN
+            w[turning, 2] = np.clip(w[turning, 2] + np.clip(-stiff * off[turning] - damp * w[turning, 2], -most, most) * dt, -fastest, fastest)
+    if small:
+        v[~moving] = 0.0  # a die at rest stays put until something knocks it
+        w[~moving] = 0.0
+    else:
+        s.x[live], s.v[live], s.w[live] = x, v, w
+    if round(s.time / dt) % 16 == 0:
+        s.r[live] = orthonormal(s.r[live])
+    # flat on a kite, upright, and barely moving (what is left is the contacts' jitter) for a moment: at rest
+    calm = flat & (np.abs(off) < UPRIGHT) & ((v * v).sum(axis=1) < 0.25) & ((w * w).sum(axis=1) < 2.25)
+    if small:
+        calm &= moving
     s.still[live] = np.where(calm, s.still[live] + dt, 0.0)
-    settle(s, live[s.still[live] >= 0.12])
+    settle(s, live[calm & (s.still[live] >= 0.12)])
     s.time += dt
 
 
