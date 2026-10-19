@@ -27,10 +27,10 @@ from ..rules import commands
 from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from . import fog, world
+from . import fog, progress, world
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
-from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, parse_time, time_of_day
+from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, Progress, parse_time, time_of_day
 from .visuals import Visuals
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -98,6 +98,12 @@ class Game:
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
+        # The players' 故事至今 (engine/progress.py), written in the background when the story
+        # has moved. Off in autoplay and replays, where nobody reads it; a screen and the Hub
+        # turn it on.
+        self.write_progress = False
+        self._recounting: asyncio.Task | None = None
+        self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
                                    self.visuals.idle, self.visuals.limit)  # big scenes: prepared ahead, the opening first
@@ -109,8 +115,12 @@ class Game:
         """Stop work owned by this game before the model sessions and screen disappear."""
         for pending in self.backstage:
             pending.task.cancel()
-        await asyncio.gather(*(p.task for p in self.backstage), return_exceptions=True)
+        recounting = [self._recounting] if self._recounting else []
+        for task in recounting:
+            task.cancel()
+        await asyncio.gather(*(p.task for p in self.backstage), *recounting, return_exceptions=True)
         self.backstage.clear()
+        self._recounting = None
         await self.visuals.close()
         await self.showcases.close()
 
@@ -184,6 +194,8 @@ class Game:
         self.showcases.prepare()  # (already at it when the game was made inside a running loop)
         await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
         text = await self._narrate(report, on_delta)
+        st.prologue = text  # the 背景 page keeps it after the log has moved on
+        st.progress.marks = progress.marks(st)  # milestones count from here
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
         st.pending_turn.clear()
         if self.checkpoint:
@@ -774,6 +786,7 @@ class Game:
     async def remember(self) -> None:
         st = self.state
         st.tally()
+        self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]
         if len(recent) < 48:
@@ -783,6 +796,41 @@ class Game:
         await self.emit({"type": "status", "text": "记录员整理笔记…"})
         st.memory = await self.cast.chronicle(st, text)
         st.log = keep
+
+    def _recount(self) -> None:
+        """After a turn, when the story has moved enough (progress.due): the players' 故事至今,
+        written again in the background. The prompt is made now; no turn waits for the reply."""
+        if self.write_progress and not self._writing() and progress.due(self.state):
+            self._ask_progress()
+
+    def recount(self) -> str:
+        """A player asks for it now (Ctrl+Y): once a turn, and only with something new since
+        the last one. Why not, when it cannot be done; "" when it is being written."""
+        why = "正在整理，稍等" if self._writing() else progress.refused(self.state)
+        if not why:
+            self._ask_progress()
+        return why
+
+    def _writing(self) -> bool:
+        return self._recounting is not None and not self._recounting.done()
+
+    def _ask_progress(self) -> None:
+        st = self.state
+        st.progress.asked = st.turn  # the next call waits progress.APART turns, whatever comes of this one
+        prompt = progress.material(self.m, st)
+        self._recounting = asyncio.create_task(self._recount_in(prompt, st.turn, st.logged, progress.marks(st)))
+
+    async def _recount_in(self, prompt: str, turn: int, seen: int, marks: dict[str, int]) -> None:
+        """Only an account that came moves on what has been read and counted: after a failure
+        the next one starts from the last that was written."""
+        st = self.state
+        try:
+            text = progress.trim(await self.cast.progress(st, prompt))
+            if text:
+                st.progress = Progress(text=text, turn=turn, asked=st.progress.asked, seen=seen, marks=marks)
+                await self.listener({"type": "progress", "text": text, "turn": turn})
+        except Exception:  # the old text stands
+            pass
 
     async def sketch(self, png: bytes, prompt_id: str | None = None) -> str:
         """Interpret a player's drawing; module sketch prompts can trigger sanity or clues."""
@@ -1173,6 +1221,8 @@ class Game:
             await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
             raise
         told.entry.text = text
+        if st.prologue == old:  # the opening told again
+            st.prologue = text
         await self.emit({"type": "keeper_end", "text": text})
         shown = st.sky  # on the screens now, set by the old telling
         st.sky, st.sky_at = told.sky

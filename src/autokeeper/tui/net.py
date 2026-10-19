@@ -204,9 +204,10 @@ class NetGameScreen(GameScreen):
         def send(text: str) -> None:
             self.run_worker(partial(self.link.send, {"t": "house_rule", "text": text}))
 
-        # Read-only view of the same public rule information, plus a box to ask the host for a
-        # house rule; the host drafts and installs it, and the result syncs back.
-        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.seat else None))
+        # Read-only view of the same public rule information. The host also gets a box for a
+        # house rule: its code runs on the host's machine, so only they can add one; the Hub
+        # drafts and installs it, and the result syncs back.
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.link.host else None))
 
     SHOW_ENGINE = True  # "轮到谁" is on the top bar
 
@@ -429,6 +430,13 @@ class NetGameScreen(GameScreen):
             super().action_suggest()
         else:
             self.app.notify("你在观战，没有自己的调查员")
+
+    def action_recount(self) -> None:
+        """Ctrl+Y: the host writes the story so far now; every screen gets it with the state."""
+        if self.seat:
+            self.run_worker(partial(self.link.send, {"t": "recount"}))
+        else:
+            self.app.notify("你在观战；有新进展时房主那边会整理")
 
     async def ideas_for(self, inv) -> list[str]:
         """The host's investigator agent thinks for this seat (Hub._ideas), from the same view
