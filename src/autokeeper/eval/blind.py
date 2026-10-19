@@ -37,16 +37,16 @@ KEEPER_JUDGE = """你在给跑团叙事做盲评。两位守秘人拿到同一�
 - 像有经验的中文作者写的：具体、自然，读起来不像套话，也不像翻译腔；
 - 情况里的事实照实交代（检定结果、线索原文、NPC 的话），不添不漏，不替玩家行动或下结论；
 - 不重复它前一段已经用过的词、画面和句式；
-- 结尾留下玩家能接着行动的东西。
-篇幅相近时不因长短加分。两段不分高下就填“相当”。"""
+- 场景与结果清楚，下一步由玩家决定；当前问题可以完整解决，平静场景可以自然结束。
+不因额外悬念、危机、感官描写或行动邀请加分。篇幅相近时不因长短加分。两段不分高下就填“相当”。"""
 
 NPC_JUDGE = """你在给跑团里的 NPC 台词做盲评。同一个 NPC 被问了同样几句话，两份回答各自连成一段对话。判断哪一份演得更好。
 
 好的 NPC：
-- 像一个活人在说话：有态度、有脾气，口吻贴合人物设定；
-- 习惯动作和口头禅偶尔带出，不是句句都有；动作写得少而准；
-- 只回答被问到的事，不编造人物设定之外的重要事实。
-两份不分高下就填“相当”。"""
+- 回应玩家实际表达的需要与条件，口吻符合人物身份、关系、目标和当前场合；
+- 人物保有立场，接受或拒绝有根据；不因玩家谢绝请求就自动敌视、纠缠或替玩家决定；
+- 亲历、转述与判断有区别，不编造资料之外的重要事实、消息来源或交往经历。
+有无口头禅、情绪、动作或个人往事本身不加分。只根据给定资料和对话判断；两份不分高下就填“相当”。"""
 
 
 def runs(kind: str, label: str) -> list[dict[str, Any]]:
@@ -85,7 +85,7 @@ def _npc_pairs(a: list[dict], b: list[dict], module: str) -> list[dict[str, Any]
     for i, (x, y) in enumerate(zip(a, b, strict=False)):
         for name, asked in x.get("asked", {}).items():
             n = people.get(name)
-            who = f"{name}：{n.role}；{n.personality}；说话方式：{n.voice}；外貌：{n.look}" if n else name
+            who = f"{name}：{n.role}；{n.personality}；目标：{n.goal}；说话方式：{n.voice}；外貌：{n.look}" if n else name
             pairs.append({"run": i + 1, "npc": name, "who": who, "asked": asked, "a": x["said"].get(name, []), "b": y["said"].get(name, [])})
     return pairs
 
