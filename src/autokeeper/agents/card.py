@@ -45,6 +45,7 @@ from ..module.schema import Module
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
 from ..rules.coc import Investigator
 from ..rules.creation import FORMULAS, accept, make
+from .writing import INTERFACE_COPY
 
 RESPECT = "尊重本人：只用公开的身份和经历，写正面或中性的内容；不编造丑闻、罪行和私生活，不写住址和家人等隐私，不评价政治立场。"
 
@@ -88,12 +89,12 @@ class Figure:
 
 
 class Question(BaseModel):
-    ask: str = Field(description="问题，不超过 20 字")
-    options: list[str] = Field(description="2–4 个选项，每个不超过 24 字")
+    ask: str = Field(description="背景确认问题，直接询问一项内容，简洁正式，不超过 20 字")
+    options: list[str] = Field(description="2–4 个含义明确、结构平行的选项，每个不超过 24 字")
 
 
 class Proposal(BaseModel):
-    who: str = Field(description="一句话介绍这个人，玩家看得到，不超过 60 字")
+    who: str = Field(description="玩家可见的人物简介，客观说明身份与经历，不评价、不使用宣传语，不超过 60 字")
     questions: list[Question] = Field(description="三个问题")
 
 
@@ -131,7 +132,7 @@ class Draft(BaseModel):
     interest_skills: dict[str, int] = Field(description="兴趣技能在基础值之上加的点，合计不超过 智力×2")
     backstory: Backstory
     inventory: list[str] = Field(default_factory=list, description="随身物品三五件，符合年代")
-    note: str = Field("", description="一句话说这张卡的思路，玩家看得到，不超过 40 字")
+    note: str = Field("", description="玩家可见的配置说明，客观说明身份或技能侧重，不使用口号或人物评语，不超过 40 字")
 
 
 class Sheet(BaseModel):
@@ -150,7 +151,7 @@ class Sheet(BaseModel):
     skills: dict[str, int] = Field(default_factory=dict, description="技能的最终值，原卡写多少填多少")
     backstory: dict[str, str] = Field(default_factory=dict, description="背景各项（个人描述、思想与信念、重要之人、意义非凡之地、宝贵之物、特质等），原卡有什么写什么")
     inventory: list[str] = Field(default_factory=list)
-    note: str = Field("", description="一句话：原卡缺了什么、你做了什么假设，玩家看得到")
+    note: str = Field("", description="玩家可见的导入说明，简洁正式地说明缺失信息及采用的假设")
 
 
 READ_SYSTEM = """你把玩家已经做好的《克苏鲁的呼唤》第 7 版人物卡录进游戏。原卡可能是骰娘的 .st 指令、Excel 或网页车卡器导出的表、PDF 人物卡、纸质卡的照片，或者一段文字。
@@ -158,10 +159,10 @@ READ_SYSTEM = """你把玩家已经做好的《克苏鲁的呼唤》第 7 版人
 - 原卡写了什么数值就填什么：不改、不补、不重新分配。属性填八项中文名，技能填最终值（不是加点），只填比基础值高的。
 - 技能名换成这些标准名（括号里是专长，比如 艺术与手艺(摄影)、外语(英语)）：{skills}；这里没有的技能照原名保留。
 - 原卡没写的文字项（姓名、职业、年龄、背景）留空，不要编；在 note 里说缺了什么。
-- 原卡根本不是人物卡（没有属性数值，只是一段人设）时，八项属性都填 0，把人设里的姓名和背景照填。"""
+- 原卡根本不是人物卡（没有属性数值，只是一段人设）时，八项属性都填 0，把人设里的姓名和背景照填。""" + "\n\n" + INTERFACE_COPY
 
 REVISE_SYSTEM = """你在帮玩家改一张已经录进游戏的《克苏鲁的呼唤》第 7 版人物卡。按玩家的要求改，没提到的地方原样保留，输出改好的整张卡。
-属性在 1–99，技能最终值不超过 99。note 里一句话说改了什么。"""
+属性在 1–99，技能最终值不超过 99。note 里一句话说改了什么。""" + "\n\n" + INTERFACE_COPY
 
 ASK_SYSTEM = f"""你在帮玩家把一位公众人物、一张角色卡里的人物，或者玩家自己的一句描述，做成《克苏鲁的呼唤》第 7 版的调查员。先根据资料出三个问题，弄清玩家想要什么样的角色。
 
@@ -169,8 +170,8 @@ ASK_SYSTEM = f"""你在帮玩家把一位公众人物、一张角色卡里的人
 - 第一个问题：在这个模组的年代和地点，他是什么身份。给 3 个选项：一个尽量贴近本人（同一个人，或者本人在那个年代最可能的样子），两个是有趣的改编，比如把歌手写成 1920 年代舞厅里的钢琴师。
 - 第二个问题：侧重哪方面的本事。从行动（格斗、射击、闪避）、调查（侦查、聆听、图书馆使用）、学识（历史、科学、神秘学）、社交（说服、魅惑、话术）里挑贴合本人的 3 个，可以写得更具体。
 - 第三个问题由你根据这个人来定，比如性格的哪一面、什么年纪的他、和这个案子有什么牵连。
-- 每个问题 2–4 个选项，每个选项不超过 24 字，写成玩家一眼能看懂的话。
-- {RESPECT}"""
+- 每个问题 2–4 个选项，每个选项不超过 24 字，使用简洁、正式的问句与平行选项，不模仿闲聊口吻。
+- {RESPECT}""" + "\n\n" + INTERFACE_COPY
 
 BUILD_SYSTEM = f"""你按《克苏鲁的呼唤》第 7 版的规则，把一位公众人物、一张角色卡里的人物，或者玩家自己的一句描述，做成这个模组的调查员。
 玩家给的是描述时，名字由你起，符合模组的年代和地点。
@@ -182,8 +183,8 @@ BUILD_SYSTEM = f"""你按《克苏鲁的呼唤》第 7 版的规则，把一位�
 - 填的是在基础值之上加的点，不是最终值。最拿手的技能最终在 60–80，最多 90。不要加克苏鲁神话。
 - 技能名用这些，括号里的专长可以自己填，比如 艺术与手艺(钢琴)、外语(英语)、科学(物理)：{{skills}}
 - 背景：个人描述、思想与信念、重要之人、意义非凡之地、宝贵之物、特质，各一两句，从本人的经历里取材，改编到模组的年代。
-- 玩家提了要求就照做；规则不允许的，在 note 里说一声。
-- {RESPECT}"""
+- 玩家提了要求就照做；规则不允许的，在 note 中说明具体限制。
+- {RESPECT}""" + "\n\n" + INTERFACE_COPY
 
 
 # -- looking them up ------------------------------------------------------------------

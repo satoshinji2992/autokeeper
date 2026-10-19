@@ -37,6 +37,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from .. import artkit, config, credits, imagegen, imagery, paths, skills
+from ..agents.writing import INTERFACE_COPY
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
@@ -198,7 +199,7 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 4. 画 art/ 下的图和 .color 蒙版。
    推荐用 write_art，一次提交多张 ASCII 图的 JSON 对象（键是图名，不含扩展名；值是图的文本），工具会校验尺寸并自动配色，省去逐个写蒙版。
 5. 调用 check 校验，按输出改到没有“错误”和“[图]”为止（“提醒”可以留着）。
-6. 最后 finish，在 answer 里用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。"""
+6. 最后 finish，在 answer 里用三五句话说明：哪些内容是你补充的，哪里原文含糊、你做了什么取舍。""" + "\n\n以下文体规范仅用于新编写的界面元数据；引用的手稿、信件和模组原文保持原貌。\n" + INTERFACE_COPY
 
 
 ART_BY_ARTIST = """
