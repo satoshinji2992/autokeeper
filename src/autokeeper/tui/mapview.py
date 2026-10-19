@@ -17,6 +17,7 @@ import heapq
 import itertools
 import math
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import networkx as nx
 from rich.cells import cell_len
@@ -248,7 +249,7 @@ def _attempt(c: Chart, t: Tree, names: dict[str, str], tag: bool, gap: int, widt
             if laid is None:
                 return None
             inner[g] = laid
-            sizes[g] = (max(laid[1] + 2, widths[g] + 6), laid[2] + 4)
+            sizes[g] = (max(laid[1] + 2, widths[g] + 6) - 1, laid[2] + 4)  # less the wall, which sits left of the column
     laid = _level(t.top, _level_ways(ways, t.top, t), sizes, width, rows, gap, grow=fit is None)
     if laid is None:
         return None
@@ -267,9 +268,11 @@ def _attempt(c: Chart, t: Tree, names: dict[str, str], tag: bool, gap: int, widt
                 p.spots[q] = (x, y)
                 continue
             fw, fh = sizes[q]
-            p.frames[q] = (x, y, x + fw - 1, y + fh - 1)
-            p.spots[q] = (x + 3, y)  # on the top edge: "┌─ ● 公墓 ▾ ──┐"
-            put(t.kids[q], inner[q][0], x + 1, y + 2)  # inside the wall, below a free row
+            # The left wall one cell before the column: a road from a place above or below
+            # the frame meets the wall straight, not its corner.
+            p.frames[q] = (x - 1, y, x + fw - 1, y + fh - 1)
+            p.spots[q] = (x + 2, y)  # on the top edge: "┌─ ● 公墓 ▾ ──┐"
+            put(t.kids[q], inner[q][0], x, y + 2)  # inside the wall, below a free row
 
     put(t.top, top, 0, 0)
     for g, (left, top_, right, bottom) in p.frames.items():
@@ -282,6 +285,16 @@ def _attempt(c: Chart, t: Tree, names: dict[str, str], tag: bool, gap: int, widt
         for y in range(top_ + 1, bottom):
             p.walls[(left, y)] = p.walls[(right, y)] = N | S
         p.walls.update({(left, top_): E | S, (right, top_): S | W, (left, bottom): N | E, (right, bottom): N | W})
+    if _route(p, ways, widths, strict=fit is not None) and not p.missing:
+        return p
+    # A column of places, their doors above and below them, walls the map off from top to
+    # bottom: a free row above and below lets a path go round it.
+    if fit is not None and h + 2 > fit[1]:
+        return None
+    p.spots = {q: (x, y + 1) for q, (x, y) in p.spots.items()}
+    p.frames = {q: (left, top_ + 1, right, bottom + 1) for q, (left, top_, right, bottom) in p.frames.items()}
+    p.walls = {(x, y + 1): mask for (x, y), mask in p.walls.items()}
+    p.height, p.lines, p.owners, p.missing = h + 2, {}, {}, []
     if not _route(p, ways, widths, strict=fit is not None):
         return None
     return p
@@ -354,14 +367,14 @@ def arrange(nodes: list[str], edges: list[tuple[str, str]], widths: dict[str, in
         if cols * grid_rows < n:
             continue
         for seed in range(1, 9):  # snapping is cheap; a few starts find a much tidier map
-            pos = nx.spring_layout(g, seed=seed) if n > 1 else {p: (0.0, 0.0) for p in g}
+            pos = _spring(tuple(g.nodes), tuple(g.edges), seed) if n > 1 else {p: (0.0, 0.0) for p in g}
             slots = _snap(g, pos, cols, grid_rows)
             snapped.append((_cost(g, slots, widths, width), cols, grid_rows, slots))
             if n <= 1 or not g.number_of_edges():
                 break  # nothing for another start to untangle
     if not snapped:
         return None
-    snapped.sort(key=lambda t: t[0])  # only the most promising are worth tidying
+    snapped.sort(key=lambda t: (t[0], t[2]))  # only the most promising are worth tidying; of two as good, the flatter
     tidied = [_tidy(g, slots, widths, width, cols, grid_rows) for _, cols, grid_rows, slots in snapped[:2]]
     best = min(tidied, key=lambda slots: _cost(g, slots, widths, width))
     if _overflow(best, widths, width):  # the tidiest is too wide: the best start that is not
@@ -372,6 +385,15 @@ def arrange(nodes: list[str], edges: list[tuple[str, str]], widths: dict[str, in
     used_cols = sorted({x for x, _ in best.values()})
     used_rows = sorted({y for _, y in best.values()})
     return {p: (used_cols.index(x), used_rows.index(y)) for p, (x, y) in best.items()}
+
+
+@lru_cache(maxsize=256)
+def _spring(nodes: tuple[str, ...], edges: tuple[tuple[str, str], ...], seed: int) -> dict[str, tuple[float, float]]:
+    """networkx's spring layout of a level, kept: every try at fitting the map starts from it."""
+    g = nx.Graph()
+    g.add_nodes_from(nodes)
+    g.add_edges_from(edges)
+    return {p: (float(x), float(y)) for p, (x, y) in nx.spring_layout(g, seed=seed).items()}
 
 
 def _snap(g: nx.Graph, pos, cols: int, rows: int) -> dict[str, tuple[int, int]]:
@@ -521,7 +543,9 @@ def _route(p: Plan, ways: list[tuple[str, tuple[str, str]]], widths: dict[str, i
     the way is left out and noted in p.missing."""
     blocked: set[tuple[int, int]] = {cell for cell, mask in p.walls.items() if mask not in (N | S, E | W)}  # corners
     doors: dict[str, dict[tuple[int, int], int]] = {}
-    every: set[tuple[int, int]] = set()
+    sides: set[tuple[int, int]] = set()  # the doors left and right of a name
+    above: set[tuple[int, int]] = set()  # and those above and below a marker
+    taken: set[tuple[int, int]] = set()  # doors a path went past: their place goes out another way
     for place, (x, y) in p.spots.items():
         end = x + widths[place] - 1  # the name's last cell
         if place in p.frames:
@@ -534,21 +558,26 @@ def _route(p: Plan, ways: list[tuple[str, tuple[str, str]]], widths: dict[str, i
         else:
             blocked |= {(i, y) for i in range(x, end + 2)}  # marker, name, and a space after it
             doors[place] = {(x, y - 1): N, (x, y + 1): S, (x - 1, y): W, (end + 2, y): E}  # door -> the way out
-            every |= set(doors[place])
+            sides |= {(x - 1, y), (end + 2, y)}
+            above |= {(x, y - 1), (x, y + 1)}
     ways = sorted(ways, key=lambda w: (w[0] != "road", not _clear(p, *w[1]), _apart(p, *w[1])))
     for kind, (a, b) in ways:
         # Out of a door straight ahead or to either side, into one the same way; turning in the
-        # doorway costs a bend. Other places' doors are kept clear, or a path passing would seem to go in.
-        starts = {(*cell, h): 0 if h == out else BEND for cell, out in doors[a].items() for h in (out, *TURNS[out])}
-        goals = {(*cell, h): 0 if h == BACK[out] else BEND for cell, out in doors[b].items() for h in (BACK[out], *TURNS[out])}
+        # doorway costs a bend. Other places' doors are kept clear, or a path passing would seem to
+        # go in; one above or below a marker that nothing uses yet may be passed straight across,
+        # or a column of places would wall the map off.
+        starts = {(*cell, h): 0 if h == out else BEND for cell, out in doors[a].items() if cell not in taken for h in (out, *TURNS[out])}
+        goals = {(*cell, h): 0 if h == BACK[out] else BEND for cell, out in doors[b].items() if cell not in taken for h in (BACK[out], *TURNS[out])}
         own = set(doors[a]) | set(doors[b])
-        way = _astar(p, blocked | (every - own), starts, goals, own, {a, b}, kind)
+        passes = {cell: N | S for cell in above - own if cell not in p.lines}
+        way = _astar(p, blocked | ((sides | above) - own - set(passes)), starts, goals, own, {a, b}, kind, passes)
         if way is None:
             if strict:
                 return False
             p.missing.append((a, b))
             continue
         _mark(p, way, kind, BACK[doors[a][way[0]]], BACK[doors[b][way[-1]]], {a, b})
+        taken |= set(way) & set(passes)
         for place, cell in ((a, way[0]), (b, way[-1])):
             if place in p.frames:  # where it meets the wall, the wall branches off to it
                 out = doors[place][cell]
@@ -578,12 +607,15 @@ def _free(cell: tuple[int, int], p: Plan, blocked: set) -> bool:
     return 0 <= x < p.width and 0 <= y < p.height and cell not in blocked and cell not in p.walls
 
 
-def _astar(p: Plan, blocked: set, starts: dict, goals: dict, forks: set, ends: set[str], kind: str) -> list[tuple[int, int]] | None:
+def _astar(p: Plan, blocked: set, starts: dict, goals: dict, forks: set, ends: set[str], kind: str,
+           passes: dict | None = None) -> list[tuple[int, int]] | None:
     """The cheapest way through free cells from a start to a goal, both (x, y, heading) -> the
     cost of turning in that doorway: few turns, crossing other paths rather than running along
     them. At the doors of the two places it joins (`forks`) it may meet their other paths, and
     it may run along a path of its kind from one of them (`ends`): a fork in the road. A
-    frame's wall is crossed straight, never followed."""
+    frame's wall, and a door in `passes` (cell -> the wall it is like), is crossed straight,
+    never followed."""
+    passes = passes or {}
     starts = {s: v for s, v in starts.items() if _free(s[:2], p, blocked)}
     goals = {g: v for g, v in goals.items() if _free(g[:2], p, blocked)}
     if not starts or not goals:
@@ -611,16 +643,16 @@ def _astar(p: Plan, blocked: set, starts: dict, goals: dict, forks: set, ends: s
                 way.append(state[:2])
                 state = came[state]
             return way[::-1]
-        for nd in (d,) if (x, y) in p.walls else (d, *TURNS[d]):
+        for nd in (d,) if (x, y) in p.walls or (x, y) in passes else (d, *TURNS[d]):
             nx_, ny = x + STEP[nd][0], y + STEP[nd][1]
             if not (0 <= nx_ < p.width and 0 <= ny < p.height) or (nx_, ny) in blocked or (nx_, ny, nd) in came:
                 continue
-            wall = p.walls.get((nx_, ny))
+            wall = p.walls.get((nx_, ny)) or passes.get((nx_, ny))
             if wall is not None and wall != (E | W if nd in (N, S) else N | S):
                 continue  # only straight across a wall
             step = 1 + (BEND if nd != d else 0) + _toll(p, (nx_, ny), nd, forks, ends, kind) + goals.get((nx_, ny, nd), 0)
             if wall is not None:
-                step += DOOR
+                step += DOOR if (nx_, ny) in p.walls else CROSS
             if nd != d and (x, y) in p.lines and (x, y) not in forks and not _ours(p, (x, y), ends, kind):
                 step += CLASH  # turning on another path joins it
             heapq.heappush(frontier, (cost + step + guess(nx_, ny), cost + step, next(tie), nx_, ny, nd, (x, y, d)))
@@ -637,7 +669,7 @@ def _toll(p: Plan, cell: tuple[int, int], heading: int, forks: set, ends: set[st
     if cell not in p.lines:
         return 0
     if _ours(p, cell, ends, kind):
-        return 0
+        return -0.5  # one road out of a place, branching, reads better than several side by side
     if cell in forks:
         return 0.5
     across = W | E if heading in (N, S) else N | S
@@ -710,7 +742,7 @@ def legend(c: Chart, t: Tree | None = None) -> Content:
     if t is not None and t.folded:
         keys.append((FOLDED, "been", "里面还有地方"))
     if t is not None and t.opened:
-        keys.append(("┌┐", "wall", "地方里面"))
+        keys.append(("┌┐", "wall", "地点内部"))
     rows = [Content("   ").join(Content.assemble((mark, STYLE[kind]), f" {label}") for mark, kind, label in keys)]
     if c.rumours:
         rows.append(Content.assemble(("听说过，还不知道怎么去：", STYLE["note"]), *_names(list(c.rumours.values()))))
@@ -889,7 +921,7 @@ class MapModal(ModalScreen[str | None]):
         body = max(30, min(width - 10, 150))
         lines = sum(max(1, math.ceil(cell_len(row) / body)) for row in legend(self.c, self.nest).plain.split("\n"))
         tall = max(6, height * 9 // 10 - 8 - lines)
-        self.wide = body >= 104
+        self.wide = body >= 124  # the map still as wide as most need
         self.notes = max(3, min(7, tall // 3))
         self.room = (body - 36, tall) if self.wide else (body, max(3, tall - self.notes - 1))
         self.query_one("#map-body").styles.layout = "horizontal" if self.wide else "vertical"
