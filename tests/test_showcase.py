@@ -273,6 +273,7 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
     game = Game(m, state, Improvising(asks, plans), Rules(dice=fake))
     game.showcases.cfg = config.Config(search="none")
     for i in range(4):
+        state.turn = 3 * i  # rounds apart: one place opens a new line once in three (Game._may_expand)
         await game.rule(Action(kind="other", summary=f"行动{i}"))
     assert [sc.id for sc in m.showcases] == ["d0", "d1", "d2"] and all(sc.improvised for sc in m.showcases)
     await asyncio.wait_for(game.showcases.task, 2)

@@ -33,3 +33,49 @@ def handle(event, ctx, api):
 ```
 
 对应测试：`{"name":"第一次", "state":{}, "expected_state":{"count":1}, "expected_effects":[]}`。hooks 可以只写 `["turn"]`，capabilities 留空。
+
+## 面板、演出、小游戏与更多玩法
+
+插件不只记数值：还可以在右栏放面板、在场景上或故事里放几秒演出、给玩家出题做小游戏、定时、给物品、提醒守秘人、改 NPC 态度、加斜杠命令。代码照旧只在沙箱里跑；它交出的是数据，由游戏自己画出来。场面需要一个机制、一个小游戏、一段演出或一个进度条时（仪式倒数、调查板、追逐、谜题、降神会、电台频率），鼓励写插件。
+
+面板、演出和题目所有玩家都看得见（联机时也同步）：只放已经发生、可以公开的东西，不写真相、NPC 秘密和还没找到的线索。`ctx.avoid` 是玩家的雷区题材，演出和题目都不碰。小游戏可玩可不玩，不能卡住主线。每样东西都会小字标上插件名。
+
+- 新 hooks：`answer`（玩家回答了你的 prompt：`event.prompt` 是 prompt 的 key，`event.value` 是答案，`event.by` 为 player/skip/timeout/ai，`event.step` 是这一局小游戏第几步）、`timer`（计时到点：`event.key`）、`roll`（一次检定之后：`event.who/skill/passed/level/value/target`）、`clue`（找到线索：`event.clue` 线索 id、`event.title`）、`command`（玩家输入了你的斜杠命令：`event.command`、`event.text` 命令后面的话、`event.who`）。订阅了这些事件，tests 里每种至少一项。
+- 新能力与效果：`panel`、`show`、`prompt`、`timer`（含 schedule）、`item`、`hint`、`attitude`。
+- `ctx.acting` 是正在行动的调查员 id；`ctx.npcs` 是当前地点的 NPC（id、name）。
+
+面板：返回里加 `panels`（最多 2 个）就是此刻的样子；不写表示不变，`[]` 表示收起。`{"key":"ritual","title":"仪式倒数","rows":[...]}`，title 最多 12 字，rows 最多 12 行，每行 `kind` 为：
+- `text`：`{"kind":"text","text":"一行字","color":"warning"}`
+- `bar`：`{"kind":"bar","text":"理智","value":40,"max":99,"color":"error"}`
+- `list`：`{"kind":"list","text":"标题","items":["最多 8 项"]}`
+- `table`：`{"kind":"table","cells":[["名字","价钱"],["煤油","2 角"]]}`，第一行是表头，最多 7 行 4 列
+- `art`：`{"kind":"art","art":"多行 ASCII，最多 10 行 36 列"}`
+颜色用 primary、secondary、accent、warning、error、success、foreground、dim 或 `#rrggbb`。测试可写 `expected_panels`（按顺序、按子集比对）。
+
+演出：`{"kind":"show","shape":"stage","title":"号外","frames":[{"art":"ASCII，最多 16 行 60 列","text":"一句话","color":"warning","ms":1200}]}`。`stage` 盖在场景图上，`inline` 是故事里的一块；最多 12 帧、合计 20 秒；玩家可以点掉，关了动画只看最后一帧；不挡叙述。每个插件每轮最多一段。
+
+题目和小游戏：`{"kind":"prompt","key":"dial1","who":"调查员 id（不写就是正在行动的人）","title":"保险箱","text":"第一个转盘拨到几？","style":"number","low":0,"high":9}`。`style`：`choice`（options 2–8 个按钮，答案是选中的那项）、`text`（最多 80 字）、`number`（low–high 的整数）、`order`（把 options 排成顺序，答案是列表）、`pick`（挑若干项，答案是列表）、`board`（`board` 是最多 8×8 的格子，每格最多 4 字宽，答案是 `[行, 列]`，从 0 数）。可选 `default`（没人答时用；不写就取第一项、low、空字、原顺序、不选、左上角），`timeout` 秒（10–900，默认 180），`ai`（AI 调查员怎么答：`default` 或 `random`）。答案作为新的 `answer` 事件回到同一个 handle，state 照常保存，所以多步小游戏就是 prompt → answer → prompt 的循环。一次输出最多一个 prompt；每人同时只开一道题；一局小游戏最多 30 步；非 answer 事件每轮最多开 2 道题。`by` 不是 player 时多半表示玩家没空，按默认收场就好。
+
+其他效果：
+- `timer`：`{"kind":"timer","key":"candle","minutes":30}` 或 `"rounds":3`，到点触发 `timer` 事件；两样都不写表示取消。`schedule`：`{"kind":"schedule","key":"dawn","at":"D2 06:00"}`。
+- `item`：`{"kind":"item","who":"调查员 id","key":"铜钥匙","amount":1}`，`-1` 拿走。
+- `hint`：`{"kind":"hint","text":"一句话"}`，守秘人这一轮必须用一句话写进叙述，标明来自规则；一次一句，最多 80 字。
+- `attitude`：`{"kind":"attitude","npc":"NPC id","amount":1,"text":"为什么"}`，-3…3，记成 NPC 对调查员的态度，NPC 说话时会照着。
+- 斜杠命令：manifest 写 `"commands":[{"name":"占卜","description":"一句话说何时用"}]`（最多 3 个，不带斜杠，hooks 要有 command），玩家输入 `/占卜 后面的话` 就收到 `command` 事件；输入框补全、Ctrl+K 和菜单都会列出来。
+
+小例子：降神会。hooks `["command","answer"]`，capabilities `["prompt","show"]`。
+
+```python
+def handle(event, ctx, api):
+    state = dict(ctx["state"])
+    if event["hook"] == "command":
+        return {"state": state, "effects": [{"kind": "prompt", "key": "ask", "title": "降神会", "style": "choice",
+                "text": "烛火一跳。你想问什么？", "options": ["你是谁", "你在找什么"]}]}
+    if event["hook"] == "answer" and event["by"] == "player":
+        word = "玛丽" if event["value"] == "你是谁" else "钥匙"
+        frames = [{"text": "指针慢慢滑向……", "ms": 900}] + [{"art": letter, "ms": 600} for letter in word]
+        return {"state": state, "effects": [{"kind": "show", "shape": "stage", "title": "降神会", "frames": frames}]}
+    return {"state": state, "effects": []}
+```
+
+对应测试：`{"name":"开场","event":{"hook":"command","command":"降神","text":""},"expected_effects":[{"kind":"prompt","key":"ask","title":"降神会","style":"choice","text":"烛火一跳。你想问什么？","options":["你是谁","你在找什么"]}]}`，再加一项 answer 事件的测试。

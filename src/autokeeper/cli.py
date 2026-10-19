@@ -738,55 +738,134 @@ def eval_lore(
     console.print(f"明细：{out}")
 
 
-@eval_app.command("cliche")
-def eval_cliche(files: Annotated[list[Path], typer.Argument(help="存档、autoplay 记录，或 AUTOKEEPER_TRACE=full 记下的追踪")]) -> None:
-    """数守秘人叙事里的套话：不是……而是……、仿佛、一丝、某种、似乎等，每千字多少次。"""
+def _style_table(stats: dict[str, dict], *, columns: bool = True):
+    """What eval cliche and eval style show: each file (or run) against the human rates, and
+    with several of them, their mean and standard deviation. `columns`: one per file too."""
     from rich import box
     from rich.table import Table
 
-    from .eval.style import CLICHES, CORE, count, narration
+    from .eval.style import HUMAN_CV, HUMAN_SHORT, PATTERNS, SIMILE, spread
 
-    stats = {f.name: count(narration(f)) for f in files}
+    runs = list(stats.values())
     table = Table(box=box.SIMPLE_HEAD, padding=(0, 1))
-    table.add_column("每千字")
-    for name in stats:
+    table.add_column("每千字（×人类）")
+    table.add_column("人类", justify="right")
+    for name in stats if columns else ():
         table.add_column(name, justify="right", overflow="fold")
-    for phrase in CLICHES:
-        table.add_row(phrase, *(f"{s['per_1000'][phrase]:.2f}（{s['hits'][phrase]}）" for s in stats.values()),
-                      style="bold" if phrase in CORE else "dim")  # fmt: skip
-    table.add_section()
-    table.add_row("前五项合计", *(f"{s['density']:.2f}（{s['core']}）" for s in stats.values()), style="bold")
-    table.add_row("全部套话", *(f"{s['all']:.2f}" for s in stats.values()))
-    table.add_row("比喻和揣测（像）", *(f"{s['similes_per_1000']:.2f}（{s['similes']}）" for s in stats.values()))
-    table.add_row("叙事段数 / 字数", *(f"{s['narrations']} / {s['chars']}" for s in stats.values()))
-    console.print(table)
-    if not any(s["narrations"] for s in stats.values()):
-        console.print("[dim]没找到守秘人的叙事：追踪要用 AUTOKEEPER_TRACE=full 记录才有原文。[/]")
+    if len(runs) > 1:
+        table.add_column(f"{len(runs)} 份：均值 ± 标准差", justify="right")
+
+    def row(label: str, human: str, values: list[float], cell, mean=None, **kw) -> None:
+        cells = [cell(v, s) for v, s in zip(values, runs, strict=True)] if columns else []
+        if len(runs) > 1:
+            m, sd = spread(values)
+            cells.append(mean(m, sd) if mean else f"{m:.2f} ± {sd:.2f}")
+        table.add_row(label, human, *cells, **kw)
+
+    if any(s["narrations"] for s in runs):
+        quiet = [p for p in PATTERNS if not any(s["hits"][p] for s in runs)]
+        for p, (_, human) in PATTERNS.items():
+            if p in quiet:
+                continue
+            row(p, f"{human:.2f}", [s["per_1000"][p] for s in runs], lambda v, s, p=p: f"{v:.2f}（×{s['ratio'][p]:g}）",
+                lambda m, sd, h=human: f"{m:.2f} ± {sd:.2f}（×{m / max(h, 0.008):.1f}）")  # fmt: skip
+        if quiet:
+            table.add_row(f"其余 {len(quiet)} 项", "", *([""] * (len(table.columns) - 2)), style="dim")
+        table.add_section()
+        row("超出人类的部分", "0", [s["excess"] for s in runs], lambda v, s: f"{v:.2f}", style="bold")
+        row("比喻和揣测（像）", f"{SIMILE[1]:.2f}", [s["similes_per_1000"] for s in runs], lambda v, s: f"{v:.2f}")
+        row("句长变化", f"{HUMAN_CV:.2f}", [s["sentence_cv"] for s in runs], lambda v, s: f"{v:.2f}")
+        row("五字以内的句子", f"{HUMAN_SHORT:.2f}", [s["short"] for s in runs], lambda v, s: f"{v:.2f}")
+        row("照搬示范的词", "", [sum(s["borrowed"].values()) for s in runs],
+            lambda v, s: "、".join(f"{w}{n}" for w, n in list(s["borrowed"].items())[:2]) or "0")  # fmt: skip
+        row("沿用上一段的词", "", [sum(s["carried"].values()) for s in runs],
+            lambda v, s: "、".join(f"{w}{n}" for w, n in list(s["carried"].items())[:2]) or "0")  # fmt: skip
+        row("段数 / 字数", "", [s["chars"] for s in runs], lambda v, s: f"{s['narrations']} / {s['chars']}",
+            lambda m, sd: f"{m:.0f} ± {sd:.0f} 字")  # fmt: skip
+    if any(s.get("voice") for s in runs):
+        table.add_section()
+        npc = [s.get("voice") or {"lines": 0, "line_chars": 0, "action_first": 0.0, "action_first_later": 0.0, "repeats": 0.0} for s in runs]
+
+        def share(key: str) -> list[float]:
+            return [v[key] for v in npc]
+
+        def pct(v: float, s: dict) -> str:
+            return f"{v:.0%}"
+
+        row("NPC 台词（句）", "", share("lines"), lambda v, s: f"{v:.0f}", lambda m, sd: f"{m:.0f} ± {sd:.0f}")
+        row("动作开头", "", share("action_first"), pct, lambda m, sd: f"{m:.0%} ± {sd:.0%}")
+        row("第二句起动作开头", "", share("action_first_later"), pct, lambda m, sd: f"{m:.0%} ± {sd:.0%}")
+        row("两句内重复口癖", "", share("repeats"), pct, lambda m, sd: f"{m:.0%} ± {sd:.0%}")
+        row("每句字数", "", share("line_chars"), lambda v, s: f"{v:.0f}", lambda m, sd: f"{m:.0f} ± {sd:.0f}")
+    return table
+
+
+@eval_app.command("cliche")
+def eval_cliche(files: Annotated[list[Path], typer.Argument(help="存档、autoplay 记录、AUTOKEEPER_TRACE=full 记下的追踪，或 eval style 的明细")]) -> None:
+    """守秘人叙事比照人类小说（鲁迅、老舍）：每种套话是人类用量的几倍、句子长短、照搬示范的词；NPC 的动作开头和口癖重复。"""
+    from .eval.style import score
+
+    stats = {f.name: score(f) for f in files}
+    console.print(_style_table(stats))
+    if not any(s["narrations"] or s["voice"] for s in stats.values()):
+        console.print("[dim]没找到守秘人的叙事或 NPC 的台词：追踪要用 AUTOKEEPER_TRACE=full 记录才有原文。[/]")
 
 
 @eval_app.command("style")
 def eval_style(
     module: Path = Path("modules/zhuishuren"),
     label: Annotated[str, typer.Option(help="这次运行的名字，如 before / after")] = "",
-    runs: Annotated[int, typer.Option(help="跑几遍")] = 1,
+    runs: Annotated[int, typer.Option(help="跑几遍；一遍只有两三千字，比较时至少跑 5 遍")] = 1,
+    npc: Annotated[bool, typer.Option("--npc", help="改测 NPC：同样的问话问三个 NPC，只有 NPC 是真的")] = False,
 ) -> None:
-    """守秘人文风：同样的行动、裁定、NPC 台词和骰子，只有守秘人是真的，数它的套话密度。"""
+    """守秘人文风：同样的行动、裁定、NPC 台词和骰子，只有守秘人是真的，比照人类小说量它的叙事。"""
     from .eval.style import run as run_style
+    from .eval.style import score, talk
+
+    done: dict[str, dict] = {}
 
     async def go() -> None:  # one event loop for every run: the API clients outlive a single run
         for i in range(runs):
             name = f"{label or 'run'}-{i + 1}"
-            out = config.SAVES / "eval" / f"style-{name}.json"
-            s = await run_style(module, label=name, out=out)
-            u = s["usage"]
-            console.print(
-                f"[bold]{name}[/] 守秘人 {s['keeper']} · 提示词 {s['prompt']} · {s['narrations']} 段 {s['chars']} 字 · "
-                f"套话 {s['core']} 处，每千字 {s['density']:.2f}（全部 {s['all']:.2f}）· 比喻 {s['similes_per_1000']:.2f} · "
-                f"{int(u.get('calls', 0))} 次调用 ${u.get('cost_usd', 0.0):.4f}"
-            )
+            out = config.SAVES / "eval" / f"{'talk' if npc else 'style'}-{name}.json"
+            if npc:
+                s = await talk(module, label=name, out=out)
+                u = s["usage"]
+                console.print(
+                    f"[bold]{name}[/] NPC {s['npc']} · 提示词 {s['prompt']} · {s['lines']} 句，每句 {s['line_chars']} 字 · "
+                    f"动作开头 {s['action_first']:.0%}（第二句起 {s['action_first_later']:.0%}）· 重复 {s['repeats']:.0%} · "
+                    f"{int(u.get('calls', 0))} 次调用 ${u.get('cost_usd', 0.0):.4f}"
+                )
+            else:
+                s = await run_style(module, label=name, out=out)
+                u = s["usage"]
+                console.print(
+                    f"[bold]{name}[/] 守秘人 {s['keeper']} · 提示词 {s['prompt']} · {s['narrations']} 段 {s['chars']} 字 · "
+                    f"超出人类 {s['excess']:.2f}/千字 · 不是……而是 {s['per_1000']['不是……而是……']:.2f} · "
+                    f"句长变化 {s['sentence_cv']:.2f} · {int(u.get('calls', 0))} 次调用 ${u.get('cost_usd', 0.0):.4f}"
+                )
             console.print(f"明细：{out}")
+            done[name] = score(out)
 
     asyncio.run(go())
+    if len(done) > 1:
+        console.print(_style_table(done, columns=len(done) <= 3))
+
+
+@eval_app.command("blind")
+def eval_blind(
+    a: Annotated[str, typer.Option(help="对照组：eval style 用的 --label")],
+    b: Annotated[str, typer.Option(help="改动组的 --label")],
+    npc: Annotated[bool, typer.Option("--npc", help="比 NPC 的问话（eval style --npc 的结果）")] = False,
+    judge: Annotated[str, typer.Option(help="裁判模型")] = "claude-opus-5-5",
+) -> None:
+    """盲评两组 eval style 的结果：同一段两两配对，先后各评一次，裁判不知道哪段是哪组。"""
+    from .eval.blind import judge as blind
+
+    out = config.SAVES / "eval" / f"blind-{'talk' if npc else 'style'}-{a}-vs-{b}.json"
+    s = asyncio.run(blind(a, b, npc=npc, model=judge, out=out))
+    console.print(f"{s['pairs']} 对：{b} 胜 {s['b_wins']}，{a} 胜 {s['a_wins']}，相当或换了先后就变 {s['ties']}；符号检验 p = {s['p']:.3f}")
+    console.print(f"明细：{out}")
 
 
 @eval_app.command("context")

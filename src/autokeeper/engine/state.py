@@ -128,6 +128,7 @@ class GameState(BaseModel):
     checks: list[CheckRecord] = Field(default_factory=list)  # the latest skill checks, newest last
     developed: list[str] = Field(default_factory=list)  # investigators who made their growth rolls (.en)
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
+    expanded: dict[str, int] = Field(default_factory=dict)  # place -> turn the director was last asked to 展开 there (Game._may_expand)
     visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # per-save illustrations, reused after loading
     looks: dict[str, dict[str, str]] = Field(default_factory=dict)  # art key -> what it shows since the story changed it (engine/visuals.py)
     shown: list[str] = Field(default_factory=list)  # big scenes whose moment has come, shown or not (engine/showcase.py)
@@ -140,6 +141,13 @@ class GameState(BaseModel):
     # a plugin's opt-in one-line status, and the last few public effects it produced this game.
     plugin_status: dict[str, str] = Field(default_factory=dict)
     plugin_log: list[dict] = Field(default_factory=list)
+    plugin_panels: dict[str, list[dict]] = Field(default_factory=dict)  # public too: each plugin's panels, by name
+    # Host only: open and waiting prompts (the hub sends each to its own player), timers, the
+    # per-plugin rate marks, and a counter that keeps prompt ids and commands apart.
+    plugin_prompts: list[dict] = Field(default_factory=list)
+    plugin_timers: list[dict] = Field(default_factory=list)
+    plugin_marks: dict[str, dict] = Field(default_factory=dict)
+    plugin_serial: int = 0
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog

@@ -29,6 +29,7 @@ Messages are JSON objects with a "t" field:
                     · retell {nudge} · epilogue · suggest · recount
     client -> hub   (before the start) bring {investigator, portrait} or {pregen} · ready {on} · card {op ...}
     client -> hub   (in a round) done · undo
+    client -> hub   answer {prompt, value, skip} · command {name, text}   (a rule plugin's question, a /command)
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
                     · event {ev} · module · sync {state} · offer · say · ideas {ideas}
@@ -71,19 +72,21 @@ from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
 from ..module.schema import Module
+from ..plugins.schema import does
 from ..rules import commands
 from ..rules.coc import Investigator
 from . import cards, media
 from .room import BLANKS
 
-SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress"}
+SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
-PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
+PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
+            "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:
@@ -156,6 +159,7 @@ def public_plugins(m: Module, st: GameState) -> list[dict[str, Any]]:
         out.append({
             "name": plugin.name, "version": plugin.version, "description": plugin.description,
             "actions": [[a.name, a.description] for a in plugin.actions],
+            "commands": [[c.name, c.description] for c in plugin.commands], "does": does(plugin.capabilities),
             "paused": identity in st.plugin_errors,
         })
     return out
@@ -263,6 +267,8 @@ class Hub:
         self.hosts: set[str] = set()  # clients that showed the key: the host may switch models
         self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
         self.rules: asyncio.Queue = asyncio.Queue()  # house rules asked for, drafted and installed between actions
+        self.plays: asyncio.Queue = asyncio.Queue()  # answers to plugins' questions and /commands, done between actions
+        self.game.plugins.away = lambda seat: self.sits.get(seat) is None  # an empty seat's questions take the default
         self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
         self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
@@ -395,6 +401,13 @@ class Hub:
                 await self._send(cid, {"t": "ideas", "ideas": []})
             elif cid not in self.thinking:  # one at a time: each costs the host a call
                 self.thinking[cid] = asyncio.create_task(self._ideas(cid, seat))
+        elif t in ("answer", "command"):  # a rule plugin's question, or its /command: for your own seat only
+            seat = self._seat_of(cid)
+            if seat is None:
+                await self._send(cid, {"t": "error", "text": "你在观战，没有自己的调查员"})
+            else:
+                self.plays.put_nowait((cid, seat, msg))
+                self.wake.set()
         elif t == "house_rule":  # the rule's code runs on the host's machine: only the host asks for one
             text = str(msg.get("text", "")).strip()[:500]
             if cid not in self.hosts:
@@ -721,6 +734,11 @@ class Hub:
     async def _event(self, ev: dict[str, Any]) -> None:
         if ev.get("type") in ("ruling", "plugin_status"):
             return  # the arbiter's private explanation and unrevealed clue ids stay on the host
+        if ev.get("type") in ("plugin_prompt", "plugin_closed"):  # to the player asked, and nobody else
+            who = self.sits.get(ev.get("who", ""))
+            if who is not None:
+                await self._send(who, {"t": "event", "ev": ev})
+            return
         if ev.get("type") == "flag":
             await self._broadcast({"t": "sync", "state": self._view()})
             return
@@ -742,7 +760,7 @@ class Hub:
                 self.sent[ev["key"]] = path
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
-        elif ev.get("type") == "plugin_effect":  # public line in the story; the id stays on the host
+        elif ev.get("type") in ("plugin_effect", "plugin_show", "plugin_panel", "plugin_answered"):  # public; the id stays on the host
             ev = {k: v for k, v in ev.items() if k != "plugin"}
         elif ev.get("type") == "showcase":  # its moment has come: the picture itself, never the host's path
             data = media.pack(ev.get("picture", ""))
@@ -829,6 +847,7 @@ class Hub:
             while True:  # once at least: a .r sent while the keeper told runs even if the round is already full
                 await self._swap()
                 await self._house_rules()
+                await self._plays()
                 await self._asks()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
@@ -858,6 +877,7 @@ class Hub:
                 return
             if inv is None or not inv.can_act:
                 continue
+            await self._plays()  # what was answered meanwhile goes in before the next action
             st.active = st.investigators.index(inv)
             who = self.sits.get(seat)
             await self._broadcast({
@@ -964,6 +984,29 @@ class Hub:
                 self._save()
                 await self._share_book()
                 await self._broadcast({"t": "sync", "state": self._view()})
+
+    async def _plays(self) -> None:
+        """Answers to rule plugins' questions and their /commands, from the players they were
+        for; then any question nobody answered in time takes its default."""
+        plugins = self.game.plugins
+        while not self.plays.empty():
+            cid, seat, msg = self.plays.get_nowait()
+            self.game.emit = self._event
+            if msg["t"] == "answer":
+                why = await plugins.answer(str(msg.get("prompt", "")), msg.get("value"), by="skip" if msg.get("skip") else "player", who=seat)
+            else:
+                st = self.state
+                st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == seat)
+                why = await plugins.command(str(msg.get("name", ""))[:20], str(msg.get("text", ""))[:200], who=seat)
+            if why:
+                await self._send(cid, {"t": "error", "text": why})
+            self._save()
+            await self._broadcast({"t": "sync", "state": self._view()})
+        if any(p["deadline"] <= time.time() for p in plugins.open_prompts()):
+            self.game.emit = self._event
+            await plugins.expire()
+            self._save()
+            await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _asks(self) -> None:
         while not self.asks.empty():
