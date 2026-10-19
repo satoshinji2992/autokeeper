@@ -1,13 +1,22 @@
-"""角色卡: every investigator on this machine, from the title screen. The cards kept from
-车卡, the player's investigator in each save (as they stand now, with what they went through in
-that game), and each module's pregens; the highlighted one's full sheet beside the list, Enter
-for the sheet on its own."""
+"""角色卡: every investigator on this machine, from the title screen, in three groups: 我的角色
+(the cards kept in saves/investigators/, from 车卡, an import or a copy), 存档里的 (the
+player's investigator in each save, as they stand now, with what they went through in that
+game) and 模组预设 (each module's pregens). The highlighted one's full sheet is beside the
+list, Enter opens it on its own.
+
+Only 我的角色 can be changed: renamed, exported, deleted (into saves/trash/). A card from a
+save or a module is copied into 我的角色 first; the save and the module's files are never
+written to."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
+import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 from rich.text import Text
@@ -23,20 +32,100 @@ from .. import artkit, config, imagery, roster
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
+from .menu import AskText, Confirm
+from .saves import to_trash, when
 from .sheet import SheetModal, sheet_view
 
 FACE = (30, 14)
 ROOM = 34  # the list's width inside its border and padding: longer lines are cut, not wrapped
+EXPORTS = "角色卡导出"  # the folder in saves/ an export goes to unless another is typed
+
+
+def photo(inv: Investigator, m: Module | None) -> Path | None:
+    """The card's photo: a kept card's beside it, else the module's picture."""
+    path = roster.folder() / f"{inv.portrait}.jpg"
+    if inv.portrait and path.is_file():
+        return path
+    if m is not None and inv.portrait in m.pictures and Path(m.pictures[inv.portrait]).is_file():
+        return Path(m.pictures[inv.portrait])
+    return None
+
+
+def kept_file(inv: Investigator) -> Path:
+    return roster.folder() / f"{inv.id}.json"
+
+
+def keep_copy(inv: Investigator, m: Module | None, source: str) -> Investigator:
+    """A save's or a module's investigator as a card of the player's own, with an id and a
+    photo of its own, so deleting either never takes the other's files."""
+    new_id = f"card-{uuid.uuid4().hex[:6]}"
+    card = inv.model_copy(deep=True, update={"id": new_id, "portrait": new_id})
+    roster.keep(card, {"copied": source})
+    if (src := photo(inv, m)) is not None:
+        try:
+            from PIL import Image
+
+            with Image.open(src) as im:
+                im.convert("RGB").save(roster.folder() / f"{new_id}.jpg", "JPEG", quality=92)
+        except (OSError, ValueError):  # no photo then; the card itself is kept
+            pass
+    return card
+
+
+def rename_kept(inv: Investigator, name: str) -> None:
+    """A new name in the card's file; it keeps its place in the list (the file's time)."""
+    f = kept_file(inv)
+    stat = f.stat()
+    record = json.loads(f.read_text(encoding="utf-8"))
+    record["investigator"]["name"] = name
+    f.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.utime(f, (stat.st_atime, stat.st_mtime))
+
+
+def delete_kept(inv: Investigator) -> Path:
+    """Into saves/trash/: the card, and its photo unless another kept card shows it too."""
+    files = [kept_file(inv)]
+    shared = any(c.portrait == inv.portrait and c.id != inv.id for c in roster.saved())
+    if inv.portrait and not shared:
+        files += [f for f in roster.folder().glob(f"{glob_escape(inv.portrait)}.*") if f not in files and f.is_file()]
+    return to_trash(files, inv.id)
+
+
+def glob_escape(name: str) -> str:
+    return re.sub(r"([*?\[])", r"[\1]", name)
+
+
+def export(inv: Investigator, m: Module | None, folder: Path) -> Path:
+    """<name>.json (the card as saves/investigators/ keeps it) in `folder`, its photo beside it."""
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = re.sub(r'[\\/:*?"<>|\s]+', "_", inv.name).strip("._") or "调查员"
+    target, n = folder / f"{stem}.json", 2
+    while target.exists():
+        target, n = folder / f"{stem}-{n}.json", n + 1
+    target.write_text(json.dumps({"investigator": inv.model_dump(mode="json")}, ensure_ascii=False, indent=1), encoding="utf-8")
+    if (src := photo(inv, m)) is not None:
+        shutil.copy2(src, target.with_suffix(src.suffix.lower()))
+    return target
 
 
 class CardsScreen(Screen):
-    BINDINGS = [Binding("escape", "app.pop_screen", "返回")]
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "返回", show=False),
+        Binding("r", "rename", "改名", show=False),
+        Binding("d,delete", "delete", "删除", show=False),
+        Binding("c", "copy", "复制成新角色", show=False),
+        Binding("e", "export", "导出", show=False),
+        Binding("i", "import_card", "导入", show=False),
+        Binding("n", "new_game", "开新游戏", show=False),
+    ]
 
     def __init__(self) -> None:
         super().__init__()
         # option id -> (the investigator, the group it is shown with, the module its pictures come from)
         self.cards: dict[str, tuple[Investigator, list[Investigator], Module | None]] = {}
         self.saves: dict[str, dict | GameState | None] = {}  # option tag -> its save, read when first shown (本局经历)
+        self.paths: dict[str, Path] = {}  # option tag of a module's pregens -> the module's folder
+        self.titles: dict[str, str] = {}  # option tag -> where the card is from, in words
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
@@ -45,15 +134,17 @@ class CardsScreen(Screen):
                 yield OptionList(id="choices")
                 with VerticalScroll(id="preview"):
                     yield Static(id="preview-body")
-            yield Static("↑↓ 翻看 · Enter 或空格单独打开 · Esc 返回", id="setup-hint")
+            yield Static(id="setup-hint")
         yield Footer()
 
     def on_mount(self) -> None:
+        self._fill()
+
+    def _fill(self, select: str | None = None) -> None:
         from .app import load_module, modules, save_index
 
-        groups: list[tuple[str, list[Investigator], Module | None, str]] = []
-        mine = roster.saved()
-        groups.append(("我的调查员", mine, None, "r"))
+        self.cards.clear()
+        self.saves.clear()
         loaded: dict[str, Module] = {}
 
         def module(path: Path) -> Module | None:
@@ -64,48 +155,84 @@ class CardsScreen(Screen):
                     return None
             return loaded[str(path)]
 
+        # (heading or None, sub-heading or None, cards, module, tag)
+        groups: list[tuple[str | None, str | None, list[Investigator], Module | None, str]] = []
+        groups.append(("我的角色", None, roster.saved(), None, "r"))
         seen: set[tuple[str, str]] = set()  # (module, investigator): only the newest save of each
+        first = True
         for slot, meta in sorted(save_index().items(), key=lambda kv: kv[1].get("updated", ""), reverse=True):
             try:
                 state = json.loads((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
                 party = [Investigator.model_validate(p) for p in state["investigators"] if p["id"] in state.get("human", [])]
-            except (OSError, ValueError, KeyError):
+            except (OSError, ValueError, KeyError, TypeError):
                 continue
             party = [p for p in party if (meta.get("module", ""), p.id) not in seen]
             seen.update((meta.get("module", ""), p.id) for p in party)
             if party:  # games only watched have no one of the player's
-                when = str(meta.get("updated", ""))[5:]
-                groups.append((f"《{meta.get('title', '?')}》存档 {when}", party, module(Path(meta.get("path", ""))), f"s{slot}"))
+                title = state.get("label") or f"《{meta.get('title', '?')}》"
+                self.titles[f"s{slot}"] = f"{title} 的存档"
+                groups.append(("存档里的" if first else None, f"{title} {when(str(meta.get('updated', '')))}", party,
+                               module(Path(meta.get("path", ""))), f"s{slot}"))  # fmt: skip
                 self.saves[f"s{slot}"] = state
+                first = False
+        first = True
         for path in modules():
             m = module(path)
             if m and m.pregens:
-                groups.append((f"《{m.title}》预设", list(m.pregens), m, f"m{path.name}"))
+                self.paths[f"m{path.name}"], self.titles[f"m{path.name}"] = path, f"《{m.title}》"
+                groups.append(("模组预设" if first else None, f"《{m.title}》", list(m.pregens), m, f"m{path.name}"))
+                first = False
 
         ol = self.query_one("#choices", OptionList)
-        for title, party, m, tag in groups:
-            head = Text(title, style="dim")
-            head.truncate(ROOM, overflow="ellipsis")
-            ol.add_option(Option(head, disabled=True))
+        ol.clear_options()
+        lit = f"bold {self.app.current_theme.primary}"
+        for heading, sub, party, m, tag in groups:
+            if heading:
+                ol.add_option(Option(Text(heading, style=lit), disabled=True))
+            if sub:
+                head = Text(f"  {sub}", style="dim")
+                head.truncate(ROOM, overflow="ellipsis")
+                ol.add_option(Option(head, disabled=True))
             if not party:
-                ol.add_option(Option("  （还没有。新的调查 → 创建调查员）", disabled=True))
+                ol.add_option(Option(Text("  还没有，按 I 导入", style="dim"), disabled=True))
             for inv in party:
                 oid = f"{tag}:{inv.id}"
                 self.cards[oid] = (inv, party, m)
-                label = Text(f"  {inv.name}")
+                label = Text(f"{'    ' if sub else '  '}{inv.name}")
                 label.append(f"  {inv.occupation.split('（')[0]}", style="dim")
                 label.truncate(ROOM, overflow="ellipsis")
                 ol.add_option(Option(label, id=oid))
-        first = next((i for i in range(ol.option_count) if not ol.get_option_at_index(i).disabled), None)
-        if first is not None:
-            ol.highlighted = first
+        if select in self.cards:
+            ol.highlighted = ol.get_option_index(select)
+        else:
+            at = next((i for i in range(ol.option_count) if not ol.get_option_at_index(i).disabled), None)
+            if at is not None:
+                ol.highlighted = at
+            self._hint(None)
         ol.focus()
 
+    # -- looking -------------------------------------------------------------------------------
+    def _chosen(self) -> str | None:
+        ol = self.query_one("#choices", OptionList)
+        oid = ol.get_option_at_index(ol.highlighted).id if ol.highlighted is not None else None
+        return oid if oid in self.cards else None
+
+    def _hint(self, oid: str | None) -> None:
+        keys = [("open", "Enter 打开")] if oid else []
+        if oid and oid.startswith("r"):
+            keys += [("rename", "R 改名"), ("delete", "D 删除"), ("export", "E 导出"), ("new_game", "N 开新游戏")]
+        elif oid:
+            keys += [("copy", "C 复制成新角色"), ("export", "E 导出")]
+            keys += [("new_game", "N 开新游戏")] if oid.startswith("m") else []
+        keys += [("import_card", "I 导入"), ("app.pop_screen", "Esc 返回")]
+        self.query_one("#setup-hint", Static).update(
+            " · ".join(f"[@click={a if '.' in a else 'screen.' + a}]{w}[/]" for a, w in keys))  # fmt: skip
+
     def _portrait(self, inv: Investigator, m: Module | None, style: str) -> Text | None:
-        path = str(roster.folder() / f"{inv.portrait}.jpg") if m is None else m.pictures.get(inv.portrait)
-        if path and Path(path).exists() and imagery.available():
+        path = photo(inv, m)
+        if path is not None and imagery.available():
             try:
-                return Text.from_ansi(imagery.render(path, *FACE, style, face=True))
+                return Text.from_ansi(imagery.render(str(path), *FACE, style, face=True))
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 pass
         if m is not None and inv.portrait in m.art:
@@ -114,8 +241,10 @@ class CardsScreen(Screen):
 
     @on(OptionList.OptionHighlighted, "#choices")
     def preview(self, event: OptionList.OptionHighlighted) -> None:
-        if event.option.id in self.cards:
-            self._show(event.option.id)
+        oid = event.option.id if event.option.id in self.cards else None
+        self._hint(oid)
+        if oid:
+            self._show(oid)
 
     def _game(self, oid: str) -> GameState | None:
         """The save a card comes from, for its 本局经历; None for kept cards and pregens."""
@@ -141,9 +270,122 @@ class CardsScreen(Screen):
             body.update(sheet_view(inv, face, width, state=game))
 
     @on(OptionList.OptionSelected, "#choices")
-    def open(self, event: OptionList.OptionSelected) -> None:
-        if event.option.id not in self.cards:
+    def open(self) -> None:
+        self.action_open()
+
+    def action_open(self) -> None:
+        oid = self._chosen()
+        if oid is None:
             return
-        inv, party, m = self.cards[event.option.id]
+        inv, party, m = self.cards[oid]
         style = self.app.art_style  # type: ignore[attr-defined]
-        self.app.push_screen(SheetModal(party, party.index(inv), lambda i: self._portrait(i, m, style), self._game(event.option.id)))
+        self.app.push_screen(SheetModal(party, party.index(inv), lambda i: self._portrait(i, m, style), self._game(oid)))
+
+    # -- changing ------------------------------------------------------------------------------
+    def _mine(self) -> Investigator | None:
+        """The highlighted card if it is one of 我的角色; else a word on why it cannot change."""
+        oid = self._chosen()
+        if oid is None:
+            return None
+        if not oid.startswith("r"):
+            self.app.notify("这张卡不能改，可以按 C 复制成新角色再改", severity="warning")
+            return None
+        return self.cards[oid][0]
+
+    def action_rename(self) -> None:
+        inv = self._mine()
+        if inv is None:
+            return
+
+        def done(name: str | None) -> None:
+            if not name or name == inv.name:
+                return
+            try:
+                rename_kept(inv, name)
+            except (OSError, ValueError, KeyError):
+                self.app.notify("没能改名", severity="error")
+                return
+            self._fill(f"r:{inv.id}")
+
+        self.app.push_screen(AskText("改名", inv.name), done)
+
+    def action_delete(self) -> None:
+        inv = self._mine()
+        if inv is None:
+            return
+
+        def done(answer: str | None) -> None:
+            if answer != "yes":
+                return
+            try:
+                delete_kept(inv)
+            except OSError:
+                self.app.notify("没能删除", severity="error")
+                return
+            self._fill()
+            self.app.notify(f"已删除 {inv.name}")
+
+        self.app.push_screen(Confirm(f"删除 {inv.name}？", [("yes", "删除"), ("no", "取消")]), done)
+
+    def action_copy(self) -> None:
+        oid = self._chosen()
+        if oid is None:
+            return
+        if oid.startswith("r"):
+            self.app.notify("这张已经是你的角色了")
+            return
+        inv, _, m = self.cards[oid]
+        try:
+            card = keep_copy(inv, m, self.titles.get(oid.split(":", 1)[0], ""))
+        except OSError:
+            self.app.notify("没能复制", severity="error")
+            return
+        self._fill(f"r:{card.id}")
+        self.app.notify(f"{card.name} 已放进我的角色")
+
+    def action_export(self) -> None:
+        oid = self._chosen()
+        if oid is None:
+            return
+        inv, _, m = self.cards[oid]
+
+        def done(where: str | None) -> None:
+            if where is None:
+                return
+            try:
+                target = export(inv, m, Path(where).expanduser() if where else config.SAVES / EXPORTS)
+            except OSError:
+                self.app.notify("这个文件夹写不进去，换一个试试", severity="error")
+                return
+            self.app.notify(f"已导出到 {target}", timeout=10)
+
+        self.app.push_screen(AskText("导出到哪个文件夹", str(config.SAVES / EXPORTS)), done)
+
+    def action_import_card(self) -> None:
+        """The import flow of 新的调查 (tui/card.py), in the first module's era."""
+        from .app import modules
+        from .card import CardScreen
+
+        try:
+            m = Module.load(modules()[0])
+            screen = CardScreen(m, start="import")
+        except (IndexError, OSError, ValueError):
+            self.app.notify("要先有一个模组才能导入", severity="error")
+            return
+        self.app.push_screen(screen, lambda card: self._fill(f"r:{card.id}" if card else None))
+
+    def action_new_game(self) -> None:
+        """Straight to 新的调查 with this card picked: a pregen in its own module; one of the
+        player's own in whichever module they choose next."""
+        from .app import SetupScreen
+
+        oid = self._chosen()
+        if oid is None:
+            return
+        tag, inv_id = oid.split(":", 1)
+        if tag.startswith("s"):
+            self.app.notify("先按 C 复制成新角色，再用它开新游戏", severity="warning")
+        elif tag.startswith("m"):
+            self.app.switch_screen(SetupScreen(spectate=False, module=self.paths[tag], card=inv_id))
+        else:
+            self.app.switch_screen(SetupScreen(spectate=False, card=inv_id))

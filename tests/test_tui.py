@@ -20,6 +20,7 @@ from autokeeper.module.schema import Module
 from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
+from autokeeper.tui.menu import Confirm, GameMenu
 from autokeeper.tui.screens import HandoutModal, PushModal, RollModal
 from autokeeper.tui.speaker import Speaker
 from autokeeper.tui.widgets import SceneArt, StoryLog, command_suggester
@@ -183,7 +184,14 @@ async def test_after_the_ending_only_the_dice_lookups_work(canned, monkeypatch):
                 break
         assert "没有需要成长检定的技能" in story_text(screen) and "我再上一趟钟楼" not in story_text(screen)
         assert state.turn == 0 and state.developed == [lead.id] and "回顾这一局" not in story_text(screen)
-        await pilot.press("escape")  # as the last lines say: Esc goes back to the title
+        await pilot.press("escape")  # as the last lines say: the Esc menu, 回到标题 ready for Enter
+        await pilot.pause()
+        assert isinstance(app.screen, GameMenu)
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, Confirm)  # the .en is still being settled: wait for it, or go now
+        await pilot.press("enter")  # 讲完再走
+        await pilot.pause()
         assert app.screen is screen  # the pending command finishes before the screen leaves
         settled.set()
         assert await until(pilot, lambda: not isinstance(app.screen, GameScreen))
@@ -215,7 +223,7 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
         assert app.art_style == "photo"  # plain blocks by default: the style players read best
         await pilot.press("ctrl+a")  # the input box has focus, but Ctrl+A still changes the style
         assert app.art_style == "ascii" and scene.style_name == "ascii"
-        await app.screen.run_action("weather")  # the switch in the Ctrl+P menu
+        await app.screen.run_action("weather")  # the switch in Ctrl+P and in 设置
         await pilot.pause(0.2)
         assert scene._atmo is None  # weather off
         screen = app.screen

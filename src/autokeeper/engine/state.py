@@ -96,6 +96,7 @@ class CheckRecord(BaseModel):
 class GameState(BaseModel):
     module: str
     slot: str = "default"
+    label: str = ""  # the player's own name for this save (继续调查 → 改名); the module title when empty
     investigators: list[Investigator]
     human: list[str] = Field(default_factory=list)  # investigator ids played by humans; the rest are AI
     active: int = 0
