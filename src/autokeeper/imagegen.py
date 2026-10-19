@@ -88,8 +88,9 @@ class Failed(RuntimeError):
 @dataclass(frozen=True)
 class Status:
     ok: bool
-    reason: str = ""  # why not, for the settings and `autokeeper doctor`
+    reason: str = ""  # why not, one plain sentence for the settings
     exe: str = ""
+    fix: str = ""  # what to do about it, for the guide's 遇到问题 page and `autokeeper doctor`
 
 
 def status() -> Status:
@@ -108,18 +109,18 @@ def recheck() -> Status:
 def _status() -> Status:
     exe = shutil.which("codex")
     if not exe:
-        return Status(False, "没有找到 codex 命令（npm i -g @openai/codex，再 codex login）")
+        return Status(False, "没装 Codex，AI 画图用不了", fix="npm i -g @openai/codex，再运行 codex login")
     try:
         login = subprocess.run([exe, "login", "status"], capture_output=True, timeout=20)
         features = subprocess.run([exe, "features", "list"], capture_output=True, timeout=20)
     except (OSError, subprocess.SubprocessError):
-        return Status(False, "codex 命令没有响应")
+        return Status(False, "Codex 没有响应，AI 画图用不了", fix="在终端运行 codex login status 看看")
     said = (login.stdout + login.stderr).decode("utf-8", "replace").lower()  # read, never shown: it may name the key
     if login.returncode != 0 or "logged in" not in said or "not logged in" in said:
-        return Status(False, "Codex 还没登录（运行 codex login）")
+        return Status(False, "Codex 还没登录，AI 画图用不了", fix="在终端运行 codex login")
     listed = features.stdout.decode("utf-8", "replace")
     if not re.search(r"^image_generation\s+.*\btrue\s*$", listed, re.M):
-        return Status(False, "这个 Codex 不能生图：没有开启 image_generation（codex update 后再试）")
+        return Status(False, "这个版本的 Codex 不能画图，AI 画图用不了", fix="在终端运行 codex update，看 codex features list 里 image_generation 是否为 true")
     return Status(True, "", exe)
 
 
@@ -169,7 +170,7 @@ def left(module: str) -> int:
 def _reserve(module: str) -> None:
     with _lock:
         if int(_read(module)["used"]) + _held.get(module, 0) >= LIMIT:
-            raise OverBudget(f"这个模组的生图额度（{LIMIT} 张）已经用完")
+            raise OverBudget(f"这个模组能用 AI 画的 {LIMIT} 张已经画完了")
         _held[module] = _held.get(module, 0) + 1
 
 
@@ -453,10 +454,10 @@ async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, 
             await make(text, art_dir / f"{key}.jpg", kind=kind, module=module.id, original=original,
                        title=f"{subject[:40]}（{look.change[:40]}）", where="import")
         except (Unavailable, OverBudget) as exc:
-            log(f"  · 变样图停在这里：{exc}")
+            log(f"  · 变样图先画到这里：{exc}")
             break
-        except (Failed, OSError, ValueError) as exc:
-            log(f"  ✗ {key}: {str(exc)[:120]}")
+        except (Failed, OSError, ValueError):
+            log(f"  ✗ {key}: 没画成")
             failed += 1
             if failed >= GIVE_UP:
                 break

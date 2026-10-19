@@ -119,7 +119,7 @@ async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_dra
         await pilot.pause()
         switch = app.screen.query_one("#settings-imagegen", Switch)
         assert switch.disabled and not switch.value
-        assert "用不了：测试里不生图" in str(app.screen.query_one("#settings-imagegen-why", Static).render())
+        assert str(app.screen.query_one("#settings-imagegen-why", Static).render()) == "测试里不生图"  # one plain line
         app.screen.query_one("#settings-save", Button).press()
         await pilot.pause()
     assert config.load().imagegen  # the choice stays for when Codex is back
@@ -130,7 +130,7 @@ async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_dra
         await pilot.pause()
         switch = again.screen.query_one("#settings-imagegen", Switch)
         assert not switch.disabled and switch.value  # on by default where Codex can draw
-        assert "最多 100 张" in str(again.screen.query_one("#settings-imagegen-why", Static).render())
+        assert not again.screen.query("#settings-imagegen-why")  # nothing to explain when it works
         switch.value = False
         again.screen.query_one("#settings-save", Button).press()
         await pilot.pause()

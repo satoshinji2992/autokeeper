@@ -138,7 +138,7 @@ async def test_the_opening_waits_for_its_picture_until_someone_acts(tmp_path, fa
     async def slow(cfg, m, sc, target, **kwargs):
         await gate.wait()
         picture(target)
-        return "Codex 照描述"
+        return "AI 照描述画"
 
     monkeypatch.setattr(showcase, "prepare", slow)
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
@@ -197,14 +197,14 @@ async def test_pictures_come_from_the_module_then_codex_from_a_reference_then_co
     cfg = config.Config()
     target = lambda sc: showcase.cache(m.id) / showcase.name(sc)  # noqa: E731
     assert await showcase.prepare(cfg, m, own, target(own)) == "模组原图" and not calls
-    assert await showcase.prepare(cfg, m, placed, target(placed)) == "Codex 照参考图"
+    assert await showcase.prepare(cfg, m, placed, target(placed)) == "AI 照原图画"
     assert calls[-1][0] == Path(m.pictures["square"]) and "made from the attached picture" in calls[-1][1]
-    assert await showcase.prepare(cfg, m, searched, target(searched)) == "Codex 照参考图"
+    assert await showcase.prepare(cfg, m, searched, target(searched)) == "AI 照原图画"
     assert calls[-1][0] == showcase.photo(target(searched))  # found through imagery's search, then redrawn
     credit = json.loads(showcase.photo(target(searched)).with_name(showcase.photo(target(searched)).stem + ".credit.json").read_text(encoding="utf-8"))
     assert credit["license"] == "CC0"
     cfg_offline = config.Config(search="none")
-    assert await showcase.prepare(cfg_offline, m, alone, target(alone)) == "Codex 照描述" and calls[-1][0] is None
+    assert await showcase.prepare(cfg_offline, m, alone, target(alone)) == "AI 照描述画" and calls[-1][0] is None
     assert len(calls) == 3 and all(showcase.ready(cfg, m, sc, target(sc)) for sc in (own, placed, searched, alone))
     assert target(placed).is_relative_to(config.SAVES / "showcases")  # outside the module, for every game of it
 

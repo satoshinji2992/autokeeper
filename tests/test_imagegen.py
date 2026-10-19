@@ -225,14 +225,14 @@ def test_without_a_logged_in_codex_that_can_draw_the_feature_is_off(monkeypatch)
         return fake
 
     monkeypatch.setattr(shutil, "which", lambda name: None)
-    assert not check().ok and "codex" in check().reason
+    assert check() == imagegen.Status(False, "没装 Codex，AI 画图用不了", fix="npm i -g @openai/codex，再运行 codex login")
     monkeypatch.setattr(shutil, "which", lambda name: "/opt/codex")
     listed = "image_generation                         stable             true\n"
     monkeypatch.setattr(subprocess, "run", run({"login": (1, "", "Not logged in"), "features": (0, listed, "")}))
-    assert not check().ok and "登录" in check().reason
+    assert not check().ok and check().reason == "Codex 还没登录，AI 画图用不了" and "codex login" in check().fix
     monkeypatch.setattr(subprocess, "run", run({"login": (0, "", "Logged in using ChatGPT"),
                                                 "features": (0, "image_generation  stable  false\n", "")}))
-    assert not check().ok and "image_generation" in check().reason
+    assert not check().ok and check().reason == "这个版本的 Codex 不能画图，AI 画图用不了" and "codex update" in check().fix
     monkeypatch.setattr(subprocess, "run", run({"login": (0, "", "Logged in using ChatGPT"), "features": (0, listed, "")}))
     assert check() == imagegen.Status(True, "", "/opt/codex")
     assert imagegen.why_off(config.Config(imagegen=False)) == "设置里关掉了" and not imagegen.enabled(None)
@@ -394,7 +394,7 @@ async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_mo
     assert drawn.is_file() and "square_bell_stopped" in Module.load(work).pictures
     credit = json.loads((work / "art" / "square_bell_stopped.credit.json").read_text(encoding="utf-8"))
     assert credit["based_on"]["license"] == imagegen.LICENSE  # made from the square's own (generated) picture
-    assert imagegen.used("example") == len(done) + 1 and "Codex 照描述画" in log.getvalue()
+    assert imagegen.used("example") == len(done) + 1 and "AI 画了一张" in log.getvalue()
     # the repository's own modules never get generated pictures
     assert imagegen.filler(config.Config(), m, config.MODULES / "zhuishuren" / "art") is None
     assert await imagegen.looks(config.Config(), m, config.MODULES / "zhuishuren" / "art") == []
@@ -432,10 +432,12 @@ def test_doctor_says_whether_story_pictures_can_be_made(monkeypatch, tmp_path):
 
     monkeypatch.setattr(config, "SAVES", tmp_path)
     monkeypatch.setattr(bcdice, "BCDice", Dice)
-    assert "· 剧情配图（Codex 生图）：关闭（测试里不生图）" in CliRunner().invoke(app, ["doctor"]).output
+    monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(False, "没装 Codex，AI 画图用不了", fix="npm i -g @openai/codex"))
+    out = CliRunner().invoke(app, ["doctor"]).output
+    assert "· AI 画图（Codex）：没装 Codex，AI 画图用不了" in out and "npm i -g @openai/codex" in out  # the fix, for who looks
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
     out = CliRunner().invoke(app, ["doctor"]).output
-    assert f"✓ 剧情配图（Codex 生图）：可用，每个模组最多 {imagegen.LIMIT} 张" in out
+    assert f"✓ AI 画图（Codex）：可用，每个模组最多 {imagegen.LIMIT} 张" in out
 
 
 async def test_improvised_people_places_and_props_no_photo_was_found_for_are_drawn_by_codex(codex, monkeypatch):

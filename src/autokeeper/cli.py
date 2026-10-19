@@ -341,9 +341,11 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     console.print(f"· 联网搜索：{resolve(cfg.search)}（配置 {cfg.search}）")
     from . import imagegen
 
-    off = imagegen.why_off(cfg)
-    console.print(f"{'✓' if not off else '·'} 剧情配图（Codex 生图）：" + (
-        f"可用，每个模组最多 {imagegen.LIMIT} 张、每局最多 {imagegen.PER_GAME} 张" if not off else f"关闭（{off}）"))
+    off, codex = imagegen.why_off(cfg), imagegen.status()
+    console.print(f"{'✓' if not off else '·'} AI 画图（Codex）：" + (
+        f"可用，每个模组最多 {imagegen.LIMIT} 张，每局最多 {imagegen.PER_GAME} 张" if not off else off))
+    if off and codex.fix:
+        console.print(f"    {codex.fix}")
     spent = spend.ledger()["total_usd"]
     console.print(f"· API 花费估计：${spent:.4f}" + (f" / 预算 ${cfg.budget_usd:g}" if cfg.budget_usd is not None else "（未设预算）"))
     if ping:
@@ -550,7 +552,7 @@ def art_fetch(
     module: Path,
     only: Annotated[list[str] | None, typer.Option(help="只处理这些图名")] = None,
     force: bool = False,
-    codex: Annotated[bool, typer.Option("--codex/--no-codex", help="找不到照片时让 Codex 照描述画，并画出模组里写的变样图（只用于本机导入的模组）")] = True,
+    codex: Annotated[bool, typer.Option("--codex/--no-codex", help="找不到照片时用 AI 画，并画出模组里写的变样图（只用于本机导入的模组）")] = True,
 ) -> None:
     """从 Wikimedia Commons 找真实图片（公有领域 / CC），读图员挑图裁剪，存成 art/<名字>.jpg 并记录署名。"""
     from . import imagegen
@@ -571,14 +573,14 @@ def art_fetch(
 
     done, drawn = asyncio.run(run())
     console.print(f"找到 {len(done)}/{len(targets)} 张图" + (f"，变样图 {len(drawn)} 张" if drawn else "")
-                  + (f"（本模组 Codex 生图已用 {imagegen.used(m.id)}/{imagegen.LIMIT}）" if fill else ""))
+                  + (f"（这个模组还能用 AI 画 {imagegen.left(m.id)} 张）" if fill else ""))
 
 
 @app.command()
 def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
-    """提前准备模组的大场景图：一次一张，开场优先；有 Codex 就照参考图或描述生成（计入每个模组 100 张的额度）。"""
+    """提前准备模组的大场景图（能用 AI 画图时一张一张画，开场优先）。"""
     from . import imagegen
-    from .engine.showcase import cache, prepare_module
+    from .engine.showcase import prepare_module
     from .module.schema import Module
 
     path = Path(module)
@@ -589,14 +591,13 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
         raise typer.Exit(1)
     m, cfg = Module.load(path), config.load()
     if not m.showcases:
-        console.print(f"《{m.title}》没有写大场景（module.yaml 的 showcases）")
+        console.print(f"《{m.title}》没有大场景")
         return
     off = imagegen.why_off(cfg)
     console.print(f"[bold]大场景[/] 《{m.title}》{len(m.showcases)} 个，"
-                  + ("用 Codex 生成，一张约一分钟" if not off else f"不生成（{off}），只用模组原图和找到的照片"))
+                  + ("AI 一张一张画，每张大约一分钟" if not off else f"{off}，只用模组里的图和找到的照片"))
     done = asyncio.run(prepare_module(cfg, m, log=console.print))
-    console.print(f"准备好 {len(done)}/{len(m.showcases)} 个，图在 {cache(m.id)}"
-                  + ("" if off else f"；本模组 Codex 生图已用 {imagegen.used(m.id)}/{imagegen.LIMIT}"))
+    console.print(f"准备好 {len(done)}/{len(m.showcases)} 个" + ("" if off else f"；这个模组还能用 AI 画 {imagegen.left(m.id)} 张"))
 
 
 @art_app.command("credits")

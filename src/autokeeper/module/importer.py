@@ -506,7 +506,7 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
     if not wanted or cfg.search == "none" or not imagery.available():
         return []
     fill = imagegen.filler(cfg, m, work / "art")
-    rest = f"找不到的让 Codex 照描述画（最多 {imagegen.AT_IMPORT} 张）" if fill else "找不到的保留手绘"
+    rest = "找不到的由 AI 画" if fill else "找不到的保留手绘"
     console.print(f"[bold]找照片[/] {len(wanted)} 处场景和人物，在 Wikimedia Commons 找有授权的照片，{rest}…")
     try:
         done = await imagery.fetch_folder(cfg, work / "art", wanted, log=console.print, generate=fill)
@@ -517,7 +517,7 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
     if fill and any(x.looks for x in [*m.locations, *m.npcs]):
         console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
         drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
-        console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张；本模组已用 Codex 生图 {imagegen.used(m.id)}/{imagegen.LIMIT} 张")
+        console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张")
     return done
 
 
@@ -529,11 +529,11 @@ async def find_showcases(m: Module, cfg: config.Config, console: Console) -> lis
     if not m.showcases or not imagery.available() or not (imagegen.enabled(cfg) or cfg.search != "none"):
         return []
     console.print(f"[bold]大场景[/] {len(m.showcases)} 个，" + (
-        "Codex 照参考图或描述画，一张约一分钟…" if imagegen.enabled(cfg) else "没有 Codex，只用原图和找到的照片…"))
+        "AI 一张一张画，每张大约一分钟…" if imagegen.enabled(cfg) else "不用 AI 画，只用模组里的图和找到的照片…"))
     try:
         done = await prepare_module(cfg, m, log=console.print)
-    except Exception as exc:  # the module is done either way
-        console.print(f"[yellow]大场景的图没准备成（{type(exc).__name__}），可以稍后用 autokeeper showcase 补。[/]")
+    except Exception:  # the module is done either way
+        console.print("[yellow]大场景的图没准备好，可以稍后用 autokeeper showcase 补。[/]")
         return []
     console.print(f"[bold green]大场景[/] 准备好 {len(done)}/{len(m.showcases)} 个")
     return done

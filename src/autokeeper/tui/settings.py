@@ -59,18 +59,18 @@ class SettingsModal(ModalScreen[None]):
             for label, key, value in (("天气与场景动画", "animations", cfg.animations),
                                       ("模组与即兴规则插件", "plugins", cfg.plugins),
                                       ("操作提示", "tips", cfg.tips),
-                                      ("大场景：关键时刻整屏一张大图", "showcase", cfg.showcase),
+                                      ("大场景", "showcase", cfg.showcase),
                                       ("即兴人物、场景与物品配图", "pictures", cfg.visual_limit > 0),
                                       ("联网搜索与参考配图", "search", cfg.search != "none")):
                 with Horizontal(classes="settings-row"):
                     yield Static(label)
                     yield Switch(value, id=f"settings-{key}")
-            codex = imagegen.recheck()  # off without a logged-in Codex: the switch says why
+            codex = imagegen.recheck()  # off without a logged-in Codex: one plain line says why (the fix is in the guide)
             with Horizontal(classes="settings-row"):
-                yield Static("剧情配图（Codex 生图）")
+                yield Static("AI 画图")
                 yield Switch(cfg.imagegen and codex.ok, id="settings-imagegen", disabled=not codex.ok)
-            yield Static(Text(f"地点和人物随剧情变样、或找不到图时，让 Codex 照原图重画；每个模组最多 {imagegen.LIMIT} 张"
-                              if codex.ok else f"用不了：{codex.reason}", style="dim"), id="settings-imagegen-why")
+            if not codex.ok:
+                yield Static(Text(codex.reason, style="dim"), id="settings-imagegen-why")
             with Horizontal(classes="buttons"):
                 yield Button("保存", id="settings-save", variant="primary")
                 yield Button("返回", id="settings-back")

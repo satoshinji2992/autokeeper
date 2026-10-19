@@ -402,7 +402,7 @@ async def fetch_folder(
                         made = await generate(name, subject, kind)
                     if made:
                         done.append(name)
-                        log(f"  ✓ {name}: 没找到照片，Codex 照描述画了一张")
+                        log(f"  ✓ {name}: 没找到照片，AI 画了一张")
                         return
                 log(f"  · {name}: 没有合适的图，保留手绘")
                 return

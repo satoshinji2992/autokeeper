@@ -118,7 +118,7 @@ async def _search(cfg: config.Config, sc: Showcase, target: Path, on_reply=None)
 async def prepare(cfg: config.Config | None, m: Module, sc: Showcase, target: Path, *, where: str = "import",
                   on_reply: Callable | None = None, on_search: Callable | None = None) -> str:
     """Make one big scene's picture into `target`, if it has none. How it came ("" for not at
-    all): 模组原图, 已经画好, Codex 照参考图, Codex 照描述, 原图照用, 找到的照片."""
+    all): 模组原图, 已经画好, AI 照原图画, AI 照描述画, 原图照用, 找到的照片."""
     if own(m, sc):
         return "模组原图"
     if target.is_file():
@@ -133,7 +133,7 @@ async def prepare(cfg: config.Config | None, m: Module, sc: Showcase, target: Pa
         try:
             await imagegen.make(imagegen.staged(sc.prompt, reference=source is not None, **world), target, kind="scene",
                                 module=m.id, original=source, title=sc.title, where=where, on_reply=on_reply)
-            return "Codex 照参考图" if source else "Codex 照描述"
+            return "AI 照原图画" if source else "AI 照描述画"
         except (imagegen.Unavailable, imagegen.OverBudget, imagegen.Failed, OSError, ValueError):
             return ""  # the moment is skipped; nothing was counted
     return "原图照用" if ref else "找到的照片" if found else ""
