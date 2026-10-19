@@ -82,12 +82,21 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
     d["opening"] = ""  # material not yet spoken is not part of a player's knowledge
     d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
+    # The screens draw their own map from this copy (tui/mapview.py): the ways on it, what lies
+    # in what on it, the minutes of the roads walked, and no other way out of anywhere.
+    c = fog.chart(m, st)
+    ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
+    read, names = [fog.plain(text) for text in fog.kept(m, st)], fog.aliases(m)
     for loc in d["locations"]:
+        here = loc["id"]
         loc["keeper"] = ""
-        loc["exits"] = [pid for pid in loc["exits"] if pid in known]
-        loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if pid in loc["exits"]}
-        if loc["id"] not in visited:
-            loc.update(name=known[loc["id"]], read_aloud="", features=[], exits=[], travel_minutes={}, art=None, weather=[])
+        loc["exits"] = [pid for pid in loc["exits"] if frozenset((here, pid)) in ways]
+        loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if frozenset((here, pid)) in roads}
+        loc["within"] = c.within.get(here)
+        if here not in visited:  # of its other names, those the players have read (and the map goes by)
+            spelled = {fog.plain(a): a for a in [loc["name"], *loc["aliases"]]}
+            loc["aliases"] = [spelled.get(a, a) for a in names.get(here, ()) if any(a in text for text in read)]
+            loc.update(name=known[here], read_aloud="", features=[], art=None, weather=[])
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
     d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
@@ -102,7 +111,8 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
-    d["items"] = [item for item in d["items"] if item["where"] == st.location or item["where"] in st.visited]
+    seen = fog.things(m, st)  # the map names what they know lies where
+    d["items"] = [item for item in d["items"] if item["where"] == st.location or item["where"] in st.visited or item["id"] in seen]
     for e in d["events"]:
         e.update(title="", text="", read_aloud="", performance="")
     for e in d["endings"]:

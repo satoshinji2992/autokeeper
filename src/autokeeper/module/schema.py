@@ -77,6 +77,8 @@ class Location(BaseModel):
     art: str | None = None
     public: bool = Field(False, description="公开营业或可问路找到的地标，不包含秘密入口和待调查地点")
     aliases: list[str] = Field(default_factory=list, description="玩家可能用的别的叫法，比如门牌地址、主人的名字（托马斯家）")
+    within: str | None = Field(None, description="在哪个地点里面：外面那个地点的 id，比如书房在某户人家里、陵墓在公墓里；"
+                               "地图上会画在它里面。只写确实在里面的，相邻或同一条街上不算；不在别处里面就留空")
     weather: list[Literal["rain", "storm", "snow", "fog", "leaves", "dust", "embers", "flicker", "torch", "redlight", "warp"]] = Field(
         default_factory=list,
         description="画面上的天气与光：rain 雨、storm 雷雨、snow 雪、fog 雾或烟、leaves 风吹落叶、dust 光里的浮尘、"

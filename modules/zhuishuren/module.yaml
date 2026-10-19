@@ -116,6 +116,7 @@ locations:
     exits: [shufang, jiefang, mudi]
   - id: shufang
     name: 道格拉斯的书房
+    within: jinboer_jia
     art: shufang
     read_aloud: |
       书房里四壁都是书，从地板一直顶到天花板，大小不一、形制各异，从园艺手册到异国游记，什么都有。
@@ -159,6 +160,7 @@ locations:
     exits: [jinboer_jia, jiefang, lingmu]
   - id: lingmu
     name: 墓地深处的陵墓
+    within: mudi
     art: lingmu
     read_aloud: |
       一座半埋在土坡里的石砌陵墓，门楣上的字早已被苔藓吃掉。石门紧闭，门缝里塞满了泥，
@@ -171,6 +173,7 @@ locations:
     exits: [mudi, suidao]
   - id: suidao
     name: 食尸鬼隧道网
+    within: mudi
     art: suidao
     read_aloud: |
       泥土通道又低又窄，四壁留着一道道爪痕，空气又湿又冷，带着一股甜腻的腐味。
@@ -196,6 +199,7 @@ locations:
   - id: tushuguan
     public: true
     name: 阿诺兹堡公共图书馆
+    within: zhenzhongxin
     art: tushuguan
     read_aloud: |
       图书馆不大，长桌上方吊着绿罩台灯，旧报纸夹在木杆上挂成一排。图书管理员从眼镜上方瞥了你一眼，示意小声。
@@ -209,6 +213,7 @@ locations:
   - id: jingju
     public: true
     name: 阿诺兹堡警察局
+    within: zhenzhongxin
     art: jingju
     read_aloud: |
       值班室里电话铃响个不停，墙上贴满了通缉令和寻人启事。值班警官一手按着话筒，一手冲你比划：“有事快说。”
@@ -220,6 +225,7 @@ locations:
   - id: baoshe
     public: true
     name: 《阿诺兹堡广告报》报社
+    within: zhenzhongxin
     art: baoshe
     read_aloud: |
       楼下印刷机轰隆作响，楼上的编辑部里烟雾缭绕。走廊尽头一扇门上写着“资料室”，里面堆满了一捆捆旧刊。
