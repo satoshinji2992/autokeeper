@@ -285,7 +285,11 @@ AUTHOR_SYSTEM = """你是这场 CoC 7 版跑团的规则工程师。玩家用一
 - id 用英文小写加下划线；name 和 description 用中文，让玩家看得懂这条规则做什么。description 第一句就说清规则效果。
 - tests 至少覆盖正常流程与一个边界/失败，必须真能跑过；预设骰值要用完。宿主会实际执行测试，不过就装不上。
 - 要公开提示进度时（如“风寒：第 2 天”），在返回里加 status 字段；不要把私有计数直接 status 公开。
-- 改人物属性用 attribute（中文基础属性），扣血扣理智用 damage/sanity，别用 attribute 直接改 HP/SAN。"""
+- 改人物属性用 attribute（中文基础属性），扣血扣理智用 damage/sanity，别用 attribute 直接改 HP/SAN。
+- 家规也可以是一个小游戏、一页面板或一段演出，比如“加个小游戏”“在右栏记着仪式还剩几轮”“找到线索时来段演出”：用 prompt、panels、show 和 commands 写。
+- 面板、演出和题目所有玩家都看得见，只写可以公开的内容，不写守秘人的秘密、真相或还没找到的线索；也别碰玩家的雷区题材。
+- 用到 answer、timer、command、roll、clue 事件时，tests 里每种事件至少写一项。
+- 例子：“加个和店主猜数字的小游戏”。commands 写 [{"name":"猜数","description":"和店主赌一把"}]；收到 command 时用 api.roll("1D10") 定下数字存进 state，返回 {"kind":"prompt","key":"guess","style":"number","low":1,"high":10,"text":"猜一个 1 到 10 的数"}；收到 answer 时比对 event["value"]，猜中返回 note，猜错再问一次。"""
 
 
 class Cast:
@@ -730,11 +734,14 @@ class Cast:
         ids = "、".join(f"{i.id}（{i.name}）" for i in state.investigators)
         places = "、".join(f"{loc.id}" for loc in m.locations)
         installed = "、".join(p.name for p in m.extensions.values()) or "无"
+        npcs = "、".join(f"{n.id}（{n.name}）" for n in m.npcs) or "无"
+        lines = "、".join(self.prefs.lines)
         prompt = (
             f"【玩家的家规】{request}\n"
             f"【调查员 id】{ids}\n【基础属性名】{'、'.join(CHARACTERISTICS)}\n"
-            f"【地点 id】{places}\n【已装的规则插件】{installed}\n"
-            "按上面的 API 写一个插件 JSON（含 code 和 tests）实现这条家规；只实现这一条，别顺带改别的。"
+            f"【地点 id】{places}\n【NPC id】{npcs}\n【已装的规则插件】{installed}\n"
+            + (f"【玩家的雷区】{lines}：面板、演出和题目都不碰这些题材。\n" if lines else "")
+            + "按上面的 API 写一个插件 JSON（含 code 和 tests）实现这条家规；只实现这一条，别顺带改别的。"
         )
         extra = ("\n【上一次的问题，请改正后重写】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
         reply = await self._send("author", s, state, prompt, extra=extra, remember="（撰写家规插件）")

@@ -45,6 +45,9 @@ from .guide import GuideScreen
 from .mapview import MapModal
 from .menu import MENU, Confirm, GameMenu
 from .pages import Page, PagesModal, background_view, mark, pages, progress_view, turn
+from .pages import panels as plugin_page
+from .plugin_ui import Plays, panel_view, tab_label
+from .plugins import plugin_commands
 from .retell import RetellModal
 from .saves import LoadScreen
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
@@ -586,6 +589,7 @@ class GameScreen(Screen):
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
         self.ideas = Ideas(self)  # F5 (tui/suggest.py)
+        self.plays = Plays(self)  # rule plugins' shows and prompts (tui/plugin_ui.py)
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -664,6 +668,7 @@ class GameScreen(Screen):
         if self.focused is None and not self.spectate:
             for box in self.query("#command").results(Input):
                 box.focus()
+        self.call_later(self.plays.ready)  # a plugin's question that waited behind another window
 
     # A click on the story or the stage takes the focus off the command box. Whatever is typed
     # or pasted then still goes into the box, instead of waiting for Esc to bring it back.
@@ -712,6 +717,8 @@ class GameScreen(Screen):
                 self.app.call_later(go)
             elif self.queued is not None:
                 self.set_timer(0.05, self._send_queued)
+            else:
+                self.plays.ready()  # a plugin's question waited for the turn to end
 
     def _send_queued(self) -> None:
         """The keeper is done: the action typed ahead goes in. A turn that broke off goes on
@@ -917,6 +924,9 @@ class GameScreen(Screen):
         """进展 and 背景 as the state has them now (经过 grows with the story)."""
         self.query_one("#progress", Page).show(progress_view(self.state))
         self.query_one("#background", Page).show(background_view(self.m, self.state, self._viewer()))
+        shown = self.state.plugin_panels
+        plugin_page(self.query_one("#pages", TabbedContent), self.query_one("#plugin-panels", Page),
+                    panel_view(shown, self.app.current_theme) if shown else None, tab_label(shown) if shown else "")
 
     def _roomy(self) -> bool:
         """The right column is up and its pages have room to be read."""
@@ -937,7 +947,9 @@ class GameScreen(Screen):
         if name == "progress":  # read over the story: nothing new waits on the tab
             mark(tabs, False)
         history = [w.content for w in self.query_one(HistoryPanel).query(Static) if not w.has_class("history-head")]
-        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name))
+        shown = self.state.plugin_panels
+        extra = (tab_label(shown), panel_view(shown, self.app.current_theme)) if shown else None
+        self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name, extra))
 
     @on(TabbedContent.TabActivated, "#pages")
     def _paged(self, event: TabbedContent.TabActivated) -> None:
@@ -1091,6 +1103,10 @@ class GameScreen(Screen):
             self.afterword, self.writing = ev["text"], False
             if ev.get("error"):
                 self.app.notify(ev["error"], severity="error", timeout=6)
+        elif t == "plugin_panel":
+            self._pages()
+        elif t in ("plugin_show", "plugin_prompt", "plugin_closed", "plugin_answered"):
+            self.plays.handle(ev)
         tips.after(self, ev)  # the first time something happens: one line on how it works
 
     def _npc_line(self, ev: dict, kind: str) -> None:
@@ -1157,10 +1173,13 @@ class GameScreen(Screen):
 
     # -- the Esc menu --------------------------------------------------------------------------
     def menu_items(self) -> list[tuple[str, str]]:
-        """What the Esc menu offers on this screen (a LAN table leaves some out, tui/net.py)."""
-        return list(MENU)
+        """What the Esc menu offers on this screen (a LAN table leaves some out, tui/net.py);
+        规则插件 only when this game has any."""
+        return [item for item in MENU if item[0] != "plugins" or self.m.plugins]
 
     def action_menu(self) -> None:
+        if self.plays.skip():  # Esc first ends a plugin's show
+            return
         first = "title" if self.state.ending else "continue"  # after the end, Esc and Enter go back to the title
         self.app.push_screen(GameMenu(self.menu_items(), first), self._menu_chosen)
 
@@ -1295,6 +1314,8 @@ class GameScreen(Screen):
             self.app.theme = names[(names.index(self.app.theme) + 1) % len(names)] if self.app.theme in names else names[0]
         elif cmd == "/quit":
             self._leave()
+        elif any(name == cmd[1:] for name, _ in plugin_commands(self.m, self.state)):
+            self.plugin_command(cmd[1:], " ".join(args))
         else:
             self.app.notify(f"不认识的命令：{cmd}", severity="warning")
 
@@ -1468,7 +1489,45 @@ class GameScreen(Screen):
     def _suggester(self):
         from .plugins import action_hints
 
-        return command_suggester(self._viewer(), action_hints(self.m, self.state))
+        slash = [f"/{name}" for name, _ in plugin_commands(self.m, self.state)]
+        return command_suggester(self._viewer(), [*slash, *action_hints(self.m, self.state)])
+
+    # -- rule plugins: their questions and slash commands (tui/plugin_ui.py) -------------------
+    def prompt_is_mine(self, who: str) -> bool:
+        """A plugin's question for this screen: the investigator a player plays here."""
+        return not self.spectate and who in self.state.human
+
+    def plugin_answer(self, pid: str, value, by: str) -> None:
+        self._plugin("answer", pid, value, by)
+
+    def plugin_command(self, name: str, text: str) -> None:
+        if self._turn_running():
+            return
+        self._plugin("command", name, text)
+
+    @work(group="plugin")
+    async def _plugin(self, kind: str, *args) -> None:
+        """An answer, a slash command or a timeout, outside the turn: what it brings is told
+        with the next narration, and the rule's own lines show at once."""
+        assert self.game
+        self._busy(True)
+        try:
+            self.game.emit = self.handle
+            plugins = self.game.plugins
+            if kind == "answer":
+                pid, value, by = args
+                why = await plugins.answer(pid, value, by=by)
+            elif kind == "command":
+                why = await plugins.command(*args)
+            else:
+                why = ""
+                await plugins.expire()
+            if why:
+                self.app.notify(why, severity="warning", timeout=4)
+            write_save(self.state, self.m)
+            self._panels()
+        finally:
+            self._busy(False)
 
     def _sync_suggester(self) -> None:
         for box in self.query("#command").results(Input):
@@ -1532,9 +1591,12 @@ class GameScreen(Screen):
         return await self.cast.suggest(self.state, inv.id, self._situation())
 
     def _backstage(self) -> None:
-        """The director finished a plan while nobody was mid-turn: play it now."""
+        """The director finished a plan while nobody was mid-turn: play it now. A plugin's
+        question nobody answered in time takes its default."""
         if self.game and not self.busy and self.game.ready():
             self._interlude()
+        elif self.game and not self.busy and any(p["deadline"] <= time.time() for p in self.game.plugins.open_prompts()):
+            self._plugin("expire")
 
     @work(exclusive=True, group="turn")
     async def _interlude(self) -> None:

@@ -14,6 +14,7 @@ from typing import Any
 
 from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module, Showcase
 
+DIRECTED = 6  # plugins the director may write in one game; upgrading one of them is always fine
 LIMITS = {  # npcs, locations, clues, events, endings
     "开局改编": (2, 1, 3, 3, 1),
     "default": (1, 1, 2, 1, 1),
@@ -47,6 +48,8 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
                 problems.append(f"更新插件 {plugin.id} 必须增加 version，并兼容已有 state")
         elif len(m.plugins) >= 8:
             problems.append("每局最多 8 个插件")
+        elif len(m.directed) >= DIRECTED:
+            problems.append(f"这一局导演已经写了 {DIRECTED} 个插件，改用或升级已有的插件")
     limit = LIMITS.get(plan.kind, LIMITS["default"])
     for name, items, cap in zip(("NPC", "地点", "线索", "事件", "结局"), (plan.npcs, plan.locations, plan.clues, plan.events, plan.endings), limit, strict=True):
         if len(items) > cap:
@@ -138,6 +141,7 @@ def apply(m: Module, plan: Any) -> Applied:
     for plugin in plan.plugins:
         if plugin.id not in m.plugins:
             m.plugins.append(plugin.id)
+            m.directed.append(plugin.id)
         m.extensions[plugin.id] = plugin
         for key, meaning in plugin.flags.items():
             m.flags.setdefault(key, meaning)

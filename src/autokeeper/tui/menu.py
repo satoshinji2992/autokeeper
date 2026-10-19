@@ -19,6 +19,7 @@ MENU = (
     ("load", "读档"),
     ("settings", "设置"),
     ("prefs", "叙事偏好"),
+    ("plugins", "规则插件"),
     ("engine", "换模型"),
     ("guide", "新手指南"),
     ("keys", "按键说明"),
