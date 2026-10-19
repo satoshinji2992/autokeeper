@@ -695,6 +695,7 @@ class GameScreen(Screen):
         if self.focused is None and not self.spectate:
             for box in self.query("#command").results(Input):
                 box.focus()
+        self.call_later(self.plays.ready)  # a plugin's question that waited behind another window
 
     # A click on the story or the stage takes the focus off the command box. Whatever is typed
     # or pasted then still goes into the box, instead of waiting for Esc to bring it back.

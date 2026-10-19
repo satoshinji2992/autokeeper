@@ -265,7 +265,7 @@ class PromptModal(ModalScreen[Any]):
                     for r, row in enumerate(ev.get("board", [])):
                         with Horizontal(classes="cells"):
                             for c, cell in enumerate(row):
-                                yield Button(cell or "·", id=f"cell-{r}-{c}", classes="cell")
+                                yield Button(cell.strip() or "·", id=f"cell-{r}-{c}", classes="cell")
             with Horizontal(classes="buttons"):
                 if style in ("text", "number", "pick", "order"):
                     yield Button("确定", id="prompt-ok", variant="primary")

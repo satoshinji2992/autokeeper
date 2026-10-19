@@ -351,14 +351,16 @@ class Manager:
                 return
             marks["asked"] = [st.turn, asked[1] + 1]
         st.plugin_serial += 1
+        place = len(st.plugin_prompts)  # a newer question takes its older one's place in the line
         for old in [p for p in st.plugin_prompts if p["who"] == who and p["plugin"] == plugin.id]:
+            place = min(place, st.plugin_prompts.index(old))
             st.plugin_prompts.remove(old)
             await self.game.emit({"type": "plugin_closed", "id": old["id"], "who": who})
         if sum(p["who"] == who for p in st.plugin_prompts) > QUEUED:
             return
-        st.plugin_prompts.append({"id": f"p{st.plugin_serial}", "plugin": plugin.id, "name": plugin.name, "who": who,
-                                  "key": prompt.key, "spec": prompt.model_dump(mode="json"), "chain": chain,
-                                  "open": False, "deadline": 0.0})
+        st.plugin_prompts.insert(place, {"id": f"p{st.plugin_serial}", "plugin": plugin.id, "name": plugin.name, "who": who,
+                                         "key": prompt.key, "spec": prompt.model_dump(mode="json"), "chain": chain,
+                                         "open": False, "deadline": 0.0})
         if chain == 1 and not turn.interlude:
             turn.notes.append(f"〔{plugin.name}〕给{st.find(who).name}出了一道题，玩家会自己作答；叙述不要替他回答，也别说出答案")
         await self._promote(who)

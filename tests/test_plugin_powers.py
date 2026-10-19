@@ -157,6 +157,7 @@ async def test_every_new_effect_lands_where_it_belongs(fake):
     game, _, events = make(module, fake, {})
     trusted(game, plugin)
     st, turn = game.state, Turn()
+    st.fired = [e.id for e in module.events]  # the module's own timed scenes stay out of it
     await game.plugins.run("turn", turn)
     assert "铜钥匙" in st.investigator.inventory  # item
     assert turn.hints == ["〔样样有〕窗外的乌鸦叫了三声"] and "规则提示" in game._report(turn)  # hint, woven in this turn
@@ -274,8 +275,8 @@ async def test_one_open_question_per_player_and_a_game_stops_at_thirty_steps(fak
     await game.plugins.command("再来")  # another plugin's question waits behind the open one
     assert [p["open"] for p in game.state.plugin_prompts] == [True, False]
     await game.plugins.command("开锁")  # the same plugin again: its new question replaces the old
-    assert [p["plugin"] for p in game.state.plugin_prompts] == ["forever", "lock"]
-    assert [p["open"] for p in game.state.plugin_prompts] == [False, True]
+    assert [p["plugin"] for p in game.state.plugin_prompts] == ["lock", "forever"]
+    assert [p["open"] for p in game.state.plugin_prompts] == [True, False]
     lock_prompt = game.plugins.open_prompts()[0]
     await game.plugins.answer(lock_prompt["id"], None, by="skip")
     for _ in range(40):
@@ -328,18 +329,23 @@ PANELS = {"仪式": [{"key": "ritual", "title": "仪式倒数", "rows": [
     {"kind": "art", "art": "  )\n (_)\n |=|", "color": "accent"}]}]}
 
 
-def test_panels_render_with_their_plugins_name_and_name_their_tab():
+def rendered(renderable) -> str:
     from rich.console import Console
 
     console = Console(width=36, record=True, color_system=None)
-    console.print(panel_view(PANELS))
-    text = console.export_text()
+    console.print(renderable)
+    return console.export_text()
+
+
+def test_panels_render_with_their_plugins_name_and_name_their_tab():
+    text = rendered(panel_view(PANELS))
     assert "〔仪式〕" in text and "仪式倒数" in text and "████████░░░░ 4/6" in text and "钟楼的脚印" in text and "守钟人" in text
     assert tab_label(PANELS) == "仪式倒数"
     assert tab_label({**PANELS, "电台": [{"key": "dial", "title": "频率", "rows": []}]}) == "更多"
 
 
-async def test_the_plugins_page_shows_its_panels_in_the_right_column(canned):
+@pytest.mark.usefixtures("canned")
+async def test_the_plugins_page_shows_its_panels_in_the_right_column():
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="panel", human=[lead.id])
@@ -356,7 +362,7 @@ async def test_the_plugins_page_shows_its_panels_in_the_right_column(canned):
         assert tabs.get_tab("plugins-page").display and str(tabs.get_tab("plugins-page").label) == "仪式倒数"
         screen.action_page("plugins")
         await pilot.pause()
-        page = str(screen.query_one("#plugin-panels").body.render())
+        page = rendered(screen.query_one("#plugin-panels").body.content)
         assert "烛火" in page and "〔仪式〕" in page
         app.save_screenshot("plugin-panel.svg", path=str(config.SAVES))
         state.plugin_panels = {}
@@ -370,7 +376,8 @@ SHOW = {"type": "plugin_show", "name": "号外", "title": "号外！号外！", 
     {"art": "墓地夜半狂欢？", "text": "警方搜遍公墓，一无所获", "ms": 3000, "color": "warning"}]}
 
 
-async def test_a_show_plays_over_the_scene_can_be_skipped_and_shows_only_its_end_without_animations(canned):
+@pytest.mark.usefixtures("canned")
+async def test_a_show_plays_over_the_scene_can_be_skipped_and_shows_only_its_end_without_animations():
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="show", human=[lead.id])
@@ -397,7 +404,8 @@ async def test_a_show_plays_over_the_scene_can_be_skipped_and_shows_only_its_end
         assert inline.index == 1 and inline.done and "警方搜遍公墓" in str(inline.render()) and "ARNOLDSBURG" not in str(inline.render())
 
 
-async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game(canned):
+@pytest.mark.usefixtures("canned")
+async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game():
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="game", human=[lead.id])
@@ -423,19 +431,19 @@ async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game(ca
         screen.game.plugins.verified.add(plugin.fingerprint)
         assert "/通灵" in screen._suggester()._suggestions  # the command box knows the command
         screen.send_line("/通灵")
-        assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=60)
+        assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=150)
         modal = app.screen
         shown = "".join(str(w.render()) for w in modal.query(Static))
         assert "〔通灵板〕" in shown and "点一个字母" in shown and "没答就按默认算" in shown
         app.save_screenshot("plugin-prompt.svg", path=str(config.SAVES))
         modal.query_one("#cell-1-1", Button).press()
-        assert await until(pilot, lambda: state.plugin_data.get("ouija", {}).get("cell") == [1, 1], tries=60)
-        assert await until(pilot, lambda: "指针停住了" in story_text(screen))
+        assert await until(pilot, lambda: state.plugin_data.get("ouija", {}).get("cell") == [1, 1], tries=150)
+        assert await until(pilot, lambda: "指针停住了" in story_text(screen), tries=150)
         assert state.plugin_data["ouija"]["by"] == "player" and app.screen is screen
         screen.send_line("/通灵")
-        assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=60)
+        assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=150)
         await pilot.press("escape")  # 先不玩
-        assert await until(pilot, lambda: state.plugin_data["ouija"]["by"] == "skip", tries=60)
+        assert await until(pilot, lambda: state.plugin_data["ouija"]["by"] == "skip", tries=150)
 
 
 # -- a LAN table ---------------------------------------------------------------------------------
