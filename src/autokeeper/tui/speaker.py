@@ -262,8 +262,10 @@ class Speaker(Vertical):
 
     def _play(self, steps: list, every: float, first: float) -> None:
         """One step at a time, each timed from the one before: a stalled loop (a long garbage
-        collection, a busy machine) holds the motion back but never folds it into one frame.
-        A new motion takes over from one still running."""
+        collection, a busy machine) holds the motion back but never folds it into one frame,
+        and the last step, back at rest, comes last. (A timer per step, all set at once, could
+        fire out of order on Windows, where Textual's timers sleep in threads.) A new motion
+        takes over from one still running."""
         if self._step is not None:
             self._step.stop()
         self._motion = steps
