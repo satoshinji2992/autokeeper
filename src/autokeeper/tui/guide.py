@@ -19,7 +19,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Checkbox, ContentSwitcher, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
-from . import tips
+from . import tips, trouble
 from .screens import HELP
 
 
@@ -230,13 +230,11 @@ PAGES = [
     Page("lan", "和朋友一起玩", """
 ## 开房间
 
-一个人当房主，在命令行里运行：
+一个人当房主，在标题页选“开房间”，选模组，给每位调查员定好玩家、AI 或不上场，也可以接着玩以前的联机存档。开好后进入准备房间，房主也在里面入座。
 
-```
-autokeeper host
-```
+准备房间里写着要发给朋友的地址。勾了“同时开网页版”，朋友用浏览器打开它；没勾的话，朋友要装好 AutoKeeper，在标题页“加入房间”里填这个地址。命令行 `autokeeper host` 也能开同样的房间。
 
-默认使用《追书人》。把终端显示的地址发给同一网络的朋友，双方用浏览器打开后入座。已安装 AutoKeeper 的玩家也可从标题页“加入房间”填写房主地址。
+离开准备房间时房间还开着，标题页的“回到房间”可以回去。在准备房间点“关闭房间”、游戏里从 Ctrl+P 菜单选，或者退出程序，房间才关。
 
 ## 入座和行动
 
@@ -245,7 +243,14 @@ autokeeper host
 全角括号开头的话是场外聊天，例如“（我去倒杯水）”，所有人可见，不占行动。
 
 掉线时 AI 暂代行动，重新连接后可坐回原座。游戏、存档、模型和偏好由房主管理。联机可用 F6 重讲，暂不支持手绘。
+
+## 在浏览器里
+
+F5 会刷新网页，刷新后要重新入座。出主意、人物卡、线索本、地图、帮助分别是 /suggest、/sheet、/notes、/map、/help，底栏和 Ctrl+P 菜单也能点。
+
+朋友进不来、网页打不开，看下一页“联机遇到问题”。
 """),
+    Page("lan-help", "联机遇到问题", trouble.text(generic=True)),
     Page("commands", "骰娘指令", """
 ## 给习惯骰娘的玩家
 
