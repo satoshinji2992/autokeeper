@@ -8,6 +8,8 @@
     npc:<id>      one session per NPC; knows only its own file and its own conversations
     keeper        narrates resolved, public facts; never carries the module's hidden truth
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
+    progress      the players' 故事至今 when the story has moved, on the summarizer's cheap
+                  model; gets only what the table was shown (engine/progress.py)
     investigator  AI players (companions and autoplay); see only what players see
                   (engine/autoplay.situation); also writes the ideas a player asks for (F5)
     vision        reads sketches
@@ -245,6 +247,11 @@ CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录
 前情回顾：像守秘人开团前帮玩家接上进度。用平实的现代汉语，称呼调查员的名字，按时间讲清发生了什么、手上有哪些线索、现在在哪、还悬着什么问题。不用评书和说书人的套话，不写诗，不加感叹和评点。
 只输出纯文本，界面不渲染 Markdown：不要加粗、标题和列表符号。"""
 
+PROGRESS_SYSTEM = """你给跑团的玩家写「故事至今」：放在屏幕一侧、随时可以翻看的一段进度。
+只用给你的材料：开场的缘起、守秘人讲给玩家听的叙述、调查员的行动、NPC 当面说的话、找到的线索和手稿。材料里没有的事不写，不猜真相，不评点，不出主意。
+用平实的现代汉语、第三人称，称呼调查员的名字，按时间顺序交代来龙去脉，最后落在他们眼下的处境和还没解开的疑问上。
+只输出这一段纯文本，不要标题、列表和 Markdown。"""
+
 INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员「{name}」（{occupation}）。
 {sheet}
 开场时你知道的：{hook}
@@ -269,6 +276,16 @@ SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家�
 只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
 
 VISION_SYSTEM = "你是跑团里的读图员，负责看玩家画的草图或模组里的图片，用中文客观描述，并按要求判断相似度。"
+
+AUTHOR_SYSTEM = """你是这场 CoC 7 版跑团的规则工程师。玩家用一句话提出想要的“家规”，你把它写成一个经过测试的纯 Python 插件，装进本局。
+
+- 只做这条家规要求的事：需要程序持续记数值或状态时才写插件（吃饭、体温、疾病、资源、追逐这类）。普通闲聊、一次性场景、已有规则不写插件。
+- 不改写原作真相，不替玩家作决定，不凭空给线索或物品。家规之外的东西一律不碰。
+- 严格按下面的插件 API 写 `handle(event, ctx, api)`：纯 Python，不导入模块，不读写文件或联网，只用普通容器/算术与 api。
+- id 用英文小写加下划线；name 和 description 用中文，让玩家看得懂这条规则做什么。description 第一句就说清规则效果。
+- tests 至少覆盖正常流程与一个边界/失败，必须真能跑过；预设骰值要用完。宿主会实际执行测试，不过就装不上。
+- 要公开提示进度时（如“风寒：第 2 天”），在返回里加 status 字段；不要把私有计数直接 status 公开。
+- 改人物属性用 attribute（中文基础属性），扣血扣理智用 damage/sanity，别用 attribute 直接改 HP/SAN。"""
 
 
 class Cast:
@@ -636,6 +653,15 @@ class Cast:
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
         return reply.text.strip()
 
+    async def progress(self, state: GameState, material: str) -> str:
+        """The players' 故事至今 (engine/progress.py): stateless, since the last account comes
+        with the material, and kept out of the transcripts; its cost is counted."""
+        if "progress" not in self.sessions:
+            self.sessions["progress"] = Session("progress", self.cfg.role("summarizer"), PROGRESS_SYSTEM, key="progress")
+        reply = await self.sessions["progress"].send(material)
+        state.record_usage("progress", reply)
+        return reply.text.strip()
+
     async def investigator(self, state: GameState, inv_id: str, situation: str) -> str:
         inv = state.find(inv_id)
         key = f"investigator:{inv_id}"
@@ -656,7 +682,13 @@ class Cast:
             system = SUGGEST_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
             self.sessions[key] = Session("suggest", self.cfg.role("investigator"), system, schema=_schema(Ideas), key=key)
         lines = "、".join(f"{k}（{LINES[k]}）" for k in self.prefs.lines)
-        reply = await self.sessions[key].send(situation, extra=f"\n（玩家不想碰的题材：{lines}。三个主意都别往这上面引。）" if lines else "")
+        extra = f"\n（玩家不想碰的题材：{lines}。三个主意都别往这上面引。）" if lines else ""
+        # Let the active rule plugins' custom actions surface as ideas when they fit the scene.
+        actions = [f"{a.name}：{a.description}" for p in self.module.extensions.values()
+                   if p.id not in state.plugin_errors for a in p.actions]
+        if actions:
+            extra += "\n（本局还有这些可以尝试的额外玩法，合适时可以提其中一个：\n" + "\n".join(f"- {a}" for a in actions) + "）"
+        reply = await self.sessions[key].send(situation, extra=extra)
         state.record_usage("suggest", reply)
         ideas = _parse(Ideas, reply.data, {"look": "", "ask": "", "dare": ""})
         said = (" ".join(t.split()).strip("“”\"「」") for t in (ideas.look, ideas.ask, ideas.dare))
@@ -682,6 +714,34 @@ class Cast:
             return None
         try:
             return Improv.model_validate(reply.data)
+        except ValueError:
+            return None
+
+    async def author_plugin(self, state: GameState, request: str, problems: list[str] | None = None):
+        """Turn a player's one-sentence house rule into one tested plugin (tui/plugins.py, the
+        LAN hub). Uses the director's model; stateless, so a retry carries the failures back in
+        the prompt rather than in memory. Returns a Plugin or None."""
+        from ..plugins import api_text
+        from ..plugins.schema import Plugin
+        from ..rules.catalog import CHARACTERISTICS
+
+        s = self._open("author", "director", AUTHOR_SYSTEM + "\n\n" + api_text(), schema=_schema(Plugin))
+        m = self.module
+        ids = "、".join(f"{i.id}（{i.name}）" for i in state.investigators)
+        places = "、".join(f"{loc.id}" for loc in m.locations)
+        installed = "、".join(p.name for p in m.extensions.values()) or "无"
+        prompt = (
+            f"【玩家的家规】{request}\n"
+            f"【调查员 id】{ids}\n【基础属性名】{'、'.join(CHARACTERISTICS)}\n"
+            f"【地点 id】{places}\n【已装的规则插件】{installed}\n"
+            "按上面的 API 写一个插件 JSON（含 code 和 tests）实现这条家规；只实现这一条，别顺带改别的。"
+        )
+        extra = ("\n【上一次的问题，请改正后重写】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
+        reply = await self._send("author", s, state, prompt, extra=extra, remember="（撰写家规插件）")
+        if not isinstance(reply.data, dict):
+            return None
+        try:
+            return Plugin.model_validate(reply.data)
         except ValueError:
             return None
 

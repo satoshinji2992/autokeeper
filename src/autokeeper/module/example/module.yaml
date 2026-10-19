@@ -28,6 +28,7 @@ locations:
     exits: [tower, office]
   - id: tower
     name: 钟楼
+    within: square
     read_aloud: 楼梯又窄又陡，顶上的齿轮间里传来咔哒声。守钟人坐在楼梯口打盹。
     keeper: 齿轮间里藏着东西。守钟人不愿多说。
     features: [齿轮间, 守钟人的柜子]

@@ -458,16 +458,18 @@ class RollCard(Static):
             self.parent.scroll_end(animate=False)
 
 
-def command_suggester(inv: Investigator | None = None) -> SuggestFromList:
+def command_suggester(inv: Investigator | None = None, actions: list[str] | None = None) -> SuggestFromList:
     """Completions for the command box, accepted with →: `.ra 侦` becomes `.ra 侦查`. The
-    investigator's own skills come first, best first, then every other skill."""
+    investigator's own skills come first, best first, then every other skill. `actions` are
+    the player-facing hints of the active rule plugins' custom actions, so those extra things a
+    player can try are discoverable here as well as in the Ctrl+K window."""
     mine = sorted(inv.skills, key=lambda k: -inv.skills[k]) if inv else []
     names = list(dict.fromkeys([*mine, *SKILL_BASE, *CHARACTERISTICS, "幸运", "灵感", "知识"]))
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
     slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help", "/theme", "/quit"]
-    return SuggestFromList([*checks, *lookups, *slash], case_sensitive=False)
+    return SuggestFromList([*checks, *lookups, *slash, *(actions or [])], case_sensitive=False)
 
 
 class DiceTray(Static):
@@ -610,12 +612,17 @@ class HistoryPanel(VerticalScroll):
         self.round = -1
 
     def compose(self):
-        yield Static(Text.assemble(("经过", "bold"), ("   点一行跳到那里", "dim")), classes="history-head")
+        yield Static(Text("点一行，故事跳到那里 · Ctrl+G 翻页", style="dim"), classes="history-head")
+
+    def on_mount(self) -> None:
+        self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go
 
     def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
-        if turn is not None and turn != self.round:
+        """`turn`: the round the line belongs to (GameState.turn once it is played). Rounds only
+        go up: a dice-bot roll (.r) after an action stays under that action's round."""
+        if turn is not None and turn > self.round:
             self.round = turn
-            self.mount(Static(Text(f"— 第 {turn + 1} 轮 —", style="dim"), classes="history-round"))  # the count of turns done; this is the next
+            self.mount(Static(Text(f"— 第 {turn} 轮 —", style="dim"), classes="history-round"))
         entry = HistoryLine(line, block)
         self.mount(entry)
         lines = list(self.query(HistoryLine))
@@ -665,8 +672,11 @@ def log_line(entry) -> Text | None:
         return Text(f"  ◈ {entry.text}", style="dim")
     if entry.kind == "clue":
         return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
-    if entry.kind in ("sanity", "damage", "ending"):
-        return Text("  " + entry.text.split("\n", 1)[0])
+    first = entry.text.split("\n", 1)[0]
+    if entry.kind in ("sanity", "damage"):  # whose, as the live line has it
+        return Text(f"  {'※' if entry.kind == 'sanity' else '✚'} {entry.who + ' ' if entry.who else ''}{first}")
+    if entry.kind == "ending":
+        return Text("  " + first)
     return None
 
 
