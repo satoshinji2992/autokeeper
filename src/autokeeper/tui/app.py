@@ -45,6 +45,7 @@ from .mapview import MapModal
 from .pages import Page, PagesModal, background_view, mark, pages, progress_view, turn
 from .retell import RetellModal
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
+from .showcase import ShowcaseScreen
 from .speaker import Speaker
 from .suggest import Ideas
 from .widgets import (
@@ -767,6 +768,22 @@ class GameScreen(Screen):
         )
         self._topbar()
 
+    def _showcase(self, ev: dict) -> None:
+        """A big scene over the screen, when this screen shows them and the picture is here; not
+        over a roll prompt, nor over another one."""
+        cfg = config.load()
+        picture = ev.get("picture", "")
+        if not cfg.showcase or not imagery.available() or not picture or not Path(picture).is_file():
+            return
+        if isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+            return
+        self.app.push_screen(ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations))  # type: ignore[attr-defined]
+
+    async def make_way(self) -> None:
+        """A big scene steps aside for what asks the player something (a roll, a push)."""
+        if isinstance(self.app.screen, ShowcaseScreen):
+            await self.app.screen.dismiss()
+
     def _sky(self, loc_id: str) -> str:
         """The narrated weather, if this place is under the open sky."""
         return self.state.sky if weather.outdoors(self.m.location(loc_id).name) else ""
@@ -983,6 +1000,8 @@ class GameScreen(Screen):
             self._topbar()
             if self.game and not self.busy:
                 write_save(self.state, self.m)
+        elif t == "showcase":  # a big scene: one picture over the screen, the story going on behind it
+            self._showcase(ev)
         elif t == "item":
             existing = next((card for card in self.query(ItemCard) if card.item_id == ev["id"]), None)
             if existing is not None:
@@ -1288,11 +1307,13 @@ class GameScreen(Screen):
                 break
             if offer.get("kind") == "roll":  # the player throws their own dice
                 self._status("等你掷骰…")
+                await self.make_way()
                 choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
             elif auto:
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
                 self.story.add("system", Text(f"◇ AI 选择：{ {'push': '孤注一掷', 'luck': '花幸运', 'drop': '放弃'}[choice] }", style="dim"))
             else:
+                await self.make_way()
                 choice = await self.app.push_screen_wait(PushModal(offer))
             inp = Command(resume=choice)
         assert self.game
