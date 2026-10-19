@@ -21,6 +21,7 @@ from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui import saves
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
+from autokeeper.tui.cardedit import CardEditModal
 from autokeeper.tui.cards import CardsScreen
 from autokeeper.tui.guide import GuideScreen
 from autokeeper.tui.menu import MENU, AskText, Confirm, GameMenu
@@ -374,32 +375,33 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
         assert shown.index("我的角色") < shown.index("存档里的") < shown.index("模组预设")
         assert ol.highlighted_option.id == "r:mine"
         hint = str(screen.query_one("#setup-hint", Static).content)
-        assert "R 改名" in hint and "D 删除" in hint and "C 复制" not in hint
+        assert "E 编辑" in hint and "D 删除" in hint and "C 复制" not in hint and "A 新建角色" in hint
 
         # a pregen cannot change; it can be copied into 我的角色
         ol.highlighted = ol.get_option_index(f"m{EXAMPLE.name}:{pregen.id}")
         await pilot.pause()
         hint = str(screen.query_one("#setup-hint", Static).content)
-        assert "C 复制成新角色" in hint and "R 改名" not in hint
-        await pilot.press("r")
+        assert "C 复制成新角色" in hint and "E 编辑" not in hint
+        await pilot.press("e")
         await pilot.pause()
-        assert app.screen is screen  # not one of the player's: nothing to type
+        assert app.screen is screen  # not one of the player's: no form
         await pilot.press("c")
         await pilot.pause()
         copied = ol.highlighted_option.id
         assert copied.startswith("r:card-") and len(roster.saved()) == 2
 
-        # rename the copy
-        await pilot.press("r")
+        # edit the copy: a new name
+        await pilot.press("e")
         await pilot.pause()
-        app.screen.query_one(Input).value = "新名字"
-        await pilot.press("enter")
+        assert isinstance(app.screen, CardEditModal)
+        app.screen.query_one("#edit-name", Input).value = "新名字"
+        await pilot.press("ctrl+s")
         await pilot.pause()
-        assert {c.name for c in roster.saved()} == {"我自己的人", "新名字"}
+        assert app.screen is screen and {c.name for c in roster.saved()} == {"我自己的人", "新名字"}
 
         # export it
         out = tmp_path / "导出"
-        await pilot.press("e")
+        await pilot.press("x")
         await pilot.pause()
         app.screen.query_one(Input).value = str(out)
         await pilot.press("enter")
@@ -416,12 +418,16 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
         assert [c.name for c in roster.saved()] == ["我自己的人"]
         assert list((config.SAVES / "trash").glob(f"*-{copied[2:]}/{copied[2:]}.json"))
 
-        # a save's card copies too, and comes with what it went through left in the save
+        # a save's card copies too; the save is left as it was
+        save_before = (config.SAVES / "played.json").read_bytes()
         save_card = next(oid for oid in screen.cards if oid.startswith("splayed:"))
         ol.highlighted = ol.get_option_index(save_card)
+        await pilot.press("e")  # read-only: no form
+        await pilot.pause()
+        assert app.screen is screen
         await pilot.press("c")
         await pilot.pause()
-        assert len(roster.saved()) == 2 and (config.SAVES / "played.json").exists()
+        assert len(roster.saved()) == 2 and (config.SAVES / "played.json").read_bytes() == save_before
 
         # with a pregen, straight to 新的调查 with it picked
         ol.highlighted = ol.get_option_index(f"m{EXAMPLE.name}:{pregen.id}")
@@ -430,3 +436,85 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
         setup = app.screen.query_one("#choices", OptionList)
         assert setup.highlighted_option.id == pregen.id
     assert module_files() == before  # the module's own pregens were never written to
+
+
+async def test_new_cards_come_from_the_setup_s_flows_and_land_in_my_cards(canned, monkeypatch):
+    from autokeeper.tui.card import CardScreen
+
+    monkeypatch.setattr(imagery, "available", lambda: False)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(CardsScreen())
+        await pilot.pause(0.5)
+        screen = app.screen
+        ol = screen.query_one(OptionList)
+        assert "create" in options(ol)  # 我的角色 is empty: 新建角色 is there, and highlighted after the cards
+        for down, start in ((0, "figure"), (1, "import")):
+            await pilot.press("a")
+            await pilot.pause()
+            assert isinstance(app.screen, GameMenu)
+            for _ in range(down):
+                await pilot.press("down")
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, CardScreen) and app.screen.start == start
+            if start == "figure":
+                await pilot.press("escape")  # nothing made
+                await pilot.pause()
+                assert app.screen is screen and not roster.saved()
+        made = Module.load(EXAMPLE).pregens[0].model_copy(update={"id": "card-made01", "name": "车出来的人", "portrait": "card-made01"})
+        roster.keep(made, {"made": "test"})  # what CardScreen.keep does with the finished card
+        app.screen.dismiss(made)
+        await pilot.pause(0.3)
+        assert app.screen is screen and ol.highlighted_option.id == "r:card-made01"
+        assert "车出来的人" in plain(ol.highlighted_option.prompt)
+
+
+async def test_editing_a_kept_card_changes_its_words_and_photo_never_its_numbers(canned, monkeypatch, tmp_path):
+    from PIL import Image
+
+    from autokeeper.tui.cards import update_kept
+
+    monkeypatch.setattr(imagery, "available", lambda: False)
+    m = Module.load(EXAMPLE)
+    mine = m.pregens[0].model_copy(update={"id": "mine", "name": "原来的名字", "portrait": "mine", "backstory": {"说明": "玩家带来的人物卡"}})
+    roster.keep(mine, {"made": "test"})
+    picture = tmp_path / "新照片.png"
+    Image.new("RGB", (60, 80), "#884422").save(picture)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(CardsScreen())
+        await pilot.pause(0.5)
+        await pilot.press("e")
+        await pilot.pause()
+        form = app.screen
+        assert isinstance(form, CardEditModal)
+        assert not form.query(f"#edit-{'skills'}") and not form.query("#edit-luck")  # no box for a number
+        assert "数值不能改" in "".join(str(w.render()) for w in form.query(Static))
+        form.query_one("#edit-occupation", Input).value = "码头记者"
+        form.query_one("#edit-age", Input).value = "41"
+        form.query_one("#edit-residence", Input).value = "上海"
+        keys = [form.query_one(f"#edit-story-{i}").parent.query_one(Static).render() for i in range(len(form.query("TextArea")) - 1)]
+        assert "个人描述" in str(keys[0]) and "说明" in "".join(map(str, keys))  # the paper sheet's fields, and the card's own
+        form.query_one("#edit-story-0").text = "瘦高，总戴一顶旧呢帽"
+        form.query_one("#edit-inventory").text = "钢笔\n记者证"
+        form.query_one("#edit-photo", Input).value = str(picture)
+        form.query_one("#edit-save").scroll_visible(animate=False)
+        await pilot.pause()
+        await pilot.click("#edit-save")
+        await pilot.pause(0.3)
+        kept = roster.saved()[0]
+        assert (kept.occupation, kept.age, kept.residence) == ("码头记者", 41, "上海")
+        assert kept.backstory["个人描述"] == "瘦高，总戴一顶旧呢帽" and kept.backstory["说明"] == "玩家带来的人物卡"
+        assert kept.inventory == ["钢笔", "记者证"] and (roster.folder() / "mine.jpg").is_file()
+        assert (kept.characteristics, kept.skills, kept.hp, kept.san, kept.luck) == (mine.characteristics, mine.skills, mine.hp, mine.san, mine.luck)
+
+        await pilot.press("e")  # Esc on the form changes nothing
+        await pilot.pause()
+        app.screen.query_one("#edit-name", Input).value = "不要了"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert roster.saved()[0].name == "原来的名字"
+    update_kept(kept, {"skills": {"侦查": 99}, "luck": 99, "name": "改名"})  # numbers are not words: left alone
+    again = roster.saved()[0]
+    assert again.name == "改名" and again.skills == mine.skills and again.luck == mine.luck

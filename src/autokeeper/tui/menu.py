@@ -28,19 +28,20 @@ MENU = (
 
 
 class GameMenu(ModalScreen[str | None]):
-    """Esc in the game: a short list; Enter or a click picks, Esc goes back to the game."""
+    """Esc in the game: a short list; Enter or a click picks, Esc goes back to the game. Also
+    any other short choice (`title`, `hint`), such as how to make a new card."""
 
     BINDINGS = [Binding("escape", "dismiss(None)", "返回游戏")]
 
-    def __init__(self, items: list[tuple[str, str]], first: str = "continue"):
+    def __init__(self, items: list[tuple[str, str]], first: str = "continue", *, title: str = "菜单", hint: str = "Enter 选择 · Esc 返回游戏"):
         super().__init__()
-        self.items, self.first = items, first
+        self.items, self.first, self.title_, self.hint = items, first, title, hint
 
     def compose(self) -> ComposeResult:
         with Vertical(id="game-menu", classes="modal"):
-            yield Static("菜单", classes="modal-title")
+            yield Static(self.title_, classes="modal-title")
             yield OptionList(*(Option(label, id=key) for key, label in self.items), id="game-menu-list")
-            yield Static("Enter 选择 · Esc 返回游戏", classes="system")
+            yield Static(self.hint, classes="system")
 
     def on_mount(self) -> None:
         ol = self.query_one(OptionList)

@@ -4,9 +4,11 @@ player's investigator in each save, as they stand now, with what they went throu
 game) and 模组预设 (each module's pregens). The highlighted one's full sheet is beside the
 list, Enter opens it on its own.
 
-Only 我的角色 can be changed: renamed, exported, deleted (into saves/trash/). A card from a
-save or a module is copied into 我的角色 first; the save and the module's files are never
-written to."""
+新建角色 opens the flows of 新的调查 (tui/card.py: AI 协助车卡 from a description or a public
+figure, or 导入已有的卡; a .st line there is the way to bring numbers of one's own). Only
+我的角色 can be changed: edited (everything but the numbers, tui/cardedit.py), exported,
+deleted (into saves/trash/). A card from a save or a module is copied into 我的角色 first;
+the save and the module's files are never written to."""
 
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ from .. import artkit, config, imagery, roster
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
-from .menu import AskText, Confirm
+from .menu import AskText, Confirm, GameMenu
 from .saves import to_trash, when
 from .sheet import SheetModal, sheet_view
 
@@ -72,14 +74,40 @@ def keep_copy(inv: Investigator, m: Module | None, source: str) -> Investigator:
     return card
 
 
-def rename_kept(inv: Investigator, name: str) -> None:
-    """A new name in the card's file; it keeps its place in the list (the file's time)."""
+NUMBERS = ("characteristics", "luck", "hp", "hp_max", "mp", "mp_max", "san", "san_start_of_day", "san_lost_today", "skills", "marks")
+
+
+def update_kept(inv: Investigator, changes: dict, photo_file: Path | None = None) -> Investigator:
+    """New words on the card, and a new photo if one is given; the numbers are never among
+    them. It keeps its place in the list (the file's time)."""
     f = kept_file(inv)
     stat = f.stat()
     record = json.loads(f.read_text(encoding="utf-8"))
-    record["investigator"]["name"] = name
+    card = Investigator.model_validate(record["investigator"])
+    fields = {k: v for k, v in changes.items() if k in Investigator.model_fields and k not in NUMBERS and k != "id"}
+    if photo_file is not None:
+        fields["portrait"] = card.portrait or card.id
+    card = card.model_copy(update=fields)
+    if photo_file is not None:
+        from PIL import Image
+
+        target = roster.folder() / f"{card.portrait}.jpg"
+        with Image.open(photo_file) as im:
+            im.convert("RGB").save(target, "JPEG", quality=92)
+        for stale in (".credit.json", ".prep.png"):  # they were about the old photo
+            target.with_name(card.portrait + stale).unlink(missing_ok=True)
+        try:
+            imagery.preprocess(target, "portrait")  # face crop, as 车卡 does
+        except (OSError, ValueError):
+            pass
+    record["investigator"] = card.model_dump(mode="json")
     f.write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     os.utime(f, (stat.st_atime, stat.st_mtime))
+    return card
+
+
+def rename_kept(inv: Investigator, name: str) -> None:
+    update_kept(inv, {"name": name})
 
 
 def delete_kept(inv: Investigator) -> Path:
@@ -111,10 +139,11 @@ def export(inv: Investigator, m: Module | None, folder: Path) -> Path:
 class CardsScreen(Screen):
     BINDINGS = [
         Binding("escape", "app.pop_screen", "返回", show=False),
-        Binding("r", "rename", "改名", show=False),
+        Binding("e,r", "edit", "编辑", show=False),
         Binding("d,delete", "delete", "删除", show=False),
         Binding("c", "copy", "复制成新角色", show=False),
-        Binding("e", "export", "导出", show=False),
+        Binding("x", "export", "导出", show=False),
+        Binding("a", "create", "新建角色", show=False),
         Binding("i", "import_card", "导入", show=False),
         Binding("n", "new_game", "开新游戏", show=False),
     ]
@@ -193,8 +222,6 @@ class CardsScreen(Screen):
                 head = Text(f"  {sub}", style="dim")
                 head.truncate(ROOM, overflow="ellipsis")
                 ol.add_option(Option(head, disabled=True))
-            if not party:
-                ol.add_option(Option(Text("  还没有，按 I 导入", style="dim"), disabled=True))
             for inv in party:
                 oid = f"{tag}:{inv.id}"
                 self.cards[oid] = (inv, party, m)
@@ -202,29 +229,32 @@ class CardsScreen(Screen):
                 label.append(f"  {inv.occupation.split('（')[0]}", style="dim")
                 label.truncate(ROOM, overflow="ellipsis")
                 ol.add_option(Option(label, id=oid))
-        if select in self.cards:
+            if tag == "r":
+                ol.add_option(Option(Text("  ＋ 新建角色"), id="create"))
+        if select in self.cards or select == "create":
             ol.highlighted = ol.get_option_index(select)
         else:
-            at = next((i for i in range(ol.option_count) if not ol.get_option_at_index(i).disabled), None)
-            if at is not None:
-                ol.highlighted = at
+            ol.highlighted = ol.get_option_index(next(iter(self.cards), "create"))  # the first card, else 新建角色
             self._hint(None)
         ol.focus()
 
     # -- looking -------------------------------------------------------------------------------
-    def _chosen(self) -> str | None:
+    def _highlighted(self) -> str | None:
         ol = self.query_one("#choices", OptionList)
-        oid = ol.get_option_at_index(ol.highlighted).id if ol.highlighted is not None else None
+        return ol.get_option_at_index(ol.highlighted).id if ol.highlighted is not None else None
+
+    def _chosen(self) -> str | None:
+        oid = self._highlighted()
         return oid if oid in self.cards else None
 
     def _hint(self, oid: str | None) -> None:
         keys = [("open", "Enter 打开")] if oid else []
         if oid and oid.startswith("r"):
-            keys += [("rename", "R 改名"), ("delete", "D 删除"), ("export", "E 导出"), ("new_game", "N 开新游戏")]
+            keys += [("edit", "E 编辑"), ("export", "X 导出"), ("delete", "D 删除"), ("new_game", "N 开新游戏")]
         elif oid:
-            keys += [("copy", "C 复制成新角色"), ("export", "E 导出")]
+            keys += [("copy", "C 复制成新角色"), ("export", "X 导出")]
             keys += [("new_game", "N 开新游戏")] if oid.startswith("m") else []
-        keys += [("import_card", "I 导入"), ("app.pop_screen", "Esc 返回")]
+        keys += [("create", "A 新建角色"), ("app.pop_screen", "Esc 返回")]
         self.query_one("#setup-hint", Static).update(
             " · ".join(f"[@click={a if '.' in a else 'screen.' + a}]{w}[/]" for a, w in keys))  # fmt: skip
 
@@ -245,6 +275,9 @@ class CardsScreen(Screen):
         self._hint(oid)
         if oid:
             self._show(oid)
+        elif event.option.id == "create":
+            self.workers.cancel_group(self, "card")
+            self.query_one("#preview-body", Static).update(Text("让 AI 帮你车一张卡，或者导入你已有的卡。做好的卡放在我的角色里。", style="dim"))
 
     def _game(self, oid: str) -> GameState | None:
         """The save a card comes from, for its 本局经历; None for kept cards and pregens."""
@@ -274,6 +307,9 @@ class CardsScreen(Screen):
         self.action_open()
 
     def action_open(self) -> None:
+        if self._highlighted() == "create":
+            self.action_create()
+            return
         oid = self._chosen()
         if oid is None:
             return
@@ -292,22 +328,25 @@ class CardsScreen(Screen):
             return None
         return self.cards[oid][0]
 
-    def action_rename(self) -> None:
+    def action_edit(self) -> None:
+        from .cardedit import CardEditModal
+
         inv = self._mine()
         if inv is None:
             return
 
-        def done(name: str | None) -> None:
-            if not name or name == inv.name:
+        def done(changes: dict | None) -> None:
+            if changes is None:
                 return
             try:
-                rename_kept(inv, name)
+                update_kept(inv, changes["investigator"], changes["photo"])
             except (OSError, ValueError, KeyError):
-                self.app.notify("没能改名", severity="error")
+                self.app.notify("没能保存", severity="error")
                 return
             self._fill(f"r:{inv.id}")
+            self.app.notify("已保存")
 
-        self.app.push_screen(AskText("改名", inv.name), done)
+        self.app.push_screen(CardEditModal(inv, photo(inv, None) is not None), done)
 
     def action_delete(self) -> None:
         inv = self._mine()
@@ -361,16 +400,24 @@ class CardsScreen(Screen):
 
         self.app.push_screen(AskText("导出到哪个文件夹", str(config.SAVES / EXPORTS)), done)
 
+    def action_create(self) -> None:
+        items = [("figure", "AI 协助车卡"), ("import", "导入已有的卡")]
+        self.app.push_screen(GameMenu(items, "figure", title="新建角色", hint="Enter 选择 · Esc 返回"),
+                             lambda how: self._make(how) if how else None)  # fmt: skip
+
     def action_import_card(self) -> None:
-        """The import flow of 新的调查 (tui/card.py), in the first module's era."""
+        self._make("import")
+
+    def _make(self, start: str) -> None:
+        """The card flows of 新的调查 (tui/card.py), in the first module's era; the card they
+        keep lands in 我的角色."""
         from .app import modules
         from .card import CardScreen
 
         try:
-            m = Module.load(modules()[0])
-            screen = CardScreen(m, start="import")
+            screen = CardScreen(Module.load(modules()[0]), start=start)
         except (IndexError, OSError, ValueError):
-            self.app.notify("要先有一个模组才能导入", severity="error")
+            self.app.notify("要先有一个模组才能车卡", severity="error")
             return
         self.app.push_screen(screen, lambda card: self._fill(f"r:{card.id}" if card else None))
 

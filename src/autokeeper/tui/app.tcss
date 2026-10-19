@@ -92,6 +92,35 @@ Footer FooterKey.-command-palette {
     width: 100%;
 }
 
+/* ---------- 编辑 a kept card (cardedit.py) ---------- */
+#card-edit {
+    width: 80;
+    max-width: 96%;
+}
+#card-edit .edit-row {
+    height: 1;
+    margin-bottom: 1;
+}
+#card-edit .edit-tall {
+    height: 3;
+}
+#card-edit .edit-label {
+    width: 14;
+    color: $text-muted;
+}
+#card-edit Input, #card-edit TextArea {
+    width: 1fr;
+    background: $panel;
+}
+#card-edit .edit-note {
+    margin-bottom: 1;
+}
+#card-edit .edit-head {
+    color: $primary;
+    text-style: bold;
+    margin: 1 0;
+}
+
 /* ---------- game ---------- */
 #topbar {
     height: 1;
