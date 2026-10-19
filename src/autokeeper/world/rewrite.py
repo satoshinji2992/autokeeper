@@ -97,6 +97,7 @@ def settle(w: World, op: Rewrite, oid: str):
     rec = w.rec
     kind, _, ident = op.target.partition(":")
     touched: list[str] = []
+    retold: dict[str, str] = {}  # event id -> its new text
     if kind == "fact":
         f = rec.facts[ident]
         old, old_version = f.text, f.version
@@ -112,9 +113,10 @@ def settle(w: World, op: Rewrite, oid: str):
             if e.visibility == "private" and old and old in e.text:
                 e.text = e.text.replace(old, f.text if not op.retract else "（并无此事）")
                 e.version += 1
+                retold[e.id] = e.text
                 touched.append(f"event:{e.id}")
         new, new_version = ("" if op.retract else f.text), f.version
-        memory_of = lambda mem: mem.fact == ident or mem.event in quoting  # noqa: E731
+        memory_of = lambda mem: mem.fact == ident or mem.event in quoting or mem.event in retold  # noqa: E731
     else:
         e = rec.event(ident)
         assert e is not None
@@ -122,6 +124,7 @@ def settle(w: World, op: Rewrite, oid: str):
         e.text = "（并无此事）" if op.retract else op.text
         e.version += 1
         new, new_version = e.text, e.version
+        retold[e.id] = e.text
         memory_of = lambda mem: mem.event == ident  # noqa: E731
     for npc, a in rec.agents.items():
         hit = False
@@ -129,6 +132,8 @@ def settle(w: World, op: Rewrite, oid: str):
             if memory_of(mem):
                 if npc in op.memories:
                     mem.text, mem.stale = op.memories[npc], False
+                elif mem.event in retold and kind == "fact":  # it remembers the event as it now stands
+                    mem.text = retold[mem.event]
                 else:
                     mem.stale = True
                 hit = True

@@ -36,6 +36,7 @@ UNDO_KEEP = 64  # entries that keep their undo patch
 JOURNAL_KEEP = 4000  # entries kept for repeats and the trace
 EVENTS_KEEP = 6000
 MEMORY_KEEP = 40  # memories an important NPC keeps
+BOOKKEEPING = {"journal", "requests", "ticks"}  # the journal's, the desk's and the scheduler's own: undo leaves them
 
 
 @dataclass
@@ -239,7 +240,7 @@ class World:
     def domain(self) -> dict[str, Any]:
         st = self.st
         return {
-            "record": st.record.model_dump(mode="json", exclude={"journal"}),
+            "record": st.record.model_dump(mode="json", exclude=BOOKKEEPING),
             "flags": list(st.flags),
             "item_owners": dict(st.item_owners),
             "world": {k: v.model_dump(mode="json") for k, v in st.world.items()},
@@ -248,9 +249,10 @@ class World:
 
     def load(self, d: dict[str, Any]) -> None:
         st = self.st
-        journal = st.record.journal
+        kept = {k: getattr(st.record, k) for k in BOOKKEEPING}
         st.record = WorldRecord.model_validate(d["record"])
-        st.record.journal = journal  # the journal is not part of the domain: the same entries go on
+        for k, v in kept.items():  # not part of the domain: the same objects go on
+            setattr(st.record, k, v)
         st.flags = list(d["flags"])
         st.item_owners = dict(d["item_owners"])
         st.world = {k: WorldFact.model_validate(v) for k, v in d["world"].items()}

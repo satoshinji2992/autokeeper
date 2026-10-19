@@ -12,7 +12,8 @@ advance(world, brain, start, end) simulates the minutes between in chunks. In ea
     4. the woken are ranked (promise, blocked, due, affected, timer) and grouped by place; each
        group is one decision call (an offscreen scene) while the budget lasts, the rest wait.
 
-NPCs where the party is are onscreen: they act through the scene, not here. A tick id (the
+NPCs where the party is are onscreen: their prepared steps still land (in front of the
+party, so in public), but they decide through the scene, not here. A tick id (the
 span simulated) is kept in the record, so a retried turn never simulates the same span twice;
 every op gets a deterministic id for the same reason.
 """
@@ -84,7 +85,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
     if tick in w.rec.ticks:
         report.repeat = True
         return report
-    calls = budget.skip if end - start >= budget.long else budget.turn
+    limit = budget.skip if end - start >= budget.long else budget.turn
     n = max(1, min(budget.chunks, math.ceil(max(0, end - start) / budget.chunk)))
     size = max(0, end - start) / n
     try:
@@ -115,30 +116,50 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
                     for who in (p.by, p.to):
                         wake(who, "promise", f"约定的时间到了：{w.name(p.by)}答应{w.name(p.to)}：{p.text}")
             for npc, a in w.rec.agents.items():
-                here = w.place(npc)
-                if here == w.st.location or w.rec.entities[npc].status == "死亡":
-                    continue  # onscreen, or past acting
+                if w.rec.entities[npc].status == "死亡":
+                    continue
+                if w.place(npc) == w.st.location:  # onscreen: its prepared steps go on in front of the party,
+                    _steps(w, npc, a, c, budget, report, lambda *_: None)  # but it decides through the scene
+                    continue
                 _steps(w, npc, a, c, budget, report, wake)
-                for e in w.rec.events:
-                    if e.seq > a.seen and e.actor != npc and (npc in e.participants or npc in e.witnesses):
-                        wake(npc, "affected", f"发生了：{e.text}")
+                _affected(w, npc, a, wake)
                 if a.wake is not None and a.wake <= c:
                     wake(npc, "timer", "该想想下一步了")
-            groups: dict[str, list[str]] = {}
-            for npc in sorted(wakes, key=lambda x: RANK[wakes[x][0]]):
-                groups.setdefault(w.place(npc), []).append(npc)
-            for place, group in sorted(groups.items(), key=lambda g: min(RANK[wakes[x][0]] for x in g[1])):
-                if brain is None or calls <= 0:
-                    report.deferred += [f"{x}：{wakes[x][1]}" for x in group]
-                    continue
-                calls -= 1
-                report.calls += 1
-                await _decide(w, brain, group, place, {x: wakes[x][1] for x in group}, f"{tick}:{c}", report)
+            decided = await _serve(w, brain, wakes, limit - report.calls, f"{tick}:{c}", report)
+            # Those the decisions just touched (told something, met in a scene) may answer in the same chunk.
+            ripple: dict[str, tuple[str, str]] = {}
+            for npc, a in w.rec.agents.items():
+                if npc not in decided and npc not in wakes and w.place(npc) != w.st.location and w.rec.entities[npc].status != "死亡":
+                    _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)))
+            await _serve(w, brain, ripple, limit - report.calls, f"{tick}:{c}:r", report)
     finally:
         w.clock = None
     w.rec.ticks.append(tick)
     del w.rec.ticks[:-200]
     return report
+
+
+def _affected(w: World, npc: str, a: Agent, wake) -> None:
+    for e in w.rec.events:
+        if e.seq > a.seen and e.actor != npc and (npc in e.participants or npc in e.witnesses):
+            wake(npc, "affected", f"发生了：{e.text}")
+
+
+async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[str, str]], calls: int, prefix: str, report: Report) -> set[str]:
+    """One decision call per place while calls last, the most pressing first; the rest wait."""
+    groups: dict[str, list[str]] = {}
+    for npc in sorted(wakes, key=lambda x: RANK[wakes[x][0]]):
+        groups.setdefault(w.place(npc), []).append(npc)
+    decided: set[str] = set()
+    for place, group in sorted(groups.items(), key=lambda g: min(RANK[wakes[x][0]] for x in g[1])):
+        if brain is None or calls <= 0:
+            report.deferred += [f"{x}：{wakes[x][1]}" for x in group]
+            continue
+        calls -= 1
+        report.calls += 1
+        await _decide(w, brain, group, place, {x: wakes[x][1] for x in group}, prefix, report)
+        decided |= set(group)
+    return decided
 
 
 def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report, wake) -> None:
@@ -151,7 +172,7 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
                 w.apply(AdvancePlan(id=f"{npc}:{s.id}:done", npc=npc, step=s.id, status="done", actor=npc))
             elif s.ops:
                 wake(npc, "stale", f"计划依据的事变了：{s.text}（{'、'.join(fresh(w, a.reads))}）")
-            else:
+            elif s.woke is None:
                 wake(npc, "due", f"该做了：{s.text}")
         elif s.due is not None and c - s.due >= budget.grace:
             w.apply(AdvancePlan(id=f"{npc}:{s.id}:blocked", npc=npc, step=s.id, status="blocked", note=f"条件没满足：{s.when}", actor=npc))
@@ -186,6 +207,9 @@ async def _decide(w: World, brain: agents.Brain, group: list[str], place: str, r
     for npc in group:
         if a := w.rec.agents.get(npc):
             a.seen, a.acted = w.rec.seq, w.now
+            for s in a.plan:  # it has thought about these now; its timer brings it back to them
+                if s.status == "pending" and (s.due is None or s.due <= w.now) and s.woke is None:
+                    s.woke = w.now
             if not any(isinstance(op, SetPlan) for d in (scene.decisions if scene else []) if d.npc == npc for op in d.ops):
                 a.reads = views[npc].reads  # it looked again with what it knows now and kept its plan
             if a.wake is not None and a.wake <= w.now:

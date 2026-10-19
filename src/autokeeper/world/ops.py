@@ -377,7 +377,7 @@ class MakePromise(Base):
                                              last=w.now, last_turn=w.st.turn, entities=[self.by, self.to]))  # fmt: skip
         npc = self.tag or next((x for x in (self.by, self.to) if _npc(w, x)), "")
         w.legacy(self.key, "promise", self.text, npc, self.actor)
-        vis = self.visibility if self.visibility != "auto" else ("public" if self.public else "private")
+        vis = self.visibility if self.public else "private"  # auto: public where the party is
         return w.emit("promise", f"{w.name(self.by)}答应{w.name(self.to)}：{self.text}", actor=self.actor, participants=[self.by, self.to],
                       place=w.place(self.by) or w.place(self.to), visibility=vis, op=oid), None  # fmt: skip
 
@@ -410,8 +410,9 @@ class _Settle(Base):
         for key, fact in w.st.world.items():  # the mirrored GameState.world promise, if any
             if fact.kind == "promise" and key == p.id:
                 fact.status, fact.turn = self.status, w.st.turn  # type: ignore[assignment]
-        vis = self.visibility if self.visibility != "auto" else ("public" if p.public else "private")
-        return w.emit(self.kind, text, actor=self.actor, participants=[p.by, p.to], place=w.place(p.by) or w.place(p.to),  # type: ignore[attr-defined]
+        vis = self.visibility if p.public else "private"  # auto: public where the party is
+        where = w.place(self.actor) or w.place(p.by) or w.place(p.to)  # where whoever settled it is
+        return w.emit(self.kind, text, actor=self.actor, participants=[p.by, p.to], place=where,  # type: ignore[attr-defined]
                       visibility=vis, op=oid), None  # fmt: skip
 
 

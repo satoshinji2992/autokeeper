@@ -113,6 +113,7 @@ class Step(BaseModel):
     ops: list[dict[str, Any]] = Field(default_factory=list)  # lands without a model call while the plan is fresh
     status: Literal["pending", "done", "blocked", "dropped"] = "pending"
     note: str = ""
+    woke: int | None = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there
 
 
 class Memory(BaseModel):
