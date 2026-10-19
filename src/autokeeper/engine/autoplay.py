@@ -3,7 +3,7 @@
 Each round, every investigator who can still act proposes an action in parallel
 (LangGraph Send fan-out); the proposals then go through the normal turn graph one
 by one. Pushes are taken whenever allowed. The transcript and a summary land in
-saves/autoplay/<slot>.jsonl and <slot>.summary.json.
+dev/output/autoplay/<slot>.jsonl and <slot>.summary.json.
 """
 
 from __future__ import annotations
@@ -19,13 +19,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Send
 from rich.console import Console
 
-from .. import config, weather
+from .. import config, paths, weather
 from ..agents.cast import Cast
 from ..config import Role
 from ..harness import models as channels
 from ..harness import replay as tapes
 from ..harness import trace
-from ..module.compiler import compile_module, skill_name
+from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..rules.bcdice import shared
 from ..rules.coc import Investigator, Rules
@@ -156,8 +156,7 @@ async def run(
     back with no model at all (harness/replay.py)."""
     console = console or Console()
     m = Module.load(module_dir)
-    if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
-        compile_module(m, config.SKILLS)
+    ensure_compiled(m, module_dir)
     investigators = [p.model_copy(deep=True) for p in m.pregens[: max(1, party)]]
     slot = slot or f"auto-{m.id}-{time.strftime('%m%d-%H%M%S')}"
     trace.label_run(slot)
@@ -175,7 +174,7 @@ async def run(
             dice = tapes.RecordingDice(dice, recorder)
     cfg.imagegen = cfg.showcase = False  # no screen to show a picture on, and a replay calls nothing at all
     cast = Cast(cfg, m)
-    out_dir = config.SAVES / "autoplay"
+    out_dir = paths.dev_output("autoplay")
     out_dir.mkdir(parents=True, exist_ok=True)
     log = (out_dir / f"{slot}.jsonl").open("w", encoding="utf-8")
     started = time.monotonic()

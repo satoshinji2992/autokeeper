@@ -231,6 +231,15 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 </details>
 
 <details>
+<summary>存档和角色卡存在哪里？</summary>
+
+都在 AutoKeeper 文件夹里的 `data/`：存档在 `data/games/`，自己的调查员在 `data/cards/`，运行记录在 `data/logs/`。`data/cache/` 里是本地模型、知识库和大场景图，删掉也没关系，用到时会重新准备。完整的说明见[文件放在哪里](docs/harness.md#文件放在哪里)。
+
+以前的版本把这些放在 `saves/`。更新后第一次启动时，本地模型、知识库和自己的调查员会自动挪到 `data/`；旧存档读不了了，`saves/` 可以整个删掉。
+
+</details>
+
+<details>
 <summary>画面颜色不对，或者右边一栏不见了？</summary>
 
 不支持真彩的终端（比如 macOS 自带的终端）会自动降到 256 色，换成 iTerm2、WezTerm 或 Windows Terminal 效果最好。终端窄于 96 列时右栏会自动隐藏。默认用块字符画照片，最容易认出内容；Ctrl+A 可切换块字符加轮廓线、更细的六分块（终端字体不支持时会显示成方框）和纯 ASCII，也可以在设置里选择。模组原图仍保留；发现地图、病历或信件后，手稿窗口提供完整文字、ASCII 预览和“查看原图”，F2 可重看。

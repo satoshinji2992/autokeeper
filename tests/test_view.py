@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from textual.widgets import Input
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Action, Cast, Ruling
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.engine import fog
 from autokeeper.engine.autoplay import situation
 from autokeeper.engine.game import NOWHERE, Game
@@ -21,6 +21,7 @@ from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Location, Module
 from autokeeper.net.hub import Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.prefs import Prefs
 from autokeeper.rules.coc import Rules
 from autokeeper.tui.app import AutoKeeperApp, GameScreen
@@ -158,7 +159,7 @@ class Thinker(hm.Model):
 
 
 async def test_ideas_are_written_from_the_players_view_and_kept_out_of_the_save(zhui, monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(config, "SAVES", tmp_path)  # no preferences saved: the defaults
+    monkeypatch.setattr(paths, "DATA", tmp_path)  # no preferences saved: the defaults
     monkeypatch.setitem(hm.MODELS, "thinker", Thinker)
     monkeypatch.setattr(Thinker, "asked", [])
     cast = Cast(config.Config(roles={r: Role("thinker", "thinker", None) for r in config.DEFAULT_ROLES}), zhui)
@@ -257,7 +258,7 @@ class IdeaCast(TableCast):
 
 
 async def test_f5_at_a_shared_table_asks_the_host(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     cast = IdeaCast()
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
     task = await opened(hub)

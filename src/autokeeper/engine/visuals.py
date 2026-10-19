@@ -17,7 +17,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from .. import artkit, config, imagegen, imagery
+from .. import artkit, config, imagegen, imagery, paths
 from ..agents import artist
 from ..module.schema import Module
 from .state import GameState
@@ -46,7 +46,7 @@ class Visuals:
         self.idle = asyncio.Event()
         self.idle.set()
         digest = hashlib.sha256(f"{module.id}/{state.slot}".encode()).hexdigest()[:24]
-        self.folder = config.SAVES / "art" / digest
+        self.folder = paths.game_art(digest)
         for key, record in state.visuals.items():
             self._attach(key, record)
         self._recover()

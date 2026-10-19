@@ -1,12 +1,12 @@
 """继续调查: the saves, newest first, the highlighted one's picture and party beside the list,
 and what can be done with a save: go on with it, name it, copy it, put it in the trash.
 
-A save is saves/<slot>.json (the whole GameState) plus its line in saves/index.json (what
+A save is data/games/<slot>.json (the whole GameState) plus its line in index.json (what
 the list shows). The slot is the file name and also the game's LangGraph thread id in
-saves/checkpoints.sqlite, so it never changes: a new name lives in the save (GameState.label),
+checkpoints.sqlite, so it never changes: a new name lives in the save (GameState.label),
 a copy gets a slot of its own (a fresh thread; everything a turn needs is in the state,
 pending_turn included), and a deleted save leaves its checkpoints where they are, so putting
-the file back from saves/trash/ brings the game back whole. Nothing here touches another
+the file back from data/games/trash/ brings the game back whole. Nothing here touches another
 slot's file, line or thread.
 """
 
@@ -32,7 +32,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import config, imagery
+from .. import imagery, paths
 from ..engine.state import GameState, time_of_day
 from ..module.schema import Module
 from .menu import AskText, Confirm
@@ -57,15 +57,15 @@ class Save:
 
 def _index() -> dict:
     try:
-        idx = json.loads((config.SAVES / "index.json").read_text(encoding="utf-8"))
+        idx = json.loads(paths.save_index().read_text(encoding="utf-8"))
     except (OSError, ValueError):  # no index yet, or one cut short: no saves to list
         return {}
     return idx if isinstance(idx, dict) else {}
 
 
 def _write_index(idx: dict) -> None:
-    config.SAVES.mkdir(parents=True, exist_ok=True)
-    target = config.SAVES / "index.json"
+    paths.games().mkdir(parents=True, exist_ok=True)
+    target = paths.save_index()
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
     temporary.replace(target)
@@ -82,24 +82,24 @@ def saves() -> list[Save]:
     out = []
     for slot, meta in _index().items():
         meta = meta if isinstance(meta, dict) else {}
-        file = config.SAVES / f"{slot}.json"
+        file = paths.save(slot)
         try:
             state: GameState | None = GameState.model_validate_json(file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             state = None
         out.append(Save(slot, meta, state))
-    mtime = {s.slot: (config.SAVES / f"{s.slot}.json").stat().st_mtime if (config.SAVES / f"{s.slot}.json").exists() else 0.0 for s in out}
+    mtime = {s.slot: paths.save(s.slot).stat().st_mtime if paths.save(s.slot).exists() else 0.0 for s in out}
     return sorted(out, key=lambda s: (str(s.meta.get("updated", "")), mtime[s.slot]), reverse=True)
 
 
 def to_trash(files: list[Path], name: str, note: dict | None = None) -> Path:
-    """Move files into saves/trash/<when>-<name>/ instead of deleting them, so an accident
+    """Move files into data/games/trash/<when>-<name>/ instead of deleting them, so an accident
     can be put back. `note` goes beside them as index.json (a save's line in the index)."""
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    box = config.SAVES / "trash" / f"{stamp}-{name}"
+    box = paths.trash() / f"{stamp}-{name}"
     n = 2
     while box.exists():
-        box = config.SAVES / "trash" / f"{stamp}-{name}-{n}"
+        box = paths.trash() / f"{stamp}-{name}-{n}"
         n += 1
     box.mkdir(parents=True)
     for f in files:
@@ -112,7 +112,7 @@ def to_trash(files: list[Path], name: str, note: dict | None = None) -> Path:
 
 def rename(slot: str, label: str) -> None:
     """A name of the player's own, in the save and its index line. Empty: the module title."""
-    file = config.SAVES / f"{slot}.json"
+    file = paths.save(slot)
     data = json.loads(file.read_text(encoding="utf-8"))
     data["label"] = label
     _write_json(file, data)
@@ -126,7 +126,7 @@ def delete(slot: str) -> Path:
     """Into the trash: the file and its index line. Its checkpoints stay (see the module doc)."""
     idx = _index()
     meta = idx.pop(slot, {})
-    box = to_trash([config.SAVES / f"{slot}.json"], slot, {slot: meta})
+    box = to_trash([paths.save(slot)], slot, {slot: meta})
     _write_index(idx)
     return box
 
@@ -136,12 +136,12 @@ def copy(save: Save) -> str:
     assert save.state is not None
     base = ("lan-" if save.lan else "") + f"{save.state.module}-{time.strftime('%m%d-%H%M%S')}"
     slot, n = base, 2
-    while (config.SAVES / f"{slot}.json").exists():
+    while paths.save(slot).exists():
         slot, n = f"{base}-{n}", n + 1
-    data = json.loads((config.SAVES / f"{save.slot}.json").read_text(encoding="utf-8"))
+    data = json.loads(paths.save(save.slot).read_text(encoding="utf-8"))
     data["slot"], data["label"] = slot, f"{save.name} 副本"
-    config.SAVES.mkdir(parents=True, exist_ok=True)
-    _write_json(config.SAVES / f"{slot}.json", data)
+    paths.games().mkdir(parents=True, exist_ok=True)
+    _write_json(paths.save(slot), data)
     idx = _index()
     idx[slot] = {**save.meta, "label": data["label"], "updated": time.strftime("%Y-%m-%d %H:%M")}
     _write_index(idx)

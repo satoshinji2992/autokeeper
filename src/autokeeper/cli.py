@@ -14,18 +14,10 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from . import artkit, config
+from . import artkit, config, paths
 
 app = typer.Typer(help="AutoKeeper：自动化 CoC 7 版中文跑团", no_args_is_help=False, add_completion=False)
 console = Console()
-
-
-def _module_dirs() -> list[Path]:
-    dirs = []
-    for base in (config.MODULES, config.LOCAL_MODULES):
-        if base.is_dir():
-            dirs += [p for p in sorted(base.iterdir()) if (p / "module.yaml").exists()]
-    return dirs
 
 
 def _version(value: bool) -> None:
@@ -52,6 +44,7 @@ def main(
     for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv), ("MODE", mode)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
+    paths.adopt_old()
     if ctx.invoked_subcommand is None:
         play()
 
@@ -70,15 +63,15 @@ def play(
 
 
 def _run(app) -> None:
-    """Run a full-screen app with file descriptor 2 sent to saves/stderr.log: C libraries
+    """Run a full-screen app with file descriptor 2 sent to data/logs/stderr.log: C libraries
     (numba, onnxruntime) write warnings there directly, over the game. Textual's Unix
     driver writes to sys.__stderr__, so keep that stream connected to the terminal.
     A crash's traceback lands in the log and is shown once the screen is back."""
-    log = config.SAVES / "stderr.log"
+    log = paths.stderr_log()
     original = sys.__stderr__
     with contextlib.ExitStack() as stack:
         try:
-            config.SAVES.mkdir(parents=True, exist_ok=True)
+            log.parent.mkdir(parents=True, exist_ok=True)
             start = log.stat().st_size if log.exists() else 0
             sink = stack.enter_context(open(log, "a", encoding="utf-8"))
             sys.stderr.flush()
@@ -181,7 +174,7 @@ def host(
     try:
         state = lan.saved(load) if load else None
     except (OSError, ValueError):
-        console.print(f"[red]读不了存档 {load}（存档在 {config.SAVES}）[/]")
+        console.print(f"[red]读不了存档 {load}（存档在 {paths.games()}）[/]")
         raise typer.Exit(1) from None
     room = lan.Room(module, seats=plan, state=state, port=hub_port, web_port=port)
     try:
@@ -237,7 +230,7 @@ def join(
 @app.command()
 def setup() -> None:
     """安装 BCDice 桥接、编译已导入模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/。"""
-    bridge = config.ROOT / "bridge"
+    bridge = paths.ROOT / "bridge"
     console.print("[bold]1/3[/] 安装 BCDice（npm）…")
     npm = shutil.which("npm") or "npm"  # npm.cmd on Windows
     subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
@@ -245,12 +238,12 @@ def setup() -> None:
     from .module.compiler import compile_module
     from .module.schema import Module
 
-    for path in _module_dirs():
-        root = compile_module(Module.load(path), config.SKILLS)
-        console.print(f"    {root.relative_to(config.ROOT)}")
+    for path in paths.module_folders():
+        root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
+        console.print(f"    {root.relative_to(paths.ROOT)}")
     console.print("[bold]3/3[/] 链接 .claude/skills 与 .agents/skills …")
     for dot in (".claude", ".agents"):
-        target = config.ROOT / dot / "skills"
+        target = paths.ROOT / dot / "skills"
         target.parent.mkdir(exist_ok=True)
         if target.is_dir():
             continue
@@ -259,7 +252,7 @@ def setup() -> None:
         try:
             target.symlink_to(Path("..") / "skills", target_is_directory=True)
         except OSError:  # Windows without developer mode: copy instead of linking
-            shutil.copytree(config.SKILLS, target)
+            shutil.copytree(paths.SKILLS, target)
             console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
     console.print("[green]完成。[/] 运行 [bold]uv run autokeeper[/] 开始游戏。")
 
@@ -376,7 +369,7 @@ def trace_cmd(
         name = trace.runs(rows)[-1]["run"] if run == "last" and rows else run
         rows = [r for r in rows if r.get("run", "?") == name]
     if not rows:
-        console.print(f"没有追踪记录（{config.SAVES / 'traces'}）")
+        console.print(f"没有追踪记录（{paths.traces()}）")
         raise typer.Exit(1)
     if runs:
         table = Table(box=box.SIMPLE_HEAD, padding=(0, 1))
@@ -445,7 +438,7 @@ def compile_cmd(module: Annotated[Path, typer.Argument(help="模组目录")]) ->
         for issue in issues:
             console.print(issue)
         raise typer.Exit(1)
-    root = compile_module(Module.load(module), config.SKILLS, source=module / "source")
+    root = compile_module(Module.load(module), paths.SKILLS, source=module / "source")
     console.print(f"已生成 {root}")
 
 
@@ -561,7 +554,7 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
 
     path = Path(module)
     if not (path / "module.yaml").is_file():
-        path = next((p for p in _module_dirs() if p.name == module), path)
+        path = next((p for p in paths.module_folders() if p.name == module), path)
     if not (path / "module.yaml").is_file():
         console.print(f"[red]找不到模组：{module}[/]")
         raise typer.Exit(1)
@@ -716,7 +709,7 @@ def eval_rhetoric(
     """修辞诱导对照：单 Agent 裁定 vs 叙事与裁定分离。"""
     from .eval.rhetoric import run as run_rhetoric
 
-    out = out or config.SAVES / "eval" / "rhetoric.json"
+    out = out or paths.dev_output("eval", "rhetoric.json")
     kw = {"referees": tuple(referee)} if referee else {}
     summary = asyncio.run(run_rhetoric(module, out, limit=limit, **kw))
     console.print_json(data=summary)
@@ -733,7 +726,7 @@ def eval_lore(
     from .eval.lore import STRATEGIES
     from .eval.lore import run as run_lore
 
-    out = config.SAVES / "eval" / f"lore_{module.name}.json"
+    out = paths.dev_output("eval", f"lore_{module.name}.json")
     console.print_json(data=asyncio.run(run_lore(module, out, n=n, only=tuple(only or STRATEGIES))))
     console.print(f"明细：{out}")
 
@@ -827,7 +820,7 @@ def eval_style(
     async def go() -> None:  # one event loop for every run: the API clients outlive a single run
         for i in range(runs):
             name = f"{label or 'run'}-{i + 1}"
-            out = config.SAVES / "eval" / f"{'talk' if npc else 'style'}-{name}.json"
+            out = paths.dev_output("eval", f"{'talk' if npc else 'style'}-{name}.json")
             if npc:
                 s = await talk(module, label=name, out=out)
                 u = s["usage"]
@@ -862,7 +855,7 @@ def eval_blind(
     """盲评两组 eval style 的结果：同一段两两配对，先后各评一次，裁判不知道哪段是哪组。"""
     from .eval.blind import judge as blind
 
-    out = config.SAVES / "eval" / f"blind-{'talk' if npc else 'style'}-{a}-vs-{b}.json"
+    out = paths.dev_output("eval", f"blind-{'talk' if npc else 'style'}-{a}-vs-{b}.json")
     s = asyncio.run(blind(a, b, npc=npc, model=judge, out=out))
     console.print(f"{s['pairs']} 对：{b} 胜 {s['b_wins']}，{a} 胜 {s['a_wins']}，相当或换了先后就变 {s['ties']}；符号检验 p = {s['p']:.3f}")
     console.print(f"明细：{out}")
@@ -882,7 +875,7 @@ def eval_experience(
     module: Path = Path("modules/zhuishuren"),
     actions: Annotated[Path | None, typer.Option(help="每行一句玩家行动的 UTF-8 文件；默认使用追书人到站与日常路线")] = None,
     turns: Annotated[int, typer.Option(min=1, help="最多体验多少轮")] = 12,
-    out: Annotated[Path, typer.Option(help="含全文、逐轮等待、调用量和待审问题的报告")] = Path("saves/eval/experience.json"),
+    out: Annotated[Path, typer.Option(help="含全文、逐轮等待、调用量和待审问题的报告")] = paths.dev_output("eval", "experience.json"),
 ) -> None:
     """用真实模型连续体验开场、闲逛和人情，不将文风分数当成好玩程度。"""
     from .eval.experience import ARRIVAL, run

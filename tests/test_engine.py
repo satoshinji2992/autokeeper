@@ -10,13 +10,14 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from PIL import Image
 
+from autokeeper import paths
 from autokeeper.agents import guard
 from autokeeper.agents.cast import Action, Ruling, Sketch
-from autokeeper.config import EXAMPLE
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import LATER, PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
 from autokeeper.module.schema import Event, Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.rules.commands import Asked
 
@@ -383,9 +384,8 @@ async def test_opening_is_told_once_from_the_arrival_with_the_investigators_back
 
 
 async def test_paper_chase_arrives_at_the_station_and_can_walk_or_stop_along_the_way(fake):
-    from autokeeper import config
 
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     game, cast, _ = make(m, fake, {})
     await game.start()
     assert game.state.location == "huochezhan" and game.state.visited == ["huochezhan"]

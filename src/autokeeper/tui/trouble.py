@@ -14,7 +14,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Markdown, Static
 
-from .. import __version__, config
+from .. import __version__, paths
 from ..net import room as lan
 
 
@@ -44,7 +44,7 @@ def text(info: dict[str, Any] | None = None, *, theirs: str = "", detail: str = 
                f"1. 地址要整串复制，带上后面的 :{web}。\n"
                "2. 房主开房间时要勾上「同时开网页版」。\n"
                "3. 换一个浏览器试试，Chrome、Edge、Firefox 都行。\n"
-               f"4. 还是不行，看一下网页的记录：{config.SAVES / 'web.log'}\n")
+               f"4. 还是不行，看一下网页的记录：{paths.web_log()}\n")
     out.append("## 版本不一样\n\n"
                "1. 大家更新到同一版：在 AutoKeeper 的文件夹里运行 git pull，再运行 uv sync。\n"
                f"2. 你的版本是 {__version__}" + (f"，房主的是 {theirs}" if theirs and theirs != __version__ else "") + "。\n")
@@ -57,7 +57,7 @@ def text(info: dict[str, Any] | None = None, *, theirs: str = "", detail: str = 
                "1. 可能已经开着一个房间：看标题画面有没有「回到房间」，或者关掉另一个开着的 AutoKeeper。\n"
                "2. 命令行开的房间（autokeeper host）也算，在那个窗口按 Ctrl+C 关掉。\n"
                f"3. 端口 {lan.HUB_PORT} 或 {lan.WEB_PORT} 被别的程序占着时，从标题画面开的房间会自己换一个；命令行用 --hub-port 和 --port 指定。\n"
-               f"4. 程序的记录在 {config.SAVES / 'stderr.log'}。\n")
+               f"4. 程序的记录在 {paths.stderr_log()}。\n")
     return "\n".join(out)
 
 

@@ -10,13 +10,13 @@ import pytest
 from textual.widgets import Input, Static
 
 from autokeeper.agents.director import Improv, NewLocation
-from autokeeper.config import EXAMPLE
 from autokeeper.engine import fog
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.module import graph, improv
 from autokeeper.module.schema import Location, Module
 from autokeeper.net.hub import PRIVATE, table
+from autokeeper.paths import EXAMPLE
 from autokeeper.tui import mapview
 from autokeeper.tui.app import AutoKeeperApp, GameScreen
 

@@ -11,12 +11,13 @@ from PIL import Image
 from rich.text import Text
 from textual.widgets import Button, Input, RadioButton, Static
 
-from autokeeper import artkit, config, imagery
-from autokeeper.config import EXAMPLE, Role
+from autokeeper import artkit, config, imagery, paths
+from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
@@ -58,7 +59,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):  # F9 sets these; undo afterwards
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
@@ -373,7 +374,7 @@ def test_the_sheet_lists_every_skill_and_the_specialisms():
 async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
     from autokeeper.tui.sheet import SheetModal
 
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -406,7 +407,7 @@ async def test_the_command_box_completes_dice_commands_and_skills():
 
 
 async def test_an_npc_line_shows_their_face_never_the_keepers_note_on_them(canned):
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="npc-line", human=[lead.id])
     app = AutoKeeperApp(theme="amber")

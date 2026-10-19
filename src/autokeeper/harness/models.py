@@ -41,7 +41,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..config import SESSIONS, Role, load_env, route
+from .. import paths
+from ..config import Role, load_env, route
 from . import spend, trace
 
 OnDelta = Callable[[str], Awaitable[None]] | None
@@ -308,7 +309,7 @@ class ClaudeCodeModel(Model):
         if key not in self._clients:
             from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
-            SESSIONS.mkdir(parents=True, exist_ok=True)
+            paths.sessions().mkdir(parents=True, exist_ok=True)
             opts: dict[str, Any] = {
                 "model": self.spec.model,
                 "system_prompt": self.system,
@@ -316,7 +317,7 @@ class ClaudeCodeModel(Model):
                 "max_turns": 1,
                 "setting_sources": [],
                 "include_partial_messages": True,
-                "cwd": str(SESSIONS),
+                "cwd": str(paths.sessions()),
                 "max_buffer_size": 32 * 1024 * 1024,
             }
             if self.spec.effort:
@@ -589,7 +590,7 @@ class CodexModel(Model):
     async def _call(self, messages, *, schema, images, on_delta) -> Reply:
         import tempfile
 
-        SESSIONS.mkdir(parents=True, exist_ok=True)
+        paths.sessions().mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory() as tmp:
             folder = os.path.realpath(tmp)
             instructions = os.path.join(folder, "instructions.md")
@@ -597,7 +598,7 @@ class CodexModel(Model):
                 f.write(self.system)
             args = [
                 "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
-                "-s", "read-only", "-C", str(SESSIONS),
+                "-s", "read-only", "-C", str(paths.sessions()),
                 "-c", f"model_instructions_file={json.dumps(instructions)}", "-c", "project_doc_max_bytes=0",
             ]  # fmt: skip
             if self.spec.model and self.spec.model != "default":

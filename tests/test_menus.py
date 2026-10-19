@@ -11,12 +11,13 @@ import pytest
 from rich.console import Console
 from textual.widgets import Input, OptionList, Static
 
-from autokeeper import config, imagery, roster
-from autokeeper.config import EXAMPLE, Role
+from autokeeper import config, imagery, paths, roster
+from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui import saves
@@ -36,7 +37,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
     """As in test_tui: every agent answers from a can, saves go to a temp folder."""
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
@@ -64,7 +65,7 @@ def saved_game(m: Module, slot: str, *, turn: int = 1, updated: str | None = Non
     if updated:
         idx = tui.save_index()
         idx[slot]["updated"] = updated
-        (config.SAVES / "index.json").write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
+        paths.save_index().write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
     return st
 
 
@@ -105,9 +106,9 @@ async def test_esc_opens_the_menu_and_each_entry_does_its_thing(canned):
         await pick(pilot, app, "continue")
         assert app.screen is screen
 
-        (config.SAVES / "menu.json").unlink(missing_ok=True)
+        paths.save("menu").unlink(missing_ok=True)
         await pick(pilot, app, "save")
-        assert app.screen is screen and (config.SAVES / "menu.json").exists()
+        assert app.screen is screen and paths.save("menu").exists()
 
         await pick(pilot, app, "settings")
         assert isinstance(app.screen, SettingsModal)
@@ -148,12 +149,12 @@ async def test_leaving_now_mid_turn_saves_first(canned):
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(100, 30)) as pilot:
         screen = await game_at_rest(app, pilot, m, slot="now")
-        (config.SAVES / "now.json").unlink(missing_ok=True)
+        paths.save("now").unlink(missing_ok=True)
         screen.busy = True
         await pick(pilot, app, "title")
         await pilot.click("#answer-now")
         assert await until(pilot, lambda: isinstance(app.screen, TitleScreen))
-        assert (config.SAVES / "now.json").exists()
+        assert paths.save("now").exists()
 
 
 async def test_after_the_end_the_menu_starts_at_back_to_the_title(canned):
@@ -183,7 +184,7 @@ async def test_loading_another_save_from_the_menu_takes_the_game_s_place(canned)
         assert "正在玩" in plain(load.query_one(OptionList).get_option_at_index(0).prompt)
         await pilot.press("d")  # the game being played cannot go to the trash
         await pilot.pause()
-        assert app.screen is load and (config.SAVES / "playing.json").exists()
+        assert app.screen is load and paths.save("playing").exists()
         load.query_one(OptionList).highlighted = load.query_one(OptionList).get_option_index("other")
         await pilot.press("enter")
         assert await until(pilot, lambda: isinstance(app.screen, GameScreen) and app.screen is not screen)
@@ -196,7 +197,7 @@ async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path,
 
     from .test_net import NoticeCast, closed, opened
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
@@ -275,7 +276,7 @@ async def test_rename_is_kept_in_the_save_and_survives_the_next_autosave(canned)
         await pilot.press("enter")
         await pilot.pause()
         assert "雨夜那一局" in plain(app.screen.query_one(OptionList).get_option_at_index(0).prompt)
-    state = GameState.model_validate_json((config.SAVES / "named.json").read_text(encoding="utf-8"))
+    state = GameState.model_validate_json(paths.save("named").read_text(encoding="utf-8"))
     assert state.label == "雨夜那一局" and state.slot == "named"  # the file and its thread keep their name
     tui.write_save(state, m)  # playing on
     assert tui.save_index()["named"]["label"] == "雨夜那一局"
@@ -297,14 +298,14 @@ async def test_delete_moves_the_save_to_the_trash_and_the_others_still_load(cann
         assert isinstance(app.screen, Confirm)
         await pilot.press("escape")  # changed their mind
         await pilot.pause()
-        assert (config.SAVES / "gone.json").exists()
+        assert paths.save("gone").exists()
         await pilot.press("d")
         await pilot.pause()
         await pilot.click("#answer-yes")
         await pilot.pause()
         assert app.screen is screen and [s.slot for s in screen.list] == ["keep"]
-        assert not (config.SAVES / "gone.json").exists() and "gone" not in tui.save_index()
-        trashed = list((config.SAVES / "trash").glob("*-gone/gone.json"))
+        assert not paths.save("gone").exists() and "gone" not in tui.save_index()
+        trashed = list(paths.trash().glob("*-gone/gone.json"))
         assert len(trashed) == 1 and "gone" in json.loads((trashed[0].parent / "index.json").read_text(encoding="utf-8"))
         await pilot.press("enter")
         assert await until(pilot, lambda: isinstance(app.screen, GameScreen))
@@ -330,8 +331,8 @@ async def test_a_broken_save_shows_greyed_and_can_be_deleted(canned):
     saved_game(m, "fine", updated="2020-01-01 09:00")
     idx = tui.save_index()
     idx["broken"] = {"module": "example", "title": m.title, "updated": "2030-01-01 09:00"}
-    (config.SAVES / "index.json").write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
-    (config.SAVES / "broken.json").write_text("{half a save", encoding="utf-8")
+    paths.save_index().write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
+    paths.save("broken").write_text("{half a save", encoding="utf-8")
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(100, 30)) as pilot:
         app.push_screen(LoadScreen())
@@ -347,7 +348,7 @@ async def test_a_broken_save_shows_greyed_and_can_be_deleted(canned):
         await pilot.pause()
         await pilot.click("#answer-yes")
         await pilot.pause()
-        assert [s.slot for s in screen.list] == ["fine"] and list((config.SAVES / "trash").glob("*-broken/broken.json"))
+        assert [s.slot for s in screen.list] == ["fine"] and list(paths.trash().glob("*-broken/broken.json"))
 
 
 # -- 角色卡 ----------------------------------------------------------------------------------------
@@ -418,10 +419,10 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
         await pilot.click("#answer-yes")
         await pilot.pause()
         assert [c.name for c in roster.saved()] == ["我自己的人"]
-        assert list((config.SAVES / "trash").glob(f"*-{copied[2:]}/{copied[2:]}.json"))
+        assert list(paths.trash().glob(f"*-{copied[2:]}/{copied[2:]}.json"))
 
         # a save's card copies too; the save is left as it was
-        save_before = (config.SAVES / "played.json").read_bytes()
+        save_before = paths.save("played").read_bytes()
         save_card = next(oid for oid in screen.cards if oid.startswith("splayed:"))
         ol.highlighted = ol.get_option_index(save_card)
         await pilot.press("e")  # read-only: no form
@@ -429,7 +430,7 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
         assert app.screen is screen
         await pilot.press("c")
         await pilot.pause()
-        assert len(roster.saved()) == 2 and (config.SAVES / "played.json").read_bytes() == save_before
+        assert len(roster.saved()) == 2 and paths.save("played").read_bytes() == save_before
 
         # with a pregen, straight to 新的调查 with it picked
         ol.highlighted = ol.get_option_index(f"m{EXAMPLE.name}:{pregen.id}")

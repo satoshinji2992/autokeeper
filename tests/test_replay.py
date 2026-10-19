@@ -15,17 +15,17 @@ from pathlib import Path
 
 import pytest
 
-from autokeeper import config
-from autokeeper.config import EXAMPLE
+from autokeeper import paths
 from autokeeper.engine import autoplay
 from autokeeper.harness import replay
+from autokeeper.paths import EXAMPLE
 
 TAPE = Path(__file__).parent / "cassettes" / "clocktower.jsonl"
 
 
 @pytest.fixture
 def tape(monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     replay.forget(TAPE)
     yield TAPE
     replay.forget(TAPE)

@@ -10,13 +10,14 @@ import pytest
 from PIL import Image, PngImagePlugin
 from textual.widgets import Input, OptionList
 
-from autokeeper import config, imagery, roster
+from autokeeper import config, imagery, paths, roster
 from autokeeper.agents import card as cardmod
 from autokeeper.agents.card import Builder, Figure, Photo, local_file, parse_st
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.creation import ARRAY, accept, make
 
 ST = (
@@ -65,7 +66,7 @@ class CardModel(hm.Model):
 @pytest.fixture
 def cards(monkeypatch, tmp_path):
     """Canned models for every role, and saves (the roster) in a temp folder."""
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setitem(hm.MODELS, "cardtest", CardModel)
     CardModel.calls = []
     cfg = config.Config(roles={r: Role("cardtest", "cardtest", None) for r in config.DEFAULT_ROLES})

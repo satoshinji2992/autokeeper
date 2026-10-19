@@ -20,7 +20,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from .. import config, knowledge, skills
+from .. import config, knowledge, paths, skills
 from ..harness import Session
 from ..module.compiler import skill_name
 from ..module.schema import Module
@@ -70,7 +70,7 @@ async def _call(role: str, system: str, prompt: str, schema: type[BaseModel] | N
 
 
 async def question_set(m: Module, module_dir: Path, n: int = 24) -> list[QA]:
-    cache = config.SAVES / "eval" / f"lore_qa_{m.id}.json"
+    cache = paths.dev_output("eval", f"lore_qa_{m.id}.json")
     if cache.exists():
         return QASet.model_validate_json(cache.read_text(encoding="utf-8")).items
     source = (module_dir / "source" / "source.md").read_text(encoding="utf-8")
@@ -93,7 +93,7 @@ async def run(module_dir: Path, out: Path, *, n: int = 24, parallel: int = 4, on
     name = skill_name(m)
     skills.clear_cache()
     overview = skills.body(name)
-    root = config.SKILLS / name
+    root = paths.SKILLS / name
     full = overview + "\n\n" + "\n\n".join(p.read_text(encoding="utf-8") for p in sorted((root / "references").rglob("*.md")))
     sem = asyncio.Semaphore(parallel)
     rows: list[dict] = []

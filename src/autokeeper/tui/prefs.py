@@ -1,7 +1,7 @@
 """Narrative preferences: how long, how dark, how fast, and what stays off screen.
 
 Fixed choices only (radio sets and a selection list), so nothing typed here can reach the
-keeper, who knows the module's secrets. Saving writes saves/preferences.json; a game in
+keeper, who knows the module's secrets. Saving writes data/preferences.json; a game in
 progress takes the new choices from its next narration on (prefs.py).
 """
 

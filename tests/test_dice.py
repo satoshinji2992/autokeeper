@@ -10,12 +10,13 @@ import pytest
 from PIL import Image, ImageDraw
 from rich.text import Text
 
-from autokeeper import config, imagery
-from autokeeper.config import EXAMPLE, Role
+from autokeeper import config, imagery, paths
+from autokeeper.config import Role
 from autokeeper.engine.game import Game, _check_view
 from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules import physdice as pd
 from autokeeper.rules.coc import Check, Level
 from autokeeper.tui import dice, diceart
@@ -130,7 +131,7 @@ class Canned(hm.Model):
 def game(monkeypatch, tmp_path, skills_dir):
     from autokeeper.tui import app as tui
 
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})

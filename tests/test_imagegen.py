@@ -17,10 +17,9 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config, imagegen, imagery
+from autokeeper import config, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewLook
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.module import graph, improv
@@ -28,6 +27,7 @@ from autokeeper.module.importer import find_photos
 from autokeeper.module.schema import Look, Module
 from autokeeper.net import media
 from autokeeper.net.hub import Hub, table
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui.net import table_module
 
@@ -90,7 +90,7 @@ class FakeProcess:
 @pytest.fixture
 def codex(monkeypatch, tmp_path) -> FakeCodex:
     """Pictures switched on, the codex process stood in for; saves and CODEX_HOME in tmp_path."""
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
     fake = FakeCodex(tmp_path / "codex-home", asyncio.create_subprocess_exec)
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
@@ -239,11 +239,11 @@ def test_without_a_logged_in_codex_that_can_draw_the_feature_is_off(monkeypatch)
 
 
 async def test_with_codex_unavailable_nothing_is_made_and_nothing_breaks(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     with pytest.raises(imagegen.Unavailable):
         await imagegen.make("p", tmp_path / "a.jpg", kind="scene", module="m")
     m = Module.load(EXAMPLE)
-    assert imagegen.filler(config.Config(), m, config.LOCAL_MODULES / "x" / "art") is None
+    assert imagegen.filler(config.Config(), m, paths.LOCAL_MODULES / "x" / "art") is None
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     game = Game(m, state, FakeCast({}), Rules())
     game.visuals.cfg = config.Config()
@@ -285,7 +285,7 @@ async def test_a_place_the_story_burns_gets_a_redrawn_picture_that_the_save_keep
     record = state.looks["square"]
     assert record["status"] == "ready" and record["target"] == "location:square" and record["made"] == "1"
     assert m.pictures["square"] == record["picture"] != str(original) and near(colour_of(record["picture"]), RED)
-    assert Path(record["picture"]).is_relative_to(config.SAVES)  # per save: the module itself never changes
+    assert Path(record["picture"]).is_relative_to(paths.DATA)  # per save: the module itself never changes
     assert codex.attached and "告示栏烧成焦黑的木架" in codex.prompts[0] and "周衡" not in codex.prompts[0]
     shown = [e for e in events if e["type"] == "art" and e["key"] == "square"]
     assert shown[-1]["picture"] == record["picture"] and shown[-1]["art"] == m.art["square"]
@@ -373,8 +373,8 @@ async def test_lan_players_see_the_redrawn_picture_and_a_late_joiner_gets_it_too
 
 # -- import -------------------------------------------------------------------------------------
 async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_module_describes(codex, monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "local")
-    work = config.LOCAL_MODULES / "example"
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
+    work = paths.LOCAL_MODULES / "example"
     shutil.copytree(EXAMPLE, work)
     raw = yaml.safe_load((work / "module.yaml").read_text(encoding="utf-8"))
     raw["locations"][0]["looks"] = [{"when": "flag:bell_stopped", "change": "钟停了，广场上的人都抬头望着它"}]
@@ -396,8 +396,8 @@ async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_mo
     assert credit["based_on"]["license"] == imagegen.LICENSE  # made from the square's own (generated) picture
     assert imagegen.used("example") == len(done) + 1 and "AI 画了一张" in log.getvalue()
     # the repository's own modules never get generated pictures
-    assert imagegen.filler(config.Config(), m, config.MODULES / "zhuishuren" / "art") is None
-    assert await imagegen.looks(config.Config(), m, config.MODULES / "zhuishuren" / "art") == []
+    assert imagegen.filler(config.Config(), m, paths.MODULES / "zhuishuren" / "art") is None
+    assert await imagegen.looks(config.Config(), m, paths.MODULES / "zhuishuren" / "art") == []
 
 
 def test_a_module_s_changes_are_checked():
@@ -430,7 +430,7 @@ def test_doctor_says_whether_story_pictures_can_be_made(monkeypatch, tmp_path):
         def roll(self, expr):
             return SimpleNamespace(text=f"{expr} ＞ 37")
 
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(bcdice, "BCDice", Dice)
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(False, "没装 Codex，AI 画图用不了", fix="npm i -g @openai/codex"))
     out = CliRunner().invoke(app, ["doctor"]).output
@@ -494,7 +494,7 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
             if near(colour_of(screen.m.pictures["square"]), RED):
                 break
         assert near(colour_of(screen.m.pictures["square"]), RED)  # through the table's art event
-        assert Path(screen.m.pictures["square"]).is_relative_to(config.SAVES / "art" / "table")  # the player's own copy
+        assert Path(screen.m.pictures["square"]).is_relative_to(paths.table_art())  # the player's own copy
     await closed(task)
     await hub.game.close()
 
@@ -528,10 +528,10 @@ async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_the
 
 
 async def test_an_import_stops_asking_after_codex_fails_twice(codex, monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "local")
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
     codex.fail = "usage limit reached"
     m = Module.load(EXAMPLE)
-    fill = imagegen.filler(config.Config(), m, config.LOCAL_MODULES / "example" / "art")
+    fill = imagegen.filler(config.Config(), m, paths.LOCAL_MODULES / "example" / "art")
     assert fill is not None
     assert [await fill(name, "广场", "scene") for name in ("a", "b", "c", "d")] == [False] * 4
     assert len(codex.prompts) == imagegen.GIVE_UP and imagegen.used("example") == 0

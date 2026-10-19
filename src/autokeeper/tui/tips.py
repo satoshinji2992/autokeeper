@@ -12,9 +12,9 @@ Hints talk about how the game works, never about the module: nothing here names 
 person or clue the player has not come across. 《追书人》 is the tutorial: a player with no
 saves is pointed to it, and its own hints use only what its hook and opening have told.
 
-What has been shown, and the switch in the guide, live in saves/tips.json, next to the
+What has been shown, and the switch in the guide, live in data/tips.json, next to the
 player's saves and cards: a player who clears the saves starts over as a new player, and
-tests, which point config.SAVES at a temp folder, start clean. `tips = false` in the config
+tests, which point paths.DATA at a temp folder, start clean. `tips = false` in the config
 file turns hints off until the switch in the guide says otherwise.
 """
 
@@ -27,11 +27,10 @@ from dataclasses import dataclass, field
 from rich.text import Text
 from textual.widgets import OptionList, Static
 
-from .. import config
+from .. import config, paths
 from ..module.schema import Module
 from ..rules.coc import Investigator
 
-FILE = "tips.json"
 TUTORIAL = "zhuishuren"  # 《追书人》, in modules/: a new player's first game
 
 
@@ -101,7 +100,7 @@ _boards: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 # -- the file -------------------------------------------------------------------------------
 def _read() -> dict:
     try:
-        data = json.loads((config.SAVES / FILE).read_text(encoding="utf-8"))
+        data = json.loads(paths.tips().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -109,8 +108,8 @@ def _read() -> dict:
 
 def _write(data: dict) -> None:
     try:
-        config.SAVES.mkdir(parents=True, exist_ok=True)
-        (config.SAVES / FILE).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        paths.DATA.mkdir(parents=True, exist_ok=True)
+        paths.tips().write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     except OSError:  # a hint that cannot be remembered comes again; it must not cost a turn
         pass
 
@@ -239,6 +238,6 @@ def first_game(setup) -> None:
 
 def _played() -> bool:
     try:
-        return bool(json.loads((config.SAVES / "index.json").read_text(encoding="utf-8")))
+        return bool(json.loads(paths.save_index().read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return False

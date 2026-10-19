@@ -11,15 +11,15 @@ import aiohttp
 import pytest
 from PIL import Image
 
-from autokeeper import config, roster
+from autokeeper import paths, roster
 from autokeeper.agents import card as cardmod
 from autokeeper.agents.card import Builder
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.net import cards as netcards
 from autokeeper.net import media
 from autokeeper.net.hub import Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from tests.test_card import CardModel, cards  # noqa: F401  (the canned card models, as a fixture)
 from tests.test_net import TableCast, closed, opened, until
@@ -36,7 +36,7 @@ def card(**changes: Any) -> dict[str, Any]:
 def jpeg(colour: str = "red") -> str:
     out = io.BytesIO()
     Image.new("RGB", (64, 80), colour).save(out, "JPEG")
-    path = config.SAVES / "face.jpg"
+    path = paths.DATA / "face.jpg"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(out.getvalue())
     return media.pack(str(path))
@@ -67,7 +67,7 @@ def test_a_modern_card_in_the_twenties_gets_a_word_for_the_host():
 
 
 async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家", "玩家"], cast=TableCast(), rules=Rules(dice=fake))  # the pregen's seat and an empty one
     task = await opened(hub)
     async with aiohttp.ClientSession() as http:
@@ -115,7 +115,7 @@ async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, t
 
 
 async def test_starting_now_fills_or_drops_the_empty_seats(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     with pytest.raises(ValueError, match="多出来"):
         Hub(EXAMPLE, seats=["玩家", "AI"], cast=TableCast(), rules=Rules(dice=fake))
     hub = Hub(EXAMPLE, seats=["不上场", "玩家", "玩家"], cast=TableCast(), rules=Rules(dice=fake))  # only empty seats
@@ -135,7 +135,7 @@ async def test_starting_now_fills_or_drops_the_empty_seats(monkeypatch, tmp_path
 
 
 async def test_a_saved_game_keeps_its_party(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan-old", human=["zhouheng"])
     hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
@@ -155,7 +155,7 @@ async def test_a_saved_game_keeps_its_party(monkeypatch, tmp_path, skills_dir, f
 
 
 async def test_the_host_s_own_cards_never_reach_the_table(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     secret = netcards.vet(card(name="房主的秘密角色"), "card-secret")
     roster.keep(secret, {})
     hub = Hub(EXAMPLE, seats=["玩家", "玩家"], cast=TableCast(), rules=Rules(dice=fake))
@@ -294,7 +294,7 @@ async def test_a_browser_seat_never_lists_the_host_s_cards(monkeypatch, tmp_path
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.seatcard import SeatCardScreen
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     roster.keep(netcards.vet(card(name="房主的卡"), "card-host"), {})
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))

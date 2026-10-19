@@ -1,7 +1,7 @@
 """Investigators made outside a module (public-figure cards), kept between games.
 
-    saves/investigators/<id>.json         the sheet, and how it was made
-    saves/investigators/<id>.jpg          its photo, with .credit.json and .prep.png beside it
+    data/cards/<id>.json         the sheet, and how it was made
+    data/cards/<id>.jpg          its photo, with .credit.json and .prep.png beside it
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ import shutil
 from collections.abc import Iterable
 from pathlib import Path
 
-from . import config
+from . import paths
 from .module.schema import Module
 from .rules.coc import Investigator
 
 
 def folder() -> Path:
-    return config.SAVES / "investigators"
+    return paths.cards()
 
 
 def keep(inv: Investigator, made: dict, photo: Path | None = None) -> None:

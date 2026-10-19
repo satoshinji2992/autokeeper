@@ -11,7 +11,7 @@ plugins, so it calls the tool at once: measured, 7.6k input tokens and 45 s a pi
 reading its imagegen skill first took 128k. Every preset uses this same path; without a codex
 CLI that is logged in and has the image_generation feature it is simply off. Every picture
 counts against its module's LIMIT (import and every game together, kept in
-saves/imagegen/<module>.json); a game also keeps to PER_GAME, an import to AT_IMPORT and LOOKS.
+data/imagegen/<module>.json); a game also keeps to PER_GAME, an import to AT_IMPORT and LOOKS.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from . import config
+from . import config, paths
 
 LIMIT = 100  # pictures one module may ever get: its import and all its games together
 PER_GAME = 12  # pictures one game (a save) may make
@@ -141,7 +141,7 @@ _held: dict[str, int] = {}  # module -> pictures being made right now
 
 
 def ledger(module: str) -> Path:
-    return config.SAVES / "imagegen" / f"{re.sub(r'[^A-Za-z0-9_.-]', '_', module) or '_'}.json"
+    return paths.imagegen_ledger(module)
 
 
 def _read(module: str) -> dict[str, Any]:

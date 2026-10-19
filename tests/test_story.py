@@ -14,9 +14,9 @@ from rich.console import Console
 from rich.text import Text
 from textual.widgets import Static, TabbedContent
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
-from autokeeper.config import EXAMPLE, Role
+from autokeeper.config import Role
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine import progress
 from autokeeper.engine.game import Game
@@ -25,6 +25,7 @@ from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import PRIVATE, Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui import app as tui
 from autokeeper.tui.app import COMMANDS, AutoKeeperApp, GameScreen
@@ -63,7 +64,7 @@ def writer(monkeypatch, tmp_path, skills_dir):
     """Every role on the canned writer; saves, traces and the spend ledger in a temp folder."""
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     monkeypatch.setattr(Writer, "asked", [])
     monkeypatch.setattr(Writer, "gate", None)
@@ -346,7 +347,7 @@ def test_an_account_is_shown_as_plain_lines_near_its_length():
 
 # -- the record ------------------------------------------------------------------------------
 def deeds_game() -> tuple[Module, GameState]:
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     party = [p.model_copy(deep=True) for p in m.pregens]
     me, her = party
     st = Game.new(m, party, slot="record", human=[me.id])
@@ -429,7 +430,7 @@ class StoryCast(TableCast):
 
 
 async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_sync(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     cast = StoryCast()
     hub = Hub(EXAMPLE, seats=["玩家"], cast=cast, rules=Rules(dice=fake))
     assert not {"progress", "deeds", "prologue", "logged"} & PRIVATE
@@ -469,7 +470,7 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         assert len(cast.material) == 2
         await ws.close()
     await closed(task)
-    saved = GameState.model_validate_json((tmp_path / "saves" / f"{hub.state.slot}.json").read_text(encoding="utf-8"))
+    saved = GameState.model_validate_json(paths.save(hub.state.slot).read_text(encoding="utf-8"))
     assert saved.progress.text == ACCOUNT  # the host keeps it in the save
 
 
@@ -556,7 +557,7 @@ async def test_the_right_column_turns_its_pages(writer):
         await screen.handle({"type": "progress", "text": st.progress.text, "turn": 6})
         assert "第二段故事至今" in shown(screen, "#progress") and "更新于第 6 轮" in shown(screen, "#progress")
         assert tabs.get_tab("progress-page").label.plain == "进展·新" and len(said) == notices  # silent
-        assert (config.SAVES / "pages.json").exists()  # idle: kept at once
+        assert paths.save("pages").exists()  # idle: kept at once
         await pilot.press("ctrl+g")  # 背景 → 经过: still waiting
         assert tabs.get_tab("progress-page").label.plain == "进展·新"
         await pilot.press("ctrl+g")  # opened: read

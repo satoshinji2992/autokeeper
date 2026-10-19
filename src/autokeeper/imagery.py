@@ -366,10 +366,10 @@ def targets(m) -> list[tuple[str, str, str]]:
 def private(folder: Path) -> bool:
     """A folder that stays on this machine (an imported module, a save), where a web picture
     without a licence may go; the bundled modules in the repository get licensed ones only."""
-    from . import config
+    from . import paths
 
     where = folder.resolve()
-    return any(where.is_relative_to(p.resolve()) for p in (config.LOCAL_MODULES, config.SAVES))
+    return any(where.is_relative_to(p.resolve()) for p in (paths.LOCAL_MODULES, paths.DATA))
 
 
 async def fetch_folder(

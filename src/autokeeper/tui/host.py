@@ -24,7 +24,7 @@ from textual.screen import Screen
 from textual.widgets import Button, Checkbox, ContentSwitcher, Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import config, imagery
+from .. import imagery, paths
 from ..module.schema import Module
 from ..net import room as lan
 from ..rules.coc import Investigator
@@ -359,8 +359,8 @@ class HostScreen(Screen):
         try:
             await asyncio.to_thread(room.open)
             if web:
-                config.SAVES.mkdir(parents=True, exist_ok=True)
-                with open(config.SAVES / "web.log", "a", encoding="utf-8") as log:  # the page keeps its own handle
+                paths.logs().mkdir(parents=True, exist_ok=True)
+                with open(paths.web_log(), "a", encoding="utf-8") as log:  # the page keeps its own handle
                     await asyncio.to_thread(room.start_web, log)
         except lan.RoomError as exc:
             await asyncio.to_thread(room.close)

@@ -127,10 +127,10 @@ class PublicServer(Server):
 
 
 def main() -> None:
-    from autokeeper import config
+    from autokeeper import config, paths
 
     config.load_env()
-    folder = config.SAVES / "public-share"
+    folder = paths.dev_output("public-share")
     credentials = json.loads((folder / "credentials.json").read_text())
     status = json.loads((folder / "status.json").read_text())
     argv = [sys.executable, "-m", "autokeeper", "--preset", "deepseek", "--model", "deepseek:deepseek-flash", "play", "--no-intro"]

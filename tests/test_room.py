@@ -15,12 +15,12 @@ from rich.console import Console
 from textual.widgets import Checkbox, Input, OptionList, Static
 
 import autokeeper
-from autokeeper import config
-from autokeeper.config import EXAMPLE
+from autokeeper import paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.net import room as lan
 from autokeeper.net.hub import Hub, room_key_file
+from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
 from .test_net import TableCast, closed, opened, until
@@ -51,7 +51,7 @@ def stand_ins(monkeypatch, tmp_path, skills_dir, fake):
     import autokeeper.agents.cast as cast_module
     import autokeeper.rules.coc as coc
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(cast_module, "Cast", lambda cfg, m: TableCast())
     real = coc.Rules
     monkeypatch.setattr(coc, "Rules", lambda: real(dice=fake))
@@ -85,7 +85,7 @@ def test_the_default_route_s_address_comes_first(monkeypatch):
 
 
 async def test_a_room_runs_its_hub_in_a_thread_and_closes_it(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     room = lan.Room(EXAMPLE, seats=["玩家"], port=0, cast=TableCast(), rules=Rules(dice=fake))
     hub = await asyncio.to_thread(room.open)
     assert room.is_open and hub.port == room.port and room_key_file(room.port).read_text(encoding="utf-8") == hub.key
@@ -106,7 +106,7 @@ async def test_a_room_runs_its_hub_in_a_thread_and_closes_it(monkeypatch, tmp_pa
 
 
 async def test_a_room_that_cannot_open_says_why(monkeypatch, tmp_path, skills_dir, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     with pytest.raises(lan.RoomError, match="座位只能填"):
         await asyncio.to_thread(lan.Room(EXAMPLE, seats=["谁都行"], port=0, cast=TableCast()).open)
     with socket.socket() as taken:
@@ -136,7 +136,7 @@ async def test_a_room_that_cannot_open_says_why(monkeypatch, tmp_path, skills_di
 async def test_the_page_runs_on_its_own_and_goes_with_the_room(monkeypatch, tmp_path, skills_dir, fake):
     """The browsers' page: our template (amber, a CJK font, the F5 note), served by a process of
     its own that the room stops."""
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     room = lan.Room(EXAMPLE, port=0, web_port=free_port(), cast=TableCast(), rules=Rules(dice=fake))
     await asyncio.to_thread(room.open)
     try:
@@ -163,7 +163,7 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
     from autokeeper.tui.sheet import SheetModal
     from autokeeper.tui.trouble import TroubleModal
 
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # a friend's seat, though on this machine
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)

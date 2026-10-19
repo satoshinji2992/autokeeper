@@ -35,7 +35,7 @@ from langgraph.graph import END, START, StateGraph
 from rich.console import Console
 from rich.markup import escape
 
-from .. import artkit, config, imagegen, imagery, skills
+from .. import artkit, config, imagegen, imagery, paths, skills
 from ..harness import Agent, make_model
 from ..harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, image_tool
 from . import graph as module_graph
@@ -136,8 +136,8 @@ def _prepare(work: Path) -> None:
     """Reference material the agent may read: an example module and the schema."""
     ex = work / "_example"
     ex.mkdir(exist_ok=True)
-    shutil.copy(config.EXAMPLE / "module.yaml", ex / "module.yaml")
-    for f in (config.EXAMPLE / "art").glob("*"):
+    shutil.copy(paths.EXAMPLE / "module.yaml", ex / "module.yaml")
+    for f in (paths.EXAMPLE / "art").glob("*"):
         shutil.copy(f, ex / f.name)
     (ex / "schema.json").write_text(json.dumps(Module.model_json_schema(), ensure_ascii=False, indent=1), encoding="utf-8")
     from ..plugins import api_text
@@ -457,7 +457,7 @@ async def pipeline(
 
     async def n_compile(_: ImportState) -> dict:
         m = Module.load(work)
-        root = compile_module(m, config.SKILLS, source=work / "source")
+        root = compile_module(m, paths.SKILLS, source=work / "source")
         console.print(
             f"[bold green]完成[/] 《{m.title}》：{len(m.locations)} 个地点、{len(m.npcs)} 个 NPC、{len(m.clues)} 条线索、"
             f"{len(m.art)} 张 ASCII 图 → {root}"
@@ -526,7 +526,7 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
 
 async def find_showcases(m: Module, cfg: config.Config, console: Console) -> list[str]:
     """The big scenes' pictures (engine/showcase.py), one at a time, the opening first, kept
-    in saves/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
+    in data/cache/showcases/<id>/ outside the module; `autokeeper showcase` does the same later."""
     from ..engine.showcase import prepare_module
 
     if not m.showcases or not imagery.available() or not (imagegen.enabled(cfg) or cfg.search != "none"):
@@ -569,7 +569,7 @@ async def run_import(
     file: Path, module_id: str, *, pages: str | None = None, images: Sequence[Path] = (),
     console: Console | None = None, model: str = "", vision_model: str = "", photos: bool = True,
 ) -> Path:
-    work = config.LOCAL_MODULES / module_id
+    work = paths.LOCAL_MODULES / module_id
 
     async def prepare(console: Console) -> None:
         # Rendering a long PDF takes a while; off the event loop, the TUI keeps drawing meanwhile.

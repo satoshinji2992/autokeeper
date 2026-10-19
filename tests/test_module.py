@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 
 import skills_ref
 
-from autokeeper.config import EXAMPLE
+from autokeeper import paths
 from autokeeper.module import graph
-from autokeeper.module.compiler import compile_module
+from autokeeper.module.compiler import compile_module, ensure_compiled
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 
 
 def test_example_module_loads_and_is_consistent():
@@ -40,6 +42,20 @@ def test_compile_skill_package(tmp_path):
     assert skills_ref.validate(root) == []
 
 
+def test_a_stale_skill_package_is_compiled_again(tmp_path):
+    folder = tmp_path / "example"
+    shutil.copytree(EXAMPLE, folder)
+    root = ensure_compiled(Module.load(folder), folder, tmp_path / "skills")
+    (root / "assets" / "leftover.txt").write_text("from an older compile", encoding="utf-8")
+    assert ensure_compiled(Module.load(folder), folder, tmp_path / "skills") == root
+    assert (root / "assets" / "leftover.txt").exists()  # unchanged: kept as it is
+    text = (folder / "module.yaml").read_text(encoding="utf-8")
+    (folder / "module.yaml").write_text(text.replace("齿轮间", "齿轮室", 1), encoding="utf-8")
+    ensure_compiled(Module.load(folder), folder, tmp_path / "skills")
+    assert not (root / "assets" / "leftover.txt").exists()  # changed: compiled from scratch
+    assert "齿轮室" in "".join(f.read_text(encoding="utf-8") for f in root.rglob("*.md"))
+
+
 def test_custom_kg_for_lightrag_has_unique_names_and_no_self_loops():
     from autokeeper.knowledge import custom_kg
 
@@ -60,9 +76,8 @@ def test_cli_prints_chinese_through_a_non_utf8_pipe():
 
 
 def test_the_bundled_paper_chase_is_playable():
-    from autokeeper import config
 
-    m = Module.load(config.MODULES / "zhuishuren")
+    m = Module.load(paths.MODULES / "zhuishuren")
     assert not [i for i in graph.audit(m) if i.level == "error"]
     assert len(m.locations) >= 8 and m.endings and m.pregens
     assert all(m.art.get(loc.art) or m.pictures.get(loc.art) for loc in m.locations if loc.art)

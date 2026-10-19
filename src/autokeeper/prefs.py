@@ -11,7 +11,7 @@ gets them as a one-turn note (never stored, so its cached prefix stays the same)
 director keeps its new scenes out of the lines (雷区), and NPCs talk around them. A line
 moves a thing off screen, implies it or cuts past it; it still happens.
 
-    saves/preferences.json   kept between games, like the cards in saves/investigators
+    data/preferences.json    kept between games, like the cards in data/cards
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from pydantic import (
     field_validator,
 )
 
-from . import config
+from . import paths
 
 LENGTHS = ("短", "中", "长")
 HORRORS = ("克制", "标准", "浓烈")
@@ -76,7 +76,7 @@ NPC_HORROR = {"克制": "说到吓人的事点到为止。", "浓烈": "说到�
 
 
 def _file():
-    return config.SAVES / "preferences.json"
+    return paths.preferences()
 
 
 class Prefs(BaseModel):

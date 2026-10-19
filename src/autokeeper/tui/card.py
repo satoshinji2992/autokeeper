@@ -17,7 +17,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import config, imagery, roster
+from .. import config, imagery, paths, roster
 from ..agents.card import Builder, CardError, Figure, Photo, Proposal, local_file
 from ..module.schema import Module
 from ..rules.coc import Investigator
@@ -84,7 +84,7 @@ class CardScreen(Screen[Investigator | None]):
         self.chosen: Path | None = None
         self.portrait: Text | None = None  # the chosen photo, rendered once
         self.from_card = False  # changing the photo of a finished card
-        self.work_dir = config.SAVES / "investigators" / ".work" / self.builder.id
+        self.work_dir = paths.card_work(self.builder.id)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):

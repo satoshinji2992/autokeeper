@@ -32,14 +32,14 @@ from textual.timer import Timer
 from textual.widgets import Button, Footer, Input, OptionList, Static, TabbedContent
 from textual.widgets.option_list import Option
 
-from .. import artkit, config, imagery, roster, weather
+from .. import artkit, config, imagery, paths, roster, weather
 from ..agents.cast import Cast
 from ..engine import debrief
 from ..engine import graph as turn_graph
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState, time_of_day
 from ..harness import models as channels
-from ..module.compiler import compile_module, skill_name
+from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules import commands
@@ -89,23 +89,17 @@ THEMES = [
 
 # -- library and saves ---------------------------------------------------------------
 def modules() -> list[Path]:
-    """The modules to play: the bundled ones (《追书人》), then the player's own. The format
-    sample (config.EXAMPLE) is for the importer and the tests, not for playing."""
-    found = []
-    for base in (config.MODULES, config.LOCAL_MODULES):
-        if base.is_dir():
-            found += [p for p in sorted(base.iterdir()) if (p / "module.yaml").exists()]
-    return found
+    return paths.module_folders()
 
 
 def save_index() -> dict:
-    f = config.SAVES / "index.json"
+    f = paths.save_index()
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 
 
 def write_save(state: GameState, module: Module) -> None:
-    config.SAVES.mkdir(parents=True, exist_ok=True)
-    target = config.SAVES / f"{state.slot}.json"
+    paths.games().mkdir(parents=True, exist_ok=True)
+    target = paths.save(state.slot)
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(state.model_dump_json(indent=1), encoding="utf-8")
     temporary.replace(target)
@@ -121,11 +115,11 @@ def write_save(state: GameState, module: Module) -> None:
         "updated": time.strftime("%Y-%m-%d %H:%M"),
         "path": str(_module_dir(module.id)),
     }
-    (config.SAVES / "index.json").write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
+    paths.save_index().write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def _module_dir(module_id: str) -> Path:
-    for p in [*modules(), config.EXAMPLE]:  # the format sample is not offered, but its saves still load
+    for p in [*modules(), paths.EXAMPLE]:  # the format sample is not offered, but its saves still load
         if p.name == module_id:
             return p
     raise FileNotFoundError(module_id)
@@ -133,8 +127,7 @@ def _module_dir(module_id: str) -> Path:
 
 def load_module(path: Path) -> Module:
     m = Module.load(path)
-    if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
-        compile_module(m, config.SKILLS, source=path / "source")
+    ensure_compiled(m, path)
     return m
 
 
@@ -705,8 +698,8 @@ class GameScreen(Screen):
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         self.game.write_progress = True  # someone reads it: the 进展 page
         channels.listeners.append(self._fell_back)
-        config.SAVES.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(config.SAVES / "checkpoints.sqlite")
+        paths.games().mkdir(parents=True, exist_ok=True)
+        self._db = await aiosqlite.connect(paths.checkpoints())
         saver = AsyncSqliteSaver(self._db)
         await saver.setup()
         self.graph = turn_graph.build(self.game, saver)

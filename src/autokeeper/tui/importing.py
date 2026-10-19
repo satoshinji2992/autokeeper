@@ -33,7 +33,7 @@ from textual.widgets import Button, ContentSwitcher, DirectoryTree, Footer, Inpu
 from textual.widgets.option_list import Option
 from textual.worker import Worker, WorkerState
 
-from .. import config
+from .. import paths
 from ..harness import models as channels
 from ..module import importer, sources
 from ..module.schema import Module
@@ -54,7 +54,7 @@ def places() -> list[tuple[str, Path]]:
     Windows downloads, where the browser saved them."""
     from platformdirs import user_downloads_dir
 
-    spots = [("模组文件夹", config.MODULES), ("下载", Path(user_downloads_dir())), ("主目录", Path.home())]
+    spots = [("模组文件夹", paths.MODULES), ("下载", Path(user_downloads_dir())), ("主目录", Path.home())]
     if "microsoft" in platform.uname().release.lower():
         found = [p for p in sorted(Path("/mnt/c/Users").glob("*/Downloads")) if p.parent.name not in WINDOWS_ACCOUNTS]
         spots += [("Windows 下载" + (f"（{p.parent.name}）" if len(found) > 1 else ""), p) for p in found]
@@ -493,10 +493,10 @@ class ImportScreen(Screen):
         from .app import modules
 
         mid = self._module_id()
-        same = next((p for p in [*modules(), config.EXAMPLE] if p.name == mid), None)  # the format sample's name stays reserved
+        same = next((p for p in [*modules(), paths.EXAMPLE] if p.name == mid), None)  # the format sample's name stays reserved
         if same is None:
             return "", f"导入后放在 modules/local/{mid}/"
-        if same.parent != config.LOCAL_MODULES:
+        if same.parent != paths.LOCAL_MODULES:
             return "error", f"{mid} 是游戏自带模组的名字，换一个"
         try:
             title = f"《{Module.load(same).title}》"
@@ -642,7 +642,7 @@ class ImportScreen(Screen):
             self._done("导入已停下", f"■ 导入已停下（{self._elapsed()}）。写好的部分留在 modules/local/{self.job.module_id}/。", ok=False)
 
     def _succeeded(self, job: Job) -> None:
-        work = config.LOCAL_MODULES / job.module_id
+        work = paths.LOCAL_MODULES / job.module_id
         if issues := importer.validate(work):
             log = self.query_one("#import-log", RichLog)
             for issue in issues:

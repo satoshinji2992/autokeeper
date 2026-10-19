@@ -1,5 +1,5 @@
 """角色卡: every investigator on this machine, from the title screen, in three groups: 我的角色
-(the cards kept in saves/investigators/, from 车卡, an import or a copy), 存档里的 (the
+(the cards kept in data/cards/, from 车卡, an import or a copy), 存档里的 (the
 player's investigator in each save, as they stand now, with what they went through in that
 game) and 模组预设 (each module's pregens). The highlighted one's full sheet is beside the
 list, Enter opens it on its own.
@@ -7,7 +7,7 @@ list, Enter opens it on its own.
 新建角色 opens the flows of 新的调查 (tui/card.py: AI 协助车卡 from a description or a public
 figure, or 导入已有的卡; a .st line there is the way to bring numbers of one's own). Only
 我的角色 can be changed: edited (everything but the numbers, tui/cardedit.py), exported,
-deleted (into saves/trash/). A card from a save or a module is copied into 我的角色 first;
+deleted (into data/games/trash/). A card from a save or a module is copied into 我的角色 first;
 the save and the module's files are never written to."""
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from .. import artkit, config, imagery, roster
+from .. import artkit, imagery, paths, roster
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
@@ -40,7 +40,6 @@ from .sheet import SheetModal, sheet_view
 
 FACE = (30, 14)
 ROOM = 31  # the list's width inside its border, padding and scrollbar: longer lines are cut, not wrapped
-EXPORTS = "角色卡导出"  # the folder in saves/ an export goes to unless another is typed
 
 
 def photo(inv: Investigator, m: Module | None) -> Path | None:
@@ -125,7 +124,7 @@ def rename_kept(inv: Investigator, name: str) -> None:
 
 
 def delete_kept(inv: Investigator) -> Path:
-    """Into saves/trash/: the card, and its photo unless another kept card shows it too."""
+    """Into the trash folder: the card, and its photo unless another kept card shows it too."""
     files = [kept_file(inv)]
     shared = any(c.portrait == inv.portrait and c.id != inv.id for c in roster.saved())
     if inv.portrait and not shared:
@@ -138,7 +137,7 @@ def glob_escape(name: str) -> str:
 
 
 def export(inv: Investigator, m: Module | None, folder: Path) -> Path:
-    """<name>.json (the card as saves/investigators/ keeps it) in `folder`, its photo beside it."""
+    """<name>.json (the card as data/cards/ keeps it) in `folder`, its photo beside it."""
     folder.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r'[\\/:*?"<>|\s]+', "_", inv.name).strip("._") or "调查员"
     target, n = folder / f"{stem}.json", 2
@@ -205,7 +204,7 @@ class CardsScreen(Screen):
         first = True
         for slot, meta in sorted(save_index().items(), key=lambda kv: kv[1].get("updated", ""), reverse=True):
             try:
-                state = json.loads((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
+                state = json.loads(paths.save(slot).read_text(encoding="utf-8"))
                 party = [Investigator.model_validate(p) for p in state["investigators"] if p["id"] in state.get("human", [])]
             except (OSError, ValueError, KeyError, TypeError):
                 continue
@@ -398,13 +397,13 @@ class CardsScreen(Screen):
             if where is None:
                 return
             try:
-                target = export(inv, m, Path(where).expanduser() if where else config.SAVES / EXPORTS)
+                target = export(inv, m, Path(where).expanduser() if where else paths.card_exports())
             except OSError:
                 self.app.notify("这个文件夹写不进去，换一个试试", severity="error")
                 return
             self.app.notify(f"已导出到 {target}", timeout=10)
 
-        self.app.push_screen(AskText("导出到哪个文件夹", str(config.SAVES / EXPORTS)), done)
+        self.app.push_screen(AskText("导出到哪个文件夹", str(paths.card_exports())), done)
 
     def action_create(self) -> None:
         items = [("figure", "AI 协助车卡"), ("import", "导入已有的卡")]

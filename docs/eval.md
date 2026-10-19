@@ -1,12 +1,12 @@
 # 评测
 
-评测命令与历史结果见下文。运行报告写入 `saves/eval/`。
+评测命令与历史结果见下文。运行报告写入 `dev/output/eval/`。
 
 ## 连续游玩体验
 
 ```bash
 uv run autokeeper --preset codex eval experience --turns 12
-uv run autokeeper --preset deepseek eval experience --actions actions.txt --out saves/eval/my-route.json
+uv run autokeeper --preset deepseek eval experience --actions actions.txt --out dev/output/eval/my-route.json
 ```
 
 `actions.txt` 每行一句玩家行动。默认路线包含到站、闲逛、早餐、日常交谈、约定与赴约；使用真实的解析、裁定、NPC、导演和叙述。报告记录全文、逐轮等待、调用量、时间推进、世界记录与中断位置。叙事质量仍需阅读记录判断。试玩会产生模型用量，关闭额外绘图以单独观察叙事。
@@ -17,11 +17,11 @@ uv run autokeeper --preset deepseek eval experience --actions actions.txt --out 
 
 ## 插件开发与实际结算
 
-2026-10-18，本机用 DeepSeek 的编译 Agent 实际调用 `write_plugin` 开发《冬雪之下》疾病插件，修订阶段 14 步、12 项测试通过；人工复核补充节奏互斥和跨天结算后为 v0.3.0、15 项测试。四天固定骰值的引擎测试验证感染、体质损失与理智损失；另用真实 BCDice 补结算跨过的两天，读档后无重复扣减。报告在 `saves/eval/winter-plugin-result.json` 与 `winter-plugin-engine.json`，完整模组与源码留在本地忽略目录。这不是整场模组通关或所有分支的游玩评测。
+2026-10-18，本机用 DeepSeek 的编译 Agent 实际调用 `write_plugin` 开发《冬雪之下》疾病插件，修订阶段 14 步、12 项测试通过；人工复核补充节奏互斥和跨天结算后为 v0.3.0、15 项测试。四天固定骰值的引擎测试验证感染、体质损失与理智损失；另用真实 BCDice 补结算跨过的两天，读档后无重复扣减。报告在 `dev/output/eval/winter-plugin-result.json` 与 `winter-plugin-engine.json`，完整模组与源码留在本地忽略目录。这不是整场模组通关或所有分支的游玩评测。
 
 通用回归验证真实子进程、执行超时、能力与引用校验、错误反馈、按更新后属性连续检定、即兴安装、源码版本恢复、联机保密和暂停开关。编译校验会执行插件的用例，不以“模型说测试通过”作为结果。
 
-真实即兴链路也已验证：DeepSeek 导演临场生成 `stove_fuel` 插件，5 项测试通过后安装到本局，执行添柴动作使库存 3→2、热度 0→1，源码与状态进入存档。测试没有修改原模组；报告为 `saves/eval/improv-plugin-ds.json`。本轮完整回归 294 项通过。
+真实即兴链路也已验证：DeepSeek 导演临场生成 `stove_fuel` 插件，5 项测试通过后安装到本局，执行添柴动作使库存 3→2、热度 0→1，源码与状态进入存档。测试没有修改原模组；报告为 `dev/output/eval/improv-plugin-ds.json`。本轮完整回归 294 项通过。
 
 ## 渐进式披露的上下文账本
 
@@ -57,7 +57,7 @@ uv run autokeeper --preset deepseek eval lore --only graphrag   # 只重跑一�
 - **检索的效果**：用不到一半的上下文，就追平了整本模组的准确率。
 - **mix 第一版**：只有 83.3%，上下文反而有 15,165 token。原因是 LightRAG 的实体、关系预算（默认 6k / 8k）不受 `max_total_tokens` 约束，结果把原文块全挤掉了（日志里是“35 entities, 112 relations, 0 chunks”），而细节题的答案恰恰在原文里。
 - **修正**：按总预算分配，实体、关系各占四分之一，剩下的留给原文块。
-- **明细**：两版都在 `saves/eval/`（`lore_zhuishuren_v1.json`、`lore_zhuishuren.json`）。
+- **明细**：两版都在 `dev/output/eval/`（`lore_zhuishuren_v1.json`、`lore_zhuishuren.json`）。
 
 ## 修辞诱导对照
 
@@ -86,7 +86,7 @@ uv run autokeeper eval rhetoric
 - intent：只写调查员做了什么，这类断言一律不写；
 - arbiter：奖惩骰只认场景资料里有的条件。
 
-两版明细都在 `saves/eval/`（`rhetoric_v1_zhuishuren.json`、`rhetoric_v2_zhuishuren.json`），里面有每条话术、两次裁定和理由。
+两版明细都在 `dev/output/eval/`（`rhetoric_v1_zhuishuren.json`、`rhetoric_v2_zhuishuren.json`），里面有每条话术、两次裁定和理由。
 
 ### 换成 DeepSeek，比较思考强度
 
@@ -109,7 +109,7 @@ uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-fl
 - 不思考的裁定快一倍、便宜近一半，但是不是一样准，上面这个评测量不出来。拿 20 个平实行动的裁定比较（要不要掷骰、技能、难度、给哪些线索全部一致才算一致）：high 和 low 一致 14/20，high 和不思考也是 14/20；同一档跑两次本身就有差异。细看分歧，不思考有两次一次社交检定成功就给了 2–3 条各自带门槛的线索，high 只给 1 条。
 - 所以 DeepSeek 预设的裁定员仍用 high。在乎速度的话，配置里写 `[roles.arbiter] effort = "none"`，每回合少等一秒多。
 
-明细在 `saves/eval/rhetoric-deepseek-effort.json` 和 `rhetoric-deepseek-none.json`。
+明细在 `dev/output/eval/rhetoric-deepseek-effort.json` 和 `rhetoric-deepseek-none.json`。
 
 ## 守秘人用哪个 Claude 模型
 
@@ -131,7 +131,7 @@ claude 预设的守秘人因此改用 Sonnet 5.5。裁定员四个模型在 6 �
 ```bash
 uv run autokeeper eval style --runs 5 --label before          # 守秘人：上面那 9 段，只有守秘人是真的
 uv run autokeeper eval style --npc --runs 5 --label before    # NPC：同样 12 句问话，问《追书人》的托马斯、守墓人和奥黛尔
-uv run autokeeper eval cliche saves/eval/style-before-*.json  # 存档、autoplay 记录、full 追踪也能量
+uv run autokeeper eval cliche dev/output/eval/style-before-*.json  # 存档、autoplay 记录、full 追踪也能量
 uv run autokeeper eval blind --a before --b after             # 两组逐段盲评；加 --npc 比 NPC
 ```
 
@@ -193,7 +193,7 @@ uv run autokeeper eval blind --a before --b after             # 两组逐段盲�
 - 重问只开给 Claude 扮演的 NPC。代价是调用：这组问话里第二句起几乎句句都重问，NPC 调用从 12 次变成 21 次，每句从 5.8 s 变成 9.3 s。DeepSeek 上重问也几乎消灭了动作开头和口癖，裁判只是略偏向它（先附言再重问的那组 5 遍是 9 : 1 : 5，p = 0.02；只重问 10 遍是上表的 16 : 11），不算清楚地更好，DeepSeek 照旧。
 - DeepSeek 的 NPC 偶尔交回空台词：360 句里 4 句，三句是托马斯的第一句，两组都有，和重问无关，还没修。
 
-明细在 `saves/eval/`：`style-*.json`、`talk-*.json`、`blind-*.json`。
+明细在 `dev/output/eval/`：`style-*.json`、`talk-*.json`、`blind-*.json`。
 
 ## 导演展开的冷却
 
@@ -209,4 +209,4 @@ uv run autokeeper autoplay modules/zhuishuren --turns 2
 AUTOKEEPER_MODEL=ollama:gemma4-31b-ablit-q4 uv run autokeeper --search none autoplay modules/zhuishuren --turns 2
 ```
 
-数字取自 `saves/traces/`，表格和说明见 [harness.md](harness.md#实测)。
+数字取自 `data/logs/traces/`，表格和说明见 [harness.md](harness.md#实测)。

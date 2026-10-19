@@ -10,13 +10,13 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config
-from autokeeper.config import EXAMPLE
+from autokeeper import config, paths
 from autokeeper.harness.tools import ToolError, Workspace
 from autokeeper.module import importer
 from autokeeper.module.compiler import compile_module
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 
 
 async def test_original_handout_retains_pixels_text_and_provenance(tmp_path):
@@ -131,7 +131,7 @@ async def test_an_import_ends_by_looking_for_photos_unless_offline(monkeypatch, 
     """Scenes and faces get real photos like 《追书人》's; offline, or without chafa, nothing is fetched."""
     from autokeeper import imagery
 
-    m = Module.load(config.EXAMPLE)
+    m = Module.load(paths.EXAMPLE)
     asked: list[list[tuple[str, str, str]]] = []
 
     async def fetch(cfg, folder, targets, **kwargs):
@@ -215,9 +215,9 @@ async def test_web_pictures_come_from_tavily_and_only_into_folders_kept_on_this_
         found = await imagery.web_images(client, "portrait old man 1920s")
     assert [c.thumb for c in found] == ["https://example.org/a.jpg", "https://example.org/b.jpg"]
     assert all(c.license == imagery.WEB_LICENCE for c in found)
-    monkeypatch.setattr(config, "LOCAL_MODULES", tmp_path / "modules" / "local")
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
-    assert imagery.private(tmp_path / "modules" / "local" / "x" / "art") and imagery.private(tmp_path / "saves" / "art" / "y")
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "modules" / "local")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    assert imagery.private(tmp_path / "modules" / "local" / "x" / "art") and imagery.private(tmp_path / "saves" / "games" / "art" / "y")
     assert not imagery.private(tmp_path / "modules" / "zhuishuren" / "art")  # the bundled module keeps licensed photos only
 
 

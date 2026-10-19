@@ -9,6 +9,7 @@
       references/endings.md         endings and rewards
       references/pregens.md         pre-generated investigators
       assets/ascii/<name>.txt       ASCII art
+      .stamp                        what it was compiled from (see stamp())
 
 Claude Code reads it from .claude/skills, Codex from .agents/skills and deepagents from
 the path we pass; all three follow the Agent Skills spec, so nothing here is custom
@@ -36,6 +37,37 @@ def version(m: Module) -> str:
     raw = yaml.safe_dump(m.model_dump(mode="json"), allow_unicode=True, sort_keys=True)
     raw += json.dumps({key: plugin.fingerprint for key, plugin in sorted(m.extensions.items())}, sort_keys=True)
     return hashlib.sha1(raw.encode()).hexdigest()[:10]
+
+
+def stamp(m: Module, source: Path | None = None) -> str:
+    """The module, its plugins, the compiler and the plugin API it was compiled with: a skill
+    package whose stamp differs is stale."""
+    from ..plugins import api_text
+
+    h = hashlib.sha1(version(m).encode())
+    h.update(Path(__file__).read_bytes())
+    h.update(api_text().encode())
+    if source is not None and source.is_dir():
+        for f in sorted(source.rglob("*")):
+            if f.is_file():
+                h.update(f"{f.relative_to(source).as_posix()}:{f.stat().st_size}".encode())
+    return h.hexdigest()[:16]
+
+
+def ensure_compiled(m: Module, folder: Path, skills_root: Path | None = None) -> Path:
+    """The skill package of the module loaded from `folder`, compiled again when it is missing
+    or stale. Every place that loads a module to play calls this, so they all agree on the stamp."""
+    from .. import paths
+
+    skills_root = paths.SKILLS if skills_root is None else skills_root
+    source = Path(folder) / "source"
+    root = Path(skills_root) / skill_name(m)
+    try:
+        if (root / ".stamp").read_text(encoding="utf-8").strip() == stamp(m, source):
+            return root
+    except OSError:
+        pass
+    return compile_module(m, skills_root, source=source)
 
 
 def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) -> Path:
@@ -83,6 +115,7 @@ def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) 
             output.write("\n## 完整原始资料（仅守秘人可读，含剧透）\n\n")
             output.write("原文、逐页扫描和未展示图片保留在 `assets/source/`；细节有疑问时回查原文，不用整理摘要代替全部资料。\n")
             output.write("- [原文](assets/source/source.md)\n- [逐页扫描](assets/source/pages/)\n- [原图档案](assets/source/images/)\n")
+    _write(root / ".stamp", stamp(m, source) + "\n")
     return root
 
 

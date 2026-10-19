@@ -25,7 +25,10 @@ wheels/
 modules/_import/
 modules/local/
 skills/module-*
+# What the game writes (src/autokeeper/paths.py); saves/ is the folder 0.0.1 used
+data/
 saves/
+dev/output/
 .env
 bridge/node_modules/
 

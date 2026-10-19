@@ -17,8 +17,8 @@ from pathlib import Path
 
 import tiktoken
 
-from .. import config, skills
-from ..module.compiler import compile_module, skill_name
+from .. import skills
+from ..module.compiler import ensure_compiled, skill_name
 from ..module.schema import Module
 
 _enc = tiktoken.get_encoding("o200k_base")
@@ -30,9 +30,7 @@ def tokens(text: str) -> int:
 
 def ledger(module_dir: Path) -> dict:
     m = Module.load(module_dir)
-    root = config.SKILLS / skill_name(m)
-    if not (root / "SKILL.md").exists():
-        compile_module(m, config.SKILLS)
+    root = ensure_compiled(m, module_dir)
     skills.clear_cache()
     overview = tokens(skills.body(skill_name(m)))
     refs = sorted((root / "references").rglob("*.md"))

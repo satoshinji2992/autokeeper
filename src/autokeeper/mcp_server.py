@@ -19,11 +19,11 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from . import artkit, config
+from . import artkit, config, paths
 from .agents.cast import Action, Cast
 from .engine.game import Game, Turn
 from .engine.state import GameState
-from .module.compiler import compile_module, skill_name
+from .module.compiler import ensure_compiled, skill_name
 from .module.schema import Module
 from .rules import commands
 from .rules.coc import DIFFICULTY_ZH, Rules
@@ -40,11 +40,7 @@ S = _Session()
 
 
 def _dirs() -> dict[str, Path]:
-    out = {}
-    for base in (config.MODULES, config.LOCAL_MODULES):
-        if base.is_dir():
-            out |= {p.name: p for p in sorted(base.iterdir()) if (p / "module.yaml").exists()}
-    return out
+    return {p.name: p for p in paths.module_folders()}
 
 
 def _need() -> Game:
@@ -55,8 +51,8 @@ def _need() -> Game:
 
 def _save() -> None:
     g = _need()
-    config.SAVES.mkdir(parents=True, exist_ok=True)
-    (config.SAVES / f"{g.state.slot}.json").write_text(g.state.model_dump_json(indent=1), encoding="utf-8")
+    paths.games().mkdir(parents=True, exist_ok=True)
+    paths.save(g.state.slot).write_text(g.state.model_dump_json(indent=1), encoding="utf-8")
 
 
 def _art(name: str | None) -> str:
@@ -114,8 +110,7 @@ async def new_game(module: str, investigator: str, slot: str = "mcp") -> dict:
     """开局：选择模组和一名预设调查员。返回开场朗读、钩子、起始地点和插图（插图请原样放进代码块）。"""
     path = _dirs()[module]
     m = Module.load(path)
-    if not (config.SKILLS / skill_name(m) / "SKILL.md").exists():
-        compile_module(m, config.SKILLS, source=path / "source")
+    ensure_compiled(m, path)
     inv = next(p for p in m.pregens if p.id == investigator).model_copy(deep=True)
     state = Game.new(m, [inv], slot=slot)
     await _replace_game(m, state)
@@ -136,7 +131,7 @@ async def new_game(module: str, investigator: str, slot: str = "mcp") -> dict:
 @server.tool()
 async def load_game(slot: str) -> dict:
     """读档。"""
-    state = GameState.model_validate_json((config.SAVES / f"{slot}.json").read_text(encoding="utf-8"))
+    state = GameState.model_validate_json(paths.save(slot).read_text(encoding="utf-8"))
     m = Module.load(_dirs()[state.module])
     await _replace_game(m, state)
     return scene()

@@ -6,9 +6,9 @@ from rich.style import Style
 from rich.text import Text
 from textual.widgets import OptionList
 
-from autokeeper import config, imagery, roster
-from autokeeper.config import EXAMPLE
+from autokeeper import imagery, paths, roster
 from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
 from autokeeper.tui import app as tui
 from autokeeper.tui import cover
 from autokeeper.tui.app import AutoKeeperApp, TitleScreen
@@ -51,7 +51,7 @@ async def test_title_without_chafa_shows_the_eye_and_the_whole_menu(monkeypatch)
 
 
 async def test_cards_list_kept_cards_and_pregens(monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setattr(imagery, "available", lambda: False)
     monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
     m = Module.load(EXAMPLE)

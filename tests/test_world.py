@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from autokeeper import config
+from autokeeper import paths
 from autokeeper.engine import world as legacy_world
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState, WorldChange
@@ -18,7 +18,7 @@ from autokeeper.world.store import World
 
 
 def fresh(location: str = "square") -> World:
-    m = Module.load(config.EXAMPLE)
+    m = Module.load(paths.EXAMPLE)
     m.items.append(Item(id="coat", name="雨衣", description="油布雨衣", where="tower", owner="warden"))
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     st.location = location
@@ -182,7 +182,7 @@ def test_moving_an_npc_moves_it_in_this_games_module_and_who_saw_it():
 
 # -- layers and knowledge ----------------------------------------------------------------------------
 def test_the_module_is_seeded_as_the_base_layer_and_left_as_it_was():
-    m = Module.load(config.EXAMPLE)
+    m = Module.load(paths.EXAMPLE)
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     before = m.model_dump()
     w = World(m, st)
@@ -239,13 +239,14 @@ def test_saves_never_share_a_record(tmp_path, monkeypatch):
     loaded = GameState.model_validate_json(a.st.model_dump_json())
     assert loaded.record == a.st.record
     assert "record" in PRIVATE and "record" not in a.st.model_dump(exclude=PRIVATE)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     a.st.slot = "one"
-    (tmp_path / "one.json").write_text(a.st.model_dump_json(), encoding="utf-8")
+    paths.games().mkdir(parents=True)
+    paths.save("one").write_text(a.st.model_dump_json(), encoding="utf-8")
     slot = saves.copy(saves.Save("one", {}, a.st))
-    copy = World(Module.load(config.EXAMPLE), GameState.model_validate_json((tmp_path / f"{slot}.json").read_text(encoding="utf-8")))
+    copy = World(Module.load(paths.EXAMPLE), GameState.model_validate_json(paths.save(slot).read_text(encoding="utf-8")))
     copy.apply(O.Move(entity="warden", to="office"))
-    original = GameState.model_validate_json((tmp_path / "one.json").read_text(encoding="utf-8"))
+    original = GameState.model_validate_json(paths.save("one").read_text(encoding="utf-8"))
     assert original.record.entities["warden"].at == "square" and copy.entity("warden").at == "office"
 
 

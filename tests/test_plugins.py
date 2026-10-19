@@ -6,10 +6,9 @@ import shutil
 import pytest
 from textual.widgets import Button, Static
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv
-from autokeeper.config import EXAMPLE
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.harness.tools import ToolError, Workspace
@@ -18,6 +17,7 @@ from autokeeper.module.compiler import compile_module
 from autokeeper.module.importer import validate_all
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
+from autokeeper.paths import EXAMPLE
 from autokeeper.plugins.author import plugin_tool
 from autokeeper.plugins.runtime import PluginError, execute, verify
 from autokeeper.plugins.schema import Action as PluginAction
@@ -208,7 +208,7 @@ async def test_mcp_keeper_can_invoke_a_plugin_twice_as_two_distinct_actions(monk
     game, _, _ = make(module, fake, {})
     monkeypatch.setattr(server.S, "game", game)
     monkeypatch.setattr(server.S, "module", module)
-    monkeypatch.setattr(config, "SAVES", tmp_path)
+    monkeypatch.setattr(paths, "DATA", tmp_path)
     assert server.list_plugins()[0]["actions"][0]["name"] == "count"
     for _ in range(2):
         result = await server.plugin_action("counter", "count")
@@ -601,7 +601,7 @@ def test_network_players_get_redacted_public_plugin_info_but_no_id_or_source(fak
 
 
 async def test_a_lan_house_rule_is_drafted_and_installed_by_the_host(monkeypatch, tmp_path, fake):
-    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
 
     class HostCast(TableCast, AuthorCast):
         def __init__(self, *plugins):
