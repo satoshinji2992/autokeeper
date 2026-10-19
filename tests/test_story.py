@@ -39,15 +39,17 @@ ACCOUNT = "周衡来到小镇广场，读了告示栏上的字。"
 
 
 class Writer(hm.Model):
-    """The cheap model: the same account every time; it keeps what it was given. `gate` holds
-    the reply back, `fail` makes the call fail."""
+    """The cheap model: the same account every time; it keeps what it was given for one (the
+    chronicler's folds, also canned, are not counted). `gate` holds the reply back, `fail`
+    makes the call fail."""
 
     asked: list[str] = []
     gate: asyncio.Event | None = None
     fail = False
 
     async def _call(self, messages, *, schema, images, on_delta):
-        Writer.asked.append(messages[-1]["content"])
+        if "「故事至今」" in messages[-1]["content"]:
+            Writer.asked.append(messages[-1]["content"])
         if Writer.gate is not None:
             await Writer.gate.wait()
         if Writer.fail:
@@ -86,7 +88,7 @@ def table_game(cfg, module: Module) -> tuple[Game, list[dict]]:
         events.append(ev)
 
     game = Game(module, st, Cast(cfg, module), Rules(), emit=emit)
-    game.progress_every = progress.EVERY
+    game.write_progress = True
     return game, events
 
 
@@ -97,8 +99,100 @@ def play(st: GameState, turn: int, text: str) -> None:
     st.add("keeper", f"（第{turn}轮的叙述）", who="守秘人")
 
 
-# -- the story so far ------------------------------------------------------------------------
-async def test_the_story_so_far_comes_every_few_turns_from_what_the_table_saw(writer):
+def find(st: GameState, m: Module, clue: str) -> None:
+    """A clue turns up, as the engine records it."""
+    st.clues.append(clue)
+    st.add("clue", f"〔{m.clue(clue).title}〕{m.clue(clue).text.strip()}")
+
+
+# -- when it is written ------------------------------------------------------------------------
+def policy_state(turns: int, *, asked: int = 0) -> tuple[Module, GameState]:
+    """A game `turns` turns in, its last account asked for and written at turn `asked`."""
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    st = Game.new(m, [lead], slot="policy", human=[lead.id])
+    for turn in range(1, asked + 1):
+        play(st, turn, "我四下看看")
+    st.progress = Progress(text=ACCOUNT, turn=asked, asked=asked, seen=st.logged, marks=progress.marks(st))
+    for turn in range(asked + 1, turns + 1):
+        play(st, turn, "我和守钟人聊了聊天气")  # talk and looking around: no milestone
+    return m, st
+
+
+def test_no_new_account_within_six_turns_even_with_a_clue():
+    m, st = policy_state(5)
+    find(st, m, "c_notice")
+    assert progress.moved(st) == ["线索"] and not progress.due(st)
+    m, st = policy_state(10, asked=5)
+    find(st, m, "c_notice")
+    assert not progress.due(st)  # five turns since the last
+
+
+def test_an_account_six_turns_on_after_a_clue():
+    m, st = policy_state(6)
+    find(st, m, "c_notice")
+    assert progress.due(st)
+    m, st = policy_state(11, asked=5)
+    find(st, m, "c_notice")
+    assert progress.due(st)
+
+
+def test_no_account_after_twenty_turns_with_nothing_new():
+    _, st = policy_state(20, asked=20)
+    st.turn = 40  # the count goes on, nothing was said or done
+    assert not progress.due(st) and progress.refused(st)
+
+
+def test_a_catch_up_account_after_fifteen_turns_of_talk():
+    _, st = policy_state(14)
+    assert not progress.moved(st) and not progress.due(st)  # talk alone, for fourteen turns
+    play(st, 15, "我又四下看看")
+    assert progress.due(st)
+    _, st = policy_state(29, asked=15)
+    assert not progress.due(st)
+    play(st, 30, "继续聊")
+    assert progress.due(st)
+
+
+def test_the_ending_always_gets_one():
+    _, st = policy_state(7, asked=6)
+    st.ending = "stopped"
+    st.add("ending", "钟停了：钟停在十一点五十九分。")
+    assert progress.due(st)  # one turn after the last, at once
+    st.progress.asked = st.turn
+    assert not progress.due(st)  # and only the one
+
+
+@pytest.mark.parametrize("what", ["place", "person", "beat", "sanity", "wound", "night", "hours"])
+def test_each_milestone_brings_one_six_turns_on(what):
+    _, st = policy_state(12, asked=6)
+    inv = st.investigators[0]
+    if what == "place":
+        st.visited.append("tower")
+    elif what == "person":
+        st.npc("warden").met = True
+    elif what == "beat":
+        st.flags.append("bell_stopped")
+    elif what == "sanity":
+        inv.san -= progress.SAN_LOSS
+    elif what == "wound":
+        inv.hp -= progress.HP_LOSS
+    elif what == "night":
+        st.minutes += 1440
+    else:
+        st.minutes += progress.TIME_SKIP
+    assert progress.due(st), what
+
+
+def test_a_little_sanity_or_a_short_while_is_no_milestone():
+    _, st = policy_state(12, asked=6)
+    st.investigators[0].san -= progress.SAN_LOSS - 1
+    st.minutes += progress.TIME_SKIP - 1
+    assert not progress.moved(st) and not progress.due(st)
+
+
+# -- what it is given, and that nobody waits ---------------------------------------------------
+async def test_the_story_so_far_comes_after_a_milestone_from_what_the_table_saw(writer):
     m = Module.load(EXAMPLE)
     game, events = table_game(writer, m)
     st = game.state
@@ -106,40 +200,43 @@ async def test_the_story_so_far_comes_every_few_turns_from_what_the_table_saw(wr
     st.improv.append({"turn": 1, "kind": "展开", "plan": {"note": "导演的安排：午夜钟里的东西会出来"}})
     st.transcripts["keeper"] = [{"role": "user", "content": "守秘人自己记的：钟里藏着东西"}]
     st.add("keeper", "午后的广场上没什么人，钟楼的影子斜斜地压在石板路上。", who="守秘人")
-    for turn in (1, 2):
+    st.progress.marks = progress.marks(st)  # as Game.start leaves it after the opening
+    for turn in range(1, 6):
         play(st, turn, f"我做第{turn}件事")
+        if turn == 2:
+            find(st, m, "c_notice")
+            st.add("npc", "外乡人？钟楼这几天不让进。", who="老守钟人")
+            dusk = next(e for e in m.events if e.id == "e_dusk")
+            st.add("event", dusk.read_aloud)  # what the table was told; its keeper's note is not
         await game.remember()
-    st.add("clue", f"〔{m.clue('c_notice').title}〕{m.clue('c_notice').text.strip()}")
-    st.add("npc", "外乡人？钟楼这几天不让进。", who="老守钟人")
-    dusk = next(e for e in m.events if e.id == "e_dusk")
-    st.add("event", dusk.read_aloud)  # what the table was told; its keeper's note is not
-    assert not Writer.asked and st.progress == Progress()  # not yet: every third turn
-    play(st, 3, "我做第3件事")
+    assert not Writer.asked and st.progress.asked == -1  # a clue, but not six turns in yet
+    play(st, 6, "我做第6件事")
     await game.remember()
     await game._recounting
     asked = Writer.asked[0]
-    assert m.hook.strip()[:10] in asked and "钟楼的影子" in asked and "我做第1件事" in asked and "我做第3件事" in asked
+    assert m.hook.strip()[:10] in asked and "钟楼的影子" in asked and "我做第1件事" in asked and "我做第6件事" in asked
     assert m.clue("c_notice").text.strip()[:10] in asked and "老守钟人（NPC）：外乡人？" in asked and dusk.read_aloud in asked
     secrets = [m.truth, m.keeper_notes, *[s for n in m.npcs for s in n.secrets], *[loc.keeper for loc in m.locations if loc.keeper],
                *[e.text for e in m.events], *[c.text.strip() for c in m.clues if c.id != "c_notice"],
                "导演的安排", "守秘人自己记的"]
     assert all(s.strip()[:12] not in asked for s in secrets if s.strip())
-    assert st.progress == Progress(text=ACCOUNT, turn=3, next=6, seen=st.logged)
-    assert events[-1] == {"type": "progress", "text": ACCOUNT, "turn": 3, "next": 6, "seen": st.logged}
+    assert st.progress == Progress(text=ACCOUNT, turn=6, asked=6, seen=st.logged, marks=progress.marks(st))
+    assert events[-1] == {"type": "progress", "text": ACCOUNT, "turn": 6}  # silent: the screens mark the tab
     assert st.usage["progress"]["calls"] == 1 and "进展" in plain(usage_view(st))  # Ctrl+B counts it
     assert "progress" not in st.transcripts  # stateless: the last account comes with the material
 
-    for turn in (4, 5):
+    for turn in range(7, 13):
         play(st, turn, f"我做第{turn}件事")
         await game.remember()
-    assert len(Writer.asked) == 1
-    play(st, 6, "我做第6件事")
+    assert len(Writer.asked) == 1  # six more turns, but nothing new turned up
+    find(st, m, "c_archive")
+    play(st, 13, "我做第13件事")
     await game.remember()
     await game._recounting
     again = Writer.asked[1]
-    assert ACCOUNT in again and "第 3 轮" in again  # the last account, and what came after it
-    assert "我做第3件事" not in again and "我做第4件事" in again and "我做第6件事" in again
-    assert st.progress.turn == 6 and st.progress.next == 9
+    assert ACCOUNT in again and "第 6 轮" in again  # the last account, and what came after it
+    assert "我做第6件事" not in again and "我做第7件事" in again and "我做第13件事" in again
+    assert st.progress.turn == 13
 
 
 async def test_the_story_so_far_never_holds_up_a_turn_and_a_failed_one_keeps_the_last(writer):
@@ -147,38 +244,65 @@ async def test_the_story_so_far_never_holds_up_a_turn_and_a_failed_one_keeps_the
     game, events = table_game(writer, m)
     st = game.state
     Writer.gate = asyncio.Event()
-    for turn in (1, 2, 3):
+    find(st, m, "c_notice")
+    for turn in range(1, 7):
         play(st, turn, f"我做第{turn}件事")
         await game.remember()  # returns with the model still writing
     for _ in range(20):
         await asyncio.sleep(0)
     assert len(Writer.asked) == 1 and not game._recounting.done()
-    assert st.progress.text == "" and st.progress.next == 6  # one call this stretch, whatever comes of it
+    assert st.progress.text == "" and st.progress.asked == 6  # no second call while it writes
     Writer.gate.set()
     await game._recounting
     assert st.progress.text == ACCOUNT
 
     Writer.fail = True
-    for turn in (4, 5, 6):
+    find(st, m, "c_archive")
+    for turn in range(7, 13):
         play(st, turn, f"我做第{turn}件事")
         await game.remember()
     await game._recounting  # the failure stays in the task
-    assert st.progress.text == ACCOUNT and st.progress.turn == 3 and st.progress.next == 9
+    assert st.progress.text == ACCOUNT and st.progress.turn == 6 and st.progress.asked == 12
     assert [e["type"] for e in events].count("progress") == 1
-    play(st, 7, "我做第7件事")
+    Writer.fail = False
+    for turn in range(13, 18):
+        play(st, turn, f"我做第{turn}件事")
+        await game.remember()
+    assert len(Writer.asked) == 2  # not again within six turns of the failed call
+    play(st, 18, "我做第18件事")
     await game.remember()
-    assert len(Writer.asked) == 2  # not tried again before turn 9
+    await game._recounting
+    assert len(Writer.asked) == 3 and st.progress.turn == 18  # the clue it missed still counts
+    assert "我做第7件事" in Writer.asked[2]  # from the last account that was written
 
-    game.progress_every = 0  # autoplay and replays write none
-    for turn in (9, 10, 11, 12):
+    game.write_progress = False  # autoplay and replays write none
+    find(st, m, "c_gears")
+    for turn in range(19, 40):
         play(st, turn, "继续")
         await game.remember()
+    assert len(Writer.asked) == 3
+
+
+async def test_a_player_may_ask_for_it_once_a_turn(writer):
+    m = Module.load(EXAMPLE)
+    game, _ = table_game(writer, m)
+    st = game.state
+    play(st, 1, "我四下看看")
+    assert game.recount() == ""  # no milestone needed when asked
+    assert game.recount() == "正在整理，稍等"
+    await game._recounting
+    assert st.progress.text == ACCOUNT and "这一轮" in game.recount()  # once a turn
+    st.turn = 2
+    assert "没有新的事" in game.recount()  # nothing since
+    play(st, 3, "我再看看")
+    assert game.recount() == ""
+    await game._recounting
     assert len(Writer.asked) == 2
 
 
-async def test_the_last_turn_gets_its_account_and_the_opening_is_kept(fake):
-    """Through the turn graph: the opening is kept for the 背景 page, the account comes after
-    the third turn's telling, and once more when the game ends between two."""
+async def test_the_ending_gets_its_account_at_once_and_the_opening_is_kept(fake):
+    """Through the turn graph: the opening is kept for the 背景 page; looking around brings no
+    account; the ending brings one at once, four turns in."""
 
     class Telling(FakeCast):
         def __init__(self, script):
@@ -192,25 +316,24 @@ async def test_the_last_turn_gets_its_account_and_the_opening_is_kept(fake):
     from autokeeper.agents.cast import Action, Ruling
 
     module = Module.load(EXAMPLE)
-    look = Action(kind="investigate", summary="周衡看告示栏", target="告示栏")
+    look = Action(kind="investigate", summary="周衡看看广场", target="广场")
     stop = Action(kind="use", summary="周衡拉下制动杆", target="制动杆")
     script = {"看": (look, Ruling(needs_roll=False, minutes=5)), "停": (stop, Ruling(needs_roll=False, set_flags=["bell_stopped"]))}
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     cast = Telling(script)
     game = Game(module, state, cast, Rules(dice=fake))  # type: ignore[arg-type]
-    game.progress_every = progress.EVERY
+    game.write_progress = True
     await game.start()
-    assert state.prologue == "叙事"
+    assert state.prologue == "叙事" and state.progress.marks == progress.marks(state)
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": "sofar"}}
     for _ in range(3):
         await app.ainvoke({"input": "看"}, thread)
-    await game._recounting
-    assert state.progress.text == "到第 3 轮为止的经过" and len(cast.material) == 1
+    assert not cast.material
     fake.queue_totals(3)  # the ending's 理智 +1D6
-    await app.ainvoke({"input": "停"}, thread)  # turn 4 ends it: no waiting for turn 6
+    await app.ainvoke({"input": "停"}, thread)
     await game._recounting
-    assert state.ending and state.progress.turn == 4 and len(cast.material) == 2
+    assert state.ending and state.progress.turn == 4 and len(cast.material) == 1
 
 
 def test_an_account_is_shown_as_plain_lines_near_its_length():
@@ -318,18 +441,30 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         await ws.send_json({"t": "sit", "investigator": "zhouheng"})
         heard: list[dict] = []
         await keep(ws, heard, pool_open)
-        for text in ("我四下看看0", "我四下看看1", "我四下看看2", "我再看看"):  # the fourth turn's save has the account
+        acts = ["我看看告示栏", *(f"我四下看看{n}" for n in range(1, 6))]  # a clue first, then six turns in
+        for text in acts:
             await ws.send_json({"t": "act", "text": text})
             await ws.send_json({"t": "done"})
             await keep(ws, heard, lambda x: x["t"] == "pool" and not x["open"])  # the keeper settles it
             await keep(ws, heard, pool_open)  # the next round
+        while not any(x["t"] == "sync" and x["state"]["progress"]["text"] for x in heard):
+            heard.append(await asyncio.wait_for(ws.receive_json(), 5.0))
         told = next(x for x in heard if x["t"] == "event" and x["ev"]["type"] == "progress")
-        assert told["ev"]["text"] == ACCOUNT and told["ev"]["turn"] == 3
+        assert told["ev"] == {"type": "progress", "text": ACCOUNT, "turn": 6}
         view = GameState.model_validate(next(x for x in heard if x["t"] == "sync" and x["state"]["progress"]["text"])["state"])
-        assert view.progress.text == ACCOUNT and (view.progress.turn, view.progress.next) == (3, 6)
-        assert [d.text for d in view.deeds if d.kind == "act"][:3] == ["我四下看看0", "我四下看看1", "我四下看看2"]
+        assert view.progress.text == ACCOUNT and (view.progress.turn, view.progress.asked) == (6, 6)
+        assert [d.text for d in view.deeds if d.kind == "act"] == acts and "c_notice" in view.clues
         assert view.prologue == "叙事" and not view.log  # the opening as told; the log stays on the host
         assert len(cast.material) == 1 and hub.m.truth not in cast.material[0]
+        await ws.send_json({"t": "recount"})  # asked for again in the same round
+        assert "这一轮已经整理过了" in (await keep(ws, heard, lambda x: x["t"] == "error"))["text"]
+        await ws.send_json({"t": "act", "text": "我再看看"})  # one more turn: saved after it, the account in the save
+        await ws.send_json({"t": "done"})
+        await keep(ws, heard, lambda x: x["t"] == "pool" and not x["open"])
+        await keep(ws, heard, pool_open)
+        await ws.send_json({"t": "recount"})  # a new round: asked for, it is written at once
+        await keep(ws, heard, lambda x: x["t"] == "event" and x["ev"]["type"] == "progress")
+        assert len(cast.material) == 2
         await ws.close()
     await closed(task)
     saved = GameState.model_validate_json((tmp_path / "saves" / f"{hub.state.slot}.json").read_text(encoding="utf-8"))
@@ -383,20 +518,23 @@ async def test_the_right_column_turns_its_pages(writer):
     lead = m.pregens[0].model_copy(deep=True)
     st = Game.new(m, [lead], slot="pages", human=[lead.id])
     st.prologue = "午后的广场上没什么人，钟楼的影子斜斜地压在石板路上。"
-    st.progress = Progress(text=ACCOUNT, turn=3, next=6)
+    st.progress = Progress(text=ACCOUNT, turn=3, asked=3)
     st.world["noon"] = WorldFact(kind="promise", text="报社答应等周衡到明天中午", who=lead.id, turn=2, source="arbiter")
     app = AutoKeeperApp(theme="amber")
+    said: list[str] = []
+    real = app.notify
+    app.notify = lambda message, **kw: (said.append(str(message)), real(message, **kw))[-1]  # type: ignore[method-assign]
     async with app.run_test(size=(140, 44)) as pilot:
         screen = GameScreen(m, st, resume=True)
         app.push_screen(screen)
         await until_idle(pilot, screen)
-        assert screen.game.progress_every == progress.EVERY
+        assert screen.game.write_progress
         tabs = screen.query_one("#pages", TabbedContent)
         assert tabs.active == "history-page"
         await pilot.press("ctrl+g")
         assert tabs.active == "progress-page"
         page = shown(screen, "#progress")
-        assert ACCOUNT in page and "第 3 轮更新 · 第 6 轮再更新" in page and "报社答应等周衡到明天中午" in page
+        assert ACCOUNT in page and "更新于第 3 轮" in page and "Ctrl+Y" in page and "报社答应等周衡到明天中午" in page
         await pilot.press("ctrl+g")
         assert tabs.active == "background-page"
         background = shown(screen, "#background")
@@ -406,14 +544,32 @@ async def test_the_right_column_turns_its_pages(writer):
         assert tabs.active == "history-page"
         await pilot.click(next(t for t in screen.query("#pages Tab") if t.id and t.id.endswith("progress-page")))  # a tab clicked
         assert tabs.active == "progress-page"
-        assert {"经过", "进展", "背景"} <= {title for title, *_ in COMMANDS}  # in the Ctrl+P menu
+        assert {"经过", "进展", "背景", "整理进展"} <= {title for title, *_ in COMMANDS}  # in the Ctrl+P menu
+        assert not [c for c in COMMANDS if "每 3 轮" in c[2]]
         await screen.run_action("page('background')")
         assert tabs.active == "background-page"
 
-        st.progress = Progress(text="第二段故事至今。", turn=6, next=9)  # written in the background meanwhile
-        await screen.handle({"type": "progress", **st.progress.model_dump()})
-        assert "第二段故事至今" in shown(screen, "#progress")
+        notices = len(said)
+        st.progress = Progress(text="第二段故事至今。", turn=6, asked=6)  # written in the background meanwhile
+        await screen.handle({"type": "progress", "text": st.progress.text, "turn": 6})
+        assert "第二段故事至今" in shown(screen, "#progress") and "更新于第 6 轮" in shown(screen, "#progress")
+        assert tabs.get_tab("progress-page").label.plain == "进展·新" and len(said) == notices  # silent
         assert (config.SAVES / "pages.json").exists()  # idle: kept at once
+        await pilot.press("ctrl+g")  # 背景 → 经过: still waiting
+        assert tabs.get_tab("progress-page").label.plain == "进展·新"
+        await pilot.press("ctrl+g")  # opened: read
+        await pilot.pause()
+        assert tabs.active == "progress-page" and tabs.get_tab("progress-page").label.plain == "进展"
+
+        st.turn = 7
+        st.add("player", "我看看告示栏", who=lead.name)
+        await pilot.press("ctrl+y")  # asked for now: written while play goes on
+        await screen.game._recounting
+        await pilot.pause()
+        assert shown(screen, "#progress").count(ACCOUNT) == 1 and "更新于第 7 轮" in shown(screen, "#progress")
+        await pilot.press("ctrl+y")
+        await pilot.pause()
+        assert "这一轮已经整理过了，下一轮再来" in said  # once a turn
 
         rounds = len(screen.query(".history-round"))
         st.turn = 4

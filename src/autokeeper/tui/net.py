@@ -412,6 +412,13 @@ class NetGameScreen(GameScreen):
         else:
             self.app.notify("你在观战，没有自己的调查员")
 
+    def action_recount(self) -> None:
+        """Ctrl+Y: the host writes the story so far now; every screen gets it with the state."""
+        if self.seat:
+            self.run_worker(partial(self.link.send, {"t": "recount"}))
+        else:
+            self.app.notify("你在观战；有新进展时房主那边会整理")
+
     async def ideas_for(self, inv) -> list[str]:
         """The host's investigator agent thinks for this seat (Hub._ideas), from the same view
         the AI seats get; the answer comes back to this screen alone."""

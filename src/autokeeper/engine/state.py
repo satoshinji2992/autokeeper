@@ -36,13 +36,15 @@ DEEDS = {"player": "act", "dice": "check", "clue": "clue", "handout": "handout",
 
 
 class Progress(BaseModel):
-    """The players' 故事至今 (engine/progress.py): the text, the turn it was written after,
-    the turn the next one is due, and how many log lines it had read by then."""
+    """The players' 故事至今 (engine/progress.py): the text and the turn it was written after;
+    the turn it was last asked for (written or not), how many log lines had been read by then
+    and what had turned up (progress.marks), to tell what is new since."""
 
     text: str = ""
     turn: int = 0
-    next: int = 0  # 0: the first one, after progress.EVERY turns
+    asked: int = -1  # -1: never yet
     seen: int = 0  # GameState.logged when it was asked for
+    marks: dict[str, int] = Field(default_factory=dict)
 
 
 class NpcState(BaseModel):

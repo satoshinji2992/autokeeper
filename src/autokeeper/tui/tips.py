@@ -2,8 +2,7 @@
 
 The first time something happens in a game (the opening, a roll, a roll that is not made
 again, the second chance after a failed one, a clue, a handout, someone talking, a sanity
-loss, HP running low, the keeper improvising, a walk somewhere, a few turns going nowhere,
-the first account of the story so far),
+loss, HP running low, the keeper improvising, a walk somewhere, a few turns going nowhere),
 one dim line in the story says how it works and which key or guide page tells more. Each hint once per player and at
 most one a turn, after the narration, where the player looks before typing: never on top
 of a choice that is being made (a notification there covered the push dialog's buttons on
@@ -59,7 +58,6 @@ TIPS: dict[str, Tip] = {
     "improv": Tip("你可以探索模组没写到的事，守秘人会按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
     "move": Tip("赶路会花游戏时间，顶部显示当前时间。F3 查看已知地点。", "screen"),
     "stuck": Tip("需要思路时按 F5。选中的建议只会填入输入框，确认后再发送。", "play"),
-    "progress": Tip("「进展」里整理好了故事至今，每 3 轮更新一次；按 Ctrl+G 翻看。「背景」一页是开场时知道的事。", "screen"),
     # Only places already mentioned in the opening or hook; no later discoveries.
     f"{TUTORIAL}:outside": Tip("想出门时，直接说要去的地点；F3 可以查看目前已知的地方。", "play"),
 }
@@ -72,8 +70,7 @@ STUCK_AFTER = 4  # turns without a clue, an event or a new place before F5 is me
 # When several wait, the more urgent and the rarer go first; the rest keep for a later turn,
 # except those about this very turn, which no later one would make sense of.
 NOW = {"start", "offer"}
-ORDER = ("start", "offer", "hurt", "sanity", "handout", "clue", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck",
-         "improv", "move", "progress")
+ORDER = ("start", "offer", "hurt", "sanity", "handout", "clue", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
 
 
 class TipLine(Static):
@@ -190,7 +187,7 @@ def _called_for(st, player: Investigator, ev: dict) -> str | None:
         return t if ev.get("who") == player.name else None
     if t == "improv":  # the kinds the story tells; a consequence speaks for itself
         return "improv" if ev.get("kind") in ("开局改编", "展开", "推进") else None
-    return {"handout": "handout", "clue": "clue", "dice": "check", "npc": "npc", "move": "move", "progress": "progress"}.get(t or "")
+    return {"handout": "handout", "clue": "clue", "dice": "check", "npc": "npc", "move": "move"}.get(t or "")
 
 
 def _due(st, player: Investigator) -> list[str]:

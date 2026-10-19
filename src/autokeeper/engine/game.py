@@ -96,9 +96,10 @@ class Game:
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
-        # Turns between two accounts of the story so far (engine/progress.py). 0 writes none
-        # (autoplay and replays: nobody reads them); a screen and the Hub set progress.EVERY.
-        self.progress_every = 0
+        # The players' 故事至今 (engine/progress.py), written in the background when the story
+        # has moved. Off in autoplay and replays, where nobody reads it; a screen and the Hub
+        # turn it on.
+        self.write_progress = False
         self._recounting: asyncio.Task | None = None
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
@@ -184,6 +185,7 @@ class Game:
         )
         text = await self._narrate(report, on_delta)
         st.prologue = text  # the 背景 page keeps it after the log has moved on
+        st.progress.marks = progress.marks(st)  # milestones count from here
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
         st.pending_turn.clear()
         if self.checkpoint:
@@ -778,23 +780,38 @@ class Game:
         st.log = keep
 
     def _recount(self) -> None:
-        """When it is due, the players' 故事至今 is written again (engine/progress.py) in the
-        background: the prompt is made now, the turn goes on without waiting for the reply."""
-        st, every = self.state, self.progress_every
-        if not every or (self._recounting and not self._recounting.done()) or not progress.due(st, every):
-            return
-        prompt = progress.material(self.m, st)
-        st.progress.next = st.turn + every  # one call a stretch, whatever comes of it
-        self._recounting = asyncio.create_task(self._recount_in(prompt, st.turn, st.logged))
+        """After a turn, when the story has moved enough (progress.due): the players' 故事至今,
+        written again in the background. The prompt is made now; no turn waits for the reply."""
+        if self.write_progress and not self._writing() and progress.due(self.state):
+            self._ask_progress()
 
-    async def _recount_in(self, prompt: str, turn: int, seen: int) -> None:
+    def recount(self) -> str:
+        """A player asks for it now (Ctrl+Y): once a turn, and only with something new since
+        the last one. Why not, when it cannot be done; "" when it is being written."""
+        why = "正在整理，稍等" if self._writing() else progress.refused(self.state)
+        if not why:
+            self._ask_progress()
+        return why
+
+    def _writing(self) -> bool:
+        return self._recounting is not None and not self._recounting.done()
+
+    def _ask_progress(self) -> None:
+        st = self.state
+        st.progress.asked = st.turn  # the next call waits progress.APART turns, whatever comes of this one
+        prompt = progress.material(self.m, st)
+        self._recounting = asyncio.create_task(self._recount_in(prompt, st.turn, st.logged, progress.marks(st)))
+
+    async def _recount_in(self, prompt: str, turn: int, seen: int, marks: dict[str, int]) -> None:
+        """Only an account that came moves on what has been read and counted: after a failure
+        the next one starts from the last that was written."""
         st = self.state
         try:
             text = progress.trim(await self.cast.progress(st, prompt))
             if text:
-                st.progress = Progress(text=text, turn=turn, next=st.progress.next, seen=seen)
-                await self.listener({"type": "progress", **st.progress.model_dump()})
-        except Exception:  # the old text stands; the next call is a few turns away
+                st.progress = Progress(text=text, turn=turn, asked=st.progress.asked, seen=seen, marks=marks)
+                await self.listener({"type": "progress", "text": text, "turn": turn})
+        except Exception:  # the old text stands
             pass
 
     async def sketch(self, png: bytes, prompt_id: str | None = None) -> str:

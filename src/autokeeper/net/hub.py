@@ -16,12 +16,14 @@ A seated player throws their own dice: the roll prompt reaches them as an offer 
 table waits for a seated player, any seated player may ask the keeper to tell the latest
 narration again (the turn loop does it, between actions); after the end, too. A seated
 player may also ask for ideas (F5) at any time: the host's investigator agent thinks for
-their seat from what the players have seen, and only they get the answer.
+their seat from what the players have seen, and only they get the answer. The story so far
+(the 进展 page) is written here when the story has moved (engine/progress.py) and reaches every
+screen with the state; a seated player may ask for it between rounds, once a round.
 
 Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
-                    · retell {nudge} · epilogue · suggest
+                    · retell {nudge} · epilogue · suggest · recount
     client -> hub   (in a round) done · undo
     hub -> client   welcome · seats · pool {open, capacity, count, by, done, waiting} · turn (the action being settled)
                     · event {ev} · module · sync {state} · offer · say · ideas {ideas}
@@ -49,7 +51,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import __version__, config, roster
-from ..engine import debrief, fog, progress
+from ..engine import debrief, fog
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
@@ -163,7 +165,7 @@ class Hub:
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
-        self.game.progress_every = progress.EVERY  # the 进展 page on every screen, through the sync
+        self.game.write_progress = True  # the 进展 page on every screen, through the sync
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}
@@ -278,6 +280,11 @@ class Hub:
             elif isinstance(msg.get("choice"), dict):
                 self.swaps.put_nowait((cid, msg["choice"]))
                 await self._send(cid, {"t": "error", "text": "这一段讲完就换模型"})
+        elif t == "recount":  # the story so far, now (Ctrl+Y): between rounds, once a round
+            why = ("你在观战" if self._seat_of(cid) is None else "守秘人正在结算这一轮，讲完再整理"
+                   if not (self.open or self.over) else self.game.recount())
+            if why:
+                await self._send(cid, {"t": "error", "text": why})
         elif t == "suggest":
             seat = self._seat_of(cid)
             if seat is None or self.state.ending:

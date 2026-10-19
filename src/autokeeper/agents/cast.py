@@ -8,8 +8,8 @@
     npc:<id>      one session per NPC; knows only its own file and its own conversations
     keeper        narrates resolved, public facts; never carries the module's hidden truth
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
-    progress      the players' 故事至今 every few turns, on the summarizer's cheap model; gets
-                  only what the table was shown (engine/progress.py)
+    progress      the players' 故事至今 when the story has moved, on the summarizer's cheap
+                  model; gets only what the table was shown (engine/progress.py)
     investigator  AI players (companions and autoplay); see only what players see
                   (engine/autoplay.situation); also writes the ideas a player asks for (F5)
     vision        reads sketches

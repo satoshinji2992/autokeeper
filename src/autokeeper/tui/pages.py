@@ -1,7 +1,8 @@
 """The pages under the sheet in the right column: 经过 (what happened, a line each: the history
-panel), 进展 (the story so far, written again every few turns: engine/progress.py) and 背景
-(what the investigators knew when it began, and who they are). Ctrl+G turns the page, and a
-click on a tab; without the column (a narrow terminal) the same pages open over the story.
+panel), 进展 (the story so far, written again when the story has moved: engine/progress.py)
+and 背景 (what the investigators knew when it began, and who they are). Ctrl+G turns the page,
+and a click on a tab; without the column (a narrow terminal) the same pages open over the
+story. A new account comes in silently: its tab says 进展·新 until the page is opened.
 
 Everything here is what the players were shown: the hook, the keeper's opening as it was
 told, the cards. Never the module's truth or the keeper's notes; a LAN screen, which has no
@@ -21,12 +22,12 @@ from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import Static, TabbedContent, TabPane
 
-from ..engine.progress import EVERY
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
 
 PAGES = {"history": "经过", "progress": "进展", "background": "背景"}
+FRESH = "进展·新"  # the 进展 tab while a new account waits to be read
 DIGEST = ("思想与信念", "重要之人", "意义非凡之地", "宝贵之物")  # why they would go into this: what they hold to
 # A space between Chinese and a number ("1922 年") is where Rich breaks a narrow line: the
 # number is left alone on its line. The pages run such text together.
@@ -68,16 +69,15 @@ def turn(tabs: TabbedContent, step: int = 1) -> str:
 
 
 # -- what the pages say ------------------------------------------------------------------
-def progress_view(st: GameState, every: int = EVERY) -> Text:
-    """The story so far, when it was written and when it is written again; the promises not
-    yet kept."""
+def progress_view(st: GameState) -> Text:
+    """The story so far and when it was written; the promises not yet kept."""
     p = st.progress
     out = Text()
     if p.text:
-        out.append(f"第 {p.turn} 轮更新 · " + ("本局已结束" if st.ending else f"第 {p.next or every} 轮再更新") + "\n", style="dim")
+        out.append(f"更新于第 {p.turn} 轮 · Ctrl+Y 现在整理\n", style="dim")
         out.append(tight(p.text.strip()))
     else:
-        out.append(f"第 {p.next or every} 轮起，这里写下故事至今，之后每 {every} 轮更新一次。", style="dim")
+        out.append("有新进展时，这里会写下故事至今。Ctrl+Y 现在整理。", style="dim")
     promises = [f for f in st.world.values() if f.kind == "promise" and f.status == "active"]
     if promises:
         out.append("\n\n未了的约定\n", style="bold")
@@ -172,3 +172,8 @@ class PagesModal(ModalScreen[None]):
 
     def action_turn_page(self) -> None:
         turn(self.query_one(TabbedContent))
+
+
+def mark(tabs: TabbedContent, fresh: bool) -> None:
+    """进展·新 on the tab while a new account waits to be read; 进展 once it is."""
+    tabs.get_tab("progress-page").label = FRESH if fresh else PAGES["progress"]
