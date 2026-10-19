@@ -614,6 +614,9 @@ class HistoryPanel(VerticalScroll):
     def compose(self):
         yield Static(Text("点一行，故事跳到那里 · Ctrl+G 翻页", style="dim"), classes="history-head")
 
+    def on_mount(self) -> None:
+        self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go
+
     def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
         """`turn`: the round the line belongs to (GameState.turn once it is played). Rounds only
         go up: a dice-bot roll (.r) after an action stays under that action's round."""

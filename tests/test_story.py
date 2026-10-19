@@ -31,6 +31,7 @@ from autokeeper.tui.app import COMMANDS, AutoKeeperApp, GameScreen
 from autokeeper.tui.pages import Page, PagesModal
 from autokeeper.tui.sheet import SheetModal, sheet_view
 from autokeeper.tui.usage import usage_view
+from autokeeper.tui.widgets import CluePanel, HistoryPanel
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened, pool_open, until
@@ -580,6 +581,14 @@ async def test_the_right_column_turns_its_pages(writer):
         await pilot.pause()
         heads = [w.content.plain for w in screen.query(".history-round")][rounds:]
         assert heads == ["— 第 5 轮 —", "— 第 6 轮 —"]
+        await pilot.press("ctrl+g", "ctrl+g")  # 经过
+        for n in range(12):
+            screen._history("player", Text(f"▶ 周衡：第{n}件事"), None)
+        await pilot.pause()
+        screen.query_one(CluePanel).show([f"线索{n}" for n in range(10)])  # the list below grows, the page shrinks
+        await pilot.pause()
+        panel = screen.query_one(HistoryPanel)
+        assert panel.max_scroll_y > 0 and panel.scroll_y == panel.max_scroll_y  # the newest line still in sight
 
         await pilot.press("f4")
         await pilot.pause()
