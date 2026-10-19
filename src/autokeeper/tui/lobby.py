@@ -63,7 +63,7 @@ class CloseRoomModal(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal", id="close-room"):
             yield Static("关闭房间？", classes="modal-title")
-            yield Static("所有人都会断开，网页也会关掉。游戏每回合都存了档，下次开房间可以接着玩。", classes="modal-body")
+            yield Static("所有人都会断开，网页版也会关掉。存档还在，下次开房间可以接着玩。", classes="modal-body")
             with Horizontal(classes="buttons"):
                 yield Button("关闭房间", id="yes", variant="error")
                 yield Button("取消", id="no")
@@ -112,14 +112,13 @@ class LobbyScreen(Screen):
                     yield Static(id="lobby-hint")
                     with VerticalScroll(id="lobby-info"):
                         yield Static(id="lobby-room")
-                        yield Static(id="lobby-rule")
                         yield Static(id="lobby-module")
                 with VerticalScroll(id="lobby-card"):
                     yield Static(id="lobby-sheet")
             with Horizontal(id="lobby-actions"):
                 yield Button("坐这个位置", id="sit", variant="primary", compact=True)
                 yield Button("观战", id="watch", compact=True)
-                yield Button("现在开始（空座交给 AI）", id="start", compact=True)
+                yield Button("现在开始", id="start", compact=True)
                 yield Button("人物卡", id="sheet", compact=True)
                 yield Button("离开", id="leave", compact=True)
                 yield Button("关闭房间", id="close_room", variant="error", compact=True)
@@ -133,7 +132,7 @@ class LobbyScreen(Screen):
             await self.link.connect()
         except Exception as exc:  # wrong address, host not up yet
             await self.link.close()
-            self.app.notify(f"连不上房间：{exc}", severity="error", timeout=8)
+            self.app.notify(str(exc) or type(exc).__name__, title="连不上房间", severity="error", timeout=8)
             if self.room is not None:
                 self.app.pop_screen()
             else:
@@ -160,8 +159,7 @@ class LobbyScreen(Screen):
             self.welcome = msg
             self.link.host = bool(msg.get("host"))
             if (theirs := msg.get("version")) and theirs != __version__:
-                self.app.notify(f"房主用的是 {theirs}，你是 {__version__}。版本不同可能出错，双方更新到同一版再联机。",
-                                severity="warning", timeout=12)
+                self.app.notify(f"房主是 {theirs}，你是 {__version__}，版本不同可能出错", severity="warning", timeout=12)
             self.m = table_module(msg)
             self.state = GameState.model_validate(msg["state"])
             self.seats = msg["seats"]
@@ -188,7 +186,7 @@ class LobbyScreen(Screen):
         elif t == "closed" and not self.gone:
             self.gone = True
             self.app.notify("房主关闭了房间", severity="error")
-            self.query_one("#lobby-hint", Static).update(Text("房间已经关了。Esc 离开。", style="bold"))
+            self.query_one("#lobby-hint", Static).update(Text("房间关了，Esc 离开", style="bold"))
             self._buttons()
         if t in ("begin", "turn", "event") and self.chosen is not None and self.welcome is not None and not self.gone:
             self._enter([msg])
@@ -243,11 +241,11 @@ class LobbyScreen(Screen):
         if not seat["human"]:
             t.append("\n  ◆ AI 扮演", style="" if lit else "dim")
         elif seat["investigator"] == self.chosen:
-            t.append("\n  ● 你坐在这里", style="bold" if lit else "bold green")
+            t.append("\n  ● 你", style="bold" if lit else "bold green")
         elif seat["online"]:
-            t.append(f"\n  ● {seat['player']} 已就座", style="" if lit else "green")
+            t.append(f"\n  ● {seat['player']}", style="" if lit else "green")
         else:
-            t.append("\n  ○ 空位" + ("，AI 先替着" if self.started else "，回车坐下"), style="bold" if lit else "bold yellow")
+            t.append("\n  ○ 空座" + ("，AI 代打" if self.started else ""), style="bold" if lit else "bold yellow")
         if inv and not self.short and (line := gist(inv, 60)):
             t.append(f"\n  {line}", style="italic" if lit else "dim italic")
         return clip(t, self.width)
@@ -269,14 +267,14 @@ class LobbyScreen(Screen):
             ol.focus()
         if self.gone:
             return
-        if self.chosen == "":
-            hint = "你在观战：开局后自动进入。想上场就选一个空位。" if not self.started else "选一个空位加入，或者观战。"
-        elif self.started:
-            hint = "游戏已经开始了：选一个空位加入，或者观战。"
+        if self.started:
+            hint = "已经开局了，选个空座或者观战"
+        elif self.chosen == "":
+            hint = "观战中，开局后自动进入"
         elif self.chosen:
-            hint = "坐好了。人齐了自动开局，也可以现在开始，空座交给 AI。"
+            hint = "人齐了自动开局，也可以现在开始，空座交给 AI"
         else:
-            hint = "选一个空座，回车坐下。人齐了自动开局。"
+            hint = "选个空座，回车坐下"
         self.query_one("#lobby-hint", Static).update(Text(hint, style="dim"))
         self._buttons()
 
@@ -298,13 +296,6 @@ class LobbyScreen(Screen):
     def _info(self) -> None:
         w = self.welcome or {}
         self.query_one("#lobby-room", Static).update(self._room_text(w))
-        rule = Table.grid(padding=(0, 1))
-        rule.add_column(no_wrap=True, style="dim")
-        rule.add_column()
-        for line in (lan.RULE, "每人先有一条，多出的一条先到先得", "守秘人讲的时候说的，留到下一轮最先交上",
-                     "/undo 撤回上一条；全角括号开头是场外聊天", "检定自己掷骰；掉线了 AI 先替你走，回来坐回原座"):
-            rule.add_row("·", line)
-        self.query_one("#lobby-rule", Static).update(Group(Text("规则", style="bold"), rule))
         book = w.get("module") or {}
         intro = Text()
         intro.append(f"《{book.get('title', '')}》", style="bold")
@@ -318,7 +309,8 @@ class LobbyScreen(Screen):
         self.query_one("#lobby-module", Static).update(intro)
 
     def _room_text(self, w: dict[str, Any]) -> Group:
-        """How friends get in: every address the host has, the page if there is one, the version."""
+        """How friends get in: every address the host has, the page if there is one; then this
+        table's round and the version."""
         info = w.get("room") or {}
         rows = [(str(ip), str(label)) for ip, label in info.get("addresses", [])]
         port, web = int(info.get("port") or 0), int(info.get("web") or 0)
@@ -328,23 +320,25 @@ class LobbyScreen(Screen):
         grid = Table.grid(padding=(0, 2))
         grid.add_column(no_wrap=True)
         grid.add_column(style="dim", no_wrap=True)
-        tail = Text(style="dim")
+        tail = Text()
         if web:
-            head = Text("把网址发给朋友，用浏览器打开就能玩", style="bold")
+            head = Text("网页版", style="bold")
             for ip, label in rows:
                 grid.add_row(f"  {lan.page_url(ip, web)}", label)
-            tail.append(f"装了 AutoKeeper 的朋友：「加入房间」填 {lan.join_target(rows[0][0], port)}")
+            tail.append(f"加入房间 {lan.join_target(rows[0][0], port)}")
         else:
-            head = Text("把地址发给朋友：标题画面「加入房间」填", style="bold")
+            head = Text("加入房间", style="bold")
             for ip, label in rows:
                 grid.add_row(f"  {lan.join_target(ip, port)}", label)
-            tail.append("没开网页：朋友要装好 AutoKeeper 才能加入")
+            tail.append("没开网页版，朋友要装 AutoKeeper 才能进", style="dim")
+        if players := sum(1 for s in self.seats if s["human"]):
+            tail.append(f"\n每轮 {lan.round_size(players)} 条行动")
+        theirs = w.get("version") or __version__
+        tail.append(f"\n版本 {theirs}" + ("" if theirs == __version__ else f"（你是 {__version__}）"))
         if self.link.host:
-            tail.append(f"\n朋友连不上：看防火墙有没有放行 {port}" + (f" 和 {web}" if web else "") + " 端口")
+            tail.append(f"\n连不上就查防火墙，放行 {port}" + (f" 和 {web}" if web else ""), style="dim")
         if info.get("hint"):
             tail.append(f"\n{info['hint']}", style="bold yellow")
-        theirs = w.get("version") or __version__
-        tail.append(f"\n版本 {theirs}" + ("" if theirs == __version__ else f"（你是 {__version__}，最好更新到同一版）"))
         return Group(head, grid, tail)
 
     def _card(self) -> None:
@@ -400,10 +394,10 @@ class LobbyScreen(Screen):
         if self.gone or seat is None:
             return
         if not seat["human"]:
-            self.app.notify(f"{seat['name']}由 AI 扮演，坐不了；开房间时可以把这个座位留给玩家", severity="warning")
+            self.app.notify("这个座位由 AI 扮演", severity="warning")
             return
         if seat["online"] and seat["investigator"] != self.chosen:
-            self.app.notify(f"{seat['player']} 已经坐在这里了", severity="warning")
+            self.app.notify(f"{seat['player']} 坐在这里了", severity="warning")
             return
         self.chosen = seat["investigator"]
         await self.link.send({"t": "sit", "investigator": self.chosen})
@@ -453,7 +447,7 @@ class LobbyScreen(Screen):
         self.gone = True
         await self.link.close()
         if self.room is not None and self.room.is_open:
-            self.app.notify("房间还开着，朋友可以接着玩。标题画面「回到房间」能回来，也能在那里关掉它。", timeout=8)
+            self.app.notify("房间还开着，标题画面「回到房间」可以回来", timeout=8)
         leave(self.app)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
@@ -480,4 +474,4 @@ async def close_room(app: Any) -> None:
     room, app.room = getattr(app, "room", None), None
     if room is not None:
         await asyncio.to_thread(room.close)
-        app.notify(f"房间关了：《{room.title}》" if room.title else "房间关了")
+        app.notify(f"《{room.title}》的房间关了" if room.title else "房间关了")

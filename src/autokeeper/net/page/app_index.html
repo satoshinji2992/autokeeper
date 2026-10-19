@@ -145,7 +145,7 @@
     <div class="cover ended">
       <div class="box">
         <div class="name">连接断开了</div>
-        <div class="sub">游戏关了，或者网络断了。</div>
+        <div class="sub">游戏关了，或者网络断了</div>
         <button type="button" onclick="restart()">重新连接</button>
       </div>
     </div>
@@ -158,10 +158,10 @@
     ></div>
     <div class="note">
       <span>
-        浏览器里 F5 会刷新网页。在输入框打 <code>/suggest</code> 出主意 · <code>/sheet</code> 人物卡 ·
-        <code>/notes</code> 线索本 · <code>/map</code> 地图 · <code>/help</code> 帮助，也可以用鼠标点底栏。
+        F5 会刷新网页。出主意 <code>/suggest</code>　人物卡 <code>/sheet</code>　线索本 <code>/notes</code>　地图
+        <code>/map</code>　帮助 <code>/help</code>　底栏也能点
       </span>
-      <button type="button" onclick="quiet()" title="收起这一行">×</button>
+      <button type="button" onclick="quiet()" title="收起">×</button>
     </div>
 
     <script>
@@ -215,11 +215,18 @@
           .catch(plain);
       })();
 
-      // A click beside the terminal gives the keys back to the game.
+      // The keys go to the game: once it is on screen, after a click beside it, and when the tab comes back.
+      const keys = () => document.querySelector("#terminal .xterm-helper-textarea")?.focus();
+      new MutationObserver((changes, watch) => {
+        if (document.body.classList.contains("-first-byte")) {
+          keys();
+          watch.disconnect();
+        }
+      }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      window.addEventListener("focus", keys);
       document.addEventListener("mouseup", (event) => {
-        if (event.target.closest("#terminal") || event.target.closest("button")) return;
-        const input = document.querySelector("#terminal .xterm-helper-textarea");
-        if (input && !String(window.getSelection())) input.focus();
+        if (event.target.closest("#terminal") || event.target.closest("button") || String(window.getSelection())) return;
+        keys();
       });
 
       // Reloading or closing the tab leaves the seat: ask first while the game is on.

@@ -173,8 +173,8 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         assert f"《{m.title}》" in text and m.hook.strip()[:12] in text
         assert "周衡" in text and "林秋" in text and "医生 · 41 岁" in text and "总揣着一只听诊器" in text
         assert "AutoKeeper 补充" not in shown(lobby, "#seats")  # a note for the keeper's records, not who she is
-        assert "空位" in text and "http://192.168.1.5:8000" in text and "Radmin VPN" in text and "26.1.2.3" in text
-        assert f"版本 {autokeeper.__version__}" in text and lan.RULE in text and "你是房主" not in text
+        assert "空座" in text and "http://192.168.1.5:8000" in text and "Radmin VPN" in text and "26.1.2.3" in text
+        assert f"版本 {autokeeper.__version__}" in text and "每轮 3 条行动" in text and "你是房主" not in text  # two players: three a round
         for secret in [m.truth, m.keeper_notes, *(s for n in m.npcs for s in n.secrets)]:
             if secret.strip():
                 assert secret.strip()[:12] not in text  # the keeper's book stays on the host
@@ -188,7 +188,7 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         await pilot.press("enter")  # sits in 林秋's seat
         seats = await asyncio.wait_for(_seated(lobby, "lin"), 5)
         assert seats["player"] == "小红" and seats["online"]
-        assert "你坐在这里" in shown(lobby, "#seats")
+        assert "● 你" in shown(lobby, "#seats")
         await pilot.press("escape")  # 离开: a browser's seat has no title screen to go back to
         await pilot.pause(0.3)
         assert app.return_code == 0

@@ -170,9 +170,11 @@ def host(
     port: Annotated[int, typer.Option(help="网页端口：朋友用浏览器打开")] = 8000,
     hub_port: Annotated[int, typer.Option(help="联机端口：终端里 autokeeper join 连这个")] = 8765,
     load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
-    web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页，朋友不用装任何东西")] = True,
+    web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页版")] = True,
 ) -> None:
-    """开一个局域网房间：同一个网络里的朋友用浏览器打开地址就能加入。标题画面的「开房间」开的是同样的房间。"""
+    """开局域网房间，和标题画面的「开房间」一样。"""
+    from rich.cells import cell_len
+
     from .net import room as lan
 
     plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
@@ -188,23 +190,26 @@ def host(
             room.start_web()  # its log lines show here
     except lan.RoomError as exc:
         room.close()
-        console.print(f"[red]房间没开成：{exc}[/]")
+        console.print(f"[red]房间没开成。{exc}[/]")
         raise typer.Exit(1) from None
     rows = [(ip, label) for ip, label in room.shared["addresses"]]
     console.print(f"[bold]《{hub.m.title}》的房间开好了[/]")
     for inv in hub.state.investigators:
-        console.print(f"  {inv.name}（{inv.occupation}）：{'玩家' if inv.id in hub.sits else 'AI'}")
+        who = "玩家" if inv.id in hub.sits else "AI"
+        console.print(f"  {who}{' ' * (6 - cell_len(who))}{inv.name}（{inv.occupation}）")
     if web_ui:
-        console.print("把网址发给朋友，用浏览器打开：")
+        console.print("网页版")
         for ip, label in rows:
             console.print(f"  [bold]{lan.page_url(ip, port)}[/]  {label}")
-    console.print(f"装了 AutoKeeper 的人也可以在终端里加入：[bold]uv run autokeeper join {lan.join_target(rows[0][0], room.port)}[/]，或者在标题画面选「加入房间」")
-    console.print(f"房主自己也要玩：另开一个终端 [bold]uv run autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，"
-                  "这样进来的就是房主，可以按 F9 换模型。下次也可以直接在标题画面选「开房间」。")
+    target = lan.join_target(rows[0][0], room.port)
+    console.print(f"加入房间 [bold]{target}[/]（终端里 uv run autokeeper join {target}）")
+    console.print(f"房主自己要玩就另开一个终端，运行 [bold]uv run autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，进来的是房主，可以按 F9 换模型。")
     if room.shared.get("hint"):
         console.print(f"[yellow]{room.shared['hint']}[/]")
-    console.print(f"[dim]{lan.RULE}。人齐了自动开局；也可以在大厅里选“现在开始”，空座交给 AI。Ctrl+C 关闭房间。[/]")
-    console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。[/]")
+    players = sum(1 for inv in hub.state.investigators if inv.id in hub.sits)
+    if players:
+        console.print(f"[dim]每轮 {lan.round_size(players)} 条行动。人齐了自动开局，也可以在准备房间里现在开始，空座交给 AI。[/]")
+    console.print(f"[dim]每回合自动存档，下次用 --load {hub.state.slot} 接着玩。Ctrl+C 关闭房间。[/]")
     try:
         room.wait()
     except KeyboardInterrupt:

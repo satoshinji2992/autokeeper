@@ -31,6 +31,7 @@ from .lobby import FACE, NARROW
 from .sheet import sheet_view
 
 CYCLE = {"玩家": "AI", "AI": "不上场", "不上场": "玩家"}
+ROOM_KEYS = "Enter 换座位 · Tab 下一项 · Esc 换模组"
 GOING_ON = {"玩家": "AI", "AI": "玩家"}  # a saved party has nobody to leave out
 
 
@@ -73,14 +74,14 @@ class HostScreen(Screen):
                         yield OptionList(id="host-seats")
                         yield OptionList(id="host-saves")
                         with Horizontal(classes="field"):
-                            yield Static("你的名字", classes="field-label")
-                            yield Input(str(last.get("name", "")), placeholder="朋友看到的名字", id="host-name", max_length=16, compact=True)
+                            yield Static("名字", classes="field-label")
+                            yield Input(str(last.get("name", "")), placeholder="房主", id="host-name", max_length=16, compact=True)
                         with Horizontal(classes="field"):
                             yield Static("联机端口", classes="field-label")
                             yield Input(str(last.get("port", lan.HUB_PORT)), id="host-port", type="integer", max_length=5, compact=True)
                             yield Static("网页端口", classes="field-label")
                             yield Input(str(last.get("web_port", lan.WEB_PORT)), id="host-web-port", type="integer", max_length=5, compact=True)
-                        yield Checkbox("同时开网页：朋友用浏览器打开就能玩，什么都不用装", bool(last.get("web", True)), id="host-web", compact=True)
+                        yield Checkbox("同时开网页版", bool(last.get("web", True)), id="host-web", compact=True)
                         yield Static(id="host-note")
                         with Horizontal(classes="buttons"):
                             yield Button("开房间", id="host-open", variant="primary", compact=True)
@@ -91,8 +92,8 @@ class HostScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#host-seats", OptionList).border_title = "座位：回车或点一下换 玩家 / AI / 不上场"
-        self.query_one("#host-saves", OptionList).border_title = "新开一局，还是接着玩"
+        self.query_one("#host-seats", OptionList).border_title = "座位"
+        self.query_one("#host-saves", OptionList).border_title = "存档"
         self._show_modules()
 
     def on_resize(self, event: events.Resize) -> None:
@@ -170,7 +171,7 @@ class HostScreen(Screen):
         self.path = Path(event.option.id or "")
         self.module = load_module(self.path)
         if not self.module.pregens:
-            self.app.notify("这个模组没有预设调查员，联机只能用预设调查员", severity="error")
+            self.app.notify("这个模组没有预设调查员，开不了房间", severity="error")
             return
         self.slot = ""
         self._seat_pregens()
@@ -190,7 +191,7 @@ class HostScreen(Screen):
         self._list_saves()
         self._list_seats()
         self.query_one("#host-seats", OptionList).focus()
-        self.query_one("#setup-hint", Static).update("回车或点击换座位 · Tab 下一项 · Esc 换模组")
+        self.query_one("#setup-hint", Static).update(ROOM_KEYS)
         self._note()
 
     def _seat_prompt(self, inv: Investigator) -> Text:
@@ -276,21 +277,24 @@ class HostScreen(Screen):
             try:
                 state = lan.saved(oid.removeprefix("slot:"))
             except (OSError, ValueError) as exc:
-                self.app.notify(f"读不了这个存档：{exc.__class__.__name__}", severity="error")
+                self.app.notify(f"读不了这个存档（{exc.__class__.__name__}）", severity="error")
                 return
             self.slot = state.slot
             self.party = list(state.investigators)
             self.plan = {inv.id: "玩家" if inv.id in state.human else "AI" for inv in self.party}
         self._list_seats()
         self._note()
-        self.app.notify("新开一局" if not self.slot else "接着玩这个存档：座位可以换成玩家或 AI", timeout=3)
+        if self.slot:
+            self.app.notify("存档里的人都要上场", timeout=3)
 
     def _note(self) -> None:
         players = sum(1 for v in self.plan.values() if v == "玩家")
         ai = sum(1 for v in self.plan.values() if v == "AI")
-        t = Text()
-        t.append(f"{players} 位玩家 · {ai} 位 AI" + ("" if not self.slot else " · 接着玩存档"), style="bold")
-        t.append(f"\n{lan.RULE}。", style="dim")
+        t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
+        if players:
+            t.append(f" · 每轮 {lan.round_size(players)} 条行动")
+        if self.slot:
+            t.append(" · 接着玩存档")
         self.query_one("#host-note", Static).update(t)
 
     # -- opening --------------------------------------------------------------------------------
@@ -307,14 +311,14 @@ class HostScreen(Screen):
         try:
             port, web_port = (int(self.query_one(f"#{i}", Input).value) for i in ("host-port", "host-web-port"))
         except ValueError:
-            self.app.notify("端口要填数字，比如 8765 和 8000", severity="error")
+            self.app.notify("端口要填数字", severity="error")
             return
         web = self.query_one("#host-web", Checkbox).value
         if not (1 <= port <= 65535 and 1 <= web_port <= 65535):
             self.app.notify("端口要在 1 到 65535 之间", severity="error")
             return
         if web and port == web_port:
-            self.app.notify("联机端口和网页端口不能是同一个", severity="error")
+            self.app.notify("联机端口和网页端口不能一样", severity="error")
             return
         seats = [self.plan.get(inv.id, "AI") for inv in self.party]
         if all(s == "不上场" for s in seats):
@@ -345,9 +349,9 @@ class HostScreen(Screen):
                     await asyncio.to_thread(room.start_web, log)
         except lan.RoomError as exc:
             await asyncio.to_thread(room.close)
-            self.app.notify(f"房间没开成：{exc}", severity="error", timeout=10)
+            self.app.notify(str(exc), title="房间没开成", severity="error", timeout=10)
             button.disabled = False
-            hint.update("回车或点击换座位 · Tab 下一项 · Esc 换模组")
+            hint.update(ROOM_KEYS)
             return
         lan.remember(name=name, port=port, web_port=web_port, web=web)
         self.app.room = room  # type: ignore[attr-defined]

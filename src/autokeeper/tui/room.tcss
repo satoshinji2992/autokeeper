@@ -124,7 +124,6 @@ LobbyScreen #lobby-info {
     background: $surface;
     scrollbar-size-vertical: 1;
 }
-LobbyScreen #lobby-rule,
 LobbyScreen #lobby-module {
     margin-top: 1;
 }

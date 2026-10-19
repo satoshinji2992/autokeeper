@@ -29,7 +29,6 @@ if TYPE_CHECKING:
     from .hub import Hub
 
 HUB_PORT, WEB_PORT = 8765, 8000
-RULE = "行动池：玩家数+1，每人最多两条，空行回车=这轮说完"
 
 # Virtual LANs, told apart by the adapter's name, then by the range they hand out.
 NAMED = (("radmin", "Radmin VPN"), ("zerotier", "ZeroTier"), ("tailscale", "Tailscale"), ("hamachi", "Hamachi"),
@@ -108,8 +107,14 @@ def wsl_hint(rows: list[tuple[str, str]]) -> str:
     if "microsoft" not in platform.uname().release.lower():
         return ""
     if all(ip == "127.0.0.1" or ipaddress.ip_address(ip) in ipaddress.ip_network("172.16.0.0/12") for ip, _ in rows):
-        return "在 WSL 里开的房间，别的电脑连不进来：在 Windows 的 .wslconfig 里写 networkingMode=mirrored，重启 WSL 再开"
+        return "WSL 里开的房间别的电脑连不进来，要在 Windows 的 .wslconfig 里设 networkingMode=mirrored"
     return ""
+
+
+def round_size(players: int) -> int:
+    """Actions a round takes at a table of this many players: one each, and one more for
+    whoever asks first (net/hub.py)."""
+    return players + 1 if players else 0
 
 
 def join_target(ip: str, port: int) -> str:
@@ -208,12 +213,12 @@ class Room:
         self._thread.start()
         if not self._ready.wait(timeout):
             self.close()
-            raise RoomError(f"房间 {timeout:.0f} 秒还没开起来")
+            raise RoomError(f"房间 {timeout:.0f} 秒还没开好")
         if self.error is not None or self.hub is None:
             error, built = self.error, self.hub is not None
             self.close()
             if built and isinstance(error, OSError):  # the module loaded: it is the port
-                raise RoomError(f"联机端口 {self.port} 用不了（{error.strerror or error}），可能已经有房间开着，换一个端口") from error
+                raise RoomError(f"联机端口 {self.port} 用不了，可能已经开着一个房间（{error.strerror or error}）") from error
             raise RoomError(str(error) or type(error).__name__) from error
         return self.hub
 
@@ -255,7 +260,7 @@ class Room:
         output goes (the console when None). Raises RoomError."""
         assert self.hub is not None, "open() first"
         if not port_free(self.web_port):
-            raise RoomError(f"网页端口 {self.web_port} 被占用了，换一个端口")
+            raise RoomError(f"网页端口 {self.web_port} 被占用了")
         url = page_url(addresses()[0][0], self.web_port)
         argv = [sys.executable, "-m", "autokeeper.net.web", str(self.port), str(self.web_port), url]
         env = os.environ | {"PYTHONIOENCODING": "utf-8"}
@@ -265,12 +270,12 @@ class Room:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.page.poll() is not None:
-                raise RoomError(f"网页没开起来（退出码 {self.page.returncode}），详情见 {config.SAVES / 'web.log'}")
+                raise RoomError(f"网页版没开起来（退出码 {self.page.returncode}），记录在 {config.SAVES / 'web.log'}")
             with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", self.web_port), 0.3):
                 self.shared["web"] = self.web_port
                 return url
             time.sleep(0.1)
-        raise RoomError(f"网页 {timeout:.0f} 秒还没开起来")
+        raise RoomError(f"网页版 {timeout:.0f} 秒还没开好")
 
     def wait(self) -> None:
         """Until the room closes; Ctrl+C gets through."""
