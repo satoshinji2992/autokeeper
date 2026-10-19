@@ -8,7 +8,9 @@ import json
 import os
 import random
 import subprocess
+import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 
@@ -1632,6 +1634,11 @@ class AutoKeeperApp(App):
         self.join = join  # (host address, player name): straight to someone's table
 
     def on_mount(self) -> None:
+        if sys.platform == "win32":
+            # On Windows Textual's timers sleep in the default thread pool, a thread each: a game
+            # screen's timers could take every thread of it (cpu + 4), and the moods, portraits
+            # and pictures sent to a thread waited behind them.
+            asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=64))
         for th in THEMES:
             self.register_theme(th)
         self.theme = self._theme_name or config.load().theme
