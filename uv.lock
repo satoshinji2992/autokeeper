@@ -269,6 +269,7 @@ dependencies = [
     { name = "ddgs" },
     { name = "filelock" },
     { name = "httpx" },
+    { name = "ifaddr" },
     { name = "jieba" },
     { name = "jsonschema" },
     { name = "langchain" },
@@ -332,6 +333,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'graphrag'", specifier = ">=0.6" },
     { name = "filelock", specifier = ">=3.15" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "ifaddr", specifier = ">=0.2" },
     { name = "jieba", specifier = ">=0.42.1" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "langchain", specifier = ">=1.4.6" },
@@ -1121,6 +1123,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f5/08/8eea9d4b8302028f3abb2c0813953f7aec26d33b7a8960ed760e65ff29fa/idna-3.20.tar.gz", hash = "sha256:a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44", size = 216463 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl", hash = "sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c", size = 69583 },
+]
+
+[[package]]
+name = "ifaddr"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/ac/fb4c578f4a3256561548cd825646680edcadb9440f3f68add95ade1eb791/ifaddr-0.2.0.tar.gz", hash = "sha256:cc0cbfcaabf765d44595825fb96a99bb12c79716b73b44330ea38ee2b0c4aed4", size = 10485 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/1f/19ebc343cc71a7ffa78f17018535adc5cbdd87afb31d7c34874680148b32/ifaddr-0.2.0-py3-none-any.whl", hash = "sha256:085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748", size = 12314 },
 ]
 
 [[package]]

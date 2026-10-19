@@ -50,7 +50,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from aiohttp import WSMsgType, web
+from aiohttp import WSCloseCode, WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
@@ -227,6 +227,7 @@ class Hub:
         self.swaps: asyncio.Queue = asyncio.Queue()  # model switches asked for, done between actions
         self.rules: asyncio.Queue = asyncio.Queue()  # house rules asked for, drafted and installed between actions
         self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
+        self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
@@ -262,6 +263,9 @@ class Hub:
                 self.names[cid] += "·房主"
             await self._send(cid, self._welcome(cid))
             await self._broadcast({"t": "seats", "seats": self._seats()})
+            if (theirs := msg.get("version")) and theirs != __version__:  # the host hears it; the friend's own lobby says so too
+                for host in self.hosts - {cid}:
+                    await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
         elif t == "start":
@@ -418,6 +422,7 @@ class Hub:
             "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
             "seats": self._seats(),
             "started": self.started.is_set(),
+            "room": self.room,
         }
 
     def _art_keys(self, book: dict) -> set[str]:
@@ -799,10 +804,14 @@ class Hub:
         app = web.Application()
         app.router.add_get("/ws", self.ws)
         app.router.add_get("/", self._status)
-        runner = web.AppRunner(app)
+        runner = web.AppRunner(app, shutdown_timeout=2.0)  # a closing room does not wait a minute for open sockets
         await runner.setup()
         site = web.TCPSite(runner, host, port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError:  # the port is taken
+            await runner.cleanup()
+            raise
         self.port = site._server.sockets[0].getsockname()[1] if site._server else port  # type: ignore[union-attr]
         key_file = room_key_file(self.port)
         key_file.parent.mkdir(parents=True, exist_ok=True)
@@ -813,6 +822,9 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            # Every screen hears the room close at once (their link pumps end with "closed").
+            await asyncio.gather(*(asyncio.wait_for(ws.close(code=WSCloseCode.GOING_AWAY, message=b"closed"), 2.0)
+                                   for ws in list(self.clients.values())), return_exceptions=True)
             await self.game.close()
             await self.cast.close()
             await runner.cleanup()

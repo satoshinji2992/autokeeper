@@ -17,7 +17,7 @@ Screen {
     position: absolute;
     width: 36;
     height: auto;
-    max-height: 11;
+    max-height: 12;  /* every title option, 开房间 included */
 }
 
 /* ---------- setup ---------- */
