@@ -24,9 +24,10 @@ from autokeeper.net.hub import Hub
 from autokeeper.paths import EXAMPLE
 from autokeeper.prefs import Prefs
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.net import NetGameScreen
-from autokeeper.tui.suggest import IdeasModal
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.suggest import IdeasModal
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.net import NetGameScreen
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened

@@ -5,7 +5,7 @@ characteristics and skills in the 7th edition's ranges, its text cut to size; HP
 SAN ceiling are worked out again by the rules code, never taken from the card.
 
 A friend often has no model of their own, so 车卡 for a seated player runs on the host: the
-player's screen is the ordinary card screen (tui/card.py), its Builder a RemoteBuilder that
+player's screen is the ordinary card screen (tui/screens/card.py), its Builder a RemoteBuilder that
 sends each step to the Hub, where a real Builder does it (step). The messages:
 
     client -> hub   card {op: begin | look_up | read | propose | build | find | photo | cancel | end, n, ...}

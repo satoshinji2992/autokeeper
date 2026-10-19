@@ -140,9 +140,9 @@ async def _until(pilot, test, rounds: int = 80) -> None:
 
 
 async def test_a_public_figure_becomes_an_investigator(cards, monkeypatch, tmp_path, skills_dir):
-    from autokeeper.tui import app as tui
-    from autokeeper.tui.app import AutoKeeperApp, SetupScreen
-    from autokeeper.tui.card import CardScreen
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.card import CardScreen
+    from autokeeper.tui.screens.setup import SetupScreen
 
     picture = tmp_path / "luxun.png"
     Image.new("RGB", (120, 160), "white").save(picture)
@@ -152,7 +152,7 @@ async def test_a_public_figure_becomes_an_investigator(cards, monkeypatch, tmp_p
 
     monkeypatch.setattr(cardmod, "research", research)
     monkeypatch.setattr(imagery, "preprocess", lambda src, kind, *a, **k: src)  # no background-removal model download in tests
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause()
@@ -188,7 +188,7 @@ async def test_a_public_figure_becomes_an_investigator(cards, monkeypatch, tmp_p
 
 async def test_a_dice_bot_card_is_brought_in(cards, skills_dir):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.card import CardScreen
+    from autokeeper.tui.screens.card import CardScreen
 
     app = AutoKeeperApp(theme="amber")
     kept = []

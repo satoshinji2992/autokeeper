@@ -261,9 +261,9 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
     from textual.widgets import Input
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.screens import RollModal
-    from autokeeper.tui.widgets import StoryLog
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.screens.net import NetGameScreen
+    from autokeeper.tui.widgets.panels import StoryLog
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
@@ -491,8 +491,8 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
     from textual.widgets import Input
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.speaker import Speaker
+    from autokeeper.tui.screens.net import NetGameScreen
+    from autokeeper.tui.widgets.speaker import Speaker
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     hub = Hub(EXAMPLE, seats=["玩家"], cast=PreacherCast(), rules=Rules(dice=fake))

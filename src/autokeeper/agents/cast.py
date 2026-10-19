@@ -722,7 +722,7 @@ class Cast:
             return None
 
     async def author_plugin(self, state: GameState, request: str, problems: list[str] | None = None):
-        """Turn a player's one-sentence house rule into one tested plugin (tui/plugins.py, the
+        """Turn a player's one-sentence house rule into one tested plugin (tui/modals/plugins.py, the
         LAN hub). Uses the director's model; stateless, so a retry carries the failures back in
         the prompt rather than in memory. Returns a Plugin or None."""
         from ..plugins import api_text

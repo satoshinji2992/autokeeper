@@ -5,7 +5,7 @@ wins. Directions count double, since they show how the NPC looks; what they say 
 meant for someone else ("别怕" calms the listener). Unsure (nothing found, or a tie) is 平静.
 
 The mood never reaches the screen as words: it only shapes the speaker's portrait (colours
-in artkit.TONES, a short motion in tui/speaker.py).
+in artkit.TONES, a short motion in tui/widgets/speaker.py).
 
 jieba finds where words begin and end. A one-character cue must be a word of its own, so 怕
 is not found in 恐怕 or 不怕, nor 笑 in 可笑 or 冷笑; a longer one must begin or end where a

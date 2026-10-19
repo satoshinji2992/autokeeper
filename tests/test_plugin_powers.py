@@ -21,8 +21,9 @@ from autokeeper.paths import EXAMPLE
 from autokeeper.plugins.runtime import verify
 from autokeeper.plugins.schema import Case, Command, Effect, Output, Panel, Plugin, check
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.plugin_ui import PromptModal, ShowPlayer, panel_view, tab_label
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets.plugin_ui import PromptModal, ShowPlayer, panel_view, tab_label
 
 from .test_engine import make
 from .test_net import TableCast

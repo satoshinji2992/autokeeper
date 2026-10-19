@@ -21,9 +21,10 @@ from autokeeper import config, paths
 from autokeeper.module import importer, sources
 from autokeeper.module.sources import dropped_path, from_windows
 from autokeeper.paths import EXAMPLE
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import AutoKeeperApp, SetupScreen, TitleScreen
-from autokeeper.tui.importing import ImportScreen, ModuleFiles, StopModal, page_spec
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.importing import ImportScreen, ModuleFiles, StopModal, page_spec
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 
 def png() -> bytes:
@@ -325,7 +326,7 @@ async def test_import_a_zip_from_the_title_screen_and_start_playing(monkeypatch,
         log = "\n".join(line.text for line in screen.query_one("#import-log", RichLog).lines)
         assert "提取 正文.md" in log and "· read_file" in log
         assert screen.steps == 1 and all("done" in screen.query_one(f"#stage-{i}").classes for i in range(4))
-        assert paths.LOCAL_MODULES / "dongxuezhixia" in tui.modules()  # in the module list now
+        assert paths.LOCAL_MODULES / "dongxuezhixia" in paths.module_folders()  # in the module list now
         assert app.focused is screen.query_one("#play", Button)
         await pilot.press("enter")  # 开始游戏
         await until(pilot, lambda: isinstance(app.screen, SetupScreen) and app.screen.step == "investigator")

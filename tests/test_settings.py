@@ -7,10 +7,12 @@ from textual.widgets import Button, OptionList, Select, Switch
 
 from autokeeper import config, paths
 from autokeeper.prefs import Prefs
-from autokeeper.tui.app import AutoKeeperApp, SetupScreen, TitleScreen
-from autokeeper.tui.prefs import PrefsModal
-from autokeeper.tui.screens import EngineModal
-from autokeeper.tui.settings import SettingsModal
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.dialogs import EngineModal
+from autokeeper.tui.modals.prefs import PrefsModal
+from autokeeper.tui.modals.settings import SettingsModal
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 
 @pytest.fixture(autouse=True)

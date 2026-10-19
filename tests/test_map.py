@@ -17,8 +17,9 @@ from autokeeper.module import graph, improv
 from autokeeper.module.schema import Location, Module
 from autokeeper.net.hub import PRIVATE, table
 from autokeeper.paths import EXAMPLE
-from autokeeper.tui import mapview
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals import mapview
+from autokeeper.tui.screens.game import GameScreen
 
 from .test_tui import canned  # noqa: F401  (a fixture: every agent answers from a can)
 

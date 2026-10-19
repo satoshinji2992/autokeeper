@@ -231,7 +231,7 @@ def test_what_reaches_the_table_is_marked_revealed_for_good():
 # -- saves stay apart --------------------------------------------------------------------------------
 def test_saves_never_share_a_record(tmp_path, monkeypatch):
     from autokeeper.net.hub import PRIVATE
-    from autokeeper.tui import saves
+    from autokeeper.tui.screens import saves
 
     a, b = staged(), staged()
     a.apply(O.Move(entity="warden", to="square"))

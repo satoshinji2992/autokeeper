@@ -159,9 +159,9 @@ async def test_the_page_runs_on_its_own_and_goes_with_the_room(monkeypatch, tmp_
 
 async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_path, skills_dir, fake):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.lobby import LobbyScreen
-    from autokeeper.tui.sheet import SheetModal
-    from autokeeper.tui.trouble import TroubleModal
+    from autokeeper.tui.modals.sheet import SheetModal
+    from autokeeper.tui.modals.trouble import TroubleModal
+    from autokeeper.tui.screens.lobby import LobbyScreen
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # a friend's seat, though on this machine
@@ -223,14 +223,14 @@ async def _seated(lobby, seat: str) -> dict[str, Any]:
 
 
 async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch, stand_ins):
-    from autokeeper.tui import host as host_screen
-    from autokeeper.tui.app import AutoKeeperApp, TitleScreen
-    from autokeeper.tui.host import HostScreen
-    from autokeeper.tui.lobby import CloseRoomModal, LobbyScreen
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.trouble import TroubleModal
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.trouble import TroubleModal
+    from autokeeper.tui.screens.host import HostScreen
+    from autokeeper.tui.screens.lobby import CloseRoomModal, LobbyScreen
+    from autokeeper.tui.screens.net import NetGameScreen
+    from autokeeper.tui.screens.title import TitleScreen
 
-    monkeypatch.setattr(host_screen, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.3)
@@ -302,18 +302,18 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
 
 
 async def test_the_title_goes_back_to_an_open_room_and_quitting_closes_it(monkeypatch, stand_ins):
-    from autokeeper.tui import host as host_screen
-    from autokeeper.tui.app import AutoKeeperApp, TitleScreen
-    from autokeeper.tui.host import HostScreen
-    from autokeeper.tui.lobby import LobbyScreen
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.host import HostScreen
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.title import TitleScreen
 
     m = Module.load(EXAMPLE)
     saved = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan-example-0101-000000", human=[])
-    from autokeeper.tui.app import write_save
+    from autokeeper.tui.library import write_save
 
     write_save(saved, m)
     write_save(Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="example-0101-000000", human=["zhouheng"]), m)
-    monkeypatch.setattr(host_screen, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause(0.3)

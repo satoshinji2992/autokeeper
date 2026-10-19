@@ -98,7 +98,7 @@ def _intro() -> None:
     try:
         from terminaltexteffects.effects.effect_decrypt import Decrypt
 
-        from .tui import art
+        from .tui.drawing import art
 
         lines = "\n".join(art.title_lines(os.get_terminal_size().columns)) + "\n\n" + art.TAGLINE + "\n\n按任意键跳过"
         effect = Decrypt(lines)

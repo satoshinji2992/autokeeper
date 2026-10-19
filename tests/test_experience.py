@@ -214,7 +214,8 @@ async def test_twenty_turns_of_daily_life_keep_promises_and_leave_the_case_open(
 async def test_the_screen_recovers_from_a_provider_failure_and_accepts_retry(module):
     from textual.widgets import Input
 
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
 
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     app = AutoKeeperApp(theme="amber")

@@ -19,7 +19,7 @@ from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules import physdice as pd
 from autokeeper.rules.coc import Check, Level
-from autokeeper.tui import dice, diceart
+from autokeeper.tui.drawing import dice, diceart
 
 needs_chafa = pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
 
@@ -129,10 +129,9 @@ class Canned(hm.Model):
 
 @pytest.fixture
 def game(monkeypatch, tmp_path, skills_dir):
-    from autokeeper.tui import app as tui
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -142,8 +141,9 @@ def game(monkeypatch, tmp_path, skills_dir):
 
 
 async def test_without_chafa_the_tray_shows_the_plain_dice_and_the_number(monkeypatch, game):
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.widgets import DiceTray
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+    from autokeeper.tui.widgets.panels import DiceTray
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     app = AutoKeeperApp(theme="amber")
@@ -163,8 +163,9 @@ async def test_without_chafa_the_tray_shows_the_plain_dice_and_the_number(monkey
 
 
 async def test_cycling_the_skin_keeps_it_and_throws_a_look(monkeypatch, game):
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.widgets import DiceTray
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+    from autokeeper.tui.widgets.panels import DiceTray
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     app = AutoKeeperApp(theme="amber")

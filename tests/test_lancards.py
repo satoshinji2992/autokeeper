@@ -241,10 +241,10 @@ async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypat
     from textual.widgets import Input, OptionList
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.card import CardScreen
-    from autokeeper.tui.lobby import LobbyScreen
-    from autokeeper.tui.menu import GameMenu
-    from autokeeper.tui.seatcard import SeatCardScreen
+    from autokeeper.tui.modals.menu import GameMenu
+    from autokeeper.tui.screens.card import CardScreen
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.seatcard import SeatCardScreen
 
     roster.keep(netcards.vet(card(name="我的老卡"), "card-old"), {})
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
@@ -292,7 +292,7 @@ async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypat
 
 async def test_a_browser_seat_never_lists_the_host_s_cards(monkeypatch, tmp_path, skills_dir, fake):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.seatcard import SeatCardScreen
+    from autokeeper.tui.screens.seatcard import SeatCardScreen
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     roster.keep(netcards.vet(card(name="房主的卡"), "card-host"), {})

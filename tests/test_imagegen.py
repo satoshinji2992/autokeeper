@@ -29,7 +29,7 @@ from autokeeper.net import media
 from autokeeper.net.hub import Hub, table
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.net import table_module
+from autokeeper.tui.screens.net import table_module
 
 from .test_engine import FakeCast, Improvising
 from .test_net import TableCast
@@ -468,7 +468,7 @@ async def test_improvised_people_places_and_props_no_photo_was_found_for_are_dra
 
 async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_dir, fake, tmp_path):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_net import closed, opened
 

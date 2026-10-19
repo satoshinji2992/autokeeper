@@ -20,8 +20,9 @@ from autokeeper.module import improv
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.widgets import ItemCard
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets.panels import ItemCard
 
 from .test_engine import FakeCast
 from .test_tui import canned, until  # noqa: F401

@@ -18,10 +18,11 @@ from autokeeper import artkit, imagery, mood, paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import NPC, Module
 from autokeeper.paths import EXAMPLE
-from autokeeper.tui import speaker as stage
-from autokeeper.tui.app import AutoKeeperApp, GameScreen
-from autokeeper.tui.speaker import Portrait, Speaker, face
-from autokeeper.tui.widgets import SceneArt, StoryLog
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.widgets import speaker as stage
+from autokeeper.tui.widgets.panels import SceneArt, StoryLog
+from autokeeper.tui.widgets.speaker import Portrait, Speaker, face
 
 from .test_tui import canned, story_text, until  # noqa: F401  (canned: a fixture, used by name)
 

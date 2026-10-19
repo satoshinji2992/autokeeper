@@ -19,10 +19,11 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.prefs import LINES, Prefs
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, TitleScreen
-from autokeeper.tui.prefs import PrefsModal
-from autokeeper.tui.settings import SettingsModal
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.prefs import PrefsModal
+from autokeeper.tui.modals.settings import SettingsModal
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
 SEEN: list[dict] = []  # every call: system and messages
@@ -137,7 +138,7 @@ class Canned(hm.Model):
 
 
 async def test_the_settings_screen_works_from_the_keyboard(monkeypatch):
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause()

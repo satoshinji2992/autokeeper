@@ -19,17 +19,21 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, LoadScreen, SetupScreen, TitleScreen
-from autokeeper.tui.menu import Confirm, GameMenu
-from autokeeper.tui.screens import HandoutModal, PushModal, RollModal
-from autokeeper.tui.speaker import Speaker
-from autokeeper.tui.widgets import SceneArt, StoryLog, command_suggester
+from autokeeper.tui import library
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.dialogs import HandoutModal, PushModal, RollModal
+from autokeeper.tui.modals.menu import Confirm, GameMenu
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.saves import LoadScreen
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
+from autokeeper.tui.widgets.panels import SceneArt, StoryLog, command_suggester
+from autokeeper.tui.widgets.speaker import Speaker
 
 
 @pytest.mark.parametrize("size", [(140, 44), (80, 24)])
 async def test_title_and_setup_flow(monkeypatch, size, skills_dir):
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
@@ -60,7 +64,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
         monkeypatch.setenv(var, "")
         monkeypatch.delenv(var)
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -203,7 +207,7 @@ async def test_loading_a_save_opens_the_game_at_night(canned):
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="night", human=[lead.id])
     state.minutes = 23 * 60 + 10
-    tui.write_save(state, m)
+    library.write_save(state, m)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause()
@@ -360,7 +364,7 @@ def test_picture_renders_to_requested_size(tmp_path):
 
 
 def test_the_sheet_lists_every_skill_and_the_specialisms():
-    from autokeeper.tui.sheet import skill_rows
+    from autokeeper.tui.modals.sheet import skill_rows
 
     inv = Module.load(EXAMPLE).pregens[0].model_copy(deep=True)
     inv.skills["外语(英语)"] = 40
@@ -372,7 +376,7 @@ def test_the_sheet_lists_every_skill_and_the_specialisms():
 
 
 async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
-    from autokeeper.tui.sheet import SheetModal
+    from autokeeper.tui.modals.sheet import SheetModal
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
@@ -440,7 +444,7 @@ def test_each_turn_s_tokens_are_kept():
 
 
 async def test_ctrl_b_shows_where_the_tokens_went(canned):
-    from autokeeper.tui.usage import UsageModal
+    from autokeeper.tui.modals.usage import UsageModal
 
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
@@ -457,7 +461,7 @@ async def test_ctrl_b_shows_where_the_tokens_went(canned):
         assert isinstance(app.screen, UsageModal)
     from rich.console import Console
 
-    from autokeeper.tui.usage import usage_view
+    from autokeeper.tui.modals.usage import usage_view
 
     console = Console(width=120, record=True)
     console.print(usage_view(state))
@@ -509,7 +513,7 @@ async def test_meta_lines_stay_off_the_story_and_a_waived_check_is_said(canned):
 
 def test_names_light_up_in_the_telling_and_the_history_keeps_a_line_per_event():
     from autokeeper.engine.state import LogEntry
-    from autokeeper.tui.widgets import HistoryPanel, StoryLog, history_line, log_line
+    from autokeeper.tui.widgets.panels import HistoryPanel, StoryLog, history_line, log_line
 
     m = Module.load(EXAMPLE)
     me = m.pregens[0]
@@ -528,7 +532,7 @@ def test_names_light_up_in_the_telling_and_the_history_keeps_a_line_per_event():
 
 def test_dice_skins_draw_both_dice_in_the_pixel_font():
     from autokeeper import config as cfg_mod
-    from autokeeper.tui import dice
+    from autokeeper.tui.drawing import dice
 
     assert set(dice.SKINS) == {"bone", "obsidian", "blood", "brass", "eldritch", "phosphor"}
     assert dice.digits("30") == ["▀▀█ █▀█", " ▀█ █ █", "▀▀▀ ▀▀▀"]
@@ -544,7 +548,7 @@ def test_a_sheet_s_photo_keeps_its_rows_in_a_narrow_pane(width):
     """Squeezed into a narrow column, each line of a drawn photo used to wrap in two: stripes."""
     from rich.console import Console
 
-    from autokeeper.tui.sheet import sheet_view
+    from autokeeper.tui.modals.sheet import sheet_view
 
     inv = Module.load(EXAMPLE).pregens[0]
     face = Text("\n".join("▓" * 30 for _ in range(14)))

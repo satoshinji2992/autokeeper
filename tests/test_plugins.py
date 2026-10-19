@@ -24,7 +24,7 @@ from autokeeper.plugins.schema import Action as PluginAction
 from autokeeper.plugins.schema import Call, Case, Plugin, check
 from autokeeper.rules.coc import Rules
 from autokeeper.tui.app import AutoKeeperApp
-from autokeeper.tui.plugins import PluginsModal
+from autokeeper.tui.modals.plugins import PluginsModal
 
 from .test_engine import make
 from .test_net import TableCast
@@ -497,8 +497,8 @@ async def test_a_house_rule_cannot_silently_replace_a_rule_of_the_same_version(f
 
 # -- custom actions are discoverable ---------------------------------------------------------
 def test_command_suggester_and_f5_know_the_custom_actions():
-    from autokeeper.tui.plugins import action_hints
-    from autokeeper.tui.widgets import command_suggester
+    from autokeeper.tui.modals.plugins import action_hints
+    from autokeeper.tui.widgets.panels import command_suggester
 
     module = Module.load(EXAMPLE)
     plugin = counter(hooks=["action"], actions=[PluginAction(name="hide", description="躲起来避开追兵。arguments: who")])

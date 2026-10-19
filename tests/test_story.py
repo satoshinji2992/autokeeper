@@ -27,12 +27,12 @@ from autokeeper.module.schema import Module
 from autokeeper.net.hub import PRIVATE, Hub
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui.app import COMMANDS, AutoKeeperApp, GameScreen
-from autokeeper.tui.pages import Page, PagesModal
-from autokeeper.tui.sheet import SheetModal, sheet_view
-from autokeeper.tui.usage import usage_view
-from autokeeper.tui.widgets import CluePanel, HistoryPanel
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.sheet import SheetModal, sheet_view
+from autokeeper.tui.modals.usage import usage_view
+from autokeeper.tui.screens.game import COMMANDS, GameScreen
+from autokeeper.tui.widgets.pages import Page, PagesModal
+from autokeeper.tui.widgets.panels import CluePanel, HistoryPanel
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened, pool_open, until
@@ -65,7 +65,7 @@ def writer(monkeypatch, tmp_path, skills_dir):
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     monkeypatch.setattr(Writer, "asked", [])
     monkeypatch.setattr(Writer, "gate", None)
     monkeypatch.setattr(Writer, "fail", False)
@@ -475,7 +475,7 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
 
 
 async def test_a_client_screen_shows_what_the_sync_brings(writer):
-    from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     class Link:
         host = False
@@ -598,7 +598,7 @@ async def test_the_right_column_turns_its_pages(writer):
 
 
 def test_the_opening_is_on_the_background_page_only_once_told():
-    from autokeeper.tui.pages import background_view
+    from autokeeper.tui.widgets.pages import background_view
 
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
@@ -613,7 +613,7 @@ def test_the_opening_is_on_the_background_page_only_once_told():
 
 def test_a_saved_line_reads_as_the_live_one_did():
     from autokeeper.engine.state import LogEntry
-    from autokeeper.tui.widgets import log_line
+    from autokeeper.tui.widgets.panels import log_line
 
     hurt = LogEntry(turn=2, time="D1 14:20", kind="damage", who="周衡", text="受到 2 点伤害（HP 12 → 10）")
     lost = LogEntry(turn=2, time="D1 14:20", kind="sanity", who="周衡", text="理智检定 50 → 77 失败，损失 1D3 = 2（50 → 48）")
@@ -648,8 +648,8 @@ async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(
     from textual.widgets import OptionList
 
     from autokeeper import imagery
-    from autokeeper.tui.app import write_save
-    from autokeeper.tui.cards import CardsScreen
+    from autokeeper.tui.library import write_save
+    from autokeeper.tui.screens.cards import CardsScreen
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     m = Module.load(EXAMPLE)

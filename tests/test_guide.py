@@ -17,12 +17,14 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui import tips
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
-from autokeeper.tui.guide import PAGES, GuideScreen
-from autokeeper.tui.screens import HandoutModal, RollModal
-from autokeeper.tui.tips import TipLine
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.dialogs import HandoutModal, RollModal
+from autokeeper.tui.modals.guide import PAGES, GuideScreen
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
+from autokeeper.tui.widgets import tips
+from autokeeper.tui.widgets.tips import TipLine
 
 TUTORIAL = paths.MODULES / tips.TUTORIAL
 
@@ -219,7 +221,7 @@ def test_the_config_file_turns_hints_off(tmp_path):
 
 async def test_a_new_player_is_pointed_to_the_tutorial(monkeypatch, tmp_path, skills_dir):
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE, TUTORIAL])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE, TUTORIAL])
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()

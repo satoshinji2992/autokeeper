@@ -240,9 +240,10 @@ async def test_the_epilogue_is_told_once_after_the_ending(module, fake):
 async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
     from textual.widgets import Static
 
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.debrief import DebriefModal
-    from autokeeper.tui.retell import RetellModal
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.debrief import DebriefModal
+    from autokeeper.tui.modals.retell import RetellModal
+    from autokeeper.tui.screens.game import GameScreen
 
     from .test_tui import story_text
     from .test_tui import until as waits
@@ -364,9 +365,9 @@ async def test_a_player_at_a_shared_table_asks_from_the_screen(monkeypatch, tmp_
     from textual.widgets import Input, Static
 
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.debrief import DebriefModal
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.retell import RetellModal
+    from autokeeper.tui.modals.debrief import DebriefModal
+    from autokeeper.tui.modals.retell import RetellModal
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_tui import story_text
     from .test_tui import until as waits

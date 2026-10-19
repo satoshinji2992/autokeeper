@@ -199,9 +199,9 @@ class Config:
     showcase: bool = True  # 大场景: one big picture over the screen at the story's turning points (engine/showcase.py)
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
-    tips: bool = True  # first-time hints for new players (tui/tips.py)
+    tips: bool = True  # first-time hints for new players (tui/widgets/tips.py)
     animations: bool = True
-    dice: str = "bone"  # tui/dice.py SKINS
+    dice: str = "bone"  # tui/drawing/dice.py SKINS
 
     @property
     def improvising(self) -> bool:

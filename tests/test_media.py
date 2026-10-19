@@ -10,7 +10,7 @@ from autokeeper import paths
 from autokeeper.net import media
 from autokeeper.net.hub import Hub
 from autokeeper.paths import EXAMPLE
-from autokeeper.tui.net import table_module
+from autokeeper.tui.screens.net import table_module
 
 from .test_net import TableCast
 

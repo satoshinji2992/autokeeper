@@ -102,7 +102,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
     d["opening"] = ""  # material not yet spoken is not part of a player's knowledge
     d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
-    # The screens draw their own map from this copy (tui/mapview.py): the ways on it, what lies
+    # The screens draw their own map from this copy (tui/modals/mapview.py): the ways on it, what lies
     # in what on it, the minutes of the roads walked, and no other way out of anywhere.
     c = fog.chart(m, st)
     ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
@@ -669,7 +669,7 @@ class Hub:
             "t": "welcome",
             "you": cid,
             "host": cid in self.hosts,
-            "version": __version__,  # a client on another version is told so (tui/net.py)
+            "version": __version__,  # a client on another version is told so (tui/screens/net.py)
             "module": book,
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
@@ -1081,7 +1081,7 @@ class Hub:
         await self._broadcast({"t": "sync", "state": self._view()})
 
     def _save(self) -> None:
-        from ..tui.app import write_save
+        from ..tui.library import write_save
 
         write_save(self.state, self.m)
 

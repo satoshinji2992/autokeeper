@@ -284,9 +284,10 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
 
 # -- on screen -------------------------------------------------------------------------------------
 async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_itself(canned, monkeypatch, tmp_path):  # noqa: F811
-    from autokeeper.tui import showcase as screen_module
-    from autokeeper.tui.app import AutoKeeperApp, GameScreen
-    from autokeeper.tui.screens import RollModal
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals import showcase as screen_module
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.screens.game import GameScreen
 
     drawn = []
 
@@ -373,8 +374,8 @@ async def test_lan_players_get_a_big_scene_only_at_its_moment(tmp_path, fake, mo
 
 async def test_a_player_at_a_shared_table_sees_the_big_scene(skills_dir, fake, tmp_path, monkeypatch):
     from autokeeper.tui.app import AutoKeeperApp
-    from autokeeper.tui.net import NetGameScreen
-    from autokeeper.tui.showcase import ShowcaseScreen
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_net import closed, opened
 

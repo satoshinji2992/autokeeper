@@ -19,15 +19,18 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.tui import app as tui
-from autokeeper.tui import saves
-from autokeeper.tui.app import AutoKeeperApp, GameScreen, SetupScreen, TitleScreen
-from autokeeper.tui.cardedit import CardEditModal
-from autokeeper.tui.cards import CardsScreen
-from autokeeper.tui.guide import GuideScreen
-from autokeeper.tui.menu import MENU, AskText, Confirm, GameMenu
-from autokeeper.tui.saves import LoadScreen
-from autokeeper.tui.settings import SettingsModal
+from autokeeper.tui import library
+from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.cardedit import CardEditModal
+from autokeeper.tui.modals.guide import GuideScreen
+from autokeeper.tui.modals.menu import MENU, AskText, Confirm, GameMenu
+from autokeeper.tui.modals.settings import SettingsModal
+from autokeeper.tui.screens import saves
+from autokeeper.tui.screens.cards import CardsScreen
+from autokeeper.tui.screens.game import GameScreen
+from autokeeper.tui.screens.saves import LoadScreen
+from autokeeper.tui.screens.setup import SetupScreen
+from autokeeper.tui.screens.title import TitleScreen
 
 from .test_tui import Canned, until
 
@@ -38,7 +41,7 @@ def canned(monkeypatch, tmp_path, skills_dir):
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_FALLBACK", "AUTOKEEPER_MODE"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(tui, "modules", lambda: [EXAMPLE])
+    monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     monkeypatch.setitem(hm.MODELS, "canned", Canned)
     cfg = config.Config(roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
     monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
@@ -61,9 +64,9 @@ def saved_game(m: Module, slot: str, *, turn: int = 1, updated: str | None = Non
     st.turn = turn
     for k, v in change.items():
         setattr(st, k, v)
-    tui.write_save(st, m)
+    library.write_save(st, m)
     if updated:
-        idx = tui.save_index()
+        idx = library.save_index()
         idx[slot]["updated"] = updated
         paths.save_index().write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
     return st
@@ -193,7 +196,7 @@ async def test_loading_another_save_from_the_menu_takes_the_game_s_place(canned)
 
 async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path, skills_dir, fake):
     from autokeeper.net.hub import Hub
-    from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.screens.net import NetGameScreen
 
     from .test_net import NoticeCast, closed, opened
 
@@ -241,7 +244,7 @@ async def test_the_save_list_newest_first_with_its_labels_and_preview(canned, mo
     saved_game(m, "lan-example-1", turn=22, updated="2021-05-01 09:00", ending=m.endings[0].id)
     newest = saved_game(m, "new", turn=7, minutes=14 * 60 + 20, clues=[clue.id])
     newest.progress.text = "守钟人说钟声会在夜里自己响起。"
-    tui.write_save(newest, m)
+    library.write_save(newest, m)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(100, 30)) as pilot:
         app.push_screen(LoadScreen())
@@ -278,8 +281,8 @@ async def test_rename_is_kept_in_the_save_and_survives_the_next_autosave(canned)
         assert "雨夜那一局" in plain(app.screen.query_one(OptionList).get_option_at_index(0).prompt)
     state = GameState.model_validate_json(paths.save("named").read_text(encoding="utf-8"))
     assert state.label == "雨夜那一局" and state.slot == "named"  # the file and its thread keep their name
-    tui.write_save(state, m)  # playing on
-    assert tui.save_index()["named"]["label"] == "雨夜那一局"
+    library.write_save(state, m)  # playing on
+    assert library.save_index()["named"]["label"] == "雨夜那一局"
     saves.rename("named", "")
     assert saves.saves()[0].name == f"《{m.title}》"
 
@@ -304,7 +307,7 @@ async def test_delete_moves_the_save_to_the_trash_and_the_others_still_load(cann
         await pilot.click("#answer-yes")
         await pilot.pause()
         assert app.screen is screen and [s.slot for s in screen.list] == ["keep"]
-        assert not paths.save("gone").exists() and "gone" not in tui.save_index()
+        assert not paths.save("gone").exists() and "gone" not in library.save_index()
         trashed = list(paths.trash().glob("*-gone/gone.json"))
         assert len(trashed) == 1 and "gone" in json.loads((trashed[0].parent / "index.json").read_text(encoding="utf-8"))
         await pilot.press("enter")
@@ -329,7 +332,7 @@ async def test_a_copy_has_a_slot_of_its_own(canned):
 async def test_a_broken_save_shows_greyed_and_can_be_deleted(canned):
     m = Module.load(EXAMPLE)
     saved_game(m, "fine", updated="2020-01-01 09:00")
-    idx = tui.save_index()
+    idx = library.save_index()
     idx["broken"] = {"module": "example", "title": m.title, "updated": "2030-01-01 09:00"}
     paths.save_index().write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
     paths.save("broken").write_text("{half a save", encoding="utf-8")
@@ -442,7 +445,7 @@ async def test_the_cards_screen_groups_and_manages_cards(canned, monkeypatch, tm
 
 
 async def test_new_cards_come_from_the_setup_s_flows_and_land_in_my_cards(canned, monkeypatch):
-    from autokeeper.tui.card import CardScreen
+    from autokeeper.tui.screens.card import CardScreen
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     app = AutoKeeperApp(theme="amber")
@@ -476,7 +479,7 @@ async def test_new_cards_come_from_the_setup_s_flows_and_land_in_my_cards(canned
 async def test_editing_a_kept_card_changes_its_words_and_photo_never_its_numbers(canned, monkeypatch, tmp_path):
     from PIL import Image
 
-    from autokeeper.tui.cards import update_kept
+    from autokeeper.tui.screens.cards import update_kept
 
     monkeypatch.setattr(imagery, "available", lambda: False)
     m = Module.load(EXAMPLE)
