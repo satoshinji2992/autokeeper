@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .hub import Hub
 
 HUB_PORT, WEB_PORT = 8765, 8000
+BLANKS = 4  # empty player seats a room may have besides the pregens (net/hub.py)
 
 # Virtual LANs, told apart by the adapter's name, then by the range they hand out.
 NAMED = (("radmin", "Radmin VPN"), ("zerotier", "ZeroTier"), ("tailscale", "Tailscale"), ("hamachi", "Hamachi"),

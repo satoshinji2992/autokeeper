@@ -18,7 +18,7 @@ from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .. import config, imagery, roster
-from ..agents.card import Builder, Figure, Photo, Proposal, download, local_file, research
+from ..agents.card import Builder, CardError, Figure, Photo, Proposal, local_file
 from ..module.schema import Module
 from ..rules.coc import Investigator
 
@@ -307,7 +307,7 @@ class CardScreen(Screen[Investigator | None]):
         async def one(i: int) -> None:
             if i not in self.shots:
                 dest = self.work_dir / f"photo-{i}.jpg"
-                self.shots[i] = dest if await download(fig.photos[i], dest) else None
+                self.shots[i] = dest if await self.builder.download(i, dest) else None
 
         await asyncio.gather(*(one(i) for i in indexes))
 
@@ -345,7 +345,7 @@ class CardScreen(Screen[Investigator | None]):
         try:
             self.proposal, _ = await asyncio.gather(self.builder.propose(), self._fetch(range(min(4, len(fig.photos)))))
         except Exception as exc:  # the model is down or answered nonsense twice
-            self.app.notify(f"未能生成问题：{exc.__class__.__name__}，请重试。", severity="error")
+            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能生成问题：{exc.__class__.__name__}，请重试。", severity="error")
             self._restart()
             return
         self._photos()
@@ -361,8 +361,8 @@ class CardScreen(Screen[Investigator | None]):
             self.pick_photo(0)
             return
         self._wait(f"正在找 {text} 的照片…")
-        fig = await research(text, self.builder.cfg.search)
-        self.builder.figure, self.shots, self.from_card = fig, {}, True
+        fig = await self.builder.find(text)
+        self.shots, self.from_card = {}, True
         if not fig.photos:
             self.app.notify("没找到照片", severity="warning")
             self._card()
@@ -411,7 +411,7 @@ class CardScreen(Screen[Investigator | None]):
         try:
             await self.builder.build(request)
         except Exception as exc:
-            self.app.notify(f"未能创建人物卡：{exc.__class__.__name__}，请重试。", severity="error")
+            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能创建人物卡：{exc.__class__.__name__}，请重试。", severity="error")
             self._extra() if back == "extra" else self._tweak()
             return
         self._card()
@@ -419,6 +419,6 @@ class CardScreen(Screen[Investigator | None]):
     def keep(self) -> None:
         b = self.builder
         assert b.card
-        roster.keep(b.card, b.record(), self.chosen)
+        b.keep(self.chosen)
         roster.attach(self.m, [b.card])
         self.dismiss(b.card)

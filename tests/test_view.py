@@ -265,6 +265,8 @@ async def test_f5_at_a_shared_table_asks_the_host(monkeypatch, tmp_path, skills_
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")  # the free seat
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         assert await until(pilot, lambda: isinstance(app.screen, NetGameScreen) and app.screen.my_turn)
         screen = app.screen
         await pilot.press("f5")

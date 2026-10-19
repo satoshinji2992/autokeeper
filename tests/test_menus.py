@@ -203,6 +203,8 @@ async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path,
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause(0.5)
         await pilot.press("enter")
+        await pilot.pause(0.1)
+        await pilot.press("y")  # ready: the game begins
         assert await until(pilot, lambda: isinstance(app.screen, NetGameScreen) and app.screen.my_turn)
         screen = app.screen
         assert screen.link.host

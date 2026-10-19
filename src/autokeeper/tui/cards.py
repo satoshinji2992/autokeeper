@@ -53,6 +53,20 @@ def photo(inv: Investigator, m: Module | None) -> Path | None:
     return None
 
 
+def portrait(inv: Investigator, m: Module | None, style: str) -> Text | None:
+    """The card's face for the sheet beside a list: its photo drawn, else the module's art. Slow
+    (chafa): call it in a thread."""
+    path = photo(inv, m)
+    if path is not None and imagery.available():
+        try:
+            return Text.from_ansi(imagery.render(str(path), *FACE, style, face=True))
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    if m is not None and inv.portrait in m.art:
+        return artkit.colorize(m.art[inv.portrait], m.art_colors.get(inv.portrait))
+    return None
+
+
 def kept_file(inv: Investigator) -> Path:
     return roster.folder() / f"{inv.id}.json"
 
@@ -259,15 +273,7 @@ class CardsScreen(Screen):
             " · ".join(f"[@click={a if '.' in a else 'screen.' + a}]{w}[/]" for a, w in keys))  # fmt: skip
 
     def _portrait(self, inv: Investigator, m: Module | None, style: str) -> Text | None:
-        path = photo(inv, m)
-        if path is not None and imagery.available():
-            try:
-                return Text.from_ansi(imagery.render(str(path), *FACE, style, face=True))
-            except (OSError, ValueError, subprocess.TimeoutExpired):
-                pass
-        if m is not None and inv.portrait in m.art:
-            return artkit.colorize(m.art[inv.portrait], m.art_colors.get(inv.portrait))
-        return None
+        return portrait(inv, m, style)
 
     @on(OptionList.OptionHighlighted, "#choices")
     def preview(self, event: OptionList.OptionHighlighted) -> None:

@@ -1,5 +1,7 @@
 """开房间: a LAN room opened from the title screen. Pick the module (the bundled ones, then your
-own), who plays each investigator (玩家 / AI / 不上场), a new game or a LAN save to go on with,
+own), who plays each investigator (玩家 / AI / 不上场) and how many empty seats there are for
+players who bring their own (each player may also swap their pregen in the lobby), a new game or a
+LAN save to go on with,
 your name, the ports and whether friends get a web page; then on into the lobby as its host.
 
 The room (net/room.py, the same one `autokeeper host` opens) lives as long as this app, or
@@ -58,6 +60,7 @@ class HostScreen(Screen):
         self.slot = ""  # the LAN save to go on with; "" for a new game
         self.party: list[Investigator] = []  # the seats: the module's pregens, or the saved party
         self.plan: dict[str, str] = {}  # investigator id -> 玩家 / AI / 不上场
+        self.blanks = 0  # empty player seats besides the pregens: the player brings their own
         self.faces: dict[tuple[str, str], Text] = {}
         self.ports = (lan.HUB_PORT, lan.WEB_PORT)  # taken ones are swapped for free ones (net/room.py any_port)
         self.trouble = ""  # the last error's technical part, for the 遇到问题 page
@@ -180,6 +183,7 @@ class HostScreen(Screen):
         assert self.module
         self.party = list(self.module.pregens)
         self.plan = {p.id: "玩家" if i == 0 else "AI" for i, p in enumerate(self.party)}
+        self.blanks = 0
 
     def _show_room(self) -> None:
         assert self.module
@@ -207,11 +211,25 @@ class HostScreen(Screen):
         kept = ol.highlighted if ol.option_count else 0
         ol.clear_options()
         ol.add_options([Option(self._seat_prompt(inv), id=inv.id) for inv in self.party])
-        ol.highlighted = min(kept or 0, len(self.party) - 1)
+        if not self.slot:  # a saved party has nobody to add
+            theme = self.app.current_theme
+            for i in range(self.blanks):
+                t = Text("玩家" + " " * 4, style=f"bold {theme.accent or 'yellow'}")
+                t.append("空座位", style="bold")
+                t.append("  自己带角色", style="dim")
+                ol.add_option(Option(t, id=f"blank-{i}"))
+            if self.blanks < lan.BLANKS:
+                ol.add_option(Option(Text("＋ 加一个空座位", style="dim"), id="add-blank"))
+        ol.highlighted = min(kept or 0, ol.option_count - 1)
 
     @on(OptionList.OptionSelected, "#host-seats")
     def _cycle(self, event: OptionList.OptionSelected) -> None:
         inv_id = event.option.id or ""
+        if inv_id == "add-blank" or inv_id.startswith("blank-"):  # Enter adds one, or takes it away
+            self.blanks += 1 if inv_id == "add-blank" else -1
+            self._list_seats()
+            self._note()
+            return
         turn = GOING_ON if self.slot else CYCLE
         self.plan[inv_id] = turn.get(self.plan.get(inv_id, "AI"), "AI")
         inv = next(i for i in self.party if i.id == inv_id)
@@ -225,6 +243,10 @@ class HostScreen(Screen):
     def _seat_card(self, inv_id: str) -> None:
         """The highlighted investigator, as the lobby and the game's F4 show them."""
         inv = next((i for i in self.party if i.id == inv_id), None)
+        if inv_id == "add-blank" or inv_id.startswith("blank-"):
+            words = "坐在这里的玩家自己选角色：自己的卡、模组预设，或者现车一张。" if inv_id != "add-blank" else "加一个空座位，给自己带角色的朋友。"
+            self.query_one("#host-card", Static).update(Text(words, style="dim"))
+            return
         if inv is None or self.module is None:
             return
         style = self.app.art_style  # type: ignore[attr-defined]
@@ -278,6 +300,7 @@ class HostScreen(Screen):
                 self.app.notify(f"读不了这个存档（{exc.__class__.__name__}）", severity="error")
                 return
             self.slot = state.slot
+            self.blanks = 0
             self.party = list(state.investigators)
             self.plan = {inv.id: "玩家" if inv.id in state.human else "AI" for inv in self.party}
         self._list_seats()
@@ -286,7 +309,7 @@ class HostScreen(Screen):
             self.app.notify("存档里的人都要上场", timeout=3)
 
     def _note(self) -> None:
-        players = sum(1 for v in self.plan.values() if v == "玩家")
+        players = sum(1 for v in self.plan.values() if v == "玩家") + (0 if self.slot else self.blanks)
         ai = sum(1 for v in self.plan.values() if v == "AI")
         t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
         if self.slot:
@@ -312,7 +335,7 @@ class HostScreen(Screen):
         name = self.query_one("#host-name", Input).value.strip()[:16] or "房主"
         port, web_port = self.ports
         web = self.query_one("#host-web", Checkbox).value
-        seats = [self.plan.get(inv.id, "AI") for inv in self.party]
+        seats = [self.plan.get(inv.id, "AI") for inv in self.party] + ["玩家"] * self.blanks
         if all(s == "不上场" for s in seats):
             self.app.notify("至少要有一位调查员上场", severity="error")
             return
