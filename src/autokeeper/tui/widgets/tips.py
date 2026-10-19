@@ -142,7 +142,7 @@ def after(screen, ev: dict) -> None:
     key = _called_for(st, player, ev)
     if key and key not in board.waiting:
         board.waiting.append(key)
-    if ev.get("type") != "keeper_end" or st.ending:
+    if ev.get("type") not in ("keeper_end", "dialogue_end") or st.ending:
         return
     board.waiting += [k for k in _due(st, player) if k not in board.waiting]
     if board.waiting and board.shown_at != st.turn:

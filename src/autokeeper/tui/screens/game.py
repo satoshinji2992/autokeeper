@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import traceback
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -59,12 +60,14 @@ from ..widgets.panels import (
     command_suggester,
     history_line,
     log_line,
+    skill_completions,
 )
 from ..widgets.plugin_ui import Plays, panel_view, tab_label
 from ..widgets.speaker import Speaker
 from .saves import LoadScreen
 
 COMMANDS = (
+    ("输入模式", "Alt", "切换角色行动与向守秘人说明；终端也可用 Alt+M", "toggle_input_mode"),
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
@@ -79,6 +82,7 @@ COMMANDS = (
     ("手绘", "F8", "绘制并提交草图", "sketch"),
     ("换模型", "F9", "切换模型和思考强度", "engine"),
     ("复盘", "F10", "结局后查看真相、未发现线索与后日谈", "debrief"),
+    ("开发者模式", "F12", "查看隐藏状态、角色会话与调用记录，使用 AI 排查异常", "developer"),
     ("继续叙述", "", "接续中断的一段，保留已发生的结果", "retry"),
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
@@ -108,6 +112,10 @@ class GameScreen(Screen):
         Binding("f8", "sketch", "手绘", show=False),
         Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
+        Binding("f12", "developer", "开发者模式", show=False),
+        Binding("alt,alt+m,alt+enter", "toggle_input_mode", "角色／KP", key_display="Alt", priority=True),
+        Binding("tab", "complete_skill(1)", "补全技能", show=False, priority=True),
+        Binding("shift+tab", "complete_skill(-1)", "上个技能", show=False, priority=True),
         Binding("ctrl+s", "save", "存档", show=False),
         Binding("ctrl+a", "art_style", "画法", show=False, priority=True),  # before the input box takes it as Home
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
@@ -132,6 +140,11 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self.dev_errors: list[str] = []
+        self._skill_choices: list[str] = []
+        self._skill_at = -1
+        self._skill_value = ""
+        self.input_mode = "rp"
         self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
         self._leave_when_ready: Callable[[], None] | None = None  # 讲完再走: where to go once the turn is over
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
@@ -139,6 +152,7 @@ class GameScreen(Screen):
         self.ideas = Ideas(self)  # F5 (tui/modals/suggest.py)
         self.plays = Plays(self)  # rule plugins' shows and prompts (tui/widgets/plugin_ui.py)
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
+        self.view = (state.location, state.view)  # which picture of which place the scene shows (engine/views.py)
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -159,6 +173,7 @@ class GameScreen(Screen):
         yield Footer()
 
     async def on_mount(self) -> None:
+        self._input_label()
         self._start_history([e for e in self.state.log])
         cfg = config.load()
         self.engine_label = self._engine_label(cfg)
@@ -168,6 +183,7 @@ class GameScreen(Screen):
         self.query_one(DiceTray).tumbling = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         self.game.write_progress = True  # someone reads it: the 进展 page
+        self.game.world_later = True  # NPCs decide while the player reads, not while they wait
         channels.listeners.append(self._fell_back)
         paths.games().mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(paths.checkpoints())
@@ -239,6 +255,38 @@ class GameScreen(Screen):
             event.prevent_default()
             event.stop()
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "toggle_input_mode":
+            return self.app.screen is self and not self.spectate
+        if action == "complete_skill":
+            box = self.query_one("#command", Input)
+            return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
+        return super().check_action(action, parameters)
+
+    def _input_label(self) -> None:
+        box = self.query_one("#command", Input)
+        box.border_title = "角色行动 · Alt 切换" if self.input_mode == "rp" else "对 KP 说明 · Alt 切换"
+        box.placeholder = "输入角色行动或对话 · Esc 菜单" if self.input_mode == "rp" else "向守秘人提问或澄清，不作为角色发言"
+        box.set_class(self.input_mode == "kp", "to-keeper")
+
+    def action_toggle_input_mode(self) -> None:
+        self.input_mode = "kp" if self.input_mode == "rp" else "rp"
+        self._input_label()
+
+    def _input_line(self, text: str) -> str:
+        # Bind the channel when submitted, so changing mode cannot change a queued line.
+        return f"/kp {text}" if self.input_mode == "kp" and text and not text.startswith("/") else text
+
+    def action_complete_skill(self, step: int = 1) -> None:
+        box = self.query_one("#command", Input)
+        if box.value != self._skill_value or not self._skill_choices:
+            self._skill_choices = skill_completions(box.value, self._viewer())
+            self._skill_at = -1 if step > 0 else 0
+        if self._skill_choices:
+            self._skill_at = (self._skill_at + step) % len(self._skill_choices)
+            box.value = self._skill_value = self._skill_choices[self._skill_at]
+            box.cursor_position = len(box.value)
+
     def _status(self, text: str) -> None:
         self.status_text = text
 
@@ -257,6 +305,8 @@ class GameScreen(Screen):
         """While a turn runs the box stays open: the next action can be typed ahead, and keys
         pressed mid-narration are not lost."""
         self.busy = busy
+        if self.game is not None and (server := getattr(self.game, "debug_server", None)) is not None:
+            server.busy = busy
         if not busy:
             self.status_text = ""
             if not self.spectate:
@@ -284,6 +334,8 @@ class GameScreen(Screen):
     def _scene(self, loc_id: str) -> None:
         loc = self.m.location(loc_id)
         name = loc.art or ""
+        if self.view[0] == loc_id and self.view[1] and (self.view[1] in self.m.art or (self.view[1] in self.m.pictures and imagery.available())):
+            name = self.view[1]  # another picture of this place: a corner they look at, the night, a moment
         scene = self.query_one(SceneArt)
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
@@ -297,6 +349,7 @@ class GameScreen(Screen):
             sky=self._sky(loc_id),
         )
         self._topbar()
+
 
     def _showcase(self, ev: dict) -> None:
         """A big scene over the screen, when this screen shows them and the picture is here; not
@@ -325,7 +378,10 @@ class GameScreen(Screen):
         right.styles.width = 40 if width >= 130 else 34
         # the dice tray as tall as the column can spare: ten rows of picture on a tall screen
         tray = self.query_one(DiceTray)
-        tray.styles.height = 13 if event.size.height >= 40 else 12 if event.size.height >= 34 else 11
+        height = event.size.height
+        tray.styles.height = 13 if height >= 48 else 10 if height >= 40 else 8 if height >= 34 else 5
+        self.query_one(SheetPanel).styles.max_height = 14 if height >= 40 else 10 if height >= 34 else 6
+        self.query_one(CluePanel).styles.max_height = 8 if height >= 48 else 6 if height >= 40 else 4 if height >= 34 else 3
         if right.display:
             self.call_after_refresh(tray.prepare)
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
@@ -550,7 +606,12 @@ class GameScreen(Screen):
         if t == "status":
             self._status(ev["text"])
         elif t == "move":
+            self.view = (ev["location"], ev.get("view", ""))
             self._scene(ev["location"])
+        elif t == "view":  # another picture of the same place
+            self.view = (ev["location"], ev["key"])
+            if ev["location"] == self.state.location:
+                self._scene(ev["location"])
         elif t == "time":
             self._topbar()
         elif t == "sky":
@@ -558,7 +619,8 @@ class GameScreen(Screen):
         elif t == "improv":  # what the director added is told in the story, never announced over it
             self._topbar()
         elif t == "art":
-            if self.m.location(self.state.location).art == ev["key"]:
+            here = self.m.location(self.state.location)
+            if ev["key"] in (here.art, self.view[1]):  # its picture came or changed
                 self._scene(self.state.location)
             for card in self.query(ItemCard):
                 if card.art_key == ev["key"]:
@@ -614,10 +676,15 @@ class GameScreen(Screen):
         elif t == "command":
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
         elif t == "clue":
-            body = Text()
-            body.append(f"〔{ev['title']}〕\n", style="bold")
-            body.append(ev["text"])
-            story.add("clue", body)
+            art = next((c.art for c in self.m.clues if c.id == ev["id"]), "")
+            if art and art in self.m.pictures and imagery.available():  # the thing it was found in, photographed
+                story.add("clue", ItemCard(self.m, {"id": ev["id"], "name": f"〔{ev['title']}〕", "text": ev["text"], "art": art},
+                                           self.app.art_style))  # fmt: skip
+            else:
+                body = Text()
+                body.append(f"〔{ev['title']}〕\n", style="bold")
+                body.append(ev["text"])
+                story.add("clue", body)
             self._panels()
             self.app.notify(f"获得线索：{ev['title']}", timeout=3)
         elif t == "handout":
@@ -747,7 +814,27 @@ class GameScreen(Screen):
     def menu_items(self) -> list[tuple[str, str]]:
         """What the Esc menu offers on this screen (a LAN table leaves some out, tui/screens/net.py);
         规则插件 only when this game has any."""
-        return [item for item in MENU if item[0] != "plugins" or self.m.plugins]
+        return [item for item in MENU if (item[0] != "plugins" or self.m.plugins)
+                and (item[0] != "developer" or self.game is not None)]
+
+    def action_developer(self) -> None:
+        if self.game is None:
+            self.app.notify("完整排查资料位于运行游戏的本机，联机客户端无法读取。", timeout=5)
+            return
+        self.open_developer()
+
+    @work(exclusive=True, group="developer-web")
+    async def open_developer(self) -> None:
+        from ...engine.developer_web import open_dashboard
+
+        assert self.game is not None
+        try:
+            url = await open_dashboard(self.game, errors=self.dev_errors, busy=self.busy)
+        except OSError as exc:
+            self.app.notify(f"开发者网页启动失败：{type(exc).__name__}", severity="error", timeout=8)
+            return
+        self.app.open_url(url)
+        self.app.notify(f"开发者网页：{url}", timeout=10)
 
     def action_menu(self) -> None:
         if self.plays.skip():  # Esc first ends a plugin's show
@@ -831,9 +918,9 @@ class GameScreen(Screen):
 
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
+        text = self._input_line(event.value.strip())
         if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
-            if not text.startswith("/") and self.queued is None and not self.state.ending:
+            if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
                 event.input.value = ""
             else:  # the line stays in the box
@@ -857,6 +944,9 @@ class GameScreen(Screen):
     def send_line(self, text: str) -> None:
         """One line from the input box: a slash command, or the investigator's action."""
         if text.startswith("/"):
+            if text.startswith("/kp "):
+                self.play(text)
+                return
             self._slash(text)
             return
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
@@ -870,7 +960,11 @@ class GameScreen(Screen):
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
-        if cmd == "/retry":
+        actions["/dev"] = self.action_developer
+        if cmd in ("/kp", "/rp"):
+            self.input_mode = "kp" if cmd == "/kp" else "rp"
+            self._input_label()
+        elif cmd == "/retry":
             self.action_retry()
         elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop
             if self.queued is None:
@@ -897,7 +991,8 @@ class GameScreen(Screen):
         self.ideas.drop()  # whatever F5 was still thinking of, this action came first
         self._busy(True)
         inv = self.state.investigator
-        self.story.add("player", Text(f"▶ {inv.name}：{text}"))
+        self.story.add("system" if text.startswith("/kp ") else "player",
+                       Text(f"▶ {inv.name} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {inv.name}：{text}"))
         turn = self.state.turn
         active = self.state.active
         try:
@@ -918,6 +1013,11 @@ class GameScreen(Screen):
             self._busy(False)
 
     def _turn_error(self, exc: Exception) -> None:
+        self.dev_errors.append(f"第 {self.state.turn} 轮\n{''.join(traceback.format_exception(exc))}")
+        if self.game is not None and (journal := getattr(self.game, "debug_journal", None)) is not None:
+            journal.append("error", {"source": "turn", "traceback": self.dev_errors[-1]}, turn=self.state.turn)
+            journal.sync(self.game)
+        del self.dev_errors[:-20]
         text = f"这一段暂未完成（{type(exc).__name__}）。输入 /retry 接着讲，已掷出的结果会保留。"
         self.story.end_keeper("这一段暂时中断。")
         self.story.add("system", Text(text))
@@ -1176,9 +1276,13 @@ class GameScreen(Screen):
         self._busy(True)
         self._status("守秘人正在讲述…")
         self.game.emit = self.handle
-        await self.game.interlude()
-        write_save(self.state, self.m)
-        self._busy(False)
+        try:
+            await self.game.interlude()
+            write_save(self.state, self.m)
+        except Exception as exc:
+            self._turn_error(exc)
+        finally:
+            self._busy(False)
 
     def _turn_running(self) -> bool:
         """Starting another turn-group worker would cancel the running turn."""

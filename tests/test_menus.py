@@ -185,7 +185,7 @@ async def test_loading_another_save_from_the_menu_takes_the_game_s_place(canned)
         await pick(pilot, app, "load")
         load = app.screen
         assert isinstance(load, LoadScreen) and [s.slot for s in load.list] == ["playing", "other"]
-        assert "正在玩" in plain(load.query_one(OptionList).get_option_at_index(0).prompt)
+        assert "当前游戏" in plain(load.query_one(OptionList).get_option_at_index(0).prompt)
         await pilot.press("d")  # the game being played cannot go to the trash
         await pilot.pause()
         assert app.screen is load and paths.save("playing").exists()
@@ -235,6 +235,42 @@ def test_last_played_in_plain_words():
     assert saves.when("2026-10-17 21:30", now) == "10月17日"
     assert saves.when("2025-03-02 21:30", now) == "2025年3月2日"
     assert saves.game_time(1440 + 9 * 60 + 5) == "第2天 09:05"
+
+
+@pytest.mark.parametrize("size", [(100, 30), (160, 50)])
+async def test_save_preview_picture_does_not_wrap_into_stripes(canned, monkeypatch, tmp_path, size):
+    from rich.text import Text
+
+    m = Module.load(EXAMPLE)
+    picture = tmp_path / "scene.png"
+    from PIL import Image
+
+    Image.new("RGB", (50, 50), "#884422").save(picture)
+    m.pictures[m.location(m.start).art] = str(picture)
+    st = saved_game(m, "striped", turn=3)
+    st.progress.text = "调查进展\n" * 60  # forces the preview's vertical scrollbar
+    library.write_save(st, m)
+    widths = []
+
+    def render(path, width, height, *args, **kwargs):
+        widths.append(width)
+        return "\n".join("▓" * (width + 1) for _ in range(height))  # even an oversized frame must crop, not wrap
+
+    monkeypatch.setattr(LoadScreen, "_module", lambda self, save: m)
+    monkeypatch.setattr(imagery, "available", lambda: True)
+    monkeypatch.setattr(imagery, "render", render)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=size) as pilot:
+        app.push_screen(LoadScreen())
+        assert await until(pilot, lambda: bool(widths) and isinstance(app.screen.query_one("#preview-picture", Static).content, Text))
+        await pilot.pause()
+        preview = app.screen.query_one("#preview-picture", Static)
+        assert preview.size.height <= LoadScreen.PICTURE + 1
+        assert widths[-1] == preview.content_size.width
+        await pilot.resize_terminal(120, 35)
+        await pilot.pause(0.4)
+        assert widths[-1] == preview.content_size.width
+        assert preview.size.height <= LoadScreen.PICTURE + 1
 
 
 async def test_the_save_list_newest_first_with_its_labels_and_preview(canned, monkeypatch):
@@ -343,7 +379,7 @@ async def test_a_broken_save_shows_greyed_and_can_be_deleted(canned):
         await pilot.pause(0.3)
         screen = app.screen
         assert screen.list[0].slot == "broken" and screen.list[0].state is None
-        assert "读不了" in plain(screen.query_one(OptionList).get_option_at_index(0).prompt)
+        assert "无法读取" in plain(screen.query_one(OptionList).get_option_at_index(0).prompt)
         assert "Enter 继续" not in str(screen.query_one("#setup-hint", Static).content)
         await pilot.press("enter")  # nothing to load: it says so and stays
         await pilot.pause()
@@ -497,7 +533,7 @@ async def test_editing_a_kept_card_changes_its_words_and_photo_never_its_numbers
         form = app.screen
         assert isinstance(form, CardEditModal)
         assert not form.query(f"#edit-{'skills'}") and not form.query("#edit-luck")  # no box for a number
-        assert "数值不能改" in "".join(str(w.render()) for w in form.query(Static))
+        assert "数值不可手动修改" in "".join(str(w.render()) for w in form.query(Static))
         form.query_one("#edit-occupation", Input).value = "码头记者"
         form.query_one("#edit-age", Input).value = "41"
         form.query_one("#edit-residence", Input).value = "上海"

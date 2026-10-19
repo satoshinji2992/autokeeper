@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import re
 import time
 import weakref
 from functools import partial
@@ -629,8 +630,28 @@ def command_suggester(inv: Investigator | None = None, actions: list[str] | None
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
-    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help", "/theme", "/quit"]
+    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help", "/dev", "/theme", "/quit"]
     return SuggestFromList([*checks, *lookups, *slash, *(actions or [])], case_sensitive=False)
+
+
+_SKILL_COMMAND = re.compile(
+    r"^(?P<command>[.。](?:ra|rc)(?:[bp][12]?)?)\s*(?P<difficulty>困难|极难)?\s*(?P<prefix>[^\d\s+\-]*)$",
+    re.IGNORECASE,
+)
+
+
+def skill_completions(text: str, inv: Investigator | None = None) -> list[str]:
+    """Skill candidates for Tab; ordinary prose and commands with a numeric target are left alone."""
+    match = _SKILL_COMMAND.fullmatch(text)
+    if match is None:
+        return []
+    difficulty, prefix = match["difficulty"] or "", match["prefix"]
+    if not difficulty and prefix in ("困", "极"):
+        difficulty, prefix = ("困难" if prefix == "困" else "极难"), ""
+    mine = sorted(inv.skills, key=lambda key: -inv.skills[key]) if inv else []
+    names = dict.fromkeys([*mine, *SKILL_BASE, *CHARACTERISTICS, "幸运", "灵感", "知识"])
+    command = match["command"].replace("。", ".").lower()
+    return [f"{command} {difficulty}{name}" for name in names if name.startswith(prefix)]
 
 
 class DiceTray(Static):

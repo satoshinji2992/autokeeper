@@ -21,6 +21,7 @@ MENU = (
     ("prefs", "叙事偏好"),
     ("plugins", "规则插件"),
     ("engine", "换模型"),
+    ("developer", "开发者模式"),
     ("guide", "新手指南"),
     ("keys", "按键说明"),
     ("title", "回到标题"),

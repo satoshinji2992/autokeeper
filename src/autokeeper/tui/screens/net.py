@@ -175,7 +175,7 @@ class NetGameScreen(GameScreen):
             block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
             if e.kind == "keeper":  # told again, it is rewritten in place
                 self.told = block
-        self.query_one(Input).placeholder = "等你的回合时说出行动；全角括号开头是场外聊天，如（我去倒杯水）"
+        self._input_label()
         self.ready = True
         while self.inbox:
             await self.on_msg(self.inbox.pop(0))
@@ -215,6 +215,8 @@ class NetGameScreen(GameScreen):
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
                            "观战模式下可使用全角括号发送场外消息。")
+        if self.input_mode == "kp":
+            self._input_label()
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -305,7 +307,9 @@ class NetGameScreen(GameScreen):
         t = ev.get("type")
         if t == "said":
             who = f"{ev['who']}（{ev.get('player') or 'AI'}）"
-            self.story.add("player", Text(f"▶ {who}：{ev['text']}"))
+            text = ev["text"]
+            self.story.add("system" if text.startswith("/kp ") else "player",
+                           Text(f"▶ {who} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {who}：{text}"))
             return
         if t == "retold":  # the keeper is about to tell the last narration again, for everyone
             self.app.notify(f"{ev.get('who') or '有人'}请守秘人重讲上一段" + ("" if ev.get("nudge") == "换个讲法" else f"：{ev.get('nudge')}"), timeout=4)
@@ -325,6 +329,11 @@ class NetGameScreen(GameScreen):
                 self.app.notify("暂无可撤回的行动。")
         elif word in ("/done", "/pass"):
             self.empty_enter()
+        elif text.startswith("/kp "):
+            if self.seat:
+                self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
+            else:
+                self.app.notify("观战模式下无可操作的调查员。")
         elif text.startswith("/"):
             self._slash(text)
         elif text.startswith(TALK):

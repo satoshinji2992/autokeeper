@@ -223,6 +223,14 @@ async def test_the_speaker_steps_in_while_they_talk_and_out_when_the_scene_moves
 
         await line("warden", "老守钟人", "上去看吧。")
         assert await until(pilot, lambda: panel.display)
+        await screen.handle({"type": "dialogue_end"})
+        assert panel.display  # a dialogue-only turn keeps its speaker on stage
+        await screen.handle({"type": "keeper_start"})
+        await pilot.pause()
+        assert not panel.display  # the next narration, without them, releases the portrait
+
+        await line("warden", "老守钟人", "上去看吧。")
+        assert await until(pilot, lambda: panel.display)
         await screen.handle({"type": "move", "location": "square", "name": "广场"})  # the party moves on
         await pilot.pause()
         assert not panel.display and scene.place == "广场"

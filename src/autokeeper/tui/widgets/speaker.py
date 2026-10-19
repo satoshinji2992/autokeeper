@@ -156,6 +156,8 @@ class Speaker(Vertical):
                 self.refit()
         elif t in ("move", "event", "ending"):
             self.leave()
+        elif t == "dialogue_end":
+            self.fresh = False  # no narration followed this reply; the next telling is another scene
         elif t == "keeper_start" and not ev.get("again"):  # told again, it is still the same turn
             if not self.fresh:
                 self.leave()

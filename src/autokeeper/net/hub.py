@@ -85,6 +85,7 @@ PER_PLAYER = 2  # actions one player may put in a round
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
+PRIVATE |= {"pending_resolution", "pending_mcp"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
@@ -118,12 +119,14 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         if here not in visited:  # of its other names, those the players have read (and the map goes by)
             spelled = {fog.plain(a): a for a in [loc["name"], *loc["aliases"]]}
             loc["aliases"] = [spelled.get(a, a) for a in names.get(here, ()) if any(a in text for text in read)]
-            loc.update(name=known[here], read_aloud="", features=[], art=None, weather=[])
+            loc.update(name=known[here], read_aloud="", features=[], art=None, weather=[], views=[])
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
+            loc["views"] = [{**v, "features": [], "prompt": ""} for v in loc["views"]]  # nor what each picture is for
     d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     for n in d["npcs"]:
         n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
+        n["status"] = m.npc(n["id"]).status  # the dead and the missing are not shown standing in a scene
         if n["location"] not in visited:
             n["location"] = None
     for c in d["clues"]:
@@ -133,10 +136,28 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
-    seen = fog.things(m, st)  # the map names what they know lies where
-    d["items"] = [item for item in d["items"] if item["where"] == st.location or item["where"] in st.visited or item["id"] in seen]
+    from ..world import knowledge
+    from ..world.record import PLAYERS
+    from ..world.store import World
+
+    seen = fog.things(m, st)
+    view = World(m, st, initialize=False)
+    party = {inv.id for inv in st.investigators}
+    def visible(item: dict) -> bool:
+        if item["id"] in st.record.entities:
+            return knowledge.item_known(view, item["id"], PLAYERS)
+        return (item["owner"] in party or (not item["owner"] and not item["hidden"] and item["equipment"] != "concealed"
+                and (item["where"] in visited or item["id"] in seen)))
+
+    d["items"] = [item for item in d["items"] if visible(item)]
+    for item in d["items"]:
+        ent = st.record.entities.get(item["id"])
+        if ent is not None and ent.at in party:
+            item.update(owner=ent.at, equipment=ent.equipment, quantity=ent.quantity, status=ent.status, hidden=ent.hidden)
+        else:
+            item.update(owner="", equipment="carried", quantity=1, status="", hidden=False)
     for e in d["events"]:
-        e.update(title="", text="", read_aloud="", performance="")
+        e.update(title="", text="", read_aloud="", performance="", art="")  # an event's picture comes with its moment
     for e in d["endings"]:
         e.update(title="", text="", reward="")
     for sk in d["sketches"]:
@@ -238,6 +259,7 @@ class Hub:
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
         self.game.write_progress = True  # the 进展 page on every screen, through the sync
+        self.game.world_later = True  # NPCs decide between rounds, not while the table waits
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}
@@ -335,9 +357,9 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "本局已结束。"})
             elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
-            elif text.strip().startswith("/"):
+            elif text.strip().startswith("/") and not text.strip().startswith("/kp "):
                 await self._send(cid, {"t": "error", "text": "当前无中断回合。"})
-            elif commands.instant(text):  # .r, .st: not the round's action; run while the pool is open
+            elif text.strip().startswith("/kp ") or commands.instant(text):  # questions do not occupy an action slot
                 self.instant.put_nowait((seat, text))
                 self.wake.set()
             elif not text.strip():
@@ -686,6 +708,7 @@ class Hub:
 
     def _art_keys(self, book: dict) -> set[str]:
         return ({x.get("art") for x in book["locations"] + book["items"]} | {p.portrait for p in self.m.pregens}
+                | {v["key"] for x in book["locations"] for v in x.get("views", [])} | {c.get("art") for c in book["clues"]}
                 | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
                 | {key for h in book["handouts"] for key in h.get("images", [])})
 
@@ -745,7 +768,7 @@ class Hub:
         if ev.get("type") == "flag":
             await self._broadcast({"t": "sync", "state": self._view()})
             return
-        if ev.get("type") in ("improv", "move", "npc", "performance", "clue", "handout"):
+        if ev.get("type") in ("improv", "move", "npc", "performance", "clue", "handout", "people"):
             await self._share_book()
             ev = {k: v for k, v in ev.items() if k != "reason"}  # the director's reasoning is for the keeper
             if ev.get("type") == "handout":
@@ -761,6 +784,15 @@ class Hub:
             if path:
                 ev["picture_data"] = media.pack(path)
                 self.sent[ev["key"]] = path
+        elif ev.get("type") == "view":  # another picture of the place: the picture first, if the screens lack it
+            key = ev.get("key", "")
+            path = self.m.pictures.get(key)
+            if path and self.sent.get(key) != path and (data := media.pack(path)):
+                self.sent[key] = path
+                art = self.m.art.get(key, "")
+                await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
+                                                            "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
+                                                            "picture_data": data}})
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         elif ev.get("type") in ("plugin_effect", "plugin_show", "plugin_panel", "plugin_answered"):  # public; the id stays on the host

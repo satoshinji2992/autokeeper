@@ -411,6 +411,53 @@ async def test_the_command_box_completes_dice_commands_and_skills():
     assert await suggest(".s") == ".st" and await suggest("/n") == "/notes"
 
 
+@pytest.mark.parametrize("text, expected", [
+    (".ra 侦", ".ra 侦查"), (".rab 图", ".rab 图书馆使用"),
+    (".rap2 困难聆", ".rap2 困难聆听"), ("。RCp2 极难力", ".rcp2 极难力量"),
+])
+def test_skill_completion_keeps_dice_modifiers(text, expected):
+    from autokeeper.tui.widgets.panels import skill_completions
+
+    inv = Module.load(EXAMPLE).pregens[0]
+    assert expected in skill_completions(text, inv)
+    assert not skill_completions("我想侦查", inv)
+    assert not skill_completions(".ra 侦查50", inv)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_tab_cycles_skills_without_sending_an_action(monkeypatch):
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="tab-skills")
+    app = AutoKeeperApp(theme="amber")
+    opened = []
+    monkeypatch.setattr(app, "open_url", lambda url: opened.append(url))
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = GameScreen(m, st, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        box = screen.query_one("#command", Input)
+        box.value = ".ra"
+        box.cursor_position = len(box.value)
+        before = st.model_dump_json()
+        await pilot.press("tab")
+        first = box.value
+        assert first.startswith(".ra ") and box.has_focus
+        await pilot.press("tab")
+        assert box.value != first and box.has_focus
+        await pilot.press("shift+tab")
+        assert box.value == first
+        box.value = ".rap2 困难聆"
+        box.cursor_position = len(box.value)
+        await pilot.press("tab")
+        assert box.value == ".rap2 困难聆听"
+        assert st.model_dump_json() == before
+        await pilot.press("f12")
+        assert await until(pilot, lambda: bool(opened))
+        assert app.screen is screen and box.has_focus  # the private webpage leaves the terminal playable
+        await pilot.press("tab")
+        assert st.model_dump_json() == before
+
+
 async def test_an_npc_line_shows_their_face_never_the_keepers_note_on_them(canned):
     m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)

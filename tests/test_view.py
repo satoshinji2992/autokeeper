@@ -236,7 +236,7 @@ async def test_f5_thinks_without_getting_in_the_way_of_typing(monkeypatch):
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         box = screen.query_one("#command", Input)
         await pilot.press("f5")
-        assert await until(pilot, lambda: "在想下一步可以做什么" in screen.status_text)  # the spinner line
+        assert await until(pilot, lambda: "生成行动建议" in screen.status_text)  # the spinner line
         await pilot.press("w", "o")  # the box is still open for typing
         gate.set()
         assert await until(pilot, lambda: not screen.status_text)

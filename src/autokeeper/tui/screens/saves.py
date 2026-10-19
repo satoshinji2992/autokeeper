@@ -272,6 +272,13 @@ class LoadScreen(Screen):
     def on_mount(self) -> None:
         self._fill()
 
+    def on_resize(self) -> None:
+        self.call_after_refresh(self._resize_preview)
+
+    def _resize_preview(self) -> None:
+        if self.is_attached and self.list and (save := self._chosen()) is not None:
+            self._show(save)
+
     @property
     def current(self) -> str | None:
         return self.playing.state.slot if self.playing is not None else None
@@ -352,13 +359,14 @@ class LoadScreen(Screen):
             key = m.location(save.state.location).art
         except Exception:  # a place the module no longer has
             return
-        width = max(24, self.query_one("#preview-body", Static).content_size.width or 40)
+        width = max(1, picture.content_size.width or self.query_one("#preview").scrollable_content_region.width)
         style = getattr(self.app, "art_style", "photo")
 
         def draw() -> Text:
             if key in m.pictures and imagery.available():
                 try:
-                    return Text.from_ansi(imagery.render(m.pictures[key], width, self.PICTURE, style, fill=True))
+                    return Text.from_ansi(imagery.render(m.pictures[key], width, self.PICTURE, style, fill=True),
+                                          no_wrap=True, overflow="crop")
                 except (OSError, ValueError, subprocess.TimeoutExpired):
                     pass  # an unreadable picture: the hand-drawn art instead
             return art_text(m, key)
