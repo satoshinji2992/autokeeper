@@ -4,11 +4,13 @@
 
 AutoKeeper runs Chinese Call of Cthulhu 7th-edition games on Python 3.12+.
 
-- `src/autokeeper/`: `engine/` manages turns/state; `agents/` and `harness/` handle models; `rules/` implements mechanics; `plugins/` runs tested extensions; `tui/` contains Textual screens/styles; `net/` supports multiplayer; `module/` handles scenarios.
+- `src/autokeeper/`: `engine/` manages turns/state; `agents/` and `harness/` handle models; `rules/` implements mechanics; `plugins/` runs tested extensions; `net/` supports multiplayer; `module/` handles scenarios (`module/package.py` is the on-disk layout of one); `world/` is the persistent world record. `paths.py` owns every location on disk: ask it instead of joining paths yourself.
+- `src/autokeeper/tui/`: `app.py` (the Textual app) and `library.py` (save index, module loading, `art_text`); `screens/` full pages (title, setup, game, cards, LAN host, lobby, saves, import); `modals/` dialogs over a screen; `widgets/` panels, speaker, pages, tips; `drawing/` title art, cover and dice. Each `.tcss` sits beside its code.
 - `bridge/`: Node.js JSON-lines bridge to BCDice.
-- `tests/`: tests, `conftest.py` fixtures, and `cassettes/` recordings.
-- `modules/zhuishuren/`: bundled scenario and artwork. `src/autokeeper/module/example/` is the format fixture.
-- `skills/`, `agents/`, and `commands/`: assistant integrations. `docs/` contains technical documentation; `docs/img/` holds screenshots.
+- `tests/`: tests, `conftest.py` fixtures (every test gets its own `paths.DATA`, `paths.DEV_OUTPUT` and `paths.USER_DIR`), and `cassettes/` recordings.
+- `modules/<id>/`: the three bundled scenarios: `module.yaml` plus `places.yaml`, `people.yaml`, `clues.yaml`, `story.yaml`, `plugins/`, and `art/{places,people,items,ascii}/` with one `art/credits.yaml`. `src/autokeeper/module/example/` is the format fixture. Never commit derived files into a module (prepared pictures, compiled skills); they live under `data/cache/` and `skills/module-*`.
+- `skills/`, `agents/`, `commands/`, `.claude-plugin/` and `.mcp.json`: the Claude Code plugin (paths fixed by the plugin format). Shared skills are tracked; `skills/module-*` are compiled and ignored. `docs/` contains technical documentation; `docs/img/` holds screenshots.
+- `dev/`: developer scripts (public-share tunnel); their output and eval/autoplay reports go to ignored `dev/output/`.
 
 ## Build, Test, and Development Commands
 
@@ -38,4 +40,4 @@ Use focused commits with concise Chinese messages, optionally prefixed by an are
 
 ## Configuration & Local Data
 
-Keep API keys in environment variables or ignored `.env` files. User configuration lives in `~/.config/autokeeper/config.toml`. Keep saves, imported copyrighted material, and generated module skills in their ignored locations: `saves/`, `modules/local/`, `modules/_import/`, and `skills/module-*`.
+Keep API keys in environment variables or ignored `.env` files. User configuration lives in `~/.config/autokeeper/config.toml`. Keep game data, imported copyrighted material, and generated module skills in their ignored locations: `data/` (layout in `paths.py`), `modules/local/`, `modules/inbox/`, every module's `source/`, `dev/output/`, and `skills/module-*`.
