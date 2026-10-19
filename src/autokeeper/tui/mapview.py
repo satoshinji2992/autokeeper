@@ -770,7 +770,7 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
     if place in c.within:
         status += f" · 在{c.names[c.within[place]]}里"
     rows = [Content.assemble((f"{MARK[kind]} {c.names[place]}", STYLE[kind]), (f"  {status}", STYLE["note"]))]
-    seen = m.location(place).read_aloud.strip() if stopped else ""
+    seen = _unwrap(m.location(place).read_aloud) if stopped else ""
     if seen:
         rows.append(Content(seen))
     lying = fog.things(m, st)
@@ -785,6 +785,17 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
         facts.append(("天气", [SKY_MARK[st.sky]]))
     rows += [Content.assemble((f"{label} ", STYLE["note"]), "、".join(items)) for label, items in facts if items]
     return Content("\n").join(rows)
+
+
+def _unwrap(text: str) -> str:
+    """A module's text without the line breaks it was typed with: the window wraps it. Chinese
+    lines join as they are, a word of Latin letters at the break gets its space back."""
+    out = ""
+    for line in (line.strip() for line in text.strip().splitlines()):
+        if line and out and out[-1].isascii() and out[-1].isalnum() and line[0].isascii() and line[0].isalnum():
+            out += " "
+        out += line
+    return out
 
 
 def view(m: Module, st: GameState, width: int, height: int) -> Content:
@@ -890,6 +901,7 @@ class MapModal(ModalScreen[str | None]):
         self.laid: Plan | None = None
         self.room = (40, 10)  # the most the map's window may take, in cells
         self.wide = False  # the place's notes beside the map, not under it
+        self.side = 0  # their width there
         self.notes = 4  # lines for them under it
         self.drawn_for: tuple[int, int] | None = None  # the screen size the map was laid out for
 
@@ -915,16 +927,19 @@ class MapModal(ModalScreen[str | None]):
         if self.drawn_for == (width, height):
             return
         self.drawn_for = (width, height)
-        # The modal keeps a margin round it, and has a border, padding, the title, the legend
-        # (as many lines as it takes) and the keys. A wide screen has the place's notes beside
-        # the map, a narrow one under it.
+        # The modal keeps a margin round it (a short screen only a line above and below), and
+        # has a border, padding, the title, the legend (as many lines as it takes) and the
+        # keys. A wide screen has the place's notes beside the map, a narrow one under it.
         body = max(30, min(width - 10, 150))
         lines = sum(max(1, math.ceil(cell_len(row) / body)) for row in legend(self.c, self.nest).plain.split("\n"))
-        tall = max(6, height * 9 // 10 - 8 - lines)
+        tall = max(6, (height - 2 if height < 30 else height * 9 // 10) - 8 - lines)
         self.wide = body >= 124  # the map still as wide as most need
+        self.side = max(34, min(44, body - 92)) if self.wide else 0
         self.notes = max(3, min(7, tall // 3))
-        self.room = (body - 36, tall) if self.wide else (body, max(3, tall - self.notes - 1))
-        self.query_one("#map-body").styles.layout = "horizontal" if self.wide else "vertical"
+        self.room = (body - self.side - 2, tall) if self.wide else (body, max(3, tall - self.notes - 1))
+        body_box = self.query_one("#map-body")
+        body_box.styles.layout = "horizontal" if self.wide else "vertical"
+        body_box.set_class(not self.wide, "under")
         self._show(replan=True, center=True)
 
     def _show(self, replan: bool = False, center: bool = False) -> None:
@@ -936,24 +951,25 @@ class MapModal(ModalScreen[str | None]):
             h = room_h if taller else self.laid.height + wider
             view, place = self.query_one(MapView), self.query_one(PlaceView)
             view.styles.width, view.styles.height = w, h
-            if self.wide:
-                place.styles.width, place.styles.height = 34, max(h, 8)
-                inside = w + 2 + 34
+            if self.wide:  # as tall as the map, or a good part of the screen: picking another does not resize it
+                place.styles.width, place.styles.height = self.side, max(h, min(room_h, 16))
+                inside = w + 2 + self.side
             else:
-                inside = max(w, min(room_w, 60))
+                inside = max(w, min(room_w, max(60, cell_len(self._keys()[0]))))
                 place.styles.width, place.styles.height = inside, self.notes
             self.query_one("#map-modal").styles.width = inside + 6
-            self.query_one("#map-keys", Static).update(self._keys(inside))
+            long, short = self._keys()
+            self.query_one("#map-keys", Static).update(long if cell_len(long) <= inside else short)
         self.query_one(MapCanvas).update(draw(self.c, self.laid, self.picked))
         self.query_one("#place", Static).update(about(self.m, self.st, self.c, self.picked) if self.picked else "")
         self.call_after_refresh(self._follow, center)
 
-    def _keys(self, width: int) -> str:
-        keys = ["方向键/Tab 选地方", "回车 展开/收起", "G 填「我去…」" if self.can_go else "", "Shift+方向键/拖动 移动地图", "Esc 关闭"]
-        line = " · ".join(k for k in keys if k)
-        if cell_len(line) > width:
-            line = " · ".join(k for k in ["方向键 选", "回车 展开", "G 去" if self.can_go else "", "拖动 移动", "Esc 关闭"] if k)
-        return line
+    def _keys(self) -> tuple[str, str]:
+        """The keys, in full and for a narrow window."""
+        go = self.can_go and any(p != self.c.here for p in self.c.names)
+        long = ["方向键/Tab 选地方", "回车 展开/收起", "G 填「我去…」" if go else "", "Shift+方向键/拖动 移动地图", "Esc 关闭"]
+        short = ["方向键 选", "回车 展开", "G 去" if go else "", "拖动 移动", "Esc 关闭"]
+        return " · ".join(k for k in long if k), " · ".join(k for k in short if k)
 
     def _follow(self, center: bool = False) -> None:
         """Keep the place picked in view (the place they are in, when the map opens)."""

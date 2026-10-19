@@ -236,6 +236,30 @@ ModalScreen {
 #sheet-modal .modal-body {
     max-height: 40;
 }
+/* the map (mapview.py): sizes are set from the screen it is on */
+#map-modal {
+    max-width: 100%;
+    max-height: 100%;
+}
+#map-body {
+    height: auto;
+}
+#map-view {
+    scrollbar-size: 1 1;
+}
+#map {
+    width: auto;
+    height: auto;
+}
+#map-place {
+    margin: 0 0 0 2;
+}
+#map-body.under #map-place {
+    margin: 1 0 0 0;
+}
+#map-legend {
+    margin-top: 1;
+}
 .buttons {
     height: auto;
     margin-top: 1;
