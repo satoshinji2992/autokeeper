@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from rich.cells import cell_len, get_character_cell_size
 from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
@@ -56,7 +57,7 @@ def cells(text: Text, width: int | None = None) -> Cells:
         row: list[tuple[str, Style]] = []
         for ch, st in zip(line.plain, styles, strict=True):
             row.append((ch, st))
-            if ord(ch) > 0x2E7F:  # CJK and fullwidth forms: two cells
+            if get_character_cell_size(ch) == 2:  # CJK and fullwidth forms; not sextants (六分块), past them in Unicode
                 row.append(("", st))
         rows.append(row[:width] if width else row)
     return rows
@@ -266,7 +267,7 @@ def menu(grid: Cells, box: tuple[int, int, int, int], labels: list[str], at: int
     put(grid, [[(ch, edge) for ch in line] for line in border], x, y, keep_ground=True)
     for i, label in enumerate(labels[: h - 2]):
         if i == at:
-            bar = cells(Text(f"  {label}".ljust(w - 2 - sum(ord(c) > 0x2E7F for c in label)), style=Style(color=panel, bgcolor=accent, bold=True)))
+            bar = cells(Text(f"  {label}".ljust(w - 2 - (cell_len(label) - len(label))), style=Style(color=panel, bgcolor=accent, bold=True)))
             put(grid, bar, x + 1, y + 1 + i, under=Style())
         else:
             put(grid, cells(Text(f"  {label}", style=ink)), x + 1, y + 1 + i, keep_ground=True)

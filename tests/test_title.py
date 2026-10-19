@@ -69,3 +69,11 @@ async def test_cards_list_kept_cards_and_pregens(monkeypatch, tmp_path, skills_d
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, SheetModal)
+
+
+def test_sextants_take_one_cell_and_cjk_two():
+    row = cover.cells(Text("🬀🬁🬂▌守秘"))[0]
+    assert [ch for ch, _ in row] == ["🬀", "🬁", "🬂", "▌", "守", "", "秘", ""]  # 六分块 are narrow, past CJK in Unicode
+    if imagery.available():
+        fine = cover.frame(60, 20, 0.5, "fine", 0)
+        assert fine and all(len(r) == 60 for r in fine)  # every row as wide as the screen
