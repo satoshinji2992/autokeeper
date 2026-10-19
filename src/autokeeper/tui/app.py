@@ -48,6 +48,7 @@ from .pages import Page, PagesModal, background_view, mark, pages, progress_view
 from .retell import RetellModal
 from .saves import LoadScreen
 from .screens import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
+from .showcase import ShowcaseScreen
 from .speaker import Speaker
 from .suggest import Ideas
 from .widgets import (
@@ -162,8 +163,9 @@ class TitleScreen(Screen):
         yield OptionList(
             Option("新的调查", id="new"),
             Option("继续调查", id="continue"),
-            Option("观战（AI 调查员）", id="watch"),
+            Option("开房间", id="host"),
             Option("加入房间", id="join"),
+            Option("观战（AI 调查员）", id="watch"),
             Option("角色卡", id="cards"),
             Option("导入模组", id="import"),
             Option("设置", id="settings"),
@@ -180,6 +182,11 @@ class TitleScreen(Screen):
 
     def on_resize(self, event) -> None:
         self._place(event.size.width, event.size.height)
+
+    def on_screen_resume(self) -> None:
+        room = getattr(self.app, "room", None)  # a LAN room this app opened (tui/host.py)
+        label = "回到房间" if room is not None and room.is_open else "开房间"
+        self.query_one("#menu", OptionList).replace_option_prompt("host", label)
 
     def _stack(self, cols: int, rows: int) -> tuple[int, int, int]:
         """Rows of the name, the tagline and the menu: one block standing on the hint line, as
@@ -277,6 +284,10 @@ class TitleScreen(Screen):
             self.app.push_screen(SetupScreen(spectate=True))
         elif choice == "continue":
             self.app.push_screen(LoadScreen())
+        elif choice == "host":
+            from .host import HostScreen, back_to_room
+
+            self.app.push_screen(back_to_room(self.app) or HostScreen())
         elif choice == "join":
             from .net import JoinScreen
 
@@ -521,7 +532,7 @@ COMMANDS = (
     ("存档", "Ctrl+S", "", "save"),
     ("叙事偏好", "Ctrl+O", "篇幅、恐怖程度、节奏和细节描写", "prefs"),
     ("换画法", "Ctrl+A", "块字符、六分块、照片、纯 ASCII", "art_style"),
-    ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、旧日、磷光", "dice_skin"),
+    ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、青石、磷光", "dice_skin"),
     ("天气动画", "", "开或关；画面晃眼或卡顿时关掉", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
     ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
@@ -601,6 +612,7 @@ class GameScreen(Screen):
         self.cast = Cast(cfg, self.m)
         self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
         self.query_one(SceneArt).effects = cfg.animations
+        self.query_one(DiceTray).tumbling = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         self.game.write_progress = True  # someone reads it: the 进展 page
         channels.listeners.append(self._fell_back)
@@ -730,6 +742,22 @@ class GameScreen(Screen):
         )
         self._topbar()
 
+    def _showcase(self, ev: dict) -> None:
+        """A big scene over the screen, when this screen shows them and the picture is here; not
+        over a roll prompt, nor over another one."""
+        cfg = config.load()
+        picture = ev.get("picture", "")
+        if not cfg.showcase or not imagery.available() or not picture or not Path(picture).is_file():
+            return
+        if isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+            return
+        self.app.push_screen(ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations))  # type: ignore[attr-defined]
+
+    async def make_way(self) -> None:
+        """A big scene steps aside for what asks the player something (a roll, a push)."""
+        if isinstance(self.app.screen, ShowcaseScreen):
+            await self.app.screen.dismiss()
+
     def _sky(self, loc_id: str) -> str:
         """The narrated weather, if this place is under the open sky."""
         return self.state.sky if weather.outdoors(self.m.location(loc_id).name) else ""
@@ -739,6 +767,11 @@ class GameScreen(Screen):
         width = event.size.width
         right.display = width >= 96
         right.styles.width = 40 if width >= 130 else 34
+        # the dice tray as tall as the column can spare: ten rows of picture on a tall screen
+        tray = self.query_one(DiceTray)
+        tray.styles.height = 13 if event.size.height >= 40 else 12 if event.size.height >= 34 else 11
+        if right.display:
+            self.call_after_refresh(tray.prepare)
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
         self.query_one(Speaker).refit()
         self.call_after_refresh(self._panels)  # the sheet fits the new column; HP and SAN go up top without it
@@ -751,8 +784,9 @@ class GameScreen(Screen):
         self.app.dice_skin = names[(names.index(now) + 1) % len(names)] if now in names else names[0]  # type: ignore[attr-defined]
         config.save_ui_settings({"dice": self.app.dice_skin})  # type: ignore[attr-defined]
         tray = self.query_one(DiceTray)
-        if tray._view is None:  # nothing rolled yet: a look at the skin
-            tray.roll({"skill": "皮肤预览", "target": 50, "value": 37, "level": "常规成功"})
+        tray.prepare()
+        if tray._view is None:  # nothing rolled yet: a throw to look at the skin
+            tray.roll(dice.preview())
         else:
             tray.redraw()
         self.app.notify(f"骰子皮肤：{dice.SKINS[self.app.dice_skin].name}")  # type: ignore[attr-defined]
@@ -764,6 +798,7 @@ class GameScreen(Screen):
         self._scene(self.state.location)
         self._panels()
         self.query_one(Speaker).refit()
+        self.query_one(DiceTray).redraw()
 
     @staticmethod
     def _engine_label(cfg: config.Config) -> str:
@@ -814,6 +849,7 @@ class GameScreen(Screen):
 
     def action_weather(self) -> None:
         on = self.query_one(SceneArt).toggle_effects()
+        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
         self.app.notify(f"天气动画：{'开' if on else '关'}")
 
     def _topbar(self) -> None:
@@ -946,6 +982,8 @@ class GameScreen(Screen):
             self._topbar()
             if self.game and not self.busy:
                 write_save(self.state, self.m)
+        elif t == "showcase":  # a big scene: one picture over the screen, the story going on behind it
+            self._showcase(ev)
         elif t == "item":
             existing = next((card for card in self.query(ItemCard) if card.item_id == ev["id"]), None)
             if existing is not None:
@@ -1314,11 +1352,13 @@ class GameScreen(Screen):
                 break
             if offer.get("kind") == "roll":  # the player throws their own dice
                 self._status("等你掷骰…")
+                await self.make_way()
                 choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
             elif auto:
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
                 self.story.add("system", Text(f"◇ AI 选择：{ {'push': '孤注一掷', 'luck': '花幸运', 'drop': '放弃'}[choice] }", style="dim"))
             else:
+                await self.make_way()
                 choice = await self.app.push_screen_wait(PushModal(offer))
             inp = Command(resume=choice)
         assert self.game
@@ -1665,6 +1705,7 @@ class AutoKeeperApp(App):
         self.art_style = config.load().art_style
         self.dice_skin = config.load().dice
         self.join = join  # (host address, player name): straight to someone's table
+        self.room = None  # the LAN room opened from the title screen (net/room.py), closed with the app
 
     def on_mount(self) -> None:
         for th in THEMES:
@@ -1674,12 +1715,18 @@ class AutoKeeperApp(App):
             self.notify(f"没找到 chafa，照片显示不出来，只能看手绘字符画。安装：{imagery.install_hint()}，装完重开。",
                         title="缺少 chafa", severity="warning", timeout=15)
         if self.join:
-            from .net import JoinScreen, LobbyScreen
+            from .lobby import LobbyScreen
+            from .net import JoinScreen
 
             address, name = self.join
             self.push_screen(LobbyScreen(address, name) if address and name else JoinScreen(address, name))
         else:
             self.push_screen(TitleScreen())
+
+    async def on_unmount(self) -> None:
+        if self.room is not None:  # quitting closes the room: the page first, then the Hub
+            room, self.room = self.room, None
+            await asyncio.to_thread(room.close)
 
     def notify(self, message, *, title: str = "", severity="information", timeout: float | None = None, markup: bool = True) -> None:
         """The same notice twice while the first still shows (a key pressed again) is dropped:

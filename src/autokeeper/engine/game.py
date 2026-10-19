@@ -28,6 +28,8 @@ from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from . import fog, progress, world
+from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
+from .showcase import Showcases
 from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, Progress, parse_time, time_of_day
 from .visuals import Visuals
 
@@ -103,8 +105,11 @@ class Game:
         self._recounting: asyncio.Task | None = None
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
+        self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
+                                   self.visuals.idle, self.visuals.limit)  # big scenes: prepared ahead, the opening first
         self.plugins = PluginManager(self)
         self.visuals.schedule()
+        self.showcases.prepare()
 
     async def close(self) -> None:
         """Stop work owned by this game before the model sessions and screen disappear."""
@@ -117,14 +122,17 @@ class Game:
         self.backstage.clear()
         self._recounting = None
         await self.visuals.close()
+        await self.showcases.close()
 
     async def replace_cast(self, cast: Cast) -> None:
         """A model switch also replaces the game's outstanding background work."""
         await self.close()
         self.cast = cast
-        self.visuals.cfg = getattr(cast, "cfg", None)
+        self.visuals.cfg = self.showcases.cfg = getattr(cast, "cfg", None)
         self.visuals.tasks.clear()
         self.visuals.schedule()
+        self.showcases.tried.clear()
+        self.showcases.prepare()
 
     @property
     def improvising(self) -> bool:
@@ -183,6 +191,8 @@ class Game:
             f"叙事停在当前地点“{loc.name}”能接话或行动的一刻，之后由玩家决定去哪、是否停留。"
             "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
         )
+        self.showcases.prepare()  # (already at it when the game was made inside a running loop)
+        await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
         text = await self._narrate(report, on_delta)
         st.prologue = text  # the 背景 page keeps it after the log has moved on
         st.progress.marks = progress.marks(st)  # milestones count from here
@@ -226,6 +236,8 @@ class Game:
     # -- the turn pipeline --------------------------------------------------------------
     async def parse(self, text: str) -> Action:
         self.visuals.schedule()  # resumes unfinished illustration work after loading, including MCP play
+        self.showcases.settle()  # someone acts: the opening's big picture, if still on its way, is not shown now
+        self.showcases.prepare()
         st = self.state
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
@@ -441,11 +453,17 @@ class Game:
         return None
 
     async def _land(self, kind: str, plan: Improv) -> improv.Applied:
+        room = max(0, IMPROV_SHOWCASES - sum(len(p.get("plan", {}).get("showcases", [])) for p in self.state.improv))
+        if len(plan.showcases) > room:  # big scenes stay rare: a few a game
+            plan = plan.model_copy(update={"showcases": plan.showcases[:room]})
         applied = improv.apply(self.m, plan)
         for plugin in plan.plugins:
             self.state.plugin_sources[plugin.id] = plugin.model_dump(mode="json")
         self.state.improv.append({"turn": self.state.turn, "kind": kind, "plan": plan.model_dump()})
+        for target, change in applied.looks:  # a place burnt, a man wounded: their picture is redrawn
+            self.visuals.look(target, change)
         self.visuals.schedule()
+        self.showcases.prepare()  # a big scene of the director's gets its picture ahead of its moment
         await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
         return applied
 
@@ -892,6 +910,8 @@ class Game:
             st.progress_at = st.turn
         loc = m.location(loc_id)
         await self.emit({"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", "")})
+        if turn.first_visit:
+            await self.showcases.fire(f"visit:{loc_id}")
         for ev in m.events:
             if ev.id not in st.fired and ev.when == f"visit:{loc_id}":
                 await self._fire(ev, turn)
@@ -944,6 +964,7 @@ class Game:
                 st.flags.append(f)
                 st.progress_at = st.turn
                 await self.emit({"type": "flag", "flag": f, "meaning": m.flags[f]})
+                await self.showcases.fire(f"flag:{f}")
                 for ev in m.events:
                     if ev.id not in st.fired and ev.when == f"flag:{f}":
                         await self._fire(ev, turn)
@@ -967,6 +988,8 @@ class Game:
         turn.events.append(ev)
         st.add("event", ev.read_aloud.strip() or ev.title)
         await self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()})
+        await self.showcases.fire(f"event:{ev.id}")
+        await self.showcases.named(f"{ev.title}\n{ev.read_aloud}")
         if ev.move_to and ev.move_to != st.location:
             await self._arrive(ev.move_to, turn)
         if ev.sanity:
@@ -987,6 +1010,7 @@ class Game:
         for f in ev.sets:
             if f not in st.flags:
                 st.flags.append(f)
+                await self.showcases.fire(f"flag:{f}")
         if ev.ending and not st.ending:
             await self._check_ending(turn)
             if not st.ending:
@@ -1015,6 +1039,7 @@ class Game:
                 notes.append(f"{inv.name} 理智 +{n}")
         st.add("ending", f"{end.title}：{end.text.strip()}")
         await self.emit({"type": "ending", "id": end.id, "title": end.title, "text": end.text.strip(), "reward": end.reward, "notes": notes})
+        await self.showcases.fire(f"ending:{end.id}")
 
     def _npc_message(self, turn: Turn, npc_id: str) -> str:
         st, m = self.state, self.m
@@ -1140,6 +1165,7 @@ class Game:
         text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
         entry = self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
+        await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
         self.told = Told(report, lore, entry, sky)
         return text
@@ -1286,6 +1312,7 @@ def _check_view(c: Check) -> dict[str, Any]:
         "passed": c.passed,
         "pushed": c.pushed,
         "text": c.describe(),
+        "throw": c.roll.throw,  # the physical dice's recording: every screen replays this very throw
     }
 
 

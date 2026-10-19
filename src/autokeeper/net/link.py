@@ -23,8 +23,9 @@ def address(target: str) -> str:
 
 
 class Link:
-    def __init__(self, url: str, name: str):
+    def __init__(self, url: str, name: str, key: str = ""):
         self.url, self.name = address(url), name
+        self.key = key  # the host key, when this app opened the room itself (net/room.py)
         self.handler: Handler | None = None
         self.session: aiohttp.ClientSession | None = None
         self.ws: aiohttp.ClientWebSocketResponse | None = None
@@ -33,9 +34,10 @@ class Link:
     async def connect(self) -> None:
         self.session = aiohttp.ClientSession()
         self.ws = await self.session.ws_connect(self.url, heartbeat=20, max_msg_size=64 * 1024 * 1024)
+        from .. import __version__
         from .hub import room_key
 
-        await self.send({"t": "hello", "name": self.name, "key": room_key(self.url)})
+        await self.send({"t": "hello", "name": self.name, "key": self.key or room_key(self.url), "version": __version__})
 
     async def send(self, msg: dict[str, Any]) -> None:
         if self.ws is not None and not self.ws.closed:

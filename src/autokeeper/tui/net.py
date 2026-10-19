@@ -14,18 +14,19 @@ from pathlib import Path
 from typing import Any
 
 from rich.text import Text
-from textual import events, on
+from textual import events, on, work
 from textual.app import ComposeResult
+from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Input, OptionList, Static
-from textual.widgets.option_list import Option
+from textual.widgets import Footer, Input, Static
 
-from .. import __version__, config
+from .. import config
 from ..engine.game import RETELL
 from ..engine.state import GameState, LogEntry
 from ..module.schema import Module
 from ..net import media
+from ..net import room as lan
 from ..net.link import Link
 from ..rules import commands
 from .app import GameScreen
@@ -50,23 +51,28 @@ def table_module(welcome: dict[str, Any]) -> Module:
 
 
 class JoinScreen(Screen):
-    """The host's address and your name."""
+    """The host's address and your name; the last ones you used are filled in. In a browser's
+    seat the address is the page's own and the name is the visitor's: neither is the host's."""
 
     BINDINGS = [("escape", "back", "返回")]
 
     def __init__(self, address: str = "", name: str = ""):
         super().__init__()
-        self.address, self.name_ = address, name
+        self.guest = bool(address and os.environ.get("AUTOKEEPER_GUEST"))  # started by the room's page
+        last = {} if self.guest else lan.recall()  # the host's own settings live on this machine too
+        self.address, self.name_ = address or last.get("address", ""), name or last.get("name", "")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
             yield Static("加入局域网房间", classes="modal-title")
-            yield Static(Text("填房主给你的地址（比如 192.168.1.5），再起个名字，回车加入。", style="dim"))
+            hint = "起个名字，回车加入" if self.guest else "填房主给你的地址（比如 192.168.1.5），再起个名字，回车加入。"
+            yield Static(Text(hint, style="dim"))
             yield Input(self.address, placeholder="房主的地址", id="addr")
-            yield Input(self.name_, placeholder="你的名字", id="name")
+            yield Input(self.name_, placeholder="你的名字", id="name", max_length=16)
         yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one("#addr", Input).display = not self.guest
         self.query_one("#name" if self.address else "#addr", Input).focus()
 
     @on(Input.Submitted)
@@ -77,126 +83,46 @@ class JoinScreen(Screen):
         elif not name:
             self.query_one("#name", Input).focus()
         else:
+            from .lobby import LobbyScreen
+
+            if not self.guest:
+                lan.remember(address=addr, name=name)
             self.app.switch_screen(LobbyScreen(addr, name))
 
     def action_back(self) -> None:
-        if len(self.app.screen_stack) > 1:
-            self.app.pop_screen()
-        else:
-            self.app.exit()
+        leave(self.app)
 
 
-class LobbyScreen(Screen):
-    """Connected: take a free seat, watch, or start with the empty seats played by the AI."""
+def leave(app) -> None:
+    """Back to the title; started as `autokeeper join` (a browser's seat), there is none: quit."""
+    if len(app.screen_stack) > 2:
+        app.pop_screen()
+    else:
+        app.exit()
 
-    BINDINGS = [("escape", "leave", "离开")]
 
-    def __init__(self, address: str, name: str):
-        super().__init__()
-        self.link = Link(address, name)
-        self.welcome: dict[str, Any] | None = None
-        self.seats: list[dict[str, Any]] = []
-        self.chosen: str | None = None  # the seat taken, "" for watching
-        self.gone = False
+class RoomCommands(Provider):
+    """Ctrl+P at the table, for the host who opened the room in this app: close it."""
 
-    def compose(self) -> ComposeResult:
-        with Vertical(id="setup"):
-            yield Static(f"正在连接 {self.link.url} …", id="lobby-title", classes="modal-title")
-            yield Static("", id="lobby-hint")
-            yield OptionList(id="choices")
-        yield Footer()
+    def _entries(self):
+        if getattr(self.app, "room", None) is not None:
+            yield "关闭房间", "所有人断开，存档还在", partial(self.screen.run_action, "close_room")
 
-    async def on_mount(self) -> None:
-        try:
-            await self.link.connect()
-        except Exception as exc:  # wrong address, host not up yet
-            self.app.notify(f"连不上房间：{exc}", severity="error", timeout=8)
-            self.app.switch_screen(JoinScreen(self.link.url.removeprefix("ws://").removesuffix("/ws"), self.link.name))
-            return
-        self.link.handler = self.on_msg
-        self.app.run_worker(self.link.pump, name="link", group="link", exit_on_error=False)
+    async def discover(self) -> Hits:
+        for name, what, run in self._entries():
+            yield DiscoveryHit(name, run, help=what)
 
-    async def on_msg(self, msg: dict[str, Any]) -> None:
-        t = msg["t"]
-        if t == "welcome":
-            self.welcome = msg
-            self.link.host = bool(msg.get("host"))
-            if (theirs := msg.get("version")) and theirs != __version__:
-                self.app.notify(f"房主用的是 {theirs}，你是 {__version__}。版本不同可能出错，双方更新到同一版再联机。",
-                                severity="warning", timeout=12)
-            self.seats = msg["seats"]
-            title = msg["module"].get("title", "")
-            self.query_one("#lobby-title", Static).update(f"《{title}》 的房间")
-            self._list_seats()
-        elif t == "seats":
-            self.seats = msg["seats"]
-            self._list_seats()
-        elif t in ("sync", "turn") and self.welcome is not None and self.chosen is None:
-            self.welcome["state"] = msg["state"]  # keep up while still choosing
-        elif t in ("begin", "turn", "event") and self.chosen is not None and self.welcome is not None:
-            self._enter([msg])
-        elif t == "error":
-            self.app.notify(msg["text"], severity="warning")
-        elif t == "closed" and not self.gone:
-            self.app.notify("房主关闭了房间", severity="error")
-
-    def _list_seats(self) -> None:
-        ol = self.query_one(OptionList)
-        kept = ol.highlighted if ol.option_count else None  # someone else sitting down must not move your cursor
-        ol.clear_options()
-        mine = self.chosen
-        for s in self.seats:
-            label = f"  {s['name']}（{s['occupation']}）  "
-            if not s["human"]:
-                ol.add_option(Option(label + "AI 扮演", id=f"ai:{s['investigator']}", disabled=True))
-            elif s["online"]:
-                tag = "你" if s["investigator"] == mine else s["player"]
-                ol.add_option(Option(label + f"{tag} 已就座", id=f"seat:{s['investigator']}", disabled=s["investigator"] != mine))
-            else:
-                ol.add_option(Option(label + "空位，选我", id=f"seat:{s['investigator']}"))
-        ol.add_option(Option("  只观战", id="watch"))
-        ol.add_option(Option("  现在开始（空座交给 AI）", id="start"))
-        started = self.welcome and self.welcome.get("started")
-        hint = "游戏已经开始了，选个空位加入，或者观战。" if started else "选一个座位，人齐了就开局。"
-        self.query_one("#lobby-hint", Static).update(Text(hint, style="dim"))
-        free = next((i for i, s in enumerate(self.seats) if s["human"] and not s["online"]), len(self.seats))
-        ol.highlighted = kept if kept is not None and kept < ol.option_count else free  # first time: Enter takes the first free seat
-        ol.focus()
-
-    @on(OptionList.OptionSelected, "#choices")
-    async def pick(self, event: OptionList.OptionSelected) -> None:
-        choice = event.option.id or ""
-        if choice.startswith("seat:"):
-            self.chosen = choice[5:]
-            await self.link.send({"t": "sit", "investigator": self.chosen})
-        elif choice == "watch":
-            self.chosen = ""
-        elif choice == "start":
-            if self.chosen is None:
-                self.chosen = ""
-            await self.link.send({"t": "start"})
-        if self.chosen is not None and self.welcome and self.welcome.get("started"):
-            self._enter([])
-
-    def _enter(self, first: list[dict[str, Any]]) -> None:
-        assert self.welcome is not None
-        w = self.welcome
-        state = GameState.model_validate(w["state"])
-        m = table_module(w)
-        screen = NetGameScreen(m, state, self.link, self.chosen or None, [LogEntry.model_validate(e) for e in w.get("log", [])])
-        screen.inbox.extend(first)
-        self.link.handler = screen.on_msg
-        self.gone = True
-        self.app.switch_screen(screen)
-
-    async def action_leave(self) -> None:
-        self.gone = True
-        await self.link.close()
-        self.app.pop_screen() if len(self.app.screen_stack) > 1 else self.app.exit()
+    async def search(self, query: str) -> Hits:
+        matcher = self.matcher(query)
+        for name, what, run in self._entries():
+            if (score := max(matcher.match(name), matcher.match(what) * 0.5)) > 0:
+                yield Hit(score, matcher.highlight(name), run, help=what)
 
 
 class NetGameScreen(GameScreen):
     """The game screen at a shared table."""
+
+    COMMANDS = {RoomCommands}
 
     def action_plugins(self) -> None:
         from .plugins import PluginsModal
@@ -260,34 +186,32 @@ class NetGameScreen(GameScreen):
     def _turnline(self) -> None:
         line = self.query_one("#turnline", Static)
         others = "、".join(self.waiting_on)
-        room = f"池子 {self.pool.get('count', 0)}/{self.pool.get('capacity', 0)}"
+        room = f"行动 {self.pool.get('count', 0)}/{self.pool.get('capacity', 0)}"
         fresh = self.my_turn and not self.pooled
         if self.pool_open and self.seat and not self.pooled and self.my_turn:
-            text = f" ▶ 新的一轮：说出你的行动（{room}，每人一条，多出的一条先到先得）"
+            text = f" ▶ 新的一轮 · {room}"
         elif self.pool_open and self.seat and self.my_turn:
-            text = f" 已交：{self.pooled[-1][:24]} · 还能再交 1 条，或直接回车表示说完了 · {room}"
+            text = f" 已交：{self.pooled[-1][:24]} · 还能交 1 条，空行回车结束 · {room}"
         elif self.pool_open and self.seat:
-            text = " 你这一轮交完了" + (f"，等 {others}" if others else "") + f" · {room} · /undo 撤回上一条"
+            text = " 这轮交完了" + (f" · 等 {others}" if others else "") + f" · {room} · 输入 /undo 撤回"
         elif self.pool_open:
-            text = " 这一轮在收集行动" + (f"：还在等 {others}" if others else "") + f" · {room}"
+            text = (f" 等 {others} · " if others else " ") + room
         elif self.settling:
-            text = f" 守秘人在结算：{self.settling}"
+            text = f" 守秘人在讲 {self.settling}"
         else:
             text = " 等待开局…"
         if self.seat and self.held:  # said meanwhile: it is not lost
             first = self.held[0] if len(self.held[0]) <= 10 else self.held[0][:9] + "…"
             more = f" 等 {len(self.held)} 条" if len(self.held) > 1 else ""
-            text += f" · 你下一轮先交：{first}{more}（/undo 撤回）"
-        elif self.seat and self.settling and not self.pool_open:
-            text += " · 现在说的话留到下一轮，最先交上"
+            text += f" · 下一轮先交：{first}{more}（输入 /undo 撤回）"
         line.update(Text(text + " ", style="bold" if fresh else "", no_wrap=True, overflow="ellipsis"))
         line.set_class(fresh, "mine")
         inp = self.query_one("#command", Input)
         inp.set_class(fresh, "mine")
-        inp.placeholder = ("说出这一轮你要做什么，回车发送" if fresh else
-                           "还能再交一条；什么都不写直接回车 = 这轮说完了" if self.my_turn else
-                           "现在说的行动留到下一轮，最先交上；全角括号开头是场外聊天，如（我去倒杯水）" if self.seat else
-                           "你在观战；全角括号开头是场外聊天，如（我去倒杯水）")
+        inp.placeholder = ("这一轮做什么" if fresh else
+                           "还能交一条，空行回车结束" if self.my_turn else
+                           "守秘人在讲，现在交的留到下一轮" if self.seat else
+                           "观战中，全角括号开头是场外聊天")
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -331,14 +255,13 @@ class NetGameScreen(GameScreen):
             self.held = list(mine.get("next", []))
             self.my_turn = self.pool_open and bool(self.seat) and self.seat in msg.get("open_to", [])
             if len(self.held) > held:
-                why = "这一轮没有你的位置了" if self.pool_open else "守秘人还在讲"
-                self.app.notify(f"{why}：这条留到下一轮，最先交上；/undo 撤回", timeout=4)
+                self.app.notify("这一轮满了，这条留到下一轮" if self.pool_open else "守秘人还在讲，这条留到下一轮", timeout=4)
             if self.pool_open and not was_open:
                 self.settling = ""
                 self.engine_label = "局域网联机 · 新的一轮"
                 self._topbar()
                 if self.seat:
-                    self.app.notify("新的一轮：你先说的已经交上了" if self.pooled else "新的一轮：说出你的行动", timeout=4)
+                    self.app.notify("新的一轮，你先说的已经交上" if self.pooled else "新的一轮", timeout=4)
                     self.query_one(Input).focus()
             self._turnline()
         elif t == "turn":  # the pool is closed: the keeper settles this seat's action
@@ -347,11 +270,12 @@ class NetGameScreen(GameScreen):
             mine = bool(self.seat) and msg["investigator"] == self.seat
             who = "你的行动" if mine else f"{msg['name']}（{msg['player'] or 'AI'}）"
             self.settling = who + (f"（{msg['index']}/{msg['total']}）" if msg.get("total", 0) > 1 else "")
-            self.engine_label = f"局域网联机 · 结算{self.settling}的行动"
+            self.engine_label = f"局域网联机 · {self.settling}"
             self._topbar()
             self._turnline()
         elif t == "offer":  # throw your own dice, or push / spend luck after a failure
             offer = msg["offer"]
+            await self.make_way()  # a big scene steps aside
             choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
             await self.link.send({"t": "choice", "mode": choice})
         elif t == "say":
@@ -403,7 +327,7 @@ class NetGameScreen(GameScreen):
         elif text.startswith(TALK):
             self.run_worker(partial(self.link.send, {"t": "say", "text": text}))
         elif not self.seat:
-            self.app.notify("你在观战；全角括号开头的话是场外聊天")
+            self.app.notify("观战中，全角括号开头是场外聊天")
         elif self.state.ending and not commands.instant(text):  # after the end: growth rolls (.en), the sheet
             self.app.notify("这局已经结束了。F10 复盘，.en 做成长检定")
         elif self.state.ending or commands.instant(text):  # .r, .st: not an action; while the keeper tells, right after
@@ -411,7 +335,7 @@ class NetGameScreen(GameScreen):
                 self.app.notify("守秘人讲完这一轮就掷", timeout=3)
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
         elif not self.my_turn and len(self.held) >= 2:
-            self.app.notify("下一轮你已经先说了 2 条；/undo 撤回上一条")
+            self.app.notify("下一轮已经有你 2 条了")
         else:  # in this round if it has room for you, else first in the next: the Hub says which
             self.run_worker(partial(self.link.send, {"t": "act", "text": text}))
 
@@ -493,6 +417,24 @@ class NetGameScreen(GameScreen):
 
     def action_prefs(self) -> None:
         self.app.notify("联机时按房主那边的叙事偏好来讲")
+
+    def _leave(self) -> None:
+        leave(self.app)
+
+    def action_close_room(self) -> None:
+        if getattr(self.app, "room", None) is not None:
+            from .lobby import CloseRoomModal
+
+            self.app.push_screen(CloseRoomModal(), self._close_room)
+
+    @work(exclusive=True, group="room")
+    async def _close_room(self, sure: bool | None) -> None:
+        if sure:
+            from .lobby import close_room
+
+            await self.link.close()
+            await close_room(self.app)
+            self._leave()
 
     def action_usage(self) -> None:
         self.app.notify("联机时模型跑在房主那边，用量由房主记账")
