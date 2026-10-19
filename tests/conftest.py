@@ -81,7 +81,7 @@ def fake() -> FakeDice:
     return FakeDice()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def skills_dir(monkeypatch, tmp_path):
     """Module skills compile into a temp folder, not the repo; the shared ones come along."""
     from autokeeper import paths

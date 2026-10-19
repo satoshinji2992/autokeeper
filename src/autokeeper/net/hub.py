@@ -71,6 +71,7 @@ from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told
 from ..engine.state import GameState
+from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
@@ -208,6 +209,7 @@ class Hub:
 
         self.dir = Path(module_dir)
         self.m = Module.load(self.dir)
+        ensure_compiled(self.m, self.dir)  # the keeper reads the module's skill package
         self.fresh = state is None
         extra: list[str] = []
         if state is None:
