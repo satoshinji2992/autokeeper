@@ -98,7 +98,7 @@ async def test_esc_opens_the_menu_and_each_entry_does_its_thing(canned):
         await pilot.pause()
         assert isinstance(app.screen, GameMenu)
         ol = app.screen.query_one(OptionList)
-        assert options(ol) == [k for k, _ in MENU] and ol.highlighted == 0
+        assert options(ol) == [k for k, _ in MENU if k != "plugins"] and ol.highlighted == 0  # no plugins here
         await pilot.press("escape")  # Esc again: back in the game, the box ready for typing
         await pilot.pause()
         assert app.screen is screen and screen.query_one("#command", Input).has_focus

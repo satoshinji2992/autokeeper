@@ -394,7 +394,7 @@ async def test_a_show_plays_over_the_scene_can_be_skipped_and_shows_only_its_end
         assert await until(pilot, lambda: player.index == 1)  # the next frame comes by itself
         app.save_screenshot("plugin-show.svg", path=str(config.SAVES))
         assert "〔号外〕" in story_text(screen)  # labelled in the story too
-        screen.action_focus_input()  # Esc: skip
+        screen.action_menu()  # Esc: skip
         await pilot.pause()
         assert not screen.query(ShowPlayer) and scene.display
         scene.effects = False  # animations off: the last frame only
