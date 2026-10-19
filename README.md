@@ -23,7 +23,7 @@
 
 </div>
 
-<p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》开场：阿诺兹堡火车站"></p>
+<p align="center"><img src="docs/img/game.png" width="100%" alt="《追书人》：阿诺兹堡公共图书馆，图书馆使用检定和物理骰子"></p>
 
 AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子与状态由程序结算。可以独自调查、带 AI 同伴，也可以和朋友联机，或旁观 AI 调查员跑团。终端和浏览器均可游玩，仓库自带三本模组：入门的《追书人》，以及《冬雪之下》和《有些人油盐不进》。
 
@@ -39,9 +39,17 @@ AutoKeeper 用 AI 担任守秘人，你用中文输入行动和对话，骰子�
 
 ## 截图
 
-| 选模组 | 角色卡 | 场景 | 人物头像 |
-|---|---|---|---|
-| <img src="docs/img/module.png" alt="选模组"> | <img src="docs/img/cards.png" alt="角色卡"> | <img src="docs/img/scenes.png" alt="场景图"> | <img src="docs/img/portraits.png" alt="头像"> |
+| 地图 | 大场景 | 规则插件 |
+|---|---|---|
+| <img src="docs/img/map.png" alt="地图"> | <img src="docs/img/showcase.png" alt="大场景"> | <img src="docs/img/plugins.png" alt="规则插件"> |
+
+| 人物卡 | 角色卡 | 存档 |
+|---|---|---|
+| <img src="docs/img/sheet.png" alt="人物卡"> | <img src="docs/img/cards.png" alt="角色卡"> | <img src="docs/img/saves.png" alt="存档"> |
+
+| 开房间 | 选模组 | 场景与头像 |
+|---|---|---|
+| <img src="docs/img/lobby.png" alt="开房间"> | <img src="docs/img/module.png" alt="选模组"> | <img src="docs/img/scenes.png" alt="场景图"><img src="docs/img/portraits.png" alt="头像"> |
 
 截图里的《追书人》就附在仓库里，改编自 Chaosium 入门套装里的 *Paper Chase*，装好就能开团。场景和头像取自三本自带模组，都是 Wikimedia Commons 上可自由使用的老照片和画作，转成彩色字符画。
 
