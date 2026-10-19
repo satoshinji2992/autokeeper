@@ -13,6 +13,7 @@ from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from ..plugins.schema import Plugin
 from ..rules.coc import Investigator
@@ -47,6 +48,17 @@ class Conclusion(BaseModel):
     text: str
 
 
+class Look(BaseModel):
+    """How a place or a person looks once the story has changed them, for the picture."""
+
+    when: str = Field(description="flag:标记；标记成立后，这个地点或人物改用这张图")
+    change: str = Field(description="和平常相比画面上看得见的变化，比如“礼拜堂烧成焦黑的空壳，屋顶塌了一半”；不写剧透")
+    art: str = Field("", description="这张图的图片键（art/<键>.jpg）；留空就用 <原图键>_<标记>，导入时由 Codex 照原图生成")
+
+    def key(self, base: str) -> str:
+        return self.art or f"{base}_{self.when.removeprefix('flag:')}"
+
+
 class NPC(BaseModel):
     id: str
     name: str
@@ -64,6 +76,7 @@ class NPC(BaseModel):
     portrait: str | None = None
     stats: dict[str, int] = Field(default_factory=dict)
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
+    looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
 
 
 class Location(BaseModel):
@@ -85,6 +98,7 @@ class Location(BaseModel):
         "embers 火星与火光、flicker 灯火摇曳、torch 只有手电或火把照亮、redlight 暗房红灯或红灯笼、warp 哈哈镜般的扭曲；"
         "最多两种，不写就按名字和描述推断",
     )
+    looks: list[Look] = Field(default_factory=list, description="剧情让这里明显变样之后的场景图（烧毁、被淹、被洗劫），最多两种；昼夜不用写")
 
 
 class Item(BaseModel):
@@ -147,6 +161,25 @@ class Ending(BaseModel):
     reward: str = ""
 
 
+SHOWCASE_KINDS = ("开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局")
+
+
+class Showcase(BaseModel):
+    """大场景: one big picture over the whole screen at a turning point (engine/showcase.py)."""
+
+    id: str
+    kind: Literal["开场", "突发", "危机", "重要场景", "怪物", "最终boss", "结局"] = Field(
+        description="开场 开局的氛围；突发 突然发生的事；危机 生死关头；重要场景 关键地点；怪物 怪物现身；最终boss 最后的对手；结局 每个结局一张")
+    when: str = Field(
+        description="什么时候展示，每局最多一次：opening 开局；visit:地点id 第一次到达；event:事件id 事件发生；"
+        "creature:怪物id 怪物的名字第一次出现在事件或叙述里；flag:标记 标记成立；ending:结局id 进入这个结局")
+    title: str = Field(description="画面下方的短标题，不超过 12 个字；只说此刻玩家看得见的，不剧透")
+    prompt: str = Field(description="画面描述，写给画师：画什么、构图、光线和气氛；只写看得见的，不写名字和幕后真相")
+    art: str = Field("", description="模组自带的、正好合适的图片键（art/<键>.jpg），有就直接用这张")
+    base: str = Field("", description="参考图的图片键：照着这张原图重画，比如这个地点或怪物的原图；留空就用触发的地点")
+    improvised: SkipJsonSchema[bool] = Field(False, exclude=True)  # the director's, in this game: its picture is kept per save
+
+
 class Module(BaseModel):
     id: str
     title: str
@@ -182,6 +215,7 @@ class Module(BaseModel):
     events: list[Event] = Field(default_factory=list)
     endings: list[Ending] = Field(default_factory=list)
     sketches: list[SketchPrompt] = Field(default_factory=list)
+    showcases: list[Showcase] = Field(default_factory=list, description="大场景：在重要节点整屏展示一张大图，每个模组 5–15 个")
     pregens: list[Investigator] = Field(default_factory=list)
     art: dict[str, str] = Field(default_factory=dict, exclude=True)
     art_colors: dict[str, str] = Field(default_factory=dict, exclude=True)

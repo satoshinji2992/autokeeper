@@ -40,6 +40,8 @@ GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创
   这个地点要真实连进 locations/exits。提供食宿、交通或闲聊的生活空间，让玩家可以停留或直接赶路；不要让所有普通人和店铺都藏着案情。
 - 每个结论至少两条独立线索（三线索原则更好），关键线索标 core；至少一个 NPC 会撒谎、需要社交检定才松口。
 - 至少一个“让玩家画出来”的 sketches 环节；至少三种结局，由剧情标记触发。
+- 在重要节点写 5–15 个 showcases（大场景，整屏一张大图）：开场（when: opening）、突发和危机（event:）、关键地点（visit:）、
+  怪物现身和最终 boss（event: 或 creature:）、每个结局（ending:）。title 是不剧透的短标题，prompt 写画面。
 - 全部原创，可以借用公有领域作品的元素，但不要照搬任何受版权保护的模组、怪物设定或插图。
 - 模组 id 用 "{module_id}"。格式照着 _example/module.yaml，字段含义见 _example/schema.json。
 

@@ -15,6 +15,15 @@ def isolated_user_settings(monkeypatch, tmp_path):
 
     monkeypatch.setattr(config, "USER_DIR", tmp_path / "user")
 
+
+@pytest.fixture(autouse=True)
+def no_codex_pictures(monkeypatch):
+    """No test makes a real picture, even where codex is installed and logged in: generation is
+    off unless a test switches it on with its own stand-in for the codex process."""
+    from autokeeper import imagegen
+
+    monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(False, "测试里不生图"))
+
 LABEL = {"critical": "大成功", "extreme": "極限成功", "hard": "困難成功", "regular": "一般成功", "failure": "失敗", "fumble": "大失敗"}
 
 

@@ -1183,6 +1183,78 @@ sketches:
   sanity: 0/1D2
   clue: null
   after: c_nightmares
+# 大场景：整屏展示一张大图，每局每个最多一次（engine/showcase.py）。图在本机生成，放在 saves/showcases/，不进仓库。
+showcases:
+  - id: sc_opening
+    kind: 开场
+    when: opening
+    title: 冬雪之下的埃斯内尔
+    prompt: 1921 年北达科他的乡下小城，房子都压着厚厚的雪帽，烟囱冒着细烟，街上没什么人；几栋房子外，两个男人把裹着白布的担架抬上一辆卡车的后厢，风雪迷蒙
+    base: ratger_house
+  - id: sc_clinic
+    kind: 重要场景
+    when: visit:clinic
+    title: 安特医生的诊所
+    prompt: 一栋改建的旧宅诊所，候诊室里坐满了咳嗽的病人，有人靠着墙睡；里间六张病床，床单洗得发白，窗外是冬日刺眼的雪光
+    base: clinic
+  - id: sc_erie
+    kind: 突发
+    when: event:e_market_erie
+    title: 街上遇见的拉尸人
+    prompt: 雪墙夹着的小城主街，街角停着一辆卡车，车斗里并排放着两口盖好的木箱，一个瘦高清秀的年轻人刚从驾驶座下来，捂着嘴咳嗽
+    base: main_street
+  - id: sc_milk
+    kind: 突发
+    when: event:e_milk
+    title: 早饭时的牛奶
+    prompt: 出租屋的早餐桌旁，一只牛奶罐摔碎在地板上，泼出来的牛奶又黄又稠、结成了块，炉子上的面包还冒着热气
+    base: ratger_house
+  - id: sc_porch
+    kind: 危机
+    when: event:e_porch
+    title: 后廊塌了
+    prompt: 木屋的后廊屋顶塌了下来，积雪和断裂的木头堆成一堆，碎木里露出一条胳膊，几个人正从屋里冲出来
+    base: ratger_house
+  - id: sc_theft
+    kind: 突发
+    when: event:e_theft
+    title: 空床
+    prompt: 清晨的诊所病房，一张空床，床单被掀到一边，窗子从里面打开着，窗台上的积雪被蹭掉了一片
+    base: clinic
+  - id: sc_storm
+    kind: 危机
+    when: event:e_storm
+    title: 暴风雪
+    prompt: 暴风雪里的一辆老式汽车，从车里望出挡风玻璃，车灯前只剩两三码白茫茫的雪，雪横着砸过来，四周什么都看不见
+  - id: sc_hill
+    kind: 重要场景
+    when: visit:satin_hill
+    title: 绸缎山
+    prompt: 风雪中的小山坡，只有雪、风和一丛丛矮树；往下望是整个小城，烟囱的细烟像插在雪里的针，天色铅灰
+    base: satin_hill
+  - id: sc_entity
+    kind: 最终boss
+    when: flag:entity_revealed
+    title: 不属于这里的东西
+    prompt: 雪夜里一个瘦高清秀的人形正在崩解，皮肤之下翻涌出无定形的、不属于这个世界的东西，提灯的光被它一点点吞没
+  - id: sc_end_late
+    kind: 结局
+    when: ending:too_late
+    title: 太迟了
+    prompt: 大雪掩埋的荒废小城，没有一缕炊烟，窗户黑洞洞的，雪地上没有一个脚印
+    base: main_street
+  - id: sc_end_stopped
+    kind: 结局
+    when: ending:stopped_in_time
+    title: 雪停了
+    prompt: 雪停后的清晨，阳光照在小城被雪覆盖的屋顶上，几户人家的烟囱重新冒出细烟，街上有人在扫雪
+    base: main_street
+  - id: sc_end_revived
+    kind: 结局
+    when: ending:revived
+    title: 从雪下拉出来的人
+    prompt: 夜里的雪坡上，几个人从雪下拉出一个冻僵的年轻人，一盏提灯放在雪地里，灯光映着呼出的白气
+    base: satin_hill
 pregens:
 - id: agnes_bell
   name: 艾格尼丝·贝尔

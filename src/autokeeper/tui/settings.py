@@ -11,7 +11,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Select, Static, Switch
 
-from .. import config, imagery
+from .. import config, imagegen, imagery
 from . import dice
 from .prefs import PrefsModal
 from .screens import EngineModal
@@ -59,11 +59,18 @@ class SettingsModal(ModalScreen[None]):
             for label, key, value in (("天气与场景动画", "animations", cfg.animations),
                                       ("模组与即兴规则插件", "plugins", cfg.plugins),
                                       ("操作提示", "tips", cfg.tips),
+                                      ("大场景", "showcase", cfg.showcase),
                                       ("即兴人物、场景与物品配图", "pictures", cfg.visual_limit > 0),
                                       ("联网搜索与参考配图", "search", cfg.search != "none")):
                 with Horizontal(classes="settings-row"):
                     yield Static(label)
                     yield Switch(value, id=f"settings-{key}")
+            codex = imagegen.recheck()  # off without a logged-in Codex: one plain line says why (the fix is in the guide)
+            with Horizontal(classes="settings-row"):
+                yield Static("AI 画图")
+                yield Switch(cfg.imagegen and codex.ok, id="settings-imagegen", disabled=not codex.ok)
+            if not codex.ok:
+                yield Static(Text(codex.reason, style="dim"), id="settings-imagegen-why")
             with Horizontal(classes="buttons"):
                 yield Button("保存", id="settings-save", variant="primary")
                 yield Button("返回", id="settings-back")
@@ -100,13 +107,16 @@ class SettingsModal(ModalScreen[None]):
     @on(Button.Pressed, "#settings-save")
     def keep(self) -> None:
         cfg = config.load()
-        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins")}
+        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins", "showcase")}
         choice |= {"improv": self.query_one("#settings-improv", Select).value,
                    "art_style": self.query_one("#settings-art", Select).value,
                    "theme": self.query_one("#settings-theme", Select).value,
                    "dice": self.query_one("#settings-dice", Select).value,
                    "visual_limit": max(1, cfg.visual_limit or 24) if self.query_one("#settings-pictures", Switch).value else 0,
                    "search": (cfg.search if cfg.search != "none" else "auto") if self.query_one("#settings-search", Switch).value else "none"}
+        codex = self.query_one("#settings-imagegen", Switch)
+        if not codex.disabled:  # without Codex the saved choice stays for when it is back
+            choice["imagegen"] = codex.value
         config.save_ui_settings(choice)
         os.environ["AUTOKEEPER_IMPROV"] = choice["improv"]
         os.environ["AUTOKEEPER_SEARCH"] = choice["search"]

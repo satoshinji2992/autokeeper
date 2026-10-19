@@ -82,6 +82,7 @@ class Roll:
     critical: bool = False
     fumble: bool = False
     rands: list[list[int]] = field(default_factory=list)
+    throw: dict | None = None  # a physical throw's recording (physdice.Throw.encode), for the screens to replay
 
     @property
     def parts(self) -> list[str]:

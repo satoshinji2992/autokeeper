@@ -15,6 +15,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.content import Content, Span
+from textual.message import Message
 from textual.style import Style as TextualStyle
 from textual.suggester import SuggestFromList
 from textual.widgets import Static
@@ -633,19 +634,125 @@ def command_suggester(inv: Investigator | None = None, actions: list[str] | None
 
 
 class DiceTray(Static):
-    """Two spinning d10s that settle on BCDice's result."""
+    """The check's dice: the physical throw that decided it, replayed in the scene's art style
+    (dice.py); the numbers on the top faces turn yellow once the dice lie still. Without chafa,
+    or for a roll that was not thrown, the pixel-font dice tumble and settle on the result."""
 
     def __init__(self, **kw):
         super().__init__(**kw)
         self.display = False  # nothing to show before the first roll
+        self.tumbling = True  # the animations switch: off, only the dice at rest are shown
         self._frames = 0
         self._view: dict | None = None
+        self._replay = None
+        self._showing = None  # dice.Showing on its way
+        self._picture: Text | None = None  # the painted frame on show
+        self.stats: dict | None = None  # the last throw's frames shown and what painting them took
 
     def roll(self, view: dict) -> None:
+        from . import dice
+
         self.display = True
         self._view = view
-        self._frames = 12
-        self._spin()
+        self._stop()
+        self._replay = dice.replay(view) if imagery.available() else None
+        self._picture = None
+        if self._replay is None or min(self._shape()) < 5:
+            self._replay = None
+            self._frames = 12
+            self._spin()
+            return
+        self._show(animate=self.tumbling)
+
+    def prepare(self) -> None:
+        """Paint the empty tray for the coming throws in the background (chafa there, a size known)."""
+        from . import dice
+
+        cols, rows = self._shape()
+        skin_key = getattr(self.app, "dice_skin", None)
+        if imagery.available() and cols >= 20 and rows >= 5:
+            self.run_worker(partial(dice.painter().warm, skin_key if skin_key in dice.SKINS else dice.DEFAULT, cols, rows),
+                            thread=True, group="dice-warm", exclusive=True, exit_on_error=False)
+
+    def _shape(self) -> tuple[int, int]:
+        """The picture's size in cells: the tray's width, its height but for the two lines of text.
+        Before the tray is first laid out, from its column and its height."""
+        width, height = self.content_region.width, self.content_region.height
+        if not width and self.parent is not None:
+            width = self.parent.content_region.width - 2
+        if not height:
+            height = int(self.styles.height.value) - 1 if self.styles.height is not None else 10
+        return max(0, width), max(0, height - 2)
+
+    def _show(self, *, animate: bool) -> None:
+        """Paint the throw: in the painter's process, or here in a worker thread without one."""
+        from . import dice
+
+        r, (cols, rows) = self._replay, self._shape()
+        skin_key = getattr(self.app, "dice_skin", None)
+        skin_key = skin_key if skin_key in dice.SKINS else dice.DEFAULT
+        symbols = list(imagery.STYLES.get(getattr(self.app, "art_style", "photo"), imagery.STYLES["picture"]))
+        ticket = dice.Ticket()
+        self._showing, self.stats = ticket, None
+        self._draw_tray(rolling=True)
+
+        def show(k: int, ansi: str | None, last: bool, stats: dict | None = None) -> None:  # from another thread
+            ticket.posted = k
+            if last:
+                ticket.done, ticket.stats = True, stats
+            self.post_message(self.Frame(ticket, k, ansi, last))
+
+        if dice.painter().throw((r, skin_key, cols, rows, symbols), animate, show):
+            return
+        timing = dice.Timing()
+        showing = dice.Showing(r, lambda k: dice.frame(r, k, skin_key, cols, rows, symbols, timing), animate=animate,
+                               stop=ticket.stop)
+        self.run_worker(partial(self._play, showing, timing, show), thread=True, group="dice", exclusive=True,
+                        exit_on_error=False)
+
+    class Frame(Message):
+        """A painted frame of the throw on show (ansi None: the painting failed)."""
+
+        def __init__(self, ticket, k: int, ansi: str | None, last: bool) -> None:
+            super().__init__()
+            self.ticket, self.k, self.ansi, self.last = ticket, k, ansi, last
+
+    @staticmethod
+    def _play(showing, timing, show) -> None:
+        """In a worker thread, without the painter: the frames, as they come, to the screen."""
+        def shown(k: int, ansi: str, last: bool) -> None:
+            stats = {"shown": showing.shown, "paint": timing.paint, "chafa": timing.chafa, "ms": showing.ms} if last else None
+            show(k, ansi, last, stats)
+
+        try:
+            showing.run(shown)
+        except Exception:  # a painting gone wrong must not take the game down: the plain dice instead
+            show(-1, None, True)
+
+    def on_dice_tray_frame(self, event: Frame) -> None:
+        from . import dice
+
+        if event.ticket is not self._showing:
+            return
+        if event.ansi is None:
+            self._replay, self._showing, self._picture = None, None, None
+            self._frames = 0
+            self._spin()
+            return
+        if not event.last and event.k < event.ticket.posted:
+            return  # a later frame is on its way: this one is stale
+        self._picture = dice.text(event.ansi)
+        if event.last:
+            self.stats = event.ticket.stats
+        self._draw_tray(rolling=not event.last)
+
+    def _stop(self) -> None:
+        if self._showing is not None:
+            self._showing.stop.set()
+            self._showing = None
+
+    def on_unmount(self) -> None:
+        self._stop()
 
     def _spin(self) -> None:
         v = self._view or {}
@@ -659,29 +766,41 @@ class DiceTray(Static):
         self._paint(f"{tens}0", str(units), rolling=False)
 
     def redraw(self) -> None:
-        """The skin changed: the last roll again in the new one."""
-        if self._view is not None and self._frames <= 0:
+        """The skin or the art style changed: the last roll again, at rest, in the new one."""
+        if self._view is None:
+            return
+        if self._replay is not None:
+            if self._showing is None or self._showing.done:
+                self._show(animate=False)
+        elif self._frames <= 0:
             self._spin()
 
     def _paint(self, tens: str, units: str, *, rolling: bool) -> None:
         from . import dice
 
         v = self._view or {}
-        faces = dice.pair(tens, units, dice.skin(getattr(self.app, "dice_skin", None)), rolling=rolling, level=v.get("level", ""))
-        head = f"{v.get('skill', '')} {v.get('target', '')}"
+        self._picture = dice.pair(tens, units, dice.skin(getattr(self.app, "dice_skin", None)), rolling=rolling, level=v.get("level", ""))
+        self._draw_tray(rolling=rolling)
+
+    def _draw_tray(self, *, rolling: bool) -> None:
+        """The check above the dice, the result under them once they are still."""
+        v = self._view or {}
+        head = f"{v.get('skill', '')} {v.get('target', '')}".strip()
         if v.get("difficulty") and v.get("difficulty") != "常规":
             head += f" · {v['difficulty']}"
         if v.get("bonus"):
             head += f" · {'奖励' if v['bonus'] > 0 else '惩罚'}骰×{abs(v['bonus'])}"
         if v.get("pushed"):
             head = "孤注一掷 · " + head
+        faces = self._picture or Text("")
         out = Text(head + "\n", style="bold")
         out.append_text(faces)
         out.append("\n")
         if not rolling:
             level = v.get("level", "")
             out.append(f"  {v.get('value')}  ", style="bold")
-            out.append(f" {level} ", style=LEVEL_STYLE.get(level, "bold"))
+            if level:
+                out.append(f" {level} ", style=LEVEL_STYLE.get(level, "bold"))
             cands = v.get("candidates") or []
             if len(cands) > 1:
                 out.append(f"  ({' / '.join(map(str, cands))})", style="dim")
