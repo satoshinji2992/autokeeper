@@ -77,14 +77,14 @@ class PluginsModal(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(classes="modal"):
             yield Static("规则插件", classes="modal-title")
-            lead = ("本局之外的额外规则。暂停后会保留已有状态。" if self.manage else
-                    "本局的额外规则在你的电脑上运行，结果会同步给所有人。" if self.send else
-                    "本局的额外规则由房主管理，结果会同步到这里；想加家规，跟房主说一声。")
+            lead = ("这一局额外的规则。暂停不会丢掉已有的进度。" if self.manage else
+                    "这些规则在你的电脑上运行，结果会同步给所有人。" if self.send else
+                    "规则由房主管理。想加家规，跟房主说一声。")
             yield Static(Text(lead, style="dim"), id="plugin-lead")
             yield from self._list()
             if self.drafter or self.send:
-                yield Static(Text("\n加一条家规（用大白话说，例如：每过一夜要吃一顿饭，不吃 HP 减 1）", style="bold"))
-                yield Input(placeholder="说出你想要的规则，回车添加", id="house-rule")
+                yield Static(Text("\n加一条家规，比如：每过一夜要吃一顿饭，不吃 HP 减 1", style="bold"))
+                yield Input(placeholder="写下规则，回车添加", id="house-rule")
                 yield Static("", id="house-status")
             yield Button("返回", id="plugin-back")
 
@@ -92,7 +92,7 @@ class PluginsModal(ModalScreen[None]):
         # Built without a `with` block so it can also be re-run by _refresh(), outside compose.
         rows = _rows(self.module, self.state, manage=self.manage)
         if not rows:
-            yield Static("本局没有自定义插件。", classes="plugin-card")
+            yield Static("这一局没有规则插件。", classes="plugin-card")
             return
         for i, row in enumerate(rows):
             yield Static(self._card(row), classes="plugin-card")
@@ -118,11 +118,11 @@ class PluginsModal(ModalScreen[None]):
             for name, desc in row["commands"]:
                 t.append(f"\n  · /{name}  {desc}", style="dim")
         if row["does"]:
-            t.append("\n它会：", style="bold")
+            t.append("\n效果：", style="bold")
             t.append("、".join(row["does"]), style="dim")
             if row["name"] in self.state.plugin_panels:
                 titles = "、".join(p.get("title", "") for p in self.state.plugin_panels[row["name"]])
-                t.append(f"（右栏的「{titles}」就是它的）", style="dim")
+                t.append(f"（右栏「{titles}」）", style="dim")
         if row["recent"]:
             t.append("\n最近：", style="bold")
             for line in row["recent"]:
@@ -139,7 +139,7 @@ class PluginsModal(ModalScreen[None]):
         if self.send is not None:  # LAN: the host drafts and installs, the result syncs back
             self.send(text)
             self.query_one("#house-rule", Input).value = ""
-            self._status("已发给房主，装好后会在这里更新；关掉再打开即可看到。")
+            self._status("已发给房主，装好后重新打开这里就能看到。")
         elif self.drafter is not None:
             self._draft(text)
 
@@ -162,7 +162,7 @@ class PluginsModal(ModalScreen[None]):
         if ok:
             box.value = ""
             self._refresh()
-        self._status(message + ("" if ok else "。可以改一句话再试一次。"))
+        self._status(message + ("" if ok else "。改一下说法再试试。"))
 
     def _status(self, text: str) -> None:
         if self.is_mounted:
