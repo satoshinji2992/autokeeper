@@ -1,6 +1,7 @@
 """角色卡: every investigator on this machine, from the title screen. The cards kept from
-车卡, the player's investigator in each save (as they stand now), and each module's pregens; the
-highlighted one's full sheet beside the list, Enter for the sheet on its own."""
+车卡, the player's investigator in each save (as they stand now, with what they went through in
+that game), and each module's pregens; the highlighted one's full sheet beside the list, Enter
+for the sheet on its own."""
 
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .. import artkit, config, imagery, roster
+from ..engine.state import GameState
 from ..module.schema import Module
 from ..rules.coc import Investigator
 from .sheet import SheetModal, sheet_view
@@ -34,6 +36,7 @@ class CardsScreen(Screen):
         super().__init__()
         # option id -> (the investigator, the group it is shown with, the module its pictures come from)
         self.cards: dict[str, tuple[Investigator, list[Investigator], Module | None]] = {}
+        self.saves: dict[str, dict | GameState | None] = {}  # option tag -> its save, read when first shown (本局经历)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
@@ -73,6 +76,7 @@ class CardsScreen(Screen):
             if party:  # games only watched have no one of the player's
                 when = str(meta.get("updated", ""))[5:]
                 groups.append((f"《{meta.get('title', '?')}》存档 {when}", party, module(Path(meta.get("path", ""))), f"s{slot}"))
+                self.saves[f"s{slot}"] = state
         for path in modules():
             m = module(path)
             if m and m.pregens:
@@ -113,15 +117,28 @@ class CardsScreen(Screen):
         if event.option.id in self.cards:
             self._show(event.option.id)
 
+    def _game(self, oid: str) -> GameState | None:
+        """The save a card comes from, for its 本局经历; None for kept cards and pregens."""
+        tag = oid.split(":", 1)[0]
+        raw = self.saves.get(tag)
+        if isinstance(raw, dict):
+            try:
+                raw = GameState.model_validate(raw)
+            except ValueError:  # a save this version cannot read still shows the card
+                raw = None
+            self.saves[tag] = raw
+        return raw
+
     @work(exclusive=True, group="card")
     async def _show(self, oid: str) -> None:
         inv, _, m = self.cards[oid]
         body = self.query_one("#preview-body", Static)
         width = body.content_size.width or None
-        body.update(sheet_view(inv, width=width))  # the words at once, the face when it is drawn
+        game = self._game(oid)
+        body.update(sheet_view(inv, width=width, state=game))  # the words at once, the face when it is drawn
         face = await asyncio.to_thread(self._portrait, inv, m, self.app.art_style)  # type: ignore[attr-defined]
         if face is not None:
-            body.update(sheet_view(inv, face, width))
+            body.update(sheet_view(inv, face, width, state=game))
 
     @on(OptionList.OptionSelected, "#choices")
     def open(self, event: OptionList.OptionSelected) -> None:
@@ -129,4 +146,4 @@ class CardsScreen(Screen):
             return
         inv, party, m = self.cards[event.option.id]
         style = self.app.art_style  # type: ignore[attr-defined]
-        self.app.push_screen(SheetModal(party, party.index(inv), lambda i: self._portrait(i, m, style)))
+        self.app.push_screen(SheetModal(party, party.index(inv), lambda i: self._portrait(i, m, style), self._game(event.option.id)))

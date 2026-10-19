@@ -99,11 +99,11 @@ def build(game: Game, checkpointer=None):
         journal = game.state.pending_turn
         if "action" in journal:
             return {"action": journal["action"]}
-        turn, count = game.state.turn, len(game.state.log)
+        turn, count, logged, deeds = game.state.turn, len(game.state.log), game.state.logged, list(game.state.deeds)
         try:
             action = await game.parse(state["input"])
         except BaseException:
-            game.state.turn = turn
+            game.state.turn, game.state.logged, game.state.deeds = turn, logged, deeds
             del game.state.log[count:]
             raise
         journal["action"] = action.model_dump(mode="json")

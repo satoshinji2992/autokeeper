@@ -8,6 +8,8 @@
     npc:<id>      one session per NPC; knows only its own file and its own conversations
     keeper        narrates resolved, public facts; never carries the module's hidden truth
     chronicler    compresses old log into memory, writes recaps in the storyteller's voice
+    progress      the players' 故事至今 when the story has moved, on the summarizer's cheap
+                  model; gets only what the table was shown (engine/progress.py)
     investigator  AI players (companions and autoplay); see only what players see
                   (engine/autoplay.situation); also writes the ideas a player asks for (F5)
     vision        reads sketches
@@ -244,6 +246,11 @@ CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录
 摘要：客观、紧凑，记下调查员去过哪里、见过谁、拿到哪些线索、做了哪些关键决定、身心状态。
 前情回顾：像守秘人开团前帮玩家接上进度。用平实的现代汉语，称呼调查员的名字，按时间讲清发生了什么、手上有哪些线索、现在在哪、还悬着什么问题。不用评书和说书人的套话，不写诗，不加感叹和评点。
 只输出纯文本，界面不渲染 Markdown：不要加粗、标题和列表符号。"""
+
+PROGRESS_SYSTEM = """你给跑团的玩家写「故事至今」：放在屏幕一侧、随时可以翻看的一段进度。
+只用给你的材料：开场的缘起、守秘人讲给玩家听的叙述、调查员的行动、NPC 当面说的话、找到的线索和手稿。材料里没有的事不写，不猜真相，不评点，不出主意。
+用平实的现代汉语、第三人称，称呼调查员的名字，按时间顺序交代来龙去脉，最后落在他们眼下的处境和还没解开的疑问上。
+只输出这一段纯文本，不要标题、列表和 Markdown。"""
 
 INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员「{name}」（{occupation}）。
 {sheet}
@@ -629,6 +636,15 @@ class Cast:
         recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:])
         prompt = f"写一段前情回顾，150–250 字，只讲调查员已经知道的事，最后落在他们现在的处境上。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
+        return reply.text.strip()
+
+    async def progress(self, state: GameState, material: str) -> str:
+        """The players' 故事至今 (engine/progress.py): stateless, since the last account comes
+        with the material, and kept out of the transcripts; its cost is counted."""
+        if "progress" not in self.sessions:
+            self.sessions["progress"] = Session("progress", self.cfg.role("summarizer"), PROGRESS_SYSTEM, key="progress")
+        reply = await self.sessions["progress"].send(material)
+        state.record_usage("progress", reply)
         return reply.text.strip()
 
     async def investigator(self, state: GameState, inv_id: str, situation: str) -> str:
