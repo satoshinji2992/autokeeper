@@ -34,8 +34,8 @@ def test_the_last_frame_lies_as_the_dice_fell_with_the_counting_numbers_in_yello
     assert r is not None and r.gold == [True, True]
     last = r.frames - 1
     dice_now = [(kind, r.centres[last, i], r.turns[last, i]) for i, kind in enumerate(r.kinds)]
-    plain, _ = diceart.picture("bone", 37, 10, r.tray, dice_now)
-    gold, placed = diceart.picture("bone", 37, 10, r.tray, dice_now, gold=r.gold)
+    plain, _ = diceart.picture("bone", 37, 10, r.tray, dice_now, view=r.view)
+    gold, placed = diceart.picture("bone", 37, 10, r.tray, dice_now, gold=r.gold, view=r.view)
     assert [pd.label(kind, p.top) for kind, p in zip(r.kinds, placed, strict=True)] == view["throw"]["labels"]
     assert int(view["throw"]["labels"][0]) + int(view["throw"]["labels"][1]) == view["value"] % 100  # the top faces are the roll
     yellow = (np.abs(np.asarray(gold).astype(int) - (255, 215, 0)).sum(axis=2) < 60)
@@ -75,7 +75,7 @@ def test_every_skin_paints_a_throw_in_the_art_style(monkeypatch, style):
             if style == "ascii":
                 assert text.plain.isascii()
         colours = {span.style.color.triplet for span in text.spans if span.style and span.style.color and span.style.color.triplet}
-        assert any(c.red > 220 and c.green > 170 and c.blue < 80 for c in colours), key  # yellow on the top faces
+        assert any(c.red > 190 and c.green > 150 and c.blue < 80 for c in colours), key  # yellow on the top faces (scanlines dim it)
 
 
 def test_late_frames_are_skipped_and_the_last_always_shown():

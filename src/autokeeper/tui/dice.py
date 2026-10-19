@@ -181,6 +181,7 @@ class Replay:
     centres: np.ndarray  # (frames, dice, 3)
     turns: np.ndarray  # (frames, dice, 3, 3)
     gold: list[bool]
+    view: tuple[float, float, float, float] | None = None  # the floor the camera frames: where the dice came to rest
 
     @property
     def frames(self) -> int:
@@ -208,7 +209,10 @@ def replay(view: dict) -> Replay | None:
         kept = int(view.get("kept") or 0)
         tens = [i for i, k in enumerate(kinds) if k == "tens"]
         gold = [k == "units" or (len(tens) > 1 and tens.index(i) == kept) or len(tens) == 1 for i, k in enumerate(kinds)]
-        return Replay(kinds, labels, (float(t["tray"][0]), float(t["tray"][1])), float(t["fps"]), centres, turns, gold)  # type: ignore[index]
+        from .diceart import resting_view
+
+        tray = (float(t["tray"][0]), float(t["tray"][1]))  # type: ignore[index]
+        return Replay(kinds, labels, tray, float(t["fps"]), centres, turns, gold, resting_view(centres[-1], tray))  # type: ignore[index]
     except (TypeError, KeyError, ValueError, IndexError):
         return None
 
@@ -230,7 +234,7 @@ def frame(r: Replay, k: int, skin_key: str, cols: int, rows: int, symbols: list[
     t0 = time.perf_counter()
     last = k == r.frames - 1
     dice = [(kind, r.centres[k, i], r.turns[k, i]) for i, kind in enumerate(r.kinds)]
-    im, _ = diceart.picture(skin_key, cols, rows, r.tray, dice, gold=r.gold if last else None)
+    im, _ = diceart.picture(skin_key, cols, rows, r.tray, dice, gold=r.gold if last else None, view=r.view)
     t1 = time.perf_counter()
     out = chafa(im, cols, rows, symbols, work=9 if last else 5)
     if timing is not None:

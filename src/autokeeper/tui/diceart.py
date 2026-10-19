@@ -10,6 +10,7 @@ faces' numbers over it in cells.
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 from functools import lru_cache
@@ -23,7 +24,7 @@ CELL = (8, 16)  # picture pixels per terminal cell handed to chafa (cells are tw
 TILT = 14.0  # the camera's lean from straight down, degrees: the far wall shows a little
 DISTANCE = 14.0  # from the camera to the middle of the floor, die radii: perspective, gently
 RIM = 0.12  # the wall's thickness, die radii
-GROOVE = 0.3  # how far a number's cut reaches past its paint, in its pixels (light skins: Material.cut)
+GROOVE = 0.3  # how wide a number's cut is round its paint, normally (Material.cut: round the yellow)
 RGB = tuple[float, float, float]
 
 
@@ -55,20 +56,34 @@ class Camera:
         return float(xy[0, 0]), float(xy[0, 1]), float(d[0])
 
 
-@lru_cache(maxsize=8)
-def camera(cols: int, rows: int, tray: tuple[float, float]) -> Camera:
-    """A camera leaning TILT from straight down, framing the tray and its rim."""
+View = tuple[float, float, float, float]  # a stretch of the floor to frame: x from, x to, y from, y to
+
+
+@lru_cache(maxsize=32)
+def camera(cols: int, rows: int, tray: tuple[float, float], view: View | None = None) -> Camera:
+    """A camera leaning TILT from straight down, framing the tray and its rim, or only `view`:
+    where the dice come to rest, so they lie as big as the picture allows."""
     w, h = cols * CELL[0], rows * CELL[1]
     t = math.radians(TILT)
     back, up = np.array([0.0, -math.sin(t), math.cos(t)]), np.array([0.0, math.cos(t), math.sin(t)])
     m = np.array([[1.0, 0.0, 0.0], up, back])
-    eye = back * DISTANCE
     a, b = tray[0] + RIM, tray[1] + RIM
-    corners = np.array([(x, y, z) for x in (-a, a) for y in (-b, b) for z in (0.0, 0.5)])
+    x0, x1, y0, y1 = view if view is not None else (-a, a, -b, b)
+    eye = np.array([(x0 + x1) / 2, (y0 + y1) / 2, 0.0]) + back * DISTANCE
+    corners = np.array([(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (0.0, 0.5)])
     q = (corners - eye) @ m.T
     sx, sy = q[:, 0] / -q[:, 2], -q[:, 1] / -q[:, 2]
     f = min(w / (sx.max() - sx.min()), h / (sy.max() - sy.min()))
     return Camera(w, h, eye, m, f, w / 2 - f * (sx.max() + sx.min()) / 2, h / 2 - f * (sy.max() + sy.min()) / 2)
+
+
+def resting_view(centres: np.ndarray, tray: tuple[float, float]) -> View:
+    """The floor round the dice where they came to rest (centres (dice, 3)), inside the rim."""
+    reach = 1.05  # a die lying flat, seen from above, and a little floor round it
+    a, b = tray[0] + RIM, tray[1] + RIM
+    x0, x1 = max(-a, float(centres[:, 0].min()) - reach), min(a, float(centres[:, 0].max()) + reach)
+    y0, y1 = max(-b, float(centres[:, 1].min()) - reach), min(b, float(centres[:, 1].max()) + reach)
+    return round(x0, 2), round(x1, 2), round(y0, 2), round(y1, 2)
 
 
 @lru_cache(maxsize=8)
@@ -165,9 +180,9 @@ def creeping(tray: tuple[float, float]) -> list[list[tuple[float, float, float]]
 
 
 @lru_cache(maxsize=12)
-def room(skin: str, cols: int, rows: int, tray: tuple[float, float]) -> np.ndarray:
+def room(skin: str, cols: int, rows: int, tray: tuple[float, float], view: View | None = None) -> np.ndarray:
     """The tray without dice: worn planks lit by the candle, the rim, tentacles over it."""
-    cam = camera(cols, rows, tray)
+    cam = camera(cols, rows, tray, view)
     fx, fy = floor_at(cam)[..., 0], floor_at(cam)[..., 1]
     a, b = tray
     inside = (np.abs(fx) <= a) & (np.abs(fy) <= b)
@@ -233,9 +248,43 @@ FONT = {  # 3 x 5 pixels, row by row: the same digits the cells use
     "6": ("###", "#..", "###", "#.#", "###"), "7": ("###", "..#", ".#.", ".#.", ".#."),
     "8": ("###", "#.#", "###", "#.#", "###"), "9": ("###", "#.#", "###", "..#", "###"),
 }
-# A number's pixel (die radii) and where its middle sits on the kite (v: 0 the side corners, 1
-# the apex): as big as a kite holds, two digits only just fitting its width.
-DECAL = {"tens": (0.105, 0.145), "units": (0.16, 0.22)}
+# The numbers: bold strokes in a box (x across, y up, both 0-1), drawn four times finer than
+# the picture and filtered down, so their edges are smooth however the face lies.
+STROKES = {
+    "0": [[(0.2, 1), (0.8, 1), (1, 0.8), (1, 0.2), (0.8, 0), (0.2, 0), (0, 0.2), (0, 0.8), (0.2, 1)]],
+    "1": [[(0.25, 0.78), (0.62, 1), (0.62, 0)]],
+    "2": [[(0, 0.78), (0.2, 1), (0.8, 1), (1, 0.8), (1, 0.6), (0, 0), (1, 0)]],
+    "3": [[(0.02, 1), (1, 1), (0.42, 0.58), (0.78, 0.58), (1, 0.38), (1, 0.18), (0.8, 0), (0.2, 0), (0, 0.15)]],
+    "4": [[(0.75, 0), (0.75, 1), (0, 0.32), (1, 0.32)]],
+    "5": [[(1, 1), (0.08, 1), (0.02, 0.56), (0.72, 0.62), (1, 0.42), (1, 0.18), (0.8, 0), (0.2, 0), (0, 0.15)]],
+    "6": [[(0.78, 1), (0.12, 0.42), (0, 0.22), (0.2, 0), (0.8, 0), (1, 0.2), (1, 0.38), (0.8, 0.56), (0.2, 0.56), (0.04, 0.4)]],  # open at the top: no 8
+    "7": [[(0, 1), (1, 1), (0.32, 0)]],
+    "8": [[(0.5, 0.56), (0.12, 0.72), (0.12, 0.88), (0.28, 1), (0.72, 1), (0.88, 0.88), (0.88, 0.72), (0.5, 0.56),
+           (0.02, 0.34), (0.02, 0.14), (0.2, 0), (0.8, 0), (0.98, 0.14), (0.98, 0.34), (0.5, 0.56)]],
+}
+STROKES["9"] = [[(1 - x, 1 - y) for x, y in line] for line in STROKES["6"]]
+UNDERLINE = [(0.05, -0.24), (0.95, -0.24)]  # under a units die's 6 and 9, as real d10s have it
+# A number's height (die radii) and where its middle sits on the kite (v: 0 the side corners, 1 the
+# apex): as big as a kite holds, two digits only just fitting its width.
+DECAL = {"tens": (0.54, 0.155), "units": (0.68, 0.24)}
+WIDE, GAP, STROKE = 0.54, 0.16, 0.2  # a digit's width, the gap between two, the stroke: parts of its height
+FINE = 4  # the numbers are drawn this many times finer than the picture
+
+
+@lru_cache(maxsize=64)
+def strokes(text: str, kind: str) -> tuple[np.ndarray, ...]:
+    """The number's strokes as (u, v) polylines on a kite."""
+    height, at = DECAL[kind]
+    _, right, up = kite(0)
+    across, tall = np.linalg.norm(right), np.linalg.norm(up)
+    width = len(text) * WIDE * height + (len(text) - 1) * GAP * height
+    out = []
+    for n, ch in enumerate(text):
+        left = -width / 2 + n * (WIDE + GAP) * height
+        lines = STROKES.get(ch, STROKES["0"]) + ([UNDERLINE] if kind == "units" and ch in "69" else [])
+        for line in lines:
+            out.append(np.array([((left + x * WIDE * height) / across, at + (y - 0.5) * height / tall) for x, y in line]))
+    return tuple(out)
 
 
 @lru_cache(maxsize=10)
@@ -262,24 +311,6 @@ def on_kite(k: int, uv: np.ndarray) -> np.ndarray:
     """Points (u, v) on kite k (n, 2) in the die's space (n, 3)."""
     mid, right, up = kite(k)
     return mid + uv[:, :1] * right + uv[:, 1:] * up
-
-
-@lru_cache(maxsize=64)
-def digits(text: str, size: float, at: float, grow: float = 0.0) -> tuple[np.ndarray, ...]:
-    """The number as squares on a kite: each lit pixel of the font, its four corners as (u, v),
-    grown by `grow` of a pixel on every side (the cut round the paint)."""
-    _, right, up = kite(0)
-    du, dv = size / np.linalg.norm(right), size / np.linalg.norm(up)
-    width = len(text) * 4 - 1
-    out = []
-    for n, ch in enumerate(text):
-        for row, line in enumerate(FONT.get(ch, FONT["0"])):
-            for col, px in enumerate(line):
-                if px == "#":
-                    u0, u1 = (n * 4 + col - width / 2 - grow) * du, (n * 4 + col + 1 - width / 2 + grow) * du
-                    v0, v1 = at + (2.5 - row + grow) * dv, at + (1.5 - row - grow) * dv
-                    out.append(np.array([(u0, v0), (u1, v0), (u1, v1), (u0, v1)]))
-    return tuple(out)
 
 
 def poly(draw: ImageDraw.ImageDraw, pts: np.ndarray, at: tuple[int, int], fill: int = 255) -> None:
@@ -351,39 +382,53 @@ def die(img: np.ndarray, cam: Camera, skin: str, kind: str, x: np.ndarray, r: np
     under, over = motif or (None, None)
     if under is not None:
         under(tile, cam, skin, x, r, visible, (x0, y0), sel, ids_a, gold, top)
-    # the numbers, every kite's: a dark cut, the paint in it; each kept to its own kite
-    size_px, at_v = DECAL[kind]
-    for paint in (False, True):
-        if paint is False and m.glow:
-            continue  # a screen's lines have no cut
-        squares, owner = [], []
-        for k in visible:
-            grow = 0.0 if paint else m.cut if gold and k == top else GROOVE  # the yellow gets a wide dark rim
-            cut = digits(label(kind, k), size_px, at_v, grow)
-            squares += cut
-            owner += [k] * len(cut)
-        if not squares:
-            continue
-        uv, frames = np.stack(squares), kites()[owner]  # (squares, 4 corners, u v), (squares, mid right up, 3)
-        body = frames[:, None, 0] + uv[..., :1] * frames[:, None, 1] + uv[..., 1:] * frames[:, None, 2]
-        pts, _ = cam.project(x + body.reshape(-1, 3) @ r.T)
-        im = Image.new("L", size, 0)
-        dr = ImageDraw.Draw(im)
-        for quad, k in zip(pts.reshape(-1, 4, 2) - (x0, y0), owner, strict=True):
-            dr.polygon([(float(a), float(b)) for a, b in quad], fill=k + 1)
-        mark = np.asarray(im).astype(np.int16)
-        on = (mark > 0) & (mark == ids_a)
-        if not on.any():
-            continue
-        faces_on = ids_a[on] - 1
-        lit = np.clip(light[faces_on] @ np.array([0.3, 0.59, 0.11]), 0.55, 1.15)[:, None]  # the paint keeps its colour
-        if not paint:
-            tile[on] = np.array(m.groove) * lit
-            continue
-        yellow = (gold & (faces_on == top))[:, None]  # the same yellow on every die and skin, whatever the light
-        tile[on] = np.where(yellow, np.array(GOLD), np.array(m.ink) if m.glow else np.array(m.ink) * lit)
-    if over is not None:
-        over(tile, cam, skin, x, r, visible, (x0, y0), sel, ids_a, gold, top)
+    # the numbers, every kite's: the grit calmed round them, a dark cut, the paint in it
+    lines, owner = [], []
+    for k in visible:
+        for line in strokes(label(kind, k), kind):
+            lines.append(line)
+            owner.append(k)
+    if lines:
+        sizes = [len(line) for line in lines]
+        uv = np.concatenate(lines)
+        frames = kites()[np.repeat(owner, sizes)]
+        body = frames[:, 0] + uv[:, :1] * frames[:, 1] + uv[:, 1:] * frames[:, 2]
+        pts, _ = cam.project(x + body @ r.T)
+        pts = (pts - (x0, y0)) * FINE
+        stroke = DECAL[kind][0] * STROKE * cam.f / cam.point(x)[2] * FINE  # on screen, at this die's distance
+        bounds = np.cumsum([0, *sizes])
+        cover = {}
+        light_skin = gold and m.cut > GROOVE  # yellow on bone or brass: a deep, dark cut round it
+        for name, extra in (("calm", 1.6), ("cut", 1.25 if light_skin else 0.5), ("paint", 0.0)):
+            im = Image.new("L", (size[0] * FINE, size[1] * FINE), 0)
+            dr = ImageDraw.Draw(im)
+            width = max(1, round(stroke * (1 + extra)))
+            for a, b in itertools.pairwise(bounds):
+                seg = [(float(px), float(py)) for px, py in pts[a:b]]
+                dr.line(seg, fill=255, width=width, joint="curve")
+                for px, py in (seg[0], seg[-1]):
+                    dr.ellipse([px - width / 2, py - width / 2, px + width / 2, py + width / 2], fill=255)
+            cover[name] = np.asarray(im.resize(size, Image.Resampling.BOX), dtype=np.float32)[..., None] / 255 * sel[..., None]
+        if not m.glow:  # under the number the surface is worn smooth: the grit does not eat the strokes
+            flat = np.zeros_like(tile)
+            flat[sel] = np.array(m.base) * light[k_of] + rim[k_of] + gloss[k_of]
+            if light_skin:  # the yellow sits in a shadowed recess
+                flat[ids_a == top + 1] *= 0.5
+            tile[...] = tile * (1 - cover["calm"]) + flat * cover["calm"]
+            bright = np.zeros((*tile.shape[:2], 1), np.float32)
+            bright[sel] = np.clip(light[k_of] @ np.array([0.3, 0.59, 0.11]), 0.55, 1.15)[:, None]
+            tile[...] = tile * (1 - cover["cut"]) + np.array(m.groove) * bright * cover["cut"]
+        else:
+            bright = np.ones((*tile.shape[:2], 1), np.float32)
+            if gold:  # on the screen too, the yellow gets a black rim, the top face's only
+                cut = cover["cut"] * (ids_a == top + 1)[..., None]
+                tile[...] = tile * (1 - cut)
+        yellow = (gold & (ids_a == top + 1))[..., None]  # the same yellow on every die and skin, whatever the light
+        paint = np.where(yellow, np.array(GOLD), np.array(m.ink) * (1.0 if m.glow else bright))
+        tile[...] = tile * (1 - cover["paint"]) + paint * cover["paint"]
+    if over is not None:  # over the die, but not over the number on top
+        clear = sel & ~((ids_a == top + 1) & (cover["calm"][..., 0] > 0.2)) if lines else sel
+        over(tile, cam, skin, x, r, visible, (x0, y0), clear, ids_a, gold, top)
     if skin == "phosphor":
         wire(tile, cam, x, r, visible, (x0, y0))
     img[y0:y1, x0:x1] = tile
@@ -523,6 +568,7 @@ def coil(tile, cam, skin, x, r, visible, at, sel, ids, gold, top) -> None:
         db.ellipse([sx - pr, sy - pr, sx + pr, sy + pr], fill=255)
         dl.ellipse([sx - pr, sy - pr, sx + pr * 0.25, sy + pr * 0.25], fill=255)
     b, l_ = np.asarray(body) > 0, np.asarray(lit) > 0
+    b &= ~((ids == top + 1) & ~sel)  # it passes under the number on top (sel: the die, less that number)
     tile[b] = np.array([0.13, 0.07, 0.15])
     tile[b & l_] = np.array([0.32, 0.2, 0.36])
 
@@ -570,11 +616,11 @@ def shadows(img: np.ndarray, cam: Camera, poses, skin: str) -> None:
 
 
 def picture(skin: str, cols: int, rows: int, tray: tuple[float, float], dice: list[tuple[str, np.ndarray, np.ndarray]],
-            *, gold: list[bool] | None = None) -> tuple[Image.Image, list[Placed]]:
+            *, gold: list[bool] | None = None, view: View | None = None) -> tuple[Image.Image, list[Placed]]:
     """One frame of the tray: dice (kind, centre, turn) where the throw has them, the nearest
     painted last. Returns the picture (CELL pixels a cell) and where each die's top face is."""
-    cam = camera(cols, rows, tuple(tray))
-    img = room(skin, cols, rows, tuple(tray)).copy()
+    cam = camera(cols, rows, tuple(tray), view)
+    img = room(skin, cols, rows, tuple(tray), view).copy()
     shadows(img, cam, [(x, r) for _, x, r in dice], skin)
     order = sorted(range(len(dice)), key=lambda i: -cam.point(dice[i][1])[2])
     placed: list[Placed | None] = [None] * len(dice)
