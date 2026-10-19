@@ -218,7 +218,6 @@
             hit(menuX + 2, menuY + i - 1, menuW - 4, 1, () => screen(pages[i]), labels[i], () => { if (state.menu !== i) { state.menu = i; tone(); } });
         }
         if (menuY + 9 < rows - 3) center(cols > 70 ? "自由调查 / 模组编译 / AI 同伴 / 浏览器联机" : "自由调查 · 模组编译 · 好友联机", menuY + 9, p.dim);
-        if (menuY + 11 < rows - 3) center("移动鼠标，照亮暗处。", menuY + 11, p.dim);
     }
 
     function mainLayout() {
@@ -345,7 +344,7 @@
         wrap(frame.caption, layout.w - 5).slice(0, 2).forEach((line, i) => text(line, layout.x + 2, layout.y + layout.h - 5 + i, p.dim, layout.w - 4));
         const y = layout.y + layout.h - 2;
         button("←", layout.x + 2, y, () => selectImage(state.image - 1));
-        button("放大 Enter", layout.x + 9, y, openImage, false, layout.w - 19);
+        button("查看原图", layout.x + 9, y, openImage, false, layout.w - 19);
         button("→", layout.x + layout.w - 7, y, () => selectImage(state.image + 1));
         canvas.dataset.frame = state.image;
     }
@@ -356,8 +355,7 @@
         text(cols > 80 ? " CoC 7 / 项目展示 / 0.0.2" : " 项目展示 0.0.2", 16, 0, p.dim, cols - 16);
         if (cols > 72) button("G GitHub", cols - 15, 0, () => openLink("https://github.com/satoshinji2992/autokeeper"), false, 15);
         fill(0, rows - 2, cols, 2, "#0a0705");
-        const status = now < state.noticeUntil ? state.notice : state.page === "home" ? "↑↓ 选择 · Enter 进入 · 鼠标照亮暗处" : state.page === "gallery" ? "←→ 切图 · Enter 放大 · Esc 标题" : "↑↓ 滚动 · ←→ 换页 · Esc 标题";
-        text(status, 1, rows - 2, now < state.noticeUntil ? p.key : p.dim, cols - 2);
+        if (now < state.noticeUntil) text(state.notice, 1, rows - 2, p.key, cols - 2);
         const tools = cols > 85 ? [["/ 命令", openCommand], ["T 配色", changeTheme], [state.muted ? "M 声景:关" : "M 声景:开", toggleAudio], ["F 全屏", fullscreen], ["? 帮助", () => { state.help = true; }]] : [["/ 命令", openCommand], ["T 配色", changeTheme], [state.muted ? "M 静音" : "M 声景", toggleAudio], ["? 帮助", () => { state.help = true; }]];
         let x = 1;
         for (const [label, action] of tools) {
