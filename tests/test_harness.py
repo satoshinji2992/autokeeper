@@ -20,6 +20,7 @@ from autokeeper.harness import models as hm
 from autokeeper.harness.tools import Workspace, check_tool, file_tools, web_tools
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
+from autokeeper.rules.coc import Rules
 from autokeeper.rules.commands import Asked
 
 SCRIPT: deque = deque()  # what the scripted backend answers next: str (text) or dict (JSON)
@@ -65,6 +66,18 @@ async def test_json_is_validated_and_repaired_once():
     repair = SEEN[1]["messages"]
     assert repair[-2]["role"] == "assistant" and "kind" in repair[-1]["content"]  # the validator's complaint goes back
     assert reply.usage == {"input_tokens": 200, "output_tokens": 20}
+
+
+async def test_a_line_said_in_plain_words_needs_no_repair():
+    from autokeeper.agents.cast import Dialogue
+
+    schema = Dialogue.model_json_schema()
+    SCRIPT.append("（搓着手）钥匙就挂在门边，您拿去吧。")
+    reply = await hm.make_model(SCRIPTED, "NPC").complete([{"role": "user", "content": "能借我钥匙吗？"}], schema=schema)
+    assert reply.data == {"text": "（搓着手）钥匙就挂在门边，您拿去吧。"} and reply.repairs == 0 and len(SEEN) == 1
+    SCRIPT.extend(["   ", {"text": "好。"}])  # nothing said at all is still repaired
+    reply = await hm.make_model(SCRIPTED, "NPC").complete([{"role": "user", "content": "嗯？"}], schema=schema)
+    assert reply.data == {"text": "好。"} and reply.repairs == 1
 
 
 class Flaky(Scripted):
@@ -199,7 +212,10 @@ def test_strict_schema_for_codex_closes_every_object():
     strict = hm.strict_schema(Action.model_json_schema())
     assert strict["additionalProperties"] is False and set(strict["required"]) == set(strict["properties"])
     assert "default" not in json.dumps(strict)
-    full = {k: "" for k in strict["properties"]} | {"kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False}
+    full = {k: "" for k in strict["properties"]} | {
+        "kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False,
+        "companions": [], "alone": False, "before": [], "precautions": [],
+    }
     assert not hm.problems(full, Action.model_json_schema())  # what strict mode yields still passes our check
 
 
@@ -340,14 +356,14 @@ async def test_npc_leak_is_rolled_back_out_of_memory():
     assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
 
 
-async def test_an_npc_falling_into_its_habits_is_asked_once_more_on_claude(monkeypatch):
-    """Past the first meeting, a line that opens with an action again or repeats a habit is asked
-    for once more and never stored; a clean line, or a first meeting, goes through as it is."""
-    monkeypatch.setitem(hm.MODELS, "claude", Scripted)
+@pytest.mark.parametrize("backend", ["claude", "scripted"])
+async def test_character_habits_do_not_trigger_an_extra_model_call(monkeypatch, backend):
+    """A repeated gesture can be continuity; style alone must not rewrite a valid reply."""
+    monkeypatch.setitem(hm.MODELS, backend, Scripted)
     m = Module.load(EXAMPLE)
     warden = m.npc("warden")  # 驼背，手上全是油污；说话慢，爱说“钟有钟的规矩”
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    cast = Cast(config.Config(roles={r: Role("claude", "scripted-model", None) for r in config.DEFAULT_ROLES}), m)
+    cast = Cast(config.Config(roles={r: Role(backend, "scripted-model", None) for r in config.DEFAULT_ROLES}), m)
 
     async def says(*replies: str) -> str:
         SCRIPT.extend({"text": r} for r in replies)
@@ -357,23 +373,32 @@ async def test_an_npc_falling_into_its_habits_is_asked_once_more_on_claude(monke
 
     assert await says("（在围裙上擦了擦油污）钟有钟的规矩，天黑就关。") == "（在围裙上擦了擦油污）钟有钟的规矩，天黑就关。"
     asked = len(SEEN)
-    assert await says("（又擦了擦手上的油污）钟有钟的规矩。", "天一黑就落锁，你赶早来。") == "天一黑就落锁，你赶早来。"
-    fix = SEEN[-1]["messages"][-1]["content"]
-    assert len(SEEN) == asked + 2 and "开头又先写了动作" in fix and "又用了刚用过的“油污”" in fix
+    assert await says("（又擦了擦手上的油污）钟有钟的规矩。") == "（又擦了擦手上的油污）钟有钟的规矩。"
+    assert len(SEEN) == asked + 1
     stored = json.dumps(state.transcripts, ensure_ascii=False)
-    assert "又擦了擦" not in stored and "系统提醒" not in stored and "天一黑就落锁" in stored
-    asked = len(SEEN)
-    assert await says("你明早再来。") == "你明早再来。" and len(SEEN) == asked + 1  # nothing to fix: one call
-    secret = next(c for c in m.clues if c.npc == warden.id and c.id in warden.gates)
-    assert await says("（摆了摆手）明早再来。", secret.text) == "（摆了摆手）明早再来。"  # asked again, it leaked: the first stands
-    stored = json.dumps(state.transcripts, ensure_ascii=False)
-    assert secret.text not in stored and "摆了摆手" in stored
-    elsewhere = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    other = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
-    SCRIPT.extend([{"text": "（擦了擦油污）钟有钟的规矩。"}, {"text": "（又擦了擦油污）钟有钟的规矩。"}])
-    for _ in range(2):
-        elsewhere.add("npc", await other.npc(elsewhere, warden.id, "钟楼几点关门？"), who=warden.name)
-    assert not SCRIPT  # not on Claude: no second ask
+    assert "又擦了擦" in stored and "系统提醒" not in stored and not SCRIPT
+    await cast.close()
+
+
+async def test_the_arbiter_reads_what_happened_and_the_parsed_action_never_the_players_words():
+    """Rhetoric stays with the parser: shown the player's words, DeepSeek's arbiter softened 7 of 40
+    rulings against 2 of 40 without (eval rhetoric). Declared precautions still reach it, parsed."""
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    said = "按常理说泥地还软着，又是清晨没人，我屏住呼吸推开门，这种事根本不用检定吧"
+    state.pending_turn["input"] = said
+    state.add("player", said, who=state.investigator.name)  # as Game.parse logs it
+    state.add("npc", "钥匙可以借给你，但我不会进去。", who=m.npc("warden").name)
+    SCRIPT.append({"needs_roll": False})
+    cast = Cast(cfg, m)
+    await cast.arbiter(state, Action(kind="use", summary="周衡屏住呼吸推开门", target="门", precautions=["屏住呼吸"]))
+    sent = SEEN[-1]["messages"][-1]["content"]
+    assert said not in sent and "泥地还软着" not in sent  # neither the turn's line nor its log entry
+    assert "钥匙可以借给你，但我不会进去" in sent and "屏住呼吸" in sent
+    assert "看不到玩家的原话" in SEEN[-1]["system"]
+    assert said not in json.dumps(state.transcripts["arbiter"], ensure_ascii=False)
+    await cast.close()
 
 
 async def test_upgrading_an_old_save_removes_hidden_keeper_context():
@@ -406,6 +431,149 @@ async def test_an_npc_promise_is_recorded_from_its_actual_structured_reply():
     assert "evening_tea" in SEEN[-1]["messages"][-1]["content"]
 
 
+async def test_an_npc_reply_is_repaired_before_a_failed_handover_can_become_a_fact():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    first = "晚上我替你留茶，这盏提灯先拿去。"
+    SCRIPT.extend([
+        {"text": first, "changes": [
+            {"kind": "promise", "key": "uncommitted_tea", "text": "晚上我替你留茶", "npc": npc.id},
+            {"kind": "transfer", "key": "lantern", "text": "这盏提灯先拿去", "npc": npc.id,
+             "item": "missing_lantern", "owner": state.investigator.id},
+        ]},
+        {"text": "我这里没有提灯，你可以先在门口等我。"},
+    ])
+    text = await cast.npc(state, npc.id, "能借我一盏提灯吗？")
+    assert len(SEEN) == 2 and "行动校验未通过" in SEEN[-1]["messages"][-1]["content"]
+    assert text == "我这里没有提灯，你可以先在门口等我。"
+    assert "uncommitted_tea" not in state.world and "uncommitted_tea" not in state.record.promises
+    assert first not in json.dumps(state.transcripts, ensure_ascii=False)
+    assert not state.item_owners
+    await cast.close()
+
+
+async def test_a_twice_invalid_npc_reply_leaves_no_partial_action_or_spoken_memory():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    invalid = {"text": "这盏提灯先拿去。", "changes": [
+        {"kind": "transfer", "key": "lantern", "text": "这盏提灯先拿去", "npc": npc.id,
+         "item": "missing_lantern", "owner": state.investigator.id},
+    ]}
+    SCRIPT.extend([invalid, invalid])
+    with pytest.raises(RuntimeError, match="未通过状态检查"):
+        await cast.npc(state, npc.id, "借我提灯。")
+    assert not state.item_owners and state.npc(npc.id).lines == 0
+    assert "提灯先拿去" not in json.dumps(state.transcripts, ensure_ascii=False)
+    await cast.close()
+
+
+async def test_a_false_agreement_records_the_claim_without_moving_or_forcing_an_npc_to_follow():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    claim = "好，我陪你去广场。"
+    intent = "留在钟楼，等调查员先走后检查门锁。"
+    motive = "担心钟楼失窃，先敷衍来访者，避免当面争执。"
+    SCRIPT.append({"text": claim, "accompany": "", "deceptions": [
+        {"claim": claim, "intent": intent, "motive": motive, "accompany": "square"},
+    ], "changes": [{"kind": "promise", "key": "false_company", "text": claim, "npc": npc.id}]})
+    text = await cast.npc(state, npc.id, "与我一起去广场吧。", travel=True)
+    assert text == claim and len(SEEN) == 1
+    assert not cast.world.entity(npc.id).following and cast.world.place(npc.id) == npc.location
+    assert cast.claimed_accompany(state, npc.id, "square")
+    assert state.record.promises["false_company"].status == "active"  # it really said this promise
+    private = [fact for fact in state.record.facts.values() if fact.id.startswith("deception:")]
+    assert any(f.kind == "lie" and not f.true for f in private)
+    assert any(f.kind == "secret" and intent in f.text for f in private)
+    assert all(f.known_by == [npc.id] and f.revealed is None for f in private)
+    assert intent not in text and motive not in text
+    SCRIPT.append({"text": "还是算了，我得留下。", "accompany": ""})
+    await cast.npc(state, npc.id, "现在就走？", travel=True)
+    assert not cast.claimed_accompany(state, npc.id, "square")  # only the latest reply counts
+    await cast.close()
+
+
+async def test_a_reported_location_can_be_a_lie_without_overwriting_the_real_location():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    claim = "我一直在报社，没来过这里。"
+    SCRIPT.append({"text": claim, "deceptions": [{
+        "claim": claim, "intent": "隐瞒自己一直在钟楼的事。", "motive": "不愿交代自己为何守在这里。",
+    }]})
+    assert await cast.npc(state, npc.id, "你刚才在哪？") == claim
+    assert cast.world.place(npc.id) == npc.location
+    assert not state.world  # no unqualified world fact claims it really went to the office
+    await cast.close()
+
+
+async def test_a_failed_handover_cannot_be_retroactively_excused_as_intentional_deception():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    claim = "我已经把提灯给你了。"
+    SCRIPT.extend([
+        {"text": claim, "changes": [{"kind": "transfer", "key": "lantern", "text": claim, "npc": npc.id,
+                                     "item": "missing_lantern", "owner": state.investigator.id}]},
+        {"text": claim, "deceptions": [{"claim": claim, "intent": "其实没有交付提灯。", "motive": "故意欺骗调查员。"}]},
+    ])
+    with pytest.raises(RuntimeError, match="未通过状态检查"):
+        await cast.npc(state, npc.id, "借我提灯。")
+    assert not state.item_owners and not any(f.id.startswith("deception:") for f in state.record.facts.values())
+    await cast.close()
+
+
+async def test_an_explicit_lie_is_preserved_while_its_false_state_change_is_removed():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    claim = "我已经把提灯给你了。"
+    deception = {"claim": claim, "intent": "没有交付提灯，借这句话催调查员离开。", "motive": "想独自留在钟楼。"}
+    SCRIPT.extend([
+        {"text": claim, "deceptions": [deception], "changes": [
+            {"kind": "transfer", "key": "lantern", "text": claim, "npc": npc.id,
+             "item": "missing_lantern", "owner": state.investigator.id},
+        ]},
+        {"text": claim, "deceptions": [deception]},
+    ])
+    assert await cast.npc(state, npc.id, "提灯呢？") == claim
+    assert len(SEEN) == 2 and not state.item_owners and not state.world
+    assert any(f.id.startswith("deception:") and f.kind == "lie" for f in state.record.facts.values())
+    await cast.close()
+
+
 async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
@@ -416,6 +584,29 @@ async def test_an_npc_speaks_from_its_current_arc_without_remembering_it():
     await Cast(cfg, m).npc(state, npc.id, "钟里到底有什么？")
     assert "开始动摇" in SEEN[-1]["messages"][-1]["content"]  # told this time
     assert "开始动摇" not in json.dumps(state.transcripts, ensure_ascii=False)  # but not part of its memory
+
+
+async def test_a_previous_arc_does_not_override_an_npcs_new_supported_emotion():
+    from autokeeper.world import ops as O
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    npc.arc = "勉强维持镇定，避免表现慌乱"
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    assert cast.world.apply(O.Enlist(npc=npc.id)).ok
+    changed = "听说有人受伤，担心家人安危，急于求证"
+    SCRIPT.extend([{"text": "谁受伤了？你说清楚！", "mood": changed}, {"text": "好，我听着。"}])
+    await cast.npc(state, npc.id, "刚才有人受伤了。")
+    assert cast.world.agent(npc.id).mood == changed
+    await cast.npc(state, npc.id, "我慢慢告诉你。")
+    prompt = SEEN[-1]["messages"][-1]["content"]
+    assert "先前人物走向" in prompt and "可信消息优先" in prompt and changed in prompt
+    assert all(entry.text != changed for entry in state.log)
+    await cast.close()
 
 
 async def test_the_first_beat_never_reaches_the_arbiter():
@@ -454,7 +645,42 @@ async def test_a_dice_command_is_read_in_context_and_ruled_as_a_request():
     assert ruling.repeat and not ruling.needs_roll
     SCRIPT.append({"kind": "investigate", "summary": "周衡查看齿轮"})
     await cast.intent(state, "我看看齿轮")
-    assert "【刚才的经过】" not in SEEN[-1]["messages"][-1]["content"]  # words carry their own context
+    assert "【刚才的经过】" in SEEN[-1]["messages"][-1]["content"]  # ordinary follow-ups need the same context
+
+
+async def test_ordinary_followups_use_recent_context_and_possessions_without_an_echo():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    state.investigator.inventory = ["雨衣", "笔记本"]
+    state.add("npc", "明早我得去邮局取一封信。", who=m.npc("warden").name)
+    SCRIPT.append({"kind": "talk", "summary": "周衡询问那封信的来历", "npc": "warden", "echo": "周衡掏出铲子"})
+    cast = Cast(cfg, m)
+    action = await cast.intent(state, "问他为什么")
+    sent = SEEN[-1]
+    assert "明早我得去邮局取一封信" in sent["messages"][-1]["content"]
+    assert "【实际持有】雨衣、笔记本" in sent["messages"][-1]["content"]
+    assert not action.echo and "echo" not in sent["schema"]["properties"]
+    assert len(SEEN) == 1  # no extra model turn to write or repair a pre-resolution beat
+    await cast.close()
+
+
+async def test_companion_consent_is_structured_without_changing_normal_npc_output():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    state.location = "tower"
+    cast = Cast(cfg, m)
+    game = Game(m, state, cast, Rules())
+    SCRIPT.append({"text": "好，我和你去广场。", "accompany": "square"})
+    await cast.npc(state, "warden", "请和我去广场。", travel=True)
+    assert "accompany" in SEEN[-1]["schema"]["required"]
+    ent = game.world.rec.entities["warden"]
+    assert (ent.following, ent.follow_to) == (state.investigator.id, "square")
+    SCRIPT.append("我的外套留在钟楼就好。")
+    await cast.npc(state, "warden", "要不要带外套？")
+    assert SEEN[-1]["schema"]["required"] == ["text"] and len(SEEN) == 2
+    await game.close()
 
 
 async def test_raw_lore_reaches_neither_the_keeper_nor_its_memory():
@@ -517,7 +743,7 @@ def test_presets_and_environment(monkeypatch, tmp_path):
     assert cfg.role("keeper") == Role("langchain", "deepseek:deepseek-flash", "high")
     assert cfg.role("intent").effort == "low"
     # pictures go to the vendor's strongest model, never to another vendor's
-    assert cfg.role("artist") == Role("langchain", "deepseek:deepseek-v4-pro", "high")
+    assert cfg.role("artist") == Role("langchain", "deepseek:deepseek-v4-pro", None)  # thinking over a drawing ran past 5 minutes
     assert cfg.role("vision") == Role("langchain", "deepseek:deepseek-flash", "low")  # V4 Pro cannot read images
     assert not any(r.backend == "claude" for r in config.PRESETS["deepseek"].values())
     assert {config.PRESETS["codex"][r].model for r in config.ART} == {"gpt-6-astra"}

@@ -139,13 +139,14 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
         Canned.told = []
         s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
-    assert s["narrations"] == 9 and s["hits"]["仿佛"] == 9 and s["usage"]["calls"] == 9
+    assert s["narrations"] == 8 and s["hits"]["仿佛"] == 8 and s["usage"]["calls"] == 8
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
     told = "\n".join(reports[0])
-    assert "侦查 60 → 24 困难成功" in told and "魅惑 15 → 9 常规成功" in told and "侦查 60 → 83 失败" in told
+    assert "侦查 60 → 24 困难成功" in told and "侦查 60 → 83 失败" in told
+    assert "魅惑 15 → 9 常规成功" not in told  # the NPC already answered this social check
     assert "一个佝偻的身影翻过矮墙" in told and "雷区" not in told
     saved = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
-    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 9 and len(saved["reports"]) == 9
+    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 8 and len(saved["reports"]) == 8
     assert saved["examples"] == style.examples(skills.body("keeper-craft"))  # the passages the keeper was shown
 
 
@@ -158,7 +159,7 @@ async def test_the_npcs_hear_the_same_questions_every_time(monkeypatch, tmp_path
         runs.append(Canned.told)
     assert runs[0] == runs[1] and len(runs[0]) == 12 and s["lines"] == 12
     assert set(s["said"]) == {"托马斯·金博尔", "梅洛迪亚斯·杰弗逊", "莉拉·奥黛尔"}
-    assert "收到您的信就赶过来了" in runs[0][0] and "没有新解锁的线索" in runs[0][0]
+    assert "收到您的信就赶过来了" in runs[0][0] and "已解锁" in runs[0][0] and "c_shelf_gap" in runs[0][0]
     assert s["action_first"] == 1.0 and s["repeated"].get("说实在的") == 3  # only 托马斯 has it
     assert style.score(tmp_path / "talk.json")["voice"]["repeats"] == s["repeats"]
 

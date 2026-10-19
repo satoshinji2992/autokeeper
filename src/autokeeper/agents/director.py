@@ -11,14 +11,20 @@ it into this game only.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..plugins.schema import Plugin
+from ..world.ops import Condition, Enlist, Learn, Move, Occur, Relate, Rewrite, Schedule, SetPlan
 from .writing import INTERFACE_COPY
+
+# What the director may do backstage, in the world record (world/ops.py): rewrite what the players
+# have not met, make an NPC important and give it a plan, arrange what happens at an hour.
+WorldOp = Annotated[Rewrite | Enlist | SetPlan | Schedule | Relate | Learn | Occur | Move | Condition, Field(discriminator="kind")]
 
 Kind = Literal["开局改编", "展开", "后果", "推进"]
 
@@ -69,7 +75,12 @@ class NewItem(BaseModel):
     name: str
     description: str = Field(description="物件看得见的形状、材质、颜色；不夹带未发现的线索或物品效果")
     where: str = Field(description="出现的地点 id")
-    owner: str = Field("", description="初始持有者 NPC id，例如店主的商品；地上或无人持有的物品留空")
+    owner: str = Field("", description="初始持有者 NPC 或调查员 id；地上或无人持有的物品留空")
+    important: bool = Field(True, description="武器、钥匙、证物、关键工具或重要消耗品才登记；普通摆设不要建立库存")
+    equipment: Literal["carried", "worn", "held", "concealed"] = "carried"
+    quantity: int = Field(1, ge=0)
+    status: str = Field("", max_length=100)
+    hidden: bool = Field(False, description="隐藏物品或NPC私人物品不写进地点公开features，发现后再公开")
 
 
 class NewEvent(BaseModel):
@@ -129,23 +140,30 @@ class Improv(BaseModel):
     go: str = Field("", description="这一轮调查员去到哪个地点（新建的或已有的 id），不移动就留空")
     give: list[str] = Field(default_factory=list, description="这一轮马上交给调查员的线索 id")
     note: str = Field("", description="本轮可公开描写的动作或氛围，不包含未解锁线索、真相、秘密或未来安排")
+    backstage: list[WorldOp] = Field(default_factory=list, max_length=6,
+                                     description="幕后的安排，玩家看不到：改写还没公开的设定、让 NPC 有自己的打算、安排到点发生的事；用不着就留空")
+    reads: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict, exclude=True)  # world versions it was made from (desk.py)
 
 
 DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到的地方即兴，让故事走下去。你的方案会写进本局的模组，守秘人、裁定员和 NPC 照着演。
 
 世界观不能破：
-- 时代、地点、神话设定和真相都以模组为准。不引入模组之外的神话存在，不出现那个年代没有的东西，不改写模组真相（谁做了什么、发生过什么、怪物是什么）。
+- 时代、地域与神话体系以模组为准。已向玩家建立的事实保持一致；未公开的秘密、动机、往事和真相可为改善剧情而调整，玩家见过、听过的事也可以为阴谋或剧情改出另一个真相，但只能通过 backstage 的 rewrite 提交并接受世界记录校验，不能靠新增旁白或传言暗中覆盖。
 - 新人物、新地点要像本来就在这个故事里：符合时代和地方，和已有的人和事有关联。
-- 新人物知道的事、嘴里的传言，不能推翻模组写明的事实（谁住在哪、谁失踪了、谁在做什么）。传言可以不准，只能错在细节上。
+- 新人物的消息有来源和局限。传言可以错误，但须作为人物的说法存在，不由旁白替它作证；未获批准的改写不能当成新事实使用。
 - 新人物写出 look；地点的 read_aloud 和物件的 description 写出能画出来的外观，后台美术会据此独立配图。
   玩家拿起来看、打算购买或特别在意的物件写进 items（最多三件），不要把所有桌椅餐具逐个登记。登记不代表已经买到或获得特殊效果。
 - 不是玩家想要什么就给什么。新线索要靠调查得来，不能直接说出真相，也不能顶替模组的关键线索。
 - 对不符合时代或能力的行动，依据既有设定说明缺少的条件，不代替调查员执行失败动作，也不擅自补出随身物品。
 
 张力与日常：
+- 导演服务于这个模组的恐怖与戏剧，不承担安抚调查员或让人物友善的任务。人物可以残酷、自私、偏执、狂热、报复、背叛或崩溃；受挫后也可能孤注一掷。依据其欲望、恐惧、关系与可用手段决定，不把所有人写成讲道理的协助者，也不强迫每个人都敌视调查员。
+- 需要施压时，可以安排围猎、离间、勒索、毁证、陷阱或对重要关系的威胁。先落实行动者知道什么、为什么此时动手、凭什么做得到、实际改变什么，并让相关人物有自己的反应；恶意与苦难可以成为故事核心，不必立刻安慰或补偿。
 - 张力要有起伏。调查和冒险中的阻力来自人物的利益、实际危险和已有时钟；吃饭、问路、投宿、闲聊可以顺利发生，不必每一步都付代价。
+- 需要冲突时，先看谁想得到什么、准备怎样行动，以及调查员的选择会改变谁的处境。让具体行动造成压力，交代可察觉的征兆与应对空间；不靠连番异响、突然袭击、所有人隐瞒来维持紧张。计划允许被打断、识破或绕过，不保证预设高潮必然发生。
+- 成功可以改变局势，代价也可以留下不可逆的损失。若人物隐瞒、假装示好或设局，不提前揭穿真实动机；把公开说法与后台计划分别安排。伤害、理智损失和行动是否得逞仍须通过事件与规则结算，不能用旁白宣布调查员恐惧、信任、绝望、投降或失去选择。
 - 日常不是空转。给地方一种营生、给人一件正忙的事或一个私人牵挂，让关系有机会发生；普通人可以只知道日常的事，饭馆不必藏线索。
-- 玩家主动停下来生活，就接住这个意图，不往事件里塞袭击、怪异预兆或催促查案。玩家明确想赶路就简短交代，不强制演完所有琐事。
+- 玩家主动停下来生活，就接住这个意图，不因为他没有查案而额外塞入袭击、怪异预兆或催促。已经运作的敌对计划、时限与危险仍会发展，不因休息自动暂停。玩家明确想赶路就简短交代，不强制演完所有琐事。
 - 展开前先看玩家已表达的需求、预算、兴趣和已有关系，优先利用已出现的人、地点与联系；确有空缺再新增，不把每个生活场景写成新任务。
 - NPC 的目标与营生、处境相符，区分亲历、转述和推测，不让多人重复传言就变成事实；案情仍遵守线索权限。玩家谢绝推销、帮助或邀约后，按人物动机和已有关系处理，不自动升级冲突。
 - 开局改编时依照调查员的来意补生活与关系，保留原模组的矛盾；不强制预埋额外冲突，也不另设催玩家查案的时限。
@@ -173,10 +191,19 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - 写短：reason 不超过 60 字，read_aloud 不超过 150 字，note 不超过 40 字，比如“奥马利的电报到了，顺势引出他”。
 
 插件（面板、演出、小游戏）：
-- 场面需要一个机制、一个小游戏、一段演出或一个进度条时，比如仪式倒数、调查板、追逐、谜题、降神会，主动考虑在 plugins 写一个插件，别只写一段 read_aloud。插件能在右栏放面板，在场景上放几秒演出，给玩家出选择、填空、排序或棋盘小游戏，答案回到插件里接着算。
+- 场面确实需要持续记录或新的交互，且现有规则与世界记录无法处理时，才在 plugins 写插件。普通交谈、一次动作和已有计划不需另做小游戏或进度条。插件能在右栏放面板、播放演出或提供可选的互动题目，答案返回插件继续结算。
 - 面板、演出和题目玩家都看得见：只放已经发生、可以公开的东西，不泄露真相、秘密和没找到的线索。小游戏可玩可不玩，不卡主线，不凭空送关键线索。
 - 每局最多写 6 个插件；已有的插件合用就升级它（提高 version）。
-- 例子：调查员要在阁楼守夜等仪式开始。写一个插件，start 时放面板 {"key":"ritual","title":"仪式倒数","rows":[{"kind":"bar","text":"烛火","value":6,"max":6,"color":"warning"}]}，每个 turn 减一格，到 0 时返回一段 {"kind":"show","shape":"stage","frames":[...]}。""" + """
+- 例子：调查员要在阁楼守夜等仪式开始。写一个插件，start 时放面板 {"key":"ritual","title":"仪式倒数","rows":[{"kind":"bar","text":"烛火","value":6,"max":6,"color":"warning"}]}，每个 turn 减一格，到 0 时返回一段 {"kind":"show","shape":"stage","frames":[...]}。
+
+幕后（backstage）：
+- 【世界】里是这一局幕后的记录：重要 NPC 的目标和计划、线头、约定、关系，玩家还不知道的设定，玩家已经知道的事，以及玩家手里线索的原文这类不能动的东西。
+- 玩家还没接触到的设定可以改写（rewrite）：秘密、动机、没找到的线索、没人知道的往事。用它把调查员的背景接进故事，或者把这一轮的即兴圆进去。已经找到的线索，改写后仍要说得通；不能借改写让调查员知道什么。
+- 看到能让跑团更顺、冲突更有戏的地方，就主动改写：线索断在一个找不到的人身上，就让够得着的人也知道；两个人物的打算能撞到一起，就改他们的往事让它撞上。没有这样的地方就不改。
+- 玩家见过、听过的事，为了阴谋或剧情也可以改出另一个真相（有人撒谎、记错、伪造、设局、假扮），但要自圆其说：reason 写清玩家当初为什么会听到、看到那样，他们知道的其他事也都还说得通。玩家手里线索的原文不能改，要改的是它背后的事。改写只改真相，不挪人，也不改东西在谁手里。
+- 人物要有自己的打算：enlist 让一个 NPC 成为重要 NPC（每局最多 6 个），plan 给重要 NPC 定几步计划，写清什么时候、什么条件下做；调查员不在场时，他会在幕后照着做下去。schedule 安排一件到点才发生的事。
+- 把敌意落实为这些人物能够执行的步骤、资源与时机，不只写一句“暗中筹划”。模型负责理解复杂动机、矛盾和临场变化，不预设固定的恐惧阈值、恶意频率或每轮冲突指标。后台校验检查的是依据、权限和执行结果，不因角色行事卑劣而撤销计划。
+- 时间写成游戏分钟数，【世界】里写着现在是第几分钟。引用的 id 只用【世界】和上面资料里有的，或者这次方案里新建的。用不着就留空，一次最多 6 条。""" + """
 
 输出文体：
 - read_aloud 采用连贯的场景叙述，信息交代完整即可结束，不固定堆叠感官描写或制造悬念。
@@ -184,7 +211,7 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - 插件名称、面板、选项、公开状态和规则提示采用以下界面规范；叙事与台词不套用界面语气。""" + "\n\n" + INTERFACE_COPY
 
 
-def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: str = "", at: str = "") -> str:
+def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: str = "", at: str = "", world: str = "") -> str:
     """Everything the director must not contradict, and what it was called for."""
     found = set(st.clues)
     here = m.location(at or st.location)
@@ -199,7 +226,7 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
         f"【这次的任务】{kind}",
         f"【模组】《{m.title}》 {m.era} {m.setting}".rstrip(),
         f"【开场钩子（玩家知道）】{m.hook.strip()}",
-        f"【真相（只有守秘人知道，不能改）】{m.truth.strip()}",
+        f"【当前真相（幕后资料；调整须通过 rewrite 校验）】{m.truth.strip()}",
         "【结论】" + "；".join(f"{k.id}：{k.text}" for k in m.conclusions),
         "【结局】" + "；".join(f"{e.id}「{e.title}」条件 {e.condition}" for e in m.endings),
         "【剧情标记】" + "；".join(f"{k}：{v}{'（已达成）' if k in st.flags else ''}" for k, v in m.flags.items()),
@@ -219,6 +246,13 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
         "【本局的规则插件】" + ("；".join(f"{x.id} v{x.version}「{x.name}」" for x in m.extensions.values()) or "无")
         + f"（导演已写 {len(m.directed)}/6 个）",
     ]
+    if m.ties:  # threads the investigators' backgrounds can be tied to (Module.ties)
+        lines.append("【可以接上调查员背景的线头】\n" + "\n".join(f"- {t.hook}" + (f"（{t.npc or t.place}）" if t.npc or t.place else "")
+                                                         + (f"，适合：{'、'.join(t.fits)}" if t.fits else "") for t in m.ties))  # fmt: skip
+    if wanted := [x for x in m.mechanics if not x.plugin]:
+        lines.append("【模组需要、还没有插件的规则】\n" + "\n".join(f"- {x.name}：{x.rules}" for x in wanted))
+    if world:  # the world record's backstage, as the director may see it (world/context.director_view)
+        lines.append(f"【世界】现在是第 {st.minutes} 分钟。\n{world}")
     if action:
         lines.append(f"【调查员的行动】{action}")
     if reason:
