@@ -68,7 +68,7 @@ class SceneArt(Static):
         self.sky = ""  # the narrated weather, for places under the open sky
         self.style_name = "picture"
         self.when = ""  # time of day, lights the art
-        self.effects = True  # weather animation (the Ctrl+P menu switches it)
+        self.effects = True  # weather animation (Esc menu → 设置 switches it; Ctrl+P too)
         self.madness = 0.0
         self._burst = 0
         self._art: Text | None = None  # the current art, ready to paint
