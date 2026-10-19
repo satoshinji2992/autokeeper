@@ -73,7 +73,9 @@ class PluginsModal(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(classes="modal"):
             yield Static("规则插件", classes="modal-title")
-            lead = "本局之外的额外规则。暂停后会保留已有状态。" if self.manage else "本局的额外规则由房主管理，结果会同步到这里。"
+            lead = ("本局之外的额外规则。暂停后会保留已有状态。" if self.manage else
+                    "本局的额外规则在你的电脑上运行，结果会同步给所有人。" if self.send else
+                    "本局的额外规则由房主管理，结果会同步到这里；想加家规，跟房主说一声。")
             yield Static(Text(lead, style="dim"), id="plugin-lead")
             yield from self._list()
             if self.drafter or self.send:

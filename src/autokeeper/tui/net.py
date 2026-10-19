@@ -204,9 +204,10 @@ class NetGameScreen(GameScreen):
         def send(text: str) -> None:
             self.run_worker(partial(self.link.send, {"t": "house_rule", "text": text}))
 
-        # Read-only view of the same public rule information, plus a box to ask the host for a
-        # house rule; the host drafts and installs it, and the result syncs back.
-        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.seat else None))
+        # Read-only view of the same public rule information. The host also gets a box for a
+        # house rule: its code runs on the host's machine, so only they can add one; the Hub
+        # drafts and installs it, and the result syncs back.
+        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.link.host else None))
 
     SHOW_ENGINE = True  # "轮到谁" is on the top bar
 

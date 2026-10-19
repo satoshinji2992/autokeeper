@@ -332,10 +332,10 @@ class Hub:
                 await self._send(cid, {"t": "ideas", "ideas": []})
             elif cid not in self.thinking:  # one at a time: each costs the host a call
                 self.thinking[cid] = asyncio.create_task(self._ideas(cid, seat))
-        elif t == "house_rule":
+        elif t == "house_rule":  # the rule's code runs on the host's machine: only the host asks for one
             text = str(msg.get("text", "")).strip()[:500]
-            if self._seat_of(cid) is None and cid not in self.hosts:
-                await self._send(cid, {"t": "error", "text": "你在观战，不能加规则"})
+            if cid not in self.hosts:
+                await self._send(cid, {"t": "error", "text": "家规只能由房主添加，跟房主说一声"})
             elif text:
                 self.rules.put_nowait((cid, text))
                 self.wake.set()

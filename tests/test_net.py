@@ -169,6 +169,27 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
     assert (tmp_path / "saves" / "lan-test.json").exists()  # the host saves after every turn
 
 
+async def test_only_the_host_adds_a_house_rule(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        guest = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await guest.send_json({"t": "hello", "name": "小红"})
+        await until(guest, lambda x: x["t"] == "welcome")
+        await guest.send_json({"t": "sit", "investigator": "zhouheng"})
+        await guest.send_json({"t": "house_rule", "text": "每过一夜要吃一顿饭"})  # its code would run on the host's machine
+        assert "房主" in (await until(guest, lambda x: x["t"] == "error"))["text"] and hub.rules.empty()
+        host = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await host.send_json({"t": "hello", "name": "小明", "key": hub.key})
+        await until(host, lambda x: x["t"] == "welcome")
+        await host.send_json({"t": "house_rule", "text": "每过一夜要吃一顿饭"})
+        await until(host, lambda x: x["t"] == "error" and "讲完" in x["text"])
+        await guest.close()
+        await host.close()
+    await closed(task)
+
+
 async def test_everyone_has_a_slot_and_one_player_may_take_the_extra_one(skills_dir, fake):
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
