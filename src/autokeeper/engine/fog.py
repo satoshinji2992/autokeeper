@@ -20,6 +20,9 @@ the town centre shows); any other is found only by going that way from next door
 module's exits allow. Naming a secret from across town takes no one there (Game.resolve),
 and the action parser is only ever given the places they could head for (bearings), so a
 name it never saw cannot end up on a player's screen.
+
+The map (chart) is drawn from the same knowledge, and a shared table's screens get no more
+of the module than it needs (net/hub.py table): drawn from that copy, it comes out the same.
 """
 
 from __future__ import annotations
@@ -28,11 +31,13 @@ import logging
 import re
 import warnings
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 import networkx as nx
 
 from ..module.schema import Module
+from . import world
 from .state import GameState
 
 with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
@@ -230,3 +235,118 @@ def bearings(m: Module, st: GameState) -> dict[str, str]:
         if e not in out and names.get(e):
             out[e] = names[e][-1]  # shortest: the head of the name, without whose it is or what lives there
     return {loc.id: out[loc.id] for loc in m.locations if loc.id in out and loc.id != st.location}
+
+
+# -- the map ----------------------------------------------------------------------------------
+@dataclass
+class Chart:
+    """The places the investigators know and the ways between them (tui/mapview.py draws it)."""
+
+    here: str
+    names: dict[str, str]  # every place on the map -> the name it has there
+    kinds: dict[str, str]  # -> "here", "been" (stopped there or walked through) or "heard"
+    roads: list[tuple[str, str]] = field(default_factory=list)  # between places they have been
+    trails: list[tuple[str, str]] = field(default_factory=list)  # to a place they saw, or were shown, from where they stood
+    rumours: dict[str, str] = field(default_factory=dict)  # heard of, the way there unknown: listed below the map
+    within: dict[str, str] = field(default_factory=dict)  # a place on the map -> the one on the map it lies in
+
+
+def chart(m: Module, st: GameState) -> Chart:
+    """Only what the investigators know: places they have been to or heard of, never one they
+    have not, not even as a blank (a door to nowhere gives a secret away). A road joins two
+    places they have been to; a trail leads from where they stood to a place they saw or were
+    shown from there (its read-aloud, the clues found there). The rest of what they heard of
+    has no known way there yet, and stays off the map with whatever it lies in."""
+    places = {loc.id: loc for loc in m.locations}
+    g = network(m)
+    visited = [v for v in dict.fromkeys([*st.visited, st.location]) if v in places]
+    told = heard(m, st)
+    there = been(m, st, told)
+    trails: list[tuple[str, str]] = []
+    for v in visited:  # they looked around where they stopped, not on the way through
+        named = mentions(m, [places[v].read_aloud, *(f"{c.title}\n{c.text}" for c in m.clues if c.where == v and c.id in st.clues)])
+        trails += [(v, p) for p in places if p in named and p in told and p not in there and g.has_edge(v, p)]
+    pointed = {p for _, p in trails}
+    names = {p: places[p].name for p in places if p in there} | {p: told[p] for p in places if p in pointed}
+    kinds = {p: "heard" if p in pointed else "been" for p in names}
+    if st.location in kinds:
+        kinds[st.location] = "here"
+    return Chart(
+        here=st.location,
+        names={p: names[p] for p in places if p in names},  # module order: the same map every time
+        kinds=kinds,
+        roads=[(a, b) for a, b in g.edges if a in there and b in there],
+        trails=trails,
+        rumours={p: told[p] for p in places if p in told and p not in names},
+        within=_within(m, set(names)),
+    )
+
+
+def _within(m: Module, drawn: set[str]) -> dict[str, str]:
+    """What lies in what, among the places on the map; a loop in a broken module is cut."""
+    out = {loc.id: loc.within for loc in m.locations if loc.id in drawn and loc.within in drawn and loc.within != loc.id}
+    for place in list(out):
+        seen, at = {place}, out.get(place)
+        while at in out and at not in seen:
+            seen.add(at)
+            at = out[at]
+        if at == place:
+            del out[place]
+    return out
+
+
+def minutes(m: Module, a: str, b: str) -> int:
+    """The walk from a place to its neighbour, as the game clock counts it (Game._edge_time)."""
+    there, back = m.location(a).travel_minutes, m.location(b).travel_minutes
+    return max(0, min(720, there.get(b, back.get(a, 10))))
+
+
+def met(m: Module, st: GameState) -> dict[str, list[str]]:
+    """The people the investigators have met, by the place they keep to (only where they have stopped)."""
+    stopped = set(st.visited) | {st.location}
+    out: dict[str, list[str]] = {}
+    for n in m.npcs:
+        if n.location in stopped and st.npcs.get(n.id) and st.npcs[n.id].met:
+            out.setdefault(n.location, []).append(n.name)
+    return out
+
+
+def found(m: Module, st: GameState) -> dict[str, list[str]]:
+    """The titles of the clues found, by the place they were found at, in the order found."""
+    clues = {c.id: c for c in m.clues}
+    out: dict[str, list[str]] = {}
+    for cid in st.clues:
+        if cid in clues and clues[cid].where:
+            out.setdefault(clues[cid].where, []).append(clues[cid].title)
+    return out
+
+
+def things(m: Module, st: GameState) -> dict[str, str]:
+    """The things the investigators know are lying at a place: item id -> place. They saw it
+    there (named in what they saw on arriving, or in a clue found there) or left it there. What
+    an investigator holds is on their sheet; what someone was handed goes with them."""
+    places = {loc.id for loc in m.locations}
+    seen: dict[str, list[str]] = {}
+    for v in dict.fromkeys([*st.visited, st.location]):
+        if v in places:
+            seen.setdefault(v, []).append(plain(m.location(v).read_aloud))
+    for c in m.clues:
+        if c.id in st.clues and c.where in places:
+            seen.setdefault(c.where, []).append(plain(f"{c.title}{c.text}"))
+    out: dict[str, str] = {}
+    for item in m.items:
+        holder = world.owner(m, st, item.id)
+        place = holder if holder in places else item.where if item.owner and holder == item.owner and item.id not in st.item_owners else ""
+        if place and (st.item_owners.get(item.id) == place or any(h in text for text in seen.get(place, []) for h in _heads(item.name))):
+            out[item.id] = place
+    return out
+
+
+@lru_cache(maxsize=256)
+def _heads(name: str) -> tuple[str, ...]:
+    """A thing's name as it comes up in text: in full or by its head (典籍 for 卡德威尔家的典籍).
+    Unlike a place's, not weighed against the other things' names: those a shared table's
+    screens never get must not change what they read."""
+    words = [w for w in jieba.lcut(name) if plain(w)]
+    heads = {plain("".join(words[i:])) for i in range(1, len(words)) if words[i] not in _JOINS}
+    return tuple(h for h in {plain(name), *heads} if len(h) >= 2 and h not in GENERIC)
