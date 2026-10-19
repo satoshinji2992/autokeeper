@@ -249,6 +249,9 @@ class Hub:
                 self.names[cid] += "·房主"
             await self._send(cid, self._welcome(cid))
             await self._broadcast({"t": "seats", "seats": self._seats()})
+            if (theirs := msg.get("version")) and theirs != __version__:  # the host hears it; the friend's own lobby says so too
+                for host in self.hosts - {cid}:
+                    await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
         elif t == "start":

@@ -47,7 +47,7 @@ def back_to_room(app: Any) -> Screen | None:
 
 class HostScreen(Screen):
     CSS_PATH = "room.tcss"
-    BINDINGS = [Binding("escape", "back", "返回")]
+    BINDINGS = [Binding("escape", "back", "返回"), Binding("f1", "help", "遇到问题")]
 
     def __init__(self) -> None:
         super().__init__()
@@ -59,6 +59,8 @@ class HostScreen(Screen):
         self.party: list[Investigator] = []  # the seats: the module's pregens, or the saved party
         self.plan: dict[str, str] = {}  # investigator id -> 玩家 / AI / 不上场
         self.faces: dict[tuple[str, str], Text] = {}
+        self.ports = (lan.HUB_PORT, lan.WEB_PORT)  # taken ones are swapped for free ones (net/room.py any_port)
+        self.trouble = ""  # the last error's technical part, for the 遇到问题 page
 
     def compose(self) -> ComposeResult:
         last = lan.recall()
@@ -76,16 +78,12 @@ class HostScreen(Screen):
                         with Horizontal(classes="field"):
                             yield Static("名字", classes="field-label")
                             yield Input(str(last.get("name", "")), placeholder="房主", id="host-name", max_length=16, compact=True)
-                        with Horizontal(classes="field"):
-                            yield Static("联机端口", classes="field-label")
-                            yield Input(str(last.get("port", lan.HUB_PORT)), id="host-port", type="integer", max_length=5, compact=True)
-                            yield Static("网页端口", classes="field-label")
-                            yield Input(str(last.get("web_port", lan.WEB_PORT)), id="host-web-port", type="integer", max_length=5, compact=True)
                         yield Checkbox("同时开网页版", bool(last.get("web", True)), id="host-web", compact=True)
                         yield Static(id="host-note")
                         with Horizontal(classes="buttons"):
                             yield Button("开房间", id="host-open", variant="primary", compact=True)
                             yield Button("返回", id="host-back", compact=True)
+                            yield Button("遇到问题", id="host-help", compact=True)
                     with VerticalScroll(id="host-preview"):
                         yield Static(id="host-card")
             yield Static(id="setup-hint")
@@ -97,7 +95,7 @@ class HostScreen(Screen):
         self._show_modules()
 
     def on_resize(self, event: events.Resize) -> None:
-        self.set_class(event.size.width < NARROW, "-narrow")
+        self.set_class(event.size.width < NARROW + 14, "-narrow")  # the form and a whole card need about 110 columns
 
     def action_back(self) -> None:
         if self.step == "room":
@@ -291,8 +289,6 @@ class HostScreen(Screen):
         players = sum(1 for v in self.plan.values() if v == "玩家")
         ai = sum(1 for v in self.plan.values() if v == "AI")
         t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
-        if players:
-            t.append(f" · 每轮 {lan.round_size(players)} 条行动")
         if self.slot:
             t.append(" · 接着玩存档")
         self.query_one("#host-note", Static).update(t)
@@ -302,24 +298,20 @@ class HostScreen(Screen):
     def _back(self) -> None:
         self.action_back()
 
+    @on(Button.Pressed, "#host-help")
+    def action_help(self) -> None:
+        from .trouble import TroubleModal
+
+        self.app.push_screen(TroubleModal({"port": self.ports[0], "web": self.ports[1]}, detail=self.trouble))
+
     @on(Input.Submitted, "#host-room Input")
     @on(Button.Pressed, "#host-open")
     def open_room(self) -> None:
         if self.path is None or self.module is None:
             return
         name = self.query_one("#host-name", Input).value.strip()[:16] or "房主"
-        try:
-            port, web_port = (int(self.query_one(f"#{i}", Input).value) for i in ("host-port", "host-web-port"))
-        except ValueError:
-            self.app.notify("端口要填数字", severity="error")
-            return
+        port, web_port = self.ports
         web = self.query_one("#host-web", Checkbox).value
-        if not (1 <= port <= 65535 and 1 <= web_port <= 65535):
-            self.app.notify("端口要在 1 到 65535 之间", severity="error")
-            return
-        if web and port == web_port:
-            self.app.notify("联机端口和网页端口不能一样", severity="error")
-            return
         seats = [self.plan.get(inv.id, "AI") for inv in self.party]
         if all(s == "不上场" for s in seats):
             self.app.notify("至少要有一位调查员上场", severity="error")
@@ -340,7 +332,7 @@ class HostScreen(Screen):
         if (old := getattr(self.app, "room", None)) is not None:  # one room at a time; this one had stopped
             self.app.room = None  # type: ignore[attr-defined]
             await asyncio.to_thread(old.close)
-        room = lan.Room(self.path, seats=seats, state=state, port=port, web_port=web_port)
+        room = lan.Room(self.path, seats=seats, state=state, port=port, web_port=web_port, any_port=True)
         try:
             await asyncio.to_thread(room.open)
             if web:
@@ -349,11 +341,12 @@ class HostScreen(Screen):
                     await asyncio.to_thread(room.start_web, log)
         except lan.RoomError as exc:
             await asyncio.to_thread(room.close)
-            self.app.notify(str(exc), title="房间没开成", severity="error", timeout=10)
+            self.trouble = exc.detail
+            self.app.notify(f"{exc}。看「遇到问题」", severity="error", timeout=10)
             button.disabled = False
             hint.update(ROOM_KEYS)
             return
-        lan.remember(name=name, port=port, web_port=web_port, web=web)
+        lan.remember(name=name, web=web)
         self.app.room = room  # type: ignore[attr-defined]
         from .lobby import LobbyScreen
 

@@ -41,7 +41,12 @@ FAKE_IP = ipaddress.ip_network("198.18.0.0/15")  # what proxy TUNs answer from
 
 
 class RoomError(Exception):
-    """The room did not open: a seat plan that makes no sense, a port already taken."""
+    """The room did not open: one plain sentence for the player, and the technical part
+    (ports, exit codes, the log) for the 遇到问题 page."""
+
+    def __init__(self, message: str, detail: str = ""):
+        super().__init__(message)
+        self.detail = detail
 
 
 # -- addresses ------------------------------------------------------------------------------
@@ -160,6 +165,13 @@ def remember(**changes: Any) -> None:
         target.write_text(json.dumps(recall() | changes, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+def free_port() -> int:
+    """A port nobody listens on now, from the system."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("0.0.0.0", 0))
+        return s.getsockname()[1]
+
+
 def port_free(port: int) -> bool:
     """Nothing listens on it yet (the page's port is checked before its process starts)."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -185,11 +197,13 @@ class Room:
         port: int = HUB_PORT,
         web_port: int = WEB_PORT,
         host: str = "0.0.0.0",
+        any_port: bool = False,
         cast: Any = None,
         rules: Any = None,
     ):
         self.dir, self.seats, self.state, self.cast, self.rules = Path(module_dir), seats, state, cast, rules
         self.host, self.port, self.web_port = host, port, web_port
+        self.any_port = any_port  # a port already taken: another one, without asking (the title screen's rooms)
         self.hub: Hub | None = None
         self.page: subprocess.Popen | None = None
         self.error: BaseException | None = None
@@ -213,12 +227,12 @@ class Room:
         self._thread.start()
         if not self._ready.wait(timeout):
             self.close()
-            raise RoomError(f"房间 {timeout:.0f} 秒还没开好")
+            raise RoomError("房间没开成", f"{timeout:.0f} 秒还没开好")
         if self.error is not None or self.hub is None:
             error, built = self.error, self.hub is not None
             self.close()
             if built and isinstance(error, OSError):  # the module loaded: it is the port
-                raise RoomError(f"联机端口 {self.port} 用不了，可能已经开着一个房间（{error.strerror or error}）") from error
+                raise RoomError("房间没开成，可能已经开着一个", f"联机端口 {self.port}：{error.strerror or error}") from error
             raise RoomError(str(error) or type(error).__name__) from error
         return self.hub
 
@@ -241,8 +255,11 @@ class Room:
         try:
             while not hub.port:
                 if serving.done():
-                    await serving  # it could not listen: the error goes to open()
-                    return
+                    if serving.exception() is None or not isinstance(serving.exception(), OSError) or not self.any_port or not self.port:
+                        await serving  # it could not listen: the error goes to open()
+                        return
+                    self.port = 0  # taken: one the system picks
+                    serving = asyncio.create_task(hub.serve(self.host, 0))
                 await asyncio.sleep(0.02)
             self.port = hub.port
             rows = addresses()
@@ -260,7 +277,9 @@ class Room:
         output goes (the console when None). Raises RoomError."""
         assert self.hub is not None, "open() first"
         if not port_free(self.web_port):
-            raise RoomError(f"网页端口 {self.web_port} 被占用了")
+            if not self.any_port:
+                raise RoomError("网页版没开起来，可能已经开着一个房间", f"网页端口 {self.web_port} 被占用了")
+            self.web_port = free_port()
         url = page_url(addresses()[0][0], self.web_port)
         argv = [sys.executable, "-m", "autokeeper.net.web", str(self.port), str(self.web_port), url]
         env = os.environ | {"PYTHONIOENCODING": "utf-8"}
@@ -270,12 +289,12 @@ class Room:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.page.poll() is not None:
-                raise RoomError(f"网页版没开起来（退出码 {self.page.returncode}），记录在 {config.SAVES / 'web.log'}")
+                raise RoomError("网页版没开起来", f"网页进程退出了（退出码 {self.page.returncode}），记录在 {config.SAVES / 'web.log'}")
             with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", self.web_port), 0.3):
                 self.shared["web"] = self.web_port
                 return url
             time.sleep(0.1)
-        raise RoomError(f"网页版 {timeout:.0f} 秒还没开好")
+        raise RoomError("网页版没开起来", f"{timeout:.0f} 秒还没开好，记录在 {config.SAVES / 'web.log'}")
 
     def wait(self) -> None:
         """Until the room closes; Ctrl+C gets through."""

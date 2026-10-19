@@ -13,7 +13,6 @@ import subprocess
 from typing import Any
 from urllib.parse import urlparse
 
-from rich.console import Group
 from rich.table import Table
 from rich.text import Text
 from textual import events, on, work
@@ -86,6 +85,7 @@ class LobbyScreen(Screen):
         Binding("s", "start", "现在开始"),
         Binding("c", "sheet", "人物卡"),
         Binding("x", "close_room", "关闭房间"),
+        Binding("h", "help", "遇到问题"),
     ]
 
     def __init__(self, address: str, name: str, *, key: str = "", room: lan.Room | None = None):
@@ -121,12 +121,15 @@ class LobbyScreen(Screen):
                 yield Button("现在开始", id="start", compact=True)
                 yield Button("人物卡", id="sheet", compact=True)
                 yield Button("离开", id="leave", compact=True)
+                yield Button("遇到问题", id="help", compact=True)
                 yield Button("关闭房间", id="close_room", variant="error", compact=True)
         yield Footer()
 
     async def on_mount(self) -> None:
         self.query_one("#seats", OptionList).border_title = "座位"
         self.query_one("#close_room", Button).display = self.room is not None
+        if self.room is not None:
+            self.query_one("#help", Button).label = "朋友进不来？"
         self.query_one("#lobby-info").border_title = "房间"
         try:
             await self.link.connect()
@@ -159,7 +162,7 @@ class LobbyScreen(Screen):
             self.welcome = msg
             self.link.host = bool(msg.get("host"))
             if (theirs := msg.get("version")) and theirs != __version__:
-                self.app.notify(f"房主是 {theirs}，你是 {__version__}，版本不同可能出错", severity="warning", timeout=12)
+                self.app.notify("房主的版本和你不一样，可能会出错", severity="warning", timeout=12)
             self.m = table_module(msg)
             self.state = GameState.model_validate(msg["state"])
             self.seats = msg["seats"]
@@ -308,38 +311,24 @@ class LobbyScreen(Screen):
             intro.append("\n" + book["hook"].strip(), style="italic")
         self.query_one("#lobby-module", Static).update(intro)
 
-    def _room_text(self, w: dict[str, Any]) -> Group:
-        """How friends get in: every address the host has, the page if there is one; then this
-        table's round and the version."""
+    def _room_text(self, w: dict[str, Any]) -> Text:
+        """The one thing to send friends: the page's address on the best network, or the
+        address for 加入房间. Every other address is on the 遇到问题 page."""
         info = w.get("room") or {}
-        rows = [(str(ip), str(label)) for ip, label in info.get("addresses", [])]
+        rows = [str(ip) for ip, _ in info.get("addresses", [])]
         port, web = int(info.get("port") or 0), int(info.get("web") or 0)
         if not rows:  # a host without the room's addresses: the one this screen came in by
             url = urlparse(self.link.url)
-            rows, port = [(url.hostname or "", "")], url.port or lan.HUB_PORT
-        grid = Table.grid(padding=(0, 2))
-        grid.add_column(no_wrap=True)
-        grid.add_column(style="dim", no_wrap=True)
-        tail = Text()
+            rows, port = [url.hostname or ""], url.port or lan.HUB_PORT
+        t = Text()
         if web:
-            head = Text("网页版", style="bold")
-            for ip, label in rows:
-                grid.add_row(f"  {lan.page_url(ip, web)}", label)
-            tail.append(f"加入房间 {lan.join_target(rows[0][0], port)}")
+            t.append("发给朋友：", style="bold")
+            t.append(lan.page_url(rows[0], web), style="bold underline")
+            t.append("\n朋友用浏览器打开", style="dim")
         else:
-            head = Text("加入房间", style="bold")
-            for ip, label in rows:
-                grid.add_row(f"  {lan.join_target(ip, port)}", label)
-            tail.append("没开网页版，朋友要装 AutoKeeper 才能进", style="dim")
-        if players := sum(1 for s in self.seats if s["human"]):
-            tail.append(f"\n每轮 {lan.round_size(players)} 条行动")
-        theirs = w.get("version") or __version__
-        tail.append(f"\n版本 {theirs}" + ("" if theirs == __version__ else f"（你是 {__version__}）"))
-        if self.link.host:
-            tail.append(f"\n连不上就查防火墙，放行 {port}" + (f" 和 {web}" if web else ""), style="dim")
-        if info.get("hint"):
-            tail.append(f"\n{info['hint']}", style="bold yellow")
-        return Group(head, grid, tail)
+            t.append("朋友在「加入房间」里填：", style="bold")
+            t.append(lan.join_target(rows[0], port), style="bold underline")
+        return t
 
     def _card(self) -> None:
         """The highlighted seat's investigator, as the game's F4 shows them; the picture comes
@@ -449,6 +438,12 @@ class LobbyScreen(Screen):
         if self.room is not None and self.room.is_open:
             self.app.notify("房间还开着，标题画面「回到房间」可以回来", timeout=8)
         leave(self.app)
+
+    def action_help(self) -> None:
+        from .trouble import TroubleModal
+
+        w = self.welcome or {}
+        self.app.push_screen(TroubleModal(w.get("room"), theirs=w.get("version", "")))
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "close_room":

@@ -188,7 +188,7 @@ class NetGameScreen(GameScreen):
         elif self.pool_open and self.seat and self.my_turn:
             text = f" 已交：{self.pooled[-1][:24]} · 还能交 1 条，空行回车结束 · {room}"
         elif self.pool_open and self.seat:
-            text = " 这轮交完了" + (f" · 等 {others}" if others else "") + f" · {room} · /undo 撤回"
+            text = " 这轮交完了" + (f" · 等 {others}" if others else "") + f" · {room} · 输入 /undo 撤回"
         elif self.pool_open:
             text = (f" 等 {others} · " if others else " ") + room
         elif self.settling:
@@ -198,7 +198,7 @@ class NetGameScreen(GameScreen):
         if self.seat and self.held:  # said meanwhile: it is not lost
             first = self.held[0] if len(self.held[0]) <= 10 else self.held[0][:9] + "…"
             more = f" 等 {len(self.held)} 条" if len(self.held) > 1 else ""
-            text += f" · 下一轮先交：{first}{more}（/undo 撤回）"
+            text += f" · 下一轮先交：{first}{more}（输入 /undo 撤回）"
         line.update(Text(text + " ", style="bold" if fresh else "", no_wrap=True, overflow="ellipsis"))
         line.set_class(fresh, "mine")
         inp = self.query_one("#command", Input)

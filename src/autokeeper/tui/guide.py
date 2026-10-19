@@ -19,7 +19,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Checkbox, ContentSwitcher, Markdown, OptionList, Static
 from textual.widgets.option_list import Option
 
-from . import tips
+from . import tips, trouble
 from .screens import HELP
 
 
@@ -230,7 +230,7 @@ PAGES = [
 
 一个人当房主，在标题页选“开房间”，选模组，给每位调查员定好玩家、AI 或不上场，也可以接着玩以前的联机存档。开好后进入准备房间，房主也在里面入座。
 
-准备房间列出本机的地址，局域网、Radmin VPN、ZeroTier 会标出来。朋友用浏览器打开网页版地址，或者在标题页“加入房间”填房主地址。命令行 `autokeeper host` 也能开同样的房间。
+准备房间里写着要发给朋友的地址。勾了“同时开网页版”，朋友用浏览器打开它；没勾的话，朋友要装好 AutoKeeper，在标题页“加入房间”里填这个地址。命令行 `autokeeper host` 也能开同样的房间。
 
 离开准备房间时房间还开着，标题页的“回到房间”可以回去。在准备房间点“关闭房间”、游戏里从 Ctrl+P 菜单选，或者退出程序，房间才关。
 
@@ -245,7 +245,10 @@ PAGES = [
 ## 在浏览器里
 
 F5 会刷新网页，刷新后要重新入座。出主意、人物卡、线索本、地图、帮助分别是 /suggest、/sheet、/notes、/map、/help，底栏和 Ctrl+P 菜单也能点。
+
+朋友进不来、网页打不开，看下一页“联机遇到问题”。
 """),
+    Page("lan-help", "联机遇到问题", trouble.text(generic=True)),
     Page("commands", "骰娘指令", """
 ## 给习惯骰娘的玩家
 

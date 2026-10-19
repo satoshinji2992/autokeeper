@@ -113,13 +113,24 @@ async def test_a_room_that_cannot_open_says_why(monkeypatch, tmp_path, skills_di
         taken.bind(("0.0.0.0", 0))
         taken.listen()
         port = taken.getsockname()[1]
-        with pytest.raises(lan.RoomError, match=f"联机端口 {port}"):
+        with pytest.raises(lan.RoomError, match="可能已经开着一个") as failed:
             await asyncio.to_thread(lan.Room(EXAMPLE, port=port, cast=TableCast(), rules=Rules(dice=fake)).open)
+        assert str(port) not in str(failed.value) and str(port) in failed.value.detail  # the port is for the 遇到问题 page
         room = lan.Room(EXAMPLE, port=0, web_port=port, cast=TableCast(), rules=Rules(dice=fake))
         await asyncio.to_thread(room.open)
-        with pytest.raises(lan.RoomError, match=f"网页端口 {port}"):
+        with pytest.raises(lan.RoomError, match="网页版没开起来") as failed:
             room.start_web()
+        assert str(port) in failed.value.detail
         room.close()
+        # opened from the title screen, a taken port is swapped for a free one
+        room = lan.Room(EXAMPLE, port=port, web_port=port, any_port=True, cast=TableCast(), rules=Rules(dice=fake))
+        await asyncio.to_thread(room.open)
+        try:
+            with open(tmp_path / "web.log", "a", encoding="utf-8") as log:
+                await asyncio.to_thread(room.start_web, log)
+            assert room.is_open and port not in (room.port, room.web_port) and room.shared["port"] == room.port
+        finally:
+            await asyncio.to_thread(room.close)
 
 
 async def test_the_page_runs_on_its_own_and_goes_with_the_room(monkeypatch, tmp_path, skills_dir, fake):
@@ -150,6 +161,7 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.lobby import LobbyScreen
     from autokeeper.tui.sheet import SheetModal
+    from autokeeper.tui.trouble import TroubleModal
 
     monkeypatch.setattr(config, "SAVES", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # a friend's seat, though on this machine
@@ -173,8 +185,15 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         assert f"《{m.title}》" in text and m.hook.strip()[:12] in text
         assert "周衡" in text and "林秋" in text and "医生 · 41 岁" in text and "总揣着一只听诊器" in text
         assert "AutoKeeper 补充" not in shown(lobby, "#seats")  # a note for the keeper's records, not who she is
-        assert "空座" in text and "http://192.168.1.5:8000" in text and "Radmin VPN" in text and "26.1.2.3" in text
-        assert f"版本 {autokeeper.__version__}" in text and "每轮 3 条行动" in text and "你是房主" not in text  # two players: three a round
+        assert "空座" in text and "发给朋友：http://192.168.1.5:8000" in text and "你是房主" not in text
+        assert "26.1.2.3" not in text and "版本" not in text and "8765" not in text  # the rest is on the 遇到问题 page
+        await pilot.press("h")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, TroubleModal)
+        help_text = app.screen.page
+        assert "26.1.2.3" in help_text and "Radmin VPN" in help_text and "8765" in help_text and autokeeper.__version__ in help_text
+        await pilot.press("escape")
+        await pilot.pause(0.1)
         for secret in [m.truth, m.keeper_notes, *(s for n in m.npcs for s in n.secrets)]:
             if secret.strip():
                 assert secret.strip()[:12] not in text  # the keeper's book stays on the host
@@ -209,6 +228,7 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
     from autokeeper.tui.host import HostScreen
     from autokeeper.tui.lobby import CloseRoomModal, LobbyScreen
     from autokeeper.tui.net import NetGameScreen
+    from autokeeper.tui.trouble import TroubleModal
 
     monkeypatch.setattr(host_screen, "modules", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
@@ -227,8 +247,12 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert screen.plan == {"zhouheng": "不上场"}
         await pilot.press("enter")  # → 玩家
         assert "玩家" in shown(screen, "#host-seats") and "1 位玩家" in shown(screen, "#host-note")
-        port = free_port()
-        screen.query_one("#host-port", Input).value = str(port)
+        assert not screen.query("#host-port")  # no ports on the form: a taken one is swapped by itself
+        await pilot.press("f1")  # 遇到问题
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, TroubleModal) and "朋友进不来" in app.screen.page
+        await pilot.press("escape")
+        await pilot.pause(0.1)
         screen.query_one("#host-name", Input).value = "小明"
         screen.query_one("#host-web", Checkbox).value = False
         screen.query_one("#host-open").press()
@@ -237,11 +261,13 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
             if isinstance(app.screen, LobbyScreen) and app.screen.welcome:
                 break
         lobby = app.screen
-        assert isinstance(lobby, LobbyScreen) and lobby.link.host and lobby.room is app.room and app.room.port == port
+        assert isinstance(lobby, LobbyScreen) and lobby.link.host and lobby.room is app.room
+        port = app.room.port
         assert lan.recall()["name"] == "小明" and lan.recall()["web"] is False
         await pilot.pause(0.2)
         text = shown(lobby, "#lobby-head", "#lobby-room")
-        assert "你是房主" in text and "没开网页" in text and f"{port}" in text
+        assert "你是房主" in text and "朋友在「加入房间」里填" in text
+        assert str(lobby.query_one("#help").label) == "朋友进不来？"
         assert lobby.query_one("#close_room").display
         await pilot.press("enter")  # the only seat: every seat taken, the game begins
         for _ in range(60):
@@ -295,7 +321,6 @@ async def test_the_title_goes_back_to_an_open_room_and_quitting_closes_it(monkey
         await pilot.press("enter", "enter")  # a saved party: 玩家 / AI only
         assert screen.plan == {"zhouheng": "AI"}
         await pilot.press("enter")
-        screen.query_one("#host-port", Input).value = str(free_port())
         screen.query_one("#host-web", Checkbox).value = False
         screen.query_one("#host-open").press()
         for _ in range(60):

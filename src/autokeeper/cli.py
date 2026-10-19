@@ -190,7 +190,7 @@ def host(
             room.start_web()  # its log lines show here
     except lan.RoomError as exc:
         room.close()
-        console.print(f"[red]房间没开成。{exc}[/]")
+        console.print(f"[red]{exc}。[/]" + (f"[dim]{exc.detail}[/]" if exc.detail else ""))
         raise typer.Exit(1) from None
     rows = [(ip, label) for ip, label in room.shared["addresses"]]
     console.print(f"[bold]《{hub.m.title}》的房间开好了[/]")
