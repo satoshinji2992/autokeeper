@@ -215,15 +215,15 @@ class Hub:
         if state is None:
             plan = [("AI" if s.lower() == "ai" else s) for s in seats] if seats else ["玩家"] + ["AI"] * (len(self.m.pregens) - 1)
             if odd := [s for s in plan if s not in SEATS]:
-                raise ValueError(f"座位只能填 {' / '.join(SEATS)}，看不懂：{'、'.join(odd)}")
+                raise ValueError(f"座位类型仅支持 {' / '.join(SEATS)}，无效值：{'、'.join(odd)}")
             extra = plan[len(self.m.pregens):]  # beyond the pregens: empty seats for players' own cards
             if any(s != "玩家" for s in extra):
-                raise ValueError(f"这个模组只有 {len(self.m.pregens)} 位预设调查员，多出来的座位只能填玩家")
+                raise ValueError(f"此模组提供 {len(self.m.pregens)} 名预设调查员，额外座位仅支持玩家控制。")
             if len(extra) > BLANKS:
                 raise ValueError(f"空座位最多 {BLANKS} 个")
             chosen = [(p, s) for p, s in zip(self.m.pregens, plan, strict=False) if s != "不上场"]
             if not chosen and not extra:
-                raise ValueError("至少要有一位调查员上场")
+                raise ValueError("至少需启用一名调查员。")
             party = [p.model_copy(deep=True) for p, _ in chosen]
             human = [p.id for p, s in chosen if s == "玩家"]
             state = Game.new(self.m, party, slot=slot or f"lan-{self.m.id}-{time.strftime('%m%d-%H%M%S')}", human=human)
@@ -287,7 +287,7 @@ class Hub:
                     try:
                         await self._on(cid, json.loads(msg.data))
                     except (KeyError, ValueError, TypeError) as exc:
-                        await self._send(cid, {"t": "error", "text": f"看不懂的消息：{exc}"})
+                        await self._send(cid, {"t": "error", "text": f"无效消息：{exc}"})
         finally:
             self.clients.pop(cid, None)
             self._drop_card(cid)
@@ -328,15 +328,15 @@ class Hub:
             seat = self._seat_of(cid)
             text = str(msg.get("text", ""))[:500]
             if seat is None:
-                await self._send(cid, {"t": "error", "text": "你在观战，没有自己的调查员"})
+                await self._send(cid, {"t": "error", "text": "观战模式下无可操作的调查员。"})
             elif self.over and commands.instant(text):  # growth rolls (.en) and the sheet still work
                 await self._afterwards(seat, text)
             elif self.over:
-                await self._send(cid, {"t": "error", "text": "这局已经结束了"})
+                await self._send(cid, {"t": "error", "text": "本局已结束。"})
             elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
             elif text.strip().startswith("/"):
-                await self._send(cid, {"t": "error", "text": "现在没有要接着讲的回合"})
+                await self._send(cid, {"t": "error", "text": "当前无中断回合。"})
             elif commands.instant(text):  # .r, .st: not the round's action; run while the pool is open
                 self.instant.put_nowait((seat, text))
                 self.wake.set()
@@ -348,7 +348,7 @@ class Hub:
                 self.wake.set()
                 await self._pool()
             elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
-                await self._send(cid, {"t": "error", "text": f"下一轮你已经先说了 {PER_PLAYER} 条；/undo 撤回上一条"})
+                await self._send(cid, {"t": "error", "text": f"下一轮已有 {PER_PLAYER} 条行动，可用 /undo 撤回上一条。"})
             else:  # the keeper is telling, or this round has no room for it: first in the next round
                 self.early.append((seat, text))
                 await self._pool()
@@ -383,18 +383,18 @@ class Hub:
             await self._ask_retell(cid, str(msg.get("nudge") or "换个讲法"))
         elif t == "epilogue":
             if not self.over or not self.state.ending:
-                await self._send(cid, {"t": "error", "text": "后日谈要等这一局结束"})
+                await self._send(cid, {"t": "error", "text": "本局结束后可生成后日谈。"})
             else:
                 async with self.desk:
                     await self._afterword()
         elif t == "engine":
             if cid not in self.hosts:
-                await self._send(cid, {"t": "error", "text": "只有房主能换模型"})
+                await self._send(cid, {"t": "error", "text": "模型仅限房主切换。"})
             elif isinstance(msg.get("choice"), dict):
                 self.swaps.put_nowait((cid, msg["choice"]))
-                await self._send(cid, {"t": "error", "text": "这一段讲完就换模型"})
+                await self._send(cid, {"t": "error", "text": "模型切换已排队，将于当前叙述结束后生效。"})
         elif t == "recount":  # the story so far, now (Ctrl+Y): between rounds, once a round
-            why = ("你在观战" if self._seat_of(cid) is None else "守秘人正在结算这一轮，讲完再整理"
+            why = ("观战模式下无法执行此操作。" if self._seat_of(cid) is None else "本轮正在结算，结束后可整理进展。"
                    if not (self.open or self.over) else self.game.recount())
             if why:
                 await self._send(cid, {"t": "error", "text": why})
@@ -407,18 +407,18 @@ class Hub:
         elif t in ("answer", "command"):  # a rule plugin's question, or its /command: for your own seat only
             seat = self._seat_of(cid)
             if seat is None:
-                await self._send(cid, {"t": "error", "text": "你在观战，没有自己的调查员"})
+                await self._send(cid, {"t": "error", "text": "观战模式下无可操作的调查员。"})
             else:
                 self.plays.put_nowait((cid, seat, msg))
                 self.wake.set()
         elif t == "house_rule":  # the rule's code runs on the host's machine: only the host asks for one
             text = str(msg.get("text", "")).strip()[:500]
             if cid not in self.hosts:
-                await self._send(cid, {"t": "error", "text": "家规只能由房主添加，跟房主说一声"})
+                await self._send(cid, {"t": "error", "text": "自定义规则仅限房主添加。"})
             elif text:
                 self.rules.put_nowait((cid, text))
                 self.wake.set()
-                await self._send(cid, {"t": "error", "text": "这一段讲完就写这条规则"})
+                await self._send(cid, {"t": "error", "text": "规则请求已排队，将于当前叙述结束后处理。"})
 
     async def _ideas(self, cid: str, seat: str) -> None:
         """Three ideas for a seated player's next move, from the view the AI seats get. The game
@@ -433,10 +433,10 @@ class Hub:
 
     async def _sit(self, cid: str, inv_id: str) -> None:
         if inv_id not in self.sits:
-            await self._send(cid, {"t": "error", "text": "这个座位由 AI 扮演，坐不了"})
+            await self._send(cid, {"t": "error", "text": "此座位由 AI 控制，无法入座。"})
             return
         if self.sits[inv_id] not in (None, cid):
-            await self._send(cid, {"t": "error", "text": "这个座位已经有人了"})
+            await self._send(cid, {"t": "error", "text": "此座位已被占用。"})
             return
         for seat, who in self.sits.items():
             if who == cid and seat != inv_id:
@@ -465,7 +465,7 @@ class Hub:
         if seat is None or not self.bringing:
             return
         if on and seat in self.blank:
-            await self._no(cid, "先选一个角色")
+            await self._no(cid, "请先选择角色。")
             return
         (self.ready.add if on else self.ready.discard)(seat)
         await self._share_seats()
@@ -484,7 +484,7 @@ class Hub:
             spares = [p for p in self.m.pregens if p.id not in {i.id for i in self.state.investigators}]
             if not self.state.investigators and not (spares and any(self.sits.get(seat) for seat in self.blank)):
                 if cid is not None:
-                    await self._no(cid, "还没有人选角色，开不了局")
+                    await self._no(cid, "尚无已选角色，无法开始游戏。")
                 return
             changed = False
             for seat in list(self.blank):
@@ -497,7 +497,7 @@ class Hub:
                     for table in (self.sits, self.inbox, self.choices):
                         table.pop(seat, None)
                     if who is not None:
-                        await self._no(who, "没有空的预设角色了，你先观战")
+                        await self._no(who, "预设角色均已分配，当前仅可观战。")
                 changed = True
             for client in list(self.builders):
                 self._drop_card(client)
@@ -533,21 +533,21 @@ class Hub:
         """A player puts an investigator in their seat: their own card, or a free pregen."""
         seat = self._seat_of(cid)
         if not self.bringing:
-            await self._no(cid, "接着玩的存档不能换角色" if not self.fresh else "已经开局了，不能换角色")
+            await self._no(cid, "继续存档时不可更换角色。" if not self.fresh else "游戏已开始，不可更换角色。")
             return
         if seat is None:
-            await self._no(cid, "先坐下再选角色")
+            await self._no(cid, "入座后可选择角色。")
             return
         face = ""
         if pregen := msg.get("pregen"):
             found = next((p for p in self.m.pregens if p.id == pregen), None)
             if found is None:
-                await self._no(cid, "没有这个角色")
+                await self._no(cid, "未找到此角色。")
                 return
             if found.id == seat:
                 return
             if found.id in {i.id for i in self.state.investigators}:
-                await self._no(cid, "这个角色已经在别的座位上了")
+                await self._no(cid, "此角色已分配至其他座位。")
                 return
             inv, origin = found.model_copy(deep=True), ""
         else:
@@ -583,20 +583,20 @@ class Hub:
             return
         why = ""
         if not self.bringing or self._seat_of(cid) is None:
-            why = "开局前坐下的玩家才能车卡"
+            why = "仅入座玩家可在开局前创建调查员。"
         elif op == "begin":
             self._drop_card(cid)  # one card at a time for each player
             self.builders[cid] = self.card_builder()
             return
         elif cid not in self.builders:
-            why = "先开始车卡"
+            why = "请先开始创建调查员。"
         elif cid in self.carding:
-            why = "上一步还没做完，等一下"
+            why = "上一步尚未完成，请稍后重试。"
         elif op in COSTLY:
             now = time.monotonic()
             recent = [at for at in self.card_steps.get(cid, []) if now - at < 60]
             if len(recent) >= CARD_STEPS:
-                why = "太快了，歇一会儿再试"
+                why = "已达到请求频率限制，请稍后重试。"
             self.card_steps[cid] = recent + ([] if why else [now])
         if why:
             if n is not None:
@@ -616,7 +616,7 @@ class Hub:
         except BudgetExceeded:
             reply = {"error": "房主设的花费上限到了，车不了卡"}
         except Exception:  # the model is down, or answered nonsense twice
-            reply = {"error": "读不了这张卡，换一种写法试试" if op == "read" else "房主那边没能做好，再试一次"}
+            reply = {"error": "无法读取人物卡，请检查文件内容或格式。" if op == "read" else "房主设备处理失败，可稍后重试。"}
         finally:
             if self.carding.get(cid) is asyncio.current_task():
                 self.carding.pop(cid, None)
@@ -926,14 +926,14 @@ class Hub:
         narration, the one on their screen when they asked, or none."""
         why = self.game.retell_blocked() or ("" if nudge in RETELL else f"可以这样要：{'、'.join(RETELL)}")
         if self._seat_of(cid) is None:
-            await self._send(cid, {"t": "error", "text": "你在观战，不能请守秘人重讲"})
+            await self._send(cid, {"t": "error", "text": "观战模式不支持请求重述。"})
         elif why:
             await self._send(cid, {"t": "error", "text": why})
         elif self.over:
             async with self.desk:
                 await self._tell_again(cid, nudge, self.game.told)
         elif not self.open:
-            await self._send(cid, {"t": "error", "text": "等这一轮讲完再请守秘人重讲"})
+            await self._send(cid, {"t": "error", "text": "本轮叙述结束后可请求重述。"})
         else:
             self.asks.put_nowait((cid, nudge, self.game.told))
             self.wake.set()  # the round loop does it, between actions
@@ -1016,7 +1016,7 @@ class Hub:
             await self._tell_again(*self.asks.get_nowait())
 
     async def _tell_again(self, cid: str, nudge: str, told: Told | None) -> None:
-        why = "守秘人已经讲到下一段了，想重讲就再要一次" if self.game.told is not told else self.game.retell_blocked()
+        why = "叙述已更新，请重新请求重述。" if self.game.told is not told else self.game.retell_blocked()
         if why:
             await self._send(cid, {"t": "error", "text": why})
             return

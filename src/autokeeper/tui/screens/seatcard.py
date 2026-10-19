@@ -64,7 +64,7 @@ class SeatCardScreen(Screen[tuple[str, object] | None]):
                 self.cards[f"r:{inv.id}"] = (inv, None)
                 ol.add_option(Option(line(inv), id=f"r:{inv.id}"))
             if not self.mine:
-                ol.add_option(Option(Text("  还没有", style="dim"), disabled=True))
+                ol.add_option(Option(Text("  暂无角色", style="dim"), disabled=True))
         if self.m.pregens:
             ol.add_option(Option(Text("模组预设", style=lit), disabled=True))
         for inv in self.m.pregens:

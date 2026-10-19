@@ -177,7 +177,7 @@ def record_view(st: GameState, inv: Investigator) -> Group:
             acted = d.turn if d.kind == "act" else acted
         parts.append(grid)
     else:
-        parts.append(Text("还没有行动。", style="dim"))
+        parts.append(Text("暂无行动记录。", style="dim"))
     rows: list[tuple[str, Text]] = []
     found = "".join(f"〔{d.text}〕" for d in mine if d.kind == "clue")
     papers = "".join(f"〔{d.text}〕" for d in mine if d.kind == "handout")

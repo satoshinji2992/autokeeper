@@ -88,14 +88,14 @@ async def test_retelling_keeps_the_dice_the_clues_and_the_state(module, fake):
 async def test_only_the_latest_narration_and_never_mid_turn(module, fake):
     game, *_ = make(module, fake, {"看告示": (LOOK, BOARD)})
     cast = game.cast = teller(FakeCast({"看告示": (LOOK, BOARD)}))
-    assert "没有能重讲" in game.retell_blocked()  # nothing told yet
+    assert "暂无可重述内容" in game.retell_blocked()  # nothing told yet
     await game.start()
     assert game.retell_blocked() == ""  # the opening can be told again
     fake.queue_totals(4)
     await game.command(".r 1d6")  # a roll outside the story does not move it on
     assert game.retell_blocked() == ""
     action = await game.parse("看告示")  # a turn has begun
-    assert "有人行动了" in game.retell_blocked()
+    assert "后续行动已开始" in game.retell_blocked()
     with pytest.raises(ValueError):
         await game.retell()
     turn = await game.resolve(action, await game.rule(action))
@@ -110,7 +110,7 @@ async def test_only_the_latest_narration_and_never_mid_turn(module, fake):
     telling = asyncio.create_task(game.narrate(turn))
     while len(cast.reports) < 2 and not telling.done():
         await asyncio.sleep(0.01)
-    assert not telling.done() and "还没讲完" in game.retell_blocked()  # mid-narration
+    assert not telling.done() and "叙述尚未结束" in game.retell_blocked()  # mid-narration
     gate.set()
     await telling
     assert game.retell_blocked() == "" and not cast.retold

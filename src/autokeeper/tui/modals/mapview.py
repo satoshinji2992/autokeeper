@@ -50,7 +50,7 @@ STYLE = {  # theme colours, resolved when drawn ($text-muted would lose its tran
     "note": "$foreground 60%",
     "pick": "underline",  # added to the name of the place picked
 }
-TAG = " ◂ 你在这里"
+TAG = " ◂ 当前位置"
 FOLDED, OPENED = "▸", "▾"  # after a place with places in it: folded (and how many), or open
 SKY_MARK = {"rain": "☂ 雨", "storm": "⚡ 雷雨", "snow": "❄ 雪", "fog": "≋ 雾"}
 GAP = 4  # cells between a column's longest name and the next column's markers
@@ -161,7 +161,7 @@ class Plan:
     height: int
     spots: dict[str, tuple[int, int]]  # place -> its marker (an open place's sits on its frame's top)
     labels: dict[str, str]  # place -> the name written beside it
-    tagged: str  # the place "你在这里" is written beside, if any
+    tagged: str  # the place "当前位置" is written beside, if any
     kinds: dict[str, str] = field(default_factory=dict)  # as marked: a folded place the investigators are in is "here"
     frames: dict[str, tuple[int, int, int, int]] = field(default_factory=dict)  # open place -> left, top, right, bottom
     walls: dict[tuple[int, int], int] = field(default_factory=dict)  # a frame's cells -> their directions
@@ -734,18 +734,18 @@ def draw(c: Chart, p: Plan, picked: str | None = None) -> Content:
 
 def legend(c: Chart, t: Tree | None = None) -> Content:
     """What the marks mean, and the places heard of with no known way there yet."""
-    keys = [(MARK["here"], "here", "你在这里"), (MARK["been"], "been", "去过")]
+    keys = [(MARK["here"], "here", "当前位置"), (MARK["been"], "been", "已到访")]
     if "heard" in c.kinds.values() or c.rumours:
-        keys.append((MARK["heard"], "heard", "听说过"))
+        keys.append((MARK["heard"], "heard", "已听闻"))
     if c.roads:
-        keys.append(("──", "road", "走过的路"))
+        keys.append(("──", "road", "已行经道路"))
     if c.trails:
-        keys.append(("┄┄", "trail", "还没走过的路"))
+        keys.append(("┄┄", "trail", "未行经道路"))
     if t is not None and t.folded:
-        keys.append((FOLDED, "been", "里面还有地方"))
+        keys.append((FOLDED, "been", "内部区域"))
     rows = [Content("   ").join(Content.assemble((mark, STYLE[kind]), f" {label}") for mark, kind, label in keys)]
     if c.rumours:
-        rows.append(Content.assemble(("听说过，还不知道怎么去：", STYLE["note"]), *_names(list(c.rumours.values()))))
+        rows.append(Content.assemble(("已听闻，路线未知：", STYLE["note"]), *_names(list(c.rumours.values()))))
     return Content("\n").join(rows)
 
 
@@ -766,25 +766,25 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
     copy of the module too (net/hub.py table), so every screen says the same."""
     kind = c.kinds[place]
     stopped = place in st.visited or place == st.location
-    status = "你在这里" if kind == "here" else "去过" if stopped else "路过" if kind == "been" else "听说过，还没去过"
+    status = "当前位置" if kind == "here" else "已到访" if stopped else "已途经" if kind == "been" else "已听闻，未到访"
     at = c.within.get(c.here)
     while at is not None and at != place:
         at = c.within.get(at)
     if at == place and kind != "here":
-        status += " · 你在里面"
+        status += " · 位于此区域内"
     if place in c.within:
-        status += f" · 在{c.names[c.within[place]]}里"
+        status += f" · 所属区域：{c.names[c.within[place]]}"
     rows = [Content.assemble((f"{MARK[kind]} {c.names[place]}", STYLE[kind]), (f"  {status}", STYLE["note"]))]
     seen = _unwrap(m.location(place).read_aloud) if stopped else ""
     if seen:
         rows.append(Content(seen))
     lying = fog.things(m, st)
-    facts = [("里面", [c.names[q] for q in c.names if c.within.get(q) == place]),
-             ("见过", fog.met(m, st).get(place, [])),
+    facts = [("内部区域", [c.names[q] for q in c.names if c.within.get(q) == place]),
+             ("已遇见人物", fog.met(m, st).get(place, [])),
              ("物件", [i.name for i in m.items if lying.get(i.id) == place]),
              ("线索", fog.found(m, st).get(place, []))]  # fmt: skip
     ways = [f"{c.names[b if a == place else a]} {fog.minutes(m, place, b if a == place else a)} 分钟" for a, b in c.roads if place in (a, b)]
-    ways += [f"{c.names[b if a == place else a]}（没走过）" for a, b in c.trails if place in (a, b)]
+    ways += [f"{c.names[b if a == place else a]}（未行经）" for a, b in c.trails if place in (a, b)]
     facts.append(("通往", ways))
     if st.sky in SKY_MARK and kind != "heard" and weather.outdoors(c.names[place]):
         facts.append(("天气", [SKY_MARK[st.sky]]))

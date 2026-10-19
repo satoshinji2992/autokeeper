@@ -172,7 +172,7 @@ class HostScreen(Screen):
         self.path = Path(event.option.id or "")
         self.module = load_module(self.path)
         if not self.module.pregens:
-            self.app.notify("这个模组没有预设调查员，开不了房间", severity="error")
+            self.app.notify("此模组未提供预设调查员，无法创建房间。", severity="error")
             return
         self.slot = ""
         self._seat_pregens()
@@ -216,7 +216,7 @@ class HostScreen(Screen):
             for i in range(self.blanks):
                 t = Text("玩家" + " " * 4, style=f"bold {theme.accent or 'yellow'}")
                 t.append("空座位", style="bold")
-                t.append("  自己带角色", style="dim")
+                t.append("  入座后选择角色", style="dim")
                 ol.add_option(Option(t, id=f"blank-{i}"))
             if self.blanks < lan.BLANKS:
                 ol.add_option(Option(Text("＋ 加一个空座位", style="dim"), id="add-blank"))
@@ -244,7 +244,7 @@ class HostScreen(Screen):
         """The highlighted investigator, as the lobby and the game's F4 show them."""
         inv = next((i for i in self.party if i.id == inv_id), None)
         if inv_id == "add-blank" or inv_id.startswith("blank-"):
-            words = "坐在这里的玩家自己选角色：自己的卡、模组预设，或者现车一张。" if inv_id != "add-blank" else "加一个空座位，给自己带角色的朋友。"
+            words = "坐在这里的玩家自己选角色：自己的卡、模组预设，或者现车一张。" if inv_id != "add-blank" else "加一个空座位，给入座后选择角色的朋友。"
             self.query_one("#host-card", Static).update(Text(words, style="dim"))
             return
         if inv is None or self.module is None:
@@ -291,7 +291,7 @@ class HostScreen(Screen):
             try:
                 state = lan.saved(oid.removeprefix("slot:"))
             except (OSError, ValueError) as exc:
-                self.app.notify(f"读不了这个存档（{exc.__class__.__name__}）", severity="error")
+                self.app.notify(f"无法读取存档（{exc.__class__.__name__}）。", severity="error")
                 return
             self.slot = state.slot
             self.blanks = 0
@@ -300,14 +300,14 @@ class HostScreen(Screen):
         self._list_seats()
         self._note()
         if self.slot:
-            self.app.notify("存档里的人都要上场", timeout=3)
+            self.app.notify("继续存档时需保留全部调查员。", timeout=3)
 
     def _note(self) -> None:
         players = sum(1 for v in self.plan.values() if v == "玩家") + (0 if self.slot else self.blanks)
         ai = sum(1 for v in self.plan.values() if v == "AI")
         t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
         if self.slot:
-            t.append(" · 接着玩存档")
+            t.append(" · 继续已有存档")
         self.query_one("#host-note", Static).update(t)
 
     # -- opening --------------------------------------------------------------------------------
@@ -331,7 +331,7 @@ class HostScreen(Screen):
         web = self.query_one("#host-web", Checkbox).value
         seats = [self.plan.get(inv.id, "AI") for inv in self.party] + ["玩家"] * self.blanks
         if all(s == "不上场" for s in seats):
-            self.app.notify("至少要有一位调查员上场", severity="error")
+            self.app.notify("至少需启用一名调查员。", severity="error")
             return
         state = None
         if self.slot:
@@ -345,7 +345,7 @@ class HostScreen(Screen):
         button = self.query_one("#host-open", Button)
         button.disabled = True
         hint = self.query_one("#setup-hint", Static)
-        hint.update(Text("正在开房间……", style="bold"))
+        hint.update(Text("正在创建房间……", style="bold"))
         if (old := getattr(self.app, "room", None)) is not None:  # one room at a time; this one had stopped
             self.app.room = None  # type: ignore[attr-defined]
             await asyncio.to_thread(old.close)
@@ -359,7 +359,7 @@ class HostScreen(Screen):
         except lan.RoomError as exc:
             await asyncio.to_thread(room.close)
             self.trouble = exc.detail
-            self.app.notify(f"{exc}。看「遇到问题」", severity="error", timeout=10)
+            self.app.notify(f"{exc}。可参阅「遇到问题」。", severity="error", timeout=10)
             button.disabled = False
             hint.update(ROOM_KEYS)
             return

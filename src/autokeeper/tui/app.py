@@ -59,7 +59,7 @@ class AutoKeeperApp(App):
 
     def action_command_palette(self) -> None:
         if not CommandPalette.is_open(self):
-            self.push_screen(CommandPalette(placeholder="找功能：地图、存档、换画法……", id="--command-palette"))
+            self.push_screen(CommandPalette(placeholder="搜索功能：地图、存档、画面风格", id="--command-palette"))
 
 
     def __init__(self, theme: str | None = None, join: tuple[str, str] | None = None):
@@ -85,7 +85,7 @@ class AutoKeeperApp(App):
             self.register_theme(th)
         self.theme = self._theme_name or config.load().theme
         if not imagery.available():  # pictures fall back to the hand-drawn art without a word otherwise
-            self.notify(f"没找到 chafa，照片显示不出来，只能看手绘字符画。安装：{imagery.install_hint()}，装完重开。",
+            self.notify(f"未检测到 chafa，照片暂以手绘字符画替代。安装命令：{imagery.install_hint()}。安装后请重启程序。",
                         title="缺少 chafa", severity="warning", timeout=15)
         if self.join:
             from .screens.lobby import LobbyScreen

@@ -189,7 +189,7 @@ class SetupScreen(Screen):
         if self.step == "module":
             self.module = load_module(Path(oid))
             if not self.module.pregens:
-                self.app.notify("这个模组没有预设调查员", severity="error")
+                self.app.notify("此模组未提供预设调查员。", severity="error")
                 return
             self._show_investigators()
         elif self.step == "investigator":

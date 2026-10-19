@@ -285,7 +285,7 @@ class LoadScreen(Screen):
                 ol.add_option(None)
             ol.add_option(Option(line(s, s.slot == self.current), id=s.slot))
         if not self.list:
-            ol.add_option(Option("还没有存档", disabled=True))
+            ol.add_option(Option("暂无存档", disabled=True))
             self.query_one("#preview-picture", Static).update("")
             self.query_one("#preview-body", Static).update(Text("新的调查开始后，每一轮都会自动存档。", style="dim"))
             self._hint(None)

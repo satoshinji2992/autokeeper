@@ -365,7 +365,7 @@ class GameScreen(Screen):
 
     def action_engine(self) -> None:
         if self.busy:
-            self.app.notify("等这一回合结束再换模型", severity="warning")
+            self.app.notify("本回合结束后可切换模型。", severity="warning")
             return
         cfg = config.load()
         from ..modals.settings import model_choices
@@ -874,7 +874,7 @@ class GameScreen(Screen):
             self.action_retry()
         elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop
             if self.queued is None:
-                self.app.notify("没有可以撤回的行动")
+                self.app.notify("暂无可撤回的行动。")
             else:
                 self.query_one("#command", Input).value, self.queued = self.queued, None
         elif cmd == "/retell":  # /retell 短一点 skips the list
@@ -889,7 +889,7 @@ class GameScreen(Screen):
         elif any(name == cmd[1:] for name, _ in plugin_commands(self.m, self.state)):
             self.plugin_command(cmd[1:], " ".join(args))
         else:
-            self.app.notify(f"不认识的命令：{cmd}", severity="warning")
+            self.app.notify(f"未知命令：{cmd}", severity="warning")
 
     @work(exclusive=True, group="turn")
     async def play(self, text: str) -> None:
@@ -929,7 +929,7 @@ class GameScreen(Screen):
             if self.game is None or self.state.pending_turn:
                 self.play("/retry")
             else:
-                self.app.notify("目前没有中断的回合，可以继续说出行动。")
+                self.app.notify("当前无中断回合，可直接提交行动。")
 
     async def _run_turn(self, inp, auto: bool = False) -> None:
         assert self.graph
@@ -1028,7 +1028,7 @@ class GameScreen(Screen):
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")
-        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "F7 回顾这一局 · Esc 菜单", style="dim")
+        t.append("F10 复盘 · " + ("" if self.spectate else ".en 做成长检定 · ") + "F7 前情回顾 · Esc 菜单", style="dim")
         self.story.add("ending", t)
 
     # -- actions -----------------------------------------------------------------------------------
@@ -1183,7 +1183,7 @@ class GameScreen(Screen):
     def _turn_running(self) -> bool:
         """Starting another turn-group worker would cancel the running turn."""
         if self.busy:
-            self.app.notify("等这一回合结束再来", severity="warning", timeout=3)
+            self.app.notify("本回合尚未结束，请稍后操作。", severity="warning", timeout=3)
         return self.busy
 
     def action_sketch(self) -> None:
@@ -1265,7 +1265,7 @@ class GameScreen(Screen):
     def action_debrief(self) -> None:
         """F10, /debrief: once it is over, the whole book, and the epilogue on request."""
         if not self.state.ending:
-            self.app.notify("复盘要等这一局结束", severity="warning", timeout=3)
+            self.app.notify("本局结束后可查看复盘。", severity="warning", timeout=3)
             return
         self.app.push_screen(DebriefModal(debrief.build(self.m, self.state), self._epilogue_so_far, self._ask_epilogue))
 

@@ -67,8 +67,8 @@ class JoinScreen(Screen):
             yield Static("加入局域网房间", classes="modal-title")
             hint = "起个名字，回车加入" if self.guest else "填房主给你的地址（比如 192.168.1.5），再起个名字，回车加入。"
             yield Static(Text(hint, style="dim"))
-            yield Input(self.address, placeholder="房主的地址", id="addr")
-            yield Input(self.name_, placeholder="你的名字", id="name", max_length=16)
+            yield Input(self.address, placeholder="房间地址", id="addr")
+            yield Input(self.name_, placeholder="玩家名称", id="name", max_length=16)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -214,7 +214,7 @@ class NetGameScreen(GameScreen):
         inp.placeholder = ("这一轮做什么" if fresh else
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
-                           "观战中，全角括号开头是场外聊天")
+                           "观战模式下可使用全角括号发送场外消息。")
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -322,7 +322,7 @@ class NetGameScreen(GameScreen):
             if self.pooled or self.held:  # the Hub takes back your latest: the next round's first
                 self.run_worker(partial(self.link.send, {"t": "undo"}))
             else:
-                self.app.notify("没有可以撤回的行动")
+                self.app.notify("暂无可撤回的行动。")
         elif word in ("/done", "/pass"):
             self.empty_enter()
         elif text.startswith("/"):
@@ -330,7 +330,7 @@ class NetGameScreen(GameScreen):
         elif text.startswith(TALK):
             self.run_worker(partial(self.link.send, {"t": "say", "text": text}))
         elif not self.seat:
-            self.app.notify("观战中，全角括号开头是场外聊天")
+            self.app.notify("观战模式下可使用全角括号发送场外消息。")
         elif self.state.ending and not commands.instant(text):  # after the end: growth rolls (.en), the sheet
             self.app.notify("本局已结束。F10 查看复盘，.en 进行成长检定。")
         elif self.state.ending or commands.instant(text):  # .r, .st: not an action; while the keeper tells, right after
@@ -354,7 +354,7 @@ class NetGameScreen(GameScreen):
             self.retry_due = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": "/retry"}))
         else:
-            self.app.notify("等房主允许接续这一回合后再试。")
+            self.app.notify("等待房主恢复当前回合后可重试。")
 
     # A rule plugin's question comes to this screen only when it is for your seat (Hub._event);
     # the answer and a plugin's /command go to the host, where the plugin runs.

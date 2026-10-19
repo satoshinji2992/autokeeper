@@ -778,7 +778,7 @@ class Game:
                 turn.notes.append(f"{action.npc} 不在这里")
             else:
                 npc = m.npc(action.npc)
-                await self.emit({"type": "status", "text": f"{npc.name}正在开口…"})
+                await self.emit({"type": "status", "text": f"等待 {npc.name} 回应…"})
                 line = await self.cast.npc(st, npc.id, self._npc_message(turn, npc.id))
                 turn.npc_lines.append((npc.id, line))
                 st.npc(npc.id).met = True
@@ -829,7 +829,7 @@ class Game:
     def recount(self) -> str:
         """A player asks for it now (Ctrl+Y): once a turn, and only with something new since
         the last one. Why not, when it cannot be done; "" when it is being written."""
-        why = "正在整理，稍等" if self._writing() else progress.refused(self.state)
+        why = "正在整理进展。" if self._writing() else progress.refused(self.state)
         if not why:
             self._ask_progress()
         return why
@@ -1217,10 +1217,10 @@ class Game:
         moved past it. Dice-bot rolls (.r, .en) stand outside the story and do not count."""
         told, log = self.told, self.state.log
         if told is None:
-            return "现在没有能重讲的段落：守秘人还没讲完，或者读档以后还没讲过新的一段"
+            return "暂无可重述内容：当前叙述尚未结束，或读档后尚未生成新的叙述。"
         at = next((i for i in range(len(log) - 1, -1, -1) if log[i] is told.entry), None)
         if at is None or any(e.kind != "dice" for e in log[at + 1 :]):
-            return "只能重讲刚讲完的那一段，之后已经有人行动了"
+            return "后续行动已开始，上一段叙述不可重述。"
         return ""
 
     async def retell(self, nudge: str = "换个讲法", on_delta=None) -> str:

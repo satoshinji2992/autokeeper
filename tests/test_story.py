@@ -291,11 +291,11 @@ async def test_a_player_may_ask_for_it_once_a_turn(writer):
     st = game.state
     play(st, 1, "我四下看看")
     assert game.recount() == ""  # no milestone needed when asked
-    assert game.recount() == "正在整理，稍等"
+    assert game.recount() == "正在整理进展。"
     await game._recounting
-    assert st.progress.text == ACCOUNT and "这一轮" in game.recount()  # once a turn
+    assert st.progress.text == ACCOUNT and "本回合已整理进展" in game.recount()  # once a turn
     st.turn = 2
-    assert "没有新的事" in game.recount()  # nothing since
+    assert "暂无新事件" in game.recount()  # nothing since
     play(st, 3, "我再看看")
     assert game.recount() == ""
     await game._recounting
@@ -460,7 +460,7 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         assert view.prologue == "叙事" and not view.log  # the opening as told; the log stays on the host
         assert len(cast.material) == 1 and hub.m.truth not in cast.material[0]
         await ws.send_json({"t": "recount"})  # asked for again in the same round
-        assert "这一轮已经整理过了" in (await keep(ws, heard, lambda x: x["t"] == "error"))["text"]
+        assert "本回合已整理进展" in (await keep(ws, heard, lambda x: x["t"] == "error"))["text"]
         await ws.send_json({"t": "act", "text": "我再看看"})  # one more turn: saved after it, the account in the save
         await ws.send_json({"t": "done"})
         await keep(ws, heard, lambda x: x["t"] == "pool" and not x["open"])
@@ -572,7 +572,7 @@ async def test_the_right_column_turns_its_pages(writer):
         assert shown(screen, "#progress").count(ACCOUNT) == 1 and "更新于第 7 轮" in shown(screen, "#progress")
         await pilot.press("ctrl+y")
         await pilot.pause()
-        assert "这一轮已经整理过了，下一轮再来" in said  # once a turn
+        assert "本回合已整理进展，可在下一回合再次整理。" in said  # once a turn
 
         rounds = len(screen.query(".history-round"))
         st.turn = 4
@@ -608,7 +608,7 @@ def test_the_opening_is_on_the_background_page_only_once_told():
     assert "（开场的叙述）" in plain(background_view(m, st, lead))  # a save from before the prologue was kept
     st.prologue = "开场原话"
     shown = plain(background_view(m, st, lead))
-    assert "开场原话" in shown and m.hook.strip() in shown and lead.name in shown and "人物卡上没有写背景" in shown
+    assert "开场原话" in shown and m.hook.strip() in shown and lead.name in shown and "未填写人物背景" in shown
 
 
 def test_a_saved_line_reads_as_the_live_one_did():

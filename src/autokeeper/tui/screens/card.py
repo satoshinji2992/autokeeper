@@ -200,7 +200,7 @@ class CardScreen(Screen[Investigator | None]):
             return
         self.step, self.question = "ask", i
         q = questions[i]
-        opts = [Option(o, id=f"answer-{j}") for j, o in enumerate(q.options)] + [Option(ANY, id="answer-any")]
+        opts = [Option(o, id=f"answer-{j}") for j, o in enumerate(q.options)] + [Option("自动选择", id="answer-any")]
         self._choose(f"（{i + 1}/{len(questions)}）{q.ask}", opts, "Enter 或空格选定 · Esc 上一步", self._about())
 
     def _extra(self) -> None:

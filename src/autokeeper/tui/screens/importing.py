@@ -156,7 +156,7 @@ def _document(path: Path, label: str) -> Document:
         try:
             pdf = pdfium.PdfDocument(str(path))
         except pdfium.PdfiumError as exc:  # a password, a damaged file
-            doc.broken = f"这个 PDF 打不开（{exc}）"
+            doc.broken = f"无法打开 PDF（{exc}）"
         else:
             doc.pages = len(pdf)
             pdf.close()
@@ -411,11 +411,11 @@ class ImportScreen(Screen):
         try:
             choice = await asyncio.to_thread(look_inside, path, scratch)
         except Exception as exc:  # a damaged zip, a password, no permission: say so and stay
-            self.app.notify(f"打不开 {path.name}：{_reason(exc)}", severity="error", timeout=8)
+            self.app.notify(f"无法打开 {path.name}：{_reason(exc)}", severity="error", timeout=8)
             self._show_browse()
             return
         if not choice.documents:
-            self.app.notify(f"{path.name} 里没有 PDF、Word（.docx）、Markdown 或纯文本文件", severity="error", timeout=8)
+            self.app.notify(f"{path.name} 中未找到 PDF、Word（.docx）、Markdown 或纯文本文件", severity="error", timeout=8)
             self._show_browse()
             return
         self._show_confirm(choice)
@@ -440,7 +440,7 @@ class ImportScreen(Screen):
         for d in choice.documents:
             line = Text(d.label)
             line.append(f"   {_describe(d)}", style="dim")
-            line.append("   打不开" if d.broken else "", style="bold red")
+            line.append("   无法读取" if d.broken else "", style="bold red")
             docs.add_option(Option(line))
         docs.display = len(choice.documents) > 1
         docs.border_title = "选一份作模组正文"
@@ -681,7 +681,7 @@ class ImportScreen(Screen):
         status.set_classes("ok" if ok else "bad")
         if not ok:
             self.query_one(f"#stage-{self.stage}", Static).add_class("failed")
-        self.query_one("#another", Button).label = "继续导入其他模组" if ok else "更换文件"
+        self.query_one("#another", Button).label = "导入其他模组" if ok else "更换文件"
         self._buttons(*(("play", "another", "leave") if ok else ("retry", "another", "leave")))
         self._frame(title, "Esc 返回标题")
         self.query_one("#play" if ok else "#retry", Button).focus()

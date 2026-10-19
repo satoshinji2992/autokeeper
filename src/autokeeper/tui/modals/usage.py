@@ -63,8 +63,8 @@ def usage_view(st: GameState) -> Group:
         parts.append(line)
     book = spend.ledger()
     cap = spend.budget()
-    across = Text(f"\n这台电脑上所有按量计费的调用：估算 ${book.get('total_usd', 0.0):.3f}", style="dim")
-    across.append(f"，预算 ${cap:g}" if cap is not None else "，没设预算", style="dim")
+    across = Text(f"\n本机按量计费调用累计估算： ${book.get('total_usd', 0.0):.3f}", style="dim")
+    across.append(f"，预算 ${cap:g}" if cap is not None else "，未设置预算", style="dim")
     parts += [across, Text("金额为估算值；Claude Code 使用其报告的等价 API 价，不代表订阅账单。逐次记录：autokeeper trace", style="dim")]
     return Group(*parts)
 

@@ -198,7 +198,7 @@ class NotebookModal(ModalScreen[str | None]):
             yield Static(f"线索本 · {len(self.clues)} 条", classes="modal-title")
             with VerticalScroll(classes="modal-body"):
                 if not self.clues:
-                    yield Static("还没有记录线索。", classes="system")
+                    yield Static("暂无已发现的线索。", classes="system")
                 for title, text in self.clues:
                     t = Text()
                     t.append(f"〔{title}〕\n", style="bold")

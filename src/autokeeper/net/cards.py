@@ -56,28 +56,28 @@ def _number(value: Any, low: int, high: int, why: str) -> int:
 def vet(data: Any, inv_id: str) -> Investigator:
     """The card as the table takes it, under `inv_id`; Refused when it cannot be played."""
     if not isinstance(data, dict) or len(json.dumps(data, ensure_ascii=False, default=str)) > CARD_BYTES:
-        raise Refused("这张卡读不了")
+        raise Refused("无法读取人物卡。")
     name = _text(data.get("name"), 24)
     if not name:
-        raise Refused("这张卡没有名字")
+        raise Refused("人物卡缺少姓名。")
     raw = data.get("characteristics")
     if not isinstance(raw, dict) or {canonical(str(k)) for k in raw} != set(CHARACTERISTICS):
-        raise Refused("这张卡的八项属性不全")
-    stats = {canonical(str(k)): _number(v, 1, 99, "属性要在 1 到 99 之间") for k, v in raw.items()}
-    luck = _number(data.get("luck"), 1, 99, "幸运要在 1 到 99 之间")
-    age = _number(data.get("age", 30), 15, 89, "年龄要在 15 到 89 岁之间")
+        raise Refused("人物卡的八项属性不完整。")
+    stats = {canonical(str(k)): _number(v, 1, 99, "属性须在 1 到 99 之间。") for k, v in raw.items()}
+    luck = _number(data.get("luck"), 1, 99, "幸运须在 1 到 99 之间。")
+    age = _number(data.get("age", 30), 15, 89, "年龄须在 15 到 89 岁之间。")
     skills: dict[str, int] = {}
     given = data.get("skills") or {}
     if not isinstance(given, dict) or len(given) > 80:
-        raise Refused("这张卡的技能读不了")
+        raise Refused("无法读取人物卡技能。")
     for k, v in given.items():
         key = canonical(_text(k, 24))
-        value = _number(v, 0, 99, "技能要在 0 到 99 之间")
+        value = _number(v, 0, 99, "技能须在 0 到 99 之间。")
         if key and key not in CHARACTERISTICS and key not in ("理智", "幸运", "灵感", "知识"):
             skills[key] = value
     conditions = data.get("conditions") or []
     if isinstance(conditions, list) and {"死亡", "永久疯狂"} & set(conditions):
-        raise Refused("这位调查员已经不能上场了")
+        raise Refused("调查员已死亡或永久疯狂，无法参加调查。")
     story = data.get("backstory") or {}
     story = {_text(k, 12): _text(v, 400) for k, v in list(story.items())[:12]} if isinstance(story, dict) else {}
     things = data.get("inventory") or []
@@ -139,13 +139,13 @@ async def step(b: Builder, op: str, msg: dict, work: Path) -> dict:
         if msg.get("file"):
             suffix = Path(_text(msg.get("name"), 120)).suffix.lower()
             if suffix not in FILE_KINDS:
-                raise CardError("这种文件读不了，换成图片、表格或文字")
+                raise CardError("不支持此文件格式，请使用图片、表格或文本文件。")
             try:
                 data = base64.b64decode(str(msg["file"]), validate=True)
             except (ValueError, binascii.Error):
-                raise CardError("文件没传过来，再试一次") from None
+                raise CardError("文件传输失败，请重试。") from None
             if len(data) > FILE_BYTES:
-                raise CardError("文件太大了，换一个小一点的")
+                raise CardError("文件超过大小限制，请缩小文件后重试。")
             work.mkdir(parents=True, exist_ok=True)
             path = work / f"upload{suffix}"
             path.write_bytes(data)
@@ -168,7 +168,7 @@ async def step(b: Builder, op: str, msg: dict, work: Path) -> dict:
         if not dest.exists() and not await b.download(i, dest):
             return {"data": ""}
         return {"data": await asyncio.to_thread(media.pack, str(dest), max_size=800)}
-    raise CardError("看不懂这一步")
+    raise CardError("不支持此角色创建操作。")
 
 
 # -- on the player's screen --------------------------------------------------------------------
@@ -257,7 +257,7 @@ class RemoteBuilder:
         path = local_file(source) if self.files else None
         if path is not None:
             if path.stat().st_size > FILE_BYTES:
-                raise CardError("文件太大了，换一个小一点的")
+                raise CardError("文件超过大小限制，请缩小文件后重试。")
             data = base64.b64encode(await asyncio.to_thread(path.read_bytes)).decode("ascii")
             reply = await self._call("read", file=data, name=path.name)
         else:

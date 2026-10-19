@@ -92,13 +92,13 @@ def progress_view(st: GameState) -> Text:
     p = st.progress
     out = Text()
     if p.text:
-        out.append(f"更新于第 {p.turn} 轮 · Ctrl+Y 现在整理\n", style="dim")
+        out.append(f"更新于第 {p.turn} 轮 · Ctrl+Y 手动整理\n", style="dim")
         out.append(tight(p.text.strip()))
     else:
-        out.append("有新进展时，这里会写下故事至今。Ctrl+Y 现在整理。", style="dim")
+        out.append("调查进展随新发现自动更新，Ctrl+Y 可手动整理。", style="dim")
     promises = [f for f in st.world.values() if f.kind == "promise" and f.status == "active"]
     if promises:
-        out.append("\n\n未了的约定\n", style="bold")
+        out.append("\n\n待履行的约定\n", style="bold")
         out.append("\n".join(f"· {f.text}" for f in promises))
     return out
 
@@ -124,7 +124,7 @@ def background_view(m: Module, st: GameState, me: Investigator | None) -> Text:
     if others:
         out.append("\n同伴\n", style="bold")
         out.append("\n".join(f"{i.name} · {i.occupation}" if i.occupation else i.name for i in others) + "\n")
-    out.append("\nF4 人物卡里有完整的背景", style="dim")
+    out.append("\nF4 查看完整人物背景", style="dim")
     return out
 
 
@@ -148,7 +148,7 @@ def digest(inv: Investigator) -> Text:
         out.append(f"{k}：", style="bold")
         out.append(tight(v.strip()) + "\n")
     if not shown:
-        out.append("人物卡上没有写背景。\n", style="dim")
+        out.append("未填写人物背景。\n", style="dim")
     return out
 
 
@@ -181,7 +181,7 @@ class PagesModal(ModalScreen[None]):
         self.extra = extra  # the plugins' page: its tab label and what is on it
 
     def compose(self) -> ComposeResult:
-        lines = Text("\n").join(r for r in self.history if isinstance(r, Text)) if self.history else Text("还没有发生什么。", style="dim")
+        lines = Text("\n").join(r for r in self.history if isinstance(r, Text)) if self.history else Text("暂无事件记录。", style="dim")
         with Vertical(classes="modal", id="pages-modal"):
             yield from pages(Page(lines, id="history-copy", classes="page"), self.first)
             yield Static("Ctrl+G 或 Tab 翻页 · Esc 关闭", classes="system")

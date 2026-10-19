@@ -107,18 +107,18 @@ async def test_a_room_runs_its_hub_in_a_thread_and_closes_it(monkeypatch, tmp_pa
 
 async def test_a_room_that_cannot_open_says_why(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
-    with pytest.raises(lan.RoomError, match="座位只能填"):
+    with pytest.raises(lan.RoomError, match="座位类型仅支持"):
         await asyncio.to_thread(lan.Room(EXAMPLE, seats=["谁都行"], port=0, cast=TableCast()).open)
     with socket.socket() as taken:
         taken.bind(("0.0.0.0", 0))
         taken.listen()
         port = taken.getsockname()[1]
-        with pytest.raises(lan.RoomError, match="可能已经开着一个") as failed:
+        with pytest.raises(lan.RoomError, match="检查是否已有房间运行") as failed:
             await asyncio.to_thread(lan.Room(EXAMPLE, port=port, cast=TableCast(), rules=Rules(dice=fake)).open)
         assert str(port) not in str(failed.value) and str(port) in failed.value.detail  # the port is for the 遇到问题 page
         room = lan.Room(EXAMPLE, port=0, web_port=port, cast=TableCast(), rules=Rules(dice=fake))
         await asyncio.to_thread(room.open)
-        with pytest.raises(lan.RoomError, match="网页版没开起来") as failed:
+        with pytest.raises(lan.RoomError, match="网页版启动失败") as failed:
             room.start_web()
         assert str(port) in failed.value.detail
         room.close()
@@ -258,7 +258,7 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert not screen.query("#host-port")  # no ports on the form: a taken one is swapped by itself
         await pilot.press("f1")  # 遇到问题
         await pilot.pause(0.2)
-        assert isinstance(app.screen, TroubleModal) and "朋友进不来" in app.screen.page
+        assert isinstance(app.screen, TroubleModal) and "无法加入房间" in app.screen.page
         await pilot.press("escape")
         await pilot.pause(0.1)
         screen.query_one("#host-name", Input).value = "小明"
@@ -274,8 +274,8 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert lan.recall()["name"] == "小明" and lan.recall()["web"] is False
         await pilot.pause(0.2)
         text = shown(lobby, "#lobby-head", "#lobby-room")
-        assert "你是房主" in text and "朋友在「加入房间」里填" in text
-        assert str(lobby.query_one("#help").label) == "朋友进不来？"
+        assert "你是房主" in text and "客户端加入地址" in text
+        assert str(lobby.query_one("#help").label) == "联机故障排查"
         assert lobby.query_one("#close_room").display
         await pilot.press("enter")  # the only seat
         await pilot.pause(0.1)
@@ -383,4 +383,4 @@ def test_autokeeper_host_opens_the_same_room(monkeypatch, stand_ins):
     assert welcome["room"]["port"] == port and [s["investigator"] for s in welcome["seats"]] == ["zhouheng"]
     assert not seen["room"].is_open  # closed when the command ends
     bad = CliRunner().invoke(cli, ["host", str(EXAMPLE), "--no-web", "--hub-port", str(port), "--seats", "随便"])
-    assert bad.exit_code == 1 and "座位只能填" in bad.output
+    assert bad.exit_code == 1 and "座位类型仅支持" in bad.output

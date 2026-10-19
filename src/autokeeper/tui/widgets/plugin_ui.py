@@ -200,10 +200,10 @@ class ShowPlayer(Static):
 # -- prompts -----------------------------------------------------------------------------------
 class PromptModal(ModalScreen[Any]):
     """A plugin's question or little game for this player: buttons, a short answer, a number,
-    putting things in order, picking some, or a board of cells to pick from. 先不玩 passes;
+    putting things in order, picking some, or a board of cells to pick from. 跳过 passes;
     the answer goes back to the plugin as its next step."""
 
-    BINDINGS = [("escape", "skip", "先不玩")]
+    BINDINGS = [("escape", "skip", "跳过")]
     DEFAULT_CSS = """
     PromptModal .cells {
         height: auto;
@@ -251,7 +251,7 @@ class PromptModal(ModalScreen[Any]):
                         for i, option in enumerate(ev.get("options", [])):
                             yield Button(option, id=f"opt-{i}", variant="primary" if i == 0 else "default")
                 elif style in ("text", "number"):
-                    hint = f"{ev.get('low', 0)} 到 {ev.get('high', 9)} 之间的数" if style == "number" else "写下你的回答，回车确定"
+                    hint = f"{ev.get('low', 0)} 到 {ev.get('high', 9)} 之间的数" if style == "number" else "输入答案，回车确认"
                     yield Input(placeholder=hint, id="prompt-input", type="integer" if style == "number" else "text",
                                 max_length=80)
                 elif style == "pick":
@@ -271,7 +271,7 @@ class PromptModal(ModalScreen[Any]):
                     yield Button("确定", id="prompt-ok", variant="primary")
                 if style == "order":
                     yield Button("重排", id="prompt-reset")
-                yield Button("先不玩", id="prompt-skip")
+                yield Button("跳过", id="prompt-skip")
             yield Static("", id="prompt-left")
 
     def on_mount(self) -> None:
@@ -287,7 +287,7 @@ class PromptModal(ModalScreen[Any]):
 
     def _order_text(self) -> Text:
         if not self.order:
-            return Text("依次点下面的按钮，排出顺序", style="dim")
+            return Text("依次选择下方选项以排序", style="dim")
         return Text(" → ".join(self.order), style="bold")
 
     def action_skip(self) -> None:
@@ -331,10 +331,10 @@ class PromptModal(ModalScreen[Any]):
             try:
                 value = int(raw)
             except ValueError:
-                self.app.notify("填一个整数", severity="warning")
+                self.app.notify("请输入整数。", severity="warning")
                 return
             if not ev.get("low", 0) <= value <= ev.get("high", 9):
-                self.app.notify(f"要在 {ev.get('low', 0)} 到 {ev.get('high', 9)} 之间", severity="warning")
+                self.app.notify(f"数值须在 {ev.get('low', 0)} 至 {ev.get('high', 9)} 之间。", severity="warning")
                 return
             self.dismiss(value)
         elif style == "pick":
@@ -373,7 +373,7 @@ class Plays:
                 self.waiting = [w for w in self.waiting if w["id"] != ev["id"]] + [ev]
                 line = Text()
                 line.append(f"⚙ 〔{ev.get('name', '')}〕", style=f"bold {LABEL}")
-                line.append(ev.get("title") or "有件事要你来定", style="bold")
+                line.append(ev.get("title") or "等待选择", style="bold")
                 self.screen.story.add("system", line)
                 self.ready()
         elif t == "plugin_closed":
@@ -381,7 +381,7 @@ class Plays:
             if self.asking is not None and self.asking.pid == ev.get("id"):
                 self.asking.dismiss(CLOSED)
         elif t == "plugin_answered":
-            how = {"ai": "（AI）选了", "timeout": "没来得及答，按默认", "skip": "先不玩了，按默认"}.get(ev.get("by", ""), "答")
+            how = {"ai": "（AI）已选择", "timeout": "回答超时，使用默认值", "skip": "已跳过，使用默认值"}.get(ev.get("by", ""), "已回答")
             line = Text()
             line.append(f"⚙ 〔{ev.get('name', '')}〕", style=f"bold {LABEL}")
             line.append(f"{ev.get('who', '')}{how}：{ev.get('text', '')}", style="dim")

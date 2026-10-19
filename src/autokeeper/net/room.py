@@ -113,7 +113,7 @@ def wsl_hint(rows: list[tuple[str, str]]) -> str:
     if "microsoft" not in platform.uname().release.lower():
         return ""
     if all(ip == "127.0.0.1" or ipaddress.ip_address(ip) in ipaddress.ip_network("172.16.0.0/12") for ip, _ in rows):
-        return "WSL 里开的房间别的电脑连不进来，要在 Windows 的 .wslconfig 里设 networkingMode=mirrored"
+        return "其他设备无法访问 WSL 房间时，请在 Windows 的 .wslconfig 中设置 networkingMode=mirrored"
     return ""
 
 
@@ -228,12 +228,12 @@ class Room:
         self._thread.start()
         if not self._ready.wait(timeout):
             self.close()
-            raise RoomError("房间没开成", f"{timeout:.0f} 秒还没开好")
+            raise RoomError("房间创建失败", f"等待 {timeout:.0f} 秒后启动超时")
         if self.error is not None or self.hub is None:
             error, built = self.error, self.hub is not None
             self.close()
             if built and isinstance(error, OSError):  # the module loaded: it is the port
-                raise RoomError("房间没开成，可能已经开着一个", f"联机端口 {self.port}：{error.strerror or error}") from error
+                raise RoomError("房间创建失败，请检查是否已有房间运行。", f"联机端口 {self.port}：{error.strerror or error}") from error
             raise RoomError(str(error) or type(error).__name__) from error
         return self.hub
 
@@ -279,7 +279,7 @@ class Room:
         assert self.hub is not None, "open() first"
         if not port_free(self.web_port):
             if not self.any_port:
-                raise RoomError("网页版没开起来，可能已经开着一个房间", f"网页端口 {self.web_port} 被占用了")
+                raise RoomError("网页版启动失败，请检查是否已有房间运行。", f"网页端口 {self.web_port} 被占用了")
             self.web_port = free_port()
         url = page_url(addresses()[0][0], self.web_port)
         argv = [sys.executable, "-m", "autokeeper.net.web", str(self.port), str(self.web_port), url]
@@ -290,12 +290,12 @@ class Room:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self.page.poll() is not None:
-                raise RoomError("网页版没开起来", f"网页进程退出了（退出码 {self.page.returncode}），记录在 {paths.web_log()}")
+                raise RoomError("网页版启动失败", f"网页进程已退出（退出码 {self.page.returncode}），日志位于 {paths.web_log()}")
             with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", self.web_port), 0.3):
                 self.shared["web"] = self.web_port
                 return url
             time.sleep(0.1)
-        raise RoomError("网页版没开起来", f"{timeout:.0f} 秒还没开好，记录在 {paths.web_log()}")
+        raise RoomError("网页版启动失败", f"等待 {timeout:.0f} 秒后启动超时，日志位于 {paths.web_log()}")
 
     def wait(self) -> None:
         """Until the room closes; Ctrl+C gets through."""

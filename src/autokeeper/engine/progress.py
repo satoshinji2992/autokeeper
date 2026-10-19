@@ -76,9 +76,9 @@ def due(st: GameState) -> bool:
 def refused(st: GameState) -> str:
     """Why a player's own request for one cannot be done now; "" when it can."""
     if st.progress.asked == st.turn:
-        return "这一轮已经整理过了，下一轮再来"
+        return "本回合已整理进展，可在下一回合再次整理。"
     if st.logged <= st.progress.seen:
-        return "上次整理以后还没有新的事"
+        return "上次整理后暂无新事件。"
     return ""
 
 

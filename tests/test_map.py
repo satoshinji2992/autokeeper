@@ -198,7 +198,7 @@ def test_every_known_place_is_drawn_once_without_overlap_and_here_is_marked(zhui
     assert drawn.count("◉") == 1 and f"◉ {p.labels['lingmu']}" in drawn
     you = [drawn[s.start : s.end] for s in content.spans if str(s.style).startswith(mapview.STYLE["you"])]
     assert you == [p.labels["lingmu"]]  # highlighted, and underlined as the place picked
-    assert ("你在这里" in drawn) == (p.tagged == "lingmu")
+    assert ("当前位置" in drawn) == (p.tagged == "lingmu")
 
 
 def test_twenty_places_with_long_names_still_fit():
@@ -302,15 +302,15 @@ def test_what_they_know_inside_a_place(zhui):
     c = mapview.chart(zhui, st)
     cemetery = mapview.about(zhui, st, c, "mudi").plain
     lines = cemetery.split("\n")
-    assert lines[0] == "◉ 公墓  你在这里"
+    assert lines[0] == "◉ 公墓  当前位置"
     assert lines[1] == "".join(x.strip() for x in zhui.location("mudi").read_aloud.split("\n"))  # what they saw, unwrapped
-    assert "里面 陵墓" in cemetery and "见过 梅洛迪亚斯·杰弗逊" in cemetery and "线索 墓碑旁的怪足迹" in cemetery
-    assert "通往 金博尔家 10 分钟、艾尔斯伯里大街 10 分钟" in cemetery and "陵墓（没走过）" in cemetery and "天气 ☂ 雨" in cemetery
+    assert "内部区域 陵墓" in cemetery and "已遇见人物 梅洛迪亚斯·杰弗逊" in cemetery and "线索 墓碑旁的怪足迹" in cemetery
+    assert "通往 金博尔家 10 分钟、艾尔斯伯里大街 10 分钟" in cemetery and "陵墓（未行经）" in cemetery and "天气 ☂ 雨" in cemetery
     street = mapview.about(zhui, st, c, "jiefang").plain
-    assert street.startswith("● 艾尔斯伯里大街  路过") and zhui.location("jiefang").read_aloud.strip()[:8] not in street
+    assert street.startswith("● 艾尔斯伯里大街  已途经") and zhui.location("jiefang").read_aloud.strip()[:8] not in street
     assert "金博尔家 15 分钟" in street and "阿诺兹堡镇中心 15 分钟" in street  # the module's minutes for the walk
     tomb = mapview.about(zhui, st, c, "lingmu").plain
-    assert tomb == "○ 陵墓  听说过，还没去过 · 在公墓里\n通往 公墓（没走过）"
+    assert tomb == "○ 陵墓  已听闻，未到访 · 所属区域：公墓\n通往 公墓（未行经）"
     everything = "\n".join(mapview.about(zhui, st, c, place).plain for place in c.names)
     shown = "\n".join(fog.shown(zhui, st)) + "".join(n.name for n in zhui.npcs if st.npc(n.id).met)
     unseen = [f for loc in zhui.locations for f in loc.features if f not in shown]  # what could be searched, not what was seen
@@ -340,11 +340,11 @@ def test_the_example_says_who_was_met_where_and_the_weather_over_it():
     st.npc("warden").met = True
     c = mapview.chart(m, st)
     tower = mapview.about(m, st, c, "tower").plain
-    assert tower.startswith("◉ 钟楼  你在这里 · 在广场里") and "见过 老守钟人" in tower and "天气" not in tower  # indoors
+    assert tower.startswith("◉ 钟楼  当前位置 · 所属区域：广场") and "已遇见人物 老守钟人" in tower and "天气" not in tower  # indoors
     square = mapview.about(m, st, c, "square").plain
-    assert "里面 钟楼" in square and "线索 广场告示" in square and "天气 ≋ 雾" in square
+    assert "内部区域 钟楼" in square and "线索 广场告示" in square and "天气 ≋ 雾" in square
     legend = mapview.legend(c, mapview.tree(c, mapview.default_open(c))).plain
-    assert "听说过，还不知道怎么去：○ 报社" in legend and "▸" not in legend  # the tower's square is open: nothing folded
+    assert "已听闻，路线未知：○ 报社" in legend and "▸" not in legend  # the tower's square is open: nothing folded
 
 
 # -- a shared table --------------------------------------------------------------------------
@@ -414,7 +414,7 @@ async def test_f3_opens_a_map_to_pick_from_open_and_fold(zhui):
         screen = app.screen
         drawn = screen.query_one("#map", Static).content.plain
         assert "◉" in drawn and "金博尔家 ▸ 1" in drawn and screen.picked == "huochezhan"
-        assert "你在这里" in screen.query_one("#place", Static).content.plain
+        assert "当前位置" in screen.query_one("#place", Static).content.plain
         hint = screen.query_one("#map-keys", Static)
         assert hint.region.bottom <= app.size.height and "Esc" in str(hint.content)  # the map scrolls; the keys stay on screen
         await pilot.press("tab")

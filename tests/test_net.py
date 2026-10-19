@@ -128,7 +128,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await a.send_json({"t": "sit", "investigator": "zhouheng"})
         await until(b, lambda x: x["t"] == "seats" and x["seats"][0]["player"] == "小明")  # A is seated first
         await b.send_json({"t": "sit", "investigator": "zhouheng"})
-        assert "已经有人" in (await until(b, lambda x: x["t"] == "error"))["text"]
+        assert "已被占用" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await b.send_json({"t": "sit", "investigator": "lin"})  # every seat taken: the game begins
 
         opened_round = await until(a, pool_open)  # a round: both may act, in any order
@@ -184,7 +184,7 @@ async def test_only_the_host_adds_a_house_rule(monkeypatch, tmp_path, skills_dir
         await host.send_json({"t": "hello", "name": "小明", "key": hub.key})
         await until(host, lambda x: x["t"] == "welcome")
         await host.send_json({"t": "house_rule", "text": "每过一夜要吃一顿饭"})
-        await until(host, lambda x: x["t"] == "error" and "讲完" in x["text"])
+        await until(host, lambda x: x["t"] == "error" and "叙述结束后处理" in x["text"])
         await guest.close()
         await host.close()
     await closed(task)

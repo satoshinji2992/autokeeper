@@ -577,7 +577,7 @@ def roll_card(v: dict, *, spinning: bool = False, led_to: list[str] | tuple[str,
     level = v.get("level", "")
     out.append("   ")
     out.append(f" {level} ", style=LEVEL_STYLE.get(level, "bold"))
-    out.append(" 过了" if v.get("passed") else " 没过", style=f"bold {PASS if v.get('passed') else MISS}")
+    out.append(" 通过" if v.get("passed") else " 未通过", style=f"bold {PASS if v.get('passed') else MISS}")
     for line in led_to:
         out.append(f"\n  ↳ {line}", style="bold")
     return out
@@ -891,7 +891,7 @@ class HistoryPanel(VerticalScroll):
         self.round = -1
 
     def compose(self):
-        yield Static(Text("点一行，故事跳到那里 · Ctrl+G 翻页", style="dim"), classes="history-head")
+        yield Static(Text("点击记录可定位对应叙述 · Ctrl+G 切换页面", style="dim"), classes="history-head")
 
     def on_mount(self) -> None:
         self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go
@@ -974,5 +974,5 @@ class CluePanel(Static):
             out.append(t, style="bold")
             out.append("〕\n", style="dim")
         if not titles:
-            out.append("还什么都没有发现。\n", style="dim")
+            out.append("暂无已发现的线索。\n", style="dim")
         self.update(out)

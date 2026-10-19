@@ -53,9 +53,9 @@ def test_a_card_is_checked_and_its_derived_values_worked_out_again():
     assert inv.hp_max == (70 + 50) // 10 and inv.hp == inv.hp_max  # never the card's own numbers
     assert inv.mp_max == 65 // 5 and inv.mp == inv.mp_max and inv.san == 30 and inv.san_start_of_day == 30
     assert inv.move == 9 and inv.damage_bonus == "0" and len(inv.name) == 24 and len(inv.backstory["个人描述"]) == 400
-    for bad, why in ((card(characteristics=STATS | {"力量": 120}), "属性"), (card(name=""), "名字"), (card(luck=0), "幸运"),
-                     (card(skills={"侦查": 150}), "技能"), (card(characteristics={"力量": 50}), "八项"), ("不是卡", "读不了"),
-                     (card(conditions=["死亡"]), "不能上场"), (card(age=7), "年龄")):  # fmt: skip
+    for bad, why in ((card(characteristics=STATS | {"力量": 120}), "属性"), (card(name=""), "姓名"), (card(luck=0), "幸运"),
+                     (card(skills={"侦查": 150}), "技能"), (card(characteristics={"力量": 50}), "八项"), ("不是卡", "无法读取"),
+                     (card(conditions=["死亡"]), "无法参加"), (card(age=7), "年龄")):  # fmt: skip
         with pytest.raises(netcards.Refused, match=why):
             netcards.vet(bad, "x")
 
@@ -96,7 +96,7 @@ async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, t
         b, _ = await hello(http, hub, "小红")
         await b.send_json({"t": "sit", "investigator": "seat-1"})
         await b.send_json({"t": "bring", "pregen": "zhouheng"})
-        assert "别的座位" in (await until(b, lambda x: x["t"] == "error"))["text"]
+        assert "其他座位" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await b.send_json({"t": "ready"})
         assert "先选" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await b.send_json({"t": "bring", "investigator": card(name="林秋")})
@@ -108,7 +108,7 @@ async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, t
         await until(a, lambda x: x["t"] == "begin")
         assert [i.name for i in hub.state.investigators] == ["周衡", "林秋"] and hub.state.human == ["zhouheng", theirs]
         await b.send_json({"t": "bring", "pregen": "zhouheng"})
-        assert "开局" in (await until(b, lambda x: x["t"] == "error"))["text"]
+        assert "不可更换角色" in (await until(b, lambda x: x["t"] == "error"))["text"]
         for ws in (a, b, host):
             await ws.close()
     await closed(task)
@@ -116,7 +116,7 @@ async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, t
 
 async def test_starting_now_fills_or_drops_the_empty_seats(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
-    with pytest.raises(ValueError, match="多出来"):
+    with pytest.raises(ValueError, match="额外座位"):
         Hub(EXAMPLE, seats=["玩家", "AI"], cast=TableCast(), rules=Rules(dice=fake))
     hub = Hub(EXAMPLE, seats=["不上场", "玩家", "玩家"], cast=TableCast(), rules=Rules(dice=fake))  # only empty seats
     assert hub.state.investigators == [] and list(hub.sits) == ["seat-1", "seat-2"]
@@ -124,7 +124,7 @@ async def test_starting_now_fills_or_drops_the_empty_seats(monkeypatch, tmp_path
     async with aiohttp.ClientSession() as http:
         a, _ = await hello(http, hub, "小明")
         await a.send_json({"t": "start"})
-        assert "还没有人" in (await until(a, lambda x: x["t"] == "error"))["text"] and not hub.started.is_set()
+        assert "尚无已选角色" in (await until(a, lambda x: x["t"] == "error"))["text"] and not hub.started.is_set()
         await a.send_json({"t": "sit", "investigator": "seat-2"})
         await a.send_json({"t": "start"})  # the seat with a player gets the free pregen; the other goes
         assert (await until(a, lambda x: x["t"] == "seated"))["investigator"] == "zhouheng"
@@ -196,7 +196,7 @@ async def test_a_card_is_made_on_the_host_one_step_at_a_time(cards, monkeypatch,
         watcher, _ = await hello(http, hub, "小红")
         await watcher.send_json({"t": "card", "op": "begin"})
         await watcher.send_json({"t": "card", "op": "look_up", "n": 1, "query": "一个女记者"})
-        assert "坐下" in (await until(watcher, lambda x: x["t"] == "card"))["error"]  # only seated players
+        assert "入座玩家" in (await until(watcher, lambda x: x["t"] == "card"))["error"]  # only seated players
         await a.send_json({"t": "sit", "investigator": "zhouheng"})
         await a.send_json({"t": "card", "op": "begin"})
         await a.send_json({"t": "card", "op": "begin"})  # again: still one card for this player
@@ -205,7 +205,7 @@ async def test_a_card_is_made_on_the_host_one_step_at_a_time(cards, monkeypatch,
         assert found["figure"]["source"] == "描述" and len(hub.builders) == 1
         await a.send_json({"t": "card", "op": "propose", "n": 2})
         await a.send_json({"t": "card", "op": "propose", "n": 3})  # while the first still runs
-        assert "还没做完" in (await until(a, lambda x: x["t"] == "card" and x["n"] == 3))["error"]
+        assert "上一步尚未完成" in (await until(a, lambda x: x["t"] == "card" and x["n"] == 3))["error"]
         SlowBuilder.gate.set()
         asked = await until(a, lambda x: x["t"] == "card" and x["n"] == 2)
         questions = asked["proposal"]["questions"]
