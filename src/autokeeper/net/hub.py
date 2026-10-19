@@ -70,6 +70,7 @@ PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors"}
+PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:

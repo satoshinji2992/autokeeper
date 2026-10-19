@@ -13,6 +13,7 @@ dependencies = [
     "httpx>=0.27",
     "ifaddr>=0.2",
     "jieba>=0.42.1",
+    "jsonpatch>=1.33",
     "jsonschema>=4.23",
     "langchain>=1.4.6",
     "langchain-core>=1.6.12",

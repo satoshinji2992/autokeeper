@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..rules.coc import Investigator
+from ..world.record import WorldRecord
 
 LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
@@ -67,7 +68,7 @@ class WorldFact(BaseModel):
     text: str
     who: str
     npc: str = ""
-    status: Literal["active", "fulfilled"] = "active"
+    status: Literal["active", "fulfilled", "broken"] = "active"
     turn: int
     source: str
 
@@ -112,6 +113,9 @@ class GameState(BaseModel):
     npcs: dict[str, NpcState] = Field(default_factory=dict)
     world: dict[str, WorldFact] = Field(default_factory=dict)
     item_owners: dict[str, str] = Field(default_factory=dict)
+    # This game's world record (world/): entities, facts and who knows them, relations, promises,
+    # threads, important NPCs and the event stream. Private at a LAN table (net/hub.py PRIVATE).
+    record: WorldRecord = Field(default_factory=WorldRecord)
     pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
