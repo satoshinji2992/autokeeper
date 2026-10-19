@@ -34,6 +34,7 @@ class NewLocation(BaseModel):
     keeper: str = Field("", description="守秘人须知")
     features: list[str] = Field(default_factory=list, description="可以调查的东西")
     exits: list[str] = Field(description="和哪些已有地点相连（会自动双向连通）")
+    within: str | None = Field(None, description="在哪个地点里面（已有的，或这次新建的），比如地窖在某户人家里；不在别处里面就留空")
 
 
 class NewNPC(BaseModel):

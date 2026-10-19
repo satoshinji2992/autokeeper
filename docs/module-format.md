@@ -25,7 +25,7 @@ modules/<id>/
 | `cover` | 无剧透的原作封面图片键；选模组时显示 ASCII 预览，不作为开局场景 |
 | `plugins` | 已开发并通过测试的插件 id 列表；从 `plugins/<id>/` 加载代码，不能在 YAML 中填运行时 `extensions` |
 | `start` / `start_time` | 起始地点 id 和时间（如 `D1 14:00`） |
-| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数；`looks` 是剧情变样后的场景图 |
+| `locations` | 地点：`read_aloud`（读给玩家）、`keeper`（幕后资料）、`features`、`exits`、`art`；`public: true` 表示可问路找到的公共地标；`travel_minutes` 指定相邻路段分钟数；`within` 填外层地点 id，表示确实在它里面（书房在宅子里、陵墓在公墓里），地图上画在外层地点里，可留空；`looks` 是剧情变样后的场景图 |
 | `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait`、变样头像 `looks` |
 | `items` | 物件：`id`、`name`、公开外观 `description`、所在地点 `where`、初始持有者 `owner`（可空）、配图 `art`；后续归属随本局保存，不替代线索或授予隐藏效果 |
 | `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出 |

@@ -322,6 +322,7 @@ locations:
   - greenhouse
 - id: greenhouse
   name: 温室天文台
+  within: hart_house
   art: greenhouse
   weather:
   - dust

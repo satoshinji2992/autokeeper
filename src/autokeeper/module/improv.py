@@ -70,6 +70,8 @@ def check(m: Module, plan: Any, *, at: str) -> list[str]:
         if not loc.exits:
             problems.append(f"新地点 {loc.id} 没有和任何地点相连")
         problems += [f"新地点 {loc.id} 的出口 {e} 不存在" for e in loc.exits if e not in locs]
+        if loc.within and (loc.within not in locs or loc.within == loc.id):
+            problems.append(f"新地点 {loc.id} 所在的地点 {loc.within} 不存在")
     for n in plan.npcs:
         if n.location not in locs:
             problems.append(f"新 NPC {n.id} 所在地点 {n.location} 不存在")
@@ -146,7 +148,7 @@ def apply(m: Module, plan: Any) -> Applied:
             continue
         m.locations.append(
             Location(id=loc.id, name=loc.name, read_aloud=loc.read_aloud, keeper=loc.keeper, features=loc.features,
-                     exits=list(loc.exits), art=visual_key("scene", loc.id))
+                     exits=list(loc.exits), art=visual_key("scene", loc.id), within=loc.within)
         )  # fmt: skip
         for e in loc.exits:
             other = next((x for x in m.locations if x.id == e), None)
