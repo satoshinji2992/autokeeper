@@ -106,6 +106,7 @@ class GameState(BaseModel):
     visited: list[str] = Field(default_factory=list)
     heard: dict[str, str] = Field(default_factory=dict)  # places named in what the players saw: id -> the name heard (engine/fog.py)
     minutes: int = 0
+    day: int = 0  # the game day the investigators' daily SAN count belongs to (minutes // 1440)
     clues: list[str] = Field(default_factory=list)
     handouts: list[str] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)

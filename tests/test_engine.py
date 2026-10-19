@@ -798,3 +798,26 @@ def test_the_roll_prompt_never_gives_the_module_away(module, fake):
     assert why("他在钟里藏了东西，所以拦着人") == ""  # echoes a secret
     assert why("守钟人的日记就锁在柜子里") == ""  # a clue not found yet
     assert len(why("、".join(["守钟人坐在楼梯口打盹手里还攥着一块油布"] * 3))) == 40
+
+
+async def test_losing_a_fifth_of_san_in_one_day_is_indefinite_insanity_and_the_count_starts_again_each_day(fake):
+    """The daily count was never started or reset, so 不定性疯狂 could not happen at all."""
+    from autokeeper.engine.game import Game
+    from autokeeper.module.schema import Module
+    from autokeeper.rules.coc import Rules
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    inv = st.investigators[0]
+    assert inv.san_start_of_day == inv.san == 55 and inv.san_lost_today == 0
+    rules = Rules(dice=fake)
+    fake.queue(99, 99)  # a failed SAN roll losing 6 of 55, then the INT roll for 5 or more
+    assert not rules.sanity(inv, "0", "6").indefinite
+    game = Game(m, st, FakeCast({}), rules)
+    st.fired = [ev.id for ev in m.events]  # only the day changes here, no timed event fires
+    st.minutes += 24 * 60  # the next day
+    await game._time()
+    assert inv.san_start_of_day == 49 and inv.san_lost_today == 0
+    fake.queue(99, 99)
+    result = rules.sanity(inv, "0", "10")  # 10 of 49 in one day: more than a fifth
+    assert result.indefinite and "不定性疯狂" in inv.conditions

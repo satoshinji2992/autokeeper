@@ -151,6 +151,9 @@ class Game:
             visited=[module.start],
             minutes=parse_time(module.start_time),
         )
+        state.day = state.minutes // 1440
+        for inv in state.investigators:  # the 1/5-of-SAN-in-a-day count starts now
+            inv.new_day()
         return state
 
     async def start(self, on_delta=None) -> str:
@@ -999,6 +1002,10 @@ class Game:
         for ev in due:
             if parse_time(ev.when) <= st.minutes:
                 await self._fire(ev, turn)
+        if st.minutes // 1440 != st.day:  # a new day: each investigator's daily SAN loss starts again
+            st.day = st.minutes // 1440
+            for inv in st.investigators:
+                inv.new_day()
         await self.plugins.due(turn)  # rule plugins' timers
         await self.emit({"type": "time", "clock": st.clock, "phase": time_of_day(st.minutes)})
 
