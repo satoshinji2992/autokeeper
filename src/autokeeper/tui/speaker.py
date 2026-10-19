@@ -16,9 +16,10 @@ One speaker at a time: when two NPCs talk in one exchange, the latest takes the 
 the story keeps who said what.
 
 The panel sits on a layer of its own, docked over the scene, so the scene keeps its width,
-its weather, its light and its scan-in. It is as tall as the scene: a place without a picture,
-or with a short drawing, grows to hold the face. Its portrait is drawn again, off the UI
-thread, when that height or the art style changes; every variant is cached.
+its weather, its light and its scan-in. It is as tall as the scene once drawn (SceneArt.rows,
+not whatever height is on screen mid-load): a place without a picture, or with a short
+drawing, grows to hold the face. Its portrait is drawn again, off the UI thread, when that
+height or the art style changes; every variant is cached.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.color import Color
 from textual.containers import Vertical
+from textual.timer import Timer
 from textual.widgets import Static
 
 from .. import artkit, imagery, mood
@@ -121,6 +123,8 @@ class Speaker(Vertical):
         self.fresh = False  # they have spoken since the keeper's last narration
         self.since = 0.0  # when they last spoke
         self._fitted: tuple = ()  # the face on show: (portrait, mood, size, style)
+        self._motion: list = []  # the steps of a tremble or a flash still to come
+        self._step: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield Static(classes="face")
@@ -133,10 +137,11 @@ class Speaker(Vertical):
     @property
     def scene(self) -> SceneArt | None:
         # During teardown the scene sibling may be gone before this widget's worker
-        # returns from its thread. Treat that exactly like a stage with no room.
-        if not self.is_attached:
+        # returns from its thread. Treat that exactly like a stage with no room. A sibling,
+        # not a query of the whole screen: that would walk every block of the story.
+        if not self.is_attached or self.parent is None:
             return None
-        return next(iter(self.screen.query(SceneArt)), None)
+        return next((w for w in self.parent.children if isinstance(w, SceneArt)), None)
 
     # -- the rules ---------------------------------------------------------------------------
     def follow(self, ev: dict, m: Module) -> None:
@@ -199,7 +204,7 @@ class Speaker(Vertical):
         width = scene.outer_size.width
         if width < NARROWEST:
             return ()
-        here = scene.outer_size.height
+        here = scene.rows
         if not p.picture:
             return (p, self.feeling, (0, 0), "", max(here, len(p.art.split("\n")) + 2))
         rows = max(here, 1 + max(PICTURE_ROWS, round(scene._fit()[1] * 0.7)))
@@ -229,7 +234,7 @@ class Speaker(Vertical):
         self.query_one(".face", Static).update(art)
         self.query_one(".who", Static).update(name)
         self.styles.width = width
-        self.parent.styles.min_height = rows + 1 if rows > scene.outer_size.height else None  # type: ignore[union-attr]  # + its border
+        self.parent.styles.min_height = rows + 1 if rows > scene.rows else None  # type: ignore[union-attr]  # + its border
         scene.cover(width)
         self.display = True
         self._fitted = wanted
@@ -251,11 +256,25 @@ class Speaker(Vertical):
             return
         if self.feeling in MOTIONS:
             step, path = MOTIONS[self.feeling]
-            for i, at in enumerate(path):
-                self.set_timer(step * (i + 1), partial(self._nudge, at))
+            self._play([partial(self._nudge, at) for at in path], step, step)
         elif self.feeling == "发怒":
-            for i, alpha in enumerate(FLASH):
-                self.set_timer(0.06 * i + 0.01, partial(self._flash, alpha))
+            self._play([partial(self._flash, alpha) for alpha in FLASH], 0.06, 0.01)
+
+    def _play(self, steps: list, every: float, first: float) -> None:
+        """One step at a time, each timed from the one before: a stalled loop (a long garbage
+        collection, a busy machine) holds the motion back but never folds it into one frame,
+        and the last step, back at rest, comes last. (A timer per step, all set at once, could
+        fire out of order on Windows, where Textual's timers sleep in threads.) A new motion
+        takes over from one still running."""
+        if self._step is not None:
+            self._step.stop()
+        self._motion = steps
+        self._step = self.set_timer(first, partial(self._advance, every))
+
+    def _advance(self, every: float) -> None:
+        if self._motion:
+            self._motion.pop(0)()
+        self._step = self.set_timer(every, partial(self._advance, every)) if self._motion else None
 
     def _nudge(self, at: tuple[int, int]) -> None:
         self.query_one(".face", Static).styles.offset = at

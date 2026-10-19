@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import json
 import os
 import random
 import subprocess
+import sys
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 
@@ -23,7 +26,9 @@ from textual.binding import Binding
 from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
+from textual.strip import Strip
 from textual.theme import Theme
+from textual.timer import Timer
 from textual.widgets import Button, Footer, Input, OptionList, Static, TabbedContent
 from textual.widgets.option_list import Option
 
@@ -161,6 +166,15 @@ class TitleScreen(Screen):
         self.flash = 0
         self.frames = 0  # how many of the loop's frames are drawn for the current size
         self.size_key: tuple[int, int, float, str] | None = None
+        self.ticker: Timer | None = None
+        # Rows ready to show, for this size and theme (the loop shows each frame again and
+        # again): the painting with the name, the tagline and the hint over it, a frame each;
+        # and the menu's rows over each frame, with the bar where it is.
+        self.painted: dict[int, list[Strip]] = {}
+        self.menus: dict[tuple[int, int | None], list[Strip]] = {}
+        self.painted_for: tuple | None = None
+        self.shown: tuple | None = None  # (frame, bar) on screen
+        self.area: tuple[int, int] | None = None  # the screen's size, once known
 
     def compose(self) -> ComposeResult:
         yield OptionList(
@@ -176,20 +190,35 @@ class TitleScreen(Screen):
             Option("离开", id="quit"),
             id="menu",
         )
-        yield Static(id="title-cover")
+        yield cover.Cover(id="title-cover")
 
     def on_mount(self) -> None:
         self.id = "title-screen"
-        self.set_interval(0.12, self._tick)
+        self.ticker = self.set_interval(0.12, self._tick)
         self.query_one("#menu", OptionList).focus()
 
-    def on_resize(self, event) -> None:
-        self._place(event.size.width, event.size.height)
+    # Under another screen (the setup, a whole game) the sea stands still: repainted behind a
+    # game eight times a second, the title took a third of a core and fed long GC pauses. Its
+    # frames go too, till it is back: every full GC of the game would walk their cells.
+    def on_screen_suspend(self) -> None:
+        if self.ticker is not None:
+            self.ticker.pause()
+        self.painted, self.menus, self.painted_for, self.shown = {}, {}, None, None
+        self.size_key, self.frames = None, 0
+        cover.clear()
 
     def on_screen_resume(self) -> None:
         room = getattr(self.app, "room", None)  # a LAN room this app opened (tui/host.py)
         label = "回到房间" if room is not None and room.is_open else "开房间"
         self.query_one("#menu", OptionList).replace_option_prompt("host", label)
+        if self.ticker is not None:
+            self.ticker.resume()
+        if self.area is not None:  # the frames again, in the art style chosen meanwhile (F9)
+            self._place(*self.area)
+
+    def on_resize(self, event) -> None:
+        self.area = (event.size.width, event.size.height)
+        self._place(*self.area)
 
     def _stack(self, cols: int, rows: int) -> tuple[int, int, int]:
         """Rows of the name, the tagline and the menu: one block standing on the hint line, as
@@ -231,29 +260,70 @@ class TitleScreen(Screen):
         self.flash = max(0, self.flash - 1)
 
     def _paint(self) -> None:
+        """The frame for this tick, unless it is the one on screen: the picture changes every
+        other tick, the name glitches now and then, the bar moves with the keys."""
         if self.size_key is None:
             return
-        cols, rows, middle, _ = self.size_key
         k = cover.FRAMES if self.flash in (3, 1) else (self.tick // 2) % cover.FRAMES
-        if self.frames > k or self.frames:
-            grid = [row[:] for row in cover.frame(*self.size_key, k if self.frames > k else 0)]
+        picture = (k if self.frames > k else 0) if self.frames else -1  # -1: nothing drawn yet
+        view = self.query_one(cover.Cover)
+        if picture < 0 and imagery.available() and cover.PICTURE.is_file() and view.rows:
+            return  # back from a game: the last frame stays till the first of these is in
+        flicker = random.choice([0.0] * 14 + [0.02, 0.05, 0.12])
+        menu = self.query_one("#menu", OptionList)
+        if (self.size_key, self.app.theme) != self.painted_for:
+            self.painted, self.menus, self.painted_for = {}, {}, (self.size_key, self.app.theme)
+        shown = (picture, menu.highlighted)
+        if not flicker and shown == self.shown:
+            return
+        cols, rows = self.size_key[:2]
+        if picture not in self.painted:
+            self.painted[picture] = cover.strips(self._words(self._cells(picture)))
+        lines = list(self.painted[picture])
+        x, y, w, h = self._menu_box(cols, rows)
+        if shown not in self.menus:
+            if len(self.menus) > 40:  # the bar has been everywhere: start again
+                self.menus.clear()
+            under = self._cells(picture)[y : y + h]
+            labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
+            theme = self.app.current_theme
+            cover.menu(under, (x, 0, w, h), labels, menu.highlighted, theme.primary, theme.foreground or "#f3d7a6", theme.surface or "#15110a")
+            self.menus[shown] = cover.strips(under)
+        lines[y : y + len(self.menus[shown])] = self.menus[shown]
+        if flicker:  # only the name's rows are drawn again
+            top = self._stack(cols, rows)[0]
+            logo = cover.cells(art.title(cols, flicker, height=rows))
+            over = self._cells(picture)[top : top + len(logo)]
+            cover.put(over, logo, (cols - max(map(len, logo), default=0)) // 2, 0, keep_ground=True)
+            lines[top : top + len(over)] = cover.strips(over)
+        view.show(lines)
+        self.shown = None if flicker else shown
+
+    def _cells(self, picture: int) -> cover.Cells:
+        """Frame `picture` of the painting (-1: the eye, or nothing yet), cells to lay words on."""
+        assert self.size_key is not None
+        cols, rows, middle, _ = self.size_key
+        if picture >= 0:
+            grid = [row[:] for row in cover.frame(*self.size_key, picture)]
         elif not imagery.available():
             grid = cover.eye(cols, rows, middle)
         else:
             grid = []
-        grid = grid[:rows] + cover.blank(cols, rows - len(grid))  # chafa may come a row short
+        return grid[:rows] + cover.blank(cols, rows - len(grid))  # chafa may come a row short
+
+    def _words(self, grid: cover.Cells) -> cover.Cells:
+        """The name, the tagline and the hint over the painting (the menu goes on by itself)."""
+        assert self.size_key is not None
+        cols, rows = self.size_key[:2]
         theme = self.app.current_theme
         top, tag, _ = self._stack(cols, rows)
-        logo = cover.cells(art.title(cols, random.choice([0.0] * 14 + [0.02, 0.05, 0.12]), height=rows))
+        logo = cover.cells(art.title(cols, 0.0, height=rows))
         cover.put(grid, logo, (cols - max(map(len, logo), default=0)) // 2, top, keep_ground=True)
         words = cover.cells(Text(f" {art.TAGLINE} ", style=f"bold {theme.secondary or '#d98e04'}"))
         cover.put(grid, words, (cols - len(words[0])) // 2, tag, under=cover.PLAQUE)
-        menu = self.query_one("#menu", OptionList)
-        labels = [str(menu.get_option_at_index(i).prompt) for i in range(menu.option_count)]
-        cover.menu(grid, self._menu_box(cols, rows), labels, menu.highlighted, theme.primary, theme.foreground or "#f3d7a6", theme.surface or "#15110a")
         hint = cover.cells(Text(" ↑↓ 选择 · Enter 确认 · F9 设置 · Ctrl+Q 离开 ", style="#8a7a66"))
         cover.put(grid, hint, (cols - len(hint[0])) // 2, rows - 1, under=cover.PLAQUE)
-        self.query_one("#title-cover", Static).update(cover.compose(grid))
+        return grid
 
     def _option_at(self, x: int, y: int) -> int | None:
         if self.size_key is None:
@@ -438,7 +508,9 @@ class SetupScreen(Screen):
             elif oid == "card:import":
                 body.update(Text("带上你自己的卡：骰娘的 .st 指令、车卡器导出的表格、PDF 或 Word 人物卡、纸质卡的照片，或者酒馆（SillyTavern）的角色卡。数值照原样录入；只有人设的角色卡，会问你几个问题再车成调查员。", style="dim"))
             elif inv := self._investigator(oid):
-                body.update(_investigator_card(self.module, inv, self.app.art_style))  # type: ignore[attr-defined]
+                body.update(_investigator_card(self.module, inv, self.app.art_style, photo=False))  # type: ignore[attr-defined]
+                if inv.portrait in self.module.pictures and imagery.available():
+                    self._preview_card(self.module, inv, oid)
 
     @work(exclusive=True, group="module-preview")
     async def _preview_original(self, m: Module, key: str, header: Text, oid: str) -> None:
@@ -463,6 +535,17 @@ class SetupScreen(Screen):
         header.append("\n\n" + m.hook.strip() + "\n\n", style="italic")
         header.append(m.source, style="dim")
         self.query_one("#preview-body", Static).update(header)
+
+    @work(exclusive=True, group="card-preview", exit_on_error=False)
+    async def _preview_card(self, m: Module, inv: Investigator, oid: str) -> None:
+        """The card with its photo, drawn in a thread: ↑↓ through the investigators no longer
+        waits for chafa at each new face."""
+        card = await asyncio.to_thread(_investigator_card, m, inv, self.app.art_style)  # type: ignore[attr-defined]
+        if not self.is_attached:  # chosen meanwhile, and on to the game
+            return
+        choices = self.query_one("#choices", OptionList)
+        if self.step == "investigator" and choices.highlighted is not None and choices.get_option_at_index(choices.highlighted).id == oid:
+            self.query_one("#preview-body", Static).update(card)
 
     @on(OptionList.OptionSelected, "#choices")
     def select(self, event: OptionList.OptionSelected) -> None:
@@ -500,9 +583,10 @@ class SetupScreen(Screen):
         self.app.switch_screen(GameScreen(self.module, state, spectate=self.spectate))
 
 
-def _investigator_card(m: Module, inv: Investigator, style: str = "photo") -> Text:
+def _investigator_card(m: Module, inv: Investigator, style: str = "photo", *, photo: bool = True) -> Text:
+    """`photo=False`: the hand-drawn face (or none) in its place, without waiting for chafa."""
     t = Text()
-    t.append_text(art_text(m, inv.portrait, (32, 14) if inv.portrait in m.pictures else None, style, face=True))
+    t.append_text(art_text(m, inv.portrait, (32, 14) if photo and inv.portrait in m.pictures else None, style, face=True))
     t.append(f"\n\n{inv.name}", style="bold")
     t.append(f"  {inv.occupation} · {inv.age}岁\n", style="dim")
     for k, v in inv.backstory.items():
@@ -590,6 +674,7 @@ class GameScreen(Screen):
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
         self.ideas = Ideas(self)  # F5 (tui/suggest.py)
         self.plays = Plays(self)  # rule plugins' shows and prompts (tui/plugin_ui.py)
+        self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -702,7 +787,7 @@ class GameScreen(Screen):
             line += f"{'  · ' if line else ' '}{wait}：{self.queued[:24]}（/undo 撤回）"
         if line != self._spun:  # an idle status line is not repainted ten times a second
             self._spun = line
-            self.query_one("#status", Static).update(Text(line))
+            self.query_one("#status", Static).update(Text(line), layout=False)  # one row, whatever it says
 
     def _busy(self, busy: bool) -> None:
         """While a turn runs the box stays open: the next action can be typed ahead, and keys
@@ -882,7 +967,7 @@ class GameScreen(Screen):
         bar.add_column(no_wrap=True, overflow="ellipsis", ratio=1)
         bar.add_column(justify="right", no_wrap=True)
         bar.add_row(left, right)
-        self.query_one("#topbar", Static).update(bar)
+        self.query_one("#topbar", Static).update(bar, layout=False)  # one row
         self.query_one(SceneArt).set_light(when)
 
     def _viewer(self):
@@ -910,8 +995,7 @@ class GameScreen(Screen):
         st = self.state
         inv = self._viewer()
         tall = self.app.size.height >= 34  # room for a face beside the bars
-        thumb = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
-        face = art_text(self.m, inv.portrait, PORTRAIT, thumb, face=True) if tall else None
+        face = self._thumb(inv) if tall else None
         self.query_one(SheetPanel).show(inv, face, st.investigators)
         self.story.mark(st.investigators, self._me())
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
@@ -919,6 +1003,30 @@ class GameScreen(Screen):
         self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))
         self._pages()
         self._topbar()
+
+    def _thumb(self, inv: Investigator) -> Text | None:
+        """The side column's face. A picture goes through chafa in a thread (a game started, or
+        Ctrl+A, used to wait for it); the sheet shows without it until it is in."""
+        style = "ascii" if self.app.art_style == "ascii" else "photo"  # type: ignore[attr-defined]  # outlines are noise this small
+        key = (inv.portrait, self.m.pictures.get(inv.portrait or ""), style)
+        if key in self._thumbs:
+            return self._thumbs[key]
+        if not (key[1] and imagery.available()):
+            return art_text(self.m, inv.portrait)  # hand-drawn, or nothing
+        self._thumbs[key] = None
+        self._draw_thumb(key)
+        return None
+
+    @work(thread=True, group="thumb", exit_on_error=False)  # a game left meanwhile: nobody to show it to
+    def _draw_thumb(self, key: tuple) -> None:
+        face = art_text(self.m, key[0], PORTRAIT, key[2], face=True)
+        if self.is_attached:
+            self.app.call_from_thread(self._thumb_drawn, key, face)
+
+    def _thumb_drawn(self, key: tuple, face: Text) -> None:
+        self._thumbs[key] = face
+        if self.is_attached:
+            self._panels()
 
     def _pages(self) -> None:
         """进展 and 背景 as the state has them now (经过 grows with the story)."""
@@ -1763,6 +1871,11 @@ class AutoKeeperApp(App):
 
     def __init__(self, theme: str | None = None, join: tuple[str, str] | None = None):
         super().__init__()
+        # Each frame (weather, a narration's tick, the title's sea) makes thousands of short-lived
+        # objects; at Python's default thresholds (700, 10, 10) they kept reaching the old
+        # generation, and a game stopped for a 150-250 ms full collection every second or two.
+        # A larger young generation lets them die young: a full collection every few minutes.
+        gc.set_threshold(10_000, 20, 20)
         self._theme_name = theme
         self.art_style = config.load().art_style
         self.dice_skin = config.load().dice
@@ -1770,6 +1883,11 @@ class AutoKeeperApp(App):
         self.room = None  # the LAN room opened from the title screen (net/room.py), closed with the app
 
     def on_mount(self) -> None:
+        if sys.platform == "win32":
+            # On Windows Textual's timers sleep in the default thread pool, a thread each: a game
+            # screen's timers could take every thread of it (cpu + 4), and the moods, portraits
+            # and pictures sent to a thread waited behind them.
+            asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=64))
         for th in THEMES:
             self.register_theme(th)
         self.theme = self._theme_name or config.load().theme

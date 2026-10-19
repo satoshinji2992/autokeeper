@@ -121,6 +121,18 @@ def speaking(screen) -> Speaker:
     return screen.query_one(Speaker)
 
 
+# Textual lays a widget out on the refresh after it changes, so a test that reads a size or a
+# region waits for that, not only for the attribute that changed (display, _art).
+def placed(panel: Speaker) -> bool:
+    """The panel is shown, and on screen."""
+    return panel.display and panel.region.height > 0
+
+
+def drawn(scene: SceneArt) -> bool:
+    """The scene's art is in, and the panel has taken its height."""
+    return scene._art is not None and scene.outer_size.height == scene.rows
+
+
 @pytest.mark.usefixtures("canned")
 async def test_a_portrait_finishing_after_the_scene_is_removed_does_not_crash(monkeypatch):
     started, release = threading.Event(), threading.Event()
@@ -170,7 +182,7 @@ async def test_the_speaker_steps_in_while_they_talk_and_out_when_the_scene_moves
             await screen.handle({"type": "npc", "npc": npc, "name": name, "text": text})
 
         await line("warden", "老守钟人", "（一拍桌子）滚出去！钟楼不是你们该来的地方！")
-        assert await until(pilot, lambda: panel.display and panel.feeling == "发怒")
+        assert await until(pilot, lambda: placed(panel) and panel.feeling == "发怒")
         assert m.art["warden"].split("\n")[3].strip() in str(panel.query_one(".face", Static).render())  # the hand-drawn face
         assert str(panel.query_one(".who", Static).render()) == "老守钟人"
         stage_box = screen.query_one("#stage")
@@ -261,11 +273,11 @@ async def test_a_small_terminal_gets_a_smaller_speaker_and_a_tiny_one_none():
     async with app.run_test(size=(80, 24)) as pilot:
         screen = GameScreen(m, state, resume=True)
         app.push_screen(screen)
-        assert await until(pilot, lambda: screen.game is not None and not screen.busy and screen.query_one(SceneArt)._art is not None)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy and drawn(screen.query_one(SceneArt)))
         panel, scene, stage_box = speaking(screen), screen.query_one(SceneArt), screen.query_one("#stage")
         before, room = stage_box.outer_size.height, screen.query_one(StoryLog).region.height
         await screen.handle({"type": "npc", "npc": "jingguan", "name": "值班警官", "text": "（眯起眼睛）你们又来干什么？"})
-        assert await until(pilot, lambda: panel.display and scene.covered, 100)
+        assert await until(pilot, lambda: placed(panel) and scene.covered, 100)
         assert panel.region.width <= stage_box.region.width * stage.WIDEST and panel.region.height == stage_box.size.height
         assert stage_box.outer_size.height == before and screen.query_one(StoryLog).region.height == room  # the story keeps its room
 
@@ -294,11 +306,11 @@ async def test_a_photo_portrait_follows_the_stage_and_the_art_style():
     async with app.run_test(size=(140, 44)) as pilot:
         screen = GameScreen(m, state, resume=True)
         app.push_screen(screen)
-        assert await until(pilot, lambda: screen.game is not None and not screen.busy and screen.query_one(SceneArt)._art is not None)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy and drawn(screen.query_one(SceneArt)))
         panel, stage_box = speaking(screen), screen.query_one("#stage")
         before = stage_box.outer_size.height
         await screen.handle({"type": "npc", "npc": "thomas", "name": "托马斯·金博尔", "text": "（搓着手，声音压低了些）这事儿……"})
-        assert await until(pilot, lambda: panel.display and panel.feeling == "警惕")
+        assert await until(pilot, lambda: placed(panel) and panel.feeling == "警惕")
         assert stage_box.outer_size.height == before  # a picture scene is tall enough already
         assert panel.region.height == stage_box.size.height and panel._fitted[2][1] == panel.region.height - 1
         assert "圆框眼镜" not in story_text(screen) and "搓手" in story_text(screen)  # his look, the first time
