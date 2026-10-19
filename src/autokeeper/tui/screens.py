@@ -387,7 +387,8 @@ HELP = Text.from_markup(
   F10 结局后复盘
   Ctrl+S 存档       Ctrl+O 叙事偏好    Ctrl+Q 离开
   Ctrl+A 画法       Ctrl+T 配色        Ctrl+B 用量
-  Ctrl+K 规则插件   Ctrl+P 全部操作（天气动画开关也在这里）
+  Ctrl+K 规则插件   Ctrl+G 右栏翻页：经过、进展、背景
+  Ctrl+Y 整理进展   Ctrl+P 全部操作（天气动画开关也在这里）
 
 F5 的建议只填入输入框，确认后再发送。
 F6 只改叙述，骰子、线索与 NPC 对话保留。

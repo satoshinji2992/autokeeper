@@ -612,12 +612,17 @@ class HistoryPanel(VerticalScroll):
         self.round = -1
 
     def compose(self):
-        yield Static(Text.assemble(("经过", "bold"), ("   点一行跳到那里", "dim")), classes="history-head")
+        yield Static(Text("点一行，故事跳到那里 · Ctrl+G 翻页", style="dim"), classes="history-head")
+
+    def on_mount(self) -> None:
+        self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go
 
     def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
-        if turn is not None and turn != self.round:
+        """`turn`: the round the line belongs to (GameState.turn once it is played). Rounds only
+        go up: a dice-bot roll (.r) after an action stays under that action's round."""
+        if turn is not None and turn > self.round:
             self.round = turn
-            self.mount(Static(Text(f"— 第 {turn + 1} 轮 —", style="dim"), classes="history-round"))  # the count of turns done; this is the next
+            self.mount(Static(Text(f"— 第 {turn} 轮 —", style="dim"), classes="history-round"))
         entry = HistoryLine(line, block)
         self.mount(entry)
         lines = list(self.query(HistoryLine))
@@ -667,8 +672,11 @@ def log_line(entry) -> Text | None:
         return Text(f"  ◈ {entry.text}", style="dim")
     if entry.kind == "clue":
         return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
-    if entry.kind in ("sanity", "damage", "ending"):
-        return Text("  " + entry.text.split("\n", 1)[0])
+    first = entry.text.split("\n", 1)[0]
+    if entry.kind in ("sanity", "damage"):  # whose, as the live line has it
+        return Text(f"  {'※' if entry.kind == 'sanity' else '✚'} {entry.who + ' ' if entry.who else ''}{first}")
+    if entry.kind == "ending":
+        return Text("  " + first)
     return None
 
 

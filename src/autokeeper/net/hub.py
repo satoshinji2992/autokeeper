@@ -19,12 +19,14 @@ A seated player throws their own dice: the roll prompt reaches them as an offer 
 table waits for a seated player, any seated player may ask the keeper to tell the latest
 narration again (the turn loop does it, between actions); after the end, too. A seated
 player may also ask for ideas (F5) at any time: the host's investigator agent thinks for
-their seat from what the players have seen, and only they get the answer.
+their seat from what the players have seen, and only they get the answer. The story so far
+(the 进展 page) is written here when the story has moved (engine/progress.py) and reaches every
+screen with the state; a seated player may ask for it between rounds, once a round.
 
 Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
-                    · retell {nudge} · epilogue · suggest
+                    · retell {nudge} · epilogue · suggest · recount
     client -> hub   (in a round) done · undo
     hub -> client   welcome · seats · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
@@ -62,7 +64,7 @@ from ..module.schema import Module
 from ..rules import commands
 from . import media
 
-SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect"}
+SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
@@ -185,6 +187,7 @@ class Hub:
         self.cast = cast or Cast(config.load(), self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
+        self.game.write_progress = True  # the 进展 page on every screen, through the sync
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}
@@ -319,16 +322,21 @@ class Hub:
             elif isinstance(msg.get("choice"), dict):
                 self.swaps.put_nowait((cid, msg["choice"]))
                 await self._send(cid, {"t": "error", "text": "这一段讲完就换模型"})
+        elif t == "recount":  # the story so far, now (Ctrl+Y): between rounds, once a round
+            why = ("你在观战" if self._seat_of(cid) is None else "守秘人正在结算这一轮，讲完再整理"
+                   if not (self.open or self.over) else self.game.recount())
+            if why:
+                await self._send(cid, {"t": "error", "text": why})
         elif t == "suggest":
             seat = self._seat_of(cid)
             if seat is None or self.state.ending:
                 await self._send(cid, {"t": "ideas", "ideas": []})
             elif cid not in self.thinking:  # one at a time: each costs the host a call
                 self.thinking[cid] = asyncio.create_task(self._ideas(cid, seat))
-        elif t == "house_rule":
+        elif t == "house_rule":  # the rule's code runs on the host's machine: only the host asks for one
             text = str(msg.get("text", "")).strip()[:500]
-            if self._seat_of(cid) is None and cid not in self.hosts:
-                await self._send(cid, {"t": "error", "text": "你在观战，不能加规则"})
+            if cid not in self.hosts:
+                await self._send(cid, {"t": "error", "text": "家规只能由房主添加，跟房主说一声"})
             elif text:
                 self.rules.put_nowait((cid, text))
                 self.wake.set()
