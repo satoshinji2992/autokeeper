@@ -120,7 +120,7 @@ async def test_zero_budget_executes_an_existing_prepared_plan_without_thinking(g
     assert game.world.apply(O.SetPlan(npc="warden", steps=[Step(id="walk", text="去广场", ops=[
         {"kind": "move", "entity": "warden", "to": "square"},
     ])])).ok
-    await game._live(Turn())
+    await game._world(Turn())  # leaving the party's scene: played as the world's turn ends
     assert game.world.place("warden") == "square" and not game.brain.asks
     assert game.world.agent("warden").plan[0].status == "done"
 

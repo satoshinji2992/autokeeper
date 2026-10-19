@@ -1,0 +1,152 @@
+"""What is on stage: the scene in front of the investigators belongs to the keeper.
+
+Offscreen the world lives on: important NPCs decide, arrangements come due, prepared plan steps
+go ahead, and all of it lands in the record as it happens (world/scheduler.py). What would change
+the scene in front of the investigators does not land behind their backs: someone walks in or
+leaves, a companion turns away, someone acts on them or on what they carry, something happens
+where they stand. It waits as a beat until the keeper plays it (engine/game.py), and lands whole
+then, told in the same breath: a reaction in place at once, but someone the investigators are
+dealing with does not walk out mid-exchange (leaves; HOLD_TURNS turns at most). A beat that no longer fits when its moment comes is
+dropped, and its author woken to think again.
+
+Commitments to the investigators outrank what was arranged elsewhere: someone walking with them
+leaves only by ending that in front of them (ops.Move refuses it otherwise), and an arrangement
+coming due goes on without them (committed).
+
+One rule for every backstage writer, instead of a case for each collision.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from ..engine import world as legacy_world
+from .ops import Break, Condition, Equip, Follow, Fulfil, Learn, MakePromise, Move, Occur, Transfer, parse
+from .record import PLAYERS, Beat
+
+if TYPE_CHECKING:
+    from .store import World
+
+HOLD_TURNS = 2  # turns a beat waits for the exchange with its person to end before it plays anyway
+KEPT = 30  # played and dropped beats kept for the developer record
+
+
+def party(w: World) -> set[str]:
+    return {i.id for i in w.st.investigators}
+
+
+def on_stage(w: World, ident: str) -> bool:
+    """In front of the investigators: one of them, someone or something where they are, or
+    something one of those carries."""
+    if not ident:
+        return False
+    if ident == PLAYERS or ident in party(w):
+        return True
+    e = w.rec.entities.get(ident)
+    if e is not None:
+        return ident == w.st.location if e.kind == "location" else w.place(ident) == w.st.location
+    holder = legacy_world.owner(w.m, w.st, ident)  # an item outside the record
+    return bool(holder) and holder != ident and on_stage(w, holder)
+
+
+def committed(w: World, npc: str) -> str:
+    """The NPC's standing commitment to the investigators, in words; empty when it is free."""
+    e = w.rec.entities.get(npc)
+    if e is None or not e.following:
+        return ""
+    return f"{e.name}正与{w.name(e.following)}同行" + (f"去{w.name(e.follow_to)}" if e.follow_to else "")
+
+
+def touches(w: World, op: Any) -> list[str]:
+    """Who and what on stage this op would change, judged before it lands; empty for backstage
+    work (plans, memories, feelings, arrangements, rewrites)."""
+    here, us = w.st.location, party(w)
+    if isinstance(op, Move):
+        return [op.entity] if w.place(op.entity) == here or op.to == here else []
+    if isinstance(op, Follow):
+        return [op.npc] if on_stage(w, op.npc) else []
+    if isinstance(op, Transfer):
+        before = legacy_world.owner(w.m, w.st, op.item)
+        return [x for x in dict.fromkeys((before, op.to, op.item)) if x and on_stage(w, x)]
+    if isinstance(op, Occur):
+        if (op.place or w.place(op.actor)) == here:
+            return list(dict.fromkeys([op.actor, *op.participants]))
+        return [x for x in op.participants if x in us]
+    if isinstance(op, Learn):
+        told = [x for x in op.who if x == PLAYERS or x in us]
+        return [op.actor, *told] if told else []
+    if isinstance(op, MakePromise):  # said in front of them, to them or to someone there
+        return [op.by, op.to] if on_stage(w, op.by) or on_stage(w, op.to) else []
+    if isinstance(op, Fulfil | Break):  # judged where the one settling it stands, not where the other party is
+        return [op.actor] if on_stage(w, op.actor) else []
+    if isinstance(op, Condition):
+        return [op.entity] if on_stage(w, op.entity) else []
+    if isinstance(op, Equip):
+        return [op.item] if op.reveal and on_stage(w, op.item) else []
+    return []
+
+
+def leaves(w: World, op: Any) -> list[str]:
+    """Who this op takes out of the scene: walking off, ending their company, dead or gone. Only
+    such a beat waits for an exchange with that person to end; a reaction in place plays at once."""
+    here = w.st.location
+    if isinstance(op, Move):
+        return [op.entity] if w.place(op.entity) == here and op.to != here else []
+    if isinstance(op, Follow):
+        return [op.npc] if not op.leader and on_stage(w, op.npc) else []
+    if isinstance(op, Condition):
+        return [op.entity] if op.status in ("死亡", "失踪") and on_stage(w, op.entity) else []
+    return []
+
+
+def queue(w: World, ident: str, actor: str, ops: list[dict[str, Any]], involves: list[str],
+          leaving: list[str] | None = None) -> Beat:
+    """Keep work that touches the stage for the keeper. The same work asked again is the same beat."""
+    if (known := next((b for b in w.rec.beats if b.id == ident), None)) is not None:
+        return known
+    beat = Beat(id=ident, actor=actor, ops=ops, involves=list(dict.fromkeys(involves)),
+                leaving=list(dict.fromkeys(leaving or [])), t=w.now, turn=w.st.turn)
+    finished = [b for b in w.rec.beats if b.status != "waiting"]
+    w.rec.beats = [*finished[-KEPT:], *(b for b in w.rec.beats if b.status == "waiting"), beat]
+    return beat
+
+
+def waiting(w: World, actor: str | None = None) -> list[Beat]:
+    return [b for b in w.rec.beats if b.status == "waiting" and (actor is None or b.actor == actor)]
+
+
+def play(w: World, beat: Beat) -> list[str]:
+    """Land a beat whole, now; what stops it when it no longer fits (it is dropped then, and
+    its author woken to decide again)."""
+    from . import agents
+    from .store import World
+
+    trial = World(w.m.model_copy(deep=True), w.st.model_copy(deep=True))
+    trial.clock = w.clock
+    problems: list[str] = []
+    ops = []
+    for raw in beat.ops:
+        try:
+            op = parse(raw)
+        except ValueError as exc:
+            problems.append(f"格式不对：{str(exc)[:80]}")
+            break
+        if beat.actor in trial.rec.agents and (refused := agents.vet(trial, beat.actor, op)):
+            problems += refused
+            break
+        result = trial.apply(op)
+        if not result.ok:
+            problems += result.problems
+            break
+        ops.append(op)
+    if not problems:  # no await between the trial and the commit: the same state both times
+        for op in ops:
+            result = w.apply(op)
+            if not result.ok:
+                problems += result.problems
+                break
+    beat.status = "dropped" if problems else "played"
+    beat.note = "；".join(problems)[:200]
+    if problems and (a := w.rec.agents.get(beat.actor)) is not None:
+        a.wake = w.now  # what it meant to do no longer fits: it thinks again
+    return problems

@@ -13,7 +13,7 @@ from autokeeper.engine.state import WorldChange
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.world import ops as O
-from autokeeper.world import scheduler
+from autokeeper.world import scheduler, stage
 from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
@@ -75,7 +75,7 @@ async def test_npcs_away_from_the_party_go_on_while_time_passes_and_the_keeper_t
     assert again.world == []
 
 
-async def test_an_npc_can_act_on_a_conversation_before_the_party_leaves(module, fake):
+async def test_an_npc_acts_on_a_conversation_once_the_exchange_is_over(module, fake):
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
     w = game.world
@@ -89,10 +89,11 @@ async def test_an_npc_can_act_on_a_conversation_before_the_party_leaves(module, 
     game.brain, game.minds = Canned(think), scheduler.Budget(turn=2, skip=4)  # type: ignore[assignment]
     turn = await game.resolve(TALK, ruled())
     await game.talk(turn)
-    assert len(game.brain.asks) == 1 and w.entity("warden").at == "office"
-    assert turn.world  # the departure is observable in the current scene
+    assert len(game.brain.asks) == 1 and w.entity("warden").at == "tower"  # it means to go, not mid-sentence
+    assert not turn.world and [b.actor for b in stage.waiting(w)] == ["warden"]
     leave = Action(kind="move", summary="周衡下楼回广场", destination="square")
-    await game.resolve(leave, Ruling(needs_roll=False, minutes=0, reason="移动"))
+    went = await game.resolve(leave, Ruling(needs_roll=False, minutes=0, reason="移动"))
+    assert w.entity("warden").at == "office" and any("老守钟人" in t for t in went.world)  # in front of them, first
     later = await game.resolve(WAIT, ruled(minutes=60))
     assert len(game.brain.asks) == 1 and w.entity("warden").at == "office"
     assert later.world == []  # it happened up in the tower, away from them
@@ -423,8 +424,9 @@ async def test_on_a_screen_npcs_decide_after_the_turn_is_told_not_while_the_play
 
 async def test_the_next_action_waits_for_the_worlds_turn_to_finish(module, fake):
     module.npc("warden").important = True
+    # Away from the party, his prepared step lands offscreen and he thinks on after it.
     game, _, _ = make(module, fake, {"我看看齿轮": (Action(kind="investigate", summary="周衡看齿轮", target="齿轮间"),
-                                                   Ruling(needs_roll=False, minutes=1, reason=""))}, location="tower")  # fmt: skip
+                                                   Ruling(needs_roll=False, minutes=1, reason=""))}, location="office")  # fmt: skip
     game.world_later = True
     w = game.world
     w.apply(O.SetPlan(npc="warden", steps=[Step(id="go", text="下楼", due=w.now + 1,

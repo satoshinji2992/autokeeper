@@ -82,13 +82,13 @@ class Move(Base):
             return [f"地点 {self.to} 不存在"]
         if e.status == "死亡":
             return [f"{e.name} 已经死了"]
+        if e.following and self.actor != ENGINE:  # only the party's own travel takes a companion along
+            return [f"{e.name}正与{w.name(e.following)}同行：先用 follow 当面结束同行，再离开"]
         return [f"{e.name} 已经在 {dest.name}"] if e.at == self.to else []
 
     def settle(self, w: World, oid: str):
         e = w.rec.entities[self.entity]
         src = e.at
-        if self.actor != ENGINE:  # choosing another journey ends the earlier agreement
-            e.following, e.follow_to = "", ""
         seeing = [] if self.visibility == "private" else [*w.present(src), *w.present(self.to)]  # who saw it go and arrive
         e.at = self.to
         w.touch(e)

@@ -239,6 +239,21 @@ class Request(BaseModel):
     note: str = ""
 
 
+class Beat(BaseModel):
+    """Backstage work that would change the scene in front of the investigators, waiting for the
+    keeper to play it at a quiet moment (world/stage.py). It lands whole when played."""
+
+    id: str
+    actor: str  # whose decision, arrangement or plan step it is
+    ops: list[dict[str, Any]] = Field(default_factory=list)
+    involves: list[str] = Field(default_factory=list)  # the people and things on stage it touches
+    leaving: list[str] = Field(default_factory=list)  # those it takes out of the scene (stage.leaves)
+    t: int = 0  # game minutes it was decided at
+    turn: int = 0
+    status: Literal["waiting", "played", "dropped"] = "waiting"
+    note: str = ""  # why it was dropped
+
+
 class WorldRecord(BaseModel):
     seq: int = 0
     seeded: list[str] = Field(default_factory=list)  # module objects already in the record
@@ -260,6 +275,7 @@ class WorldRecord(BaseModel):
     npc_budget_calls: int = 0
     npc_budget_limit: int = 0
     npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
+    beats: list[Beat] = Field(default_factory=list)  # backstage work waiting for the stage (world/stage.py)
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

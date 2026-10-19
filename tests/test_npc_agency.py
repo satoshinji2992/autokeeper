@@ -9,7 +9,7 @@ import pytest
 from autokeeper import paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
-from autokeeper.world import context, scheduler
+from autokeeper.world import context, scheduler, stage
 from autokeeper.world import ops as O
 from autokeeper.world.agents import Canned, Decision, Scene, holds
 from autokeeper.world.record import PLAYERS, Step
@@ -148,6 +148,8 @@ async def test_thomas_can_offer_help_and_show_a_supported_emotion_without_a_play
     )]))
     report = await scheduler.advance(w, brain, w.now, w.now + 1)
     assert report.calls == 1 and not report.refused
+    assert not w.entity("thomas").following  # in front of the party: it waits for the keeper to play it
+    assert report.staged and [stage.play(w, beat) for beat in stage.waiting(w)] == [[]]
     view = brain.asks[0].views["thomas"]
     assert "协助调查员" in view and "刚才有人想从窗边逃走" in view
     assert w.entity("thomas").following == state.investigator.id

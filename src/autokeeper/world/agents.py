@@ -277,8 +277,6 @@ def vet(w: World, npc: str, op: Any) -> list[str]:
     if isinstance(op, Move):
         if op.entity != me:
             return [f"{name}只能决定自己去哪"]
-        if w.rec.entities[me].following:
-            return [f"{name}已答应同行，须先用 follow 结束同行，再安排独自离开"]
         return [] if op.to in places(w, me) else [f"{name}不知道 {op.to} 这个地方"]
     if isinstance(op, Follow):
         if op.npc != me:

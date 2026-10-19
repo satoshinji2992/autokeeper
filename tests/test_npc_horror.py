@@ -1,6 +1,6 @@
 """Hostile motives remain playable without becoming facts or damage by narration."""
 
-from autokeeper.world import context, maintenance, scheduler
+from autokeeper.world import context, maintenance, scheduler, stage
 from autokeeper.world import ops as O
 from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
@@ -26,6 +26,8 @@ async def test_a_hostile_npc_can_threaten_and_prepare_revenge_without_harming_by
                                              ops=[{"kind": "move", "entity": "warden", "to": "square"}])]),
     ])]))
     report = await scheduler.advance(world, brain, world.now, world.now + 1)
+    assert report.staged and not world.relation("warden", player.id, "敌意")  # in their faces: the keeper plays it
+    assert [stage.play(world, beat) for beat in stage.waiting(world)] == [[]]
 
     assert report.calls == 1 and not report.refused
     assert goal in brain.asks[0].views["warden"]

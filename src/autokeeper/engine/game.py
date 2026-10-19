@@ -30,7 +30,7 @@ from ..rules import commands
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from ..world import adapters, desk, knowledge, rewrite, scheduler
+from ..world import adapters, desk, knowledge, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
@@ -172,6 +172,7 @@ class Game:
         self.world_later = False
         self._world_owed = False
         self._world_task: asyncio.Task | None = None
+        self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -1105,6 +1106,8 @@ class Game:
             return ruling is not None
 
         step = self._resolution_step
+        self._dealing = self._engaged(action)
+        await step("beats", turn, lambda: self._play(self._late, self._dealing))
         if not await step("initial", turn, initial) or ruling is None:
             return
         inv = st.investigator
@@ -1754,6 +1757,28 @@ class Game:
             self._world_owed = True  # remember() starts it; the player does not wait for it
         else:
             await self._live(turn)
+            self._play(turn, self._dealing)
+
+    def _engaged(self, action: Action | None) -> set[str]:
+        """Who the investigators are dealing with in this action: a beat that would move them
+        waits for the exchange to end (world/stage.py)."""
+        if action is None or action.kind == "meta":
+            return set()
+        return {x for x in (action.npc, *(step.npc for step in action.before)) if x}
+
+    def _play(self, turn: Turn, engaged: set[str]) -> None:
+        """Backstage work waiting for the stage plays now, and is told in this turn's narration
+        (or the interlude). A beat that would take someone the investigators are dealing with out
+        of the scene waits for that exchange to end, HOLD_TURNS turns at most."""
+        w = self.world
+        for beat in stage.waiting(w):
+            if engaged & set(beat.leaving) and self.state.turn - beat.turn < stage.HOLD_TURNS:
+                continue
+            since = w.rec.seq
+            problems = stage.play(w, beat)
+            self._debug("world", {"phase": "beat", "id": beat.id, "status": beat.status, "problems": problems})
+            if not problems:
+                turn.world += world_view.happened(w, since)
 
     async def _world_settled(self) -> None:
         """The world's life after the last turn, finished before anything else happens."""
@@ -1776,6 +1801,7 @@ class Game:
         except Exception as exc:  # the world's own life is a bonus: a failure costs nobody a turn
             self._debug("world", {"phase": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]})
             return
+        self._play(late, self._dealing)
         self._late.world += late.world
         if self.checkpoint:
             self.checkpoint()

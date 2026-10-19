@@ -9,7 +9,7 @@ the square. The brain decides only from each NPC's own view, as a model would.
 from __future__ import annotations
 
 from autokeeper.engine.state import WorldChange, parse_time
-from autokeeper.world import adapters, context, index, knowledge, scheduler
+from autokeeper.world import adapters, context, index, knowledge, scheduler, stage
 from autokeeper.world import ops as O
 from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import PLAYERS, Step
@@ -81,6 +81,8 @@ async def play(kept: bool):
     # warden's committed complaint on his next decision, then needs an hour to prepare.
     morning = await scheduler.advance(w, brain, st.minutes - 10, st.minutes + 200, budget=scheduler.Budget(chunk=70))
     st.minutes += 200
+    for beat in stage.waiting(w):  # what came about in front of them, played by the keeper (engine/game.py)
+        assert stage.play(w, beat) == []
     return w, brain, overnight, morning, left
 
 

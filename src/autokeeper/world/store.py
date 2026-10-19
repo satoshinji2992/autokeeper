@@ -37,7 +37,8 @@ JOURNAL_KEEP = 4000  # entries kept for repeats and the trace
 EVENTS_KEEP = 6000
 MEMORY_KEEP = 40  # memories an important NPC keeps
 # The journal's, the desk's, the scheduler's and the game's own clocks: undo leaves them.
-BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "npc_budget_turn", "npc_budget_calls", "npc_budget_limit", "npc_work"}
+BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "npc_budget_turn", "npc_budget_calls", "npc_budget_limit", "npc_work",
+               "beats"}
 
 
 @dataclass
