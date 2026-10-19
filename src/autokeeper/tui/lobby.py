@@ -203,7 +203,7 @@ class LobbyScreen(Screen):
             m.art_colors.update(msg.get("colors", {}))
             self.m, self.welcome["module"] = m, msg["module"]
         elif t == "begin" and self.welcome is not None:
-            self.welcome["started"] = True
+            self.welcome["started"], self.bring = True, False
             if self.chosen is None:
                 self._show_all()
         elif t == "error":
