@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+from rich.cells import cell_len
 from rich.console import Group, RenderableType
 from rich.table import Table
 from rich.text import Text
@@ -57,8 +58,17 @@ def skill_rows(inv: Investigator) -> list[tuple[str, int, bool, bool]]:
 def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | None = None, *, state: GameState | None = None) -> Group:
     """`width`: the room it has, when narrower than the sheet window; fewer skill columns then.
     `state`: the game they are in, for 本局经历."""
+    face = portrait if portrait is not None and portrait.plain else None
+    face_width = max((cell_len(line) for line in face.plain.splitlines()), default=0) if face else 0
+    # A drawn photo must keep its width: squeezed into a narrower column, each of its lines
+    # wraps in two and the face turns into stripes. Too narrow for face and words side by
+    # side: the face goes above them.
+    stacked = face is not None and width is not None and width < face_width + 2 + 26
     head = Table.grid(padding=(0, 2))
-    head.add_column()
+    if face is not None and not stacked:
+        head.add_column(width=face_width, no_wrap=True)
+    else:
+        head.add_column(no_wrap=True)
     head.add_column()
     who = Text()
     who.append(f"{inv.name}\n", style="bold")
@@ -74,7 +84,15 @@ def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | Non
     who.append(f"MP {inv.mp}/{inv.mp_max}   幸运 {inv.luck}   MOV {inv.move}{gap}DB {inv.damage_bonus}   体格 {inv.build}\n")
     if inv.conditions:
         who.append("状态：" + "、".join(inv.conditions) + "\n", style="bold red")
-    head.add_row(portrait if portrait is not None and portrait.plain else Text(""), who)
+    if stacked:
+        assert face is not None
+        face.no_wrap, face.overflow = True, "crop"
+        head = Table.grid()
+        head.add_column(no_wrap=True)
+        head.add_row(face)
+        head.add_row(who)
+    else:
+        head.add_row(face or Text(""), who)
 
     stats = Table.grid(padding=(0, 3))
     for _ in range(4):

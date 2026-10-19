@@ -536,3 +536,18 @@ def test_dice_skins_draw_both_dice_in_the_pixel_font():
         assert len(shown) == dice.HEIGHT + 2 and len({len(line) for line in shown}) == 1, key  # both dice, aligned
     assert dice.skin("nonsense") is dice.SKINS[dice.DEFAULT]
     assert cfg_mod.Config().dice == dice.DEFAULT
+
+
+@pytest.mark.parametrize("width", [100, 70, 55, 40])
+def test_a_sheet_s_photo_keeps_its_rows_in_a_narrow_pane(width):
+    """Squeezed into a narrow column, each line of a drawn photo used to wrap in two: stripes."""
+    from rich.console import Console
+
+    from autokeeper.tui.sheet import sheet_view
+
+    inv = Module.load(EXAMPLE).pregens[0]
+    face = Text("\n".join("▓" * 30 for _ in range(14)))
+    console = Console(width=width, record=True, color_system=None)
+    console.print(sheet_view(inv, face, width))
+    rows = [line for line in console.export_text().splitlines() if "▓" in line]
+    assert len(rows) == 14 and all("▓" * 30 in line for line in rows)
