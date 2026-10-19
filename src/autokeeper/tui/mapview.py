@@ -819,6 +819,20 @@ def _toward(boxes: dict[str, tuple[int, int, int]], at: str, dx: int, dy: int) -
 
 
 # -- on screen ----------------------------------------------------------------------------
+def window(width: int, height: int, notes: Content) -> tuple[tuple[int, int], bool, int, int]:
+    """How the map modal shares a screen of width x height: the most room the map's window may
+    take, whether the place's notes go beside it (and how wide), and how many lines they get
+    under it. The modal keeps a margin round it (a short screen, a line above and below) and
+    has a border, padding, the title, the legend `notes` (as many lines as it takes) and the keys."""
+    body = max(30, min(width - 10, 150))
+    lines = sum(max(1, math.ceil(cell_len(row) / body)) for row in notes.plain.split("\n"))
+    tall = max(6, (height - 2 if height < 30 else height * 9 // 10) - 8 - lines)
+    wide = body >= 124  # beside it, the map still as wide as most need
+    side = max(34, min(44, body - 92)) if wide else 0
+    under = max(3, min(7, tall // 3))
+    return ((body - side - 2, tall) if wide else (body, max(3, tall - under - 1))), wide, side, under
+
+
 class MapCanvas(Static):
     """The drawn map. A click picks a place; dragging moves the map."""
 
@@ -927,16 +941,7 @@ class MapModal(ModalScreen[str | None]):
         if self.drawn_for == (width, height):
             return
         self.drawn_for = (width, height)
-        # The modal keeps a margin round it (a short screen only a line above and below), and
-        # has a border, padding, the title, the legend (as many lines as it takes) and the
-        # keys. A wide screen has the place's notes beside the map, a narrow one under it.
-        body = max(30, min(width - 10, 150))
-        lines = sum(max(1, math.ceil(cell_len(row) / body)) for row in legend(self.c, self.nest).plain.split("\n"))
-        tall = max(6, (height - 2 if height < 30 else height * 9 // 10) - 8 - lines)
-        self.wide = body >= 124  # the map still as wide as most need
-        self.side = max(34, min(44, body - 92)) if self.wide else 0
-        self.notes = max(3, min(7, tall // 3))
-        self.room = (body - self.side - 2, tall) if self.wide else (body, max(3, tall - self.notes - 1))
+        self.room, self.wide, self.side, self.notes = window(width, height, legend(self.c, self.nest))
         body_box = self.query_one("#map-body")
         body_box.styles.layout = "horizontal" if self.wide else "vertical"
         body_box.set_class(not self.wide, "under")
