@@ -573,7 +573,7 @@ class Cast:
         if journal := getattr(self, "debug_journal", None):
             journal.append("retrieval", {"status": "found" if text else "empty", "query": query,
                                          "keywords": keywords, "context": text}, turn=state.turn)
-        rewritten = "".join(f"\n- {r.old[:60]} → {r.new[:160]}" for r in state.record.revisions[-8:])
+        rewritten = "".join("\n" + row for row in world_view.rewrites(state.record))
         return ("\n【模组原文检索，仅供幕后核对】\n" + text
                 + "\n以上是静态资料，不表示人物此刻在原地点、物品仍在原持有者手里或事件已发生。"
                 "位置、时间、知识权限与本局记录以本轮动态资料为准。"

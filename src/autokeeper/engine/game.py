@@ -2314,14 +2314,20 @@ class Game:
             return not plans[-1].problems
 
         fix = ""
+        p = scene.plan(self.world, {}, ctx)  # nothing changes: what a telling that never gave a scene is held to
         for attempt in (1, 2):
+            asked = len(plans)
             told = await keeper(st, report, on_delta=delta, lore=lore + brief, check=check, fix=fix)
             if isinstance(told, str):
                 return words | {"text": told}
-            if told.scene is None or not plans:  # no scene could be read: the words stand, nothing changes
-                if not told.shown:
-                    await delta(told.text)
-                return words | {"text": told.text}
+            if told.scene is None or len(plans) == asked:  # no scene could be read
+                if told.shown:  # already before the players: its words stand, the record as it was
+                    return words | {"text": told.text}
+                # Its words would say what the record never got ("the warden goes with you", nobody
+                # following): asked again for the scene, and the second time held to the record as it is.
+                self._debug("scene", {"phase": "missing", "attempt": attempt})
+                p, fix = scene.plan(self.world, {}, ctx), scene.MISSING
+                continue
             p = plans[-1]
             if not p.problems or told.shown:
                 if not told.shown:  # written words first: shown now that the scene holds

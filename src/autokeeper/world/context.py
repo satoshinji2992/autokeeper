@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from ..engine.state import format_time
 from . import agents, knowledge, threads
-from .record import PLAYERS, Event, Fact, Memory
+from .record import PLAYERS, Event, Fact, Memory, WorldRecord
 
 if TYPE_CHECKING:
     from ..module.schema import Module
@@ -325,6 +325,23 @@ BRIEF_SOON = 4  # coming things listed
 def _clip(text: str, n: int = BRIEF_ITEM) -> str:
     text = " ".join(text.split())
     return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def rewrites(rec: WorldRecord) -> list[str]:
+    """Every fact or event rewritten in this game, once each, however long ago and however many
+    rewrites came after: what it first said, and the whole of what it says now."""
+    rows = []
+    for target in dict.fromkeys(r.target for r in rec.revisions):
+        first = next(r for r in rec.revisions if r.target == target)
+        kind, _, ident = target.partition(":")
+        if kind == "fact":
+            f = rec.facts.get(ident)
+            now = "（已撤回，没有这回事）" if f is None or f.retracted or not f.text.strip() else f.text.strip()
+        else:
+            e = rec.event(ident)
+            now = "（已撤回，没有这回事）" if e is None or not e.text.strip() else e.text.strip()
+        rows.append(f"- 原来：{_clip(first.old, 60)} → 现在：{now}")
+    return rows
 
 
 def keeper_brief(w: World) -> str:
