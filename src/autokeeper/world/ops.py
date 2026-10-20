@@ -808,6 +808,7 @@ class Enlist(Base):
     resources: list[str] = Field(default_factory=list, description="他能动用的人和东西")
     places: list[str] = Field(default_factory=list, description="除了公开的地方，他还知道哪些地点 id")
     mood: str = Field("", description="此刻的心境")
+    passive: SkipJsonSchema[bool] = False  # only its fixed steps run (record.Agent.passive); set by the engine alone
 
     def check(self, w: World) -> list[str]:
         if _npc(w, self.npc) is None:
@@ -828,6 +829,7 @@ class Enlist(Base):
         a.resources = self.resources or a.resources
         a.places = list(dict.fromkeys([*a.places, *self.places]))
         a.mood = self.mood or a.mood
+        a.passive = self.passive
         return None, None
 
 

@@ -161,6 +161,10 @@ class Agent(Versioned):
     acted: int = -1  # game minutes it last decided
     places: list[str] = Field(default_factory=list)  # places it knows besides the public ones and its own
     refused: str = ""  # why what it last meant to do could not be done; it hears this when it next wakes
+    # Only the module's fixed steps (a time or a condition, and what they bring about) run; nothing
+    # wakes it to decide (world/scheduler.py). Those the module gives an agenda but does not mark
+    # important (agents.marked); the director enlisting one makes it decide again.
+    passive: bool = False
 
 
 class Event(BaseModel):
