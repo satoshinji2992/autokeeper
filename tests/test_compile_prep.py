@@ -345,6 +345,22 @@ def test_case_an_npc_offering_help_comes_at_its_time_and_the_ruled_help_is_the_k
 
 
 # -- the bundled modules ------------------------------------------------------------------------
+@pytest.mark.parametrize("key", BUNDLED)
+def test_the_bundled_situations_hand_over_nothing_behind_a_roll(key):
+    m = Module.load(paths.MODULES / key)
+    assert not [str(f) for f in conditions.findings(m) if f.level == "error"]
+
+
+def test_the_regenerated_paper_chase_says_the_grounds_of_every_step():
+    """《追书人》的局面层按新的补写重做过（2026-10-20）：每个见面反应都标了只做一次还是一贯如此，
+    没有一步拿调查员的进展当成 NPC 已经知道，规则清单写明谁执行。"""
+    m = Module.load(paths.MODULES / "zhuishuren")
+    assert not conditions.findings(m)
+    assert all(s.once is not None for a in m.agendas for s in a.steps if s.meet)
+    assert all(x.runs or x.plugin for x in m.mechanics)
+    assert not [s for a in m.agendas for s in a.steps if "日记" in s.text and not s.ruling]
+
+
 def test_the_texts_edit_takes_back_one_entry_and_nothing_else():
     text = SITUATION
     data = yaml.safe_load(text)
