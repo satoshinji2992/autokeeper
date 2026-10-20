@@ -142,6 +142,27 @@ async def test_a_rewritten_truth_reaches_the_keeper_however_many_rewrites_follow
     assert "真相：钟里藏的是一封信，多出的那一下是信在响。" in brief and "以这里为准" in brief  # the book's truth as it is now
 
 
+async def test_the_keeper_reads_the_whole_of_the_place_notes_and_the_source_after_a_rewrite(module, fake):
+    """The review of 2026-10-20: a rule at the end of a place's notes reached the arbiter, not the
+    keeper (cut at 400); and one rewrite (the warden's goal) shut the source off for everything."""
+    from autokeeper.agents.cast import Cast
+    from autokeeper.world import context as world_view
+    from autokeeper.world.ops import Rewrite
+
+    module.location("tower").keeper += "。" + "齿轮间的地板很旧。" * 60 + "最后一条：钟敲十三下时必须做理智检定。"
+    game, _, _ = make(module, fake, {}, location="tower")
+    assert "最后一条：钟敲十三下时必须做理智检定" in world_view.keeper_brief(game.world)
+    assert game.world.apply(Rewrite(id="rw", target="fact:npc:warden:secrets:0", text="他在钟里藏了一封信",
+                                    reason="让信接上调查员的背景", actor="director")).ok
+
+    class Source:
+        async def lore(self, state, query, keywords=(), max_tokens=0):
+            return "报社旧刊：十年前钟楼失火。"
+
+    text = await Cast._private_lore(Source(), game.state, "去报社查旧刊", ["报社"])  # type: ignore[arg-type]
+    assert "十年前钟楼失火" in text and "以改写后的为准" in text and "他在钟里藏了一封信" in text
+
+
 def test_a_check_rolled_again_under_new_conditions_is_a_new_attempt(module, fake):
     from autokeeper.engine.state import CheckRecord
 

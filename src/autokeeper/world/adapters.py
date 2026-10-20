@@ -205,12 +205,18 @@ def bring_ops(w: World, items: Iterable[Any], *, actor: str, holder: str | None 
 
 
 def reply_ops(w: World, npc: str, *, leave: str = "", items: Iterable[Any] = (), accompany: str = "",
-              visibility: str = "auto") -> tuple[list[list[dict[str, Any]]], list[str]]:
+              visibility: str = "auto", played: Iterable[str] = ()) -> tuple[list[list[dict[str, Any]]], list[str]]:
     """An NPC's on-the-spot acts in its reply (agents/cast.Dialogue.items, .leave), as groups of
     world ops for its own gateway (world/tools.Gateway), each group landing whole: a thing it takes
     out (bring_ops) and the handing of it over (Transfer), then its going off (ending the company it
-    keeps, then Move). What cannot be put as ops at all, in words."""
+    keeps, then Move). What cannot be put as ops at all, in words. What it does on meeting them
+    (Dialogue.played) is done once played, and no longer put to it each time they talk."""
+    from .agents import meets
+
     groups: list[list[dict[str, Any]]] = []
+    if (a := w.rec.agents.get(npc)) is not None:
+        due = {s.id for s in a.plan if s.status == "pending" and meets(w, npc, s)}
+        groups += [[{"kind": "step", "npc": npc, "step": sid, "status": "done"}] for sid in dict.fromkeys(played) if sid in due]
     things = list(items)
     found = bring_ops(w, things, actor=npc, holder=npc, visibility=visibility)
     problems = list(found.problems)

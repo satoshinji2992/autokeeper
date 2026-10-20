@@ -169,7 +169,7 @@ agendas:
     when: D1 10:00
     meet: true
   - id: thomas_show_study
-    text: 被问到丢书时领人上书房，说少了约六本却说不清是哪几本，顺手指出叔叔的旧书桌和那本日记。
+    text: 被问到丢书时领人上书房，指给他们看书架上的空档，说少了约六本却说不清是哪几本；书房里别的东西要搜得调查员自己找。
     meet: true
   - id: thomas_urge_watch
     text: 问调查员进展，说自己出不起更多钱但愿意配合，建议夜里守着书房窗户抓窃贼现行。
@@ -192,7 +192,7 @@ agendas:
     when: D1 23:00
     meet: false
   - id: jefferson_take_bribe
-    text: 收下酒，态度松动，说出深夜在那块墓碑旁见过人影，他认定是金博尔的鬼，所以从没敢上前。
+    text: 调查员当面把酒递给他、他收下以后（只是听说调查员买了酒不算），态度松动，说出深夜在那块墓碑旁见过人影，他认定是金博尔的鬼，所以从没敢上前。
     when: flag:has_liquor
     meet: true
   - id: jefferson_clam_up

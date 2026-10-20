@@ -216,7 +216,7 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
         steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in pending if not agents.meeting(w, npc, s)][:3]
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
-        meet = [s.text for s in pending if agents.meets(w, npc, s)][:4]
+        meet = [f"{s.text}（{s.id}）" for s in pending if agents.meets(w, npc, s)][:4]
         if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
@@ -333,7 +333,7 @@ def keeper_brief(w: World) -> str:
     lines: list[str] = []
     note = rec.facts.get(f"location:{here}:keeper")
     if note is not None and not note.retracted and note.text.strip():
-        lines.append(f"此地（{w.name(here)}）的守秘人须知：{_clip(note.text, 400)}")
+        lines.append(f"此地（{w.name(here)}）的守秘人须知：{' '.join(note.text.split())}")  # whole: what it says last counts too
 
     def person(npc: str) -> str:
         own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]

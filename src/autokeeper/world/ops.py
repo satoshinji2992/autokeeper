@@ -897,7 +897,10 @@ class AdvancePlan(Base):
             return [f"步骤 {self.step} 已经{s.status}"]
         if self.status != "done":
             return []
-        from .agents import holds
+        from .agents import holds, meeting
+
+        if meeting(w, self.npc, s):  # what it does on meeting them is its own to play: played, it is done
+            return []
 
         if not s.started and not s.achieved and not s.ops:
             return [f"步骤 {self.step} 是缺少完成依据的旧计划；先重新规划并明确 achieved 条件或执行操作"]

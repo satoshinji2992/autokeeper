@@ -167,6 +167,7 @@ class Dialogue(BaseModel):
     accompany: str = Field("", description="真正愿意与调查员同行时填目的地 id；假答应、含糊意向、拒绝或只约在那里碰面留空")
     items: list[Gift] = Field(default_factory=list, max_length=3, description="当场拿出或递出的东西；没有就留空")
     leave: str = Field("", description="说完马上走开时，填要去的地点 id；留下就留空")
+    played: list[str] = Field(default_factory=list, description="【见到调查员时，你会】里这次已经做了的几条，填括号里的编号；没做就留空")
     deceptions: list[Deception] = Field(default_factory=list, max_length=3, description="本次有意欺骗的私有说明，玩家不可见；未故意说谎时留空，不固定比例撒谎")
 
 
@@ -495,8 +496,10 @@ class Cast:
             return text
 
     async def _private_lore(self, state: GameState, query: str, keywords: list[str]) -> str:
-        """Optional source detail for private decisions. A static index cannot undo rewrites."""
-        if state.record.revisions or not query.strip():
+        """Optional source detail for private decisions. A static index cannot undo rewrites, so what
+        was rewritten follows it, to stand over the source where they differ: one rewrite (the warden's
+        goal) no longer shuts the source off for everything else (the newspaper's files)."""
+        if not query.strip():
             return ""
         try:
             async with asyncio.timeout(8):
@@ -509,9 +512,11 @@ class Cast:
         if journal := getattr(self, "debug_journal", None):
             journal.append("retrieval", {"status": "found" if text else "empty", "query": query,
                                          "keywords": keywords, "context": text}, turn=state.turn)
+        rewritten = "".join(f"\n- {r.old[:60]} → {r.new[:160]}" for r in state.record.revisions[-8:])
         return ("\n【模组原文检索，仅供幕后核对】\n" + text
                 + "\n以上是静态资料，不表示人物此刻在原地点、物品仍在原持有者手里或事件已发生。"
-                "位置、时间、知识权限与本局记录以本轮动态资料为准。") if text else ""
+                "位置、时间、知识权限与本局记录以本轮动态资料为准。"
+                + (f"\n本局改写过的设定（和上面的原文不同时，以改写后的为准）：{rewritten}" if rewritten else "")) if text else ""
 
     def _equipment(self, who: str) -> list[str]:
         if self.world is None:
@@ -833,7 +838,7 @@ class Cast:
     def _acts(w: World, npc_id: str, dialogue: Dialogue, *, private: bool) -> tuple[list[list[dict]], list[str]]:
         """What the reply does on the spot (world/adapters.reply_ops): things taken out or handed over, going off."""
         return adapters.reply_ops(w, npc_id, leave=dialogue.leave, items=dialogue.items, accompany=dialogue.accompany,
-                                  visibility="private" if private else "auto")
+                                  visibility="private" if private else "auto", played=dialogue.played)
 
     def _act(self, state: GameState, npc_id: str, dialogue: Dialogue, *, private: bool) -> list[str]:
         """Land the reply's on-the-spot acts in this turn through the NPC's own gateway, each act whole

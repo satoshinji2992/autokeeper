@@ -130,6 +130,11 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
                 assert new.goal.startswith("协助调查员" + old.goal + "；")
                 assert "力所能及的帮助" in new.personality and "履行承诺" in new.goal
                 old.personality, old.goal = new.personality, new.goal
+                # He knows the diary is in the study (「我知道它就在这间屋子里」), not where: finding it
+                # stays the 侦查 roll's (the review of 2026-10-20).
+                assert "叔叔有本日记，就在书房里" in old.knows
+                old.knows = [k if k != "叔叔有本日记，就在书房里" else "叔叔写日记，日记就在书房里，但他自己没翻到过，不知道放在哪"
+                             for k in old.knows]
         # What compile time adds since (module/adapt.py): the situation layer, the opening performance,
         # clues for a conclusion short of three. Added, never changed: the original clues stay as they were.
         for name in ("relations", "agendas", "foreshadow", "ties", "mechanics", "history", "prelude"):

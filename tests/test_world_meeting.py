@@ -111,3 +111,19 @@ async def test_what_stopped_a_decision_is_what_it_hears_when_it_wakes():
     await scheduler.advance(w, later, w.now + 1, w.now + 2)
     assert "上次没做成" in later.asks[0].reasons["warden"] and "不知道" in later.asks[0].reasons["warden"]
     assert w.agent("warden").refused == ""  # decided again: it is behind it
+
+
+def test_what_it_did_on_meeting_them_is_not_put_to_it_again():
+    """Thomas answered the door and settled their bags: that is done, not a standing order for every
+    later talk (the review of 2026-10-20). Done only when its voice says it played it."""
+    from autokeeper.world.adapters import reply_ops
+    from autokeeper.world.tools import Gateway
+
+    w = staged(location="tower")
+    later = Step(id="later", text="傍晚问调查员进展", due=w.now + 30, meet=True)
+    assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="greet", text="有人上门就请他们进屋喝茶", meet=True), later])).ok
+    assert "喝茶（greet）" in context.npc_brief(w, "warden")
+    groups, problems = reply_ops(w, "warden", played=["greet", "later", "nothing"])  # not yet time for later; no such step
+    assert not problems and groups == [[{"kind": "step", "npc": "warden", "step": "greet", "status": "done"}]]
+    assert Gateway(w, "warden").settle(groups[0], request_id="reply:1:warden:0:0").get("ok")
+    assert w.agent("warden").plan[0].status == "done" and "喝茶" not in context.npc_brief(w, "warden")
