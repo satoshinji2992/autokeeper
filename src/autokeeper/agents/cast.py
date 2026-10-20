@@ -688,7 +688,7 @@ class Cast:
         calls count as "plan"), never the narration's, whose memory keeps only what was told."""
         if "plan" not in self.sessions:
             system = PLAN_SYSTEM + ACTION_RULES + ("\n\n" + _book(self.module) if self.backstage else "")
-            self.sessions["plan"] = Session("plan", self.cfg.role("keeper"), system, schema=_schema(Plan), key="plan",
+            self.sessions["plan"] = Session("plan", self.cfg.role("plan"), system, schema=_schema(Plan), key="plan",
                                             summarizer=self.summarizer)
         return self.sessions["plan"]
 

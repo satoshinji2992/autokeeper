@@ -107,3 +107,13 @@ async def test_world_sessions_use_world_trace_but_mind_usage_while_dialogue_uses
         assert any(row.get("agent") == "world" for row in trace.read())
     finally:
         await cast.close()
+
+
+def test_the_keepers_plan_takes_the_keepers_model_thinking_low():
+    """The plan (agents/cast.Cast.plan) is on the player's wait, before any roll: DeepSeek's keeper
+    thinks high for the telling, the plan low, on the same model, until configured otherwise."""
+    keeper = Role("langchain", "deepseek:deepseek-flash", "high")
+    cfg = config.Config(roles={"keeper": keeper})
+    assert cfg.role("plan") == replace(keeper, effort="low") and "plan" in cfg.role_names
+    cfg.roles["plan"] = config.HAIKU
+    assert cfg.role("plan") == config.HAIKU

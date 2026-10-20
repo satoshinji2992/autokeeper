@@ -107,11 +107,13 @@ DEFAULT_ROLES: dict[str, Role] = {
 
 # Optional roles inherit the effective route, including local/global overrides. Leaving
 # them out of presets keeps older configurations and custom arbiter routes compatible.
-ROLE_PARENTS = {"world": "arbiter"}
+ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
 # What an inherited role changes of its parent's route. Important NPCs' own decisions think
 # low, not at the arbiter's high (the user's call, 2026-10-20): at high one took 6.4 s and they
 # were four tenths of a replayed session's spend. A configured effort still wins.
-ROLE_EFFORT = {"world": "low"}
+# The keeper's plan (agents/cast.Cast.plan) is on the player's wait, before any roll: the keeper's
+# model, thinking low (DeepSeek's keeper thinks high, which the telling can afford, not this).
+ROLE_EFFORT = {"world": "low", "plan": "low"}
 
 
 def _deepseek(effort: str | None) -> Role:
