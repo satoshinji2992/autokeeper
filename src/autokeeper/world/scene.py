@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import itertools
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -201,40 +201,23 @@ def _named(text: str) -> str:
     return re.sub(r"[\s，。、；：！？“”‘’「」（）()·,.;:!?\"']", "", text)
 
 
-def lacking(name: str, missing: Sequence[str]) -> str:
-    """What of this action's lack a thing brought out would fill (empty when nothing)."""
-    own = _named(name)
-    for gap in missing:
-        need = _named(gap)
-        if own and need and (own in need or need in own):
-            return gap
-    return ""
-
-
 def _clip(text: str, n: int = 120) -> str:
     text = " ".join(text.split())
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
 # -- everyday things (Bring) -------------------------------------------------------------------
-def bring(w: World, items: list[str], *, actor: str, holder: str | None = None, place: str | None = None,
-          missing: Sequence[str] = ()) -> tuple[list[dict[str, Any]], list[str]]:
-    """Everyday things a scene brings out, registered as they are given: the ops that put them in the
-    record, and why any of them cannot be. `actor` brings them out; `holder` has them as the telling
-    ends (`actor` when not given), or they are put down at `place`. What this action lacks
-    (Ruling.missing) is not brought out here.
+def bring(w: World, step: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """An everyday thing a scene brings out, registered as it is given (world/adapters.bring_ops,
+    ops.Bring): read off the record as the unit finds it (whoever brings or takes it may have just
+    come in), so the step keeps what was said rather than the op. Its op takes the step's id; what
+    this action lacks (Ruling.missing) is not brought out."""
+    from .adapters import bring_ops
 
-    TODO(p3-items): the Bring op is being written beside this (worktree p3-items). Once it lands,
-    return its ops from bring_ops(w, items, actor=actor, holder=holder, place=place, missing=missing);
-    what it refuses then comes back from its ops' own checks when the scene is tried. Until then
-    nothing is registered (an everyday thing stays in the telling only), and only the lack is
-    refused, the same rule bring_ops keeps.
-    """
-    problems = []
-    for name in items:
-        if gap := lacking(name, missing):
-            problems.append(f"「{name}」正是这次行动缺的东西（{gap}），不能当场变出来：可以写他们没有、还得去找。")
-    return [], problems
+    found = bring_ops(w, [step["name"]], actor=step["actor"], holder=step.get("holder") or None,
+                      place=step.get("place") or None, missing=step.get("missing", ()))
+    ops = [op.model_copy(update={"id": step["id"]}).model_dump(mode="json") for op in found.ops]
+    return ops, list(found.problems)
 
 
 # -- the scene against the record -----------------------------------------------------------------
@@ -379,7 +362,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                 unit(f"npc:{n}").said.append(f"{e.name}不再跟着调查员")
 
     # Things: what changed hands, then everyday things brought out, and handed on.
-    things = {_named(t.name): t for t in scene.things if not _blank(t.name) and _item(w, t.name) is None}
+    things = {_named(t.name): t for t in scene.things if not _blank(t.name)}
     handed: dict[str, str] = {}
     for h in scene.holds:
         if _blank(h.item):
@@ -414,15 +397,13 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         if holder is None and place is None:
             problems.append(f"「{final}」不是人也不是地点，{t.name}到不了那里。")
             continue
-        ops, refused = bring(w, [t.name], actor=actor, holder=holder, place=place, missing=ctx.missing)
-        problems += refused
-        if refused:
-            continue
         given_to = holder or place or actor
         u = unit(f"thing:{i}")
-        # Brought out in front of the investigators, and handed over where both stand.
+        # Brought out in front of the investigators and handed over where both stand: one step, so
+        # registering it and its handing on land together.
         u.steps += [_meet(actor, lead, f"{name(actor)}讲完时不在调查员身边，拿不出{t.name}。"),
-                    _meet(given_to, lead, f"{name(given_to)}讲完时不在调查员身边，{t.name}到不了那里。"), *ops]
+                    {"kind": "bring", "id": f"{ctx.ids}:{next(count)}", "name": t.name.strip(), "actor": actor,
+                     "holder": holder or "", "place": place or "", "missing": list(ctx.missing)}]
         u.said.append(f"{name(actor)}拿出{t.name}" + (f"，给了{name(given_to)}" if given_to != actor else ""))
     for i, t in enumerate(scene.traces):
         if not _blank(t.text):
@@ -490,11 +471,18 @@ def run(w: World, u: Unit) -> list[str]:
                 problems = [step["why"]]
                 break
             continue
-        result = w.apply(step)
-        if not result.ok:
-            problems = [f"{'；'.join(u.said) or u.key}：{p}" for p in result.problems]
+        ops, refused = bring(w, step) if kind == "bring" else ([step], [])
+        if refused:
+            problems = refused
             break
-        applied += 0 if result.repeat else 1
+        for raw in ops:
+            result = w.apply(raw)
+            if not result.ok:
+                problems = [f"{'；'.join(u.said) or u.key}：{p}" for p in result.problems]
+                break
+            applied += 0 if result.repeat else 1
+        if problems:
+            break
     else:
         return []
     if applied:

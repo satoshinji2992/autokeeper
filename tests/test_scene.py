@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from types import SimpleNamespace
 
 import pytest
 
@@ -181,16 +180,22 @@ def test_a_handover_lands_with_the_moves_of_the_people_in_it(fake):
     assert [u.key for u in landed] == ["npc:warden"] and game.world.rec.entities["lantern"].at == lead
 
 
-def test_what_this_action_lacks_is_not_brought_out(fake):
+def test_everyday_things_are_registered_as_given_but_not_what_the_action_lacks(fake):
     game, _ = made("square")
-    lead = game.state.investigator.id
-    turn = Turn(action=Action(kind="investigate", summary="周衡想挖开地砖"), ruling=SimpleNamespace(missing=["铲子"]))  # type: ignore[arg-type]
+    w, lead = game.world, game.state.investigator.id
+    turn = Turn(action=Action(kind="investigate", summary="周衡想挖开地砖"), ruling=Ruling(needs_roll=False, missing=["铲子"]))
     c = game._scene_context(turn)
     assert c.missing == ["铲子"] and "这次行动缺的铲子不能在 scene 里变出来" in game._scene_brief(c)
-    spade = scene.plan(game.world, {"here": ["preacher"], "things": [{"name": "一把铲子", "holder": lead}]}, c)
-    assert any("正是这次行动缺的东西" in x for x in spade.problems)
-    matches = scene.plan(game.world, {"here": ["preacher"], "things": [{"name": "火柴", "holder": lead}]}, c)
-    assert not matches.problems and matches.held[0].said == ["周衡拿出火柴"]
+    spade = scene.plan(w, {"here": ["preacher"], "things": [{"name": "铲子", "holder": lead}]}, c)
+    assert any("这一轮的行动正缺铲子" in x for x in spade.problems)
+    given = scene.plan(w, {"here": ["preacher"], "things": [{"name": "火柴", "holder": "preacher"}],
+                           "holds": [{"item": "火柴", "holder": lead}]}, c)
+    assert not given.problems and given.held[0].said == ["街头布道者拿出火柴，给了周衡"]  # brought out and handed over: one unit
+    assert [u.key for u in scene.land(w, given.held)] == ["thing:0"]
+    match = next(e for e in w.rec.entities.values() if e.kind == "item" and e.name == "火柴")
+    assert match.at == lead and "火柴" in game.state.investigator.inventory and not match.important
+    away = scene.plan(w, {"here": ["preacher"], "things": [{"name": "烟斗", "holder": "warden"}]}, c)
+    assert any("老守钟人讲完时不在调查员身边" in x for x in away.problems)  # he is in the tower
 
 
 # -- told after it is settled -----------------------------------------------------------------
@@ -357,3 +362,26 @@ async def test_a_keeper_that_answers_in_words_alone_still_tells_the_turn(fake):
     game.cast.world = game.world
     assert await game.narrate(acted(game, "我看看", 1)) == "叙事" and told(events) == "叙事"
     assert game.state.ongoing == "" and not [e for e in game.world.rec.journal if e.id.startswith("keeper:")]
+
+
+async def test_json_mode_streams_the_telling_as_it_is_written():
+    """DeepSeek's JSON mode (LangChainModel, mode "json") hands the JSON on piece by piece."""
+    from langchain_core.messages import AIMessageChunk
+
+    class Chat:
+        def bind(self, **kw):
+            return self
+
+        async def astream(self, history):
+            for piece in ['{"scene": {"here": []}, ', '"text": "雾', '散了。"}']:
+                yield AIMessageChunk(content=piece)
+
+    model = hm.LangChainModel.__new__(hm.LangChainModel)
+    model.spec, model.system, model.label, model.provider, model.mode, model.chat = WRITER, "守秘人", "keeper", "deepseek", "json", Chat()
+    pieces: list[str] = []
+
+    async def show(piece):
+        pieces.append(piece)
+
+    reply = await model._call([{"role": "user", "content": "讲"}], schema={"title": "Telling"}, images=None, on_delta=show)
+    assert len(pieces) == 3 and reply.data == {"scene": {"here": []}, "text": "雾散了。"}

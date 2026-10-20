@@ -2332,7 +2332,7 @@ class Game:
         ids = f"keeper:{st.turn}"
         used = [int(n) for e in rec.journal if e.id.startswith(ids + ":") and (n := e.id.rsplit(":", 1)[1]).isdigit()]
         ruling = turn.ruling if turn is not None else None
-        lacks = (getattr(ruling, "missing", None) or []) if ruling is not None else []  # Ruling.missing comes with p3-items
+        lacks = (getattr(ruling, "missing", None) or []) if ruling is not None else []
         return scene.Context(travel=self._travel, elapsed=max(0, st.minutes - start) if acted else 0,
                              missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1)
 
