@@ -131,6 +131,10 @@ async def test_a_long_story_keeps_its_latest_blocks_and_folds_the_rest():
         await pilot.pause()
         blocks = [w for w in story.children if not isinstance(w, Folded) and w.is_attached]
         assert len(blocks) <= StoryLog.KEEP + StoryLog.FOLD  # every layout walks these, not four hundred
+        for _ in range(30):  # scrolled to the end once laid out (Windows' CI checked just before)
+            if story.is_vertical_scroll_end:
+                break
+            await pilot.pause(0.1)
         assert "第 399 段" in str(blocks[-1].render()) and story.is_vertical_scroll_end
         header = story.query_one(Folded)
         folded = before + 401 - len(blocks)
