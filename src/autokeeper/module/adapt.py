@@ -130,7 +130,8 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "does 里的 flag 只用表示世界里发生了某事的标记，不用表示调查员看见、遇到、做到或知道了什么的标记（那些由裁定员按调查员的行动立）；"
                 "物件只用【物件】里的 id，交给调查员写 players；别人去哪不写在他的 does 里。原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
-                   "端倪本身不说破真相，只让人觉得哪里不对。", Signs),
+                   "端倪本身不说破真相，只让人觉得哪里不对；也不能说出某条线索本身的内容（线索是窗锁松了，端倪就不写窗钩是松的），"
+                   "不然等于不用检定就把线索给了。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
                 "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。", NewClues),
     "ties": ("写 4–8 条私人牵连：调查员背景里的重要之人、意义非凡之地、思想与信念、宝贵之物、职业，可以怎样接上这个模组的人和地方。"
@@ -285,8 +286,13 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
                 # Without a time or a condition the step is the NPC's to judge in play: no outcome done for it.
                 step.does = " & ".join(x for x in parts if not _outcome(m, a.npc, x)) if step.when.strip() else ""
     elif name == "foreshadow":
+        from ..agents import guard
+
         targets = {k.id for k in m.conclusions} | {e.id for e in m.events} | {e.id for e in m.endings}
-        items = [f for f in items if f.where in places and f.pays_off in targets]
+        clues = {c.id: c.text for c in m.clues}
+        names = " ".join([*(n.name for n in m.npcs), *(x.name for x in m.locations), m.setting, m.hook])
+        items = [f for f in items if f.where in places and f.pays_off in targets
+                 and not guard.leaks(f.hint, clues, public=names)]  # a sign that says a clue's words gives it away
     elif name == "ties":
         items = [t for t in items if (t.npc in npcs or not t.npc) and (t.place in places or not t.place) and t.hook.strip()]
     elif name == "history":  # names the module does not have are left out, the event kept

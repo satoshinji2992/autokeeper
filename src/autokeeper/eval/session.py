@@ -104,7 +104,8 @@ def _name(m: Module, ident: str) -> str:
     return next((x.name for x in [*m.locations, *m.npcs] if x.id == ident), ident)
 
 
-def world_after(m: Module, st: GameState, turn: int, before: dict[str, Any], ruling: dict[str, Any] | None) -> str:
+def world_after(m: Module, st: GameState, turn: int, before: dict[str, Any], ruling: dict[str, Any] | None,
+                hints: list[str] | None = None) -> str:
     rec = st.record
     here = st.location
     minutes_before = int(before.get("minutes", st.minutes))
@@ -136,6 +137,8 @@ def world_after(m: Module, st: GameState, turn: int, before: dict[str, Any], rul
     lines.append("这一轮结算的结果：\n" + ("\n".join(f"- {x}" for x in settled) or "- 没有检定，没有新线索，没有事件"))
     if ruling and ruling.get("reason"):
         lines.append(f"裁定员对这一轮的说明（能有什么结果）：{ruling['reason']}")
+    if hints:  # the module's foreshadowing, handed to the keeper this turn: telling it is no invention
+        lines.append("这一轮守秘人可以露出的端倪（照写不算凭空补的物证）：\n" + "\n".join(f"- {h}" for h in hints))
     return "\n".join(lines)
 
 
@@ -306,6 +309,8 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
                 inp = Command(resume="drop")  # a failed roll stays failed, as most players leave it
             if game._world_task is not None:  # counted with the turn, though nobody waited for it
                 await asyncio.gather(game._world_task, return_exceptions=True)
+        report = game.told.report if game.told is not None else ""
+        shown.append({"type": "hints", "lines": [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]})
     finally:
         await game.close()
         await cast.close()
@@ -336,11 +341,11 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
     rows: list[dict[str, Any]] = []
 
     async def judge(m: Module, st: GameState, turn: int, before: dict[str, Any], text: str, ruling: dict | None,
-                    side: dict[str, Any]) -> list[dict[str, str]]:  # fmt: skip
+                    side: dict[str, Any], hints: list[str] | None = None) -> list[dict[str, str]]:  # fmt: skip
         keeper, lines = told(st, turn)
         if not keeper and not lines:
             return []
-        record_text = side["record"] = world_after(m, st, turn, before, ruling)  # kept, so a report can be judged again
+        record_text = side["record"] = world_after(m, st, turn, before, ruling, hints)  # kept, so a report can be judged again
         return await ask_judge(pool, record_text, text, keeper, lines)
 
     def measures(m: Module, st: GameState, turn: int, text: str, action: dict | None, before: dict[str, Any]) -> dict[str, Any]:
@@ -376,7 +381,8 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     ruling = next(({k: v for k, v in e.items() if k != "type"} for e in reversed(shown) if e.get("type") == "ruling"), None)
                     row["replayed"] = measures(m2, st, turn, text, action, before)
                     row["replayed"]["ruling"] = ruling
-                    row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"])
+                    hints = next((e["lines"] for e in shown if e.get("type") == "hints"), [])
+                    row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
                 except Exception as exc:  # one turn that fails to replay is reported, the rest go on
                     row["replayed"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
                 row["seconds"] = round(time.monotonic() - started, 1)

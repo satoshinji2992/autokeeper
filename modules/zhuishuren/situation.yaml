@@ -61,7 +61,7 @@ relations:
   why: 资料室里的旧刊和记者笔记是他的地盘，不是同行就别乱翻，弄乱了他会当面赶人。
 foreshadow:
 - id: f_mud_on_sill
-  hint: 书房窗台内侧积着一线细干土，像被什么东西蹭过；凑近闻，土腥里带一点说不出的甜腻。窗钩是松的。
+  hint: 书房窗台内侧积着一线细干土，像被什么东西蹭过；凑近闻，土腥里带一点说不出的甜腻。
   where: shufang
   pays_off: k_not_burglar
 - id: f_prints_by_wall
