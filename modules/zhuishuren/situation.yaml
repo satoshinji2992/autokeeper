@@ -1,0 +1,235 @@
+relations:
+- a: thomas
+  b: players
+  kind: 雇佣
+  value: 55
+  why: 他请调查员来抓偷书贼、查清叔叔下落，愿意出 10 美元、管吃住，但每笔花销都记得清清楚楚。
+- a: thomas
+  b: douglas
+  kind: 亲属
+  value: 45
+  why: 失踪一年的叔叔是他唯一还挂心的家里人，既想知道是死是活，也怕对方还活着回来跟他算那份遗产。
+- a: douglas
+  b: thomas
+  kind: 亲属
+  value: 20
+  why: 侄子继承了他的旧居，他不打算被发现，也不愿意当面跟侄子解释自己如今的样子，只想把书悄悄取走。
+- a: douglas
+  b: players
+  kind: 警惕
+  value: -25
+  why: 外来的人只会侵占他的人生；只要对方不动手、好好说话，他愿意回应，否则他会打倒拦路的人，带着书逃走。
+- a: douglas
+  b: jefferson
+  kind: 旧识
+  value: 40
+  why: 从前常坐在墓地里跟守墓人聊天，从天气聊到异国故事，那是他和地面世界剩下的一点交情。
+- a: jefferson
+  b: douglas
+  kind: 恐惧
+  value: -55
+  why: 深夜在墓碑旁见过人影，他认定那是金博尔的鬼魂，不敢上前，也不敢跟人多说。
+- a: jefferson
+  b: players
+  kind: 敌意
+  value: -35
+  why: 外来人一打听墓碑和夜里的动静，他就当是冲自己来的，怕丢饭碗，也怕那些事被翻出来。
+- a: jefferson
+  b: jingguan
+  kind: 隐瞒
+  value: -25
+  why: 外套口袋里揣着一瓶私酒；他绝不想让警察盘问墓地的事，更不想被搜身。
+- a: odell
+  b: douglas
+  kind: 旧识
+  value: 20
+  why: 老金博尔还住在这儿时，她差不多天天看他夹着书走向墓地，“他总是在读书”；她并不讨厌那个怪人。
+- a: odell
+  b: players
+  kind: 审视
+  value: -10
+  why: 她先看这个人衣着和鞋子，再决定要不要跟这么一个陌生人多说一句话。
+- a: jingguan
+  b: douglas
+  kind: 未结旧案
+  value: -15
+  why: 寻人启事发了、照片贴遍了，人还是没找到；他不喜欢被问起这件事，问急了就换个话题。
+- a: bianji
+  b: players
+  kind: 戒备
+  value: -20
+  why: 资料室里的旧刊和记者笔记是他的地盘，不是同行就别乱翻，弄乱了他会当面赶人。
+foreshadow:
+- id: f_mud_on_sill
+  hint: 书房窗台内侧积着一线细干土，像被什么东西蹭过；凑近闻，土腥里带一点说不出的甜腻。窗钩是松的。
+  where: shufang
+  pays_off: k_not_burglar
+- id: f_prints_by_wall
+  hint: 人行道边的湿泥上有一串印子，看着像狗爪，却陷得太深、步幅太大，一路朝金博尔家后面的矮墙去了。
+  where: jiefang
+  pays_off: k_tunnel
+- id: f_hollow_ground
+  hint: 守墓人拿铁铲往一块低矮墓碑旁的土里一杵，铲柄弹了两下，回声闷闷的，像下面空着。他骂了一句，把铲子挪开了。
+  where: mudi
+  pays_off: k_underground
+- id: f_paper_in_crack
+  hint: 陵墓石门缝里塞满的泥中夹着一小片包书用的牛皮纸，边角撕得很齐，还带着干净的折痕。
+  where: lingmu
+  pays_off: k_tunnel
+- id: f_call_at_dusk
+  hint: 天刚擦黑，公墓那边传来两声很轻的“咪噗”，像是谁在唤猫，可镇上没人养那样的猫。
+  where: jinboer_jia
+  pays_off: k_creatures
+mechanics:
+- name: 最后一夜倒计时
+  rules: 把调查员抵达阿诺兹堡的早晨记为 D1 上午。每次跨半天以上的行动（往返镇中心、在图书馆或报社耗一整天、整夜监视、下隧道）推进一个时段。抵达当晚道格拉斯可能回来取书；若没被撞见，次日晚（D2
+    深夜）是最后一晚，之后食尸鬼封闭隧道口，他不再出现。D2 18:00 若调查员仍未提出监视，托马斯主动建议监视屋子。
+  why: 划定道格拉斯取书的最后机会，并安排托马斯的建议。
+- name: 理智损失与临时疯狂
+  rules: 单次损失 5 点或更多理智时，立即做智力检定：成功则陷入临时性疯狂 1D10 轮，期间纵声尖叫、无法精密行动，尖叫声会引来附近食尸鬼；失败则只是震惊，保持理智。疯狂结束后不保留后遗症。
+  why: 遭遇食尸鬼、看清道格拉斯真身或面对食尸鬼群时使用。
+- name: 与道格拉斯交手
+  rules: 调查员攻击道格拉斯即转战斗，调查员先手。斗殴对抗他的闪避 30%，比较成功等级：更高则命中 1D3，书掉在地上；否则落空，他冲向墓地。手枪射击时他先掷闪避寻找掩体，成功则射击带一枚惩罚骰；命中
+    1D10，枪伤对他减半（向下取整）。他没逃掉就在书掉落后爪击 50%，调查员选闪避（成功等级相同或更高即躲开）或反击（斗殴须更高）；被击中扣 1D6 HP 并被打倒，他捡起书逃进墓地。道格拉斯 12
+    HP，降到 0 死亡；只用拳头时累计损失 6 点即被击晕。
+  why: 调查员在任何时刻攻击道格拉斯时使用。
+- name: 私酒买卖
+  rules: 在镇上找酒须过知识检定（目标值等于教育）。成功花 2 美元买到一品脱烈酒，获得 has_liquor；失败则做幸运检定避免被捕，掷出 96–00 必被捕。被捕者在牢里关一夜、挨一顿训，次日早晨无罪释放（jailed），错过当晚行动。
+  why: 禁酒令时期买酒、准备贿赂守墓人时使用。
+- name: 贿赂守墓人
+  rules: 调查员把一品脱烈酒送给杰弗逊（消耗 has_liquor），他收下后态度转好，不再敌对（清除 jefferson_hostile），愿意说出道格拉斯最喜欢的墓碑位置和深夜墓碑旁的人影；若没有酒，他提到墓地怪事就闭嘴。
+  why: 守墓人杰弗逊掌握墓碑与鬼影线索，且随身带酒。
+- name: 陵墓恶臭
+  rules: 打开陵墓石门时，调查员须声明屏住呼吸。未声明者立即被恶臭熏昏（fainted），1D10 分钟后在墓外醒来，期间无法行动；同伴可把他拖走。声明屏息者安全，但说话、奔跑或施法会中断屏息。
+  why: 打开 lingmu 的石门、进入隧道前使用。
+- name: 隧道导航
+  rules: 进入食尸鬼隧道（in_tunnels）后，每经过一个岔路做一次导航或幸运检定。失败则迷失 1D6×10 分钟，并触发一次遭遇：1–3 无事，4–5 远远看见食尸鬼，6 与一只食尸鬼面对面（e_tunnel_maze）。有人带路（如跟随道格拉斯）时不需检定。
+  why: 隧道网又低又窄、岔路一条接一条时使用。
+- name: 守夜监视
+  rules: 设岗监视（watching）时，每名守夜者须做 CON 检定；失败则次日所有检定带一枚惩罚骰，且当夜可能睡着。守夜者做侦察或聆听检定发现离开公墓的人影：成功则看见他进书房窗户（figure_seen）；失败则只听见动静，错过他进屋的瞬间。
+  why: 托马斯建议监视屋子或墓地，以及 e_figure 事件使用。
+- name: 食尸鬼群
+  rules: 几十只食尸鬼现身（horde_arrived）时，调查员可逃跑或搏斗。逃跑做一次敏捷对抗（食尸鬼群视为 50%），成功则脱身（fled_ghouls）；失败则被制服带走（taken_by_ghouls），进入
+    vanished 结局。选择搏斗则每轮至少面对两只食尸鬼，累计受到 10 点伤害即被扑倒带走。
+  why: 深夜在墓地惊动食尸鬼群时使用。
+- name: 封窗
+  rules: 调查员锁上或加固书房窗户（window_locked）后，道格拉斯当夜无法从窗户进入。他会在窗外徘徊 1D10 分钟，留下爪痕后返回墓地；此后他不再回来取书（k_last_night 提前成立），未取走的书留在书房。
+  why: 书房窗锁松动，道格拉斯从窗户进出。
+- name: 报酬与开销
+  rules: 托马斯承担调查期间的合理花销（车票、住宿、吃饭、买酒），并承诺 10 美元报酬。调查员先垫付的小额开销可凭票据向他报销。若搜书房时孤注一掷失败打碎贵重物件（broke_vase），报酬扣
+    5 美元。
+  why: 开场委托与书房搜查的后果。
+- name: 图书馆闭馆
+  rules: 在图书馆查资料孤注一掷失败，管理员下班锁门，调查员被关在馆内过夜（locked_in_library）。这一夜不能进行监视或赴约；次日早晨管理员开门放人。
+  why: 图书馆旧报合订本与闭馆后果。
+- name: 喊出名字
+  rules: 在墓地遇到人影时，只有喊出完整姓名“道格拉斯·金博尔”才会触发 called_name：人影停下，引调查员到那块低矮墓碑旁。喊“金博尔先生”“叔叔”等不完整称呼只让人影迟疑一轮，随后继续走。
+  why: e_hello 与 c_douglas_truth 的触发方式。
+- name: 跟踪下隧道
+  rules: 调查员若想跟随道格拉斯进入陵墓隧道，须做一次潜行检定（对抗他的聆听 50%）。成功则跟到隧道口并看见他下去（followed_douglas）；失败则他在岔路消失，只留下 k_tunnel
+    的线索。
+  why: followed_douglas 结局与隧道入口。
+agendas:
+- npc: douglas
+  goals:
+  - 赶在食尸鬼封闭隧道之前，把心爱的书搬回地下，凑起自己的图书馆
+  - 照地下的见闻写一本新书，同时不让侄子知道自己还在人世
+  steps:
+  - id: douglas_take_books
+    text: 从陵墓的隧道爬上来，摸到金博尔家书房那扇锁松的窗，撬开进去抱走大约六本旧书。
+    when: D1 23:00
+    does: flag:figure_seen
+  - id: douglas_read_at_tomb
+    text: 抱着书坐到那块低矮墓碑上读，天亮前回隧道；有礼貌的人喊他名字，他就停下等对方过来。
+    when: flag:figure_seen
+    does: at:douglas:mudi
+  - id: douglas_answer_call
+    text: 在墓碑旁用一句“你好”开口，只要对方不动手就有问必答，讲自己为什么离开、地下有什么。
+    when: flag:called_name
+    does: at:douglas:mudi
+  - id: douglas_flee_with_books
+    text: 挨了一下就把书掉在地上，找机会抱起书冲过矮墙钻进陵墓，不回头。
+    when: flag:attacked_douglas & !flag:douglas_down
+    does: flag:douglas_escaped
+  - id: douglas_seal_tunnel
+    text: 带着取回的书回到隧道深处，和其他食尸鬼一起封死陵墓这端的出入口，此后不再上来。
+    when: D2 04:00
+    does: at:douglas:suidao
+  - id: douglas_lead_down
+    text: 在地下撞见调查员时先问好；对方不动手，就领他们看自己堆书的角落，说“地下的朋友们”正要搬走。
+    when: flag:in_tunnels
+    does: at:douglas:suidao
+- npc: thomas
+  goals:
+  - 抓住偷书贼、把叔叔的书追回来
+  - 弄清道格拉斯是死是活，又不想为此多花钱、闹出丑闻
+  steps:
+  - id: thomas_greet
+    text: 应门、寒暄，把空房间和行李安顿好，等调查员问起才讲委托和叔叔的样貌。
+    when: D1 10:00
+  - id: thomas_show_study
+    text: 被问到丢书时领人上书房，说少了约六本却说不清是哪几本，顺手指出叔叔的旧书桌和那本日记。
+  - id: thomas_urge_watch
+    text: 问调查员进展，说自己出不起更多钱但愿意配合，建议夜里守着书房窗户抓窃贼现行。
+    when: D2 18:00
+  - id: thomas_after_truth
+    text: 听完真相沉默很久，请调查员别对外声张，只想把书要回来、把叔叔的失踪名单上了结。
+    when: flag:told_thomas
+- npc: jefferson
+  goals:
+  - 干完活、别惹麻烦，尤其别去深究墓地里的事
+  - 保住口袋里那瓶私酒，不被警察或讲究的人看见
+  steps:
+  - id: jefferson_work
+    text: 在墓地里干活，有人问路就粗声指一下；一问到墓碑和夜里的怪事就闭嘴，拿铁铲杵地说“我还有活要干”。
+  - id: jefferson_sight_figure
+    text: 收工前绕到道格拉斯常坐的那块墓碑附近，看见人影就远远退开，回工具棚喝一口酒压惊。
+    when: D1 23:00
+  - id: jefferson_take_bribe
+    text: 收下酒，态度松动，说出深夜在那块墓碑旁见过人影，他认定是金博尔的鬼，所以从没敢上前。
+    when: flag:has_liquor
+  - id: jefferson_clam_up
+    text: 从此不搭理调查员，问什么都只管铲土，最多指一下墓碑的方向。
+    when: flag:jefferson_hostile
+- npc: odell
+  goals:
+  - 买完东西回家，顺便看清这个陌生人体不体面
+  - 守住这一带街面上的老规矩，不让不三不四的事上门
+  steps:
+  - id: odell_gossip
+    text: 挎着篮子在人行道上慢走，主动跟人搭话，说起从前天天看见道格拉斯夹着书往墓地走，“他总是在读书”。
+    when: at:odell:jiefang
+  - id: odell_night_sounds
+    text: 出门时和人抱怨夜里从公墓那边传来的闷响，说这一年听得越来越勤，愿上帝保佑。
+    when: D2 09:00
+history:
+- when: 一年前
+  text: 道格拉斯·金博尔某夜跟随他的食尸鬼朋友走进墓中那扇嘎吱打开的门，从此定居在昏暗的地下世界，没有留下任何踪迹。
+  who:
+  - douglas
+  where: mudi
+- when: 一年前
+  text: 道格拉斯失踪后，托马斯·金博尔接手了艾尔斯伯里大街218号的房子，并以为叔叔已死。
+  who:
+  - thomas
+  where: jinboer_jia
+- when: 一年前
+  text: 警方应报发出道格拉斯·金博尔的寻人启事，照片广为传播，始终没找到人。
+  where: jingju
+  known_by:
+  - thomas
+- when: 最近几周
+  text: 其他食尸鬼决定关闭这处墓地出入口，废弃这片墓地，隧道里从此不再通到这里。
+  where: suidao
+  known_by:
+  - douglas
+- when: 上周
+  text: 道格拉斯从书房那扇窗锁松动的窗户闯入旧居，取走了大约六本他心爱的书。
+  who:
+  - douglas
+  where: shufang
+- when: 几天前
+  text: 守墓人杰弗逊深夜在道格拉斯最爱坐的那块墓碑旁看见人影，以为是金博尔的鬼魂，没敢上前。
+  who:
+  - jefferson
+  where: mudi

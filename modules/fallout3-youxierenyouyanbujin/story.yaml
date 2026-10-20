@@ -142,3 +142,14 @@ showcases:
     when: ending:e_viewed
     title: 看见大智慧
     prompt: 望远镜的接目镜里，昴星团附近的星空裂开一道深渊，一个庞大、冰冷、非人的意识的轮廓压过整片星空
+prelude:
+- art: main_street
+  text: 一九二〇年代，美国小镇斯托威尔。大街两旁是面包店、杂货店和药店，高高的电话线杆一路排开。
+- art: gregson_store
+  text: 格雷格森商店的货架堆得满满的，柜台边有汽水机，孩子们常在这儿买汽水。
+- art: steakhouse
+  text: 埃尔默牛排馆是镇上最好的饭店。今天菜不如从前，服务员们低着头，不敢多说一句。
+- art: church
+  text: 美以美会堂门口写着：每日两次布道，欢迎所有人。这几天，熟人之间却越来越沉默。
+- art: meeting_house
+  text: 今晚，几个从小一起长大的同窗聚在木板小屋里，想弄清楚镇上到底出了什么事。

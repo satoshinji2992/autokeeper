@@ -1,0 +1,291 @@
+relations:
+- a: caroline
+  b: erie
+  kind: 支配
+  value: 85
+  why: 她召来它、给它埃里的脸和声音，它一举一动都照她的指示
+- a: erie
+  b: caroline
+  kind: 服从
+  value: 90
+  why: 它只听卡洛琳的命令，没有指示时才偶尔按自己的想法行动
+- a: ante
+  b: caroline
+  kind: 信任
+  value: 60
+  why: 他靠她护理满屋病人，西班牙流感时那十几个奇迹康复的也都是她照看的
+- a: caroline
+  b: ante
+  kind: 隐瞒
+  value: -35
+  why: 她绝不让他看出自己的熏香治疗和全镇的病是同一路法术
+- a: caroline
+  b: players
+  kind: 拉拢
+  value: 40
+  why: 她要借外来人的手查清“是什么法术抵消了我的法术”，必要时还要一具尸体
+- a: erie
+  b: players
+  kind: 戒备
+  value: -45
+  why: 卡洛琳交代过对外人说什么，问起咳嗽就答胸腔里卡着弹片
+- a: darvill_parents
+  b: erie
+  kind: 恐惧
+  value: -75
+  why: 他们记得那个男人浑身是血地回来，笑着说面具是他的了，会永远戴着
+- a: erie
+  b: darvill_parents
+  kind: 监视
+  value: -50
+  why: 他们知道面具不是他的，说出去就完了
+- a: anna
+  b: erie
+  kind: 怀疑
+  value: -40
+  why: 萨缪尔死前说打猎遇到一个包裹全身的人，还说过与埃里关系紧张
+- a: anna
+  b: players
+  kind: 倾诉
+  value: 55
+  why: 她一直想找个人说丈夫临死前究竟怎么了，一开口就停不下来
+- a: doreen_ratger
+  b: players
+  kind: 招待
+  value: 50
+  why: 她想让客人住得安稳，别在饭桌上谈死人——她自己已经咳了两天
+- a: francis_ratger
+  b: erie
+  kind: 不安
+  value: -30
+  why: 他记得埃里从战场回来整个人就不对，如今还替人拉尸体
+- a: doreen_ratger
+  b: caroline
+  kind: 非议
+  value: -25
+  why: 她念叨卡洛琳和埃里当年“没结婚就那样来往”的旧事
+- a: reggie
+  b: players
+  kind: 戒心
+  value: -35
+  why: 他怕人看出他在盘算把农场抵出去，把牛的死一概说成天罚
+foreshadow:
+- id: truck_pine_needles
+  hint: 街角那辆卡车没熄火，车斗里铺着一条旧毯子；风把毯角掀起来，下面压着几根矮树林才有的松针，和一层没化的、比路边的雪更湿的雪。
+  where: main_street
+  pays_off: k_buried
+- id: porch_stain
+  hint: 弗朗西斯端着汤绕开后廊那一步，抬头看了一眼天花板上的水渍，什么也没说；那圈水渍比昨天大了一圈。
+  where: ratger_house
+  pays_off: e_porch
+- id: same_hour_wake
+  hint: 候诊室里靠墙睡着的男人忽然抽了一下，嘟囔“别再往上堆了”，随后几个睡着的病人几乎在同一刻翻身、皱眉，像被同一个声音点到。
+  where: clinic
+  pays_off: k_nightmare
+- id: lime_dust
+  hint: 长椅底下扫出一小堆石灰渣，是从地下室门口被风吹上来的；牧师说上周地上还是干净的，那面墙也从没渗过水。
+  where: church
+  pays_off: k_disease
+- id: unsent_letter
+  hint: 安娜盖戳时漏了一封，那是一封写给“埃里·赫琴斯”的信，她把信封翻过去，压在最底下，说这信退过一次，收件人从来不来取。
+  where: post_office
+  pays_off: k_erie_false
+- id: stretcher_track
+  hint: 达维尔家屋后雪地上那道清理过的痕迹一直通到地下室门口，宽窄像一副担架，边上有两行踩实了的脚印，一深一浅。
+  where: darvill_house
+  pays_off: e_theft
+ties:
+- id: anna_penpal
+  hook: 安娜·伊斯特曼是调查员战前通信多年的笔友，萨缪尔死后她只寄来过一张没写字的明信片。
+  npc: anna
+  fits:
+  - 重要之人
+- id: doreen_mother_friend
+  hook: 多琳·拉特格是调查员母亲的旧同窗，每年圣诞都寄一张埃斯内尔的风景卡。
+  npc: doreen_ratger
+  fits:
+  - 重要之人
+- id: church_grandmother
+  hook: 调查员的祖母在类似的小镇教堂里做了一辈子管风琴手，他答应替她给埃斯内尔的教堂捐一本赞美诗。
+  place: church
+  fits:
+  - 意义非凡之地
+  - 思想与信念
+- id: ante_public_health
+  hook: 调查员坚信公共卫生是政府最不容推卸的责任，安特医生越级上报的做法在他看来不是恐慌，而是尽责。
+  npc: ante
+  fits:
+  - 思想与信念
+  - 职业
+- id: ante_stethoscope
+  hook: 调查员随身带着亡父留下的老式听诊器，听说埃斯内尔只有安特医生一人撑诊所，便想亲手交给他用。
+  npc: ante
+  fits:
+  - 宝贵之物
+  - 职业
+- id: francis_war_wounded
+  hook: 调查员在法国见过被炮火毁掉脸的伤兵，弗朗西斯·拉特格一句“埃里回来后人不对”会让他想起那些病例。
+  npc: francis_ratger
+  fits:
+  - 职业
+  - 思想与信念
+- id: caroline_classmate
+  hook: 卡洛琳·达维尔是调查员大学药学班的旧同学，听说她在埃斯内尔照护病人，调查员出发前给她写过一封信。
+  npc: caroline
+  place: darvill_house
+  fits:
+  - 重要之人
+  - 职业
+mechanics:
+- name: 疾病计数器
+  rules: 开场掷 2D10，用 100 减去结果，得到埃斯内尔健康度计数器（可预先暗掷，也可在调查员得知疫情时公开掷）。此后定期扣除：第一次 1D10，之后每次多 1D10，最多 3D10；若调查员提出有效的治疗或公共卫生措施，可减少所投
+    D10 的数量（经裁定后调用 mitigate，但骰数不少于 1D10）。节奏二选一：daily，按游戏内时间每满 1440 分钟推进一次；dramatic，只在最紧迫的时刻投，且全模组总共只投
+    4-7 次。分区：81-100 为第一阶段，31-80 为第二阶段，0-30 为第三阶段，0 表示镇子不可避免走向灭亡（counter_zero → 结局 too_late）。跨越阈值时分别置位
+    disease_phase2 / disease_phase3，并由阶段决定传播范围、症状轻重与死亡人数。
+  why: 全模组的时限与传播速度都靠这个计数器；e_milk、e_porch 分别要求已进入第二、第三阶段，结局 too_late 判定 counter_zero。
+  plugin: winter_disease
+- name: 患病调查员
+  rules: 进入第二阶段时让一名调查员出现症状，进入第三阶段时再让一名（按人数调整）。此后每当为疾病计数器掷骰，患病调查员做体质检定：失败失去等于本次掷骰中最高单个 D10 的体质，成功也失去等于最低单个
+    D10 的体质；需要体力活动时 KP 可给惩罚骰。每次体质检定失败，还要做理智检定 0/1D6（噩梦与高烧梦境）；噩梦可用于给出线索、法术片段或增长克苏鲁神话技能。
+  why: 把计数器推进直接落到调查员身上；噩梦内容对应 k_nightmare 与 c_samuel_diary 里的无脸男人。
+  plugin: winter_disease
+- name: 暴风雪中的追踪
+  rules: 调查员动身追踪“埃里”回达维尔家（chase_erie）时进入暴风雪：按追逐回合结算，每回合双方各做一次体质或导航（雪地辨迹）检定，风向与积雪使失败方落后一回合。追丢即失去雪地痕迹，只能返回主街或出租屋，并当作一次时间推进（按所选节奏为疾病计数器投一次骰）；追上则在达维尔家门前接续。
+  why: e_storm「追踪途中的暴风雪」需要一套裁定谁先到、追丢后怎么算的规则，引擎不管追逐。
+agendas:
+- npc: caroline
+  goals:
+  - 把这场病压下去，用熏香“治好”更多濒死的人，证明自己只是个好护士
+  - 弄清是什么法术抵消了自己的法术；实在不行，再弄一具尸体来试
+  steps:
+  - id: treat_dying
+    text: 在诊所用熏香和那套自创手法救活一个濒死的病人，让所有人看见“有效”。
+  - id: ask_for_body
+    text: 在药柜旁的走廊上私下拦住调查员，说要做“研究”，请他们松口给她一具刚死的病人尸体。
+    when: flag:caroline_cure
+  - id: send_erie_for_body
+    text: 夜里支使埃里去诊所搬一具尸体回来，别惊动值夜的人。
+    when: D1 23:00
+  - id: let_erie_cover
+    text: 一旦有人翻出典籍或当面点破她，立刻让埃里殿后，自己先退走。
+    when: flag:grimoire_found
+    does: flag:caroline_fled
+  - id: share_method
+    text: 若调查员表示愿意合作，就摊开一部分“治疗”手法，让他们按她的办法帮病人。
+    when: flag:caroline_ally
+- npc: erie
+  goals:
+  - 照卡洛琳的吩咐做事，不多说一个字
+  - 不让任何人知道绸缎山矮树林下埋着什么
+  steps:
+  - id: haul_bodies
+    text: 在主街街角用卡车替镇上拉尸体，被问起就说是殡葬的活。
+  - id: cough_excuse
+    text: 被问起那阵咳时，只说胸腔里卡着一片从法国带回来的弹片。
+    when: flag:met_erie
+  - id: take_corpse
+    text: 摸黑撬开诊所后门，扛走一具刚死的病人尸体。
+    when: D1 23:30
+    does: flag:body_stolen
+  - id: lose_pursuers
+    text: 有人跟踪时钻进风雪，靠着对雪路的熟悉甩开他们回达维尔家。
+    when: flag:chase_erie
+    does: at:erie:darvill_house
+  - id: drop_disguise
+    text: 在绸缎山被逼到矮树林时不再装人，当着他们的面散成原形。
+    when: flag:hill_found
+    does: flag:entity_revealed
+- npc: ante
+  goals:
+  - 把这场病继续当流感治，别让镇子炸开锅
+  - 守住他“控制得住”的脸面
+  steps:
+  - id: show_records
+    text: 把病历本和体温记录摊给调查员，一条条念数字。
+    when: at:ante:clinic
+  - id: keep_sedating
+    text: 病情吃紧时照旧给病人开镇静剂助眠，好让他们安静下来。
+    when: flag:disease_phase2
+  - id: admit_loss
+    text: 私下找调查员承认自己压不住了，请他们接手防疫安排，但别在病人面前说。
+    when: flag:disease_phase3
+- npc: anna
+  goals:
+  - 找个人说说萨缪尔临死前到底怎么了
+  - 别一个人回家，别一个人碰那本日记
+  steps:
+  - id: tell_samuel
+    text: 在柜台后面一边盖戳一边讲萨缪尔是镇上第一个死的，死前就胡言乱语。
+    when: at:anna:post_office
+  - id: show_diary
+    text: 若有人愿意听下去，下班后带他们回伊斯特曼家，取出那本潦草的日记。
+    when: at:anna:eastman_house
+- npc: darvill_parents
+  goals:
+  - 没人知道他们想要什么；只要家里安静、女儿按时回来
+  - 把“戴面具的男人”这段话讲给有耐心的人听
+  steps:
+  - id: mumble_seance
+    text: 天黑后在地下室门前断断续续地嘟囔，像在跟谁说话。
+    when: D1 21:00
+  - id: tell_mask_man
+    text: 被问得够久、够耐心时，说出那个戴面具的男人浑身是血地回来、笑着说面具是他的了。
+- npc: pastor
+  goals:
+  - 让这几天的死者体面下葬，让活人别慌
+  - 弄明白地下室那面墙为什么忽然坏了
+  steps:
+  - id: open_cellar
+    text: 领调查员到地下室看停着等雪停的棺木。
+    when: at:pastor:church
+  - id: find_old_rite
+    text: 翻地下室的木柜找下葬用的旧葬仪簿，翻到夹页里的旁注。
+    when: at:pastor:church
+  - id: insist_burial
+    text: 镇子越来越糟时，坚持雪一停就立刻下葬，不再等。
+    when: flag:disease_phase3
+history:
+- when: 多年前，大战之前
+  text: 埃里·赫琴斯与卡洛琳·达维尔在原卡德威尔家的废弃农舍里找到一本属于犹格-索托斯的典籍，两人一起研习其中的法术。
+  who:
+  - caroline
+  where: cardwell_farm
+- when: 多年前，两人一起研习典籍的时期
+  text: 埃里与卡洛琳私下约定，等他打完欧洲战场那一仗回来就成婚。镇上人只当他们是一对没结婚就那样来往的男女。
+  who:
+  - caroline
+  known_by:
+  - doreen_ratger
+- when: 1918—1919 年西班牙流感最凶的时候
+  text: 镇上十几个濒死的人奇迹般康复，而康复名单上的病人都是卡洛琳·达维尔护理的。安特医生把这份名单记进了旧病历档案。
+  who:
+  - caroline
+  - ante
+  where: clinic
+  known_by:
+  - ante
+- when: 西班牙流感那几年
+  text: 卡洛琳用同一路法术把濒死的父母“治”了过来；达维尔夫妇从此只会断断续续地嘟囔、突然发笑。
+  who:
+  - caroline
+  - darvill_parents
+  where: darvill_house
+- when: 战事将尽时
+  text: 卡洛琳收到军方电报，称埃里阵亡。她不肯接受，召来一个无定形的异界存在，赋予它埃里的外表与声音，留在身边，对外称作“埃里”。
+  who:
+  - caroline
+  - erie
+  where: darvill_house
+- when: 战后，这场病开始之前
+  text: 真正的埃里只是重伤，被丢在法国乡下；他康复后回到埃斯内尔，撞见那个顶着自己相貌的东西。它夜里浑身是血地回来，对达维尔夫妇笑着说，它杀掉了面具的主人，面具从此归它了。
+  who:
+  - erie
+  where: satin_hill
+- when: 就在被杀的那一刻
+  text: 临死前，埃里施法让自己悬停在生死之间；这道法术不断吸取埃斯内尔居民的生命力，直到他恢复、挣脱雪墓。
+  where: satin_hill
+- when: 开局前不久
+  text: 萨缪尔·伊斯特曼是镇上第一个死于这场病的人。死前他还没有任何症状，就开始胡言乱语：打猎时遇到一个包裹全身的人，“他回家了。他本来就在这，但他现在又回来了。”
+  who:
+  - anna
+  where: eastman_house

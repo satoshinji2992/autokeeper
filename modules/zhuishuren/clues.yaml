@@ -158,6 +158,56 @@ clues:
     text: |
       一头丑陋的人型生物，浑身赤裸，满身结块的泥土和霉菌，长着野兽般的脸和巨大的犬齿，本该是鼻子的地方是犬科一样的吻状突起。
       最令人惊恐的是——它的脸与道格拉斯·金博尔惊人地相似。
+  - id: c_borrow_records
+    title: 借阅登记簿上的名字
+    text: 登记簿上，道格拉斯·金博尔失踪前那一年借的书换了口味：园艺手册、异国游记少了，多了好些讲地下世界、洞穴、冥府传说和掘地生物的书，一本接一本。管理员在旁边批了一句：“他向来按时还，还回来时书页间总夹着干土。”
+    where: tushuguan
+    feature: 借阅台后的旧登记簿（道格拉斯·金博尔名下的记录）
+    check:
+      skill: 图书馆使用
+      difficulty: 常规
+    points_to:
+    - k_underground
+    - k_joined
+  - id: c_tomb_subsidence
+    title: 陵墓底下的旧传闻
+    text: 一叠旧剪报里提到，公墓深处那座石砌陵墓多年前地面塌过一回，工人来填土，越挖越觉得底下是空的；镇上有老人说，那一带地底下“自古以来就有路”。这条报道没登出来，只在记者笔记里留了一行。
+    where: baoshe
+    feature: 资料室里一叠关于本地旧事的记者剪报
+    check:
+      skill: 图书馆使用
+      difficulty: 常规
+    points_to:
+    - k_tunnel
+  - id: c_annotated_books
+    title: 只剩批注的主人
+    text: 架子上剩下的书里，有一小批页边写满铅笔小字、被翻得起了毛边，空档正好落在它们中间：被拿走的不是随手抓的几本，而是这些被人反复读过、做过批注的。剩下书脊上的灰，也有人抹过。
+    where: shufang
+    feature: 书架上还留着的书（书页边角的铅笔批注）
+    check:
+      skill: 侦查
+      difficulty: 常规
+    points_to:
+    - k_ghoul
+    - k_not_burglar
+  - id: c_tunnel_sealed
+    title: 越走越窄的路
+    text: 前方一条岔道被新填的湿土和碎石堵死了，土色比四壁新，爪痕到此为止。旁边另一条岔道也有同样的痕迹，像有人在一条条地把路封上。空气里的甜腐味压得很低。
+    where: suidao
+    feature: 隧道里一处岔道口
+    check:
+      skill: 侦查
+      difficulty: 常规
+    points_to:
+    - k_last_night
+    - k_underground
+  - id: c_odell_night_sounds
+    title: 夜里的闷响
+    text: 奥黛尔夫人压低了声音说，近来深更半夜，墓地那头常传来沉闷的响动——像有人搬石头、往坑里填土，一下一下的，听得人心里发毛。她说从前可没这动静，还劝你天黑后别往那边去。
+    where: jiefang
+    feature: 莉拉·奥黛尔（在门口和人说话时提起）
+    points_to:
+    - k_last_night
 handouts:
   - id: h_diary
     title: 道格拉斯·金博尔的日记（节选）

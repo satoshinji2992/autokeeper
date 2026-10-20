@@ -462,6 +462,26 @@ clues:
   points_to:
   - k_erie_false
   sanity: null
+- id: c_old_rite_note
+  title: 旧葬仪簿里的旁注
+  text: 地下室的旧葬仪簿里夹着一页没署名的旁注，字迹很老。上面说绸缎山下的雪“埋过不该埋的人”，只要那个人不安宁，镇上的病就不会断根；要么让他真正归于土，要么让他自己从雪里站起来。旁注边角画着一小片矮树林。
+  where: church
+  feature: 地下室木柜里一本旧葬仪簿的夹页
+  check:
+    skill: 图书馆使用
+    difficulty: 常规
+  points_to:
+  - k_antidote
+- id: c_reggie_mutter
+  title: 雷吉灌酒时的嘟囔
+  text: 雷吉灌下一口酒，盯着牛棚嘟囔：牛不是病，是地底下有东西在啃。他说老辈人讲过，要么把土里的东西烧干净，要么等它自己爬出来，不然这地方好不了。说完他又摇头，说自己只是胡说。
+  where: brucker_farm
+  feature: 雷吉拎着酒瓶站在牛棚边时的嘟囔
+  check:
+    skill: 说服
+    difficulty: 常规
+  points_to:
+  - k_antidote
 handouts:
 - id: h_map_plain
   title: 分发材料 1a——埃斯内尔地图（黑字地名版）

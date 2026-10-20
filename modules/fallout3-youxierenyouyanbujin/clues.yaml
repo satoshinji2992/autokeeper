@@ -242,6 +242,57 @@ clues:
   points_to:
   - k_cut
   text: 工作室里堆满透镜毛坯、镜筒和磨镜工具——要修一架望远镜，离了这些可不行。
+- id: c_police_log
+  title: 报案登记簿
+  text: 最近两周的报案记录几乎全被划掉，每一行旁边都批着“已处理”，落款都是同一个姓名缩写。有一页写着有人来报亲戚痴呆走失，被批“家属接回”。值班的警员见你在翻本子，站起身往这边走。
+  where: police_station
+  feature: 值班台前的报案登记簿
+  check:
+    skill: 侦查
+    difficulty: 常规
+  points_to:
+  - k_cover_up
+- id: c_church_list
+  title: 圣经里的名单
+  text: 讲坛上摊开的圣经里夹着一张纸条，上面是会众的名字，几个名字后面打了钩，记着日期和“特别弥撒·午夜”；最近一个日期就在这两天。打钩的名字里有两个你认识的人，他们这几天都不太对劲。
+  where: church
+  feature: 讲坛上摊开的圣经，夹在书页间的纸条
+  check:
+    skill: 侦查
+    difficulty: 常规
+  points_to:
+  - k_church
+- id: c_leonard_parts
+  title: 伦纳德刷盘子时的嘟囔
+  text: 伦纳德头也不抬地刷盘子，嘴里念着：玻璃匠说他做不了教授那活儿，得从镇外订，一时半会儿到不了。“没那块料，镜子就是块废铁。”说完他抬眼看了看门口。
+  where: steakhouse
+  feature: 厨房水槽前的伦纳德
+  check:
+    skill: 聆听
+    difficulty: 常规
+  points_to:
+  - k_cut
+- id: c_massey_parts
+  title: 马西的最后一块石英
+  text: 棚里的工作台上摆着一块磨到一半的石英。马西说教授催得急：“这块磨完就没料了，剩下那块有裂纹，装上去什么也看不见。”他挥手让你别碰。
+  where: park_mine
+  feature: 棚子里的工作台
+  check:
+    skill: 侦查
+    difficulty: 常规
+  points_to:
+  - k_cut
+- id: c_farm_police_car
+  title: 田里那辆黑轿车
+  text: 一辆黑色轿车停在田边，车门上的警徽漆印还没刮干净，钥匙插在锁孔里，后座有几道擦不掉的黑褐色痕迹。旁边几个闲站的人一看见有人走近就直起了腰。
+  where: jensen_farm
+  feature: 停车的田地边，一辆刮掉字样的黑色轿车
+  check:
+    skill: 侦查
+    difficulty: 常规
+  points_to:
+  - k_cover_up
+  - k_jensen
 handouts:
 - id: h_town_map
   title: 斯托威尔镇地图
