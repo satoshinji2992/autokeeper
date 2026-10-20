@@ -102,6 +102,11 @@ def reserved(w: World, name: str) -> str:
     return next((f"{what}「{title}」" for title, what in kept if names(name, title)), "")
 
 
+# Never anyone's everyday thing, whoever brings it out: arms come from the module, the investigator's
+# own gear or a ruling, so a revolver is not had for the asking (Bring).
+ARMS = re.compile(r"枪|左轮|子弹|弹药|炸药|火药|雷管|手榴弹|炸弹")
+
+
 def lacking(w: World, name: str) -> str:
     """What this turn's action lacks (Ruling.missing, kept in the record) that a name stands for."""
     missing = w.rec.missing if w.rec.missing_turn == w.st.turn else []
@@ -334,6 +339,8 @@ class Bring(Base):
         if clash := reserved(w, name):  # an NPC is told why without hearing of the module's things
             problems.append(f"「{name}」和{clash}重名：这样的东西只由模组、线索或裁定给出" if self.actor in STAFF
                             else f"「{name}」不是随手就有的日常物件，不能当场拿出来")
+        if ARMS.search(name):
+            problems.append(f"「{name}」不是随手就有的日常物件：枪支、弹药和炸药只由模组、调查员的装备或裁定给出")
         if gap := lacking(w, name):
             problems.append(f"这一轮的行动正缺{gap}，不能当场拿出来")
         if have := holding(w, where, name):
@@ -801,6 +808,7 @@ class Enlist(Base):
     resources: list[str] = Field(default_factory=list, description="他能动用的人和东西")
     places: list[str] = Field(default_factory=list, description="除了公开的地方，他还知道哪些地点 id")
     mood: str = Field("", description="此刻的心境")
+    passive: SkipJsonSchema[bool] = False  # only its fixed steps run (record.Agent.passive); set by the engine alone
 
     def check(self, w: World) -> list[str]:
         if _npc(w, self.npc) is None:
@@ -821,6 +829,7 @@ class Enlist(Base):
         a.resources = self.resources or a.resources
         a.places = list(dict.fromkeys([*a.places, *self.places]))
         a.mood = self.mood or a.mood
+        a.passive = self.passive
         return None, None
 
 

@@ -228,6 +228,13 @@ class Move(BaseModel):
                                       "gone:谁（死了或不见了）；只写原作里这一步真会造成的，没有就留空")
     meet: bool | None = Field(None, description="见面时的反应填 true：调查员来问、来访、在场时他才会做的事（应门招呼、领人去看、被问到时怎么说），"
                                                 "不写 does，when 只表示从什么时候、什么条件起才这样；游戏里是人物资料，不在幕后想；要他自己在幕后去做的填 false")
+    once: bool | None = Field(None, description="见面时的反应才填：只发生一次的事（应门、安顿行李、头一回讲委托）填 true，做过就算完成；"
+                                                "一贯的态度（一问到墓地就闭嘴）填 false，碰上了才带出，不必每次都演")
+    only_if: str = Field("", description="条件语法写不出的实际依据，一句话写全：谁当面做了什么（酒递到他手里，不是调查员买到了酒）、"
+                                         "他通过什么途径得知（有人报告、亲眼看见，不是调查员自己知道了）；到时由守秘人或他本人判断。没有就留空")
+    ruling: bool = Field(False, description="要守秘人先裁定才发生的结果（某次检定或孤注一掷的结果、调查员的具体做法带来的后果）填 true："
+                                            "交给守秘人，不当成人物见面就做的事")
+    source: str = Field("", description="依据：原作哪里写到（地点、线索、NPC 的 id，或 真相、守秘人须知）；原作没写、是推出来的写 补写")
 
 
 class Agenda(BaseModel):
@@ -273,6 +280,15 @@ class Mechanic(BaseModel):
     rules: str = Field(description="规则本身：什么时候、怎么算、有什么后果")
     why: str = Field("", description="模组里哪里用到")
     plugin: str = Field("", description="写好的插件 id；还没写就留空")
+    runs: Literal["", "核心规则", "插件", "守秘人"] = Field("", description="谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害）、"
+                                                                         "插件（填 plugin）、守秘人（临场裁定）；留空时有插件算插件，没有算守秘人")
+
+    @property
+    def executor(self) -> str:
+        """Who keeps this rule in play: the engine's core rules, a plugin, or the keeper on the spot."""
+        if self.plugin:
+            return f"插件 {self.plugin}"
+        return self.runs if self.runs in ("核心规则", "守秘人") else "守秘人"
 
 
 class Module(BaseModel):

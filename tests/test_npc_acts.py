@@ -11,6 +11,7 @@ from autokeeper.engine.game import Game, Turn
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
+from autokeeper.world import ops
 from autokeeper.world.ops import Follow
 
 from .test_harness import SCRIPT, SCRIPTED, SEEN, harness_sandbox  # noqa: F401
@@ -142,4 +143,23 @@ async def test_the_arbiter_sees_everyday_things_here_and_on_the_people_here(fake
     await cast.arbiter(game.state, Action(kind="use", summary="周衡拿起拨火棍", target="拨火棍"))
     sent = SEEN[-1]["messages"][-1]["content"]
     assert f"{poker} 拨火棍，持有者 tower" in sent and f"{can} 油壶，持有者 warden" in sent
+    await game.close()
+
+
+async def test_the_keeper_hears_that_an_npc_went_off_and_sees_what_the_people_here_carry(fake):
+    """The review of 2026-10-20: an NPC that walked off was only missing from the list of people
+    here; and the keeper's brief did not show what an NPC had on it."""
+    from autokeeper.world import context as world_view
+
+    game, cast = setup(fake)
+    me = game.state.investigator.id
+    SCRIPT.append({"text": "（摸出一盒火柴）拿着。", "items": [{"name": "火柴"}]})
+    await cast.npc(game.state, "warden", "有火吗？")
+    assert "身上有：火柴" in world_view.keeper_brief(game.world)  # brought out, still in his hand
+    SCRIPT.append({"text": "我得下去看看广场上布道的。", "leave": "square"})
+    turn = Turn(action=Action(kind="talk", summary="周衡问守钟人去哪", npc="warden", speech="你要去哪？"))
+    await game.talk(turn)
+    assert any(n.startswith("老守钟人说完就走了，去了广场") for n in turn.notes)
+    revolver = ops.Bring(name="左轮手枪", holder=me, actor="keeper")
+    assert any("枪支、弹药和炸药" in p for p in revolver.check(game.world))
     await game.close()

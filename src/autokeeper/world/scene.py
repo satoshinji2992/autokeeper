@@ -301,7 +301,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             party_unit.said.append(f"{e.name}一起过去")
             movers[n] = "party"
             continue
-        minutes = ctx.travel(e.at, room) if e.at else None
+        minutes = _way(w, ctx, e.at, room) if e.at else None
         if minutes is None:
             problems.append(f"{e.name}在{name(e.at) or '别处'}，从那里到不了{name(room)}：他不在这里，可以写他没来。")
         elif minutes > ctx.elapsed:
@@ -319,7 +319,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         e = rec.entities[n]
         if n in leaving:
             to = _place(w, leaving[n])
-            minutes = ctx.travel(e.at, to) if to else None
+            minutes = _way(w, ctx, e.at, to) if to else None
             if to is None or to == room:
                 problems.append(f"{e.name}的去向「{leaving[n]}」不是能离开去的地点：写一个别的地点。")
             elif minutes is None:
@@ -527,6 +527,16 @@ def land(w: World, units: list[Unit]) -> list[Unit]:
 
 
 # -- in words, for the keeper --------------------------------------------------------------------
+def _way(w: World, ctx: Context, a: str, b: str) -> int | None:
+    """Minutes from one place to another as a scene counts them: a room of the same building is
+    a few steps away (Thomas comes over from the study while they talk, as they walk into it
+    themselves); between places, the way there takes its time."""
+    return 0 if b in rooms(w.m, a) else ctx.travel(a, b)
+
+
+MISSING = "\n\n【上一稿没有 scene】先写 scene（这段讲完时的场面，没变的照抄），再照 scene 写 text。"
+
+
 def feedback(p: Plan) -> str:
     """What to tell the keeper when its scene did not hold: what, and what it could write instead."""
     return ("\n\n【上一稿的 scene 没通过核对】\n" + "\n".join(f"- {x}" for x in p.problems)

@@ -127,3 +127,27 @@ def test_what_it_did_on_meeting_them_is_not_put_to_it_again():
     assert not problems and groups == [[{"kind": "step", "npc": "warden", "step": "greet", "status": "done"}]]
     assert Gateway(w, "warden").settle(groups[0], request_id="reply:1:warden:0:0").get("ok")
     assert w.agent("warden").plan[0].status == "done" and "喝茶" not in context.npc_brief(w, "warden")
+
+
+async def test_a_step_at_an_hour_waits_for_its_condition_as_well(module):
+    """「D1 22:00 & flag:bell_stopped」: at ten, and only once the bell has stopped. The compiler cut
+    it down to the hour, and the warden went at ten with the bell still going (the review of 2026-10-20)."""
+    from autokeeper.engine.state import parse_time
+
+    from .test_world import fresh
+
+    module.agendas = [Agenda(npc="warden", goals=["守住钟楼"], steps=[
+        Move(id="go_down", text="钟一停就下楼去广场", when="D1 22:00 & flag:bell_stopped", does="at:warden:square")])]
+    w = fresh("office")  # out of the party's sight: his going lands, it does not wait for the keeper to tell it
+    w.m = module
+    for op in agents.marked(w):
+        assert w.apply(op).ok
+    [step] = w.agent("warden").plan
+    assert step.due == parse_time("D1 22:00") and step.when == "flag:bell_stopped" and step.ops
+    w.st.minutes = parse_time("D1 22:30")
+    await scheduler.advance(w, Canned(nothing), parse_time("D1 21:50"), w.now)
+    assert w.place("warden") == "tower"  # ten has come, the bell has not stopped
+    w.st.flags.append("bell_stopped")
+    await scheduler.advance(w, Canned(nothing), w.now, w.now + 10)
+    assert w.place("warden") == "square"
+    assert agents.split_when("D1 22:00 | flag:x") == ("", "D1 22:00 | flag:x")  # no hour to wait for: audit says so

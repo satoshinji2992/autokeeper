@@ -45,7 +45,7 @@ async def test_kp_questions_wait_separately_from_the_network_action_pool(fake, m
 
 @pytest.mark.skipif(not shutil.which("node"), reason="browser keyboard checks need Node.js")
 def test_browser_alt_taps_toggle_but_shortcuts_altgr_and_lost_focus_do_not():
-    page = (PAGE / "app_index.html").read_text()
+    page = (PAGE / "app_index.html").read_text(encoding="utf-8")
     start = page.index("window.autokeeperAltKey =")
     end = page.index("\n        // The address", start)
     setup = page[start:end]

@@ -52,6 +52,7 @@ def write_save(state: GameState, module: Module) -> None:
         "path": str(module_dir(module.id)),
     }
     paths.save_index().write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
+    paths.remember_checkout()  # a later installed copy finds these saves
 
 
 def module_dir(module_id: str) -> Path:

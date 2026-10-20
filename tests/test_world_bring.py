@@ -85,7 +85,7 @@ async def test_what_the_action_lacks_cannot_be_brought_out_that_turn(module, fak
     game, _, _ = make(module, fake, {"撬门": (action, ruling)}, location="tower")
     w, me = game.world, game.state.investigator.id
     turn = await game.resolve(action, ruling)
-    assert "这次行动缺撬棍，做不成。" in turn.notes  # the keeper hears what it lacked
+    assert "这次行动缺撬棍，做不成；叙述和场面里都不能把它变出来。" in turn.notes  # the keeper hears what it lacked
     r = w.apply(O.Bring(name="一根旧撬棍", holder="warden", actor="keeper"))
     assert not r.ok and "正缺撬棍" in r.problems[0]
     found = adapters.bring_ops(w, [{"name": "撬棍", "look": "铁的"}], actor="arbiter", holder=me)

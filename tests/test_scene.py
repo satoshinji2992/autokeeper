@@ -155,11 +155,14 @@ def test_the_scene_does_not_take_the_investigators_to_another_place(fake):
 
 
 def test_an_npc_comes_or_goes_only_as_far_as_the_turn_took_them(fake):
-    game, _ = made("tower")
-    rushed = scene.plan(game.world, {"here": ["warden", "preacher"]}, ctx(game, 3))
-    assert any("街头布道者在广场，到钟楼要 10 分钟，这一轮只过了 3 分钟，赶不到" in p and "可以写他动身" in p for p in rushed.problems)
-    walked = scene.plan(game.world, {"here": ["warden", "preacher"]}, ctx(game, 12))
-    assert not walked.problems and walked.held[0].said == ["街头布道者来到钟楼"]
+    game, _ = made("office")
+    rushed = scene.plan(game.world, {"here": ["preacher"]}, ctx(game, 3))
+    assert any("街头布道者在广场，到报社要 10 分钟，这一轮只过了 3 分钟，赶不到" in p and "可以写他动身" in p for p in rushed.problems)
+    walked = scene.plan(game.world, {"here": ["preacher"]}, ctx(game, 12))
+    assert not walked.problems and walked.held[0].said == ["街头布道者来到报社"]
+    game, _ = made("tower")  # the tower stands in the square: a few steps, while they talk (the review of 2026-10-20)
+    over = scene.plan(game.world, {"here": ["warden", "preacher"]}, ctx(game, 0))
+    assert not over.problems and over.held[0].said == ["街头布道者来到钟楼"]
     leaving = scene.plan(game.world, {"here": [], "left": [{"who": "warden", "to": "office"}]}, ctx(game, 5))
     assert any("老守钟人从钟楼到报社要 20 分钟" in p and "人还写在 here 里" in p for p in leaving.problems)
 
@@ -167,14 +170,14 @@ def test_an_npc_comes_or_goes_only_as_far_as_the_turn_took_them(fake):
 def test_a_handover_lands_with_the_moves_of_the_people_in_it(fake):
     m = Module.load(EXAMPLE)
     m.items.append(Item(id="lantern", name="提灯", description="一盏铜提灯", where="tower", owner="warden"))
-    game, _ = made("square", module=m)
+    game, _ = made("office", module=m)
     lead = game.state.investigator.id
-    p = scene.plan(game.world, {"here": ["preacher", "warden"], "holds": [{"item": "提灯", "holder": lead}]}, ctx(game, 12))
+    p = scene.plan(game.world, {"here": ["warden"], "holds": [{"item": "提灯", "holder": lead}]}, ctx(game, 25))
     assert not p.problems and [u.key for u in p.held] == ["npc:warden"]  # his coming and his handing over: one unit
-    assert p.held[0].said == ["老守钟人来到广场", "提灯到了周衡手里"]
-    alone = scene.plan(game.world, {"holds": [{"item": "lantern", "holder": lead}]}, ctx(game, 12))
+    assert p.held[0].said == ["老守钟人来到报社", "提灯到了周衡手里"]
+    alone = scene.plan(game.world, {"holds": [{"item": "lantern", "holder": lead}]}, ctx(game, 25))
     assert any("老守钟人和周衡讲完时不在一处，提灯递不过去" in x for x in alone.problems)
-    rushed = scene.plan(game.world, {"here": ["preacher", "warden"], "holds": [{"item": "lantern", "holder": lead}]}, ctx(game, 3))
+    rushed = scene.plan(game.world, {"here": ["warden"], "holds": [{"item": "lantern", "holder": lead}]}, ctx(game, 3))
     assert not rushed.held  # he cannot come, so he cannot hand it over either
     landed = scene.land(game.world, p.held)
     assert [u.key for u in landed] == ["npc:warden"] and game.world.rec.entities["lantern"].at == lead
@@ -185,7 +188,7 @@ def test_everyday_things_are_registered_as_given_but_not_what_the_action_lacks(f
     w, lead = game.world, game.state.investigator.id
     turn = Turn(action=Action(kind="investigate", summary="周衡想挖开地砖"), ruling=Ruling(needs_roll=False, missing=["铲子"]))
     c = game._scene_context(turn)
-    assert c.missing == ["铲子"] and "这次行动缺的铲子不能在 scene 里变出来" in game._scene_brief(c)
+    assert c.missing == ["铲子"] and "铲子" not in game._scene_brief(c)  # said once, in the report's notes (Game._lacking)
     spade = scene.plan(w, {"here": ["preacher"], "things": [{"name": "铲子", "holder": lead}]}, c)
     assert any("这一轮的行动正缺铲子" in x for x in spade.problems)
     given = scene.plan(w, {"here": ["preacher"], "things": [{"name": "火柴", "holder": "preacher"}],
@@ -217,17 +220,17 @@ async def test_a_scene_turned_back_once_is_written_again_and_only_that_one_is_sh
 
 
 async def test_failing_twice_the_keeper_tells_what_holds_and_the_rest_as_attempts(fake):
-    game, events = made("tower")
+    game, events = made("office")
     turn = acted(game, "我喊布道者过来", 2)
-    rushed = telling("布道者推门进来。", here=["warden", "preacher"], traces=[{"text": "楼梯上落了一层灰", "visibility": "public"}])
-    SCRIPT.extend([rushed, rushed, "你朝楼下喊了一声，布道者在广场上应了，说这就过来。楼梯上落着一层灰。"])
+    rushed = telling("布道者推门进来。", here=["preacher"], traces=[{"text": "楼梯上落了一层灰", "visibility": "public"}])
+    SCRIPT.extend([rushed, rushed, "你朝窗外喊了一声，布道者在广场上应了，说这就过来。楼梯上落着一层灰。"])
     text = await game.narrate(turn)
-    assert text.startswith("你朝楼下喊了一声") and told(events) == text
+    assert text.startswith("你朝窗外喊了一声") and told(events) == text
     last = SEEN[-1]
     assert last["schema"] is None  # the words only, to the scene the program put together
     asked = last["messages"][-1]["content"]
     assert "【场面已经定了】" in asked and "留下痕迹：楼梯上落了一层灰" in asked
-    assert "没能成立的，只能写成尝试或打算" in asked and "到钟楼要 10 分钟" in asked
+    assert "没能成立的，只能写成尝试或打算" in asked and "到报社要 10 分钟" in asked
     w = game.world
     assert w.rec.entities["preacher"].at == "square"  # what did not hold did not land
     assert any(e.trace == "楼梯上落了一层灰" for e in w.rec.events) and game.state.ongoing == ""
@@ -385,3 +388,20 @@ async def test_json_mode_streams_the_telling_as_it_is_written():
 
     reply = await model._call([{"role": "user", "content": "讲"}], schema={"title": "Telling"}, images=None, on_delta=show)
     assert len(pieces) == 3 and reply.data == {"scene": {"here": []}, "text": "雾散了。"}
+
+
+async def test_a_telling_that_never_gives_its_scene_is_held_to_the_record(fake):
+    """Twice no scene at all: its words would have the warden go with them while the record has
+    nobody following (the review of 2026-10-20). Asked again for the scene, then held to the record
+    as it is: the keeper writes the words only, and neither draft is shown."""
+    game, events = made("tower")
+    turn = acted(game, "我下楼，叫守钟人一起", 2)
+    bare = {"text": "守钟人跟着你下了楼。"}
+    SCRIPT.extend([bare] * 4 + ["你走到楼梯口回头看，守钟人还坐在那里，没有起身。"])  # each call is repaired once (harness)
+    text = await game.narrate(turn)
+    assert text.startswith("你走到楼梯口回头看") and told(events) == text
+    assert "【上一稿没有 scene】" in SEEN[2]["messages"][-1]["content"]
+    assert SEEN[-1]["schema"] is None and "【场面已经定了】" in SEEN[-1]["messages"][-1]["content"]
+    warden = game.world.rec.entities["warden"]
+    assert warden.at == "tower" and not warden.following
+    await game.cast.close()

@@ -90,10 +90,6 @@ foreshadow:
   hint: 安娜盖戳时漏了一封，那是一封写给“埃里·赫琴斯”的信，她把信封翻过去，压在最底下，说这信退过一次，收件人从来不来取。
   where: post_office
   pays_off: k_erie_false
-- id: stretcher_track
-  hint: 达维尔家屋后雪地上那道清理过的痕迹一直通到地下室门口，宽窄像一副担架，边上有两行踩实了的脚印，一深一浅。
-  where: darvill_house
-  pays_off: e_theft
 ties:
 - id: anna_penpal
   hook: 安娜·伊斯特曼是调查员战前通信多年的笔友，萨缪尔死后她只寄来过一张没写字的明信片。
@@ -138,86 +134,158 @@ ties:
   - 职业
 mechanics:
 - name: 疾病计数器
-  rules: 开场掷 2D10，用 100 减去结果，得到埃斯内尔健康度计数器（可预先暗掷，也可在调查员得知疫情时公开掷）。此后定期扣除：第一次 1D10，之后每次多 1D10，最多 3D10；若调查员提出有效的治疗或公共卫生措施，可减少所投
-    D10 的数量（经裁定后调用 mitigate，但骰数不少于 1D10）。节奏二选一：daily，按游戏内时间每满 1440 分钟推进一次；dramatic，只在最紧迫的时刻投，且全模组总共只投
-    4-7 次。分区：81-100 为第一阶段，31-80 为第二阶段，0-30 为第三阶段，0 表示镇子不可避免走向灭亡（counter_zero → 结局 too_late）。跨越阈值时分别置位
-    disease_phase2 / disease_phase3，并由阶段决定传播范围、症状轻重与死亡人数。
-  why: 全模组的时限与传播速度都靠这个计数器；e_milk、e_porch 分别要求已进入第二、第三阶段，结局 too_late 判定 counter_zero。
+  rules: 开场 100 减 2D10 作为计数器（可事先保密，也可公开掷）。默认每满 1440 分钟（一游戏日）结算一次恶化：第一次 1D10，第二次 2D10，之后最多 3D10；每次都从计数器减去。81-100 为第一阶段，31-80 为第二阶段，0-30 为第三阶段；归零后小镇不可逆（counter_zero），之后即使阻止复活也只走 too_late。跨阶段时设置 disease_phase2
+    / disease_phase3。第二阶段让一名调查员染病，第三阶段增至两名。患病调查员每次恶化做体质检定：失败则失去等于本次最高单骰点数的体质，并做理智 0/1D6；成功也失去等于最低单骰点数的体质。治疗或公共卫生主意经守秘人判断后调用 mitigate，累计最多少掷两颗 D10（每次恶化至少 1D10），计数器不回升、不自动治愈。跨多天逐段结算，跳过已死亡调查员。
+  why: 全程计时；第二阶段、第三阶段染病；诊所治疗、隔离等主意；结局判定
   plugin: winter_disease
+  runs: 插件
+- name: 早饭牛奶与后廊塌方
+  rules: 只在对应阶段且调查员正在拉特格出租屋吃饭时触发，不得提前或在别处触发。breakfast_phase2：多琳尖叫，牛奶罐碎，牛奶腐坏发臭；若调查员手里有文件，可以被泼坏，但被泼坏的必须仍能从原处再次取得（如地图可以再向拉特格夫妇要），不能因此永久丢失关键线索。meal_phase3：屋里传来呻吟与碰撞，后廊屋顶被雪压垮，弗朗西斯半身埋在下面、失去知觉；医生判断生命垂危。此场景只是描写与压力，不替调查员完成救人或医学检定。
+  why: e_milk 第二阶段早饭；e_porch 第三阶段吃饭；拉特格夫妇日常晴雨表
+  runs: 守秘人
+- name: 暴风雪与驾车
+  rules: 风雪只在追踪埃里回达维尔家途中等场景骤然出现，入场不受伤。驾车：驾驶员做困难驾驶检定（核心规则）；失败则冲出路边撞上雪堆；即使成功也暂时失明，守秘人裁定持续时间与能看清的范围。徒步：只有调查员身处风雪中、无处避寒时，才做体质检定；失败受 1D10 点伤害，成功不受伤。此伤害必须以上述条件为前提裁定，不得无条件扣血。幻视、幻听可用来给细微线索，线索内容按原文另行给出。
+  why: e_storm 追踪途中的暴风雪；达维尔家附近
+  runs: 守秘人
+- name: 地图分阶段揭示
+  rules: 开场只给 h_map_plain（黑字地名，无圈线）。只有调查员实际收集病例分布、在地图上逐户标出并比较传播路径（c_map_spread，医学常规）后，才设置 spread_reviewed 并给出 h_map_full（圈线中心指向绸缎山）。老练的调查员会想到画传播地图；陷入困境时，守秘人可以用一次成功的灵感检定提出这个建议。单纯索要完整地图不设置该标记，也不给传播结论。守秘人不得把地图的传播信息说得含糊；伊斯特曼家位于圈外，是干扰信息。
+  why: 分发材料 1；c_map、c_map_spread；KP 地图使用说明
+  runs: 守秘人
+- name: 剧情标记设置条件
+  rules: 标记只在对应事实真实发生后设置，不因调查员的承诺、猜测或只听说而设置。met_erie：见到拉尸的埃里。caroline_cure：阴影治疗场景实际发生。caroline_ally：调查员明确回应合作（只是表示听听不算）。body_stolen：当夜实际被盗。seance_heard：实际在地下室门口听见招魂。grimoire_found：实际拿到典籍原本。parents_told：实际从达维尔夫妇口中得到那段话。hill_found：实际在绸缎山找到埋尸的矮树林。entity_revealed：异界存在实际露出非人原形（猜测或只见普通外貌不算）。spread_reviewed
+    见地图条目。其余标记（nightmares_known、caroline_fled、chase_erie、hidden_destroyed、hidden_revived、entity_banished、theft_discovered）同理，以实际发生为准。
+  why: 全部剧情标记
+  runs: 守秘人
+- name: 尸体被盗的隔夜与次晨
+  rules: 当夜由卡洛琳授意，异界存在偷走一具病人尸体，body_stolen 在当夜成立。调查员除非妄想或特别幸运，否则要到次日早上亲自到诊所，才能获知失窃（设置 theft_discovered 并给 c_theft）；不能因答应合作就立刻设置。护士说午夜后听到软弱刺耳的咳嗽，这一声可在次晨诉说，作为通往埃里的线索。不得跳过时间或调查员的行动。
+  why: e_theft；c_theft；c_theft_suspect
+  runs: 守秘人
+- name: 卡洛琳的索求升级与支配
+  rules: 卡洛琳会自行调查，即使被拒也会频繁出现。她的请求按顺序升级：先要一具尸体（c_cure_offer 需说服常规才能从她口中得到），再要更多尸体，最后要活着的病人作仪式献祭以定位掩藏者。阻止她继续时她逃跑，并让埃里殿后（caroline_fled）。若调查员过度受她支配，她会乐意牺牲其中一人或几人来完成复活术。是否支配到这一步由守秘人依调查员的实际行为判断，不靠数值记账。
+  why: 答案的诱惑；卡洛琳的请求；结局 revived
+  runs: 守秘人
+- name: 掩藏者的吸取生命法术
+  rules: 掩藏者施放的是腐烂外皮之恩惠的进阶版：在几天之内让目标长期陷入噩梦与疾病，以 5:1 比例恢复自身 HP，施法者的理智消耗为恢复 HP 的两倍。掩藏者没有人物卡，此数值只用于描述他的恢复进度与病人恶化的表现，不要求调查员记账，也不另设数器（计数器已是时钟）。
+  why: 治疗方案与法术描写；发烧时的噩梦
+  runs: 守秘人
+- name: 病人噩梦的顺从分支
+  rules: 病人在梦中拒绝掩藏者者恶化较慢，顺从者恶化较快。这是 NPC 病人的病程描写，由守秘人在病历与病况里体现，不由插件计算；调查员被梦中索求时的理智与线索，按梦境条款单独裁定。
+  why: 发烧时的噩梦；c_nightmares
+  runs: 守秘人
+- name: 阴影治疗的结果
+  rules: 卡洛琳用香炉烧粉末，在调查员协助下进行治疗。目睹者做理智检定 1/1D4+1。阴影持续数小时，期间病人起伏不定。阴影散去后，守秘人把病人分为半数显著恢复、半数死去（六名病人时各三人），并标记 caroline_cure。卡洛琳能认出这是犹格-索托斯的咒语，其他人需成功的克苏鲁神话检定才能认出。
+  why: c_shadow；治疗场景
+  runs: 守秘人
+- name: 靠近埋尸处的效应
+  rules: 调查员靠近绸缎山矮树林时，已患病者出现幻觉，看见掩藏者为他们指路；未患病者开始咳嗽、觉得发烧。患病状态取自 winter_disease。找到埋尸处只能靠极难侦查检定（c_hill_trace）并设置 hill_found；只到山脊或只听见地名不算到达。埋尸处雪被从下方翻动。卡洛琳与埃里会在到达时或不久后出现，除非调查员尽力阻止；卡洛琳显出疾病症状，埃里不受影响，不立即冲突。
+  why: satin_hill；c_hill_dream；c_hill_trace；e_hill_arrival
+  runs: 守秘人
+- name: 异界存在埃里的战斗特性
+  rules: 以埃里外表出现时，无理智损失。一旦攻击或造成伤害，暴露异界形态，目击者做理智检定 1/1D4+1（核心规则）。每轮恢复 1 点 HP（守秘人执行，不需要调查员记录）。剧本没有安排战斗流程，只在它真的动手时使用此条。实际露出原形后设置 entity_revealed 并可给 c_entity_form。
+  why: 埃里·赫琴斯（异界存在）属性；c_entity_form_*
+  runs: 守秘人
+- name: 结局理智恢复
+  rules: 由守秘人先定结局，再结算理智。stopped_in_time：仅当计数器未归零且 hidden_destroyed 时，每人恢复 1D6 点理智；若同时 entity_banished，再额外恢复 1D4。too_late（counter_zero 已设）与 revived（hidden_revived）不设理智恢复。恢复后不超过理智上限。
+  why: 结局：stopped_in_time、too_late、revived
+  runs: 核心规则
 - name: 患病调查员
-  rules: 进入第二阶段时让一名调查员出现症状，进入第三阶段时再让一名（按人数调整）。此后每当为疾病计数器掷骰，患病调查员做体质检定：失败失去等于本次掷骰中最高单个 D10 的体质，成功也失去等于最低单个
-    D10 的体质；需要体力活动时 KP 可给惩罚骰。每次体质检定失败，还要做理智检定 0/1D6（噩梦与高烧梦境）；噩梦可用于给出线索、法术片段或增长克苏鲁神话技能。
+  rules: 进入第二阶段时让一名调查员出现症状，进入第三阶段时再让一名（按人数调整）。此后每当为疾病计数器掷骰，患病调查员做体质检定：失败失去等于本次掷骰中最高单个 D10 的体质，成功也失去等于最低单个 D10 的体质；需要体力活动时 KP 可给惩罚骰。每次体质检定失败，还要做理智检定 0/1D6（噩梦与高烧梦境）；噩梦可用于给出线索、法术片段或增长克苏鲁神话技能。
   why: 把计数器推进直接落到调查员身上；噩梦内容对应 k_nightmare 与 c_samuel_diary 里的无脸男人。
   plugin: winter_disease
-- name: 暴风雪中的追踪
-  rules: 调查员动身追踪“埃里”回达维尔家（chase_erie）时进入暴风雪：按追逐回合结算，每回合双方各做一次体质或导航（雪地辨迹）检定，风向与积雪使失败方落后一回合。追丢即失去雪地痕迹，只能返回主街或出租屋，并当作一次时间推进（按所选节奏为疾病计数器投一次骰）；追上则在达维尔家门前接续。
-  why: e_storm「追踪途中的暴风雪」需要一套裁定谁先到、追丢后怎么算的规则，引擎不管追逐。
+  runs: 守秘人
 agendas:
 - npc: caroline
   goals:
-  - 把这场病压下去，用熏香“治好”更多濒死的人，证明自己只是个好护士
-  - 弄清是什么法术抵消了自己的法术；实在不行，再弄一具尸体来试
+  - 查明是什么法术抵消了自己的法术
+  - 必要时再要一具尸体，最终要活人献祭以定位掩藏者
   steps:
   - id: treat_dying
     text: 在诊所用熏香和那套自创手法救活一个濒死的病人，让所有人看见“有效”。
     meet: false
-  - id: ask_for_body
-    text: 在药柜旁的走廊上私下拦住调查员，说要做“研究”，请他们松口给她一具刚死的病人尸体。
-    when: flag:caroline_cure
+  - id: caroline_request_body
+    text: 与调查员交谈时把话往“需要一具死于那种病的尸体”上引；只有说服成功，她才把请求讲明。
     meet: true
-  - id: send_erie_for_body
-    text: 夜里支使埃里去诊所搬一具尸体回来，别惊动值夜的人。
-    when: D1 23:00
+    once: false
+    source: c_cure_offer「卡洛琳的请求」；守秘人须知：卡洛琳的索求升级与支配
+  - id: caroline_pointout_nightmare
+    text: 调查员还没提到病人的梦时，她可以主动谈起病人的梦；梦里的细节需说服才讲全。
+    meet: true
+    once: false
+    source: c_nightmares「相似的噩梦」；原文：卡洛琳会指出病人噩梦的相似性
+  - id: caroline_cure_session
+    text: 在调查员协助下，用香炉烧粉末为病人做阴影治疗；阴影散去后半数显著恢复、半数死去。
+    when: flag:disease_phase2
+    only_if: 需调查员实际协助、且阴影场景真的发生，由守秘人裁定
+    ruling: true
+    source: c_shadow「阴影下的治疗」；守秘人须知：阴影治疗的结果
+  - id: caroline_fled
+    text: 调查员阻止她继续以法术调查时，她逃跑，并让埃里殿后。
+    only_if: 调查员实际阻止她继续，由守秘人裁定
+    ruling: true
+    source: 守秘人须知：阻止她继续时她逃跑，并让埃里殿后
+  - id: caroline_at_hill
+    text: 调查员找到埋尸处后，她与埃里前来；她显出疾病症状。
+    when: flag:hill_found
+    does: at:caroline:satin_hill
     meet: false
-  - id: let_erie_cover
-    text: 一旦有人翻出典籍或当面点破她，立刻让埃里殿后，自己先退走。
-    when: flag:grimoire_found
-    does: flag:caroline_fled
-  - id: share_method
-    text: 若调查员表示愿意合作，就摊开一部分“治疗”手法，让他们按她的办法帮病人。
-    when: flag:caroline_ally
-    meet: true
+    only_if: 调查员没有先尽力阻止她（caroline_fled 未设）
+    source: e_hill_arrival「绸缎山上的两个人」；守秘人须知：靠近埋尸处的效应
 - npc: erie
   goals:
-  - 照卡洛琳的吩咐做事，不多说一个字
-  - 不让任何人知道绸缎山矮树林下埋着什么
+  - 服从卡洛琳的命令
+  - 没有命令时按自己的想法行动，替卡洛琳殿后
   steps:
-  - id: haul_bodies
-    text: 在主街街角用卡车替镇上拉尸体，被问起就说是殡葬的活。
+  - id: erie_hauling
+    text: 开卡车替人拉尸体。被问起时，先咳嗽一阵，说胸腔里卡着一片弹片。
     meet: true
-  - id: cough_excuse
-    text: 被问起那阵咳时，只说胸腔里卡着一片从法国带回来的弹片。
-    when: flag:met_erie
-    meet: true
-  - id: take_corpse
-    text: 摸黑撬开诊所后门，扛走一具刚死的病人尸体。
-    when: D1 23:30
+    once: false
+    source: c_hauling「拉尸体的人」；c_erie_odd「埃里不对劲」；守秘人须知：异界存在埃里的战斗特性
+  - id: erie_theft
+    text: 按卡洛琳的命令，当夜潜入诊所偷走一具病人的尸体。
+    when: D2 23:00
     does: flag:body_stolen
+    meet: false
+    only_if: 时间为补写：原文只说“当晚”，未定日期；若调查员已阻止卡洛琳（caroline_fled 已设），此步不发生，由守秘人裁定
+    source: e_theft「当晚，尸体被盗」；守秘人须知：尸体被盗的隔夜与次晨
   - id: lose_pursuers
     text: 有人跟踪时钻进风雪，靠着对雪路的熟悉甩开他们回达维尔家。
     when: flag:chase_erie
     does: at:erie:darvill_house
-  - id: drop_disguise
-    text: 在绸缎山被逼到矮树林时不再装人，当着他们的面散成原形。
-    when: flag:hill_found
-    does: flag:entity_revealed
+  - id: erie_rear_guard
+    text: 卡洛琳逃走后，埃里留下来殿后，挡住追查她的调查员。
+    when: flag:caroline_fled
+    ruling: true
+    source: 守秘人须知：阻止她继续时她逃跑，并让埃里殿后（caroline_fled）
 - npc: ante
   goals:
-  - 把这场病继续当流感治，别让镇子炸开锅
-  - 守住他“控制得住”的脸面
+  - 把这场病按流感治下去，不让镇子慌起来
+  - 不愿承认超自然，但已经开始怀疑自己控制不住局面
   steps:
-  - id: show_records
-    text: 把病历本和体温记录摊给调查员，一条条念数字。
-    when: at:ante:clinic
+  - id: ante_briefing
+    text: 第一次见面，他说“州里终于来人了”，用病历式的短句交代病况，坚持按流感处理。
     meet: true
-  - id: keep_sedating
-    text: 病情吃紧时照旧给病人开镇静剂助眠，好让他们安静下来。
+    once: true
+    source: clinic 守秘人须知；ante 人物资料
+  - id: ante_notes_guard
+    text: 被问到病程时，他只重复“这只是流感，我们会压下去的”；病历本只在被说服后才拿出来。
+    meet: true
+    once: false
+    source: c_notes「安特医生的病历」（说服常规）；c_ante_cure「安特医生证实的事」
+  - id: ante_sedatives
+    text: 病人越来越多，他仍给几个病人开镇静剂助眠，并暗自怀疑局面控制不住，却不说出口。
     when: flag:disease_phase2
     meet: false
+    source: 真相；守秘人须知：安特医生不知道镇静剂会加速死亡
+  - id: ante_allow_caroline
+    text: 卡洛琳向他提出由自己来治疗诊所里的病人，他同意，把这当作合理护理。
+    when: flag:disease_phase2
+    meet: false
+    source: 治疗方案（卡洛琳会向安特医生提出由自己来治疗病人，发生在疾病第二阶段中后期）
   - id: admit_loss
     text: 私下找调查员承认自己压不住了，请他们接手防疫安排，但别在病人面前说。
     when: flag:disease_phase3
     meet: true
+    once: true
 - npc: anna
   goals:
   - 找个人说说萨缪尔临死前到底怎么了
@@ -227,10 +295,12 @@ agendas:
     text: 在柜台后面一边盖戳一边讲萨缪尔是镇上第一个死的，死前就胡言乱语。
     when: at:anna:post_office
     meet: true
+    once: true
   - id: show_diary
     text: 若有人愿意听下去，下班后带他们回伊斯特曼家，取出那本潦草的日记。
     when: at:anna:eastman_house
     meet: true
+    once: true
 - npc: darvill_parents
   goals:
   - 没人知道他们想要什么；只要家里安静、女儿按时回来
@@ -240,9 +310,6 @@ agendas:
     text: 天黑后在地下室门前断断续续地嘟囔，像在跟谁说话。
     when: D1 21:00
     meet: false
-  - id: tell_mask_man
-    text: 被问得够久、够耐心时，说出那个戴面具的男人浑身是血地回来、笑着说面具是他的了。
-    meet: true
 - npc: pastor
   goals:
   - 让这几天的死者体面下葬，让活人别慌
@@ -252,10 +319,7 @@ agendas:
     text: 领调查员到地下室看停着等雪停的棺木。
     when: at:pastor:church
     meet: true
-  - id: find_old_rite
-    text: 翻地下室的木柜找下葬用的旧葬仪簿，翻到夹页里的旁注。
-    when: at:pastor:church
-    meet: true
+    once: true
   - id: insist_burial
     text: 镇子越来越糟时，坚持雪一停就立刻下葬，不再等。
     when: flag:disease_phase3

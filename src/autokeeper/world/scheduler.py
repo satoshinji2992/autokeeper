@@ -5,7 +5,8 @@ advance(world, brain, start, end) simulates the minutes between in chunks. In ea
     1. scheduled events that came due land (dropped, and their author woken, if what they read
        has changed since);
     2. promises whose time came are noted, and the important NPCs in them wake;
-    3. each important NPC: a due plan step whose condition holds lands its prepared
+    3. each important NPC (one passive, Agent.passive, only the first of these: its fixed steps
+       land, nothing wakes it): a due plan step whose condition holds lands its prepared
        ops with no model call while the plan is fresh; one without ops, or a stale plan, wakes
        the NPC; a step whose condition stays unmet past its grace is blocked, and wakes it;
        events it took part in or saw since it last decided wake it; a conversation with the
@@ -28,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -141,7 +142,7 @@ def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
     for npc, a in w.rec.agents.items():
         if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
             continue
-        if any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
+        if not a.passive and any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
             return True
         if any(s.status == "pending" and s.ops and (s.due is None or s.due <= w.now)
                and not agents.meeting(w, npc, s) and agents.holds(w, s.when) for s in a.plan):
@@ -153,9 +154,12 @@ def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
 
 async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *, budget: Budget | None = None,
                   tick: str = "", shared: bool = False, events_only: bool = False, moved_on: bool = False,
-                  checkpoint: Callable[[], None] | None = None) -> Report:
+                  checkpoint: Callable[[], None] | None = None, held: Collection[str] = ()) -> Report:
     """`moved_on`: the party went somewhere else this turn; like a jump in time, a moment for
-    those with nothing left to do to think of their next step."""
+    those with nothing left to do to think of their next step. `held`: those the keeper already
+    had act in front of the party this turn (engine/game.Game._join_in): nothing wakes them and
+    no step of theirs lands in this advance, so no one decides twice in a turn; what is due
+    for them comes in the next."""
     budget = budget or Budget()
     tick = tick or f"tick:{start}:{end}"
     report = Report(tick)
@@ -202,12 +206,14 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             wakes: dict[str, tuple[str, str]] = {}  # npc -> (rank kind, reason)
 
             def wake(npc: str, kind: str, reason: str, wakes=wakes) -> None:
-                if npc in w.rec.agents and (npc not in wakes or RANK[kind] < RANK[wakes[npc][0]]):
+                a = w.rec.agents.get(npc)
+                if (a is not None and not a.passive and npc not in held
+                        and (npc not in wakes or RANK[kind] < RANK[wakes[npc][0]])):
                     wakes[npc] = (kind, reason)
 
             if chunk is None:
                 report.chunks += 1
-                _prepare(w, c, budget, report, wake, events_only=events_only, planning=skip or moved_on)
+                _prepare(w, c, budget, report, wake, events_only=events_only, planning=skip or moved_on, held=held)
                 chunk = work["chunks"][str(i)] = {"wakes": wakes, "before": w.rec.seq}
                 save()
             await _serve(w, brain, chunk["wakes"], f"{tick}:{c}", report, work["batches"], reserve, save)
@@ -215,7 +221,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             if "ripple" not in chunk:
                 ripple: dict[str, tuple[str, str]] = {}
                 for npc, a in w.rec.agents.items():
-                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc):
+                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and npc not in held and not a.passive:
                         _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)), since=chunk["before"])
                 chunk["ripple"] = ripple
                 save()
@@ -235,7 +241,8 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
 PLANNING_GAP = 60  # game minutes since its last decision before one with nothing to do plans again
 
 
-def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_only: bool, planning: bool = False) -> None:
+def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_only: bool, planning: bool = False,
+             held: Collection[str] = ()) -> None:
     """Synchronous work and wake reasons are checkpointed before any model is awaited."""
     for sch in sorted((s for s in w.rec.scheduled.values() if s.status == "pending" and s.at <= c), key=lambda s: s.at):
         if moved := fresh(w, sch.reads):
@@ -271,6 +278,9 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
                 wake(who, "promise", f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}")
     for npc, agent in w.rec.agents.items():
         if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):  # its move is waiting
+            continue
+        if npc in held:  # the keeper's plan has it act this turn: no model asked for it, its fixed steps land all the same
+            _fixed(w, npc, agent, c, report)
             continue
         _steps(w, npc, agent, c, budget, report, wake)
         _affected(w, npc, agent, wake, talks=planning)
@@ -384,6 +394,21 @@ async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[st
         for key in ("scene", "views"):
             job.pop(key, None)
         save()  # landed operations and the completion receipt share one checkpoint
+
+
+def _fixed(w: World, npc: str, a: Agent, c: int, report: Report) -> None:
+    """The fixed steps of one the keeper's plan has act this turn (Plan.initiative): what their time
+    and condition bring about lands as anyone's does (the appointment half an hour on is kept while
+    the party waits two hours); what would ask a model (a step to judge, a block, a stale plan)
+    waits for the next turn, when it is no longer held."""
+    for s in a.plan:
+        if s.status != "pending" or not s.ops or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
+            continue
+        if agents.condition_problems(w, s.when) or agents.condition_problems(w, s.achieved) or fresh(w, a.reads):
+            continue
+        if agents.holds(w, s.when):
+            ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+            _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text, reads=a.reads, when=s.when)
 
 
 def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report, wake) -> None:

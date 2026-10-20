@@ -84,6 +84,7 @@ class SceneArt(Static):
         self.picture = ""
         self.mask: str | None = None
         self.image: str | None = None
+        self.people: tuple[str, ...] = ()  # portraits of who they know is here now, set into a picture (imagery.cameos)
         self.weather: list[str] = []  # the module's own; empty: read off the description
         self.description = ""
         self.sky = ""  # the narrated weather, for places under the open sky
@@ -138,9 +139,10 @@ class SceneArt(Static):
         weather: list[str] | None = None,
         description: str = "",
         sky: str = "",
+        people: tuple[str, ...] = (),
     ) -> None:
         arrived = place != self.place
-        self.place, self.picture, self.mask, self.image = place, picture, mask, image
+        self.place, self.picture, self.mask, self.image, self.people = place, picture, mask, image, people
         self.weather, self.description, self.sky = list(weather or []), description, sky
         if arrived or self._look() != self._asked:  # the same scene again (a resumed game's recap) is left be
             self._refresh(reveal=arrived)
@@ -195,7 +197,7 @@ class SceneArt(Static):
         w, h = self._fit()
         when, graded = ("", "") if graded == "beam" else (self.when, graded)
         if self._uses_image():
-            return _tall(center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded)), w), h)
+            return _tall(center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded, people=self.people)), w), h)
         if self.picture:
             return center(artkit.colorize(art.corrupt(self.picture, rate), self.mask, when=when, grade=graded), w, self.covered)
         return Text()
@@ -222,7 +224,7 @@ class SceneArt(Static):
 
     def _look(self) -> tuple:
         """Everything a load draws from."""
-        return (self.place, self.picture, self.mask, self.image, tuple(self.weather), self.description, self.sky,
+        return (self.place, self.picture, self.mask, self.image, self.people, tuple(self.weather), self.description, self.sky,
                 self.style_name, self.when, self.effects, self.covered, self._fit())
 
     def _refresh(self, reveal: bool = False) -> None:
@@ -295,7 +297,7 @@ class SceneArt(Static):
         try:
             for i in range(frames):
                 strength = 1.0 - i / frames
-                frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name, self.when, True)
+                frame = await asyncio.to_thread(imagery.glitch, self.image, w, h, strength, self.style_name, self.when, True, self.people)
                 self._paint(frame=frame)
                 await asyncio.sleep(0.05)
         finally:

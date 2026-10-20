@@ -110,3 +110,43 @@ def test_the_players_screens_get_the_pictures_not_what_they_are_for(module, fake
     assert all(e.get("art", "") == "" for e in book["events"])
     assert next(n for n in book["npcs"] if n["id"] == "warden")["status"] == "受伤"
     assert Module.model_validate(book).npc("warden").status == "受伤"
+
+
+def test_who_they_know_is_here_is_set_into_the_picture(tmp_path):
+    from PIL import Image
+
+    from autokeeper import imagery
+
+    scene, face = tmp_path / "scene.png", tmp_path / "face.png"  # lossless: the face keeps its colour
+    Image.new("RGB", (480, 240), (40, 90, 140)).save(scene)
+    Image.new("RGB", (120, 160), (230, 200, 160)).save(face)
+    plain = imagery._framed(str(scene), 72, 22, True)
+    with_face = imagery.cameos(plain, (str(face),))
+    assert with_face.size == plain.size
+    corner = with_face.crop((0, with_face.height // 2, with_face.width // 3, with_face.height))
+    def nearer_face(c: tuple[int, ...]) -> bool:  # the photo's preparation shifts colours: warm skin against a blue scene
+        return sum((a - b) ** 2 for a, b in zip(c, (230, 200, 160), strict=True)) < sum((a - b) ** 2 for a, b in zip(c, (40, 90, 140), strict=True))
+
+    warm = sum(n for n, c in corner.getcolors(1 << 16) if nearer_face(c))
+    assert warm > corner.width * corner.height * 0.05  # the face is in the bottom left
+    box = (with_face.width * 2 // 3, 0, with_face.width, with_face.height)
+    assert with_face.crop(box).tobytes() == plain.crop(box).tobytes()  # the rest of the scene untouched
+    assert imagery.cameos(plain, ()) is not plain and imagery.cameos(plain, ()).tobytes() == plain.tobytes()
+
+
+def test_only_the_people_they_have_met_show_a_face(module, fake, tmp_path):
+    """The user, 2026-10-20: who they know is here, as the oval portraits at the bottom left. Not
+    someone they have not met (the figure by the tombstone is no one's yet), not the dead."""
+    from types import SimpleNamespace
+
+    from autokeeper.tui.screens.game import GameScreen
+
+    game, _, _ = make(module, fake, {}, location="tower")
+    st, warden = game.state, module.npc("warden")
+    module.pictures[warden.portrait] = str(tmp_path / "warden.jpg")
+    screen = SimpleNamespace(state=st, m=module)
+    assert GameScreen._faces(screen, "tower") == ()  # here, never spoken with
+    st.npc("warden").met = True
+    assert GameScreen._faces(screen, "tower") == (str(tmp_path / "warden.jpg"),)
+    warden.status = "死亡"
+    assert GameScreen._faces(screen, "tower") == ()

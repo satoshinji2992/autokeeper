@@ -74,7 +74,7 @@ def test_snapshot_keeps_private_world_data_and_is_detached(fake, monkeypatch):
     assert game.state.notes["npc:warden"] == "人物自己的记忆"
     output = diagnostics.export(data, "排查建议")
     assert output.is_relative_to(paths.dev_output("diagnostics"))
-    assert json.loads(output.read_text())["analysis"] == "排查建议"
+    assert json.loads(output.read_text(encoding="utf-8"))["analysis"] == "排查建议"
 
 
 async def test_diagnosis_uses_its_own_session_and_only_records_usage(diagnostic_model):
@@ -257,11 +257,11 @@ def test_persistent_journal_sanitizes_credentials_and_recovers_complete_lines(mo
     journal = Journal("../../some slot")
     journal.append("world", {"truth": "隐藏剧情", "Authorization": "Bearer secret", "text": "private-test-secret-key"})
     assert journal.path.parent == paths.games() / "debug"
-    journal.path.write_text(journal.path.read_text() + '{"incomplete":', encoding="utf-8")
+    journal.path.write_text(journal.path.read_text(encoding="utf-8") + '{"incomplete":', encoding="utf-8")
     rows, cursor = journal.read()
     assert len(rows) == 1 and cursor == 1
     assert rows[0]["data"]["truth"] == "隐藏剧情"
-    assert "private-test-secret-key" not in journal.path.read_text()
+    assert "private-test-secret-key" not in journal.path.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("size", [(120, 40), (80, 24)])

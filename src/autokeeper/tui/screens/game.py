@@ -350,8 +350,22 @@ class GameScreen(Screen):
             weather=loc.weather,
             description=loc.read_aloud,
             sky=self._sky(loc_id),
+            people=self._faces(loc_id),
         )
         self._topbar()
+
+    def _faces(self, loc_id: str) -> tuple[str, ...]:
+        """The photos of the people here the investigators know (they have spoken with them), set
+        into the scene's picture (imagery.cameos): nobody they have not met shows a face, so the
+        figure by the tombstone is no one's yet; not the dead or the lost."""
+        st = self.state
+        known = [n for n in self.m.npcs_at(loc_id) if n.id in st.npcs and st.npcs[n.id].met and n.status not in ("死亡", "失踪")]
+        return tuple(self.m.pictures[n.portrait] for n in known if n.portrait in self.m.pictures)[: imagery.CAMEOS]
+
+    def _known_here(self) -> None:
+        """Someone came in, left or was first spoken with: the faces in the scene again, if they changed."""
+        if self._faces(self.state.location) != self.query_one(SceneArt).people:
+            self._scene(self.state.location)
 
 
     def _showcase(self, ev: dict) -> None:
@@ -615,6 +629,8 @@ class GameScreen(Screen):
             self.view = (ev["location"], ev["key"])
             if ev["location"] == self.state.location:
                 self._scene(ev["location"])
+        elif t == "people" and ev["location"] == self.state.location:  # someone came in or left
+            self._known_here()
         elif t == "time":
             self._topbar()
         elif t == "sky":
@@ -623,7 +639,8 @@ class GameScreen(Screen):
             self._topbar()
         elif t == "art":
             here = self.m.location(self.state.location)
-            if ev["key"] in (here.art, self.view[1]):  # its picture came or changed
+            faces = {n.portrait for n in self.m.npcs_at(here.id)}
+            if ev["key"] in (here.art, self.view[1]) or ev["key"] in faces:  # its picture, or a face in it, came or changed
                 self._scene(self.state.location)
             for card in self.query(ItemCard):
                 if card.art_key == ev["key"]:
@@ -713,8 +730,10 @@ class GameScreen(Screen):
             story.add("event", body)
         elif t == "npc":
             self._npc_line(ev, "npc")
+            self._known_here()  # spoken with: they know who this is now
         elif t == "performance":
             self._npc_line(ev, "performance")
+            self._known_here()
             self.query_one(SceneArt).glitch(24)
         elif t == "luck":
             story.add("system", Text(f"◎ {ev['who']} 花掉 {ev['spent']} 点幸运（剩 {ev['left']}）"))

@@ -1019,3 +1019,25 @@ async def test_losing_a_fifth_of_san_in_one_day_is_indefinite_insanity_and_the_c
     fake.queue(99, 99)
     result = rules.sanity(inv, "0", "10")  # 10 of 49 in one day: more than a fifth
     assert result.indefinite and "不定性疯狂" in inv.conditions
+
+
+async def test_an_early_rewrite_stays_over_the_source_however_many_follow(module, fake):
+    """The truth rewritten, then eight other rewrites: the source retrieved later still comes with
+    the truth as it is now, whole (it was the last eight, cut at 160)."""
+    from autokeeper.agents.cast import Cast
+    from autokeeper.world.ops import Rewrite
+
+    game, _, _ = make(module, fake, {}, location="tower")
+    w = game.world
+    truth = "钟里藏的是一封信，" + "信上写满了守钟人一家三代的名字，" * 12 + "多出的那一下是信在响。"
+    assert w.apply(Rewrite(id="rw-truth", target="fact:truth", text=truth, reason="接上背景", actor="director")).ok
+    for i in range(8):
+        assert w.apply(Rewrite(id=f"rw-{i}", target="fact:npc:warden:secrets:0", text=f"他在钟里藏了第 {i} 样东西",
+                               reason="又改了一次", actor="director")).ok
+
+    class Source:
+        async def lore(self, state, query, keywords=(), max_tokens=0):
+            return "报社旧刊：十年前钟楼失火。"
+
+    text = await Cast._private_lore(Source(), game.state, "去报社查旧刊", ["报社"])  # type: ignore[arg-type]
+    assert truth in text and "他在钟里藏了第 7 样东西" in text and "第 6 样" not in text  # each once, as it is now

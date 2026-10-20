@@ -46,6 +46,7 @@ Keys come from the environment; ~/.config/autokeeper/.env and ./.env are read to
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tomllib
@@ -106,11 +107,13 @@ DEFAULT_ROLES: dict[str, Role] = {
 
 # Optional roles inherit the effective route, including local/global overrides. Leaving
 # them out of presets keeps older configurations and custom arbiter routes compatible.
-ROLE_PARENTS = {"world": "arbiter"}
+ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
 # What an inherited role changes of its parent's route. Important NPCs' own decisions think
 # low, not at the arbiter's high (the user's call, 2026-10-20): at high one took 6.4 s and they
 # were four tenths of a replayed session's spend. A configured effort still wins.
-ROLE_EFFORT = {"world": "low"}
+# The keeper's plan (agents/cast.Cast.plan) is on the player's wait, before any roll: the keeper's
+# model, thinking low (DeepSeek's keeper thinks high, which the telling can afford, not this).
+ROLE_EFFORT = {"world": "low", "plan": "low"}
 
 
 def _deepseek(effort: str | None) -> Role:
@@ -245,6 +248,94 @@ def load_env() -> None:
     for f in (paths.USER_DIR / ".env", paths.ROOT / ".env"):
         if f.is_file():
             load_dotenv(f, override=False)
+
+
+def save_key(name: str, value: str) -> Path:
+    """Put NAME=value in ~/.config/autokeeper/.env (the file load_env reads first), in place of
+    an older line for the same name; the file is readable by its owner only. The running process
+    gets the key too."""
+    paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+    target = paths.USER_DIR / ".env"
+    lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+    lines = [line for line in lines if line.split("=", 1)[0].strip().removeprefix("export ").strip() != name]
+    lines.append(f"{name}={value}")
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with contextlib.suppress(OSError):  # Windows keeps its own permissions
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    os.environ[name] = value
+    return target
+
+
+CLAUDE_EXTRA = ("用 Claude 要先装上它的组件：uv tool install --force \"autokeeper[claude]\"（pipx 用 pipx inject autokeeper claude-agent-sdk，"
+                "源码目录用 uv sync --extra claude）")
+
+
+def claude_ready() -> bool:
+    """Whether the Claude backend's package is installed: an extra, not part of the game."""
+    import importlib.util
+
+    return importlib.util.find_spec("claude_agent_sdk") is not None
+
+
+def remove_key(name: str) -> bool:
+    """Take NAME out of ~/.config/autokeeper/.env (and out of this process, when the value came
+    from there). True when the file had it."""
+    target = paths.USER_DIR / ".env"
+    if env_file(name) != target:
+        return False
+    lines = target.read_text(encoding="utf-8").splitlines()
+    kept = [line for line in lines if line.split("=", 1)[0].strip().removeprefix("export ").strip() != name]
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text("".join(f"{line}\n" for line in kept), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    os.environ.pop(name, None)
+    return True
+
+
+def env_file(name: str) -> Path | None:
+    """The .env file that gave this process NAME, or None when it came from the shell (or is unset)."""
+    from dotenv import dotenv_values
+
+    value = os.environ.get(name)
+    for f in (paths.USER_DIR / ".env", paths.ROOT / ".env"):
+        if value is not None and f.is_file() and dotenv_values(f).get(name) == value:
+            return f
+    return None
+
+
+def preset_overrides(preset: str) -> list[str]:
+    """What keeps roles off `preset` once it is the saved choice (as `autokeeper login` and the
+    settings save it), in words for the player. Empty when every role follows it."""
+    try:
+        cfg = load()
+    except ValueError as exc:
+        return [str(exc)]
+    off = [name for name, r in PRESETS[preset].items() if (cfg.role(name).backend, cfg.role(name).model) != (r.backend, r.model)]
+    if not off:
+        return []
+
+    def where(name: str) -> str:
+        f = env_file(name)
+        return f"{f} 里写着 " if f else "终端里设置了环境变量 "
+
+    reasons = []
+    if (value := os.environ.get("AUTOKEEPER_PRESET")) and value != preset:
+        reasons.append(f"{where('AUTOKEEPER_PRESET')}AUTOKEEPER_PRESET={value}，它优先于这里的选择")
+    if value := os.environ.get("AUTOKEEPER_MODEL"):
+        reasons.append(f"{where('AUTOKEEPER_MODEL')}AUTOKEEPER_MODEL={value}，所有角色都改用这个模型")
+    for f in (paths.USER_DIR / "config.toml", paths.ROOT / "autokeeper.toml"):
+        try:
+            roles = tomllib.loads(f.read_text(encoding="utf-8")).get("roles", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        named = [n for n, spec in roles.items() if isinstance(spec, dict) and {"model", "backend"} & set(spec)]
+        if named:
+            reasons.append(f"{f} 里的 {'、'.join(f'[roles.{n}]' for n in named)} 指定了别的模型")
+    return reasons or [f"{'、'.join(off)} 没有用 {preset}"]
 
 
 def ui_settings() -> dict:

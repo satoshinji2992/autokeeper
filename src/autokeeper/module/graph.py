@@ -164,6 +164,36 @@ def _outcome(m: Module, npc: str, does: str) -> list[str]:
     return out
 
 
+def _waits(m: Module, atoms: list[str], when: str = "") -> list[str]:
+    """What is wrong with the people, places, things and facts an agenda step's condition names:
+    at:谁:地点, owner:物件:持有者, gone:谁, knows:谁:clue:线索 (a clue someone has: the players once
+    they found it)."""
+    people = {x.id for x in m.npcs} | {"players"} | {p.id for p in m.pregens}
+    places, items, clues = {x.id for x in m.locations}, {x.id for x in m.items}, {x.id for x in m.clues}
+    out = []
+    timed = re.compile(r"D\d+ \d{1,2}:\d{2}")
+    for atom in atoms:
+        kind, _, rest = atom.partition(":")
+        a, _, b = rest.partition(":")
+        if timed.fullmatch(atom) and len(atoms) > 1 and ("|" in when or sum(bool(timed.fullmatch(x)) for x in atoms) > 1):
+            out.append(f"{atom} 不对：时间只能单独写，或者用 & 和条件连写（D1 22:00 & flag:x，到点而且条件成立），不能放进 |，也不能写两个")
+        elif not timed.fullmatch(atom) and kind not in ("flag", "at", "owner", "gone", "knows", "hour", "after", "promise"):
+            out.append(f"{atom} 不对：条件只能是 flag、at、owner、gone、knows、hour、after，或单独一个时间")
+        elif kind == "at" and not (a in people and b in places):
+            out.append(f"{atom} 不对：at 写已有的人物（或 players）和地点")
+        elif kind == "owner" and not (a in items and b in people | places):
+            out.append(f"{atom} 不对：owner 写【物件】里的 id 和已有的人物、地点")
+        elif kind == "gone" and rest not in people:
+            out.append(f"{atom} 不对：gone 写已有的人物")
+        elif kind == "knows":
+            fact_kind, _, ident = b.partition(":")
+            known = (fact_kind == "clue" and ident in clues) or (fact_kind == "npc" and ident.partition(":")[0] in people) \
+                or (fact_kind == "location" and ident.partition(":")[0] in places)
+            if a not in people or not known:
+                out.append(f"{atom} 不对：knows 写谁（或 players）和一条已有的事实，如 knows:players:clue:线索id")
+    return out
+
+
 def audit(m: Module) -> list[Issue]:
     issues: list[Issue] = []
     def err(text: str) -> None:
@@ -305,6 +335,10 @@ def audit(m: Module) -> list[Issue]:
             for span in (x[5:] for x in atoms if x.startswith("hour:")):
                 if hours(span) is None:
                     err(f"{a.npc} 的打算 {step.id} 的时段 hour:{span} 要写成 hour:22-6 这样")
+            for problem in _waits(m, atoms, step.when):
+                err(f"{a.npc} 的打算 {step.id} 的条件 {problem}")
+            if step.once is not None and not step.meet:
+                warn(f"{a.npc} 的打算 {step.id} 不是见面反应，once 不起作用")
             for problem in _outcome(m, a.npc, step.does):
                 err(f"{a.npc} 的打算 {step.id} 的结果 {problem}")
     for i, past in enumerate(m.history, 1):
