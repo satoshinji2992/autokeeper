@@ -324,6 +324,18 @@ class Model:
 
 
 # -- Claude Code ----------------------------------------------------------------------------
+def _portable(schema: Any) -> Any:
+    """A schema as Claude Code takes it: without OpenAPI's `discriminator` (pydantic writes one for
+    a tagged union, like the NPC's backstage ops; Claude Code refuses the whole call). The union's
+    `kind` constants still tell its members apart, and the reply is checked against the full
+    schema (problems) all the same."""
+    if isinstance(schema, dict):
+        return {k: _portable(v) for k, v in schema.items() if k != "discriminator"}
+    if isinstance(schema, list):
+        return [_portable(v) for v in schema]
+    return schema
+
+
 HISTORY = "【下面是系统保存的对话记录，每次完整重发。“〔输入〕”是发给你的消息，“〔你的回复〕”是你之前的回答；只回应最后一条输入。】"
 
 
@@ -406,7 +418,7 @@ class ClaudeCodeModel(Model):
             if self.spec.effort:
                 opts["effort"] = self.spec.effort
             if schema:
-                opts["output_format"] = {"type": "json_schema", "schema": schema}
+                opts["output_format"] = {"type": "json_schema", "schema": _portable(schema)}
             client = ClaudeSDKClient(options=ClaudeAgentOptions(**opts))
             await client.connect()
             self._clients[key] = client

@@ -378,6 +378,8 @@ def keeper_brief(w: World) -> str:
         parts = [f"想要：{_clip(goal)}"] if goal else []
         parts += [f"秘密：{'；'.join(secrets)}"] if secrets else []
         parts += [f"会说的谎：{'；'.join(lies)}"] if lies else []
+        things = [e.name for e in rec.entities.values() if e.kind == "item" and e.at == npc]  # what is on them, everyday or not
+        parts += [f"身上有：{'、'.join(things)}"] if things else []
         if (a := rec.agents.get(npc)) is not None:
             steps = [f"{_clip(s.text, 80)}（{_when(s.due) if s.due is not None else s.when or '想到就做'}）"
                      for s in a.plan if s.status == "pending"][:3]

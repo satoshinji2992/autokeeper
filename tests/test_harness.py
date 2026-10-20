@@ -850,3 +850,30 @@ def test_budget_guard_stops_metered_calls(monkeypatch):
     with pytest.raises(BudgetExceeded):
         spend.guard("deepseek:deepseek-flash")
     spend.guard("claude-opus-5-5")  # Claude Code reports its own cost and is not capped here
+
+
+async def test_claude_code_gets_the_backstage_schema_without_its_discriminator(monkeypatch):
+    """Claude Code refuses a schema with OpenAPI's `discriminator`, which pydantic writes for the NPC's
+    backstage ops (world.agents.Scene): every backstage decision on the Claude preset failed. It is
+    sent without one; the reply is still checked against the full schema."""
+    sdk = pytest.importorskip("claude_agent_sdk")
+    from autokeeper.harness import models as hm
+    from autokeeper.world.agents import Scene
+
+    seen: dict = {}
+
+    class Client:
+        def __init__(self, options):
+            seen["options"] = options
+
+        async def connect(self):
+            return None
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    monkeypatch.setattr(sdk, "ClaudeAgentOptions", lambda **kw: kw)
+    schema = Scene.model_json_schema()
+    assert "discriminator" in json.dumps(schema)
+    model = hm.make_model(Role(backend="claude", model="claude-haiku-5-5", effort=None), "幕后")
+    await model._client("scene", schema)  # type: ignore[attr-defined]
+    sent = seen["options"]["output_format"]["schema"]
+    assert "discriminator" not in json.dumps(sent) and json.dumps(sent).count('"const"') == json.dumps(schema).count('"const"')

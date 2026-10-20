@@ -188,7 +188,7 @@ def test_everyday_things_are_registered_as_given_but_not_what_the_action_lacks(f
     w, lead = game.world, game.state.investigator.id
     turn = Turn(action=Action(kind="investigate", summary="周衡想挖开地砖"), ruling=Ruling(needs_roll=False, missing=["铲子"]))
     c = game._scene_context(turn)
-    assert c.missing == ["铲子"] and "这次行动缺的铲子不能在 scene 里变出来" in game._scene_brief(c)
+    assert c.missing == ["铲子"] and "铲子" not in game._scene_brief(c)  # said once, in the report's notes (Game._lacking)
     spade = scene.plan(w, {"here": ["preacher"], "things": [{"name": "铲子", "holder": lead}]}, c)
     assert any("这一轮的行动正缺铲子" in x for x in spade.problems)
     given = scene.plan(w, {"here": ["preacher"], "things": [{"name": "火柴", "holder": "preacher"}],

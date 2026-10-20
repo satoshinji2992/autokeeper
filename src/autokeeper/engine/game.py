@@ -1327,7 +1327,7 @@ class Game:
         rec = self.world.rec
         rec.missing, rec.missing_turn = [x.strip() for x in ruling.missing if x.strip()], self.state.turn
         if rec.missing:
-            turn.notes.append(f"这次行动缺{'、'.join(rec.missing)}，做不成。")
+            turn.notes.append(f"这次行动缺{'、'.join(rec.missing)}，做不成；叙述和场面里都不能把它变出来。")
 
     def _takes(self, ruling: Ruling, turn: Turn) -> None:
         """Everyday things the investigator takes up in this action (Ruling.takes), registered in
@@ -1498,6 +1498,8 @@ class Game:
                 line = await self.cast.npc(st, npc.id, self._npc_message(turn, npc.id))
                 turn.npc_lines.append((npc.id, line))
                 turn.notes += self._unsettled(npc.id)
+                if (gone := self.world.place(npc.id)) and gone != st.location:  # its reply's leave landed (Dialogue.leave)
+                    turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
                 st.npc(npc.id).met = True
                 st.add("npc", line, who=npc.name)
                 self._exchanged(npc.id, action, line)
@@ -2374,9 +2376,9 @@ class Game:
         party = {i.id for i in st.investigators}
         here = "、".join(f"{n}（{w.name(n)}{'，跟着调查员' if w.rec.entities[n].following in party else ''}）"
                         for n in w.present(st.location)) or "没有别人"
-        lack = f"这次行动缺的{'、'.join(ctx.missing)}不能在 scene 里变出来。" if ctx.missing else ""
+        # What the action lacks is said once, in the report's notes (Game._lacking); the scene's check holds it too.
         return (f"\n\n【场面】先写 scene，是这段讲完时的样子，没变的照抄。现在：调查员在 {st.location}（{w.name(st.location)}），"
-                f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。{lack}")
+                f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。")
 
     async def _walked(self, room: str) -> None:
         """The investigators walked to another room of the place in the telling (world/scene.py

@@ -84,6 +84,8 @@ def test_the_adapter_reads_every_condition_and_the_original(key):
         if c.requires:
             assert f"前置 {'、'.join(c.requires)}" in text
     assert m.keeper_notes.strip() in text  # no longer cut at 1200 characters
+    if not (folder / "source").exists():  # the originals stay on the importer's machine, never in the repository
+        pytest.skip("这台机器上没有模组原文（source/）")
     source = adapt.original(folder)
     assert len(source) > 10000 and "追书人" in adapt.original(paths.MODULES / "zhuishuren")
 
@@ -234,7 +236,9 @@ async def test_the_review_takes_out_what_it_flags(tmp_path, judge):
     before = Module.load(folder)
     out = await adapt.verify(folder, SimpleNamespace(), log=lambda _: None)
     after = Module.load(folder)
-    assert "【原文（整理资料的出处" in judge.calls[0] and "[agendas:thomas:show_study]" in judge.calls[0]
+    assert "[agendas:thomas:show_study]" in judge.calls[0]
+    if (paths.MODULES / "zhuishuren" / "source").exists():  # the originals stay on the importer's machine
+        assert "【原文（整理资料的出处" in judge.calls[0]
     assert "[knows:" not in judge.calls[0]  # the whole layer is reviewed, never the NPCs' own sheets
     assert [s.id for a in after.agendas for s in a.steps] == ["greet", "urge_watch"]  # the diary step, by the rules
     assert [f.id for f in after.foreshadow] == ["f_mud"] and after.history == before.history[:1]
