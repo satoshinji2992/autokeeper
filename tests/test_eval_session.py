@@ -123,6 +123,7 @@ async def test_a_slip_stands_when_both_readings_name_it():
             self.answers = list(answers)
 
         async def complete(self, system, messages, schema=None):
+            self.asked = (system, messages[-1]["content"])
             return Reply(data=self.answers.pop(0))
 
     hidden = {"truth": "守钟人在钟里藏了一样东西", "npc:warden:secrets:0": "他在钟里藏了东西"}
@@ -131,13 +132,19 @@ async def test_a_slip_stands_when_both_readings_name_it():
     got = await session.ask_leaks(pool, hidden, "你听见钟里藏着东西在敲。", "守钟人说：钟楼夜里会多敲一下。")
     assert [x["secret"] for x in got] == ["truth"]
     assert await session.ask_leaks(pool, hidden, "") == []  # no narration, nothing to read
+    pool = Pool({"leaks": [{"secret": "npc:warden:secrets:0", "claim": "我在钟里藏了东西"}]},
+                {"leaks": [{"secret": "npc:warden:secrets:0", "claim": "钟里有我藏的"}]})
+    said = await session.ask_leaks(pool, hidden, "老守钟人：我在钟里藏了东西。", "", npc=True)
+    assert [x["secret"] for x in said] == ["npc:warden:secrets:0"]
+    assert pool.asked[0] == session.NPC_LEAK_RULES and "【NPC 的台词】" in pool.asked[1]  # an NPC's words, by their own rule
     pool = Pool({"findings": [{"index": 1, "label": "伏笔"}, {"index": 2, "label": "假线索"}, {"index": 3, "label": "白给"}]},
                 {"findings": [{"index": 1, "label": "伏笔"}, {"index": 2, "label": "假线索"}, {"index": 3, "label": "伏笔"}]})
     kinds = await session.ask_findings(pool, hidden, ["齿轮上一层新油", "日记被人收走了", "钟里藏着一个盒子"])
     assert [f["label"] for f in kinds] == ["伏笔", "假线索", "不确定"]  # a label stands when both readings give it
     assert await session.ask_findings(pool, hidden, []) == []
     rows = [{"turn": 1, "recorded": {"problems": [], "npc": [], "target": "", "echo": 0.0, "chars": 9,
-                                     "leaks": got, "verbatim": ["truth"], "findings": kinds}}]  # fmt: skip
+                                     "leaks": got, "verbatim": ["truth"], "findings": kinds, "npc_leaks": said}}]  # fmt: skip
     told = session.summarize(rows)["recorded"]
     assert told["turns_with_leaks"] == 1 and told["leaks"] == 1 and told["verbatim_leaks"] == 1
+    assert told["turns_with_npc_leaks"] == 1 and told["npc_leaks"] == 1
     assert told["findings"] == {"假线索": 1, "白给": 0, "伏笔": 1, "不确定": 1}

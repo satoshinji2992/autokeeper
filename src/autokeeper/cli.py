@@ -962,6 +962,7 @@ def eval_session(
             continue
         line = (f"[bold]{label}[/] {got['turns']} 轮：{got['turns_with_problems']} 轮有矛盾（共 {got['problems']} 处 {got['by_kind']}），"
                 f"{got.get('turns_with_leaks', 0)} 轮说漏秘密（共 {got.get('leaks', 0)} 处，照抄原文 {got.get('verbatim_leaks', 0)} 处），"
+                f"NPC 说漏 {got.get('turns_with_npc_leaks', 0)} 轮，"
                 f"凭空多出的细节 {got.get('findings', {})}，"
                 f"换了玩家点名的人 {got['target_swaps']} 轮，NPC 开口后叙述复述 {got['echo_when_npc_spoke']:.0%}，叙述平均 {got['keeper_chars']} 字")
         if "cost_usd" in got:
