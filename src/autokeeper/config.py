@@ -2,8 +2,8 @@
 
 Every agent role picks its own backend and model. A preset sets all of them at once:
 
-    claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story, Opus 5.5
-              rules, directs, builds modules and handles pictures, Haiku 5.5 plays the NPCs.
+    claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story and rules
+              on checks, Opus 5.5 directs, builds modules and handles pictures, Haiku 5.5 plays the NPCs.
     deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role; ASCII art on
               deepseek-v4-pro, which cannot read images). Needs DEEPSEEK_API_KEY.
 
@@ -92,7 +92,10 @@ DEFAULT_ROLES: dict[str, Role] = {
     # Narrates the game. Against Opus on the same scripted turns (docs/eval.md): as few stock
     # phrases, closer to the length asked for, half the latency, under half the price.
     "keeper": SONNET,
-    "arbiter": OPUS,  # rules on checks without seeing the player's wording (docs/eval.md: Sonnet once gave a clue it should not)
+    # Rules on checks without seeing the player's wording; the world's NPC decisions inherit it. On 19
+    # real rulings (docs/eval.md, 2026-10-21) Sonnet at low ruled as Opus did 18 times and gave the
+    # same clues every time, about a fifth faster; Haiku skipped a roll the player asked for.
+    "arbiter": replace(SONNET, effort="low"),
     "chronicler": SONNET,  # memory, recaps, replays
     "importer": OPUS,  # builds modules from PDFs, researches generated ones
     "vision": OPUS,  # reads sketches and module images (pictures go to the vendor's strongest: ART below)
