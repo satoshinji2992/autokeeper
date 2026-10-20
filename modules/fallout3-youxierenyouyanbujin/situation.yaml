@@ -230,7 +230,7 @@ agendas:
     when: D1 22:00
     meet: false
   - id: stanley_arrests
-    text: 一旦认定调查员已经查到了教授和望远镜的事，就带人上门抓人，关进警局后面的牢房。
+    text: 有手下或有福者向他报告、或他亲眼看到调查员在追查教授和望远镜以后（调查员自己知道了不等于他知道），就带人上门抓人，关进警局后面的牢房。
     when: flag:learned_telescope
     meet: false
   - id: stanley_blocks_roads

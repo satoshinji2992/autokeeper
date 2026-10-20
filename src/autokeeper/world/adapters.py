@@ -6,20 +6,41 @@
                      as engine/world.apply leaves them
     improvise        the director's plan (module/improv.py) as an Improvise op
     plugin_ops       a rule plugin's effects that touch the world (flags, conditions, notes)
+    bring_ops        everyday things where the investigators are, as Bring (or, picked up, Transfer)
+                     ops: the keeper's scene, an NPC's reply and the arbiter's ruling share it
+    reply_ops        an NPC's on-the-spot acts in its reply (taking out, handing over, going off),
+                     as groups of ops for its own gateway (world/tools.Gateway)
 
 Phase 2 swaps engine/world.apply for settle_changes in game.py and cast.py.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, NamedTuple
 
+from ..engine import fog
 from ..engine import world as legacy_world
 from ..engine.state import WorldChange
-from .ops import AddFact, Fulfil, Improvise, MakePromise, Occur, Relate, SetFlag, Transfer
+from .ops import (
+    MAX_BRING,
+    AddFact,
+    Bring,
+    Fulfil,
+    Improvise,
+    MakePromise,
+    Occur,
+    Relate,
+    SetFlag,
+    Transfer,
+    bring_count,
+    holding,
+    lacking,
+    overlap,
+)
 from .ops import Condition as ConditionOp
 from .record import PLAYERS
-from .store import Result
+from .store import Result, digest
 
 if TYPE_CHECKING:
     from ..plugins.schema import Effect
@@ -71,6 +92,153 @@ def improvise(w: World, plan: Any, *, at: str = "") -> Result:
     """A director's plan (agents/director.Improv) through the world API: checked, merged, seeded, logged."""
     data = plan.model_dump(mode="json") if hasattr(plan, "model_dump") else dict(plan)
     return w.apply(Improvise(plan=data, at=at, actor="director"))
+
+
+class Brought(NamedTuple):
+    """What bring_ops makes of a list of things: the ops to land, in order; what cannot be registered,
+    one line a thing, with why; and for each thing asked about, the id of what stands for it (new,
+    picked up or already there), empty when it was refused."""
+
+    ops: list[Bring | Transfer]
+    problems: list[str]
+    ids: list[str]
+
+
+def _field(thing: Any, key: str) -> str:
+    if isinstance(thing, str):
+        return thing if key == "name" else ""
+    value = thing.get(key, "") if isinstance(thing, Mapping) else getattr(thing, key, "")
+    return str(value or "").strip()
+
+
+def _person(w: World, who: str) -> str:
+    """A person's id from an id or a name: the full name, else part of the name of just one person in
+    the scene (托马斯 for 托马斯·金博尔); as given when nobody answers to it."""
+    if any(i.id == who for i in w.st.investigators) or ((e := w.rec.entities.get(who)) is not None and e.kind == "npc"):
+        return who
+    people = [(i.id, i.name) for i in w.st.investigators] + [(e.id, e.name) for e in w.rec.entities.values() if e.kind == "npc"]
+    named = [pid for pid, name in people if name == who]
+    if not named and len(who) >= 2:
+        here = {i.id for i in w.st.investigators} | set(w.present(w.st.location))
+        named = [pid for pid, name in people if pid in here and who in name]
+    return named[0] if len(named) == 1 else who
+
+
+def _location(w: World, where: str) -> str:
+    """A place's id from an id or one of its names (engine/fog.aliases); empty when none or several fit."""
+    if (e := w.rec.entities.get(where)) is not None and e.kind == "location":
+        return where
+    named = [pid for pid, names in fog.aliases(w.m).items() if fog.plain(where) in names]
+    return named[0] if len(named) == 1 else ""
+
+
+def _lying(w: World, name: str, taken: list[str]) -> str:
+    """An everyday thing of this name lying where the investigators are, not spoken for in this batch:
+    one registered as it came up (Bring), or one of the module's items of no importance."""
+    here = w.st.location
+    hit = next((e.id for e in w.rec.entities.values() if e.kind == "item" and not e.important and e.at == here
+                and e.id not in taken and overlap(name, e.name)), "")
+    return hit or next((i.id for i in w.m.items if not i.important and i.id not in taken and i.id not in w.rec.entities
+                        and legacy_world.owner(w.m, w.st, i.id) == here and overlap(name, i.name)), "")
+
+
+def bring_ops(w: World, items: Iterable[Any], *, actor: str, holder: str | None = None, place: str | None = None,
+              missing: Iterable[str] = (), visibility: str = "auto") -> Brought:
+    """Everyday things where the investigators are, as world ops (ops.Bring): what someone has on
+    them or what lies about, for the keeper's scene, an NPC's reply or the arbiter's ruling alike.
+    Pure: nothing lands. Each op is checked against the record as it is now (scene, names, this
+    turn's Ruling.missing and limit) and against the batch itself (the same thing twice, the limit,
+    `missing` besides the recorded one).
+
+    A thing is a name, or a mapping or object with `name` and optionally `look`, `holder` or `place`
+    (ids, or the names the table knows), which take the place of the keyword arguments. Something
+    of its name already there is left as it is; an everyday thing of its name lying where the
+    investigators are goes to a holder who takes it up (Transfer); anything else is brought."""
+    missing = [x for x in (str(m).strip() for m in missing) if x]
+    ops: list[Bring | Transfer] = []
+    problems: list[str] = []
+    ids: list[str] = []
+    batch: list[tuple[str, str]] = []  # (where, name) brought in this batch
+    count = bring_count(w)
+    for thing in items:
+        name = _field(thing, "name")
+        own_holder, own_place = _field(thing, "holder"), _field(thing, "place")
+        who, at = (own_holder, own_place) if own_holder or own_place else (holder or "", place or "")
+        who = _person(w, who) if who else ""
+        at = (_location(w, at) or at) if at else ""
+        where = who or at
+        if not name:
+            problems.append("有一件东西没写名称")
+            ids.append("")
+            continue
+        if where and (there := holding(w, where, name)):
+            ids.append(there)  # it is already where it is said to be
+            continue
+        if who and not at and (lying := _lying(w, name, ids)):  # taken up from where it lies
+            take = Transfer(id=f"pick:{w.st.turn}:{lying}:{who}", item=lying, to=who, actor=actor,
+                            visibility=visibility)  # type: ignore[arg-type]
+            if bad := take.check(w):
+                problems.append(f"{name}：{'；'.join(bad)}")
+                ids.append("")
+            else:
+                ops.append(take)
+                ids.append(lying)
+            continue
+        ident = f"thing:{digest([w.st.turn, actor, where, name])[:10]}"
+        op = Bring(id=f"bring:{ident}", item=ident, name=name, look=_field(thing, "look")[:80], holder=who, place=at, actor=actor,
+                   visibility=visibility)  # type: ignore[arg-type]
+        bad = op.check(w)  # the record as it is now: then what this batch adds to it
+        if any(w0 == where and overlap(name, n0) for w0, n0 in batch):
+            bad.append("同一件东西写了两次")
+        if not lacking(w, name) and (gap := next((x for x in missing if overlap(name, x, least=1)), "")):
+            bad.append(f"这一轮的行动正缺{gap}，不能当场拿出来")
+        if count < MAX_BRING <= count + len(batch):
+            bad.append(f"这一轮已经登记了 {MAX_BRING} 件东西")
+        if bad:
+            problems.append(f"{name}：{'；'.join(bad)}")
+            ids.append("")
+            continue
+        ops.append(op)
+        ids.append(ident)
+        batch.append((where, name))
+    return Brought(ops, problems, ids)
+
+
+def reply_ops(w: World, npc: str, *, leave: str = "", items: Iterable[Any] = (), accompany: str = "",
+              visibility: str = "auto", played: Iterable[str] = ()) -> tuple[list[list[dict[str, Any]]], list[str]]:
+    """An NPC's on-the-spot acts in its reply (agents/cast.Dialogue.items, .leave), as groups of
+    world ops for its own gateway (world/tools.Gateway), each group landing whole: a thing it takes
+    out (bring_ops) and the handing of it over (Transfer), then its going off (ending the company it
+    keeps, then Move). What cannot be put as ops at all, in words. What it does on meeting them
+    (Dialogue.played) is done once played, and no longer put to it each time they talk."""
+    from .agents import meets
+
+    groups: list[list[dict[str, Any]]] = []
+    if (a := w.rec.agents.get(npc)) is not None:
+        due = {s.id for s in a.plan if s.status == "pending" and meets(w, npc, s)}
+        groups += [[{"kind": "step", "npc": npc, "step": sid, "status": "done"}] for sid in dict.fromkeys(played) if sid in due]
+    things = list(items)
+    found = bring_ops(w, things, actor=npc, holder=npc, visibility=visibility)
+    problems = list(found.problems)
+    for thing, ident in zip(things, found.ids, strict=True):
+        if not ident:
+            continue
+        group = [op.model_dump(mode="json", exclude={"id", "actor"}) for op in found.ops if op.item == ident]
+        to = _person(w, _field(thing, "to")) if _field(thing, "to") else ""
+        if to and to != npc:  # handed over, in the same breath
+            group.append({"kind": "transfer", "item": ident, "to": to, "giver": npc, "visibility": visibility})
+        if group:
+            groups.append(group)
+    if leave.strip():
+        dest = _location(w, leave.strip())
+        if not dest:
+            problems.append(f"不知道“{leave}”是哪里：说完走开时，leave 填给出的地点 id")
+        elif accompany:
+            problems.append("同意了同行，就不能同时走开：两样只能选一样")
+        elif dest != w.place(npc):
+            end = [{"kind": "follow", "npc": npc, "visibility": visibility}] if w.rec.entities[npc].following else []
+            groups.append([*end, {"kind": "move", "entity": npc, "to": dest, "visibility": visibility}])
+    return groups, problems
 
 
 def plugin_ops(w: World, plugin: str, effects: list[Effect]) -> list[Any]:

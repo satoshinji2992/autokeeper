@@ -19,6 +19,9 @@ The contract belongs to the harness, not the provider:
                        the schema and an example go into the system prompt and JSON mode
                        is switched on where the API has one ("json"). Either way the
                        result is parsed, validated against the schema, and repaired once.
+                       Given an on_delta, Claude Code and JSON mode stream the JSON as it is
+                       written; the caller reads what it wants of it (agents/cast._Telling) and
+                       says, through its `shown`, whether any of it reached the player yet.
     thinking           Role.effort is mapped to each provider's own knob. Reasoning text
                        comes back in Reply.thinking for traces and is never resent.
     spend              metered calls pass the budget guard and land in the ledger.
@@ -163,6 +166,13 @@ def spoken(schema: dict) -> bool:
 REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完整、正确的 JSON 对象（json），只输出 JSON。"
 
 
+def _shown(on_delta: OnDelta) -> bool:
+    """Whether what streamed so far reached the player. A plain stream shows every piece; a
+    structured one's reader may hold its first pieces back and says so (agents/cast._Telling), and
+    until then a failed call can still be tried again or handed to the fallback."""
+    return bool(getattr(on_delta, "shown", True))
+
+
 # -- the channel contract -----------------------------------------------------------------
 class Model:
     mode = "native"  # how structured output is obtained: native | json
@@ -214,9 +224,12 @@ class Model:
 
         async def watch(piece: str) -> None:
             nonlocal shown
-            shown = True
-            await on_delta(piece)  # type: ignore[misc]
+            try:
+                await on_delta(piece)  # type: ignore[misc]
+            finally:
+                shown = watch.shown = shown or _shown(on_delta)  # type: ignore[attr-defined]
 
+        watch.shown = False  # type: ignore[attr-defined]
         try:
             return await self._complete(messages, schema=schema, images=images, on_delta=watch if on_delta else None)
         except ContextBudgetExceeded:
@@ -277,9 +290,11 @@ class Model:
 
         async def delta(piece: str) -> None:
             nonlocal streamed
-            streamed = True
             trace.progress("delta", text=piece)
-            await on_delta(piece)  # type: ignore[misc]
+            try:
+                await on_delta(piece)  # type: ignore[misc]
+            finally:
+                streamed = streamed or _shown(on_delta)
 
         reply = Reply()
         async for attempt in AsyncRetrying(
@@ -424,16 +439,23 @@ class ClaudeCodeModel(Model):
             if pending := self._wiping.pop(key, None):
                 await pending
             client = await self._client(key, schema)
-            reply, streamed = Reply(), False
+            reply, streamed, block = Reply(), False, ""
             try:
                 await client.query(_stream(_blocks(messages, images)))
                 async for msg in client.receive_response():
                     if isinstance(msg, StreamEvent):
                         ev = msg.event
-                        if ev.get("type") == "content_block_delta" and ev.get("delta", {}).get("type") == "text_delta":
+                        delta = ev.get("delta", {})
+                        if ev.get("type") == "content_block_start":
+                            block = (ev.get("content_block") or {}).get("type", "")
+                        elif ev.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
                             streamed = True
                             if on_delta and not schema:
-                                await on_delta(ev["delta"]["text"])
+                                await on_delta(delta["text"])
+                        elif (ev.get("type") == "content_block_delta" and delta.get("type") == "input_json_delta"
+                              and schema and block == "tool_use" and on_delta and delta.get("partial_json")):
+                            # Claude Code's structured output is the input of its StructuredOutput tool: the JSON as written.
+                            await on_delta(delta["partial_json"])
                     elif isinstance(msg, AssistantMessage):
                         for b in msg.content:
                             if isinstance(b, TextBlock):
@@ -574,8 +596,17 @@ class LangChainModel(Model):
             # a playtest, each one a second call to repair; a spoken line is taken as plain words instead.
             switch = self.provider in JSON_SWITCH and not spoken(schema)
             runnable = self.chat.bind(response_format={"type": "json_object"}) if switch else self.chat
-            msg = await runnable.ainvoke(history)
-            reply.text, reply.thinking, reply.usage = msg.text, _thinking(msg), _usage(msg.usage_metadata)
+            if on_delta:  # the JSON as it is written, for a caller that reads it on the way (the keeper's telling)
+                async for chunk in runnable.astream(history):
+                    if piece := chunk.text:
+                        reply.text += piece
+                        await on_delta(piece)
+                    reply.thinking += _thinking(chunk)
+                    if chunk.usage_metadata:
+                        reply.usage = _usage(chunk.usage_metadata)
+            else:
+                msg = await runnable.ainvoke(history)
+                reply.text, reply.thinking, reply.usage = msg.text, _thinking(msg), _usage(msg.usage_metadata)
             reply.data = parse_json(reply.text)
             return reply
         out = await self.plain.with_structured_output(schema, include_raw=True).ainvoke(history)

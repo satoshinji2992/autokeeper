@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 
 import aiohttp
 import pytest
@@ -147,7 +148,12 @@ class Scripted(hm.Model):
             raise out
         if on_delta:
             await on_delta(out)
-        return Reply(text=out, usage={"input_tokens": 100, "output_tokens": 10})
+        return Reply(text=out, data=hm.parse_json(out) if schema else None, usage={"input_tokens": 100, "output_tokens": 10})
+
+
+def telling(text: str) -> str:
+    """A keeper's telling as it is written: the scene first (here, nothing changed), then the words."""
+    return json.dumps({"scene": {}, "text": text}, ensure_ascii=False)
 
 
 @pytest.fixture
@@ -170,7 +176,7 @@ async def test_the_keeper_remembers_only_the_new_telling(module, fake, scripted,
         events.append(ev)
 
     game = Game(module, state, Cast(scripted, module), Rules(dice=fake), emit=emit)
-    Scripted.replies += ["午后的广场空荡荡的。", "你凑近告示栏，纸角在风里翻动。", "告示栏上只剩半张纸。"]
+    Scripted.replies += [telling("午后的广场空荡荡的。"), telling("你凑近告示栏，纸角在风里翻动。"), "告示栏上只剩半张纸。"]
     await game.narrate(Turn(action=Action(kind="wait", summary="周衡在广场上站了一会儿")))
     await game.narrate(Turn(action=Action(kind="move", summary="周衡走到告示栏前")))
     keeper = state.transcripts["keeper"]

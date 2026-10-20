@@ -6,7 +6,7 @@ keeper's narration and the NPCs' lines, who the people they met turned out to be
 clues and handouts they found, the new places the director announced. Their own words do
 not count, or typing a guess would put a secret on the map.
 
-A name counts in full or by its head (阿诺兹堡公共图书馆 as 图书馆, 食尸鬼隧道网 as 隧道网),
+A name counts in full or by its head (阿诺兹堡公共图书馆 as 图书馆, 地底隧道网 as 隧道网),
 never by a word so plain it could mean anything (大街, 中心), nor by one that is part of
 another place's name. jieba finds where the words of a name begin.
 
@@ -237,7 +237,7 @@ def findable(m: Module, st: GameState, place: str) -> bool:
 def bearings(m: Module, st: GameState) -> dict[str, str]:
     """The places an action here can head for (findable), as the action parser is given them:
     by the name the investigators know, else as plain sight names them, else (next door) by
-    the plainest form of the name (隧道网, not 食尸鬼隧道网), which getting there would show
+    the plainest form of the name (隧道网, not 地底隧道网), which getting there would show
     them anyway. Here is left out."""
     out = known(m, st)
     for pid, name in landmarks(m, st).items():

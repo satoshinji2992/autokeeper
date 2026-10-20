@@ -283,7 +283,7 @@ def test_weather_is_read_off_the_place_and_the_hour():
     assert weather.infer("大街", "梧桐叶子在人行道上打着旋。", "下午") == ["leaves"]
     assert weather.infer("图书馆", "长桌上方吊着绿罩台灯。", "深夜") == ["flicker"]
     assert weather.infer("码头", "雨后的石板路。", "下午") == []
-    assert [weather.outdoors(n) for n in ("公墓", "艾尔斯伯里大街", "广场", "道格拉斯的书房", "警察局", "食尸鬼隧道网", "钟楼")] == [
+    assert [weather.outdoors(n) for n in ("公墓", "艾尔斯伯里大街", "广场", "道格拉斯的书房", "警察局", "地底隧道网", "钟楼")] == [
         True, True, True, False, False, False, False,
     ]
     names = ("后弄堂", "南京路街口", "霞飞路·特卡琴科西点铺", "江西路口·总巡捕房", "徐家汇路百代厂房·整理间")

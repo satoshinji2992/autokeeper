@@ -90,7 +90,7 @@ locations:
       - when: flag:tomb_opened
         change: 陵墓的石门被推开了，门缝里的泥掉了一地，门后是一片漆黑
   - id: suidao
-    name: 食尸鬼隧道网
+    name: 地底隧道网
     within: mudi
     art: suidao
     read_aloud: |

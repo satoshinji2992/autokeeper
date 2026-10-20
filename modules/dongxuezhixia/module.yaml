@@ -5,9 +5,9 @@ system: CoC7
 era: 1921 年
 setting: 美国北达科他州沃德县，乡下小城埃斯内尔
 players: 1-3 人
-duration: 约 4-6 小时（游戏内 4-7 天）
-source: 《冬雪之下》（Nathan Ross & friends，Stygian Fox）
-license: 仅作个人游戏整理使用
+duration: 约 4-6 小时
+source: 《冬雪之下》，Nathan Ross & friends 著，Stygian Fox 出版
+license: 原书版权归作者与出版方所有，仅供个人跑团使用
 plugins:
 - winter_disease
 hook: 埃斯内尔唯一的医生把警报送到了州府：这个小镇上的人正在以流感般的症状成批倒下， 而且死得比流感快得多。沃德县卫生部门派你们去评估情况、尽可能协助控制扩散。 雪已经下了一个礼拜，去埃斯内尔的路只剩一条。

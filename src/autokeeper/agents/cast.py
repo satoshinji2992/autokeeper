@@ -22,11 +22,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
+from collections.abc import Callable
 from contextlib import nullcontext
-from typing import TYPE_CHECKING, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
+from pydantic_core import from_json
 
 from .. import skills
 from ..config import Config
@@ -43,6 +46,7 @@ from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Follow
+from ..world.scene import Scene
 from . import guard
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
@@ -96,6 +100,17 @@ class EquipmentChange(BaseModel):
     evidence: str = Field("", max_length=200, description="reveal时记录本次实际可观察经过，不重复或编造台词")
 
 
+class Thing(BaseModel):
+    """An everyday thing that comes up on the spot, registered in the world record (world/ops.Bring)."""
+
+    name: str = Field(description="东西的名称，如 手电筒、拨火棍、手杖")
+    look: str = Field("", max_length=80, description="一句外观，可留空")
+
+
+class Gift(Thing):
+    to: str = Field("", description="递给谁：调查员 id；自己拿着就留空")
+
+
 class Failure(BaseModel):
     """What a failed check brings about besides not succeeding; the engine settles it."""
 
@@ -118,6 +133,8 @@ class Ruling(BaseModel):
     changes: list[WorldChange] = Field(default_factory=list, description="成功后发生的生活事实、关系、约定或物品转交；不得新增案情、凭空造物或替 NPC 答应")
     equipment: list[EquipmentChange] = Field(default_factory=list, max_length=3,
                                             description="成功后调查员对重要装备实际进行的取用、穿戴、藏匿、消耗或出示；无相关动作留空")
+    takes: list[Thing] = Field(default_factory=list, max_length=3, description="成功后调查员当场拿起的日常物件，如屋里的手杖、桌上的火柴；没有就留空")
+    missing: list[str] = Field(default_factory=list, max_length=4, description="这次行动缺少、因而做不成的工具或条件；没有就留空")
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
     scope: Literal["模组内", "可即兴", "出格"] = Field(
         "模组内", description="模组内：场景资料有对应内容；可即兴：合理但模组未写；出格：确实违背时代或能力；捷径和偏离主线不算出格"
@@ -152,11 +169,71 @@ class Dialogue(BaseModel):
     mood: str = Field("", description="根据这次亲历或可信消息变化后的心境，供后续扮演使用；无变化留空，不能凭空获知秘密")
     changes: list[WorldChange] = Field(default_factory=list, description="只记自己本次回复里明确承诺或发生的生活事实；text 必须逐字摘自回复；不给线索或改规则")
     accompany: str = Field("", description="真正愿意与调查员同行时填目的地 id；假答应、含糊意向、拒绝或只约在那里碰面留空")
+    items: list[Gift] = Field(default_factory=list, max_length=3, description="当场拿出或递出的东西；没有就留空")
+    leave: str = Field("", description="说完马上走开时，填要去的地点 id；留下就留空")
+    played: list[str] = Field(default_factory=list, description="【见到调查员时，你会】里这次已经做了的几条，填括号里的编号；没做就留空")
     deceptions: list[Deception] = Field(default_factory=list, max_length=3, description="本次有意欺骗的私有说明，玩家不可见；未故意说谎时留空，不固定比例撒谎")
 
 
 class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
+
+
+# The keeper's telling: how things stand as it ends, then the words (engine/game.Game._narrate). The
+# scene goes into the record, checked first (world/scene.py); the words are shown once it holds. No
+# docstring: a schema's descriptions are what the model reads.
+class Telling(BaseModel):
+    scene: Scene = Field(description="先写：这段讲完时的场面")
+    text: str = Field(description="再写：讲给玩家听的叙述")
+
+
+@dataclass
+class Narration:
+    """A telling as it came back: the words, the scene as written (None when none could be read),
+    whether the words reached the player as they were written, and whether the scene came first."""
+
+    text: str
+    scene: dict | None = None
+    shown: bool = False
+    first: bool = True
+
+
+class _Telling:
+    """A telling read as it is written. The scene, once complete, is checked (`check`); while it
+    holds, the words that follow it go to the player as they come. A telling that writes its words
+    before its scene (the key order is the model's), or a scene that does not hold, keeps its
+    words back until the reply is complete. `shown` tells the harness whether the player saw any
+    of it (harness/models._shown): until then a failed call may still be tried again."""
+
+    def __init__(self, check: Callable[[Any], bool], on_delta: Any):
+        self.check, self.on_delta = check, on_delta
+        self.raw, self.sent = "", 0
+        self.verdict: bool | None = None  # None: no scene read yet
+        self.first = True
+        self.shown = False
+
+    async def __call__(self, piece: str) -> None:
+        self.raw += piece
+        start = self.raw.find("{")
+        if start < 0:
+            return
+        try:
+            data = from_json(self.raw[start:], allow_partial="trailing-strings")
+        except ValueError:
+            return
+        if not isinstance(data, dict) or "text" not in data:
+            return
+        if self.verdict is None:  # the words have begun: whatever came before them is complete
+            keys = list(data)
+            self.first = "scene" in keys and keys.index("scene") < keys.index("text")
+            self.verdict = bool(self.first and self.check(data["scene"]))
+        text = data["text"]
+        if not self.verdict or not self.on_delta or not isinstance(text, str):
+            return
+        start = max(self.sent, len(text) - len(text.lstrip()))
+        if len(text) > start:
+            self.sent, self.shown = len(text), True
+            await self.on_delta(text[start:])
 
 
 class Consistency(BaseModel):
@@ -233,7 +310,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 心理学用于判断可观察的态度或言行，不使 NPC 自动承认秘密、接受要求或知道自己正被观察；不能替代说服、话术等门槛来取得口供。模组明确设置心理学线索时按其要求处理。
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
 - 剧情标记只在行动真的达成了标记含义时设置，比如真的点火烧了戏本才设 script_burned；前提不具备（手里没有那样东西）就不设，也不掷骰。
-- 专用工具须有背包、持有者或本地物件记录。缺少时说明条件尚不具备；仅想做某事，不等于已经取得工具、谈妥交易或完成动作。
+- 专用工具须有背包、持有者或本地物件记录。缺少时说明条件尚不具备，缺的东西写进 missing；调查员顺手拿起场景里合情合理的日常物件（屋里的手杖、桌上的火柴），写进 takes。仅想做某事，不等于已经取得工具、谈妥交易或完成动作。
 - equipment 只维护本次实际涉及的重要武器、钥匙、证物、关键工具与重要消耗品。拔出、穿戴或藏好填对应模式；明确出示或发现才 reveal 并附可观察经过，不因站在同一房间就公开 NPC 的随身物。不替玩家消耗未使用的东西，也不统计普通餐具与衣物杂项。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
 - 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤）填进对应字段，不只写在 text 里。
@@ -338,7 +415,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 只说自己的话、做自己的事。不代写玩家的问题、行动、承诺或内心，也不重复已经完成的动作。
 - 威胁、诱骗和指控可以是台词；是否伤害、束缚或夺走调查员物品须由系统实际裁定，不能仅凭台词或括号动作宣布完成。
 - 真正同意与调查员去某处时，在 accompany 填该地点 id，系统据此记录实际同行。假答应只在 deceptions.accompany 写公开目的地，顶层 accompany 留空，并说明真实策略；只约在那里碰面也不建立同行。目的地只用本轮给出的地点。
-- 已经交出物件、明确许诺或形成生活事实时，必须同时填写 changes，逐字引用这次台词作为 text；物件只能取自“实际拿着”，参与者和新持有者只用给出的 id。只讨论可能性不算交付，不把没有登记的东西写成已经递出。
+- 明确许诺或形成生活事实时，必须同时填写 changes，逐字引用这次台词作为 text；参与者只用给出的 id。当场拿出或递出身边的日常东西，写进 items，递给调查员时 to 填他的 id；说完马上走开，leave 填去处。只讨论可能性不算交付。
 - 台词中的不实声称不能提交成已发生的 fact、relationship、transfer 或 fulfill。假承诺可以登记为 promise，因为确实说过答应；不代表真实打算履行，更不等于已执行。实际移动、交物仍由状态操作完成，不能借谎言改写真实位置、背包或已发生事件。
 
 以下为互不相关的虚构表达示例，仅比较身份与关系，不沿用其中的人物、事实或句式：
@@ -480,8 +557,10 @@ class Cast:
             return text
 
     async def _private_lore(self, state: GameState, query: str, keywords: list[str]) -> str:
-        """Optional source detail for private decisions. A static index cannot undo rewrites."""
-        if state.record.revisions or not query.strip():
+        """Optional source detail for private decisions. A static index cannot undo rewrites, so what
+        was rewritten follows it, to stand over the source where they differ: one rewrite (the warden's
+        goal) no longer shuts the source off for everything else (the newspaper's files)."""
+        if not query.strip():
             return ""
         try:
             async with asyncio.timeout(8):
@@ -494,9 +573,11 @@ class Cast:
         if journal := getattr(self, "debug_journal", None):
             journal.append("retrieval", {"status": "found" if text else "empty", "query": query,
                                          "keywords": keywords, "context": text}, turn=state.turn)
+        rewritten = "".join(f"\n- {r.old[:60]} → {r.new[:160]}" for r in state.record.revisions[-8:])
         return ("\n【模组原文检索，仅供幕后核对】\n" + text
                 + "\n以上是静态资料，不表示人物此刻在原地点、物品仍在原持有者手里或事件已发生。"
-                "位置、时间、知识权限与本局记录以本轮动态资料为准。") if text else ""
+                "位置、时间、知识权限与本局记录以本轮动态资料为准。"
+                + (f"\n本局改写过的设定（和上面的原文不同时，以改写后的为准）：{rewritten}" if rewritten else "")) if text else ""
 
     def _equipment(self, who: str) -> list[str]:
         if self.world is None:
@@ -557,6 +638,7 @@ class Cast:
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
+            f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
         )
 
@@ -621,6 +703,11 @@ class Cast:
         sheet = "，".join(f"{k}{v}" for k, v in top) + "；" + "，".join(f"{k}{v}" for k, v in inv.characteristics.items())
         held = "、".join(m.clue(c).title for c in state.clues) or "无"
         moved = f"（调查员为此先走到了{m.location(at).name}，下面是那里的场景）\n" if at else ""
+        local = [f"{i.id} {i.name}，持有者 {world.owner(m, state, i.id)}" for i in m.items if i.where == where]
+        if self.world is not None:  # everyday things registered as they came up (world/ops.Bring), here or on the people here
+            around = {where} | {e.id for e in self.world.rec.entities.values() if e.kind == "npc" and e.at == where}
+            local += [f"{e.id} {e.name}，持有者 {e.at}" for e in self.world.rec.entities.values()
+                      if e.kind == "item" and not e.important and e.at in around]
         prompt = (
             f"【行动】{action.ruled()}\n{moved}"
             f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER)}\n"
@@ -629,7 +716,7 @@ class Cast:
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
             f"【NPC 门槛】\n{chr(10).join(gates) or '无'}\n"
             f"【调查员】{inv.name}：{sheet}\n背包：{'、'.join(inv.inventory) or '无'}\n"
-            f"【本地物件】" + "；".join(f"{i.id} {i.name}，持有者 {world.owner(m, state, i.id)}" for i in m.items if i.where == where) + "\n"
+            f"【本地物件】" + "；".join(local) + "\n"
             f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
         prompt += "\n【本地人物的处境】\n" + "\n".join(
@@ -800,7 +887,33 @@ class Cast:
         for op in self._deception_ops(state, npc_id, dialogue):
             result = trial.apply(op)
             problems.extend(result.problems)
+        groups, refused = self._acts(trial, npc_id, dialogue, private=private)
+        problems += refused
+        if groups and not refused:  # tried whole through its own gateway, as they will land
+            from ..world.tools import Gateway
+
+            receipt = Gateway(trial, npc_id).preview([op for group in groups for op in group])
+            problems += [] if receipt.get("ok") else receipt.get("problems") or ["当场的动作没有通过校验"]
         return problems
+
+    @staticmethod
+    def _acts(w: World, npc_id: str, dialogue: Dialogue, *, private: bool) -> tuple[list[list[dict]], list[str]]:
+        """What the reply does on the spot (world/adapters.reply_ops): things taken out or handed over, going off."""
+        return adapters.reply_ops(w, npc_id, leave=dialogue.leave, items=dialogue.items, accompany=dialogue.accompany,
+                                  visibility="private" if private else "auto", played=dialogue.played)
+
+    def _act(self, state: GameState, npc_id: str, dialogue: Dialogue, *, private: bool) -> list[str]:
+        """Land the reply's on-the-spot acts in this turn through the NPC's own gateway, each act whole
+        (a thing brought out and handed over together), what can land landing; what could not, in words."""
+        from ..world.tools import Gateway
+
+        assert self.world is not None
+        groups, failed = self._acts(self.world, npc_id, dialogue, private=private)
+        for index, group in enumerate(groups):
+            receipt = Gateway(self.world, npc_id).settle(
+                group, request_id=f"reply:{state.turn}:{npc_id}:{state.npc(npc_id).lines}:{index}")
+            failed += [] if receipt.get("ok") else receipt.get("problems") or ["当场的动作没有通过校验"]
+        return failed
 
     async def npc(self, state: GameState, npc_id: str, message: str, *, travel: bool = False, private: bool = False) -> str:
         npc = self.module.npc(npc_id)
@@ -814,6 +927,9 @@ class Cast:
         held = [f"{item.id}（{item.name}，{equipment_names[item.equipment]}，数量{item.quantity}"
                 + (f"，{item.status}" if item.status else "") + "）" for item in items]
         mood += f"\n你实际持有的重要物品：{'、'.join(held) or '未登记'}。数量为0的物品已经耗尽，不能使用或交付。\n"
+        if self.world is not None and (things := [e.name for e in self.world.rec.entities.values()
+                                                  if e.kind == "item" and not e.important and e.at == npc_id]):
+            mood += f"你手边的日常物件：{'、'.join(things)}。\n"
         mood += world.context(state, npc=npc_id)
         if self.world is not None and (brief := world_view.npc_brief(self.world, npc_id, query=message)):
             mood += "\n" + brief
@@ -833,7 +949,7 @@ class Cast:
                 break
             s.forget()
             fix = "\n\n【行动校验未通过】\n" + "\n".join(problems)
-            fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；嘴上说此刻交出、同行的事要在 changes、accompany 里写上，做不到就别这样说；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
+            fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；嘴上说此刻交出、同行、走开的事要在 items、accompany、leave 里写上，做不到就别这样说；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
             reply = await self._send(key, s, state, message, extra=mood + fix, **output)
             dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
             text = dialogue.text.strip()
@@ -855,6 +971,8 @@ class Cast:
                                         visibility="private" if private else "auto"))
             for op in self._deception_ops(state, npc_id, dialogue):
                 self.world.apply(op)
+            if failed := self._act(state, npc_id, dialogue, private=private):  # said it, so it does it, this turn
+                self.unsettled[npc_id] = list(dict.fromkeys([*self.unsettled.get(npc_id, []), *failed]))
             if dialogue.mood and (agent := self.world.agent(npc_id)):
                 agent.mood = dialogue.mood
                 self.world.touch(agent)
@@ -917,13 +1035,49 @@ class Cast:
         )
         return self._open("keeper", "keeper", system)
 
-    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
+    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
+                     check: Callable[[Any], bool] | None = None, fix: str = "") -> str | Narration:
         """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
-        narrative preferences ride along this call only, without rewriting the cached prefix."""
+        narrative preferences ride along this call only, without rewriting the cached prefix.
+
+        With `check`, the telling comes with its scene (Telling): the scene is checked as soon as it
+        is written and the words stream once it holds (_Telling); `fix` says what did not hold last
+        time. It comes back as a Narration. The keeper's memory keeps the words alone, and only of a
+        telling whose scene held or that the player already saw: one turned back is not remembered."""
         s = self._keeper(state)
-        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper()
-        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
-        return reply.text.strip()
+        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper() + fix
+        if check is None:
+            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
+            return reply.text.strip()
+        reader = _Telling(check, on_delta)
+        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader, schema=TELLING)
+        data = reply.data if isinstance(reply.data, dict) else {}
+        text, scene = data.get("text"), data.get("scene")
+        if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
+            text, scene = _words(reply.text), None
+        told = Narration(text=text.strip(), scene=scene if isinstance(scene, dict) else None, shown=reader.shown,
+                         first=reader.first)
+        holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
+        if told.shown or holds:
+            self._kept(s, report, told.text)
+        else:
+            self._unsaid(s, report)
+        return told
+
+    @staticmethod
+    def _kept(s: Session, report: str, text: str) -> None:
+        """The keeper remembers what it said, not the JSON it was said in."""
+        last = s.transcript[-2:]
+        if len(last) == 2 and last[0]["content"] == report and last[1]["role"] == "assistant":
+            last[1]["content"] = text
+
+    @staticmethod
+    def _unsaid(s: Session, report: str) -> None:
+        """A telling turned back before anyone saw it: the keeper writes it again knowing why, not
+        after it."""
+        last = s.transcript[-2:]
+        if len(last) == 2 and last[0]["content"] == report and last[1]["role"] == "assistant":
+            del s.transcript[-2:]
 
     async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
         """`told`, the keeper's latest narration of `report`, told again. That exchange leaves the
@@ -1111,6 +1265,26 @@ class Cast:
 # let 7 of 40 rhetorical attacks soften a ruling (bonus dice for "the mud is still soft, nobody is
 # about"); without them 2 of 40, both what the module allows anyway (eval rhetoric, 2026-10-20).
 SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
+
+
+TELLING = _schema(Telling)
+
+
+def _words(raw: str) -> str:
+    """A reply that should have been a telling, as words: its text field if any of it can be read,
+    else the reply itself when it is not JSON at all."""
+    raw = raw.strip()
+    start = raw.find("{")
+    if start >= 0:
+        try:
+            data = from_json(raw[start:], allow_partial="trailing-strings")
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get("text"), str):
+            return data["text"]
+        if start == 0:
+            raise ValueError("守秘人的回复读不出叙述")
+    return raw
 
 
 def _book(m: Module) -> str:

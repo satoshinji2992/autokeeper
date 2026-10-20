@@ -343,4 +343,10 @@ def audit(m: Module) -> list[Issue]:
             err(f"关键线索 {c.id} 在走不到的地点")
     if not m.pregens:
         warn("没有预设调查员")
+    from ..engine import fog  # how the map reads names (it imports this package)
+
+    told = fog.mentions(m, [m.opening]) | fog.landmarks(m)
+    for pid, name in fog.mentions(m, [m.title, m.subtitle, m.hook, m.setting]).items():
+        if pid != m.start and pid not in told and not m.location(pid).public:
+            warn(f"标题、副标题、缘起或地点说明提到了「{name}」，地点 {pid} 开局就会出现在地图上；要调查才找得到的地方，这几处别点名")
     return issues

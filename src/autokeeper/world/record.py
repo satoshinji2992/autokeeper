@@ -46,6 +46,7 @@ class Entity(Versioned):
     quantity: int = Field(1, ge=0)
     hidden: bool = False
     observed_by: list[str] = Field(default_factory=list)  # who confirmed this item's current ownership/equipment state
+    look: str = ""  # an everyday thing's one line of how it looks (ops.Bring)
 
 
 class Fact(Versioned):
@@ -284,6 +285,10 @@ class WorldRecord(BaseModel):
     npc_budget_limit: int = 0
     npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
     beats: list[Beat] = Field(default_factory=list)  # arrangements left for the keeper to play (world/stage.py)
+    # What the turn's action lacks and so cannot do (agents/cast.Ruling.missing): nobody brings it
+    # out that turn (ops.Bring).
+    missing: list[str] = Field(default_factory=list)
+    missing_turn: int = -1
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

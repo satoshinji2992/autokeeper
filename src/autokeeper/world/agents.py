@@ -26,6 +26,7 @@ from . import knowledge
 from .ops import (
     AdvancePlan,
     Break,
+    Bring,
     Condition,
     Enlist,
     Equip,
@@ -49,6 +50,13 @@ if TYPE_CHECKING:
 
 NpcOp = Annotated[
     Move | Follow | Relate | Transfer | Equip | Learn | MakePromise | Fulfil | Break | Occur | Remember | Condition | AdvancePlan | SetPlan | Schedule,
+    Field(discriminator="kind"),
+]
+# What an NPC may do through its own gateway (world/tools.Gateway): what it decides backstage, and
+# in a reply to the investigators, taking out an everyday thing it has on it (agents/cast.Dialogue.items).
+ReplyOp = Annotated[
+    Move | Follow | Relate | Transfer | Bring | Equip | Learn | MakePromise | Fulfil | Break | Occur | Remember | Condition | AdvancePlan
+    | SetPlan | Schedule,
     Field(discriminator="kind"),
 ]
 
@@ -350,7 +358,7 @@ def _disclosure(w: World, npc: str, op: Any) -> list[str]:
     public = "\n".join(f.text for f in w.rec.facts.values()
                        if not f.retracted and (f.revealed is not None
                                                or (f.id.startswith("clue:") and f.id.removeprefix("clue:") in allowed)))
-    text = op.evidence if isinstance(op, Equip) else getattr(op, "text", "")
+    text = op.evidence if isinstance(op, Equip) else f"{op.name}\n{op.look}" if isinstance(op, Bring) else getattr(op, "text", "")
     blocked += guard.leaks(text, protected, public=public)
     return [f"不能通过公开行动透露未解锁的信息：{fid}" for fid in dict.fromkeys(blocked)]
 
@@ -379,6 +387,10 @@ def vet(w: World, npc: str, op: Any) -> list[str]:
         if op.to == me and holder == w.place(me):
             return []
         return [f"{op.item} 不在{name}手里，也不在他身边"]
+    if isinstance(op, Bring):  # what it has on it, or puts down where it stands; handing it over is a transfer
+        if op.holder and op.holder != me:
+            return [f"{name}只能拿出自己身上的东西"]
+        return [] if not op.place or op.place == w.place(me) else [f"{name}不在 {op.place}"]
     if isinstance(op, Learn):
         return [f"{name}身边没有 {x}" for x in op.who if not _beside(w, me, x)]
     if isinstance(op, MakePromise):

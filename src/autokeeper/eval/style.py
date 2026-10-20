@@ -407,9 +407,10 @@ class Scripted(Cast):
     async def npc(self, state, npc_id: str, message: str) -> str:
         return self.now.npc if self.now and self.now.npc else "……"
 
-    async def keeper(self, state, report: str, on_delta=None, lore: str = "") -> str:
-        self.reports.append(report)
-        return await super().keeper(state, report, on_delta=on_delta, lore=lore)
+    async def keeper(self, state, report: str, on_delta=None, lore: str = "", *, check=None, fix: str = ""):
+        if not self.reports or self.reports[-1] != report:  # a scene sent back is the same report told again
+            self.reports.append(report)
+        return await super().keeper(state, report, on_delta=on_delta, lore=lore, check=check, fix=fix)
 
     async def lore(self, state, query: str, keywords: list[str] | None = None, max_tokens: int = 1500) -> str:
         return ""

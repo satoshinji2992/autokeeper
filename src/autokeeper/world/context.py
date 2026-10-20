@@ -39,6 +39,11 @@ def _when(t: int | None) -> str:
     return "不限时" if t is None else format_time(t)
 
 
+def _company(w: World, ent) -> str:
+    """Whose company an NPC is in: to an agreed place, or along wherever they go (world/scene.py)."""
+    return f"与{w.name(ent.following)}去{w.name(ent.follow_to)}" if ent.follow_to else f"跟着{w.name(ent.following)}走"
+
+
 def _terms(text: str) -> set[str]:
     """Small, deterministic lexical recall; never expands a query into new information."""
     terms = set(re.findall(r"[a-z0-9_]{2,}", text.casefold()))
@@ -145,7 +150,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     if ent.status or ent.conditions:
         lines.append(f"【你的状况】{'、'.join(x for x in [ent.status, *ent.conditions] if x)}")
     if ent.following:
-        lines.append(f"【已同意同行】与{w.name(ent.following)}去{w.name(ent.follow_to)}；改变主意须明确结束同行，不忽略刚才的约定。")
+        lines.append(f"【已同意同行】{_company(w, ent)}；改变主意须明确结束同行，不忽略刚才的约定。")
     others = [f"{w.name(x)}（{x}）" for x in w.present(here) if x != npc]
     if here == w.st.location:
         others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators]
@@ -206,7 +211,7 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
     if ent.status or ent.conditions:
         lines.append(f"【你的状况】{'、'.join(x for x in [ent.status, *ent.conditions] if x)}")
     if ent.following:
-        lines.append(f"【已同意同行】与{w.name(ent.following)}去{w.name(ent.follow_to)}。")
+        lines.append(f"【已同意同行】{_company(w, ent)}。")
     if a:
         if a.goals:
             lines.append("【你眼下想要的】" + "；".join(a.goals))
@@ -216,7 +221,7 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
         steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in pending if not agents.meeting(w, npc, s)][:3]
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
-        meet = [s.text for s in pending if agents.meets(w, npc, s)][:4]
+        meet = [f"{s.text}（{s.id}）" for s in pending if agents.meets(w, npc, s)][:4]
         if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
@@ -333,7 +338,7 @@ def keeper_brief(w: World) -> str:
     lines: list[str] = []
     note = rec.facts.get(f"location:{here}:keeper")
     if note is not None and not note.retracted and note.text.strip():
-        lines.append(f"此地（{w.name(here)}）的守秘人须知：{_clip(note.text, 400)}")
+        lines.append(f"此地（{w.name(here)}）的守秘人须知：{' '.join(note.text.split())}")  # whole: what it says last counts too
 
     def person(npc: str) -> str:
         own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]
