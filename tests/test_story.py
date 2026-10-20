@@ -700,3 +700,44 @@ async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, SheetModal) and app.screen.state is not None and app.screen.state.deeds
+
+
+async def test_a_seat_deciding_its_roll_still_hears_the_table(writer):
+    """The dice dialog was awaited where messages are read: nothing else came in until it closed."""
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.screens.net import NetGameScreen
+
+    sent: list[dict] = []
+
+    class Link:
+        host = False
+
+        async def send(self, msg: dict) -> None:
+            sent.append(msg)
+
+        async def close(self) -> None:
+            return None
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    st = Game.new(m, [lead], slot="client-roll", human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = NetGameScreen(m, st.model_copy(deep=True), Link(), lead.id, [])  # type: ignore[arg-type]
+        app.push_screen(screen)
+        await pilot.pause(0.3)
+        await screen.on_msg({"t": "offer", "offer": {"kind": "roll", "who": lead.name, "skill": "侦查", "target": 50}})
+        for _ in range(20):
+            await pilot.pause(0.1)
+            if isinstance(app.screen, RollModal):
+                break
+        assert isinstance(app.screen, RollModal)
+        await screen.on_msg({"t": "say", "from": "小明", "text": "我先去门口"})  # read while the dialog is up
+        assert "我先去门口" in "".join(str(w.render()) for w in screen.story.query(Static))
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        for _ in range(20):
+            await pilot.pause(0.1)
+            if sent:
+                break
+        assert sent and sent[0]["t"] == "choice"
