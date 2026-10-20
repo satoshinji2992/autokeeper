@@ -133,10 +133,10 @@ def play(
 
 
 def _new_player() -> bool:
-    """No model chosen anywhere and no game played yet: `autokeeper` right after installing."""
-    chosen = any(os.environ.get(f"AUTOKEEPER_{name}") for name in ("PRESET", "MODEL"))
-    configured = (paths.USER_DIR / "config.toml").is_file() or "preset" in config.ui_settings()
-    return not chosen and not configured and not paths.save_index().exists()
+    """No model chosen yet (or Claude chosen without its package): `autokeeper` right after
+    installing. Not whether games were played: saves copied over from a checkout made an installed
+    game skip the question and fail on Claude it did not have (the user, 2026-10-20)."""
+    return not config.chosen()
 
 
 def _run(app) -> None:

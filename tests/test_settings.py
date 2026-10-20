@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from textual.widgets import Button, OptionList, Select, Switch
+from textual.widgets import Button, Input, OptionList, Select, Static, Switch
 
 from autokeeper import config, paths
 from autokeeper.prefs import Prefs
@@ -137,3 +137,50 @@ async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_dra
         again.screen.query_one("#settings-save", Button).press()
         await pilot.pause()
     assert not config.load().imagegen
+
+
+async def test_the_model_settings_take_a_key_and_test_the_connection(monkeypatch):
+    """The user, 2026-10-20: where in the game does the API key go, and how do I know it works?
+    模型设置 takes the chosen preset's key (kept as `autokeeper login` keeps it) and tries it."""
+    from autokeeper import config
+
+    saved, pinged = {}, []
+
+    async def ping(preset):
+        pinged.append(preset)
+        return "" if preset == "deepseek" else "RuntimeError: 用 Claude 要先装上它的组件"
+
+    monkeypatch.setattr(config, "save_key", lambda name, value: saved.setdefault(name, value))
+    monkeypatch.setattr(config, "ping", ping)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 44)) as pilot:
+        app.push_screen(EngineModal({"deepseek": "DeepSeek", "claude": "Claude"}, "claude", "", "", in_game=False))
+        await pilot.pause()
+        modal = app.screen
+        modal.query_one("#preset", OptionList).highlighted = 0  # deepseek
+        modal.query_one("#key", Input).value = "sk-test"
+        modal.query_one("#ping", Button).press()
+        await pilot.pause(0.3)
+        assert saved == {"DEEPSEEK_API_KEY": "sk-test"} and pinged == ["deepseek"]
+        assert "连通了" in str(modal.query_one("#ping-result", Static).render())
+        modal.query_one("#preset", OptionList).highlighted = 1  # claude, without its package
+        modal.query_one("#ping", Button).press()
+        await pilot.pause(0.3)
+        assert "没连通" in str(modal.query_one("#ping-result", Static).render())
+
+
+def test_a_player_without_a_usable_model_is_asked_even_with_old_saves(monkeypatch):
+    """Saves copied over from a checkout made an installed game skip the first-run question, and the
+    default Claude it had no package for failed (ModuleNotFoundError). Asked until one usable is chosen."""
+    from autokeeper import cli, config, paths
+
+    for name in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    paths.games().mkdir(parents=True, exist_ok=True)
+    paths.save_index().write_text("{}", encoding="utf-8")  # games came over
+    assert cli._new_player()
+    config.save_ui_settings({"preset": "claude", "model": ""})
+    monkeypatch.setattr(config, "claude_ready", lambda: False)
+    assert cli._new_player()  # Claude chosen, its package missing
+    config.save_ui_settings({"preset": "deepseek", "model": ""})
+    assert not cli._new_player()

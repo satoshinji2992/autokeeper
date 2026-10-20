@@ -250,6 +250,34 @@ def load_env() -> None:
             load_dotenv(f, override=False)
 
 
+PRESET_KEYS = {"deepseek": "DEEPSEEK_API_KEY", "claude": "ANTHROPIC_API_KEY"}  # the key a preset runs on, when it needs one
+
+
+def chosen() -> bool:
+    """A model chosen anywhere: the environment, the saved settings (`autokeeper login`, the game's
+    模型设置) or a config.toml; and, if it is Claude, its package installed (an extra)."""
+    named = any(os.environ.get(f"AUTOKEEPER_{name}") for name in ("PRESET", "MODEL"))
+    named = named or (paths.USER_DIR / "config.toml").is_file() or "preset" in ui_settings()
+    if not named:
+        return False
+    return load().preset != "claude" or claude_ready() or bool(os.environ.get("AUTOKEEPER_MODEL"))
+
+
+async def ping(preset: str) -> str:
+    """One short call on a preset's keeper model: "" when it answered, else what went wrong, in a line."""
+    from .harness import make_model
+
+    role = PRESETS.get(preset, DEFAULT_ROLES)["keeper"]
+    m = make_model(role, "你是连通性测试。", label="ping")
+    try:
+        await m.complete([{"role": "user", "content": "只回答两个字：收到"}])
+        return ""
+    except Exception as exc:
+        return f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}"
+    finally:
+        await m.close()
+
+
 def save_key(name: str, value: str) -> Path:
     """Put NAME=value in ~/.config/autokeeper/.env (the file load_env reads first), in place of
     an older line for the same name; the file is readable by its owner only. The running process

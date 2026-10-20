@@ -324,21 +324,48 @@ class EngineModal(ModalScreen[dict | None]):
                     yield RadioButton(Text.assemble((name.ljust(4, "　"), "bold"), "  ", note), value=name == self.mode, name=name)
             yield Input(self.model, placeholder="统一模型（可选），例如 ollama:qwen3:14b", id="model")
             yield Input(self.fallback, placeholder="备用模型（可选）：主模型出错或超出预算时使用", id="fallback")
+            yield Input(placeholder="API Key（可选；已经填过就留空）", password=True, id="key")
+            yield Static("", id="ping-result")
             with Horizontal(classes="buttons"):
                 yield Button("应用", id="apply", variant="primary")
+                yield Button("测试连接", id="ping")
                 yield Button("取消", id="cancel")
 
     def on_mount(self) -> None:
         ol = self.query_one(OptionList)
         ol.highlighted = list(self.presets).index(self.preset) if self.preset in self.presets else 0
 
-    @on(Button.Pressed)
+    def _chosen(self) -> str:
+        ol = self.query_one(OptionList)
+        return ol.get_option_at_index(ol.highlighted or 0).id or self.preset
+
+    def _key(self, preset: str) -> None:
+        """A key typed in: kept where every later start finds it (config.save_key), for this preset."""
+        from ... import config
+
+        key = self.query_one("#key", Input).value.strip()
+        if key and (name := config.PRESET_KEYS.get(preset)):
+            config.save_key(name, key)
+
+    @on(Button.Pressed, "#ping")
+    async def test(self) -> None:
+        from ... import config
+
+        preset = self._chosen()
+        self._key(preset)
+        result = self.query_one("#ping-result", Static)
+        result.update(Text(f"正在连接 {preset}…", style="dim"))
+        problem = await config.ping(preset)
+        result.update(Text(f"✓ {preset} 连通了" if not problem else f"✗ {preset} 没连通：{problem}",
+                           style="green" if not problem else "red"))
+
+    @on(Button.Pressed, "#apply, #cancel")
     def choose(self, event: Button.Pressed) -> None:
         if event.button.id != "apply":
             self.dismiss(None)
             return
-        ol = self.query_one(OptionList)
-        preset = ol.get_option_at_index(ol.highlighted or 0).id or self.preset
+        preset = self._chosen()
+        self._key(preset)
         pressed = self.query_one(RadioSet).pressed_button
         mode = pressed.name if pressed is not None and pressed.name else self.mode
         self.dismiss({"preset": preset, "mode": mode, "model": self.query_one("#model", Input).value.strip(), "fallback": self.query_one("#fallback", Input).value.strip()})

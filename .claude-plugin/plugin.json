@@ -1,6 +1,6 @@
 {
   "name": "autokeeper",
-  "version": "0.0.3.1",
+  "version": "0.0.3.2",
   "description": "在 Claude Code 里跑 CoC 7 版中文团：BCDice 掷骰、模组 Skill 包、隔离记忆的 NPC、彩色 ASCII 插图。",
   "author": { "name": "satoshinji2992" },
   "license": "MIT",

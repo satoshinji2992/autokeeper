@@ -56,3 +56,20 @@ def test_linux_gets_the_binary_from_its_tarball_and_macos_is_told_to_brew(monkey
     monkeypatch.setattr(imagery.sys, "platform", "darwin")
     monkeypatch.setattr("platform.machine", lambda: "arm64")
     assert imagery.fetch_chafa() == "" and "brew install chafa" in imagery.install_hint()
+
+
+def test_a_chafa_that_probes_the_terminal_is_told_not_to(monkeypatch, tmp_path):
+    """chafa 1.16 and later query the terminal they run in, even with their output piped (the user,
+    2026-10-20: on Windows the game went black). It is called with --probe off; older ones as before."""
+    def chafa(text: str):
+        exe = tmp_path / f"chafa-{len(text)}"
+        exe.write_text(f"#!/bin/sh\necho '{text}'\n", encoding="utf-8")
+        exe.chmod(0o755)
+        return str(exe)
+
+    if imagery.sys.platform == "win32":
+        pytest.skip("a shell script stands in for chafa")
+    imagery._quiet.cache_clear()
+    assert imagery._quiet(chafa("  --probe=ARG    Probe the terminal")) == ("--probe", "off")
+    assert imagery._quiet(chafa("  --polite=BOOL  Polite mode")) == ()
+    assert imagery._quiet(str(tmp_path / "missing")) == ()

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.3.2（2026-10-20）
+
+- 修复 Windows 装上 chafa 后进游戏黑屏、画面一闪一闪：新版 chafa（1.16 起）默认会向终端发探测序列并等回应，搅乱了游戏画面；现在调用它时关掉探测。
+- 「设置 → 模型设置」可以直接填 API Key，并有「测试连接」按钮，不用回命令行。
+- 第一次运行时，只要还没选过能用的模型（没选过，或选了 Claude 却没装它的组件）就会先问用哪家；以前搬过来的旧存档会让这一步被跳过，结果默认用了没装的 Claude，建卡报 ModuleNotFoundError。
+
 ## 0.0.3.1（2026-10-20）
 
 - 用 `uv tool install` 或 pipx 装的也能显示照片：找不到 chafa 时，第一次运行或 `autokeeper setup` 会自动下载它的官方版本（Windows、Linux）；macOS 提示 `brew install chafa`。一键安装脚本也会顺便用系统的包管理器装 chafa。

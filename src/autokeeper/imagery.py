@@ -462,6 +462,24 @@ def available() -> bool:
     return chafa_path() is not None
 
 
+@lru_cache(maxsize=4)
+def _quiet(chafa: str) -> tuple[str, ...]:
+    """What keeps a chafa from talking to the terminal the game is drawn in: since 1.16 it probes the
+    terminal by default (queries written to the console, up to 5 s waiting for the answer), which on
+    Windows tore the game's screen to black (the user, 2026-10-20). Older ones have no such option."""
+    try:
+        help_text = subprocess.run([chafa, "--help"], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.TimeoutExpired):
+        return ()
+    return ("--probe", "off") if "--probe" in help_text else ()
+
+
+def chafa_command() -> list[str]:
+    """chafa and the options every call of the game's starts with."""
+    chafa = chafa_path() or "chafa"
+    return [chafa, *_quiet(chafa)]
+
+
 def fetch_chafa() -> str:
     """chafa where the system has none: the official static build for this platform (hpjansson.org),
     one file, into the game's own tools folder; `uv tool install` cannot bring programs, and on
@@ -517,7 +535,7 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
     colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
     # The picture is already cut to the panel's shape for cells half as wide as tall; say so,
     # or chafa guesses the cell shape from the console font (Windows) and draws a thin strip.
-    cmd = [chafa_path() or "chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
+    cmd = [*chafa_command(), "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
            *STYLES.get(style, STYLES["picture"]), source]
     out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
