@@ -187,27 +187,6 @@
       } catch (e) {}
 
       (function () {
-        window.autokeeperAltKey = (session) => {
-          let tapped = false;
-          const inside = () => session.element.contains(document.activeElement);
-          document.addEventListener("keydown", (event) => {
-            if (event.key === "Alt") {
-              if (!event.repeat) tapped = inside() && !event.ctrlKey && !event.metaKey && !event.getModifierState("AltGraph");
-              if (tapped) event.preventDefault();
-            } else {
-              tapped = false;
-            }
-          }, true);
-          document.addEventListener("keyup", (event) => {
-            if (event.key !== "Alt") return;
-            if (tapped && inside() && session.socket?.readyState === 1) {
-              session.socket.send(JSON.stringify(["stdin", "\u001b[13;3u"]));
-              event.preventDefault();
-            }
-            tapped = false;
-          }, true);
-          window.addEventListener("blur", () => { tapped = false; });
-        };
         // The address the visitor typed, not the one the server guessed: a room reached over
         // Radmin VPN or ZeroTier connects back the same way.
         const terminal = document.getElementById("terminal");
@@ -233,8 +212,7 @@
         fetch("/static/js/textual.js")
           .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
           .then((code) => run(code
-            .replace(/fontFamily:"'Roboto Mono'[^"]*"/, "fontFamily:" + JSON.stringify(fonts))
-            .replace("this.terminal.onData(", "window.autokeeperAltKey(this),this.terminal.onData(")))
+            .replace(/fontFamily:"'Roboto Mono'[^"]*"/, "fontFamily:" + JSON.stringify(fonts))))
           .catch(plain);
       })();
 

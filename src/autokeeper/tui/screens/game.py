@@ -68,7 +68,7 @@ from .prelude import PreludeScreen
 from .saves import LoadScreen
 
 COMMANDS = (
-    ("输入模式", "Alt+M", "切换角色行动与向守秘人说明", "toggle_input_mode"),
+    ("输入模式", "Shift+Tab", "切换角色行动与向守秘人说明", "toggle_input_mode"),
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
@@ -113,9 +113,10 @@ class GameScreen(Screen):
         Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
         Binding("f12", "developer", "开发者模式", show=False),
-        Binding("alt,alt+m,alt+enter", "toggle_input_mode", "角色／KP", key_display="Alt+M", priority=True),
+        # Shift+Tab: a key every terminal sends (a lone Alt reaches only a browser); while Tab is
+        # going through skill names it goes back one instead (the user, 2026-10-21).
+        Binding("shift+tab", "shift_tab", "角色／KP", key_display="Shift+Tab", priority=True),
         Binding("tab", "complete_skill(1)", "补全技能", show=False, priority=True),
-        Binding("shift+tab", "complete_skill(-1)", "上个技能", show=False, priority=True),
         Binding("ctrl+s", "save", "存档", show=False),
         Binding("ctrl+a", "art_style", "画法", show=False, priority=True),  # before the input box takes it as Home
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
@@ -279,6 +280,13 @@ class GameScreen(Screen):
     def _input_line(self, text: str) -> str:
         # Bind the channel when submitted, so changing mode cannot change a queued line.
         return f"/kp {text}" if self.input_mode == "kp" and text and not text.startswith("/") else text
+
+    def action_shift_tab(self) -> None:
+        box = self.query_one("#command", Input)
+        if self._skill_choices and box.value == self._skill_value:
+            self.action_complete_skill(-1)
+        else:
+            self.action_toggle_input_mode()
 
     def action_complete_skill(self, step: int = 1) -> None:
         box = self.query_one("#command", Input)

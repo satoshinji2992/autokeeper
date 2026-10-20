@@ -457,13 +457,13 @@ async def test_alt_switches_input_mode_without_losing_the_draft_or_reclassifying
         monkeypatch.setattr(screen, "send_line", sent.append)
         box = screen.query_one("#command", Input)
         box.value = "我指的是刚才提到的书房。"
-        await pilot.press("alt+m")
+        await pilot.press("shift+tab")
         assert screen.input_mode == "kp" and box.value == "我指的是刚才提到的书房。"
         assert "对 KP" in str(box.border_title) and box.has_class("to-keeper")
         screen.busy = True
         await pilot.press("enter")
         assert screen.queued == "/kp 我指的是刚才提到的书房。" and not sent
-        await pilot.press("alt+m")
+        await pilot.press("shift+tab")
         assert screen.input_mode == "rp"
         screen._busy(False)
         assert await until(pilot, lambda: bool(sent))

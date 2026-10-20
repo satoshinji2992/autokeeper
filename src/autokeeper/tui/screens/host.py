@@ -197,13 +197,19 @@ class HostScreen(Screen):
         self._note()
 
     def _seat_prompt(self, inv: Investigator) -> Text:
+        """A seat first, who sits in it, then the module's investigator it starts with: in a new game
+        only a default the player may swap in the lobby (it read as an investigator already chosen)."""
         theme = self.app.current_theme
         who = self.plan.get(inv.id, "AI")
         colour = {"玩家": f"bold {theme.accent or 'yellow'}", "AI": f"bold {theme.secondary or 'cyan'}", "不上场": "dim"}[who]
+        label = {"玩家": "玩家来坐", "AI": "AI 扮演", "不上场": "不上场"}[who]
         t = Text()
-        t.append(who + " " * (8 - cell_len(who)), style=colour)
-        t.append(inv.name, style="bold" if who != "不上场" else "dim strike")
-        t.append(f"  {inv.occupation} · {inv.age} 岁", style="dim")
+        t.append(f"座位 {self.party.index(inv) + 1}  ", style="bold")
+        t.append(label + " " * (10 - cell_len(label)), style=colour)
+        default = "角色" if self.slot or who == "AI" else "默认角色"
+        t.append(f"\n  {default}：", style="dim")
+        t.append(inv.name, style="dim strike" if who == "不上场" else "")
+        t.append(f" · {inv.occupation} · {inv.age} 岁", style="dim")
         return t
 
     def _list_seats(self) -> None:
@@ -214,9 +220,9 @@ class HostScreen(Screen):
         if not self.slot:  # a saved party has nobody to add
             theme = self.app.current_theme
             for i in range(self.blanks):
-                t = Text("玩家" + " " * 4, style=f"bold {theme.accent or 'yellow'}")
-                t.append("空座位", style="bold")
-                t.append("  入座后选择角色", style="dim")
+                t = Text(f"座位 {len(self.party) + i + 1}  ", style="bold")
+                t.append("玩家来坐" + " " * 2, style=f"bold {theme.accent or 'yellow'}")
+                t.append("\n  空座位：入座后选角色或车卡", style="dim")
                 ol.add_option(Option(t, id=f"blank-{i}"))
             if self.blanks < lan.BLANKS:
                 ol.add_option(Option(Text("＋ 加一个空座位", style="dim"), id="add-blank"))
