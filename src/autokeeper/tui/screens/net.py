@@ -217,6 +217,14 @@ class NetGameScreen(GameScreen):
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
                            "观战模式下可使用全角括号发送场外消息。")
 
+    @work(group="offer")
+    async def _offer(self, offer: dict[str, Any]) -> None:
+        """Your dice, or your push: in a worker, so what the others do keeps coming in while you
+        decide (waiting here held every message behind the dialog, 2026-10-21)."""
+        await self.make_way()  # a big scene steps aside
+        choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
+        await self.link.send({"t": "choice", "mode": choice})
+
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
         if self.seat:
@@ -289,10 +297,7 @@ class NetGameScreen(GameScreen):
             self._topbar()
             self._turnline()
         elif t == "offer":  # throw your own dice, or push / spend luck after a failure
-            offer = msg["offer"]
-            await self.make_way()  # a big scene steps aside
-            choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
-            await self.link.send({"t": "choice", "mode": choice})
+            self._offer(msg["offer"])
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
         elif t == "ideas":  # for this screen alone
