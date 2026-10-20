@@ -96,6 +96,16 @@ class EquipmentChange(BaseModel):
     evidence: str = Field("", max_length=200, description="reveal时记录本次实际可观察经过，不重复或编造台词")
 
 
+class Failure(BaseModel):
+    """What a failed check brings about besides not succeeding; the engine settles it."""
+
+    text: str = Field("", max_length=120, description="一句话：失败时实际发生什么（耽搁、动静、损坏、受伤、被人看见、失去机会）；没有就留空")
+    clues: list[str] = Field(default_factory=list, description="模组明确写了失败也能得到的线索 id；没写就留空")
+    flags: list[str] = Field(default_factory=list, description="失败时成立的剧情标记（比如打碎了贵重物件）；没有就留空")
+    minutes: int = Field(0, ge=0, le=240, description="失败额外耗掉的分钟数")
+    damage: str = Field("", description="失败时调查员受的伤，骰子式如 1D3；没有就留空")
+
+
 class Ruling(BaseModel):
     needs_roll: bool = Field(description="这次行动要不要掷骰")
     skill: str = Field("", description="技能或属性名，如 侦查、图书馆使用、说服、力量")
@@ -113,6 +123,8 @@ class Ruling(BaseModel):
         "模组内", description="模组内：场景资料有对应内容；可即兴：合理但模组未写；出格：确实违背时代或能力；捷径和偏离主线不算出格"
     )
     repeat: bool = Field(False, description="同一个调查员刚做过同样的检定，情况没变：不重掷，那次的结果照旧")
+    on_fail: Failure = Field(default_factory=Failure, description="这次检定失败、不再孤注一掷时的后果；多数时候留空")
+    on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
     reason: str = Field("", description="一句话理由（玩家看不到）")
     # Filled in by the engine from the director's plan, never by the arbiter.
@@ -224,6 +236,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 专用工具须有背包、持有者或本地物件记录。缺少时说明条件尚不具备；仅想做某事，不等于已经取得工具、谈妥交易或完成动作。
 - equipment 只维护本次实际涉及的重要武器、钥匙、证物、关键工具与重要消耗品。拔出、穿戴或藏好填对应模式；明确出示或发现才 reveal 并附可观察经过，不因站在同一房间就公开 NPC 的随身物。不替玩家消耗未使用的东西，也不统计普通餐具与衣物杂项。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
+- 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
   观察成功若没有对应线索，就明确范围内没有新发现；不指望叙述员事后补出痕迹、可拾取物件或跟踪方向。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。

@@ -153,15 +153,13 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         await pilot.pause(0.2)
         await pilot.press("right")  # → takes the suggestion
         assert box.value == ".ra 侦查"
-        offer = {"kind": "push", "skill": "图书馆使用", "target": 60, "need": 60, "value": 63, "can_push": True, "luck": 3, "left": 52, "core": True}
+        offer = {"kind": "push", "skill": "图书馆使用", "target": 60, "need": 60, "value": 63, "can_push": True, "luck": 3, "left": 52,
+                 "risk": "管理员下班锁门，你被关在馆里过夜"}
         app.push_screen(PushModal(offer))
         await pilot.pause()
         stakes = "".join(str(w.render()) for w in app.screen.query(Static))
-        assert "更严重的后果" in stakes and "幸运 55 → 52" in stakes and "仍可调查" in stakes and "仍可取得" not in stakes  # first miss
-        app.pop_screen()
-        app.push_screen(PushModal({**offer, "due": True}))  # missed before: giving up now finds it, at a price
-        await pilot.pause()
-        assert "仍可取得关键发现" in "".join(str(w.render()) for w in app.screen.query(Static))
+        assert "再次失败：管理员下班锁门，你被关在馆里过夜" in stakes and "幸运 55 → 52" in stakes  # the price, before the choice
+        assert "接受这次失败" in stakes and "仍可取得" not in stakes  # giving up finds nothing
 
 
 async def test_after_the_ending_only_the_dice_lookups_work(canned, monkeypatch):

@@ -12,7 +12,7 @@ from PIL import Image
 
 from autokeeper import paths
 from autokeeper.agents import guard
-from autokeeper.agents.cast import Action, Ruling, Sketch
+from autokeeper.agents.cast import Action, Failure, Ruling, Sketch
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
@@ -673,33 +673,50 @@ async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
     assert cast.asked[-1][0] == "推进"
 
 
-async def test_a_failed_roll_neither_sits_on_a_core_clue_nor_hands_it_out(module, fake):
+async def test_a_failed_roll_stays_failed_and_the_keeper_hears_what_was_missed(module, fake):
     look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
     ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)
     game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
-    fake.queue(99)  # a plain failure: a push is offered first
-    turn = await game.resolve(look, ruling)
-    assert turn.push and "c_gears" not in game.state.clues
-    first = await game.push("drop")
-    assert "c_gears" not in game.state.clues and any("尚未取得线索" in n for n in first.notes)
-    fake.queue(99)  # looking again, and failing again
-    await game.resolve(look, ruling)
-    before = game.state.minutes
-    fake.queue(10)  # the gears' sanity check
-    second = await game.push("drop")
-    assert "c_gears" in game.state.clues and game.state.minutes - before == 20  # found the second time, at a cost
-    assert any("关键线索不能卡住" in n for n in second.notes)
+    for _ in range(2):  # failing twice hands nothing over any more (the user's call, 2026-10-20)
+        fake.queue(99)
+        turn = await game.resolve(look, ruling)
+        assert turn.push and "c_gears" not in game.state.clues
+        before = game.state.minutes
+        dropped = await game.push("drop")
+        assert "c_gears" not in game.state.clues and game.state.minutes == before  # no clue, no fixed price
+        assert any("没有取得：齿轮间" in n and "不在叙述里补出" in n for n in dropped.notes)
 
 
-async def test_a_failed_push_brings_the_core_clue_at_once(module, fake):
+async def test_a_failure_the_module_lets_find_something_finds_it(module, fake):
     look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
-    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10)
+    module.flags["gear_jammed"] = "齿轮被弄卡住了"
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10,
+                    on_fail=Failure(text="手指被齿轮夹了一下，还是看清了", clues=["c_gears"], flags=["gear_jammed"]))  # fmt: skip
     game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
     fake.queue(99)
     await game.resolve(look, ruling)
-    fake.queue(99, 10)  # the pushed roll fails too; then the gears' sanity check
-    await game.push("push")
-    assert "c_gears" in game.state.clues
+    fake.queue(10)  # the gears' sanity check
+    dropped = await game.push("drop")
+    assert "c_gears" in game.state.clues and "gear_jammed" in game.state.flags
+    assert any("实际发生：手指被齿轮夹了一下" in n for n in dropped.notes) and not any("没有取得" in n for n in dropped.notes)
+
+
+async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake):
+    look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
+    module.flags["warden_woken"] = "守钟人被惊动了"
+    risk = Failure(text="齿轮突然转动，夹伤了手，还惊动了守钟人", flags=["warden_woken"], minutes=15, damage="1D3")
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10, on_push_fail=risk)
+    game, _, events = make(module, fake, {"x": (look, ruling)}, location="tower")
+    fake.queue(99)
+    turn = await game.resolve(look, ruling)
+    assert turn.push["risk"] == risk.text  # said before the choice
+    hp, before = game.state.investigator.hp, game.state.minutes
+    fake.queue(99).queue_totals(2)  # the pushed roll fails; the wound is 2
+    pushed = await game.push("push")
+    assert "c_gears" not in game.state.clues and "warden_woken" in game.state.flags
+    assert game.state.minutes - before == 15 and game.state.investigator.hp == hp - 2
+    assert any(e["type"] == "outcome" and e["lines"][0] == f"孤注一掷也没成：{risk.text}" for e in events)
+    assert any("孤注一掷也没有成功" in n for n in pushed.notes)
 
 
 async def test_a_look_around_does_not_empty_a_room(module, fake):

@@ -158,7 +158,7 @@ class GameState(BaseModel):
     plugin_timers: list[dict] = Field(default_factory=list)
     plugin_marks: dict[str, dict] = Field(default_factory=dict)
     plugin_serial: int = 0
-    missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts at it (Game._fail_forward)
+    missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts, from older saves (a failure no longer hands a clue over)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own

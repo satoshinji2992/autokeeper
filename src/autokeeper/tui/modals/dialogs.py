@@ -100,7 +100,8 @@ class PushModal(ModalScreen[str]):
             body = Text()
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
-                body.append(f"采用更冒险的方式重试，目标仍为 ≤{need}。再次失败将触发更严重的后果；"
+                risk = o.get("risk") or "会有更严重的后果"
+                body.append(f"采用更冒险的方式重试，目标仍为 ≤{need}。再次失败：{risk}。"
                             "同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
             if o.get("luck") is not None:
                 left = o.get("left")
@@ -109,12 +110,7 @@ class PushModal(ModalScreen[str]):
                 body.append(f"幸运 {left + o['luck']} → {left}，" if left is not None else "")
                 body.append("花费后会降低当前幸运值。\n")
             body.append("放弃：", style="bold")
-            if o.get("due"):
-                body.append("接受失败。仍可取得关键发现，但需承担额外代价，如消耗时间或引起注意。")
-            elif o.get("core"):
-                body.append("接受失败。关键线索仍可调查，可改变方式或再次搜索。")
-            else:
-                body.append("接受这次失败。")
+            body.append("接受这次失败。可以换个办法、换个人再试。")
             yield Static(body, classes="modal-body")
             with Horizontal(classes="buttons"):
                 if o.get("can_push"):

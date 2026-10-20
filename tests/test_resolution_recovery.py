@@ -8,7 +8,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from autokeeper.agents.cast import Action, Ruling
+from autokeeper.agents.cast import Action, Failure, Ruling
 from autokeeper.engine import graph
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
@@ -310,7 +310,9 @@ async def test_damage_tool_receipt_does_not_reroll_damage_if_constitution_check_
 @pytest.mark.parametrize("choice", ["push", "luck", "drop"])
 async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regaining(module, fake, choice):
     action = Action(kind="investigate", summary="查旧报", target="旧报合订本")
-    ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3)
+    # A failure the module lets find the paper at a price: what giving up settles, and resumes.
+    ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3,
+                    on_fail=Failure(text="翻到天黑才找着", clues=["c_archive"], minutes=20))
     fake.queue(65)
     if choice == "push":
         fake.queue(5)
@@ -319,8 +321,6 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     first = await game.resolve(action, ruling)
     assert first.push and game.state.pending_push
     luck, start = game.state.investigator.luck, game.state.minutes
-    if choice == "drop":
-        game.state.missed["c_archive"] = 1
     started = asyncio.Event()
 
     async def blocked(event: dict) -> None:
@@ -342,8 +342,6 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     assert sum(entry.kind == "clue" for entry in resumed.state.log) == 1
     assert resumed.state.investigator.luck == luck - (5 if choice == "luck" else 0)
     assert resumed.state.minutes == start + (20 if choice == "drop" else 0)
-    if choice == "drop":
-        assert resumed.state.missed["c_archive"] == 2
     assert len(turn.checks) == (1 if choice == "push" else 0)
     assert not fake.values and not resumed.state.pending_resolution
     await game.close()

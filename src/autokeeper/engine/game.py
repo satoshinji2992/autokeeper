@@ -20,7 +20,7 @@ from pydantic import TypeAdapter
 
 from .. import weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Ruling
+from ..agents.cast import Action, Cast, Failure, Ruling
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
@@ -977,29 +977,44 @@ class Game:
         r.now, r.go, r.note = list(applied.now), applied.go, applied.note
         return r
 
-    async def _fail_forward(self, ids: list[str], turn: Turn, *, pushed: bool = False) -> None:
-        """Do not sit on clues, do not hand them out either. A core clue missed once stays where
-        it is, and the keeper shows how close they came; missed again, or after a pushed roll
-        failed, it turns up at a price the keeper has to tell (time lost, noise made, something
-        given away)."""
-        st = self.state
+    async def _failed(self, failure: Failure, wanted: list[str], turn: Turn, action: Action | None, *,
+                      pushed: bool = False) -> None:
+        """A check that failed stays failed (the user's call, 2026-10-20: no clue for a failure, no
+        fixed price). Only what the arbiter said a failure brings about, the module's own word
+        first, is settled here (a clue the module lets a failure find, a flag, time, a wound),
+        and the keeper is told what was tried, what was not found and what happened."""
+        st, step = self.state, self._resolution_step
+        clues = self._valid_clues([c for c in failure.clues if c not in st.clues], action)
+        missed = [self.m.clue(c).title for c in wanted if c not in st.clues and c not in clues]
+        flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
-        def missed() -> list[str]:
-            core = [c for c in ids if self.m.clue(c).core and c not in st.clues]
-            for c in core:
-                st.missed[c] = st.missed.get(c, 0) + 1
-            due = [c for c in core if pushed or st.missed[c] >= 2]
-            if not due and core:
-                turn.notes.append("本次检定失败，尚未取得线索；只交代这次方法未奏效，不暗示隐藏内容或承诺原样重试会成功。")
-            if due:
-                st.minutes += 20
-            return due
+        def time() -> None:
+            st.minutes += max(0, min(failure.minutes, 240))
 
-        due = await self._resolution_step("miss-count", turn, missed)
-        if due:
-            await self._gain(due, turn, turn.action)
-            await self._resolution_step("miss-note", turn, lambda: turn.notes.append(
-                "关键线索不能卡住：继续查找后取得上述线索，系统已额外计入 20 分钟。只叙述这项时间代价与发现经过，不另加噪声、把柄、损失或 NPC 敌意。"))
+        await step("fail-time", turn, time)
+        if flags:
+            await step("fail-flags", turn, lambda: self._flags(flags, turn))
+        if clues:
+            await step("fail-clues", turn, lambda: self._gain(clues, turn, action))
+        if failure.damage.strip():
+            def wound() -> dict:
+                inv = st.investigator
+                trial = inv.model_copy(deep=True)
+                hurt = self.rules.damage(trial, failure.damage.strip())
+                inv.__dict__.update(trial.__dict__)
+                st.add("damage", hurt.describe(), who=inv.name)
+                return {"type": "damage", "who": inv.name, "text": hurt.describe()}
+
+            notice = await step("fail-damage", turn, wound)
+            await step("fail-damage-notice", turn, lambda: self.emit(notice))
+        happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
+                                f"{st.investigator.name}受了伤" if failure.damage.strip() else "") if x]
+        if not missed and not happened:
+            return  # the roll's card says it: nothing was within reach and nothing else came of it
+        note = ("孤注一掷也没有成功" if pushed else "这次检定失败") + (f"，没有取得：{'、'.join(missed)}" if missed else "")
+        note += f"。实际发生：{'；'.join(happened)}" if happened else "。没有别的后果"
+        await step("fail-note", turn, lambda: turn.notes.append(
+            note + "。照实讲失败，不在叙述里补出没拿到的东西；之后可以有新的机会，这一轮不补偿。"))
 
     async def _nudge(self, turn: Turn) -> None:
         """Stuck for a while: resume the same lead even after its cooldown was saved."""
@@ -1218,19 +1233,18 @@ class Game:
                                      "need": _threshold(rolled.target, ruling.difficulty), "difficulty": ruling.difficulty,
                                      "bonus": ruling.bonus, "clues": wanted, "flags": ruling.set_flags,
                                      "can_push": rolled.can_push, "luck": luck, "left": inv.luck - (luck or 0),
-                                     "core": any(self.m.clue(c).core for c in wanted),
-                                     "due": any(self.m.clue(c).core and st.missed.get(c, 0) for c in wanted),
+                                     "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
+                                     "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
                                      "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value}
                         st.pending_push = turn.push
-            return {"passed": passed, "event": event,
-                    "missed": self._valid_clues(ruling.clues_on_success, action) if not passed and turn.push is None and turn.checks else []}
+            return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
         checked = await step("check", turn, check)
         passed = checked["passed"]
         if checked["event"]:
             await step("check-notice", turn, lambda: self.emit(checked["event"]))
-        if checked["missed"]:
-            await step("missed", turn, lambda: self._fail_forward(checked["missed"], turn))
+        if checked.get("failed"):
+            await self._failed(ruling.on_fail, self._valid_clues(ruling.clues_on_success, action), turn, action)
 
         def available() -> dict:
             gained = self._valid_clues(ruling.auto_clues, action)
@@ -1362,7 +1376,7 @@ class Game:
 
         known = await step("initial", turn, initial)
         if mode == "drop":
-            await step("missed", turn, lambda: self._fail_forward(pending["clues"], turn))
+            await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
             won = [c for c in turn.clues if c in pending["clues"]]
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
@@ -1381,8 +1395,6 @@ class Game:
             turn.checks.append(rolled)
             st.add("dice", rolled.describe(), who=inv.name)
             self._settle(record, rolled.passed, rolled.describe())
-            if not rolled.passed:
-                turn.notes.append("孤注一掷失败：兑现检定前已明确的风险，后果与行动相称，不另加无关惩罚")
             return {"passed": rolled.passed, "notice": {"type": "dice", "who": inv.name, **_check_view(rolled)}}
 
         checked = await step("check", turn, check)
@@ -1391,8 +1403,8 @@ class Game:
         if passed:
             await step("flags", turn, lambda: self._flags(pending.get("flags", []), turn))
             await step("gain", turn, lambda: self._gain(pending["clues"], turn, None))
-        else:
-            await step("missed", turn, lambda: self._fail_forward(pending["clues"], turn, pushed=True))
+        else:  # what was said before the choice now happens (Failure, Ruling.on_push_fail)
+            await self._failed(Failure.model_validate(pending.get("on_push_fail") or {}), pending["clues"], turn, None, pushed=True)
         await step("plugins", turn, lambda: self.plugins.settled(turn))
         won = [c for c in turn.clues if c in pending["clues"]]
         done = [f for f in pending.get("flags", []) if f in st.flags and f not in known]
@@ -1400,7 +1412,7 @@ class Game:
         if lucky:
             lines.insert(0, f"花了 {pending['luck']} 点幸运，算作成功")
         elif not passed:
-            lines.insert(0, "孤注一掷也没成：后果会找上门")
+            lines.insert(0, f"孤注一掷也没成：{pending['risk']}" if pending.get("risk") else "孤注一掷也没成")
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
         await step("ending", turn, lambda: self._check_ending(turn))
         await step("settle", turn, lambda: self._settle(record))
