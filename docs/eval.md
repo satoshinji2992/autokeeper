@@ -160,6 +160,21 @@ AI 调查员不像真人，所以拿真人存档来测。回合图在每一轮�
 
 加了反而更多。翻明细：点名说谁不在，守秘人有时反倒把他写了进来（「阿萨塔还在，隔着几道门」）；「叫一声听得见」让守秘人把书房里的托马斯直接写到门厅递手杖。另一面，不加提示时也有「家里没人」这种老问题（托马斯就在书房）。所以这三句没有留下，改成在解析那一层处理：玩家要找的人在同一栋房子的另一间屋，就走过去（`world/context.nearby`）。明细在 `dev/output/eval/ab-notes-on-rejudged.json` 和 `ab-notes-off-rejudged.json`。
 
+### 比两组提示词：控制精准度
+
+```bash
+uv run autokeeper eval session zhuishuren-1019-224053 --turns 28,44 --parallel 1 --no-baseline --out a1.json
+uv run autokeeper eval --prompts dev/prompts/kcmix.yaml session zhuishuren-1019-224053 --turns 28,44 \
+    --parallel 1 --no-baseline --given a1.json --out b1.json
+uv run autokeeper eval compare --a 'a*.json' --b 'b*.json'
+```
+
+`eval --prompts` 只在这一次评测里换掉文件里写的提示词（`agents/cast.py` 里的 `*_SYSTEM`，或 `skills/` 下的技能），不改任何文件；写法见 `eval/variants.py`，用过的变体放在 `dev/prompts/`。替换的原句必须正好出现一次，占位符不能变，否则不跑。`--given` 让这一遍沿用另一份报告里同一轮的行动和裁定（模组内的才沿用，导演即兴的那轮照常重新裁定），比守秘人或 NPC 的提示词时，两边面对同样的裁定，差别只来自被比的那部分。`--no-baseline` 不再核对当时的记录，省一半核对调用。`--parallel 1` 时重放和核对都一次一个调用。
+
+报告里每一轮多了不经裁判、按规则数出来的几项（`eval/control.py`）：守秘人的场面快照第一次就通过、退回、第二次仍不通过，以及退回的原因；NPC 因为回应做不到被重问几次、最后落进「未落实」几次；NPC 嘴上说一起去、递东西、走开，却没填 accompany、items、leave，或者守秘人的场面写某人跟着、走了、拿出东西，那人自己的回应却没有这个字段；见面安排给了几次、填了 played 几次；裁定员修 JSON 几次、给了几个用不上的线索 id；检定失败那一轮讲出了该得的线索，或者讲出了还没人找到、要检定才有的线索原文（五字片段）；玩家要悄悄做的事叙述写成喊出来；结算里没有伤害，叙述却写调查员受了伤；同一栋房子里明明有人，叙述写没人应；在别处的人在叙述里开口、走动。核对模型另外多看两类：「代做」（替调查员做了玩家没说的事）和「升级」（结算里没有的伤害、袭击、追赶，或者把危险写得比记录更近更重）。
+
+`eval compare` 把两组报告按轮配对：每项指标给各遍合计的均值 ± 标准差，再把每一轮两边各遍的平均数相比，B 更少的轮和更多的轮做符号检验；另附两边叙述的套话和句长作为文风护栏。
+
 ## 守秘人用哪个 Claude 模型
 
 `eval style` 固定《追书人》9 段的行动、裁定、NPC 台词和骰子，只有守秘人真调用；每个模型跑 1 遍，样本很小。价格是 Claude Code 报出的等价 API 价，缓存命中后的每次调用。Opus、Sonnet、Haiku 在 2026-10-18 的工作树上测，Fable 只有早一版代码上的一遍。

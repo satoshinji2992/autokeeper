@@ -751,6 +751,19 @@ eval_app = typer.Typer(help="评测")
 app.add_typer(eval_app, name="eval")
 
 
+@eval_app.callback()
+def eval_main(
+    prompts: Annotated[Path | None, typer.Option(help="换一组提示词再评测：YAML 文件，写法见 eval/variants.py；不改任何文件")] = None,
+) -> None:
+    """评测。加 --prompts 时，这一次评测用文件里写的提示词变体。"""
+    if prompts is not None:
+        from .eval import variants
+
+        v = variants.load(prompts)
+        variants.apply(v)
+        console.print(f"提示词变体：{v.name}（{v.digest}）{v.note}，换了 {'、'.join(v.texts)}")
+
+
 @eval_app.command("rhetoric")
 def eval_rhetoric(
     module: Path = Path("modules/zhuishuren"),
@@ -951,11 +964,14 @@ def eval_session(
     parallel: Annotated[int, typer.Option(min=1, max=8, help="同时重放几轮")] = 3,
     out: Annotated[Path | None, typer.Option(help="报告写到哪里；默认 dev/output/eval/session-<存档>-<时间>.json")] = None,
     blind: Annotated[bool, typer.Option("--blind-keeper", help="重放时守秘人看不到底牌，用来和看得到时对照")] = False,
+    baseline: Annotated[bool, typer.Option("--baseline/--no-baseline", help="也核对当时的记录；比两组提示词时不需要，省一半核对调用")] = True,
+    given: Annotated[Path | None, typer.Option(help="另一份报告：同一轮的行动和裁定照它的用（模组内的才用），比守秘人或 NPC 提示词时两边面对同样的裁定")] = None,
 ) -> None:
     """拿一局真人存档逐轮重放：从每轮之前的局面、用玩家原话和当时的骰子，跑现在的流程；核对叙述和世界记录对不对得上、有没有说漏秘密，和当时比。"""
     from .eval.session import run
 
-    report = asyncio.run(run(slot, turns=turns, recorded_only=recorded, parallel=parallel, out=out, log=console.print, blind=blind))
+    report = asyncio.run(run(slot, turns=turns, recorded_only=recorded, parallel=parallel, out=out, log=console.print, blind=blind,
+                             baseline=baseline, given=given))
     for side, label in (("recorded", "当时"), ("replayed", "现在")):
         got = report["summary"].get(side)
         if not got:
@@ -971,9 +987,53 @@ def eval_session(
         if "woke_pairs" in got:  # each turn starts from the save, so the backstage call count is not a game's
             line += f"；幕后唤醒 {got['woke_pairs']} 种（人物，原因）"
         console.print(line)
+        if sc := got.get("scene"):
+            npc, fields, arb, clues = got["npc_checks"], got["fields"], got["arbiter"], got["clue_slips"]
+            console.print(f"  场面快照 {sc['told']} 次：第一次就通过 {sc['held']}，退回 {sc['sent_back']}，"
+                          f"显示后才不通过 {sc['kept_partial']}，读不出 {sc['no_scene']}；第二次仍不通过 {sc['second_failed']}；"
+                          f"退回原因 {sc['reasons']}")
+            console.print(f"  NPC 回应 {npc['replies']} 次：重问 {npc['reasks']} 次，落进未落实 {npc['unsettled']} 次 {npc['reasons']}；"
+                          f"嘴上说了没填字段 {fields['said_missing']} 处，和守秘人场面对不上 {fields['scene_vs_reply']} 处，"
+                          f"见面安排给了 {fields['meetings_offered']} 次、填了 played {fields['meetings_marked']} 次")
+            console.print(f"  裁定员修 JSON {arb['repairs']} 次，用不上的线索 id {arb['invalid_clues']} 个；"
+                          f"检定失败还讲出该得的线索 {clues['missed_told']} 处，讲出没找到的检定线索原文 {clues['early_told']} 处")
     if report["summary"]["failed"]:
         console.print(f"[yellow]{report['summary']['failed']} 轮重放失败，见报告[/]")
+    if report["summary"].get("halted"):
+        console.print(f"[red]撞到额度上限，后面的回合没有重放：{report['summary']['halted']}[/]")
+        raise typer.Exit(2)
     console.print(f"报告：{report['out']}")
+
+
+@eval_app.command("compare")
+def eval_compare(
+    a: Annotated[list[Path], typer.Option(help="变体 A 的 eval session 报告，可写多次或用通配符")],
+    b: Annotated[list[Path], typer.Option(help="变体 B 的报告")],
+    out: Annotated[Path | None, typer.Option(help="比较结果写到哪里")] = None,
+) -> None:
+    """两组提示词变体的重放报告逐轮配对：每项指标各遍合计的均值 ± 标准差，以及逐轮的符号检验（B 更少算 B 好）。"""
+    import glob
+    import json
+
+    from rich.table import Table
+
+    from .eval.session import compare
+
+    def reports(paths_: list[Path]) -> list[dict]:
+        files = [Path(f) for p in paths_ for f in (sorted(glob.glob(str(p))) or [str(p)])]
+        return [json.loads(f.read_text(encoding="utf-8")) for f in files]
+
+    got = compare(reports(a), reports(b))
+    table = Table(title=f"{len(got['turns'])} 轮 · A {got['runs'][0]} 遍 · B {got['runs'][1]} 遍", title_justify="left")
+    for col in ("指标", "A 每遍", "B 每遍", "B 更少的轮", "B 更多的轮", "p"):
+        table.add_column(col)
+    for k, v in got["metrics"].items():
+        table.add_row(k, f"{v['a'][0]} ± {v['a'][1]}", f"{v['b'][0]} ± {v['b'][1]}", str(v["b_better"]), str(v["b_worse"]), f"{v['p']:.3f}")
+    console.print(table)
+    console.print(f"文风护栏 A {got['style']['a']}；B {got['style']['b']}")
+    if out:
+        out.write_text(json.dumps(got, ensure_ascii=False, indent=1), encoding="utf-8")
+        console.print(f"明细：{out}")
 
 
 @eval_app.command("rejudge")

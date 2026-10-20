@@ -70,6 +70,13 @@ async def test_a_turn_is_played_again_from_the_game_before_it(fake, monkeypatch)
     keeper, lines = session.told(st, 2)
     assert lines == ["老守钟人：warden 的回答"] and keeper in ("", "叙事")  # a plain exchange needs no retelling
     assert not paths.save(st.slot).exists()  # nothing is saved
+    watched = next(e for e in shown if e.get("type") == "control")  # the engine's own checks, counted (eval/control.py)
+    assert set(watched) == {"type", "scene", "npc", "fields", "arbiter"}
+    # Another run's action and ruling, taken over: the same decisions, whatever this cast would parse.
+    given = {"action": LOOK.model_dump(), "ruling": SCRIPT["看看告示"][1].model_dump()}
+    st, shown = await session.replay(EXAMPLE, rec[1]["state"], "问守钟人", [40], turn=2, given=given)
+    assert any(e.get("type") == "action" and e.get("kind") == "investigate" for e in shown)
+    assert session.pairable(given) and not session.pairable({**given, "ruling": {"scope": "可即兴"}})
 
 
 def test_the_measures(fake):

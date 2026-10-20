@@ -14,10 +14,17 @@ Per turn, for the recorded turn (the baseline) and the replayed one alike:
                 it reads twice, and a problem stands when both readings found one of its kind.
     target      the player named someone; did the parsed action keep them, or put another in
     echo        how much of an NPC's line the narration after it says again
+    control     what the engine's own checks said, no judge (eval/control.py): the keeper's scene held
+                the first time or went back, NPC replies asked again or left unsettled, fields an NPC's
+                words call for and it left empty, the arbiter's repairs and clue ids it could not use,
+                a failed check's clue told anyway, a clue behind a check told before anyone found it
     calls       seconds and cost of the turn's model calls (replays only)
 
     autokeeper eval session <slot> --turns 70-80      # these turns only
     autokeeper eval session <slot> --recorded         # judge the recorded turns, play nothing
+    autokeeper eval session <slot> --no-baseline      # replay, and leave the recorded turns unjudged
+    autokeeper eval --prompts v.yaml session <slot>   # the same with a prompt variant (eval/variants.py)
+    autokeeper eval compare a1.json a2.json -- b1.json b2.json   # two variants, turn by turn
 """
 
 from __future__ import annotations
@@ -43,6 +50,7 @@ from ..harness.models import ModelPool
 from ..module.schema import Module
 from ..world import knowledge
 from ..world.context import rooms
+from . import control, variants
 from .style import Loaded, module_of
 
 GONE = ("死亡", "失踪")
@@ -321,7 +329,18 @@ async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
 judge_prompt = check.prompt
 
 
+def clue_slips(m: Module, st: GameState, turn: int, ruling: dict | None, keeper: str, lines: list[str]) -> dict[str, list[str]]:
+    """A failed check's clue told anyway, and a clue behind a check told before it was found
+    (eval/control.clue_slips): what was told this turn, keeper and NPCs, against what was public."""
+    words = "\n".join([keeper, *(x.partition("：")[2] for x in lines)])
+    public = seen_before(st, turn) + "\n" + shown_now(st, turn, npc=False)
+    wanted = (ruling or {}).get("clues_on_success") or []
+    missed = [c for c in wanted if c not in st.clues] if control.failed_check(st.log, turn) else []
+    return control.clue_slips(m, st.clues, words, public, missed=missed)
+
+
 # -- playing a turn again --------------------------------------------------------------------------
+LIMIT = re.compile(r"session limit|usage limit|hit your .*limit|rate.?limit|429|529", re.I)  # stop: the quota is spent
 _turn = contextvars.ContextVar("eval_turn", default=0)
 
 
@@ -337,11 +356,38 @@ class _Calls:
                                                    "cost": round(reply.cost_usd, 6), "repairs": reply.repairs})  # fmt: skip
 
 
+def _feed(cast: Any, given: dict[str, Any]) -> None:
+    """The paired run's action and ruling, handed back to this turn's first parse and first ruling:
+    two variants of the keeper's or an NPC's prompt then meet the same decisions, and what differs
+    comes from the prompt compared. Later parses and rulings in the turn are the cast's own."""
+    from ..agents.cast import Action, Ruling
+
+    intent, arbiter = cast.intent, cast.arbiter
+    left: dict[str, Any] = {"intent": Action.model_validate(given["action"])}
+    if given.get("ruling"):
+        left["arbiter"] = Ruling.model_validate(given["ruling"])
+
+    async def fed_intent(state, text):
+        return left.pop("intent") if "intent" in left else await intent(state, text)
+
+    async def fed_arbiter(state, action, at=None):
+        return left.pop("arbiter") if "arbiter" in left else await arbiter(state, action, at=at)
+
+    cast.intent, cast.arbiter = fed_intent, fed_arbiter
+
+
+def pairable(got: dict[str, Any] | None) -> bool:
+    """A replayed turn whose action and ruling another run can take over: the module had it (the
+    director made nothing for it, which the other run would not have)."""
+    return bool(got and got.get("action") and (got.get("ruling") or {}).get("scope", "模组内") == "模组内")
+
+
 async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int], *, turn: int,
-                 timeout: float = 240, blind: bool = False) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
+                 timeout: float = 240, blind: bool = False, given: dict[str, Any] | None = None) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
     """One turn played again from the game as it stood before it: the game after it, and what
     the turn showed (its events, without the narration's pieces). `blind` keeps the keeper from
-    the backstage, to compare with the keeper that sees it."""
+    the backstage, to compare with the keeper that sees it; `given`, another run's action and
+    ruling of this turn (pairable) to use instead of asking again (_feed)."""
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.types import Command
 
@@ -360,6 +406,10 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
     game = Game(m, st, cast, Rules(dice=Loaded(dice)))  # type: ignore[arg-type]
     game.director_wait = None  # nobody is waiting: a plan the turn asks for lands in it
     game.world_later = True  # as on a screen: the NPCs' own decisions come after the turn is told
+    if pairable(given):
+        _feed(cast, given)  # type: ignore[arg-type]
+    watch = control.Watch()
+    watch.attach(cast, game)
     app = graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": f"eval-{turn}"}}
     shown: list[dict[str, Any]] = []
@@ -381,6 +431,9 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
         report = game.told.report if game.told is not None else ""
         shown.append({"type": "hints", "lines": [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]})
         shown.append({"type": "woke", "lines": [x for r in game.debug_world for x in r.woke]})  # who decided backstage, and why
+        journal = getattr(game, "debug_journal", None)
+        rows = [r for r in (journal.read(kind="scene")[0] if journal else []) if r.get("run") == journal.run]
+        shown.append({"type": "control", **watch.result(m, rows)})
     finally:
         await game.close()
         await cast.close()
@@ -389,7 +442,11 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
 # -- the whole run -----------------------------------------------------------------------------------
 async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: Path | None = None, parallel: int = 3,
-              log=print, blind: bool = False) -> dict[str, Any]:  # fmt: skip
+              log=print, blind: bool = False, baseline: bool = True, given: Path | None = None) -> dict[str, Any]:  # fmt: skip
+    """`parallel`: turns played at once, and the judge's calls at once. `baseline`: judge the recorded
+    turns too (an A/B of two variants compares replays and needs no baseline). `given`: another
+    run's report, whose actions and rulings this run takes over where they can be (pairable)."""
+    paired = {r["turn"]: r.get("replayed") for r in json.loads(Path(given).read_text(encoding="utf-8"))["rows"]} if given else {}
     record = recorded(slot)
     have = sorted(t for t in record if t - 1 in record)
     chosen = parse_turns(turns, have)
@@ -402,13 +459,14 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
     out = out or paths.dev_output("eval") / f"session-{slot}-{time.strftime('%m%d-%H%M%S')}.json"
     work = out.with_suffix("")  # the replays' own games folder: their journals and pictures stay out of data/games
     cfg = config.load()
-    pool = ModelPool(replace(cfg.role("summarizer"), effort=None), size=4, label="judge")
+    pool = ModelPool(replace(cfg.role("summarizer"), effort=None), size=min(4, parallel), label="judge")
     calls = _Calls()
     trace.taps.append(calls)
     real_games = paths.games
     paths.games = lambda: work / "games"  # type: ignore[assignment]
     sem = asyncio.Semaphore(parallel)
     rows: list[dict[str, Any]] = []
+    halted: list[str] = []  # the subscription's limit was hit: the turns after it are not played
 
     async def judge(m: Module, st: GameState, turn: int, before: dict[str, Any], text: str, ruling: dict | None,
                     side: dict[str, Any], hints: list[str] | None = None) -> list[dict[str, str]]:  # fmt: skip
@@ -425,6 +483,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
         # the party of the handprints once she trusts them is initiative); only what it could not know counts.
         said = side["npc_said"] = speakers(m, lines)
         unknown = side["npc_unknown"] = {npc: [fid for fid in hidden if not knowledge.sees(st.record.facts[fid], npc)] for npc in said}
+        side["clues"] = clue_slips(m, st, turn, ruling, keeper, lines)
         problems, side["leaks"], *npc_slips = await asyncio.gather(
             ask_judge(pool, record_text, text, keeper, lines), ask_leaks(pool, hidden, keeper, shown),
             *(ask_leaks(pool, {fid: hidden[fid] for fid in unknown[npc]}, "\n".join(words), given, npc=True) for npc, words in said.items()))
@@ -435,11 +494,15 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
     def measures(m: Module, st: GameState, turn: int, text: str, action: dict | None, before: dict[str, Any]) -> dict[str, Any]:
         keeper, lines = told(st, turn)
         then = GameState.model_validate(before)  # whom the player could name: those here before they acted
+        ruled = {"secret_spoken": control.secret_spoken(text, keeper), "unhurt": control.unhurt(keeper, st.log, turn),
+                 **control.presence_rules(m, st, keeper)}  # what the telling does that a rule can see
         return {"target": target(m, then, text, action), "echo": echo(keeper, lines), "chars": len(keeper),
-                "keeper": keeper, "npc": lines, "action": action}  # fmt: skip
+                "keeper": keeper, "npc": lines, "action": action, "rules": ruled}  # fmt: skip
 
     async def one(turn: int) -> None:
         async with sem:
+            if halted:
+                return
             before = record[turn - 1]["state"]
             after = record[turn]
             text = said(after["state"], turn)
@@ -453,11 +516,13 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                 improv.restore(m, then.improv)
             row: dict[str, Any] = {"turn": turn, "input": text}
             row["recorded"] = measures(m, then, turn, text, after.get("action"), before)
-            row["recorded"]["problems"] = await judge(m, then, turn, before, text, after.get("ruling"), row["recorded"])
+            if baseline:
+                row["recorded"]["problems"] = await judge(m, then, turn, before, text, after.get("ruling"), row["recorded"])
             if not recorded_only:
                 started = time.monotonic()
                 try:
-                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, blind=blind)
+                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, blind=blind,
+                                             given=paired.get(turn))
                     m2 = Module.load(m_dir)
                     if st.improv:
                         improv.restore(m2, st.improv)
@@ -468,12 +533,17 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     hints = next((e["lines"] for e in shown if e.get("type") == "hints"), [])
                     row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
                     row["replayed"]["woke"] = next((e["lines"] for e in shown if e.get("type") == "woke"), [])
+                    row["replayed"]["given"] = pairable(paired.get(turn))
+                    row["replayed"]["control"] = next(({k: v for k, v in e.items() if k != "type"} for e in shown
+                                                       if e.get("type") == "control"), {})
                 except Exception as exc:  # one turn that fails to replay is reported, the rest go on
                     row["replayed"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+                    if LIMIT.search(str(exc)):
+                        halted.append(row["replayed"]["error"])
                 row["seconds"] = round(time.monotonic() - started, 1)
             rows.append(row)
             got = row.get("replayed", {})
-            log(f"  第 {turn} 轮：原来 {len(row['recorded']['problems'])} 处" + (
+            log(f"  第 {turn} 轮：原来 {len(row['recorded'].get('problems', []))} 处" + (
                 f"，重放 {len(got.get('problems', []))} 处" if "problems" in got else f"，重放失败 {got.get('error', '')}" if got else ""))
 
     try:
@@ -487,12 +557,43 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
         if "replayed" in r:
             r["replayed"]["calls"] = calls.by_turn.get(r["turn"], [])
     summary = summarize(rows)
+    if halted:
+        summary["halted"] = halted[0]
     report = {"slot": slot, "module": first.module, "turns": [r["turn"] for r in rows], "summary": summary, "rows": rows,
-              "settings": {"blind_keeper": blind}}
+              "settings": {"blind_keeper": blind, "baseline": baseline, "prompts": variants.current(), "given": str(given or ""),
+                           "models": {r: f"{cfg.role(r).backend}:{cfg.role(r).model}" for r in ("keeper", "npc", "arbiter", "summarizer")}}}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     report["out"] = str(out)
     return report
+
+
+def control_summary(controls: list[dict[str, Any]], calls: list[dict[str, Any]]) -> dict[str, Any]:
+    """The engine's own checks over a run's turns (eval/control.py)."""
+    from collections import Counter
+
+    firsts = [c["scene"]["first"] for c in controls if c.get("scene", {}).get("first")]
+    return {
+        "scene": {"told": len(firsts), **{k: sum(f == k for f in firsts) for k in ("held", "sent_back", "kept_partial", "no_scene")},
+                  "second_failed": sum(second_failed(c) for c in controls),
+                  "reasons": dict(Counter(r for c in controls for r in c["scene"]["reasons"]).most_common())},
+        "npc_checks": {"replies": sum(c["npc"]["replies"] for c in controls), "reasks": sum(c["npc"]["reasks"] for c in controls),
+                       "unsettled": sum(c["npc"]["unsettled"] for c in controls),
+                       "reasons": dict(Counter(r for c in controls for r in c["npc"]["reasons"]).most_common())},
+        "fields": {"said_missing": sum(len(c["fields"]["said_missing"]) for c in controls),
+                   "scene_vs_reply": sum(len(c["fields"]["scene_vs_reply"]) for c in controls),
+                   "meetings_offered": sum(c["fields"]["meetings_offered"] for c in controls),
+                   "meetings_marked": sum(c["fields"]["meetings_marked"] for c in controls)},
+        "arbiter": {"repairs": sum(c.get("repairs", 0) for c in calls if c.get("agent") == "arbiter"),
+                    "invalid_clues": sum(len(c["arbiter"]["invalid_clues"]) for c in controls),
+                    "found_again": sum(len(c["arbiter"]["found_again"]) for c in controls)},
+    }
+
+
+def second_failed(c: dict[str, Any]) -> bool:
+    """The keeper's scene went back and the second one did not hold either."""
+    sc = c.get("scene", {})
+    return sc.get("second") in ("sent_back", "kept_partial") or sc.get("settled", 0) > 0
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -536,6 +637,89 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             out["world_calls_not_comparable"] = sum(c["agent"] == "world" for c in calls)
         if any("woke" in x for x in done):
             out["woke_pairs"] = len({line for x in done for line in x.get("woke", [])})
+        out["clue_slips"] = {k: sum(len(x.get("clues", {}).get(k, [])) for x in done) for k in ("missed_told", "early_told")}
+        out["rules"] = {k: sum(len(x.get("rules", {}).get(k, [])) for x in done) for k in ("secret_spoken", "unhurt", "nobody", "absent")}
+        if controls := [x["control"] for x in done if x.get("control")]:
+            out.update(control_summary(controls, [c for x in done for c in x.get("calls", [])]))
         return out
 
     return {"recorded": side("recorded"), "replayed": side("replayed"), "failed": sum("error" in r.get("replayed", {}) for r in rows)}
+
+
+# -- two variants, turn by turn ------------------------------------------------------------------------
+KINDS = ("在场", "同行", "物品", "发现", "时间", "代做", "升级", "其他")
+# What each turn should keep low. The engine's own checks first, then what the judge read.
+ENGINE = ("scene_first_failed", "scene_second_failed", "npc_reasks", "npc_unsettled", "fields_missing",
+          "invalid_clues", "arbiter_repairs")
+RULED = ("secret_spoken", "unhurt", "nobody", "absent", "missed_told", "early_told")  # the telling, read by rule
+JUDGED = ("problems", "leaks", "npc_leaks", "false_leads", "giveaways")
+
+
+def per_turn(report: dict[str, Any]) -> dict[int, dict[str, float]]:
+    """Each replayed turn's counts, from one report; turns that failed to replay are left out."""
+    out: dict[int, dict[str, float]] = {}
+    for r in report["rows"]:
+        x = r.get("replayed") or {}
+        if "problems" not in x:
+            continue
+        c = x.get("control") or {}
+        sc, npc, fields, arb = (c.get(k, {}) for k in ("scene", "npc", "fields", "arbiter"))
+        clues = x.get("clues", {})
+        kinds = {k: sum(p["kind"] == k for p in x["problems"]) for k in KINDS}
+        row = {
+            "scene_first_failed": float(sc.get("first") in ("sent_back", "kept_partial", "no_scene")),
+            "scene_second_failed": float(second_failed(c)) if c else 0.0,
+            "npc_reasks": npc.get("reasks", 0), "npc_unsettled": npc.get("unsettled", 0),
+            "fields_missing": len(fields.get("said_missing", [])) + len(fields.get("scene_vs_reply", [])),
+            "invalid_clues": len(arb.get("invalid_clues", {})),
+            "arbiter_repairs": sum(cl.get("repairs", 0) for cl in x.get("calls", []) if cl.get("agent") == "arbiter"),
+            "missed_told": len(clues.get("missed_told", [])), "early_told": len(clues.get("early_told", [])),
+            "problems": len(x["problems"]), **{f"problems:{k}": v for k, v in kinds.items()},
+            "leaks": len(x.get("leaks", [])), "npc_leaks": len(x.get("npc_leaks", [])),
+            "false_leads": sum(f["label"] == "假线索" for f in x.get("findings", [])),
+            "giveaways": sum(f["label"] == "白给" for f in x.get("findings", [])),
+            "keeper_chars": x.get("chars", 0),
+            **{k: len(x.get("rules", {}).get(k, [])) for k in ("secret_spoken", "unhurt", "nobody", "absent")},
+        }
+        row["engine"] = sum(row[k] for k in ENGINE)
+        row["ruled"] = sum(row[k] for k in RULED)
+        row["judged"] = sum(row[k] for k in JUDGED)
+        out[r["turn"]] = row
+    return out
+
+
+def compare(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> dict[str, Any]:
+    """Runs of variant A against runs of variant B on the turns all of them replayed: per metric, the
+    runs' totals (mean ± sd) and a sign test over turns, each turn's mean over its runs set against
+    the other's (B better = fewer). The style guard: the narrations' length and stock phrases."""
+    import statistics
+
+    from .blind import sign_test
+    from .style import count
+
+    ta, tb = [per_turn(r) for r in a], [per_turn(r) for r in b]
+    turns = sorted(set.intersection(*(set(t) for t in ta + tb))) if ta and tb else []
+    metrics = list(next(iter(ta[0].values())).keys()) if turns else []
+
+    def spread(xs: list[float]) -> list[float]:
+        return [round(statistics.mean(xs), 2), round(statistics.stdev(xs), 2) if len(xs) > 1 else 0.0]
+
+    table = {}
+    for k in metrics:
+        better = worse = 0
+        for t in turns:
+            ma, mb = statistics.mean(r[t][k] for r in ta), statistics.mean(r[t][k] for r in tb)
+            better += mb < ma
+            worse += mb > ma
+        table[k] = {"a": spread([sum(r[t][k] for t in turns) for r in ta]), "b": spread([sum(r[t][k] for t in turns) for r in tb]),
+                    "b_better": better, "b_worse": worse, "p": round(sign_test(better, worse), 4)}
+
+    def guard(reports: list[dict[str, Any]]) -> dict[str, list[float]]:
+        told = [[r["replayed"]["keeper"] for r in rep["rows"] if r["turn"] in turns and r.get("replayed", {}).get("keeper")]
+                for rep in reports]
+        counted = [count(x) for x in told]
+        return {"excess": spread([c["excess"] for c in counted]), "similes_per_1000": spread([c["similes_per_1000"] for c in counted]),
+                "sentence_cv": spread([c["sentence_cv"] for c in counted])}
+
+    return {"turns": turns, "runs": [len(a), len(b)], "metrics": table, "style": {"a": guard(a), "b": guard(b)},
+            "prompts": [[r.get("settings", {}).get("prompts", {}) for r in side] for side in (a, b)]}

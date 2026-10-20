@@ -54,6 +54,7 @@ from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules.bcdice import Roll
 from ..rules.coc import Rules
+from . import variants
 
 with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
     warnings.simplefilter("ignore", SyntaxWarning)
@@ -467,6 +468,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         "label": label,
         "keeper": f"{keeper.model}@{keeper.effort or 'none'}",
         "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which keeper prompt told it
+        "variant": variants.current(),  # eval --prompts: which prompt variant, if any
         **count(told, examples=shown, own=_own(m, *cast.reports)),
         "lengths": [han(t) for t in told],
         "usage": state.usage.get("keeper", {}),
@@ -531,6 +533,7 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
         "label": label,
         "npc": f"{role.model}@{role.effort or 'none'}",
         "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which NPC prompts answered
+        "variant": variants.current(),
         **voice(said, {n.name: habits(n) for n in m.npcs}),
         "usage": state.usage.get("npc", {}),
         "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),
