@@ -18,13 +18,16 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
 
     preset = "deepseek"
     search = "auto"            # auto | tavily | ddgs | wikipedia | none
-    budget_usd = 5             # stop metered API calls past this estimate
+    budget_usd = 5             # stop metered API calls past this estimate (Claude counts on an API key)
     mode = "标准"              # 经济 | 标准 | 高级剧情
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
     imagegen = true            # pictures from Codex's image tool, when codex is installed and logged in
     showcase = true            # 大场景: a big picture over the screen at the turning points of the story
     minds = 2                  # important NPCs' backstage decisions a turn (twice that on a long skip); 0: only their plans
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
+
+    [prices]                   # USD per million tokens, for an API the built-in table does not know
+    "openai:gpt-5" = [1.25, 0.125, 10.0]   # input, cached input, output
 
     [roles.all]                # applies to every role
     base_url = "http://localhost:8000/v1"
@@ -239,6 +242,7 @@ class Config:
     plugins: bool = True
     search: str = "auto"
     budget_usd: float | None = None
+    prices: dict = field(default_factory=dict)  # [prices] "model" = [input, cached input, output] USD per million tokens
     visual_budget_usd: float = 1.0  # separate estimated allowance; jobs already in flight may finish
     visual_limit: int = 24  # illustration attempts per save, including unmetered backends
     imagegen: bool = True  # pictures from Codex's image tool where the story changes a place or a person (imagegen.py)
@@ -616,6 +620,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None
+    cfg.prices = data.get("prices", {}) if isinstance(data.get("prices"), dict) else {}
     cfg.visual_budget_usd = max(0.0, float(data.get("visual_budget_usd", cfg.visual_budget_usd)))
     cfg.visual_limit = max(0, int(data.get("visual_limit", cfg.visual_limit)))
     cfg.minds = max(0, min(8, int(data.get("minds", cfg.minds))))

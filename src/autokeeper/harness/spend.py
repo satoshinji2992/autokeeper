@@ -46,8 +46,23 @@ def ledger() -> dict[str, Any]:
         return {"total_usd": 0.0, "models": {}}
 
 
+@functools.cache
+def _priced() -> dict[str, tuple[float, float, float]]:
+    """The built-in prices and the config's own ([prices] "model" = [input, cached input, output],
+    USD per million tokens), for an API the table does not know."""
+    own = {str(k).split(":", 1)[-1]: tuple(float(x) for x in v) for k, v in (config.load().prices or {}).items()
+           if isinstance(v, (list, tuple)) and len(v) == 3}
+    return {**PRICES, **own}  # type: ignore[dict-item]
+
+
 def price(model: str) -> tuple[float, float, float] | None:
-    return PRICES.get(model.split(":", 1)[-1])
+    return _priced().get(model.split(":", 1)[-1])
+
+
+def billed(model: str) -> bool:
+    """Whether calls on the model cost money: a priced API, or Claude on an API key (what Claude
+    Code reports on a subscription is what it would have cost, not a bill)."""
+    return price(model) is not None or (model.split(":", 1)[-1].startswith("claude-") and bool(os.environ.get("ANTHROPIC_API_KEY")))
 
 
 def estimate(model: str, usage: dict) -> float:
@@ -66,15 +81,16 @@ def budget() -> float | None:
 
 def guard(model: str) -> None:
     """Refuse a metered call once the ledger is past the cap."""
-    if (cap := budget()) is None or price(model) is None:
+    if (cap := budget()) is None or not billed(model):
         return
     spent = ledger()["total_usd"]
     if spent >= cap:
         raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（data/spend.json；在配置里调 budget_usd）")
 
 
-def record(model: str, usage: dict) -> float:
-    cost = estimate(model, usage)
+def record(model: str, usage: dict, cost: float | None = None) -> float:
+    """Into the ledger: the estimate from the usage, or what the backend reported it cost."""
+    cost = estimate(model, usage) if cost is None else cost
     if not cost:
         return 0.0
     path = _file()

@@ -899,3 +899,17 @@ async def test_claude_code_gets_the_backstage_schema_without_its_discriminator(m
     await model._client("scene", schema)  # type: ignore[attr-defined]
     sent = seen["options"]["output_format"]["schema"]
     assert "discriminator" not in json.dumps(sent) and json.dumps(sent).count('"const"') == json.dumps(schema).count('"const"')
+
+
+def test_claude_on_an_api_key_and_a_priced_api_count_against_the_budget(monkeypatch, tmp_path):
+    """Only DeepSeek had a price: an OpenAI model or Claude on an API key ran past budget_usd unseen."""
+    monkeypatch.setattr(paths, "USER_DIR", tmp_path)
+    (tmp_path / "config.toml").write_text('[prices]\n"openai:gpt-5" = [1.0, 0.1, 10.0]\n', encoding="utf-8")
+    spend._priced.cache_clear()
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert spend.billed("openai:gpt-5") and spend.estimate("openai:gpt-5", {"input_tokens": 1_000_000}) == 1.0
+    assert not spend.billed("claude-sonnet-5-5")  # a subscription: what Claude Code reports is not a bill
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert spend.billed("claude-sonnet-5-5")
+    assert spend.record("claude-sonnet-5-5", {"input_tokens": 10}, 0.25) == 0.25 and spend.ledger()["total_usd"] >= 0.25
+    spend._priced.cache_clear()

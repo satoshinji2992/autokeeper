@@ -301,6 +301,8 @@ class Model:
             reply.seconds = time.monotonic() - started
             if not reply.cost_usd:
                 reply.cost_usd = spend.record(self.spec.model, reply.usage)
+            elif spend.billed(self.spec.model):  # Claude Code on an API key reports what it cost: a real bill
+                spend.record(self.spec.model, reply.usage, reply.cost_usd)
             try:
                 trace.emit(self, messages, reply, schema=schema, error=error)
             finally:
