@@ -23,6 +23,7 @@ import asyncio
 import json
 from collections import deque
 from contextlib import nullcontext
+from dataclasses import replace
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -1075,6 +1076,42 @@ class Cast:
             return Review.model_validate(reply.data)
         except ValueError:
             return None
+
+    @property
+    def checking(self) -> bool:
+        """Whether tellings are read against the record before they are shown (Config.check)."""
+        return bool(getattr(self.cfg, "check", False))
+
+    async def check(self, state: GameState, material: str) -> list | None:
+        """Where a telling does not hold against the record (engine/check.py), read before anyone
+        sees it. Stateless, on the summarizer's light model as the replay judge is; None without
+        an answer."""
+        from ..engine import check as checking
+        from ..harness.replay import CassetteError
+
+        if "check" not in self.sessions:
+            role = replace(self.cfg.role("summarizer"), effort=None)
+            self.sessions["check"] = Session("check", role, checking.RULES, schema=_schema(checking.Verdict), key="check")
+        try:
+            reply = await self._send("check", self.sessions["check"], state, material, bind=False)
+        except CassetteError:  # a replay that drifted must fail loudly
+            raise
+        except Exception:
+            return None
+        if not isinstance(reply.data, dict):
+            return None
+        try:
+            return checking.standing(checking.Verdict.model_validate(reply.data).problems)
+        except ValueError:
+            return None
+
+    def amend(self, state: GameState, report: str, told: str, text: str) -> None:
+        """The keeper's memory keeps what was shown: its last telling of `report` becomes `text`."""
+        s = self._keeper(state)
+        s.bind(state.transcripts.setdefault("keeper", []), state.notes)
+        last = s.transcript[-2:]
+        if len(last) == 2 and [m["content"].strip() for m in last] == [report.strip(), told.strip()]:
+            last[1]["content"] = text
 
     async def reconcile(self, state: GameState, record: str, telling: str) -> Reconcile | None:
         """Where a telling ran ahead of the record, and what is going on as it stops

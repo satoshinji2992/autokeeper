@@ -36,7 +36,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import AddFact, Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, fog, progress, views, world
+from . import check, diagnostics, fog, progress, views, world
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -186,6 +186,8 @@ class Game:
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._looked = 0  # the turn the director last looked between turns (Game._review)
         self.reconcile = False  # a screen has each telling checked against the record afterwards (Game._reconcile)
+        self._before: dict[str, Any] = {}  # the game as the turn found it, for reading its telling (engine/check.py)
+        self._said = ""  # the player's words this turn
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -368,6 +370,7 @@ class Game:
         st = self.state
         await self._world_settled()  # what the rest of the world did since the last turn, before this one
         await self._curtain(Action(kind="other", summary=text))
+        self._before, self._said = {"minutes": st.minutes, "location": st.location}, text
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
@@ -1465,7 +1468,7 @@ class Game:
             self.told = None
             await self.emit({"type": "dialogue_end"})
             return ""  # the reply, clue cards and roll outcomes have already been shown
-        return await self._narrate(self._report(turn), on_delta)
+        return await self._narrate(self._report(turn), on_delta, turn=turn)
 
     async def remember(self) -> None:
         st = self.state
@@ -2225,23 +2228,87 @@ class Game:
             out.append("请叙述。")
         return "\n".join(out)
 
-    async def _narrate(self, report: str, on_delta=None, lore: str = "") -> str:
+    async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:
+        """The keeper tells it. Where the cast can check a telling (engine/check.py), it is read
+        against the record before anyone sees it, and shown once it holds."""
         self.told = None  # while the keeper speaks there is nothing to tell again
         sky = (self.state.sky, self.state.sky_at)
-        await self.emit({"type": "keeper_start"})
 
         async def delta(text: str) -> None:
             await self.emit({"type": "keeper_delta", "text": text})
             if on_delta:
                 await on_delta(text)
 
-        text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
+        if getattr(self.cast, "checking", False):
+            await self.emit({"type": "status", "text": "KP 正在构思…"})
+            text = await self.cast.keeper(self.state, report, lore=lore)
+            text = await self._verified(report, lore, text, turn)
+            await self.emit({"type": "keeper_start"})
+            await delta(text)
+        else:
+            await self.emit({"type": "keeper_start"})
+            text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
         entry = self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
         await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
         self.told = Told(report, lore, entry, sky)
         return text
+
+    async def _check(self, text: str, turn: Turn | None, report: str) -> list | None:
+        st = self.state
+        ruling = turn.ruling.model_dump(mode="json") if turn is not None and turn.ruling is not None else None
+        hints = [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]
+        before = self._before or {"minutes": st.minutes, "location": st.location}
+        record = check.account(self.m, st, st.turn, before, ruling, hints)
+        lines = [f"{e.who}：{e.text}" for e in st.log if e.turn == st.turn and e.kind == "npc"]
+        return await self.cast.check(st, check.prompt(record, self._said, text, lines))
+
+    def _comes_over(self, problems: list) -> list:
+        """Someone written in who is next door and free comes over: the record follows the
+        telling. What is left still does not hold."""
+        w, st, m = self.world, self.state, self.m
+        here = st.location
+        near = set(next((loc.exits for loc in m.locations if loc.id == here), [])) | set(world_view.rooms(m, here))
+        left = []
+        for p in problems:
+            if p.kind in ("在场", "同行"):
+                named = [e for e in w.rec.entities.values() if e.kind == "npc" and _called(e.name, p.claim)]
+                who = named[0] if len(named) == 1 else None
+                if (who is not None and who.at != here and who.at in near and who.status not in check.GONE and not who.following
+                        and not stage.waiting(w, who.id) and not review.waiting(w, who.id)
+                        and w.apply(Move(id=f"check:{st.turn}:{who.id}", entity=who.id, to=here, actor="keeper")).ok):
+                    self._debug("check", {"phase": "came", "npc": who.id, "claim": p.claim})
+                    continue
+            left.append(p)
+        return left
+
+    async def _verified(self, report: str, lore: str, text: str, turn: Turn | None) -> str:
+        """The telling read against the record before anyone sees it (engine/check.py): what the
+        record can follow, it follows; the rest is told again knowing what did not hold, and a
+        sentence that still does not hold is left out."""
+        found = self._comes_over(await self._check(text, turn, report) or [])
+        if not found:
+            return text
+        self._debug("check", {"phase": "found", "problems": [p.model_dump() for p in found], "telling": text})
+        fix = ("\n\n（系统：上一稿有几处和记录对不上，这一稿改掉，其余照旧：\n"
+               + "\n".join(f"- 「{p.claim}」：{p.record}" for p in found) + "）")
+        try:
+            again = await self.cast.retell(self.state, report, text, extra=lore + fix)
+        except CassetteError:
+            raise
+        except Exception as exc:  # the first telling, cut down below
+            self._debug("check", {"phase": "retell-failed", "error": f"{type(exc).__name__}: {exc}"[:200]})
+            again = text
+        left = self._comes_over(await self._check(again, turn, report) or [])
+        if not left:
+            return again
+        kept = check.redact(again, left)
+        self._debug("check", {"phase": "redacted", "problems": [p.model_dump() for p in left], "telling": again, "kept": kept})
+        if kept and kept != again:
+            self.cast.amend(self.state, report, again, kept)  # the keeper remembers what was shown
+            return kept
+        return again
 
     async def _sky(self, narration: str) -> None:
         """The keeper's words set the weather; unmentioned for a few hours, it passes."""
@@ -2287,8 +2354,13 @@ class Game:
                 await on_delta(text)
 
         old = told.entry.text
+        checking = getattr(self.cast, "checking", False)
         try:
-            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge), on_delta=delta)
+            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge),
+                                          on_delta=None if checking else delta)
+            if checking:  # read against the record before it is shown, as the first telling was
+                text = await self._verified(told.report, told.lore, text, None)
+                await delta(text)
         except Exception:
             self.told = told
             await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
@@ -2369,6 +2441,15 @@ class _Minds:
             await self.game.emit({"type": "status", "text": "KP 正在构思…"})
         assert self.game.brain is not None
         return await self.game.brain.decide(ask)
+
+
+def _called(name: str, text: str) -> bool:
+    """Whether a telling names this person: whole, by one part of the name, or a part without its
+    first or last character (老守钟人 as 守钟人)."""
+    for part in (x for x in [name, *name.split("·")] if len(x) >= 2):
+        if part in text or (len(part) >= 3 and (part[1:] in text or part[:-1] in text)):
+            return True
+    return False
 
 
 def _clip(text: str, n: int) -> str:
