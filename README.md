@@ -174,6 +174,18 @@ uv tool upgrade autokeeper   # 更新
 仓库本身也是一个 **Claude Code 插件**与 **MCP 服务端**——如果你想直接在 Claude Code 或 Codex 对话框里调用它的骰子、模组 Skills 与状态引擎来跑团，可参考[在 Claude Code / Codex 中主持](docs/playing.md#在-claude-code--codex-中主持)。
 
 <details>
+<summary><b>0.0.3 更新亮点</b></summary>
+<br>
+
+- **会自己运转的世界**：每局有一份世界记录，记着谁在哪、谁知道什么、谁答应过谁；重要 NPC 照自己的打算行事，说了就做。
+- **守秘人统一主持**：守秘人看得到全部底牌，每轮先安排玩家的行动和在场人物的主动参与，讲完的场面先记进世界再显示。
+- **检定更像真的跑团**：失败就是失败，孤注一掷先说后果；日常物件可以当场拿、当场借。
+- **一条命令安装**：`uv tool install autokeeper`，在任意目录启动；以前的存档自动带过来。AutoKeeper 本体不绑定模型，Claude 是可选组件。
+- 详见[完整更新记录](CHANGELOG.md#0032026-10-20)。
+
+</details>
+
+<details>
 <summary><b>0.0.2 更新亮点与升级须知</b></summary>
 <br>
 
