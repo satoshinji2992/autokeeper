@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from pathlib import Path
 
 import pytest
 from PIL import Image, PngImagePlugin
@@ -28,6 +29,7 @@ STORY = {"个人描述": "瘦削，眼神锐利", "思想与信念": "救救孩�
 ANSWERS = {
     "Proposal": {
         "who": "鲁迅，中国现代文学的奠基人",
+        "photo": "鲁迅 作家 肖像",
         "questions": [
             {"ask": "在这个年代他是谁？", "options": ["教书的作家", "报社的编辑"]},
             {"ask": "侧重什么本事？", "options": ["学识", "调查"]},
@@ -147,10 +149,16 @@ async def test_a_public_figure_becomes_an_investigator(cards, monkeypatch, tmp_p
     picture = tmp_path / "luxun.png"
     Image.new("RGB", (120, 160), "white").save(picture)
 
-    async def research(query, provider="auto"):
+    async def research(query, provider="auto", **_):
         return Figure(query, title="鲁迅", extract="中国作家。", photos=[Photo(str(picture), title="照片")])
 
+    searched: list[str] = []
+
+    async def find_photos(fig, query=""):  # by the proposal's words, once it is known who this is
+        searched.append(query)
+
     monkeypatch.setattr(cardmod, "research", research)
+    monkeypatch.setattr(cardmod, "find_photos", find_photos)
     monkeypatch.setattr(imagery, "preprocess", lambda src, kind, *a, **k: src)  # no background-removal model download in tests
     monkeypatch.setattr(paths, "module_folders", lambda: [EXAMPLE])
     app = AutoKeeperApp(theme="amber")
@@ -183,7 +191,7 @@ async def test_a_public_figure_becomes_an_investigator(cards, monkeypatch, tmp_p
         assert setup.lead and setup.lead.name == "周樟寿" and setup.lead.skills["图书馆使用"] == 70
     kept = roster.saved()
     assert [c.name for c in kept] == ["周樟寿"] and (roster.folder() / f"{kept[0].portrait}.jpg").exists()
-    assert CardModel.calls == ["Proposal", "Draft"]
+    assert CardModel.calls == ["Proposal", "Draft"] and len(searched) == 1
 
 
 async def test_a_dice_bot_card_is_brought_in(cards, skills_dir):
@@ -220,3 +228,52 @@ async def test_a_described_investigator_skips_the_web(cards, monkeypatch):
     b = Builder(cards, Module.load(EXAMPLE))
     fig = await b.look_up("在码头长大、胆子很大的女记者")
     assert fig.source == "描述" and not fig.photos and "女记者" in fig.brief()
+
+
+async def test_photos_are_searched_for_by_who_it_is_new_names_start_afresh_and_a_local_photo_can_be_used(cards, monkeypatch, tmp_path):
+    """The user, 2026-10-20: 「哈姆」 found the right person but Hamtaro's pictures (the photos were
+    searched by the bare name, before it was known who this is); 「重新输入姓名」 showed the last
+    name's pictures; and a photo from this machine could not be used while making a card."""
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.card import CardScreen
+
+    queries: list[str] = []
+    web = tmp_path / "web.png"
+    Image.new("RGB", (120, 160), "gray").save(web)
+
+    async def research(query, provider="auto", photos=True):
+        return Figure(query, title=query, extract="一个人。")
+
+    async def image_search(fig, query=""):
+        queries.append(query)
+        fig.photos.append(Photo(str(web), title=f"{fig.query} 的照片"))
+
+    monkeypatch.setattr(cardmod, "research", research)
+    monkeypatch.setattr(cardmod, "_image_search", image_search)
+    monkeypatch.setattr(imagery, "preprocess", lambda src, kind, *a, **k: src)
+    mine = tmp_path / "mine.png"
+    Image.new("RGB", (120, 160), "white").save(mine)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        await pilot.pause()
+        app.push_screen(CardScreen(Module.load(EXAMPLE), start="figure"))
+        await pilot.pause()
+        screen = app.screen
+        screen.query_one(Input).value = "鲁迅"
+        await pilot.press("enter")
+        await _until(pilot, lambda: screen.step == "photo")
+        assert queries == ["鲁迅 作家 肖像"]  # the proposal's words, not the bare name
+        screen.shots[0] = tmp_path / "stale.png"
+        screen._restart()  # 重新输入姓名
+        screen.query_one(Input).value = "许广平"
+        await pilot.press("enter")
+        await _until(pilot, lambda: screen.step == "photo")
+        assert 0 not in screen.shots or screen.shots[0] != tmp_path / "stale.png"  # this name's own
+        choices = screen.query_one(OptionList)
+        choices.highlighted = next(i for i in range(choices.option_count) if choices.get_option_at_index(i).id == "photo-local")
+        await pilot.press("enter")
+        await _until(pilot, lambda: screen.step == "local")
+        screen.query_one(Input).value = str(mine)
+        await pilot.press("enter")
+        await _until(pilot, lambda: screen.step == "ask")
+        assert screen.chosen is not None and Path(screen.builder.photo.url) == mine

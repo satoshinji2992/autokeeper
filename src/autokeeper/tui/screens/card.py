@@ -173,17 +173,18 @@ class CardScreen(Screen[Investigator | None]):
 
     def _photos(self) -> None:
         fig = self.builder.figure
-        if not fig or not fig.photos:
-            if fig and fig.source != "描述":  # a description never had photos to find
-                self.app.notify("未找到照片，将继续创建人物卡。")
-            self.chosen, self.portrait = None, None
-            self._next_after_photo()
-            return
+        if fig and not fig.photos and fig.source != "描述":  # a description never had photos to find
+            self.app.notify("未找到照片，可以用本地照片，或不用照片继续。")
         self.step = "photo"
-        opts = [Option(f"照片 {i + 1} · {_host(p.page or p.url)}", id=f"photo-{i}") for i, p in enumerate(fig.photos[:SHOWN])]
+        opts = [Option(f"照片 {i + 1} · {_host(p.page or p.url)}", id=f"photo-{i}") for i, p in enumerate((fig.photos if fig else [])[:SHOWN])]
         again = "重新输入姓名" if self.start == "figure" else "重新导入"
-        opts += [Option("不使用照片", id="photo-none"), Option(again, id="again")]
+        opts += [Option("用本地照片", id="photo-local"), Option("不使用照片", id="photo-none"), Option(again, id="again")]
         self._choose("选择人物照片", opts, "↑↓ 预览 · Enter 或空格选定 · Esc 返回")
+
+    def _local_photo(self) -> None:
+        self.step = "local"
+        hint = Text("输入图片文件的路径，或把文件拖进来。支持 jpg、png、webp。", style="dim")
+        self._type("用本地照片", "图片文件路径", "回车 · Esc 返回", hint)
 
     def _next_after_photo(self) -> None:
         if self.from_card and self.builder.card:
@@ -235,6 +236,8 @@ class CardScreen(Screen[Investigator | None]):
             self.read_card(text)
         elif self.step == "find" and text:
             self.photo_from(text)
+        elif self.step == "local" and text:
+            self.local_photo(text)
         elif self.step == "extra":
             self.build(text)
         elif self.step == "tweak":
@@ -243,7 +246,7 @@ class CardScreen(Screen[Investigator | None]):
     @on(OptionList.OptionHighlighted, "#choices")
     def highlighted(self, event: OptionList.OptionHighlighted) -> None:
         oid = event.option.id or ""
-        if self.step == "photo" and oid.startswith("photo-") and oid != "photo-none":
+        if self.step == "photo" and oid.startswith("photo-") and oid.removeprefix("photo-").isdigit():
             self.show_photo(int(oid.removeprefix("photo-")))
 
     @on(OptionList.OptionSelected, "#choices")
@@ -253,6 +256,8 @@ class CardScreen(Screen[Investigator | None]):
         if self.step == "photo":
             if oid == "again":
                 self._restart()
+            elif oid == "photo-local":
+                self._local_photo()
             elif oid == "photo-none":
                 self.chosen, self.portrait, b.photo = None, None, None
                 self._next_after_photo()
@@ -287,10 +292,12 @@ class CardScreen(Screen[Investigator | None]):
             self.dismiss(None)
         elif self.step == "find":
             self._card()
+        elif self.step == "local":
+            self._photos()
         elif self.step == "photo":
             self._card() if self.from_card and self.builder.card else self._restart()
         elif self.step == "ask":
-            self._ask(self.question - 1) if self.question else (self._photos() if self.builder.figure and self.builder.figure.photos else self._restart())
+            self._ask(self.question - 1) if self.question else self._photos()
         elif self.step == "extra":
             self._ask(len(self.proposal.questions) - 1) if self.proposal and self.proposal.questions else self._restart()
         elif self.step == "card":
@@ -319,12 +326,14 @@ class CardScreen(Screen[Investigator | None]):
     @work(exclusive=True, group="card")
     async def look_up(self, query: str) -> None:
         self._wait(f"正在检索 {query} 的人物资料…")
+        self.shots, self.chosen, self.portrait = {}, None, None  # the last name's photos are not this one's
         await self.builder.look_up(query)
         await self._questions()
 
     @work(exclusive=True, group="card")
     async def read_card(self, source: str) -> None:
         self._wait("正在读取人物卡…")
+        self.shots, self.chosen, self.portrait = {}, None, None
         try:
             kind = await self.builder.read(source)
         except Exception as exc:  # an unreadable file, a model that cannot see images, a dropped call
@@ -343,7 +352,8 @@ class CardScreen(Screen[Investigator | None]):
         self._wait("正在准备照片和背景问题…")
         self.query_one("#preview-body", Static).update(Text(fig.brief(800), style="dim"))
         try:
-            self.proposal, _ = await asyncio.gather(self.builder.propose(), self._fetch(range(min(4, len(fig.photos)))))
+            self.proposal = await self.builder.propose()  # who this is, then their photos by it
+            await self._fetch(range(min(4, len(fig.photos))))
         except Exception as exc:  # the model is down or answered nonsense twice
             self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能生成问题：{exc.__class__.__name__}，请重试。", severity="error")
             self._restart()
@@ -387,6 +397,19 @@ class CardScreen(Screen[Investigator | None]):
         t.append(f"\n\n{photo.title}\n{photo.page or photo.url}", style="dim")
         if self.step == "photo":
             self.query_one("#preview-body", Static).update(t)
+
+    def local_photo(self, text: str) -> None:
+        """A photo from this machine, put first among the candidates and chosen."""
+        path = local_file(text)
+        if path is None:
+            self.app.notify("找不到这个图片文件，检查路径后再试。", severity="warning")
+            return
+        fig = self.builder.figure
+        if fig is None:
+            fig = self.builder.figure = Figure(path.stem)
+        fig.photos.insert(0, Photo(str(path), title=path.name))
+        self.shots = {}  # the indices moved
+        self.pick_photo(0)
 
     @work(exclusive=True, group="card")
     async def pick_photo(self, i: int) -> None:

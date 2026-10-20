@@ -95,6 +95,7 @@ class Question(BaseModel):
 
 class Proposal(BaseModel):
     who: str = Field(description="玩家可见的人物简介，客观说明身份与经历，不评价、不使用宣传语，不超过 60 字")
+    photo: str = Field("", description="搜这个人照片用的关键词：名字加上能把他和同名的人、作品区分开的两三个词，比如“哈姆 阿拉伯语 幼教动画”；描述出来的人物留空")
     questions: list[Question] = Field(description="三个问题")
 
 
@@ -234,34 +235,49 @@ async def _web(fig: Figure, provider: str) -> None:
     fig.web += [f"{u}：{ex}" for u, t in zip(pages, texts, strict=True) if isinstance(t, str) and (ex := _excerpt(t, fig.query))]
 
 
-async def _image_search(fig: Figure) -> None:
-    """Photos from web image search (ddgs), larger ones first."""
+async def _image_search(fig: Figure, query: str = "") -> None:
+    """Photos from web image search (ddgs), larger ones first: by `query` when the person is known
+    (Proposal.photo: 「哈姆」 alone found Hamtaro, the user, 2026-10-20), else by the name typed."""
     if not importlib.util.find_spec("ddgs"):
         return
     from ddgs import DDGS
 
-    rows = await asyncio.to_thread(lambda: DDGS().images(fig.query, max_results=12))
+    rows = await asyncio.to_thread(lambda: DDGS().images(query or fig.query, max_results=12))
     rows = [r for r in rows or [] if min(int(r.get("width") or 0), int(r.get("height") or 0)) >= 300]
     fig.photos += [Photo(r["image"], r.get("url", ""), r.get("title", "")[:40]) for r in rows[:6]]
 
 
-async def research(query: str, provider: str = "auto") -> Figure:
-    """Who they are and what they look like, from whatever the web has."""
+async def research(query: str, provider: str = "auto", *, photos: bool = True) -> Figure:
+    """Who they are and what they look like, from whatever the web has. `photos`: False when they
+    are looked for once it is known who this is (find_photos, by the proposal's keywords)."""
     fig = Figure(query.strip())
     if resolve(provider) == "none":
         return fig
     headers = {"User-Agent": imagery.USER_AGENT, "Accept-Language": "zh-cn"}
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
-        found = await asyncio.gather(_wikipedia(client, fig), _web(fig, provider), _image_search(fig), return_exceptions=True)
+        found = await asyncio.gather(_wikipedia(client, fig), _web(fig, provider), return_exceptions=True)
+    del found  # a source that failed (offline, rate-limited, odd answer) just adds nothing
+    if photos:
+        await find_photos(fig)
+    return fig
+
+
+async def find_photos(fig: Figure, query: str = "") -> None:
+    """Photo candidates: web image search by `query` (who this is, in a few words) or the name,
+    then Commons by the English name or the page's title when that found few."""
+    headers = {"User-Agent": imagery.USER_AGENT, "Accept-Language": "zh-cn"}
+    async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
+        try:
+            await _image_search(fig, query)
+        except Exception:  # offline, rate-limited: Commons may still have them
+            pass
         if len(fig.photos) < 3 and (fig.english or fig.title):  # famous enough for Commons
             try:
                 fig.photos += [Photo(c.thumb.replace("/360px-", "/800px-"), c.page, c.title, c.license) for c in await imagery.search(client, fig.english or fig.title, limit=8)]
             except httpx.HTTPError:
                 pass
-    del found  # a source that failed (offline, rate-limited, odd answer) just adds nothing
     seen: set[str] = set()
     fig.photos = [p for p in fig.photos if not (p.url in seen or seen.add(p.url))]
-    return fig
 
 
 async def download(photo: Photo, dest: Path) -> bool:
@@ -440,14 +456,18 @@ class Builder:
         if is_description(query):
             self.figure = Figure(query.strip(), source="描述", extract=query.strip())
         else:
-            self.figure = await research(query, self.cfg.search)
+            self.figure = await research(query, self.cfg.search, photos=False)
         return self.figure
 
     async def propose(self) -> Proposal:
+        """Who this is and the questions; then their photos, by the words that tell them from others
+        of the same name (Proposal.photo)."""
         assert self.figure
         prompt = f"{_setting(self.m)}\n【这个人】{self.figure.brief()}"
         p = await self._ask_model(ASK_SYSTEM, prompt, Proposal)
         p.questions = [q for q in p.questions if q.options][:3]
+        if self.figure.source != "描述" and resolve(self.cfg.search) != "none":
+            await find_photos(self.figure, p.photo.strip())
         return p
 
     async def build(self, request: str = "") -> Investigator:

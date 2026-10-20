@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -37,6 +38,9 @@ from PIL import Image, ImageOps
 
 from . import config, credits, paths
 from .module.package import find_picture, picture_target
+
+# Windows: codex with no console of its own (it shares the game's otherwise, and took the screen down).
+DETACHED = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 
 LIMIT = 100  # pictures one module may ever get: its import and all its games together
 PER_GAME = 12  # pictures one game (a save) may make
@@ -112,8 +116,8 @@ def _status() -> Status:
     if not exe:
         return Status(False, "没装 Codex，AI 画图用不了", fix="npm i -g @openai/codex，再运行 codex login")
     try:
-        login = subprocess.run([exe, "login", "status"], capture_output=True, timeout=20)
-        features = subprocess.run([exe, "features", "list"], capture_output=True, timeout=20)
+        login = subprocess.run([exe, "login", "status"], capture_output=True, timeout=20, **DETACHED)
+        features = subprocess.run([exe, "features", "list"], capture_output=True, timeout=20, **DETACHED)
     except (OSError, subprocess.SubprocessError):
         return Status(False, "Codex 没有响应，AI 画图用不了", fix="在终端运行 codex login status 看看")
     said = (login.stdout + login.stderr).decode("utf-8", "replace").lower()  # read, never shown: it may name the key
@@ -316,7 +320,7 @@ async def _run(text: str, image: Path | None, timeout: float) -> tuple[bytes, st
         start, began = time.monotonic(), time.time() - 2  # file times can lag the clock a little
         proc = await asyncio.create_subprocess_exec(
             *command(exe, folder, attached), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE, cwd=folder, start_new_session=os.name == "posix",
+            stderr=asyncio.subprocess.PIPE, cwd=folder, start_new_session=os.name == "posix", **DETACHED,
         )
         try:
             out, err = await asyncio.wait_for(_communicate(proc, text.encode("utf-8")), timeout)
@@ -343,7 +347,7 @@ async def _forget(exe: str, thread: str) -> None:
     shutil.rmtree(codex_home() / "generated_images" / thread, ignore_errors=True)
     try:
         proc = await asyncio.create_subprocess_exec(exe, "delete", "--force", thread, stdin=asyncio.subprocess.DEVNULL,
-                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, **DETACHED)
         await asyncio.wait_for(proc.wait(), 20)
     except (OSError, TimeoutError):
         pass

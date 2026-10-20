@@ -38,7 +38,10 @@ import base64
 import json
 import os
 import re
+import shutil
 import signal
+import subprocess
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -711,7 +714,7 @@ class CodexModel(Model):
             with open(instructions, "w", encoding="utf-8") as f:
                 f.write(self.system)
             args = [
-                "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
+                shutil.which("codex") or "codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config",
                 "-s", "read-only", "-C", str(paths.sessions()),
                 "-c", f"model_instructions_file={json.dumps(instructions)}", "-c", "project_doc_max_bytes=0",
             ]  # fmt: skip
@@ -732,6 +735,9 @@ class CodexModel(Model):
             proc = await asyncio.create_subprocess_exec(
                 *args, "-", stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 start_new_session=os.name == "posix",
+                # Windows: codex.cmd found by its full name, and run with no console of its own: sharing the
+                # game's, a child took the screen down with it (the user, 2026-10-20, as chafa did).
+                **({"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}),
             )
             out, err = await _communicate(proc, _transcript(messages).encode("utf-8"))
         reply, failure = Reply(), ""

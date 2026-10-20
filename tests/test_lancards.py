@@ -274,6 +274,8 @@ async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypat
         screen = app.screen
         screen.query_one(Input).value = "在码头长大、胆子很大的女记者"
         await pilot.press("enter")
+        await _until(pilot, lambda: screen.step == "photo")  # a described person: a photo from this machine, or none
+        await pilot.press("down", "enter")  # 不使用照片
         await _until(pilot, lambda: screen.step == "ask")
         for _ in range(3):
             await pilot.press("space")

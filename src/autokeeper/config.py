@@ -46,6 +46,7 @@ Keys come from the environment; ~/.config/autokeeper/.env and ./.env are read to
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import os
@@ -272,7 +273,9 @@ async def ping(preset: str) -> str:
     try:
         await m.complete([{"role": "user", "content": "只回答两个字：收到"}])
         return ""
-    except Exception as exc:
+    except asyncio.CancelledError:
+        raise
+    except BaseException as exc:  # whatever a backend's program does, the test says so and the game goes on
         return f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}"
     finally:
         await m.close()
