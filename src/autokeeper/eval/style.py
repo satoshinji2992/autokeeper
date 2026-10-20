@@ -54,6 +54,7 @@ from ..module.schema import Module
 from ..prefs import Prefs
 from ..rules.bcdice import Roll
 from ..rules.coc import Rules
+from . import variants
 
 with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
     warnings.simplefilter("ignore", SyntaxWarning)
@@ -311,6 +312,10 @@ class Beat:
 def _beats_zhuishuren() -> list[Beat]:
     who = "哈罗德"
     return [
+        # The game opens at the station, and a room is reached from its house: walk there first.
+        Beat("我去金博尔家找托马斯",
+             Action(kind="move", summary=f"{who}去艾尔斯伯里大街 218 号的金博尔家", destination="jinboer_jia"),
+             Ruling(needs_roll=False, minutes=0)),
         Beat("我去书房看看叔叔的书架",
              Action(kind="investigate", summary=f"{who}走进道格拉斯的书房，查看书架上的空档", target="书架上的空档",
                     destination="shufang", echo=f"{who}推开书房的门"),
@@ -463,6 +468,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         "label": label,
         "keeper": f"{keeper.model}@{keeper.effort or 'none'}",
         "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which keeper prompt told it
+        "variant": variants.current(),  # eval --prompts: which prompt variant, if any
         **count(told, examples=shown, own=_own(m, *cast.reports)),
         "lengths": [han(t) for t in told],
         "usage": state.usage.get("keeper", {}),
@@ -490,12 +496,31 @@ def _talk_zhuishuren() -> list[tuple[str, list[str]]]:
 TALKS = {"zhuishuren": _talk_zhuishuren}
 
 
-async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) -> dict[str, Any]:
+def _probe_zhuishuren() -> list[tuple[str, list[str]]]:
+    """Requests an NPC answers with a field as well as words: going along (accompany), handing a thing
+    over (items), walking off (leave)."""
+    return [
+        ("thomas", ["金博尔先生，天黑之前，您陪我去后面的公墓走一趟吧。", "屋里有手电吗？借我一只，晚上用得着。",
+                    "我先去书房看看，您忙您的。"]),
+        ("jefferson", ["您这把铁铲能借我用一会儿吗？就在这儿用，马上还您。", "您能领我去道格拉斯先生常坐的那块墓碑吗？",
+                       "天快黑了，您是不是要回小屋了？"]),
+        ("odell", ["夫人，您能陪我去金博尔家一趟吗？就几步路。", "您篮子里有火柴吗？能给我一盒吗？", "不耽误您了，您先回家吧。"]),
+    ]  # fmt: skip
+
+
+PROBES = {"zhuishuren": _probe_zhuishuren}
+
+
+async def talk(module_dir: Path, *, label: str = "", out: Path | None = None, probe: bool = False) -> dict[str, Any]:
     """Ask the module's NPCs the same questions with the configured NPC model, through the game's
-    own NPC call (its leak check included), and measure how they talk. No checks, no keeper."""
+    own NPC call (its leak check included), and measure how they talk. No checks, no keeper.
+    `probe`: the requests of PROBES instead, and what the replies filled in (eval/control.py)."""
+    from .control import Watch
+
     m = Module.load(module_dir)
-    if m.id not in TALKS:
-        raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(TALKS)}）")
+    script = PROBES if probe else TALKS
+    if m.id not in script:
+        raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(script)}）")
     # Measure the same twelve replies. Autonomous decisions and illustration calls
     # would change both the scene and the model-call count of this voice experiment.
     cfg = replace(config.load(), improv="严格", minds=0, visual_limit=0, imagegen=False, showcase=False)
@@ -503,11 +528,13 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
     cast.prefs = Prefs()
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"talk-{m.id}-{label or 'run'}", human=[])
     game = Game(m, state, cast, Rules(dice=Loaded(())))  # type: ignore[arg-type]
+    watch = Watch()
+    watch.attach(cast, game)
     inv = state.investigator
     said: dict[str, list[str]] = {}
     asked: dict[str, list[str]] = {}
     try:
-        for npc_id, questions in TALKS[m.id]():
+        for npc_id, questions in script[m.id]():
             npc = m.npc(npc_id)
             state.location = npc.location or state.location
             for q in questions:
@@ -527,11 +554,19 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
         "label": label,
         "npc": f"{role.model}@{role.effort or 'none'}",
         "prompt": hashlib.sha1(system.encode("utf-8")).hexdigest()[:10],  # which NPC prompts answered
+        "variant": variants.current(),
         **voice(said, {n.name: habits(n) for n in m.npcs}),
         "usage": state.usage.get("npc", {}),
         "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),
         "said": said,
         "asked": asked,
     }
+    if probe:
+        checked = watch.result(m)
+        replies = checked["npc"]["detail"]
+        summary["fields"] = {"replies": replies, "said_missing": checked["fields"]["said_missing"],
+                             "filled": sum(bool(r["fields"].get(f)) for r in replies for f in ("accompany", "items", "leave")),
+                             "said": sum(len(r["said"]) for r in replies), "reasks": checked["npc"]["reasks"],
+                             "unsettled": checked["npc"]["unsettled"]}
     _write(out, summary)
     return summary

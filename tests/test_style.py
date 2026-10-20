@@ -141,14 +141,14 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
         Canned.told = []
         s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
-    assert s["narrations"] == 8 and s["hits"]["仿佛"] == 8 and s["usage"]["calls"] == 8
+    assert s["narrations"] == 9 and s["hits"]["仿佛"] == 9 and s["usage"]["calls"] == 9
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
     told = "\n".join(reports[0])
     assert "侦查 60 → 24 困难成功" in told and "侦查 60 → 83 失败" in told
     assert "魅惑 15 → 9 常规成功" not in told  # the NPC already answered this social check
     assert "一个佝偻的身影翻过矮墙" in told and "雷区" not in told
     saved = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
-    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 8 and len(saved["reports"]) == 8
+    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 9 and len(saved["reports"]) == 9
     assert saved["examples"] == style.examples(skills.body("keeper-craft"))  # the passages the keeper was shown
 
 
@@ -164,6 +164,15 @@ async def test_the_npcs_hear_the_same_questions_every_time(monkeypatch, tmp_path
     assert "收到您的信就赶过来了" in runs[0][0] and "已解锁" in runs[0][0] and "c_shelf_gap" in runs[0][0]
     assert s["action_first"] == 1.0 and s["repeated"].get("说实在的") == 3  # only 托马斯 has it
     assert style.score(tmp_path / "talk.json")["voice"]["repeats"] == s["repeats"]
+
+
+async def test_the_npcs_are_probed_for_what_their_replies_fill_in(monkeypatch, tmp_path, skills_dir):
+    _canned(monkeypatch, tmp_path)
+    Canned.told = []
+    s = await style.talk(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "probe.json", probe=True)
+    assert s["lines"] == 9 and "陪我去后面的公墓" in Canned.told[0]
+    f = s["fields"]
+    assert len(f["replies"]) == 9 and f["said"] == 0 and f["said_missing"] == [] and f["reasks"] == 0  # "我不知道" asks for no field
 
 
 def test_the_keeper_learns_the_voice_from_examples(skills_dir):
