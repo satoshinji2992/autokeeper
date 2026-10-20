@@ -87,7 +87,7 @@ class LobbyScreen(Screen):
         Binding("w", "watch", "观战"),
         Binding("s", "start", "现在开始"),
         Binding("c", "sheet", "人物卡"),
-        Binding("r", "pick", "选角色"),
+        Binding("r", "pick", "选角色 · 车卡"),
         Binding("y", "ready", "准备"),
         Binding("x", "close_room", "关闭房间"),
         Binding("h", "help", "遇到问题"),
@@ -125,7 +125,7 @@ class LobbyScreen(Screen):
                     yield Static(id="lobby-sheet")
             with Horizontal(id="lobby-actions"):
                 yield Button("入座", id="sit", variant="primary", compact=True)
-                yield Button("选角色", id="pick", variant="primary", compact=True)
+                yield Button("选角色 · 车卡", id="pick", variant="primary", compact=True)
                 yield Button("准备", id="ready", compact=True)
                 yield Button("观战", id="watch", compact=True)
                 yield Button("现在开始", id="start", compact=True)
@@ -304,11 +304,11 @@ class LobbyScreen(Screen):
         elif self.chosen and self.bring:
             mine = next((s for s in self.seats if s["investigator"] == self.chosen), {})
             if mine.get("blank"):
-                hint = "R 选择角色 · Y 准备"
+                hint = "R 选角色或车卡 · Y 准备"
             elif mine.get("ready"):
                 hint = "等待所有玩家准备 · Y 取消准备"
             else:
-                hint = "R 更换角色 · Y 准备 · 全员准备后开始"
+                hint = "R 换角色或车卡 · Y 准备 · 全员准备后开始"
         elif self.chosen:
             hint = "全员准备后自动开始；也可立即开始，空座由 AI 接替。"
         else:
