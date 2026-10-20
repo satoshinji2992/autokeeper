@@ -150,14 +150,18 @@ def chafa(im, cols: int, rows: int, symbols: list[str], *, work: int = 5) -> str
     """A frame through chafa with the art style's symbols (imagery.STYLES), as scenes are, but
     made for small pictures many times a second: an uncompressed PNG, one thread (a thread pool's
     start costs more than such a picture). Padded to `rows` lines: chafa may come a row short."""
-    buf = io.BytesIO()
-    im.save(buf, format="PNG", compress_level=0)
     colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
     from ... import imagery
 
+    if (drawn := imagery.draw(im, cols, rows, symbols, colors, work)) is not None:  # the library: no program per frame
+        ansi = drawn.rstrip("\n")
+        return ansi + ("\n" + " " * cols) * max(0, rows - (ansi.count("\n") + 1))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", compress_level=0)
+
     cmd = [*imagery.chafa_command(), "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--threads", "1",
            "--size", f"{cols}x{rows}", *symbols, "-"]
-    ansi = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+    ansi = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=10, **imagery.DETACHED).stdout.decode("utf-8", "replace")
     ansi = ansi.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
     return ansi + ("\n" + " " * cols) * max(0, rows - (ansi.count("\n") + 1))
 

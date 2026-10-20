@@ -91,7 +91,7 @@ def _chafa_ready() -> None:
     Without it the game still plays, with the hand-drawn pictures."""
     from . import imagery
 
-    if imagery.available():
+    if imagery.available() or os.environ.get("AUTOKEEPER_CHAFA", "").lower() in ("off", "0", "no"):
         return
     notices.print("没找到 chafa（把照片画成彩色字符），下载官方版本…")
     try:
@@ -126,7 +126,11 @@ def play(
     _chafa_ready()
     if sys.stdin.isatty() and _new_player():
         console.print("第一次运行，先选用哪家模型（以后运行 [bold]autokeeper login[/] 再换）：")
-        login()
+        with contextlib.suppress(typer.Exit):  # Claude without its package: the game starts all the same, its menu says so
+            login()
+        if _RESTART:
+            console.print("重新运行 [bold]autokeeper[/] 开始游戏。")
+            return
     if intro and sys.stdout.isatty():
         _intro()
     _run(AutoKeeperApp(theme=theme))
@@ -372,6 +376,29 @@ LOGINS = {  # what `login` offers: preset, the key it needs (empty: the local pr
 }
 
 
+_RESTART = False  # a component was installed under the running game: it starts again to load it
+
+
+def _claude_installed() -> bool:
+    """Claude chosen without its package: offered to install it now, as installed (uv tool), and
+    True once it is there. A running game sees it only after a restart, so this asks to restart."""
+    from . import __version__
+
+    uv = shutil.which("uv")
+    if not (paths.INSTALLED and uv and sys.stdin.isatty()):
+        return False
+    if not typer.confirm("用 Claude 要先装上它的组件（约 250 MB），现在装吗", default=True):
+        return False
+    done = subprocess.run([uv, "tool", "install", "--force", "--python", "3.12", f"autokeeper[claude]=={__version__}"])
+    if done.returncode != 0:
+        console.print("[red]Claude 组件没装好：上面是 uv 的报错。[/]")
+        return False
+    console.print("[green]Claude 组件装好了。[/] 设置完后重新运行一次 [bold]autokeeper[/]。")
+    global _RESTART
+    _RESTART = True
+    return True
+
+
 @app.command()
 def login(
     preset: Annotated[str | None, typer.Argument(help="deepseek、claude 或 codex；不写就逐项问")] = None,
@@ -396,8 +423,9 @@ def login(
         raise typer.Exit(1)
     _, name, where = LOGINS[preset]
     program = {"claude": "claude", "codex": "codex"}.get(preset)
-    if preset == "claude" and not config.claude_ready():
-        console.print(f"[yellow]{escape(config.CLAUDE_EXTRA)}。装好后再运行 autokeeper login claude。[/]")
+    if preset == "claude" and not config.claude_ready() and not _claude_installed():
+        console.print(f"[yellow]没有选 Claude。{escape(config.CLAUDE_EXTRA)}。装好后再运行 autokeeper login claude。[/]")
+        raise typer.Exit(1)  # not kept as the choice: a game on it would fail on its first call
     if key is None and program and shutil.which(program):
         console.print(f"找到本机的 {program}，用它的登录，不用填 Key。")
     elif key is None and program == "codex":

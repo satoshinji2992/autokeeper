@@ -361,6 +361,8 @@ class EngineModal(ModalScreen[dict | None]):
 
     @on(Button.Pressed, "#apply, #cancel")
     def choose(self, event: Button.Pressed) -> None:
+        if self.app.screen is not self:  # pressed again while closing: the screens under it are not this one's to close
+            return
         if event.button.id != "apply":
             self.dismiss(None)
             return

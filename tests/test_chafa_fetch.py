@@ -25,6 +25,7 @@ def fake_download(archive: bytes):
 def nowhere(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "tools", lambda: tmp_path / "tools")
     monkeypatch.setattr(imagery.shutil, "which", lambda name: None)
+    monkeypatch.setattr(imagery, "_library", lambda: None)  # no chafa.py either: the program is the way
     return tmp_path / "tools"
 
 
@@ -73,3 +74,20 @@ def test_a_chafa_that_probes_the_terminal_is_told_not_to(monkeypatch, tmp_path):
     assert imagery._quiet(chafa("  --probe=ARG    Probe the terminal")) == ("--probe", "off")
     assert imagery._quiet(chafa("  --polite=BOOL  Polite mode")) == ()
     assert imagery._quiet(str(tmp_path / "missing")) == ()
+
+
+def test_the_library_draws_without_a_program_and_the_switch_turns_it_off(monkeypatch, tmp_path):
+    """chafa.py carries the library in its wheel (Windows too): pictures come out with no chafa
+    program anywhere, and nothing runs beside the game (the user, 2026-10-20: Windows went black)."""
+    from PIL import Image
+
+    if imagery._library() is None:
+        pytest.skip("chafa.py has no wheel for this platform")
+    monkeypatch.setattr(imagery.shutil, "which", lambda name: None)
+    monkeypatch.setattr(paths, "tools", lambda: tmp_path / "none")
+    monkeypatch.setattr(imagery.subprocess, "run", lambda *a, **k: pytest.fail("no program should run"))
+    im = Image.new("RGB", (120, 80), (200, 60, 40))
+    out = imagery._chafa(im, 20, 6, "photo")
+    assert out.count("\n") == 5 and "\x1b[" in out and imagery.available()
+    monkeypatch.setenv("AUTOKEEPER_CHAFA", "off")
+    assert not imagery.available() and imagery.draw(im, 20, 6, imagery.STYLES["photo"], "240", 9) is None

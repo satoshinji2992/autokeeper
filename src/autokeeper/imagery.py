@@ -448,18 +448,65 @@ CHAFA_BUILDS = {("win32", "AMD64"): f"chafa-{CHAFA}-1-x86_64-windows.zip",
                 ("linux", "armv7l"): f"chafa-{CHAFA}-1-armv7l-linux-gnu.tar.gz"}
 
 
+# On Windows chafa runs without a console of its own (pipes only): sharing the game's, it changed
+# the console's modes and the game's screen went black (the user, 2026-10-20).
+DETACHED = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+
+
 def chafa_path() -> str | None:
-    """chafa: the system's, else the official build the game fetched (fetch_chafa)."""
+    """chafa: the system's, else the official build the game fetched (fetch_chafa); none when the
+    player turned it off (AUTOKEEPER_CHAFA=off: the hand-drawn pictures only)."""
     from . import paths
 
+    if os.environ.get("AUTOKEEPER_CHAFA", "").lower() in ("off", "0", "no"):
+        return None
     if found := shutil.which("chafa"):
         return found
     own = paths.tools() / ("chafa.exe" if sys.platform == "win32" else "chafa")
     return str(own) if own.is_file() else None
 
 
+def _off() -> bool:
+    return os.environ.get("AUTOKEEPER_CHAFA", "").lower() in ("off", "0", "no")
+
+
+@lru_cache(maxsize=1)
+def _library():
+    """chafa.py, which carries the chafa library in its wheel (Windows, Linux, macOS): pictures drawn
+    in-process, no program to find or fetch, nothing touching the game's console. None where it is
+    not installed (a platform without a wheel): the chafa program then."""
+    try:
+        import chafa
+    except Exception:  # an ImportError, or a library that would not load
+        return None
+    return chafa
+
+
 def available() -> bool:
-    return chafa_path() is not None
+    return not _off() and (_library() is not None or chafa_path() is not None)
+
+
+def draw(im: Image.Image, width: int, height: int, symbols: list[str], colors: str, work: int) -> str | None:
+    """A picture through the chafa library (chafa.py) with the command line's options as the game
+    gives them (--symbols, --color-space): None without the library."""
+    lib = _library()
+    if lib is None or _off():
+        return None
+    opts = dict(zip(symbols[::2], symbols[1::2], strict=False))
+    rgba = im.convert("RGBA")
+    cfg = lib.CanvasConfig()
+    cfg.width, cfg.height = max(1, width), max(1, height)
+    cfg.calc_canvas_geometry(rgba.width, rgba.height, 0.5)
+    cfg.canvas_mode = lib.CanvasMode.CHAFA_CANVAS_MODE_TRUECOLOR if colors == "full" else lib.CanvasMode.CHAFA_CANVAS_MODE_INDEXED_240
+    if opts.get("--color-space") == "din99d":
+        cfg.color_space = lib.ColorSpace.CHAFA_COLOR_SPACE_DIN99D
+    cfg.work_factor = max(0.0, min(1.0, (work - 1) / 8))
+    symbol_map = lib.SymbolMap()
+    symbol_map.apply_selectors(opts.get("--symbols", "block+space-wide-inverted"))
+    cfg.set_symbol_map(symbol_map)
+    canvas = lib.Canvas(cfg)
+    canvas.draw_all_pixels(lib.PixelType.CHAFA_PIXEL_RGBA8_UNASSOCIATED, rgba.tobytes(), rgba.width, rgba.height, rgba.width * 4)
+    return canvas.print().decode("utf-8", "replace")
 
 
 @lru_cache(maxsize=4)
@@ -468,7 +515,7 @@ def _quiet(chafa: str) -> tuple[str, ...]:
     terminal by default (queries written to the console, up to 5 s waiting for the answer), which on
     Windows tore the game's screen to black (the user, 2026-10-20). Older ones have no such option."""
     try:
-        help_text = subprocess.run([chafa, "--help"], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
+        help_text = subprocess.run([chafa, "--help"], capture_output=True, timeout=10, **DETACHED).stdout.decode("utf-8", "replace")
     except (OSError, subprocess.TimeoutExpired):
         return ()
     return ("--probe", "off") if "--probe" in help_text else ()
@@ -524,7 +571,18 @@ def install_hint() -> str:
 
 
 def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, work: int = 9) -> str:
-    """chafa on a file, or on an in-memory image piped through stdin."""
+    """chafa on a file, or on an in-memory image: the library when it is there (draw), else the
+    program, the image piped through stdin."""
+    colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
+    symbols = STYLES.get(style, STYLES["picture"])
+    if _library() is not None and not _off():
+        try:
+            im = source if isinstance(source, Image.Image) else Image.open(source)
+            out = draw(im, width, height, symbols, colors, work)
+        except (OSError, ValueError):
+            out = None
+        if out is not None:
+            return out.rstrip("\n")
     data = None
     if isinstance(source, Image.Image):
         buf = io.BytesIO()
@@ -537,7 +595,7 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
     # or chafa guesses the cell shape from the console font (Windows) and draws a thin strip.
     cmd = [*chafa_command(), "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
            *STYLES.get(style, STYLES["picture"]), source]
-    out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
+    out = subprocess.run(cmd, input=data, capture_output=True, timeout=20, **DETACHED).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")
 
 

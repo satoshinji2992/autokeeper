@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.3.3（2026-10-20）
+
+- 照片改用 chafa 的 Python 库（chafa.py，安装包里自带 chafa 的库，Windows、Linux、macOS 都有）在程序内部画，不再另起 chafa 程序：Windows 上不用下载 chafa.exe，也不会再有子程序搅乱游戏的控制台（主界面黑屏、没有图片）。没有这个库的平台仍用 chafa 程序；设 `AUTOKEEPER_CHAFA=off` 可以只用手绘图。
+- 选 Claude 却没装它的组件时，`login` 会问要不要现在装，不装就不把 Claude 存成默认（以前照样存下，进游戏才报错）。
+- 模型设置里连按「应用」不再崩溃。
+
 ## 0.0.3.2（2026-10-20）
 
 - 修复 Windows 装上 chafa 后进游戏黑屏、画面一闪一闪：新版 chafa（1.16 起）默认会向终端发探测序列并等回应，搅乱了游戏画面；现在调用它时关掉探测。
