@@ -46,6 +46,7 @@ Keys come from the environment; ~/.config/autokeeper/.env and ./.env are read to
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tomllib
@@ -245,6 +246,24 @@ def load_env() -> None:
     for f in (paths.USER_DIR / ".env", paths.ROOT / ".env"):
         if f.is_file():
             load_dotenv(f, override=False)
+
+
+def save_key(name: str, value: str) -> Path:
+    """Put NAME=value in ~/.config/autokeeper/.env (the file load_env reads first), in place of
+    an older line for the same name; the file is readable by its owner only. The running process
+    gets the key too."""
+    paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+    target = paths.USER_DIR / ".env"
+    lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+    lines = [line for line in lines if line.split("=", 1)[0].strip().removeprefix("export ").strip() != name]
+    lines.append(f"{name}={value}")
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with contextlib.suppress(OSError):  # Windows keeps its own permissions
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    os.environ[name] = value
+    return target
 
 
 def ui_settings() -> dict:

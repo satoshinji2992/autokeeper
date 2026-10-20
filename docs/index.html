@@ -52,18 +52,14 @@
         </section>
         <section id="install" data-title="安装开团">
             <h2>安装与启动</h2>
-            <p>运行环境为 Python 3.12+、uv 和 Node.js 18+；建议安装 chafa 以显示照片字符画。克隆仓库后安装依赖、准备模组，并运行 doctor 检查环境。</p>
-            <pre id="install-code">git clone https://github.com/satoshinji2992/autokeeper
-cd autokeeper
-uv sync --extra claude --extra graphrag
-uv run autokeeper setup
-uv run autokeeper doctor</pre>
+            <p>一行命令装好：自动安装 uv 和 Python，下载代码，最后选用哪家模型、填 API Key。需要先装 git 和 Node.js 18+，建议安装 chafa 以显示照片字符画。Windows 用 PowerShell 运行 <code>irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex</code>。</p>
+            <pre id="install-code">curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash</pre>
             <h3>模型配置与启动</h3>
             <p>支持 Claude、DeepSeek、Codex、Ollama 及兼容接口，可按职责分别配置模型。在标题页选择“新的调查”，指定模组与调查员后开始游戏。</p>
-            <pre id="launch-code">uv run autokeeper</pre>
-            <p>浏览器游玩使用 uv run autokeeper serve 启动。本网站仅提供项目介绍，实际游戏与模型调用在用户设备上运行。</p>
+            <pre id="launch-code">autokeeper</pre>
+            <p>在任意目录都能启动；浏览器游玩用 autokeeper serve，换模型或补 Key 用 autokeeper login。本网站仅提供项目介绍，实际游戏与模型调用在用户设备上运行。</p>
             <h3>从 0.0.1 升级</h3><p>升级前请备份 saves/。0.0.2 将数据整理到 data/，自己的调查员、本地模型和知识库会自动迁移，但旧版存档不能继续读取。</p>
-            <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#安装依赖">各系统安装说明</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#模型与花费">模型与花费</a>
+            <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#安装">各系统安装说明</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#模型与花费">模型与花费</a>
         </section>
         <section id="credits" data-title="文档与署名">
             <h2>文档、源码和署名</h2>

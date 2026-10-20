@@ -141,23 +141,27 @@ CoC 模组常有标准规则之外的特殊机制——比如《冬雪之下》�
 
 ## 开始玩
 
-环境需要 **Python 3.12+、[uv](https://docs.astral.sh/uv/)、Node.js 18+**，推荐一并安装 [chafa](https://hpjansson.org/chafa/) 以启用真彩照片字符画（各系统安装命令见[安装依赖](docs/playing.md#安装依赖)）。克隆仓库后初始化环境：
+一行命令装好（会自动装 uv 和 Python，最后问你用哪家模型、填 API Key）：
 
 ```bash
-git clone https://github.com/satoshinji2992/autokeeper
-cd autokeeper
-uv sync --extra claude --extra graphrag
-uv run autokeeper setup
-uv run autokeeper doctor
+# Linux、macOS、WSL
+curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
 ```
 
-`doctor` 检查通过后，按你手头的模型任选一种方式启动：
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
+```
+
+然后在任意目录：
 
 ```bash
-uv run autokeeper                       # 默认使用本机 Claude Code 登录或 ANTHROPIC_API_KEY
-uv run autokeeper --preset deepseek     # 使用 DeepSeek（需先设置 DEEPSEEK_API_KEY）
-uv run autokeeper serve                 # 在浏览器中打开单人界面
+autokeeper            # 开始游戏
+autokeeper serve      # 在浏览器里玩
+autokeeper login      # 换模型、补 API Key
 ```
+
+需要自己先装 git 和 Node.js 18+，推荐再装 [chafa](https://hpjansson.org/chafa/) 显示照片字符画（各系统命令和从源码开发的方式见[安装](docs/playing.md#安装)）。
 
 除了 Claude 和 DeepSeek，游戏还支持 Codex、Ollama 本地离线模型以及任意 OpenAI 兼容接口，可以在标题页「设置」或游戏中按 `F9` 随时切换，也能按职责混搭模型并设置预算上限。详细配法与花费说明见[游玩指南](docs/playing.md#模型与花费)。
 
@@ -177,7 +181,7 @@ uv run autokeeper serve                 # 在浏览器中打开单人界面
 
 ## 文档与开发
 
-- [游玩指南](docs/playing.md)：安装依赖、模型配置、快捷键、联机排查、MCP 与 Claude Code 插件用法。
+- [游玩指南](docs/playing.md)：安装、模型配置、快捷键、联机排查、MCP 与 Claude Code 插件用法。
 - [模组格式](docs/module-format.md) / [规则插件](docs/plugins.md)：手工编写剧本、配置大场景与开发自定义机制。
 - [守秘人体验设计](docs/keeper-experience.md)：开场引入、导演即兴、线索节奏与配图设计。
 - [模型运行机制](docs/harness.md) / [评测记录](docs/eval.md) / [世界引擎设计](docs/world.md)：多智能体架构、修辞防注入评测与后续计划。
