@@ -100,6 +100,7 @@ class Initiative(BaseModel):
 # of the turn take it, and who of those here joins in of their own accord (Game.talk). No docstring:
 # a schema's descriptions are what the model reads.
 class Plan(BaseModel):
+    lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
     action: Action = Field(description="玩家这一轮的行动")
     # At most two, as the schema says; more do not void the plan: the engine keeps the first two
     # that hold (Game._arrange).
@@ -287,6 +288,9 @@ MEMORY = {"keeper": 16000, "npc": 8000, "investigator": 6000, "arbiter": 4000}
 
 INTENT_HEAD = "你负责理解这场跑团中玩家的本轮意图。结合完整的近期交谈和现场记录，形成中立、结构化的行动，交给看不到原话的裁定员。"
 
+LOOKUPS = 2  # what the keeper may look up before it arranges a turn (Cast.plan)
+LOOKUP_HITS = 6  # record lines one lookup brings back
+
 # How an action is filled in, shared by the intent parser and the keeper's plan (PLAN_SYSTEM).
 ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声明的意图、尝试与方法，不提前确认行动成功。
   “肚子饿了”只表示饥饿或用餐意愿，不增写起身、摸肚子、进入饭馆或点餐；“想挖开墓穴”不表示已拿到铲子。
@@ -325,6 +329,7 @@ PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底�
 
 - action 交给看不到玩家原话的裁定员，summary 和第一句还会显示在玩家屏幕上。summary 只用玩家说过的叫法和【场景】里给出的名字，不写底牌里的人名、地名、真相，也不写玩家还不知道的事。destination 只填【场景】里能去的地点 id。
 - initiative：在场的人会不会主动开口、帮忙、阻拦，由你按他的目标、心境和局势决定。宁少勿多，没有就留空，最多 2 条。npc 只填【在场、可以主动的人】里的 id；玩家正在交谈的那个人会照常回应，不用写进来。does 写一句他这一轮主动说什么或做什么，只写他自己知道、出于他自己打算的事；他会用自己的资料和口吻演出来。临时路人（模组里没有的人）不进 initiative，由你在叙述里直接演。
+- lookup：手头的资料不够、答案又会改变这一轮的安排时，写一句想查的事，比如「托马斯知道日记的哪些事」「图书馆那篇旧报道的原文」「杰弗逊最近在哪」。action 照样先填好；系统查完会把结果给你，再问你一次。不用查就留空。
 
 【action 的填法】
 """
@@ -737,7 +742,55 @@ class Cast:
         prompt += "\n【在场、可以主动的人】" + ("、".join(f"{n.name}({n.id})" for n in self.able(state)) or "无")
         reply = await self._send("plan", s, state, prompt)
         plan = Plan.model_validate(reply.data)
-        return plan.model_copy(update={"action": plan.action.model_copy(update={"echo": ""})})
+        # What it asks to look up is answered and it is asked again, twice at most; a lookup after
+        # that is not answered. A model-free loop: one JSON field, no vendor's tool calls (as the
+        # NPCs' backstage decisions, world/agents.CastBrain). A call that then fails leaves the plan
+        # it had, whose action was already filled in.
+        for _asked in range(LOOKUPS):
+            query = plan.lookup.strip()
+            if not query:
+                break
+            found = await self.look_up(state, query)
+            if journal := getattr(self, "debug_journal", None):
+                journal.append("lookup", {"query": query, "found": found}, turn=state.turn)
+            prompt += f"\n\n【查询结果】（{query}）\n{found}\n现在给出安排，lookup 留空。"
+            try:
+                reply = await self._send("plan", s, state, prompt)
+                plan = Plan.model_validate(reply.data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if journal:
+                    journal.append("lookup", {"status": "failed", "error": type(exc).__name__}, turn=state.turn)
+                break
+        return plan.model_copy(update={"lookup": "", "action": plan.action.model_copy(update={"echo": ""})})
+
+    async def look_up(self, state: GameState, query: str) -> str:
+        """What the keeper asks before it arranges the turn (Plan.lookup), never shown to the players:
+        those it names, where they are now and what of the query they know and went through
+        (world/context.npc_brief); the record's facts and events that match (world/index.Recall, the
+        module's seeded text with this game's rewrites in it); the module's source when it has an
+        index (_private_lore, with what was rewritten)."""
+        m, w = self.module, self.world
+        rows: list[str] = []
+        named = [n for n in m.npcs if n.id in query or any(len(part) > 1 and part in query
+                                                           for part in [n.name, *n.name.replace("·", " ").split()])][:2]
+        names = [n.name for n in named]
+        if w is not None:
+            from ..world.index import Recall
+
+            for n in named:
+                place, ent = w.place(n.id), w.rec.entities.get(n.id)
+                where = w.name(place) if place else "不明"
+                rows.append(f"【{n.name}】此刻在{where}" + (f"，{ent.status}" if ent is not None and ent.status else ""))
+                if brief := world_view.npc_brief(w, n.id, query=query):
+                    rows.append(f"（下面是{n.name}自己的资料，“你”指{n.name}）\n{brief}")
+            hits = await Recall().search(w, query, k=LOOKUP_HITS)
+            if hits:
+                rows.append("【记录里相关的】\n" + "\n".join(f"- {h.text.strip()}" for h in hits))
+        if lore := await self._private_lore(state, query, names):
+            rows.append(lore.strip())
+        return "\n".join(rows) or "没有查到相关的记录，按手头的资料安排。"
 
     async def arbiter(self, state: GameState, action: Action, at: str | None = None) -> Ruling:
         """`at`: the place the investigator walks to for this action; it is ruled there."""

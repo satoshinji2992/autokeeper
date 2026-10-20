@@ -3,6 +3,8 @@ what it looks up first. Scripted models and FakeCast, no model calls."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from autokeeper import config
@@ -223,3 +225,61 @@ async def test_the_scheduler_holds_those_named_wakes_and_steps_alike(module, fak
     report = await scheduler.advance(w, Canned(decide), start + 5, start + 10, tick="free")
     assert w.entity("warden").at == "office" and decided == [["warden"]]
     await game.close()
+
+
+# -- what the keeper looks up first (Plan.lookup) -----------------------------------------------------
+def scripted(module, fake):
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), module)
+    return make(module, fake, cast), cast
+
+
+async def test_a_lookup_is_answered_from_the_record_and_the_keeper_is_asked_again(module, fake):
+    game, cast = scripted(module, fake)
+    events = []
+
+    async def emit(ev):
+        events.append(ev)
+
+    game.emit = emit
+    draft = {"kind": "investigate", "summary": "周衡查看齿轮"}
+    SCRIPT.append({"lookup": "老守钟人知道齿轮间的什么事", "action": draft})
+    SCRIPT.append({"lookup": "", "action": {**draft, "target": "齿轮间"},
+                   "initiative": [{"npc": "warden", "does": "提醒他齿轮会咬手"}]})
+    action = await game.parse("我看看齿轮")
+    asked = [c for c in SEEN if c["system"].startswith(PLAN_SYSTEM)]
+    assert len(asked) == 2 and not SCRIPT
+    again = asked[1]["messages"][-1]["content"]
+    assert "【查询结果】（老守钟人知道齿轮间的什么事）" in again and "现在给出安排，lookup 留空" in again
+    assert "【老守钟人】此刻在钟楼" in again and "老守钟人自己的资料" in again
+    assert asked[0]["messages"][-1]["content"] in again  # the same turn, asked again with the answer
+    assert action.target == "齿轮间" and [x.npc for x in game.initiative] == ["warden"]
+    assert game.state.usage["plan"]["calls"] == 2
+    shown = "".join(e.text for e in game.state.log) + json.dumps(events, ensure_ascii=False)
+    assert "查询结果" not in shown and "老守钟人自己的资料" not in shown  # the players never see it
+    await game.close()
+    await cast.close()
+
+
+async def test_two_lookups_at_most_and_the_last_ones_is_not_answered(module, fake):
+    game, cast = scripted(module, fake)
+    for i in range(3):
+        SCRIPT.append({"lookup": f"第{i + 1}次想查的钟楼旧事", "action": {"kind": "investigate", "summary": f"周衡查看齿轮{i}"}})
+    action = await game.parse("我看看齿轮")
+    asked = [c for c in SEEN if c["system"].startswith(PLAN_SYSTEM)]
+    assert len(asked) == 3 and not SCRIPT and action.summary == "周衡查看齿轮2"
+    last = asked[2]["messages"][-1]["content"]
+    assert "【查询结果】（第1次想查的钟楼旧事）" in last and "【查询结果】（第2次想查的钟楼旧事）" in last
+    assert "第3次" not in last
+    await game.close()
+    await cast.close()
+
+
+async def test_a_lookup_finds_the_records_matching_lines_with_rewrites_in(module, fake):
+    game, cast = scripted(module, fake)
+    w = game.world
+    w.apply(O.AddFact(id="ledger", actor="director", fact="ledger", text="钟楼的账本记着每一次多敲的钟声", fact_kind="setting"))
+    found = await cast.look_up(game.state, "钟楼账本记着什么")
+    assert "【记录里相关的】" in found and "钟楼的账本记着每一次多敲的钟声" in found
+    assert (await cast.look_up(game.state, "zzz")) == "没有查到相关的记录，按手头的资料安排。"
+    await game.close()
+    await cast.close()
