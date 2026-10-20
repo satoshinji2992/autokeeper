@@ -26,7 +26,7 @@ from .test_tui import canned  # noqa: F401  (a fixture: every agent answers from
 ROOT = Path(__file__).resolve().parents[1]
 ZHUI = ROOT / "modules" / "zhuishuren"
 BUNDLED = [Path(EXAMPLE), *sorted(p.parent for p in (ROOT / "modules").glob("*/module.yaml"))]
-SECRETS = {"lingmu", "suidao"}  # 墓地深处的陵墓, 食尸鬼隧道网
+SECRETS = {"lingmu", "suidao"}  # 墓地深处的陵墓, 地底隧道网
 SIZES = [(80, 24), (100, 30), (120, 40), (160, 50)]
 
 
@@ -99,7 +99,7 @@ def plays(m: Module, rng: random.Random, games: int, turns: int) -> list[GameSta
 def test_secret_places_stay_off_the_map_until_heard_of(zhui):
     st = opened(zhui)
     assert known(zhui, st) == {"huochezhan", "jinboer_jia", "jiefang", "mudi", "zhenzhongxin"}  # the platform and the address, before meeting Thomas
-    st.add("player", "我直接去食尸鬼隧道网，再去墓地深处的陵墓看看", who="哈罗德")  # a guess is not knowledge
+    st.add("player", "我直接去地底隧道网，再去墓地深处的陵墓看看", who="哈罗德")  # a guess is not knowledge
     assert not known(zhui, st) & SECRETS
     drawn = mapview.view(zhui, st, 88, 22).plain
     assert "陵墓" not in drawn and "隧道" not in drawn and "食尸鬼" not in drawn
@@ -119,7 +119,7 @@ def test_a_place_heard_of_shows_by_the_name_it_was_heard_by(zhui):
     assert ("mudi", "lingmu") in c.trails and c.names["lingmu"] == "陵墓" and c.kinds["lingmu"] == "heard"
     st.visited += ["lingmu", "suidao"]
     c = mapview.chart(zhui, st)
-    assert c.names["suidao"] == "食尸鬼隧道网" and c.kinds["suidao"] == "been" and ("lingmu", "suidao") in c.roads
+    assert c.names["suidao"] == "地底隧道网" and c.kinds["suidao"] == "been" and ("lingmu", "suidao") in c.roads
 
 
 def test_names_match_in_full_or_by_their_head_never_by_a_plain_word(zhui):
@@ -203,7 +203,7 @@ def test_every_known_place_is_drawn_once_without_overlap_and_here_is_marked(zhui
 
 def test_twenty_places_with_long_names_still_fit():
     m = Module.load(EXAMPLE)
-    names = ["金博尔家", "道格拉斯的书房", "艾尔斯伯里大街", "公墓", "墓地深处的陵墓", "食尸鬼隧道网", "阿诺兹堡镇中心", "阿诺兹堡公共图书馆", "阿诺兹堡警察局",
+    names = ["金博尔家", "道格拉斯的书房", "艾尔斯伯里大街", "公墓", "墓地深处的陵墓", "地底隧道网", "阿诺兹堡镇中心", "阿诺兹堡公共图书馆", "阿诺兹堡警察局",
              "《阿诺兹堡广告报》报社", "圣玛丽教堂的钟楼", "河边的废弃磨坊", "火车站候车室", "黑橡树旅馆", "旅馆二楼的十三号房", "老码头仓库",
              "密斯卡托尼克大学图书馆", "镇北的疗养院", "沼泽边的渔夫小屋", "灯塔"]  # fmt: skip
     ways = {0: [1, 2, 3], 2: [6, 3], 3: [4], 4: [5], 6: [7, 8, 9, 12, 13], 13: [14], 12: [15, 16], 15: [11, 19], 11: [18], 16: [17], 10: [6, 3]}
@@ -401,6 +401,20 @@ def test_within_is_optional_and_checked(zhui):
     assert len(c.within) == 1 and mapview.tree(c, set(c.names)).shown  # the loop is cut, the map still drawn
     bad = Improv(kind="后果", reason="…", locations=[NewLocation(id="loft", name="阁楼", read_aloud="", exits=["jinboer_jia"], within="nowhere")])
     assert improv.check(zhui, bad, at="jinboer_jia")
+
+
+def test_the_front_matter_puts_no_secret_place_on_the_map():
+    """The title, subtitle, hook and setting count as shown from the start: 「斯托威尔镇的望远镜」
+    put the professor's telescope on the map before anyone had heard of it."""
+    for path in sorted(p for p in (ROOT / "modules").iterdir() if (p / "module.yaml").exists()):
+        m = Module.load(path)
+        assert not [i for i in graph.audit(m) if "开局就会出现在地图上" in i.text], m.id
+    stowell = Module.load(ROOT / "modules" / "fallout3-youxierenyouyanbujin")
+    st = Game.new(stowell, stowell.pregens[:1])
+    assert "greenhouse" not in fog.known(stowell, st)
+    stowell.subtitle = "斯托威尔镇的望远镜"
+    assert "greenhouse" in fog.known(stowell, st)
+    assert any("「望远镜」" in i.text and "greenhouse" in i.text for i in graph.audit(stowell))
 
 
 # -- on screen --------------------------------------------------------------------------------
