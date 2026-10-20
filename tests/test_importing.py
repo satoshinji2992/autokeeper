@@ -272,7 +272,10 @@ async def test_import_screen_passes_separate_models_to_the_job(monkeypatch, libr
         await until(pilot, lambda: screen.step == "confirm")
         screen.query_one("#import-model", Select).value = "codex:default"
         screen.query_one("#vision-model", Input).value = "codex:default"
-        await pilot.pause()
+        for _ in range(30):  # the changes handled (Windows' CI looked one tick too soon)
+            await pilot.pause(0.1)
+            if "default" in shown(screen, "#engine"):
+                break
         assert "default" in shown(screen, "#engine")
         screen._begin()
         await until(pilot, lambda: screen.step == "done")
