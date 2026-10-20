@@ -132,7 +132,7 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
                 old.personality, old.goal = new.personality, new.goal
         # What compile time adds since (module/adapt.py): the situation layer, the opening performance,
         # clues for a conclusion short of three. Added, never changed: the original clues stay as they were.
-        for name in ("relations", "agendas", "foreshadow", "ties", "mechanics", "prelude"):
+        for name in ("relations", "agendas", "foreshadow", "ties", "mechanics", "history", "prelude"):
             setattr(then, name, getattr(now, name))
         original = {c.id for c in then.clues}
         now = now.model_copy(update={"clues": [c for c in now.clues if c.id in original]})
