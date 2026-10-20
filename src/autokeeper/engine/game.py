@@ -77,6 +77,7 @@ class Turn:
     earlier: CheckRecord | None = None  # a repeated attempt: this earlier check stands, nothing is rolled
     notes: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)  # a rule plugin's one line the keeper must weave in
+    foreshadow: list[str] = field(default_factory=list)  # Module.foreshadow ids of the place they came to (Game._foreshadow)
     world: list[str] = field(default_factory=list)  # what the rest of the world did in front of the party (world/)
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
@@ -1673,7 +1674,23 @@ class Game:
         return [f"【未落实】{name}刚才的回应里有做不到的事：{'；'.join(failed)}。叙述里按实际情况交代（东西不在身上、去不了那里），"
                 "不写成已经做到，也不删改他说过的话。"]
 
+    def _foreshadow(self, turn: Turn) -> None:
+        """The hints of the place they came to, given to the keeper as this turn is told. A roll
+        that failed and found nothing keeps them back: a trace on the very thing they searched is
+        what the failure did not find. They come out on a later visit."""
+        st = self.state
+        missed = not turn.clues and not turn.events and (
+            any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
+        for fid in turn.foreshadow:
+            f = next((x for x in self.m.foreshadow if x.id == fid), None)
+            if f is None or f.id in st.hinted or missed:
+                continue
+            st.hinted.append(f.id)
+            turn.notes.append(f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{f.hint}")
+        turn.foreshadow = []
+
     async def narrate(self, turn: Turn, on_delta=None) -> str:
+        self._foreshadow(turn)
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling.
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
@@ -1853,10 +1870,7 @@ class Game:
             self._here = self._present()
             if traces := world_view.traces(self.world, loc_id):
                 self.visuals.look(f"location:{loc_id}", "；".join(traces))
-            for f in m.foreshadow:
-                if f.where == loc_id and f.id not in st.hinted:
-                    st.hinted.append(f.id)
-                    turn.notes.append(f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{f.hint}")
+            turn.foreshadow += [f.id for f in m.foreshadow if f.where == loc_id and f.id not in st.hinted]
             return {"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", ""), "view": st.view}
 
         async def arrive() -> None:

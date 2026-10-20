@@ -390,10 +390,12 @@ async def test_the_modules_situation_is_set_going_when_the_game_starts(module, f
     assert rec.threads["foreshadow:f_tick"].kind == "foreshadow"
     turn = Turn()
     await game._arrive("tower", turn)
+    game._foreshadow(turn)
     assert any("比钟摆慢半拍" in n for n in turn.notes)
     again = Turn()
     await game._arrive("square", Turn())
     await game._arrive("tower", again)
+    game._foreshadow(again)
     assert not any("比钟摆慢半拍" in n for n in again.notes)  # given once
     assert "守钟人是他父亲的老战友" in director_context(module, game.state, "开局改编")
 
@@ -487,3 +489,22 @@ async def test_the_modules_past_is_remembered_by_those_who_know_it(module, fake)
     assert past.visibility == "private" and set(past.witnesses) == {"warden", "preacher"} and not past.reactive
     assert "儿子从钟楼上摔下来" in context.npc_view(w, "warden").text
     assert "儿子从钟楼上摔下来" not in context.keeper_view(w)
+
+
+async def test_a_failed_search_keeps_the_places_foreshadowing_for_a_later_visit(module, fake):
+    from autokeeper.module.schema import Foreshadow
+
+    module.foreshadow = [Foreshadow(id="f_tick", hint="钟楼里的咔哒声比钟摆慢半拍", where="tower", pays_off="k_motive")]
+    game, _, _ = make(module, fake, {}, location="square")
+    fake.queue(99)
+    missed = Turn()
+    await game._arrive("tower", missed)
+    missed.checks.append(game.rules.check(game.state.investigator, "侦查"))
+    game._foreshadow(missed)
+    assert not missed.checks[0].passed
+    assert not any("比钟摆慢半拍" in n for n in missed.notes) and "f_tick" not in game.state.hinted
+    later = Turn()
+    await game._arrive("square", Turn())
+    await game._arrive("tower", later)
+    game._foreshadow(later)
+    assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.hinted == ["f_tick"]
