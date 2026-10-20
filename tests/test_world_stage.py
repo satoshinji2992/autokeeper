@@ -52,6 +52,30 @@ async def test_a_beat_that_no_longer_fits_is_dropped_and_its_author_thinks_again
     assert w.entity("warden").at == "tower" and w.agent("warden").wake == w.now
 
 
+async def test_a_held_step_whose_condition_no_longer_holds_is_thought_again():
+    w = staged(location="tower")
+    show = Step(id="show", text="把日记摊给调查员看", due=w.now + 1, when="at:players:tower",
+                ops=[{"kind": "occur", "text": "守钟人把日记摊开在桌上", "place": "tower"}])
+    w.apply(O.SetPlan(npc="warden", steps=[show]))
+    await scheduler.advance(w, None, w.now, w.now + 2)
+    [beat] = stage.waiting(w)
+    w.st.location = "square"  # the party went down before it played
+    assert any("条件不再成立" in p for p in stage.play(w, beat)) and beat.status == "dropped"
+    assert not any(e.text == "守钟人把日记摊开在桌上" for e in w.rec.events) and w.agent("warden").wake == w.now
+
+
+async def test_a_held_decision_resting_on_what_has_since_changed_is_decided_again():
+    w = staged(location="tower")
+    w.agent("warden").wake = w.now
+    leave = Scene(decisions=[Decision(npc="warden", ops=[O.Move(entity="warden", to="square")])])
+    await scheduler.advance(w, Canned(lambda ask: leave), w.now, w.now + 1)
+    [beat] = stage.waiting(w)
+    assert "entity:warden" in beat.reads and "agent:warden" not in beat.reads  # not its own mood and timer
+    assert w.apply(O.Condition(entity="warden", add="扭伤了脚", actor="director")).ok  # hurt meanwhile
+    assert stage.play(w, beat) == ["entity:warden 变了"] and beat.status == "dropped"
+    assert w.entity("warden").at == "tower" and w.agent("warden").wake == w.now
+
+
 def test_only_the_partys_own_travel_takes_a_companion_along():
     w = staged(location="tower")
     me = w.st.investigator.id

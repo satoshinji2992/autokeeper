@@ -472,11 +472,32 @@ async def test_a_twice_invalid_npc_reply_leaves_no_partial_action_or_spoken_memo
          "item": "missing_lantern", "owner": state.investigator.id},
     ]}
     SCRIPT.extend([invalid, invalid, {"text": "提灯不在我这儿，你得另想办法。"}])
-    # Twice not doable: the third time it answers in words only, and the turn goes on (no /retry).
+    # Told again with what did not hold, checked the same way each time; the turn goes on (no /retry).
     assert await cast.npc(state, npc.id, "借我提灯。") == "提灯不在我这儿，你得另想办法。"
-    assert "只用台词回应" in SEEN[-1]["messages"][-1]["content"]
+    assert "行动校验未通过" in SEEN[-1]["messages"][-1]["content"]
     assert not state.item_owners and state.npc(npc.id).lines == 1
     assert "提灯先拿去" not in json.dumps(state.transcripts, ensure_ascii=False)
+    await cast.close()
+
+
+async def test_a_reply_never_made_doable_says_nothing_it_did_not_do():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), m)
+    cast.world = World(m, state)
+    invalid = {"text": "这盏提灯先拿去。", "changes": [
+        {"kind": "transfer", "key": "lantern", "text": "这盏提灯先拿去", "npc": npc.id,
+         "item": "missing_lantern", "owner": state.investigator.id},
+    ]}
+    SCRIPT.extend([invalid, invalid, invalid])
+    said = await cast.npc(state, npc.id, "借我提灯。")
+    assert "提灯" not in said and "什么也没做" in said  # never "here you are" with nothing handed over
+    assert not state.item_owners
+    assert "提灯先拿去" not in json.dumps(state.transcripts, ensure_ascii=False)  # it remembers what it said
     await cast.close()
 
 
@@ -806,3 +827,28 @@ def test_budget_guard_stops_metered_calls(monkeypatch):
     with pytest.raises(BudgetExceeded):
         spend.guard("deepseek:deepseek-flash")
     spend.guard("claude-opus-5-5")  # Claude Code reports its own cost and is not capped here
+
+
+async def test_a_spoken_handover_that_does_not_settle_is_told_again(monkeypatch):
+    from autokeeper.engine.check import Problem, Reading
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    npc = m.npc("warden")
+    state.location = npc.location
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, check=True)
+    cast = Cast(cfg, m)
+    cast.world = World(m, state)
+    readings = [Reading(problems=[Problem(kind="其他", claim="提灯给你", record="这一轮没有结算交出提灯")]), Reading()]
+    seen = []
+
+    async def reading(state, material):
+        seen.append(material)
+        return readings.pop(0)
+
+    monkeypatch.setattr(cast, "check", reading)
+    SCRIPT.extend([{"text": "提灯给你。"}, {"text": "我手上没有提灯。"}])
+    assert await cast.npc(state, npc.id, "借我提灯。") == "我手上没有提灯。"
+    assert "这次回应同时结算：什么也不结算" in seen[0] and "提灯给你" in SEEN[-1]["messages"][-1]["content"]
+    await cast.close()

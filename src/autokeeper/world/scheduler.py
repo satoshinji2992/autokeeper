@@ -68,11 +68,13 @@ def fresh(w: World, reads: dict[str, int]) -> list[str]:
     return [ref for ref, v in reads.items() if w.version(ref) != v]
 
 
-def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, report: Report, text: str = "") -> bool:
+def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, report: Report, text: str = "",
+          reads: dict[str, int] | None = None, when: str = "") -> bool:
     """A decision is one unit: a refused transfer must not leave a successful handover story.
     Work that would change the scene in front of the investigators waits for the keeper as a
     beat instead of landing behind their backs (stage.py); a turning point offscreen waits for
-    the director while one is looking (review.py)."""
+    the director while one is looking (review.py). Held work keeps what it rested on (reads,
+    the plan step's when): if that moved by the time it goes ahead, its author decides again."""
     from .store import World
     from .tools import Gateway
 
@@ -108,14 +110,16 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
         report.refused.extend(f"{prefix} {p}" for p in cuts)
         return False
     if involved:
-        beat = stage.queue(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], involved, leaving)
+        beat = stage.queue(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], involved, leaving,
+                           reads=reads, when=when)
         if beat.status == "dropped":
             report.refused.append(f"{beat.id} 上次没能上演：{beat.note}")
             return False
         report.staged.append(beat.id)
         return True
     if turning and w.reviewing:
-        proposal = review.hold(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], turning, text)
+        proposal = review.hold(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], turning, text,
+                               reads=reads, when=when)
         if proposal.status == "dropped":
             report.refused.append(f"{proposal.id} 导演没有放行：{proposal.note}")
             return False
@@ -247,7 +251,7 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
                         and not any(raw.get("kind") == "move" and raw.get("entity") == person for raw in ops)):
                     ops.append({"kind": "move", "entity": person, "to": sch.place})
         ops.append({"kind": "occur", "text": sch.text, "place": sch.place, "participants": people})
-        if not _land(w, ops, prefix=sch.id, actor=sch.actor or "engine", report=report, text=sch.text):
+        if not _land(w, ops, prefix=sch.id, actor=sch.actor or "engine", report=report, text=sch.text, reads=sch.reads):
             sch.status = "dropped"
             report.dropped.append(sch.id)
             wake(sch.actor, "blocked", f"原先安排无法执行：{sch.text}")
@@ -385,7 +389,8 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
         if agents.holds(w, s.when):
             if s.ops and not fresh(w, a.reads):
                 ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
-                if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text):
+                if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text,
+                             reads=a.reads, when=s.when):
                     wake(npc, "blocked", f"计划未能执行，需处理实际阻碍：{s.text}")
                     report.blocked.append(f"{npc}:{s.id}")
             elif s.ops:
@@ -419,7 +424,8 @@ def _settle(w: World, scene: agents.Scene | None, group: list[str], place: str, 
             if isinstance(op, SetPlan) and not op.reads:
                 op = op.model_copy(update={"reads": views[d.npc].reads})
             ops.append(op.model_dump(mode="json"))
-        if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report, text=d.judge or d.notice):
+        if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report, text=d.judge or d.notice,
+                     reads=views[d.npc].reads):
             # A failed decision must remain eligible on the next turn, with the real
             # refusal in the diagnostic report, instead of sleeping for four hours.
             if a := w.rec.agents.get(d.npc):

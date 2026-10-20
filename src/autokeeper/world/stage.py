@@ -100,15 +100,30 @@ def leaves(w: World, op: Any) -> list[str]:
 
 
 def queue(w: World, ident: str, actor: str, ops: list[dict[str, Any]], involves: list[str],
-          leaving: list[str] | None = None) -> Beat:
-    """Keep work that touches the stage for the keeper. The same work asked again is the same beat."""
+          leaving: list[str] | None = None, *, reads: dict[str, int] | None = None, when: str = "") -> Beat:
+    """Keep work that touches the stage for the keeper, with what it rested on. The same work
+    asked again is the same beat."""
     if (known := next((b for b in w.rec.beats if b.id == ident), None)) is not None:
         return known
     beat = Beat(id=ident, actor=actor, ops=ops, involves=list(dict.fromkeys(involves)),
-                leaving=list(dict.fromkeys(leaving or [])), t=w.now, turn=w.st.turn)
+                leaving=list(dict.fromkeys(leaving or [])), reads=basis(actor, reads), when=when, t=w.now, turn=w.st.turn)
     finished = [b for b in w.rec.beats if b.status != "waiting"]
     w.rec.beats = [*finished[-KEPT:], *(b for b in w.rec.beats if b.status == "waiting"), beat]
     return beat
+
+
+def basis(actor: str, reads: dict[str, int] | None) -> dict[str, int]:
+    """What a held decision rests on, without its author's own bookkeeping (mood, timer), which
+    changes the moment the decision is taken."""
+    return {ref: v for ref, v in (reads or {}).items() if ref != f"agent:{actor}"}
+
+
+def gone_by(w: World, reads: dict[str, int], when: str) -> list[str]:
+    """Why held work no longer fits: what it rested on moved, or its condition no longer holds."""
+    from .agents import holds
+
+    moved = [f"{ref} 变了" for ref, v in reads.items() if w.version(ref) != v]
+    return moved + ([f"条件不再成立：{when}"] if when.strip() and not holds(w, when) else [])
 
 
 def waiting(w: World, actor: str | None = None) -> list[Beat]:
@@ -152,8 +167,9 @@ def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
 
 def play(w: World, beat: Beat) -> list[str]:
     """Land a beat whole, now; what stops it when it no longer fits (it is dropped then, and
-    its author woken to decide again)."""
-    problems = commit(w, beat.actor, beat.ops)
+    its author woken to decide again): what it rested on moved, its condition no longer holds,
+    or the world refuses it."""
+    problems = gone_by(w, beat.reads, beat.when) or commit(w, beat.actor, beat.ops)
     beat.status = "dropped" if problems else "played"
     beat.note = "；".join(problems)[:200]
     if problems and (a := w.rec.agents.get(beat.actor)) is not None:

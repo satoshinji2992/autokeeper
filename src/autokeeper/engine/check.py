@@ -3,11 +3,11 @@
 The keeper writes a turn's narration; before the words reach a screen they are read against the
 world record as the turn left it (account): who is here and who is in the other rooms of the
 building, who walks with the investigators, what they and the people here carry, what this turn
-settled, which signs of the module's foreshadowing it was handed. Engine.Game._verified does the
-rest: someone written in who is next door and free comes over (the record follows the telling);
-anything else that does not hold is told again with what was wrong, and a sentence that still
-does not hold is left out. The replay eval (eval/session.py) judges with this same record and
-these same rules, so what passes here is what it counts as consistent.
+settled, which signs of the module's foreshadowing it was handed. The record is right and the
+telling is what is checked: Engine.Game._verified has what does not hold told again knowing
+what was wrong, leaves out a sentence that still does not hold, and never moves the world to
+fit the words. The replay eval (eval/session.py) judges with this same record and these same
+rules, so what passes here is what it counts as consistent.
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ RULES = """你核对一段跑团叙述和游戏后台的记录是否一致。记
 - 物品：调查员用了、拿着、掏出的东西，不在他的随身物品里，这一轮也没有得到，叙述里也没写是从谁手里借来、在哪里拿起。
 - 发现：叙述里出现了这一轮结算之外的具体新物证（血迹、新的脚印、被拖拽或打斗的痕迹、遗落的物件、写着字的东西），而结算里没有这样的线索或事件。光线、声音、天气、气味、情绪和早已知道的东西不算。
 - 时间：叙述的时刻、昼夜，或者一段事情花了多久，和记录明显对不上。
-- 其他：叙述替玩家做了玩家没说的重要行动，或者把记录里没有发生的事当成已经发生。
+- 其他：叙述替玩家做了玩家没说的重要行动，或者把记录里没有发生的事当成已经发生；NPC 嘴上说此刻把东西交给调查员、答应同行或带路，记录里这一轮却没有结算这件事。
 
 只核对记录里有名字的人；街上的行人、店铺开门关门、窗帘灯火这类寻常景象不算在场，也不算发现。回忆、转述、猜测，只是提到某人的名字，都不算在场。
-这些不是矛盾，不要列：叙述写某人不在这里、没跟来、不见了、找不到、一路没见着，而记录里他确实不在调查员身边；同一处别的房间里的人隔着门应声、在门口探身，没有走进调查员所在的地方；记录里刚一起到达、同行已经结束、此刻就在身边的人。NPC 自己说的话可以撒谎、可以不知道，不算矛盾；只看旁白叙述和 NPC 的动作描写。NPC 自己身上的东西不算调查员的物品。
+这些不是矛盾，不要列：叙述写某人不在这里、没跟来、不见了、找不到、一路没见着，而记录里他确实不在调查员身边；同一处别的房间里的人隔着门应声、在门口探身，没有走进调查员所在的地方；记录里刚一起到达、同行已经结束、此刻就在身边的人。NPC 对事情的说法可以撒谎、可以不知道，不算矛盾；要看的是旁白叙述、NPC 的动作描写，以及 NPC 嘴上说此刻正在做的交接和同行。NPC 自己身上的东西不算调查员的物品。
 逐条核对，核对下来一致的不要列；没有矛盾就留空。"""
 
 # A reader that checked a line and found it agreed sometimes lists it anyway, saying so.
@@ -50,6 +50,15 @@ class Problem(BaseModel):
 
 class Verdict(BaseModel):
     problems: list[Problem] = Field(default_factory=list, max_length=6, description="和记录矛盾的地方；没有就留空")
+
+
+class Reading(Verdict):
+    """In play the same reading also keeps what is going on as the telling stops (GameState.ongoing)."""
+
+    now: str = Field("", max_length=60, description="叙述停下时正在进行的事，一句话（追着谁、在等谁回答、和谁对峙）；平静就留空")
+
+
+ONGOING = "另外用一句话写下叙述停下时正在进行的事（追着谁、在等谁回答、和谁对峙），平静就留空。"
 
 
 def _name(m: Module, ident: str) -> str:
@@ -109,11 +118,27 @@ def standing(found: list[Problem]) -> list[Problem]:
     return [p for p in found if not AGREED.search(p.record)]
 
 
-_SENTENCE = re.compile(r"(?<=[。！？!?…])")
+_PLAIN = re.compile(r"[\s，。、；：？！“”‘’「」『』（）()《》〈〉…—\-,.;:?!\"'`]+")
 
 
 def redact(text: str, problems: list[Problem]) -> str:
-    """The telling without the sentences that still do not hold: those quoting a problem's words."""
-    bad = [grams(p.claim, 4) for p in problems if p.claim.strip()]
-    kept = [s for s in _SENTENCE.split(text) if s.strip() and not any(g and len(grams(s, 4) & g) >= max(1, len(g) // 2) for g in bad)]
-    return "".join(kept).strip()
+    """The telling without the sentences that do not hold: those quoting a problem's words,
+    whole or for the most part. Paragraph breaks stay where sentences remain."""
+    bad = [(_PLAIN.sub("", p.claim), grams(p.claim, 4)) for p in problems if p.claim.strip()]
+
+    def wrong(sentence: str) -> bool:
+        plain = _PLAIN.sub("", sentence)
+        return any((claim and (claim in plain or plain in claim)) or (g and len(grams(sentence, 4) & g) >= max(1, len(g) // 2))
+                   for claim, g in bad)
+
+    out, line = [], []
+    for piece in re.split(r"(\n+)", text):
+        if piece.startswith("\n"):
+            if line:
+                out.append("".join(line))
+                line = []
+            continue
+        line += [s for s in re.split(r"(?<=[。！？!?…）)])", piece) if s.strip() and not wrong(s)]
+    if line:
+        out.append("".join(line))
+    return "\n\n".join(x.strip() for x in out if x.strip())

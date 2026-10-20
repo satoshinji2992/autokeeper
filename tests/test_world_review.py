@@ -53,6 +53,16 @@ async def test_without_a_director_looking_nothing_is_held():
     assert not report.held and w.entity("warden").status == "死亡"
 
 
+async def test_let_through_after_what_it_rested_on_moved_it_is_decided_again():
+    w = staged(location="office")
+    await held_kill(w)
+    [proposal] = review.waiting(w)
+    assert w.apply(O.Move(entity="warden", to="square", actor="director")).ok  # he left the tower meanwhile
+    assert review.let_through(w, proposal) == ["entity:warden 变了"]
+    assert proposal.status == "dropped" and w.entity("warden").status != "死亡"
+    assert w.agent("preacher").wake == w.now
+
+
 class Reviewing(FakeCast):
     """A director whose look between turns answers from a list."""
 

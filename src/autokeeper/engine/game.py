@@ -33,7 +33,7 @@ from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from ..world import adapters, contract, desk, knowledge, review, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
-from ..world.ops import AddFact, Equip, Follow, Improvise, Move, Occur, Rewrite
+from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import check, diagnostics, fog, progress, views, world
@@ -185,7 +185,6 @@ class Game:
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._looked = 0  # the turn the director last looked between turns (Game._review)
-        self.reconcile = False  # a screen has each telling checked against the record afterwards (Game._reconcile)
         self._before: dict[str, Any] = {}  # the game as the turn found it, for reading its telling (engine/check.py)
         self._said = ""  # the player's words this turn
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
@@ -1473,10 +1472,9 @@ class Game:
     async def remember(self) -> None:
         st = self.state
         st.tally()
-        told = self.told if self.reconcile and self.told is not None and self.told.entry.turn == st.turn else None
-        if (self._world_owed or told) and self._world_task is None:
-            owed, self._world_owed = self._world_owed, False
-            self._world_task = asyncio.create_task(self._after_turn(told, owed), name="world")
+        if self._world_owed and self._world_task is None:
+            self._world_owed = False
+            self._world_task = asyncio.create_task(self._live_later(), name="world")
         self.world.sync()  # before the log is folded: what the players were told is out
         self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
@@ -1891,58 +1889,6 @@ class Game:
         if task is not None:
             await asyncio.gather(task, return_exceptions=True)
 
-    async def _after_turn(self, told: Told | None, owed: bool) -> None:
-        """Once a turn is told: its telling checked against the record, then the world's own life."""
-        if told is not None:
-            try:
-                await self._reconcile(told)
-            except asyncio.CancelledError:
-                raise
-            except CassetteError:
-                raise
-            except Exception as exc:  # a check that failed costs nobody a turn
-                self._debug("reconcile", {"phase": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]})
-        if owed:
-            await self._live_later()
-
-    async def _reconcile(self, told: Told) -> None:
-        """After the telling: where it ran ahead of the record. Someone written in who is not here
-        comes along when nothing keeps them (next door, free, not gone); otherwise the next telling
-        is told they are not here. Evidence that was never settled becomes something the players
-        saw there, so later tellings keep to it. What is going on as the telling stops (a chase, a
-        stand-off) is kept for the next turn (GameState.ongoing)."""
-        if not hasattr(self.cast, "reconcile"):
-            return
-        w, st, m = self.world, self.state, self.m
-        here = st.location
-        party = st.investigator.id
-        found = [e.text[:60] for e in st.log if e.turn == st.turn and e.kind == "clue"]
-        record = (f"【记录】地点：{w.name(here)}；在场的人：{'、'.join(f'{w.name(x)}({x})' for x in w.present(here)) or '没有别人'}；"
-                  f"跟着调查员的：{'、'.join(w.name(e.id) for e in w.rec.entities.values() if e.kind == 'npc' and e.following == party) or '无'}；"
-                  f"这一轮结算出的线索：{'；'.join(found) or '没有'}；调查员持有：{'、'.join(st.investigator.inventory) or '未登记'}\n"
-                  "【人物】" + "、".join(f"{n.name}({n.id})" for n in m.npcs))
-        result = await self.cast.reconcile(st, record, told.entry.text)
-        if result is None:
-            return
-        st.ongoing = result.now.strip()
-        near = set(next((loc.exits for loc in m.locations if loc.id == here), [])) | set(world_view.rooms(m, here))
-        for i, slip in enumerate(result.slips):
-            ent = w.rec.entities.get(slip.who)
-            if slip.kind == "在场" and ent is not None and ent.kind == "npc" and ent.at != here:
-                free = (ent.status not in ("死亡", "失踪") and ent.at in near and not ent.following
-                        and not stage.waiting(w, ent.id) and not review.waiting(w, ent.id))
-                came = free and w.apply(Move(id=f"reconcile:{st.turn}:{ent.id}", entity=ent.id, to=here, actor="keeper")).ok
-                if not came:
-                    self._late.notes.append(f"上一段叙述写到{ent.name}在这里，其实{ent.name}在{w.name(ent.at)}；"
-                                            f"这一轮自然交代他不在场，不再写成在场或同行。")
-                self._debug("reconcile", {"slip": slip.model_dump(mode="json"), "came": came})
-            elif slip.kind == "物证" and slip.text.strip():
-                w.apply(AddFact(id=f"reconcile:{st.turn}:{i}", fact=f"seen:{st.turn}:{i}", text=f"在{w.name(here)}看到：{slip.text.strip()}",
-                                about=[here], public=True, actor="keeper"))
-                self._debug("reconcile", {"slip": slip.model_dump(mode="json")})
-        if self.checkpoint:
-            self.checkpoint()
-
     async def _live_later(self) -> None:
         """The minutes the last turn took, lived by the rest of the world after it was told. What
         happened in front of the party waits in self._late for the next narration or an interlude."""
@@ -2255,7 +2201,7 @@ class Game:
         self.told = Told(report, lore, entry, sky)
         return text
 
-    async def _check(self, text: str, turn: Turn | None, report: str) -> list | None:
+    async def _check(self, text: str, turn: Turn | None, report: str):
         st = self.state
         ruling = turn.ruling.model_dump(mode="json") if turn is not None and turn.ruling is not None else None
         hints = [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]
@@ -2264,51 +2210,50 @@ class Game:
         lines = [f"{e.who}：{e.text}" for e in st.log if e.turn == st.turn and e.kind == "npc"]
         return await self.cast.check(st, check.prompt(record, self._said, text, lines))
 
-    def _comes_over(self, problems: list) -> list:
-        """Someone written in who is next door and free comes over: the record follows the
-        telling. What is left still does not hold."""
-        w, st, m = self.world, self.state, self.m
-        here = st.location
-        near = set(next((loc.exits for loc in m.locations if loc.id == here), [])) | set(world_view.rooms(m, here))
-        left = []
-        for p in problems:
-            if p.kind in ("在场", "同行"):
-                named = [e for e in w.rec.entities.values() if e.kind == "npc" and _called(e.name, p.claim)]
-                who = named[0] if len(named) == 1 else None
-                if (who is not None and who.at != here and who.at in near and who.status not in check.GONE and not who.following
-                        and not stage.waiting(w, who.id) and not review.waiting(w, who.id)
-                        and w.apply(Move(id=f"check:{st.turn}:{who.id}", entity=who.id, to=here, actor="keeper")).ok):
-                    self._debug("check", {"phase": "came", "npc": who.id, "claim": p.claim})
-                    continue
-            left.append(p)
-        return left
-
     async def _verified(self, report: str, lore: str, text: str, turn: Turn | None) -> str:
-        """The telling read against the record before anyone sees it (engine/check.py): what the
-        record can follow, it follows; the rest is told again knowing what did not hold, and a
-        sentence that still does not hold is left out."""
-        found = self._comes_over(await self._check(text, turn, report) or [])
-        if not found:
+        """The telling read against the record before anyone sees it (engine/check.py). The record
+        is the truth: a telling that does not hold is told again knowing what was wrong, then cut
+        down to the sentences that hold; if nothing holds, a plain telling of what was settled.
+        Nothing in the world is changed to fit the words."""
+        reading = await self._check(text, turn, report)
+        if reading is None or not reading.problems:
+            self.state.ongoing = reading.now.strip() if reading is not None else self.state.ongoing
             return text
-        self._debug("check", {"phase": "found", "problems": [p.model_dump() for p in found], "telling": text})
+        self._debug("check", {"phase": "found", "problems": [p.model_dump() for p in reading.problems], "telling": text})
         fix = ("\n\n（系统：上一稿有几处和记录对不上，这一稿改掉，其余照旧：\n"
-               + "\n".join(f"- 「{p.claim}」：{p.record}" for p in found) + "）")
+               + "\n".join(f"- 「{p.claim}」：{p.record}" for p in reading.problems) + "）")
+        shown = text
         try:
-            again = await self.cast.retell(self.state, report, text, extra=lore + fix)
+            shown = await self.cast.retell(self.state, report, text, extra=lore + fix)
         except CassetteError:
             raise
-        except Exception as exc:  # the first telling, cut down below
+        except Exception as exc:  # cut down below
             self._debug("check", {"phase": "retell-failed", "error": f"{type(exc).__name__}: {exc}"[:200]})
-            again = text
-        left = self._comes_over(await self._check(again, turn, report) or [])
-        if not left:
-            return again
-        kept = check.redact(again, left)
-        self._debug("check", {"phase": "redacted", "problems": [p.model_dump() for p in left], "telling": again, "kept": kept})
-        if kept and kept != again:
-            self.cast.amend(self.state, report, again, kept)  # the keeper remembers what was shown
-            return kept
-        return again
+        told = shown
+        for _round in range(3):
+            reading = await self._check(shown, turn, report)
+            if reading is not None and not reading.problems:
+                self.state.ongoing = reading.now.strip()
+                break
+            problems = reading.problems if reading is not None else []
+            cut = check.redact(shown, problems) if problems else shown
+            self._debug("check", {"phase": "cut", "problems": [p.model_dump() for p in problems], "telling": shown, "kept": cut})
+            if not cut or cut == shown:
+                shown = self._plain_telling()  # nothing that holds is left: what was settled, plainly
+                break
+            shown = cut
+        else:
+            shown = self._plain_telling()
+        if shown != told:
+            self.cast.amend(self.state, report, told, shown)  # the keeper remembers what was shown
+        return shown
+
+    def _plain_telling(self) -> str:
+        """When no telling holds: where they are and what this turn settled, nothing added."""
+        st = self.state
+        here = self.m.location(st.location).name
+        settled = [e.text.strip() for e in st.log if e.turn == st.turn and e.kind in ("event",)]
+        return "".join(settled) or f"你在{here}，{st.clock}。"
 
     async def _sky(self, narration: str) -> None:
         """The keeper's words set the weather; unmentioned for a few hours, it passes."""
@@ -2441,15 +2386,6 @@ class _Minds:
             await self.game.emit({"type": "status", "text": "KP 正在构思…"})
         assert self.game.brain is not None
         return await self.game.brain.decide(ask)
-
-
-def _called(name: str, text: str) -> bool:
-    """Whether a telling names this person: whole, by one part of the name, or a part without its
-    first or last character (老守钟人 as 守钟人)."""
-    for part in (x for x in [name, *name.split("·")] if len(x) >= 2):
-        if part in text or (len(part) >= 3 and (part[1:] in text or part[:-1] in text)):
-            return True
-    return False
 
 
 def _clip(text: str, n: int) -> str:

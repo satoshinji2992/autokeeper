@@ -148,17 +148,6 @@ class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
 
 
-class Slip(BaseModel):
-    kind: Literal["在场", "物证"] = Field(description="在场：叙述写了不在场的人在这里或跟着；物证：叙述写出了记录里没有的可追查的东西")
-    who: str = Field("", description="在场时，那个人物的 id")
-    text: str = Field(max_length=80, description="叙述里那句话，短")
-
-
-class Reconcile(BaseModel):
-    slips: list[Slip] = Field(default_factory=list, max_length=4, description="叙述和记录对不上的地方；没有就留空")
-    now: str = Field("", max_length=60, description="叙述停下时正在进行的事，一句话（追赶、对峙、等待回应）；平静就留空")
-
-
 class Consistency(BaseModel):
     problems: list[str] = Field(default_factory=list, description="说不通的地方，一条一句；没有就留空")
 
@@ -379,10 +368,6 @@ SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家�
 想三个方向不同的行动，每个都是玩家在桌上会说的一句话：第一人称，{name}的口吻，具体到人、东西或地方，不超过 30 字，
 比如“我蹲下看看门槛上的泥印”“我问掌柜：昨晚谁来过？”“我先回客栈睡一觉，明早再来”。
 只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
-
-RECONCILE_SYSTEM = """你核对一段跑团叙述和世界记录。只看两类问题：叙述写了记录里不在场的人此刻在场或跟着调查员；叙述写出了记录里这一轮没有结算、可以追查的东西（脚印、字条、物件）。
-天气、气氛、调查员自己的动作和感受不算。回忆、提到某人、隔着窗看见别处的人也不算在场。对得上就留空。
-再用一句话写下叙述停下时正在进行的事：追着谁、在等谁回答、和谁对峙；平静就留空。"""
 
 CONSISTENCY_SYSTEM = """你核对跑团幕后的改写能不能自圆其说。给你改写前后的文字、改写的理由，以及玩家已经知道的、和同一批人和地点有关的事，每条标着玩家是亲眼见到的、叙述里说过的，还是听谁说的。
 玩家见过、听过的事可以改出另一个真相：有人撒谎、记错、伪造、设局、假扮。理由说得清玩家当时为什么会看到、听到那样，又和玩家知道的其他事不冲突，就不算矛盾。
@@ -851,31 +836,35 @@ class Cast:
                 s.forget()
                 text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
         problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
-        if problems:
-            intentions = {d.model_dump_json() for d in dialogue.deceptions}
+        spoken = [] if problems else await self._spoken_problems(state, npc, dialogue, text)
+        intentions = {d.model_dump_json() for d in dialogue.deceptions}
+        for _attempt in range(2):  # told again, knowing what did not hold; every reply is checked the same way
+            if not problems and not spoken and not guard.leaks(text, protected, public=public):
+                break
             s.forget()
-            fix = "\n\n【行动校验未通过】\n" + "\n".join(problems)
-            fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
+            fix = "\n\n【行动校验未通过】\n" + "\n".join([*problems, *(f"「{p.claim}」：{p.record}" for p in spoken)])
+            fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；嘴上说此刻交出、同行的事要在 changes、accompany 里写上，做不到就别这样说；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
             reply = await self._send(key, s, state, message, extra=mood + fix, **output)
             dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
             text = dialogue.text.strip()
             problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
                 problems.append("状态修正不能新增原回复没有声明的欺骗意图")
-            if problems or guard.leaks(text, protected, public=public):
-                # Still not doable: once more, words only (nothing handed over, no company, no
-                # promise), so the turn goes on instead of stopping at /retry; nothing settles.
-                s.forget()
-                plain = ("\n\n（系统：这次只用台词回应，不交出任何东西、不答应同行、不立约定；"
-                         "做不到的事就说做不到，或者岔开话题。）")
-                reply = await self._send(key, s, state, message, extra=mood + plain)
-                dialogue = Dialogue(text=(reply.data.get("text", "") if isinstance(reply.data, dict) else reply.text) or "")
-                text = dialogue.text.strip()
+            spoken = [] if problems else await self._spoken_problems(state, npc, dialogue, text)
+        else:
+            if problems or spoken or guard.leaks(text, protected, public=public):
+                # Still not doable: nothing of it settles, and what it says it does right now (hands
+                # over, comes along) is cut from its words, so it never says what did not happen.
+                from ..engine import check as checking
+
+                claims = spoken or await self._spoken_problems(state, npc, Dialogue(text=text), text)
+                # Without a reading to say which words claim what failed, none of them are kept.
+                text = checking.redact(text, claims) if claims else "" if problems else text
                 if guard.leaks(text, protected, public=public):
-                    s.forget()
                     text = guard.redact(text, protected, public=public)
-                text = text or "（他想了想，没有接这个话。）"
+                text = text or f"（{npc.name}迟疑了一下，什么也没做。）"
                 dialogue = Dialogue(text=text)
+                self._said(s, text)  # it remembers what it actually said
         if self.world is not None:  # no await between the final validation and the commit
             adapters.settle_changes(self.world, dialogue.changes, source=npc_id, spoken=text, private=private)
             if dialogue.accompany in destinations and text == dialogue.text.strip():
@@ -1082,28 +1071,62 @@ class Cast:
         """Whether tellings are read against the record before they are shown (Config.check)."""
         return bool(getattr(self.cfg, "check", False))
 
-    async def check(self, state: GameState, material: str) -> list | None:
+    async def check(self, state: GameState, material: str):
         """Where a telling does not hold against the record (engine/check.py), read before anyone
-        sees it. Stateless, on the summarizer's light model as the replay judge is; None without
-        an answer."""
+        sees it: two readings at once, on the summarizer's light model as the replay judge is,
+        and whatever either found. Also what is going on as the telling stops. None when no
+        reading came back."""
         from ..engine import check as checking
         from ..harness.replay import CassetteError
 
         if "check" not in self.sessions:
             role = replace(self.cfg.role("summarizer"), effort=None)
-            self.sessions["check"] = Session("check", role, checking.RULES, schema=_schema(checking.Verdict), key="check")
-        try:
-            reply = await self._send("check", self.sessions["check"], state, material, bind=False)
-        except CassetteError:  # a replay that drifted must fail loudly
-            raise
-        except Exception:
+            self.sessions["check"] = Session("check", role, checking.RULES, schema=_schema(checking.Reading), key="check")
+
+        async def read():
+            try:
+                reply = await self._send("check", self.sessions["check"], state, material + "\n\n" + checking.ONGOING, bind=False)
+                return checking.Reading.model_validate(reply.data) if isinstance(reply.data, dict) else None
+            except CassetteError:  # a replay that drifted must fail loudly
+                raise
+            except Exception:
+                return None
+
+        readings = [r for r in await asyncio.gather(read(), read()) if r is not None]
+        if not readings:
             return None
-        if not isinstance(reply.data, dict):
-            return None
-        try:
-            return checking.standing(checking.Verdict.model_validate(reply.data).problems)
-        except ValueError:
-            return None
+        found, seen = [], set()
+        for p in (p for r in readings for p in checking.standing(r.problems)):
+            if p.claim not in seen:
+                seen.add(p.claim)
+                found.append(p)
+        return checking.Reading(problems=found, now=next((r.now for r in readings if r.now.strip()), ""))
+
+    async def _spoken_problems(self, state: GameState, npc, dialogue, text: str) -> list:
+        """What an NPC's reply describes or says it does right now (hands over, comes along, walks
+        in) that this reply does not settle, read against the record as a telling is
+        (engine/check.py). Empty without the check."""
+        if not self.checking or not text.strip():
+            return []
+        from ..engine import check as checking
+
+        record = checking.account(self.module, state, state.turn, {}, None)
+        settling = [f"{c.kind}：{c.text}" for c in dialogue.changes] + ([f"同意同行，去 {dialogue.accompany}"] if dialogue.accompany else [])
+        record += "\n这次回应同时结算：" + ("；".join(settling) or "什么也不结算")
+        reading = await self.check(state, checking.prompt(record, "", "", [f"{npc.name}：{text}"]))
+        return list(reading.problems) if reading is not None else []
+
+    @staticmethod
+    def _said(s: Session, text: str) -> None:
+        """The session's last answer becomes what was actually said (a cut-down reply)."""
+        if s.transcript and s.transcript[-1].get("role") == "assistant":
+            try:
+                data = json.loads(s.transcript[-1]["content"])
+            except ValueError:
+                s.transcript[-1]["content"] = text
+            else:
+                s.transcript[-1]["content"] = json.dumps({**data, "text": text, "changes": [], "accompany": "",
+                                                          "deceptions": []} if isinstance(data, dict) else text, ensure_ascii=False)
 
     def amend(self, state: GameState, report: str, told: str, text: str) -> None:
         """The keeper's memory keeps what was shown: its last telling of `report` becomes `text`."""
@@ -1112,25 +1135,6 @@ class Cast:
         last = s.transcript[-2:]
         if len(last) == 2 and [m["content"].strip() for m in last] == [report.strip(), told.strip()]:
             last[1]["content"] = text
-
-    async def reconcile(self, state: GameState, record: str, telling: str) -> Reconcile | None:
-        """Where a telling ran ahead of the record, and what is going on as it stops
-        (engine/game.Game._reconcile). Stateless, on the world's light model; None without an answer."""
-        from ..harness.replay import CassetteError
-
-        s = self._open("reconcile", "world", RECONCILE_SYSTEM, schema=_schema(Reconcile))
-        try:
-            reply = await self._send("reconcile", s, state, f"{record}\n【叙述】\n{telling}", bind=False)
-        except CassetteError:  # a replay that drifted must fail loudly
-            raise
-        except Exception:
-            return None
-        if not isinstance(reply.data, dict):
-            return None
-        try:
-            return Reconcile.model_validate(reply.data)
-        except ValueError:
-            return None
 
     async def consistent(self, state: GameState, material: str) -> list[str] | None:
         """Where a backstage rewrite does not hold together with what the players met

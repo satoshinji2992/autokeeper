@@ -249,6 +249,8 @@ class Beat(BaseModel):
     ops: list[dict[str, Any]] = Field(default_factory=list)
     involves: list[str] = Field(default_factory=list)  # the people and things on stage it touches
     leaving: list[str] = Field(default_factory=list)  # those it takes out of the scene (stage.leaves)
+    reads: dict[str, int] = Field(default_factory=dict)  # versions the decision rested on: moved, it is decided again
+    when: str = ""  # the plan step's condition, still to hold when it plays
     t: int = 0  # game minutes it was decided at
     turn: int = 0
     status: Literal["waiting", "played", "dropped"] = "waiting"
@@ -264,6 +266,8 @@ class Proposal(BaseModel):
     ops: list[dict[str, Any]] = Field(default_factory=list)
     why: list[str] = Field(default_factory=list)  # what makes it matter: someone dies, a flag starts an ending...
     text: str = ""  # what it is, in the words of its decision or plan step
+    reads: dict[str, int] = Field(default_factory=dict)  # versions it rested on: moved, it is decided again
+    when: str = ""  # the plan step's condition, still to hold when it goes ahead
     t: int = 0
     turn: int = 0
     status: Literal["waiting", "deferred", "landed", "dropped"] = "waiting"

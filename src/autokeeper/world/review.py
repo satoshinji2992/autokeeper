@@ -47,11 +47,16 @@ def significant(w: World, op: Any) -> list[str]:
     return []
 
 
-def hold(w: World, ident: str, actor: str, ops: list[dict[str, Any]], why: list[str], text: str = "") -> Proposal:
-    """Keep a turning point for the director. The same work asked again is the same proposal."""
+def hold(w: World, ident: str, actor: str, ops: list[dict[str, Any]], why: list[str], text: str = "", *,
+         reads: dict[str, int] | None = None, when: str = "") -> Proposal:
+    """Keep a turning point for the director, with what it rested on. The same work asked again
+    is the same proposal."""
+    from .stage import basis
+
     if (known := next((p for p in w.rec.proposals if p.id == ident), None)) is not None:
         return known
-    proposal = Proposal(id=ident, actor=actor, ops=ops, why=list(dict.fromkeys(why)), text=text, t=w.now, turn=w.st.turn)
+    proposal = Proposal(id=ident, actor=actor, ops=ops, why=list(dict.fromkeys(why)), text=text, reads=basis(actor, reads),
+                        when=when, t=w.now, turn=w.st.turn)
     finished = [p for p in w.rec.proposals if p.status in ("landed", "dropped")]
     open_ = [p for p in w.rec.proposals if p.status not in ("landed", "dropped")]
     w.rec.proposals = [*finished[-KEPT:], *open_, proposal]
@@ -74,10 +79,13 @@ def let_through(w: World, proposal: Proposal) -> list[str]:
     except ValueError as exc:
         problems = [f"格式不对：{str(exc)[:80]}"]
     else:
+        problems = stage.gone_by(w, proposal.reads, proposal.when)  # it rested on what is no longer so
+    if not problems:
         involved = [x for op in ops for x in stage.touches(w, op)]
         if involved:
             leaving = [x for op in ops for x in stage.leaves(w, op)]
-            stage.queue(w, proposal.id, proposal.actor, proposal.ops, involved, leaving)
+            stage.queue(w, proposal.id, proposal.actor, proposal.ops, involved, leaving,
+                        reads=proposal.reads, when=proposal.when)
             problems = []
         else:
             problems = stage.commit(w, proposal.actor, proposal.ops)

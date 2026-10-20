@@ -186,7 +186,6 @@ class GameScreen(Screen):
         self.game.write_progress = True  # someone reads it: the 进展 page
         self.game.world_later = True  # NPCs decide while the player reads, not while they wait
         self.game.world.reviewing = True  # turning points wait for the director's look between turns (world/review.py)
-        self.game.reconcile = True  # each telling is checked against the record once told (Game._reconcile)
         channels.listeners.append(self._fell_back)
         paths.games().mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(paths.checkpoints())

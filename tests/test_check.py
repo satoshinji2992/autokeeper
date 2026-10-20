@@ -24,9 +24,9 @@ class Checking(FakeCast):
 
     checking = True
 
-    def __init__(self, tellings, findings):
+    def __init__(self, tellings, findings, now=""):
         super().__init__({})
-        self.tellings, self.findings = list(tellings), list(findings)
+        self.tellings, self.findings, self.now = list(tellings), list(findings), now
         self.read: list[str] = []
         self.retold: list[str] = []
         self.amended: list[tuple[str, str]] = []
@@ -41,7 +41,7 @@ class Checking(FakeCast):
 
     async def check(self, state, material):
         self.read.append(material)
-        return self.findings.pop(0) if self.findings else []
+        return check.Reading(problems=self.findings.pop(0) if self.findings else [], now=self.now)
 
     def amend(self, state, report, told, text):
         self.amended.append((told, text))
@@ -60,11 +60,12 @@ async def test_a_telling_that_holds_is_shown_as_written(module, fake):
     assert deltas == ["午后的广场空荡荡的。"]  # shown once it was read
 
 
-async def test_someone_from_next_door_written_in_comes_over(module, fake):
+async def test_the_record_does_not_move_to_fit_the_telling(module, fake):
     game, _, _ = make(module, fake, {}, location="square")  # the warden is up in the tower, next door
-    game.cast = cast = Checking(["守钟人从钟楼下来，站到你身边。"], [[Problem(kind="在场", claim="守钟人从钟楼下来，站到你身边", record="老守钟人在钟楼")]])
-    assert await game.narrate(WAIT) == "守钟人从钟楼下来，站到你身边。"
-    assert game.world.place("warden") == "square" and not cast.retold
+    walked_in = Problem(kind="在场", claim="守钟人从钟楼下来，站到你身边", record="老守钟人在钟楼")
+    game.cast = cast = Checking(["守钟人从钟楼下来，站到你身边。", "钟楼上传来守钟人的咳嗽声。"], [[walked_in], []])
+    assert await game.narrate(WAIT) == "钟楼上传来守钟人的咳嗽声。"
+    assert game.world.place("warden") == "tower" and cast.retold  # told again; nobody moved for the words
 
 
 async def test_what_does_not_hold_is_told_again_knowing_why(module, fake):
@@ -80,10 +81,36 @@ async def test_a_sentence_that_still_does_not_hold_is_left_out(module, fake):
     game, _, _ = make(module, fake, {}, location="square")
     lamp = Problem(kind="物品", claim="你掏出手电照了照", record="随身物品里没有手电")
     telling = "风从广场上刮过。你掏出手电照了照告示栏。纸角翻了起来。"
-    game.cast = cast = Checking([telling, telling], [[lamp], [lamp]])
+    game.cast = cast = Checking([telling, telling], [[lamp], [lamp], []])
     shown = await game.narrate(WAIT)
     assert shown == "风从广场上刮过。纸角翻了起来。"
     assert cast.amended == [(telling, shown)]  # the keeper remembers what was shown
+
+
+async def test_a_telling_with_nothing_that_holds_is_never_shown(module, fake):
+    game, _, _ = make(module, fake, {}, location="square")
+    lamp = Problem(kind="物品", claim="你掏出手电", record="随身物品里没有手电")
+    game.cast = cast = Checking(["你掏出手电。", "你掏出手电。"], [[lamp], [lamp], [lamp]])
+    shown = await game.narrate(WAIT)
+    assert "手电" not in shown and shown.startswith("你在")  # only where they are and when
+    assert cast.amended and cast.amended[-1][1] == shown
+
+
+async def test_made_up_evidence_is_told_away_not_written_into_the_world(module, fake):
+    game, _, _ = make(module, fake, {}, location="tower")
+    prints = Problem(kind="发现", claim="楼梯上一串湿脚印", record="这一轮没有新线索")
+    game.cast = Checking(["楼梯上一串湿脚印。", "楼梯上积着灰。"], [[prints], []])
+    before = len(game.world.rec.facts)
+    assert await game.narrate(WAIT) == "楼梯上积着灰。"
+    assert len(game.world.rec.facts) == before
+
+
+async def test_what_is_going_on_as_the_telling_stops_is_kept_for_the_next_turn(module, fake):
+    game, _, _ = make(module, fake, {}, location="square")
+    game.cast = Checking(["人影朝墓地那边跑了。"], [[]], now="人影正往墓地跑")
+    await game.narrate(WAIT)
+    assert game.state.ongoing == "人影正往墓地跑"
+    assert "【上一段叙述停在】人影正往墓地跑" in game._report(Turn())
 
 
 def test_the_record_lists_the_people_near_and_what_they_carry(module, fake):
