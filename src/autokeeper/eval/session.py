@@ -317,11 +317,10 @@ class _Calls:
 
 
 async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int], *, turn: int,
-                 timeout: float = 240, check: bool | None = None, blind: bool = False) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
+                 timeout: float = 240, blind: bool = False) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
     """One turn played again from the game as it stood before it: the game after it, and what
-    the turn showed (its events, without the narration's pieces). `check` overrides the
-    configuration's reading of tellings (engine/check.py); `blind` keeps the keeper from the
-    backstage, to compare with the keeper that sees it."""
+    the turn showed (its events, without the narration's pieces). `blind` keeps the keeper from
+    the backstage, to compare with the keeper that sees it."""
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.types import Command
 
@@ -332,8 +331,6 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
     _turn.set(turn)
     cfg = replace(config.load(), visual_limit=0, imagegen=False, showcase=False)
-    if check is not None:
-        cfg = replace(cfg, check=check)
     m = Module.load(m_dir)
     st = GameState.model_validate(before)
     st.pending_turn = {}
@@ -370,7 +367,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
 # -- the whole run -----------------------------------------------------------------------------------
 async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: Path | None = None, parallel: int = 3,
-              log=print, check: bool | None = None, blind: bool = False) -> dict[str, Any]:  # fmt: skip
+              log=print, blind: bool = False) -> dict[str, Any]:  # fmt: skip
     record = recorded(slot)
     have = sorted(t for t in record if t - 1 in record)
     chosen = parse_turns(turns, have)
@@ -431,7 +428,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
             if not recorded_only:
                 started = time.monotonic()
                 try:
-                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, check=check, blind=blind)
+                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, blind=blind)
                     m2 = Module.load(m_dir)
                     if st.improv:
                         improv.restore(m2, st.improv)
@@ -461,7 +458,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
             r["replayed"]["calls"] = calls.by_turn.get(r["turn"], [])
     summary = summarize(rows)
     report = {"slot": slot, "module": first.module, "turns": [r["turn"] for r in rows], "summary": summary, "rows": rows,
-              "settings": {"check": check, "blind_keeper": blind}}
+              "settings": {"blind_keeper": blind}}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     report["out"] = str(out)

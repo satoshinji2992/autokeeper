@@ -1,13 +1,11 @@
-"""先结算，后讲述，核对过才给人看: a telling is read against the record before anyone reads it.
+"""How the replay eval reads a telling against the record (eval/session.py, `autokeeper eval session`).
 
-The keeper writes a turn's narration; before the words reach a screen they are read against the
-world record as the turn left it (account): who is here and who is in the other rooms of the
-building, who walks with the investigators, what they and the people here carry, what this turn
-settled, which signs of the module's foreshadowing it was handed. The record is right and the
-telling is what is checked: Engine.Game._verified has what does not hold told again knowing
-what was wrong, leaves out a sentence that still does not hold, and never moves the world to
-fit the words. The replay eval (eval/session.py) judges with this same record and these same
-rules, so what passes here is what it counts as consistent.
+The world as a turn left it (account): who is here and who is in the other rooms of the building,
+who walks with the investigators, what they and the people here carry, what this turn settled,
+which signs of the module's foreshadowing the keeper was handed; and the rules a judge model reads
+a turn's narration and NPC lines by. Nothing reads a telling in play any more (the user's call,
+2026-10-20: no cutting down of what the model wrote); the keeper sees the backstage instead, and
+what a turn could not bring about reaches it as notes.
 """
 
 from __future__ import annotations
@@ -17,7 +15,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..agents.guard import grams
 from ..module.schema import Module
 from ..world.context import rooms
 from .state import GameState, format_time, time_of_day
@@ -50,15 +47,6 @@ class Problem(BaseModel):
 
 class Verdict(BaseModel):
     problems: list[Problem] = Field(default_factory=list, max_length=6, description="和记录矛盾的地方；没有就留空")
-
-
-class Reading(Verdict):
-    """In play the same reading also keeps what is going on as the telling stops (GameState.ongoing)."""
-
-    now: str = Field("", max_length=60, description="叙述停下时正在进行的事，一句话（追着谁、在等谁回答、和谁对峙）；平静就留空")
-
-
-ONGOING = "另外用一句话写下叙述停下时正在进行的事（追着谁、在等谁回答、和谁对峙），平静就留空。"
 
 
 def _name(m: Module, ident: str) -> str:
@@ -117,28 +105,3 @@ def standing(found: list[Problem]) -> list[Problem]:
     """What a reading found, without the lines it checked and found agreed."""
     return [p for p in found if not AGREED.search(p.record)]
 
-
-_PLAIN = re.compile(r"[\s，。、；：？！“”‘’「」『』（）()《》〈〉…—\-,.;:?!\"'`]+")
-
-
-def redact(text: str, problems: list[Problem]) -> str:
-    """The telling without the sentences that do not hold: those quoting a problem's words,
-    whole or for the most part. Paragraph breaks stay where sentences remain."""
-    bad = [(_PLAIN.sub("", p.claim), grams(p.claim, 4)) for p in problems if p.claim.strip()]
-
-    def wrong(sentence: str) -> bool:
-        plain = _PLAIN.sub("", sentence)
-        return any((claim and (claim in plain or plain in claim)) or (g and len(grams(sentence, 4) & g) >= max(1, len(g) // 2))
-                   for claim, g in bad)
-
-    out, line = [], []
-    for piece in re.split(r"(\n+)", text):
-        if piece.startswith("\n"):
-            if line:
-                out.append("".join(line))
-                line = []
-            continue
-        line += [s for s in re.split(r"(?<=[。！？!?…）)])", piece) if s.strip() and not wrong(s)]
-    if line:
-        out.append("".join(line))
-    return "\n\n".join(x.strip() for x in out if x.strip())

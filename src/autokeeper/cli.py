@@ -950,14 +950,12 @@ def eval_session(
     recorded: Annotated[bool, typer.Option("--recorded", help="只核对当时的记录，不重放（只调用核对模型）")] = False,
     parallel: Annotated[int, typer.Option(min=1, max=8, help="同时重放几轮")] = 3,
     out: Annotated[Path | None, typer.Option(help="报告写到哪里；默认 dev/output/eval/session-<存档>-<时间>.json")] = None,
-    no_check: Annotated[bool, typer.Option("--no-check", help="重放时不在显示前核对叙述（不管配置里的 check）")] = False,
     blind: Annotated[bool, typer.Option("--blind-keeper", help="重放时守秘人看不到底牌，用来和看得到时对照")] = False,
 ) -> None:
     """拿一局真人存档逐轮重放：从每轮之前的局面、用玩家原话和当时的骰子，跑现在的流程；核对叙述和世界记录对不对得上、有没有说漏秘密，和当时比。"""
     from .eval.session import run
 
-    report = asyncio.run(run(slot, turns=turns, recorded_only=recorded, parallel=parallel, out=out, log=console.print,
-                             check=False if no_check else None, blind=blind))
+    report = asyncio.run(run(slot, turns=turns, recorded_only=recorded, parallel=parallel, out=out, log=console.print, blind=blind))
     for side, label in (("recorded", "当时"), ("replayed", "现在")):
         got = report["summary"].get(side)
         if not got:

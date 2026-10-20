@@ -23,7 +23,6 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
     imagegen = true            # pictures from Codex's image tool, when codex is installed and logged in
     showcase = true            # 大场景: a big picture over the screen at the turning points of the story
-    check = true               # each narration is checked against the world record before it is shown
     minds = 2                  # important NPCs' backstage decisions a turn (twice that on a long skip); 0: only their plans
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
 
@@ -216,9 +215,6 @@ class Config:
     visual_limit: int = 24  # illustration attempts per save, including unmetered backends
     imagegen: bool = True  # pictures from Codex's image tool where the story changes a place or a person (imagegen.py)
     showcase: bool = True  # 大场景: one big picture over the screen at the story's turning points (engine/showcase.py)
-    # Each telling read against the record before it is shown (engine/check.py). On for every
-    # loaded configuration (load); off for one built in code, as tests with scripted models do.
-    check: bool = False
     minds: int = 2  # important NPCs' backstage decisions a player turn; a long skip gets twice (world/scheduler.py)
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
@@ -338,7 +334,6 @@ def load(path: Path | None = None) -> Config:
     cfg.animations = data.get("animations", cfg.animations) is not False
     cfg.imagegen = data.get("imagegen", cfg.imagegen) is not False
     cfg.showcase = data.get("showcase", cfg.showcase) is not False
-    cfg.check = data.get("check", True) is not False
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None

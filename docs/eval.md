@@ -131,8 +131,7 @@ uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-fl
 uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --turns 3-40
 uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --recorded   # 只核对当时的记录
 uv run autokeeper --preset deepseek eval rejudge dev/output/eval/session-xxx.json    # 换了核对规则后重核
-uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --no-check   # 重放时不在显示前核对叙述
-uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --no-check --blind-keeper  # 守秘人看不到底牌，作对照
+uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --blind-keeper  # 守秘人看不到底牌，作对照
 ```
 
 AI 调查员不像真人，所以拿真人存档来测。回合图在每一轮结束时把整局状态存进检查点，`eval session` 从里面取出第 N-1 轮结束时的局面，用玩家第 N 轮的原话和当时掷出的点数，跑一遍现在的流程；每一轮单独从当时的局面开始，一轮的错不会带到下一轮，也不写存档。

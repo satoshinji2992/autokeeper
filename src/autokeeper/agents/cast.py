@@ -23,7 +23,6 @@ import asyncio
 import json
 from collections import deque
 from contextlib import nullcontext
-from dataclasses import replace
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -404,6 +403,7 @@ class Cast:
         # The keeper holds the module's book and reads each scene's backstage (the user's call,
         # 2026-10-20: the keeper sees everything); off only to compare with the blind keeper (eval session).
         self.backstage = True
+        self.unsettled: dict[str, list[str]] = {}  # npc id -> what its last reply could not do (Game._unsettled)
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -544,7 +544,6 @@ class Cast:
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
-            f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
         )
 
@@ -839,13 +838,12 @@ class Cast:
                 s.forget()
                 text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
         problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
-        spoken = [] if problems else await self._spoken_problems(state, npc, dialogue, text)
         intentions = {d.model_dump_json() for d in dialogue.deceptions}
         for _attempt in range(2):  # told again, knowing what did not hold; every reply is checked the same way
-            if not problems and not spoken and not guard.leaks(text, protected, public=public):
+            if not problems and not guard.leaks(text, protected, public=public):
                 break
             s.forget()
-            fix = "\n\n【行动校验未通过】\n" + "\n".join([*problems, *(f"「{p.claim}」：{p.record}" for p in spoken)])
+            fix = "\n\n【行动校验未通过】\n" + "\n".join(problems)
             fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；嘴上说此刻交出、同行的事要在 changes、accompany 里写上，做不到就别这样说；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
             reply = await self._send(key, s, state, message, extra=mood + fix, **output)
             dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
@@ -853,21 +851,17 @@ class Cast:
             problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
                 problems.append("状态修正不能新增原回复没有声明的欺骗意图")
-            spoken = [] if problems else await self._spoken_problems(state, npc, dialogue, text)
         else:
-            if problems or spoken or guard.leaks(text, protected, public=public):
-                # Still not doable: nothing of it settles, and what it says it does right now (hands
-                # over, comes along) is cut from its words, so it never says what did not happen.
-                from ..engine import check as checking
-
-                claims = spoken or await self._spoken_problems(state, npc, Dialogue(text=text), text)
-                # Without a reading to say which words claim what failed, none of them are kept.
-                text = checking.redact(text, claims) if claims else "" if problems else text
-                if guard.leaks(text, protected, public=public):
-                    text = guard.redact(text, protected, public=public)
-                text = text or f"（{npc.name}迟疑了一下，什么也没做。）"
-                dialogue = Dialogue(text=text)
+            if guard.leaks(text, protected, public=public):  # a secret said word for word stays unsaid
+                text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
+                dialogue = dialogue.model_copy(update={"text": text})
                 self._said(s, text)  # it remembers what it actually said
+            if problems:
+                # Still not doable: its words stand and what it could not do does not land (only
+                # admissible changes settle below, no deceit it did not mean at first); the keeper
+                # tells how it really went (Game.talk).
+                dialogue = dialogue.model_copy(update={"deceptions": [d for d in dialogue.deceptions if d.model_dump_json() in intentions]})
+                self.unsettled[npc_id] = problems
         if self.world is not None:  # no await between the final validation and the commit
             adapters.settle_changes(self.world, dialogue.changes, source=npc_id, spoken=text, private=private)
             if dialogue.accompany in destinations and text == dialogue.text.strip():
@@ -1071,59 +1065,9 @@ class Cast:
         except ValueError:
             return None
 
-    @property
-    def checking(self) -> bool:
-        """Whether tellings are read against the record before they are shown (Config.check)."""
-        return bool(getattr(self.cfg, "check", False))
-
-    async def check(self, state: GameState, material: str):
-        """Where a telling does not hold against the record (engine/check.py), read before anyone
-        sees it: two readings at once, on the summarizer's light model as the replay judge is,
-        and whatever either found. Also what is going on as the telling stops. None when no
-        reading came back."""
-        from ..engine import check as checking
-        from ..harness.replay import CassetteError
-
-        if "check" not in self.sessions:
-            role = replace(self.cfg.role("summarizer"), effort=None)
-            self.sessions["check"] = Session("check", role, checking.RULES, schema=_schema(checking.Reading), key="check")
-
-        async def read():
-            try:
-                reply = await self._send("check", self.sessions["check"], state, material + "\n\n" + checking.ONGOING, bind=False)
-                return checking.Reading.model_validate(reply.data) if isinstance(reply.data, dict) else None
-            except CassetteError:  # a replay that drifted must fail loudly
-                raise
-            except Exception:
-                return None
-
-        readings = [r for r in await asyncio.gather(read(), read()) if r is not None]
-        if not readings:
-            return None
-        found, seen = [], set()
-        for p in (p for r in readings for p in checking.standing(r.problems)):
-            if p.claim not in seen:
-                seen.add(p.claim)
-                found.append(p)
-        return checking.Reading(problems=found, now=next((r.now for r in readings if r.now.strip()), ""))
-
-    async def _spoken_problems(self, state: GameState, npc, dialogue, text: str) -> list:
-        """What an NPC's reply describes or says it does right now (hands over, comes along, walks
-        in) that this reply does not settle, read against the record as a telling is
-        (engine/check.py). Empty without the check."""
-        if not self.checking or not text.strip():
-            return []
-        from ..engine import check as checking
-
-        record = checking.account(self.module, state, state.turn, {}, None)
-        settling = [f"{c.kind}：{c.text}" for c in dialogue.changes] + ([f"同意同行，去 {dialogue.accompany}"] if dialogue.accompany else [])
-        record += "\n这次回应同时结算：" + ("；".join(settling) or "什么也不结算")
-        reading = await self.check(state, checking.prompt(record, "", "", [f"{npc.name}：{text}"]))
-        return list(reading.problems) if reading is not None else []
-
     @staticmethod
     def _said(s: Session, text: str) -> None:
-        """The session's last answer becomes what was actually said (a cut-down reply)."""
+        """The session's last answer becomes what was actually said (a secret left unsaid)."""
         if s.transcript and s.transcript[-1].get("role") == "assistant":
             try:
                 data = json.loads(s.transcript[-1]["content"])
@@ -1132,14 +1076,6 @@ class Cast:
             else:
                 s.transcript[-1]["content"] = json.dumps({**data, "text": text, "changes": [], "accompany": "",
                                                           "deceptions": []} if isinstance(data, dict) else text, ensure_ascii=False)
-
-    def amend(self, state: GameState, report: str, told: str, text: str) -> None:
-        """The keeper's memory keeps what was shown: its last telling of `report` becomes `text`."""
-        s = self._keeper(state)
-        s.bind(state.transcripts.setdefault("keeper", []), state.notes)
-        last = s.transcript[-2:]
-        if len(last) == 2 and [m["content"].strip() for m in last] == [report.strip(), told.strip()]:
-            last[1]["content"] = text
 
     async def consistent(self, state: GameState, material: str) -> list[str] | None:
         """Where a backstage rewrite does not hold together with what the players met

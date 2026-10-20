@@ -137,10 +137,3 @@ async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_dra
         again.screen.query_one("#settings-save", Button).press()
         await pilot.pause()
     assert not config.load().imagegen
-
-
-def test_a_loaded_configuration_checks_every_telling_unless_told_not_to(tmp_path):
-    assert config.load().check  # what players get; only configurations built in code start without it
-    off = tmp_path / "off.toml"
-    off.write_text("check = false\n", encoding="utf-8")
-    assert not config.load(off).check

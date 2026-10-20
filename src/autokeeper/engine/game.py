@@ -36,7 +36,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import check, diagnostics, fog, progress, views, world
+from . import diagnostics, fog, progress, views, world
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -185,8 +185,6 @@ class Game:
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._looked = 0  # the turn the director last looked between turns (Game._review)
-        self._before: dict[str, Any] = {}  # the game as the turn found it, for reading its telling (engine/check.py)
-        self._said = ""  # the player's words this turn
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -369,7 +367,6 @@ class Game:
         st = self.state
         await self._world_settled()  # what the rest of the world did since the last turn, before this one
         await self._curtain(Action(kind="other", summary=text))
-        self._before, self._said = {"minutes": st.minutes, "location": st.location}, text
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
@@ -460,6 +457,7 @@ class Game:
                     message = f"（系统：出发前，调查员{self.state.investigator.name}对你说：「{request}」。{privacy}是否同意由你决定，不替其他人答应。）"
                     line = await self.cast.npc(self.state, nid, message, travel=not bool(speech), private=private)
                     journal["lines"].append([nid, line])
+                    journal["notes"] += self._unsettled(nid)
                     self.state.npc(nid).met = True
                     self.state.add("npc", line, who=self.m.npc(nid).name)
                     self._exchanged(nid, Action(kind="talk", summary=request, speech=request), line, private=private)
@@ -1426,6 +1424,7 @@ class Game:
                 await self.emit({"type": "status", "text": f"等待 {npc.name} 回应…"})
                 line = await self.cast.npc(st, npc.id, self._npc_message(turn, npc.id))
                 turn.npc_lines.append((npc.id, line))
+                turn.notes += self._unsettled(npc.id)
                 st.npc(npc.id).met = True
                 st.add("npc", line, who=npc.name)
                 self._exchanged(npc.id, action, line)
@@ -1461,6 +1460,16 @@ class Game:
         self.world.apply(Occur(id=f"talk:{st.turn}:{inv.id}:{npc_id}", actor=inv.id, participants=[npc_id], place=st.location,
                                text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
 
+    def _unsettled(self, npc_id: str) -> list[str]:
+        """What an NPC's last reply meant to do and could not (agents/cast.Cast.unsettled): the
+        words stand, the deed did not land, and the keeper tells how it really went."""
+        failed = getattr(self.cast, "unsettled", {}).pop(npc_id, [])
+        if not failed:
+            return []
+        name = self.m.npc(npc_id).name
+        return [f"【未落实】{name}刚才的回应里有做不到的事：{'；'.join(failed)}。叙述里按实际情况交代（东西不在身上、去不了那里），"
+                "不写成已经做到，也不删改他说过的话。"]
+
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         if (turn.npc_lines and not turn.events and not turn.notes and not turn.ending
                 and not turn.arrived and not turn.world and not turn.sanity and not turn.hints):
@@ -1470,8 +1479,10 @@ class Game:
         return await self._narrate(self._report(turn), on_delta, lore=self._brief(), turn=turn)
 
     def _brief(self) -> str:
-        """What the keeper keeps behind the screen for this telling (world/context.keeper_brief)."""
-        return world_view.keeper_brief(self.world) if getattr(self.cast, "backstage", True) else ""
+        """What the keeper keeps behind the screen for this telling (world/context.keeper_brief),
+        set apart from what it rides along with (the report, a nudge to tell it again)."""
+        brief = world_view.keeper_brief(self.world) if getattr(self.cast, "backstage", True) else ""
+        return "\n\n" + brief if brief else ""
 
     async def remember(self) -> None:
         st = self.state
@@ -2098,8 +2109,6 @@ class Game:
         loc = m.location(st.location)
         out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）", world.context(st)]
         people = [n.name if st.npc(n.id).met else f"未通名的人（{n.look or '暂无外观记录'}）" for n in m.npcs_at(st.location)]
-        if st.ongoing:
-            out.append(f"【上一段叙述停在】{st.ongoing}")
         out.append("【当前在场人物，以记录为准】" + ("、".join(people) or "没有其他人")
                    + "。人物未出现在当前地点不代表失踪，不推断未观察到的去向；先前台词和旁白不能替代位置记录。")
         out.append(f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}（专用工具与新取得物品以持有记录为准。）")
@@ -2179,8 +2188,10 @@ class Game:
         return "\n".join(out)
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:
-        """The keeper tells it. Where the cast can check a telling (engine/check.py), it is read
-        against the record before anyone sees it, and shown once it holds."""
+        """The keeper tells it, streamed as it is written. Nothing reads the words afterwards to
+        cut them down (the user's call, 2026-10-20: no deleting of what the model wrote): the
+        keeper sees the backstage (`lore`), and what a turn could not bring about reaches it as
+        notes in the report (Game.talk)."""
         self.told = None  # while the keeper speaks there is nothing to tell again
         sky = (self.state.sky, self.state.sky_at)
 
@@ -2189,75 +2200,14 @@ class Game:
             if on_delta:
                 await on_delta(text)
 
-        if getattr(self.cast, "checking", False):
-            await self.emit({"type": "status", "text": "KP 正在构思…"})
-            text = await self.cast.keeper(self.state, report, lore=lore)
-            text = await self._verified(report, lore, text, turn)
-            await self.emit({"type": "keeper_start"})
-            await delta(text)
-        else:
-            await self.emit({"type": "keeper_start"})
-            text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
+        await self.emit({"type": "keeper_start"})
+        text = await self.cast.keeper(self.state, report, on_delta=delta, lore=lore)
         entry = self.state.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
         await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
         self.told = Told(report, lore, entry, sky)
         return text
-
-    async def _check(self, text: str, turn: Turn | None, report: str):
-        st = self.state
-        ruling = turn.ruling.model_dump(mode="json") if turn is not None and turn.ruling is not None else None
-        hints = [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]
-        before = self._before or {"minutes": st.minutes, "location": st.location}
-        record = check.account(self.m, st, st.turn, before, ruling, hints)
-        lines = [f"{e.who}：{e.text}" for e in st.log if e.turn == st.turn and e.kind == "npc"]
-        return await self.cast.check(st, check.prompt(record, self._said, text, lines))
-
-    async def _verified(self, report: str, lore: str, text: str, turn: Turn | None) -> str:
-        """The telling read against the record before anyone sees it (engine/check.py). The record
-        is the truth: a telling that does not hold is told again knowing what was wrong, then cut
-        down to the sentences that hold; if nothing holds, a plain telling of what was settled.
-        Nothing in the world is changed to fit the words."""
-        reading = await self._check(text, turn, report)
-        if reading is None or not reading.problems:
-            self.state.ongoing = reading.now.strip() if reading is not None else self.state.ongoing
-            return text
-        self._debug("check", {"phase": "found", "problems": [p.model_dump() for p in reading.problems], "telling": text})
-        fix = ("\n\n（系统：上一稿有几处和记录对不上，这一稿改掉，其余照旧：\n"
-               + "\n".join(f"- 「{p.claim}」：{p.record}" for p in reading.problems) + "）")
-        shown = text
-        try:
-            shown = await self.cast.retell(self.state, report, text, extra=lore + fix)
-        except CassetteError:
-            raise
-        except Exception as exc:  # cut down below
-            self._debug("check", {"phase": "retell-failed", "error": f"{type(exc).__name__}: {exc}"[:200]})
-        told = shown
-        for _round in range(3):
-            reading = await self._check(shown, turn, report)
-            if reading is not None and not reading.problems:
-                self.state.ongoing = reading.now.strip()
-                break
-            problems = reading.problems if reading is not None else []
-            cut = check.redact(shown, problems) if problems else shown
-            self._debug("check", {"phase": "cut", "problems": [p.model_dump() for p in problems], "telling": shown, "kept": cut})
-            if not cut or cut == shown:
-                shown = self._plain_telling()  # nothing that holds is left: what was settled, plainly
-                break
-            shown = cut
-        else:
-            shown = self._plain_telling()
-        if shown != told:
-            self.cast.amend(self.state, report, told, shown)  # the keeper remembers what was shown
-        return shown
-
-    def _plain_telling(self) -> str:
-        """When no telling holds: where they are and what this turn settled, nothing added."""
-        st = self.state
-        here = self.m.location(st.location).name
-        settled = [e.text.strip() for e in st.log if e.turn == st.turn and e.kind in ("event",)]
-        return "".join(settled) or f"你在{here}，{st.clock}。"
 
     async def _sky(self, narration: str) -> None:
         """The keeper's words set the weather; unmentioned for a few hours, it passes."""
@@ -2303,13 +2253,8 @@ class Game:
                 await on_delta(text)
 
         old = told.entry.text
-        checking = getattr(self.cast, "checking", False)
         try:
-            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge),
-                                          on_delta=None if checking else delta)
-            if checking:  # read against the record before it is shown, as the first telling was
-                text = await self._verified(told.report, told.lore, text, None)
-                await delta(text)
+            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge), on_delta=delta)
         except Exception:
             self.told = told
             await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
