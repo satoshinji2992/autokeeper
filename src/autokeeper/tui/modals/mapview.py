@@ -208,7 +208,9 @@ def plan(c: Chart, width: int, height: int, short: dict[str, str] | None = None,
     if (kept := _PLANS.get(key)) is not None:
         return kept
     t = tree(c, opened)
-    tries = [(c.names, True, 2), (c.names, False, 2)]
+    # With room to spare, rows further apart first: the painted ground between them shows what
+    # each place is (drawing/mapart.py); a tight layout left it no room (2026-10-21).
+    tries = [(c.names, True, 4), (c.names, True, 3), (c.names, True, 2), (c.names, False, 2)]
     if short and short != c.names:
         tries.append((short, False, 2))
     tries.append((short or c.names, False, 1))
@@ -732,18 +734,19 @@ def draw(c: Chart, p: Plan, picked: str | None = None) -> Content:
     return Content("\n").join(rows)
 
 
-def legend(c: Chart, t: Tree | None = None) -> Content:
-    """What the marks mean, and the places heard of with no known way there yet."""
+def legend(c: Chart, t: Tree | None = None, *, painted: bool = False) -> Content:
+    """What the marks mean, and the places heard of with no known way there yet. `painted`: the
+    ways as the painted map shows them (drawing/mapart.py), a swatch of track."""
     keys = [(MARK["here"], "here", "当前位置"), (MARK["been"], "been", "已到访")]
     if "heard" in c.kinds.values() or c.rumours:
         keys.append((MARK["heard"], "heard", "已听闻"))
     if c.roads:
-        keys.append(("──", "road", "已行经道路"))
+        keys.append(("██" if painted else "──", "#805e3a" if painted else "road", "已行经道路"))
     if c.trails:
-        keys.append(("┄┄", "trail", "未行经道路"))
+        keys.append(("█ █" if painted else "┄┄", "#967a54" if painted else "trail", "未行经道路"))
     if t is not None and t.folded:
         keys.append((FOLDED, "been", "内部区域"))
-    rows = [Content("   ").join(Content.assemble((mark, STYLE[kind]), f" {label}") for mark, kind, label in keys)]
+    rows = [Content("   ").join(Content.assemble((mark, STYLE.get(kind, kind)), f" {label}") for mark, kind, label in keys)]
     if c.rumours:
         rows.append(Content.assemble(("已听闻，路线未知：", STYLE["note"]), *_names(list(c.rumours.values()))))
     return Content("\n").join(rows)
@@ -923,6 +926,7 @@ class MapModal(ModalScreen[str | None]):
         self.side = 0  # their width there
         self.notes = 4  # lines for them under it
         self.drawn_for: tuple[int, int] | None = None  # the screen size the map was laid out for
+        self._painted: tuple | None = None  # (the plan, its painted ground): made again when the plan is
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal", id="map-modal"):
@@ -970,9 +974,23 @@ class MapModal(ModalScreen[str | None]):
             self.query_one("#map-modal").styles.width = inside + 6
             long, short = self._keys()
             self.query_one("#map-keys", Static).update(long if cell_len(long) <= inside else short)
-        self.query_one(MapCanvas).update(draw(self.c, self.laid, self.picked))
+        self.query_one(MapCanvas).update(self._drawn())
         self.query_one("#place", Static).update(about(self.m, self.st, self.c, self.picked) if self.picked else "")
         self.call_after_refresh(self._follow, center)
+
+    def _drawn(self) -> Content:
+        """The map painted (drawing/mapart.py): ground, ways and mist made by program, the names in
+        ink on top; in the pure-ASCII art style, the plan as text as before."""
+        assert self.laid is not None
+        if getattr(self.app, "art_style", "photo") == "ascii":
+            return draw(self.c, self.laid, self.picked)
+        from ..drawing import mapart
+
+        kinds = {p: self.laid.kinds.get(p, self.c.kinds[p]) for p in self.laid.spots}
+        if self._painted is None or self._painted[0] is not self.laid:
+            self._painted = (self.laid, mapart.paint(self.laid, kinds, self.c.names, self.m.id))
+            self.query_one("#map-legend", Static).update(legend(self.c, self.nest, painted=True))
+        return mapart.compose(self.laid, self._painted[1], kinds, TAG, self.picked, MARK)
 
     def _keys(self) -> tuple[str, str]:
         """The few keys that matter (Tab, Shift+arrows and dragging are in the guide), in full
