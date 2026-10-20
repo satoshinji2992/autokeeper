@@ -149,7 +149,7 @@ def _run(app) -> None:
     driver writes to sys.__stderr__, so keep that stream connected to the terminal.
     A crash's traceback lands in the log and is shown once the screen is back."""
     log = paths.stderr_log()
-    original = sys.__stderr__
+    original, before = sys.__stderr__, sys.stderr
     with contextlib.ExitStack() as stack:
         try:
             log.parent.mkdir(parents=True, exist_ok=True)
@@ -162,12 +162,15 @@ def _run(app) -> None:
             app.run()
             return
         try:
-            sys.__stderr__ = terminal
+            # Python's own writes go to the log too. On Windows sys.stderr is a console stream that
+            # writes to whatever handle descriptor 2 has: the log file, which is no console, so a
+            # crash's traceback failed with "WinError 6 句柄无效" and hid the error (the user, 2026-10-21).
+            sys.__stderr__, sys.stderr = terminal, sink
             app.run()
         finally:
             terminal.flush()
             sys.stderr.flush()
-            sys.__stderr__ = original
+            sys.__stderr__, sys.stderr = original, before
             os.dup2(terminal.fileno(), 2)
     if app.return_code:
         with open(log, encoding="utf-8", errors="replace") as f:
@@ -382,14 +385,12 @@ _RESTART = False  # a component was installed under the running game: it starts 
 def _claude_installed() -> bool:
     """Claude chosen without its package: offered to install it now, as installed (uv tool), and
     True once it is there. A running game sees it only after a restart, so this asks to restart."""
-    from . import __version__
-
-    uv = shutil.which("uv")
-    if not (paths.INSTALLED and uv and sys.stdin.isatty()):
+    command = config.claude_install_command()
+    if not (command and sys.stdin.isatty()):
         return False
     if not typer.confirm("用 Claude 要先装上它的组件（约 250 MB），现在装吗", default=True):
         return False
-    done = subprocess.run([uv, "tool", "install", "--force", "--python", "3.12", f"autokeeper[claude]=={__version__}"])
+    done = subprocess.run(command)
     if done.returncode != 0:
         console.print("[red]Claude 组件没装好：上面是 uv 的报错。[/]")
         return False
@@ -455,8 +456,7 @@ def login(
     console.print(f"[green]以后默认用 {preset}。[/] 想试试通不通：[bold]autokeeper doctor --ping[/]")
 
 
-KEYS = {"deepseek": ("DEEPSEEK_API_KEY",), "openai": ("OPENAI_API_KEY",), "anthropic": ("ANTHROPIC_API_KEY",),
-        "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY")}
+KEYS = config.PROVIDER_KEYS
 
 
 @app.command()
@@ -527,20 +527,14 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
 
 
 async def _ping(routes: set[tuple[str, str]]) -> bool:
-    from .config import Role
-    from .harness import make_model
+    import time
 
     good = True
     for backend, model in sorted(routes):
-        m = make_model(Role(backend, model, None), "你是连通性测试。", label="doctor")
-        try:
-            reply = await m.complete([{"role": "user", "content": "只回答两个字：收到"}])
-            console.print(f"✓ {backend}:{model}  {reply.seconds:.1f}s  {reply.text.strip()[:20]}")
-        except Exception as exc:
-            good = False
-            console.print(f"✗ {backend}:{model}  {type(exc).__name__}: {str(exc)[:200]}")
-        finally:
-            await m.close()
+        start = time.monotonic()
+        problem = await config.ping_role(config.Role(backend, model, None))
+        good &= not problem
+        console.print(f"✓ {backend}:{model}  {time.monotonic() - start:.1f}s" if not problem else f"✗ {backend}:{model}  {escape(problem)}")
     return good
 
 

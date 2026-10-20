@@ -13,14 +13,14 @@ from textual.widgets import Button, Select, Static, Switch
 
 from ... import config, imagegen, imagery
 from ..drawing import dice
-from .dialogs import EngineModal
+from .engine import EngineModal
 from .prefs import PrefsModal
 
 
 def model_choices() -> dict[str, str]:
-    return {"claude": "Claude · 使用本机登录或已配置的 API",
-            "codex": "Codex · 使用本机登录，当前默认模型",
-            "deepseek": "DeepSeek · 使用已配置的 API"} | {k: "" for k in config.PRESETS if k not in ("claude", "codex", "deepseek")}
+    return {"deepseek": "按用量付费的 API，要 DeepSeek 的 API Key",
+            "claude": "本机 Claude Code 的登录；也可以填 Anthropic 的 API Key",
+            "codex": "本机 Codex 的登录，用它的默认模型"} | {k: "" for k in config.PRESETS if k not in ("claude", "codex", "deepseek")}
 
 
 class SettingsModal(ModalScreen[None]):
@@ -79,8 +79,10 @@ class SettingsModal(ModalScreen[None]):
         cfg = config.load()
         world = cfg.role("world")
         inherited = "（随裁定配置）" if "world" not in cfg.roles else "（单独配置）"
+        own = config.ui_settings().get("role_models", {})
         return Text(f"当前：{cfg.preset} · {cfg.mode} · {cfg.role('keeper').model}\n"
-                    f"世界推演：{world.model} · 思考 {world.effort or '关'}{inherited}", style="dim")
+                    f"世界推演：{world.model} · 思考 {world.effort or '关'}{inherited}"
+                    + (f"\n单独指定：{'、'.join(config.ROLES_SHOWN[r][0] for r in own)}" if own else ""), style="dim")
 
     @on(Button.Pressed, "#settings-models")
     def models(self) -> None:

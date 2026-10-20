@@ -116,6 +116,27 @@ ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
 # model, thinking low (DeepSeek's keeper thinks high, which the telling can afford, not this).
 ROLE_EFFORT = {"world": "low", "plan": "low"}
 
+# The roles as the model settings list them: name, what it does. Only 读图 is sent pictures.
+ROLES_SHOWN: dict[str, tuple[str, str]] = {
+    "keeper": ("守秘人", "讲故事、描写场景"),
+    "plan": ("守秘人安排", "每轮先整理玩家的行动，安排在场的人"),
+    "arbiter": ("裁定", "判断要不要检定、用哪个技能"),
+    "npc": ("NPC", "扮演每个 NPC"),
+    "director": ("导演", "模组没写到的地方补戏"),
+    "world": ("世界推演", "重要 NPC 在幕后的决定"),
+    "investigator": ("AI 调查员", "AI 队友和观战"),
+    "intent": ("解析行动", "备用：守秘人安排出错时理解玩家的话"),
+    "summarizer": ("摘要", "把较早的经过压成摘要"),
+    "chronicler": ("记录员", "前情回顾、故事至今"),
+    "lore": ("知识库", "查模组资料"),
+    "vision": ("读图", "看手绘草图、模组插图、挑照片：要能看图的模型"),
+    "artist": ("美术", "画 ASCII 插图"),
+    "card": ("车卡", "把公众人物做成调查员"),
+    "importer": ("导入模组", "读 PDF、补写模组"),
+}
+ROLE_ORDER = tuple(ROLES_SHOWN)
+SEES = ("vision",)  # the roles sent pictures
+
 
 def _deepseek(effort: str | None) -> Role:
     return Role("langchain", "deepseek:deepseek-flash", effort)
@@ -252,6 +273,75 @@ def load_env() -> None:
 
 
 PRESET_KEYS = {"deepseek": "DEEPSEEK_API_KEY", "claude": "ANTHROPIC_API_KEY"}  # the key a preset runs on, when it needs one
+# The keys an init_chat_model provider reads (any one of them will do), and its name for people.
+PROVIDER_KEYS = {"deepseek": ("DEEPSEEK_API_KEY",), "openai": ("OPENAI_API_KEY",), "anthropic": ("ANTHROPIC_API_KEY",),
+                 "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY")}
+PROVIDER_NAMES = {"deepseek": "DeepSeek", "openai": "OpenAI", "anthropic": "Anthropic", "google_genai": "Gemini",
+                  "claude": "Claude", "codex": "Codex", "ollama": "Ollama"}
+
+
+def provider(role: Role) -> str:
+    """Whose model a role runs on: claude / codex, or the init_chat_model provider (deepseek, ollama, ...)."""
+    return role.backend if role.backend != "langchain" else role.model.partition(":")[0] if ":" in role.model else "openai"
+
+
+def keys_needed(cfg: Config) -> list[tuple[str, str, bool]]:
+    """(key name, whose, optional) for the models the roles run on: an API's own key; Claude's
+    is optional (without one, the local Claude Code login); Codex and local models need none."""
+    out: dict[str, tuple[str, str, bool]] = {}
+    for name in sorted(cfg.role_names | set(DEFAULT_ROLES)):
+        role = cfg.role(name)
+        who = provider(role)
+        if who == "claude":
+            out.setdefault("ANTHROPIC_API_KEY", ("ANTHROPIC_API_KEY", "Claude", True))
+        elif role.backend == "langchain" and (names := PROVIDER_KEYS.get(who)) and not role.base_url:
+            out.setdefault(names[0], (names[0], PROVIDER_NAMES.get(who, who), False))
+    return list(out.values())
+
+
+def plain(exc: BaseException) -> str:
+    """What went wrong with a model, in a line a player can act on."""
+    text = str(exc)
+    if isinstance(exc, ModuleNotFoundError) and "claude_agent_sdk" in text:
+        return "没装 Claude 组件"
+    if "API_KEY" in text or "api_key" in text:
+        return next((f"没有 {PROVIDER_NAMES[who]} 的 API Key" for who, names in PROVIDER_KEYS.items() for k in names if k in text),
+                    "没有填 API Key")
+    if isinstance(exc, FileNotFoundError):
+        return f"找不到程序：{Path(exc.filename or text).name}（先装好并登录）"
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if status in (401, 403):
+        return f"API Key 不对，或者没有权限（{status}）"
+    if status == 402 or "Insufficient Balance" in text:
+        return "账户余额不足"
+    if status == 429:
+        return "请求太频繁或额度用完了（429）"
+    if isinstance(exc, TimeoutError):
+        return f"{PING_SECONDS} 秒内没有回应"
+    first = text.splitlines()[0][:160] if text else ""
+    return f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+
+
+PING_SECONDS = 90
+
+
+async def ping_role(role: Role) -> str:
+    """One short call on a model: "" when it answered, else what went wrong (plain())."""
+    from .harness import make_model
+
+    m = None
+    try:
+        m = make_model(role, "你是连通性测试。", label="ping")  # an API without its key fails right here
+        await asyncio.wait_for(m.complete([{"role": "user", "content": "只回答两个字：收到"}]), PING_SECONDS)
+        return ""
+    except asyncio.CancelledError:
+        raise
+    except BaseException as exc:  # whatever a backend's program does, the test says so and the game goes on
+        return plain(exc)
+    finally:
+        if m is not None:
+            with contextlib.suppress(Exception):
+                await m.close()
 
 
 def chosen() -> bool:
@@ -265,20 +355,17 @@ def chosen() -> bool:
 
 
 async def ping(preset: str) -> str:
-    """One short call on a preset's keeper model: "" when it answered, else what went wrong, in a line."""
-    from .harness import make_model
+    """A preset's keeper model tried (ping_role)."""
+    return await ping_role(PRESETS.get(preset, DEFAULT_ROLES)["keeper"])
 
-    role = PRESETS.get(preset, DEFAULT_ROLES)["keeper"]
-    m = make_model(role, "你是连通性测试。", label="ping")
-    try:
-        await m.complete([{"role": "user", "content": "只回答两个字：收到"}])
-        return ""
-    except asyncio.CancelledError:
-        raise
-    except BaseException as exc:  # whatever a backend's program does, the test says so and the game goes on
-        return f"{type(exc).__name__}: {str(exc).splitlines()[0][:160] if str(exc) else ''}"
-    finally:
-        await m.close()
+
+def models_in_use(cfg: Config) -> dict[tuple[str, str], list[str]]:
+    """Each distinct model the roles run on, with the roles on it."""
+    out: dict[tuple[str, str], list[str]] = {}
+    for name in ROLE_ORDER:
+        role = cfg.role(name)
+        out.setdefault((role.backend, role.model), []).append(name)
+    return out
 
 
 def save_key(name: str, value: str) -> Path:
@@ -305,9 +392,50 @@ CLAUDE_EXTRA = ("用 Claude 要先装上它的组件：uv tool install --force \
 
 def claude_ready() -> bool:
     """Whether the Claude backend's package is installed: an extra, not part of the game."""
+    import importlib
     import importlib.util
 
+    importlib.invalidate_caches()  # installed while running (install_claude)
     return importlib.util.find_spec("claude_agent_sdk") is not None
+
+
+def claude_install_command() -> list[str] | None:
+    """How this installation gets the Claude extra, or None when it cannot do it by itself
+    (a source checkout, pipx, no uv). `uv tool install --force` with the extra adds the package
+    to the same environment in place (the running game keeps working) and records the extra, so
+    a later `uv tool upgrade` keeps it; on the same Python, or the environment would be rebuilt."""
+    import shutil
+    import sys
+
+    from . import __version__
+
+    uv = shutil.which("uv")
+    if not (paths.INSTALLED and uv):
+        return None
+    return [uv, "tool", "install", "--force", "--python", f"{sys.version_info.major}.{sys.version_info.minor}",
+            f"autokeeper[claude]=={__version__}"]
+
+
+async def install_claude() -> str:
+    """The Claude extra installed now: "" when it is ready, else why not (with the command to run)."""
+    command = claude_install_command()
+    if command is None:
+        return CLAUDE_EXTRA
+    proc = await asyncio.create_subprocess_exec(*command, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+                                                stderr=asyncio.subprocess.STDOUT, **_quiet_child())
+    out, _ = await proc.communicate()
+    if proc.returncode != 0 or not claude_ready():
+        tail = out.decode("utf-8", "replace").strip().splitlines()[-1:] or [f"退出码 {proc.returncode}"]
+        return f"没装好：{tail[0][:160]}。可以退出游戏后运行：{' '.join(command[1:])}"
+    return ""
+
+
+def _quiet_child() -> dict:
+    """A child program that does not share the game's console on Windows (it took the screen down)."""
+    import subprocess
+    import sys
+
+    return {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
 
 
 def remove_key(name: str) -> bool:
@@ -392,6 +520,9 @@ def ui_settings() -> dict:
     for key in ("model", "fallback"):
         if isinstance(data.get(key), str) and len(data[key]) <= 512:
             out[key] = data[key].strip()
+    if isinstance(data.get("role_models"), dict):  # 模型设置's 分工: a model for one role
+        out["role_models"] = {k: v.strip() for k, v in data["role_models"].items()
+                              if k in ROLES_SHOWN and isinstance(v, str) and 0 < len(v.strip()) <= 512}
     for key in ("visual_limit", "visual_budget_usd"):
         value = data.get(key)
         if type(value) in (float, int) and 0 <= value <= 10000:
@@ -415,7 +546,9 @@ def _role(base: Role, spec: dict) -> Role:
     return replace(base, **changes)
 
 
-def load(path: Path | None = None) -> Config:
+def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
+    """The configuration as saved; `choice`: 模型设置's choices (preset, mode, model, fallback,
+    role_models) over it and over the environment, to see what they would run before saving."""
     load_env()
     data: dict = {}
     for candidate in (paths.USER_DIR / "config.toml", paths.ROOT / "autokeeper.toml", path):
@@ -427,19 +560,25 @@ def load(path: Path | None = None) -> Config:
                 else:
                     data[key] = value
     data.update(ui_settings())
-    preset = os.environ.get("AUTOKEEPER_PRESET") or data.get("preset", "claude")
+    wanted = {k: v for k, v in (choice or {}).items() if k in ("preset", "mode", "model", "fallback", "role_models")}
+    data.update(wanted)
+
+    def given(key: str, env: str, default: str = "") -> str:
+        return wanted[key] if key in wanted else os.environ.get(env) or data.get(key, default)
+
+    preset = given("preset", "AUTOKEEPER_PRESET", "claude")
     if preset not in PRESETS:
         raise ValueError(f"未知预设：{preset}（可选：{', '.join(PRESETS)}）")
-    mode = os.environ.get("AUTOKEEPER_MODE") or data.get("mode", "标准")
+    mode = given("mode", "AUTOKEEPER_MODE", "标准")
     if mode not in MODES:
         raise ValueError(f"未知的模式：{mode}（可选：{'、'.join(MODES)}）")
     cfg = Config(roles=moded(PRESETS[preset], mode), preset=preset, mode=mode)
     roles = data.get("roles", {})
     every = dict(roles.get("all", {}))
-    if picked := os.environ.get("AUTOKEEPER_MODEL") or data.get("model"):
+    if picked := given("model", "AUTOKEEPER_MODEL"):
         backend, model = route(picked)
         every.update(backend=backend, model=model)
-    if fallback := os.environ.get("AUTOKEEPER_FALLBACK") or data.get("fallback"):
+    if fallback := given("fallback", "AUTOKEEPER_FALLBACK"):
         every.update(fallback=fallback)
     for name in (set(DEFAULT_ROLES) | set(roles)) - {"all", *ROLE_PARENTS}:
         cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
@@ -447,6 +586,10 @@ def load(path: Path | None = None) -> Config:
         if name in roles:
             inherited = cfg.role(parent)
             cfg.roles[name] = _role(replace(inherited, effort=ROLE_EFFORT.get(name, inherited.effort)), roles[name])
+    for name, picked in (data.get("role_models") or {}).items():  # one role's own model, picked in 模型设置
+        if name in ROLES_SHOWN and picked:
+            backend, model = route(picked)
+            cfg.roles[name] = replace(cfg.role(name), backend=backend, model=model)
     cfg.module = data.get("module", cfg.module)
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)

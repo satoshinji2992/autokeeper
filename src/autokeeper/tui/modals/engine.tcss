@@ -1,0 +1,42 @@
+/* 模型设置 (engine.py); .modal, .modal-title and .buttons come from app.tcss */
+
+#engine-modal {
+    width: 110;
+    max-width: 96%;
+    height: 92%;
+}
+
+#engine-body {
+    height: 1fr;
+}
+
+#engine-modal .engine-head {
+    margin-top: 1;
+    text-style: bold;
+}
+
+#engine-modal #preset {
+    height: auto;
+    max-height: 6;
+}
+
+#engine-modal .role-row {
+    height: 1;
+}
+
+#engine-modal .role-name {
+    width: 56;
+}
+
+#engine-modal .role-model, #engine-modal .key {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0 1;
+}
+
+#engine-modal #ping-result {
+    margin-top: 1;
+    height: auto;
+    max-height: 6;
+}

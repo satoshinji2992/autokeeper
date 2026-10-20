@@ -20,7 +20,7 @@ from autokeeper import paths
 from autokeeper import cli, paths
 
 paths.DATA = Path(sys.argv[1])
-original = sys.__stderr__
+original, before = sys.__stderr__, sys.stderr
 
 class App:
     return_code = 0
@@ -28,6 +28,7 @@ class App:
     def run(self):
         sys.__stderr__.write('visible game screen\\n')
         os.write(2, b'native warning\\n')
+        sys.stderr.write('python traceback\\n')  # Textual's own report of a crash: on Windows, WinError 6
         if sys.argv[2] == 'True':
             raise RuntimeError('startup failed')
 
@@ -35,7 +36,7 @@ try:
     cli._run(App())
 except RuntimeError:
     pass
-assert sys.__stderr__ is original
+assert sys.__stderr__ is original and sys.stderr is before
 os.write(2, b'after game\\n')
 """
     result = subprocess.run(
@@ -44,7 +45,7 @@ os.write(2, b'after game\\n')
     )
     assert result.returncode == 0, result.stderr
     assert result.stderr == "visible game screen\nafter game\n"
-    assert (tmp_path / "logs" / "stderr.log").read_text(encoding="utf-8") == "native warning\n"
+    assert (tmp_path / "logs" / "stderr.log").read_text(encoding="utf-8") == "native warning\npython traceback\n"
 
 
 def test_terminals_that_show_true_colour_are_told_so(monkeypatch):

@@ -8,7 +8,7 @@ from textual.widgets import Button, Input, OptionList, Select, Static, Switch
 from autokeeper import config, paths
 from autokeeper.prefs import Prefs
 from autokeeper.tui.app import AutoKeeperApp
-from autokeeper.tui.modals.dialogs import EngineModal
+from autokeeper.tui.modals.engine import EngineModal
 from autokeeper.tui.modals.prefs import PrefsModal
 from autokeeper.tui.modals.settings import SettingsModal
 from autokeeper.tui.screens.setup import SetupScreen
@@ -141,32 +141,69 @@ async def test_pictures_from_codex_are_off_with_the_reason_when_codex_cannot_dra
 
 async def test_the_model_settings_take_a_key_and_test_the_connection(monkeypatch):
     """The user, 2026-10-20: where in the game does the API key go, and how do I know it works?
-    模型设置 takes the chosen preset's key (kept as `autokeeper login` keeps it) and tries it."""
-    from autokeeper import config
+    2026-10-21: the key field said only "API Key" under DeepSeek's "API", nothing said which role
+    needs a model that sees pictures, no role could have a model of its own, and a test of Codex
+    froze the page. The keys listed are the ones the chosen models need, each role can be given a
+    model, and every model in use is tried in the background."""
+    import asyncio
 
     saved, pinged = {}, []
 
-    async def ping(preset):
-        pinged.append(preset)
-        return "" if preset == "deepseek" else "RuntimeError: 用 Claude 要先装上它的组件"
+    async def ping_role(role):
+        pinged.append(role.model)
+        await asyncio.sleep(0.05)
+        return "" if role.model.startswith("deepseek:") else "没有回应"
 
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setattr(config, "save_key", lambda name, value: saved.setdefault(name, value))
-    monkeypatch.setattr(config, "ping", ping)
+    monkeypatch.setattr(config, "ping_role", ping_role)
+    monkeypatch.setattr(config, "claude_ready", lambda: False)
+    monkeypatch.setattr(config, "claude_install_command", lambda: ["uv", "tool", "install"])
     app = AutoKeeperApp(theme="amber")
-    async with app.run_test(size=(120, 44)) as pilot:
-        app.push_screen(EngineModal({"deepseek": "DeepSeek", "claude": "Claude"}, "claude", "", "", in_game=False))
+    async with app.run_test(size=(140, 50)) as pilot:
+        result: list = []
+        app.push_screen(EngineModal({"deepseek": "DeepSeek", "claude": "Claude"}, "claude", "", "", in_game=False, role_models={}),
+                        result.append)
         await pilot.pause()
         modal = app.screen
         modal.query_one("#preset", OptionList).highlighted = 0  # deepseek
-        modal.query_one("#key", Input).value = "sk-test"
+        await pilot.pause()
+        keys = list(modal.query("#keys Input"))
+        assert [k.name for k in keys] == ["DEEPSEEK_API_KEY"] and "还没填" in keys[0].placeholder
+        assert modal.query_one("#role-artist", Input).placeholder == "deepseek-v4-pro"  # the preset's own, in grey
+        keys[0].value = "sk-test"
         modal.query_one("#ping", Button).press()
         await pilot.pause(0.3)
-        assert saved == {"DEEPSEEK_API_KEY": "sk-test"} and pinged == ["deepseek"]
-        assert "连通了" in str(modal.query_one("#ping-result", Static).render())
-        modal.query_one("#preset", OptionList).highlighted = 1  # claude, without its package
+        assert saved == {"DEEPSEEK_API_KEY": "sk-test"}
+        assert sorted(pinged) == ["deepseek:deepseek-flash", "deepseek:deepseek-v4-pro"]  # each model once
+        text = str(modal.query_one("#ping-result", Static).render())
+        assert "deepseek-flash" in text and "连通了" in text
+        modal.query_one("#role-vision", Input).value = "claude-haiku-5-5"  # 读图 on a model that sees
+        await pilot.pause()
+        assert [k.name for k in modal.query("#keys Input")] == ["DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY"]
         modal.query_one("#ping", Button).press()
         await pilot.pause(0.3)
-        assert "没连通" in str(modal.query_one("#ping-result", Static).render())
+        assert "没装 Claude 组件" in str(modal.query_one("#ping-result", Static).render())
+        assert modal.query_one("#install", Button).display  # one press installs it
+        modal.query_one("#apply", Button).press()
+        await pilot.pause()
+    assert result[0]["preset"] == "deepseek" and result[0]["role_models"] == {"vision": "claude-haiku-5-5"}
+
+
+def test_a_role_given_its_own_model_keeps_it_and_tests_say_what_is_wrong_in_plain_words(monkeypatch, tmp_path):
+    import asyncio
+
+    monkeypatch.setattr(paths, "USER_DIR", tmp_path)
+    config.save_ui_settings({"preset": "deepseek", "role_models": {"vision": "openai:gpt-5", "nobody": "x"}})
+    cfg = config.load()
+    assert cfg.role("vision").model == "openai:gpt-5" and cfg.role("keeper").model == "deepseek:deepseek-flash"
+    assert config.load(choice={"preset": "claude", "role_models": {}}).role("vision").model == "claude-opus-5-5"
+    assert ("OPENAI_API_KEY", "OpenAI", False) in config.keys_needed(cfg)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setattr(config, "load_env", lambda: None)
+    # no key: the model fails as it is made, which used to take the game down with it
+    assert asyncio.run(config.ping_role(config.Role("langchain", "deepseek:deepseek-flash", None))) == "没有 DeepSeek 的 API Key"
+    assert config.plain(ModuleNotFoundError("No module named 'claude_agent_sdk'")) == "没装 Claude 组件"
 
 
 def test_a_player_without_a_usable_model_is_asked_even_with_old_saves(monkeypatch):

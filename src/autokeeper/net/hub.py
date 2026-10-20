@@ -1009,7 +1009,7 @@ class Hub:
                 else:
                     os.environ.pop(env, None)
             try:
-                cfg = config.load()
+                cfg = config.load(choice=choice)
             except ValueError as exc:
                 await self._send(cid, {"t": "error", "text": str(exc)})
                 continue

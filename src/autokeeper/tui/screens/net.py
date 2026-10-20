@@ -29,7 +29,8 @@ from ...net import media
 from ...net import room as lan
 from ...net.link import Link
 from ...rules import commands
-from ..modals.dialogs import EngineModal, PushModal, RollModal
+from ..modals.dialogs import PushModal, RollModal
+from ..modals.engine import EngineModal
 from ..modals.retell import RetellModal
 from ..widgets.panels import SceneArt
 from .game import GameScreen
