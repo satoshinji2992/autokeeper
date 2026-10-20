@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.3.1（2026-10-20）
+
+- 用 `uv tool install` 或 pipx 装的也能显示照片：找不到 chafa 时，第一次运行或 `autokeeper setup` 会自动下载它的官方版本（Windows、Linux）；macOS 提示 `brew install chafa`。一键安装脚本也会顺便用系统的包管理器装 chafa。
+- README 写上怎么装 uv。
+
 ## 0.0.3（2026-10-20）
 
 ### 游玩与排查
