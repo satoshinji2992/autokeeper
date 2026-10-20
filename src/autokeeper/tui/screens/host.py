@@ -308,6 +308,8 @@ class HostScreen(Screen):
         t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
         if self.slot:
             t.append(" · 继续已有存档")
+        else:  # where a card of one's own is made: not here, in the lobby (the user, 2026-10-21: 在哪新建角色?)
+            t.append("\n开房间后在大厅入座，按 R 可以换成自己的角色或车卡。", style="dim")
         self.query_one("#host-note", Static).update(t)
 
     # -- opening --------------------------------------------------------------------------------
