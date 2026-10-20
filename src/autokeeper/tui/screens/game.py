@@ -35,7 +35,8 @@ from ...rules import commands
 from ...rules.coc import Investigator, Rules
 from ..library import THEMES, art_text, face_text, write_save
 from ..modals.debrief import DebriefModal
-from ..modals.dialogs import EngineModal, HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
+from ..modals.dialogs import HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
+from ..modals.engine import EngineModal
 from ..modals.guide import GuideScreen
 from ..modals.mapview import MapModal
 from ..modals.menu import MENU, Confirm, GameMenu
@@ -68,7 +69,7 @@ from .prelude import PreludeScreen
 from .saves import LoadScreen
 
 COMMANDS = (
-    ("输入模式", "Alt", "切换角色行动与向守秘人说明；终端也可用 Alt+M", "toggle_input_mode"),
+    ("输入模式", "Alt+M", "切换角色行动与向守秘人说明", "toggle_input_mode"),
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
@@ -114,7 +115,7 @@ class GameScreen(Screen):
         Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
         Binding("f12", "developer", "开发者模式", show=False),
-        Binding("alt,alt+m,alt+enter", "toggle_input_mode", "角色／KP", key_display="Alt", priority=True),
+        Binding("alt,alt+m,alt+enter", "toggle_input_mode", "角色／KP", key_display="Alt+M", priority=True),
         Binding("tab", "complete_skill(1)", "补全技能", show=False, priority=True),
         Binding("shift+tab", "complete_skill(-1)", "上个技能", show=False, priority=True),
         Binding("ctrl+s", "save", "存档", show=False),
@@ -267,7 +268,7 @@ class GameScreen(Screen):
 
     def _input_label(self) -> None:
         box = self.query_one("#command", Input)
-        box.border_title = "角色行动 · Alt 切换" if self.input_mode == "rp" else "对 KP 说明 · Alt 切换"
+        box.border_title = "角色行动" if self.input_mode == "rp" else "对 KP 说明"
         box.placeholder = "输入角色行动或对话 · Esc 菜单" if self.input_mode == "rp" else "向守秘人提问或澄清，不作为角色发言"
         box.set_class(self.input_mode == "kp", "to-keeper")
 
@@ -463,7 +464,7 @@ class GameScreen(Screen):
             else:
                 os.environ.pop(env, None)
         try:
-            cfg = config.load()
+            cfg = config.load(choice=choice)
         except ValueError as exc:
             self.app.notify(str(exc), severity="error")
             return
