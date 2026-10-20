@@ -400,7 +400,8 @@ def _source(text: str) -> str:
     return f"\n\n【原文（整理资料的出处；条件和整理资料对不上时以原文为准）】\n{text}" if text.strip() else ""
 
 
-async def _ask(cfg: config.Config, name: str, m: Module, *, source: str = "", problems: list[str] | tuple[str, ...] = ()) -> BaseModel:
+async def _ask(cfg: config.Config, name: str, m: Module, *, source: str = "", problems: list[str] | tuple[str, ...] = (),
+               hints: list[str] | tuple[str, ...] = ()) -> BaseModel:
     """One pass's call: the keeper's book with its conditions and the original text (the opening
     performance reads only what the players are told), and, asked again, what the last answer got
     round."""
@@ -409,7 +410,10 @@ async def _ask(cfg: config.Config, name: str, m: Module, *, source: str = "", pr
     material = _public(m) if name == "prelude" else f"{book(m)}{_source(source)}{_material(m, name)}"
     ask = f"{material}\n\n【这次要做的】{LABELS[name]}：{task}"
     if problems:
-        ask += "\n\n【上一次补写里这几条绕过了原作的条件，这次改掉：删掉，写清实际依据，或交给守秘人裁定】\n" + "\n".join(f"- {x}" for x in problems)
+        ask += "\n\n【上一次补写里这几条写法不对，这次改掉；条件写不出的写进 only_if，不要删掉前提】\n" + "\n".join(f"- {x}" for x in problems)
+    if hints:  # found by words, not by reading: the call that reads the original decides
+        ask += ("\n\n【程序按关键词觉得这几条可能绕过了原作的条件，对照原文判断：确实绕过的就改（删掉、写清实际依据，"
+                "或交给守秘人裁定），没有绕过的照原样写】\n" + "\n".join(f"- {x}" for x in hints))
     try:
         reply = await s.send(ask)
         return schema.model_validate(reply.data or {})
@@ -490,8 +494,8 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
         for a in items:  # an outcome naming what the module lacks is cut down to what it has, not the whole pass
             for step in a.steps:
                 step.only_if, step.source = step.only_if.strip(), step.source.strip()
-                if (hour := re.search(r"D\d+ \d{1,2}:\d{2}", step.when)) and step.when.strip() != hour.group():
-                    step.when = hour.group()  # a time stands alone (graph.audit): the hour kept, what was joined to it left to its words
+                # A time joined to a condition stays whole (「D1 22:00 & flag:x」, agents.split_when); one written
+                # some other way is asked again (held), never cut down to its hour: that would drop its premise.
                 if step.ruling:  # what comes of the keeper's ruling is the keeper's: no outcome done, no meeting reaction
                     step.does, step.meet = "", None
                 if step.meet:  # what it does on meeting them is its voice's to play: no outcome
@@ -564,7 +568,7 @@ def preview(m: Module, found: list[tuple[Any, ...]]) -> Module:
 def _refs(m: Module) -> set[str]:
     """What the situation layer has, by the refs the review names them by."""
     return ({p.ref for p in conditions.pieces(m)} | {f"knows:{n.id}:{i}" for n in m.npcs for i in range(len(n.knows))}
-            | {f"history:{i}" for i in range(len(m.history))})
+            | {f"history:{i}" for i in range(len(m.history))} | {f"mechanics:{i}" for i in range(len(m.mechanics))})
 
 
 def held(m: Module, name: str, found: list[tuple[Any, ...]]) -> list[conditions.Finding]:
@@ -577,7 +581,19 @@ def held(m: Module, name: str, found: list[tuple[Any, ...]]) -> list[conditions.
     else:
         old = {p.ref for p in conditions.pieces(m)}
         chosen = [p for p in conditions.pieces(after) if p.ref not in old]
-    return conditions.findings(after, chosen)
+    out = conditions.findings(after, chosen)
+    if name == "agendas":  # a condition the runtime cannot read is no premise kept: written again, never cut down
+        from .graph import _waits
+
+        steps = {f"agendas:{a.npc}:{s.id}": s for a in after.agendas for s in a.steps}
+        for p in chosen:
+            if (s := steps.get(p.ref)) is None:
+                continue
+            atoms = [x.strip().lstrip("!") for group in s.when.split("|") for x in group.split("&") if x.strip()]
+            bad = _waits(after, atoms, s.when) + [f"标记 {x[5:]} 没有声明" for x in atoms if x.startswith("flag:") and x[5:] not in after.flags]
+            if bad:
+                out.append(conditions.Finding(p.ref, "error", f"{p.ref} 的条件 {s.when} 写法不对：{'；'.join(bad)}"))
+    return out
 
 
 def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...]]:
@@ -585,8 +601,8 @@ def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...
     out: list[tuple[Any, ...]] = []
     for e in found:
         if e[0] == "append" and e[1] == "agendas":
-            e = ("append", "agendas", [{**a, "steps": [x for x in a.get("steps", []) if f"agendas:{a['npc']}:{x['id']}" not in refs]}
-                                       for a in e[2]])
+            kept = [{**a, "steps": [x for x in a.get("steps", []) if f"agendas:{a['npc']}:{x['id']}" not in refs]} for a in e[2]]
+            e = ("append", "agendas", [a for a in kept if a["steps"]])  # an agenda with nothing left to do is no agenda
         elif e[0] == "append" and e[1] == "foreshadow":
             e = ("append", "foreshadow", [f for f in e[2] if f"foreshadow:{f['id']}" not in refs])
         elif e[0] == "put" and e[3] == "knows":
@@ -602,6 +618,7 @@ def take_out(folder: Path, refs: list[str]) -> None:
     m = Module.load(folder)
     knows: dict[str, set[int]] = {}
     past: list[int] = []
+    rules: list[int] = []
     for ref in refs:
         kind, _, rest = ref.partition(":")
         if kind == "knows":
@@ -609,6 +626,8 @@ def take_out(folder: Path, refs: list[str]) -> None:
             knows.setdefault(npc, set()).add(int(i))
         elif kind == "history":
             past.append(int(rest))
+        elif kind == "mechanics":
+            rules.append(int(rest))
     for ref in refs:
         kind, _, rest = ref.partition(":")
         if kind == "agendas":
@@ -618,12 +637,13 @@ def take_out(folder: Path, refs: list[str]) -> None:
         elif kind == "foreshadow":
             path = _target(folder, "foreshadow")
             path.write_text(yamledit.drop_entry(path.read_text(encoding="utf-8"), "foreshadow", rest), encoding="utf-8")
-    if past:
-        path = _target(folder, "history")
-        text = path.read_text(encoding="utf-8")
-        for i in sorted(set(past), reverse=True):
-            text = yamledit.drop(text, "history", i)
-        path.write_text(text, encoding="utf-8")
+    for group, gone in (("history", past), ("mechanics", rules)):
+        if gone:
+            path = _target(folder, group)
+            text = path.read_text(encoding="utf-8")
+            for i in sorted(set(gone), reverse=True):
+                text = yamledit.drop(text, group, i)
+            path.write_text(text, encoding="utf-8")
     for npc, gone in knows.items():
         path = _target(folder, "npcs")
         kept = [k for i, k in enumerate(m.npc(npc).knows) if i not in gone]
@@ -679,14 +699,18 @@ async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log:
     found = edits(m, name, out)
     wrong = held(m, name, found)
     if wrong and not dry:
-        log(f"  [yellow]{LABELS[name]}：{len(wrong)} 条绕过了原作的条件，带着原因重问一次[/]")
+        log(f"  [yellow]{LABELS[name]}：{len(wrong)} 条要再看一遍，带着原因重问一次[/]")
         try:
-            again = await _ask(cfg, name, m, source=original(folder, _focus(m, name)), problems=[f.text for f in wrong])
+            again = await _ask(cfg, name, m, source=original(folder, _focus(m, name)),
+                               problems=[f.text for f in wrong if f.level == "error"],
+                               hints=[f.text for f in wrong if f.level != "error"])
             found = edits(m, name, again)
             wrong = held(m, name, found)
-        except Exception as exc:  # the first answer stands, less what got round
+        except Exception as exc:  # the first answer stands, less what is surely wrong
             log(f"  [yellow]{LABELS[name]}：重问没有成功（{type(exc).__name__}）[/]")
-    wrong = [f for f in wrong if f.level != "note"]  # asked again about; a fact it may have lived stays
+    # Only what is surely wrong is left out; what words merely matched, the call that read the original
+    # kept on a second look, and the review (verify) reads it once more.
+    wrong = [f for f in wrong if f.level == "error"]
     left_out = [f.text for f in wrong]
     if wrong:
         found = without(found, {f.ref for f in wrong})
@@ -719,7 +743,8 @@ VERIFY_SYSTEM = """你是 CoC 7 版跑团的资深守秘人，开团前核对编
 - 提前兑现：原作要检定、前置线索或交涉门槛才拿得到的东西，补写成人物见面就指出、交出、讲明，或写成别人早就知道的事；
 - 混淆条件：拿调查员有了什么、知道了什么，当成东西已经到了 NPC 手里、NPC 也知道了；
 - 凭空多出：原作没有的物件、获知途径或别的拿法（守秘人临场可以裁定，编译期不替他定）；
-- 把检定或孤注一掷之后的某种演法，写成了一般的见面反应或日程。
+- 把检定或孤注一掷之后的某种演法，写成了一般的见面反应或日程；
+- 规则清单（mechanics）和原文、事件或别的补写对不上（原文写锁窗后人影撞窗进来，规则却写进不来），或者检定、数值、遭遇表是原文没有的：守秘人会照它临场执行，不照原文的就列出来。
 知道有这样东西、知道它在哪、实际找到、拿到手、读懂内容是五件事，原作写到哪一步就是哪一步；原作写明失败也能得到的，照原作。
 写了 only_if、要守秘人裁定（ruling）或等线索找到以后（knows:players:clue:）才成立的，条件写对了就不算。
 没有问题的不列，拿不准的不列。每条写编号，和它绕过了原作哪一条：哪条线索、什么检定，原文怎么写。"""
@@ -743,6 +768,7 @@ def _rows(m: Module, refs: set[str]) -> list[str]:
     rows += [f"[history:{i}] 前史 {p.when}：{p.text}（牵涉 {'、'.join(p.who) or '无'}；另外知道的 {'、'.join(p.known_by) or '无'}）"
              for i, p in enumerate(m.history) if f"history:{i}" in refs]
     rows += [f"[knows:{n.id}:{i}] {n.name}知道：{k}" for n in m.npcs for i, k in enumerate(n.knows) if f"knows:{n.id}:{i}" in refs]
+    rows += [f"[mechanics:{i}] 规则「{x.name}」（{x.executor}执行）：{x.rules}" for i, x in enumerate(m.mechanics) if f"mechanics:{i}" in refs]
     return rows
 
 
@@ -759,7 +785,7 @@ async def _judge(cfg: config.Config, material: str) -> Verdict:
 async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[str] | None = None,
                  log: Callable[[str], None] = print, dry: bool = False) -> Result:  # fmt: skip
     """复核: what was added (this run's `refs`, or the whole situation layer when none are given:
-    its steps, signs and past, never the NPCs' sheets)
+    its steps, signs, past and rules, never the NPCs' sheets)
     held to the module's conditions by rule (module/conditions.py), then read against the original
     text by one call; what gets round one is taken out of the files."""
     folder = Path(folder)
@@ -772,10 +798,13 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
         return Result("verify")
     pieces = [p for p in conditions.pieces(m) if p.ref in chosen]
     pieces += [p for n in m.npcs for p in conditions.knows(m, n.id) if p.ref in chosen]
-    flagged = {f.ref: f.text for f in conditions.findings(m, pieces) if f.level != "note"}
+    found_by_rule = conditions.findings(m, pieces)
+    flagged = {f.ref: f.text for f in found_by_rule if f.level == "error"}  # surely wrong: out whatever the call says
+    hints = [f"[{f.ref}] {f.text}" for f in found_by_rule if f.level != "error"]  # matched by words: the call decides
     log(f"[bold]{LABELS['verify']}[/] {len(chosen)} 条补写对照原文…")
     try:
-        verdict = await _judge(cfg, f"{book(m)}{_source(original(folder, _focus(m, 'verify')))}\n\n【补写的条目】\n" + "\n".join(_rows(m, chosen)))
+        verdict = await _judge(cfg, f"{book(m)}{_source(original(folder, _focus(m, 'verify')))}\n\n【补写的条目】\n" + "\n".join(_rows(m, chosen))
+                               + ("\n\n【程序按关键词找出的疑点（可能误报，对照原文判断，没问题就不列）】\n" + "\n".join(hints) if hints else ""))
     except Exception as exc:  # the rules' findings still stand
         log(f"  [yellow]{LABELS['verify']}：模型复核没有成功（{type(exc).__name__}），只按规则[/]")
         verdict = Verdict()

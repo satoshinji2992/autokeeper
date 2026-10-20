@@ -269,7 +269,7 @@ agendas:
   steps:
   - id: jensen_pickup_body
     text: 开破皮卡来收尸，把尸体卷进床单扔上车斗，往镇东头农场开。无人干预时，尸体会被带回农场，玩够后喂猪。
-    when: D1 20:30
+    when: D1 20:30 & flag:mccurdy_dead
     does: at:jensen:jensen_farm
     meet: false
     source: e_jensen_arrives；c_jensen_pickup；詹森秘密：他把尸体拉回农场喂猪

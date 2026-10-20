@@ -211,6 +211,22 @@ class CastBrain:
         return None
 
 
+HOUR = re.compile(r"D\d+ \d{1,2}:\d{2}")
+
+
+def split_when(when: str) -> tuple[str, str]:
+    """A module step's when as its two halves: the hour it waits for and what must hold as well,
+    joined by & (「D1 22:00 & flag:bell_stopped」: at ten, and only once the bell has stopped).
+    A plan step keeps them apart (Step.due, Step.when). An hour inside an |, or two hours, is no
+    hour to wait for: it stays in the condition, where graph.audit reports it."""
+    when = when.strip()
+    parts = [x.strip() for x in when.split("&") if x.strip()]
+    hours = [x for x in parts if HOUR.fullmatch(x)]
+    if "|" in when or len(hours) != 1:
+        return ("", when) if not HOUR.fullmatch(when) else (when, "")
+    return hours[0], " & ".join(x for x in parts if x != hours[0])
+
+
 def marked(w: World) -> list[Any]:
     """What the module sets going: the NPCs it marks important (Enlist), what they mean to do
     (its agendas: Enlist with their goals, then SetPlan), and its foreshadowing (threads).
@@ -228,15 +244,15 @@ def marked(w: World) -> list[Any]:
         for move in a.steps:
             if move.ruling:  # what comes of the keeper's ruling is the keeper's (context.keeper_brief), not the NPC's to do
                 continue
-            timed = re.fullmatch(r"D\d+ \d{1,2}:\d{2}", move.when.strip())
+            hour, wait = split_when(move.when)  # 「D1 22:00 & flag:x」: from ten on, once x holds
             # What the module says it brings about, done with no model call when its time or
             # condition comes; a step for "whenever" (no when), or with grounds the condition cannot
             # say (only_if), is the NPC's own to judge, the outcome then what must hold once done.
             prepared, achieved = effects(a.npc, move.does) if move.when.strip() and not move.meet else ([], "")
             if move.only_if.strip():
                 prepared = []
-            steps.append(Step(id=move.id, text=step_text(move), due=parse_time(move.when) if timed else None,
-                              when="" if timed else move.when, ops=prepared, achieved=achieved, meet=move.meet,
+            steps.append(Step(id=move.id, text=step_text(move), due=parse_time(hour) if hour else None,
+                              when=wait, ops=prepared, achieved=achieved, meet=move.meet,
                               once=move.once if move.meet else None))
         if steps:
             ops.append(SetPlan(id=f"agenda:{a.npc}:plan", npc=a.npc, steps=steps, actor="director"))

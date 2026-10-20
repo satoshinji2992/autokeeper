@@ -130,14 +130,20 @@ async def test_each_pass_adds_only_what_the_module_lacks_and_checks_what_it_adds
     assert all(r.name in ("clueweb", "npcs", "mechanics") or (r.name == "verify" and not r.written) for r in again)  # still short, or nothing to add
 
 
-async def test_a_pass_that_breaks_the_module_is_taken_back(example, monkeypatch):
-    async def ask(cfg, name, m, **_):  # an agenda on a flag nobody declared
+async def test_a_step_on_a_condition_the_module_cannot_read_is_asked_again_then_left_out(example, monkeypatch):
+    """A flag nobody declared: asked again once with the reason, then that step is left out, never
+    its premise cut away (the review of 2026-10-20). With nothing else in the pass, nothing is written."""
+    asked = []
+
+    async def ask(cfg, name, m, **kw):
+        asked.append(kw.get("problems", ()))
         return adapt.Agendas.model_validate({"agendas": [{"npc": "warden", "steps": [{"id": "x", "text": "等钟停", "when": "flag:nope"}]}]})
 
     monkeypatch.setattr(adapt, "_ask", ask)
     text = {p.name: p.read_text(encoding="utf-8") for p in example.glob("*.yaml")}
     results = await adapt.adapt(example, passes=("agendas",), cfg=SimpleNamespace(), log=lambda _: None)
-    assert results[0].problems and {p.name: p.read_text(encoding="utf-8") for p in example.glob("*.yaml")} == text
+    assert len(asked) == 2 and any("标记 nope 没有声明" in x for x in asked[1])
+    assert results[0].left_out and {p.name: p.read_text(encoding="utf-8") for p in example.glob("*.yaml")} == text
 
 
 def test_the_score_asks_for_a_situation_that_moves_on_its_own():

@@ -147,7 +147,7 @@ def test_a_meeting_reaction_that_hands_over_a_clue_behind_a_roll_is_found():
     with_plan(m, "thomas", bad)
     assert not [i for i in audit(m) if i.level == "error"]  # the structural checks see nothing wrong
     found = [f for f in conditions.findings(m) if f.ref.startswith("agendas:thomas:")]
-    assert [f.ref for f in found if f.level == "error"] == ["agendas:thomas:bad_diary"]
+    assert [f.ref for f in found if f.level == "warning"] == ["agendas:thomas:bad_diary"]  # found by words: a hint, not a verdict
     assert "c_diary" in found[0].text and "侦查" in found[0].text
     for fixed in (bad.model_copy(update={"ruling": True}), bad.model_copy(update={"when": "knows:players:clue:c_diary"}),
                   Move(id="shelf", text="被问到丢书时领人看书架上的空档，书房里别的东西要调查员自己搜。", meet=True)):
@@ -164,7 +164,9 @@ def test_a_step_on_the_investigators_progress_must_say_how_the_npc_comes_to_it()
     assert not [f for f in conditions.findings(m) if f.ref == "agendas:stanley:arrest"]
 
 
-async def test_what_gets_round_a_condition_is_asked_again_once_then_left_out(tmp_path, monkeypatch, judge):
+async def test_what_words_flag_is_asked_about_once_and_the_review_that_reads_the_original_decides(tmp_path, monkeypatch, judge):
+    """The review of 2026-10-20: matching words took steps out even when the reading call saw nothing
+    wrong. Now a word match is put to the call as a hint, and only what the review flags comes out."""
     folder = copy("zhuishuren", tmp_path)
     situation = folder / "situation.yaml"
     data = yaml.safe_load(situation.read_text(encoding="utf-8"))
@@ -172,19 +174,22 @@ async def test_what_gets_round_a_condition_is_asked_again_once_then_left_out(tmp
     situation.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     asked = []
 
-    async def ask(cfg, name, m, *, source="", problems=()):
-        asked.append(list(problems))
+    async def ask(cfg, name, m, *, source="", problems=(), hints=()):
+        asked.append((list(problems), list(hints)))
         steps = [Move(id="shelf", text="被问到丢书时领人看书架上的空档。", meet=True, once=True, source="c_shelf_gap"),
                  Move(id="hand_diary", text="被问到叔叔时顺手指出旧书桌里的那本日记。", meet=True, once=True, source="补写")]
         return adapt.Agendas(agendas=[Agenda(npc="thomas", goals=["找回书"], steps=steps)])
 
     monkeypatch.setattr(adapt, "_ask", ask)
     monkeypatch.setattr(adapt, "wanted", lambda m, name: name == "agendas")
+    judge.flags = ["agendas:thomas:hand_diary"]  # the reading call agrees: it hands over what 侦查 finds
     [result, review] = await adapt.adapt(folder, passes=("agendas", "verify"), cfg=SimpleNamespace(), log=lambda _: None)
-    assert asked[0] == [] and any("c_diary" in p for p in asked[1]) and len(asked) == 2  # asked again once, with the reason
-    steps = [s.id for a in Module.load(folder).agendas if a.npc == "thomas" for s in a.steps]
-    assert steps == ["shelf"] and result.left_out and not review.written
+    assert asked[0] == ([], []) and not asked[1][0] and any("c_diary" in h for h in asked[1][1]) and len(asked) == 2  # a hint, once
+    assert not result.left_out  # the words alone took nothing out
     assert "侦查" in judge.calls[0] and "[agendas:thomas:shelf]" in judge.calls[0]  # the review reads the conditions and what was added
+    assert "【程序按关键词找出的疑点" in judge.calls[0] and "agendas:thomas:hand_diary" in judge.calls[0]
+    steps = [s.id for a in Module.load(folder).agendas if a.npc == "thomas" for s in a.steps]
+    assert steps == ["shelf"] and review.written == 1  # taken out because the review said so
 
 
 SITUATION = """relations:
@@ -240,10 +245,11 @@ async def test_the_review_takes_out_what_it_flags(tmp_path, judge):
     if (paths.MODULES / "zhuishuren" / "source").exists():  # the originals stay on the importer's machine
         assert "【原文（整理资料的出处" in judge.calls[0]
     assert "[knows:" not in judge.calls[0]  # the whole layer is reviewed, never the NPCs' own sheets
-    assert [s.id for a in after.agendas for s in a.steps] == ["greet", "urge_watch"]  # the diary step, by the rules
+    assert "【程序按关键词找出的疑点" in judge.calls[0] and "agendas:thomas:show_study" in judge.calls[0]  # put to the call
+    assert [s.id for a in after.agendas for s in a.steps] == ["greet", "show_study", "urge_watch"]  # it saw no harm: words take nothing out
     assert [f.id for f in after.foreshadow] == ["f_mud"] and after.history == before.history[:1]
     assert after.npcs == before.npcs and after.clues == before.clues and after.truth == before.truth  # the module's own, untouched
-    assert out.written == 3 and not [i for i in audit(after) if i.level == "error"]
+    assert out.written == 2 and not [i for i in audit(after) if i.level == "error"]
 
 
 # -- 5. what the package and the keeper's book carry --------------------------------------------
@@ -396,10 +402,14 @@ def test_the_condition_language_of_a_plan_is_checked_against_the_module():
               Move(id="b", text="y", when="knows:players:clue:nope | at:ghost:shufang"))
     errors = [str(i) for i in audit(m) if i.level == "error"]
     assert not [e for e in errors if " a " in e] and len([e for e in errors if "打算 b " in e]) == 2
-    with_plan(m, "thomas", Move(id="c", text="z", when="D1 20:30&flag:watching"))
-    assert any("时间只能单独写" in str(i) for i in audit(m))
+    with_plan(m, "thomas", Move(id="c", text="z", when="D1 20:30&flag:watching"))  # at half past eight, once they keep watch
+    assert not any("时间只能" in str(i) for i in audit(m) if i.level == "error")
+    with_plan(m, "thomas", Move(id="d", text="z", when="D1 20:30 | flag:watching"))
+    assert any("时间只能单独写，或者用 & 和条件连写" in str(i) for i in audit(m))
     [(_, _, [agenda])] = adapt.edits(m, "agendas", adapt.Agendas(agendas=[m.agendas[-1]]))
-    assert agenda["steps"][0]["when"] == "D1 20:30"  # what the adapter writes keeps the hour alone
+    assert agenda["steps"][-1]["when"] == "D1 20:30 | flag:watching"  # never cut down to its hour: asked again (adapt.held)
+    found = adapt.held(Module.load(paths.MODULES / "zhuishuren"), "agendas", [("append", "agendas", [agenda])])  # new there
+    assert any(f.level == "error" and "时间只能单独写，或者用 & 和条件连写" in f.text for f in found)
 
 
 def test_a_step_with_grounds_the_condition_cannot_say_is_judged_not_done():

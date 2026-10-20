@@ -139,8 +139,11 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
                and not s.ruling and a.npc in at]
     timed = sorted((parse_time(e.when.strip()), e) for e in m.events if TIMED.fullmatch(e.when.strip()))
 
+    from ..world.agents import split_when
+
     def due(step) -> int | None:
-        return parse_time(step.when.strip()) if TIMED.fullmatch(step.when.strip()) else None
+        hour = split_when(step.when)[0]
+        return parse_time(hour) if hour else None
 
     def holds(when: str, t: int) -> bool:
         if not when.strip() or TIMED.fullmatch(when.strip()):
@@ -188,7 +191,7 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
             moved = False
             for item in list(pending):
                 npc, step = item
-                if npc in gone or ((d := due(step)) is not None and d > t) or not holds(step.when, t):
+                if npc in gone or ((d := due(step)) is not None and d > t) or not holds(split_when(step.when)[1], t):
                     continue
                 pending.remove(item)
                 for part in (x.strip() for x in step.does.split("&") if x.strip()):

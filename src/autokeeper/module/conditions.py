@@ -134,13 +134,15 @@ def _flags(when: str) -> list[str]:
     return [x.strip()[5:] for group in when.split("|") for x in group.split("&") if x.strip().startswith("flag:")]
 
 
-def _waits_for(piece: Piece, c: Clue) -> bool:
-    """Whether the piece holds off until the clue is had: found (knows:players:clue:<id>), or its
-    prerequisites met, or it is the keeper's to rule."""
+def _waits_for(m: Module, piece: Piece, c: Clue) -> bool:
+    """Whether the piece holds off until the clue is had: found (knows:players:clue:<id>), or the
+    keeper's to rule. Its prerequisites met is enough only for a clue that takes nothing else: one
+    that takes a roll or a social gate is not had because what comes before it is."""
     if piece.ruling or f"knows:players:clue:{c.id}" in piece.when.replace(" ", ""):
         return True
+    rolled = bool(c.check) or bool(c.npc and any(n.id == c.npc and c.id in n.gates for n in m.npcs))
     needs = {r[5:] for r in c.requires if r.startswith("flag:")}
-    return bool(needs) and needs <= set(_flags(piece.when))
+    return not rolled and bool(needs) and needs <= set(_flags(piece.when))
 
 
 def progress(m: Module, flag: str) -> bool:
@@ -170,12 +172,13 @@ def findings(m: Module, chosen: list[Piece] | None = None) -> list[Finding]:
                 # A sign names the thing by its title; its words against the clue's are guard.leaks' (adapt.edits).
                 names = [w for w in words if w in titles(m, c)] if p.kind == "foreshadow" else words
                 hit = next((w for w in names if w in p.text), None)
-                if hit is None or _waits_for(p, c):
+                if hit is None or _waits_for(m, p, c):
                     continue
                 if p.npc and p.npc == c.npc and (p.kind == "knows" or p.only_if.strip()):
                     continue  # its giver knows its own clue; telling it under a stated condition is the module's way
-                out.append(Finding(p.ref, "error", f"{p.ref} 提到「{hit}」，线索 {c.id}「{c.title}」要{why}才拿得到；"
-                                                   f"写成{_as(p)}等于不用{why}就交了出去。要么删掉，要么写成要守秘人裁定的结果"
+                # Found by words (「不指出日记」 names it too): a hint for the call that reads the original, never a verdict.
+                out.append(Finding(p.ref, "warning", f"{p.ref} 提到「{hit}」，线索 {c.id}「{c.title}」要{why}才拿得到；"
+                                                   f"写成{_as(p)}可能等于不用{why}就交了出去。若是这样，要么删掉，要么写成要守秘人裁定的结果"
                                                    f"（ruling: true），要么等线索找到以后（when 写 knows:players:clue:{c.id}）"))
                 break
         if p.kind in ("meet", "backstage") and not p.only_if.strip() and not p.ruling:

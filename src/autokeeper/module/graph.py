@@ -164,7 +164,7 @@ def _outcome(m: Module, npc: str, does: str) -> list[str]:
     return out
 
 
-def _waits(m: Module, atoms: list[str]) -> list[str]:
+def _waits(m: Module, atoms: list[str], when: str = "") -> list[str]:
     """What is wrong with the people, places, things and facts an agenda step's condition names:
     at:谁:地点, owner:物件:持有者, gone:谁, knows:谁:clue:线索 (a clue someone has: the players once
     they found it)."""
@@ -175,8 +175,8 @@ def _waits(m: Module, atoms: list[str]) -> list[str]:
     for atom in atoms:
         kind, _, rest = atom.partition(":")
         a, _, b = rest.partition(":")
-        if timed.fullmatch(atom) and len(atoms) > 1:
-            out.append(f"{atom} 不对：时间只能单独写成 when，不能和条件用 & 或 | 连起来")
+        if timed.fullmatch(atom) and len(atoms) > 1 and ("|" in when or sum(bool(timed.fullmatch(x)) for x in atoms) > 1):
+            out.append(f"{atom} 不对：时间只能单独写，或者用 & 和条件连写（D1 22:00 & flag:x，到点而且条件成立），不能放进 |，也不能写两个")
         elif not timed.fullmatch(atom) and kind not in ("flag", "at", "owner", "gone", "knows", "hour", "after", "promise"):
             out.append(f"{atom} 不对：条件只能是 flag、at、owner、gone、knows、hour、after，或单独一个时间")
         elif kind == "at" and not (a in people and b in places):
@@ -335,7 +335,7 @@ def audit(m: Module) -> list[Issue]:
             for span in (x[5:] for x in atoms if x.startswith("hour:")):
                 if hours(span) is None:
                     err(f"{a.npc} 的打算 {step.id} 的时段 hour:{span} 要写成 hour:22-6 这样")
-            for problem in _waits(m, atoms):
+            for problem in _waits(m, atoms, step.when):
                 err(f"{a.npc} 的打算 {step.id} 的条件 {problem}")
             if step.once is not None and not step.meet:
                 warn(f"{a.npc} 的打算 {step.id} 不是见面反应，once 不起作用")
