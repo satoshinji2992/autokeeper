@@ -7,7 +7,9 @@ Esc skips the rest, and if the opening is not ready yet it says so and waits."""
 from __future__ import annotations
 
 import asyncio
+import itertools
 import subprocess
+import time
 
 from rich.text import Text
 from textual import events
@@ -57,9 +59,20 @@ class PreludeScreen(ModalScreen[None]):
                 break
             await self._show(shot)
         if not self.ready.done():
-            self.query_one("#prelude-status", Static).update(Text("开场准备中…", style="dim"))
-            await asyncio.wait({self.ready})
+            await self._waiting()
         self.dismiss()
+
+    async def _waiting(self) -> None:
+        """The opening still being written after the shots: dots that move and the seconds so far,
+        so a long wait does not look like a hang (the user, 2026-10-21)."""
+        status = self.query_one("#prelude-status", Static)
+        start = time.monotonic()
+        for n in itertools.count():
+            seconds = int(time.monotonic() - start)
+            status.update(Text(f"开场准备中{'.' * (n % 3 + 1):<3}" + (f"  {seconds} 秒" if seconds >= 3 else ""), style="dim"))
+            done, _ = await asyncio.wait({self.ready}, timeout=0.5)
+            if done:
+                return
 
     async def _show(self, shot: PreludeFrame) -> None:
         self._next.clear()

@@ -88,3 +88,22 @@ async def test_a_new_game_plays_its_prelude_while_the_opening_is_prepared(monkey
         await app.workers.wait_for_complete()
         assert order[:3] == ["prepare", "prepared", "start"]  # the keeper starts once the opening is ready
         assert app.screen.game.prelude_played  # so no big opening picture covers the keeper's first words
+
+
+async def test_waiting_for_the_opening_after_the_shots_shows_it_is_still_going():
+    """The user, 2026-10-21: a still 「开场准备中…」 looked like a hang. The dots move."""
+    ready = asyncio.get_running_loop().create_future()
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.push_screen(PreludeScreen(Module.load(EXAMPLE), ready, shots=[]))
+        seen = set()
+        for _ in range(8):
+            await pilot.pause(0.2)
+            seen.add(str(app.screen.query_one("#prelude-status").render()))
+        assert len({s.strip() for s in seen if s.startswith("开场准备中")}) >= 2
+        ready.set_result(None)
+        for _ in range(10):
+            await pilot.pause(0.2)
+            if not isinstance(app.screen, PreludeScreen):
+                break
+        assert not isinstance(app.screen, PreludeScreen)
