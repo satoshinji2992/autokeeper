@@ -469,3 +469,17 @@ async def test_an_agenda_step_with_an_outcome_goes_ahead_with_no_model_and_its_f
     assert [s.status for s in game.world.agent("warden").plan] == ["done", "done"]
     assert not any("该做了" in a.reasons["warden"] for a in asked)  # no model was asked to carry the steps out
     assert game.state.ending == "stopped" and turn.ending == "stopped"  # the clock ran out with no one stepping in
+
+
+async def test_the_modules_past_is_remembered_by_those_who_know_it(module, fake):
+    from autokeeper.module.schema import Past
+    from autokeeper.world import context
+
+    module.npc("warden").important = True
+    module.history = [Past(when="二十年前", text="守钟人的儿子从钟楼上摔下来死了", who=["warden"], where="tower", known_by=["preacher"])]
+    game, _, _ = make(module, fake, {}, location="square")
+    w = game.world
+    past = next(e for e in w.rec.events if e.text.startswith("（二十年前）"))
+    assert past.visibility == "private" and set(past.witnesses) == {"warden", "preacher"} and not past.reactive
+    assert "儿子从钟楼上摔下来" in context.npc_view(w, "warden").text
+    assert "儿子从钟楼上摔下来" not in context.keeper_view(w)

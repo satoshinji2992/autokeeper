@@ -225,6 +225,13 @@ def marked(w: World) -> list[Any]:
     places = {loc.id for loc in w.m.locations}
     ops += [OpenThread(id=f"foreshadow:{f.id}", thread=f"foreshadow:{f.id}", thread_kind="foreshadow", title=f.hint[:40],
                        entities=[f.where] if f.where in places else [], actor="director") for f in w.m.foreshadow]  # fmt: skip
+    # The past (Module.history): private events from the start, remembered by those in them and
+    # those who know; the director may rewrite them like any private event. They wake no one.
+    for i, past in enumerate(w.m.history):
+        who = [x for x in past.who if x in npcs]
+        ops.append(Occur(id=f"past:{i}", text=f"（{past.when}）{past.text}", participants=who,
+                         place=past.where if past.where in places else "", visibility="private", reactive=False,
+                         actor="engine", witnesses=[x for x in past.known_by if x in npcs and x not in who]))
     return ops
 
 

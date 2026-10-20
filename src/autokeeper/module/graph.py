@@ -307,6 +307,11 @@ def audit(m: Module) -> list[Issue]:
                     err(f"{a.npc} 的打算 {step.id} 的时段 hour:{span} 要写成 hour:22-6 这样")
             for problem in _outcome(m, a.npc, step.does):
                 err(f"{a.npc} 的打算 {step.id} 的结果 {problem}")
+    for i, past in enumerate(m.history, 1):
+        if missing := [x for x in [*past.who, *past.known_by] if x not in npcs]:
+            err(f"前史第 {i} 件里的人物 {'、'.join(missing)} 不存在")
+        if past.where and past.where not in locs:
+            err(f"前史第 {i} 件的地点 {past.where} 不存在")
     if len(m.agendas) > 6:
         warn(f"写了 {len(m.agendas)} 份打算；每局最多 6 个重要 NPC，多出的不会自己行动")
     targets = concl | {e.id for e in m.events} | endings

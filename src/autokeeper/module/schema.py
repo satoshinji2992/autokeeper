@@ -253,6 +253,17 @@ class Tie(BaseModel):
     fits: list[str] = Field(default_factory=list, description="适合哪类背景：重要之人、意义非凡之地、思想与信念、宝贵之物、职业")
 
 
+class Past(BaseModel):
+    """Something that happened before the game and still matters (前史): a private event in the
+    world record from the start, remembered by those who know it (world/agents.marked)."""
+
+    when: str = Field(description="多久以前，比如：五年前、一年前、上周、开局前一晚")
+    text: str = Field(description="发生了什么，一两句：谁、做了什么")
+    who: list[str] = Field(default_factory=list, description="牵涉的 NPC id")
+    where: str = Field("", description="在哪个地点 id，不详就留空")
+    known_by: list[str] = Field(default_factory=list, description="另外还有谁知道（NPC id）；牵涉的人本来就知道")
+
+
 class Mechanic(BaseModel):
     """A rule the module needs that the engine does not keep by itself: a plugin's job."""
 
@@ -306,6 +317,7 @@ class Module(BaseModel):
     agendas: list[Agenda] = Field(default_factory=list, description="重要 NPC 的打算：没人插手时他们会做什么")
     foreshadow: list[Foreshadow] = Field(default_factory=list, description="伏笔：早早可以露出来的端倪，和它最后指向什么")
     ties: list[Tie] = Field(default_factory=list, description="私人牵连：调查员的背景可以接上的线头")
+    history: list[Past] = Field(default_factory=list, max_length=8, description="前史：开局以前发生过、至今还在起作用的事，按先后")
     mechanics: list[Mechanic] = Field(default_factory=list, description="插件清单：引擎自己不管、要插件来管的规则")
     art: dict[str, str] = Field(default_factory=dict, exclude=True)
     art_colors: dict[str, str] = Field(default_factory=dict, exclude=True)

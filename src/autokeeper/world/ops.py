@@ -477,11 +477,14 @@ class Occur(Base):
     trace: str = Field("", description="之后在这里还看得出来的痕迹")
     reactive: SkipJsonSchema[bool] = True  # engine classification of greeting-only dialogue, not an NPC discretion
     transcript: SkipJsonSchema[bool] = False  # complete investigator/NPC exchange, supplied only by the engine
+    witnesses: SkipJsonSchema[list[str]] = Field(default_factory=list)  # who else knows of it: the module's past (agents.marked)
 
     def check(self, w: World) -> list[str]:
         problems = [] if self.text.strip() and (self.transcript or len(self.text) <= 300) else ["要写发生了什么，不超过 300 字"]
         if self.transcript and self.actor not in {i.id for i in w.st.investigators}:
             problems.append("完整对话记录只能由系统登记调查员实际参与的交流")
+        if self.witnesses and self.actor not in STAFF:
+            problems.append("另外还有谁知道，只能由系统登记")
         if self.place and self.place not in w.rec.entities:
             problems.append(f"地点 {self.place} 不存在")
         problems += [f"{x} 不存在" for x in self.participants if not _who(w, x)]
@@ -490,7 +493,7 @@ class Occur(Base):
 
     def settle(self, w: World, oid: str):
         return w.emit("occur", self.text, actor=self.actor, participants=self.participants, place=self.place,
-                      visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid,
+                      visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid, witnesses=self.witnesses,
                       reactive=self.reactive, verbatim=self.transcript), None  # fmt: skip
 
 

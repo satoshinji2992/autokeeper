@@ -9,7 +9,7 @@ modules/<id>/
   people.yaml        NPC、怪物、预设调查员（npcs、creatures、pregens）
   clues.yaml         线索、物件、手稿、手绘题（clues、items、handouts、sketches）
   story.yaml         事件、结论、结局、大场景、开局演出（events、conclusions、endings、showcases、prelude）
-  situation.yaml     局面：人物关系、各人的打算、伏笔、私人牵连、插件清单（relations、agendas、foreshadow、ties、mechanics）
+  situation.yaml     局面：人物关系、各人的打算、伏笔、私人牵连、插件清单、前史（relations、agendas、foreshadow、ties、mechanics、history）
   art/places/<键>.jpg   场景照片和原作场景图（也支持 png、jpeg、webp）
   art/people/<键>.jpg   人物头像
   art/items/<键>.png    手稿、地图、封面和其他图
@@ -114,6 +114,12 @@ ties:                           # 私人牵连：导演开局改编时按调查�
     hook: 调查员小时候在这片公墓给祖父上过坟
     place: mudi
     fits: [意义非凡之地]
+history:                        # 前史：开局以前发生过、至今还在起作用的事，按先后
+  - when: 五年前
+    text: 道格拉斯在墓地读书时结识了一头食尸鬼
+    who: [douglas]
+    where: mudi
+    known_by: []                # 另外还有谁知道；牵涉的人本来就知道
 mechanics:                      # 引擎自己不管、要插件来管的规则
   - name: 最后一夜
     rules: 道格拉斯只剩今晚能回来取书……

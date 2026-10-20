@@ -13,6 +13,7 @@ lacks and leaves what it has:
     ties        私人牵连    threads an investigator's background can be tied to (Module.ties)
     endings     额外结局    the ends a table is likely to reach that the module never wrote
     mechanics   插件清单    the rules the engine does not keep by itself (Module.mechanics)
+    history     前史        what happened before the game and still matters, who knows it (Module.history)
     prelude     开局演出    a few pictures and lines on the story's background, played before the
                             game screen while the director adapts (module/prelude.py); it reads
                             only what the players are told, never the keeper's book
@@ -37,11 +38,11 @@ from .. import config
 from ..harness import Session
 from . import package, prelude, yamledit
 from .graph import audit, supporting_clues
-from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, PreludeFrame, Tie
+from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Tie
 
-PASSES = ("npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "mechanics", "prelude")
+PASSES = ("npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude")
 LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "foreshadow": "伏笔", "clueweb": "线索网",
-          "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "prelude": "开局演出"}  # fmt: skip
+          "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史", "prelude": "开局演出"}  # fmt: skip
 
 SYSTEM = """你是 AutoKeeper 的模组改编员，在编译期给一个 CoC 7 版模组补上跑团时用得着、原文却没写的东西。
 - 原作的真相、线索原文、检定、结局一个字都不改；补上的东西要和原作对得上，像本来就在里面。
@@ -109,6 +110,10 @@ class Mechanics(BaseModel):
     mechanics: list[Mechanic] = Field(default_factory=list)
 
 
+class Pasts(BaseModel):
+    history: list[Past] = Field(default_factory=list, max_length=8)
+
+
 class Prelude(BaseModel):
     prelude: list[PreludeFrame] = Field(default_factory=list, max_length=prelude.MAX_FRAMES)
 
@@ -134,6 +139,8 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "每个写一个新的剧情标记（写清调查员的行动真正达成什么时它才成立）和结局叙述。不改原作的结局。", Endings),
     "mechanics": ("列出模组里引擎自己不会管、要插件来管的规则：时钟和倒计时、资源、疾病、仪式进度、追逐、特殊的检定。"
                   "每条写规则本身（什么时候、怎么算、有什么后果）和模组里哪里用到。原作没有这样的规则就留空。", Mechanics),
+    "history": ("写 3–8 件开局以前发生过、至今还在起作用的事（前史），按时间先后：多久以前、谁在哪做了什么、另外还有谁知道。"
+                "只用原作的真相、守秘人须知和人物资料里写到的，不新编案情；玩家开局就知道的不用写。", Pasts),
     "prelude": ("写开局演出：进入游戏前播放的 3–5 幕，像电影开头那样一张图配一两句字幕，按先后排，只介绍故事背景："
                 "时代、地方、气氛、事情是怎么找上门的。图只从【可用的图】里挑，没有合适的就留空。"
                 "只用上面玩家知道的内容，不写调查员会怎么做、会发现什么，每幕不超过 60 字。", Prelude),
@@ -281,6 +288,9 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
         items = [f for f in items if f.where in places and f.pays_off in targets]
     elif name == "ties":
         items = [t for t in items if (t.npc in npcs or not t.npc) and (t.place in places or not t.place) and t.hook.strip()]
+    elif name == "history":  # names the module does not have are left out, the event kept
+        items = [p.model_copy(update={"who": [x for x in p.who if x in npcs], "known_by": [x for x in p.known_by if x in npcs],
+                                      "where": p.where if p.where in places else ""}) for p in items if p.text.strip()][:8]
     dumped = [x.model_dump(mode="json", exclude_defaults=True) for x in items]
     return [("append", name, dumped)] if dumped else []
 

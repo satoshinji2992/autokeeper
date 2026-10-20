@@ -43,7 +43,7 @@ PARTS: dict[str, tuple[str, ...]] = {
     "people.yaml": ("npcs", "creatures", "pregens"),
     "clues.yaml": ("clues", "items", "handouts", "sketches"),
     "story.yaml": ("events", "conclusions", "endings", "showcases", "prelude"),
-    "situation.yaml": ("relations", "agendas", "foreshadow", "ties", "mechanics"),
+    "situation.yaml": ("relations", "agendas", "foreshadow", "ties", "mechanics", "history"),
 }
 IMAGES = (".jpg", ".jpeg", ".png", ".webp")
 DRAFT_LEFTOVERS = ("_example", "module.yaml.bak")  # the importer's reference copy and backups
