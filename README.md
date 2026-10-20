@@ -141,15 +141,27 @@ CoC 模组常有标准规则之外的特殊机制——比如《冬雪之下》�
 
 ## 开始玩
 
-一条命令装好（需要 [uv](https://docs.astral.sh/uv/getting-started/installation/)；用 pipx 的话是 `pipx install autokeeper`）：
+先装 [uv](https://docs.astral.sh/uv/getting-started/installation/)（Python 工具管理器，已经有了就跳过）：
 
 ```bash
-uv tool install autokeeper
+# Linux、macOS、WSL
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+装好后开一个新终端，一条命令装好 AutoKeeper（用 pipx 的话是 `pipx install autokeeper`）：
+
+```bash
+uv tool install autokeeper            # 用 Claude 的话：uv tool install "autokeeper[claude]"
 ```
 
 然后在任意目录输入 `autokeeper` 开始。第一次运行会装好掷骰组件，再问你用哪家模型、填 API Key。
 
-还没装 uv，可以用一键脚本，它先装 uv，再做上面的事：
+也可以用一键脚本，它会先装 uv、chafa，再做上面的事：
 
 ```bash
 # Linux、macOS、WSL
