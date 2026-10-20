@@ -198,9 +198,10 @@ def score_npc(m: Module, s: dict[str, Any], data: Any) -> dict[str, Any]:
                                            private=snap["private"])
         found["checks"] = len(problems)
         why += problems[:3]
-        offered = snap.get("offered") or []
+        # A one-off step to play on meeting them, by its id; "一贯如此" ones are the person's ways, never marked done.
+        offered = [x.split("，")[0] for x in snap.get("offered") or [] if "一贯如此" not in x and re.fullmatch(r"[\w-]+", x.split("，")[0])]
         found["played_missing"] = int(bool(offered) and not dialogue.played)
-        found["played_invalid"] = sum(p not in offered for p in dialogue.played)
+        found["played_invalid"] = sum(p not in [x.split("，")[0] for x in snap.get("offered") or []] for p in dialogue.played)
     fields = {"accompany": dialogue.accompany or any(d.accompany for d in dialogue.deceptions), "items": dialogue.items,
               "leave": dialogue.leave}
     found["said_missing"] = sum(1 for f in control.cues(dialogue.text) if not fields.get(f))
