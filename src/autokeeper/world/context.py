@@ -199,6 +199,10 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
 SHOWN = {"occur", "move", "transfer", "equip", "condition", "promise", "fulfil", "break", "fact", "learn"}
 
 
+# How a meeting reaction stands (Step.once): done once, or the NPC's way that comes up now and then.
+ONCE = {True: "，只做一次，做过填进 played", False: "，一贯如此，碰上了才带出，不必每次都演"}
+
+
 def npc_brief(w: World, npc: str, query: str = "") -> str:
     """What an NPC brings to a conversation of its own life in this game: how it is, what it is
     after and up to, what it remembers, how it stands with people, what it promised. The rest of
@@ -221,7 +225,7 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
         steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in pending if not agents.meeting(w, npc, s)][:3]
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
-        meet = [f"{s.text}（{s.id}）" for s in pending if agents.meets(w, npc, s)][:4]
+        meet = [f"{s.text}（{s.id}{ONCE.get(s.once, '')}）" for s in pending if agents.meets(w, npc, s)][:4]
         if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
@@ -344,6 +348,15 @@ def rewrites(rec: WorldRecord) -> list[str]:
     return rows
 
 
+def _ready(w: World, when: str) -> bool:
+    """Whether a module step's time has come and its condition holds."""
+    from ..engine.state import parse_time
+
+    if re.fullmatch(r"D\d+ \d{1,2}:\d{2}", when.strip()):
+        return parse_time(when.strip()) <= w.now
+    return agents.holds(w, when)
+
+
 def keeper_brief(w: World) -> str:
     """What the keeper keeps behind the screen for the telling it is about to give (the user's
     call, 2026-10-20: the keeper sees everything): what this place hides, what the people here and
@@ -370,6 +383,10 @@ def keeper_brief(w: World) -> str:
                      for s in a.plan if s.status == "pending"][:3]
             parts += [f"打算：{'；'.join(steps)}"] if steps else []
             parts += [f"心境：{_clip(a.mood, 60)}"] if a.mood else []
+        # What may come of a ruling of the keeper's (Move.ruling): not the NPC's to do, the keeper's to decide.
+        ruled = [_clip(s.text, 100) + (f"（只在{s.only_if}时）" if s.only_if else "") for g in m.agendas if g.npc == npc
+                 for s in g.steps if s.ruling and _ready(w, s.when)]
+        parts += [f"要你裁定以后才可能的：{'；'.join(ruled)}"] if ruled else []
         return "；".join(parts) or "没有特别的事"
 
     present = w.present(here)

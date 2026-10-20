@@ -413,15 +413,19 @@ def trace_cmd(
 
 @app.command()
 def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
-    """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版，再不用模型推演一遍：走不到的地方、到不了的结局、只靠一处的结论。"""
-    from .module import graph
+    """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版，再不用模型推演一遍：走不到的地方、到不了的结局、只靠一处的结论；
+    最后核对补写的局面有没有绕过原作的条件（不用检定就交出线索、拿调查员的进展当成 NPC 已经知道）。"""
+    from .module import conditions, graph
     from .module.importer import validate_all
     from .module.schema import Module
     from .module.simulate import playthrough
 
     m = Module.load(module)
     errors = asyncio.run(validate_all(module))
+    held = conditions.findings(m)
+    errors += [f"[条件] {f}" for f in held if f.level == "error"]
     issues = errors + [str(i) for i in graph.audit(m) if i.level != "error"] + [f"[推演] {i}" for i in playthrough(m).issues]
+    issues += [f"[条件] {f}" for f in held if f.level != "error"]
     for i in issues:
         console.print(i)
     console.print(f"{'[red]有错误[/]' if errors else '[green]通过[/]'}：{len(issues)} 条提示，{len(errors)} 条需要修")
@@ -573,11 +577,12 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
 @app.command()
 def upgrade(
     module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")],
-    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,prelude")] = "",
+    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,prelude,verify"
+                                           "（verify 单独跑时复核整个局面层）")] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="只看打算补多少，不写文件")] = False,
     review: Annotated[bool, typer.Option("--review", help="补完后请模型像守秘人那样审读一遍（一次调用），列出跑起来会出问题的地方")] = False,
 ) -> None:
-    """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单）。只补没有的，原作不改；中断了再跑一次就接着补。"""
+    """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单），最后对照原文复核这次补的。只补没有的，原作不改；中断了再跑一次就接着补。"""
     from .module import adapt
     from .module.schema import Module
     from .module.simulate import playthrough

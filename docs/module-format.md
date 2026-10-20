@@ -108,6 +108,20 @@ agendas:                        # 重要 NPC 的打算：调查员不在时照�
       - id: greet
         text: 地下撞见调查员时先问好，对方不动手就领他们看自己堆书的角落
         meet: true              # 见面时的反应：调查员在场时由他自己演，不在幕后想；不写 when 和 does
+        once: true              # 只做一次（应门、安顿行李），演过就算完成；一贯的态度写 false
+        source: c_douglas_truth # 依据：原作哪里写到（地点、线索、NPC 的 id，或 真相、守秘人须知）；推出来的写 补写
+  - npc: jefferson
+    steps:
+      - id: take_bribe
+        text: 收下酒，态度松动，说出深夜在墓碑旁见过人影
+        when: flag:has_liquor
+        only_if: 调查员当面把酒递给他、他收下以后；只是买到了酒不算   # 条件语法写不出的实际依据
+        meet: true
+        once: true
+      - id: help_search
+        text: 过来帮忙，在旧书桌里翻出日记
+        ruling: true            # 要守秘人先裁定才发生的结果：不给人物当成见面就做的事
+        only_if: 调查员在书房侦查失败后孤注一掷成功
 foreshadow:                     # 伏笔：到这个地点时交给守秘人，一笔带过
   - id: f_mud
     hint: 书房窗台外沿蹭着一道干了的湿泥
@@ -128,9 +142,14 @@ mechanics:                      # 引擎自己不管、要插件来管的规则
   - name: 最后一夜
     rules: 道格拉斯只剩今晚能回来取书……
     plugin: ""                  # 写好的插件 id；没写就留空，导演看得到这条
+    runs: 守秘人                 # 谁执行：核心规则、插件（填 plugin）、守秘人（临场裁定）；留空时有插件算插件，没有算守秘人
 ```
 
+打算的每一步分清三种东西：人物已经知道的事写进 NPC 的 `knows`；见面时可以这样演的写 `meet: true`，是素材不是剧本；要守秘人先裁定（某次检定、孤注一掷的结果，调查员的具体做法）才发生的写 `ruling: true`，它不进人物的打算，只在条件到了、人物在场时出现在守秘人的幕后简报里（「要你裁定以后才可能的」）。条件写实际成立的依据：`has_liquor` 只说明调查员有酒，`learned_telescope` 只说明调查员知道了；要等对方当面递酒、有人报告的，能用条件写的用条件（`owner:物件:他`、`knows:他:事实`，线索找到以后用 `knows:players:clue:线索id`），写不出的写进 `only_if`，人物读到的这一步会带上「只在……时才这样」。`once: true` 的见面反应演过一次（回应里的 `played`）就算完成；`once: false` 是一贯的态度，一直留着，写明碰上了才带出；没标的照旧演过就完成。
+
 写了 `agendas` 的 NPC 自动算重要 NPC（每局最多 6 个）。打算的每一步可以写 `does`：做成以后实际成立的事，用 `&` 连接——`at:他自己:地点`（他去哪）、`owner:物件:持有者`（东西到谁手里）、`flag:标记`（剧情标记，可以是某个结局的标记）、`gone:谁`（死了或不见了）。写了 `does` 的步骤到时直接照做，不用调用模型；发生在调查员眼前的会等守秘人来演（见[世界引擎](world.md#台前与幕后stagepy)），立起的标记照常触发挂在上面的事件和结局。没写的步骤到时由重要 NPC 自己决定怎么做。见面时的反应（应门招呼、领人去看、被问到时怎么说）写 `meet: true`，不写 `when` 和 `does`：它是人物资料，调查员在场时交给 NPC 自己演，不在幕后叫醒人物；要他自己在幕后去做的写 `meet: false` 或不写。`autokeeper upgrade` 的「见面反应」一步会给没标过的步骤补上。`autokeeper upgrade <模组>` 会让导入模型补上模组缺的这几项，并补人物性格和口吻、凑够每个结论三条线索、补一两个玩家很可能走到的结局；只补没有的，原作不改，补完校验不过的那一步整步撤掉。
+
+补写时每一步读的是完整的守秘人资料：每个地点的守秘人须知、每条线索的原文、检定、前置条件和交涉门槛、每个 NPC 的门槛，不再截断；本机 `source/` 有原文的一并读原文（太长时按原顺序先留与这一步相关、写着条件的段落）。各步按依赖分批：人物补全、线索网、额外结局、插件清单、开局演出先做，冲突图、前史、私人牵连其次，再写各人的打算，最后标见面反应、写伏笔，后面的步骤读的是前面刚补好的资料。每一步补的东西写入前按规则核对（`module/conditions.py`）：见面反应、人物知道的事或伏笔点出了一条要检定、前置条件或交涉门槛才拿得到的线索（标题或它说的那样东西），又没有写成要守秘人裁定或等线索找到以后，算提前兑现；一步等的标记说的是调查员的进展（得知、弄到、发现），又没写 `only_if`，算条件太宽。有这样的，带着原因重问一次，还有就不写那几条。全部补完后「复核」再读一遍原文和这次补的东西（一次调用），绕过原作条件的条目从文件里拿掉；`upgrade --only verify` 复核整个局面层。`autokeeper check` 也按同样的规则报这两类问题，提前兑现算错误。
 
 ## 开局演出（prelude）
 
@@ -204,5 +223,5 @@ uv run autokeeper compile modules/<id>    # 生成 skills/module-<id>/（Agent S
 
 推演看不到调查员实际走的先后和导演在游戏里补的东西，只看模组自己写下的。它的结果算进 `upgrade` 打的可玩度分。
 
-编译出的 Skill 包遵循 [Agent Skills 规范](https://agentskills.io/specification)：`SKILL.md` 是守秘人随身带的总览，
-`references/locations/*.md`、`references/npcs/*.md`、`references/handouts/*.md` 等到需要时才读，`assets/ascii/` 放字符画，`assets/images/` 保留原图和来源。导入模组还会把完整原文、逐页扫描和图片档案复制到 `assets/source/`，只供守秘人回查；整理稿不代替完整原始资料。
+编译出的 Skill 包遵循 [Agent Skills 规范](https://agentskills.io/specification)：`SKILL.md` 是守秘人随身带的总览（规则清单写明每条由核心规则、哪个插件还是守秘人执行，守秘人执行的附全文），
+`references/locations/*.md`、`references/npcs/*.md`、`references/handouts/*.md`、`references/situation.md`（人物关系、各人的打算和每一步的条件与依据、伏笔、前史、规则清单与谁来执行）等到需要时才读，`assets/ascii/` 放字符画，`assets/images/` 保留原图和来源。导入模组还会把完整原文、逐页扫描和图片档案复制到 `assets/source/`，只供守秘人回查；整理稿不代替完整原始资料。

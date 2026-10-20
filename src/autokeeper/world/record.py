@@ -130,6 +130,7 @@ class Step(BaseModel):
     ops: list[dict[str, Any]] = Field(default_factory=list, description="到时直接结算的操作，格式同操作；要到时再想就留空")
     meet: bool | None = Field(None, description="见到调查员时才做的事（他们来问、来访时怎样回应、领他们去看什么）填 true：这是人物资料，"
                                                 "见面时由人物自己演，不在幕后想，due 和 when 只表示从什么时候起才这样；幕后要他自己去做的填 false")
+    once: SkipJsonSchema[bool | None] = None  # the module's meeting reaction (Move.once): True once only, False its way every time
     status: SkipJsonSchema[Literal["pending", "done", "blocked", "dropped"]] = "pending"
     note: SkipJsonSchema[str] = ""
     woke: SkipJsonSchema[int | None] = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there

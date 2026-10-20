@@ -210,12 +210,13 @@ def reply_ops(w: World, npc: str, *, leave: str = "", items: Iterable[Any] = (),
     world ops for its own gateway (world/tools.Gateway), each group landing whole: a thing it takes
     out (bring_ops) and the handing of it over (Transfer), then its going off (ending the company it
     keeps, then Move). What cannot be put as ops at all, in words. What it does on meeting them
-    (Dialogue.played) is done once played, and no longer put to it each time they talk."""
+    (Dialogue.played) is done once played, and no longer put to it each time they talk; its way
+    with them every time (Step.once False: clams up when asked about the graves) stays its way."""
     from .agents import meets
 
     groups: list[list[dict[str, Any]]] = []
     if (a := w.rec.agents.get(npc)) is not None:
-        due = {s.id for s in a.plan if s.status == "pending" and meets(w, npc, s)}
+        due = {s.id for s in a.plan if s.status == "pending" and s.once is not False and meets(w, npc, s)}
         groups += [[{"kind": "step", "npc": npc, "step": sid, "status": "done"}] for sid in dict.fromkeys(played) if sid in due]
     things = list(items)
     found = bring_ops(w, things, actor=npc, holder=npc, visibility=visibility)

@@ -1299,6 +1299,9 @@ def _book(m: Module) -> str:
         rows.append("结论：" + "；".join(f"{k.id} {k.text}" for k in m.conclusions))
     if m.endings:
         rows.append("结局：" + "；".join(f"{e.title}（{e.condition}）" for e in m.endings))
+    # The module's own rules that no plugin keeps (Mechanic.executor): the keeper's to rule in play.
+    if mine := [x for x in m.mechanics if x.executor == "守秘人"]:
+        rows.append("要你临场执行的规则（没有插件替你算）：\n" + "\n".join(f"- {x.name}：{x.rules.strip()}" for x in mine))
     return "【守秘人的底牌（只给你看）】\n" + "\n".join(rows)
 
 

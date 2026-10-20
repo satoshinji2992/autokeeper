@@ -1,5 +1,5 @@
 """Edit a module's YAML as text: a field into one entry (or one agenda step), items onto a list,
-a key into a map.
+a key into a map; and taking back one of them (an entry, a step, a field's whole value).
 
 A hand-written module keeps its layout and comments; a new field goes in as new lines, in that
 file's own indentation, so the diff is the new lines alone (module/adapt.py writes through this).
@@ -122,6 +122,83 @@ def put_key(text: str, group: str, key: str, value: Any) -> str:
         end -= 1
     inner = next((len(x) - len(x.lstrip(" ")) for x in lines[top + 1 : end] if x.strip()), 2)
     return "\n".join([*lines[:end], *_block({key: value}, inner), *lines[end:]]) + "\n"
+
+
+def _top(lines: list[str], group: str) -> tuple[int, int]:
+    """The lines of the top-level `group:` (from its key to the next top-level key)."""
+    top = next((i for i, line in enumerate(lines) if re.match(rf"{re.escape(group)}:\s*$", line)), None)
+    if top is None:
+        raise KeyError(f"没有 {group}")
+    return top, next((i for i in range(top + 1, len(lines)) if re.match(r"[^\s-]", lines[i])), len(lines))
+
+
+def _entries(lines: list[str], top: int, bottom: int) -> list[int]:
+    """Where each entry of the list under lines[top] starts."""
+    first = next((i for i in range(top + 1, bottom) if lines[i].lstrip().startswith("- ")), None)
+    if first is None:
+        return []
+    dash = len(lines[first]) - len(lines[first].lstrip(" "))
+    return [i for i in range(first, bottom) if lines[i].startswith(" " * dash + "- ") and len(lines[i]) - len(lines[i].lstrip(" ")) == dash]
+
+
+def drop(text: str, group: str, index: int) -> str:
+    """`text` without the `index`-th entry of the top-level list `group:`."""
+    lines = text.split("\n")
+    top, bottom = _top(lines, group)
+    starts = _entries(lines, top, bottom)
+    if not 0 <= index < len(starts):
+        raise KeyError(f"{group} 没有第 {index + 1} 条")
+    start = starts[index]
+    end = _entry_end(lines, start, bottom)
+    out = [*lines[:start], *lines[end:]]
+    if not _entries(out, top, bottom - (end - start)):  # the list is empty now
+        out[top] = f"{group}: []"
+    return "\n".join(out)
+
+
+def drop_entry(text: str, group: str, ident: str) -> str:
+    """`text` without the entry `- id: <ident>` of the top-level list `group:`."""
+    lines = text.split("\n")
+    top, bottom = _top(lines, group)
+    starts = _entries(lines, top, bottom)
+    index = next((k for k, i in enumerate(starts) if re.match(rf"\s*- id: ['\"]?{re.escape(ident)}['\"]?\s*$", lines[i])), None)
+    if index is None:
+        raise KeyError(f"{group} 里没有 {ident}")
+    return drop(text, group, index)
+
+
+def drop_step(text: str, group: str, owner: str, ident: str) -> str:
+    """`text` without the step `- id: <ident>` of the entry `- npc: <owner>` (an agenda's steps)."""
+    lines = text.split("\n")
+    top, bottom = _top(lines, group)
+    entry = next((i for i in range(top + 1, bottom) if re.match(rf"\s*- npc: ['\"]?{re.escape(owner)}['\"]?\s*$", lines[i])), None)
+    if entry is None:
+        raise KeyError(f"{group} 里没有 {owner}")
+    stop = _entry_end(lines, entry, bottom)
+    start = next((i for i in range(entry + 1, stop) if re.match(rf"\s*- id: ['\"]?{re.escape(ident)}['\"]?\s*$", lines[i])), None)
+    if start is None:
+        raise KeyError(f"{owner} 的打算里没有 {ident}")
+    return "\n".join([*lines[:start], *lines[_entry_end(lines, start, stop):]])
+
+
+def replace(text: str, group: str, ident: str, key: str, value: Any) -> str:
+    """`text` with the whole of the field `key:` of the entry `- id: <ident>` under `group:`
+    (however many lines it has) given as `value`."""
+    lines = text.split("\n")
+    top, bottom = _top(lines, group)
+    start = next((i for i in range(top + 1, bottom) if re.match(rf"(\s*)- id: ['\"]?{re.escape(ident)}['\"]?\s*$", lines[i])), None)
+    if start is None:
+        raise KeyError(f"{group} 里没有 {ident}")
+    end = _entry_end(lines, start, bottom)
+    inner = len(lines[start]) - len(lines[start].lstrip(" ")) + 2
+    own = next((i for i in range(start + 1, end) if re.match(rf" {{{inner}}}{re.escape(key)}:", lines[i])), None)
+    if own is None:
+        return put(text, group, ident, key, value)
+    stop = own + 1
+    while stop < end and (not lines[stop].strip() or len(lines[stop]) - len(lines[stop].lstrip(" ")) > inner
+                          or lines[stop].startswith(" " * inner + "- ")):
+        stop += 1
+    return "\n".join([*lines[:own], *_block({key: value}, inner), *lines[stop:]])
 
 
 def where(folder: Path, group: str) -> Path:

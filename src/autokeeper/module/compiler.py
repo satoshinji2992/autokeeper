@@ -8,6 +8,9 @@
       references/events.md          timed and triggered events
       references/endings.md         endings and rewards
       references/pregens.md         pre-generated investigators
+      references/situation.md       the situation compile time prepared: relations, what each important
+                                    NPC means to do and on what grounds, signs, the past, and the
+                                    module's own rules with who keeps each (core rules, a plugin, the keeper)
       assets/ascii/<name>.txt       ASCII art
       .stamp                        what it was compiled from (see stamp())
 
@@ -22,6 +25,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -90,6 +94,8 @@ def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) 
     _write(root / "references" / "endings.md", _endings_md(m))
     if m.pregens:
         _write(root / "references" / "pregens.md", _pregens_md(m))
+    if _has_situation(m):
+        _write(root / "references" / "situation.md", _situation_md(m))
     if m.art:
         (root / "assets" / "ascii").mkdir(parents=True)
         for name, text in m.art.items():
@@ -197,6 +203,13 @@ def _skill_md(m: Module) -> str:
     ]
     if m.pregens:
         lines.append("- 预设调查员：[references/pregens.md](references/pregens.md)")
+    if _has_situation(m):
+        lines.append("- 局面（人物关系、各人的打算与依据、伏笔、前史、规则清单）：[references/situation.md](references/situation.md)")
+    if m.mechanics:
+        lines += ["", "## 规则清单（谁来执行）", ""]
+        lines += [f"- **{x.name}**（{x.executor}）：{x.rules.strip()}" if x.executor == "守秘人" else f"- **{x.name}**（{x.executor}）"
+                  for x in m.mechanics]
+        lines += ["", "写着「守秘人」的由你临场裁定执行；核心规则和插件已经结算的，不再口头重复结算。"]
     if m.art:
         lines.append("- ASCII 插图：`assets/ascii/<name>.txt`")
     if m.pictures:
@@ -307,6 +320,53 @@ def _endings_md(m: Module) -> str:
         out += [f"## {e.title}（`{e.id}`）", "", f"条件：{e.condition}", "", e.text.strip(), ""]
         if e.reward:
             out += [f"奖励 / 代价：{e.reward}", ""]
+    return "\n".join(out)
+
+
+def _has_situation(m: Module) -> bool:
+    return bool(m.relations or m.agendas or m.foreshadow or m.ties or m.history or m.mechanics)
+
+
+def _step_md(s: Any) -> str:
+    """One step of an agenda with all it rests on: when, what it brings about, whose it is to play."""
+    if s.ruling:
+        kind = "要守秘人裁定后才发生"
+    elif s.meet:
+        kind = "见面反应，" + {True: "只做一次", False: "一贯如此，碰上了才带出"}.get(s.once, "可以这样演")
+    else:
+        kind = "幕后" + ("，到时直接照做" if s.does and s.when else "，到时由他自己决定")
+    meta = [kind, f"条件 `{s.when}`" if s.when else "", f"做成以后 `{s.does}`" if s.does else "",
+            f"只在：{s.only_if}" if s.only_if else "", f"依据：{s.source}" if s.source else ""]
+    return f"- `{s.id}` {s.text.strip()}（{'；'.join(x for x in meta if x)}）"
+
+
+def _situation_md(m: Module) -> str:
+    names = {n.id: n.name for n in m.npcs} | {"players": "调查员们"}
+    out = ["# 局面", "", "编译期备好的人物动机、日程、触发条件与规则，供临场取用：见面反应是可以这样演，不是剧本；"
+           "写着「要守秘人裁定」的只在你裁定以后才发生；原作的检定与前置条件照原作。", ""]
+    if m.relations:
+        out += ["## 人物关系", ""] + [f"- {names.get(b.a, b.a)} → {names.get(b.b, b.b)}：{b.kind} {b.value:+d}" + (f"，{b.why}" if b.why else "")
+                                     for b in m.relations] + [""]
+    for a in m.agendas:
+        out += [f"## {names.get(a.npc, a.npc)}（`{a.npc}`）的打算", ""]
+        if a.goals:
+            out += [f"想要：{'；'.join(a.goals)}", ""]
+        out += [_step_md(s) for s in a.steps] + [""]
+    if m.foreshadow:
+        out += ["## 伏笔", ""] + [f"- `{f.id}` 在 `{f.where}`：{f.hint} → `{f.pays_off}`" for f in m.foreshadow] + [""]
+    if m.history:
+        out += ["## 前史", ""]
+        for p in m.history:
+            who = "、".join(names.get(x, x) for x in p.who)
+            also = "、".join(names.get(x, x) for x in p.known_by)
+            out.append(f"- {p.when}：{p.text}" + (f"（牵涉 {who}）" if who else "") + (f"（另外知道：{also}）" if also else ""))
+        out.append("")
+    if m.ties:
+        out += ["## 私人牵连", ""] + [f"- `{t.id}` {t.hook}" + (f"（{t.npc or t.place}）" if t.npc or t.place else "") for t in m.ties] + [""]
+    if m.mechanics:
+        out += ["## 规则清单", ""]
+        for x in m.mechanics:
+            out += [f"### {x.name}（{x.executor}执行）", "", x.rules.strip(), ""] + ([f"用在：{x.why}", ""] if x.why else [])
     return "\n".join(out)
 
 

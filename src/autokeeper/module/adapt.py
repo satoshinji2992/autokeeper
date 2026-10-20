@@ -21,9 +21,18 @@ lacks and leaves what it has:
                             game screen while the director adapts (module/prelude.py); it reads
                             only what the players are told, never the keeper's book
 
-The model calls of the passes asked for run at once; their edits land one pass at a time and a
-pass whose edits break the module's checks is taken back whole. The module's truth, its clues'
-words, checks and endings are never changed: everything here is added.
+    verify      复核        what this run added, read against the original text by one more call: what gets
+                            round a condition the module keeps (a roll, a prerequisite, a gate) is taken out
+
+Every call reads the whole of the keeper's book with its conditions kept whole (book(): each
+place's keeper notes, each clue's words, check and prerequisites, each NPC's gates) and the
+original text from source/ (original()); when that is too long, what bears on the call and states
+a condition is kept first. The passes run in waves, each wave at once: what depends on another
+pass waits for it (AFTER), so the plans read the people as they were just filled in. Each pass's
+additions are held to the module's conditions (module/conditions.py) before they land: what gets
+round one is asked again once with the reasons, then left out. A pass whose edits break the
+module's checks is taken back whole. The module's truth, its clues' words, checks and endings are
+never changed: everything here is added.
 """
 
 from __future__ import annotations
@@ -31,7 +40,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -39,28 +48,47 @@ from pydantic import BaseModel, Field
 
 from .. import config
 from ..harness import Session
-from . import package, prelude, yamledit
+from . import conditions, package, prelude, yamledit
 from .graph import audit, supporting_clues
 from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Tie
 
-PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude")
+PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude", "verify")
 LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "meet": "见面反应", "foreshadow": "伏笔",
           "clueweb": "线索网", "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史",
-          "prelude": "开局演出"}  # fmt: skip
+          "prelude": "开局演出", "verify": "复核"}  # fmt: skip
+# What a pass reads that another pass writes: it waits for that one (the plans read the people as
+# just filled in, the signs the clues just added).
+AFTER: dict[str, tuple[str, ...]] = {
+    "relations": ("npcs",), "history": ("npcs",), "ties": ("npcs",),
+    "agendas": ("npcs", "relations", "history", "endings", "mechanics"),
+    "meet": ("agendas",), "foreshadow": ("clueweb", "agendas", "history"),
+}
+BOOK_LIMIT = 40000  # characters of the keeper's book before its descriptions are shortened (conditions never are)
+SOURCE_LIMIT = 40000  # characters of the original text before only what bears on the call is kept
 
 SYSTEM = """你是 AutoKeeper 的模组改编员，在编译期给一个 CoC 7 版模组补上跑团时用得着、原文却没写的东西。
 - 原作的真相、线索原文、检定、结局一个字都不改；补上的东西要和原作对得上，像本来就在里面。
+- 原作的条件一个都不绕过：知道有这样东西、知道它在哪、实际找到、拿到手、读懂内容是五件事，各有各的条件（检定、前置线索、交涉门槛、时间）。
+  补写不替检定交出结果，也不替守秘人决定别的拿法；检定或孤注一掷之后怎么演，是守秘人裁定以后的事。
+- 你备的是给守秘人临场用的材料：人物的动机和所知、手头的资源、日程、触发条件、可能的后果。不预写台词，不穷举调查员的路线；见面反应是可以这样演，不是非演不可。
+- 条件写实际成立的依据：调查员买到酒不等于酒到了他手里，调查员知道了不等于他也知道了。条件语法写不出的，把完整条件写进文字，不改用更宽的标记。
 - 按局面来想，不按剧情：写清谁想要什么、彼此怎样、没人插手时事情会怎么发展；不预设调查员会怎么走，不分幕。
 - id 用英文小写或拼音加下划线，不和已有的重复；引用的地点、NPC、线索、结论、事件、结局只用资料里有的。
 - 写短，写具体：一个人、一样东西、一件事，不写空话。"""
 
 
+class Known(BaseModel):
+    text: str = Field(description="他知道的一件事，照原作写到哪一步就写到哪一步：知道有、知道在哪、见过、读过是不同的事")
+    how: str = Field("", description="他是怎么知道的：亲眼见过、亲身经历、听谁说的")
+    source: str = Field(description="原作哪里写到：地点、线索、NPC 的 id，或 真相、守秘人须知、原文；原作没写的不写这一条")
+
+
 class NpcFill(BaseModel):
     npc: str = Field(description="NPC id")
     personality: str = Field("", description="性格，一句话；原来有就留空")
-    voice: str = Field("", description="说话方式、口头禅；原来有就留空")
+    voice: str = Field("", description="说话方式；口头禅和习惯动作写成偶尔带出的（“偶尔……”“着急时……”），不写成每句都做；原来有就留空")
     goal: str = Field("", description="他想要什么；原来有就留空")
-    knows: list[str] = Field(default_factory=list, description="他按原作会知道、肯说的事；原来有就留空，不添新案情")
+    knows: list[Known] = Field(default_factory=list, description="他按原作知道的事；原来有就留空，不添新案情")
 
 
 class NpcFills(BaseModel):
@@ -79,6 +107,7 @@ class MeetMark(BaseModel):
     npc: str = Field(description="NPC id")
     step: str = Field(description="步骤 id")
     meet: bool = Field(description="见面时的反应填 true；要他自己在幕后去做的填 false")
+    once: bool | None = Field(None, description="见面时的反应才填：只发生一次的（应门、安顿行李、头一回讲委托）填 true；一贯的态度、习惯（被问到墓地就闭嘴）填 false")
 
 
 class Meets(BaseModel):
@@ -134,7 +163,9 @@ class Prelude(BaseModel):
 
 ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "npcs": ("给下面标着“缺”的 NPC 补上空着的字段：personality 性格、voice 说话方式、goal 想要什么、knows 他知道的事。"
-             "只补空着的，已有的不动；knows 只写他按原作会知道的事，不添新的案情。", NpcFills),
+             "只补空着的，已有的不动。voice 里的口头禅、习惯动作写成偶尔带出的素材，不写成每句话都要做的。"
+             "knows 每条写他按原作知道的一件事、他是怎么知道的（how）、原作哪里写到（source）；原作没写他知道的不写，不添新的案情。"
+             "知道一样东西存在，不等于知道它在哪、找到过、读过：原作写到哪一步就写到哪一步。肯不肯说留给游戏里看关系，不写在这里。", NpcFills),
     "relations": ("画出人物之间的冲突图：谁对谁怎样看（信任、恐惧、欠情、敌对、亲属、雇佣、爱慕……），多深（-100..100，负数是反过来），为什么。"
                   "写 6–14 条，先写会推动局面的：利益冲突、隐瞒、亏欠、旧怨。b 也可以写 players：他对外来调查员的态度。", Bonds),
     "agendas": ("挑 3–6 个最有自己打算的 NPC（标了“重要”的优先），写他们想要什么，以及没人插手时接下来会怎么做，每人 2–5 步。"
@@ -143,10 +174,19 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "要等调查员来问、来做的事写不成条件，不写 when 也不写 does，交给人物临场决定；"
                 "这样的见面时的反应写 meet: true，不写 does，when 只写从什么时候、什么条件起才这样；其余没有 does 的步骤写 meet: false；"
                 "does 里的 flag 只用表示世界里发生了某事的标记，不用表示调查员看见、遇到、做到或知道了什么的标记（那些由裁定员按调查员的行动立）；"
-                "物件只用【物件】里的 id，交给调查员写 players；别人去哪不写在他的 does 里。原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
+                "物件只用【物件】里的 id，交给调查员写 players；别人去哪不写在他的 does 里。原作里会把剧情推向某个结局的，用那个结局的标记。"
+                "见面时的反应再标 once：只发生一次的（应门、安顿行李、头一回讲委托）填 true，一贯的态度（一问到墓地就闭嘴）填 false。"
+                "一步要等别人当面做了什么、或他从别人那里听说了什么才成立的，条件写得出的用条件（owner:物件:他、knows:他:事实），"
+                "写不出的把完整条件写进 only_if（“调查员当面把酒递给他、他收下以后”“有手下报告、或他亲眼看到调查员在查望远镜”），"
+                "不拿表示调查员有了什么、知道了什么的标记代替。要等线索已经找到才做的，when 写 knows:players:clue:线索id。"
+                "检定、孤注一掷或调查员的具体做法之后才可能发生的结果（孤注一掷成功时他过来帮忙找），写 ruling: true，交给守秘人裁定。"
+                "见面反应不写台词，不把原作要检定才找到的东西写成他主动指出、交出或讲明。"
+                "每步写 source：原作哪里写到（地点、线索、NPC 的 id，或 真相、守秘人须知）；推出来的写 补写。", Agendas),
     "meet": ("下面【打算里没标的步骤】，逐条判断：是见面时的反应（调查员来问、来访、在场时他才会做的事：应门招呼、领人去看、被问到时怎么说），"
              "还是要他自己在幕后去做的事（盯梢、报信、藏东西、搬走什么、找人商量）。见面时的反应填 true，幕后去做的填 false。"
-             "一步里既有见面时的反应、又有之后在幕后要做的事（比如被问完就去报信），填 false。只判断，不改步骤。", Meets),
+             "一步里既有见面时的反应、又有之后在幕后要做的事（比如被问完就去报信），填 false。"
+             "见面时的反应再标 once：只发生一次的事（应门、安顿行李、头一回讲委托）填 true；一贯的态度、习惯（被问到墓地就闭嘴）填 false。"
+             "已经标了见面、只差 once 的，照样填 meet: true 和 once。只判断，不改步骤。", Meets),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
                    "端倪本身不说破真相，只让人觉得哪里不对；也不能说出某条线索本身的内容（线索是窗锁松了，端倪就不写窗钩是松的），"
                    "不然等于不用检定就把线索给了。", Signs),
@@ -157,7 +197,9 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "endings": ("原作的结局之外，补 1–2 个玩家很可能走到、原作却没写的结局：放弃调查离开、和对手做了交易、只救下一部分人……"
                 "每个写一个新的剧情标记（写清调查员的行动真正达成什么时它才成立）和结局叙述。不改原作的结局。", Endings),
     "mechanics": ("列出模组里引擎自己不会管、要插件来管的规则：时钟和倒计时、资源、疾病、仪式进度、追逐、特殊的检定。"
-                  "每条写规则本身（什么时候、怎么算、有什么后果）和模组里哪里用到。原作没有这样的规则就留空。", Mechanics),
+                  "每条写规则本身（什么时候、怎么算、有什么后果）和模组里哪里用到。原作没有这样的规则就留空。"
+                  "每条写 runs，谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害就能算的）、插件（已经有插件的，plugin 填它的 id）、"
+                  "守秘人（要守秘人临场裁定的）。", Mechanics),
     "history": ("写 3–8 件开局以前发生过、至今还在起作用的事（前史），按时间先后：多久以前、谁在哪做了什么、另外还有谁知道。"
                 "只用原作的真相、守秘人须知和人物资料里写到的，不新编案情；玩家开局就知道的不用写。"
                 "known_by 只写知道这句话全部内容的人：只知道一部分（比如只知道书丢了、不知道是谁拿的）的人不写，他们会把这句话当成自己知道的。", Pasts),
@@ -167,24 +209,133 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
 }
 
 
-def book(m: Module) -> str:
-    """The module as the adapter reads it: the keeper's whole book, short."""
-    lines = [f"【模组】《{m.title}》 {m.era}，{m.setting}", f"【开场钩子】{m.hook.strip()}", f"【真相】{m.truth.strip()}"]
+def _clip(text: str, n: int | None) -> str:
+    text = " ".join(text.split())
+    return text if n is None or len(text) <= n else text[: n - 1] + "…"
+
+
+def _when_row(s: Any) -> str:
+    """An agenda step with all it hangs on."""
+    bits = [f"when {s.when}" if s.when else "", f"does {s.does}" if s.does else "", "见面反应" if s.meet else ("幕后" if s.meet is False else ""),
+            {True: "一次性", False: "一贯如此"}.get(s.once, "") if s.meet else "", f"只在：{s.only_if}" if s.only_if else "",
+            "要守秘人裁定" if s.ruling else "", f"依据 {s.source}" if s.source else ""]
+    return f"{s.id}：{s.text}" + (f"（{'；'.join(b for b in bits if b)}）" if any(bits) else "")
+
+
+def book(m: Module, *, limit: int = BOOK_LIMIT) -> str:
+    """The module as the adapter reads it: the keeper's whole book, with every condition whole
+    (each place's keeper notes, each clue's words, check and prerequisites, each NPC's gates);
+    over `limit`, only what is read aloud and the handouts' words are shortened."""
+    text = _book(m, None)
+    return text if len(text) <= limit else _book(m, 120)
+
+
+def _book(m: Module, short: int | None) -> str:
+    npcs = {n.id: n for n in m.npcs}
+    lines = [f"【模组】《{m.title}》 {m.era}，{m.setting}；{m.players}", f"【开场钩子（玩家知道）】{m.hook.strip()}", f"【真相】{m.truth.strip()}"]
     if m.keeper_notes.strip():
-        lines.append(f"【守秘人须知】{m.keeper_notes.strip()[:1200]}")
-    lines.append("【地点】\n" + "\n".join(f"- {x.id} {x.name}：{x.read_aloud.strip()[:80]}" for x in m.locations))
-    lines.append("【NPC】\n" + "\n".join(
-        f"- {n.id} {n.name}（{n.role}）{'，重要' if n.important else ''}，在 {n.location}；想要：{n.goal or '缺'}；性格：{n.personality or '缺'}；"
-        f"说话：{n.voice or '缺'}；知道：{'；'.join(n.knows) or '缺'}；秘密：{'；'.join(n.secrets) or '无'}" for n in m.npcs))
+        lines.append(f"【守秘人须知】{m.keeper_notes.strip()}")
+    if m.opening.strip():
+        lines.append(f"【开场】{_clip(m.opening, short and 300)}")
+    lines.append(f"【开局】{m.start_time}，在 {m.start}")
+    lines.append("【剧情标记】\n" + "\n".join(f"- {k}：{v}" for k, v in m.flags.items()))
+    rows = []
+    for x in m.locations:
+        head = f"- {x.id} {x.name}" + ("（公开）" if x.public else "") + (f"（在 {x.within} 里）" if x.within else "")
+        rows.append(f"{head}：{_clip(x.read_aloud, short)}")
+        if x.keeper.strip():
+            rows.append(f"  守秘人须知：{x.keeper.strip()}")
+        if x.features:
+            rows.append(f"  可调查：{'、'.join(x.features)}")
+        rows.append(f"  通往：{'、'.join(x.exits) or '无'}")
+    lines.append("【地点】\n" + "\n".join(rows))
+    rows = []
+    for n in m.npcs:
+        rows.append(f"- {n.id} {n.name}（{n.role}）{'，重要' if n.important else ''}，在 {n.location}；想要：{n.goal or '缺'}；性格：{n.personality or '缺'}；"
+                    f"说话：{n.voice or '缺'}")
+        rows.append(f"  知道：{'；'.join(n.knows) or '缺'}")
+        if n.secrets:
+            rows.append(f"  秘密（不被逼问不说）：{'；'.join(n.secrets)}")
+        if n.lies:
+            rows.append(f"  会撒的谎：{'；'.join(n.lies)}")
+        if n.clues:
+            rows.append("  能给的线索：" + "；".join(f"{c}（{'要 ' + n.gates[c].skill + '（' + n.gates[c].difficulty + '）' if c in n.gates else '问到就说'}）"
+                                                for c in n.clues))
+    lines.append("【NPC】\n" + "\n".join(rows))
     if m.items:
-        lines.append("【物件】\n" + "\n".join(f"- {i.id} {i.name}，在 {i.owner or i.where or '不详'}" for i in m.items))
-    lines.append("【线索】\n" + "\n".join(f"- {c.id}「{c.title}」在 {c.where}{'·' + c.feature if c.feature else ''}，指向 {'、'.join(c.points_to) or '无'}"
-                                        + ("，关键" if c.core else "") for c in m.clues))  # fmt: skip
+        lines.append("【物件】\n" + "\n".join(f"- {i.id} {i.name}：{_clip(i.description, short)}，在 {i.owner or i.where or '不详'}"
+                                            + ("，藏着" if i.hidden else "") for i in m.items))
+    rows = []
+    for c in m.clues:
+        where = f"在 {c.where}" + (f"·{c.feature}" if c.feature else "") + (f"，由 {c.npc} 说出" if c.npc else "")
+        how = f"检定 {c.check.skill}（{c.check.difficulty}）" if c.check else "搜到即得"
+        if c.npc and c.npc in npcs and c.id in npcs[c.npc].gates:
+            gate = npcs[c.npc].gates[c.id]
+            how += f"，交涉门槛 {gate.skill}（{gate.difficulty}）"
+        extra = [how] + ([f"前置 {'、'.join(c.requires)}"] if c.requires else []) + (["关键"] if c.core else [])
+        extra += [f"理智 {c.sanity}"] if c.sanity else []
+        extra += [f"手稿 {c.handout}"] if c.handout else []
+        rows.append(f"- {c.id}「{c.title}」{where}；{'；'.join(extra)}；指向 {'、'.join(c.points_to) or '无'}")
+        rows.append(f"  原文：{c.text.strip()}")
+    lines.append("【线索】\n" + "\n".join(rows))
+    if m.handouts:
+        lines.append("【手稿】\n" + "\n".join(f"- {h.id}「{h.title}」（{h.kind}）：{_clip(h.text, short and 200)}" for h in m.handouts))
     lines.append("【结论】\n" + "\n".join(f"- {k.id}：{k.text}" for k in m.conclusions))
-    lines.append("【事件】\n" + "\n".join(f"- {e.id}「{e.title}」{e.when}" for e in m.events))
-    lines.append("【结局】\n" + "\n".join(f"- {e.id}「{e.title}」条件 {e.condition}" for e in m.endings))
-    lines.append("【剧情标记】" + "；".join(f"{k}：{v}" for k, v in m.flags.items()))
+    lines.append("【事件】\n" + "\n".join(
+        f"- {e.id}「{e.title}」{e.when}：{_clip(e.text, None)}" + (f"；设标记 {'、'.join(e.sets)}" if e.sets else "")
+        + (f"；理智 {e.sanity}" if e.sanity else "") + (f"；进入结局 {e.ending}" if e.ending else "") for e in m.events))
+    lines.append("【结局】\n" + "\n".join(f"- {e.id}「{e.title}」条件 {e.condition}：{_clip(e.text, short and 120)}" for e in m.endings))
+    if m.extensions:
+        lines.append("【规则插件】\n" + "\n".join(f"- {x.id}「{x.name}」：{x.description}" for x in m.extensions.values()))
+    if m.mechanics:
+        lines.append("【规则清单】\n" + "\n".join(f"- {x.name}（{x.executor}执行）：{x.rules}" for x in m.mechanics))
+    # The situation already written (by hand, or by the passes before this one).
+    if m.relations:
+        lines.append("【人物关系（已写）】\n" + "\n".join(f"- {b.a}→{b.b} {b.kind} {b.value}：{b.why}" for b in m.relations))
+    if m.history:
+        lines.append("【前史（已写）】\n" + "\n".join(f"- {p.when}：{p.text}（牵涉 {'、'.join(p.who) or '无'}；另外知道的 {'、'.join(p.known_by) or '无'}）"
+                                                for p in m.history))
+    if m.agendas:
+        lines.append("【各人的打算（已写）】\n" + "\n".join(
+            f"- {a.npc} 想要 {'；'.join(a.goals) or '无'}\n" + "\n".join(f"  · {_when_row(s)}" for s in a.steps) for a in m.agendas))
+    if m.foreshadow:
+        lines.append("【伏笔（已写）】\n" + "\n".join(f"- {f.id} 在 {f.where}：{f.hint} → {f.pays_off}" for f in m.foreshadow))
     return "\n".join(lines)
+
+
+def original(folder: Path | None, focus: list[str] | tuple[str, ...] = (), *, limit: int = SOURCE_LIMIT) -> str:
+    """The module's original text from source/ (the imported pages, or the import notes when there
+    are none), whole when it fits in `limit`; else the parts that name what this call is about
+    (`focus`) or state a condition (a roll, an if, an only), in their order, up to `limit`."""
+    if folder is None:
+        return ""
+    found = next((p for p in (Path(folder) / "source" / "source.md", Path(folder) / "source" / "source" / "source.md",
+                              Path(folder) / "source" / "notes.md") if p.is_file()), None)
+    if found is None:
+        return ""
+    text = found.read_text(encoding="utf-8").strip()
+    if len(text) <= limit:
+        return text
+    parts = [x for x in re.split(r"\n\s*\n|(?=^-{5,} 第)", text, flags=re.M) if x.strip()]
+    rule = re.compile(r"检定|成功|失败|孤注一掷|如果|若|只有|才|除非|必须|前提|之前|之后|要求|理智")
+
+    def rank(part: str) -> int:
+        return 2 * sum(1 for f in focus if f and f in part) + (1 if rule.search(part) else 0)
+
+    keep, used = set(), 0
+    for i in sorted(range(len(parts)), key=lambda i: -rank(parts[i])):
+        if rank(parts[i]) == 0 or used + len(parts[i]) > limit:
+            continue
+        keep.add(i)
+        used += len(parts[i])
+    return "（原文较长，下面按原顺序只摘了与这次相关、写着条件的段落）\n" + "\n\n".join(parts[i] for i in sorted(keep))
+
+
+def _focus(m: Module, name: str) -> list[str]:
+    """The names a pass is about, for picking the parts of a long original."""
+    if name == "npcs":
+        return [n.name for n in m.npcs if not (n.personality and n.voice and n.goal and n.knows)]
+    return [n.name for n in m.npcs if n.important] or [n.name for n in m.npcs]
 
 
 def wanted(m: Module, name: str) -> bool:
@@ -204,14 +355,16 @@ def wanted(m: Module, name: str) -> bool:
 
 
 def _unmarked(m: Module) -> list[tuple[str, Any]]:
-    """Agenda steps without an outcome, left for the NPC to judge, not yet marked as meeting
-    reactions or backstage work."""
-    return [(a.npc, s) for a in m.agendas for s in a.steps if s.meet is None and not s.does]
+    """Agenda steps without an outcome, left for the NPC to judge (not the keeper's to rule), not
+    yet marked as meeting reactions or backstage work, or meeting reactions not yet marked as
+    happening once or always."""
+    return [(a.npc, s) for a in m.agendas for s in a.steps if not s.does and not s.ruling and (s.meet is None or (s.meet and s.once is None))]
 
 
 def _material(m: Module, name: str) -> str:
     if name == "meet":
-        rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") for npc, s in _unmarked(m)]
+        rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") + ("（已标见面反应，只差 once）" if s.meet else "")
+                for npc, s in _unmarked(m)]
         return "\n【打算里没标的步骤】\n" + "\n".join(rows)
     if name == "clueweb":
         from .simulate import playthrough
@@ -243,12 +396,22 @@ def _public(m: Module) -> str:
     return "\n".join(lines)
 
 
-async def _ask(cfg: config.Config, name: str, m: Module) -> BaseModel:
+def _source(text: str) -> str:
+    return f"\n\n【原文（整理资料的出处；条件和整理资料对不上时以原文为准）】\n{text}" if text.strip() else ""
+
+
+async def _ask(cfg: config.Config, name: str, m: Module, *, source: str = "", problems: list[str] | tuple[str, ...] = ()) -> BaseModel:
+    """One pass's call: the keeper's book with its conditions and the original text (the opening
+    performance reads only what the players are told), and, asked again, what the last answer got
+    round."""
     task, schema = ASK[name]
     s = Session("importer", cfg.role("importer"), SYSTEM, schema=schema.model_json_schema())
-    material = _public(m) if name == "prelude" else f"{book(m)}{_material(m, name)}"
+    material = _public(m) if name == "prelude" else f"{book(m)}{_source(source)}{_material(m, name)}"
+    ask = f"{material}\n\n【这次要做的】{LABELS[name]}：{task}"
+    if problems:
+        ask += "\n\n【上一次补写里这几条绕过了原作的条件，这次改掉：删掉，写清实际依据，或交给守秘人裁定】\n" + "\n".join(f"- {x}" for x in problems)
     try:
-        reply = await s.send(f"{material}\n\n【这次要做的】{LABELS[name]}：{task}")
+        reply = await s.send(ask)
         return schema.model_validate(reply.data or {})
     finally:
         await s.close()
@@ -269,13 +432,24 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
             for key in ("personality", "voice", "goal"):
                 if not getattr(n, key) and getattr(f, key).strip():
                     found.append(("put", "npcs", n.id, key, getattr(f, key).strip()))
-            if not n.knows and f.knows:
-                found.append(("put", "npcs", n.id, "knows", [k.strip() for k in f.knows if k.strip()][:6]))
+            # What it knows, as far as the module goes and how it came to know it; one the module
+            # never gives it (no source, or 补写) is no fact of its.
+            rows = [k.text.strip() + (f"（{k.how.strip()}）" if k.how.strip() else "") for k in f.knows
+                    if k.text.strip() and k.source.strip() and k.source.strip() != "补写"]
+            if not n.knows and rows:
+                found.append(("put", "npcs", n.id, "knows", rows[:6]))
         return found
     if name == "meet":
-        open_ = {(npc, s.id) for npc, s in _unmarked(m)}
-        marks = {(x.npc, x.step): x.meet for x in out.steps if (x.npc, x.step) in open_}
-        return [("step", "agendas", npc, step, "meet", meet) for (npc, step), meet in marks.items()]
+        open_ = {(npc, s.id): s for npc, s in _unmarked(m)}
+        marks: dict[tuple[str, str, str], bool] = {}
+        for x in out.steps:
+            if (s := open_.get((x.npc, x.step))) is None:
+                continue
+            if s.meet is None:
+                marks[(x.npc, x.step, "meet")] = x.meet
+            if (s.meet or x.meet) and s.once is None and x.once is not None:
+                marks[(x.npc, x.step, "once")] = x.once
+        return [("step", "agendas", npc, step, key, value) for (npc, step, key), value in marks.items()]
     if name == "clueweb":
         taken = {c.id for c in m.clues}
         conclusions = {k.id for k in m.conclusions}
@@ -315,8 +489,15 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
         items = [a for a in items if a.npc in npcs and not (a.npc in seen or seen.add(a.npc)) and a.steps][:6]  # type: ignore[func-returns-value]
         for a in items:  # an outcome naming what the module lacks is cut down to what it has, not the whole pass
             for step in a.steps:
+                step.only_if, step.source = step.only_if.strip(), step.source.strip()
+                if (hour := re.search(r"D\d+ \d{1,2}:\d{2}", step.when)) and step.when.strip() != hour.group():
+                    step.when = hour.group()  # a time stands alone (graph.audit): the hour kept, what was joined to it left to its words
+                if step.ruling:  # what comes of the keeper's ruling is the keeper's: no outcome done, no meeting reaction
+                    step.does, step.meet = "", None
                 if step.meet:  # what it does on meeting them is its voice's to play: no outcome
                     step.does = ""
+                else:
+                    step.once = None
                 parts = [x.strip() for x in step.does.replace("|", "&").split("&") if x.strip() and "!" not in x]
                 # Without a time or a condition the step is the NPC's to judge in play: no outcome done for it.
                 step.does = " & ".join(x for x in parts if not _outcome(m, a.npc, x)) if step.when.strip() else ""
@@ -360,57 +541,269 @@ def land(folder: Path, found: list[tuple[Any, ...]]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
+def preview(m: Module, found: list[tuple[Any, ...]]) -> Module:
+    """The module as it would be with a pass's edits, in memory (to hold them to its conditions
+    before anything is written)."""
+    data = m.model_dump(mode="json")
+    for e in found:
+        kind, group = e[0], e[1]
+        if kind == "put":
+            next(x for x in data[group] if x["id"] == e[2])[e[3]] = e[4]
+        elif kind == "step":
+            agenda = next(a for a in data[group] if a["npc"] == e[2])
+            next(x for x in agenda["steps"] if x["id"] == e[3])[e[4]] = e[5]
+        elif kind == "append":
+            data.setdefault(group, []).extend(e[2])
+        else:
+            data.setdefault(group, {})[e[2]] = e[3]
+    out = Module.model_validate(data)
+    out.extensions = m.extensions
+    return out
+
+
+def _refs(m: Module) -> set[str]:
+    """What the situation layer has, by the refs the review names them by."""
+    return ({p.ref for p in conditions.pieces(m)} | {f"knows:{n.id}:{i}" for n in m.npcs for i in range(len(n.knows))}
+            | {f"history:{i}" for i in range(len(m.history))})
+
+
+def held(m: Module, name: str, found: list[tuple[Any, ...]]) -> list[conditions.Finding]:
+    """What of a pass's edits gets round the module's conditions (module/conditions.py)."""
+    if name not in ("npcs", "agendas", "foreshadow") or not found:
+        return []
+    after = preview(m, found)
+    if name == "npcs":
+        chosen = [p for e in found if e[0] == "put" and e[3] == "knows" for p in conditions.knows(after, e[2])]
+    else:
+        old = {p.ref for p in conditions.pieces(m)}
+        chosen = [p for p in conditions.pieces(after) if p.ref not in old]
+    return conditions.findings(after, chosen)
+
+
+def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...]]:
+    """A pass's edits less the steps, signs and facts named in `refs`."""
+    out: list[tuple[Any, ...]] = []
+    for e in found:
+        if e[0] == "append" and e[1] == "agendas":
+            e = ("append", "agendas", [{**a, "steps": [x for x in a.get("steps", []) if f"agendas:{a['npc']}:{x['id']}" not in refs]}
+                                       for a in e[2]])
+        elif e[0] == "append" and e[1] == "foreshadow":
+            e = ("append", "foreshadow", [f for f in e[2] if f"foreshadow:{f['id']}" not in refs])
+        elif e[0] == "put" and e[3] == "knows":
+            e = (*e[:4], [k for i, k in enumerate(e[4]) if f"knows:{e[2]}:{i}" not in refs])
+        if (e[0] == "append" and not e[2]) or (e[0] == "put" and e[3] == "knows" and not e[4]):
+            continue
+        out.append(e)
+    return out
+
+
+def take_out(folder: Path, refs: list[str]) -> None:
+    """Take steps, signs, past events and facts out of the module's files, by their refs."""
+    m = Module.load(folder)
+    knows: dict[str, set[int]] = {}
+    past: list[int] = []
+    for ref in refs:
+        kind, _, rest = ref.partition(":")
+        if kind == "knows":
+            npc, _, i = rest.rpartition(":")
+            knows.setdefault(npc, set()).add(int(i))
+        elif kind == "history":
+            past.append(int(rest))
+    for ref in refs:
+        kind, _, rest = ref.partition(":")
+        if kind == "agendas":
+            npc, _, step = rest.partition(":")
+            path = _target(folder, "agendas")
+            path.write_text(yamledit.drop_step(path.read_text(encoding="utf-8"), "agendas", npc, step), encoding="utf-8")
+        elif kind == "foreshadow":
+            path = _target(folder, "foreshadow")
+            path.write_text(yamledit.drop_entry(path.read_text(encoding="utf-8"), "foreshadow", rest), encoding="utf-8")
+    if past:
+        path = _target(folder, "history")
+        text = path.read_text(encoding="utf-8")
+        for i in sorted(set(past), reverse=True):
+            text = yamledit.drop(text, "history", i)
+        path.write_text(text, encoding="utf-8")
+    for npc, gone in knows.items():
+        path = _target(folder, "npcs")
+        kept = [k for i, k in enumerate(m.npc(npc).knows) if i not in gone]
+        path.write_text(yamledit.replace(path.read_text(encoding="utf-8"), "npcs", npc, "knows", kept), encoding="utf-8")
+
+
 @dataclass
 class Result:
     name: str
     written: int = 0
     problems: list[str] | None = None
+    left_out: list[str] = field(default_factory=list)  # what got round a condition and was not written, or taken out by the review
 
 
 async def adapt(folder: Path, *, passes: tuple[str, ...] = PASSES, cfg: config.Config | None = None,
                 log: Callable[[str], None] = print, dry: bool = False) -> list[Result]:  # fmt: skip
-    """Run the passes the module still needs: the model calls at once, the edits one pass at a time,
-    each pass taken back whole if the module no longer passes its checks."""
+    """Run the passes the module still needs, in waves (AFTER): a wave's calls at once, its edits one
+    pass at a time, each held to the module's conditions first and taken back whole if the module
+    no longer passes its checks; then the review of what this run added (verify)."""
+    folder = Path(folder)
+    cfg = cfg or config.load()
+    results: list[Result] = []
+    added: list[str] = []
+    left = [name for name in passes if name != "verify"]
+    while left:
+        wave = [name for name in left if not set(AFTER.get(name, ())) & set(left)]
+        left = [name for name in left if name not in wave]
+        m = Module.load(folder)
+        todo = [name for name in wave if wanted(m, name)]
+        for name in wave:
+            if name not in todo:
+                log(f"[dim]{LABELS[name]}：已经有了[/]")
+        if not todo:
+            continue
+        log(f"[bold]编译期改编[/] {len(todo)} 步一起问：{'、'.join(LABELS[x] for x in todo)}…")
+        answers = await asyncio.gather(*(_ask(cfg, name, m, source=original(folder, _focus(m, name))) for name in todo),
+                                       return_exceptions=True)
+        for name, out in zip(todo, answers, strict=True):
+            results.append(await _settle(folder, cfg, name, out, log=log, dry=dry, added=added))
+    if "verify" in passes:
+        results.append(await verify(folder, cfg, refs=added if len(passes) > 1 else None, log=log, dry=dry))
+    return results
+
+
+async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log: Callable[[str], None], dry: bool,
+                  added: list[str]) -> Result:  # fmt: skip
+    """Write one pass's answer: what gets round a condition asked again once with the reasons and
+    then left out; the whole pass taken back if the module no longer passes its checks."""
+    if isinstance(out, BaseException):
+        log(f"  [yellow]✗ {LABELS[name]}：{type(out).__name__}[/]")
+        return Result(name, problems=[f"{type(out).__name__}: {out}"[:200]])
+    m = Module.load(folder)
+    found = edits(m, name, out)
+    wrong = held(m, name, found)
+    if wrong and not dry:
+        log(f"  [yellow]{LABELS[name]}：{len(wrong)} 条绕过了原作的条件，带着原因重问一次[/]")
+        try:
+            again = await _ask(cfg, name, m, source=original(folder, _focus(m, name)), problems=[f.text for f in wrong])
+            found = edits(m, name, again)
+            wrong = held(m, name, found)
+        except Exception as exc:  # the first answer stands, less what got round
+            log(f"  [yellow]{LABELS[name]}：重问没有成功（{type(exc).__name__}）[/]")
+    wrong = [f for f in wrong if f.level != "note"]  # asked again about; a fact it may have lived stays
+    left_out = [f.text for f in wrong]
+    if wrong:
+        found = without(found, {f.ref for f in wrong})
+        for f in wrong:
+            log(f"  [yellow]  没有写入 {f.ref}：{f.text[:90]}[/]")
+    count = sum(len(e[2]) if e[0] == "append" else 1 for e in found)
+    if dry or not found:
+        log(f"  {LABELS[name]}：{count} 处" + ("（只看不写）" if dry else ""))
+        return Result(name, count, left_out=left_out)
+    before = {p: p.read_text(encoding="utf-8") if p.is_file() else None for p in {_target(folder, e[1]) for e in found}}
+    errors_before = {str(i) for i in audit(m) if i.level == "error"}
+    try:
+        land(folder, found)
+        now = Module.load(folder)
+        new_errors = [str(i) for i in audit(now) if i.level == "error" and str(i) not in errors_before]
+    except Exception as exc:  # malformed YAML, a missing entry: the pass is taken back
+        new_errors = [f"{type(exc).__name__}: {exc}"[:200]]
+    if new_errors:
+        for path, text in before.items():
+            path.unlink(missing_ok=True) if text is None else path.write_text(text, encoding="utf-8")
+        log(f"  [yellow]✗ {LABELS[name]}：补上以后校验不过，没有写入（{new_errors[0]}）[/]")
+        return Result(name, problems=new_errors, left_out=left_out)
+    added += sorted(_refs(now) - _refs(m))
+    log(f"  [green]✓ {LABELS[name]}[/]：补了 {count} 处")
+    return Result(name, count, left_out=left_out)
+
+
+VERIFY_SYSTEM = """你是 CoC 7 版跑团的资深守秘人，开团前核对编译期补写的条目有没有绕过原作的条件。下面先是整理好的守秘人资料和原文（条件以原文为准），
+最后是这次要核对的补写条目。只挑这几种：
+- 提前兑现：原作要检定、前置线索或交涉门槛才拿得到的东西，补写成人物见面就指出、交出、讲明，或写成别人早就知道的事；
+- 混淆条件：拿调查员有了什么、知道了什么，当成东西已经到了 NPC 手里、NPC 也知道了；
+- 凭空多出：原作没有的物件、获知途径或别的拿法（守秘人临场可以裁定，编译期不替他定）；
+- 把检定或孤注一掷之后的某种演法，写成了一般的见面反应或日程。
+知道有这样东西、知道它在哪、实际找到、拿到手、读懂内容是五件事，原作写到哪一步就是哪一步；原作写明失败也能得到的，照原作。
+写了 only_if、要守秘人裁定（ruling）或等线索找到以后（knows:players:clue:）才成立的，条件写对了就不算。
+没有问题的不列，拿不准的不列。每条写编号，和它绕过了原作哪一条：哪条线索、什么检定，原文怎么写。"""
+
+
+class Flag(BaseModel):
+    ref: str = Field(description="有问题的那一条的编号，照抄【补写的条目】里方括号中的编号")
+    problem: str = Field(description="它绕过了原作哪一条条件：哪条线索、什么检定或前置，原文怎么写；一句话")
+
+
+class Verdict(BaseModel):
+    flags: list[Flag] = Field(default_factory=list, max_length=16)
+
+
+def _rows(m: Module, refs: set[str]) -> list[str]:
+    """The added entries to review, each with its ref and all it hangs on."""
+    rows = []
+    for a in m.agendas:
+        rows += [f"[agendas:{a.npc}:{s.id}] {a.npc} 的打算 {_when_row(s)}" for s in a.steps if f"agendas:{a.npc}:{s.id}" in refs]
+    rows += [f"[foreshadow:{f.id}] 伏笔，在 {f.where}：{f.hint} → 指向 {f.pays_off}" for f in m.foreshadow if f"foreshadow:{f.id}" in refs]
+    rows += [f"[history:{i}] 前史 {p.when}：{p.text}（牵涉 {'、'.join(p.who) or '无'}；另外知道的 {'、'.join(p.known_by) or '无'}）"
+             for i, p in enumerate(m.history) if f"history:{i}" in refs]
+    rows += [f"[knows:{n.id}:{i}] {n.name}知道：{k}" for n in m.npcs for i, k in enumerate(n.knows) if f"knows:{n.id}:{i}" in refs]
+    return rows
+
+
+async def _judge(cfg: config.Config, material: str) -> Verdict:
+    """The review's one call."""
+    s = Session("importer", cfg.role("importer"), VERIFY_SYSTEM, schema=Verdict.model_json_schema())
+    try:
+        reply = await s.send(material)
+        return Verdict.model_validate(reply.data or {})
+    finally:
+        await s.close()
+
+
+async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[str] | None = None,
+                 log: Callable[[str], None] = print, dry: bool = False) -> Result:  # fmt: skip
+    """复核: what was added (this run's `refs`, or the whole situation layer when none are given:
+    its steps, signs and past, never the NPCs' sheets)
+    held to the module's conditions by rule (module/conditions.py), then read against the original
+    text by one call; what gets round one is taken out of the files."""
     folder = Path(folder)
     cfg = cfg or config.load()
     m = Module.load(folder)
-    todo = [name for name in passes if wanted(m, name)]
-    for name in passes:
-        if name not in todo:
-            log(f"[dim]{LABELS[name]}：已经有了[/]")
-    if not todo:
-        return []
-    log(f"[bold]编译期改编[/] {len(todo)} 步一起问：{'、'.join(LABELS[x] for x in todo)}…")
-    answers = await asyncio.gather(*(_ask(cfg, name, m) for name in todo), return_exceptions=True)
-    results = []
-    for name, out in zip(todo, answers, strict=True):
-        if isinstance(out, BaseException):
-            log(f"  [yellow]✗ {LABELS[name]}：{type(out).__name__}[/]")
-            results.append(Result(name, problems=[f"{type(out).__name__}: {out}"[:200]]))
-            continue
-        m = Module.load(folder)
-        found = edits(m, name, out)
-        count = sum(len(e[2]) if e[0] == "append" else 1 for e in found)
-        if dry or not found:
-            log(f"  {LABELS[name]}：{count} 处" + ("（只看不写）" if dry else ""))
-            results.append(Result(name, count))
-            continue
-        before = {p: p.read_text(encoding="utf-8") if p.is_file() else None for p in {_target(folder, e[1]) for e in found}}
-        errors_before = {str(i) for i in audit(m) if i.level == "error"}
-        try:
-            land(folder, found)
-            new_errors = [str(i) for i in audit(Module.load(folder)) if i.level == "error" and str(i) not in errors_before]
-        except Exception as exc:  # malformed YAML, a missing entry: the pass is taken back
-            new_errors = [f"{type(exc).__name__}: {exc}"[:200]]
-        if new_errors:
-            for path, text in before.items():
-                path.unlink(missing_ok=True) if text is None else path.write_text(text, encoding="utf-8")
-            log(f"  [yellow]✗ {LABELS[name]}：补上以后校验不过，没有写入（{new_errors[0]}）[/]")
-            results.append(Result(name, problems=new_errors))
-            continue
-        log(f"  [green]✓ {LABELS[name]}[/]：补了 {count} 处")
-        results.append(Result(name, count))
-    return results
+    # The whole layer, when no run's refs are given: what the NPCs know is the module's own sheet then, not this.
+    chosen = {r for r in _refs(m) if not r.startswith("knows:")} if refs is None else set(refs) & _refs(m)
+    if not chosen:
+        log(f"[dim]{LABELS['verify']}：这次没有新补的[/]")
+        return Result("verify")
+    pieces = [p for p in conditions.pieces(m) if p.ref in chosen]
+    pieces += [p for n in m.npcs for p in conditions.knows(m, n.id) if p.ref in chosen]
+    flagged = {f.ref: f.text for f in conditions.findings(m, pieces) if f.level != "note"}
+    log(f"[bold]{LABELS['verify']}[/] {len(chosen)} 条补写对照原文…")
+    try:
+        verdict = await _judge(cfg, f"{book(m)}{_source(original(folder, _focus(m, 'verify')))}\n\n【补写的条目】\n" + "\n".join(_rows(m, chosen)))
+    except Exception as exc:  # the rules' findings still stand
+        log(f"  [yellow]{LABELS['verify']}：模型复核没有成功（{type(exc).__name__}），只按规则[/]")
+        verdict = Verdict()
+    for f in verdict.flags:
+        if f.ref in chosen:
+            flagged.setdefault(f.ref, f.problem.strip())
+    found = [f"{ref}：{why}" for ref, why in flagged.items()]
+    for line in found:
+        log(f"  [yellow]{'（只看不改）' if dry else '拿掉'} {line[:120]}[/]")
+    if dry or not flagged:
+        if not flagged:
+            log(f"  [green]✓ {LABELS['verify']}[/]：没有绕过原作条件的")
+        return Result("verify", problems=found or None)
+    files = {_target(folder, g) for g in ("agendas", "foreshadow", "history", "npcs")}
+    before = {p: p.read_text(encoding="utf-8") for p in files if p.is_file()}
+    errors_before = {str(i) for i in audit(m) if i.level == "error"}
+    try:
+        take_out(folder, list(flagged))
+        new_errors = [str(i) for i in audit(Module.load(folder)) if i.level == "error" and str(i) not in errors_before]
+    except Exception as exc:
+        new_errors = [f"{type(exc).__name__}: {exc}"[:200]]
+    if new_errors:
+        for path, text in before.items():
+            path.write_text(text, encoding="utf-8")
+        log(f"  [yellow]✗ {LABELS['verify']}：拿掉以后校验不过，没有改（{new_errors[0]}）[/]")
+        return Result("verify", problems=[*found, *new_errors])
+    log(f"  [green]✓ {LABELS['verify']}[/]：拿掉了 {len(flagged)} 条")
+    return Result("verify", len(flagged), problems=found, left_out=found)
 
 
 # -- how ready a module is to play -------------------------------------------------------------
@@ -484,7 +877,8 @@ REVIEW_SYSTEM = """你是 CoC 7 版跑团的资深守秘人，替一个准备开
 - 关键信息只有一条路，玩家错过就卡死；
 - 前后矛盾：时间、地点、谁知道什么对不上；
 - 人物动机说不通，或者没人插手时局面不会动；
-- 原文写得含糊、守秘人当场没法裁定的规则或情形。
+- 原文写得含糊、守秘人当场没法裁定的规则或情形；
+- 补写的局面（人物知道的事、打算、见面反应、伏笔）绕过了原作的条件：不用检定就交出线索，拿调查员的进展当成 NPC 已经知道。
 每条写清在哪、为什么会出问题、怎么补（补，不改原作真相）。没有问题的方面不要写。最多 8 条，按严重程度排。"""
 
 
@@ -505,7 +899,7 @@ async def review(folder: Path, cfg: config.Config | None = None) -> Review:
     m = Module.load(folder)
     s = Session("importer", cfg.role("importer"), REVIEW_SYSTEM, schema=Review.model_json_schema())
     try:
-        reply = await s.send(book(m))
+        reply = await s.send(f"{book(m)}{_source(original(folder, _focus(m, 'review')))}")
         return Review.model_validate(reply.data or {})
     finally:
         await s.close()

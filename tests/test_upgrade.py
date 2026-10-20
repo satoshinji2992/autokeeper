@@ -94,14 +94,19 @@ ANSWERS = {
 
 
 @pytest.fixture
-def example(tmp_path):
+def example(tmp_path, monkeypatch):
     folder = tmp_path / "example"
     shutil.copytree(paths.EXAMPLE, folder)
+
+    async def judge(cfg, material):  # the review of what was added (verify): finds nothing here
+        return adapt.Verdict()
+
+    monkeypatch.setattr(adapt, "_judge", judge)
     return folder
 
 
 async def test_each_pass_adds_only_what_the_module_lacks_and_checks_what_it_adds(example, monkeypatch):
-    async def ask(cfg, name, m):
+    async def ask(cfg, name, m, **_):
         return adapt.ASK[name][1].model_validate(ANSWERS[name])
 
     monkeypatch.setattr(adapt, "_ask", ask)
@@ -122,11 +127,11 @@ async def test_each_pass_adds_only_what_the_module_lacks_and_checks_what_it_adds
     assert [f.art for f in m.prelude] == ["square", "", ""]
     assert m.history[0].who == ["warden"] and m.history[0].where == "tower"  # the one not in the module is left out
     again = await adapt.adapt(example, cfg=SimpleNamespace(), log=lambda _: None)  # run again: resumes, nothing left to do
-    assert all(r.name in ("clueweb", "npcs", "mechanics") for r in again)  # still short, or nothing to add
+    assert all(r.name in ("clueweb", "npcs", "mechanics") or (r.name == "verify" and not r.written) for r in again)  # still short, or nothing to add
 
 
 async def test_a_pass_that_breaks_the_module_is_taken_back(example, monkeypatch):
-    async def ask(cfg, name, m):  # an agenda on a flag nobody declared
+    async def ask(cfg, name, m, **_):  # an agenda on a flag nobody declared
         return adapt.Agendas.model_validate({"agendas": [{"npc": "warden", "steps": [{"id": "x", "text": "等钟停", "when": "flag:nope"}]}]})
 
     monkeypatch.setattr(adapt, "_ask", ask)
@@ -193,11 +198,11 @@ async def test_the_meeting_pass_marks_only_the_steps_left_to_judge(example, monk
     (example / "situation.yaml").write_text(AGENDAS, encoding="utf-8")
     asked = []
 
-    async def ask(cfg, name, m):
+    async def ask(cfg, name, m, **_):
         asked.append(adapt._material(m, name))
         return adapt.Meets.model_validate({"steps": [
-            {"npc": "warden", "step": "door", "meet": True},
-            {"npc": "preacher", "step": "door", "meet": False},
+            {"npc": "warden", "step": "door", "meet": True, "once": True},
+            {"npc": "preacher", "step": "door", "meet": False, "once": True},  # backstage: once means nothing
             {"npc": "warden", "step": "lock", "meet": False},
             {"npc": "warden", "step": "leave", "meet": True},  # an outcome of its own: not its to mark
         ]})
@@ -209,4 +214,5 @@ async def test_the_meeting_pass_marks_only_the_steps_left_to_judge(example, monk
     steps = {(a.npc, s.id): s.meet for a in m.agendas for s in a.steps}
     assert steps == {("warden", "door"): True, ("warden", "lock"): False, ("warden", "leave"): None, ("preacher", "door"): False}
     assert "天亮前下楼离开" not in asked[0]  # only what is left to judge is asked about
+    assert [s.once for a in m.agendas for s in a.steps if s.id == "door"] == [True, None]
     assert not adapt.wanted(m, "meet")  # run again: nothing left

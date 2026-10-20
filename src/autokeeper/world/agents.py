@@ -226,12 +226,18 @@ def marked(w: World) -> list[Any]:
         ops.append(Enlist(id=f"agenda:{a.npc}", npc=a.npc, goals=list(a.goals), actor="director"))
         steps = []
         for move in a.steps:
+            if move.ruling:  # what comes of the keeper's ruling is the keeper's (context.keeper_brief), not the NPC's to do
+                continue
             timed = re.fullmatch(r"D\d+ \d{1,2}:\d{2}", move.when.strip())
             # What the module says it brings about, done with no model call when its time or
-            # condition comes; a step for "whenever" (no when) is the NPC's own to judge.
+            # condition comes; a step for "whenever" (no when), or with grounds the condition cannot
+            # say (only_if), is the NPC's own to judge, the outcome then what must hold once done.
             prepared, achieved = effects(a.npc, move.does) if move.when.strip() and not move.meet else ([], "")
-            steps.append(Step(id=move.id, text=move.text, due=parse_time(move.when) if timed else None, when="" if timed else move.when,
-                              ops=prepared, achieved=achieved, meet=move.meet))
+            if move.only_if.strip():
+                prepared = []
+            steps.append(Step(id=move.id, text=step_text(move), due=parse_time(move.when) if timed else None,
+                              when="" if timed else move.when, ops=prepared, achieved=achieved, meet=move.meet,
+                              once=move.once if move.meet else None))
         if steps:
             ops.append(SetPlan(id=f"agenda:{a.npc}:plan", npc=a.npc, steps=steps, actor="director"))
     places = {loc.id for loc in w.m.locations}
@@ -245,6 +251,14 @@ def marked(w: World) -> list[Any]:
                          place=past.where if past.where in places else "", visibility="private", reactive=False,
                          actor="engine", witnesses=[x for x in past.known_by if x in npcs and x not in who]))
     return ops
+
+
+def step_text(move: Any) -> str:
+    """An agenda step as its NPC reads it: what it does, and what must really have happened first
+    when the condition language cannot say it (Move.only_if): the drink in his hand, not in the
+    investigators' bag; told by someone, not known to the players."""
+    only = move.only_if.strip().rstrip("。")
+    return f"{move.text.strip()}（只在{only}时才这样）" if only else move.text
 
 
 def effects(npc: str, does: str) -> tuple[list[dict[str, Any]], str]:
