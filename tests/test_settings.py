@@ -169,7 +169,7 @@ async def test_the_model_settings_take_a_key_and_test_the_connection(monkeypatch
         modal.query_one("#preset", OptionList).highlighted = 0  # deepseek
         await pilot.pause()
         keys = list(modal.query("#keys Input"))
-        assert [k.name for k in keys] == ["DEEPSEEK_API_KEY"] and "还没填" in keys[0].placeholder
+        assert [k.name for k in keys] == ["DEEPSEEK_API_KEY"] and "未填写" in keys[0].placeholder
         assert modal.query_one("#role-artist", Input).placeholder == "deepseek-v4-pro"  # the preset's own, in grey
         keys[0].value = "sk-test"
         modal.query_one("#ping", Button).press()
@@ -177,13 +177,13 @@ async def test_the_model_settings_take_a_key_and_test_the_connection(monkeypatch
         assert saved == {"DEEPSEEK_API_KEY": "sk-test"}
         assert sorted(pinged) == ["deepseek:deepseek-flash", "deepseek:deepseek-v4-pro"]  # each model once
         text = str(modal.query_one("#ping-result", Static).render())
-        assert "deepseek-flash" in text and "连通了" in text
+        assert "deepseek-flash" in text and "连接正常" in text
         modal.query_one("#role-vision", Input).value = "claude-haiku-5-5"  # 读图 on a model that sees
         await pilot.pause()
         assert [k.name for k in modal.query("#keys Input")] == ["DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY"]
         modal.query_one("#ping", Button).press()
         await pilot.pause(0.3)
-        assert "没装 Claude 组件" in str(modal.query_one("#ping-result", Static).render())
+        assert "未安装 Claude 组件" in str(modal.query_one("#ping-result", Static).render())
         assert modal.query_one("#install", Button).display  # one press installs it
         modal.query_one("#apply", Button).press()
         await pilot.pause()
@@ -202,8 +202,8 @@ def test_a_role_given_its_own_model_keeps_it_and_tests_say_what_is_wrong_in_plai
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.setattr(config, "load_env", lambda: None)
     # no key: the model fails as it is made, which used to take the game down with it
-    assert asyncio.run(config.ping_role(config.Role("langchain", "deepseek:deepseek-flash", None))) == "没有 DeepSeek 的 API Key"
-    assert config.plain(ModuleNotFoundError("No module named 'claude_agent_sdk'")) == "没装 Claude 组件"
+    assert asyncio.run(config.ping_role(config.Role("langchain", "deepseek:deepseek-flash", None))) == "缺少 DeepSeek API Key"
+    assert config.plain(ModuleNotFoundError("No module named 'claude_agent_sdk'")) == "未安装 Claude 组件"
 
 
 def test_a_player_without_a_usable_model_is_asked_even_with_old_saves(monkeypatch):

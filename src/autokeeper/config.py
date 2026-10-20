@@ -118,21 +118,21 @@ ROLE_EFFORT = {"world": "low", "plan": "low"}
 
 # The roles as the model settings list them: name, what it does. Only 读图 is sent pictures.
 ROLES_SHOWN: dict[str, tuple[str, str]] = {
-    "keeper": ("守秘人", "讲故事、描写场景"),
-    "plan": ("守秘人安排", "每轮先整理玩家的行动，安排在场的人"),
-    "arbiter": ("裁定", "判断要不要检定、用哪个技能"),
-    "npc": ("NPC", "扮演每个 NPC"),
-    "director": ("导演", "模组没写到的地方补戏"),
-    "world": ("世界推演", "重要 NPC 在幕后的决定"),
-    "investigator": ("AI 调查员", "AI 队友和观战"),
-    "intent": ("解析行动", "备用：守秘人安排出错时理解玩家的话"),
-    "summarizer": ("摘要", "把较早的经过压成摘要"),
-    "chronicler": ("记录员", "前情回顾、故事至今"),
-    "lore": ("知识库", "查模组资料"),
-    "vision": ("读图", "看手绘草图、模组插图、挑照片：要能看图的模型"),
-    "artist": ("美术", "画 ASCII 插图"),
-    "card": ("车卡", "把公众人物做成调查员"),
-    "importer": ("导入模组", "读 PDF、补写模组"),
+    "keeper": ("守秘人", "叙述与场景描写"),
+    "plan": ("守秘人安排", "整理玩家行动，安排在场人物"),
+    "arbiter": ("裁定", "判定是否检定及所用技能"),
+    "npc": ("NPC", "扮演 NPC"),
+    "director": ("导演", "补充模组未写明的情节"),
+    "world": ("世界推演", "重要 NPC 的幕后决定"),
+    "investigator": ("AI 调查员", "AI 队友与观战"),
+    "intent": ("解析行动", "守秘人安排失败时解析玩家输入"),
+    "summarizer": ("摘要", "压缩较早的记录"),
+    "chronicler": ("记录员", "前情回顾与调查进展"),
+    "lore": ("知识库", "检索模组资料"),
+    "vision": ("读图", "识别草图、模组插图与照片，需支持图像输入"),
+    "artist": ("美术", "绘制 ASCII 插图"),
+    "card": ("车卡", "依据公众人物创建调查员"),
+    "importer": ("导入模组", "读取 PDF 并补全模组"),
 }
 ROLE_ORDER = tuple(ROLES_SHOWN)
 SEES = ("vision",)  # the roles sent pictures
@@ -303,21 +303,21 @@ def plain(exc: BaseException) -> str:
     """What went wrong with a model, in a line a player can act on."""
     text = str(exc)
     if isinstance(exc, ModuleNotFoundError) and "claude_agent_sdk" in text:
-        return "没装 Claude 组件"
+        return "未安装 Claude 组件"
     if "API_KEY" in text or "api_key" in text:
-        return next((f"没有 {PROVIDER_NAMES[who]} 的 API Key" for who, names in PROVIDER_KEYS.items() for k in names if k in text),
-                    "没有填 API Key")
+        return next((f"缺少 {PROVIDER_NAMES[who]} API Key" for who, names in PROVIDER_KEYS.items() for k in names if k in text),
+                    "缺少 API Key")
     if isinstance(exc, FileNotFoundError):
-        return f"找不到程序：{Path(exc.filename or text).name}（先装好并登录）"
+        return f"未找到程序：{Path(exc.filename or text).name}（请先安装并登录）"
     status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
     if status in (401, 403):
-        return f"API Key 不对，或者没有权限（{status}）"
+        return f"API Key 无效或无权限（{status}）"
     if status == 402 or "Insufficient Balance" in text:
         return "账户余额不足"
     if status == 429:
-        return "请求太频繁或额度用完了（429）"
+        return "请求过于频繁或额度已用尽（429）"
     if isinstance(exc, TimeoutError):
-        return f"{PING_SECONDS} 秒内没有回应"
+        return f"{PING_SECONDS} 秒内无响应"
     first = text.splitlines()[0][:160] if text else ""
     return f"{type(exc).__name__}: {first}" if first else type(exc).__name__
 
@@ -426,7 +426,7 @@ async def install_claude() -> str:
     out, _ = await proc.communicate()
     if proc.returncode != 0 or not claude_ready():
         tail = out.decode("utf-8", "replace").strip().splitlines()[-1:] or [f"退出码 {proc.returncode}"]
-        return f"没装好：{tail[0][:160]}。可以退出游戏后运行：{' '.join(command[1:])}"
+        return f"安装失败：{tail[0][:160]}。可退出游戏后运行：{' '.join(command[1:])}"
     return ""
 
 

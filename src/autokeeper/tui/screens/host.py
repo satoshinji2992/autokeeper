@@ -202,11 +202,11 @@ class HostScreen(Screen):
         theme = self.app.current_theme
         who = self.plan.get(inv.id, "AI")
         colour = {"玩家": f"bold {theme.accent or 'yellow'}", "AI": f"bold {theme.secondary or 'cyan'}", "不上场": "dim"}[who]
-        label = {"玩家": "玩家来坐", "AI": "AI 扮演", "不上场": "不上场"}[who]
+        label = {"玩家": "玩家", "AI": "AI", "不上场": "不上场"}[who]
         t = Text()
         t.append(f"座位 {self.party.index(inv) + 1}  ", style="bold")
         t.append(label + " " * (10 - cell_len(label)), style=colour)
-        default = "角色" if self.slot or who == "AI" else "默认角色"
+        default = "调查员" if self.slot or who == "AI" else "默认调查员"
         t.append(f"\n  {default}：", style="dim")
         t.append(inv.name, style="dim strike" if who == "不上场" else "")
         t.append(f" · {inv.occupation} · {inv.age} 岁", style="dim")
@@ -221,8 +221,8 @@ class HostScreen(Screen):
             theme = self.app.current_theme
             for i in range(self.blanks):
                 t = Text(f"座位 {len(self.party) + i + 1}  ", style="bold")
-                t.append("玩家来坐" + " " * 2, style=f"bold {theme.accent or 'yellow'}")
-                t.append("\n  空座位：入座后选角色或车卡", style="dim")
+                t.append("玩家" + " " * 8, style=f"bold {theme.accent or 'yellow'}")
+                t.append("\n  空座位 · 入座后选择角色或车卡", style="dim")
                 ol.add_option(Option(t, id=f"blank-{i}"))
             if self.blanks < lan.BLANKS:
                 ol.add_option(Option(Text("＋ 加一个空座位", style="dim"), id="add-blank"))
@@ -315,7 +315,7 @@ class HostScreen(Screen):
         if self.slot:
             t.append(" · 继续已有存档")
         else:  # where a card of one's own is made: not here, in the lobby (the user, 2026-10-21: 在哪新建角色?)
-            t.append("\n开房间后在大厅入座，按 R 可以换成自己的角色或车卡。", style="dim")
+            t.append("\n开房间后在大厅入座，按 R 选择角色或车卡。", style="dim")
         self.query_one("#host-note", Static).update(t)
 
     # -- opening --------------------------------------------------------------------------------

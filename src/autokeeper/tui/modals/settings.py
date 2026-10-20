@@ -18,9 +18,9 @@ from .prefs import PrefsModal
 
 
 def model_choices() -> dict[str, str]:
-    return {"deepseek": "按用量付费的 API，要 DeepSeek 的 API Key",
-            "claude": "本机 Claude Code 的登录；也可以填 Anthropic 的 API Key",
-            "codex": "本机 Codex 的登录，用它的默认模型"} | {k: "" for k in config.PRESETS if k not in ("claude", "codex", "deepseek")}
+    return {"deepseek": "按量计费 API，需要 DeepSeek API Key",
+            "claude": "使用本机 Claude Code 登录，或 Anthropic API Key",
+            "codex": "使用本机 Codex 登录及其默认模型"} | {k: "" for k in config.PRESETS if k not in ("claude", "codex", "deepseek")}
 
 
 class SettingsModal(ModalScreen[None]):

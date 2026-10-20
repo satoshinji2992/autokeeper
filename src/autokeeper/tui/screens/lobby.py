@@ -304,11 +304,11 @@ class LobbyScreen(Screen):
         elif self.chosen and self.bring:
             mine = next((s for s in self.seats if s["investigator"] == self.chosen), {})
             if mine.get("blank"):
-                hint = "R 选角色或车卡 · Y 准备"
+                hint = "R 选择角色或车卡 · Y 准备"
             elif mine.get("ready"):
                 hint = "等待所有玩家准备 · Y 取消准备"
             else:
-                hint = "R 换角色或车卡 · Y 准备 · 全员准备后开始"
+                hint = "R 更换角色或车卡 · Y 准备 · 全员准备后开始"
         elif self.chosen:
             hint = "全员准备后自动开始；也可立即开始，空座由 AI 接替。"
         else:

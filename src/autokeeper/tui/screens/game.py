@@ -20,7 +20,8 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Input, Static
+from textual.widgets import Footer, Input, OptionList, Static
+from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
@@ -68,7 +69,7 @@ from .prelude import PreludeScreen
 from .saves import LoadScreen
 
 COMMANDS = (
-    ("输入模式", "Shift+Tab", "切换角色行动与向守秘人说明", "toggle_input_mode"),
+    ("输入模式", "Alt+空格", "切换角色行动与向守秘人说明；也可点击输入框顶边选择", "toggle_input_mode"),
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
@@ -113,10 +114,10 @@ class GameScreen(Screen):
         Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
         Binding("f12", "developer", "开发者模式", show=False),
-        # Shift+Tab: a key every terminal sends (a lone Alt reaches only a browser); while Tab is
-        # going through skill names it goes back one instead (the user, 2026-10-21).
-        Binding("shift+tab", "shift_tab", "角色／KP", key_display="Shift+Tab", priority=True),
+        # Alt+Space: terminals send nothing for a lone Alt, only a browser sees it (the user, 2026-10-21).
+        Binding("alt+space", "toggle_input_mode", "角色／KP", key_display="Alt+空格", priority=True),
         Binding("tab", "complete_skill(1)", "补全技能", show=False, priority=True),
+        Binding("shift+tab", "complete_skill(-1)", "上个技能", show=False, priority=True),
         Binding("ctrl+s", "save", "存档", show=False),
         Binding("ctrl+a", "art_style", "画法", show=False, priority=True),  # before the input box takes it as Home
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
@@ -164,6 +165,7 @@ class GameScreen(Screen):
                     yield Speaker()
                 yield StoryLog(id="story")
                 yield Static(id="status")
+                yield OptionList(id="picker")
                 yield Input(placeholder="输入行动或对话 · Esc 菜单", id="command",
                             suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
@@ -281,12 +283,45 @@ class GameScreen(Screen):
         # Bind the channel when submitted, so changing mode cannot change a queued line.
         return f"/kp {text}" if self.input_mode == "kp" and text and not text.startswith("/") else text
 
-    def action_shift_tab(self) -> None:
+    # -- the list over the input box: the input mode, or the skills a check command can take ------
+    @on(events.Click, "#command")
+    def _box_clicked(self, event: events.Click) -> None:
+        """The box's top edge (its title) lists the input modes; a check command (.ra 聆) lists its skills."""
         box = self.query_one("#command", Input)
-        if self._skill_choices and box.value == self._skill_value:
-            self.action_complete_skill(-1)
+        if event.y == 0:
+            self._pick("mode", [("rp", "角色行动"), ("kp", "对 KP 说明")], "rp" if self.input_mode == "rp" else "kp")
+        elif choices := skill_completions(box.value, self._viewer()):
+            self._pick("skill", [(c, c) for c in choices], box.value if box.value in choices else choices[0])
+
+    def _pick(self, kind: str, items: list[tuple[str, str]], current: str) -> None:
+        picker = self.query_one("#picker", OptionList)
+        picker.clear_options()
+        picker.add_options([Option(label, id=key) for key, label in items])
+        picker.highlighted = next((i for i, (key, _) in enumerate(items) if key == current), 0)
+        picker.border_title = "输入模式" if kind == "mode" else "技能"
+        picker.kind = kind  # type: ignore[attr-defined]
+        picker.display = True
+        picker.focus()
+
+    def _unpick(self) -> bool:
+        picker = self.query_one("#picker", OptionList)
+        if not picker.display:
+            return False
+        picker.display = False
+        self.query_one("#command", Input).focus()
+        return True
+
+    @on(OptionList.OptionSelected, "#picker")
+    def _picked(self, event: OptionList.OptionSelected) -> None:
+        key = event.option.id or ""
+        if getattr(event.option_list, "kind", "") == "mode":
+            if key != self.input_mode:
+                self.action_toggle_input_mode()
         else:
-            self.action_toggle_input_mode()
+            box = self.query_one("#command", Input)
+            box.value = self._skill_value = key
+            box.cursor_position = len(key)
+        self._unpick()
 
     def action_complete_skill(self, step: int = 1) -> None:
         box = self.query_one("#command", Input)
@@ -855,7 +890,7 @@ class GameScreen(Screen):
         self.app.notify(f"开发者网页：{url}", timeout=10)
 
     def action_menu(self) -> None:
-        if self.plays.skip():  # Esc first ends a plugin's show
+        if self.plays.skip() or self._unpick():  # Esc first ends a plugin's show, or closes the list over the box
             return
         first = "title" if self.state.ending else "continue"  # after the end, Esc and Enter go back to the title
         self.app.push_screen(GameMenu(self.menu_items(), first), self._menu_chosen)

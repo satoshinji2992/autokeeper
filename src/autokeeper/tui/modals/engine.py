@@ -50,6 +50,7 @@ class EngineModal(ModalScreen[dict | None]):
         self.in_game = in_game
         self.role_models = dict(config.ui_settings().get("role_models", {}) if role_models is None else role_models)
         self.typed: dict[str, str] = {}  # keys typed in, kept while the list of keys is redrawn
+        self._redrawing = asyncio.Lock()  # one redraw at a time: the old rows gone before the new come
 
     def compose(self) -> ComposeResult:
         with Vertical(id="engine-modal", classes="modal"):
@@ -64,8 +65,8 @@ class EngineModal(ModalScreen[dict | None]):
                 yield Button("取消", id="cancel")
 
     def _body(self) -> ComposeResult:
-        yield Static(Text("切换模型后保留本局记录。" if self.in_game else "先选用哪家，再按需要给某个分工单独换模型。", style="dim"))
-        yield Static("用哪家", classes="engine-head")
+        yield Static(Text("切换模型后保留本局记录。" if self.in_game else "选择模型方案；各分工可单独指定模型。", style="dim"))
+        yield Static("模型方案", classes="engine-head")
         options = [Option(Text.assemble((f"{name:<9}", "bold"), desc), id=name) for name, desc in self.presets.items()]
         yield OptionList(*options, id="preset")
         yield Static("API Key", classes="engine-head")
@@ -75,24 +76,24 @@ class EngineModal(ModalScreen[dict | None]):
             for name, note in MODE_NOTES.items():
                 yield RadioButton(Text.assemble((name.ljust(4, "　"), "bold"), "  ", note), value=name == self.mode, name=name)
         yield Static("分工", classes="engine-head")
-        yield Static(Text(f"留空就用上面那家的默认模型（灰字）。可以填：{EXAMPLES}。只有「读图」会收到图片，要选能看图的模型。",
+        yield Static(Text(f"留空使用方案默认模型（灰色）。示例：{EXAMPLES}。「读图」需选择支持图像输入的模型。",
                           style="dim"), classes="engine-note")
         with Horizontal(classes="role-row"):
-            yield Static(Text.assemble(("全部分工", "bold"), ("  下面单独填的优先", "dim")), classes="role-name")
-            yield Input(self.model, placeholder="不统一", id="model", classes="role-model")
+            yield Static(Text.assemble(("全部分工", "bold"), ("  单项设置优先", "dim")), classes="role-name")
+            yield Input(self.model, placeholder="未指定", id="model", classes="role-model")
         for name, (label, what) in config.ROLES_SHOWN.items():
             with Horizontal(classes="role-row"):
                 yield Static(Text.assemble((label, "bold"), (f"  {what}", "dim")), classes="role-name")
                 yield Input(self.role_models.get(name, ""), id=f"role-{name}", classes="role-model")
         with Horizontal(classes="role-row"):
-            yield Static(Text.assemble(("备用模型", "bold"), ("  主模型出错或超出预算时改用", "dim")), classes="role-name")
-            yield Input(self.fallback, placeholder="不用", id="fallback", classes="role-model")
+            yield Static(Text.assemble(("备用模型", "bold"), ("  主模型出错或超出预算时使用", "dim")), classes="role-name")
+            yield Input(self.fallback, placeholder="未指定", id="fallback", classes="role-model")
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         ol = self.query_one(OptionList)
         ol.highlighted = list(self.presets).index(self.preset) if self.preset in self.presets else 0
         self.query_one("#install", Button).display = False
-        self._refresh()
+        await self._refresh()
 
     # -- what is chosen -------------------------------------------------------------------------
     def _chosen(self) -> str:
@@ -116,39 +117,41 @@ class EngineModal(ModalScreen[dict | None]):
 
     @on(OptionList.OptionHighlighted, "#preset")
     @on(RadioSet.Changed)
-    def _preset_changed(self) -> None:
-        self._refresh()
+    async def _preset_changed(self) -> None:
+        await self._refresh()
 
     @on(Input.Changed, ".role-model")
-    def _model_changed(self) -> None:
-        self._keys()
+    async def _model_changed(self) -> None:
+        await self._keys()
 
-    def _refresh(self) -> None:
+    async def _refresh(self) -> None:
         """The roles' default models (the preset's, before anything typed) and the keys they need."""
         bare = self._config(self._choice() | {"model": "", "role_models": {}})
         if bare is not None:
             for name in config.ROLES_SHOWN:
                 self.query_one(f"#role-{name}", Input).placeholder = short(bare.role(name).model)
-        self._keys()
+        await self._keys()
 
-    def _keys(self) -> None:
+    async def _keys(self) -> None:
+        async with self._redrawing:
+            await self._redraw_keys()
+
+    async def _redraw_keys(self) -> None:
         box = self.query_one("#keys", Vertical)
         for field in box.query(Input):
             self.typed[field.name or ""] = field.value
-        box.remove_children()
+        await box.remove_children()
         cfg = self._config()
         needed = config.keys_needed(cfg) if cfg else []
         rows = []
         for name, whose, optional in needed:
-            note = "可选：不填就用本机 Claude Code 的登录" if optional else ("已经填过，留空不改" if os.environ.get(name) else "还没填")
-            rows.append(Horizontal(Static(Text.assemble((f"{whose} 的 API Key", "bold"), (f"  {name}", "dim")), classes="role-name"),
+            note = "可选，留空使用本机 Claude Code 登录" if optional else ("已保存，留空保持不变" if os.environ.get(name) else "未填写")
+            rows.append(Horizontal(Static(Text.assemble((f"{whose} API Key", "bold"), (f"  {name}", "dim")), classes="role-name"),
                                    Input(self.typed.get(name, ""), placeholder=note, password=True, name=name, classes="key"),
                                    classes="role-row"))
         if not needed:
-            used = {config.provider(cfg.role(r)) for r in config.ROLE_ORDER} if cfg else set()
-            rows.append(Static(Text("用的是本机登录的 Codex 或本地模型，不用填 Key。" if used <= {"codex", "ollama"}
-                                    else "这些模型不用在这里填 Key。", style="dim")))
-        box.mount_all(rows)
+            rows.append(Static(Text("当前模型无需 API Key。", style="dim")))
+        await box.mount_all(rows)
 
     def _save_keys(self) -> None:
         """Keys typed in: kept where every later start finds them (config.save_key)."""
@@ -171,7 +174,7 @@ class EngineModal(ModalScreen[dict | None]):
         result = self.query_one("#ping-result", Static)
         cfg = self._config(choice)
         if cfg is None:
-            result.update(Text("✗ 这个组合用不了，检查分工里填的模型。", style="red"))
+            result.update(Text("✗ 模型配置无效，请检查分工中的模型名称。", style="red"))
             return
         models = config.models_in_use(cfg)
         lines = {key: Text(f"… 正在测试 {short(key[1])}（{who(roles)}）", style="dim") for key, roles in models.items()}
@@ -184,11 +187,11 @@ class EngineModal(ModalScreen[dict | None]):
 
         async def one(key: tuple[str, str], roles: list[str]) -> None:
             if key[0] == "claude" and missing:
-                problem = "没装 Claude 组件：点「安装 Claude 组件」" if config.claude_install_command() else config.CLAUDE_EXTRA
+                problem = "未安装 Claude 组件" if config.claude_install_command() else config.CLAUDE_EXTRA
             else:
                 problem = await config.ping_role(cfg.role(roles[0]))
             label = f"{short(key[1])}（{who(roles)}）"
-            lines[key] = Text(f"✓ {label} 连通了", style="green") if not problem else Text(f"✗ {label}：{problem}", style="red")
+            lines[key] = Text(f"✓ {label} 连接正常", style="green") if not problem else Text(f"✗ {label}：{problem}", style="red")
             show()
 
         show()
@@ -202,14 +205,14 @@ class EngineModal(ModalScreen[dict | None]):
     async def _install(self) -> None:
         result, button = self.query_one("#ping-result", Static), self.query_one("#install", Button)
         button.disabled = True
-        result.update(Text("正在安装 Claude 组件（约 250 MB），可以先做别的设置…", style="dim"))
+        result.update(Text("正在安装 Claude 组件（约 250 MB）…", style="dim"))
         problem = await config.install_claude()
         button.disabled = False
         if problem:
             result.update(Text(f"✗ {problem}", style="red"))
             return
         button.display = False
-        result.update(Text("✓ Claude 组件装好了，可以再点「测试连接」。", style="green"))
+        result.update(Text("✓ Claude 组件已安装。", style="green"))
 
     # -- leaving --------------------------------------------------------------------------------
     @on(Button.Pressed, "#apply, #cancel")

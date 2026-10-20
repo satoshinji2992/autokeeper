@@ -457,18 +457,55 @@ async def test_alt_switches_input_mode_without_losing_the_draft_or_reclassifying
         monkeypatch.setattr(screen, "send_line", sent.append)
         box = screen.query_one("#command", Input)
         box.value = "我指的是刚才提到的书房。"
-        await pilot.press("shift+tab")
+        await pilot.press("alt+space")
         assert screen.input_mode == "kp" and box.value == "我指的是刚才提到的书房。"
         assert "对 KP" in str(box.border_title) and box.has_class("to-keeper")
         screen.busy = True
         await pilot.press("enter")
         assert screen.queued == "/kp 我指的是刚才提到的书房。" and not sent
-        await pilot.press("shift+tab")
+        await pilot.press("alt+space")
         assert screen.input_mode == "rp"
         screen._busy(False)
         assert await until(pilot, lambda: bool(sent))
         assert sent == ["/kp 我指的是刚才提到的书房。"]
         assert "角色行动" in str(box.border_title) and not box.has_class("to-keeper")
+
+
+@pytest.mark.usefixtures("canned")
+async def test_clicking_the_input_box_lists_the_modes_and_a_check_s_skills(module):
+    """The user, 2026-10-21: the mode and a check's skill can be picked from a list, by click."""
+    from textual.widgets import Input, OptionList
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = GameScreen(module, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.cast is not None and not screen.busy)
+        box, picker = screen.query_one("#command", Input), screen.query_one("#picker", OptionList)
+        await pilot.click("#command", offset=(4, 0))  # the top edge, where the mode is written
+        await pilot.pause()
+        assert picker.display and [picker.get_option_at_index(i).id for i in range(picker.option_count)] == ["rp", "kp"]
+        picker.highlighted = 1
+        await pilot.press("enter")
+        await pilot.pause()
+        assert screen.input_mode == "kp" and not picker.display and box.has_focus
+        box.value = ".ra 聆"
+        await pilot.click("#command", offset=(4, 1))
+        await pilot.pause()
+        assert picker.display and picker.get_option_at_index(0).id == ".ra 聆听"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert box.value == ".ra 聆听" and not picker.display
+        box.value = ".ra 聆"
+        await pilot.click("#command", offset=(4, 1))
+        await pilot.pause()
+        await pilot.press("escape")  # closes the list, not the game's menu
+        await pilot.pause()
+        assert not picker.display and app.screen is screen
 
 
 @pytest.mark.usefixtures("canned")

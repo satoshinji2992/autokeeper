@@ -167,6 +167,13 @@ Footer FooterKey.-command-palette {
     padding: 0 1;
     color: $secondary;
 }
+#picker {
+    display: none;
+    height: auto;
+    max-height: 10;
+    border: round $primary;
+    background: $surface;
+}
 #command {
     border: tall $primary-darken-1;
     background: $surface;
