@@ -314,8 +314,8 @@ def presence_rules(record: str, keeper: str) -> dict[str, list[str]]:
 
 def clue_slips(m: Module, found: list[str], told: str, public: str, *, missed: list[str]) -> dict[str, list[str]]:
     """`missed`: the clues this turn's failed check would have given. Returns the ones whose text the
-    telling says again (six-字 runs, two or more, not public before), and every clue behind a check or
-    an NPC's gate that nobody has found whose text it says ("early")."""
+    telling says again (_says; nothing public before counts), and every clue behind a check or an NPC's
+    gate that nobody has found whose text it says ("early")."""
     gated = {}
     for c in m.clues:
         if c.id in found:
@@ -323,8 +323,23 @@ def clue_slips(m: Module, found: list[str], told: str, public: str, *, missed: l
         gate = m.npc(c.npc).gates.get(c.id) if c.npc and any(n.id == c.npc for n in m.npcs) else None
         if c.check is not None or gate is not None or c.id in missed:
             gated[c.id] = c.text
-    slips = guard.leaks(told, gated, n=6, public=public) if told.strip() and gated else []
+    said = guard.grams(told, 6) - guard.grams(public, 6) if told.strip() else set()
+    slips = [cid for cid, text in gated.items() if _says(said, text)]
     return {"missed_told": [c for c in slips if c in missed], "early_told": slips}
+
+
+def _says(said: set[str], text: str, n: int = 6) -> bool:
+    """The telling says this text again: two separate runs of six 字 or more from it, or one of twelve.
+    One shared phrase (园艺手册、异国游记: what the shelves hold) is not the clue."""
+    plain = guard._STRIP.sub("", text)
+    hits = [i for i in range(max(0, len(plain) - n + 1)) if plain[i : i + n] in said]
+    runs: list[list[int]] = []
+    for i in hits:
+        if runs and i <= runs[-1][1] + 1:
+            runs[-1][1] = i
+        else:
+            runs.append([i, i])
+    return len(runs) >= 2 or any(b - a + n >= 12 for a, b in runs)
 
 
 def public_texts(m: Module) -> str:

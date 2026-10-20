@@ -65,6 +65,7 @@ def test_a_clue_told_without_being_found():
     assert control.clue_slips(m, [], told, gears, missed=["c_gears"])["early_told"] == []  # already public
     notice = next(c.text for c in m.clues if c.id == "c_notice")
     assert control.clue_slips(m, [], notice, "", missed=[])["early_told"] == []  # needs no check: anyone may tell it
+    assert control.clue_slips(m, [], "书架上摆着园艺手册、异国游记。", "", missed=[])["early_told"] == []  # one phrase is not the clue
     diary = next(c.text for c in m.clues if c.id == "c_diary")
     assert control.clue_slips(m, [], f"老守钟人：{diary}", "", missed=[])["early_told"] == ["c_diary"]  # behind his gate
 
