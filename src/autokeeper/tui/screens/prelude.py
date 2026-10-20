@@ -71,12 +71,13 @@ class PreludeScreen(ModalScreen[None]):
         if self.animations:
             picture.styles.opacity = 0.0
         picture.update(art)
-        view.scroll_to(y=0, animate=False)
+        view.scroll_to(y=0, animate=False, force=True)  # no scrollbar: moved by the drift alone
         if self.animations:
             picture.styles.animate("opacity", 1.0, duration=FADE)
         words = shot.text.strip()
-        if self.animations:  # the picture drifts down its length while the caption is read
-            view.scroll_to(y=max(0, len(art.split()) - rows), duration=len(words) * TYPE + HOLD, easing="linear")
+        if self.animations:  # the picture drifts down its length while the caption is read (once it is laid out)
+            drift = len(words) * TYPE + HOLD
+            view.call_after_refresh(lambda: view.scroll_to(y=view.max_scroll_y, duration=drift, easing="linear", force=True))
             for n in range(1, len(words) + 1):
                 if self._next.is_set():
                     break
