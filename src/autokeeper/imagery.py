@@ -694,11 +694,44 @@ def overlay(art: str, strokes: np.ndarray, under: np.ndarray, colour: np.ndarray
 
 
 @lru_cache(maxsize=32)
-def _framed(path: str, width: int, height: int, fill: bool, face: bool = False) -> Image.Image:
+def _framed(path: str, width: int, height: int, fill: bool, face: bool = False, people: tuple[str, ...] = ()) -> Image.Image:
     if face:
         return frame_blur(path, width, height)
     im = Image.open(picture_source(path)).convert("RGB")
-    return frame(im, width, height) if fill else im
+    im = frame(im, width, height) if fill else im
+    return cameos(im, people) if people else im
+
+
+CAMEOS = 3  # people a scene shows at most
+
+
+def cameos(im: Image.Image, faces: tuple[str, ...]) -> Image.Image:
+    """Who the investigators know is here, set into the bottom left of the scene as small oval
+    portraits in a thin gilt ring, the way old photographs were framed: someone walks in, a face
+    appears; they leave, it is gone. Pasted after the scene is cropped to the panel, so none is
+    cut off, and before the hour's light, so they are lit like the room."""
+    faces = faces[:CAMEOS]
+    out = im.copy()
+    tall = round(out.height * (0.36 if len(faces) < 3 else 0.3))  # an oval a little narrower than tall
+    if tall < 24:
+        return out
+    wide, gap = round(tall * 0.8), max(3, tall // 12)
+    ring = max(2, tall // 28)
+    x, y = gap * 2, out.height - tall - gap * 2
+    for path in faces:
+        try:
+            face = ImageOps.fit(Image.open(picture_source(path)).convert("RGB"), (wide, tall), Image.Resampling.LANCZOS, centering=(0.5, 0.32))
+        except OSError:
+            continue
+        big = Image.new("L", (wide * 4, tall * 4), 0)  # drawn large and shrunk: a smooth edge
+        ImageDraw.Draw(big).ellipse((0, 0, wide * 4 - 1, tall * 4 - 1), fill=255)
+        mask = big.resize((wide, tall), Image.Resampling.LANCZOS)
+        draw = ImageDraw.Draw(out)
+        draw.ellipse((x - ring - 1, y - ring - 1, x + wide + ring, y + tall + ring), fill=(28, 22, 16))  # shadow and backing
+        draw.ellipse((x - ring, y - ring, x + wide + ring - 1, y + tall + ring - 1), outline=(196, 160, 98), width=ring)
+        out.paste(face, (x, y), mask)
+        x += wide + gap + ring * 2
+    return out
 
 
 
@@ -728,28 +761,29 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
 
 
 @lru_cache(maxsize=32)
-def _strokes(path: str, width: int, height: int, cols: int, rows: int) -> np.ndarray:
+def _strokes(path: str, width: int, height: int, cols: int, rows: int, people: tuple[str, ...] = ()) -> np.ndarray:
     """A scene's strokes, found on the unlit picture: the same lines at every hour and in every
-    weather layer, only their colours change."""
-    return outlines(_framed(path, width, height, True), cols, rows)
+    weather layer, only their colours change. Its people's rings are lines too."""
+    return outlines(_framed(path, width, height, True, people=people), cols, rows)
 
 
-def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded: str = "") -> Image.Image:
-    return grade(light(_framed(path, width, height, fill), when), graded, when)
+def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded: str = "", people: tuple[str, ...] = ()) -> Image.Image:
+    return grade(light(_framed(path, width, height, fill, people=people), when), graded, when)
 
 
 @lru_cache(maxsize=256)
 def render(path: str, width: int, height: int, style: str = "photo", when: str = "", fill: bool = False, graded: str = "",
-           face: bool = False) -> str:  # fmt: skip
+           face: bool = False, people: tuple[str, ...] = ()) -> str:  # fmt: skip
     """ANSI text for a picture at the given character size, lit for `when`, optionally
     cropped to fill the panel and graded for the weather layer (cached per combination).
     Scenes (`fill`) in an outlined style get strokes along their lines, drawn into every
-    weather layer so fog veils them and the dark outside a torch beam swallows them."""
+    weather layer so fog veils them and the dark outside a torch beam swallows them.
+    `people`: portraits of who they know is in the scene now, set into it (cameos)."""
     if face:  # a portrait: whole, centred, blurred copy behind it, then coloured as asked
         return _chafa(grade(light(_framed(path, width, height, False, face=True), when), graded, when), width, height, style)
-    if not when and not fill and not graded:
+    if not when and not fill and not graded and not people:
         return _chafa(picture_source(path), width, height, style)
-    lit = light(_framed(path, width, height, fill), when)
+    lit = light(_framed(path, width, height, fill, people=people), when)
     im = grade(lit, graded, when)
     out = _chafa(im, width, height, style)
     if not (fill and style in OUTLINED and out):
@@ -758,12 +792,13 @@ def render(path: str, width: int, height: int, style: str = "photo", when: str =
     size = (max(map(len, lines)), len(lines))  # chafa keeps the aspect, so maybe a cell short
     under = np.asarray(im.resize(size, Image.Resampling.BOX))
     stroke = grade(Image.fromarray(ink(np.asarray(lit.resize(size, Image.Resampling.BOX)), when)), graded, when)
-    return overlay(out, _strokes(path, width, height, *size), under, np.asarray(stroke))
+    return overlay(out, _strokes(path, width, height, *size, people=people), under, np.asarray(stroke))
 
 
-def glitch(path: str, width: int, height: int, strength: float, style: str = "photo", when: str = "", fill: bool = False) -> str:
+def glitch(path: str, width: int, height: int, strength: float, style: str = "photo", when: str = "", fill: bool = False,
+           people: tuple[str, ...] = ()) -> str:  # fmt: skip
     """A glitched frame: RGB split and torn scanlines, rendered fresh (not cached)."""
-    im = _prepared(path, width, height, when, fill)
+    im = _prepared(path, width, height, when, fill, people=people)
     r, g, b = im.split()
     shift = max(1, int(im.width * 0.02 * strength))
     im = Image.merge("RGB", (r.transform(r.size, Image.Transform.AFFINE, (1, 0, shift, 0, 1, 0)), g, b.transform(b.size, Image.Transform.AFFINE, (1, 0, -shift, 0, 1, 0))))
