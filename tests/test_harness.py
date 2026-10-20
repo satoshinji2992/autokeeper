@@ -160,6 +160,26 @@ async def test_a_failing_model_hands_over_to_its_fallback(standby, monkeypatch):
     assert "ConnectionError" in rows[0]["error"]
 
 
+async def test_a_request_the_model_turns_down_goes_to_the_fallback_but_puts_no_one_on_hold(standby, monkeypatch):
+    """One schema it would not take (a 400) sent every role on the model to the fallback for five
+    minutes (2026-10-21): now only that call goes there; the model stays in use."""
+    notes: list[str] = []
+    monkeypatch.setattr(hm, "listeners", [notes.append])
+    Flaky.failures.append(BadRequestError("schema invalid"))
+    SCRIPT.extend(["备用模型接着讲"])
+    spec = Role("flaky", "flaky-model", "high", fallback="claude:scripted-model")
+    reply = await hm.make_model(spec, "守秘人", label="keeper").complete([{"role": "user", "content": "继续"}])
+    assert reply.text == "备用模型接着讲" and not hm._down and not notes
+
+
+def test_what_the_player_waits_on_gives_up_sooner(monkeypatch):
+    monkeypatch.delenv("AUTOKEEPER_TIMEOUT", raising=False)
+    assert hm.call_timeout("plan") == 120 and hm.call_timeout("npc:warden") == 120
+    assert hm.call_timeout("director") == hm.CALL_TIMEOUT  # long jobs keep the long one
+    monkeypatch.setenv("AUTOKEEPER_TIMEOUT", "30")
+    assert hm.call_timeout("plan") == hm.CALL_TIMEOUT  # set by hand: for every role
+
+
 async def test_no_fallback_once_the_player_has_read_part_of_a_reply(standby):
     broken = TimeoutError("stalled mid-stream")
     broken.after_text = True  # type: ignore[attr-defined]

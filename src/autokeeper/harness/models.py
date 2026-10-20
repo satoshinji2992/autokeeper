@@ -87,8 +87,29 @@ class Reply:
 ATTEMPTS = 3
 RETRY_WAIT = (1.0, 20.0)  # first back-off and cap in seconds; exponential with jitter
 CALL_TIMEOUT = float(os.environ.get("AUTOKEEPER_TIMEOUT", 600))
+# What the player waits on gives up sooner, then retries or goes to the fallback: at ten minutes a
+# try, a stuck keeper's plan could hold a turn for half an hour. Long jobs (imports, the director,
+# pictures) keep CALL_TIMEOUT; AUTOKEEPER_TIMEOUT, when set, applies to every role.
+WAITED_ON = {"plan": 120.0, "intent": 90.0, "arbiter": 120.0, "npc": 120.0, "keeper": 180.0, "investigator": 120.0}
+
+
+def call_timeout(label: str) -> float:
+    if os.environ.get("AUTOKEEPER_TIMEOUT"):
+        return CALL_TIMEOUT
+    return WAITED_ON.get(label.split(":")[0], CALL_TIMEOUT)
 TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 TRANSIENT_NAMES = ("Timeout", "RateLimit", "Connection", "InternalServer", "ServiceUnavailable", "Overloaded", "RemoteProtocol")
+
+
+def unavailable(exc: BaseException) -> bool:
+    """The model itself is out of reach (still failing after its retries, refusing the key, out of
+    credit, its program gone), not just this one request: every role on it switches to its fallback
+    for a while. A request the model turned down (a schema it would not take) puts it on hold for no one."""
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status in TRANSIENT_STATUS or status in (401, 402, 403)
+    return transient(exc) or type(exc).__name__ in ("ProcessError", "CLIConnectionError", "CLINotFoundError", "CodexError",
+                                                    "BudgetExceeded")
 
 
 def transient(exc: BaseException) -> bool:
@@ -240,9 +261,10 @@ class Model:
         except Exception as exc:
             if shown:  # the player already read part of this reply; starting over would repeat it
                 raise
-            _down[key] = time.monotonic() + COOLDOWN
-            for tell in listeners:
-                tell(f"{self.spec.model} 出错（{type(exc).__name__}），{self.label} 等角色改用备用模型 {self.fallback.spec.model}")
+            if unavailable(exc):
+                _down[key] = time.monotonic() + COOLDOWN
+                for tell in listeners:
+                    tell(f"{self.spec.model} 出错（{type(exc).__name__}），{self.label} 等角色改用备用模型 {self.fallback.spec.model}")
             return await self.fallback.complete(messages, schema=schema, images=images, on_delta=on_delta)
 
     async def _complete(self, messages: list[Msg], *, schema: dict | None, images: list[bytes] | None, on_delta: OnDelta) -> Reply:
@@ -266,7 +288,7 @@ class Model:
                     {"role": "user", "content": REPAIR.format(errors="\n".join(errors))},
                 ]
                 trace.progress("repair", input=fix, problems=errors, context=self._input_parts(fix, schema))
-                second = await self._attempt(fix, schema=schema, images=None, on_delta=None)
+                second = await self._attempt(fix, schema=schema, images=images, on_delta=None)  # a reading still needs its picture
                 reply.add(second)
                 reply.repairs += 1
                 if not problems(second.data, schema) or (reply.data is None and second.data is not None):
@@ -313,7 +335,7 @@ class Model:
             with attempt:
                 parts = self._guard_input(messages, schema)
                 trace.progress("attempt", attempt=attempt.retry_state.attempt_number, context=parts)
-                async with asyncio.timeout(CALL_TIMEOUT):
+                async with asyncio.timeout(call_timeout(self.label)):
                     reply = await self._call(messages, schema=schema, images=images, on_delta=delta if on_delta else None)
                 reply.retries = attempt.retry_state.attempt_number - 1
         return reply
