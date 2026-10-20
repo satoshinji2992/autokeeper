@@ -471,10 +471,11 @@ async def test_a_twice_invalid_npc_reply_leaves_no_partial_action_or_spoken_memo
         {"kind": "transfer", "key": "lantern", "text": "这盏提灯先拿去", "npc": npc.id,
          "item": "missing_lantern", "owner": state.investigator.id},
     ]}
-    SCRIPT.extend([invalid, invalid])
-    with pytest.raises(RuntimeError, match="未通过状态检查"):
-        await cast.npc(state, npc.id, "借我提灯。")
-    assert not state.item_owners and state.npc(npc.id).lines == 0
+    SCRIPT.extend([invalid, invalid, {"text": "提灯不在我这儿，你得另想办法。"}])
+    # Twice not doable: the third time it answers in words only, and the turn goes on (no /retry).
+    assert await cast.npc(state, npc.id, "借我提灯。") == "提灯不在我这儿，你得另想办法。"
+    assert "只用台词回应" in SEEN[-1]["messages"][-1]["content"]
+    assert not state.item_owners and state.npc(npc.id).lines == 1
     assert "提灯先拿去" not in json.dumps(state.transcripts, ensure_ascii=False)
     await cast.close()
 
@@ -544,8 +545,8 @@ async def test_a_failed_handover_cannot_be_retroactively_excused_as_intentional_
                                      "item": "missing_lantern", "owner": state.investigator.id}]},
         {"text": claim, "deceptions": [{"claim": claim, "intent": "其实没有交付提灯。", "motive": "故意欺骗调查员。"}]},
     ])
-    with pytest.raises(RuntimeError, match="未通过状态检查"):
-        await cast.npc(state, npc.id, "借我提灯。")
+    SCRIPT.append({"text": "提灯？我这儿可没有。"})
+    assert await cast.npc(state, npc.id, "借我提灯。") == "提灯？我这儿可没有。"
     assert not state.item_owners and not any(f.id.startswith("deception:") for f in state.record.facts.values())
     await cast.close()
 

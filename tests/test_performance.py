@@ -97,11 +97,9 @@ async def test_invalid_performance_actions_do_not_mutate_the_world(performance):
     state = game.state
     bad = {"text": "我把金条交给你。", "changes": [{"kind": "transfer", "key": "stage_gold", "text": "我把金条交给你。",
            "npc": "preacher", "item": "nonexistent_gold", "owner": state.investigator.id}]}
-    script.extend([bad, bad])
-    with pytest.raises(RuntimeError, match="未通过状态检查"):
-        await game.cast.perform(state, "preacher", "回应观众。", "")
+    script.extend([bad, bad, {"text": "诸位，金条不过是个比方。"}])
+    assert await game.cast.perform(state, "preacher", "回应观众。", "") == "诸位，金条不过是个比方。"
     assert "stage_gold" not in state.world and "nonexistent_gold" not in state.item_owners
-    assert not state.npc("preacher").met
 
 
 async def test_known_unsafe_legacy_performance_history_is_removed_before_the_next_call(performance):

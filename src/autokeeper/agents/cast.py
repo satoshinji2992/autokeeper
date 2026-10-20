@@ -862,8 +862,19 @@ class Cast:
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
                 problems.append("状态修正不能新增原回复没有声明的欺骗意图")
             if problems or guard.leaks(text, protected, public=public):
+                # Still not doable: once more, words only (nothing handed over, no company, no
+                # promise), so the turn goes on instead of stopping at /retry; nothing settles.
                 s.forget()
-                raise RuntimeError("角色回应未通过状态检查，本次回应尚未生效。输入 /retry 可继续。")
+                plain = ("\n\n（系统：这次只用台词回应，不交出任何东西、不答应同行、不立约定；"
+                         "做不到的事就说做不到，或者岔开话题。）")
+                reply = await self._send(key, s, state, message, extra=mood + plain)
+                dialogue = Dialogue(text=(reply.data.get("text", "") if isinstance(reply.data, dict) else reply.text) or "")
+                text = dialogue.text.strip()
+                if guard.leaks(text, protected, public=public):
+                    s.forget()
+                    text = guard.redact(text, protected, public=public)
+                text = text or "（他想了想，没有接这个话。）"
+                dialogue = Dialogue(text=text)
         if self.world is not None:  # no await between the final validation and the commit
             adapters.settle_changes(self.world, dialogue.changes, source=npc_id, spoken=text, private=private)
             if dialogue.accompany in destinations and text == dialogue.text.strip():
