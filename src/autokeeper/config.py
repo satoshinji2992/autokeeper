@@ -266,6 +266,65 @@ def save_key(name: str, value: str) -> Path:
     return target
 
 
+def remove_key(name: str) -> bool:
+    """Take NAME out of ~/.config/autokeeper/.env (and out of this process, when the value came
+    from there). True when the file had it."""
+    target = paths.USER_DIR / ".env"
+    if env_file(name) != target:
+        return False
+    lines = target.read_text(encoding="utf-8").splitlines()
+    kept = [line for line in lines if line.split("=", 1)[0].strip().removeprefix("export ").strip() != name]
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text("".join(f"{line}\n" for line in kept), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    os.environ.pop(name, None)
+    return True
+
+
+def env_file(name: str) -> Path | None:
+    """The .env file that gave this process NAME, or None when it came from the shell (or is unset)."""
+    from dotenv import dotenv_values
+
+    value = os.environ.get(name)
+    for f in (paths.USER_DIR / ".env", paths.ROOT / ".env"):
+        if value is not None and f.is_file() and dotenv_values(f).get(name) == value:
+            return f
+    return None
+
+
+def preset_overrides(preset: str) -> list[str]:
+    """What keeps roles off `preset` once it is the saved choice (as `autokeeper login` and the
+    settings save it), in words for the player. Empty when every role follows it."""
+    try:
+        cfg = load()
+    except ValueError as exc:
+        return [str(exc)]
+    off = [name for name, r in PRESETS[preset].items() if (cfg.role(name).backend, cfg.role(name).model) != (r.backend, r.model)]
+    if not off:
+        return []
+
+    def where(name: str) -> str:
+        f = env_file(name)
+        return f"{f} 里写着 " if f else "终端里设置了环境变量 "
+
+    reasons = []
+    if (value := os.environ.get("AUTOKEEPER_PRESET")) and value != preset:
+        reasons.append(f"{where('AUTOKEEPER_PRESET')}AUTOKEEPER_PRESET={value}，它优先于这里的选择")
+    if value := os.environ.get("AUTOKEEPER_MODEL"):
+        reasons.append(f"{where('AUTOKEEPER_MODEL')}AUTOKEEPER_MODEL={value}，所有角色都改用这个模型")
+    for f in (paths.USER_DIR / "config.toml", paths.ROOT / "autokeeper.toml"):
+        try:
+            roles = tomllib.loads(f.read_text(encoding="utf-8")).get("roles", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        named = [n for n, spec in roles.items() if isinstance(spec, dict) and {"model", "backend"} & set(spec)]
+        if named:
+            reasons.append(f"{f} 里的 {'、'.join(f'[roles.{n}]' for n in named)} 指定了别的模型")
+    return reasons or [f"{'、'.join(off)} 没有用 {preset}"]
+
+
 def ui_settings() -> dict:
     """UI choices persist separately; advanced TOML and secrets are never rewritten."""
     try:

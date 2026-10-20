@@ -22,11 +22,16 @@ DEFAULT_SYSTEM = "Cthulhu7th:ChineseTraditional"
 TABLE_SYSTEM = "Cthulhu7th"  # madness / phobia tables only exist in the Japanese system
 
 
+NODE_HINT = "没找到 Node.js：伤害、理智这些骰子要用它。装好 Node.js 18 或更新的版本（https://nodejs.org）后运行 autokeeper setup。"
+
+
 def _default_bridge() -> Path:
     env = os.environ.get("AUTOKEEPER_BCDICE_BRIDGE")
     if env:
         return Path(env)
-    return Path(__file__).resolve().parents[3] / "bridge" / "bcdice_bridge.mjs"
+    from .. import paths
+
+    return paths.bridge_script()
 
 
 class Level(IntEnum):
@@ -134,7 +139,9 @@ class BCDice:
     # -- process management -------------------------------------------------
     def _start(self) -> None:
         if not self.bridge.exists():
-            raise BCDiceError(f"找不到 BCDice 桥接脚本：{self.bridge}（先运行 autokeeper setup）")
+            raise BCDiceError(f"找不到掷骰程序：{self.bridge}（运行 autokeeper setup）")
+        if shutil.which(self.node) is None and not Path(self.node).is_file():
+            raise BCDiceError(NODE_HINT)
         proc = subprocess.Popen(
             [self.node, str(self.bridge)],
             stdin=subprocess.PIPE,
@@ -147,7 +154,7 @@ class BCDice:
         assert proc.stdout is not None
         hello = json.loads(proc.stdout.readline() or "{}")
         if not hello.get("ready"):
-            raise BCDiceError("BCDice 桥接进程没有正常启动（检查 bridge/node_modules 是否已安装）")
+            raise BCDiceError(f"掷骰程序没有启动：{self.bridge.parent / 'node_modules'} 里缺少组件（运行 autokeeper setup）")
         self.version = hello.get("version")
         self._proc = proc
 

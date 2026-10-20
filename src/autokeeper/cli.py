@@ -13,11 +13,13 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from . import artkit, config, paths
 
 app = typer.Typer(help="AutoKeeper：自动化 CoC 7 版中文跑团", no_args_is_help=False, add_completion=False)
 console = Console()
+notices = Console(stderr=True)  # before a command runs: stdout may be an MCP connection
 
 
 def _version(value: bool) -> None:
@@ -44,9 +46,55 @@ def main(
     for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv), ("MODE", mode)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
+    for line in paths.prepare():
+        notices.print(f"[dim]{line}[/]")
+    if ctx.invoked_subcommand != "migrate":
+        for root, counts in paths.adopt_known().items():
+            notices.print(f"从 {root} 找到以前的存档，复制了过来：{_counts(counts)}（原处没动）")
     paths.adopt_old()
     if ctx.invoked_subcommand is None:
         play()
+
+
+def _counts(counts: dict[str, int]) -> str:
+    return f"{'、'.join(counts)}，共 {sum(counts.values())} 个文件"
+
+
+def _module(module: Path) -> Path:
+    """A module folder from a path or an id (zhuishuren, or example for the format sample)."""
+    found = paths.find_module(module)
+    if found is None:
+        names = "、".join(p.name for p in paths.module_folders())
+        console.print(f"[red]找不到模组：{module}[/]（可用：{names}）")
+        raise typer.Exit(1)
+    return found
+
+
+def _install_bridge() -> bool:
+    """Install the dice bridge's npm packages beside it. False, with the reason on screen, when it could not."""
+    npm = shutil.which("npm")  # npm.cmd on Windows
+    if shutil.which("node") is None or npm is None:
+        from .rules.bcdice import NODE_HINT
+
+        notices.print(f"[yellow]{NODE_HINT}[/]")
+        return False
+    try:
+        subprocess.run([npm, "install", "--no-audit", "--no-fund", "--loglevel=error"], cwd=paths.BRIDGE, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        notices.print(f"[red]掷骰组件没装好（{exc}）。检查网络后运行 autokeeper setup 再试。[/]")
+        return False
+    return True
+
+
+def _dice_ready() -> None:
+    """Before a game: the dice bridge's packages installed, or one clear line on what is missing."""
+    if paths.bridge_ready() and shutil.which("node"):
+        return
+    if shutil.which("node") and shutil.which("npm"):
+        notices.print("第一次运行，安装掷骰组件（npm，大约半分钟）…")
+    if not _install_bridge() and sys.stdin.isatty():
+        with contextlib.suppress(EOFError, KeyboardInterrupt):
+            input("没有它也能进游戏，但掷不了伤害和理智。按回车继续…")
 
 
 @app.command()
@@ -57,9 +105,20 @@ def play(
     """打开终端界面。"""
     from .tui.app import AutoKeeperApp
 
+    _dice_ready()
+    if sys.stdin.isatty() and _new_player():
+        console.print("第一次运行，先选用哪家模型（以后运行 [bold]autokeeper login[/] 再换）：")
+        login()
     if intro and sys.stdout.isatty():
         _intro()
     _run(AutoKeeperApp(theme=theme))
+
+
+def _new_player() -> bool:
+    """No model chosen anywhere and no game played yet: `autokeeper` right after installing."""
+    chosen = any(os.environ.get(f"AUTOKEEPER_{name}") for name in ("PRESET", "MODEL"))
+    configured = (paths.USER_DIR / "config.toml").is_file() or "preset" in config.ui_settings()
+    return not chosen and not configured and not paths.save_index().exists()
 
 
 def _run(app) -> None:
@@ -152,13 +211,14 @@ def serve(port: int = 8000) -> None:
     """在浏览器里玩（textual-serve）。"""
     from .net.web import Page, command
 
+    _dice_ready()
     os.environ["COLORTERM"] = "truecolor"  # the browser's terminal shows 24-bit colour; the game it starts inherits this
     Page(command("play", "--no-intro"), port=port, title="AutoKeeper").serve()
 
 
 @app.command()
 def host(
-    module: Annotated[Path, typer.Argument(help="模组目录")] = Path("modules/zhuishuren"),
+    module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")] = Path("zhuishuren"),
     seats: Annotated[str, typer.Option(help="按预设调查员的顺序填“玩家 / AI / 不上场”，逗号分隔；多填的“玩家”是空座位，玩家自己带角色；默认第一位玩家，其余 AI")] = "",
     port: Annotated[int, typer.Option(help="网页端口：朋友用浏览器打开")] = 8000,
     hub_port: Annotated[int, typer.Option(help="联机端口：终端里 autokeeper join 连这个")] = 8765,
@@ -170,6 +230,8 @@ def host(
 
     from .net import room as lan
 
+    module = _module(module)
+    _dice_ready()
     plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
     try:
         state = lan.saved(load) if load else None
@@ -197,8 +259,8 @@ def host(
         for ip, label in rows:
             console.print(f"  [bold]{lan.page_url(ip, port)}[/]  {label}")
     target = lan.join_target(rows[0][0], room.port)
-    console.print(f"加入房间 [bold]{target}[/]（终端里 uv run autokeeper join {target}）")
-    console.print(f"房主自己要玩就另开一个终端，运行 [bold]uv run autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，进来的是房主，可以按 F9 换模型。")
+    console.print(f"加入房间 [bold]{target}[/]（终端里 autokeeper join {target}）")
+    console.print(f"房主自己要玩就另开一个终端，运行 [bold]autokeeper join {lan.join_target('127.0.0.1', room.port)}[/]，进来的是房主，可以按 F9 换模型。")
     if room.shared.get("hint"):
         console.print(f"[yellow]{room.shared['hint']}[/]")
     players = len(hub.sits)
@@ -231,40 +293,55 @@ def join(
 def setup(
     login_now: Annotated[bool, typer.Option("--login/--no-login", help="最后问用哪家模型、填 API Key（在终端里运行时）")] = True,
 ) -> None:
-    """安装 BCDice 桥接、编译模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/，最后选模型、填 API Key。"""
-    bridge = paths.ROOT / "bridge"
-    console.print("[bold]1/4[/] 安装 BCDice（npm）…")
-    npm = shutil.which("npm")  # npm.cmd on Windows
-    if npm is None:
-        console.print("    [yellow]没找到 npm：先装 Node.js 18+（https://nodejs.org），再运行 autokeeper setup。没有它，伤害和理智的骰子掷不了。[/]")
-    else:
-        subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
-    console.print("[bold]2/4[/] 编译模组 Skill 包…")
+    """安装掷骰组件（BCDice）、编译模组的 Skill 包，最后选模型、填 API Key。"""
     from .module.compiler import compile_module
     from .module.schema import Module
 
+    steps = 3 if paths.INSTALLED else 4
+    console.print(f"[bold]1/{steps}[/] 安装掷骰组件（BCDice，npm）…")
+    if _install_bridge():
+        console.print(f"    {paths.BRIDGE}")
+    console.print(f"[bold]2/{steps}[/] 编译模组 Skill 包…")
     for path in paths.module_folders():
         root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
-        console.print(f"    {root.relative_to(paths.ROOT)}")
-    console.print("[bold]3/4[/] 链接 .claude/skills 与 .agents/skills …")
-    for dot in (".claude", ".agents"):
-        target = paths.ROOT / dot / "skills"
-        target.parent.mkdir(exist_ok=True)
-        if target.is_dir():
-            continue
-        if target.exists() or target.is_symlink():  # e.g. a git symlink checked out as a text file on Windows
-            target.unlink()
-        try:
-            target.symlink_to(Path("..") / "skills", target_is_directory=True)
-        except OSError:  # Windows without developer mode: copy instead of linking
-            shutil.copytree(paths.SKILLS, target)
-            console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
+        console.print(f"    {root.relative_to(paths.ROOT) if root.is_relative_to(paths.ROOT) else root}")
+    if not paths.INSTALLED:  # Claude Code and Codex opened in the repository read the skills there
+        console.print(f"[bold]3/{steps}[/] 链接 .claude/skills 与 .agents/skills …")
+        for dot in (".claude", ".agents"):
+            target = paths.ROOT / dot / "skills"
+            target.parent.mkdir(exist_ok=True)
+            if target.is_symlink() or target.exists():
+                continue
+            try:
+                target.symlink_to(Path("..") / "skills", target_is_directory=True)
+                console.print(f"    {dot}/skills -> ../skills")
+            except OSError:  # Windows without developer mode: copy instead of linking
+                shutil.copytree(paths.SKILLS, target)
+                console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
     if login_now and sys.stdin.isatty():
-        console.print("[bold]4/4[/] 选模型")
+        console.print(f"[bold]{steps}/{steps}[/] 选模型")
         login()
     else:
-        console.print("[bold]4/4[/] 选模型：跳过（以后运行 [bold]autokeeper login[/]）")
+        console.print(f"[bold]{steps}/{steps}[/] 选模型：跳过（以后运行 [bold]autokeeper login[/]）")
     console.print("[green]完成。[/] 在任意目录运行 [bold]autokeeper[/] 开始游戏；[bold]autokeeper doctor[/] 检查环境。")
+
+
+@app.command()
+def migrate(
+    folder: Annotated[Path | None, typer.Argument(help="以前玩的源码目录（或它的 data 文件夹）；不写就找记得的源码目录和当前目录")] = None,
+) -> None:
+    """把以前在源码目录里玩的存档、角色卡、导入的模组复制过来。原处不动，已有的不覆盖。"""
+    sources = [folder] if folder is not None else paths.known_checkouts()
+    if not sources:
+        console.print("没找到以前的源码目录。写上它的位置再试，例如 [bold]autokeeper migrate ~/autokeeper[/]。")
+        raise typer.Exit(1)
+    for source in sources:
+        if not source.is_dir():
+            console.print(f"[red]没有这个文件夹：{source}[/]")
+            raise typer.Exit(1)
+        counts = paths.adopt(source)
+        console.print(f"{source}：" + (f"复制了 {_counts(counts)}" if counts else "没有要复制的新东西"))
+    console.print(f"现在的存档在 {paths.games()}")
 
 
 LOGINS = {  # what `login` offers: preset, the key it needs (empty: the local program's own login), how to get one
@@ -279,7 +356,7 @@ def login(
     preset: Annotated[str | None, typer.Argument(help="deepseek、claude 或 codex；不写就逐项问")] = None,
     key: Annotated[str | None, typer.Option(help="API Key；不写就提示输入（输入时不显示）")] = None,
 ) -> None:
-    """选用哪家模型，把 API Key 存进 ~/.config/autokeeper/.env（只有你能读），之后在任意目录启动都会用它。"""
+    """选用哪家模型，把 API Key 存进配置文件夹里的 .env（只有你能读），之后在任意目录启动都会用它。"""
     config.load_env()
     if preset is None:
         names = list(LOGINS)
@@ -314,7 +391,16 @@ def login(
             console.print(f"已存到 {target}")
         elif not os.environ.get(name):
             console.print(f"[yellow]没填 Key。以后运行 [bold]autokeeper login {preset}[/] 补上。[/]")
-    config.save_ui_settings({"preset": preset})
+    config.save_ui_settings({"preset": preset, "model": ""})  # a model picked in the game's settings would override every role
+    for name in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL"):
+        if (name == "AUTOKEEPER_MODEL" or os.environ.get(name) != preset) and config.remove_key(name):
+            console.print(f"删掉了 {paths.USER_DIR / '.env'} 里的 {name}，它会盖过这次的选择。")
+    if blocked := config.preset_overrides(preset):
+        console.print(f"[yellow]记下了用 {preset}，但下面的设置盖过了它，游戏实际还不会用 {preset}：[/]")
+        for reason in blocked:
+            console.print(f"  [yellow]·[/] {escape(reason)}")
+        console.print("去掉这些设置后再启动；[bold]autokeeper doctor[/] 能看到每个角色实际用的模型。")
+        return
     console.print(f"[green]以后默认用 {preset}。[/] 想试试通不通：[bold]autokeeper doctor --ping[/]")
 
 
@@ -347,6 +433,8 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     except Exception as exc:
         ok = False
         console.print(f"✗ BCDice: {exc}")
+    console.print(f"· 存档：{paths.games()}")
+    console.print(f"· 设置和 API Key：{paths.USER_DIR}")
     table = Table(title=f"角色路由（预设：{cfg.preset} · 模式：{cfg.mode}）", title_justify="left")
     for col in ("角色", "后端", "模型", "思考", "上下文窗口", "备用"):
         table.add_column(col)
@@ -354,6 +442,8 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
         r = cfg.role(name)
         table.add_row(name, r.backend, r.model, str(r.effort or "关"), str(r.window or "默认"), r.fallback or "—")
     console.print(table)
+    for reason in config.preset_overrides(cfg.preset):
+        console.print(f"· 没完全按预设 {cfg.preset}：{escape(reason)}")
     routes = {(r.backend, r.model) for r in cfg.roles.values()} | {config.route(r.fallback) for r in cfg.roles.values() if r.fallback}
     if any(b == "claude" for b, _ in routes):
         found = shutil.which("claude")
@@ -473,12 +563,14 @@ def trace_cmd(
 
 
 @app.command()
-def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
+def check(module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
     """校验模组：引用、可达性、线索冗余、ASCII 图和配色蒙版，再不用模型推演一遍：走不到的地方、到不了的结局、只靠一处的结论。"""
     from .module import graph
     from .module.importer import validate_all
     from .module.schema import Module
     from .module.simulate import playthrough
+
+    module = _module(module)
 
     m = Module.load(module)
     errors = asyncio.run(validate_all(module))
@@ -490,11 +582,13 @@ def check(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
 
 
 @app.command(name="compile")
-def compile_cmd(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
+def compile_cmd(module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
     """把模组编译成 Agent Skill 包（渐进式披露）。"""
     from .module.compiler import compile_module
     from .module.importer import validate_all
     from .module.schema import Module
+
+    module = _module(module)
 
     if issues := asyncio.run(validate_all(module)):
         for issue in issues:

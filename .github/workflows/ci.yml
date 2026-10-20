@@ -31,3 +31,33 @@ jobs:
         run: |
           for d in skills/*/; do uv run agentskills validate "$d"; done
           uv run autokeeper check src/autokeeper/module/example
+
+  package:
+    # The wheel a player installs: built, installed as a uv tool, played from a folder outside the repository.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: astral-sh/setup-uv@v5
+      - name: Build
+        run: uv build
+      - name: Install the wheel as a tool
+        shell: bash
+        run: |
+          uv tool install --python 3.12 dist/*.whl
+          uv tool dir --bin >> "$GITHUB_PATH"
+      - name: Play from another folder
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          autokeeper --version
+          autokeeper setup --no-login
+          autokeeper check zhuishuren
+          autokeeper doctor | tee doctor.txt || true
+          grep "✓ BCDice" doctor.txt

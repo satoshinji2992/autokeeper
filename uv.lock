@@ -262,10 +262,10 @@ wheels = [
 
 [[package]]
 name = "autokeeper"
-version = "0.0.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "claude-agent-sdk" },
     { name = "ddgs" },
     { name = "filelock" },
     { name = "httpx" },
@@ -296,6 +296,7 @@ dependencies = [
     { name = "python-slugify" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "skills-ref" },
     { name = "terminaltexteffects" },
     { name = "textual" },
     { name = "textual-canvas" },
@@ -309,9 +310,6 @@ art = [
     { name = "ascii-magic" },
     { name = "opencv-python-headless" },
 ]
-claude = [
-    { name = "claude-agent-sdk" },
-]
 graphrag = [
     { name = "fastembed" },
     { name = "lightrag-hku" },
@@ -322,14 +320,13 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
-    { name = "skills-ref" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9" },
     { name = "ascii-magic", marker = "extra == 'art'", specifier = ">=2.7.5" },
-    { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.2.168" },
+    { name = "claude-agent-sdk", specifier = ">=0.2.168" },
     { name = "ddgs", specifier = ">=9.16.0" },
     { name = "fastembed", marker = "extra == 'graphrag'", specifier = ">=0.6" },
     { name = "filelock", specifier = ">=3.15" },
@@ -363,6 +360,7 @@ requires-dist = [
     { name = "python-slugify", specifier = ">=9.1.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rich", specifier = ">=15.0.0" },
+    { name = "skills-ref", specifier = ">=0.1.1" },
     { name = "terminaltexteffects", specifier = ">=0.15.0" },
     { name = "textual", specifier = ">=6" },
     { name = "textual-canvas", specifier = ">=1.1.0" },
@@ -370,14 +368,13 @@ requires-dist = [
     { name = "typer", specifier = ">=0.27.3" },
     { name = "wcwidth", specifier = ">=0.9.2" },
 ]
-provides-extras = ["claude", "graphrag", "art"]
+provides-extras = ["art", "claude", "graphrag"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "ruff", specifier = ">=0.17.1" },
-    { name = "skills-ref", specifier = ">=0.1.1" },
 ]
 
 [[package]]

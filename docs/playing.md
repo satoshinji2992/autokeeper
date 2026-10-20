@@ -4,7 +4,17 @@
 
 ## 安装
 
-一行命令装好，会自动装 uv 和 Python，下载代码，装好 `autokeeper` 命令，最后问你用哪家模型、填 API Key：
+装好 [uv](https://docs.astral.sh/uv/getting-started/installation/) 以后一条命令：
+
+```bash
+uv tool install autokeeper
+```
+
+用 pipx 也行：`pipx install autokeeper`。PyPI 上还没有新版本时，可以直接从 GitHub 装：`uv tool install git+https://github.com/satoshinji2992/autokeeper`。
+
+装好以后在任意目录输入 `autokeeper` 开始。第一次运行会把掷骰组件装进你的用户目录，再问你用哪家模型、填 API Key。想提前做完这些，运行 `autokeeper setup`。
+
+还没装 uv，可以用一键脚本，它先装 uv，再装 autokeeper、运行 `setup`：
 
 ```bash
 # Linux、macOS、WSL
@@ -16,31 +26,50 @@ curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/inst
 irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
 ```
 
-装好以后在任意目录输入 `autokeeper` 开始。代码、模组和存档都在 `~/.local/share/autokeeper`（Windows 是 `%LOCALAPPDATA%\autokeeper`）；再运行一次安装命令就是更新。
+再运行一次脚本，或者 `uv tool upgrade autokeeper`（pipx 是 `pipx upgrade autokeeper`），就是更新。脚本可以用环境变量调整：`AUTOKEEPER_VERSION` 装指定版本（如 `0.0.3`），`AUTOKEEPER_EXTRAS=graphrag` 加上模组原文检索（约 1 GB，首次使用还会下载嵌入模型），`AUTOKEEPER_FROM=git` 和 `AUTOKEEPER_REF` 从 GitHub 的某个分支或标签装。不用脚本的话，原文检索这样加：`uv tool install "autokeeper[graphrag]"`。
 
-脚本自己装不了的是 git、Node.js 18+ 和 chafa。没有 git 装不了；没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
+另外要自己装的是 Node.js 18+ 和 chafa。没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
 
 | 系统 | 安装方式 |
 |---|---|
 | macOS | `brew install node chafa` |
-| Linux | `sudo apt install git nodejs npm chafa`（其他发行版用自己的包管理器）。检查 `node --version` 不低于 18。 |
-| Windows | `winget install Git.Git OpenJS.NodeJS.LTS`；用 Scoop 的话 `scoop install chafa`。建议在 Windows Terminal 中运行。 |
+| Linux | `sudo apt install nodejs npm chafa`（其他发行版用自己的包管理器）。检查 `node --version` 不低于 18。 |
+| Windows | `winget install OpenJS.NodeJS.LTS`；用 Scoop 的话 `scoop install chafa`。建议在 Windows Terminal 中运行。 |
 
-换模型、补 Key：`autokeeper login`（Key 存在 `~/.config/autokeeper/.env`，只有你能读）。检查环境：`autokeeper doctor`，加 `--ping` 给每个模型发一句话试试通不通。
+换模型、补 Key：`autokeeper login`。检查环境：`autokeeper doctor`，加 `--ping` 给每个模型发一句话试试通不通。
 
-安装脚本可以用环境变量调整：`AUTOKEEPER_DIR` 装到别处，`AUTOKEEPER_REF` 选分支或版本（如 `v0.0.2`），`AUTOKEEPER_EXTRAS` 选组件（默认 `claude,graphrag`；`graphrag` 是模组原文检索，约 1 GB，首次使用还会下载嵌入模型）。
+### 东西放在哪
+
+| | Linux、macOS | Windows |
+|---|---|---|
+| 设置和 API Key（`config.toml`、`.env`，只有你能读） | `~/.config/autokeeper/` | `%APPDATA%\autokeeper\` |
+| 存档、角色卡、导入的模组 | `~/.local/share/autokeeper/` | `%LOCALAPPDATA%\autokeeper\` |
+| 缓存（本地模型、知识库、图片，可以删） | `~/.cache/autokeeper/` | `%LOCALAPPDATA%\autokeeper\Cache\` |
+| 导出的角色卡 | `~/Documents/AutoKeeper/角色卡导出/` | 「文档」里的 `AutoKeeper\角色卡导出\` |
+
+Linux 和 macOS 上设置了 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HOME` 的话，按它们来。`autokeeper doctor` 会列出存档和设置的位置。想把所有东西放在一个文件夹里，设置 `AUTOKEEPER_HOME`，里面的布局和源码目录一样。
+
+### 以前从源码目录玩的存档
+
+从源码目录（`uv run autokeeper`）玩的存档在那个目录的 `data/` 里。装好的 `autokeeper` 第一次运行时，会把记得的源码目录和当前目录里的存档、角色卡、导入的模组复制过来；原处不动，已有的不覆盖。之后想再带一次，或者源码目录没被找到：
+
+```bash
+autokeeper migrate ~/autokeeper    # 换成你的源码目录
+```
+
+用过 0.0.3 测试版一键脚本的，旧的安装目录会被移到 `~/.local/share/autokeeper-old-install`（Windows 在 `%LOCALAPPDATA%` 里），里面的存档同样会复制过来，确认没问题后可以删掉它。
 
 ### 从源码开发
 
 ```bash
 git clone https://github.com/satoshinji2992/autokeeper
 cd autokeeper
-uv sync --extra claude --extra graphrag
+uv sync --extra graphrag
 uv run autokeeper setup
 uv run autokeeper doctor
 ```
 
-`setup` 会安装 BCDice 的 Node 桥接、编译模组、为 Claude Code / Codex 链接仓库里的 Skills，最后问用哪家模型。更新代码后运行 `uv sync --extra claude --extra graphrag`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
+从源码目录运行时，模组、存档和掷骰组件都在仓库里（`modules/`、`data/`、`bridge/`），和以前一样。`setup` 会安装 BCDice 的 Node 桥接、编译模组、为 Claude Code / Codex 链接仓库里的 Skills，最后问用哪家模型。更新代码后运行 `uv sync`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
 
 ## 模型与花费
 
@@ -61,12 +90,12 @@ set -gx DEEPSEEK_API_KEY "你的密钥"
 $env:DEEPSEEK_API_KEY = "你的密钥"
 ```
 
-使用 Anthropic API 时，变量名改成 `ANTHROPIC_API_KEY`。密钥也可以放进仓库中已忽略的 `.env`，不要提交到 Git。
+使用 Anthropic API 时，变量名改成 `ANTHROPIC_API_KEY`。`autokeeper login` 会把密钥存进设置文件夹里的 `.env`；从源码目录运行时，也可以放进仓库中已忽略的 `.env`，不要提交到 Git。
 
 ```bash
-uv run autokeeper --preset deepseek
-uv run autokeeper --model codex:default
-uv run autokeeper --model ollama:qwen3:14b --search none
+autokeeper --preset deepseek
+autokeeper --model codex:default
+autokeeper --model ollama:qwen3:14b --search none
 ```
 
 Codex 使用本机已登录的 CLI；Ollama 需要提前下载指定模型。标题页的「设置」和游戏中的 F9 可以换模型、备用模型、思考模式；导入界面还能为本次导入单独指定模型与读图模型。设置会保存。更细的分工写在 `~/.config/autokeeper/config.toml`，见[模型配置](harness.md#换模型)。
@@ -75,10 +104,10 @@ Codex 使用本机已登录的 CLI；Ollama 需要提前下载指定模型。标
 
 ```bash
 # 主模型不可用时，尝试本地备用模型
-uv run autokeeper --preset deepseek --fallback ollama:qwen3:14b
+autokeeper --preset deepseek --fallback ollama:qwen3:14b
 
 # 给模型调用设置 5 美元的估算预算
-uv run autokeeper --preset deepseek --budget 5
+autokeeper --preset deepseek --budget 5
 ```
 
 `--mode 高级剧情` 提高叙事相关角色的思考强度，`--mode 经济` 降低思考强度；效果和速度取决于模型。叙事已经开始输出时不会中途换到备用模型，避免重讲一遍；出错后用 `/retry` 继续。[重试与预算的实现](harness.md)里有详细说明。
@@ -89,7 +118,7 @@ uv run autokeeper --preset deepseek --budget 5
 
 ## 操作
 
-启动终端界面用 `uv run autokeeper`；浏览器界面用 `uv run autokeeper serve`。在标题页选「新的调查」，选模组、调查员和同伴即可开局。开局先播放一小段开局演出，介绍故事背景，按任意键看下一幕、Esc 跳过；演出结束后守秘人开始讲开场。用自然语言描述行动或直接说话，不必先记指令。需要检定时，界面会请你掷骰；守秘人讲的时候也能先输入行动，讲完自动交上。
+启动终端界面用 `autokeeper`；浏览器界面用 `autokeeper serve`（从源码目录运行时前面加 `uv run`）。在标题页选「新的调查」，选模组、调查员和同伴即可开局。开局先播放一小段开局演出，介绍故事背景，按任意键看下一幕、Esc 跳过；演出结束后守秘人开始讲开场。用自然语言描述行动或直接说话，不必先记指令。需要检定时，界面会请你掷骰；守秘人讲的时候也能先输入行动，讲完自动交上。
 
 | 按键 | 作用 |
 |---|---|
@@ -151,12 +180,12 @@ uv run autokeeper --preset deepseek --budget 5
 ### 命令行开房间
 
 ```bash
-uv run autokeeper host
-uv run autokeeper host modules/local/mymod --seats 玩家,玩家,AI
-uv run autokeeper join 192.168.1.5
+autokeeper host
+autokeeper host mymod --seats 玩家,玩家,AI
+autokeeper join 192.168.1.5
 ```
 
-默认模组是《追书人》，第一位调查员留给玩家，其余交给 AI。开房间的终端不占座，房主自己另开终端 `uv run autokeeper join 127.0.0.1`。如果程序显示了不同端口，请连显示的完整地址。续档用 `host --load 存档名`。
+默认模组是《追书人》，第一位调查员留给玩家，其余交给 AI。开房间的终端不占座，房主自己另开终端 `autokeeper join 127.0.0.1`。如果程序显示了不同端口，请连显示的完整地址。续档用 `host --load 存档名`。
 
 浏览器加入无需安装。终端加入要安装 AutoKeeper；图片由各自电脑上的 chafa 转成字符画，没装则只显示手绘图。
 
@@ -175,10 +204,10 @@ uv run autokeeper join 192.168.1.5
 标题页可以导入 PDF、Word、Markdown、文本或 ZIP，也可以使用命令行：
 
 ```bash
-uv run autokeeper import 模组.pdf --id mymod
-uv run autokeeper import 模组.pdf --model codex:default --vision-model codex:default
-uv run autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian
-uv run autokeeper autoplay modules/local/mymod --party 2
+autokeeper import 模组.pdf --id mymod
+autokeeper import 模组.pdf --model codex:default --vision-model codex:default
+autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpian
+autokeeper autoplay mymod --party 2
 ```
 
 `--model` 和 `--vision-model` 分别选择导入与读图模型。导入中途断了（断网、额度用完、关了窗口），同一个文件再导一次会接着做：原文不再重新提取，导入 Agent 先读自己上次记的笔记和写了一半的草稿，接着往下写；加 `--fresh` 从头来。导入结束会查找 Wikimedia Commons 上有授权的照片，转成字符画；加 `--no-photos` 跳过，之后可用 `autokeeper art fetch 模组目录` 补图。模组原图和手稿尽量保留；`generate` 从设定生成原创模组，`autoplay` 让 AI 调查员自动游玩，标题页「观战」也能看。
@@ -211,7 +240,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 
 **原图怎么看？** 手稿发现后可在窗口中读完整文字、看字符画预览，点击「查看原图」；F2 可以重看。尚未发现的内容不会提前解锁。
 
-**数据在哪里？** 仓库的 `data/games/` 是存档，`data/cards/` 是自己的调查员，`data/logs/` 是运行记录；配置在 `~/.config/autokeeper/`。备份时同时保存自己的导入模组 `modules/local/`。`data/cache/` 包括嵌入模型、知识库、预处理图片和大场景图，可以重建，但重新下载、建库或生成图片可能需要联网和额外额度；有想保留的生成图，清理前先备份。详见[文件位置](harness.md#文件放在哪里)。
+**数据在哪里？** 装好的 `autokeeper` 见上面的[东西放在哪](#东西放在哪)；从源码目录运行时，仓库的 `data/games/` 是存档，`data/cards/` 是自己的调查员，`data/logs/` 是运行记录，导入的模组在 `modules/local/`；设置都在 `~/.config/autokeeper/`。备份时连同导入的模组一起保存。缓存包括嵌入模型、知识库、预处理图片和大场景图，可以重建，但重新下载、建库或生成图片可能需要联网和额外额度；有想保留的生成图，清理前先备份。详见[文件位置](harness.md#文件放在哪里)。
 
 ## 命令索引
 
@@ -220,16 +249,17 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | 命令 | 用途 |
 |---|---|
 | `play` / `serve` | 终端 / 浏览器游玩 |
-| `host [DIR] [--seats 玩家,AI]` / `join 地址` | 开房间 / 加入房间 |
+| `host [模组] [--seats 玩家,AI]` / `join 地址` | 开房间 / 加入房间 |
 | `import FILE --id ID [--pages 8-19]` | 导入模组，可指定页码 |
 | `generate "灵感" --id ID` / `research DIR` | 生成模组 / 联网核实考据 |
-| `check DIR` / `compile DIR` | 校验模组 / 编译 Skill 包 |
+| `check 模组` / `compile 模组` | 校验模组 / 编译 Skill 包（模组写 id 或目录，如 `zhuishuren`） |
 | `index DIR` / `ask DIR "问题"` | 建原文知识库 / 提问 |
 | `art fetch DIR` / `art color DIR` / `art show DIR NAME` | 补照片 / 字符画上色 / 预览 |
 | `showcase 模组` | 提前准备大场景图 |
 | `autoplay DIR --party N` | AI 调查员自动跑团 |
 | `plugin list DIR` / `plugin test DIR` | 查看规则插件 / 运行插件测试 |
 | `setup` / `doctor [--ping]` | 准备环境 / 检查环境（可实测连接） |
+| `migrate [源码目录]` | 把以前从源码目录玩的存档复制过来 |
 | `login [deepseek\|claude\|codex] [--key KEY]` | 选模型、存 API Key |
 | `trace` | 查看模型用量与花费 |
 | `eval context` / `eval rhetoric` / `eval lore` / `eval style` | 运行评测 |

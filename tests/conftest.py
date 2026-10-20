@@ -18,6 +18,8 @@ def isolated_user_data(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path / "data")
     monkeypatch.setattr(paths, "DEV_OUTPUT", tmp_path / "dev-output")
     monkeypatch.setattr(paths, "OLD_SAVES", tmp_path / "old-saves")
+    monkeypatch.setattr(paths, "CACHE", None)  # under DATA, as in a checkout
+    monkeypatch.setattr(paths, "EXPORTS", None)
 
 
 @pytest.fixture(autouse=True)

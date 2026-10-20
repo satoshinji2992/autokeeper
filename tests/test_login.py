@@ -14,7 +14,7 @@ from autokeeper.cli import app
 
 @pytest.fixture(autouse=True)
 def no_keys(monkeypatch):
-    for name in ("DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY"):
+    for name in ("DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY", "AUTOKEEPER_MODEL", "AUTOKEEPER_PRESET", "AUTOKEEPER_MODE"):
         monkeypatch.setenv(name, "")  # so the key a test saves is taken away after it
         monkeypatch.delenv(name)
     monkeypatch.setattr("shutil.which", lambda name: None)  # no local claude or codex
@@ -53,3 +53,41 @@ def test_skipping_changes_nothing():
 def test_an_unknown_choice_is_refused():
     out = CliRunner().invoke(app, ["login", "gemini"])
     assert out.exit_code == 1 and "没有这个选项" in out.output
+
+
+def flat(out) -> str:
+    return out.output.replace("\n", "")
+
+
+def routes() -> set[tuple[str, str]]:
+    cfg = config.load()
+    return {(cfg.role(name).backend, cfg.role(name).model.split(":")[0]) for name in config.DEFAULT_ROLES}
+
+
+def test_switching_to_deepseek_drops_the_one_model_picked_in_the_settings():
+    config.save_ui_settings({"preset": "claude", "model": "claude-opus-5-5"})  # every role on Claude, from the game's 模型 dialog
+    out = CliRunner().invoke(app, ["login", "deepseek", "--key", "sk-x"])
+    assert out.exit_code == 0 and "以后默认用 deepseek" in flat(out)
+    assert routes() == {("langchain", "deepseek")}  # the keeper and every other role really go to DeepSeek
+
+
+def test_a_model_set_in_the_shell_is_named_instead_of_claiming_success(monkeypatch):
+    monkeypatch.setenv("AUTOKEEPER_MODEL", "claude-opus-5-5")
+    out = CliRunner().invoke(app, ["login", "deepseek", "--key", "sk-x"])
+    assert out.exit_code == 0
+    assert "以后默认用" not in flat(out) and "环境变量 AUTOKEEPER_MODEL=claude-opus-5-5" in flat(out)
+
+
+def test_a_model_left_in_the_key_file_is_taken_out():
+    config.save_key("AUTOKEEPER_MODEL", "claude-opus-5-5")
+    out = CliRunner().invoke(app, ["login", "deepseek", "--key", "sk-x"])
+    assert out.exit_code == 0 and "以后默认用 deepseek" in flat(out), out.output
+    assert "AUTOKEEPER_MODEL" not in (paths.USER_DIR / ".env").read_text(encoding="utf-8")
+    assert routes() == {("langchain", "deepseek")}
+
+
+def test_roles_pinned_in_the_config_file_are_named():
+    paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+    (paths.USER_DIR / "config.toml").write_text('[roles.keeper]\nmodel = "claude-sonnet-5-5"\nbackend = "claude"\n', encoding="utf-8")
+    out = CliRunner().invoke(app, ["login", "deepseek", "--key", "sk-x"])
+    assert "[roles.keeper]" in flat(out) and "以后默认用" not in flat(out)

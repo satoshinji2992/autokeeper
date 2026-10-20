@@ -17,7 +17,7 @@ from . import paths
 
 
 def path(name: str) -> Path:
-    return paths.SKILLS / name  # read at call time, so a relocated skills folder is honoured everywhere
+    return paths.skill(name)  # read at call time, so a relocated skills folder is honoured everywhere
 
 
 def body(name: str) -> str:
@@ -43,7 +43,7 @@ def wrap(name: str, text: str | None = None) -> str:
 
 def available(names: list[str] | None = None) -> str:
     """Level-1 metadata of the installed skills, in the format Anthropic recommends."""
-    dirs = [path(n) for n in names] if names else sorted(p for p in paths.SKILLS.iterdir() if (p / "SKILL.md").exists())
+    dirs = [path(n) for n in names] if names else paths.skill_folders()
     return skills_ref.to_prompt(dirs)
 
 
