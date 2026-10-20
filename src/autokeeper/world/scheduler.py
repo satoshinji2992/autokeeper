@@ -5,7 +5,8 @@ advance(world, brain, start, end) simulates the minutes between in chunks. In ea
     1. scheduled events that came due land (dropped, and their author woken, if what they read
        has changed since);
     2. promises whose time came are noted, and the important NPCs in them wake;
-    3. each important NPC: a due plan step whose condition holds lands its prepared
+    3. each important NPC (one passive, Agent.passive, only the first of these: its fixed steps
+       land, nothing wakes it): a due plan step whose condition holds lands its prepared
        ops with no model call while the plan is fresh; one without ops, or a stale plan, wakes
        the NPC; a step whose condition stays unmet past its grace is blocked, and wakes it;
        events it took part in or saw since it last decided wake it; a conversation with the
@@ -141,7 +142,7 @@ def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
     for npc, a in w.rec.agents.items():
         if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
             continue
-        if any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
+        if not a.passive and any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
             return True
         if any(s.status == "pending" and s.ops and (s.due is None or s.due <= w.now)
                and not agents.meeting(w, npc, s) and agents.holds(w, s.when) for s in a.plan):
@@ -205,7 +206,9 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             wakes: dict[str, tuple[str, str]] = {}  # npc -> (rank kind, reason)
 
             def wake(npc: str, kind: str, reason: str, wakes=wakes) -> None:
-                if npc in w.rec.agents and npc not in held and (npc not in wakes or RANK[kind] < RANK[wakes[npc][0]]):
+                a = w.rec.agents.get(npc)
+                if (a is not None and not a.passive and npc not in held
+                        and (npc not in wakes or RANK[kind] < RANK[wakes[npc][0]])):
                     wakes[npc] = (kind, reason)
 
             if chunk is None:
@@ -218,7 +221,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             if "ripple" not in chunk:
                 ripple: dict[str, tuple[str, str]] = {}
                 for npc, a in w.rec.agents.items():
-                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and npc not in held:
+                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and npc not in held and not a.passive:
                         _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)), since=chunk["before"])
                 chunk["ripple"] = ripple
                 save()

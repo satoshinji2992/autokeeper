@@ -229,7 +229,8 @@ def split_when(when: str) -> tuple[str, str]:
 
 def marked(w: World) -> list[Any]:
     """What the module sets going: the NPCs it marks important (Enlist), what they mean to do
-    (its agendas: Enlist with their goals, then SetPlan), and its foreshadowing (threads).
+    (its agendas: Enlist with their goals, then SetPlan; one it does not mark important only runs
+    the steps with a time or condition and an outcome, Agent.passive), and its foreshadowing (threads).
     Fixed ids, so a loaded game repeats none of it."""
     from ..engine.state import parse_time
     from .ops import OpenThread
@@ -240,6 +241,8 @@ def marked(w: World) -> list[Any]:
         if a.npc not in npcs:
             continue
         ops.append(Enlist(id=f"agenda:{a.npc}", npc=a.npc, goals=list(a.goals), actor="director"))
+        if not w.m.npc(a.npc).important:  # its fixed steps only, nobody to wake (a save from before gets it too)
+            ops.append(Enlist(id=f"agenda:{a.npc}:passive", npc=a.npc, passive=True, actor="director"))
         steps = []
         for move in a.steps:
             if move.ruling:  # what comes of the keeper's ruling is the keeper's (context.keeper_brief), not the NPC's to do
