@@ -177,7 +177,6 @@ class NetGameScreen(GameScreen):
             block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
             if e.kind == "keeper":  # told again, it is rewritten in place
                 self.told = block
-        self._input_label()
         self.ready = True
         while self.inbox:
             await self.on_msg(self.inbox.pop(0))
@@ -217,8 +216,6 @@ class NetGameScreen(GameScreen):
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
                            "观战模式下可使用全角括号发送场外消息。")
-        if self.input_mode == "kp":
-            self._input_label()
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""

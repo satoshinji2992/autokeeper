@@ -441,7 +441,9 @@ async def test_twenty_turns_of_daily_life_keep_promises_and_leave_the_case_open(
 
 
 @pytest.mark.usefixtures("canned")
-async def test_alt_switches_input_mode_without_losing_the_draft_or_reclassifying_queued_text(module, monkeypatch):
+async def test_a_kp_line_typed_ahead_stays_a_question_for_the_keeper(module, monkeypatch):
+    """No input modes (the user, 2026-10-21): /kp marks a line as for the keeper; the rest is read
+    as it comes (an action, or a question out of the game)."""
     from textual.widgets import Input
 
     from autokeeper.tui.app import AutoKeeperApp
@@ -456,24 +458,19 @@ async def test_alt_switches_input_mode_without_losing_the_draft_or_reclassifying
         sent = []
         monkeypatch.setattr(screen, "send_line", sent.append)
         box = screen.query_one("#command", Input)
-        box.value = "我指的是刚才提到的书房。"
-        await pilot.press("alt+space")
-        assert screen.input_mode == "kp" and box.value == "我指的是刚才提到的书房。"
-        assert "对 KP" in str(box.border_title) and box.has_class("to-keeper")
+        assert not box.border_title and "/kp" in box.placeholder
+        box.value = "/kp 我指的是刚才提到的书房。"
         screen.busy = True
         await pilot.press("enter")
         assert screen.queued == "/kp 我指的是刚才提到的书房。" and not sent
-        await pilot.press("alt+space")
-        assert screen.input_mode == "rp"
         screen._busy(False)
         assert await until(pilot, lambda: bool(sent))
         assert sent == ["/kp 我指的是刚才提到的书房。"]
-        assert "角色行动" in str(box.border_title) and not box.has_class("to-keeper")
 
 
 @pytest.mark.usefixtures("canned")
-async def test_clicking_the_input_box_lists_the_modes_and_a_check_s_skills(module):
-    """The user, 2026-10-21: the mode and a check's skill can be picked from a list, by click."""
+async def test_clicking_the_input_box_lists_a_check_s_skills(module):
+    """The user, 2026-10-21: a check's skill can be picked from a list, by click."""
     from textual.widgets import Input, OptionList
 
     from autokeeper.tui.app import AutoKeeperApp
@@ -486,13 +483,6 @@ async def test_clicking_the_input_box_lists_the_modes_and_a_check_s_skills(modul
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.cast is not None and not screen.busy)
         box, picker = screen.query_one("#command", Input), screen.query_one("#picker", OptionList)
-        await pilot.click("#command", offset=(4, 0))  # the top edge, where the mode is written
-        await pilot.pause()
-        assert picker.display and [picker.get_option_at_index(i).id for i in range(picker.option_count)] == ["rp", "kp"]
-        picker.highlighted = 1
-        await pilot.press("enter")
-        await pilot.pause()
-        assert screen.input_mode == "kp" and not picker.display and box.has_focus
         box.value = ".ra 聆"
         await pilot.click("#command", offset=(4, 1))
         await pilot.pause()

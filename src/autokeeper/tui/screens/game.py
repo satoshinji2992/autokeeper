@@ -69,7 +69,6 @@ from .prelude import PreludeScreen
 from .saves import LoadScreen
 
 COMMANDS = (
-    ("输入模式", "Alt+空格", "切换角色行动与向守秘人说明；也可点击输入框顶边选择", "toggle_input_mode"),
     ("帮助", "F1", "玩法说明和按键", "help"),
     ("线索本", "F2", "找到的线索和手稿", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
@@ -114,8 +113,6 @@ class GameScreen(Screen):
         Binding("f9", "engine", "换模型", show=False),
         Binding("f10", "debrief", "复盘", show=False),
         Binding("f12", "developer", "开发者模式", show=False),
-        # Alt+Space: terminals send nothing for a lone Alt, only a browser sees it (the user, 2026-10-21).
-        Binding("alt+space", "toggle_input_mode", "角色／KP", key_display="Alt+空格", priority=True),
         Binding("tab", "complete_skill(1)", "补全技能", show=False, priority=True),
         Binding("shift+tab", "complete_skill(-1)", "上个技能", show=False, priority=True),
         Binding("ctrl+s", "save", "存档", show=False),
@@ -146,7 +143,6 @@ class GameScreen(Screen):
         self._skill_choices: list[str] = []
         self._skill_at = -1
         self._skill_value = ""
-        self.input_mode = "rp"
         self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
         self._leave_when_ready: Callable[[], None] | None = None  # 讲完再走: where to go once the turn is over
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
@@ -166,7 +162,7 @@ class GameScreen(Screen):
                 yield StoryLog(id="story")
                 yield Static(id="status")
                 yield OptionList(id="picker")
-                yield Input(placeholder="输入行动或对话 · Esc 菜单", id="command",
+                yield Input(placeholder="输入行动或对话 · /kp 向守秘人提问 · Esc 菜单", id="command",
                             suggester=self._suggester(), select_on_focus=False)  # fmt: skip
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
@@ -178,7 +174,6 @@ class GameScreen(Screen):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self._input_label()
         self._start_history([e for e in self.state.log])
         cfg = config.load()
         self.engine_label = self._engine_label(cfg)
@@ -262,46 +257,24 @@ class GameScreen(Screen):
             event.stop()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if action == "toggle_input_mode":
-            return self.app.screen is self and not self.spectate
         if action == "complete_skill":
             box = self.query_one("#command", Input)
             return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
         return super().check_action(action, parameters)
 
-    def _input_label(self) -> None:
-        box = self.query_one("#command", Input)
-        box.border_title = "角色行动" if self.input_mode == "rp" else "对 KP 说明"
-        box.placeholder = "输入角色行动或对话 · Esc 菜单" if self.input_mode == "rp" else "向守秘人提问或澄清，不作为角色发言"
-        box.set_class(self.input_mode == "kp", "to-keeper")
-
-    def action_toggle_input_mode(self) -> None:
-        self.input_mode = "kp" if self.input_mode == "rp" else "rp"
-        self._input_label()
-
-    def _input_line(self, text: str) -> str:
-        # Bind the channel when submitted, so changing mode cannot change a queued line.
-        return f"/kp {text}" if self.input_mode == "kp" and text and not text.startswith("/") else text
-
-    # -- the list over the input box: the input mode, or the skills a check command can take ------
+    # -- the list over the input box: the skills a check command can take -----------------------
     @on(events.Click, "#command")
-    def _box_clicked(self, event: events.Click) -> None:
-        """The box's top edge (its title) lists the input modes; a check command (.ra 聆) lists its skills."""
+    def _box_clicked(self) -> None:
+        """A check command in the box (.ra 聆): its skills listed, to pick one by click."""
         box = self.query_one("#command", Input)
-        if event.y == 0:
-            self._pick("mode", [("rp", "角色行动"), ("kp", "对 KP 说明")], "rp" if self.input_mode == "rp" else "kp")
-        elif choices := skill_completions(box.value, self._viewer()):
-            self._pick("skill", [(c, c) for c in choices], box.value if box.value in choices else choices[0])
-
-    def _pick(self, kind: str, items: list[tuple[str, str]], current: str) -> None:
-        picker = self.query_one("#picker", OptionList)
-        picker.clear_options()
-        picker.add_options([Option(label, id=key) for key, label in items])
-        picker.highlighted = next((i for i, (key, _) in enumerate(items) if key == current), 0)
-        picker.border_title = "输入模式" if kind == "mode" else "技能"
-        picker.kind = kind  # type: ignore[attr-defined]
-        picker.display = True
-        picker.focus()
+        if choices := skill_completions(box.value, self._viewer()):
+            picker = self.query_one("#picker", OptionList)
+            picker.clear_options()
+            picker.add_options([Option(c, id=c) for c in choices])
+            picker.highlighted = choices.index(box.value) if box.value in choices else 0
+            picker.border_title = "技能"
+            picker.display = True
+            picker.focus()
 
     def _unpick(self) -> bool:
         picker = self.query_one("#picker", OptionList)
@@ -314,13 +287,9 @@ class GameScreen(Screen):
     @on(OptionList.OptionSelected, "#picker")
     def _picked(self, event: OptionList.OptionSelected) -> None:
         key = event.option.id or ""
-        if getattr(event.option_list, "kind", "") == "mode":
-            if key != self.input_mode:
-                self.action_toggle_input_mode()
-        else:
-            box = self.query_one("#command", Input)
-            box.value = self._skill_value = key
-            box.cursor_position = len(key)
+        box = self.query_one("#command", Input)
+        box.value = self._skill_value = key
+        box.cursor_position = len(key)
         self._unpick()
 
     def action_complete_skill(self, step: int = 1) -> None:
@@ -974,7 +943,7 @@ class GameScreen(Screen):
 
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
-        text = self._input_line(event.value.strip())
+        text = event.value.strip()
         if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
             if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
@@ -1017,9 +986,8 @@ class GameScreen(Screen):
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
         actions["/dev"] = self.action_developer
-        if cmd in ("/kp", "/rp"):
-            self.input_mode = "kp" if cmd == "/kp" else "rp"
-            self._input_label()
+        if cmd == "/kp":  # "/kp <话>" goes to the keeper (send_line); alone it has nothing to say
+            self.app.notify("在 /kp 后输入要对守秘人说的话。", timeout=4)
         elif cmd == "/retry":
             self.action_retry()
         elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop

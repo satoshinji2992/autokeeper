@@ -181,10 +181,6 @@ Footer FooterKey.-command-palette {
 #command:focus {
     border: tall $primary;
 }
-#command.to-keeper {
-    border: tall $secondary;
-    border-title-color: $secondary;
-}
 
 .entry {
     margin: 1 0 0 0;

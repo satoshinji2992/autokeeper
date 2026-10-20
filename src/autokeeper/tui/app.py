@@ -15,12 +15,9 @@ from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.widgets import Button, OptionList
 
 from .. import config, imagery
-from . import keys
 from .library import THEMES
 from .screens.game import COMMANDS, GameScreen
 from .screens.title import TitleScreen
-
-keys.install()
 
 
 class Menu(Provider):
