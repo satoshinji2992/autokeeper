@@ -450,9 +450,11 @@ class Game:
             return
         journal = self.state.pending_turn.setdefault("preparation", {"done": [], "lines": [], "notes": [], "blocked": False})
         present = {n.id for n in self.m.npcs_at(self.state.location)}
+        along = [] if action.alone else list(dict.fromkeys(action.companions))
         requests = [(f"before:{i}", step.npc, step.speech, step.private) for i, step in enumerate(action.before)]
-        if not action.alone:
-            requests += [(f"companion:{nid}", nid, "", False) for nid in dict.fromkeys(action.companions)]
+        said = {step.npc for step in action.before}  # the one spoken to hears the words with the invitation
+        requests += [(f"companion:{nid}", nid, action.speech if nid == action.npc and nid not in said else "", False) for nid in along]
+        place = self.m.location(action.destination).name
         for key, nid, speech, private in requests:
             if key in journal["done"]:
                 continue
@@ -464,10 +466,15 @@ class Game:
                 ent = self.world.rec.entities[nid]
                 agreed = ent.following == self.state.investigator.id and ent.follow_to == action.destination
                 if speech or not agreed:
-                    request = speech or f"请与我一同前往{self.m.location(action.destination).name}。"
+                    # Asked along: its answer says whether it comes (TravelDialogue), whatever else is said to it
+                    # ("我陪您去" and no accompany left the man behind, replay turn 82); asked once, not again after.
+                    asked = nid in along and not agreed
+                    request = speech or f"请与我一同前往{place}。"
+                    invite = f"调查员想请你一同前往{place}。" if asked and speech else ""
                     privacy = "这是避开其他人的私下交谈，其他人没有听到。" if private else ""
-                    message = f"（系统：出发前，调查员{self.state.investigator.name}对你说：「{request}」。{privacy}是否同意由你决定，不替其他人答应。）"
-                    line = await self.cast.npc(self.state, nid, message, travel=not bool(speech), private=private)
+                    message = (f"（系统：出发前，调查员{self.state.investigator.name}对你说：「{request}」。{invite}{privacy}"
+                               "是否同意由你决定，不替其他人答应。）")
+                    line = await self.cast.npc(self.state, nid, message, travel=asked or not speech, private=private)
                     journal["lines"].append([nid, line])
                     journal["notes"] += self._unsettled(nid)
                     self.state.npc(nid).met = True
@@ -476,9 +483,11 @@ class Game:
                     ent = self.world.rec.entities[nid]
                     actual = ent.following == self.state.investigator.id and ent.follow_to == action.destination
                     claimed = bool(getattr(self.cast, "claimed_accompany", lambda *_: False)(self.state, nid, action.destination))
-                    if not speech and not actual and not claimed:
+                    if asked and not actual and not claimed:
                         journal["notes"].append(f"{self.m.npc(nid).name}尚未同意同行，调查员尚未出发；由玩家决定是否独行或另作安排。")
                         journal["blocked"] = True
+                    if asked:
+                        journal["done"].append(f"companion:{nid}")  # answered here
                     journal["done"].append(key)
                     if self.checkpoint:
                         self.checkpoint()
@@ -1169,6 +1178,8 @@ class Game:
             await step("beat-flags", turn, lambda: self._flags(flagged, self._late, landed=True))
         if not await step("initial", turn, initial) or ruling is None:
             return
+        if ruling.missing:
+            await step("missing", turn, lambda: self._lacking(ruling, turn))
         inv = st.investigator
 
         def travel() -> dict:
@@ -1272,6 +1283,7 @@ class Game:
             def changes() -> None:
                 adapters.settle_changes(self.world, ruling.changes, source="arbiter")
                 self._equipment(ruling, turn)
+                self._takes(ruling, turn)
 
             await step("changes", turn, changes)
         await step("gain", turn, lambda: self._gain(found["gained"], turn, action))
@@ -1307,6 +1319,28 @@ class Game:
                        "text": item.description, "art": item.art}))
         if turn.checks or turn.earlier:
             await step("settle", turn, lambda: self._settle(st.checks[-1]))
+
+    def _lacking(self, ruling: Ruling, turn: Turn) -> None:
+        """What this action lacks and so cannot do (Ruling.missing) is kept for the turn: whoever
+        registers a thing this turn cannot bring it out (world/ops.Bring), and the keeper hears it."""
+        rec = self.world.rec
+        rec.missing, rec.missing_turn = [x.strip() for x in ruling.missing if x.strip()], self.state.turn
+        if rec.missing:
+            turn.notes.append(f"这次行动缺{'、'.join(rec.missing)}，做不成。")
+
+    def _takes(self, ruling: Ruling, turn: Turn) -> None:
+        """Everyday things the investigator takes up in this action (Ruling.takes), registered in
+        their hands (world/adapters.bring_ops); what cannot be, the keeper hears of."""
+        if not ruling.takes:
+            return
+        inv = self.state.investigator
+        found = adapters.bring_ops(self.world, ruling.takes, actor="arbiter", holder=inv.id)
+        problems = list(found.problems)
+        for op in found.ops:
+            result = self.world.apply(op)
+            problems += [] if result.ok else [f"{getattr(op, 'name', '') or op.item}：{'；'.join(result.problems)}"]
+        if problems:
+            turn.notes.append(f"【未落实】{inv.name}没拿到：{'；'.join(problems)}。叙述里照实交代，不写成已经拿到。")
 
     def _equipment(self, ruling: Ruling, turn: Turn) -> None:
         """Maintain important gear after success, without publishing a permanent inventory UI."""
