@@ -126,6 +126,47 @@ async def test_the_keeper_reads_the_backstage_of_where_the_party_stands(module, 
     assert game._brief() == ""
 
 
+async def test_a_rewritten_truth_reaches_the_keeper_however_many_rewrites_follow(module, fake):
+    from autokeeper.world import context as world_view
+    from autokeeper.world.ops import Rewrite
+
+    game, _, _ = make(module, fake, {}, location="tower")
+    w = game.world
+    done = w.apply(Rewrite(id="rw-truth", target="fact:truth", text="钟里藏的是一封信，多出的那一下是信在响。",
+                           reason="让信接上调查员的背景", actor="director"))
+    assert done.ok, done.problems
+    for i in range(6):  # more than the brief's list of recent rewrites
+        assert w.apply(Rewrite(id=f"rw-{i}", target="fact:npc:warden:secrets:0", text=f"他在钟里藏了第 {i} 样东西",
+                               reason="又改了一次", actor="director")).ok
+    brief = world_view.keeper_brief(w)
+    assert "真相：钟里藏的是一封信，多出的那一下是信在响。" in brief and "以这里为准" in brief  # the book's truth as it is now
+
+
+def test_a_check_rolled_again_under_new_conditions_is_a_new_attempt(module, fake):
+    from autokeeper.engine.state import CheckRecord
+
+    game, _, _ = make(module, fake, {}, location="tower")
+    st = game.state
+    st.turn = 1
+    st.add("player", "我查看齿轮间", who=st.investigator.name)
+    st.checks.append(CheckRecord(turn=1, who=st.investigator.id, at="tower", skill="侦查", target="齿轮间", text="侦查 失败",
+                                 passed=False, minutes=st.minutes, seen=game._seen(), bonus=0, difficulty="常规"))  # fmt: skip
+    st.turn = 2
+    look = Action(kind="investigate", summary="周衡再查看齿轮间", target="齿轮间")
+    assert game._no_reroll(look, Ruling(needs_roll=True, skill="侦查", difficulty="常规"), "tower").repeat  # the same roll again
+    lamp = Ruling(needs_roll=True, skill="侦查", difficulty="常规", bonus=1)  # the arbiter saw the lamp brought in
+    assert not game._no_reroll(look, lamp, "tower").repeat
+
+
+def test_a_plan_for_two_passing_travellers_is_not_turned_away(module):
+    from autokeeper.agents.director import Improv, NewNPC
+    from autokeeper.module import improv
+
+    plan = Improv(kind="展开", reason="车站来了两个旅客", npcs=[NewNPC(id="traveller_a", name="旅客甲", role="旅客", location="square"),
+                                                         NewNPC(id="traveller_b", name="旅客乙", role="旅客", location="square")])  # fmt: skip
+    assert not [p for p in improv.check(module, plan, at="square") if "最多" in p]
+
+
 async def run_turn(app, text, thread, resume=None):
     out, interrupts = [], []
     async for mode, chunk in app.astream({"input": text}, thread, stream_mode=["custom", "updates"]):

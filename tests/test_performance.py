@@ -72,12 +72,12 @@ async def test_authorized_local_experience_and_script_are_available_without_beco
     assert text == "查过旧报的记者，请听这一声钟。"
 
 
-async def test_performance_output_obeys_the_normal_secret_disclosure_guard(performance):
-    game, script, _ = performance
-    script.extend([{"text": game.m.truth}, {"text": "诸位，钟声会替我们作证。"}])
+async def test_a_performer_is_never_given_what_it_must_not_know(performance):
+    game, script, seen = performance
+    script.append({"text": "诸位，钟声会替我们作证。"})
     text = await game.cast.perform(game.state, "preacher", "作一段简短表演。", "")
-    assert text == "诸位，钟声会替我们作证。" and game.m.truth not in text
-    assert game.m.truth not in json.dumps(game.state.transcripts["npc:preacher"], ensure_ascii=False)
+    assert text == "诸位，钟声会替我们作证。" and len(seen) == 1  # its words as it gave them, one call
+    assert game.m.truth.strip() not in json.dumps(seen, ensure_ascii=False)  # the truth is not its to tell
     assert game.state.record.facts["truth"].revealed is None
 
 

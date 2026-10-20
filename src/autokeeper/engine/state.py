@@ -88,6 +88,8 @@ class CheckRecord(BaseModel):
     passed: bool
     minutes: int = 0  # game clock when the attempt was over
     seen: int = 0  # clues + flags + events by then: a higher count later means something new came up
+    bonus: int = 0  # bonus (+) or penalty (-) dice it was rolled with
+    difficulty: str = ""  # 常规 / 困难 / 极难 it was rolled at; "" in older saves
 
     @property
     def aim(self) -> str:

@@ -360,6 +360,23 @@ def keeper_brief(w: World) -> str:
     if soon:
         lines.append("接下来会发生的事（还没发生，别提前写成发生了）：\n" + "\n".join(
             f"- {format_time(t)} {text}" for t, text in sorted(soon)[:BRIEF_SOON]))
+    # The keeper's book (agents/cast._book) is written once, when its session opens: whatever of it
+    # was rewritten since stands here whole, as it is now, however many other rewrites came after.
+    book = [t for t in dict.fromkeys(r.target for r in rec.revisions)
+            if t in ("fact:truth",) or t.startswith(("fact:conclusion:", "event:past:"))]
+    if book:
+        rows = []
+        for target in book:
+            kind, _, ident = target.partition(":")
+            if kind == "fact":
+                f = rec.facts.get(ident)
+                label = "真相" if ident == "truth" else f"结论 {ident.removeprefix('conclusion:')}"
+                now = "（已撤回，没有这回事）" if f is None or f.retracted or not f.text.strip() else f.text.strip()
+            else:
+                e = rec.event(ident)
+                label, now = "前史", "（已撤回，没有这回事）" if e is None or not e.text.strip() else e.text.strip()
+            rows.append(f"- {label}：{now}")
+        lines.append("底牌里改过的（以这里为准，代替开头资料里的同一条）：\n" + "\n".join(rows))
     if rec.revisions:
         lines.append("改写过的设定（以改写后的为准）：\n" + "\n".join(
             f"- {_clip(r.old, 60)} → {_clip(r.new, 120)}" for r in rec.revisions[-5:]))

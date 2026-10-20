@@ -15,10 +15,13 @@ from typing import Any
 from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module, Showcase
 
 DIRECTED = 6  # plugins the director may write in one game; upgrading one of them is always fine
-LIMITS = {  # npcs, locations, clues, events, endings
-    "开局改编": (2, 1, 3, 3, 1),
-    "default": (1, 1, 2, 1, 1),
+# npcs, locations, clues, events, endings. The director's prompt asks for small plans (agents/
+# director.py: 方案要小); these only stop a runaway one, never a plan for two passing travellers.
+LIMITS = {
+    "开局改编": (6, 3, 8, 8, 3),
+    "default": (4, 3, 5, 4, 2),
 }
+ITEMS = 6  # new things a plan may register
 
 
 @dataclass
@@ -54,8 +57,8 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
     for name, items, cap in zip(("NPC", "地点", "线索", "事件", "结局"), (plan.npcs, plan.locations, plan.clues, plan.events, plan.endings), limit, strict=True):
         if len(items) > cap:
             problems.append(f"新{name}最多 {cap} 个，这次有 {len(items)} 个")
-    if len(plan.items) > 3:
-        problems.append("新物件最多 3 件")
+    if len(plan.items) > ITEMS:
+        problems.append(f"新物件最多 {ITEMS} 件")
     taken = {x.id for group in (m.locations, m.npcs, m.clues, m.events, m.endings, m.items) for x in group}
     new_ids = [x.id for group in (plan.locations, plan.npcs, plan.clues, plan.events, plan.endings, plan.items) for x in group]
     for i in new_ids:

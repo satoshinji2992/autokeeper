@@ -481,7 +481,8 @@ class Game:
     def _no_reroll(self, action: Action, ruling: Ruling, at: str) -> Ruling:
         """CoC does not repeat a check: a failure may be pushed once, not rolled again while
         nothing has changed. The arbiter sees the recent checks and marks a repeat; the engine
-        catches the plain re-roll even when the arbiter does not."""
+        catches the plain re-roll even when the arbiter does not, but never overrules an arbiter
+        that rolls it under other conditions (a lamp brought for a bonus die)."""
         earlier = self._earlier(action, ruling, at)
         if earlier is not None:
             return ruling.model_copy(update={"needs_roll": False, "repeat": True, "skill": earlier.skill})
@@ -504,7 +505,9 @@ class Game:
             return None
         same = (last.turn, last.at, last.skill, last.aim) == (self._acted_before(), at, skill, _aim(action))
         quiet = last.seen == self._seen() and st.minutes - last.minutes < RECHECK_AFTER
-        return last if same and quiet else None
+        # The arbiter judges what changed: more bonus dice or another difficulty is another attempt.
+        changed = ruling.bonus > last.bonus or (bool(last.difficulty) and ruling.difficulty != last.difficulty)
+        return last if same and quiet and not changed else None
 
     def _acted_before(self) -> int:
         """The turn of the acting investigator's previous action (0 if none is on record):
@@ -524,6 +527,7 @@ class Game:
         st.checks.append(CheckRecord(
             turn=st.turn, who=st.investigator.id, at=st.location, skill=check.name, npc=action.npc,
             target=action.target.strip(), text=check.describe(), passed=check.passed, minutes=st.minutes,
+            bonus=check.bonus, difficulty=next((zh for zh, level in DIFFICULTY_ZH.items() if level == check.difficulty), ""),
         ))  # fmt: skip
         del st.checks[:-KEEP_CHECKS]
 

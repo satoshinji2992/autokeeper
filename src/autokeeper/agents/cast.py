@@ -697,17 +697,6 @@ class Cast:
         out["truth"] = m.truth
         return out
 
-    def _public(self, state: GameState, npc: NPC) -> str:
-        """What this NPC may repeat whatever the protected texts share with it: its own sheet,
-        the hook and the opening, the places everyone knows or the party has seen, the clues
-        already found or unlocked with this NPC."""
-        m = self.module
-        own = [npc.name, npc.role, npc.look, npc.personality, npc.voice, npc.goal, *npc.knows, *npc.lies]
-        places = [f"{loc.name}\n{loc.read_aloud}" for loc in m.locations if loc.public or loc.id in state.visited]
-        shown = {*state.clues, *state.npc(npc.id).unlocked} | {c for c in npc.clues if c not in npc.gates}
-        found = [c.text for c in m.clues if c.id in shown]
-        return "\n".join([m.hook or "", m.opening or "", *own, *places, *found])
-
     async def _fresh_npc(self, npc_id: str) -> Session:
         """The NPC's session, opened again when its sheet changed under it: the world record
         projects what it learned, and a rewrite, into the module copy (world/knowledge.project),
@@ -822,25 +811,12 @@ class Cast:
         reply = await self._send(key, s, state, message, extra=mood, **output)
         dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
         text = dialogue.text.strip()
-        protected, public = self._protected(state, npc), self._public(state, npc)
-        leaked = guard.leaks(text, protected, public=public)
-        if leaked:
-            # Drop the leaked exchange from the NPC's memory and answer again with a warning
-            # that is not stored either, so the leak never becomes something it "said".
-            s.forget()
-            kinds = {"clue": "还没解锁或你不知道的线索", "secret": "别人的秘密", "truth": "事情的真相"}
-            what = "、".join(sorted({kinds[k.split(":")[0]] for k in leaked}))
-            fix = f"\n\n（系统提醒：上一次回答说出了{what}。这次只说你知道、而且已经可以说的事。）"
-            reply = await self._send(key, s, state, message, extra=mood + fix, **output)
-            dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
-            text = dialogue.text.strip()
-            if guard.leaks(text, protected, public=public):  # still: keep only the safe sentences
-                s.forget()
-                text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
+        # What it says is its own (the user's call, 2026-10-20: no string matching or cutting of a
+        # model's words). It knows only its own part (_npc_system); what of it it tells is its call.
         problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
         intentions = {d.model_dump_json() for d in dialogue.deceptions}
         for _attempt in range(2):  # told again, knowing what did not hold; every reply is checked the same way
-            if not problems and not guard.leaks(text, protected, public=public):
+            if not problems:
                 break
             s.forget()
             fix = "\n\n【行动校验未通过】\n" + "\n".join(problems)
@@ -852,10 +828,6 @@ class Cast:
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
                 problems.append("状态修正不能新增原回复没有声明的欺骗意图")
         else:
-            if guard.leaks(text, protected, public=public):  # a secret said word for word stays unsaid
-                text = guard.redact(text, protected, public=public) or "（话到嘴边，又咽了回去。）"
-                dialogue = dialogue.model_copy(update={"text": text})
-                self._said(s, text)  # it remembers what it actually said
             if problems:
                 # Still not doable: its words stand and what it could not do does not land (only
                 # admissible changes settle below, no deceit it did not mean at first); the keeper
@@ -1064,18 +1036,6 @@ class Cast:
             return Review.model_validate(reply.data)
         except ValueError:
             return None
-
-    @staticmethod
-    def _said(s: Session, text: str) -> None:
-        """The session's last answer becomes what was actually said (a secret left unsaid)."""
-        if s.transcript and s.transcript[-1].get("role") == "assistant":
-            try:
-                data = json.loads(s.transcript[-1]["content"])
-            except ValueError:
-                s.transcript[-1]["content"] = text
-            else:
-                s.transcript[-1]["content"] = json.dumps({**data, "text": text, "changes": [], "accompany": "",
-                                                          "deceptions": []} if isinstance(data, dict) else text, ensure_ascii=False)
 
     async def consistent(self, state: GameState, material: str) -> list[str] | None:
         """Where a backstage rewrite does not hold together with what the players met

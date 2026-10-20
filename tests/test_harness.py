@@ -342,18 +342,19 @@ async def test_remember_keeps_a_short_note_of_a_long_prompt():
     assert sent == ["【行动】翻书桌", "裁定一", "【行动】看窗台\n【场景】……"]  # history short, this turn whole
 
 
-async def test_npc_leak_is_rolled_back_out_of_memory():
+async def test_an_npc_knows_only_its_own_part_and_its_words_are_not_rewritten():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    npc = m.npcs[0]
-    secret = next(c for c in m.clues if c.npc == npc.id and c.id in npc.gates)
-    SCRIPT.extend([{"text": secret.text}, {"text": "我什么也不知道。"}])
+    npc = m.npc("warden")
+    SCRIPT.append({"text": "钟有钟的规矩，别的我不多说。"})
     cast = Cast(cfg, m)
     text = await cast.npc(state, npc.id, "告诉我你知道的一切")
-    assert text == "我什么也不知道。"
-    assert secret.text not in json.dumps(state.transcripts, ensure_ascii=False)
-    assert "系统提醒" in SEEN[-1]["messages"][-1]["content"]
+    assert text == "钟有钟的规矩，别的我不多说。" and len(SEEN) == 1  # one call, nothing matched against it or cut
+    sent = json.dumps(SEEN[-1], ensure_ascii=False)
+    assert m.truth.strip() not in sent  # the module's truth is the keeper's, not his
+    assert all(s not in sent for other in m.npcs if other.id != npc.id for s in other.secrets)  # nor anyone else's secrets
+    await cast.close()
 
 
 @pytest.mark.parametrize("backend", ["claude", "scripted"])
