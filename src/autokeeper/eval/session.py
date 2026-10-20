@@ -345,8 +345,12 @@ def recheck(path: Path, *, out: Path | None = None) -> dict[str, Any]:
             hidden = side.get("hidden") or {}
             found = [c.id for c in m.clues if f"clue:{c.id}" not in hidden]
             ruling = side.get("ruling") if key == "replayed" else record[row["turn"]].get("ruling")
+            given = side.get("given")
+            if not isinstance(given, str):  # reports from before "paired" had the flag here: what the turn showed, less the NPCs' words
+                spoken = {x.partition("：")[2] for x in side.get("npc", [])}
+                given = "\n".join(line for line in side.get("shown", "").splitlines() if line not in spoken)
             side.update(control.ruled(m, side["record"], row["input"], side.get("keeper", ""), side.get("npc", []), found=found,
-                                      ruling=ruling, public=seen_before(then, row["turn"]) + "\n" + side.get("given", "")))
+                                      ruling=ruling, public=seen_before(then, row["turn"]) + "\n" + given))
     report["summary"] = summarize(report["rows"])
     target = out or Path(path)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -547,7 +551,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     hints = next((e["lines"] for e in shown if e.get("type") == "hints"), [])
                     row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
                     row["replayed"]["woke"] = next((e["lines"] for e in shown if e.get("type") == "woke"), [])
-                    row["replayed"]["given"] = pairable(paired.get(turn))
+                    row["replayed"]["paired"] = pairable(paired.get(turn))
                     row["replayed"]["control"] = next(({k: v for k, v in e.items() if k != "type"} for e in shown
                                                        if e.get("type") == "control"), {})
                 except Exception as exc:  # one turn that fails to replay is reported, the rest go on
