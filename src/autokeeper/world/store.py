@@ -102,8 +102,8 @@ class World:
         return e.id if e.kind == "location" else e.at
 
     def present(self, place: str) -> list[str]:
-        """NPCs at a place, alive."""
-        return [e.id for e in self.rec.entities.values() if e.kind == "npc" and e.at == place and e.status != "死亡"]
+        """NPCs at a place, alive and not gone missing."""
+        return [e.id for e in self.rec.entities.values() if e.kind == "npc" and e.at == place and e.status not in ("死亡", "失踪")]
 
     def agent(self, npc: str) -> Agent | None:
         return self.rec.agents.get(npc)

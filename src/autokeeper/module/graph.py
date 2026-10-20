@@ -144,6 +144,25 @@ class Issue:
         return f"[{'错误' if self.level == 'error' else '提醒'}] {self.text}"
 
 
+def _outcome(m: Module, npc: str, does: str) -> list[str]:
+    """What is wrong with an agenda step's outcome (Move.does): at:him:place, owner:item:holder,
+    flag:declared, gone:someone, joined by &."""
+    if not does.strip():
+        return []
+    if "|" in does or "!" in does:
+        return ["只用 & 连接，不写“或”和“不”"]
+    places, people, items = {x.id for x in m.locations}, {x.id for x in m.npcs}, {x.id for x in m.items}
+    out = []
+    for part in does.split("&"):
+        kind, _, rest = part.strip().partition(":")
+        a, _, b = rest.partition(":")
+        ok = {"at": a == npc and b in places, "owner": a in items and b in places | people | {"players"},
+              "flag": rest in m.flags, "gone": rest in people}.get(kind, False)
+        if not ok:
+            out.append(f"{part.strip()} 不对（at 只写他自己去哪；地点、物件、人物和标记要已经有）")
+    return out
+
+
 def audit(m: Module) -> list[Issue]:
     issues: list[Issue] = []
     def err(text: str) -> None:
@@ -280,6 +299,8 @@ def audit(m: Module) -> list[Issue]:
         for step in a.steps:
             if step.when.startswith("flag:") and step.when[5:] not in m.flags:
                 err(f"{a.npc} 的打算 {step.id} 依赖未声明的标记 {step.when[5:]}")
+            for problem in _outcome(m, a.npc, step.does):
+                err(f"{a.npc} 的打算 {step.id} 的结果 {problem}")
     if len(m.agendas) > 6:
         warn(f"写了 {len(m.agendas)} 份打算；每局最多 6 个重要 NPC，多出的不会自己行动")
     targets = concl | {e.id for e in m.events} | endings

@@ -37,6 +37,7 @@ from .ops import (
     Relate,
     Remember,
     Schedule,
+    SetFlag,
     SetPlan,
     Transfer,
 )
@@ -213,13 +214,47 @@ def marked(w: World) -> list[Any]:
         steps = []
         for move in a.steps:
             timed = re.fullmatch(r"D\d+ \d{1,2}:\d{2}", move.when.strip())
-            steps.append(Step(id=move.id, text=move.text, due=parse_time(move.when) if timed else None, when="" if timed else move.when))
+            prepared, achieved = effects(a.npc, move.does)  # what the module says it brings about: done with no model call
+            steps.append(Step(id=move.id, text=move.text, due=parse_time(move.when) if timed else None, when="" if timed else move.when,
+                              ops=prepared, achieved=achieved))
         if steps:
             ops.append(SetPlan(id=f"agenda:{a.npc}:plan", npc=a.npc, steps=steps, actor="director"))
     places = {loc.id for loc in w.m.locations}
     ops += [OpenThread(id=f"foreshadow:{f.id}", thread=f"foreshadow:{f.id}", thread_kind="foreshadow", title=f.hint[:40],
                        entities=[f.where] if f.where in places else [], actor="director") for f in w.m.foreshadow]  # fmt: skip
     return ops
+
+
+def effects(npc: str, does: str) -> tuple[list[dict[str, Any]], str]:
+    """An agenda step's outcome (Move.does) as the ops that bring it about (it goes somewhere,
+    hands something over, sets a story flag, someone is gone), and the condition that then holds
+    (Step.achieved). Only "|"-free outcomes count; the world still checks each op."""
+    ops: list[dict[str, Any]] = []
+    done: list[str] = []
+    if "|" in does:
+        return ops, ""
+    for kind, rest, negate in condition_atoms(does):
+        a, _, b = rest.partition(":")
+        if negate:
+            continue
+        if kind == "at" and a == npc and b:
+            ops.append({"kind": "move", "entity": npc, "to": b})
+        elif kind == "owner" and a and b:
+            ops.append({"kind": "transfer", "item": a, "to": b})
+        elif kind == "flag" and rest:
+            ops.append({"kind": "flag", "flag": rest})
+        elif kind == "gone" and rest:
+            ops.append({"kind": "condition", "entity": rest, "status": "失踪" if rest == npc else "死亡"})
+        else:
+            continue
+        done.append(f"{kind}:{rest}")
+    return ops, " & ".join(done)
+
+
+def sanctioned(w: World, npc: str) -> set[str]:
+    """Story flags the module's own agenda for this NPC brings about (Move.does): it may set those."""
+    return {rest for a in w.m.agendas if a.npc == npc for move in a.steps
+            for kind, rest, negate in condition_atoms(move.does) if kind == "flag" and not negate}
 
 
 # -- what an NPC can reach ---------------------------------------------------------------------
@@ -235,7 +270,8 @@ def places(w: World, npc: str) -> set[str]:
         out.add(n.location)
     if a := w.agent(npc):
         out |= set(a.places)
-        out |= {rest.partition(":")[2] for s in a.plan for kind, rest, _ in condition_atoms(s.when) if kind == "at"}
+        out |= {rest.partition(":")[2] for s in a.plan for kind, rest, _ in condition_atoms(f"{s.when} & {s.achieved}".strip(" &"))
+                if kind == "at"}  # where its plan waits for someone, or takes it
     locations = {e.id for e in w.rec.entities.values() if e.kind == "location"}
     out |= {x for f in knowledge.known(w.rec, npc) for x in f.about if x in locations}
     return out
@@ -314,6 +350,8 @@ def vet(w: World, npc: str, op: Any) -> list[str]:
         return [] if op.participants == [] or me in op.participants else [f"{name}只能安排自己要做的事"]
     if isinstance(op, Fulfil | Break):
         return []  # the op itself checks that it is a party
+    if isinstance(op, SetFlag):
+        return [] if op.flag in sanctioned(w, me) else [f"{name}不能改剧情标记 {op.flag}"]
     return [f"{name}不能做 {getattr(op, 'kind', '?')}"]
 
 
@@ -345,6 +383,8 @@ def condition_problems(w: World, when: str) -> list[str]:
             valid = a in who and b in w.rec.facts
         elif kind == "after":
             valid = rest.isdecimal()
+        elif kind == "gone":
+            valid = (e := w.rec.entities.get(rest)) is not None and e.kind == "npc"
         else:
             valid = False
         if not valid or any(c in rest for c in "()!"):
@@ -370,6 +410,8 @@ def holds(w: World, when: str) -> bool:
             ok = owner == b or (b == PLAYERS and any(i.id == owner for i in w.st.investigators))
         elif kind == "knows":
             ok = knowledge.sees(w.rec.facts[b], a)
+        elif kind == "gone":
+            ok = w.rec.entities[rest].status in ("死亡", "失踪")
         else:  # after: validated as a nonnegative integer
             ok = w.now >= int(rest)
         return ok != negate

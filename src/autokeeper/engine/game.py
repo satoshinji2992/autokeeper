@@ -890,7 +890,7 @@ class Game:
     def ready(self) -> bool:
         """A plan is finished backstage and can take the stage, or the world did something in
         front of the party while they read the last narration."""
-        lived = self._world_task is not None and self._world_task.done() and bool(self._late.world)
+        lived = self._world_task is not None and self._world_task.done() and bool(self._late.world or self._late.events)
         return lived or any(b.task.done() for b in self.backstage)
 
     async def interlude(self) -> Turn | None:
@@ -1121,7 +1121,9 @@ class Game:
 
         step = self._resolution_step
         self._dealing = self._engaged(action)
-        await step("beats", turn, lambda: self._play(self._late, self._dealing))
+        flagged = await step("beats", turn, lambda: self._play(self._late, self._dealing))
+        if flagged:
+            await step("beat-flags", turn, lambda: self._flags(flagged, self._late, landed=True))
         if not await step("initial", turn, initial) or ruling is None:
             return
         inv = st.investigator
@@ -1699,16 +1701,19 @@ class Game:
         if turn.clues:
             await step("clue-sheet", turn, lambda: self.emit({"type": "sheet"}))
 
-    async def _flags(self, flags: list[str], turn: Turn) -> None:
+    async def _flags(self, flags: list[str], turn: Turn, *, landed: bool = False) -> None:
+        """Set story flags, and what hangs on them happens. `landed`: the world already set them (an
+        agenda brought them about, world/agents.effects); only their consequences are left."""
         st, m = self.state, self.m
         step = self._resolution_step
         for flag in flags:
             key = f"/flag:{flag}"
-            if flag not in m.flags or (flag in st.flags and not self._resolution_pending(key)):
+            if flag not in m.flags or (flag in st.flags and not landed and not self._resolution_pending(key)):
                 continue
 
             def commit(flag=flag) -> None:
-                st.flags.append(flag)
+                if flag not in st.flags:
+                    st.flags.append(flag)
                 st.progress_at = st.turn
 
             async def settle(flag=flag) -> None:
@@ -1770,8 +1775,10 @@ class Game:
         if self.world_later and not turn.interlude:
             self._world_owed = True  # remember() starts it; the player does not wait for it
         else:
+            before = set(self.state.flags)
             await self._live(turn)
             self._play(turn, self._dealing)
+            await self._flags([f for f in self.state.flags if f not in before], turn, landed=True)
 
     def _engaged(self, action: Action | None) -> set[str]:
         """Who the investigators are dealing with in this action: a beat that would move them
@@ -1780,11 +1787,13 @@ class Game:
             return set()
         return {x for x in (action.npc, *(step.npc for step in action.before)) if x}
 
-    def _play(self, turn: Turn, engaged: set[str]) -> None:
+    def _play(self, turn: Turn, engaged: set[str]) -> list[str]:
         """Backstage work waiting for the stage plays now, and is told in this turn's narration
         (or the interlude). A beat that would take someone the investigators are dealing with out
-        of the scene waits for that exchange to end, HOLD_TURNS turns at most."""
+        of the scene waits for that exchange to end, HOLD_TURNS turns at most. Returns the story
+        flags the beats set, whose consequences are left to _flags."""
         w = self.world
+        before = set(self.state.flags)
         for beat in stage.waiting(w):
             if engaged & set(beat.leaving) and self.state.turn - beat.turn < stage.HOLD_TURNS:
                 continue
@@ -1793,6 +1802,7 @@ class Game:
             self._debug("world", {"phase": "beat", "id": beat.id, "status": beat.status, "problems": problems})
             if not problems:
                 turn.world += world_view.happened(w, since)
+        return [f for f in self.state.flags if f not in before]
 
     async def _world_settled(self) -> None:
         """The world's life after the last turn, finished before anything else happens."""
@@ -1806,8 +1816,11 @@ class Game:
         """The minutes the last turn took, lived by the rest of the world after it was told. What
         happened in front of the party waits in self._late for the next narration or an interlude."""
         late = Turn()
+        before = set(self.state.flags)
         try:
             await self._live(late, inline=False)
+            self._play(late, self._dealing)
+            await self._flags([f for f in self.state.flags if f not in before], late, landed=True)
         except asyncio.CancelledError:
             raise
         except CassetteError:
@@ -1815,8 +1828,8 @@ class Game:
         except Exception as exc:  # the world's own life is a bonus: a failure costs nobody a turn
             self._debug("world", {"phase": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]})
             return
-        self._play(late, self._dealing)
-        self._late.world += late.world
+        for attr in ("events", "sanity", "notes", "hints", "world"):
+            getattr(self._late, attr).extend(getattr(late, attr))
         if self.checkpoint:
             self.checkpoint()
 

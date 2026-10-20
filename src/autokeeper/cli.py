@@ -598,10 +598,20 @@ def upgrade(
     console.print(f"[bold]可玩度[/] {before.total} → {after.total} / 100")
     for name, (got, out_of, why) in after.parts.items():
         console.print(f"  {name} {got}/{out_of}  [dim]{why}[/]")
-    if found := playthrough(Module.load(path)).issues:
+    run = playthrough(Module.load(path))
+    if found := run.issues:
         console.print(f"[bold]推演[/]（不用模型，把能走的路都走一遍）{len(found)} 处")
         for line in found:
             console.print(f"  · {line}")
+    if run.drift.timeline or run.drift.endings:
+        from .engine.state import format_time
+
+        names = {n.id: n.name for n in Module.load(path).npcs}
+        console.print("[bold]没人插手时[/]（各人的打算按时间走一遍，不用模型）")
+        for d in run.drift.timeline[:12]:
+            console.print(f"  {format_time(d.t)} {names.get(d.npc, d.npc)}{d.text}")
+        for ending, t in run.drift.endings.items():
+            console.print(f"  {format_time(t)} 走到结局 {ending}")
     if review:
         found = asyncio.run(adapt.review(path))
         console.print(f"[bold]审读[/] {len(found.findings)} 条")

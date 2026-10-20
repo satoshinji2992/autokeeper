@@ -447,3 +447,25 @@ async def test_the_next_action_waits_for_the_worlds_turn_to_finish(module, fake)
     release.set()
     await parsing
     assert w.entity("warden").at == "square"  # his prepared step landed before the new action
+
+
+async def test_an_agenda_step_with_an_outcome_goes_ahead_with_no_model_and_its_flag_ends_the_game(module, fake):
+    from autokeeper.module.schema import Agenda, Move
+
+    module.agendas = [Agenda(npc="warden", goals=["守住秘密"], steps=[
+        Move(id="office", text="去报社打听那个记者", when="D1 14:30", does="at:warden:office"),
+        Move(id="stop", text="把钟停下", when="D1 15:00", does="flag:bell_stopped"),
+    ])]
+    game, _, _ = make(module, fake, {}, location="square")
+    asked: list = []
+    game.brain = Canned(lambda ask: asked.append(ask) or Scene(decisions=[]))  # type: ignore[assignment]
+    game.minds = scheduler.Budget(turn=2, skip=4)
+    plan = game.world.agent("warden").plan
+    assert [(s.ops, s.achieved) for s in plan] == [([{"kind": "move", "entity": "warden", "to": "office"}], "at:warden:office"),
+                                                   ([{"kind": "flag", "flag": "bell_stopped"}], "flag:bell_stopped")]
+    fake.queue_totals(3)  # the ending's sanity reward
+    turn = await game.resolve(WAIT, ruled(minutes=70))
+    assert game.world.place("warden") == "office" and "bell_stopped" in game.state.flags
+    assert [s.status for s in game.world.agent("warden").plan] == ["done", "done"]
+    assert not any("该做了" in a.reasons["warden"] for a in asked)  # no model was asked to carry the steps out
+    assert game.state.ending == "stopped" and turn.ending == "stopped"  # the clock ran out with no one stepping in

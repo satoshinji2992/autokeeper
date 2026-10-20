@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from autokeeper.module import simulate
 from autokeeper.module.schema import NPC, Clue, Ending, Event, Location, Module
 from autokeeper.module.simulate import playthrough, reach
 from autokeeper.paths import EXAMPLE
@@ -60,3 +61,33 @@ def test_a_conclusion_hanging_on_one_hidden_place_or_one_person(m):
     m.location("vault").public = False
     m.clues.append(Clue(id="c_word", title="守钟人的话", text="……", where="tower", npc="warden", points_to=["k_one"]))
     assert playthrough(m).fragile["k_one"] == []  # now another way in: the warden says it
+
+
+def test_the_world_with_no_one_stepping_in_is_played_forward():
+    from autokeeper.engine.state import parse_time
+    from autokeeper.module.schema import Agenda, Move
+
+    m = Module.load(EXAMPLE)
+    m.clue("c_notice").points_to = []  # the motive now rests on the warden's diary alone
+    m.agendas = [Agenda(npc="warden", goals=["守住秘密"], steps=[
+        Move(id="stop", text="把钟停下", when="D1 20:00", does="flag:bell_stopped"),
+        Move(id="flee", text="连夜离开小镇", when="D1 23:00", does="gone:warden"),
+    ])]
+    run = simulate.drift(m)
+    assert [d.step for d in run.timeline] == ["stop", "flee"]
+    assert run.endings == {"stopped": parse_time("D1 20:00"), "toll": parse_time("D1 22:00")}  # the clocks
+    t, why = run.lost["k_motive"]
+    assert t == parse_time("D1 23:00") and "连夜离开小镇" in why
+    assert "k_tower" not in run.lost  # the gears and the archive still tell it
+    assert any("k_motive" in issue and "没人插手时" in issue for issue in simulate.playthrough(m).issues)
+
+
+def test_an_agenda_outcome_names_what_the_module_has():
+    from autokeeper.module.graph import audit
+    from autokeeper.module.schema import Agenda, Move
+
+    m = Module.load(EXAMPLE)
+    m.agendas = [Agenda(npc="warden", steps=[Move(id="a", text="把布道者赶下钟楼", does="at:preacher:square"),
+                                             Move(id="b", text="烧掉日记", does="flag:no_such_flag | gone:warden")])]
+    errors = [str(i) for i in audit(m) if i.level == "error"]
+    assert any("a 的结果" in e for e in errors) and any("b 的结果" in e for e in errors)

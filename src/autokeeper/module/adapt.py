@@ -119,7 +119,9 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "relations": ("画出人物之间的冲突图：谁对谁怎样看（信任、恐惧、欠情、敌对、亲属、雇佣、爱慕……），多深（-100..100，负数是反过来），为什么。"
                   "写 6–14 条，先写会推动局面的：利益冲突、隐瞒、亏欠、旧怨。b 也可以写 players：他对外来调查员的态度。", Bonds),
     "agendas": ("挑 3–6 个最有自己打算的 NPC（标了“重要”的优先），写他们想要什么，以及没人插手时接下来会怎么做，每人 2–5 步。"
-                "when 写 'D1 23:00' 这样的时间，或条件 flag:标记、at:谁:地点。和原作的事件时间线对得上，不替原作的事件抢戏。", Agendas),
+                "when 写 'D1 23:00' 这样的时间，或条件 flag:标记、at:谁:地点。和原作的事件时间线对得上，不替原作的事件抢戏。"
+                "每步的 does 写做成以后实际成立的事（at:他自己:地点、owner:物件:持有者、flag:标记、gone:谁），游戏里到时直接照做；"
+                "原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
                    "端倪本身不说破真相，只让人觉得哪里不对。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
@@ -162,7 +164,7 @@ def wanted(m: Module, name: str) -> bool:
         from .simulate import playthrough
 
         run = playthrough(m)
-        return bool(run.lean) or any(run.fragile.values())
+        return bool(run.lean) or any(run.fragile.values()) or bool(run.drift.lost)
     if name == "endings":
         return len(m.endings) < 3
     return not getattr(m, name)
@@ -179,7 +181,13 @@ def _material(m: Module, name: str) -> str:
             got = [c for c in v if c in run.reach.clues]
             hangs = run.fragile.get(k) or []
             rows.append(f"- {k}：拿得到的 {'、'.join(got) or '没有'}（{len(got)} 条）" + (f"；离不开{'、'.join(hangs)}，新线索放到别处、别人口中" if hangs else ""))
-        return "\n【每个结论现有的线索】\n" + "\n".join(rows)
+        text = "\n【每个结论现有的线索】\n" + "\n".join(rows)
+        if run.drift.lost:  # what the agendas take away if no one steps in: the new way must not hang on it
+            from .simulate import _clock
+
+            text += "\n【没人插手时会断的结论】\n" + "\n".join(
+                f"- {k}：{_clock(t)}「{why}」之后一条线索也拿不到了，新线索要放在这一步动不到的地方和人身上" for k, (t, why) in run.drift.lost.items())
+        return text
     return ""
 
 
