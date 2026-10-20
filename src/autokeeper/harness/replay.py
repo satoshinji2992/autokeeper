@@ -141,6 +141,9 @@ class ReplayModel(Model):
         if schema is not None and schema.get("title") == "Dialogue" and data is None:
             # Recordings before structured social memory stored NPC replies as plain text.
             data = {"text": row["text"], "changes": []}
+        if schema is not None and schema.get("title") == "Telling" and data is None:
+            # Recordings before the keeper's scene (agents/cast.Telling) kept its words alone: nothing changed.
+            data = {"scene": {}, "text": row["text"]}
         if schema is not None and data is None:
             data = parse_json(row["text"])
         if on_delta and schema is None and row["text"]:

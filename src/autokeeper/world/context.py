@@ -39,6 +39,11 @@ def _when(t: int | None) -> str:
     return "不限时" if t is None else format_time(t)
 
 
+def _company(w: World, ent) -> str:
+    """Whose company an NPC is in: to an agreed place, or along wherever they go (world/scene.py)."""
+    return f"与{w.name(ent.following)}去{w.name(ent.follow_to)}" if ent.follow_to else f"跟着{w.name(ent.following)}走"
+
+
 def _terms(text: str) -> set[str]:
     """Small, deterministic lexical recall; never expands a query into new information."""
     terms = set(re.findall(r"[a-z0-9_]{2,}", text.casefold()))
@@ -145,7 +150,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     if ent.status or ent.conditions:
         lines.append(f"【你的状况】{'、'.join(x for x in [ent.status, *ent.conditions] if x)}")
     if ent.following:
-        lines.append(f"【已同意同行】与{w.name(ent.following)}去{w.name(ent.follow_to)}；改变主意须明确结束同行，不忽略刚才的约定。")
+        lines.append(f"【已同意同行】{_company(w, ent)}；改变主意须明确结束同行，不忽略刚才的约定。")
     others = [f"{w.name(x)}（{x}）" for x in w.present(here) if x != npc]
     if here == w.st.location:
         others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators]
@@ -206,7 +211,7 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
     if ent.status or ent.conditions:
         lines.append(f"【你的状况】{'、'.join(x for x in [ent.status, *ent.conditions] if x)}")
     if ent.following:
-        lines.append(f"【已同意同行】与{w.name(ent.following)}去{w.name(ent.follow_to)}。")
+        lines.append(f"【已同意同行】{_company(w, ent)}。")
     if a:
         if a.goals:
             lines.append("【你眼下想要的】" + "；".join(a.goals))

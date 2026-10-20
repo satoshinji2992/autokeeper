@@ -22,11 +22,14 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
+from collections.abc import Callable
 from contextlib import nullcontext
-from typing import TYPE_CHECKING, Literal
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
+from pydantic_core import from_json
 
 from .. import skills
 from ..config import Config
@@ -43,6 +46,7 @@ from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Follow
+from ..world.scene import Scene
 from . import guard
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
@@ -173,6 +177,63 @@ class Dialogue(BaseModel):
 
 class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
+
+
+# The keeper's telling: how things stand as it ends, then the words (engine/game.Game._narrate). The
+# scene goes into the record, checked first (world/scene.py); the words are shown once it holds. No
+# docstring: a schema's descriptions are what the model reads.
+class Telling(BaseModel):
+    scene: Scene = Field(description="先写：这段讲完时的场面")
+    text: str = Field(description="再写：讲给玩家听的叙述")
+
+
+@dataclass
+class Narration:
+    """A telling as it came back: the words, the scene as written (None when none could be read),
+    whether the words reached the player as they were written, and whether the scene came first."""
+
+    text: str
+    scene: dict | None = None
+    shown: bool = False
+    first: bool = True
+
+
+class _Telling:
+    """A telling read as it is written. The scene, once complete, is checked (`check`); while it
+    holds, the words that follow it go to the player as they come. A telling that writes its words
+    before its scene (the key order is the model's), or a scene that does not hold, keeps its
+    words back until the reply is complete. `shown` tells the harness whether the player saw any
+    of it (harness/models._shown): until then a failed call may still be tried again."""
+
+    def __init__(self, check: Callable[[Any], bool], on_delta: Any):
+        self.check, self.on_delta = check, on_delta
+        self.raw, self.sent = "", 0
+        self.verdict: bool | None = None  # None: no scene read yet
+        self.first = True
+        self.shown = False
+
+    async def __call__(self, piece: str) -> None:
+        self.raw += piece
+        start = self.raw.find("{")
+        if start < 0:
+            return
+        try:
+            data = from_json(self.raw[start:], allow_partial="trailing-strings")
+        except ValueError:
+            return
+        if not isinstance(data, dict) or "text" not in data:
+            return
+        if self.verdict is None:  # the words have begun: whatever came before them is complete
+            keys = list(data)
+            self.first = "scene" in keys and keys.index("scene") < keys.index("text")
+            self.verdict = bool(self.first and self.check(data["scene"]))
+        text = data["text"]
+        if not self.verdict or not self.on_delta or not isinstance(text, str):
+            return
+        start = max(self.sent, len(text) - len(text.lstrip()))
+        if len(text) > start:
+            self.sent, self.shown = len(text), True
+            await self.on_delta(text[start:])
 
 
 class Consistency(BaseModel):
@@ -577,6 +638,7 @@ class Cast:
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
+            f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
         )
 
@@ -973,13 +1035,49 @@ class Cast:
         )
         return self._open("keeper", "keeper", system)
 
-    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
+    async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
+                     check: Callable[[Any], bool] | None = None, fix: str = "") -> str | Narration:
         """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
-        narrative preferences ride along this call only, without rewriting the cached prefix."""
+        narrative preferences ride along this call only, without rewriting the cached prefix.
+
+        With `check`, the telling comes with its scene (Telling): the scene is checked as soon as it
+        is written and the words stream once it holds (_Telling); `fix` says what did not hold last
+        time. It comes back as a Narration. The keeper's memory keeps the words alone, and only of a
+        telling whose scene held or that the player already saw: one turned back is not remembered."""
         s = self._keeper(state)
-        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper()
-        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
-        return reply.text.strip()
+        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper() + fix
+        if check is None:
+            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
+            return reply.text.strip()
+        reader = _Telling(check, on_delta)
+        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader, schema=TELLING)
+        data = reply.data if isinstance(reply.data, dict) else {}
+        text, scene = data.get("text"), data.get("scene")
+        if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
+            text, scene = _words(reply.text), None
+        told = Narration(text=text.strip(), scene=scene if isinstance(scene, dict) else None, shown=reader.shown,
+                         first=reader.first)
+        holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
+        if told.shown or holds:
+            self._kept(s, report, told.text)
+        else:
+            self._unsaid(s, report)
+        return told
+
+    @staticmethod
+    def _kept(s: Session, report: str, text: str) -> None:
+        """The keeper remembers what it said, not the JSON it was said in."""
+        last = s.transcript[-2:]
+        if len(last) == 2 and last[0]["content"] == report and last[1]["role"] == "assistant":
+            last[1]["content"] = text
+
+    @staticmethod
+    def _unsaid(s: Session, report: str) -> None:
+        """A telling turned back before anyone saw it: the keeper writes it again knowing why, not
+        after it."""
+        last = s.transcript[-2:]
+        if len(last) == 2 and last[0]["content"] == report and last[1]["role"] == "assistant":
+            del s.transcript[-2:]
 
     async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
         """`told`, the keeper's latest narration of `report`, told again. That exchange leaves the
@@ -1167,6 +1265,26 @@ class Cast:
 # let 7 of 40 rhetorical attacks soften a ruling (bonus dice for "the mud is still soft, nobody is
 # about"); without them 2 of 40, both what the module allows anyway (eval rhetoric, 2026-10-20).
 SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
+
+
+TELLING = _schema(Telling)
+
+
+def _words(raw: str) -> str:
+    """A reply that should have been a telling, as words: its text field if any of it can be read,
+    else the reply itself when it is not JSON at all."""
+    raw = raw.strip()
+    start = raw.find("{")
+    if start >= 0:
+        try:
+            data = from_json(raw[start:], allow_partial="trailing-strings")
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get("text"), str):
+            return data["text"]
+        if start == 0:
+            raise ValueError("守秘人的回复读不出叙述")
+    return raw
 
 
 def _book(m: Module) -> str:
