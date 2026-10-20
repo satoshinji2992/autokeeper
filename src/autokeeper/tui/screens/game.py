@@ -709,7 +709,7 @@ class GameScreen(Screen):
             story.add("handout", Text(f"▤ 手稿：{ev['title']}（F2 可重看）", style="bold"))
             handout = next((h for h in self.m.handouts if h.id == ev.get("id")), None)
             pictures = [self.m.pictures[k] for k in handout.images if k in self.m.pictures] if handout else []
-            self.app.push_screen(HandoutModal(ev["title"], ev["text"], pictures))
+            self.app.push_screen(HandoutModal(ev["title"], ev["text"], pictures, kind=ev.get("kind", "信件")))
         elif t == "sanity":
             body = Text()
             body.append(f"※ {ev['who']} 理智 {ev['before']} → {ev['after']}（-{ev['loss']}）", style="bold")
@@ -1176,7 +1176,7 @@ class GameScreen(Screen):
         chosen = await self.app.push_screen_wait(NotebookModal(clues, handouts, facts))
         if chosen:
             h = self.m.handout(chosen)
-            self.app.push_screen(HandoutModal(h.title, h.text, [self.m.pictures[k] for k in h.images if k in self.m.pictures]))
+            self.app.push_screen(HandoutModal(h.title, h.text, [self.m.pictures[k] for k in h.images if k in self.m.pictures], kind=h.kind))
 
     def action_sheet(self) -> None:
         from ..modals.sheet import SheetModal

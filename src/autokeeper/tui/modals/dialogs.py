@@ -22,7 +22,7 @@ from textual.widgets import Button, Static
 from textual_canvas import Canvas
 
 from ... import imagery
-from ..drawing import art
+from ..drawing import paper
 
 
 def roll_ask(a: dict) -> Text:
@@ -124,13 +124,13 @@ class PushModal(ModalScreen[str]):
 
 
 class HandoutModal(ModalScreen[None]):
-    """Paper frame whose text 'develops' like ink soaking through."""
+    """The handout on its kind of paper (drawing/paper.py), the ink soaking in."""
 
     BINDINGS = [("escape", "dismiss", "关闭"), ("enter", "dismiss", "关闭")]
 
-    def __init__(self, title: str, text: str, pictures: list[str] | None = None):
+    def __init__(self, title: str, text: str, pictures: list[str] | None = None, kind: str = "信件"):
         super().__init__()
-        self.paper = art.frame(text, title, width=60)
+        self.sheet = paper.sheet(kind, title, text, width=60)
         self.revealed = 0
         self.pictures = pictures or []
 
@@ -172,12 +172,11 @@ class HandoutModal(ModalScreen[None]):
                 self.app.open_url(path.as_uri())
 
     def _develop(self) -> None:
-        if self.revealed >= len(self.paper):
+        size = self.sheet.size
+        if self.revealed >= size:
             return
-        self.revealed = min(len(self.paper), self.revealed + max(4, len(self.paper) // 60))
-        shown = self.paper[: self.revealed]
-        rest = art.corrupt("".join(c if c in "\n" else " " for c in self.paper[self.revealed :]), 0.0)
-        self.query_one("#paper", Static).update(Text(shown + rest))
+        self.revealed = min(size, self.revealed + max(4, size // 60))
+        self.query_one("#paper", Static).update(self.sheet.render(self.revealed))
 
 
 class NotebookModal(ModalScreen[str | None]):

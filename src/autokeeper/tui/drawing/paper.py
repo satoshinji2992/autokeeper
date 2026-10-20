@@ -48,6 +48,11 @@ FAMILIES = {
 PAPERS = {"letter": LETTER, "diary": DIARY, "news": NEWS, "wire": WIRE, "book": BOOK, "card": CARD}
 DATE = re.compile(r"^\s*(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}\s*年|[一二三四五六七八九十〇零\d]{1,3}\s*月\s*[一二三四五六七八九十\d]{1,3}\s*日)")
 NOTE = re.compile(r"^（AutoKeeper[^）]*）\s*$")  # the tool's own remark, not part of the paper
+SHEET = set(" 　▁▔┃┈═─◥")  # what the paper is made of, there before the ink
+
+
+def _structure(text: str) -> bool:
+    return all(c in SHEET for c in text)
 
 
 def family(kind: str) -> str:
@@ -66,16 +71,27 @@ def width_of(s: str) -> int:
 def wrap(text: str, width: int, *, indent: int = 0) -> list[str]:
     """A paragraph cut to `width` cells; the first line indented `indent` cells (two full-width spaces
     is how Chinese paragraphs start)."""
+    return ["".join(t for t, _ in line) for line in wrap_pieces([(text, Style())], width, indent=indent)]
+
+
+def wrap_pieces(pieces: list[Piece], width: int, *, indent: int = 0) -> list[Line]:
+    """Styled words cut to `width` cells, each piece keeping its style across the cuts."""
     lead = "　" * (indent // 2)
-    out, line, used = [], lead, width_of(lead)
-    for ch in text:
-        cw = max(0, wcwidth(ch))
-        if used + cw > width:
-            out.append(line)
-            line, used = "", 0
-        line += ch
-        used += cw
-    out.append(line)
+    out: list[Line] = []
+    line: Line = [(lead, pieces[0][1])] if lead and pieces else []
+    used = width_of(lead)
+    for text, style in pieces:
+        run = ""
+        for ch in text:
+            cw = max(0, wcwidth(ch))
+            if used + cw > width:
+                line.append((run, style))
+                out.append([p for p in line if p[0]])
+                line, run, used = [], "", 0
+            run += ch
+            used += cw
+        line.append((run, style))
+    out.append([p for p in line if p[0]])
     return out
 
 
@@ -84,28 +100,33 @@ class Sheet:
     lines: list[Line]
     note: str = ""  # said over the sheet, small: "依原文大意补写"
     width: int = 60
+    caption: str = ""  # the handout's title over a sheet that has no place for it (a letter)
 
     @property
     def size(self) -> int:
-        """Characters the ink has to reach, newlines aside."""
-        return sum(len(t) for line in self.lines for t, _ in line)
+        """Characters the ink has to reach: the words, not the paper's edges, margins and rules."""
+        return sum(len(t) for line in self.lines for t, _ in line if not _structure(t))
 
     def render(self, reveal: int | None = None) -> Text:
         """The sheet with the first `reveal` characters inked (all when None): the rest blank paper."""
         out = Text()
+        if self.caption:
+            out.append(self.caption + "\n", style="bold")
         if self.note:
             out.append(self.note + "\n", style="dim italic")
         left = self.size if reveal is None else reveal
         for i, line in enumerate(self.lines):
             for text, style in line:
-                if left >= len(text):
+                if _structure(text):  # the sheet itself is there from the start
+                    out.append(text, style=style)
+                elif left >= len(text):
                     out.append(text, style=style)
                     left -= len(text)
-                    continue
-                shown, hidden = text[:max(0, left)], text[max(0, left):]
-                left = 0
-                out.append(shown, style=style)
-                out.append("".join(" " * max(1, wcwidth(c)) for c in hidden), style=Style(bgcolor=style.bgcolor))
+                else:
+                    shown, hidden = text[:max(0, left)], text[max(0, left):]
+                    left = 0
+                    out.append(shown, style=style)
+                    out.append("".join(" " * max(1, wcwidth(c)) for c in hidden), style=Style(bgcolor=style.bgcolor))
             if i < len(self.lines) - 1:
                 out.append("\n")
         return out
@@ -147,10 +168,11 @@ class _Page:
         else:
             self.lines.append([(" ", Style()), (char * self.width, Style(color="#14110d"))])
 
-    def text(self, words: str, style: Style | None = None, *, indent: int = 0, align: str = "left",
+    def text(self, words: str | list[Piece], style: Style | None = None, *, indent: int = 0, align: str = "left",
              left: Piece | None = None) -> None:
-        for chunk in wrap(words, self.inner - (width_of(left[0]) - self.margin if left else 0), indent=indent):
-            self.row([(chunk, style or self.ink)], align=align, left=left)
+        pieces = [(words, style or self.ink)] if isinstance(words, str) else words
+        for line in wrap_pieces(pieces, self.inner - (width_of(left[0]) - self.margin if left else 0), indent=indent):
+            self.row(line, align=align, left=left)
 
 
 def _parts(text: str) -> tuple[str, list[str]]:
@@ -171,14 +193,14 @@ def _signature(lines: list[str]) -> int:
         s = line.strip()
         if not s:
             break
-        if len(s) <= 14 and (s.startswith(("——", "—", "你的", "您的", "敬上", "谨上")) or tail < 2 and len(lines) > 3):
+        if len(s) <= 14 and (s.startswith(("——", "—", "你的", "您的", "敬上", "谨上")) or (tail < 2 and len(lines) > 3)):
             tail += 1
             continue
         break
     return tail if tail < len(lines) else 0
 
 
-def letter(title: str, lines: list[str], width: int) -> list[Line]:
+def letter(_title: str, lines: list[str], width: int) -> list[Line]:  # the title goes over the sheet (Sheet.caption)
     page = _Page(LETTER, width)
     page.edge(top=True)
     page.blank()
@@ -242,8 +264,7 @@ def news(title: str, lines: list[str], width: int) -> list[Line]:
             continue
         lead = re.match(r"^(【[^】]+】)(.*)$", s)
         if lead:  # 【本报讯】 in bold, the story after it
-            page.text(lead.group(1) + lead.group(2), page.style(bold=False))
-            page.lines[-len(wrap(lead.group(1) + lead.group(2), page.inner)) ][1:1] = []
+            page.text([(lead.group(1), page.style(bold=True)), (lead.group(2), page.ink)], indent=4)
         elif first and len(s) <= 18:  # a headline
             page.text(s, page.style(bold=True), align="center")
         else:
@@ -314,4 +335,5 @@ LAYOUTS = {"letter": letter, "diary": diary, "news": news, "wire": wire, "book":
 def sheet(kind: str, title: str, text: str, width: int = 60) -> Sheet:
     """The handout as its kind of paper."""
     note, lines = _parts(text)
-    return Sheet(LAYOUTS[family(kind)](title, lines, width), note=note, width=width + 1)
+    name = family(kind)
+    return Sheet(LAYOUTS[name](title, lines, width), note=note, width=width + 1, caption=title if name == "letter" else "")
