@@ -226,7 +226,7 @@ class Gateway:
         if isinstance(op, Improvise):
             raise ValueError("场景即兴必须通过游戏引擎准备并提交，不能绕过插件、图像与场景校验")
         if not self.staff:
-            TypeAdapter(agents.NpcOp).validate_python(op.model_dump(mode="json"))
+            TypeAdapter(agents.ReplyOp).validate_python(op.model_dump(mode="json"))
             subject = (op.entity if isinstance(op, Move) else op.npc if isinstance(op, Follow | Remember | SetPlan | AdvancePlan)
                        else op.a if isinstance(op, Relate) else op.by if isinstance(op, MakePromise) else self.actor)
             if subject != self.actor:
@@ -331,16 +331,35 @@ class Gateway:
             trial.rec.requests[rid] = Request(id=rid, key=rid, kind="world-tool", reason=signature,
                                                ops=copy.deepcopy(ops), reads=dict(reads), turn=w.st.turn,
                                                t=w.now, status="landed", note=json.dumps(result, ensure_ascii=False))
-            state_changes = {name: copy.deepcopy(value) for name, value in trial.st.__dict__.items()
-                             if value != w.st.__dict__.get(name)}
-            module_changes = {name: copy.deepcopy(value) for name, value in trial.m.__dict__.items()
-                              if value != w.m.__dict__.get(name)}
             bad, stale = self._check_reads(reads)
             if bad or stale:
                 return {"ok": False, "status": "stale", "stale": stale, "problems": bad}
-            w.m.__dict__.update(module_changes)
-            w.st.__dict__.update(state_changes)
+            self._publish(trial)
             return result
+
+    def settle(self, ops: list[dict], *, request_id: str) -> dict:
+        """The engine's own landing of what an actor does in this turn (an NPC's on-the-spot acts in
+        its reply, agents/cast.Cast.npc): the same binding, vetting, trial on a copy and whole-group
+        publication as commit, on the record as it is now. No client receipt is kept: the op ids
+        come from `request_id`, so the same ops landed again are repeats."""
+        w = self.world
+        with w._gateway_lock:
+            result, trial = self._prepare(ops, self._public_reads(self._allowed_reads()), request_id)
+            if trial is None:
+                return self._public_data(result)
+            self._publish(trial)
+            result["status"] = "committed"
+            return result
+
+    def _publish(self, trial: World) -> None:
+        """What a validated copy changed, onto the live save at once."""
+        w = self.world
+        state_changes = {name: copy.deepcopy(value) for name, value in trial.st.__dict__.items()
+                         if value != w.st.__dict__.get(name)}
+        module_changes = {name: copy.deepcopy(value) for name, value in trial.m.__dict__.items()
+                          if value != w.m.__dict__.get(name)}
+        w.m.__dict__.update(module_changes)
+        w.st.__dict__.update(state_changes)
 
 
 def harness_tools(gateway: Gateway, *, writable: bool = False) -> list:

@@ -9,6 +9,8 @@ world/agents.vet before their ops get here.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
     from .store import World
 
 MAX_AGENTS = 6
+MAX_BRING = 10  # everyday things registered in one turn, by everyone together: a scene's worth, not a shop's stock
 STAFF = (ENGINE, DIRECTOR, KEEPER, "arbiter")
 Visibility = Literal["auto", "public", "private"]
 
@@ -64,6 +67,67 @@ def _who(w: World, ident: str, *, players: bool = True) -> bool:
 def _npc(w: World, ident: str) -> Entity | None:
     e = w.rec.entities.get(ident)
     return e if e is not None and e.kind == "npc" else None
+
+
+# -- names of things -----------------------------------------------------------------------------
+_MARKS = re.compile(r"[\s，。、；：？！“”‘’「」『』（）()《》〈〉【】…—·\-,.;:?!\"'`]+")
+_COUNT = re.compile(r"^(?:[一二两三四五六七八九十几数半]|\d+)[把根支枝盏个本封张件条块只副瓶袋包盒枚串顶双套份册片罐杯碗捆叠]")
+
+
+def plain(name: str) -> str:
+    """A thing's name as names are compared: no marks or spaces, no count in front (一把、两根)."""
+    text = _MARKS.sub("", name).casefold()
+    return _COUNT.sub("", text) or text
+
+
+def overlap(a: str, b: str, *, least: int = 2) -> bool:
+    """One name inside the other, compared plain; shorter than `least` characters, only the same name."""
+    a, b = plain(a), plain(b)
+    return bool(a and b) and (a == b or (min(len(a), len(b)) >= least and (a in b or b in a)))
+
+
+def names(name: str, title: str) -> bool:
+    """Whether a thing's name stands for what a title names: the same name, the title inside it, or
+    it inside the thing the title is about (after its last 的: 外套口袋里的酒瓶 is about a flask, not a coat)."""
+    a, t = plain(name), plain(title)
+    return bool(a and t) and (a == t or (len(t) >= 2 and t in a) or overlap(name, title.rsplit("的", 1)[-1]))
+
+
+def reserved(w: World, name: str) -> str:
+    """What of the module's own a name stands for, in words: a clue, a handout or an important item.
+    Those come from the module, a found clue or a ruling, never as an everyday thing (Bring)."""
+    kept = [(c.title, "线索") for c in w.m.clues] + [(h.title, "手稿") for h in w.m.handouts]
+    kept += [(i.name, "重要物件") for i in w.m.items if i.important]
+    kept += [(e.name, "重要物件") for e in w.rec.entities.values() if e.kind == "item" and e.important]
+    return next((f"{what}「{title}」" for title, what in kept if names(name, title)), "")
+
+
+def lacking(w: World, name: str) -> str:
+    """What this turn's action lacks (Ruling.missing, kept in the record) that a name stands for."""
+    missing = w.rec.missing if w.rec.missing_turn == w.st.turn else []
+    return next((x for x in missing if overlap(name, x, least=1)), "")
+
+
+def holding(w: World, where: str, name: str) -> str:
+    """The thing of this name already at `where` (a person or a place): its record id, or the line
+    of an investigator's inventory; empty when there is none."""
+    hit = next((e.id for e in w.rec.entities.values() if e.kind == "item" and e.at == where and overlap(name, e.name)), "")
+    hit = hit or next((i.id for i in w.m.items if overlap(name, i.name) and legacy_world.owner(w.m, w.st, i.id) == where), "")
+    if hit:
+        return hit
+    inv = next((i for i in w.st.investigators if i.id == where), None)
+    return next((line for line in inv.inventory if overlap(name, line)), "") if inv is not None else ""
+
+
+def _thing(w: World, name: str, holder: str) -> Entity | None:
+    """An everyday thing (Bring) by its name, with the one holding it."""
+    return next((e for e in w.rec.entities.values()
+                 if e.kind == "item" and not e.important and e.name == name and e.at == holder), None)
+
+
+def bring_count(w: World) -> int:
+    """Everyday things registered this turn."""
+    return sum(1 for e in w.rec.events if e.kind == "bring" and e.turn == w.st.turn)
 
 
 # -- people and things ------------------------------------------------------------------------
@@ -211,14 +275,16 @@ class Transfer(Base):
         st, m = w.st, w.m
         before = legacy_world.owner(m, st, self.item)
         item = next((x for x in m.items if x.id == self.item), None)
-        ent = w.rec.entities.get(self.item)
+        # An everyday thing (Bring) handed on by the name its holder's inventory shows goes with its record.
+        ent = w.rec.entities.get(self.item) or (_thing(w, self.item, before) if item is None else None)
+        key = ent.id if ent is not None else self.item
         name = ent.name if ent is not None else item.name if item else self.item
         for inv in st.investigators:  # the same bookkeeping as engine/world.apply
             if inv.id == before and name in inv.inventory:
                 inv.inventory.remove(name)
             if inv.id == self.to and name not in inv.inventory:
                 inv.inventory.append(name)
-        st.item_owners[self.item] = self.to
+        st.item_owners[key] = self.to
         if ent is None and item is not None and item.important:
             ent = w.rec.entities[self.item] = Entity(id=self.item, kind="item", name=name, origin="game", changed=w.rec.seq)
         elif ent is not None:
@@ -229,12 +295,75 @@ class Transfer(Base):
             ent.hidden = self.visibility == "private" and destination is not None and destination.kind == "location"
         text = self.text or f"{name}从{w.name(before)}到了{w.name(self.to)}手里"
         w.legacy(self.key, "transfer", text, self.tag or next((x for x in (before, self.to) if _npc(w, x)), ""), self.actor)
-        event = w.emit("transfer", text, actor=self.actor, participants=[before, self.to, self.item], place=w.place(before),
+        event = w.emit("transfer", text, actor=self.actor, participants=[before, self.to, key], place=w.place(before),
                        visibility=self.visibility, op=oid)
         if ent is not None:
             ent.observed_by = list(dict.fromkeys([before, self.to, *event.witnesses,
                                                   *([PLAYERS] if event.visibility == "public" else [])]))
         return event, None
+
+
+class Bring(Base):
+    """An everyday thing registered as it comes up where the investigators are: a torch the keeper
+    hands over, a poker an NPC takes from the fireplace, a cane picked up in the hall. Not an
+    important item; never one with the name of a clue, a handout or an important item, nor what
+    this turn's action lacks (Ruling.missing): those come from the module, a found clue or a ruling."""
+
+    kind: Literal["bring"] = "bring"
+    name: str = Field(description="东西的名称，如 手电筒、拨火棍")
+    look: str = Field("", description="一句外观")
+    holder: str = Field("", description="拿着它的人：调查员或 NPC id；放在那里没人拿就留空，填 place")
+    place: str = Field("", description="它放在哪个地点；有人拿着就留空")
+    item: str = Field("", description="新物件的 id，留空由系统生成")
+
+    def check(self, w: World) -> list[str]:
+        name, here = self.name.strip(), w.st.location
+        if not name or len(name) > 16:
+            return ["东西的名称要写，且不超过 16 个字"]
+        if bool(self.holder) == bool(self.place):
+            return ["holder 和 place 填一个：有人拿着填 holder，放在那里填 place"]
+        problems = [] if len(self.look) <= 80 else ["外观写一句，不超过 80 字"]
+        where = self.holder or self.place
+        if self.holder and not (any(i.id == self.holder for i in w.st.investigators)
+                                or ((e := _npc(w, self.holder)) is not None and e.at == here and e.status not in ("死亡", "失踪"))):
+            problems.append(f"{w.name(self.holder)}不在调查员所在的{w.name(here)}")
+        if self.place and self.place != here:
+            problems.append(f"{w.name(self.place)}不是调查员此刻所在的地方")
+        if self.item and self.item in w.rec.entities:
+            problems.append(f"id {self.item} 已经用过")
+        if clash := reserved(w, name):  # an NPC is told why without hearing of the module's things
+            problems.append(f"「{name}」和{clash}重名：这样的东西只由模组、线索或裁定给出" if self.actor in STAFF
+                            else f"「{name}」不是随手就有的日常物件，不能当场拿出来")
+        if gap := lacking(w, name):
+            problems.append(f"这一轮的行动正缺{gap}，不能当场拿出来")
+        if have := holding(w, where, name):
+            problems.append(f"{w.name(where)}已经有{w.name(have)}了")
+        if bring_count(w) >= MAX_BRING:
+            problems.append(f"这一轮已经登记了 {MAX_BRING} 件东西")
+        return problems
+
+    def settle(self, w: World, oid: str):
+        name, look = self.name.strip(), self.look.strip()
+        where = self.holder or self.place
+        ident = self.item or f"thing:{hashlib.sha256(oid.encode()).hexdigest()[:10]}"
+        ent = w.rec.entities[ident] = Entity(id=ident, kind="item", name=name, origin="game", at=where, important=False,
+                                             look=look, changed=w.rec.seq)
+        w.st.item_owners[ident] = where
+        for inv in w.st.investigators:
+            if inv.id == self.holder and name not in inv.inventory:
+                inv.inventory.append(name)
+        seen = f"（{look}）" if look else ""
+        if self.place:
+            text = f"{w.name(self.place)}有{name}{seen}"
+        else:
+            text = f"{w.name(self.holder)}{'拿出了' if self.actor == self.holder else '拿着'}{name}{seen}"
+        actor = self.actor if self.actor not in STAFF else self.holder or ENGINE
+        # Seen, not news: nobody is woken to think again over a torch (scheduler._affects).
+        event = w.emit("bring", text, actor=actor, participants=[x for x in (self.holder, ident) if x], place=w.st.location,
+                       visibility=self.visibility, op=oid, reactive=False)
+        ent.observed_by = list(dict.fromkeys([*([self.holder] if self.holder else []), *event.witnesses,
+                                              *([PLAYERS] if event.visibility == "public" else [])]))
+        return event, ident
 
 
 class Equip(Base):
@@ -857,13 +986,13 @@ class Improvise(Base):
 
 
 Op = Annotated[
-    Move | Follow | Relate | Transfer | Equip | Condition | SetFlag | AddFact | Learn | Remember | Occur | MakePromise | Fulfil | Break
-    | OpenThread | AdvanceThread | CloseThread | Schedule | Enlist | SetPlan | AdvancePlan | Rewrite | Improvise,
+    Move | Follow | Relate | Transfer | Bring | Equip | Condition | SetFlag | AddFact | Learn | Remember | Occur | MakePromise | Fulfil
+    | Break | OpenThread | AdvanceThread | CloseThread | Schedule | Enlist | SetPlan | AdvancePlan | Rewrite | Improvise,
     Field(discriminator="kind"),
 ]
 OPS: TypeAdapter[Op] = TypeAdapter(Op)
-KINDS = [m.model_fields["kind"].default for m in (Move, Follow, Relate, Transfer, Equip, Condition, SetFlag, AddFact, Learn, Remember, Occur,
-                                                  MakePromise, Fulfil, Break, OpenThread, AdvanceThread, CloseThread, Schedule,
+KINDS = [m.model_fields["kind"].default for m in (Move, Follow, Relate, Transfer, Bring, Equip, Condition, SetFlag, AddFact, Learn, Remember,
+                                                  Occur, MakePromise, Fulfil, Break, OpenThread, AdvanceThread, CloseThread, Schedule,
                                                   Enlist, SetPlan, AdvancePlan, Rewrite, Improvise)]  # fmt: skip
 
 

@@ -59,6 +59,7 @@
 | `move` | NPC 换地方，可以在原地留下痕迹（`trace`），之后到那里的人看得出来 |
 | `relate` | 改一方对另一方的看法：设值或增减，附缘由 |
 | `transfer` | 物件易手，和 `engine/world.apply` 的记账一致 |
+| `bring` | 当场登记一件日常物件（名称、一句外观、拿着它的人或放着它的地点），不是重要物件。人或地点必须就在调查员所在的地方；名称不能和本模组的线索、手稿、重要物件重名（一个名字含着另一个也算）；这一轮行动缺的东西（`Ruling.missing`）这一轮谁也拿不出来；每轮最多 10 件。拿到的人随身物品里就有它 |
 | `condition` | 调查员或 NPC 加减状态；NPC 的总体状况（受伤、失踪、死亡） |
 | `flag` | 设置或清除已声明的剧情标记 |
 | `fact` | 记一条新事实（即兴内容、发生过的事），指定谁知道 |
@@ -190,8 +191,9 @@
 |---|---|
 | `Game.__init__` | 建 `World`（读档时在 `improv.restore` 之后，所以记录里 NPC 的位置会写回模组副本）；模组标了 `important` 的 NPC 落成 `enlist`；`cast.world` 指向它 |
 | 每回合 | `remember` 里 `sync`（在日志折叠之前），开场讲完也 `sync` 一次 |
-| 裁定员的 `changes` | `adapters.settle_changes`，旧的 `GameState.world` 账本照样同步 |
-| NPC 对话 | `Cast.npc` 把台词里的转交、约定、关系也走 `settle_changes`；每次对话记一条公开事件（`talk:<回合>:<调查员>:<NPC>`），在场的人都看见，重要 NPC 记进记忆 |
+| 裁定员的 `changes` | `adapters.settle_changes`，旧的 `GameState.world` 账本照样同步；`takes`（调查员顺手拿起的日常物件）走 `adapters.bring_ops`；`missing`（行动缺的东西）记进 `WorldRecord.missing`，这一轮的 `bring` 照它拒绝 |
+| NPC 对话 | `Cast.npc` 把台词里的转交、约定、关系也走 `settle_changes`；当场做的事（`Dialogue.items` 拿出或递出东西，`leave` 说完就走）由 `adapters.reply_ops` 变成操作，经 NPC 自己的 `Gateway` 先在副本里试、再同一轮整组落地（`Gateway.settle`），做不到就带着原因重答，两次还不行写进【未落实】；每次对话记一条公开事件（`talk:<回合>:<调查员>:<NPC>`），在场的人都看见，重要 NPC 记进记忆 |
+| 出发前的交谈 | `Game.prepare`：同行请求里点到的 NPC，回应一律用 `TravelDialogue`（必须回答同不同行），哪怕玩家同时还对他说了别的话；只问一次 |
 | 导演的即兴 | `_land` 走 `improvise` 操作：写进模组、播种进记录、开线头；同一个方案落两次是重复，第二次什么都不做 |
 | 时间推进 | `_time` 里 `_live`：把上次模拟到的时间（`WorldRecord.simulated`）到现在这段交给 `scheduler.advance`；在调查员眼前发生的事（NPC 走进来、到点的安排）写进 `Turn.world`，守秘人当回合讲 |
 | 到达某处 | 离开一个地点时记下当时的 `seq`（`WorldRecord.left`）；回来时守秘人拿到“此刻在这里的人（以这一条为准）”和离开后留下的痕迹，模组的地点描写里写到、但已经走了的人不会再被讲成还在 |
