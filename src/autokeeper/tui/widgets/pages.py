@@ -196,6 +196,24 @@ class PagesModal(ModalScreen[None]):
         turn(self.query_one(TabbedContent))
 
 
+class PagesHead(Static):
+    """The right column's head over 经过: clicked (or Ctrl+G), 经过, 进展 and 背景 open as a page
+    over the screen. The column keeps only 经过: tabs under the sheet and the dice were squeezed out
+    of sight (the user, 2026-10-21)."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.fresh(False)
+
+    def fresh(self, new: bool) -> None:
+        """进展·新 while a new account waits to be read."""
+        self.update(Text.assemble(("经过", "bold"), "  ", (f"{FRESH if new else PAGES['progress']} · 背景 ▸", "bold" if new else "dim"),
+                                  ("  点击展开", "dim")))
+
+    async def on_click(self) -> None:
+        await self.screen.run_action("page('progress')")
+
+
 def mark(tabs: TabbedContent, fresh: bool) -> None:
     """进展·新 on the tab while a new account waits to be read; 进展 once it is."""
     tabs.get_tab("progress-page").label = FRESH if fresh else PAGES["progress"]

@@ -276,8 +276,16 @@ Footer FooterKey.-command-palette {
     background: $panel;
 }
 #pages-modal {
-    width: 72;
-    height: 80%;
+    width: 110;
+    max-width: 96%;
+    height: 90%;
+}
+#pages-head {
+    height: 1;
+    padding: 0 1;
+}
+#pages-head:hover {
+    background: $panel;
 }
 #pages-modal #pages {
     border-top: none;

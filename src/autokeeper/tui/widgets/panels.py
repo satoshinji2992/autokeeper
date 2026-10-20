@@ -914,7 +914,7 @@ class HistoryPanel(VerticalScroll):
         self.round = -1
 
     def compose(self):
-        yield Static(Text("点击记录可定位对应叙述 · Ctrl+G 切换页面", style="dim"), classes="history-head")
+        yield Static(Text("点击记录可定位对应叙述", style="dim"), classes="history-head")
 
     def on_mount(self) -> None:
         self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go

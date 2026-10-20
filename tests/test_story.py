@@ -31,7 +31,7 @@ from autokeeper.tui.app import AutoKeeperApp
 from autokeeper.tui.modals.sheet import SheetModal, sheet_view
 from autokeeper.tui.modals.usage import usage_view
 from autokeeper.tui.screens.game import COMMANDS, GameScreen
-from autokeeper.tui.widgets.pages import Page, PagesModal
+from autokeeper.tui.widgets.pages import Page, PagesHead, PagesModal
 from autokeeper.tui.widgets.panels import CluePanel, HistoryPanel
 
 from .test_engine import FakeCast
@@ -496,9 +496,13 @@ async def test_a_client_screen_shows_what_the_sync_brings(writer):
         st.progress = Progress(text=ACCOUNT, turn=3, next=6, seen=st.logged)
         screen._sync(st.model_dump(mode="json", exclude=PRIVATE))
         await pilot.pause()
-        assert ACCOUNT in shown(screen, "#progress")
-        background = shown(screen, "#background")
+        await screen.run_action("page('progress')")
+        await pilot.pause()
+        assert ACCOUNT in shown(app.screen, "#progress")
+        background = shown(app.screen, "#background")
         assert "午后的广场上没什么人" in background and m.hook.strip()[:8] in background and m.truth not in background
+        await pilot.press("escape")
+        await pilot.pause()
         await pilot.press("f4")
         await pilot.pause()
         assert isinstance(app.screen, SheetModal) and "我看看告示栏" in plain(app.screen.query_one("#sheet-body", Static).content)
@@ -516,7 +520,9 @@ async def until_idle(pilot, screen) -> None:
         await pilot.pause(0.1)
 
 
-async def test_the_right_column_turns_its_pages(writer):
+async def test_the_right_column_keeps_the_history_and_opens_the_other_pages_over_the_screen(writer):
+    """The user, 2026-10-21: under the sheet and the dice the 经过 / 进展 / 背景 tabs were squeezed
+    out of sight. The column keeps 经过; its head (or Ctrl+G) opens all of them as a page."""
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     st = Game.new(m, [lead], slot="pages", human=[lead.id])
@@ -532,44 +538,45 @@ async def test_the_right_column_turns_its_pages(writer):
         app.push_screen(screen)
         await until_idle(pilot, screen)
         assert screen.game.write_progress
-        tabs = screen.query_one("#pages", TabbedContent)
-        assert tabs.active == "history-page"
+        assert not screen.query(TabbedContent) and screen.query_one(HistoryPanel)
         await pilot.press("ctrl+g")
-        assert tabs.active == "progress-page"
-        page = shown(screen, "#progress")
+        await pilot.pause()
+        modal = app.screen
+        assert isinstance(modal, PagesModal) and modal.query_one("#pages", TabbedContent).active == "progress-page"
+        page = shown(modal, "#progress")
         assert ACCOUNT in page and "更新于第 3 轮" in page and "Ctrl+Y" in page and "报社答应等周衡到明天中午" in page
-        await pilot.press("ctrl+g")
-        assert tabs.active == "background-page"
-        background = shown(screen, "#background")
+        await pilot.press("tab")
+        background = shown(modal, "#background")
         assert m.title in background and "钟楼的影子" in background and m.hook.strip()[:8] in background and lead.name in background
         assert m.truth not in background and m.keeper_notes not in background
-        await pilot.press("ctrl+g")
-        assert tabs.active == "history-page"
-        await pilot.click(next(t for t in screen.query("#pages Tab") if t.id and t.id.endswith("progress-page")))  # a tab clicked
-        assert tabs.active == "progress-page"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is screen
         assert {"经过", "进展", "背景", "整理进展"} <= {title for title, *_ in COMMANDS}  # in the Ctrl+P menu
-        assert not [c for c in COMMANDS if "每 3 轮" in c[2]]
-        await screen.run_action("page('background')")
-        assert tabs.active == "background-page"
 
         notices = len(said)
         st.progress = Progress(text="第二段故事至今。", turn=6, asked=6)  # written in the background meanwhile
         await screen.handle({"type": "progress", "text": st.progress.text, "turn": 6})
-        assert "第二段故事至今" in shown(screen, "#progress") and "更新于第 6 轮" in shown(screen, "#progress")
-        assert tabs.get_tab("progress-page").label.plain == "进展·新" and len(said) == notices  # silent
+        head = screen.query_one("#pages-head", PagesHead)
+        assert "进展·新" in head.content.plain and len(said) == notices  # silent
         assert paths.save("pages").exists()  # idle: kept at once
-        await pilot.press("ctrl+g")  # 背景 → 经过: still waiting
-        assert tabs.get_tab("progress-page").label.plain == "进展·新"
-        await pilot.press("ctrl+g")  # opened: read
+        await pilot.click("#pages-head")  # the head clicked: opened, read
         await pilot.pause()
-        assert tabs.active == "progress-page" and tabs.get_tab("progress-page").label.plain == "进展"
+        assert isinstance(app.screen, PagesModal) and "第二段故事至今" in shown(app.screen, "#progress")
+        assert "进展·新" not in head.content.plain
+        await pilot.press("escape")
+        await pilot.pause()
 
         st.turn = 7
         st.add("player", "我看看告示栏", who=lead.name)
         await pilot.press("ctrl+y")  # asked for now: written while play goes on
         await screen.game._recounting
         await pilot.pause()
-        assert shown(screen, "#progress").count(ACCOUNT) == 1 and "更新于第 7 轮" in shown(screen, "#progress")
+        await pilot.press("ctrl+g")
+        await pilot.pause()
+        assert shown(app.screen, "#progress").count(ACCOUNT) == 1 and "更新于第 7 轮" in shown(app.screen, "#progress")
+        await pilot.press("escape")
+        await pilot.pause()
         await pilot.press("ctrl+y")
         await pilot.pause()
         assert "本回合已整理进展，可在下一回合再次整理。" in said  # once a turn
@@ -583,7 +590,6 @@ async def test_the_right_column_turns_its_pages(writer):
         await pilot.pause()
         heads = [w.content.plain for w in screen.query(".history-round")][rounds:]
         assert heads == ["— 第 5 轮 —", "— 第 6 轮 —"]
-        await pilot.press("ctrl+g", "ctrl+g")  # 经过
         for n in range(40):
             screen._history("player", Text(f"▶ 周衡：第{n}件事"), None)
         await pilot.pause()
@@ -645,12 +651,11 @@ async def test_without_room_for_the_column_the_pages_open_over_the_story(writer)
 
 
 @pytest.mark.parametrize("height", [24, 30, 34, 40, 44])
-async def test_dice_and_clues_leave_the_sidebar_pages_readable(writer, height):
+async def test_dice_and_clues_leave_the_history_readable(writer, height):
     from autokeeper.tui.widgets.panels import DiceTray, SheetPanel
 
     m = Module.load(EXAMPLE)
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="sidebar-fit")
-    st.progress = Progress(text="\n".join(f"第{i}条调查进展" for i in range(30)), turn=3)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(120, height)) as pilot:
         screen = GameScreen(m, st, resume=True)
@@ -658,27 +663,12 @@ async def test_dice_and_clues_leave_the_sidebar_pages_readable(writer, height):
         await until_idle(pilot, screen)
         screen.query_one(DiceTray).display = True
         screen.query_one(CluePanel).show([f"很长的线索标题第{i}条" for i in range(20)])
-        await pilot.pause()
-        tabs = screen.query_one("#pages", TabbedContent)
-        assert tabs.outer_size.height >= 8
-        assert tabs.region.bottom <= screen.query_one("#right").region.bottom
-        await pilot.pause(0.3)  # the clue list's growth laid out (slower runners: Windows' CI) before the tab is clicked
-        await pilot.click(tabs.get_tab("progress-page"))
-        page = screen.query_one("#progress", Page)
-        for _ in range(30):  # switched, then laid out (Windows' CI read a size of 0 in between)
-            if tabs.active == "progress-page" and page.size.height >= 5:
-                break
-            await pilot.pause(0.1)
-        assert tabs.active == "progress-page" and page.size.height >= 5
-        assert page.max_scroll_y > 0
-        page.scroll_end(animate=False)
-        for _ in range(30):  # scrolled once laid out (Windows' CI read 0 just after)
-            if page.scroll_y == page.max_scroll_y:
-                break
-            await pilot.pause(0.1)
-        assert page.scroll_y == page.max_scroll_y
-        assert "第29条调查进展" in shown(screen, "#progress")
-        assert screen.query_one(SheetPanel).region.bottom <= tabs.region.y
+        await pilot.pause(0.3)
+        column = screen.query_one("#pages")
+        assert column.outer_size.height >= 8
+        assert column.region.bottom <= screen.query_one("#right").region.bottom
+        assert screen.query_one(SheetPanel).region.bottom <= column.region.y
+        assert screen.query_one("#pages-head").region.height == 1
 
 
 async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(writer, monkeypatch):

@@ -20,7 +20,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Input, Static, TabbedContent
+from textual.widgets import Footer, Input, Static
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
@@ -45,8 +45,7 @@ from ..modals.retell import RetellModal
 from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
 from ..widgets import tips
-from ..widgets.pages import Page, PagesModal, background_view, mark, pages, progress_view, turn
-from ..widgets.pages import panels as plugin_page
+from ..widgets.pages import PagesHead, PagesModal, background_view, progress_view
 from ..widgets.panels import (
     LIGHT_MARK,
     PORTRAIT,
@@ -77,9 +76,9 @@ COMMANDS = (
     ("行动建议", "F5", "根据当前情况生成三条行动建议", "suggest"),
     ("重讲上一段", "F6", "调整叙述方式，保留检定与线索", "retell"),
     ("前情回顾", "F7", "回顾本局已发生的事件", "recap"),
-    ("经过", "Ctrl+G", "右栏：行动、检定与发现记录", "page('history')"),
-    ("进展", "Ctrl+G", "右栏：当前调查进展，有新进展时更新", "page('progress')"),
-    ("背景", "Ctrl+G", "右栏：开局已知信息与调查员背景", "page('background')"),
+    ("经过", "", "行动、检定与发现记录；右栏也有", "page('history')"),
+    ("进展", "Ctrl+G", "当前调查进展，有新进展时右栏标「进展·新」", "page('progress')"),
+    ("背景", "", "开局已知信息与调查员背景", "page('background')"),
     ("整理进展", "Ctrl+Y", "整理当前调查进展，每轮一次", "recount"),
     ("手绘", "F8", "绘制并提交草图", "sketch"),
     ("换模型", "F9", "切换模型和思考强度", "engine"),
@@ -97,7 +96,6 @@ COMMANDS = (
 )
 
 
-PAGE_ROWS = 8  # rows the right column's pages need to be read there; with fewer, they open over the story
 
 
 class GameScreen(Screen):
@@ -123,7 +121,7 @@ class GameScreen(Screen):
         Binding("ctrl+o", "prefs", "叙事偏好", show=False),
         Binding("ctrl+b", "usage", "用量", show=False),
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
-        Binding("ctrl+g", "turn_page", "翻页", show=False),  # 经过 / 进展 / 背景 in the right column
+        Binding("ctrl+g", "page('progress')", "进展", show=False),  # 经过 / 进展 / 背景 as a page over the screen
         Binding("ctrl+y", "recount", "整理进展", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
@@ -170,7 +168,9 @@ class GameScreen(Screen):
             with Vertical(id="right"):
                 yield SheetPanel(id="sheet")
                 yield DiceTray(id="dice")
-                yield from pages(HistoryPanel(id="history"))
+                with Vertical(id="pages"):
+                    yield PagesHead(id="pages-head")
+                    yield HistoryPanel(id="history")
                 yield CluePanel(id="clues")
         yield Footer()
 
@@ -567,42 +567,16 @@ class GameScreen(Screen):
             self._panels()
 
     def _pages(self) -> None:
-        """进展 and 背景 as the state has them now (经过 grows with the story)."""
-        self.query_one("#progress", Page).show(progress_view(self.state))
-        self.query_one("#background", Page).show(background_view(self.m, self.state, self._viewer()))
-        shown = self.state.plugin_panels
-        plugin_page(self.query_one("#pages", TabbedContent), self.query_one("#plugin-panels", Page),
-                    panel_view(shown, self.app.current_theme) if shown else None, tab_label(shown) if shown else "")
-
-    def _roomy(self) -> bool:
-        """The right column is up and its pages have room to be read."""
-        return bool(self.query_one("#right").display) and self.query_one("#pages").size.height >= PAGE_ROWS
-
-    def action_turn_page(self) -> None:
-        """Ctrl+G: the next page of the right column; without room for it, the pages over the story."""
-        if self._roomy():
-            turn(self.query_one("#pages", TabbedContent))
-        else:
-            self.action_page("progress")
+        """进展, 背景 and the plugins' page are read over the screen (action_page), made as it opens."""
 
     def action_page(self, name: str) -> None:
-        tabs = self.query_one("#pages", TabbedContent)
-        if self._roomy():
-            tabs.active = f"{name}-page"
-            return
-        if name == "progress":  # read over the story: nothing new waits on the tab
-            mark(tabs, False)
+        """经过, 进展 and 背景 (and a rule plugin's page) as a page over the screen, `name` first."""
+        if name == "progress":  # read: nothing new waits on the head
+            self.query_one(PagesHead).fresh(False)
         history = [w.content for w in self.query_one(HistoryPanel).query(Static) if not w.has_class("history-head")]
         shown = self.state.plugin_panels
         extra = (tab_label(shown), panel_view(shown, self.app.current_theme)) if shown else None
         self.app.push_screen(PagesModal(history, progress_view(self.state), background_view(self.m, self.state, self._viewer()), name, extra))
-
-    @on(TabbedContent.TabActivated, "#pages")
-    def _paged(self, event: TabbedContent.TabActivated) -> None:
-        if event.pane.id == "history-page":  # lines came in while another page was up
-            self.query_one(HistoryPanel).scroll_end(animate=False)
-        elif event.pane.id == "progress-page":
-            mark(event.tabbed_content, False)
 
     def action_recount(self) -> None:
         """Ctrl+Y: the story so far, written now (between turns, once a turn)."""
@@ -751,10 +725,7 @@ class GameScreen(Screen):
         elif t == "sheet":
             self._panels()
         elif t == "progress":  # the story so far, written again in the background: a mark on its tab, no notice
-            self._pages()
-            tabs = self.query_one("#pages", TabbedContent)
-            if tabs.active != "progress-page" or not self._roomy():
-                mark(tabs, True)
+            self.query_one(PagesHead).fresh(True)
             if self.game and not self.busy:
                 write_save(self.state, self.m)
         elif t == "epilogue_start":
