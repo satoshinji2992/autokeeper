@@ -5,6 +5,7 @@
 #   AUTOKEEPER_DIR     装到哪里（默认 ~/.local/share/autokeeper，存档和模组也在这里）
 #   AUTOKEEPER_REF     用哪个分支或版本（默认 main）
 #   AUTOKEEPER_EXTRAS  可选组件（默认 claude,graphrag；graphrag 是模组知识库，约 1 GB）
+#   AUTOKEEPER_NO_MODIFY_PATH=1  不改 shell 配置文件里的 PATH
 set -euo pipefail
 
 REPO="${AUTOKEEPER_REPO:-https://github.com/satoshinji2992/autokeeper}"
@@ -55,7 +56,7 @@ fi
 case ":$PATH:" in
   *":$BIN:"*) say "装好了。在任意目录输入 autokeeper 开始。" ;;
   *)
-    uv tool update-shell >/dev/null 2>&1 || true
+    [ -n "${AUTOKEEPER_NO_MODIFY_PATH:-}" ] || uv tool update-shell >/dev/null 2>&1 || true
     say "装好了。开一个新终端（或运行 export PATH=\"$BIN:\$PATH\"），在任意目录输入 autokeeper 开始。"
     ;;
 esac
