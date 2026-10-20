@@ -203,12 +203,22 @@ class PagesHead(Static):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.fresh(False)
+        self.new, self.extra = False, ""
+        self._draw()
 
     def fresh(self, new: bool) -> None:
         """进展·新 while a new account waits to be read."""
-        self.update(Text.assemble(("经过", "bold"), "  ", (f"{FRESH if new else PAGES['progress']} · 背景 ▸", "bold" if new else "dim"),
-                                  ("  点击展开", "dim")))
+        self.new = new
+        self._draw()
+
+    def plugins(self, label: str) -> None:
+        """A rule plugin's page under `label` ("" while there is none)."""
+        self.extra = label
+        self._draw()
+
+    def _draw(self) -> None:
+        pages = [FRESH if self.new else PAGES["progress"], PAGES["background"], *([self.extra] if self.extra else [])]
+        self.update(Text.assemble(("经过", "bold"), "  ", (f"{' · '.join(pages)} ▸", "bold" if self.new else "dim"), ("  点击展开", "dim")))
 
     async def on_click(self) -> None:
         await self.screen.run_action("page('progress')")

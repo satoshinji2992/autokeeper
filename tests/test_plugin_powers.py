@@ -356,21 +356,25 @@ async def test_the_plugins_page_shows_its_panels_in_the_right_column():
         screen = GameScreen(m, state, resume=True)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
-        tabs = screen.query_one("#pages")
-        assert not tabs.get_tab("plugins-page").display  # no panel yet: no page
+        head = screen.query_one("#pages-head")
+        assert "仪式倒数" not in head.content.plain  # no panel yet: no page
         state.plugin_panels = PANELS
         await screen.handle({"type": "plugin_panel", "name": "仪式"})
         await pilot.pause()
-        assert tabs.get_tab("plugins-page").display and str(tabs.get_tab("plugins-page").label) == "仪式倒数"
+        assert "仪式倒数" in head.content.plain
         screen.action_page("plugins")
         await pilot.pause()
-        page = rendered(screen.query_one("#plugin-panels").body.content)
+        modal = app.screen
+        assert modal.query_one("#pages").active == "plugins-page"
+        page = rendered(modal.query_one("#plugin-panels").body.content)
         assert "烛火" in page and "〔仪式〕" in page
         app.save_screenshot("plugin-panel.svg", path=str(paths.DATA))
+        await pilot.press("escape")
+        await pilot.pause()
         state.plugin_panels = {}
         await screen.handle({"type": "plugin_panel", "name": "仪式"})
         await pilot.pause()
-        assert not tabs.get_tab("plugins-page").display and tabs.active != "plugins-page"
+        assert "仪式倒数" not in head.content.plain
 
 
 SHOW = {"type": "plugin_show", "name": "号外", "title": "号外！号外！", "shape": "stage", "frames": [

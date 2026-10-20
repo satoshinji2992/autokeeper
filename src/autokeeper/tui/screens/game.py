@@ -567,7 +567,10 @@ class GameScreen(Screen):
             self._panels()
 
     def _pages(self) -> None:
-        """进展, 背景 and the plugins' page are read over the screen (action_page), made as it opens."""
+        """进展, 背景 and the plugins' page are read over the screen (action_page), made as it opens;
+        the head over 经过 names a plugin's page while there is one."""
+        shown = self.state.plugin_panels
+        self.query_one(PagesHead).plugins(tab_label(shown) if shown else "")
 
     def action_page(self, name: str) -> None:
         """经过, 进展 and 背景 (and a rule plugin's page) as a page over the screen, `name` first."""
