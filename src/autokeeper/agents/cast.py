@@ -147,6 +147,17 @@ class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
 
 
+class Slip(BaseModel):
+    kind: Literal["在场", "物证"] = Field(description="在场：叙述写了不在场的人在这里或跟着；物证：叙述写出了记录里没有的可追查的东西")
+    who: str = Field("", description="在场时，那个人物的 id")
+    text: str = Field(max_length=80, description="叙述里那句话，短")
+
+
+class Reconcile(BaseModel):
+    slips: list[Slip] = Field(default_factory=list, max_length=4, description="叙述和记录对不上的地方；没有就留空")
+    now: str = Field("", max_length=60, description="叙述停下时正在进行的事，一句话（追赶、对峙、等待回应）；平静就留空")
+
+
 class Consistency(BaseModel):
     problems: list[str] = Field(default_factory=list, description="说不通的地方，一条一句；没有就留空")
 
@@ -368,6 +379,10 @@ SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家�
 比如“我蹲下看看门槛上的泥印”“我问掌柜：昨晚谁来过？”“我先回客栈睡一觉，明早再来”。
 只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
 
+RECONCILE_SYSTEM = """你核对一段跑团叙述和世界记录。只看两类问题：叙述写了记录里不在场的人此刻在场或跟着调查员；叙述写出了记录里这一轮没有结算、可以追查的东西（脚印、字条、物件）。
+天气、气氛、调查员自己的动作和感受不算。回忆、提到某人、隔着窗看见别处的人也不算在场。对得上就留空。
+再用一句话写下叙述停下时正在进行的事：追着谁、在等谁回答、和谁对峙；平静就留空。"""
+
 CONSISTENCY_SYSTEM = """你核对跑团幕后的改写能不能自圆其说。给你改写前后的文字、改写的理由，以及玩家已经知道的、和同一批人和地点有关的事，每条标着玩家是亲眼见到的、叙述里说过的，还是听谁说的。
 玩家见过、听过的事可以改出另一个真相：有人撒谎、记错、伪造、设局、假扮。理由说得清玩家当时为什么会看到、听到那样，又和玩家知道的其他事不冲突，就不算矛盾。
 只指出说不通的地方（时间、地点、谁做了什么、东西在谁手里、谁是死是活），以及推翻了玩家见过、听过的事却没有说得通的理由的；说法不同但不冲突的、玩家知道的事里没提到的，都不算矛盾。没有矛盾就留空。"""
@@ -540,6 +555,7 @@ class Cast:
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
+            f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
         )
 
@@ -1046,6 +1062,25 @@ class Cast:
             return None
         try:
             return Review.model_validate(reply.data)
+        except ValueError:
+            return None
+
+    async def reconcile(self, state: GameState, record: str, telling: str) -> Reconcile | None:
+        """Where a telling ran ahead of the record, and what is going on as it stops
+        (engine/game.Game._reconcile). Stateless, on the world's light model; None without an answer."""
+        from ..harness.replay import CassetteError
+
+        s = self._open("reconcile", "world", RECONCILE_SYSTEM, schema=_schema(Reconcile))
+        try:
+            reply = await self._send("reconcile", s, state, f"{record}\n【叙述】\n{telling}", bind=False)
+        except CassetteError:  # a replay that drifted must fail loudly
+            raise
+        except Exception:
+            return None
+        if not isinstance(reply.data, dict):
+            return None
+        try:
+            return Reconcile.model_validate(reply.data)
         except ValueError:
             return None
 

@@ -33,7 +33,7 @@ from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from ..world import adapters, contract, desk, knowledge, review, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
-from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
+from ..world.ops import AddFact, Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import diagnostics, fog, progress, views, world
@@ -185,6 +185,7 @@ class Game:
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._looked = 0  # the turn the director last looked between turns (Game._review)
+        self.reconcile = False  # a screen has each telling checked against the record afterwards (Game._reconcile)
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -1469,9 +1470,10 @@ class Game:
     async def remember(self) -> None:
         st = self.state
         st.tally()
-        if self._world_owed and self._world_task is None:
-            self._world_owed = False
-            self._world_task = asyncio.create_task(self._live_later(), name="world")
+        told = self.told if self.reconcile and self.told is not None and self.told.entry.turn == st.turn else None
+        if (self._world_owed or told) and self._world_task is None:
+            owed, self._world_owed = self._world_owed, False
+            self._world_task = asyncio.create_task(self._after_turn(told, owed), name="world")
         self.world.sync()  # before the log is folded: what the players were told is out
         self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
@@ -1886,6 +1888,58 @@ class Game:
         if task is not None:
             await asyncio.gather(task, return_exceptions=True)
 
+    async def _after_turn(self, told: Told | None, owed: bool) -> None:
+        """Once a turn is told: its telling checked against the record, then the world's own life."""
+        if told is not None:
+            try:
+                await self._reconcile(told)
+            except asyncio.CancelledError:
+                raise
+            except CassetteError:
+                raise
+            except Exception as exc:  # a check that failed costs nobody a turn
+                self._debug("reconcile", {"phase": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]})
+        if owed:
+            await self._live_later()
+
+    async def _reconcile(self, told: Told) -> None:
+        """After the telling: where it ran ahead of the record. Someone written in who is not here
+        comes along when nothing keeps them (next door, free, not gone); otherwise the next telling
+        is told they are not here. Evidence that was never settled becomes something the players
+        saw there, so later tellings keep to it. What is going on as the telling stops (a chase, a
+        stand-off) is kept for the next turn (GameState.ongoing)."""
+        if not hasattr(self.cast, "reconcile"):
+            return
+        w, st, m = self.world, self.state, self.m
+        here = st.location
+        party = st.investigator.id
+        found = [e.text[:60] for e in st.log if e.turn == st.turn and e.kind == "clue"]
+        record = (f"【记录】地点：{w.name(here)}；在场的人：{'、'.join(f'{w.name(x)}({x})' for x in w.present(here)) or '没有别人'}；"
+                  f"跟着调查员的：{'、'.join(w.name(e.id) for e in w.rec.entities.values() if e.kind == 'npc' and e.following == party) or '无'}；"
+                  f"这一轮结算出的线索：{'；'.join(found) or '没有'}；调查员持有：{'、'.join(st.investigator.inventory) or '未登记'}\n"
+                  "【人物】" + "、".join(f"{n.name}({n.id})" for n in m.npcs))
+        result = await self.cast.reconcile(st, record, told.entry.text)
+        if result is None:
+            return
+        st.ongoing = result.now.strip()
+        near = set(next((loc.exits for loc in m.locations if loc.id == here), [])) | set(world_view.rooms(m, here))
+        for i, slip in enumerate(result.slips):
+            ent = w.rec.entities.get(slip.who)
+            if slip.kind == "在场" and ent is not None and ent.kind == "npc" and ent.at != here:
+                free = (ent.status not in ("死亡", "失踪") and ent.at in near and not ent.following
+                        and not stage.waiting(w, ent.id) and not review.waiting(w, ent.id))
+                came = free and w.apply(Move(id=f"reconcile:{st.turn}:{ent.id}", entity=ent.id, to=here, actor="keeper")).ok
+                if not came:
+                    self._late.notes.append(f"上一段叙述写到{ent.name}在这里，其实{ent.name}在{w.name(ent.at)}；"
+                                            f"这一轮自然交代他不在场，不再写成在场或同行。")
+                self._debug("reconcile", {"slip": slip.model_dump(mode="json"), "came": came})
+            elif slip.kind == "物证" and slip.text.strip():
+                w.apply(AddFact(id=f"reconcile:{st.turn}:{i}", fact=f"seen:{st.turn}:{i}", text=f"在{w.name(here)}看到：{slip.text.strip()}",
+                                about=[here], public=True, actor="keeper"))
+                self._debug("reconcile", {"slip": slip.model_dump(mode="json")})
+        if self.checkpoint:
+            self.checkpoint()
+
     async def _live_later(self) -> None:
         """The minutes the last turn took, lived by the rest of the world after it was told. What
         happened in front of the party waits in self._late for the next narration or an interlude."""
@@ -2091,6 +2145,8 @@ class Game:
         loc = m.location(st.location)
         out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）", world.context(st)]
         people = [n.name if st.npc(n.id).met else f"未通名的人（{n.look or '暂无外观记录'}）" for n in m.npcs_at(st.location)]
+        if st.ongoing:
+            out.append(f"【上一段叙述停在】{st.ongoing}")
         out.append("【当前在场人物，以记录为准】" + ("、".join(people) or "没有其他人")
                    + "。人物未出现在当前地点不代表失踪，不推断未观察到的去向；先前台词和旁白不能替代位置记录。")
         out.append(f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}（专用工具与新取得物品以持有记录为准。）")
