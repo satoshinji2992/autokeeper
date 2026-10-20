@@ -342,11 +342,12 @@ def test_streaming_events_do_not_repeatedly_serialize_game_state(fake, monkeypat
     for _ in range(10):
         record_event(game, {"type": "keeper_delta", "text": "片段"})
     record_event(game, {"type": "keeper_start"})
-    assert snapshots == []
     record_event(game, {"type": "keeper_end"})
+    assert snapshots == []  # every event is kept; the whole state is taken once the turn is over
+    record_event(game, {"type": "sheet"})
     assert snapshots == [True]
     rows, _ = game.debug_journal.read(kind="event")
-    assert len(rows) == 12
+    assert len(rows) == 13
 
 
 def test_journal_continues_after_a_truncated_line_and_pages_backwards():

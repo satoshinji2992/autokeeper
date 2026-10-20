@@ -17,6 +17,14 @@ if TYPE_CHECKING:
     from .game import Game
 
 
+MAX_BYTES = 200 * 1024 * 1024  # a journal past this is set aside (<slot>.1.jsonl) and a new one begun
+# The state, the world and the sessions are written whole when they changed: on every event that
+# was nearly every event, 16 snapshots a turn and some 2 MB (a two-turn game came to 3.9 MB). The
+# events themselves are all kept; the whole picture is taken once a turn is over (its "sheet"),
+# at the end of the game, and on an error.
+SNAPSHOT_ON = {"sheet", "ending", "epilogue"}
+
+
 class Journal:
     def __init__(self, slot: str):
         self.path = paths.game_debug(slot)
@@ -38,6 +46,9 @@ class Journal:
             with self._lock:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 self.path.parent.chmod(0o700)
+                if self.path.exists() and self.path.stat().st_size > MAX_BYTES:
+                    os.replace(self.path, self.path.with_suffix(".1.jsonl"))
+                    self._seen.clear()  # the new file starts with whole snapshots again
                 # A crash can leave half a JSON line. Preserve it for inspection while
                 # putting subsequent complete records on their own lines.
                 descriptor = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o600)
@@ -155,6 +166,5 @@ def record_event(game: Game, event: dict) -> None:
     journal = getattr(game, "debug_journal", None)
     if journal is not None:
         journal.append("event", event, turn=game.state.turn)
-        event_type = str(event.get("type", ""))
-        if event_type not in {"token", "delta", "thinking", "keeper_start", "status"} and not event_type.endswith("_delta"):
+        if str(event.get("type", "")) in SNAPSHOT_ON:
             journal.sync(game)
