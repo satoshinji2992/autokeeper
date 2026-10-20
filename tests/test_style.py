@@ -166,6 +166,15 @@ async def test_the_npcs_hear_the_same_questions_every_time(monkeypatch, tmp_path
     assert style.score(tmp_path / "talk.json")["voice"]["repeats"] == s["repeats"]
 
 
+async def test_the_npcs_are_probed_for_what_their_replies_fill_in(monkeypatch, tmp_path, skills_dir):
+    _canned(monkeypatch, tmp_path)
+    Canned.told = []
+    s = await style.talk(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "probe.json", probe=True)
+    assert s["lines"] == 9 and "陪我去后面的公墓" in Canned.told[0]
+    f = s["fields"]
+    assert len(f["replies"]) == 9 and f["said"] == 0 and f["said_missing"] == [] and f["reasks"] == 0  # "我不知道" asks for no field
+
+
 def test_the_keeper_learns_the_voice_from_examples(skills_dir):
     body = skills.body("keeper-craft")
     examples = style.examples(body)

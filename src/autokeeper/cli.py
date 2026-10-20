@@ -878,6 +878,7 @@ def eval_style(
     label: Annotated[str, typer.Option(help="这次运行的名字，如 before / after")] = "",
     runs: Annotated[int, typer.Option(help="跑几遍；一遍只有两三千字，比较时至少跑 5 遍")] = 1,
     npc: Annotated[bool, typer.Option("--npc", help="改测 NPC：同样的问话问三个 NPC，只有 NPC 是真的")] = False,
+    probe: Annotated[bool, typer.Option("--probe", help="和 --npc 一起：改问要 NPC 一起去、递东西、走开的请求，看字段填没填")] = False,
 ) -> None:
     """守秘人文风：同样的行动、裁定、NPC 台词和骰子，只有守秘人是真的，比照人类小说量它的叙事。"""
     from .eval.style import run as run_style
@@ -888,15 +889,17 @@ def eval_style(
     async def go() -> None:  # one event loop for every run: the API clients outlive a single run
         for i in range(runs):
             name = f"{label or 'run'}-{i + 1}"
-            out = paths.dev_output("eval", f"{'talk' if npc else 'style'}-{name}.json")
+            out = paths.dev_output("eval", f"{'probe' if npc and probe else 'talk' if npc else 'style'}-{name}.json")
             if npc:
-                s = await talk(module, label=name, out=out)
+                s = await talk(module, label=name, out=out, probe=probe)
                 u = s["usage"]
                 console.print(
                     f"[bold]{name}[/] NPC {s['npc']} · 提示词 {s['prompt']} · {s['lines']} 句，每句 {s['line_chars']} 字 · "
                     f"动作开头 {s['action_first']:.0%}（第二句起 {s['action_first_later']:.0%}）· 重复 {s['repeats']:.0%} · "
                     f"{int(u.get('calls', 0))} 次调用 ${u.get('cost_usd', 0.0):.4f}"
                 )
+                if f := s.get("fields"):
+                    console.print(f"  字段：嘴上说了 {f['said']} 处，填了 {f['filled']} 处，说了没填 {f['said_missing']}；重问 {f['reasks']}，未落实 {f['unsettled']}")
             else:
                 s = await run_style(module, label=name, out=out)
                 u = s["usage"]

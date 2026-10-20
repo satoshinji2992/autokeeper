@@ -496,12 +496,31 @@ def _talk_zhuishuren() -> list[tuple[str, list[str]]]:
 TALKS = {"zhuishuren": _talk_zhuishuren}
 
 
-async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) -> dict[str, Any]:
+def _probe_zhuishuren() -> list[tuple[str, list[str]]]:
+    """Requests an NPC answers with a field as well as words: going along (accompany), handing a thing
+    over (items), walking off (leave)."""
+    return [
+        ("thomas", ["金博尔先生，天黑之前，您陪我去后面的公墓走一趟吧。", "屋里有手电吗？借我一只，晚上用得着。",
+                    "我先去书房看看，您忙您的。"]),
+        ("jefferson", ["您这把铁铲能借我用一会儿吗？就在这儿用，马上还您。", "您能领我去道格拉斯先生常坐的那块墓碑吗？",
+                       "天快黑了，您是不是要回小屋了？"]),
+        ("odell", ["夫人，您能陪我去金博尔家一趟吗？就几步路。", "您篮子里有火柴吗？能给我一盒吗？", "不耽误您了，您先回家吧。"]),
+    ]  # fmt: skip
+
+
+PROBES = {"zhuishuren": _probe_zhuishuren}
+
+
+async def talk(module_dir: Path, *, label: str = "", out: Path | None = None, probe: bool = False) -> dict[str, Any]:
     """Ask the module's NPCs the same questions with the configured NPC model, through the game's
-    own NPC call (its leak check included), and measure how they talk. No checks, no keeper."""
+    own NPC call (its leak check included), and measure how they talk. No checks, no keeper.
+    `probe`: the requests of PROBES instead, and what the replies filled in (eval/control.py)."""
+    from .control import Watch
+
     m = Module.load(module_dir)
-    if m.id not in TALKS:
-        raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(TALKS)}）")
+    script = PROBES if probe else TALKS
+    if m.id not in script:
+        raise ValueError(f"没有《{m.title}》的问话（有：{'、'.join(script)}）")
     # Measure the same twelve replies. Autonomous decisions and illustration calls
     # would change both the scene and the model-call count of this voice experiment.
     cfg = replace(config.load(), improv="严格", minds=0, visual_limit=0, imagegen=False, showcase=False)
@@ -509,11 +528,13 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
     cast.prefs = Prefs()
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"talk-{m.id}-{label or 'run'}", human=[])
     game = Game(m, state, cast, Rules(dice=Loaded(())))  # type: ignore[arg-type]
+    watch = Watch()
+    watch.attach(cast, game)
     inv = state.investigator
     said: dict[str, list[str]] = {}
     asked: dict[str, list[str]] = {}
     try:
-        for npc_id, questions in TALKS[m.id]():
+        for npc_id, questions in script[m.id]():
             npc = m.npc(npc_id)
             state.location = npc.location or state.location
             for q in questions:
@@ -540,5 +561,12 @@ async def talk(module_dir: Path, *, label: str = "", out: Path | None = None) ->
         "said": said,
         "asked": asked,
     }
+    if probe:
+        checked = watch.result(m)
+        replies = checked["npc"]["detail"]
+        summary["fields"] = {"replies": replies, "said_missing": checked["fields"]["said_missing"],
+                             "filled": sum(bool(r["fields"].get(f)) for r in replies for f in ("accompany", "items", "leave")),
+                             "said": sum(len(r["said"]) for r in replies), "reasks": checked["npc"]["reasks"],
+                             "unsettled": checked["npc"]["unsettled"]}
     _write(out, summary)
     return summary
