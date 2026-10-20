@@ -320,9 +320,20 @@ def plain(exc: BaseException) -> str:
     if status == 429:
         return "请求过于频繁或额度已用尽（429）"
     if isinstance(exc, TimeoutError):
-        return f"{PING_SECONDS} 秒内无响应"
-    first = text.splitlines()[0][:160] if text else ""
-    return f"{type(exc).__name__}: {first}" if first else type(exc).__name__
+        return "模型长时间没有回应"
+    name = type(exc).__name__
+    if name == "BudgetExceeded":
+        return "已达设定的花费上限，可在配置里调整 budget_usd"
+    if name == "ContextBudgetExceeded":
+        return "这次要发给模型的资料超过了设定的字数上限"
+    if (isinstance(status, int) and status >= 500) or isinstance(exc, ConnectionError) or any(
+            k in name for k in ("Connection", "Overloaded", "ServiceUnavailable", "InternalServer", "RemoteProtocol")):
+        return "模型服务暂时不可用"
+    if name in ("ValidationError", "JSONDecodeError") or "validation error" in text:
+        return "模型返回的内容格式不对"
+    if name in ("ProcessError", "CLIConnectionError", "ClaudeError", "CodexError"):
+        return "模型程序意外退出"
+    return f"出现错误（{name}）"  # the rest is in the developer records (F12)
 
 
 PING_SECONDS = 90

@@ -1075,7 +1075,7 @@ class GameScreen(Screen):
             journal.append("error", {"source": "turn", "traceback": self.dev_errors[-1]}, turn=self.state.turn)
             journal.sync(self.game)
         del self.dev_errors[:-20]
-        text = f"这一段暂未完成（{type(exc).__name__}）。输入 /retry 接着讲，已掷出的结果会保留。"
+        text = f"这一段暂未完成：{config.plain(exc)}。输入 /retry 接着讲，已掷出的结果会保留。"
         self.story.end_keeper("这一段暂时中断。")
         self.story.add("system", Text(text))
         self.app.notify(text, severity="warning", timeout=12)

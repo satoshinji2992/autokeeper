@@ -22,6 +22,7 @@ from ... import config, imagery, paths, roster
 from ...agents.card import Builder, CardError, Figure, Photo, Proposal, local_file
 from ...module.schema import Module
 from ...rules.coc import Investigator
+from ..widgets.waiting import wait_on
 
 ANY = "你来定"
 PHOTO = (40, 18)  # the photo in the preview pane, in cells
@@ -137,7 +138,7 @@ class CardScreen(Screen[Investigator | None]):
     def _wait(self, text: str) -> None:
         self.query_one(Input).disabled = True
         self.query_one(OptionList).disabled = True
-        self.query_one("#setup-hint", Static).update(Text(f"{text}  Esc 取消", style="bold"))
+        wait_on(self.query_one("#setup-hint", Static), text, after="  Esc 取消")
 
     def _about(self) -> Text:
         """Who they are, their photo, the answers so far."""
@@ -339,7 +340,7 @@ class CardScreen(Screen[Investigator | None]):
         try:
             kind = await self.builder.read(source)
         except Exception as exc:  # an unreadable file, a model that cannot see images, a dropped call
-            self.app.notify(f"无法读取人物卡：{exc}", severity="error", timeout=8)
+            self.app.notify(f"无法读取人物卡：{config.plain(exc)}", severity="error", timeout=8)
             self._source()
             return
         if kind == "sheet":
@@ -357,7 +358,7 @@ class CardScreen(Screen[Investigator | None]):
             self.proposal = await self.builder.propose()  # who this is, then their photos by it
             await self._fetch(range(min(4, len(fig.photos))))
         except Exception as exc:  # the model is down or answered nonsense twice
-            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能生成问题：{exc.__class__.__name__}，请重试。", severity="error")
+            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能生成问题：{config.plain(exc)}。", severity="error")
             self._restart()
             return
         self._photos()
@@ -436,7 +437,7 @@ class CardScreen(Screen[Investigator | None]):
         try:
             await self.builder.build(request)
         except Exception as exc:
-            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能创建人物卡：{exc.__class__.__name__}，请重试。", severity="error")
+            self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能创建人物卡：{config.plain(exc)}。", severity="error")
             self._extra() if back == "extra" else self._tweak()
             return
         self._card()

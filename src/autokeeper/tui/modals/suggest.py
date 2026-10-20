@@ -24,6 +24,8 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from ... import config
+
 if TYPE_CHECKING:
     from ..screens.game import GameScreen
 
@@ -132,7 +134,7 @@ class Ideas:
         try:
             texts = await s.ideas_for(inv)
         except Exception as exc:  # a failed call costs nothing but the ideas
-            s.app.notify(f"行动建议生成失败（{exc.__class__.__name__}），可按 F5 重试。", severity="warning")
+            s.app.notify(f"行动建议生成失败：{config.plain(exc)}。可按 F5 重试。", severity="warning")
             return
         finally:
             draft, self.draft = self.draft, None

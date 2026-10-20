@@ -23,6 +23,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
 
+from ... import config
 from ...engine.state import GameState
 from ...module.schema import Module
 from ...plugins.schema import does
@@ -156,7 +157,7 @@ class PluginsModal(ModalScreen[None]):
         try:
             ok, message = await self.drafter(text, progress)
         except Exception as exc:  # the house rule is a bonus; a failed call must not break the screen
-            ok, message = False, f"添加失败（{exc.__class__.__name__}），可稍后重试。"
+            ok, message = False, f"添加失败：{config.plain(exc)}。可稍后重试。"
         self.working = False
         box.disabled = False
         if ok:

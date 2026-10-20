@@ -18,6 +18,7 @@ from textual.widgets import Button, Input, OptionList, RadioButton, RadioSet, St
 from textual.widgets.option_list import Option
 
 from ... import config
+from ..widgets.waiting import wait_on
 
 MODE_NOTES = {
     "经济": "降低各分工的思考强度",
@@ -212,8 +213,9 @@ class EngineModal(ModalScreen[dict | None]):
     async def _install(self) -> None:
         result, button = self.query_one("#ping-result", Static), self.query_one("#install", Button)
         button.disabled = True
-        result.update(Text("正在安装 Claude 组件（约 250 MB）…", style="dim"))
+        waiting = wait_on(result, "正在安装 Claude 组件（约 250 MB）", style="dim")
         problem = await config.install_claude()
+        waiting.stop()
         button.disabled = False
         if problem:
             result.update(Text(f"✗ {problem}", style="red"))

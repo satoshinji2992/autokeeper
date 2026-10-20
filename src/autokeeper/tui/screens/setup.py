@@ -80,8 +80,8 @@ class SetupScreen(Screen):
             try:
                 m = Module.load(p)
                 opts.append(Option(f"《{m.title}》 {m.players}", id=str(p)))
-            except Exception as exc:  # broken module files should not crash the menu
-                opts.append(Option(f"{p.name}（无法读取：{exc.__class__.__name__}）", id=str(p), disabled=True))
+            except Exception:  # broken module files should not crash the menu
+                opts.append(Option(f"{p.name}（无法读取）", id=str(p), disabled=True))
         self._set("选择模组" + ("（AI 观战）" if self.spectate else ""), opts, "Enter 或空格选择 · Esc 返回")
         tips.first_game(self)  # no saves yet: 《追书人》 is the tutorial
 

@@ -29,6 +29,7 @@ from ...net import room as lan
 from ...rules.coc import Investigator
 from ..library import art_text, face_text, load_module
 from ..modals.sheet import sheet_view
+from ..widgets.waiting import wait_on
 from .lobby import NARROW
 
 ROOM_KEYS = "Enter 切换玩家或 AI · Delete 删除座位 · Tab 选择调查员 · Esc 换模组"
@@ -120,8 +121,8 @@ class HostScreen(Screen):
             try:
                 m = Module.load(p)
                 ol.add_option(Option(f"《{m.title}》 {m.players}", id=str(p), disabled=not m.pregens))
-            except Exception as exc:  # broken module files should not crash the menu
-                ol.add_option(Option(f"{p.name}（无法读取：{exc.__class__.__name__}）", id=str(p), disabled=True))
+            except Exception:  # broken module files should not crash the menu
+                ol.add_option(Option(f"{p.name}（无法读取）", id=str(p), disabled=True))
         if self.path is not None and self.path in self.paths:
             ol.highlighted = self.paths.index(self.path)
         elif ol.option_count:
@@ -353,8 +354,8 @@ class HostScreen(Screen):
         else:
             try:
                 state = lan.saved(oid.removeprefix("slot:"))
-            except (OSError, ValueError) as exc:
-                self.app.notify(f"无法读取存档（{exc.__class__.__name__}）。", severity="error")
+            except (OSError, ValueError):
+                self.app.notify("无法读取这个存档。", severity="error")
                 return
             self.slot = state.slot
             self.party = list(state.investigators)
@@ -411,7 +412,7 @@ class HostScreen(Screen):
         button = self.query_one("#host-open", Button)
         button.disabled = True
         hint = self.query_one("#setup-hint", Static)
-        hint.update(Text("正在创建房间……", style="bold"))
+        wait_on(hint, "正在创建房间")
         if (old := getattr(self.app, "room", None)) is not None:  # one room at a time; this one had stopped
             self.app.room = None  # type: ignore[attr-defined]
             await asyncio.to_thread(old.close)

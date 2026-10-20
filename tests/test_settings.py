@@ -205,6 +205,9 @@ def test_a_role_given_its_own_model_keeps_it_and_tests_say_what_is_wrong_in_plai
     # no key: the model fails as it is made, which used to take the game down with it
     assert asyncio.run(config.ping_role(config.Role("langchain", "deepseek:deepseek-flash", None))) == "缺少 DeepSeek API Key"
     assert config.plain(ModuleNotFoundError("No module named 'claude_agent_sdk'")) == "未安装 Claude 组件"
+    assert config.plain(TimeoutError()) == "模型长时间没有回应"  # a player's words, not an exception's name
+    assert config.plain(ConnectionError("reset")) == "模型服务暂时不可用"
+    assert config.plain(KeyError("x")) == "出现错误（KeyError）"
 
 
 def test_a_player_without_a_usable_model_is_asked_even_with_old_saves(monkeypatch):
