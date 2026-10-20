@@ -35,9 +35,11 @@ from ...net.link import Link
 from ...rules.coc import Investigator
 from ..library import art_text, face_text
 from ..modals.sheet import SheetModal, sheet_view
+from ..widgets.waiting import wait_on
 from .net import NetGameScreen, leave, table_module
 
 NARROW = 96  # fewer columns than this: no sheet beside the seats (人物卡 opens it)
+CONNECT_SECONDS = 10  # joining a room gives up after this
 
 
 def gist(inv: Investigator, width: int = 40) -> str:
@@ -136,17 +138,27 @@ class LobbyScreen(Screen):
                 yield Button("关闭房间", id="close_room", variant="error", compact=True)
         yield Footer()
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
         self.query_one("#seats", OptionList).border_title = "座位"
         self.query_one("#close_room", Button).display = self.room is not None
         if self.room is not None:
             self.query_one("#help", Button).label = "联机故障排查"
         self.query_one("#lobby-info").border_title = "房间"
+        self._connect()
+
+    @work(exclusive=True, group="connect")
+    async def _connect(self) -> None:
+        """In the background, ten seconds at most: a wrong address that still routes somewhere held
+        the lobby frozen for up to five minutes, Esc included (2026-10-21)."""
+        waiting = wait_on(self.query_one("#lobby-head", Static), f"正在连接 {self.link.url}", style="")
         try:
-            await self.link.connect()
-        except Exception as exc:  # wrong address, host not up yet
+            async with asyncio.timeout(CONNECT_SECONDS):
+                await self.link.connect()
+        except Exception:  # wrong address, host not up yet, a firewall in between
+            waiting.stop()
             await self.link.close()
-            self.app.notify(str(exc) or type(exc).__name__, title="连接房间失败", severity="error", timeout=8)
+            self.app.notify("无法连接这个房间。请检查地址和网络，或查看「遇到问题」。", title="连接房间失败",
+                            severity="error", timeout=8)
             if self.room is not None:
                 self.app.pop_screen()
             else:
@@ -154,6 +166,7 @@ class LobbyScreen(Screen):
 
                 self.app.switch_screen(JoinScreen(self.link.url.removeprefix("ws://").removesuffix("/ws"), self.link.name))
             return
+        waiting.stop()
         self.link.handler = self.on_msg
         self.app.run_worker(self.link.pump, name="link", group="link", exit_on_error=False)
 

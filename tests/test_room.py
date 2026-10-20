@@ -394,3 +394,31 @@ def test_autokeeper_host_opens_the_same_room(monkeypatch, stand_ins):
     assert not seen["room"].is_open  # closed when the command ends
     bad = CliRunner().invoke(cli, ["host", str(EXAMPLE), "--no-web", "--hub-port", str(port), "--seats", "随便"])
     assert bad.exit_code == 1 and "座位类型仅支持" in bad.output
+
+
+async def test_joining_a_room_that_does_not_answer_gives_up_and_says_so(monkeypatch):
+    """A wrong address that still routes somewhere froze the lobby for up to five minutes (2026-10-21)."""
+    from autokeeper.net.link import Link
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens import lobby as lobby_screen
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.net import JoinScreen
+
+    async def silent(self) -> None:
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(Link, "connect", silent)
+    monkeypatch.setattr(lobby_screen, "CONNECT_SECONDS", 0.3)
+    said: list[str] = []
+    app = AutoKeeperApp(theme="amber")
+    real = app.notify
+    app.notify = lambda message, **kw: (said.append(str(message)), real(message, **kw))[-1]  # type: ignore[method-assign]
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.push_screen(LobbyScreen("10.255.255.1:8765", "小红"))
+        await pilot.pause(0.1)
+        assert "正在连接" in str(app.screen.query_one("#lobby-head").render())
+        for _ in range(30):
+            await pilot.pause(0.1)
+            if isinstance(app.screen, JoinScreen):
+                break
+        assert isinstance(app.screen, JoinScreen) and any("无法连接这个房间" in s for s in said)
