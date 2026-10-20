@@ -55,7 +55,7 @@ async def test_original_handouts_only_travel_to_players_after_discovery(monkeypa
     hub.m.pictures["private_map"] = str(image)
     before = hub._welcome("player")
     assert "private_map" not in before["picture_data"]
-    assert not table_module(before).pictures
+    assert "private_map" not in table_module(before).pictures  # the place they are in may be pictured; the map, not yet
     sent = []
 
     async def record(message):

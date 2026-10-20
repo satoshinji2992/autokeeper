@@ -17,7 +17,7 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config, credits, imagegen, imagery, paths
+from autokeeper import config, credits, imagegen, imagery, paths, scenery
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewLook
 from autokeeper.engine.game import Game
@@ -503,7 +503,7 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
 async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_they_get_there(codex, fake):
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
     hub.game.visuals.cfg = config.Config()
-    assert hub.m.location("tower").art is None  # no picture of its own at all
+    assert scenery.painted(hub.m.pictures[hub.m.location("tower").art])  # no picture of its own: one painted by program
     sent = []
 
     async def collect(msg):

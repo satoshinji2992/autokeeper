@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -108,8 +109,11 @@ async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypat
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
     await asyncio.gather(*visuals.tasks.values())
-    assert all(record["status"] == "failed" and not record["art"] for record in st.visuals.values())
-    assert all(record["error"] == "ConnectionError" for record in st.visuals.values())
+    drawn = {k: v for k, v in st.visuals.items() if not k.startswith("improv_scene_")}
+    assert all(record["status"] == "failed" and not record["art"] for record in drawn.values())
+    assert all(record["error"] == "ConnectionError" for record in drawn.values())
+    place = next(v for k, v in st.visuals.items() if k.startswith("improv_scene_"))
+    assert place["status"] == "ready" and Path(place["picture"]).is_file()  # a place is painted by program, no artist needed
     await visuals.close()
 
     async def slow(*args, **kwargs):
@@ -170,7 +174,7 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
     assert all(t.cancelled() for t in old_tasks)
     gate.set()
     await asyncio.gather(*game.visuals.tasks.values())
-    assert all(cfg is replacement for cfg in configs[-3:]) and game.visuals.cfg is replacement
+    assert all(cfg is replacement for cfg in configs[-2:]) and game.visuals.cfg is replacement  # the person and the prop
     await game.close()
 
 
@@ -191,9 +195,9 @@ async def test_art_waits_for_the_player_turn_and_obeys_a_separate_job_allowance(
     assert not calls
     visuals.resume()
     await asyncio.gather(*visuals.tasks.values())
-    assert len(calls) == 1
-    assert sum(v["status"] == "ready" for v in st.visuals.values()) == 1
-    assert sum(bool(v["art"]) for v in st.visuals.values()) == 1  # only the completed drawing is shown
+    assert len(calls) <= 1  # the one job the allowance has; the place is painted by program, free
+    assert next(v for k, v in st.visuals.items() if k.startswith("improv_scene_"))["status"] == "ready"
+    assert sum(bool(v["art"]) for v in st.visuals.values()) == len(calls)  # only the completed drawing is shown
     await visuals.close()
 
 
@@ -212,8 +216,9 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
     for _ in range(4):
         visuals.schedule()
         await asyncio.gather(*visuals.tasks.values())
-    assert calls == 6 and all(v["attempts"] == "2" for v in st.visuals.values())
-    assert all(v["status"] == "failed" for v in st.visuals.values())
+    drawn = {k: v for k, v in st.visuals.items() if not k.startswith("improv_scene_")}  # the place is painted, never fails
+    assert calls == 4 and all(v["attempts"] == "2" for v in drawn.values())
+    assert all(v["status"] == "failed" for v in drawn.values())
     await visuals.close()
 
 

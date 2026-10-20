@@ -36,6 +36,10 @@ async def test_start_menu_has_settings_and_nested_pages_do_not_start_a_game(size
         app.screen.query_one("#settings-models", Button).press()
         await pilot.pause()
         assert isinstance(app.screen, EngineModal)
+        for _ in range(30):  # its two pages laid out (Windows' CI asked before they were)
+            if app.screen.query("#preset"):
+                break
+            await pilot.pause(0.1)
         assert app.screen.query_one("#preset", OptionList).get_option("codex")
         await pilot.press("escape")
         await pilot.pause()

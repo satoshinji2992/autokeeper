@@ -27,6 +27,14 @@ from .test_speaker import drawn
 from .test_tui import canned, until  # noqa: F401  (canned: a fixture, used by name)
 
 
+@pytest.fixture(autouse=True)
+def hand_drawn(monkeypatch):
+    """These time and measure the hand-drawn scenes: no places painted by program (scenery.py)."""
+    from autokeeper import scenery
+
+    monkeypatch.setattr(scenery, "fill", lambda m: [])
+
+
 def square() -> tuple[Module, Game]:
     m = Module.load(EXAMPLE)  # starts on the square: hand-drawn, nine rows, in fog
     lead = m.pregens[0].model_copy(deep=True)

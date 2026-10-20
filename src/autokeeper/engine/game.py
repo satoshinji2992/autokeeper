@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .. import weather
+from .. import scenery, weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
 from ..agents.director import Improv
@@ -158,6 +158,7 @@ class _ResolutionDice:
 class Game:
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
+        scenery.fill(module)  # every place with a picture: painted by program where the module has none
         self.emit: Emit = emit or _silent
         self.checkpoint: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None

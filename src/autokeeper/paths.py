@@ -266,6 +266,11 @@ def prepared_pictures() -> Path:
     return cache() / "pictures"
 
 
+def scenery() -> Path:
+    """Scenes painted by program for places with no picture (scenery.py), per module."""
+    return cache() / "scenery"
+
+
 def sessions() -> Path:
     """cwd for Claude Code and Codex processes, which keeps them out of other projects."""
     return cache() / "sessions"

@@ -12,7 +12,7 @@ from PIL import Image
 from rich.text import Text
 from textual.widgets import Button, Input, RadioButton, Static
 
-from autokeeper import artkit, config, imagery, paths
+from autokeeper import artkit, config, imagery, paths, scenery
 from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
@@ -375,6 +375,7 @@ def test_the_sheet_lists_every_skill_and_the_specialisms():
 
 
 async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
+    monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
     from autokeeper.tui.modals.sheet import SheetModal
 
     monkeypatch.setattr(paths, "DATA", tmp_path)

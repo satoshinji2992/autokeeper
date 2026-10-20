@@ -18,7 +18,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from .. import artkit, config, imagegen, imagery, paths
+from .. import artkit, config, imagegen, imagery, paths, scenery
 from ..agents import artist
 from ..module.schema import Module
 from .state import GameState
@@ -151,6 +151,8 @@ class Visuals:
                 attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
                 if ((record["status"] != "ready" and not record.get("phase") and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
+                    if kind == "scene":  # a place painted by program costs nothing
+                        await self._painted(key, record, subject)
                     return  # foreground narration owns the remaining budget
                 if record["status"] != "ready" and not record.get("phase"):
                     record["attempts"] = str(int(record.get("attempts", "0")) + 1)
@@ -175,8 +177,13 @@ class Visuals:
                     record.pop("error", None)
                     await self._cache(key)
                     return
-                # Only use hand-drawn ASCII when neither a reference image nor image
-                # generation supplied a picture. Never publish a crude intermediate first.
+                # A place neither a photo nor image generation supplied: painted by program
+                # (scenery.py), never the artist's hand-drawn ASCII (2026-10-21).
+                if kind == "scene":
+                    await self._painted(key, record, subject)
+                    return
+                # A person: hand-drawn ASCII when neither a reference image nor image generation
+                # supplied a picture. Never publish a crude intermediate first.
                 if record["status"] != "ready":
                     record["phase"] = "ascii"
                     async with asyncio.timeout(90):
@@ -202,6 +209,18 @@ class Visuals:
             record.update(status="ready" if record["status"] == "ready" else "failed", error=type(exc).__name__)
             record.pop("phase", None)
             await self._cache(key)
+
+    async def _painted(self, key: str, record: dict[str, str], subject: str) -> None:
+        """The place's scene painted by program, in this game's pictures folder."""
+        if record.get("picture"):
+            return
+        name = next((loc.name for loc in self.module.locations if loc.art == key), "")
+        path = await asyncio.to_thread(scenery.picture, self.folder, key, name, subject)
+        record.update(picture=str(path), status="ready", photo_status="done")
+        record.pop("phase", None)
+        record.pop("error", None)
+        self._attach(key, record)
+        await self._publish(key)
 
     async def _photo(self, key, record, subject, kind) -> None:
         await imagery.fetch_folder(
@@ -361,7 +380,7 @@ class Visuals:
                 kind, change = record.get("kind", "scene"), record.get("change", "")
                 record["attempts"] = str(int(record.get("attempts", "0")) + 1)
                 shown = self.module.pictures.get(key, "")
-                original = Path(shown) if shown and Path(shown).is_file() else None
+                original = Path(shown) if shown and Path(shown).is_file() and not scenery.painted(shown) else None
                 made = int(record.get("made", "0")) + 1
                 world = {"era": self.module.era, "setting": self.module.setting}
                 text = (imagegen.prompt(subject, kind, change=change, **world) if original is not None

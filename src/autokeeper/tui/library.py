@@ -11,7 +11,7 @@ from pathlib import Path
 from rich.text import Text
 from textual.theme import Theme
 
-from .. import artkit, imagery, paths
+from .. import artkit, imagery, paths, scenery
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
@@ -65,6 +65,7 @@ def module_dir(module_id: str) -> Path:
 def load_module(path: Path) -> Module:
     m = Module.load(path)
     ensure_compiled(m, path)
+    scenery.fill(m)  # a place with no picture: one painted by program, not the hand-drawn art
     return m
 
 

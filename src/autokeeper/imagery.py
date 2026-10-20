@@ -604,6 +604,9 @@ def picture_source(path: str | Path) -> str:
     original."""
     p = Path(path)
     prep = prepared(p)
+    from . import scenery
+
+    scenery.ensure(p)  # a scene painted by program, made the first time it is shown
     try:
         if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
             return str(prep)

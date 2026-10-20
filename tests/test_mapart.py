@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from rich.cells import cell_len
 
 from autokeeper import paths
@@ -51,3 +53,21 @@ def test_what_has_only_been_heard_of_lies_in_mist():
     if far:  # paler where they have not been
         x, y = plan.spots[far[0]]
         assert misty[y * 2, x + 3].mean() >= clear[y * 2, x + 3].mean() - 0.02
+
+
+def test_a_place_with_no_picture_gets_one_painted_by_program_when_first_shown(tmp_path, monkeypatch):
+    """Places without a picture fell back to hand-drawn ASCII art (2026-10-21: art made by program)."""
+    from autokeeper import imagery, scenery
+
+    monkeypatch.setattr(paths, "CACHE", tmp_path)
+    m = Module.load(paths.EXAMPLE)
+    assert not any(loc.art in m.pictures for loc in m.locations)
+    made = scenery.fill(m)
+    assert set(made) == {loc.art for loc in m.locations}
+    path = m.pictures[m.locations[0].art]
+    assert not Path(path).exists()  # named now, painted only when shown
+    imagery.picture_source(path)
+    assert Path(path).is_file()
+    assert scenery.kind_of("道格拉斯的书房") == "study" and scenery.kind_of("公墓") == "graveyard"
+    assert scenery.kind_of("报社") == "office" and scenery.kind_of("阿诺兹堡火车站") == "station"
+    assert (scenery.paint("钟楼", key="k").tobytes() == scenery.paint("钟楼", key="k").tobytes())  # the same each time
