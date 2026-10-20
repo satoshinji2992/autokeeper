@@ -689,6 +689,8 @@ def per_turn(report: dict[str, Any]) -> dict[int, dict[str, float]]:
             "scene_second_failed": float(second_failed(c)) if c else 0.0,
             "npc_reasks": npc.get("reasks", 0), "npc_unsettled": npc.get("unsettled", 0),
             "fields_missing": len(fields.get("said_missing", [])) + len(fields.get("scene_vs_reply", [])),
+            # Offered something to play on meeting the investigators, and left played empty: told again next time.
+            "meetings_unmarked": fields.get("meetings_offered", 0) - fields.get("meetings_marked", 0),
             "invalid_clues": len(arb.get("invalid_clues", {})),
             "arbiter_repairs": sum(cl.get("repairs", 0) for cl in x.get("calls", []) if cl.get("agent") == "arbiter"),
             "missed_told": len(clues.get("missed_told", [])), "early_told": len(clues.get("early_told", [])),

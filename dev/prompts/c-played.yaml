@@ -1,0 +1,5 @@
+note: 候选：见面安排这次做了就填 played（NPC_SYSTEM 信息与行动边界）
+replace:
+  NPC_SYSTEM:
+    - old: 说完马上走开，leave 填去处。只讨论可能性不算交付。
+      new: 说完马上走开，leave 填去处。只讨论可能性不算交付。【见到调查员时，你会】里的事这次做了，played 填它括号里的编号。
