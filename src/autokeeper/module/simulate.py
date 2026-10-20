@@ -134,7 +134,7 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
     flags: set[str] = set()
     gone: set[str] = set()
     names = {n.id: n.name for n in m.npcs}
-    pending = [(a.npc, s) for a in m.agendas for s in a.steps if s.does.strip() and a.npc in at]
+    pending = [(a.npc, s) for a in m.agendas for s in a.steps if s.does.strip() and s.when.strip() and a.npc in at]
     timed = sorted((parse_time(e.when.strip()), e) for e in m.events if TIMED.fullmatch(e.when.strip()))
 
     def due(step) -> int | None:

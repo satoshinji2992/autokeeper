@@ -297,8 +297,10 @@ def audit(m: Module) -> list[Issue]:
         if a.npc not in npcs:
             err(f"打算里的 NPC {a.npc} 不存在")
         for step in a.steps:
-            if step.when.startswith("flag:") and step.when[5:] not in m.flags:
-                err(f"{a.npc} 的打算 {step.id} 依赖未声明的标记 {step.when[5:]}")
+            atoms = [x.strip().lstrip("!") for group in step.when.split("|") for x in group.split("&") if x.strip()]
+            for flag in (x[5:] for x in atoms if x.startswith("flag:")):
+                if flag not in m.flags:
+                    err(f"{a.npc} 的打算 {step.id} 依赖未声明的标记 {flag}")
             for problem in _outcome(m, a.npc, step.does):
                 err(f"{a.npc} 的打算 {step.id} 的结果 {problem}")
     if len(m.agendas) > 6:

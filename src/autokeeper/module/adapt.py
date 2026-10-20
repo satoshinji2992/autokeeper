@@ -120,8 +120,10 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                   "写 6–14 条，先写会推动局面的：利益冲突、隐瞒、亏欠、旧怨。b 也可以写 players：他对外来调查员的态度。", Bonds),
     "agendas": ("挑 3–6 个最有自己打算的 NPC（标了“重要”的优先），写他们想要什么，以及没人插手时接下来会怎么做，每人 2–5 步。"
                 "when 写 'D1 23:00' 这样的时间，或条件 flag:标记、at:谁:地点。和原作的事件时间线对得上，不替原作的事件抢戏。"
-                "每步的 does 写做成以后实际成立的事（at:他自己:地点、owner:物件:持有者、flag:标记、gone:谁），游戏里到时直接照做；"
-                "原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
+                "有 when 的步骤写 does：做成以后实际成立的事（at:他自己:地点、owner:物件:持有者、flag:标记、gone:谁），游戏里到时直接照做；"
+                "要等调查员来问、来做的事写不成条件，不写 when 也不写 does，交给人物临场决定；"
+                "does 里的 flag 只用表示世界里发生了某事的标记，不用表示调查员看见、遇到、做到或知道了什么的标记（那些由裁定员按调查员的行动立）；"
+                "物件只用【物件】里的 id，交给调查员写 players；别人去哪不写在他的 does 里。原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
                    "端倪本身不说破真相，只让人觉得哪里不对。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
@@ -147,6 +149,8 @@ def book(m: Module) -> str:
     lines.append("【NPC】\n" + "\n".join(
         f"- {n.id} {n.name}（{n.role}）{'，重要' if n.important else ''}，在 {n.location}；想要：{n.goal or '缺'}；性格：{n.personality or '缺'}；"
         f"说话：{n.voice or '缺'}；知道：{'；'.join(n.knows) or '缺'}；秘密：{'；'.join(n.secrets) or '无'}" for n in m.npcs))
+    if m.items:
+        lines.append("【物件】\n" + "\n".join(f"- {i.id} {i.name}，在 {i.owner or i.where or '不详'}" for i in m.items))
     lines.append("【线索】\n" + "\n".join(f"- {c.id}「{c.title}」在 {c.where}{'·' + c.feature if c.feature else ''}，指向 {'、'.join(c.points_to) or '无'}"
                                         + ("，关键" if c.core else "") for c in m.clues))  # fmt: skip
     lines.append("【结论】\n" + "\n".join(f"- {k.id}：{k.text}" for k in m.conclusions))
@@ -263,8 +267,15 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
     if name == "relations":
         items = [b for b in items if b.a in npcs and (b.b in npcs or b.b == "players") and b.a != b.b]
     elif name == "agendas":
+        from .graph import _outcome
+
         seen: set[str] = set()
         items = [a for a in items if a.npc in npcs and not (a.npc in seen or seen.add(a.npc)) and a.steps][:6]  # type: ignore[func-returns-value]
+        for a in items:  # an outcome naming what the module lacks is cut down to what it has, not the whole pass
+            for step in a.steps:
+                parts = [x.strip() for x in step.does.replace("|", "&").split("&") if x.strip() and "!" not in x]
+                # Without a time or a condition the step is the NPC's to judge in play: no outcome done for it.
+                step.does = " & ".join(x for x in parts if not _outcome(m, a.npc, x)) if step.when.strip() else ""
     elif name == "foreshadow":
         targets = {k.id for k in m.conclusions} | {e.id for e in m.events} | {e.id for e in m.endings}
         items = [f for f in items if f.where in places and f.pays_off in targets]

@@ -130,7 +130,12 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
                 assert new.goal.startswith("协助调查员" + old.goal + "；")
                 assert "力所能及的帮助" in new.personality and "履行承诺" in new.goal
                 old.personality, old.goal = new.personality, new.goal
-        then.prelude = now.prelude  # the opening performance, written at compile time since (module/prelude.py)
+        # What compile time adds since (module/adapt.py): the situation layer, the opening performance,
+        # clues for a conclusion short of three. Added, never changed: the original clues stay as they were.
+        for name in ("relations", "agendas", "foreshadow", "ties", "mechanics", "prelude"):
+            setattr(then, name, getattr(now, name))
+        original = {c.id for c in then.clues}
+        now = now.model_copy(update={"clues": [c for c in now.clues if c.id in original]})
         if folder.name == "zhuishuren":  # 未解之谜 had a sentence for a condition, which never fires
             ending = next(e for e in then.endings if e.id == "unsolved")
             assert ending.condition.startswith("以上都没有发生")

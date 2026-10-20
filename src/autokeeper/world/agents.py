@@ -214,7 +214,9 @@ def marked(w: World) -> list[Any]:
         steps = []
         for move in a.steps:
             timed = re.fullmatch(r"D\d+ \d{1,2}:\d{2}", move.when.strip())
-            prepared, achieved = effects(a.npc, move.does)  # what the module says it brings about: done with no model call
+            # What the module says it brings about, done with no model call when its time or
+            # condition comes; a step for "whenever" (no when) is the NPC's own to judge.
+            prepared, achieved = effects(a.npc, move.does) if move.when.strip() else ([], "")
             steps.append(Step(id=move.id, text=move.text, due=parse_time(move.when) if timed else None, when="" if timed else move.when,
                               ops=prepared, achieved=achieved))
         if steps:
