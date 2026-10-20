@@ -24,6 +24,16 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue) -or -not (Get-Command 
     Write-Warning "没找到 Node.js：伤害、理智这些骰子要用它。winget install OpenJS.NodeJS.LTS 装好后运行 autokeeper setup。"
 }
 
+if (-not (Get-Command chafa -ErrorAction SilentlyContinue)) {  # photos as coloured characters
+    if (Get-Command scoop -ErrorAction SilentlyContinue) {
+        Write-Host "安装 chafa（把照片画成彩色字符）…"
+        scoop install chafa
+    }
+    if (-not (Get-Command chafa -ErrorAction SilentlyContinue)) {
+        Write-Warning "chafa 没装上：场景照片会改用手绘的字符画。想看照片的话，装 Scoop（https://scoop.sh）后运行 scoop install chafa。"
+    }
+}
+
 $Name = if ($Extras) { "autokeeper[$Extras]" } else { "autokeeper" }
 if ($From -eq "pypi") {
     try { Invoke-WebRequest -UseBasicParsing -Method Head "https://pypi.org/pypi/autokeeper/json" | Out-Null }

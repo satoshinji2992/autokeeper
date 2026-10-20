@@ -28,7 +28,7 @@ irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1
 
 再运行一次脚本，或者 `uv tool upgrade autokeeper`（pipx 是 `pipx upgrade autokeeper`），就是更新。脚本可以用环境变量调整：`AUTOKEEPER_VERSION` 装指定版本（如 `0.0.3`），`AUTOKEEPER_EXTRAS=graphrag` 加上模组原文检索（约 1 GB，首次使用还会下载嵌入模型），`AUTOKEEPER_FROM=git` 和 `AUTOKEEPER_REF` 从 GitHub 的某个分支或标签装。不用脚本的话，原文检索这样加：`uv tool install "autokeeper[graphrag]"`。
 
-另外要自己装的是 Node.js 18+ 和 chafa。没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
+另外要装的是 Node.js 18+ 和 chafa。一键脚本会顺便用系统的包管理器装 chafa（macOS 用 brew，Linux 用 apt、dnf 或 pacman，Windows 用 Scoop），装不上会提示。没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
 
 | 系统 | 安装方式 |
 |---|---|
