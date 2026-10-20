@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..engine import world as legacy_world
-from .ops import Break, Condition, Equip, Follow, Fulfil, Learn, MakePromise, Move, Occur, Transfer, parse
+from .ops import Break, Bring, Condition, Equip, Follow, Fulfil, Learn, MakePromise, Move, Occur, Transfer, parse
 from .record import PLAYERS, Beat
 
 if TYPE_CHECKING:
@@ -70,6 +70,8 @@ def touches(w: World, op: Any) -> list[str]:
     if isinstance(op, Transfer):
         before = legacy_world.owner(w.m, w.st, op.item)
         return [x for x in dict.fromkeys((before, op.to, op.item)) if x and on_stage(w, x)]
+    if isinstance(op, Bring):
+        return [x for x in (op.holder, op.place) if x and on_stage(w, x)]
     if isinstance(op, Occur):
         if (op.place or w.place(op.actor)) == here:
             return list(dict.fromkeys([op.actor, *op.participants]))
