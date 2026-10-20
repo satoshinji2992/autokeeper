@@ -80,6 +80,19 @@ class Turn:
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
 
+    def absorb(self, later: Turn) -> None:
+        """What a later stage of the same turn settled (the push choice): its rolls, finds, events,
+        lines and notes join this turn's, so the NPCs on stage and the keeper's report have them."""
+        for name in ("checks", "sanity", "npc_lines", "notes", "hints", "world"):
+            getattr(self, name).extend(getattr(later, name))
+        self.clues += [c for c in later.clues if c not in self.clues]
+        self.events += [e for e in later.events if all(e.id != x.id for x in self.events)]
+        self.performed += [e for e in later.performed if e not in self.performed]
+        self.performance = later.performance or self.performance
+        if later.arrived:  # an event carried them off
+            self.arrived, self.first_visit, self.route = later.arrived, later.first_visit, later.route
+        self.ending = self.ending or later.ending
+
 
 TURN_RECORD = TypeAdapter(Turn)
 
@@ -1370,18 +1383,32 @@ class Game:
         record = st.checks[-1] if st.checks and st.checks[-1].turn == st.turn else None
         inv, npc = st.investigator, pending.get("npc", "")
 
-        def initial() -> list[str]:
+        def initial() -> dict:
             st.pending_push = None
-            return list(st.flags)
+            return {"flags": list(st.flags), "minutes": st.minutes}
 
-        known = await step("initial", turn, initial)
+        start = await step("initial", turn, initial)
+        known = start["flags"] if isinstance(start, dict) else start  # a choice saved before minutes were kept
         if mode == "drop":
             await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
+            await step("plugins", turn, lambda: self.plugins.settled(turn))
             won = [c for c in turn.clues if c in pending["clues"]]
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
-            await step("settle", turn, lambda: self._settle(record))
-            return
+        else:
+            await self._pushed(mode, pending, turn, record, known)
+        # What the failure cost settles as any turn's does: the clock moved on, so what was due by
+        # now happens (scheduled events, the rest of the world, rule timers), and an ending it
+        # brought about ends the game.
+        if isinstance(start, dict) and st.minutes > start["minutes"]:
+            await step("time", turn, lambda: self._time(turn))
+        await step("ending", turn, lambda: self._check_ending(turn))
+        await step("settle", turn, lambda: self._settle(record))
+
+    async def _pushed(self, mode: str, pending: dict, turn: Turn, record: CheckRecord | None, known: list[str]) -> None:
+        """The second chance: luck spent, or the pushed roll and what it brings."""
+        st, step = self.state, self._resolution_step
+        inv, npc = st.investigator, pending.get("npc", "")
         lucky = mode == "luck" and pending.get("luck") is not None
 
         def check() -> dict:
@@ -1414,8 +1441,6 @@ class Game:
         elif not passed:
             lines.insert(0, f"孤注一掷也没成：{pending['risk']}" if pending.get("risk") else "孤注一掷也没成")
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
-        await step("ending", turn, lambda: self._check_ending(turn))
-        await step("settle", turn, lambda: self._settle(record))
 
     async def talk(self, turn: Turn) -> None:
         """NPC replies and stage performances, after the engine has resolved checks."""

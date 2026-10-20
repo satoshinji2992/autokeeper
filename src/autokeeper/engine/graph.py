@@ -168,11 +168,7 @@ def build(game: Game, checkpointer=None):
             keep()
         extra = await game.push(journal["push_choice"])
         turn = held()
-        turn.checks += extra.checks
-        turn.clues += extra.clues
-        turn.sanity += extra.sanity
-        turn.notes += extra.notes
-        turn.ending = turn.ending or extra.ending
+        turn.absorb(extra)  # the events a failure set off too: who comes to stop them speaks this turn
         turn.push = None
         journal["push_merged"] = True
         keep(turn)

@@ -719,6 +719,55 @@ async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake
     assert any("孤注一掷也没有成功" in n for n in pushed.notes)
 
 
+@pytest.mark.parametrize("mode", ["drop", "push"])
+async def test_the_time_a_failure_costs_brings_what_was_due(module, fake, mode):
+    """17:50, the check fails, and giving up (or the failed push) costs 20 minutes: dusk at 18:00
+    comes this turn, not the next."""
+    look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
+    lost = Failure(text="在齿轮间里耽搁了", minutes=20)
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=0,
+                    on_fail=lost, on_push_fail=lost)
+    game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
+    game.state.minutes = parse_time("D1 17:50")
+    fake.queue(99)
+    await game.resolve(look, ruling)
+    assert "e_dusk" not in game.state.fired
+    fake.queue(99)  # the pushed roll fails too
+    later = await game.push(mode)
+    assert game.state.clock.endswith("18:10") and "e_dusk" in game.state.fired
+    assert [e.id for e in later.events] == ["e_dusk"]
+
+
+async def test_what_a_failed_push_sets_off_reaches_the_stage_and_the_keeper(module, fake):
+    """The pushed search fails and wakes the warden, whose event has him step in: he speaks this
+    turn, and the keeper's report has it (graph.offer_push merges the whole push turn)."""
+    look = Action(kind="investigate", summary="周衡撬开齿轮间的柜子", target="柜子")
+    module.flags["warden_woken"] = "守钟人被惊动了"
+    module.events.append(Event(id="e_warden", title="守钟人赶来", when="flag:warden_woken", text="守钟人赶来制止搜查。",
+                               read_aloud="守钟人提着灯冲上楼梯。", performer="warden", performance="喝止调查员，让他离柜子远点"))
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10,
+                    on_push_fail=Failure(text="柜门哐当一声，惊动了守钟人", flags=["warden_woken"]))
+    game, cast, _ = make(module, fake, {"look": (look, ruling)}, location="tower")
+    fake.queue(99, 99)  # fails, and the push fails
+    app = turn_graph.build(game, InMemorySaver())
+    events, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "t-warden"}}, resume="push")
+    assert interrupts and "e_warden" in game.state.fired
+    assert [e["npc"] for e in events if e["type"] == "performance"] == ["warden"]
+    assert "眼前发生：守钟人提着灯冲上楼梯。" in cast.reports[-1]
+
+
+async def test_an_ending_a_failure_brings_about_ends_the_game_when_they_give_up(module, fake):
+    look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
+    ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10,
+                    on_fail=Failure(text="扳手卡进齿轮，钟停了", flags=["bell_stopped"]))
+    game, *_ = make(module, fake, {"x": (look, ruling)}, location="tower")
+    fake.queue(99)
+    await game.resolve(look, ruling)
+    fake.queue_totals(4)  # the ending's 理智 +1D6
+    dropped = await game.push("drop")
+    assert game.state.ending == "stopped" and dropped.ending == "stopped"
+
+
 async def test_a_look_around_does_not_empty_a_room(module, fake):
     vague = Action(kind="investigate", summary="周衡在钟楼里四处查看")
     ruling = Ruling(needs_roll=False, auto_clues=["c_gears", "c_diary"], minutes=10)
