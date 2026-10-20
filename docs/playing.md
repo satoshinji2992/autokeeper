@@ -10,7 +10,7 @@
 uv tool install autokeeper
 ```
 
-用 pipx 也行：`pipx install autokeeper`。PyPI 上还没有新版本时，可以直接从 GitHub 装：`uv tool install git+https://github.com/satoshinji2992/autokeeper`。
+用 Claude 的话装成 `uv tool install "autokeeper[claude]"`（DeepSeek、OpenAI 兼容接口和本地模型不需要）。用 pipx 也行：`pipx install autokeeper`。PyPI 上还没有新版本时，可以直接从 GitHub 装：`uv tool install git+https://github.com/satoshinji2992/autokeeper`。
 
 装好以后在任意目录输入 `autokeeper` 开始。第一次运行会把掷骰组件装进你的用户目录，再问你用哪家模型、填 API Key。想提前做完这些，运行 `autokeeper setup`。
 

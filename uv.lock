@@ -265,7 +265,6 @@ name = "autokeeper"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "claude-agent-sdk" },
     { name = "ddgs" },
     { name = "filelock" },
     { name = "httpx" },
@@ -310,6 +309,9 @@ art = [
     { name = "ascii-magic" },
     { name = "opencv-python-headless" },
 ]
+claude = [
+    { name = "claude-agent-sdk" },
+]
 graphrag = [
     { name = "fastembed" },
     { name = "lightrag-hku" },
@@ -326,7 +328,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9" },
     { name = "ascii-magic", marker = "extra == 'art'", specifier = ">=2.7.5" },
-    { name = "claude-agent-sdk", specifier = ">=0.2.168" },
+    { name = "claude-agent-sdk", marker = "extra == 'claude'", specifier = ">=0.2.168" },
     { name = "ddgs", specifier = ">=9.16.0" },
     { name = "fastembed", marker = "extra == 'graphrag'", specifier = ">=0.6" },
     { name = "filelock", specifier = ">=3.15" },

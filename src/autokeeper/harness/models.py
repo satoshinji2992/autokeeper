@@ -385,7 +385,12 @@ class ClaudeCodeModel(Model):
 
     async def _client(self, key: str, schema: dict | None):
         if key not in self._clients:
-            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+            try:
+                from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+            except ImportError as exc:  # an extra (pyproject [claude]): the game runs on any backend
+                from ..config import CLAUDE_EXTRA
+
+                raise RuntimeError(CLAUDE_EXTRA) from exc
 
             paths.sessions().mkdir(parents=True, exist_ok=True)
             opts: dict[str, Any] = {

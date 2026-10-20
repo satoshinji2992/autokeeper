@@ -375,6 +375,8 @@ def login(
         raise typer.Exit(1)
     _, name, where = LOGINS[preset]
     program = {"claude": "claude", "codex": "codex"}.get(preset)
+    if preset == "claude" and not config.claude_ready():
+        console.print(f"[yellow]{escape(config.CLAUDE_EXTRA)}。装好后再运行 autokeeper login claude。[/]")
     if key is None and program and shutil.which(program):
         console.print(f"找到本机的 {program}，用它的登录，不用填 Key。")
     elif key is None and program == "codex":
@@ -445,6 +447,8 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     for reason in config.preset_overrides(cfg.preset):
         console.print(f"· 没完全按预设 {cfg.preset}：{escape(reason)}")
     routes = {(r.backend, r.model) for r in cfg.roles.values()} | {config.route(r.fallback) for r in cfg.roles.values() if r.fallback}
+    if any(b == "claude" for b, _ in routes) and not config.claude_ready():
+        console.print(f"✗ Claude 组件没装：{escape(config.CLAUDE_EXTRA)}")
     if any(b == "claude" for b, _ in routes):
         found = shutil.which("claude")
         console.print(f"{'✓' if found else '·'} claude CLI: {found or '未找到（用 Agent SDK 自带的 CLI）'}")

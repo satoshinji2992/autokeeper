@@ -266,6 +266,17 @@ def save_key(name: str, value: str) -> Path:
     return target
 
 
+CLAUDE_EXTRA = ("用 Claude 要先装上它的组件：uv tool install --force \"autokeeper[claude]\"（pipx 用 pipx inject autokeeper claude-agent-sdk，"
+                "源码目录用 uv sync --extra claude）")
+
+
+def claude_ready() -> bool:
+    """Whether the Claude backend's package is installed: an extra, not part of the game."""
+    import importlib.util
+
+    return importlib.util.find_spec("claude_agent_sdk") is not None
+
+
 def remove_key(name: str) -> bool:
     """Take NAME out of ~/.config/autokeeper/.env (and out of this process, when the value came
     from there). True when the file had it."""

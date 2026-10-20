@@ -91,3 +91,16 @@ def test_roles_pinned_in_the_config_file_are_named():
     (paths.USER_DIR / "config.toml").write_text('[roles.keeper]\nmodel = "claude-sonnet-5-5"\nbackend = "claude"\n', encoding="utf-8")
     out = CliRunner().invoke(app, ["login", "deepseek", "--key", "sk-x"])
     assert "[roles.keeper]" in flat(out) and "以后默认用" not in flat(out)
+
+
+def test_the_game_needs_no_claude_and_says_how_to_add_it(monkeypatch):
+    """The game is model-agnostic (the user, 2026-10-20): the Claude backend is an extra, and
+    choosing it without the extra says how to add it."""
+    import tomllib
+
+    project = tomllib.loads((paths.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert not any(d.startswith("claude-agent-sdk") for d in project["dependencies"])
+    assert any(d.startswith("claude-agent-sdk") for d in project["optional-dependencies"]["claude"])
+    monkeypatch.setattr(config, "claude_ready", lambda: False)
+    out = CliRunner().invoke(app, ["login", "claude"], input="\n")
+    assert 'autokeeper[claude]' in " ".join(out.output.split())
