@@ -72,8 +72,9 @@ async def test_a_held_decision_resting_on_what_has_since_changed_is_decided_agai
     [beat] = stage.waiting(w)
     assert "entity:warden" in beat.reads and "agent:warden" not in beat.reads  # not its own mood and timer
     assert w.apply(O.Condition(entity="warden", add="扭伤了脚", actor="director")).ok  # hurt meanwhile
-    assert stage.play(w, beat) == ["entity:warden 变了"] and beat.status == "dropped"
+    assert stage.play(w, beat) == ["老守钟人的情况变了"] and beat.status == "dropped"
     assert w.entity("warden").at == "tower" and w.agent("warden").wake == w.now
+    assert "老守钟人的情况变了" in w.agent("warden").refused  # it hears why when it thinks again
 
 
 def test_only_the_partys_own_travel_takes_a_companion_along():
@@ -95,14 +96,15 @@ async def test_someone_being_talked_to_leaves_after_a_while_even_if_the_talk_goe
     game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", wait=600, ops=[
         O.Move(entity="warden", to="square")])]))  # type: ignore[assignment]
     game.minds = scheduler.Budget(turn=2, skip=4)
+    w.agent("warden").wake = game.state.minutes  # it means to think: it decides to go down
     talk = Action(kind="talk", summary="周衡问守钟人钟的事", npc="warden", speech="这钟怎么了？")
     for _ in range(stage.HOLD_TURNS):
         game.state.turn += 1
-        turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=0))
+        turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=1))
         await game.talk(turn)
         assert w.entity("warden").at == "tower"  # still being talked to
     game.state.turn += 1
-    turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=0))
+    turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=1))
     assert w.entity("warden").at == "square" and any("离开了钟楼" in t for t in turn.world)
     await game.close()
 

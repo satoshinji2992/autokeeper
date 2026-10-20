@@ -127,6 +127,8 @@ class Step(BaseModel):
     achieved: str = Field("", description="完成后必须实际成立的条件，语法同 when；移动填 at:NPC:目的地，交物填 owner:物品:接收者；不能以打算或口头宣称代替")
     # Lands without a model call while the plan is fresh.
     ops: list[dict[str, Any]] = Field(default_factory=list, description="到时直接结算的操作，格式同操作；要到时再想就留空")
+    meet: bool | None = Field(None, description="见到调查员时才做的事（他们来问、来访时怎样回应、领他们去看什么）填 true：这是人物资料，"
+                                                "见面时由人物自己演，不在幕后想，due 和 when 只表示从什么时候起才这样；幕后要他自己去做的填 false")
     status: SkipJsonSchema[Literal["pending", "done", "blocked", "dropped"]] = "pending"
     note: SkipJsonSchema[str] = ""
     woke: SkipJsonSchema[int | None] = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there
@@ -156,6 +158,7 @@ class Agent(Versioned):
     seen: int = 0  # record seq when it last decided
     acted: int = -1  # game minutes it last decided
     places: list[str] = Field(default_factory=list)  # places it knows besides the public ones and its own
+    refused: str = ""  # why what it last meant to do could not be done; it hears this when it next wakes
 
 
 class Event(BaseModel):
@@ -241,8 +244,9 @@ class Request(BaseModel):
 
 
 class Beat(BaseModel):
-    """Backstage work that would change the scene in front of the investigators, waiting for the
-    keeper to play it at a quiet moment (world/stage.py). It lands whole when played."""
+    """Backstage work that would change the scene in front of the investigators: an arrangement
+    left unfinished for the keeper, played in the next telling (world/stage.py). It lands whole
+    when played, if what it rested on still holds."""
 
     id: str
     actor: str  # whose decision, arrangement or plan step it is
@@ -251,28 +255,11 @@ class Beat(BaseModel):
     leaving: list[str] = Field(default_factory=list)  # those it takes out of the scene (stage.leaves)
     reads: dict[str, int] = Field(default_factory=dict)  # versions the decision rested on: moved, it is decided again
     when: str = ""  # the plan step's condition, still to hold when it plays
+    text: str = ""  # what it is, in the words of its decision or plan step
     t: int = 0  # game minutes it was decided at
     turn: int = 0
     status: Literal["waiting", "played", "dropped"] = "waiting"
     note: str = ""  # why it was dropped
-
-
-class Proposal(BaseModel):
-    """Backstage work that would change where the story can go, waiting for the director to look
-    at it after the turn (world/review.py). It lands whole when let through."""
-
-    id: str
-    actor: str
-    ops: list[dict[str, Any]] = Field(default_factory=list)
-    why: list[str] = Field(default_factory=list)  # what makes it matter: someone dies, a flag starts an ending...
-    text: str = ""  # what it is, in the words of its decision or plan step
-    reads: dict[str, int] = Field(default_factory=dict)  # versions it rested on: moved, it is decided again
-    when: str = ""  # the plan step's condition, still to hold when it goes ahead
-    t: int = 0
-    turn: int = 0
-    status: Literal["waiting", "deferred", "landed", "dropped"] = "waiting"
-    until: int | None = None  # put off to this game minute
-    note: str = ""  # the director's word, or why it no longer fitted
 
 
 class WorldRecord(BaseModel):
@@ -296,8 +283,7 @@ class WorldRecord(BaseModel):
     npc_budget_calls: int = 0
     npc_budget_limit: int = 0
     npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
-    beats: list[Beat] = Field(default_factory=list)  # backstage work waiting for the stage (world/stage.py)
-    proposals: list[Proposal] = Field(default_factory=list)  # turning points waiting for the director (world/review.py)
+    beats: list[Beat] = Field(default_factory=list)  # arrangements left for the keeper to play (world/stage.py)
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

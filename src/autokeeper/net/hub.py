@@ -261,7 +261,7 @@ class Hub:
         self.game.director_wait = PLAY_WAIT
         self.game.write_progress = True  # the 进展 page on every screen, through the sync
         self.game.world_later = True  # NPCs decide between rounds, not while the table waits
-        self.game.world.reviewing = True  # turning points wait for the director's look between rounds
+        self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}}

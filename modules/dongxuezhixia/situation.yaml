@@ -160,12 +160,15 @@ agendas:
   steps:
   - id: treat_dying
     text: 在诊所用熏香和那套自创手法救活一个濒死的病人，让所有人看见“有效”。
+    meet: false
   - id: ask_for_body
     text: 在药柜旁的走廊上私下拦住调查员，说要做“研究”，请他们松口给她一具刚死的病人尸体。
     when: flag:caroline_cure
+    meet: true
   - id: send_erie_for_body
     text: 夜里支使埃里去诊所搬一具尸体回来，别惊动值夜的人。
     when: D1 23:00
+    meet: false
   - id: let_erie_cover
     text: 一旦有人翻出典籍或当面点破她，立刻让埃里殿后，自己先退走。
     when: flag:grimoire_found
@@ -173,6 +176,7 @@ agendas:
   - id: share_method
     text: 若调查员表示愿意合作，就摊开一部分“治疗”手法，让他们按她的办法帮病人。
     when: flag:caroline_ally
+    meet: true
 - npc: erie
   goals:
   - 照卡洛琳的吩咐做事，不多说一个字
@@ -180,9 +184,11 @@ agendas:
   steps:
   - id: haul_bodies
     text: 在主街街角用卡车替镇上拉尸体，被问起就说是殡葬的活。
+    meet: true
   - id: cough_excuse
     text: 被问起那阵咳时，只说胸腔里卡着一片从法国带回来的弹片。
     when: flag:met_erie
+    meet: true
   - id: take_corpse
     text: 摸黑撬开诊所后门，扛走一具刚死的病人尸体。
     when: D1 23:30
@@ -203,12 +209,15 @@ agendas:
   - id: show_records
     text: 把病历本和体温记录摊给调查员，一条条念数字。
     when: at:ante:clinic
+    meet: true
   - id: keep_sedating
     text: 病情吃紧时照旧给病人开镇静剂助眠，好让他们安静下来。
     when: flag:disease_phase2
+    meet: false
   - id: admit_loss
     text: 私下找调查员承认自己压不住了，请他们接手防疫安排，但别在病人面前说。
     when: flag:disease_phase3
+    meet: true
 - npc: anna
   goals:
   - 找个人说说萨缪尔临死前到底怎么了
@@ -217,9 +226,11 @@ agendas:
   - id: tell_samuel
     text: 在柜台后面一边盖戳一边讲萨缪尔是镇上第一个死的，死前就胡言乱语。
     when: at:anna:post_office
+    meet: true
   - id: show_diary
     text: 若有人愿意听下去，下班后带他们回伊斯特曼家，取出那本潦草的日记。
     when: at:anna:eastman_house
+    meet: true
 - npc: darvill_parents
   goals:
   - 没人知道他们想要什么；只要家里安静、女儿按时回来
@@ -228,8 +239,10 @@ agendas:
   - id: mumble_seance
     text: 天黑后在地下室门前断断续续地嘟囔，像在跟谁说话。
     when: D1 21:00
+    meet: false
   - id: tell_mask_man
     text: 被问得够久、够耐心时，说出那个戴面具的男人浑身是血地回来、笑着说面具是他的了。
+    meet: true
 - npc: pastor
   goals:
   - 让这几天的死者体面下葬，让活人别慌
@@ -238,12 +251,15 @@ agendas:
   - id: open_cellar
     text: 领调查员到地下室看停着等雪停的棺木。
     when: at:pastor:church
+    meet: true
   - id: find_old_rite
     text: 翻地下室的木柜找下葬用的旧葬仪簿，翻到夹页里的旁注。
     when: at:pastor:church
+    meet: true
   - id: insist_burial
     text: 镇子越来越糟时，坚持雪一停就立刻下葬，不再等。
     when: flag:disease_phase3
+    meet: false
 history:
 - when: 多年前，大战之前
   text: 埃里·赫琴斯与卡洛琳·达维尔在原卡德威尔家的废弃农舍里找到一本属于犹格-索托斯的典籍，两人一起研习其中的法术。

@@ -76,7 +76,8 @@ ANSWERS = {
     "npcs": {"npcs": [{"npc": "preacher", "personality": "固执，好面子", "goal": "这条不该写：他原来有 goal"}]},
     "relations": {"relations": [{"a": "preacher", "b": "warden", "kind": "敌对", "value": -40, "why": "不让他上钟楼"},
                                 {"a": "ghost", "b": "warden", "kind": "信任"}]},
-    "agendas": {"agendas": [{"npc": "warden", "goals": ["守住齿轮间"], "steps": [{"id": "lock", "text": "半夜锁上齿轮间", "when": "D1 23:00"}]}]},
+    "agendas": {"agendas": [{"npc": "warden", "goals": ["守住齿轮间"], "steps": [{"id": "lock", "text": "半夜锁上齿轮间", "when": "D1 23:00",
+                                                                             "meet": False}]}]},
     "foreshadow": {"foreshadow": [{"id": "f1", "hint": "咔哒声慢半拍", "where": "tower", "pays_off": "k_motive"},
                                   {"id": "f2", "hint": "不存在的结论", "where": "tower", "pays_off": "nothing"}]},
     "clueweb": {"clues": [{"id": "c_extra", "title": "旧账本", "text": "账本上记着守钟人每月买一次新弦", "where": "office",
@@ -148,3 +149,64 @@ def test_the_score_asks_for_a_situation_that_moves_on_its_own():
     assert adapt.score(m).parts["冲突"][0] == 0  # wary of the party alone is not a conflict
     m.relations.append(Bond(a="preacher", b="warden", kind="敌对", value=-40))
     assert adapt.score(m).parts["冲突"][0] == 15 and adapt.score(m).total > bare.total
+
+
+AGENDAS = """agendas:
+- npc: warden
+  goals:
+  - 守住钟楼
+  steps:
+  - id: door
+    text: 应门招呼来人
+  - id: lock
+    text: 半夜锁上齿轮间
+    when: D1 23:00
+  - id: leave
+    text: 天亮前下楼离开
+    when: D2 05:00
+    does: at:warden:square
+- npc: preacher
+  steps:
+  - id: door
+    text: 在广场等人来听
+"""
+
+
+def test_a_mark_goes_into_the_agenda_step_it_is_for():
+    import yaml
+
+    from autokeeper.module import yamledit
+
+    out = yamledit.put_step(AGENDAS + "foreshadow: []\n", "agendas", "preacher", "door", "meet", False)
+    out = yamledit.put_step(out, "agendas", "warden", "door", "meet", True)
+    data = yaml.safe_load(out)
+    warden, preacher = data["agendas"]
+    assert warden["steps"][0]["meet"] is True and "meet" not in warden["steps"][1] and preacher["steps"][0]["meet"] is False
+    assert data["foreshadow"] == []
+    again = yamledit.put_step(out, "agendas", "warden", "door", "meet", False)  # its own line, put in place
+    assert yaml.safe_load(again)["agendas"][0]["steps"][0]["meet"] is False and again.count("meet:") == 2
+    with pytest.raises(KeyError):
+        yamledit.put_step(out, "agendas", "warden", "nope", "meet", True)
+
+
+async def test_the_meeting_pass_marks_only_the_steps_left_to_judge(example, monkeypatch):
+    (example / "situation.yaml").write_text(AGENDAS, encoding="utf-8")
+    asked = []
+
+    async def ask(cfg, name, m):
+        asked.append(adapt._material(m, name))
+        return adapt.Meets.model_validate({"steps": [
+            {"npc": "warden", "step": "door", "meet": True},
+            {"npc": "preacher", "step": "door", "meet": False},
+            {"npc": "warden", "step": "lock", "meet": False},
+            {"npc": "warden", "step": "leave", "meet": True},  # an outcome of its own: not its to mark
+        ]})
+
+    monkeypatch.setattr(adapt, "_ask", ask)
+    assert adapt.wanted(Module.load(example), "meet")
+    await adapt.adapt(example, passes=("meet",), cfg=SimpleNamespace(), log=lambda _: None)
+    m = Module.load(example)
+    steps = {(a.npc, s.id): s.meet for a in m.agendas for s in a.steps}
+    assert steps == {("warden", "door"): True, ("warden", "lock"): False, ("warden", "leave"): None, ("preacher", "door"): False}
+    assert "天亮前下楼离开" not in asked[0]  # only what is left to judge is asked about
+    assert not adapt.wanted(m, "meet")  # run again: nothing left

@@ -148,3 +148,15 @@ async def test_a_slip_stands_when_both_readings_name_it():
     assert told["turns_with_leaks"] == 1 and told["leaks"] == 1 and told["verbatim_leaks"] == 1
     assert told["turns_with_npc_leaks"] == 1 and told["npc_leaks"] == 1
     assert told["findings"] == {"假线索": 1, "白给": 0, "伏笔": 1, "不确定": 1}
+
+
+def test_backstage_wakes_are_counted_once_across_the_run_and_calls_are_marked():
+    def side(woke, agents):
+        return {"problems": [], "target": "", "echo": 0.0, "chars": 10, "npc": [], "woke": woke,
+                "calls": [{"agent": a, "seconds": 1.0, "cost": 0.001} for a in agents]}
+
+    rows = [{"turn": 1, "replayed": side(["thomas：该做了：应门"], ["keeper", "world"])},
+            {"turn": 2, "replayed": side(["thomas：该做了：应门", "asata：发生了：有人敲门"], ["keeper", "world"])}]
+    got = session.summarize(rows)["replayed"]
+    assert got["woke_pairs"] == 2  # the same wake on every replayed turn counts once
+    assert got["world_calls_not_comparable"] == 2

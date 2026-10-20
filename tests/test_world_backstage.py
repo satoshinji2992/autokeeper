@@ -172,13 +172,16 @@ def nothing(ask):
     return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
 
 
-async def test_a_player_turn_spends_at_most_its_budget():
-    w = crowd(location="tower")  # the warden is onscreen
+async def test_everyone_woken_in_a_turn_is_decided_in_one_call():
+    w = crowd(location="tower")  # the warden is onscreen, the others in three places
     brain = Canned(nothing)
     report = await scheduler.advance(w, brain, w.now, w.now + 10, budget=Budget(turn=2))
-    assert report.calls == 2 == len(brain.asks) and report.chunks == 1
-    assert len(report.woke) == 2 and len(report.deferred) == 2  # onscreen NPCs share the same budget
-    assert any("warden" in x for x in report.woke)
+    assert report.calls == 1 == len(brain.asks) and report.chunks == 1
+    assert set(brain.asks[0].npcs) == {"warden", "preacher", "clerk", "cook"} and not brain.asks[0].place
+    assert len(report.woke) == 4 and not report.deferred
+    spent = crowd(location="tower")
+    report = await scheduler.advance(spent, Canned(nothing), spent.now, spent.now + 10, budget=Budget(turn=0))
+    assert report.calls == 0 and len(report.deferred) == 4  # no allowance: they wait
 
 
 async def test_a_long_skip_is_simulated_in_chunks_on_its_own_budget():
@@ -187,32 +190,49 @@ async def test_a_long_skip_is_simulated_in_chunks_on_its_own_budget():
     start = w.now
     w.st.minutes += 8 * 60
     report = await scheduler.advance(w, brain, start, w.st.minutes, budget=Budget(skip=4, chunk=240))
-    assert report.chunks == 2 and report.calls == 4 and not report.deferred
+    assert report.chunks == 2 and report.calls == 1 and not report.deferred  # they chose to wait 600 minutes
     w.st.minutes += 3 * 1440
     report = await scheduler.advance(w, None, start + 480, w.st.minutes, budget=Budget(chunks=12))
     assert report.chunks == 12 and report.calls == 0
     assert (await scheduler.advance(w, brain, start + 480, w.st.minutes)).repeat  # the same span twice: nothing twice
 
 
-async def test_npcs_in_one_place_are_one_offscreen_scene():
-    w = crowd(location="tower")
-    w.apply(O.Move(entity="clerk", to="square"))
-    w.apply(O.Move(entity="cook", to="square"))
-    w.apply(O.Move(entity="preacher", to="square"))
-
+def square_scene(cook_op):
     def scene(ask):
-        if ask.npcs == ["warden"]:
+        if len(ask.npcs) < 4:  # a later look by those the scene touched
             return nothing(ask)
-        assert set(ask.npcs) == {"clerk", "cook", "preacher"}
-        assert "齿轮间的钥匙" not in ask.views["clerk"]
+        assert set(ask.npcs) == {"warden", "clerk", "cook", "preacher"}  # one call, wherever they are
+        assert "齿轮间的钥匙" not in ask.views["clerk"]  # each sees only its own view
         return Scene(summary="三个人在广场上吵了起来", decisions=[
+            Decision(npc="warden", wait=600),
             Decision(npc="clerk", ops=[O.Relate(a="clerk", b="cook", rel="敌对", delta=-20, note="吵架")]),
-            Decision(npc="cook", ops=[O.Relate(a="clerk", b="cook", rel="盟友", value=99)]),  # not its own view to change
+            Decision(npc="cook", ops=[cook_op]),
+            Decision(npc="preacher", wait=600),
         ])  # fmt: skip
+    return scene
 
-    brain = Canned(scene)
+
+def at_the_square():
+    w = crowd(location="tower")
+    for npc in ("clerk", "cook", "preacher"):
+        w.apply(O.Move(entity=npc, to="square"))
+    return w
+
+
+async def test_those_together_in_one_place_share_one_offscreen_scene():
+    w = at_the_square()
+    brain = Canned(square_scene(O.Relate(a="cook", b="clerk", rel="敌对", delta=-10, note="吵架")))
+    await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=2))
+    assert w.relation("clerk", "cook", "敌对").value == -20
+    assert not any("preacher" in ask.npcs for ask in brain.asks[1:])  # its own scene wakes none of them again
+    [scene] = [e for e in w.rec.events if e.text == "三个人在广场上吵了起来"]
+    assert scene.place == "square" and set(scene.participants) == {"clerk", "cook", "preacher"}  # not the warden
+
+
+async def test_a_scene_is_not_told_when_one_of_those_in_it_was_refused():
+    w = at_the_square()
+    brain = Canned(square_scene(O.Relate(a="clerk", b="cook", rel="盟友", value=99)))  # not its own view to change
     report = await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=2))
-    assert report.calls == 2 and w.relation("clerk", "cook", "敌对").value == -20
     assert w.relation("clerk", "cook", "盟友") is None and any("只能改变自己" in x for x in report.refused)
     # A summary must not claim the whole scene happened after one participant's
     # proposed actions were refused (or another participant gave no decision).

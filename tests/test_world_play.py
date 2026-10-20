@@ -13,7 +13,7 @@ from autokeeper.engine.state import WorldChange
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.world import ops as O
-from autokeeper.world import scheduler, stage
+from autokeeper.world import scheduler
 from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
@@ -75,7 +75,7 @@ async def test_npcs_away_from_the_party_go_on_while_time_passes_and_the_keeper_t
     assert again.world == []
 
 
-async def test_an_npc_acts_on_a_conversation_once_the_exchange_is_over(module, fake):
+async def test_an_npc_acts_on_a_conversation_once_the_party_has_moved_on(module, fake):
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
     w = game.world
@@ -83,20 +83,20 @@ async def test_an_npc_acts_on_a_conversation_once_the_exchange_is_over(module, f
 
     def think(ask):
         assert "这钟怎么总多敲一下" in ask.views["warden"]  # its own memory of the talk
+        assert "这钟怎么总多敲一下" in ask.reasons["warden"]
         return Scene(decisions=[Decision(npc="warden", notice="记者在打听钟", judge="得把东西挪走",
                                          ops=[O.Move(entity="warden", to="office", trace="齿轮间的柜门开着，里面空了")])])  # fmt: skip
 
     game.brain, game.minds = Canned(think), scheduler.Budget(turn=2, skip=4)  # type: ignore[assignment]
     turn = await game.resolve(TALK, ruled())
     await game.talk(turn)
-    assert len(game.brain.asks) == 1 and w.entity("warden").at == "tower"  # it means to go, not mid-sentence
-    assert not turn.world and [b.actor for b in stage.waiting(w)] == ["warden"]
+    assert game.brain.asks == [] and w.entity("warden").at == "tower"  # its voice answered; nothing backstage yet
     leave = Action(kind="move", summary="周衡下楼回广场", destination="square")
     went = await game.resolve(leave, Ruling(needs_roll=False, minutes=0, reason="移动"))
-    assert w.entity("warden").at == "office" and any("老守钟人" in t for t in went.world)  # in front of them, first
+    assert len(game.brain.asks) == 1 and w.entity("warden").at == "office"  # once they had gone
+    assert not any("老守钟人" in t for t in went.world)  # up in the tower, away from them
     later = await game.resolve(WAIT, ruled(minutes=60))
-    assert len(game.brain.asks) == 1 and w.entity("warden").at == "office"
-    assert later.world == []  # it happened up in the tower, away from them
+    assert len(game.brain.asks) == 1 and w.entity("warden").at == "office" and later.world == []
     back = Action(kind="move", summary="周衡又上了钟楼", destination="tower")
     returned = await game.resolve(back, Ruling(needs_roll=False, minutes=0, reason="移动"))
     report = game._report(returned)
@@ -139,14 +139,15 @@ async def test_an_onscreen_npc_reacts_to_a_due_plan_and_the_player_sees_its_acti
     assert "开始检查门锁" in cast.reports[-1]
 
 
-async def test_an_important_npc_with_a_goal_starts_planning_without_player_questions(module, fake):
+async def test_an_npc_with_nothing_left_to_do_plans_again_when_time_jumps_not_every_turn(module, fake):
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
-    game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", wait=60)]))
+    game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", wait=600)]))
     game.minds = scheduler.Budget()
     await game.resolve(WAIT, ruled(minutes=10))
-    assert len(game.brain.asks) == 1
-    assert "还没有接下来的安排" in game.brain.asks[0].reasons["warden"]
+    assert game.brain.asks == []  # ten minutes in the same room: no reason to think anew
+    await game.resolve(WAIT, ruled(minutes=180))  # a long wait: time has jumped
+    assert len(game.brain.asks) == 1 and "还没有接下来的安排" in game.brain.asks[0].reasons["warden"]
     await game.resolve(WAIT, ruled(minutes=1))
     assert len(game.brain.asks) == 1  # no new reason: respect its chosen wait
 
@@ -169,6 +170,7 @@ async def test_an_onscreen_npc_can_share_a_clue_the_player_has_unlocked(module, 
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
     game.state.npc("warden").unlocked.append("c_diary")
+    game.world.agent("warden").wake = game.state.minutes  # it means to think now
     game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[
         O.Learn(fact="clue:c_diary", who=["players"]),
     ])]))
@@ -181,6 +183,7 @@ async def test_an_onscreen_npc_can_share_a_clue_the_player_has_unlocked(module, 
 async def test_an_offscreen_public_conversation_never_reaches_the_keepers_report(module, fake):
     module.npc("preacher").important = True
     game, _, _ = make(module, fake, {}, location="tower")
+    game.world.agent("preacher").wake = game.state.minutes  # it means to think now
     game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="preacher", ops=[
         O.Occur(text="布道者向站务员打听短笺", place="square", visibility="public"),
     ])]))
@@ -431,6 +434,7 @@ async def test_the_next_action_waits_for_the_worlds_turn_to_finish(module, fake)
     w = game.world
     w.apply(O.SetPlan(npc="warden", steps=[Step(id="go", text="下楼", due=w.now + 1,
                                                 ops=[{"kind": "move", "entity": "warden", "to": "square"}])]))  # fmt: skip
+    w.agent("warden").wake = w.now + 5  # and he means to think again a little later
     release = asyncio.Event()
 
     async def slow(ask):

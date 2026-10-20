@@ -211,6 +211,7 @@ agendas:
     does: at:hart:hart_house
   - id: hart_invites
     text: 对上门质问的人笑呵呵地招手：“您一定得亲眼看看”，把人往温室引。
+    meet: true
 - npc: stanley
   goals:
   - 让镇上看上去一切如常，调查员老实过日子
@@ -227,9 +228,11 @@ agendas:
   - id: stanley_watch
     text: 派巡警整夜在聚会小屋一带转，记下调查员见了谁、去了哪。
     when: D1 22:00
+    meet: false
   - id: stanley_arrests
     text: 一旦认定调查员已经查到了教授和望远镜的事，就带人上门抓人，关进警局后面的牢房。
     when: flag:learned_telescope
+    meet: false
   - id: stanley_blocks_roads
     text: 望远镜一毁就封锁出镇的路，谁要出镇就开枪。
     when: flag:telescope_destroyed
@@ -250,9 +253,11 @@ agendas:
   - id: jensen_hunts
     text: 带喽啰上街搜捕逃出来的崩溃者和多嘴的人，送去警局或关进农场。
     when: flag:learned_blessed_broken
+    meet: false
   - id: jensen_obeys_stanley
     text: 斯坦利一招呼就带上罗迪和麦加维出门替他办事。
     when: at:stanley:jensen_farm
+    meet: false
 - npc: fitzgerald
   goals:
   - 在会众里挑出合适的人送去教授家看望远镜
@@ -268,8 +273,10 @@ agendas:
     does: at:fitzgerald:church
   - id: fitz_frames
     text: 照斯坦利的意思作证，把某个不肯低头的人说成疯子或凶手，赞成不审判就枪毙。
+    meet: false
   - id: fitz_deflects
     text: 被调查员质问时引撒种的比喻搪塞过去，转身就让人给警局捎信。
+    meet: false
 - npc: twins
   goals:
   - 弄明白活物的构造，需要一个还新鲜的实验对象
@@ -277,10 +284,13 @@ agendas:
   steps:
   - id: twins_dissect_donald
     text: 在地下室里继续解剖被绑着的父亲，记下这一刀能看到什么。
+    meet: false
   - id: twins_size_up
     text: 有人上门就请人吃蛋糕，一唱一和地问解剖问题，打量对方的身体。
+    meet: true
   - id: twins_lure
     text: 若客人起疑或不肯配合，就哄人下地下室看“爸爸”，或者跑去叫警察。
+    meet: false
   - id: twins_chase_donald
     text: 发现父亲挣脱跑了，就去街上把他抓回来，顺便告诉有福者大人。
     when: D2 03:00

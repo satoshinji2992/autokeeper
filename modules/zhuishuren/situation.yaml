@@ -167,14 +167,18 @@ agendas:
   - id: thomas_greet
     text: 应门、寒暄，把空房间和行李安顿好，等调查员问起才讲委托和叔叔的样貌。
     when: D1 10:00
+    meet: true
   - id: thomas_show_study
     text: 被问到丢书时领人上书房，说少了约六本却说不清是哪几本，顺手指出叔叔的旧书桌和那本日记。
+    meet: true
   - id: thomas_urge_watch
     text: 问调查员进展，说自己出不起更多钱但愿意配合，建议夜里守着书房窗户抓窃贼现行。
     when: D2 18:00
+    meet: true
   - id: thomas_after_truth
     text: 听完真相沉默很久，请调查员别对外声张，只想把书要回来、把叔叔的失踪名单上了结。
     when: flag:told_thomas
+    meet: true
 - npc: jefferson
   goals:
   - 干完活、别惹麻烦，尤其别去深究墓地里的事
@@ -182,15 +186,19 @@ agendas:
   steps:
   - id: jefferson_work
     text: 在墓地里干活，有人问路就粗声指一下；一问到墓碑和夜里的怪事就闭嘴，拿铁铲杵地说“我还有活要干”。
+    meet: true
   - id: jefferson_sight_figure
     text: 收工前绕到道格拉斯常坐的那块墓碑附近，看见人影就远远退开，回工具棚喝一口酒压惊。
     when: D1 23:00
+    meet: false
   - id: jefferson_take_bribe
     text: 收下酒，态度松动，说出深夜在那块墓碑旁见过人影，他认定是金博尔的鬼，所以从没敢上前。
     when: flag:has_liquor
+    meet: true
   - id: jefferson_clam_up
     text: 从此不搭理调查员，问什么都只管铲土，最多指一下墓碑的方向。
     when: flag:jefferson_hostile
+    meet: true
 - npc: odell
   goals:
   - 买完东西回家，顺便看清这个陌生人体不体面
@@ -199,9 +207,11 @@ agendas:
   - id: odell_gossip
     text: 挎着篮子在人行道上慢走，主动跟人搭话，说起从前天天看见道格拉斯夹着书往墓地走，“他总是在读书”。
     when: at:odell:jiefang
+    meet: true
   - id: odell_night_sounds
     text: 出门时和人抱怨夜里从公墓那边传来的闷响，说这一年听得越来越勤，愿上帝保佑。
     when: D2 09:00
+    meet: true
 history:
 - when: 一年前
   text: 道格拉斯·金博尔某夜跟随他的食尸鬼朋友走进墓中那扇嘎吱打开的门，从此定居在昏暗的地下世界，没有留下任何踪迹。

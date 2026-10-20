@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from autokeeper import paths
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
-from autokeeper.world import context, scheduler, stage
+from autokeeper.world import context, knowledge, scheduler, stage
 from autokeeper.world import ops as O
 from autokeeper.world.agents import Canned, Decision, Scene, holds
 from autokeeper.world.record import PLAYERS, Step
@@ -169,41 +167,54 @@ def test_replacing_a_completed_step_with_the_same_id_keeps_the_new_step_executab
     assert len([s for s in w.agent("warden").plan if s.id == "visit"]) == 1
 
 
-async def test_npcs_in_different_places_think_concurrently_from_the_same_instant():
+async def test_npcs_in_different_places_are_decided_in_one_call_each_by_its_own_view():
     w = staged()
     assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="help", text="想下一步")])).ok
-    started = set()
-    both_started = asyncio.Event()
 
-    async def think(ask):
-        npc = ask.npcs[0]
-        started.add(npc)
-        if len(started) == 2:
-            both_started.set()
-        await both_started.wait()
-        assert not any("已完成并行行动" in text for text in ask.views.values())
-        return Scene(decisions=[Decision(npc=npc, ops=[O.Remember(npc=npc, text="已完成并行行动")])])
+    def think(ask):
+        assert set(ask.npcs) == {"warden", "preacher"} and not ask.place  # one call, two places
+        assert "齿轮间的钥匙" in ask.views["warden"] and "齿轮间的钥匙" not in ask.views["preacher"]
+        return Scene(decisions=[Decision(npc=npc, ops=[O.Remember(npc=npc, text="已完成行动")]) for npc in ask.npcs])
 
-    report = await asyncio.wait_for(scheduler.advance(w, Canned(think), w.now, w.now + 1), timeout=5)
-    assert started == {"warden", "preacher"} and report.calls == 2
-    assert all(any("已完成并行行动" in m.text for m in w.agent(npc).memory) for npc in started)
+    report = await scheduler.advance(w, Canned(think), w.now, w.now + 1)
+    assert report.calls == 1
+    assert all(any("已完成行动" in m.text for m in w.agent(npc).memory) for npc in ("warden", "preacher"))
 
 
-async def test_a_parallel_decision_is_deferred_when_an_earlier_commit_changed_its_evidence():
+async def test_a_decision_resting_on_another_ones_lines_is_not_made():
+    w = staged()
+    assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="help", text="想下一步")])).ok
+    key = knowledge.public_ref(w.rec.facts["f_key"], "warden")  # a line only the warden's part shows
+
+    def think(ask):
+        assert key in ask.views["warden"] and key not in ask.views["preacher"]
+        return Scene(decisions=[
+            Decision(npc="warden", ops=[O.Remember(npc="warden", text="钥匙还在腰上")], basis=[key]),
+            Decision(npc="preacher", ops=[O.Move(entity="preacher", to="tower")], basis=[key, "claim:写错的编号"]),
+        ])
+
+    report = await scheduler.advance(w, Canned(think), w.now, w.now + 1)
+    assert any("钥匙还在腰上" in m.text for m in w.agent("warden").memory)
+    assert w.entity("preacher").at != "tower" and any("出自别人那一段" in x for x in report.refused)
+    assert w.agent("preacher").refused and w.agent("preacher").wake is not None  # thinks again, knowing why
+    again = await scheduler.advance(w, Canned(lambda ask: Scene(decisions=[])), w.now, w.now + 2)
+    assert "上次没做成" in next(x for x in again.woke + again.deferred if x.startswith("preacher"))
+
+
+async def test_a_decision_is_deferred_when_one_settled_before_it_changed_its_evidence():
     w = staged()
     assert w.apply(O.Relate(a="warden", b="preacher", rel="信任", value=0,
                             known_by=["warden", "preacher"])).ok
     assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="help", text="想下一步")])).ok
 
     def think(ask):
-        npc = ask.npcs[0]
-        return Scene(decisions=[Decision(npc=npc, ops=[
-            O.Relate(a="warden", b="preacher", rel="信任", delta=20) if npc == "warden"
-            else O.Occur(text="布道者按旧的关系采取行动", place="square"),
-        ])])
+        return Scene(decisions=[
+            Decision(npc="warden", ops=[O.Relate(a="warden", b="preacher", rel="信任", delta=20)]),
+            Decision(npc="preacher", ops=[O.Occur(text="布道者按旧的关系采取行动", place="square")]),
+        ])
 
     report = await scheduler.advance(w, Canned(think), w.now, w.now + 1)
-    assert report.calls == 2 and any("preacher：构思期间依据发生变化" in text for text in report.deferred)
+    assert report.calls == 1 and any("preacher：构思期间依据发生变化" in text for text in report.deferred)
     assert not any(e.text == "布道者按旧的关系采取行动" for e in w.rec.events)
     assert w.relation("warden", "preacher", "信任").value == 20
 
