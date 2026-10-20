@@ -378,10 +378,11 @@ def _feed(cast: Any, given: dict[str, Any]) -> None:
     """The paired run's action and ruling, handed back to this turn's first parse and first ruling:
     two variants of the keeper's or an NPC's prompt then meet the same decisions, and what differs
     comes from the prompt compared. Later parses and rulings in the turn are the cast's own."""
-    from ..agents.cast import Action, Ruling
+    from ..agents.cast import Action, Initiative, Plan, Ruling
 
-    intent, arbiter = cast.intent, cast.arbiter
+    intent, arbiter, planner = cast.intent, cast.arbiter, getattr(cast, "plan", None)
     left: dict[str, Any] = {"intent": Action.model_validate(given["action"])}
+    left["plan"] = Plan(action=left["intent"], initiative=[Initiative.model_validate(x) for x in given.get("initiative") or []])
     if given.get("ruling"):
         left["arbiter"] = Ruling.model_validate(given["ruling"])
 
@@ -391,7 +392,15 @@ def _feed(cast: Any, given: dict[str, Any]) -> None:
     async def fed_arbiter(state, action, at=None):
         return left.pop("arbiter") if "arbiter" in left else await arbiter(state, action, at=at)
 
+    async def fed_plan(state, text):
+        if "plan" in left:
+            left.pop("intent", None)
+            return left.pop("plan")
+        return await planner(state, text)
+
     cast.intent, cast.arbiter = fed_intent, fed_arbiter
+    if planner is not None:  # the keeper's arrangement (Cast.plan): the action and who joins in
+        cast.plan = fed_plan
 
 
 def pairable(got: dict[str, Any] | None) -> bool:
@@ -449,6 +458,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
         report = game.told.report if game.told is not None else ""
         shown.append({"type": "hints", "lines": [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]})
         shown.append({"type": "woke", "lines": [x for r in game.debug_world for x in r.woke]})  # who decided backstage, and why
+        shown.append({"type": "initiative", "items": [x.model_dump() for x in getattr(game, "initiative", [])]})
         journal = getattr(game, "debug_journal", None)
         rows = [r for r in (journal.read(kind="scene")[0] if journal else []) if r.get("run") == journal.run]
         shown.append({"type": "control", **watch.result(m, rows)})
@@ -552,6 +562,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
                     row["replayed"]["woke"] = next((e["lines"] for e in shown if e.get("type") == "woke"), [])
                     row["replayed"]["paired"] = pairable(paired.get(turn))
+                    row["replayed"]["initiative"] = next((e["items"] for e in shown if e.get("type") == "initiative"), [])
                     row["replayed"]["control"] = next(({k: v for k, v in e.items() if k != "type"} for e in shown
                                                        if e.get("type") == "control"), {})
                 except Exception as exc:  # one turn that fails to replay is reported, the rest go on

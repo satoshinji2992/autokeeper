@@ -30,7 +30,7 @@ def _write(tmp_path: Path, text: str, **files: str) -> Path:
 
 def test_a_sentence_is_swapped_for_the_run_and_taken_back(tmp_path):
     before = cast.KEEPER_SYSTEM
-    old = "失败只说明本次尝试未达成，不额外制造敌意、伤害或丢失物品。"
+    old = "不能替调查员决定行动、态度或内心感受。"
     v = variants.load(_write(tmp_path, f"note: 第 10 条\nreplace:\n  KEEPER_SYSTEM:\n    - old: {old}\n      new: 失败照结算写。\n"))
     assert v.texts["KEEPER_SYSTEM"] == before.replace(old, "失败照结算写。") and v.digest
     variants.apply(v)
