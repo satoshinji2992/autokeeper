@@ -34,6 +34,8 @@ def hand_drawn(monkeypatch):
 
     monkeypatch.setattr(scenery, "fill", lambda m: [])
 
+    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
+
 
 def square() -> tuple[Module, Game]:
     m = Module.load(EXAMPLE)  # starts on the square: hand-drawn, nine rows, in fog

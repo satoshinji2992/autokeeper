@@ -376,6 +376,7 @@ def test_the_sheet_lists_every_skill_and_the_specialisms():
 
 async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
     monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
+    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
     from autokeeper.tui.modals.sheet import SheetModal
 
     monkeypatch.setattr(paths, "DATA", tmp_path)

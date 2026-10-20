@@ -66,6 +66,7 @@ def load_module(path: Path) -> Module:
     m = Module.load(path)
     ensure_compiled(m, path)
     scenery.fill(m)  # a place with no picture: one painted by program, not the hand-drawn art
+    scenery.fill_people(m)  # and a person with none, a portrait
     return m
 
 

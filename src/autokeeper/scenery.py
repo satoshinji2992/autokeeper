@@ -489,13 +489,17 @@ _pending: dict[str, tuple[str, str, str]] = {}  # a picture fill() named, not pa
 
 
 def ensure(path: str | Path) -> None:
-    """Paint a picture fill() named if it is not there yet (imagery reads pictures through here)."""
-    found = _pending.get(str(path))
-    if found is not None and not Path(path).is_file():
-        try:
+    """Paint a picture fill() or fill_people() named if it is not there yet (imagery reads
+    pictures through here)."""
+    if Path(path).is_file():
+        return
+    try:
+        if (found := _pending.get(str(path))) is not None:
             picture(Path(path).parent, *found)
-        except OSError:
-            pass
+        elif (person := _faces.get(str(path))) is not None:
+            face(Path(path).parent, *person)
+    except OSError:
+        pass
 
 
 def painted(path: str | Path) -> bool:
@@ -504,4 +508,148 @@ def painted(path: str | Path) -> bool:
     p = Path(path)
     from . import paths
 
-    return str(p) in _pending or p.is_relative_to(paths.scenery()) or (p.suffix == ".png" and p.stem.startswith("improv_scene_"))
+    return (str(p) in _pending or str(p) in _faces or p.is_relative_to(paths.scenery())
+            or (p.suffix == ".png" and p.stem.startswith(("improv_scene_", "improv_portrait_"))))
+
+
+# -- people ---------------------------------------------------------------------------------------
+PW, PH = 600, 800  # a portrait: head and shoulders, cropped round the face where it is shown
+
+SKINS: tuple[Rgb, ...] = ((226, 188, 160), (214, 172, 140), (196, 150, 118), (160, 112, 84), (122, 84, 62))
+HAIRS: tuple[Rgb, ...] = ((44, 32, 26), (82, 56, 36), (126, 92, 58), (170, 140, 96), (60, 44, 34))
+GREY: Rgb = (176, 172, 166)
+
+DRESS: list[tuple[tuple[str, ...], str]] = [
+    (("警", "探长", "巡警", "警官", "军", "士兵", "兵"), "uniform"),
+    (("医生", "大夫", "护士", "医"), "coat"),
+    (("牧师", "神父", "传教", "布道", "修女"), "clergy"),
+    (("农", "工人", "矿", "铁匠", "掘墓", "守墓", "车夫", "水手", "渔"), "work"),
+]
+FEMALE = ("女", "夫人", "小姐", "太太", "妇", "她", "母亲", "姐", "妹", "妻", "姑娘", "修女")
+OLD = ("老", "年迈", "白发", "花白", "六十", "七十", "八十", "祖")
+
+
+def _person(text: str) -> tuple[str, bool, bool]:
+    """Dress, woman, old: what a portrait needs to know, from the name, the role and the look."""
+    dress = next((d for words, d in DRESS if any(w in text for w in words)), "suit")
+    return dress, any(w in text for w in FEMALE), any(w in text for w in OLD)
+
+
+def portrait(name: str, look: str = "", role: str = "", *, key: str = "") -> Image.Image:
+    """A head-and-shoulders portrait painted by program, 600x800: dressed for the role, hair, beard,
+    glasses and hat as the look says, lit from one side. Seeded by `key` (or the name)."""
+    text = f"{name} {role} {look}"
+    rng = np.random.default_rng(_seed(key or name, "portrait"))
+    dress, woman, old = _person(text)
+    t = np.linspace(0, 1, PH)[:, None, None]
+    back = (np.array((92, 78, 64)) * (1 - t) + np.array((40, 34, 30)) * t).repeat(PW, axis=1)
+    img = Image.fromarray(np.clip(back, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(img)
+    skin = SKINS[int(rng.integers(len(SKINS)))]
+    hair = GREY if old else HAIRS[int(rng.integers(len(HAIRS)))]
+    if "白发" in look or "银发" in look:
+        hair = (214, 212, 206)
+    cx, top = PW / 2, 170
+
+    # shoulders and clothes
+    cloth = {"uniform": (44, 54, 78), "coat": (226, 224, 216), "clergy": (30, 28, 30), "work": (96, 74, 52),
+             "suit": ((52, 50, 54), (70, 56, 46), (48, 56, 66))[int(rng.integers(3))]}[dress]
+    if woman and dress == "suit":
+        cloth = ((116, 40, 48), (40, 88, 92), (88, 70, 110), (62, 74, 58))[int(rng.integers(4))]
+    d.rectangle([cx - 46, 470, cx + 46, 600], fill=tuple(int(c * 0.86) for c in skin))  # the neck, in shade
+    d.rounded_rectangle([cx - 250, 560, cx + 250, PH + 80], radius=140, fill=cloth)
+    if dress in ("suit", "uniform") and not woman:
+        d.polygon([(cx - 70, 560), (cx, 660), (cx + 70, 560)], fill=(232, 228, 218))  # shirt
+        d.polygon([(cx - 14, 576), (cx + 14, 576), (cx + 20, 720), (cx, 750), (cx - 20, 720)],
+                  fill=(120, 36, 36) if dress == "suit" else (34, 40, 58))  # tie
+        d.polygon([(cx - 70, 560), (cx - 10, 680), (cx - 120, 720)], fill=tuple(int(c * 0.8) for c in cloth))  # lapels
+        d.polygon([(cx + 70, 560), (cx + 10, 680), (cx + 120, 720)], fill=tuple(int(c * 0.8) for c in cloth))
+    if dress == "uniform":
+        for y in (650, 700):
+            d.ellipse([cx + 60, y, cx + 76, y + 16], fill=(200, 170, 90))  # buttons
+    if dress == "clergy":
+        d.rectangle([cx - 40, 560, cx + 40, 582], fill=(236, 236, 230))  # the white collar
+    if dress == "coat":
+        d.line([(cx, 570), (cx, PH)], fill=(190, 188, 180), width=4)
+    if woman:
+        d.ellipse([cx - 60, 550, cx + 60, 600], fill=tuple(int(c * 1.1) if c < 220 else c for c in cloth))  # a round collar
+
+    # head
+    fw, fh = (150, 196) if woman else (160, 206)
+    d.ellipse([cx - fw / 2 - 10, top + 120, cx - fw / 2 + 14, top + 190], fill=skin)  # ears
+    d.ellipse([cx + fw / 2 - 14, top + 120, cx + fw / 2 + 10, top + 190], fill=skin)
+    d.ellipse([cx - fw / 2, top, cx + fw / 2, top + fh * 1.7], fill=skin)
+    if woman:  # a bob, framing the face
+        d.pieslice([cx - fw / 2 - 26, top - 20, cx + fw / 2 + 26, top + fh * 1.4], 180, 360, fill=hair)
+        d.rectangle([cx - fw / 2 - 26, top + fh * 0.7 - 20, cx - fw / 2 + 10, top + fh * 1.2], fill=hair)
+        d.rectangle([cx + fw / 2 - 10, top + fh * 0.7 - 20, cx + fw / 2 + 26, top + fh * 1.2], fill=hair)
+    elif "秃" not in look:
+        d.pieslice([cx - fw / 2 - 6, top - 14, cx + fw / 2 + 6, top + fh * 0.9], 180, 360, fill=hair)
+    hat = "帽" in look or (not woman and rng.random() < 0.45 and dress in ("suit", "work"))
+    if hat or (woman and "帽" in look):
+        brim = (36, 32, 30) if not woman else tuple(int(c * 0.7) for c in cloth)
+        if woman:  # a cloche
+            d.pieslice([cx - fw / 2 - 20, top - 40, cx + fw / 2 + 20, top + fh * 0.9], 180, 360, fill=brim)
+        else:  # a fedora
+            d.ellipse([cx - fw / 2 - 60, top + 36, cx + fw / 2 + 60, top + 70], fill=brim)
+            d.rounded_rectangle([cx - fw / 2 + 4, top - 50, cx + fw / 2 - 4, top + 54], radius=30, fill=brim)
+            d.rectangle([cx - fw / 2 + 4, top + 26, cx + fw / 2 - 4, top + 42], fill=(90, 70, 50))
+
+    # the face
+    ey = top + fh * 0.78
+    for side in (-1, 1):
+        ex = cx + side * fw * 0.2
+        d.ellipse([ex - 13, ey - 8, ex + 13, ey + 8], fill=(240, 234, 226))
+        d.ellipse([ex - 7, ey - 7, ex + 7, ey + 7], fill=(50, 40, 34))
+        d.line([(ex - 20, ey - 22 - (4 if old else 0)), (ex + 20, ey - 24)], fill=tuple(int(c * 0.6) for c in hair), width=7)  # brows
+    d.polygon([(cx, ey + 8), (cx - 14, ey + 62), (cx + 6, ey + 66)], fill=tuple(int(c * 0.86) for c in skin))  # the nose's shade
+    mouth = ey + 104
+    d.line([(cx - 28, mouth), (cx + 28, mouth + rng.uniform(-4, 4))], fill=(140, 74, 66), width=5)
+    if not woman and ("胡" in look or "须" in look or (old and rng.random() < 0.5)):
+        d.pieslice([cx - fw / 2 + 10, ey + 40, cx + fw / 2 - 10, top + fh * 1.75], 0, 180, fill=hair)  # a beard
+        d.ellipse([cx - 40, mouth - 16, cx + 40, mouth + 8], fill=hair)
+    if "眼镜" in look or (old and rng.random() < 0.4):
+        for side in (-1, 1):
+            ex = cx + side * fw * 0.2
+            d.ellipse([ex - 24, ey - 20, ex + 24, ey + 20], outline=(60, 50, 40), width=4)
+        d.line([(cx - fw * 0.2 + 24, ey), (cx + fw * 0.2 - 24, ey)], fill=(60, 50, 40), width=4)
+    if old:  # lines at the eyes and the mouth
+        for side in (-1, 1):
+            d.line([(cx + side * (fw * 0.2 + 26), ey + 4), (cx + side * (fw * 0.2 + 40), ey + 14)], fill=tuple(int(c * 0.8) for c in skin), width=3)
+            d.line([(cx + side * 40, mouth - 20), (cx + side * 46, mouth + 14)], fill=tuple(int(c * 0.82) for c in skin), width=3)
+
+    # light from the left, shade to the right; then paint, not diagram
+    arr = np.asarray(img, float)
+    xx = np.linspace(1.08, 0.78, PW)[None, :, None]
+    arr = arr * xx * (1 + rng.normal(0, 0.03, (PH, PW, 1)))
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.4))
+
+
+def face(folder: Path, key: str, name: str, look: str = "", role: str = "") -> Path:
+    """The portrait saved in `folder` as <key>.png (made once)."""
+    out = folder / f"{key}.png"
+    if not out.is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        portrait(name, look, role, key=key).save(out)
+    return out
+
+
+def fill_people(m: Module) -> list[str]:
+    """Every person of the module with no picture (an NPC, a pregen) gets a portrait painted by
+    program, in place of the hand-drawn face; painted when first shown."""
+    from . import paths
+
+    folder, made = paths.scenery() / m.id / "people", []  # "people": imagery prepares it as a portrait
+    for who, look, role in [*((n, n.look, n.role) for n in m.npcs), *((p, "", p.occupation) for p in m.pregens)]:
+        key = who.portrait or f"face-{who.id}"
+        if key in m.pictures:
+            continue
+        out = folder / f"{key}.png"
+        _faces[str(out)] = (key, who.name, look or "", role or "")
+        m.pictures[key] = str(out)
+        who.portrait = key
+        made.append(key)
+    return made
+
+
+_faces: dict[str, tuple[str, str, str, str]] = {}  # a portrait fill_people() named: path -> key, name, look, role

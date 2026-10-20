@@ -358,7 +358,9 @@ class GameScreen(Screen):
         name = loc.art or ""
         if self.view[0] == loc_id and self.view[1] and (self.view[1] in self.m.art or (self.view[1] in self.m.pictures and imagery.available())):
             name = self.view[1]  # another picture of this place: a corner they look at, the night, a moment
-        scene = self.query_one(SceneArt)
+        if not (found := self.query(SceneArt)):  # the screen is being taken down: nothing to draw on
+            return
+        scene = found.first()
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
         scene.show(
@@ -383,7 +385,8 @@ class GameScreen(Screen):
 
     def _known_here(self) -> None:
         """Someone came in, left or was first spoken with: the faces in the scene again, if they changed."""
-        if self._faces(self.state.location) != self.query_one(SceneArt).people:
+        scene = self.query(SceneArt)
+        if scene and self._faces(self.state.location) != scene.first().people:
             self._scene(self.state.location)
 
 
@@ -531,7 +534,8 @@ class GameScreen(Screen):
         bar.add_column(justify="right", no_wrap=True)
         bar.add_row(left, right)
         self.query_one("#topbar", Static).update(bar, layout=False)  # one row
-        self.query_one(SceneArt).set_light(when)
+        for scene in self.query(SceneArt):  # none while the screen is being taken down
+            scene.set_light(when)
 
     def _viewer(self):
         """Whose sheet the right column shows: here, whoever is acting."""
@@ -563,7 +567,8 @@ class GameScreen(Screen):
         self.story.mark(st.investigators, self._me())
         self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
-        self.query_one(SceneArt).madness = max(0.0, min(0.6, lost * 2))
+        for scene in self.query(SceneArt):  # none while the screen is being taken down (a face drawn late)
+            scene.madness = max(0.0, min(0.6, lost * 2))
         self._pages()
         self._topbar()
 

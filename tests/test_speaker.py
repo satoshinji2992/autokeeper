@@ -166,6 +166,7 @@ async def test_a_portrait_finishing_after_the_scene_is_removed_does_not_crash(mo
 @pytest.mark.usefixtures("canned")
 async def test_the_speaker_steps_in_while_they_talk_and_out_when_the_scene_moves_on(monkeypatch):
     monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
+    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
     m = Module.load(EXAMPLE)
     m.npcs.append(NPC(id="stranger", name="陌生人", role="路过的人", location="tower"))  # no portrait
     lead = m.pregens[0].model_copy(deep=True)
@@ -276,6 +277,7 @@ async def test_fear_trembles_anger_flashes_and_f6_stills_them():
 @pytest.mark.usefixtures("canned")
 async def test_a_small_terminal_gets_a_smaller_speaker_and_a_tiny_one_none(monkeypatch):
     monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
+    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
     m = Module.load(paths.MODULES / "zhuishuren")
     lead = m.pregens[0].model_copy(deep=True)
     state = Game.new(m, [lead], slot="small", human=[lead.id])

@@ -151,8 +151,8 @@ class Visuals:
                 attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
                 if ((record["status"] != "ready" and not record.get("phase") and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
-                    if kind == "scene":  # a place painted by program costs nothing
-                        await self._painted(key, record, subject)
+                    if kind in ("scene", "portrait"):  # painted by program: costs nothing
+                        await self._painted(key, record, subject, kind)
                     return  # foreground narration owns the remaining budget
                 if record["status"] != "ready" and not record.get("phase"):
                     record["attempts"] = str(int(record.get("attempts", "0")) + 1)
@@ -179,8 +179,8 @@ class Visuals:
                     return
                 # A place neither a photo nor image generation supplied: painted by program
                 # (scenery.py), never the artist's hand-drawn ASCII (2026-10-21).
-                if kind == "scene":
-                    await self._painted(key, record, subject)
+                if kind in ("scene", "portrait"):
+                    await self._painted(key, record, subject, kind)
                     return
                 # A person: hand-drawn ASCII when neither a reference image nor image generation
                 # supplied a picture. Never publish a crude intermediate first.
@@ -210,12 +210,17 @@ class Visuals:
             record.pop("phase", None)
             await self._cache(key)
 
-    async def _painted(self, key: str, record: dict[str, str], subject: str) -> None:
-        """The place's scene painted by program, in this game's pictures folder."""
+    async def _painted(self, key: str, record: dict[str, str], subject: str, kind: str = "scene") -> None:
+        """The place's scene, or the person's portrait, painted by program in this game's pictures folder."""
         if record.get("picture"):
             return
-        name = next((loc.name for loc in self.module.locations if loc.art == key), "")
-        path = await asyncio.to_thread(scenery.picture, self.folder, key, name, subject)
+        if kind == "portrait":
+            who = next((n for n in self.module.npcs if n.portrait == key), None)
+            path = await asyncio.to_thread(scenery.face, self.folder / "people", key, who.name if who else subject,
+                                           who.look if who else "", who.role if who else "")
+        else:
+            name = next((loc.name for loc in self.module.locations if loc.art == key), "")
+            path = await asyncio.to_thread(scenery.picture, self.folder, key, name, subject)
         record.update(picture=str(path), status="ready", photo_status="done")
         record.pop("phase", None)
         record.pop("error", None)

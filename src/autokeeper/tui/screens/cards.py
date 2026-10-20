@@ -30,7 +30,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
-from ... import artkit, credits, imagery, paths, roster
+from ... import artkit, credits, imagery, paths, roster, scenery
 from ...engine.state import GameState
 from ...module.schema import Module
 from ...rules.coc import Investigator
@@ -47,6 +47,8 @@ def photo(inv: Investigator, m: Module | None) -> Path | None:
     path = roster.folder() / f"{inv.portrait}.jpg"
     if inv.portrait and path.is_file():
         return path
+    if m is not None and inv.portrait in m.pictures:
+        scenery.ensure(m.pictures[inv.portrait])  # a portrait painted by program, made when first wanted
     if m is not None and inv.portrait in m.pictures and Path(m.pictures[inv.portrait]).is_file():
         return Path(m.pictures[inv.portrait])
     return None

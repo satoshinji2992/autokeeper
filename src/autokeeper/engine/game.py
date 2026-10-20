@@ -159,6 +159,7 @@ class Game:
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         scenery.fill(module)  # every place with a picture: painted by program where the module has none
+        scenery.fill_people(module)  # every person a portrait, likewise
         self.emit: Emit = emit or _silent
         self.checkpoint: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None

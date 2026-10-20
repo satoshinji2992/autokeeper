@@ -109,11 +109,11 @@ async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypat
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
     await asyncio.gather(*visuals.tasks.values())
-    drawn = {k: v for k, v in st.visuals.items() if not k.startswith("improv_scene_")}
-    assert all(record["status"] == "failed" and not record["art"] for record in drawn.values())
+    drawn = {k: v for k, v in st.visuals.items() if k.startswith("improv_item_")}  # only a prop still needs the artist
+    assert drawn and all(record["status"] == "failed" and not record["art"] for record in drawn.values())
     assert all(record["error"] == "ConnectionError" for record in drawn.values())
-    place = next(v for k, v in st.visuals.items() if k.startswith("improv_scene_"))
-    assert place["status"] == "ready" and Path(place["picture"]).is_file()  # a place is painted by program, no artist needed
+    painted = [v for k, v in st.visuals.items() if not k.startswith("improv_item_")]  # a place and a person: by program
+    assert painted and all(v["status"] == "ready" and Path(v["picture"]).is_file() for v in painted)
     await visuals.close()
 
     async def slow(*args, **kwargs):
@@ -174,7 +174,7 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
     assert all(t.cancelled() for t in old_tasks)
     gate.set()
     await asyncio.gather(*game.visuals.tasks.values())
-    assert all(cfg is replacement for cfg in configs[-2:]) and game.visuals.cfg is replacement  # the person and the prop
+    assert configs and configs[-1] is replacement and game.visuals.cfg is replacement  # the prop, drawn on the new model
     await game.close()
 
 
@@ -216,8 +216,8 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
     for _ in range(4):
         visuals.schedule()
         await asyncio.gather(*visuals.tasks.values())
-    drawn = {k: v for k, v in st.visuals.items() if not k.startswith("improv_scene_")}  # the place is painted, never fails
-    assert calls == 4 and all(v["attempts"] == "2" for v in drawn.values())
+    drawn = {k: v for k, v in st.visuals.items() if k.startswith("improv_item_")}  # a place and a person are painted, never fail
+    assert calls == 2 and all(v["attempts"] == "2" for v in drawn.values())
     assert all(v["status"] == "failed" for v in drawn.values())
     await visuals.close()
 
