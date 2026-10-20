@@ -124,8 +124,11 @@ def test_who_they_know_is_here_is_set_into_the_picture(tmp_path):
     with_face = imagery.cameos(plain, (str(face),))
     assert with_face.size == plain.size
     corner = with_face.crop((0, with_face.height // 2, with_face.width // 3, with_face.height))
-    near = [c for _, c in corner.getcolors(1 << 16) if sum(abs(a - b) for a, b in zip(c, (230, 200, 160), strict=True)) < 16]
-    assert near  # the face (as prepared, a shade off) is in the bottom left
+    def nearer_face(c: tuple[int, ...]) -> bool:  # the photo's preparation shifts colours: warm skin against a blue scene
+        return sum((a - b) ** 2 for a, b in zip(c, (230, 200, 160), strict=True)) < sum((a - b) ** 2 for a, b in zip(c, (40, 90, 140), strict=True))
+
+    warm = sum(n for n, c in corner.getcolors(1 << 16) if nearer_face(c))
+    assert warm > corner.width * corner.height * 0.05  # the face is in the bottom left
     box = (with_face.width * 2 // 3, 0, with_face.width, with_face.height)
     assert with_face.crop(box).tobytes() == plain.crop(box).tobytes()  # the rest of the scene untouched
     assert imagery.cameos(plain, ()) is not plain and imagery.cameos(plain, ()).tobytes() == plain.tobytes()

@@ -277,7 +277,10 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
             for who in (promise.by, promise.to):
                 wake(who, "promise", f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}")
     for npc, agent in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc) or npc in held:  # its move is waiting, or made
+        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):  # its move is waiting
+            continue
+        if npc in held:  # the keeper's plan has it act this turn: no model asked for it, its fixed steps land all the same
+            _fixed(w, npc, agent, c, report)
             continue
         _steps(w, npc, agent, c, budget, report, wake)
         _affected(w, npc, agent, wake, talks=planning)
@@ -391,6 +394,21 @@ async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[st
         for key in ("scene", "views"):
             job.pop(key, None)
         save()  # landed operations and the completion receipt share one checkpoint
+
+
+def _fixed(w: World, npc: str, a: Agent, c: int, report: Report) -> None:
+    """The fixed steps of one the keeper's plan has act this turn (Plan.initiative): what their time
+    and condition bring about lands as anyone's does (the appointment half an hour on is kept while
+    the party waits two hours); what would ask a model (a step to judge, a block, a stale plan)
+    waits for the next turn, when it is no longer held."""
+    for s in a.plan:
+        if s.status != "pending" or not s.ops or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
+            continue
+        if agents.condition_problems(w, s.when) or agents.condition_problems(w, s.achieved) or fresh(w, a.reads):
+            continue
+        if agents.holds(w, s.when):
+            ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+            _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text, reads=a.reads, when=s.when)
 
 
 def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report, wake) -> None:

@@ -664,11 +664,11 @@ async def test_dice_and_clues_leave_the_sidebar_pages_readable(writer, height):
         assert tabs.region.bottom <= screen.query_one("#right").region.bottom
         await pilot.pause(0.3)  # the clue list's growth laid out (slower runners: Windows' CI) before the tab is clicked
         await pilot.click(tabs.get_tab("progress-page"))
-        for _ in range(20):
-            if tabs.active == "progress-page":
+        page = screen.query_one("#progress", Page)
+        for _ in range(30):  # switched, then laid out (Windows' CI read a size of 0 in between)
+            if tabs.active == "progress-page" and page.size.height >= 5:
                 break
             await pilot.pause(0.1)
-        page = screen.query_one("#progress", Page)
         assert tabs.active == "progress-page" and page.size.height >= 5
         assert page.max_scroll_y > 0
         page.scroll_end(animate=False)

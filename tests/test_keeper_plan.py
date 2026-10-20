@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from autokeeper import config
+from autokeeper import config, paths
 from autokeeper.agents.cast import PLAN_SYSTEM, Action, Cast, Initiative, Plan, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
@@ -221,9 +221,40 @@ async def test_the_scheduler_holds_those_named_wakes_and_steps_alike(module, fak
 
     start = w.now
     report = await scheduler.advance(w, Canned(decide), start, start + 5, tick="held", held={"warden"})
-    assert decided == [] and not report.woke and w.agent("warden").plan[0].status == "pending"
+    # The review of 2026-10-20: held means no model asked for him, not his appointment missed.
+    assert decided == [] and not report.woke and w.entity("warden").at == "office"
+    assert w.agent("warden").plan[0].status == "done"
     report = await scheduler.advance(w, Canned(decide), start + 5, start + 10, tick="free")
-    assert w.entity("warden").at == "office" and decided == [["warden"]]
+    assert decided == [["warden"]]  # the next turn he is the world's again: it asks him what next
+    await game.close()
+
+
+async def test_one_who_steps_in_is_played_before_the_ruling(module, fake):
+    """The review of 2026-10-20: the keeper had the warden stop the investigator before he touched
+    the gears, and the touch was settled first. Stepping in (Initiative.first) is played before the
+    arbiter rules, so the ruling and the roll go on it; he is not asked again after."""
+    game, cast = joining(module, fake, [Initiative(npc="warden", does="喝住他：别碰齿轮", first=True)])
+    order: list[str] = []
+    npc, arbiter = cast.npc, cast.arbiter
+
+    async def speaking(state, npc_id, message, **kw):
+        order.append(f"npc:{npc_id}")
+        return await npc(state, npc_id, message)
+
+    async def ruling(state, action, at=None):
+        order.append("arbiter")
+        assert any(e.kind == "npc" for e in state.log)  # what he said is in what the arbiter reads
+        return await arbiter(state, action, at)
+
+    cast.npc, cast.arbiter = speaking, ruling  # type: ignore[method-assign]
+    game.state.pending_turn = {"input": "我看看齿轮"}
+    action = await game.parse("我看看齿轮")
+    await game.prepare(action)
+    turn = await game.resolve(action, await game.rule(action))
+    await game.talk(turn)
+    assert order == ["npc:warden", "arbiter"]
+    assert "正要：" in cast.npc_calls[0][1] and "抢在前面主动：喝住他：别碰齿轮" in cast.npc_calls[0][1]
+    assert turn.npc_lines == [("warden", "warden 的回答")] and turn.joined == ["warden"]
     await game.close()
 
 
@@ -301,3 +332,24 @@ async def test_who_joins_in_belongs_to_the_turn_that_planned_it(module, fake):
         await game.talk(turn)
     assert [n for n, _ in cast.npc_calls] == ["warden"]
     await game.close()
+
+
+async def test_the_rhetoric_eval_goes_through_the_keepers_plan(tmp_path, monkeypatch):
+    """The review of 2026-10-20: eval rhetoric still measured the old parser. It rules on what the
+    keeper's plan makes of the words, as play does."""
+    from autokeeper.eval import rhetoric
+
+    planned: list[str] = []
+
+    async def plan(self, state, text):
+        planned.append(text)
+        return Plan(action=Action(kind="investigate", summary="周衡翻看旧报", target="旧报"))
+
+    async def arbiter(self, state, action, at=None):
+        return Ruling(needs_roll=True, skill="图书馆使用", reason="")
+
+    monkeypatch.setattr(rhetoric.Cast, "plan", plan)
+    monkeypatch.setattr(rhetoric.Cast, "arbiter", arbiter)
+    summary = await rhetoric.run(paths.MODULES / "zhuishuren", tmp_path / "out.json", limit=1, adversarial=False,
+                                 referees=("claude-haiku-5-5",), systems=("split",))
+    assert len(planned) == 2 and summary["cases"] == 1  # the plain words and one rhetorical, both planned

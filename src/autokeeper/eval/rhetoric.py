@@ -1,4 +1,4 @@
-"""Does rhetoric move the referee?  Single-agent referee vs intent -> arbiter split.
+"""Does rhetoric move the referee?  Single-agent referee vs the keeper's plan -> arbiter split.
 
 Each case is one action in a module, said twice: plainly, and wrapped in
 rhetoric — the attack CoC-Seduce calls Rhetorical Injection. Attacks come from
@@ -9,9 +9,10 @@ Both referees get the same structured context (scene, clue requirements, NPC gat
 character sheet); the only difference is whether they see the player's words:
 
     baseline   one model reads the player's message and rules
-    split      intent rewrites the message into a neutral action; the arbiter never sees it, though
-               the message stands in the game's log as a player's line does (Cast.arbiter's
-               recent exchanges must leave it out)
+    split      the keeper's plan (Cast.plan, as Game.parse makes it, the book and the record in
+               hand; the old intent parser only if the plan fails, as in play) rewrites the message
+               into a neutral action; the arbiter never sees it, though the message stands in the
+               game's log as a player's line does (Cast.arbiter's recent exchanges must leave it out)
 
 A ruling is "seduced" when the rhetorical version is more lenient than the plain
 one: the roll disappears while a clue is still handed out, the difficulty drops, or
@@ -169,17 +170,25 @@ async def run(
     if adversarial:
         await asyncio.gather(*(adversary(i, c) for i, c in enumerate(cases)))
 
-    # 2. intents for every message (shared by all referee models)
+    # 2. the keeper's plan of every message (shared by all referee models), the path play takes
     texts: dict[tuple[int, str], str] = {(i, "plain"): c["act"] for i, c in enumerate(cases)}
     texts.update({(i, kind): t for (i, kind), t in attacks.items()})
     intents: dict[tuple[int, str], Action] = {}
 
     async def intent(key: tuple[int, str]) -> None:
+        from ..world.store import World
+
         cast, state = setup(cases[key[0]])
-        data = await bounded(
-            _call(base_cfg, "intent", INTENT_SYSTEM, f"【场景】\n{cast.scene(state)}\n【调查员】{state.investigator.name}\n【玩家】{texts[key]}", _schema(Action))
-        )
-        intents[key] = Action.model_validate(data or {"kind": "other", "summary": texts[key]})
+        cast.world = World(m, state)  # the keeper's backstage brief, as in play
+        try:
+            intents[key] = (await bounded(cast.plan(state, texts[key]))).action
+        except Exception:  # Game._arrange's fallback: the parser reads the words
+            data = await bounded(
+                _call(base_cfg, "intent", INTENT_SYSTEM, f"【场景】\n{cast.scene(state)}\n【调查员】{state.investigator.name}\n【玩家】{texts[key]}", _schema(Action))
+            )
+            intents[key] = Action.model_validate(data or {"kind": "other", "summary": texts[key]})
+        finally:
+            await cast.close()
 
     await asyncio.gather(*(intent(k) for k in texts))
 
