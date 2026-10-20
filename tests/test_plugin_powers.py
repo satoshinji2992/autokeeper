@@ -435,8 +435,12 @@ async def test_a_mini_game_comes_up_after_the_turn_and_answers_go_to_the_game():
         screen.send_line("/通灵")
         assert await until(pilot, lambda: isinstance(app.screen, PromptModal), tries=150)
         modal = app.screen
-        shown = "".join(str(w.render()) for w in modal.query(Static))
-        assert "〔通灵板〕" in shown and "点一个字母" in shown and "没答就按默认算" in shown
+
+        def shown() -> str:
+            return "".join(str(w.render()) for w in modal.query(Static))
+
+        assert await until(pilot, lambda: "没答就按默认算" in shown())  # its lines are laid out a moment apart on a busy runner
+        assert "〔通灵板〕" in shown() and "点一个字母" in shown()
         app.save_screenshot("plugin-prompt.svg", path=str(paths.DATA))
         modal.query_one("#cell-1-1", Button).press()
         assert await until(pilot, lambda: state.plugin_data.get("ouija", {}).get("cell") == [1, 1], tries=150)

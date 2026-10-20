@@ -672,7 +672,10 @@ async def test_dice_and_clues_leave_the_sidebar_pages_readable(writer, height):
         assert tabs.active == "progress-page" and page.size.height >= 5
         assert page.max_scroll_y > 0
         page.scroll_end(animate=False)
-        await pilot.pause()
+        for _ in range(30):  # scrolled once laid out (Windows' CI read 0 just after)
+            if page.scroll_y == page.max_scroll_y:
+                break
+            await pilot.pause(0.1)
         assert page.scroll_y == page.max_scroll_y
         assert "第29条调查进展" in shown(screen, "#progress")
         assert screen.query_one(SheetPanel).region.bottom <= tabs.region.y
