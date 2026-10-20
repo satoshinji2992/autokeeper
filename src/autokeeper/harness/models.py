@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import os
 import re
@@ -43,6 +44,7 @@ import signal
 import subprocess
 import sys
 import time
+import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -418,18 +420,52 @@ async def _stream(content: list[dict]):
     yield {"type": "user", "message": {"role": "user", "content": content}, "parent_tool_use_id": None}
 
 
+# Claude Code processes open at once, across every agent. Each is a Node program of a hundred MB
+# or two, and every NPC, every important NPC's mind and every role kept its own until the game
+# ended. The one idle longest is closed to make room; nothing lives in it (the transcript is the
+# game's), so the next call on that agent starts it again.
+MAX_PROCESSES = int(os.environ.get("AUTOKEEPER_CLAUDE_PROCESSES", 6))
+_open: weakref.WeakSet[ClaudeCodeModel] = weakref.WeakSet()
+
+
+async def _make_room(asking: ClaudeCodeModel) -> None:
+    while sum(len(m._clients) for m in list(_open)) >= MAX_PROCESSES:
+        idle = [(m._used.get(k, 0.0), id(m), m, k) for m in list(_open)
+                if m is not asking and not m._lock.locked() for k in m._clients]  # never one mid-call
+        if not idle:
+            return
+        _, _, m, k = min(idle)
+        await m._release(k)
+
+
 class ClaudeCodeModel(Model):
-    """One Claude Code process per agent. It is wiped with /clear right after each reply,
-    in the background while the player reads, so it never carries context of its own."""
+    """One Claude Code process per agent (and output schema), at most MAX_PROCESSES of them at
+    once. It is wiped with /clear right after each reply, in the background while the player
+    reads, so it never carries context of its own."""
 
     def __init__(self, spec: Role, system: str, **kw: Any):
         super().__init__(spec, system, **kw)
         self._clients: dict[str, Any] = {}  # one per output schema
+        self._used: dict[str, float] = {}  # when each was last asked
         self._wiping: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
 
+    async def _release(self, key: str) -> None:
+        """Close one idle process to make room for another agent's (_make_room). Out of the table
+        first, so a call that comes meanwhile starts a fresh one instead of using this."""
+        client = self._clients.pop(key, None)
+        self._used.pop(key, None)
+        if (task := self._wiping.pop(key, None)) is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        if client is not None:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
+
     async def _client(self, key: str, schema: dict | None):
+        self._used[key] = time.monotonic()
         if key not in self._clients:
+            await _make_room(self)
             try:
                 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
             except ImportError as exc:  # an extra (pyproject [claude]): the game runs on any backend
@@ -455,6 +491,7 @@ class ClaudeCodeModel(Model):
             client = ClaudeSDKClient(options=ClaudeAgentOptions(**opts))
             await client.connect()
             self._clients[key] = client
+            _open.add(self)
         return self._clients[key]
 
     async def _wipe(self, key: str) -> None:

@@ -913,3 +913,36 @@ def test_claude_on_an_api_key_and_a_priced_api_count_against_the_budget(monkeypa
     assert spend.billed("claude-sonnet-5-5")
     assert spend.record("claude-sonnet-5-5", {"input_tokens": 10}, 0.25) == 0.25 and spend.ledger()["total_usd"] >= 0.25
     spend._priced.cache_clear()
+
+
+async def test_only_so_many_claude_code_processes_stay_open(monkeypatch):
+    """Every NPC, mind and role kept a Claude Code process to the end of the game: the idlest is
+    closed to make room, and opened again when its agent is next asked."""
+    sdk = pytest.importorskip("claude_agent_sdk")
+    from autokeeper.harness import models as hm
+
+    live: list[object] = []
+
+    class Client:
+        def __init__(self, options):
+            self.options = options
+
+        async def connect(self):
+            live.append(self)
+
+        async def disconnect(self):
+            live.remove(self)
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    monkeypatch.setattr(sdk, "ClaudeAgentOptions", lambda **kw: kw)
+    monkeypatch.setattr(hm, "MAX_PROCESSES", 3)
+    agents = [hm.make_model(Role(backend="claude", model="claude-haiku-5-5", effort=None), f"NPC {i}") for i in range(5)]
+    for agent in agents:
+        await agent.warm()
+    assert len(live) == 3  # the first two, idle longest, were closed
+    assert not agents[0]._clients and agents[4]._clients  # type: ignore[attr-defined]
+    await agents[0].warm()  # asked again: started again, the idlest of the rest closed
+    assert len(live) == 3 and agents[0]._clients and not agents[2]._clients  # type: ignore[attr-defined]
+    for agent in agents:
+        await agent.close()
+    assert not live
