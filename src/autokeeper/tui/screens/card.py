@@ -4,6 +4,7 @@ three questions), or from a card the player already has; then keep it or say wha
 from __future__ import annotations
 
 import asyncio
+import itertools
 import shutil
 from pathlib import Path
 from urllib.parse import urlparse
@@ -85,6 +86,7 @@ class CardScreen(Screen[Investigator | None]):
         self.portrait: Text | None = None  # the chosen photo, rendered once
         self.from_card = False  # changing the photo of a finished card
         self.work_dir = paths.card_work(self.builder.id)
+        self.downloads = itertools.count()  # a file name per download: pictures are drawn once per path
 
     def compose(self) -> ComposeResult:
         with Vertical(id="setup"):
@@ -313,7 +315,7 @@ class CardScreen(Screen[Investigator | None]):
 
         async def one(i: int) -> None:
             if i not in self.shots:
-                dest = self.work_dir / f"photo-{i}.jpg"
+                dest = self.work_dir / f"photo-{next(self.downloads)}.jpg"
                 self.shots[i] = dest if await self.builder.download(i, dest) else None
 
         await asyncio.gather(*(one(i) for i in indexes))

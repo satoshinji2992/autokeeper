@@ -233,7 +233,8 @@ async def test_a_described_investigator_skips_the_web(cards, monkeypatch):
 async def test_photos_are_searched_for_by_who_it_is_new_names_start_afresh_and_a_local_photo_can_be_used(cards, monkeypatch, tmp_path):
     """The user, 2026-10-20: 「哈姆」 found the right person but Hamtaro's pictures (the photos were
     searched by the bare name, before it was known who this is); 「重新输入姓名」 showed the last
-    name's pictures; and a photo from this machine could not be used while making a card."""
+    name's pictures (still, after the first fix: the new download took the old one's file name,
+    and its drawing was the old picture's); and a photo from this machine could not be used while making a card."""
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens.card import CardScreen
 
@@ -263,12 +264,13 @@ async def test_photos_are_searched_for_by_who_it_is_new_names_start_afresh_and_a
         await pilot.press("enter")
         await _until(pilot, lambda: screen.step == "photo")
         assert queries == ["鲁迅 作家 肖像"]  # the proposal's words, not the bare name
-        screen.shots[0] = tmp_path / "stale.png"
+        first = screen.shots[0]
         screen._restart()  # 重新输入姓名
         screen.query_one(Input).value = "许广平"
         await pilot.press("enter")
         await _until(pilot, lambda: screen.step == "photo")
-        assert 0 not in screen.shots or screen.shots[0] != tmp_path / "stale.png"  # this name's own
+        # this name's own, in a file of its own: a picture is drawn once per path (imagery.render)
+        assert screen.shots[0] is not None and screen.shots[0] != first
         choices = screen.query_one(OptionList)
         choices.highlighted = next(i for i in range(choices.option_count) if choices.get_option_at_index(i).id == "photo-local")
         await pilot.press("enter")
