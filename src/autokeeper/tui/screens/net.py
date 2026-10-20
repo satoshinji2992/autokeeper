@@ -24,7 +24,7 @@ from textual.widgets import Footer, Input, Static
 from ... import config
 from ...engine.game import RETELL
 from ...engine.state import GameState, LogEntry
-from ...module.schema import Module
+from ...module.schema import Module, PreludeFrame
 from ...net import media
 from ...net import room as lan
 from ...net.link import Link
@@ -33,6 +33,7 @@ from ..modals.dialogs import EngineModal, PushModal, RollModal
 from ..modals.retell import RetellModal
 from ..widgets.panels import SceneArt
 from .game import GameScreen
+from .prelude import PreludeScreen
 
 TALK = ("（", "(")  # table talk, heard by everyone, never an action
 IDEAS_WAIT = 60.0  # seconds F5 waits for the host's ideas
@@ -243,6 +244,17 @@ class NetGameScreen(GameScreen):
                 if path := media.unpack(pictures):
                     msg["ev"]["picture"] = path
             await self.handle(msg["ev"])
+        elif t == "prelude":  # the opening performance, played while the host prepares the opening
+            self.m.art.update(msg.get("art", {}))
+            self.m.art_colors.update(msg.get("colors", {}))
+            self.m.pictures.update({k: path for k, data in msg.get("picture_data", {}).items() if (path := media.unpack(data))})
+            self._prelude_ready = asyncio.get_running_loop().create_future()
+            shots = [PreludeFrame.model_validate(f) for f in msg.get("frames", [])]
+            self.app.push_screen(PreludeScreen(self.m, self._prelude_ready, shots=shots, style=self.app.art_style,  # type: ignore[attr-defined]
+                                               animations=config.load().animations))
+        elif t == "prelude_ready":
+            if (ready := getattr(self, "_prelude_ready", None)) is not None and not ready.done():
+                ready.set_result(None)
         elif t == "module":  # the director added places and people
             m = Module.model_validate(msg["module"])
             m.art, m.art_colors, m.pictures = self.m.art, self.m.art_colors, self.m.pictures

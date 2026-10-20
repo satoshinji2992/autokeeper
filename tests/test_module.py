@@ -130,6 +130,7 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
                 assert new.goal.startswith("协助调查员" + old.goal + "；")
                 assert "力所能及的帮助" in new.personality and "履行承诺" in new.goal
                 old.personality, old.goal = new.personality, new.goal
+        then.prelude = now.prelude  # the opening performance, written at compile time since (module/prelude.py)
         if folder.name == "zhuishuren":  # 未解之谜 had a sentence for a condition, which never fires
             ending = next(e for e in then.endings if e.id == "unsolved")
             assert ending.condition.startswith("以上都没有发生")

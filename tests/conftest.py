@@ -21,6 +21,15 @@ def isolated_user_data(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def quick_prelude(monkeypatch):
+    """The opening performance (tui/screens/prelude.py) takes no time, on screens and at a LAN host."""
+    from autokeeper.tui.screens import prelude
+
+    monkeypatch.setattr(prelude, "HOLD", 0.0)
+    monkeypatch.setattr(prelude, "TYPE", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def no_codex_pictures(monkeypatch):
     """No test makes a real picture, even where codex is installed and logged in: generation is
     off unless a test switches it on with its own stand-in for the codex process."""

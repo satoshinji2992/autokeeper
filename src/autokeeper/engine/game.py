@@ -246,6 +246,20 @@ class Game:
             inv.new_day()
         return state
 
+    async def prepare_opening(self) -> improv.Applied | None:
+        """What the opening needs before the keeper speaks: the director's adaptation of the
+        module to these investigators, with its first pictures. A screen runs it while the
+        prelude plays (module/prelude.py), so no one waits on a silent game screen; start() then
+        finds it done (its receipt in pending_turn)."""
+        st = self.state
+        if not st.pending_turn:
+            st.pending_turn.update(input="/opening", opening=True)
+            if self.checkpoint:
+                self.checkpoint()
+        # Opening adaptation must exist before the keeper introduces its people and premise.
+        adapting = st.pending_turn.get("scene_package", {}).get("kind") == "开局改编"
+        return await self._improvise("开局改编", required=True) if not st.improv or adapting else None
+
     async def start(self, on_delta=None) -> str:
         st, m = self.state, self.m
         if not st.pending_turn:
@@ -253,9 +267,7 @@ class Game:
         self.visuals.pause()
         if self.checkpoint:
             self.checkpoint()
-        # Opening adaptation must exist before the keeper introduces its people and premise.
-        adapting = st.pending_turn.get("scene_package", {}).get("kind") == "开局改编"
-        adapted = await self._improvise("开局改编", required=True) if not st.improv or adapting else None
+        adapted = await self.prepare_opening()
         opening = Turn()
         await self.plugins.run("start", opening)
         await self._arrive(st.location, opening)

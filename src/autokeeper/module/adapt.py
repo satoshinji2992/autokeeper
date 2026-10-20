@@ -13,6 +13,9 @@ lacks and leaves what it has:
     ties        私人牵连    threads an investigator's background can be tied to (Module.ties)
     endings     额外结局    the ends a table is likely to reach that the module never wrote
     mechanics   插件清单    the rules the engine does not keep by itself (Module.mechanics)
+    prelude     开局演出    a few pictures and lines on the story's background, played before the
+                            game screen while the director adapts (module/prelude.py); it reads
+                            only what the players are told, never the keeper's book
 
 The model calls of the passes asked for run at once; their edits land one pass at a time and a
 pass whose edits break the module's checks is taken back whole. The module's truth, its clues'
@@ -32,13 +35,13 @@ from pydantic import BaseModel, Field
 
 from .. import config
 from ..harness import Session
-from . import package, yamledit
+from . import package, prelude, yamledit
 from .graph import audit, supporting_clues
-from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Tie
+from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, PreludeFrame, Tie
 
-PASSES = ("npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "mechanics")
+PASSES = ("npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "mechanics", "prelude")
 LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "foreshadow": "伏笔", "clueweb": "线索网",
-          "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单"}  # fmt: skip
+          "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "prelude": "开局演出"}  # fmt: skip
 
 SYSTEM = """你是 AutoKeeper 的模组改编员，在编译期给一个 CoC 7 版模组补上跑团时用得着、原文却没写的东西。
 - 原作的真相、线索原文、检定、结局一个字都不改；补上的东西要和原作对得上，像本来就在里面。
@@ -106,6 +109,10 @@ class Mechanics(BaseModel):
     mechanics: list[Mechanic] = Field(default_factory=list)
 
 
+class Prelude(BaseModel):
+    prelude: list[PreludeFrame] = Field(default_factory=list, max_length=prelude.MAX_FRAMES)
+
+
 ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "npcs": ("给下面标着“缺”的 NPC 补上空着的字段：personality 性格、voice 说话方式、goal 想要什么、knows 他知道的事。"
              "只补空着的，已有的不动；knows 只写他按原作会知道的事，不添新的案情。", NpcFills),
@@ -123,6 +130,9 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "每个写一个新的剧情标记（写清调查员的行动真正达成什么时它才成立）和结局叙述。不改原作的结局。", Endings),
     "mechanics": ("列出模组里引擎自己不会管、要插件来管的规则：时钟和倒计时、资源、疾病、仪式进度、追逐、特殊的检定。"
                   "每条写规则本身（什么时候、怎么算、有什么后果）和模组里哪里用到。原作没有这样的规则就留空。", Mechanics),
+    "prelude": ("写开局演出：进入游戏前播放的 3–5 幕，像电影开头那样一张图配一两句字幕，按先后排，只介绍故事背景："
+                "时代、地方、气氛、事情是怎么找上门的。图只从【可用的图】里挑，没有合适的就留空。"
+                "只用上面玩家知道的内容，不写调查员会怎么做、会发现什么，每幕不超过 60 字。", Prelude),
 }
 
 
@@ -173,11 +183,22 @@ def _material(m: Module, name: str) -> str:
     return ""
 
 
+def _public(m: Module) -> str:
+    """What the players are told before play, for the opening performance: never the keeper's book."""
+    start = next((x for x in m.locations if x.id == m.start), None)
+    lines = [f"【模组】《{m.title}》{m.subtitle}", f"【时代与地方】{m.era}，{m.setting}", f"【开场钩子（玩家知道）】{m.hook.strip()}"]
+    if start is not None:
+        lines.append(f"【开场地点】{start.name}：{start.read_aloud.strip()}")
+    lines.append("【可用的图】\n" + ("\n".join(f"- {key}：{what}" for key, what in prelude.public_art(m).items()) or "- 没有"))
+    return "\n".join(lines)
+
+
 async def _ask(cfg: config.Config, name: str, m: Module) -> BaseModel:
     task, schema = ASK[name]
     s = Session("importer", cfg.role("importer"), SYSTEM, schema=schema.model_json_schema())
+    material = _public(m) if name == "prelude" else f"{book(m)}{_material(m, name)}"
     try:
-        reply = await s.send(f"{book(m)}{_material(m, name)}\n\n【这次要做的】{LABELS[name]}：{task}")
+        reply = await s.send(f"{material}\n\n【这次要做的】{LABELS[name]}：{task}")
         return schema.model_validate(reply.data or {})
     finally:
         await s.close()
@@ -225,6 +246,11 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
             found.append(("key", "flags", flag, e.meaning.strip()))
             found.append(("append", "endings", [{"id": e.id, "title": e.title, "condition": f"flag:{flag}", "text": e.text.strip()}]))
         return found
+    if name == "prelude":  # a shot that shows what is not public yet, or says too much, is left out
+        art = prelude.public_art(m)
+        shots = [f.model_copy(update={"art": f.art if f.art in art else ""}) for f in out.prelude]
+        shots = [f for f in shots if not prelude.shot(m, f)][: prelude.MAX_FRAMES]
+        return [("append", "prelude", [f.model_dump(mode="json", exclude_defaults=True) for f in shots])] if len(shots) >= 2 else []
     items: list[BaseModel] = getattr(out, name)
     if name == "relations":
         items = [b for b in items if b.a in npcs and (b.b in npcs or b.b == "players") and b.a != b.b]

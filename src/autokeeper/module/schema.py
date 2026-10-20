@@ -198,6 +198,14 @@ class Showcase(BaseModel):
     improvised: SkipJsonSchema[bool] = Field(False, exclude=True)  # the director's, in this game: its picture is kept per save
 
 
+class PreludeFrame(BaseModel):
+    """One shot of the opening performance (开局演出): a picture and a line or two, played before
+    the game screen while the director adapts the module (module/prelude.py)."""
+
+    art: str = Field("", description="这一幕的图片键：封面、开场地点，或钩子和背景里已经点名的地方；没有合适的留空")
+    text: str = Field(description="这一幕的字幕，一两句，只讲故事背景：时代、地方、气氛、事情的由来；不剧透，不写调查员会怎么做")
+
+
 # -- the situation (局面): who wants what, and what comes of it if nobody steps in ---------------
 class Bond(BaseModel):
     """How one person sees another: an edge of the conflict graph."""
@@ -288,6 +296,8 @@ class Module(BaseModel):
     endings: list[Ending] = Field(default_factory=list)
     sketches: list[SketchPrompt] = Field(default_factory=list)
     showcases: list[Showcase] = Field(default_factory=list, description="大场景：在重要节点整屏展示一张大图，每个模组 5–15 个")
+    prelude: list[PreludeFrame] = Field(default_factory=list, max_length=8,
+                                        description="开局演出：进入游戏前播放的几幕，图和字介绍故事背景；编译时写好，不剧透")
     pregens: list[Investigator] = Field(default_factory=list)
     relations: list[Bond] = Field(default_factory=list, description="冲突图：人物之间的看法，开局就在本局的世界记录里")
     agendas: list[Agenda] = Field(default_factory=list, description="重要 NPC 的打算：没人插手时他们会做什么")

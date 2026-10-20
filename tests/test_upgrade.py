@@ -85,6 +85,9 @@ ANSWERS = {
     "endings": {"endings": [{"id": "e_leave", "title": "离开", "flag": "left_town", "meaning": "调查员放弃调查离开了小镇",
                              "text": "火车开出小镇的时候，钟又多敲了一下。"}]},
     "mechanics": {"mechanics": []},
+    "prelude": {"prelude": [{"art": "square", "text": "小镇的广场中央立着一座老钟楼。"},
+                            {"art": "tower", "text": "钟楼里藏着守钟人的秘密。"},  # a place not public yet: shown without it
+                            {"text": "最近，钟总是多敲一下。"}]},
 }
 
 
@@ -113,7 +116,8 @@ async def test_each_pass_adds_only_what_the_module_lacks_and_checks_what_it_adds
     for name, text in before.items():  # what was there is still there, line for line
         now = (example / name).read_text(encoding="utf-8")
         assert all(line in now.split("\n") for line in text.split("\n")), name
-    assert {r.name for r in results if r.written} >= {"npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings"}
+    assert {r.name for r in results if r.written} >= {"npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "prelude"}
+    assert [f.art for f in m.prelude] == ["square", "", ""]
     again = await adapt.adapt(example, cfg=SimpleNamespace(), log=lambda _: None)  # run again: resumes, nothing left to do
     assert all(r.name in ("clueweb", "npcs", "mechanics") for r in again)  # still short, or nothing to add
 

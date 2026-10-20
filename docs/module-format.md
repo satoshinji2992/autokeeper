@@ -8,7 +8,7 @@ modules/<id>/
   places.yaml        地点（locations）
   people.yaml        NPC、怪物、预设调查员（npcs、creatures、pregens）
   clues.yaml         线索、物件、手稿、手绘题（clues、items、handouts、sketches）
-  story.yaml         事件、结论、结局、大场景（events、conclusions、endings、showcases）
+  story.yaml         事件、结论、结局、大场景、开局演出（events、conclusions、endings、showcases、prelude）
   situation.yaml     局面：人物关系、各人的打算、伏笔、私人牵连、插件清单（relations、agendas、foreshadow、ties、mechanics）
   art/places/<键>.jpg   场景照片和原作场景图（也支持 png、jpeg、webp）
   art/people/<键>.jpg   人物头像
@@ -47,6 +47,7 @@ modules/<id>/
 | `endings` | `condition: flag:x` 的结局按顺序判定；奖励里写 `理智 +1D6` 会自动结算 |
 | `sketches` | 让玩家手绘的东西：`target` 写真实样子，读图员相似度过 `threshold` 时触发理智检定或线索 |
 | `showcases` | 大场景：在重要节点整屏展示一张大图，每个模组 5–15 个，见下文 |
+| `prelude` | 开局演出：进入游戏前播放的几幕，图和字介绍故事背景，见下文 |
 | `pregens` | 预设调查员（属性用中文名：力量、体质、体型、敏捷、外貌、智力、意志、教育） |
 
 ## 剧情变样（looks）
@@ -116,6 +117,23 @@ mechanics:                      # 引擎自己不管、要插件来管的规则
 ```
 
 写了 `agendas` 的 NPC 自动算重要 NPC（每局最多 6 个）。`autokeeper upgrade <模组>` 会让导入模型补上模组缺的这几项，并补人物性格和口吻、凑够每个结论三条线索、补一两个玩家很可能走到的结局；只补没有的，原作不改，补完校验不过的那一步整步撤掉。
+
+## 开局演出（prelude）
+
+新开一局时，先整屏播放几幕开局演出，再进入游戏界面：每幕一张图缓慢移动，配一两句逐字出现的字幕，只介绍故事背景（时代、地方、气氛、事情是怎么找上门的）。演出播放时，导演在后台为这几位调查员改编模组；两样都完成后进入游戏，守秘人马上开讲，不让玩家对着空的游戏界面等。按任意键看下一幕，Esc 跳过；看完了后台还没准备好，会停在最后一幕显示「开场准备中」。联机时所有人一起看，准备好后一起进入游戏。
+
+```yaml
+prelude:
+  - art: huochezhan
+    text: 火车驶进阿诺兹堡。木站台被行李车磨出两道白痕，蒸汽散开，站外小食铺窗上蒙着热气。
+  - art: jinboer_jia
+    text: 托马斯请你住进空置的房间，付 10 美元，找回书，也查清叔叔道格拉斯的下落。
+```
+
+- 2–6 幕，每幕字幕不超过 80 字；`art` 可以留空。
+- 图只能用开局就能公开的：封面、开场地点、钩子或背景里点名的地点、标为 `public` 的地点。
+- 字幕只写玩家开局就知道的事，不能和真相、守秘人须知、NPC 秘密、线索原文有重合（检查方式同 NPC 泄密检查）。
+- 编译时自动写（改编步骤「开局演出」，只给模型看玩家知道的内容，不合规的幕会去掉）；没有写的模组用模组名、时代与背景、钩子拼一段默认演出。
 
 ## 大场景（showcases）
 

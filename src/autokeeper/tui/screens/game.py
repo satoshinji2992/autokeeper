@@ -64,6 +64,7 @@ from ..widgets.panels import (
 )
 from ..widgets.plugin_ui import Plays, panel_view, tab_label
 from ..widgets.speaker import Speaker
+from .prelude import PreludeScreen
 from .saves import LoadScreen
 
 COMMANDS = (
@@ -310,7 +311,8 @@ class GameScreen(Screen):
         if not busy:
             self.status_text = ""
             if not self.spectate:
-                self.query_one(Input).focus()
+                for box in self.query(Input).results(Input):  # none once the screen is leaving
+                    box.focus()
             if self._leave_when_ready is not None:
                 go, self._leave_when_ready = self._leave_when_ready, None
                 self.app.call_later(go)
@@ -762,6 +764,17 @@ class GameScreen(Screen):
         self.story.add(kind, body)
 
     # -- turns ----------------------------------------------------------------------------------
+    async def _prelude(self) -> None:
+        """The opening performance plays while the director adapts the module to these
+        investigators (screens/prelude.py); the keeper begins as soon as both are done."""
+        assert self.game
+        ready = asyncio.ensure_future(self.game.prepare_opening())
+        if not self.spectate:
+            animations = config.load().animations
+            await self.app.push_screen_wait(PreludeScreen(self.m, ready, style=self.app.art_style,  # type: ignore[attr-defined]
+                                                          animations=animations))
+        await ready
+
     @work(exclusive=True, group="turn")
     async def boot(self) -> None:
         assert self.game and self.cast
@@ -769,6 +782,7 @@ class GameScreen(Screen):
         warm = asyncio.create_task(self._warm())
         try:
             if self.state.pending_turn.get("opening"):
+                await self._prelude()
                 await self.game.start()
             elif self.state.pending_turn:
                 self.story.add("system", Text("上一回合尚未讲完，正在接续已保存的结果。"))
@@ -784,7 +798,7 @@ class GameScreen(Screen):
                 self.story.end_keeper(text)
                 self._scene(self.state.location)
             else:
-                self._status("守秘人正在准备开场…")
+                await self._prelude()
                 await self.game.start()
                 write_save(self.state, self.m)
             await warm

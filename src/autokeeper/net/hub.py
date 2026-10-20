@@ -33,6 +33,7 @@ Messages are JSON objects with a "t" field:
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
                     · event {ev} · module · sync {state} · offer · say · ideas {ideas}
+                    · prelude {frames, art, colors, picture_data} · prelude_ready (the opening performance)
                     · over · error
 
 Seats come from the host's plan: each of the module's pregens is a player's, an AI's or left out,
@@ -812,6 +813,7 @@ class Hub:
         await self._broadcast({"t": "begin"})
         st = self.state
         if self.fresh and not st.log:
+            await self._prelude()
             await self.game.start()
             self._save()
             await self._broadcast({"t": "sync", "state": self._view()})
@@ -822,6 +824,26 @@ class Hub:
             await self._settle()
         self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
+
+    async def _prelude(self) -> None:
+        """Every screen plays the opening performance (module/prelude.py) while the director adapts
+        the module to the party; the screens hear it is ready once that is done and the shots
+        have had their time, so the table goes into the game together."""
+        from ..module import prelude
+        from ..tui.screens.prelude import duration
+
+        shots = prelude.frames(self.m)
+        keys = {shot.art for shot in shots if shot.art}
+        begun = time.monotonic()
+        await self._broadcast({"t": "prelude", "frames": [shot.model_dump(mode="json") for shot in shots],
+                               "art": {k: v for k, v in self.m.art.items() if k in keys},
+                               "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
+                               "picture_data": self._shared({k: media.pack(v) for k, v in self.m.pictures.items() if k in keys})})
+        try:
+            await self.game.prepare_opening()
+            await asyncio.sleep(max(0.0, duration(shots) - (time.monotonic() - begun)))
+        finally:
+            await self._broadcast({"t": "prelude_ready"})
 
     def _count(self, seat: str) -> int:
         return sum(1 for s, _ in self.pool if s == seat)

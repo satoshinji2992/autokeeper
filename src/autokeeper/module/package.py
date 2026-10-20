@@ -42,7 +42,7 @@ PARTS: dict[str, tuple[str, ...]] = {
     "places.yaml": ("locations",),
     "people.yaml": ("npcs", "creatures", "pregens"),
     "clues.yaml": ("clues", "items", "handouts", "sketches"),
-    "story.yaml": ("events", "conclusions", "endings", "showcases"),
+    "story.yaml": ("events", "conclusions", "endings", "showcases", "prelude"),
     "situation.yaml": ("relations", "agendas", "foreshadow", "ties", "mechanics"),
 }
 IMAGES = (".jpg", ".jpeg", ".png", ".webp")

@@ -1,0 +1,36 @@
+PreludeScreen {
+    background: black;
+    layout: vertical;
+}
+
+PreludeScreen #prelude-view {
+    width: 100%;
+    height: 1fr;
+    overflow: hidden hidden;
+    scrollbar-size: 0 0;
+    background: black;
+}
+
+PreludeScreen #prelude-picture {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    background: black;
+}
+
+PreludeScreen #prelude-caption {
+    width: 100%;
+    height: 4;
+    padding: 1 4 0 4;
+    content-align: center top;
+    text-align: center;
+    color: $text;
+    background: black;
+}
+
+PreludeScreen #prelude-status {
+    width: 100%;
+    height: 1;
+    content-align: center middle;
+    background: black;
+}
