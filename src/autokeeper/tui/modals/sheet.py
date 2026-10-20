@@ -7,6 +7,7 @@ screen gets through the sync). ←/→ go through the party."""
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Callable
 
@@ -14,6 +15,7 @@ from rich.cells import cell_len
 from rich.console import Group, RenderableType
 from rich.table import Table
 from rich.text import Text
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
@@ -248,11 +250,24 @@ class SheetModal(ModalScreen[None]):
         self._show_card()
 
     def _show_card(self) -> None:
+        """The words at once; the face once it is drawn, off the UI thread (a photo goes through chafa,
+        which held the window still for a moment each time it opened or turned the page)."""
         inv = self.party[self.at]
         where = f"  {self.at + 1}/{len(self.party)}" if len(self.party) > 1 else ""
         self.query_one("#sheet-title", Static).update(f"人物卡 · {inv.name}{where}")
-        width = min(120, self.app.size.width - 8)  # the window's own room: fewer skill columns on a small terminal
-        self.query_one("#sheet-body", Static).update(sheet_view(inv, self.portrait(inv) if self.portrait else None, width, state=self.state))
+        self.query_one("#sheet-body", Static).update(sheet_view(inv, None, self._width(), state=self.state))
+        if self.portrait is not None:
+            self._face(self.at)
+
+    def _width(self) -> int:
+        return min(120, self.app.size.width - 8)  # the window's own room: fewer skill columns on a small terminal
+
+    @work(exclusive=True, group="sheet-face", exit_on_error=False)
+    async def _face(self, at: int) -> None:
+        inv = self.party[at]
+        face = await asyncio.to_thread(self.portrait, inv)  # type: ignore[arg-type]
+        if at == self.at and face is not None and self.is_mounted:
+            self.query_one("#sheet-body", Static).update(sheet_view(inv, face, self._width(), state=self.state))
 
     def action_turn(self, step: int) -> None:
         self.at = (self.at + step) % len(self.party)
