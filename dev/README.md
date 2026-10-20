@@ -50,3 +50,36 @@ uv run python dev/export_site_art.py
 结果默认写入 `dev/output/site/cover-data.json`，检查后复制到 `docs/site/cover-data.json`。原画署名与许可链接保留在网页的「文档与署名」中。
 
 发布地址为 <https://satoshinji2992.github.io/autokeeper/>。仓库 Pages 使用 `main` 分支的 `/docs`，提交并推送网页改动后会自动发布，`docs/.nojekyll` 用于直接发布静态文件。运行中的游戏、API 密钥和存档仍留在玩家本机。
+
+## 发布到 PyPI
+
+玩家用 `uv tool install autokeeper` 或 `pipx install autokeeper` 装的是 PyPI 上的包。包里有游戏代码、三本自带模组（不含 `source/`）、共用 Skills 和掷骰脚本，打包规则在 `pyproject.toml` 的 `[tool.hatch.build.*]`。
+
+1. 改版本号，两处要一致（`tests/test_cli.py` 会核对）：`src/autokeeper/__init__.py` 的 `__version__`（`pyproject.toml` 从这里读），`.claude-plugin/plugin.json` 的 `version`。PyPI 上同一个版本号只能传一次。
+2. `CHANGELOG.md` 把「开发中」换成日期，然后检查：
+
+   ```bash
+   uv run ruff check src tests
+   uv run pytest -q
+   ```
+
+3. 构建，检查包里没有不该有的东西（这条命令应该什么都不输出），再在隔离的目录里试装：
+
+   ```bash
+   rm -rf dist && uv build
+   unzip -l dist/*.whl | grep -E "/source/|/data/|dev/output|skills/module-|node_modules"
+   export UV_TOOL_DIR=/tmp/ak-tools UV_TOOL_BIN_DIR=/tmp/ak-bin HOME=/tmp/ak-home
+   uv tool install dist/*.whl && cd /tmp && /tmp/ak-bin/autokeeper check zhuishuren
+   ```
+
+4. 在 [pypi.org](https://pypi.org/manage/account/token/) 建一个 API token（第一次发布时范围只能选整个账号，发布后换一个只限 autokeeper 项目的），然后：
+
+   ```bash
+   uv publish --token pypi-你的token        # 或 UV_PUBLISH_TOKEN=pypi-… uv publish
+   ```
+
+   想先试一遍，用 [TestPyPI](https://test.pypi.org/manage/account/token/) 的 token：`uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-…`。用 twine 也行：`uvx twine upload dist/*`，用户名填 `__token__`，密码填 token。
+
+5. 打标签、建 GitHub Release：`git tag v版本号 && git push origin v版本号`。
+
+以后想不经手 token，可以在 PyPI 项目设置里加「Trusted Publisher」（GitHub Actions），用 `pypa/gh-action-pypi-publish` 在推标签时自动发布。

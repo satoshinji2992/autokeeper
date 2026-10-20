@@ -365,7 +365,7 @@ fallback = "ollama:qwen3:14b"  # 备用模型；不带前缀的 claude-* 走 Cla
 
 ### 文件放在哪里
 
-所有位置都由 `src/autokeeper/paths.py` 给出，别的代码不自己拼路径。游戏运行时写的东西都在仓库根目录的 `data/` 下（设了 `AUTOKEEPER_HOME` 就在那个目录下）：
+所有位置都由 `src/autokeeper/paths.py` 给出，别的代码不自己拼路径。从源码目录运行时，游戏写的东西都在仓库根目录的 `data/` 下（设了 `AUTOKEEPER_HOME` 就在那个目录下，布局和仓库一样）；装成命令（`uv tool install autokeeper`）以后，同样的内容放在用户目录：`data/` 换成 `~/.local/share/autokeeper/`，`cache/` 换成 `~/.cache/autokeeper/`，导入的模组在 `~/.local/share/autokeeper/modules/`，Windows 见[游玩指南](playing.md#东西放在哪)。自带的模组、共用的 Skills 和掷骰脚本随包一起装好，掷骰组件的 npm 依赖装在 `~/.local/share/autokeeper/bridge/`。
 
 ```text
 data/
@@ -385,7 +385,9 @@ data/
   preferences.json  tips.json  spend.json  imagegen/<模组>.json
 ```
 
-界面里改的设置在 `~/.config/autokeeper/settings.json`。评测报告、自动跑团记录和公网分享的运行文件在 `dev/output/`。
+界面里改的设置在 `~/.config/autokeeper/settings.json`（Windows 是 `%APPDATA%\autokeeper\`）。评测报告、自动跑团记录和公网分享的运行文件在 `dev/output/`（装成命令后是 `~/.local/share/autokeeper/dev-output/`）。
+
+从源码目录写存档时，会把这个目录记进 `~/.config/autokeeper/checkouts.json`；装好的命令第一次运行时，把这些目录和当前目录里的存档、角色卡、导入的模组和慢的缓存复制过来（`paths.adopt`，不移动、不覆盖），`autokeeper migrate <目录>` 可以随时再带一次。
 
 0.0.1 把这些都放在 `saves/` 里。第一次启动新版本时，本地模型、知识库、大场景图和自己的调查员会从 `saves/` 挪到新位置；旧存档不再读取，`saves/` 可以直接删掉。
 
