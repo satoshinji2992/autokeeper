@@ -20,7 +20,7 @@ from pydantic import TypeAdapter
 
 from .. import weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Failure, Ruling
+from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
@@ -70,6 +70,7 @@ class Turn:
     first_visit: bool = False
     route: list[str] = field(default_factory=list)
     npc_lines: list[tuple[str, str]] = field(default_factory=list)
+    joined: list[str] = field(default_factory=list)  # of those, who spoke of their own accord (Game._join_in)
     performance: tuple[str, str] | None = None
     performed: list[str] = field(default_factory=list)
     push: dict | None = None
@@ -83,7 +84,7 @@ class Turn:
     def absorb(self, later: Turn) -> None:
         """What a later stage of the same turn settled (the push choice): its rolls, finds, events,
         lines and notes join this turn's, so the NPCs on stage and the keeper's report have them."""
-        for name in ("checks", "sanity", "npc_lines", "notes", "hints", "world"):
+        for name in ("checks", "sanity", "npc_lines", "joined", "notes", "hints", "world"):
             getattr(self, name).extend(getattr(later, name))
         self.clues += [c for c in later.clues if c not in self.clues]
         self.events += [e for e in later.events if all(e.id != x.id for x in self.events)]
@@ -195,6 +196,8 @@ class Game:
         self._world_owed = False
         self._world_task: asyncio.Task | None = None
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
+        self.initiative: list[Initiative] = []  # who here the keeper's plan has join in this turn (Cast.plan, talk)
+        self._directed: set[str] = set()  # those it has join in: the world does not decide for them too this turn
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._moved_on = False  # the party went somewhere else since the world last lived (scheduler.advance)
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
@@ -382,7 +385,7 @@ class Game:
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
-        action = await self.cast.intent(st, text)
+        action = await self._arrange(text)
         # What a dice command asks for is read off the command, never taken from the model.
         action = action.model_copy(update={"asked": commands.asked(text), "echo": ""})
         if action.kind != "meta" and (action.kind == "move" or action.destination):
@@ -411,6 +414,35 @@ class Game:
         if action.kind == "daily":
             st.progress_at = st.turn  # do not suggest the player is stuck while choosing everyday life
         return action
+
+    async def _arrange(self, text: str) -> Action:
+        """The keeper's plan of the turn (Cast.plan), or the parser's action when there is no plan to
+        be had: a cast without one, a failed call, a reply that is no Plan. Who joins in is held to
+        those it may be (here, alive, the module's: _present), by their ids alone, and kept for
+        talk(), in the turn's journal too, so a resumed turn still has it."""
+        st = self.state
+        self.initiative, self._directed = [], set()
+        planner = getattr(self.cast, "plan", None)
+        if planner is not None:
+            try:
+                plan = await planner(st, text)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # the parser still reads the player's words
+                self._debug("plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
+            else:
+                here, kept = set(self._present()), {}
+                for x in plan.initiative:
+                    if x.npc in here and x.npc not in kept and x.does.strip():
+                        kept[x.npc] = x
+                self.initiative = list(kept.values())[:2]
+                self._directed = {x.npc for x in self.initiative}  # the world does not decide for them this turn
+                if st.pending_turn:
+                    st.pending_turn["initiative"] = [x.model_dump() for x in self.initiative]
+                self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
+                                     "kept": [x.npc for x in self.initiative]})
+                return plan.action
+        return await self.cast.intent(st, text)
 
     async def rule(self, action: Action) -> Ruling | None:
         if action.kind in ("meta",):
@@ -1506,6 +1538,7 @@ class Game:
                 if self.turn_checkpoint:
                     self.turn_checkpoint(turn)
                 await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
+        await self._join_in(turn)
         for ev in turn.events:
             if ev.performer and ev.id not in turn.performed:
                 npc = m.npc(ev.performer)
@@ -1524,6 +1557,57 @@ class Game:
         await self._people()
         if self.turn_checkpoint:
             self.turn_checkpoint(turn)
+
+    async def _join_in(self, turn: Turn) -> None:
+        """Those the keeper's plan has join in of their own accord (Plan.initiative), after the one
+        addressed: each in its own voice, from its own file (Cast.npc), what it says and does on the
+        spot landing this turn as any reply's does. Whoever already spoke this turn (the one addressed,
+        a resumed turn's) is not asked again, nor one no longer here."""
+        st, m = self.state, self.m
+        saved = st.pending_turn.get("initiative") if st.pending_turn else None
+        plans = [Initiative.model_validate(x) for x in saved] if saved is not None else self.initiative
+        for x in plans:
+            if any(nid == x.npc for nid, _ in turn.npc_lines) or x.npc not in self._present():
+                continue
+            npc = m.npc(x.npc)
+            await self.emit({"type": "status", "text": f"{npc.name}开口了…"})
+            line = await self.cast.npc(st, npc.id, self._joining(turn, x))
+            turn.npc_lines.append((npc.id, line))
+            turn.joined.append(npc.id)
+            turn.notes += self._unsettled(npc.id)
+            if (gone := self.world.place(npc.id)) and gone != st.location:
+                turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
+            st.npc(npc.id).met = True
+            st.add("npc", line, who=npc.name)
+            inv = st.investigator
+            self.world.apply(Occur(id=f"talk:{st.turn}:{npc.id}:initiative", actor=inv.id, participants=[npc.id],
+                                   place=st.location, text=f"{npc.name}主动对{inv.name}：「{line}」", visibility="public",
+                                   transcript=True))
+            if self.turn_checkpoint:
+                self.turn_checkpoint(turn)
+            await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
+
+    def _held(self) -> set[str]:
+        """Those the keeper's plan has join in this turn (also as a resumed turn's journal keeps them):
+        the world's own decisions leave them be until the next turn (scheduler.advance)."""
+        saved = self.state.pending_turn.get("initiative") if self.state.pending_turn else None
+        return self._directed | {x["npc"] for x in saved or [] if isinstance(x, dict) and x.get("npc")}
+
+    def _joining(self, turn: Turn, x: Initiative) -> str:
+        """What one joining in of its own accord is told: what was said aloud in front of it this turn,
+        and the keeper's one line of what it does, to play from its own file and in its own voice."""
+        st, m = self.state, self.m
+        inv, action = st.investigator, turn.action
+        heard = []
+        if action and action.speech:
+            heard.append(f"{inv.name}刚才说：「{action.speech}」。")
+        elif action and action.visible:
+            heard.append(f"{inv.name}刚才：{action.visible}。")
+        private = {step.npc for step in action.before if step.private} if action else set()
+        heard += [f"{m.npc(nid).name}刚才说：「{line}」。" for nid, line in turn.npc_lines if nid not in private]
+        return (f"（系统：{st.clock}，{m.location(st.location).name}。{''.join(heard)}"
+                f"这一轮你主动：{x.does}。这是守秘人的安排，不是你知道的事：只用你自己的知识、亲历和口吻演出来，不知道的不说。"
+                "当场拿出或递出东西、走开、同行，照常写在回复里；不替调查员说话或做决定。）")
 
     def _exchanged(self, npc_id: str, action: Action, line: str, *, private: bool = False) -> None:
         """A conversation goes into the world record: everyone there saw it, an important NPC keeps
@@ -1546,7 +1630,9 @@ class Game:
                 "不写成已经做到，也不删改他说过的话。"]
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
-        if (turn.npc_lines and not turn.events and not turn.notes and not turn.ending
+        # A reply to the player is the turn's telling; someone joining in of their own accord is not:
+        # what the player did still wants telling.
+        if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
                 and not turn.arrived and not turn.world and not turn.sanity and not turn.hints):
             self.told = None
             await self.emit({"type": "dialogue_end"})
@@ -2003,7 +2089,7 @@ class Game:
         brain = _Minds(self, quiet=not inline) if self.brain is not None else None
         report = await scheduler.advance(self.world, brain, start, st.minutes, budget=self.minds, tick=tick,
                                          shared=True, events_only=events_only, moved_on=self._moved_on,
-                                         checkpoint=self.checkpoint)
+                                         checkpoint=self.checkpoint, held=self._held())
         self._moved_on = False
         self._debug("world", asdict(report))
         self.debug_world.append(report)
@@ -2232,6 +2318,8 @@ class Game:
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
             out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复线索卡与检定卡；只叙述本轮另行发生的变化。")
+            if turn.joined:
+                out.append(f"其中{'、'.join(m.npc(x).name for x in turn.joined)}是这一轮自己主动开口的。")
         if turn.performance:
             out.append(f"NPC 表演（已展示给玩家）：{m.npc(turn.performance[0]).name} 刚刚说完这一段书。")
         for ev in turn.events:
