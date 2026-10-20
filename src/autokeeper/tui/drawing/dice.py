@@ -153,7 +153,9 @@ def chafa(im, cols: int, rows: int, symbols: list[str], *, work: int = 5) -> str
     buf = io.BytesIO()
     im.save(buf, format="PNG", compress_level=0)
     colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
-    cmd = ["chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--threads", "1",
+    from ... import imagery
+
+    cmd = [imagery.chafa_path() or "chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--threads", "1",
            "--size", f"{cols}x{rows}", *symbols, "-"]
     ansi = subprocess.run(cmd, input=buf.getvalue(), capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
     ansi = ansi.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")

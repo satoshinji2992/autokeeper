@@ -86,6 +86,23 @@ def _install_bridge() -> bool:
     return True
 
 
+def _chafa_ready() -> None:
+    """Before a game: chafa for the photos, fetched (its official build) where the system has none.
+    Without it the game still plays, with the hand-drawn pictures."""
+    from . import imagery
+
+    if imagery.available():
+        return
+    notices.print("没找到 chafa（把照片画成彩色字符），下载官方版本…")
+    try:
+        got = imagery.fetch_chafa()
+    except Exception as exc:  # no network, a moved file: the hand-drawn pictures still show
+        notices.print(f"[yellow]chafa 没下载成功（{type(exc).__name__}），场景照片改用手绘字符画。也可以自己装：{imagery.install_hint()}[/]")
+        return
+    if not got:
+        notices.print(f"[yellow]这个系统没有现成的 chafa 可下载，场景照片改用手绘字符画。装上它：{imagery.install_hint()}[/]")
+
+
 def _dice_ready() -> None:
     """Before a game: the dice bridge's packages installed, or one clear line on what is missing."""
     if paths.bridge_ready() and shutil.which("node"):
@@ -106,6 +123,7 @@ def play(
     from .tui.app import AutoKeeperApp
 
     _dice_ready()
+    _chafa_ready()
     if sys.stdin.isatty() and _new_player():
         console.print("第一次运行，先选用哪家模型（以后运行 [bold]autokeeper login[/] 再换）：")
         login()
@@ -212,6 +230,7 @@ def serve(port: int = 8000) -> None:
     from .net.web import Page, command
 
     _dice_ready()
+    _chafa_ready()
     os.environ["COLORTERM"] = "truecolor"  # the browser's terminal shows 24-bit colour; the game it starts inherits this
     Page(command("play", "--no-intro"), port=port, title="AutoKeeper").serve()
 
@@ -232,6 +251,7 @@ def host(
 
     module = _module(module)
     _dice_ready()
+    _chafa_ready()
     plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
     try:
         state = lan.saved(load) if load else None
@@ -301,6 +321,7 @@ def setup(
     console.print(f"[bold]1/{steps}[/] 安装掷骰组件（BCDice，npm）…")
     if _install_bridge():
         console.print(f"    {paths.BRIDGE}")
+    _chafa_ready()  # the photos' renderer, fetched where the system has none
     console.print(f"[bold]2/{steps}[/] 编译模组 Skill 包…")
     for path in paths.module_folders():
         root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
@@ -425,7 +446,7 @@ def doctor(ping: Annotated[bool, typer.Option(help="给每个用到的模型发�
     console.print(f"{'✓' if found else '✗'} node: {found or '未找到（BCDice 需要）'}")
     from . import imagery
 
-    found = shutil.which("chafa")
+    found = imagery.chafa_path()
     console.print(f"{'✓' if found else '✗'} chafa: {found or '未找到：场景和头像只能显示手绘字符画，联机时朋友的终端也一样。安装：' + imagery.install_hint()}")
     ok &= bool(found)
     try:

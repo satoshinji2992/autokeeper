@@ -442,8 +442,58 @@ async def fetch_folder(
 
 
 # -- rendering ------------------------------------------------------------------
+CHAFA = "1.18.3"  # the official static build fetched where the system has none (fetch_chafa)
+CHAFA_BUILDS = {("win32", "AMD64"): f"chafa-{CHAFA}-1-x86_64-windows.zip",
+                ("linux", "x86_64"): f"chafa-{CHAFA}-1-x86_64-linux-gnu.tar.gz",
+                ("linux", "armv7l"): f"chafa-{CHAFA}-1-armv7l-linux-gnu.tar.gz"}
+
+
+def chafa_path() -> str | None:
+    """chafa: the system's, else the official build the game fetched (fetch_chafa)."""
+    from . import paths
+
+    if found := shutil.which("chafa"):
+        return found
+    own = paths.tools() / ("chafa.exe" if sys.platform == "win32" else "chafa")
+    return str(own) if own.is_file() else None
+
+
 def available() -> bool:
-    return shutil.which("chafa") is not None
+    return chafa_path() is not None
+
+
+def fetch_chafa() -> str:
+    """chafa where the system has none: the official static build for this platform (hpjansson.org),
+    one file, into the game's own tools folder; `uv tool install` cannot bring programs, and on
+    Windows no package manager may be there. Empty when there is no build for it (macOS: brew)."""
+    import platform
+    import tarfile
+    import tempfile
+    import urllib.request
+    import zipfile
+
+    from . import paths
+
+    name = CHAFA_BUILDS.get((sys.platform, platform.machine()))
+    if name is None:
+        return ""
+    target = paths.tools() / ("chafa.exe" if sys.platform == "win32" else "chafa")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / name
+        urllib.request.urlretrieve(f"https://hpjansson.org/chafa/releases/static/{name}", archive)
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(archive) as z:
+                member = next(n for n in z.namelist() if n.lower().endswith("chafa.exe"))
+                target.write_bytes(z.read(member))
+        else:
+            with tarfile.open(archive) as t:
+                member = next(m for m in t.getmembers() if m.isfile() and m.name.endswith("/chafa"))
+                data = t.extractfile(member)
+                assert data is not None
+                target.write_bytes(data.read())
+    target.chmod(0o755)
+    return str(target)
 
 
 def install_hint() -> str:
@@ -467,7 +517,7 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
     colors = "full" if os.environ.get("COLORTERM", "").lower() in ("truecolor", "24bit") else "240"
     # The picture is already cut to the panel's shape for cells half as wide as tall; say so,
     # or chafa guesses the cell shape from the console font (Windows) and draws a thin strip.
-    cmd = ["chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
+    cmd = [chafa_path() or "chafa", "-f", "symbols", "-c", colors, "--font-ratio", "1/2", "--work", str(work), "--size", f"{width}x{height}",
            *STYLES.get(style, STYLES["picture"]), source]
     out = subprocess.run(cmd, input=data, capture_output=True, timeout=20).stdout.decode("utf-8", "replace")
     return out.replace("\x1b[?25l", "").replace("\x1b[?25h", "").rstrip("\n")

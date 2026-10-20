@@ -1,0 +1,58 @@
+"""chafa where the system has none (imagery.fetch_chafa): `uv tool install` cannot bring a program,
+so the game fetches the official static build into its own tools folder (the user, 2026-10-20:
+Windows had no chafa after `uv tool install autokeeper`). Offline: the archives are made here."""
+
+from __future__ import annotations
+
+import io
+import tarfile
+import zipfile
+
+import pytest
+
+from autokeeper import imagery, paths
+
+
+def fake_download(archive: bytes):
+    def fetch(url, target):
+        assert url.startswith("https://hpjansson.org/chafa/releases/static/chafa-")
+        with open(target, "wb") as f:
+            f.write(archive)
+    return fetch
+
+
+@pytest.fixture
+def nowhere(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "tools", lambda: tmp_path / "tools")
+    monkeypatch.setattr(imagery.shutil, "which", lambda name: None)
+    return tmp_path / "tools"
+
+
+def test_windows_gets_the_official_exe_from_its_zip(monkeypatch, nowhere):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("chafa-1.18.3-1-x86_64-win/README.TXT", "readme")
+        z.writestr("chafa-1.18.3-1-x86_64-win/Chafa.exe", b"MZ-exe")
+    monkeypatch.setattr(imagery.sys, "platform", "win32")
+    monkeypatch.setattr("platform.machine", lambda: "AMD64")
+    monkeypatch.setattr("urllib.request.urlretrieve", fake_download(buf.getvalue()))
+    assert not imagery.available()
+    got = imagery.fetch_chafa()
+    assert got == str(nowhere / "chafa.exe") and (nowhere / "chafa.exe").read_bytes() == b"MZ-exe"
+    assert imagery.chafa_path() == got and imagery.available()
+
+
+def test_linux_gets_the_binary_from_its_tarball_and_macos_is_told_to_brew(monkeypatch, nowhere):
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as t:
+        data = b"\x7fELF"
+        info = tarfile.TarInfo("chafa-1.18.3-1-x86_64-linux-gnu/chafa")
+        info.size = len(data)
+        t.addfile(info, io.BytesIO(data))
+    monkeypatch.setattr(imagery.sys, "platform", "linux")
+    monkeypatch.setattr("platform.machine", lambda: "x86_64")
+    monkeypatch.setattr("urllib.request.urlretrieve", fake_download(buf.getvalue()))
+    assert imagery.fetch_chafa() == str(nowhere / "chafa") and (nowhere / "chafa").read_bytes() == b"\x7fELF"
+    monkeypatch.setattr(imagery.sys, "platform", "darwin")
+    monkeypatch.setattr("platform.machine", lambda: "arm64")
+    assert imagery.fetch_chafa() == "" and "brew install chafa" in imagery.install_hint()

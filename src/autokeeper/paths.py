@@ -248,6 +248,12 @@ def models() -> Path:
     return cache() / "models"
 
 
+def tools() -> Path:
+    """Programs the game fetched for itself (imagery.fetch_chafa: chafa's official build where no
+    package manager put one); in the cache, as they come back if it is cleared."""
+    return cache() / "tools"
+
+
 def kb(module_id: str) -> Path:
     return cache() / "kb" / module_id
 
