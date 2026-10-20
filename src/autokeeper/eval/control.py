@@ -91,7 +91,8 @@ def _npc_of(m: Module, text: str) -> str | None:
 class Watch:
     """What the engine's own checks said while one turn played: put on before, read after."""
 
-    def __init__(self) -> None:
+    def __init__(self, snaps: list[dict[str, Any]] | None = None) -> None:
+        self.snaps = snaps  # eval/probe.build: the game as each NPC reply was checked, in order
         self.tellings: list[dict[str, Any]] = []  # each keeper call with a scene: retry?, held?, the scene
         self.settled = 0  # tellings written to a scene the program put together
         self.replies: list[dict[str, Any]] = []  # each NPC reply: its checks (problems per try), fields, offers
@@ -131,8 +132,11 @@ class Watch:
             return await npc(state, npc_id, message, travel=travel, private=private)
 
         def watched_problems(state, npc_id, dialogue, text, destinations, *, private):
-            found = problems(state, npc_id, dialogue, text, destinations, private=private)
             reply = next((r for r in reversed(watch.replies) if r["npc"] == npc_id), None)
+            if watch.snaps is not None:
+                watch.snaps.append({"state": state.model_dump(mode="json"), "npc": npc_id, "destinations": dict(destinations),
+                                    "private": private, "offered": reply["offered"] if reply else []})
+            found = problems(state, npc_id, dialogue, text, destinations, private=private)
             if reply is not None:
                 reply["checks"].append(found)  # the list itself: a problem added after the check still shows
                 reply["text"] = text

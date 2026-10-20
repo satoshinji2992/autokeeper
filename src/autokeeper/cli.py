@@ -1203,6 +1203,40 @@ def eval_compare(
         console.print(f"明细：{out}")
 
 
+probe_app = typer.Typer(help="冻结输入的提示词对照：只重跑被比的那个角色（eval/probe.py）")
+eval_app.add_typer(probe_app, name="probe")
+
+
+@probe_app.command("build")
+def probe_build(
+    slot: Annotated[str, typer.Argument(help="真人存档名")],
+    turns: Annotated[str, typer.Option(help="哪些回合，如 11,22-30")],
+    name: Annotated[str, typer.Option(help="样本库名，放在 dev/output/probes/<名>/")],
+) -> None:
+    """用现在的提示词把这些回合重放一遍，留下守秘人、NPC、守秘人安排每次实际收到的输入和当时的局面。"""
+    from .eval.probe import build
+
+    asyncio.run(build(slot, turns=turns, name=name, log=console.print))
+
+
+@probe_app.command("run")
+def probe_run(
+    name: Annotated[str, typer.Argument(help="样本库名")],
+    role: Annotated[str, typer.Option(help="keeper / npc / plan")],
+    b: Annotated[Path, typer.Option(help="变体 B（eval/variants.py 的 YAML）")],
+    a: Annotated[Path | None, typer.Option(help="变体 A；不给就用样本库里当时的输出")] = None,
+    limit: Annotated[int, typer.Option(help="最多几对；0 为全部")] = 0,
+) -> None:
+    """每个样本换上变体的系统提示只调一次，按规则判分；每 10 对做一次符号检验，分出高下或明显打平就停。"""
+    from .eval.probe import run
+
+    s = asyncio.run(run(name, role=role, b=b, a=a, limit=limit, log=console.print))
+    console.print(f"{s['pairs']} 对（{s['stopped']}）：B 更少 {s['b_better']}，B 更多 {s['b_worse']}，p = {s['p']:.3f}；"
+                  f"违规合计 A {s['a_total']} · B {s['b_total']}；分项 A {s['by_rule']['a']} · B {s['by_rule']['b']}；"
+                  f"平均字数 A {s['chars']['a']} · B {s['chars']['b']}")
+    console.print(f"明细：{s['out']}")
+
+
 @eval_app.command("recheck")
 def eval_recheck(reports: Annotated[list[Path], typer.Argument(help="eval session 写的报告，就地改写")]) -> None:
     """按现在的规则重算报告里不经裁判的那几项（规则核对、线索原文），不调用模型。"""

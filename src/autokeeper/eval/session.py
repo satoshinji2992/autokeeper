@@ -410,7 +410,8 @@ def pairable(got: dict[str, Any] | None) -> bool:
 
 
 async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int], *, turn: int,
-                 timeout: float = 240, blind: bool = False, given: dict[str, Any] | None = None) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
+                 timeout: float = 240, blind: bool = False, given: dict[str, Any] | None = None,
+                 snaps: list[dict[str, Any]] | None = None) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
     """One turn played again from the game as it stood before it: the game after it, and what
     the turn showed (its events, without the narration's pieces). `blind` keeps the keeper from
     the backstage, to compare with the keeper that sees it; `given`, another run's action and
@@ -435,7 +436,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
     game.world_later = True  # as on a screen: the NPCs' own decisions come after the turn is told
     if pairable(given):
         _feed(cast, given)  # type: ignore[arg-type]
-    watch = control.Watch()
+    watch = control.Watch(snaps)
     watch.attach(cast, game)
     app = graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": f"eval-{turn}"}}
@@ -470,7 +471,8 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
 # -- the whole run -----------------------------------------------------------------------------------
 async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: Path | None = None, parallel: int = 3,
-              log=print, blind: bool = False, baseline: bool = True, given: Path | None = None) -> dict[str, Any]:  # fmt: skip
+              log=print, blind: bool = False, baseline: bool = True, given: Path | None = None,
+              npc_snapshots: dict[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
     """`parallel`: turns played at once, and the judge's calls at once. `baseline`: judge the recorded
     turns too (an A/B of two variants compares replays and needs no baseline). `given`: another
     run's report, whose actions and rulings this run takes over where they can be (pairable)."""
@@ -550,7 +552,8 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                 started = time.monotonic()
                 try:
                     st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, blind=blind,
-                                             given=paired.get(turn))
+                                             given=paired.get(turn),
+                                             snaps=npc_snapshots.setdefault("npc", []) if npc_snapshots is not None else None)
                     m2 = Module.load(m_dir)
                     if st.improv:
                         improv.restore(m2, st.improv)
