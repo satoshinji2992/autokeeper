@@ -378,7 +378,7 @@ async def test_the_plugins_page_shows_its_panels_in_the_right_column():
 
 
 SHOW = {"type": "plugin_show", "name": "号外", "title": "号外！号外！", "shape": "stage", "frames": [
-    {"art": "+--------------+\n| ARNOLDSBURG  |\n|   GAZETTE    |\n+--------------+", "text": "", "ms": 400},
+    {"art": "+--------------+\n| ARNOLDSBURG  |\n|   GAZETTE    |\n+--------------+", "text": "", "ms": 1500},  # long enough for a slow runner to see
     {"art": "墓地夜半狂欢？", "text": "警方搜遍公墓，一无所获", "ms": 3000, "color": "warning"}]}
 
 

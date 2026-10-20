@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import itertools
 import json
 import os
 import re
@@ -426,11 +427,12 @@ async def _stream(content: list[dict]):
 # game's), so the next call on that agent starts it again.
 MAX_PROCESSES = int(os.environ.get("AUTOKEEPER_CLAUDE_PROCESSES", 6))
 _open: weakref.WeakSet[ClaudeCodeModel] = weakref.WeakSet()
+_asked = itertools.count()  # the order calls came in: Windows' clock can give two the same time
 
 
 async def _make_room(asking: ClaudeCodeModel) -> None:
     while sum(len(m._clients) for m in list(_open)) >= MAX_PROCESSES:
-        idle = [(m._used.get(k, 0.0), id(m), m, k) for m in list(_open)
+        idle = [(m._used.get(k, 0), id(m), m, k) for m in list(_open)
                 if m is not asking and not m._lock.locked() for k in m._clients]  # never one mid-call
         if not idle:
             return
@@ -446,7 +448,7 @@ class ClaudeCodeModel(Model):
     def __init__(self, spec: Role, system: str, **kw: Any):
         super().__init__(spec, system, **kw)
         self._clients: dict[str, Any] = {}  # one per output schema
-        self._used: dict[str, float] = {}  # when each was last asked
+        self._used: dict[str, int] = {}  # when each was last asked, in the order of all calls
         self._wiping: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
 
@@ -463,7 +465,7 @@ class ClaudeCodeModel(Model):
                 await client.disconnect()
 
     async def _client(self, key: str, schema: dict | None):
-        self._used[key] = time.monotonic()
+        self._used[key] = next(_asked)
         if key not in self._clients:
             await _make_room(self)
             try:

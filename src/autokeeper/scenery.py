@@ -461,9 +461,20 @@ def picture(folder: Path, key: str, name: str, description: str = "") -> Path:
     """The scene saved in `folder` as <key>.png (made once; the same place gives the same picture)."""
     out = folder / f"{key}.png"
     if not out.is_file():
-        folder.mkdir(parents=True, exist_ok=True)
-        paint(name, description, key=key).save(out)
+        _save(paint(name, description, key=key), out)
     return out
+
+
+def _save(img: Image.Image, out: Path) -> None:
+    """Whole or not at all: a renderer in another thread may look for it while it is written
+    (macOS CI read half a file: "image file is truncated")."""
+    import os
+    import threading
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    part = out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.part.png")
+    img.save(part)
+    os.replace(part, out)
 
 
 def fill(m: Module) -> list[str]:
@@ -629,8 +640,7 @@ def face(folder: Path, key: str, name: str, look: str = "", role: str = "") -> P
     """The portrait saved in `folder` as <key>.png (made once)."""
     out = folder / f"{key}.png"
     if not out.is_file():
-        folder.mkdir(parents=True, exist_ok=True)
-        portrait(name, look, role, key=key).save(out)
+        _save(portrait(name, look, role, key=key), out)
     return out
 
 
