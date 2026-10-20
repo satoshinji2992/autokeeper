@@ -882,6 +882,7 @@ class Cast:
         extra = ""
         if _storyteller(npc):  # a teahouse storyteller in the module, not anyone the director puts on stage
             extra = "\n你是说书人，表演时用下面的评书腔：\n" + skills.wrap("pingshu-voice")
+        learned_knows, learned_secrets = self._learned(npc.id)  # told each call (npc), not part of the sheet
         return NPC_SYSTEM.format(
             name=npc.name,
             era=m.era,
@@ -891,12 +892,26 @@ class Cast:
             personality=npc.personality or "—",
             voice=npc.voice or "—",
             goal=npc.goal or "—",
-            knows=bullet(npc.knows),
-            secrets=bullet(npc.secrets),
+            knows=bullet([k for k in npc.knows if k not in learned_knows]),
+            secrets=bullet([x for x in npc.secrets if x not in learned_secrets]),
             lies=bullet(npc.lies),
             clues="\n".join(clues) or "- 无",
             extra=extra,
         )
+
+    def _learned(self, npc_id: str) -> tuple[list[str], list[str]]:
+        """What the NPC came to know in this game, and the secrets it came to keep: the newest few, as
+        world/knowledge.project puts them on its sheet. They go with each call (npc), not into the
+        system prompt: a prompt that changed opened the session again, every time it learned
+        something (a new Claude Code process, and nothing of it cached on any vendor)."""
+        if self.world is None:
+            return [], []
+        facts = self.world.rec.facts.values()
+        knows = [f.text for f in facts if f.origin == "game" and npc_id in f.known_by and not f.retracted
+                 and f.kind not in ("secret", "lie", "goal") and f.true][-world_knowledge.PROJECTED_KNOWS:]  # fmt: skip
+        secrets = [f.text for f in facts if f.origin == "game" and f.kind == "secret" and npc_id in f.known_by
+                   and npc_id in f.about and not f.retracted]  # fmt: skip
+        return knows, secrets
 
     def _protected(self, state: GameState, npc: NPC) -> dict[str, str]:
         """Texts this NPC must not reproduce right now."""
@@ -1045,6 +1060,11 @@ class Cast:
         mood += world.context(state, npc=npc_id)
         if self.world is not None and (brief := world_view.npc_brief(self.world, npc_id, query=message)):
             mood += "\n" + brief
+        knows, secrets = self._learned(npc_id)
+        if knows:
+            mood += "\n【你在本局新知道的】" + "；".join(knows)
+        if secrets:
+            mood += "\n【你在本局新有的秘密（不被逼问不说）】" + "；".join(secrets)
         mood += self.prefs.for_npc()
         destinations = {state.location: self.module.location(state.location).name, **fog.bearings(self.module, state)}
         mood += "\n【可提出同行的地点】" + "、".join(f"{name}（{pid}）" for pid, name in destinations.items())

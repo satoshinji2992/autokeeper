@@ -508,3 +508,22 @@ async def test_a_failed_search_keeps_the_places_foreshadowing_for_a_later_visit(
     await game._arrive("tower", later)
     game._foreshadow(later)
     assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.hinted == ["f_tick"]
+
+
+async def test_what_an_npc_learns_in_the_game_goes_with_each_call_and_keeps_its_session(module, fake):
+    """Learned facts were written into the NPC's system prompt, so every one opened its session
+    again: a new Claude Code process each time, and no prompt cache on any vendor (2026-10-21)."""
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+
+    game, _, _ = make(module, fake, {})
+    cast = Cast(config.Config(), game.m)
+    cast.world = game.world
+    first = await cast._fresh_npc("warden")
+    assert game.world.apply(O.AddFact(fact="tower_visit", text="报社的人昨晚来过钟楼", fact_kind="knows",
+                                      known_by=["warden"], id="learned", actor="engine")).ok
+    game.world.sync()
+    assert "报社的人昨晚来过钟楼" in game.m.npc("warden").knows  # on its sheet, for everyone else who reads it
+    assert await cast._fresh_npc("warden") is first and "报社的人昨晚来过钟楼" not in first.system
+    assert cast._learned("warden")[0] == ["报社的人昨晚来过钟楼"]  # told with every call instead
+    await cast.close()
