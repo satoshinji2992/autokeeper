@@ -670,7 +670,13 @@ class DiceTray(Static):
         self._replay = None
         self._showing = None  # dice.Showing on its way
         self._picture: Text | None = None  # the painted frame on show
+        self._drawn: tuple[int, int] = (0, 0)  # the picture size the last throw was painted at
         self.stats: dict | None = None  # the last throw's frames shown and what painting them took
+
+    def on_resize(self) -> None:
+        """A new size (the terminal changed): the last roll again, drawn to fit it."""
+        if self.display and self._view is not None and self._shape() != self._drawn:
+            self.redraw()
 
     def roll(self, view: dict) -> None:
         from ..drawing import dice
@@ -700,11 +706,11 @@ class DiceTray(Static):
     def _shape(self) -> tuple[int, int]:
         """The picture's size in cells: the tray's width, its height but for the two lines of text.
         Before the tray is first laid out, from its column and its height."""
-        width, height = self.content_region.width, self.content_region.height
+        width = self.content_region.width
         if not width and self.parent is not None:
             width = self.parent.content_region.width - 2
-        if not height:
-            height = int(self.styles.height.value) - 1 if self.styles.height is not None else 10
+        tall = self.styles.height  # the height asked for (_fit), laid out yet or not
+        height = int(tall.value) - 1 if tall is not None and tall.is_cells else (self.content_region.height or 10)
         return max(0, width), max(0, height - 2)
 
     def _show(self, *, animate: bool) -> None:
@@ -712,6 +718,7 @@ class DiceTray(Static):
         from ..drawing import dice
 
         r, (cols, rows) = self._replay, self._shape()
+        self._drawn = (cols, rows)
         skin_key = getattr(self.app, "dice_skin", None)
         skin_key = skin_key if skin_key in dice.SKINS else dice.DEFAULT
         symbols = list(imagery.STYLES.get(getattr(self.app, "art_style", "photo"), imagery.STYLES["picture"]))

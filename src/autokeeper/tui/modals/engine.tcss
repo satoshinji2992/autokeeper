@@ -6,7 +6,14 @@
     height: 92%;
 }
 
-#engine-body {
+#engine-tabs {
+    height: 1fr;
+}
+#engine-tabs TabPane, #engine-tabs ContentSwitcher {
+    height: 1fr;
+    padding: 0;
+}
+#engine-modal .engine-page {
     height: 1fr;
 }
 

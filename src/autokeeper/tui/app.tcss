@@ -249,7 +249,7 @@ Footer FooterKey.-command-palette {
 /* 经过 / 进展 / 背景: one row of tabs, the page under it */
 #pages {
     height: 1fr;
-    min-height: 8;
+    min-height: 4;  /* game.PAGES_MIN */
     border-top: dashed $primary-darken-2;
 }
 #pages > ContentTabs {

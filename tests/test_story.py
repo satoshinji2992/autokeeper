@@ -652,6 +652,7 @@ async def test_without_room_for_the_column_the_pages_open_over_the_story(writer)
 
 @pytest.mark.parametrize("height", [24, 30, 34, 40, 44])
 async def test_dice_and_clues_leave_the_history_readable(writer, height):
+    from autokeeper.tui.screens.game import PAGES_MIN
     from autokeeper.tui.widgets.panels import DiceTray, SheetPanel
 
     m = Module.load(EXAMPLE)
@@ -664,11 +665,13 @@ async def test_dice_and_clues_leave_the_history_readable(writer, height):
         screen.query_one(DiceTray).display = True
         screen.query_one(CluePanel).show([f"很长的线索标题第{i}条" for i in range(20)])
         await pilot.pause(0.3)
-        column = screen.query_one("#pages")
-        assert column.outer_size.height >= 8
+        column, tray = screen.query_one("#pages"), screen.query_one(DiceTray)
+        assert column.outer_size.height >= PAGES_MIN  # the history's head and a few lines; it opens in full
         assert column.region.bottom <= screen.query_one("#right").region.bottom
-        assert screen.query_one(SheetPanel).region.bottom <= column.region.y
+        assert screen.query_one(SheetPanel).region.bottom <= tray.region.y
         assert screen.query_one("#pages-head").region.height == 1
+        if height >= 34:  # as tall as 0.0.2 had it: twelve lines, thirteen from forty (the user, 2026-10-21)
+            assert tray.region.height == (13 if height >= 40 else 12)
 
 
 async def test_a_saved_investigator_s_card_on_the_title_screen_has_their_record(writer, monkeypatch):

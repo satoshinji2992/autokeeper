@@ -14,7 +14,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from rich.cells import cell_len
 from rich.text import Text
 from textual import events, on, work
 from textual.app import ComposeResult
@@ -32,9 +31,8 @@ from ..library import art_text, face_text, load_module
 from ..modals.sheet import sheet_view
 from .lobby import NARROW
 
-CYCLE = {"玩家": "AI", "AI": "不上场", "不上场": "玩家"}
-ROOM_KEYS = "Enter 换座位 · Tab 下一项 · Esc 换模组"
-GOING_ON = {"玩家": "AI", "AI": "玩家"}  # a saved party has nobody to leave out
+ROOM_KEYS = "Enter 切换玩家或 AI · Delete 删除座位 · Tab 选择调查员 · Esc 换模组"
+OWN = "own"  # a seat whose player chooses in the lobby: a card of their own, a pregen, or one made there
 
 
 def back_to_room(app: Any) -> Screen | None:
@@ -49,7 +47,8 @@ def back_to_room(app: Any) -> Screen | None:
 
 class HostScreen(Screen):
     CSS_PATH = "room.tcss"
-    BINDINGS = [Binding("escape", "back", "返回"), Binding("f1", "help", "遇到问题")]
+    BINDINGS = [Binding("escape", "back", "返回"), Binding("f1", "help", "遇到问题"),
+                Binding("delete", "drop_seat", "删除座位", show=False)]
 
     def __init__(self) -> None:
         super().__init__()
@@ -58,9 +57,11 @@ class HostScreen(Screen):
         self.path: Path | None = None
         self.module: Module | None = None
         self.slot = ""  # the LAN save to go on with; "" for a new game
-        self.party: list[Investigator] = []  # the seats: the module's pregens, or the saved party
-        self.plan: dict[str, str] = {}  # investigator id -> 玩家 / AI / 不上场
-        self.blanks = 0  # empty player seats besides the pregens: the player brings their own
+        self.party: list[Investigator] = []  # who may be played: the module's pregens, or the saved party
+        # The seats, each who sits there (玩家 / AI) and the investigator it uses ("" for the player to
+        # choose in the lobby). A seat line says who sits; the investigator is chosen under the list
+        # (the user, 2026-10-21: a pregen on the seat read as already chosen).
+        self.seats: list[dict[str, str]] = []
         self.faces: dict[tuple[str, str], Text] = {}
         self.ports = (lan.HUB_PORT, lan.WEB_PORT)  # taken ones are swapped for free ones (net/room.py any_port)
         self.trouble = ""  # the last error's technical part, for the 遇到问题 page
@@ -77,6 +78,7 @@ class HostScreen(Screen):
                 with Horizontal(id="host-room"):
                     with VerticalScroll(id="host-form"):
                         yield OptionList(id="host-seats")
+                        yield OptionList(id="host-investigators")
                         yield OptionList(id="host-saves")
                         with Horizontal(classes="field"):
                             yield Static("名字", classes="field-label")
@@ -94,6 +96,7 @@ class HostScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one("#host-seats", OptionList).border_title = "座位"
+        self.query_one("#host-investigators", OptionList).border_title = "调查员"
         self.query_one("#host-saves", OptionList).border_title = "存档"
         self._show_modules()
 
@@ -180,10 +183,10 @@ class HostScreen(Screen):
 
     # -- the room ----------------------------------------------------------------------------
     def _seat_pregens(self) -> None:
+        """A new game: the first pregen played by a player, the others by the AI."""
         assert self.module
         self.party = list(self.module.pregens)
-        self.plan = {p.id: "玩家" if i == 0 else "AI" for i, p in enumerate(self.party)}
-        self.blanks = 0
+        self.seats = [{"who": "玩家" if i == 0 else "AI", "inv": p.id} for i, p in enumerate(self.party)]
 
     def _show_room(self) -> None:
         assert self.module
@@ -196,70 +199,125 @@ class HostScreen(Screen):
         self.query_one("#setup-hint", Static).update(ROOM_KEYS)
         self._note()
 
-    def _seat_prompt(self, inv: Investigator) -> Text:
-        """A seat first, who sits in it, then the module's investigator it starts with: in a new game
-        only a default the player may swap in the lobby (it read as an investigator already chosen)."""
+    def _seat_prompt(self, i: int) -> Text:
+        """The seat and who sits in it; the investigator is under the list."""
         theme = self.app.current_theme
-        who = self.plan.get(inv.id, "AI")
-        colour = {"玩家": f"bold {theme.accent or 'yellow'}", "AI": f"bold {theme.secondary or 'cyan'}", "不上场": "dim"}[who]
-        label = {"玩家": "玩家", "AI": "AI", "不上场": "不上场"}[who]
-        t = Text()
-        t.append(f"座位 {self.party.index(inv) + 1}  ", style="bold")
-        t.append(label + " " * (10 - cell_len(label)), style=colour)
-        default = "调查员" if self.slot or who == "AI" else "默认调查员"
-        t.append(f"\n  {default}：", style="dim")
-        t.append(inv.name, style="dim strike" if who == "不上场" else "")
-        t.append(f" · {inv.occupation} · {inv.age} 岁", style="dim")
+        who = self.seats[i]["who"]
+        t = Text(f"座位 {i + 1}  ", style="bold")
+        t.append(who, style=f"bold {theme.accent or 'yellow'}" if who == "玩家" else f"bold {theme.secondary or 'cyan'}")
+        if who == "玩家":
+            t.append("  待入座", style="dim")
         return t
 
     def _list_seats(self) -> None:
         ol = self.query_one("#host-seats", OptionList)
         kept = ol.highlighted if ol.option_count else 0
         ol.clear_options()
-        ol.add_options([Option(self._seat_prompt(inv), id=inv.id) for inv in self.party])
-        if not self.slot:  # a saved party has nobody to add
-            theme = self.app.current_theme
-            for i in range(self.blanks):
-                t = Text(f"座位 {len(self.party) + i + 1}  ", style="bold")
-                t.append("玩家" + " " * 8, style=f"bold {theme.accent or 'yellow'}")
-                t.append("\n  空座位 · 入座后选择角色或车卡", style="dim")
-                ol.add_option(Option(t, id=f"blank-{i}"))
-            if self.blanks < lan.BLANKS:
-                ol.add_option(Option(Text("＋ 加一个空座位", style="dim"), id="add-blank"))
+        ol.add_options([Option(self._seat_prompt(i), id=f"seat-{i}") for i in range(len(self.seats))])
+        if not self.slot and len(self.seats) < len(self.party) + lan.BLANKS:  # a saved party is as it was
+            ol.add_option(Option(Text("＋ 加一个座位", style="dim"), id="add-seat"))
         ol.highlighted = min(kept or 0, ol.option_count - 1)
+        self._list_investigators()
+
+    def _seat_at(self) -> int | None:
+        ol = self.query_one("#host-seats", OptionList)
+        oid = ol.get_option_at_index(ol.highlighted).id if ol.highlighted is not None and ol.option_count else ""
+        return int(oid.removeprefix("seat-")) if oid and oid.startswith("seat-") else None
+
+    def _list_investigators(self) -> None:
+        """The investigators the highlighted seat may use: a player's own choice in the lobby, or a
+        pregen no other seat has; a saved game keeps its own."""
+        ol = self.query_one("#host-investigators", OptionList)
+        i = self._seat_at()
+        ol.clear_options()
+        if i is None:
+            ol.border_title = "调查员"
+            ol.add_option(Option(Text("新座位由玩家在大厅选择角色或车卡。", style="dim"), disabled=True))
+            return
+        seat = self.seats[i]
+        ol.border_title = f"调查员 · 座位 {i + 1}"
+        if self.slot:  # going on with a save: the party stays as it was
+            inv = next(x for x in self.party if x.id == seat["inv"])
+            ol.add_option(Option(Text.assemble((inv.name, "bold"), (f" · {inv.occupation}（继续存档时不可更换）", "dim")), id=inv.id))
+            ol.highlighted = 0
+            return
+        taken = {s["inv"]: n for n, s in enumerate(self.seats) if s["inv"] and n != i}
+        if seat["who"] == "玩家":
+            ol.add_option(Option(Text.assemble(("入座后选择", "bold"), ("  自有角色、模组预设或车卡", "dim")), id=OWN))
+        for inv in self.party:
+            line = Text.assemble((inv.name, "bold"), (f" · {inv.occupation.split('（')[0]} · {inv.age} 岁", "dim"))
+            if inv.id in taken:
+                line.append(f"  座位 {taken[inv.id] + 1}", style="dim")
+            ol.add_option(Option(line, id=inv.id, disabled=inv.id in taken))
+        current = seat["inv"] or OWN
+        ol.highlighted = next((n for n in range(ol.option_count) if ol.get_option_at_index(n).id == current), 0)
+
+    @on(OptionList.OptionSelected, "#host-investigators")
+    def _investigator_chosen(self, event: OptionList.OptionSelected) -> None:
+        i = self._seat_at()
+        if i is None or self.slot:
+            return
+        self.seats[i]["inv"] = "" if event.option.id == OWN else event.option.id or ""
+        self._list_investigators()
+        self._seat_card(i)
+        self._note()
 
     @on(OptionList.OptionSelected, "#host-seats")
     def _cycle(self, event: OptionList.OptionSelected) -> None:
-        inv_id = event.option.id or ""
-        if inv_id == "add-blank" or inv_id.startswith("blank-"):  # Enter adds one, or takes it away
-            self.blanks += 1 if inv_id == "add-blank" else -1
+        oid = event.option.id or ""
+        if oid == "add-seat":  # a player who brings their own, or makes one in the lobby
+            self.seats.append({"who": "玩家", "inv": ""})
             self._list_seats()
             self._note()
             return
-        turn = GOING_ON if self.slot else CYCLE
-        self.plan[inv_id] = turn.get(self.plan.get(inv_id, "AI"), "AI")
-        inv = next(i for i in self.party if i.id == inv_id)
-        self.query_one("#host-seats", OptionList).replace_option_prompt(inv_id, self._seat_prompt(inv))
+        i = int(oid.removeprefix("seat-"))
+        seat = self.seats[i]
+        if seat["who"] == "玩家":
+            if not seat["inv"]:  # the AI needs someone to play
+                free = next((inv.id for inv in self.party if all(s["inv"] != inv.id for s in self.seats)), "")
+                if not free:
+                    self.app.notify("AI 座位需要一位调查员，当前没有空闲的模组预设调查员。", severity="warning")
+                    return
+                seat["inv"] = free
+            seat["who"] = "AI"
+        else:
+            seat["who"] = "玩家"
+        self.query_one("#host-seats", OptionList).replace_option_prompt(oid, self._seat_prompt(i))
+        self._list_investigators()
+        self._seat_card(i)
+        self._note()
+
+    def action_drop_seat(self) -> None:
+        i = self._seat_at()
+        if self.slot or i is None or not self.query_one("#host-seats", OptionList).has_focus:
+            return
+        if len(self.seats) == 1:
+            self.app.notify("至少保留一个座位。", severity="warning")
+            return
+        del self.seats[i]
+        self._list_seats()
         self._note()
 
     @on(OptionList.OptionHighlighted, "#host-seats")
-    def _seat_moved(self, event: OptionList.OptionHighlighted) -> None:
-        self._seat_card(event.option.id or "")
+    def _seat_moved(self) -> None:
+        self._list_investigators()
+        self._seat_card(self._seat_at())
 
-    def _seat_card(self, inv_id: str) -> None:
-        """The highlighted investigator, as the lobby and the game's F4 show them."""
-        inv = next((i for i in self.party if i.id == inv_id), None)
-        if inv_id == "add-blank" or inv_id.startswith("blank-"):
-            words = "坐在这里的玩家自己选角色：自己的卡、模组预设，或者现车一张。" if inv_id != "add-blank" else "加一个空座位，给入座后选择角色的朋友。"
-            self.query_one("#host-card", Static).update(Text(words, style="dim"))
+    def _seat_card(self, i: int | None) -> None:
+        """The investigator the seat uses, as the lobby and the game's F4 show them."""
+        card = self.query_one("#host-card", Static)
+        if i is None:
+            card.update(Text("加一个座位，给入座后自己选择角色的朋友。", style="dim"))
             return
+        inv = next((x for x in self.party if x.id == self.seats[i]["inv"]), None)
         if inv is None or self.module is None:
+            card.update(Text("坐在这里的玩家在大厅选择角色：自有角色、模组预设，或车卡。", style="dim"))
             return
         style = self.app.art_style  # type: ignore[attr-defined]
         picture = inv.portrait in self.module.pictures and imagery.available()
         face = self.faces.get((inv.portrait, style)) if picture else art_text(self.module, inv.portrait)
         width = max(40, self.query_one("#host-preview").scrollable_content_region.width - 2)
-        self.query_one("#host-card", Static).update(sheet_view(inv, face, width))
+        card.update(sheet_view(inv, face, width))
         if picture and face is None:
             self._draw_face(inv, style)
 
@@ -269,9 +327,8 @@ class HostScreen(Screen):
         m = self.module
 
         self.faces[(inv.portrait, style)] = await asyncio.to_thread(face_text, m, inv.portrait, style)
-        seats = self.query_one("#host-seats", OptionList)
-        if seats.highlighted is not None and seats.get_option_at_index(seats.highlighted).id == inv.id:
-            self._seat_card(inv.id)
+        if (i := self._seat_at()) is not None and self.seats[i]["inv"] == inv.id:
+            self._seat_card(i)
 
     def _list_saves(self) -> None:
         assert self.module
@@ -300,17 +357,16 @@ class HostScreen(Screen):
                 self.app.notify(f"无法读取存档（{exc.__class__.__name__}）。", severity="error")
                 return
             self.slot = state.slot
-            self.blanks = 0
             self.party = list(state.investigators)
-            self.plan = {inv.id: "玩家" if inv.id in state.human else "AI" for inv in self.party}
+            self.seats = [{"who": "玩家" if inv.id in state.human else "AI", "inv": inv.id} for inv in self.party]
         self._list_seats()
         self._note()
         if self.slot:
             self.app.notify("继续存档时需保留全部调查员。", timeout=3)
 
     def _note(self) -> None:
-        players = sum(1 for v in self.plan.values() if v == "玩家") + (0 if self.slot else self.blanks)
-        ai = sum(1 for v in self.plan.values() if v == "AI")
+        players = sum(1 for s in self.seats if s["who"] == "玩家")
+        ai = len(self.seats) - players
         t = Text(f"{players} 位玩家 · {ai} 位 AI", style="bold")
         if self.slot:
             t.append(" · 继续已有存档")
@@ -337,14 +393,16 @@ class HostScreen(Screen):
         name = self.query_one("#host-name", Input).value.strip()[:16] or "房主"
         port, web_port = self.ports
         web = self.query_one("#host-web", Checkbox).value
-        seats = [self.plan.get(inv.id, "AI") for inv in self.party] + ["玩家"] * self.blanks
-        if all(s == "不上场" for s in seats):
-            self.app.notify("至少需启用一名调查员。", severity="error")
+        if not self.seats:
+            self.app.notify("至少保留一个座位。", severity="error")
             return
+        # The room's form of it: each pregen 玩家 / AI / 不上场, then the seats chosen in the lobby.
+        used = {s["inv"]: s["who"] for s in self.seats if s["inv"]}
+        seats = [used.get(inv.id, "不上场") for inv in self.party] + ["玩家"] * sum(1 for s in self.seats if not s["inv"])
         state = None
         if self.slot:
             state = lan.saved(self.slot)
-            state.human = [inv.id for inv in state.investigators if self.plan.get(inv.id) == "玩家"]
+            state.human = [inv.id for inv in state.investigators if used.get(inv.id) == "玩家"]
         self._open(name, port, web_port, web, None if state else seats, state)
 
     @work(exclusive=True, group="host")

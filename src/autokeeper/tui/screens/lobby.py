@@ -117,6 +117,7 @@ class LobbyScreen(Screen):
             with Horizontal(id="lobby-body"):
                 with Vertical(id="lobby-left"):
                     yield OptionList(id="seats")
+                    yield Static(id="lobby-investigator")
                     yield Static(id="lobby-hint")
                     with VerticalScroll(id="lobby-info"):
                         yield Static(id="lobby-room")
@@ -256,29 +257,41 @@ class LobbyScreen(Screen):
         bar.add_row(left, right)
         self.query_one("#lobby-head", Static).update(bar)
 
-    def _seat_line(self, seat: dict[str, Any], lit: bool = False) -> Text:
-        """Name, occupation and age; who sits there; one line of who they are. `lit`: under the
-        cursor, where only the cursor's own colours read well."""
-        inv = self._investigator(seat["investigator"])
-        t = Text()
-        t.append(seat["name"] or "空座位", style="bold")
-        if inv:
-            t.append(f"  {seat['occupation']} · {inv.age} 岁", style="" if lit else "dim")
-        ready = " · 已准备" if seat.get("ready") else " · 未选择角色" if seat.get("blank") else ""
+    def _seat_line(self, seat: dict[str, Any], lit: bool = False, number: int = 0) -> Text:
+        """The seat, who sits in it, and whether they are ready; the investigator is shown under the
+        list (_investigator_line). `lit`: under the cursor, where only its own colours read well."""
+        t = Text(f"座位 {number}  ", style="bold")
         if not seat["human"]:
-            t.append("\n  ◆ AI 扮演", style="" if lit else "dim")
-        elif seat["investigator"] == self.chosen:
-            t.append("\n  ● 你" + ready, style="bold" if lit else "bold green")
+            t.append("AI", style="" if lit else "bold cyan")
+            return clip(t, self.width)
+        t.append("玩家  ", style="" if lit else "bold yellow")
+        ready = " · 已准备" if seat.get("ready") else " · 未选择角色" if seat.get("blank") else ""
+        if seat["investigator"] == self.chosen:
+            t.append(f"{self.link.name}（你）{ready}", style="bold" if lit else "bold green")
         elif seat["online"]:
-            t.append(f"\n  ● {seat['player']}{ready}", style="" if lit else "green")
+            t.append(f"{seat['player']}{ready}", style="" if lit else "green")
         else:
-            t.append("\n  ○ 空座" + ("，AI 暂代" if self.started else ""), style="bold" if lit else "bold yellow")
+            t.append("待入座" + ("，AI 暂代" if self.started else ""), style="" if lit else "dim")
         brought = {"own": "自有角色", "new": "新建角色"}.get(seat.get("origin", ""), "")
         if self.link.host and (brought or seat.get("note")):  # who brought what, for the host
             t.append("  " + " · ".join(x for x in (brought, seat.get("note", "")) if x), style="" if lit else "dim")
-        if inv and not self.short and (line := gist(inv, 60)):
-            t.append(f"\n  {line}", style="italic" if lit else "dim italic")
         return clip(t, self.width)
+
+    def _investigator_line(self) -> None:
+        """Under the seats: the highlighted seat's investigator, and how to change your own."""
+        seat = self._highlighted()
+        line = Text("调查员：", style="bold")
+        inv = self._investigator(seat["investigator"]) if seat and not seat.get("blank") else None
+        if seat is None:
+            line = Text("")
+        elif inv is None:
+            line.append("未选择", style="dim")
+        else:
+            line.append(inv.name, style="bold")
+            line.append(f" · {seat.get('occupation') or inv.occupation} · {inv.age} 岁", style="dim")
+        if seat is not None and seat["investigator"] == self.chosen and self.bring:
+            line.append("  R 选择角色或车卡", style="dim")
+        self.query_one("#lobby-investigator", Static).update(clip(line, self.width))
 
     def _list_seats(self) -> None:
         ol = self.query_one("#seats", OptionList)
@@ -290,7 +303,7 @@ class LobbyScreen(Screen):
         at = kept if kept is not None and kept < len(self.seats) else free  # first time: Enter takes the first free seat
         ol.clear_options()
         for i, s in enumerate(self.seats):  # an AI's or a taken seat can still be looked at, not sat in
-            ol.add_option(Option(self._seat_line(s, i == at), id=s["investigator"]))
+            ol.add_option(Option(self._seat_line(s, i == at, i + 1), id=s["investigator"]))
         self.lit = at
         ol.highlighted = at
         if self.focused is None or self.focused is ol:
@@ -321,7 +334,7 @@ class LobbyScreen(Screen):
         ol = self.query_one("#seats", OptionList)
         for i in {self.lit, ol.highlighted}:
             if i is not None and i < min(ol.option_count, len(self.seats)):
-                ol.replace_option_prompt_at_index(i, self._seat_line(self.seats[i], i == ol.highlighted))
+                ol.replace_option_prompt_at_index(i, self._seat_line(self.seats[i], i == ol.highlighted, i + 1))
         self.lit = ol.highlighted
 
     def _buttons(self) -> None:
@@ -375,6 +388,7 @@ class LobbyScreen(Screen):
     def _card(self) -> None:
         """The highlighted seat's investigator, as the game's F4 shows them; the picture comes
         a moment later (chafa), the hand-drawn art before it."""
+        self._investigator_line()
         seat = self._highlighted()
         pane = self.query_one("#lobby-card")
         inv = self._investigator(seat["investigator"]) if seat else None

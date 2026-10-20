@@ -14,7 +14,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, OptionList, RadioButton, RadioSet, Static
+from textual.widgets import Button, Input, OptionList, RadioButton, RadioSet, Static, TabbedContent, TabPane
 from textual.widgets.option_list import Option
 
 from ... import config
@@ -55,8 +55,13 @@ class EngineModal(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="engine-modal", classes="modal"):
             yield Static("模型设置", classes="modal-title")
-            with VerticalScroll(id="engine-body"):
-                yield from self._body()
+            # Two pages: the vendor, its key and how hard it thinks; and each role's own model, which
+            # under the first page's fold went unfound (the user, 2026-10-21).
+            with TabbedContent(id="engine-tabs"):
+                with TabPane("模型方案", id="engine-plan"), VerticalScroll(classes="engine-page"):
+                    yield from self._plan()
+                with TabPane("各分工模型", id="engine-roles"), VerticalScroll(classes="engine-page"):
+                    yield from self._roles()
             yield Static("", id="ping-result")
             with Horizontal(classes="buttons"):
                 yield Button("应用", id="apply", variant="primary")
@@ -64,8 +69,9 @@ class EngineModal(ModalScreen[dict | None]):
                 yield Button("安装 Claude 组件", id="install")
                 yield Button("取消", id="cancel")
 
-    def _body(self) -> ComposeResult:
-        yield Static(Text("切换模型后保留本局记录。" if self.in_game else "选择模型方案；各分工可单独指定模型。", style="dim"))
+    def _plan(self) -> ComposeResult:
+        yield Static(Text("切换模型后保留本局记录。" if self.in_game else "选择模型方案；各分工的模型在「各分工模型」页单独指定。",
+                          style="dim"))
         yield Static("模型方案", classes="engine-head")
         options = [Option(Text.assemble((f"{name:<9}", "bold"), desc), id=name) for name, desc in self.presets.items()]
         yield OptionList(*options, id="preset")
@@ -75,7 +81,8 @@ class EngineModal(ModalScreen[dict | None]):
         with RadioSet(id="mode"):
             for name, note in MODE_NOTES.items():
                 yield RadioButton(Text.assemble((name.ljust(4, "　"), "bold"), "  ", note), value=name == self.mode, name=name)
-        yield Static("分工", classes="engine-head")
+
+    def _roles(self) -> ComposeResult:
         yield Static(Text(f"留空使用方案默认模型（灰色）。示例：{EXAMPLES}。「读图」需选择支持图像输入的模型。",
                           style="dim"), classes="engine-note")
         with Horizontal(classes="role-row"):

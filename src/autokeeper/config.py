@@ -2,8 +2,8 @@
 
 Every agent role picks its own backend and model. A preset sets all of them at once:
 
-    claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story,
-              Opus 5.5 rules, directs and builds modules, Haiku 5.5 plays the NPCs.
+    claude    (default) local play on a Claude subscription: Sonnet 5.5 tells the story, Opus 5.5
+              rules, directs, builds modules and handles pictures, Haiku 5.5 plays the NPCs.
     deepseek  DeepSeek API (deepseek-flash, thinking on, effort by role; ASCII art on
               deepseek-v4-pro, which cannot read images). Needs DEEPSEEK_API_KEY.
 
@@ -92,10 +92,10 @@ DEFAULT_ROLES: dict[str, Role] = {
     # Narrates the game. Against Opus on the same scripted turns (docs/eval.md): as few stock
     # phrases, closer to the length asked for, half the latency, under half the price.
     "keeper": SONNET,
-    "arbiter": OPUS,  # rules on checks without seeing the player's wording
-    "chronicler": OPUS,  # memory, recaps, replays
+    "arbiter": OPUS,  # rules on checks without seeing the player's wording (docs/eval.md: Sonnet once gave a clue it should not)
+    "chronicler": SONNET,  # memory, recaps, replays
     "importer": OPUS,  # builds modules from PDFs, researches generated ones
-    "vision": OPUS,  # reads sketches and module images
+    "vision": OPUS,  # reads sketches and module images (pictures go to the vendor's strongest: ART below)
     "artist": OPUS,  # ASCII art
     "npc": HAIKU,  # every NPC gets its own session
     "intent": replace(HAIKU, effort="low"),  # turns player input into a neutral action
@@ -103,7 +103,7 @@ DEFAULT_ROLES: dict[str, Role] = {
     "lore": replace(HAIKU, effort="low"),  # LightRAG entity extraction and lore answers
     "summarizer": replace(HAIKU, effort="low"),  # folds old conversation into summaries
     "director": OPUS,  # improvises where the module is silent (agents/director.py)
-    "card": OPUS,  # makes an investigator out of a public figure (agents/card.py)
+    "card": SONNET,  # makes an investigator out of a public figure (agents/card.py); the player waits on each step
 }
 
 # Optional roles inherit the effective route, including local/global overrides. Leaving

@@ -181,11 +181,13 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         lobby = app.screen
         assert isinstance(lobby, LobbyScreen) and not lobby.link.host
         await pilot.pause(0.3)
-        text = shown(lobby, "#lobby-head", "#seats", "#lobby-room", "#lobby-rule", "#lobby-module", "#lobby-sheet")
+        text = shown(lobby, "#lobby-head", "#seats", "#lobby-investigator", "#lobby-room", "#lobby-rule", "#lobby-module", "#lobby-sheet")
         assert f"《{m.title}》" in text and m.hook.strip()[:12] in text
-        assert "周衡" in text and "林秋" in text and "医生 · 41 岁" in text and "总揣着一只听诊器" in text
-        assert "AutoKeeper 补充" not in shown(lobby, "#seats")  # a note for the keeper's records, not who she is
-        assert "空座" in text and "发给朋友：http://192.168.1.5:8000" in text and "你是房主" not in text
+        seat_lines = shown(lobby, "#seats")
+        assert "座位 1" in seat_lines and "座位 2" in seat_lines and "周衡" not in seat_lines  # who sits, not whom they play
+        assert "周衡" in shown(lobby, "#lobby-investigator")  # the highlighted seat's investigator, under the list
+        assert "AutoKeeper 补充" not in seat_lines  # a note for the keeper's records, not who she is
+        assert "待入座" in text and "发给朋友：http://192.168.1.5:8000" in text and "你是房主" not in text
         assert "26.1.2.3" not in text and "版本" not in text and "8765" not in text  # the rest is on the 遇到问题 page
         await pilot.press("h")
         await pilot.pause(0.2)
@@ -200,6 +202,8 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         await pilot.press("down")  # 林秋's seat: her sheet beside the list
         await pilot.pause(0.2)
         assert "人物卡 · 林秋" in str(lobby.query_one("#lobby-card").border_title)
+        line = shown(lobby, "#lobby-investigator")
+        assert "林秋" in line and "医生 · 41 岁" in line and "总揣着一只听诊器" in shown(lobby, "#lobby-sheet")
         await pilot.press("c")
         await pilot.pause(0.2)
         assert isinstance(app.screen, SheetModal) and app.screen.party[app.screen.at].id == "lin"
@@ -207,7 +211,7 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         await pilot.press("enter")  # sits in 林秋's seat
         seats = await asyncio.wait_for(_seated(lobby, "lin"), 5)
         assert seats["player"] == "小红" and seats["online"]
-        assert "● 你" in shown(lobby, "#seats")
+        assert "小红（你）" in shown(lobby, "#seats")
         await pilot.press("escape")  # 离开: a browser's seat has no title screen to go back to
         await pilot.pause(0.3)
         assert app.return_code == 0
@@ -242,18 +246,24 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert isinstance(screen, HostScreen)
         await pilot.press("enter")  # the only module
         await pilot.pause(0.2)
-        assert screen.step == "room" and screen.plan == {"zhouheng": "玩家"}
-        await pilot.press("enter", "enter")  # 玩家 → AI → 不上场
-        assert screen.plan == {"zhouheng": "不上场"}
-        await pilot.press("enter")  # → 玩家
-        assert "玩家" in shown(screen, "#host-seats") and "1 位玩家" in shown(screen, "#host-note")
+        assert screen.step == "room" and screen.seats == [{"who": "玩家", "inv": "zhouheng"}]
         seats = screen.query_one("#host-seats", OptionList)
-        seats.highlighted = seats.get_option_index("add-blank")
-        await pilot.press("enter")  # an empty seat, for a friend who brings their own
-        assert screen.blanks == 1 and "2 位玩家" in shown(screen, "#host-note") and "空座位" in shown(screen, "#host-seats")
-        seats.highlighted = seats.get_option_index("blank-0")
-        await pilot.press("enter")  # and gone again
-        assert screen.blanks == 0 and "1 位玩家" in shown(screen, "#host-note")
+        line = shown(screen, "#host-seats")
+        assert "座位 1" in line and "玩家" in line and "周衡" not in line  # the seat says who sits, not whom they play
+        assert "周衡" in shown(screen, "#host-investigators")  # the investigator is chosen under it
+        await pilot.press("enter")  # 玩家 → AI
+        assert screen.seats == [{"who": "AI", "inv": "zhouheng"}]
+        await pilot.press("enter")  # → 玩家
+        assert "1 位玩家" in shown(screen, "#host-note")
+        seats.highlighted = seats.get_option_index("add-seat")
+        await pilot.press("enter")  # a seat for a friend who brings their own, or makes one in the lobby
+        assert screen.seats[1] == {"who": "玩家", "inv": ""} and "2 位玩家" in shown(screen, "#host-note")
+        seats.highlighted = 1
+        await pilot.pause()
+        chooser = screen.query_one("#host-investigators", OptionList)
+        assert chooser.get_option("zhouheng").disabled  # seat 1 has him
+        await pilot.press("delete")  # and gone again
+        assert len(screen.seats) == 1 and "1 位玩家" in shown(screen, "#host-note")
         seats.highlighted = 0
         assert not screen.query("#host-port")  # no ports on the form: a taken one is swapped by itself
         await pilot.press("f1")  # 遇到问题
@@ -326,10 +336,10 @@ async def test_the_title_goes_back_to_an_open_room_and_quitting_closes_it(monkey
         assert saves.display and saves.option_count == 2  # the LAN save, not the single-player one
         saves.focus()
         await pilot.press("down", "enter")
-        assert screen.slot == "lan-example-0101-000000" and screen.plan == {"zhouheng": "AI"}  # as it was saved
+        assert screen.slot == "lan-example-0101-000000" and screen.seats == [{"who": "AI", "inv": "zhouheng"}]  # as saved
         screen.query_one("#host-seats", OptionList).focus()
-        await pilot.press("enter", "enter")  # a saved party: 玩家 / AI only
-        assert screen.plan == {"zhouheng": "AI"}
+        await pilot.press("enter", "enter")  # a saved party: 玩家 / AI only, the same investigator
+        assert screen.seats == [{"who": "AI", "inv": "zhouheng"}] and "继续存档时不可更换" in shown(screen, "#host-investigators")
         await pilot.press("enter")
         screen.query_one("#host-web", Checkbox).value = False
         screen.query_one("#host-open").press()

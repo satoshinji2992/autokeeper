@@ -98,6 +98,9 @@ COMMANDS = (
 
 
 
+PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
+
+
 class GameScreen(Screen):
     BINDINGS = [
         # Esc and F1–F5 on the footer, the rest in order of use; everything common is in the Esc menu
@@ -406,12 +409,17 @@ class GameScreen(Screen):
         width = event.size.width
         right.display = width >= 96
         right.styles.width = 40 if width >= 130 else 34
-        # the dice tray as tall as the column can spare: ten rows of picture on a tall screen
+        # The dice tray as tall as 0.0.2 had it (thirteen lines on a tall screen); shrunk to make room
+        # for the history it came out too small to read (the user, 2026-10-21). The history and the
+        # clues give way instead: both open in full (Ctrl+G, F2). Only a very short screen trims it.
         tray = self.query_one(DiceTray)
         height = event.size.height
-        tray.styles.height = 13 if height >= 48 else 10 if height >= 40 else 8 if height >= 34 else 5
-        self.query_one(SheetPanel).styles.max_height = 14 if height >= 40 else 10 if height >= 34 else 6
-        self.query_one(CluePanel).styles.max_height = 8 if height >= 48 else 6 if height >= 40 else 4 if height >= 34 else 3
+        sheet = 14 if height >= 40 else 10 if height >= 34 else 6
+        clues = 6 if height >= 48 else 4 if height >= 40 else 3
+        spare = (height - 2) - sheet - clues - PAGES_MIN  # the top bar and the footer take a line each
+        tray.styles.height = max(5, min(13 if height >= 40 else 12 if height >= 34 else 11, spare))
+        self.query_one(SheetPanel).styles.max_height = sheet
+        self.query_one(CluePanel).styles.max_height = clues
         if right.display:
             self.call_after_refresh(tray.prepare)
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture

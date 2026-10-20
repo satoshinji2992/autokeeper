@@ -238,7 +238,7 @@ async def _until(pilot, test, rounds: int = 100) -> None:
 
 
 async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypatch, tmp_path, skills_dir, fake):  # noqa: F811
-    from textual.widgets import Input, OptionList
+    from textual.widgets import Input, OptionList, Static
 
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.modals.menu import GameMenu
@@ -285,7 +285,7 @@ async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypat
         await _until(pilot, lambda: screen.step == "card")
         await pilot.press("enter")  # 就用这张卡
         await _until(pilot, lambda: app.screen is lobby and hub.state.investigators[0].name == "周樟寿")
-        await _until(pilot, lambda: "周樟寿" in str(lobby.query_one("#seats", OptionList).get_option_at_index(0).prompt))
+        await _until(pilot, lambda: "周樟寿" in str(lobby.query_one("#lobby-investigator", Static).render()))
         assert {c.name for c in roster.saved()} == {"我的老卡", "周樟寿"}  # kept on this machine too
         await pilot.press("y")  # ready: the game begins
         await _until(pilot, lambda: hub.started.is_set())

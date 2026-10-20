@@ -28,6 +28,7 @@ HostScreen.-narrow #host-preview {
     display: none;
 }
 HostScreen #host-seats,
+HostScreen #host-investigators,
 HostScreen #host-saves {
     height: auto;
     max-height: 10;
@@ -37,6 +38,7 @@ HostScreen #host-saves {
     background: $surface;
 }
 HostScreen #host-seats:focus,
+HostScreen #host-investigators:focus,
 HostScreen #host-saves:focus {
     border: round $primary;
 }
@@ -110,6 +112,11 @@ LobbyScreen #seats {
 }
 LobbyScreen #seats:focus {
     border: round $primary;
+}
+LobbyScreen #lobby-investigator {
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
 }
 LobbyScreen #lobby-hint {
     height: auto;

@@ -166,6 +166,7 @@ async def test_the_model_settings_take_a_key_and_test_the_connection(monkeypatch
                         result.append)
         await pilot.pause()
         modal = app.screen
+        assert str(modal.query_one("#engine-tabs").get_tab("engine-roles").label) == "各分工模型"  # a page of its own
         modal.query_one("#preset", OptionList).highlighted = 0  # deepseek
         await pilot.pause()
         keys = list(modal.query("#keys Input"))
