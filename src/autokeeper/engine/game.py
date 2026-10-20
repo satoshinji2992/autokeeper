@@ -371,6 +371,7 @@ class Game:
 
     # -- the turn pipeline --------------------------------------------------------------
     async def parse(self, text: str) -> Action:
+        self.initiative, self._directed = [], set()  # a new turn: nobody arranged yet, a question to the keeper too
         if text.startswith("/kp "):
             question = text[4:].strip()
             self.state.add("system", f"对守秘人：{question}", who=self.state.investigator.name)
@@ -421,7 +422,6 @@ class Game:
         those it may be (here, alive, the module's: _present), by their ids alone, and kept for
         talk(), in the turn's journal too, so a resumed turn still has it."""
         st = self.state
-        self.initiative, self._directed = [], set()
         planner = getattr(self.cast, "plan", None)
         if planner is not None:
             try:
@@ -1566,6 +1566,7 @@ class Game:
         st, m = self.state, self.m
         saved = st.pending_turn.get("initiative") if st.pending_turn else None
         plans = [Initiative.model_validate(x) for x in saved] if saved is not None else self.initiative
+        self.initiative = []  # this turn's: an interlude or a turn with no plan of its own does not play it again
         for x in plans:
             if any(nid == x.npc for nid, _ in turn.npc_lines) or x.npc not in self._present():
                 continue

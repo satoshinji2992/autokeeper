@@ -283,3 +283,21 @@ async def test_a_lookup_finds_the_records_matching_lines_with_rewrites_in(module
     assert (await cast.look_up(game.state, "zzz")) == "没有查到相关的记录，按手头的资料安排。"
     await game.close()
     await cast.close()
+
+
+async def test_who_joins_in_belongs_to_the_turn_that_planned_it(module, fake):
+    game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
+    action = await game.parse("我看看齿轮")
+    await game.parse("/kp 规则上能不能这样？")  # a question to the keeper: nobody arranged for it
+    assert game.initiative == [] and game._directed == set()
+    turn = await game.resolve(action, await game.rule(action))
+    await game.talk(turn)
+    assert cast.npc_calls == []
+    await game.close()
+    game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
+    action = await game.parse("我看看齿轮")
+    for _ in range(2):  # played once; a later turn with no plan of its own does not play it again
+        turn = await game.resolve(action, Ruling(needs_roll=False, minutes=1, reason=""))
+        await game.talk(turn)
+    assert [n for n, _ in cast.npc_calls] == ["warden"]
+    await game.close()
