@@ -37,18 +37,25 @@ TALK = Action(kind="talk", summary="把有人从窗边逃走的消息告诉守�
 QUIET = Ruling(needs_roll=False, minutes=0)
 
 
-async def test_a_zero_minute_message_can_prompt_an_action_in_the_same_turn(game):
+def moved_on(game, minutes: int = 5) -> None:
+    """The party has gone somewhere else, and some minutes passed on the way."""
+    game._moved_on = True
+    game.state.minutes += minutes
+
+
+async def test_a_message_is_answered_now_and_thought_over_once_the_party_moves_on(game):
     game, events = game
     clock = game.state.minutes
     turn = await game.resolve(TALK, QUIET)
-    assert not game.brain.asks
     await game.talk(turn)
-    assert len(game.brain.asks) == 1
-    assert "有人想从窗边逃走" in game.brain.asks[0].views["warden"]
-    assert turn.world == ["守钟人放下工具，检查窗边的门闩"]
+    assert not game.brain.asks and game.world.rec.npc_budget_calls == 0  # its voice answered it
     assert game.state.minutes == clock and not game.state.checks
     assert any(event["type"] == "npc" for event in events)
-    assert game.world.rec.npc_budget_calls == 1
+    moved_on(game)
+    await game._live(Turn())
+    assert len(game.brain.asks) == 1
+    assert "有人想从窗边逃走" in game.brain.asks[0].reasons["warden"]
+    assert "有人想从窗边逃走" in game.brain.asks[0].views["warden"]
 
 
 async def test_greeting_only_dialogue_keeps_its_memory_without_a_background_call(game):
@@ -63,7 +70,7 @@ async def test_greeting_only_dialogue_keeps_its_memory_without_a_background_call
     assert any("谢谢" in memory.text for memory in game.world.agent("warden").memory)
 
 
-async def test_elapsed_time_and_dialogue_share_one_turns_remaining_calls(game):
+async def test_a_conversation_spends_none_of_the_turns_calls(game):
     game, _ = game
     game.minds = scheduler.Budget(turn=1)
     game.world.agent("warden").wake = game.state.minutes + 1
@@ -74,14 +81,17 @@ async def test_elapsed_time_and_dialogue_share_one_turns_remaining_calls(game):
     await game.talk(turn)
     assert len(game.brain.asks) == 1 and game.world.rec.npc_budget_calls == 1
     game.state.turn += 1
+    moved_on(game)
     await game._live(Turn())
-    assert len(game.brain.asks) == 2 and game.world.rec.npc_budget_calls == 1
+    assert len(game.brain.asks) == 2 and game.world.rec.npc_budget_calls == 1  # a new turn, its own call
 
 
 async def test_repeated_live_calls_do_not_repeat_a_completed_reaction(game):
     game, _ = game
     turn = await game.resolve(TALK, QUIET)
     await game.talk(turn)
+    moved_on(game)
+    await game._world(turn)  # the world's turn: the reaction is decided and played
     seq, output = game.world.rec.seq, list(turn.world)
     for _ in range(3):
         await game._live(turn)
@@ -96,21 +106,24 @@ async def test_no_decision_result_does_not_grant_a_free_retry_in_the_same_tick(g
     game.brain = Canned(lambda ask: None)
     turn = await game.resolve(TALK, QUIET)
     await game.talk(turn)
+    moved_on(game)
+    await game._live(turn)
     await game._live(turn)
     assert len(game.brain.asks) == 1
     game.state.turn += 1
+    moved_on(game)
     await game._live(turn)
     assert len(game.brain.asks) == 2
 
 
-async def test_another_real_message_can_wake_the_same_npc_with_the_remaining_allowance(game):
+async def test_something_done_in_front_of_it_wakes_it_at_once(game):
     game, _ = game
     turn = await game.resolve(TALK, QUIET)
     await game.talk(turn)
-    assert game.world.apply(O.Occur(text="调查员当面补充：有人拿走了门边的靴子。", actor=game.state.investigator.id,
+    assert game.world.apply(O.Occur(text="调查员当着他的面拿走了门边的靴子。", actor=game.state.investigator.id,
                                    participants=["warden"], place="tower")).ok
     await game._live(turn)
-    assert len(game.brain.asks) == 2 and game.world.rec.npc_budget_calls == 2
+    assert len(game.brain.asks) == 1 and game.world.rec.npc_budget_calls == 1
     assert "拿走了门边的靴子" in game.brain.asks[-1].reasons["warden"]
 
 
@@ -125,79 +138,66 @@ async def test_zero_budget_executes_an_existing_prepared_plan_without_thinking(g
     assert game.world.agent("warden").plan[0].status == "done"
 
 
-async def test_cancelled_parallel_work_reuses_returned_results_and_keeps_reserved_calls():
+async def test_a_cancelled_call_keeps_its_allowance_and_is_asked_again_on_resume():
     w = staged()
     assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="think", text="检查门锁")])).ok
-    completed = asyncio.Event()
+    asked = asyncio.Event()
     hanging = asyncio.Event()
-    seen = []
+    calls = 0
 
     async def think(ask):
-        npc = ask.npcs[0]
-        seen.append(npc)
-        if npc == "preacher" and seen.count(npc) == 1:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            asked.set()
             await hanging.wait()
         return Scene(decisions=[Decision(npc=npc, ops=[
             O.Occur(text=f"{w.name(npc)}整理了随身的东西", place=w.place(npc)),
-        ])])
-
-    def checkpoint():
-        if any(job.get("status") == "ready" for work in w.rec.npc_work.values()
-               for batch in work["batches"].values() for job in batch):
-            completed.set()
+        ]) for npc in ask.npcs])
 
     brain = Canned(think)
     start = w.now
     task = asyncio.create_task(scheduler.advance(w, brain, start, start + 1, tick="cancelled",
-                               budget=scheduler.Budget(turn=3), shared=True, checkpoint=checkpoint))
-    await asyncio.wait_for(completed.wait(), timeout=2)
+                               budget=scheduler.Budget(turn=3), shared=True))
+    await asyncio.wait_for(asked.wait(), timeout=2)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert w.rec.npc_budget_calls == 2 and w.clock is None
+    assert w.rec.npc_budget_calls == 1 and w.clock is None  # the call it reserved stays spent
     assert not any("整理了随身" in event.text for event in w.rec.events)
-    # Resuming a saved record must also retain completed sibling results and allowance.
-    w.st.record = WorldRecord.model_validate_json(w.rec.model_dump_json())
+    w.st.record = WorldRecord.model_validate_json(w.rec.model_dump_json())  # resumed from the save
     report = await scheduler.advance(w, brain, start, start + 1, tick="cancelled",
                                      budget=scheduler.Budget(turn=3), shared=True)
-    assert seen.count("warden") == 1 and seen.count("preacher") == 2
-    assert report.calls == w.rec.npc_budget_calls == 3
+    assert calls == 2 and report.calls == w.rec.npc_budget_calls == 2
     assert len([event for event in w.rec.events if "整理了随身" in event.text]) == 2
     repeated = await scheduler.advance(w, brain, start, start + 1, tick="cancelled", shared=True)
-    assert repeated.repeat and len(seen) == 3 and not w.rec.npc_work
+    assert repeated.repeat and calls == 2 and not w.rec.npc_work
 
 
-async def test_ready_results_still_land_after_cancellation_exhausts_the_budget():
+async def test_an_answer_that_came_back_lands_on_resume_without_asking_again():
     w = staged()
     assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="think", text="检查门锁")])).ok
-    completed = asyncio.Event()
-    hanging = asyncio.Event()
-
-    async def think(ask):
-        npc = ask.npcs[0]
-        if npc == "preacher":
-            await hanging.wait()
-        return Scene(decisions=[Decision(npc=npc, ops=[O.Occur(text="守钟人关好窗户", place="tower")])])
+    brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[O.Occur(text="守钟人关好窗户", place="tower")])]))
+    interrupted = False
 
     def checkpoint():
-        if any(job.get("status") == "ready" for work in w.rec.npc_work.values()
-               for batch in work["batches"].values() for job in batch):
-            completed.set()
+        nonlocal interrupted
+        if not interrupted and any(job.get("status") == "ready" for work in w.rec.npc_work.values()
+                                   for batch in work["batches"].values() for job in batch):
+            interrupted = True
+            raise ConnectionError("save notification interrupted")
 
-    brain = Canned(think)
-    task = asyncio.create_task(scheduler.advance(w, brain, w.now, w.now + 1, tick="exhausted",
-                               shared=True, checkpoint=checkpoint))
-    await asyncio.wait_for(completed.wait(), timeout=2)
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    report = await scheduler.advance(w, brain, w.now, w.now + 1, tick="exhausted", shared=True)
-    assert len(brain.asks) == 2 and report.calls == 2
+    with pytest.raises(ConnectionError):
+        await scheduler.advance(w, brain, w.now, w.now + 1, tick="ready", shared=True, checkpoint=checkpoint)
+    assert not any(event.text == "守钟人关好窗户" for event in w.rec.events)
+    w.st.record = WorldRecord.model_validate_json(w.rec.model_dump_json())
+    w.rec.npc_budget_calls = 99  # no allowance left, and none needed
+    await scheduler.advance(w, brain, w.now, w.now + 1, tick="ready", shared=True)
+    assert len(brain.asks) == 1
     assert len([event for event in w.rec.events if event.text == "守钟人关好窗户"]) == 1
-    assert any("preacher" in text for text in report.deferred)
 
 
-async def test_a_landed_group_and_its_receipt_survive_a_checkpoint_interruption():
+async def test_a_landed_answer_and_its_receipt_survive_a_checkpoint_interruption():
     w = staged()
     assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="think", text="检查门锁")])).ok
     brain = Canned(lambda ask: Scene(decisions=[Decision(npc=npc, ops=[
@@ -215,10 +215,10 @@ async def test_a_landed_group_and_its_receipt_survive_a_checkpoint_interruption(
     start = w.now
     with pytest.raises(ConnectionError):
         await scheduler.advance(w, brain, start, start + 1, tick="landed", shared=True, checkpoint=checkpoint)
-    assert len([event for event in w.rec.events if "合上随身" in event.text]) == 1
+    assert len([event for event in w.rec.events if "合上随身" in event.text]) == 2
     w.st.record = WorldRecord.model_validate_json(w.rec.model_dump_json())
     await scheduler.advance(w, brain, start, start + 1, tick="landed", shared=True)
-    assert len(brain.asks) == w.rec.npc_budget_calls == 2
+    assert len(brain.asks) == w.rec.npc_budget_calls == 1  # nothing is asked or landed twice
     assert len([event for event in w.rec.events if "合上随身" in event.text]) == 2
 
 

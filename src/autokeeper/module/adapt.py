@@ -13,6 +13,9 @@ lacks and leaves what it has:
     ties        私人牵连    threads an investigator's background can be tied to (Module.ties)
     endings     额外结局    the ends a table is likely to reach that the module never wrote
     mechanics   插件清单    the rules the engine does not keep by itself (Module.mechanics)
+    meet        见面反应    which agenda steps are what an NPC does on meeting the investigators (Move.meet):
+                            character material for its voice, never a backstage decision; for
+                            modules whose agendas were written before the label
     history     前史        what happened before the game and still matters, who knows it (Module.history)
     prelude     开局演出    a few pictures and lines on the story's background, played before the
                             game screen while the director adapts (module/prelude.py); it reads
@@ -40,9 +43,10 @@ from . import package, prelude, yamledit
 from .graph import audit, supporting_clues
 from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Tie
 
-PASSES = ("npcs", "relations", "agendas", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude")
-LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "foreshadow": "伏笔", "clueweb": "线索网",
-          "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史", "prelude": "开局演出"}  # fmt: skip
+PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude")
+LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "meet": "见面反应", "foreshadow": "伏笔",
+          "clueweb": "线索网", "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史",
+          "prelude": "开局演出"}  # fmt: skip
 
 SYSTEM = """你是 AutoKeeper 的模组改编员，在编译期给一个 CoC 7 版模组补上跑团时用得着、原文却没写的东西。
 - 原作的真相、线索原文、检定、结局一个字都不改；补上的东西要和原作对得上，像本来就在里面。
@@ -69,6 +73,16 @@ class Bonds(BaseModel):
 
 class Agendas(BaseModel):
     agendas: list[Agenda] = Field(default_factory=list)
+
+
+class MeetMark(BaseModel):
+    npc: str = Field(description="NPC id")
+    step: str = Field(description="步骤 id")
+    meet: bool = Field(description="见面时的反应填 true；要他自己在幕后去做的填 false")
+
+
+class Meets(BaseModel):
+    steps: list[MeetMark] = Field(default_factory=list)
 
 
 class Signs(BaseModel):
@@ -127,8 +141,12 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "when 写 'D1 23:00' 这样的时间，或条件 flag:标记、at:谁:地点。和原作的事件时间线对得上，不替原作的事件抢戏。"
                 "有 when 的步骤写 does：做成以后实际成立的事（at:他自己:地点、owner:物件:持有者、flag:标记、gone:谁），游戏里到时直接照做；"
                 "要等调查员来问、来做的事写不成条件，不写 when 也不写 does，交给人物临场决定；"
+                "这样的见面时的反应写 meet: true，不写 does，when 只写从什么时候、什么条件起才这样；其余没有 does 的步骤写 meet: false；"
                 "does 里的 flag 只用表示世界里发生了某事的标记，不用表示调查员看见、遇到、做到或知道了什么的标记（那些由裁定员按调查员的行动立）；"
                 "物件只用【物件】里的 id，交给调查员写 players；别人去哪不写在他的 does 里。原作里会把剧情推向某个结局的，用那个结局的标记。", Agendas),
+    "meet": ("下面【打算里没标的步骤】，逐条判断：是见面时的反应（调查员来问、来访、在场时他才会做的事：应门招呼、领人去看、被问到时怎么说），"
+             "还是要他自己在幕后去做的事（盯梢、报信、藏东西、搬走什么、找人商量）。见面时的反应填 true，幕后去做的填 false。"
+             "一步里既有见面时的反应、又有之后在幕后要做的事（比如被问完就去报信），填 false。只判断，不改步骤。", Meets),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
                    "端倪本身不说破真相，只让人觉得哪里不对；也不能说出某条线索本身的内容（线索是窗锁松了，端倪就不写窗钩是松的），"
                    "不然等于不用检定就把线索给了。", Signs),
@@ -180,10 +198,21 @@ def wanted(m: Module, name: str) -> bool:
         return bool(run.lean) or any(run.fragile.values()) or bool(run.drift.lost)
     if name == "endings":
         return len(m.endings) < 3
+    if name == "meet":
+        return bool(_unmarked(m))
     return not getattr(m, name)
 
 
+def _unmarked(m: Module) -> list[tuple[str, Any]]:
+    """Agenda steps without an outcome, left for the NPC to judge, not yet marked as meeting
+    reactions or backstage work."""
+    return [(a.npc, s) for a in m.agendas for s in a.steps if s.meet is None and not s.does]
+
+
 def _material(m: Module, name: str) -> str:
+    if name == "meet":
+        rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") for npc, s in _unmarked(m)]
+        return "\n【打算里没标的步骤】\n" + "\n".join(rows)
     if name == "clueweb":
         from .simulate import playthrough
 
@@ -243,6 +272,10 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
             if not n.knows and f.knows:
                 found.append(("put", "npcs", n.id, "knows", [k.strip() for k in f.knows if k.strip()][:6]))
         return found
+    if name == "meet":
+        open_ = {(npc, s.id) for npc, s in _unmarked(m)}
+        marks = {(x.npc, x.step): x.meet for x in out.steps if (x.npc, x.step) in open_}
+        return [("step", "agendas", npc, step, "meet", meet) for (npc, step), meet in marks.items()]
     if name == "clueweb":
         taken = {c.id for c in m.clues}
         conclusions = {k.id for k in m.conclusions}
@@ -282,6 +315,8 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
         items = [a for a in items if a.npc in npcs and not (a.npc in seen or seen.add(a.npc)) and a.steps][:6]  # type: ignore[func-returns-value]
         for a in items:  # an outcome naming what the module lacks is cut down to what it has, not the whole pass
             for step in a.steps:
+                if step.meet:  # what it does on meeting them is its voice's to play: no outcome
+                    step.does = ""
                 parts = [x.strip() for x in step.does.replace("|", "&").split("&") if x.strip() and "!" not in x]
                 # Without a time or a condition the step is the NPC's to judge in play: no outcome done for it.
                 step.does = " & ".join(x for x in parts if not _outcome(m, a.npc, x)) if step.when.strip() else ""
@@ -316,6 +351,8 @@ def land(folder: Path, found: list[tuple[Any, ...]]) -> None:
         text = path.read_text(encoding="utf-8") if path.is_file() else ""
         if kind == "put":
             text = yamledit.put(text, group, edit[2], edit[3], edit[4])
+        elif kind == "step":
+            text = yamledit.put_step(text, group, edit[2], edit[3], edit[4], edit[5])
         elif kind == "append":
             text = yamledit.append(text, group, edit[2])
         else:

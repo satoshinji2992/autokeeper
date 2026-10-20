@@ -226,6 +226,8 @@ class Move(BaseModel):
                                       "& 连接；不写就是想到就做")
     does: str = Field("", description="做成了以后实际成立的事，用 & 连接：at:他自己:地点、owner:物件:持有者、flag:标记、"
                                       "gone:谁（死了或不见了）；只写原作里这一步真会造成的，没有就留空")
+    meet: bool | None = Field(None, description="见面时的反应填 true：调查员来问、来访、在场时他才会做的事（应门招呼、领人去看、被问到时怎么说），"
+                                                "不写 does，when 只表示从什么时候、什么条件起才这样；游戏里是人物资料，不在幕后想；要他自己在幕后去做的填 false")
 
 
 class Agenda(BaseModel):

@@ -152,7 +152,9 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
         lines.append("【你的目标】" + ("；".join(a.goals) or "无"))
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
-        steps = [f"- {s.id}：{s.text}（{_when(s.due)}{'，条件 ' + s.when if s.when else ''}，{s.status}）" for s in a.plan if s.status != "dropped"]
+        # What it does on meeting the investigators is its voice's (npc_brief), not a backstage step.
+        steps = [f"- {s.id}：{s.text}（{_when(s.due)}{'，条件 ' + s.when if s.when else ''}，{s.status}）"
+                 for s in a.plan if s.status != "dropped" and not agents.meeting(w, npc, s)]
         lines.append("【你的计划】\n" + ("\n".join(steps) or "- 还没有"))
     concerns = _concerns(w, npc)
     facts = _npc_facts(w, npc, query, concerns)
@@ -208,9 +210,13 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
             lines.append("【你眼下想要的】" + "；".join(a.goals))
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
-        steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in a.plan if s.status == "pending"][:3]
+        pending = [s for s in a.plan if s.status == "pending"]
+        steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in pending if not agents.meeting(w, npc, s)][:3]
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
+        meet = [s.text for s in pending if agents.meets(w, npc, s)][:4]
+        if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
+            lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
     memories, sources = _npc_memories(w, npc, query, concerns, recent=6)
     if memories:

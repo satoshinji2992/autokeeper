@@ -219,7 +219,8 @@ class Verdict(BaseModel):
 
 
 class Review(BaseModel):
-    """The director's look between turns (world/review.py)."""
+    """The director's look backstage after a long stretch of game time (Game._look). Nothing waits
+    for its verdicts any more: the important NPCs' decisions land as they are made."""
 
     verdicts: list[Verdict] = Field(default_factory=list)
     backstage: list[WorldOp] = Field(default_factory=list, max_length=4,

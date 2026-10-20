@@ -98,3 +98,15 @@ def test_the_measures(fake):
                                           ("这句与记录不矛盾", False)])  # fmt: skip
 def test_a_judge_note_that_admits_agreement_is_dropped(record, kept):
     assert (session.AGREED.search(record) is None) == kept
+
+
+def test_backstage_wakes_are_counted_once_across_the_run_and_calls_are_marked():
+    def side(woke, agents):
+        return {"problems": [], "target": "", "echo": 0.0, "chars": 10, "npc": [], "woke": woke,
+                "calls": [{"agent": a, "seconds": 1.0, "cost": 0.001} for a in agents]}
+
+    rows = [{"turn": 1, "replayed": side(["thomas：该做了：应门"], ["keeper", "world"])},
+            {"turn": 2, "replayed": side(["thomas：该做了：应门", "asata：发生了：有人敲门"], ["keeper", "world"])}]
+    got = session.summarize(rows)["replayed"]
+    assert got["woke_pairs"] == 2  # the same wake on every replayed turn counts once
+    assert got["world_calls_not_comparable"] == 2

@@ -4,10 +4,12 @@ Offscreen the world lives on: important NPCs decide, arrangements come due, prep
 go ahead, and all of it lands in the record as it happens (world/scheduler.py). What would change
 the scene in front of the investigators does not land behind their backs: someone walks in or
 leaves, a companion turns away, someone acts on them or on what they carry, something happens
-where they stand. It waits as a beat until the keeper plays it (engine/game.py), and lands whole
-then, told in the same breath: a reaction in place at once, but someone the investigators are
-dealing with does not walk out mid-exchange (leaves; HOLD_TURNS turns at most). A beat that no longer fits when its moment comes is
-dropped, and its author woken to think again.
+where they stand. It waits as a beat, an arrangement left unfinished for the keeper, until the
+keeper plays it in the next telling (engine/game.py), and lands whole then, told in the same
+breath: a reaction in place at once, but someone the investigators are dealing with does not walk
+out mid-exchange (leaves; HOLD_TURNS turns at most). A beat whose basis moved meanwhile (what its
+decision rested on, its plan step's condition), or that the world no longer allows, is dropped,
+and its author woken to think again.
 
 Commitments to the investigators outrank what was arranged elsewhere: someone walking with them
 leaves only by ending that in front of them (ops.Move refuses it otherwise), and an arrangement
@@ -100,13 +102,14 @@ def leaves(w: World, op: Any) -> list[str]:
 
 
 def queue(w: World, ident: str, actor: str, ops: list[dict[str, Any]], involves: list[str],
-          leaving: list[str] | None = None, *, reads: dict[str, int] | None = None, when: str = "") -> Beat:
+          leaving: list[str] | None = None, *, reads: dict[str, int] | None = None, when: str = "", text: str = "") -> Beat:
     """Keep work that touches the stage for the keeper, with what it rested on. The same work
     asked again is the same beat."""
     if (known := next((b for b in w.rec.beats if b.id == ident), None)) is not None:
         return known
     beat = Beat(id=ident, actor=actor, ops=ops, involves=list(dict.fromkeys(involves)),
-                leaving=list(dict.fromkeys(leaving or [])), reads=basis(actor, reads), when=when, t=w.now, turn=w.st.turn)
+                leaving=list(dict.fromkeys(leaving or [])), reads=basis(actor, reads), when=when, text=text, t=w.now,
+                turn=w.st.turn)
     finished = [b for b in w.rec.beats if b.status != "waiting"]
     w.rec.beats = [*finished[-KEPT:], *(b for b in w.rec.beats if b.status == "waiting"), beat]
     return beat
@@ -119,11 +122,19 @@ def basis(actor: str, reads: dict[str, int] | None) -> dict[str, int]:
 
 
 def gone_by(w: World, reads: dict[str, int], when: str) -> list[str]:
-    """Why held work no longer fits: what it rested on moved, or its condition no longer holds."""
+    """Why held work no longer fits, in words its author can act on: what it rested on moved, or
+    its condition no longer holds."""
     from .agents import holds
 
-    moved = [f"{ref} 变了" for ref, v in reads.items() if w.version(ref) != v]
-    return moved + ([f"条件不再成立：{when}"] if when.strip() and not holds(w, when) else [])
+    moved = [_moved(w, ref) for ref, v in reads.items() if w.version(ref) != v]
+    return list(dict.fromkeys(moved)) + ([f"条件不再成立：{when}"] if when.strip() and not holds(w, when) else [])
+
+
+def _moved(w: World, ref: str) -> str:
+    kind, _, ident = ref.partition(":")
+    if kind == "entity":
+        return f"{w.name(ident)}的情况变了"
+    return {"fact": "他知道的一件事变了", "relation": "和别人的关系变了", "promise": "一个约定变了"}.get(kind, "情况变了")
 
 
 def waiting(w: World, actor: str | None = None) -> list[Beat]:
@@ -173,5 +184,6 @@ def play(w: World, beat: Beat) -> list[str]:
     beat.status = "dropped" if problems else "played"
     beat.note = "；".join(problems)[:200]
     if problems and (a := w.rec.agents.get(beat.actor)) is not None:
-        a.wake = w.now  # what it meant to do no longer fits: it thinks again
+        # What it meant to do no longer fits: it thinks again, knowing why.
+        a.wake, a.refused = w.now, f"{beat.text or '原先的安排'}没做成：{'；'.join(problems)}"[:200]
     return problems

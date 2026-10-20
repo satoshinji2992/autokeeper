@@ -1047,9 +1047,9 @@ class Cast:
             return None
 
     async def review(self, state: GameState, material: str) -> Review | None:
-        """The director's look between turns (world/review.py): verdicts on held turning points,
-        and a backstage adjustment of its own if one is called for. Stateless, on the director's
-        model; None when no look was had (everything held then goes ahead)."""
+        """The director's look backstage after a long stretch of game time (Game._look): a backstage
+        adjustment of its own if one is called for. Stateless, on the director's model; None when
+        no look was had."""
         from ..harness.replay import CassetteError
 
         s = self._open("review", "director", REVIEW_SYSTEM, schema=_schema(Review))

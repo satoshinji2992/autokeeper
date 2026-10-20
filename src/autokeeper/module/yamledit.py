@@ -1,4 +1,5 @@
-"""Edit a module's YAML as text: a field into one entry, items onto a list, a key into a map.
+"""Edit a module's YAML as text: a field into one entry (or one agenda step), items onto a list,
+a key into a map.
 
 A hand-written module keeps its layout and comments; a new field goes in as new lines, in that
 file's own indentation, so the diff is the new lines alone (module/adapt.py writes through this).
@@ -43,6 +44,43 @@ def put(text: str, group: str, ident: str, key: str, value: Any) -> str:
     if own is not None:
         if lines[own].rstrip().endswith(":") or (own + 1 < end and len(lines[own + 1]) - len(lines[own + 1].lstrip(" ")) > inner):
             raise ValueError(f"{ident} 的 {key} 已经有内容")
+        return "\n".join([*lines[:own], *new, *lines[own + 1 :]])
+    return "\n".join([*lines[:end], *new, *lines[end:]])
+
+
+def _entry_end(lines: list[str], start: int, stop: int) -> int:
+    """Where the list entry starting at `start` ends: the next entry at its level, or `stop`;
+    the blank lines between entries stay after it."""
+    dash = len(lines[start]) - len(lines[start].lstrip(" "))
+    end = start + 1
+    while end < stop and not re.match(rf"([^\s-]| {{0,{dash}}}- |-)", lines[end]):
+        end += 1
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    return end
+
+
+def put_step(text: str, group: str, owner: str, ident: str, key: str, value: Any) -> str:
+    """`text` with `key: value` added to the step `- id: <ident>` of the entry `- npc: <owner>`
+    under the top-level `group:` (an agenda's steps), or put in place of that step's own one-line
+    `key:`."""
+    lines = text.split("\n")
+    top = next((i for i, line in enumerate(lines) if re.match(rf"{re.escape(group)}:\s*$", line)), None)
+    if top is None:
+        raise KeyError(f"没有 {group}")
+    bottom = next((i for i in range(top + 1, len(lines)) if re.match(r"[^\s-]", lines[i])), len(lines))
+    entry = next((i for i in range(top + 1, bottom) if re.match(rf"\s*- npc: ['\"]?{re.escape(owner)}['\"]?\s*$", lines[i])), None)
+    if entry is None:
+        raise KeyError(f"{group} 里没有 {owner}")
+    stop = _entry_end(lines, entry, bottom)
+    start = next((i for i in range(entry + 1, stop) if re.match(rf"\s*- id: ['\"]?{re.escape(ident)}['\"]?\s*$", lines[i])), None)
+    if start is None:
+        raise KeyError(f"{owner} 的打算里没有 {ident}")
+    end = _entry_end(lines, start, stop)
+    inner = len(lines[start]) - len(lines[start].lstrip(" ")) + 2
+    new = _block({key: value}, inner)
+    own = next((i for i in range(start + 1, end) if re.match(rf" {{{inner}}}{re.escape(key)}:", lines[i])), None)
+    if own is not None:
         return "\n".join([*lines[:own], *new, *lines[own + 1 :]])
     return "\n".join([*lines[:end], *new, *lines[end:]])
 

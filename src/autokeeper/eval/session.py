@@ -247,6 +247,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
                 await asyncio.gather(game._world_task, return_exceptions=True)
         report = game.told.report if game.told is not None else ""
         shown.append({"type": "hints", "lines": [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]})
+        shown.append({"type": "woke", "lines": [x for r in game.debug_world for x in r.woke]})  # who decided backstage, and why
     finally:
         await game.close()
         await cast.close()
@@ -319,6 +320,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     row["replayed"]["ruling"] = ruling
                     hints = next((e["lines"] for e in shown if e.get("type") == "hints"), [])
                     row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
+                    row["replayed"]["woke"] = next((e["lines"] for e in shown if e.get("type") == "woke"), [])
                 except Exception as exc:  # one turn that fails to replay is reported, the rest go on
                     row["replayed"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
                 row["seconds"] = round(time.monotonic() - started, 1)
@@ -373,6 +375,12 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             waited = [c for c in calls if c["agent"] not in BACKGROUND]
             out["wait_seconds_per_turn"] = round(sum(c["seconds"] for c in waited) / len(done), 1)
             out["calls_per_turn"] = round(len(calls) / len(done), 1)
+            # Each turn starts again from the save: an NPC woken once in play is woken again on every
+            # replayed turn, so the backstage calls are not comparable with a game; what is, is how
+            # many different (NPC, reason) wakes the whole run had.
+            out["world_calls_not_comparable"] = sum(c["agent"] == "world" for c in calls)
+        if any("woke" in x for x in done):
+            out["woke_pairs"] = len({line for x in done for line in x.get("woke", [])})
         return out
 
     return {"recorded": side("recorded"), "replayed": side("replayed"), "failed": sum("error" in r.get("replayed", {}) for r in rows)}

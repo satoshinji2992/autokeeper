@@ -60,6 +60,8 @@ class Decision(BaseModel):
     mood: str = Field("", description="这次经历使他的心境怎样变化；无变化留空，不把害怕、愤怒或关切一律写成冷静")
     ops: list[NpcOp] = Field(default_factory=list, max_length=4, description="他这次做的事；没什么要做就留空")
     wait: int = Field(240, ge=10, le=2880, description="过多少分钟再想下一步")
+    basis: list[str] = Field(default_factory=list, max_length=4,
+                             description="这个决定依据他自己那一段【你知道的事】里的哪几条，照抄 claim: 开头的编号；没有就留空")
 
 
 class Consultation(BaseModel):
@@ -99,7 +101,9 @@ NPC_MIND_SYSTEM = """你替跑团里的 NPC 决定接下来做什么。玩家看
 - 几个 NPC 同在一处时，这是一场幕后的戏：summary 里一两句写清发生了什么，每个人的操作分开写在 decisions 里。
 - 引用的 id 只用资料里出现过的。写短：notice、judge 各不超过 30 字。
 - 需要核对旧事或试算行动时，可以用 consultations 调用 world_query 或 world_preview。每次只查询对应 NPC 的资料，试算不会执行；最多两轮，获得结果后再给 decisions。已经能决定时直接输出行动，不为每个普通反应追加查询。
-- 走动时，只有别人确实会注意到的痕迹才写 trace（翻乱的东西、撬开的门、带走的东西）；在自己家、自己常待的地方走动，不留痕迹。"""
+- 走动时，只有别人确实会注意到的痕迹才写 trace（翻乱的东西、撬开的门、带走的东西）；在自己家、自己常待的地方走动，不留痕迹。
+- 这次一起想的几个人可能在不同的地方，每个人只按自己那一段资料决定；同在一处时才能当面配合。
+- basis 写这个决定依据了他自己那一段【你知道的事】里的哪几条，照抄 claim: 开头的编号；没有就留空。"""
 
 
 @dataclass
@@ -217,9 +221,9 @@ def marked(w: World) -> list[Any]:
             timed = re.fullmatch(r"D\d+ \d{1,2}:\d{2}", move.when.strip())
             # What the module says it brings about, done with no model call when its time or
             # condition comes; a step for "whenever" (no when) is the NPC's own to judge.
-            prepared, achieved = effects(a.npc, move.does) if move.when.strip() else ([], "")
+            prepared, achieved = effects(a.npc, move.does) if move.when.strip() and not move.meet else ([], "")
             steps.append(Step(id=move.id, text=move.text, due=parse_time(move.when) if timed else None, when="" if timed else move.when,
-                              ops=prepared, achieved=achieved))
+                              ops=prepared, achieved=achieved, meet=move.meet))
         if steps:
             ops.append(SetPlan(id=f"agenda:{a.npc}:plan", npc=a.npc, steps=steps, actor="director"))
     places = {loc.id for loc in w.m.locations}
@@ -259,6 +263,42 @@ def effects(npc: str, does: str) -> tuple[list[dict[str, Any]], str]:
             continue
         done.append(f"{kind}:{rest}")
     return ops, " & ".join(done)
+
+
+# What a step without an outcome or a condition is about, when nothing says: meeting the
+# investigators (coming to the door, being asked, taking them to see something).
+# Kept narrow: a backstage step taken for a meeting would never be acted on.
+MEETING = re.compile(r"(等|见到|遇到|碰到|见着).{0,8}(调查员|玩家|客人|来人|访客)|来访|上门|来问|问起|问到|被问|有人来|"
+                     r"招呼|寒暄|应门|请.{0,4}(吃|喝|坐|进)|(领|带).{0,2}(调查员|玩家|客人|访客)")
+
+
+def meeting(w: World, npc: str, step: Step) -> bool:
+    """Whether a plan step is what the NPC does on meeting the investigators: character material
+    for its voice, never a backstage decision (its time or condition only says from when on).
+    Its own label first, then the module's agenda step of the same id (saves made before the
+    label), then, for a step with no time, condition or outcome, what its words are about. One
+    with an outcome is always backstage work."""
+    if step.ops or step.achieved.strip():
+        return False
+    if step.meet is not None:
+        return step.meet
+    move = next((s for a in w.m.agendas if a.npc == npc for s in a.steps if s.id == step.id), None)
+    if move is not None and move.meet is not None:
+        return move.meet
+    return step.due is None and not step.when.strip() and bool(MEETING.search(step.text))
+
+
+def meets(w: World, npc: str, step: Step) -> bool:
+    """A meeting step whose time has come and whose condition holds: its voice plays it now."""
+    return meeting(w, npc, step) and (step.due is None or step.due <= w.now) and holds(w, step.when)
+
+
+def foreign(w: World, npc: str, basis: list[str], others: list[str]) -> list[str]:
+    """The refs a decision rests on that come from someone else's part of the call: refs are
+    scoped to whom they are shown (knowledge.public_ref), so one that only another NPC of the call
+    can read is a line this NPC was never given. A ref nobody can read is a slip, not a leak."""
+    return [ref for ref in basis if knowledge.resolve_ref(w, npc, ref.strip()) is None
+            and any(knowledge.resolve_ref(w, other, ref.strip()) for other in others if other != npc)]
 
 
 def sanctioned(w: World, npc: str) -> set[str]:

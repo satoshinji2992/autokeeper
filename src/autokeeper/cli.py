@@ -573,7 +573,7 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
 @app.command()
 def upgrade(
     module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")],
-    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,foreshadow,clueweb,ties,endings,mechanics")] = "",
+    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,prelude")] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="只看打算补多少，不写文件")] = False,
     review: Annotated[bool, typer.Option("--review", help="补完后请模型像守秘人那样审读一遍（一次调用），列出跑起来会出问题的地方")] = False,
 ) -> None:
@@ -964,6 +964,8 @@ def eval_session(
         if "cost_usd" in got:
             line += (f"；每轮 {got['calls_per_turn']} 次调用，模型耗时 {got['model_seconds_per_turn']} 秒，"
                      f"其中玩家要等的 {got['wait_seconds_per_turn']} 秒；共 ${got['cost_usd']}")
+        if "woke_pairs" in got:  # each turn starts from the save, so the backstage call count is not a game's
+            line += f"；幕后唤醒 {got['woke_pairs']} 种（人物，原因）"
         console.print(line)
     if report["summary"]["failed"]:
         console.print(f"[yellow]{report['summary']['failed']} 轮重放失败，见报告[/]")

@@ -30,7 +30,7 @@ from ..rules import commands
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from ..world import adapters, contract, desk, knowledge, review, rewrite, scheduler, stage
+from ..world import adapters, contract, desk, knowledge, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
@@ -46,7 +46,6 @@ from .state import (
     GameState,
     LogEntry,
     Progress,
-    format_time,
     parse_time,
     time_of_day,
 )
@@ -184,7 +183,7 @@ class Game:
         self._world_task: asyncio.Task | None = None
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
-        self._looked = 0  # the turn the director last looked between turns (Game._review)
+        self._moved_on = False  # the party went somewhere else since the world last lived (scheduler.advance)
         self._before: dict[str, Any] = {}  # the game as the turn found it, for reading its telling (engine/check.py)
         self._said = ""  # the player's words this turn
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
@@ -1788,6 +1787,7 @@ class Game:
 
     async def _world(self, turn: Turn) -> None:
         """The rest of the world after what just happened: now, or once the turn is told."""
+        self._moved_on = self._moved_on or bool(turn.arrived)
         if self.world_later and not turn.interlude:
             self._world_owed = True  # remember() starts it; the player does not wait for it
         else:
@@ -1796,46 +1796,28 @@ class Game:
             self._play(turn, self._dealing)
             await self._flags([f for f in self.state.flags if f not in before], turn, landed=True)
 
-    async def _review(self) -> None:
-        """The director looks between turns (world/review.py): at the turning points held for it,
-        and now and then at the situation, for a backstage adjustment of its own. One call at most;
-        without an answer everything held goes ahead."""
-        w, st = self.world, self.state
-        for proposal in review.due(w):  # put off until now: they go ahead without asking again
-            review.let_through(w, proposal)
-        held = [p for p in review.waiting(w) if p.status == "waiting"]
-        looking = st.turn - self._looked >= REVIEW_EVERY and st.progress_at > self._looked
-        if not held and not looking:
-            return
-        self._looked = st.turn
-        verdict = await self.cast.review(st, self._review_material(held)) if hasattr(self.cast, "review") else None
-        decided = {v.id: v for v in (verdict.verdicts if verdict else [])}
-        for proposal in held:
-            v = decided.get(proposal.id)
-            if v is None or v.choice == "放行":
-                review.let_through(w, proposal)
-            elif v.choice == "推迟":
-                review.put_off(w, proposal, v.minutes or 60, v.why)
-            else:
-                review.turn_down(w, proposal, v.why)
-        self._debug("director", {"phase": "review", "held": [p.id for p in held],
-                                  "verdicts": [v.model_dump(mode="json") for v in decided.values()]})
+    async def _look(self) -> None:
+        """After a long stretch of game time (a night, a journey) the director looks backstage, on
+        the screens: a backstage adjustment of its own if one is called for (a rewrite, a plan, an
+        arrangement), checked as its plans are. What the important NPCs do is decided when they
+        wake (world/scheduler.py), not here. One call; without an answer nothing changes."""
+        verdict = await self.cast.review(self.state, self._look_material()) if hasattr(self.cast, "review") else None
+        self._debug("director", {"phase": "look", "answered": verdict is not None})
         if verdict is not None and verdict.backstage:
             problems = await self._backstage(list(verdict.backstage), verdict.reason)
-            self._debug("director", {"phase": "review-backstage", "reason": verdict.reason, "problems": problems,
+            self._debug("director", {"phase": "look-backstage", "reason": verdict.reason, "problems": problems,
                                       "ops": [op.model_dump(mode="json") for op in verdict.backstage]})
 
-    def _review_material(self, held: list) -> str:
+    def _look_material(self) -> str:
         w, st, m = self.world, self.state, self.m
-        rows = [f"- {p.id}（{w.name(p.actor)}，{format_time(p.t)}）：{p.text or '（没写明）'}；会：{'；'.join(p.why)}" for p in held]
         found = "、".join(m.clue(c).title for c in st.clues) or "还没有"
         recent = "\n".join(f"- {e.who or e.kind}：{e.text[:120]}" for e in st.log[-8:] if e.kind in ("player", "keeper", "npc"))
-        return (f"【待审】\n{chr(10).join(rows) or '没有'}\n"
+        return ("【待审】没有\n"
                 f"【调查员】在 {m.location(st.location).name}；已找到的线索：{found}\n【最近】\n{recent or '无'}\n"
                 f"【世界】现在是第 {st.minutes} 分钟。\n{world_view.director_view(w).text}")
 
     async def _backstage(self, ops: list, reason: str) -> list[str]:
-        """The director's own backstage work outside a plan (Game._review): tried on a copy and
+        """The director's own backstage work outside a plan (Game._look): tried on a copy and
         checked as a plan's is; what touches the investigators' scene waits for the keeper."""
         w = World(self.m.model_copy(deep=True), self.state.model_copy(deep=True))
         problems: list[str] = []
@@ -1894,11 +1876,12 @@ class Game:
         happened in front of the party waits in self._late for the next narration or an interlude."""
         late = Turn()
         before = set(self.state.flags)
+        start = self.world.rec.simulated
         try:
             await self._live(late, inline=False)
             self._play(late, self._dealing)
-            if self.world.reviewing:
-                await self._review()
+            if self.world.reviewing and start is not None and self.state.minutes - start >= self.minds.long:
+                await self._look()  # a night, a journey: the director's look backstage
                 self._play(late, self._dealing)
             await self._flags([f for f in self.state.flags if f not in before], late, landed=True)
         except asyncio.CancelledError:
@@ -1922,14 +1905,16 @@ class Game:
         pending = next(((key, work) for key, work in rec.npc_work.items()
                         if work["turn"] == st.turn and work["start"] == start and work["end"] == st.minutes), None)
         events_only = st.minutes <= start
-        if events_only and pending is None and not scheduler.reactions_ready(self.world):
+        if events_only and pending is None and not scheduler.reactions_ready(self.world, moved_on=self._moved_on):
             return
         since = pending[1]["since"] if pending else rec.seq
         tick = (pending[0] if pending else f"reaction:{st.turn}:{st.minutes}:{rec.seq}" if events_only
                 else f"tick:{start}:{st.minutes}")
         brain = _Minds(self, quiet=not inline) if self.brain is not None else None
         report = await scheduler.advance(self.world, brain, start, st.minutes, budget=self.minds, tick=tick,
-                                         shared=True, events_only=events_only, checkpoint=self.checkpoint)
+                                         shared=True, events_only=events_only, moved_on=self._moved_on,
+                                         checkpoint=self.checkpoint)
+        self._moved_on = False
         self._debug("world", asdict(report))
         self.debug_world.append(report)
         del self.debug_world[:-30]
@@ -2356,7 +2341,6 @@ PLAY_WAIT = 0.0
 PREPARE_LIMIT = 300.0
 PREPARE_DRAWS = 2
 PREPARE_PAUSE = 5.0
-REVIEW_EVERY = 3  # turns between the director's own looks at the situation, when the story has moved
 NOWHERE = (
     "这一轮人还在原地：调查员说要去的地方，没人告诉过他们在哪，从这儿也找不到路（或者没说清去哪）。"
     "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"

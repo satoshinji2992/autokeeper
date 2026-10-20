@@ -8,14 +8,20 @@ advance(world, brain, start, end) simulates the minutes between in chunks. In ea
     3. each important NPC: a due plan step whose condition holds lands its prepared
        ops with no model call while the plan is fresh; one without ops, or a stale plan, wakes
        the NPC; a step whose condition stays unmet past its grace is blocked, and wakes it;
-       events it took part in or saw since it last decided wake it; so does its own timer;
-    4. the woken are ranked (promise, blocked, due, affected, timer) and grouped by place; each
-       group is one decision call (an offscreen scene) while the budget lasts, the rest wait.
+       events it took part in or saw since it last decided wake it; a conversation with the
+       investigators only once time jumps or they move on (its voice answered it at the time); so
+       does its own timer. One with goals and nothing left to do thinks of its next step only when
+       time jumps or the party moves on;
+    4. those woken are decided together in one call while the budget lasts (the rest wait),
+       each by its own view, each op held to what that NPC can do (agents.vet), and each decision
+       resting only on lines of its own view (agents.foreign).
 
-NPCs where the party is also react to witnessed changes and due plans; their observable
-actions reach the current scene. A tick id (the
-span simulated) is kept in the record, so a retried turn never simulates the same span twice;
-every op gets a deterministic id for the same reason.
+A step marked for meeting the investigators (agents.meeting: coming to the door, being asked)
+never wakes anyone: it is character material for the NPC's voice. NPCs where the party is also
+react to witnessed changes and due plans; what would change the scene in front of the party is
+left for the keeper to play (world/stage.py). A tick id (the span simulated) is kept in the
+record, so a retried turn never simulates the same span twice; every op gets a deterministic id
+for the same reason.
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from . import agents, context, contract, review, stage
+from . import agents, context, contract, stage
 from .ops import AdvancePlan, Occur, SetPlan, parse
 from .record import Agent
 
@@ -34,6 +40,8 @@ if TYPE_CHECKING:
     from .store import World
 
 RANK = {"promise": 0, "blocked": 1, "stale": 1, "due": 2, "affected": 3, "timer": 4}
+SCENE = ":scene"  # the id suffix of a decided scene's summary (_settle)
+TALK = "talk:"  # the op id prefix of a conversation with the investigators (engine/game.Game._exchanged)
 
 
 @dataclass
@@ -60,7 +68,11 @@ class Report:
     fired: list[str] = field(default_factory=list)  # scheduled ids
     dropped: list[str] = field(default_factory=list)  # scheduled ids gone stale
     staged: list[str] = field(default_factory=list)  # beats left for the keeper: they would change the scene (stage.py)
-    held: list[str] = field(default_factory=list)  # turning points left for the director (review.py)
+
+    @classmethod
+    def restored(cls, saved: dict[str, Any]) -> Report:
+        """A report kept in an interrupted tick, without the fields of older versions."""
+        return cls(**{k: v for k, v in saved.items() if k in cls.__dataclass_fields__})
 
 
 def fresh(w: World, reads: dict[str, int]) -> list[str]:
@@ -72,9 +84,9 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
           reads: dict[str, int] | None = None, when: str = "") -> bool:
     """A decision is one unit: a refused transfer must not leave a successful handover story.
     Work that would change the scene in front of the investigators waits for the keeper as a
-    beat instead of landing behind their backs (stage.py); a turning point offscreen waits for
-    the director while one is looking (review.py). Held work keeps what it rested on (reads,
-    the plan step's when): if that moved by the time it goes ahead, its author decides again."""
+    beat instead of landing behind their backs (stage.py), keeping what it rested on (reads,
+    the plan step's when): if that moved by the time it plays, its author decides again. The
+    rest lands now, turning points included: whoever decides has decided."""
     from .store import World
     from .tools import Gateway
 
@@ -83,7 +95,6 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     prepared = []
     involved: list[str] = []
     leaving: list[str] = []
-    turning: list[str] = []
     for i, raw in enumerate(ops):
         try:
             raw = Gateway(trial, actor).normalize_ops([raw])[0]
@@ -100,7 +111,6 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
             op.reads = {ref: trial.version(ref) for ref in op.reads}
         involved += stage.touches(trial, op)
         leaving += stage.leaves(trial, op)
-        turning += review.significant(trial, op)
         r = trial.apply(op)
         if not r.ok:
             report.refused.extend(f"{r.op} {p}" for p in r.problems)
@@ -111,19 +121,11 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
         return False
     if involved:
         beat = stage.queue(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], involved, leaving,
-                           reads=reads, when=when)
+                           reads=reads, when=when, text=text)
         if beat.status == "dropped":
             report.refused.append(f"{beat.id} 上次没能上演：{beat.note}")
             return False
         report.staged.append(beat.id)
-        return True
-    if turning and w.reviewing:
-        proposal = review.hold(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], turning, text,
-                               reads=reads, when=when)
-        if proposal.status == "dropped":
-            report.refused.append(f"{proposal.id} 导演没有放行：{proposal.note}")
-            return False
-        report.held.append(proposal.id)
         return True
     # No await or model call between validation and commit. The NPC operations are
     # deterministic, so they see exactly the state against which they just checked.
@@ -136,15 +138,16 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     return True
 
 
-def reactions_ready(w: World) -> bool:
-    """New experienced information or a prepared action; elapsed minutes are not required."""
+def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
+    """New experienced information or a prepared action; elapsed minutes are not required. Once
+    the party has moved on, the conversations they left behind count too."""
     for npc, a in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc) or review.waiting(w, npc):
+        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
             continue
-        if any(_affects(e, npc, a.seen) for e in w.rec.events):
+        if any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
             return True
         if any(s.status == "pending" and s.ops and (s.due is None or s.due <= w.now)
-               and agents.holds(w, s.when) for s in a.plan):
+               and not agents.meeting(w, npc, s) and agents.holds(w, s.when) for s in a.plan):
             return True
     return (any(s.status == "pending" and s.at <= w.now for s in w.rec.scheduled.values())
             or any(p.status == "active" and not p.noted and p.due is not None and p.due <= w.now
@@ -152,15 +155,18 @@ def reactions_ready(w: World) -> bool:
 
 
 async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *, budget: Budget | None = None,
-                  tick: str = "", shared: bool = False, events_only: bool = False,
+                  tick: str = "", shared: bool = False, events_only: bool = False, moved_on: bool = False,
                   checkpoint: Callable[[], None] | None = None) -> Report:
+    """`moved_on`: the party went somewhere else this turn; like a jump in time, a moment for
+    those with nothing left to do to think of their next step."""
     budget = budget or Budget()
     tick = tick or f"tick:{start}:{end}"
     report = Report(tick)
     if tick in w.rec.ticks:
         report.repeat = True
         return report
-    limit = budget.skip if end - start >= budget.long else budget.turn
+    skip = end - start >= budget.long
+    limit = budget.skip if skip else budget.turn
     if shared:
         if w.rec.npc_budget_turn != w.st.turn:
             w.rec.npc_budget_turn = w.st.turn
@@ -170,7 +176,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
         w.rec.npc_budget_limit = max(w.rec.npc_budget_limit, limit)
     work = w.rec.npc_work.setdefault(tick, {"turn": w.st.turn, "start": start, "end": end, "since": w.rec.seq,
                                            "events_only": events_only, "report": asdict(report), "chunks": {}, "batches": {}})
-    report = Report(**work["report"])
+    report = Report.restored(work["report"])
 
     def save() -> None:
         work["report"] = asdict(report)
@@ -204,7 +210,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
 
             if chunk is None:
                 report.chunks += 1
-                _prepare(w, c, budget, report, wake, events_only=events_only)
+                _prepare(w, c, budget, report, wake, events_only=events_only, planning=skip or moved_on)
                 chunk = work["chunks"][str(i)] = {"wakes": wakes, "before": w.rec.seq}
                 save()
             await _serve(w, brain, chunk["wakes"], f"{tick}:{c}", report, work["batches"], reserve, save)
@@ -212,7 +218,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             if "ripple" not in chunk:
                 ripple: dict[str, tuple[str, str]] = {}
                 for npc, a in w.rec.agents.items():
-                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and not review.waiting(w, npc):
+                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc):
                         _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)), since=chunk["before"])
                 chunk["ripple"] = ripple
                 save()
@@ -229,7 +235,10 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
     return report
 
 
-def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_only: bool) -> None:
+PLANNING_GAP = 60  # game minutes since its last decision before one with nothing to do plans again
+
+
+def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_only: bool, planning: bool = False) -> None:
     """Synchronous work and wake reasons are checkpointed before any model is awaited."""
     for sch in sorted((s for s in w.rec.scheduled.values() if s.status == "pending" and s.at <= c), key=lambda s: s.at):
         if moved := fresh(w, sch.reads):
@@ -264,26 +273,34 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
             for who in (promise.by, promise.to):
                 wake(who, "promise", f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}")
     for npc, agent in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc) or review.waiting(w, npc):  # its move is waiting
+        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):  # its move is waiting
             continue
         _steps(w, npc, agent, c, budget, report, wake)
-        _affected(w, npc, agent, wake)
+        _affected(w, npc, agent, wake, talks=planning)
+        if agent.refused:  # what it last meant to do could not be done: it hears what stopped it
+            wake(npc, "blocked", f"上次没做成：{agent.refused}")
         if events_only:
             continue  # a zero-minute reaction does not create an extra periodic planning cycle
         if agent.wake is not None and agent.wake <= c:
             wake(npc, "timer", "该想想下一步了")
-        elif agent.wake is None and agent.goals and not any(s.status == "pending" for s in agent.plan) and c - agent.acted >= 10:
+        elif (planning and agent.wake is None and agent.goals and c - agent.acted >= PLANNING_GAP
+              and not any(s.status == "pending" and not agents.meeting(w, npc, s) for s in agent.plan)):
             wake(npc, "timer", "有自己的目标，但还没有接下来的安排")
 
 
-def _affects(event, npc: str, since: int) -> bool:
-    return (event.reactive and event.seq > since and event.actor != npc
+def _affects(event, npc: str, since: int, *, talks: bool = False) -> bool:
+    """Something it went through or saw, other than its own doing. A conversation with the
+    investigators counts only with `talks` (time has jumped, or they have moved on): its voice
+    answered it in the same breath, and what it makes of it backstage can wait until they go."""
+    if event.id.endswith(SCENE) and npc in event.participants:
+        return False  # the summary of a scene it was decided in
+    return (event.reactive and event.seq > since and event.actor != npc and (talks or not event.op.startswith(TALK))
             and (npc in event.participants or npc in event.witnesses))
 
 
-def _affected(w: World, npc: str, a: Agent, wake, *, since: int = 0) -> None:
+def _affected(w: World, npc: str, a: Agent, wake, *, since: int = 0, talks: bool = False) -> None:
     for event in w.rec.events:
-        if _affects(event, npc, max(a.seen, since)):
+        if _affects(event, npc, max(a.seen, since), talks=talks):
             wake(npc, "affected", f"发生了：{event.text}")
 
 
@@ -295,21 +312,22 @@ async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[st
     sibling results survive cancellation and are revalidated rather than requested twice.
     """
     if prefix not in batches:
-        groups: dict[str, list[str]] = {}
-        for npc in sorted(wakes, key=lambda x: RANK[wakes[x][0]]):
-            groups.setdefault(w.place(npc), []).append(npc)
+        # Everyone woken in this slice is decided in one call, wherever they are: those in the same
+        # place can act together, and the world gets one look per slice instead of one per room.
+        group = sorted(wakes, key=lambda x: RANK[wakes[x][0]])
+        places = {w.place(npc) for npc in group}
         batches[prefix] = [
-            {"place": place, "group": group, "views": {npc: asdict(context.npc_view(w, npc)) for npc in group},
+            {"place": next(iter(places)) if len(places) == 1 else "", "group": group,
+             "views": {npc: asdict(context.npc_view(w, npc)) for npc in group},
              "reasons": {npc: wakes[npc][1] for npc in group}, "t": w.now, "status": "pending"}
-            for place, group in sorted(groups.items(), key=lambda g: min(RANK[wakes[x][0]] for x in g[1]))
-        ]
+        ] if group else []
     jobs = batches[prefix]
 
     async def think(job: dict) -> None:
         views = {npc: context.View(**view) for npc, view in job["views"].items()}
         ask = agents.Ask(npcs=job["group"], views={npc: view.text for npc, view in views.items()},
                          known={npc: view.facts for npc, view in views.items()}, reasons=job["reasons"],
-                         t=job["t"], place=w.name(job["place"]))
+                         t=job["t"], place=w.name(job["place"]) if job["place"] else "")
         try:
             assert brain is not None
             scene = await brain.decide(ask)
@@ -364,7 +382,7 @@ async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[st
             report.refused.append(f"{'、'.join(job['group'])} 决策失败：{job['error']}")
         scene = agents.Scene.model_validate(job["scene"]) if job.get("scene") is not None else None
         views = {npc: context.View(**view) for npc, view in job["views"].items()}
-        _settle(w, scene, job["group"], job["place"], views, job["reasons"], prefix, report)
+        _settle(w, scene, job["group"], views, job["reasons"], prefix, report)
         job["status"] = "done"
         for key in ("scene", "views"):
             job.pop(key, None)
@@ -373,8 +391,8 @@ async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[st
 
 def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report, wake) -> None:
     for s in a.plan:
-        if s.status != "pending" or (s.due is not None and s.due > c):
-            continue
+        if s.status != "pending" or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
+            continue  # not yet; or what it does on meeting the investigators, for its voice
         problems = agents.condition_problems(w, s.when) + agents.condition_problems(w, s.achieved)
         if not s.started and not s.achieved and not s.ops:
             problems.append("旧计划缺少完成依据，需重新规划")
@@ -389,9 +407,11 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
         if agents.holds(w, s.when):
             if s.ops and not fresh(w, a.reads):
                 ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+                mark = len(report.refused)
                 if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text,
                              reads=a.reads, when=s.when):
-                    wake(npc, "blocked", f"计划未能执行，需处理实际阻碍：{s.text}")
+                    why = "；".join(p.partition(" ")[2] or p for p in report.refused[mark:])[:160]
+                    wake(npc, "blocked", f"计划未能执行，需处理实际阻碍：{s.text}" + (f"（{why}）" if why else ""))
                     report.blocked.append(f"{npc}:{s.id}")
             elif s.ops:
                 wake(npc, "stale", f"计划依据的事变了：{s.text}（{'、'.join(fresh(w, a.reads))}）")
@@ -403,12 +423,25 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
             wake(npc, "blocked", f"计划受阻：{s.text}")
 
 
-def _settle(w: World, scene: agents.Scene | None, group: list[str], place: str, views: dict[str, context.View],
+def _together(where: dict[str, str], accepted: set[str]) -> tuple[str, list[str]] | None:
+    """The one place where several of a call's people were together, every one of them decided:
+    a scene's summary is told there. Two such places, or one of them refused, and it is not."""
+    by_place: dict[str, list[str]] = {}
+    for npc, place in where.items():
+        by_place.setdefault(place, []).append(npc)
+    shared = [(place, people) for place, people in by_place.items() if place and len(people) > 1]
+    if len(shared) != 1 or not set(shared[0][1]) <= accepted:
+        return None
+    return shared[0]
+
+
+def _settle(w: World, scene: agents.Scene | None, group: list[str], views: dict[str, context.View],
             reasons: dict[str, str], prefix: str, report: Report) -> None:
     if scene is None:  # no decision came: they stay woken and are asked again later
         report.deferred += [f"{x}：{reasons[x]}" for x in group]
         return
     report.woke += [f"{x}：{reasons[x]}" for x in group]
+    where = {npc: w.place(npc) for npc in group}  # as they stood when the call was answered
     accepted = set()
     for d in scene.decisions:
         if d.npc not in group:
@@ -419,28 +452,37 @@ def _settle(w: World, scene: agents.Scene | None, group: list[str], place: str, 
             if a := w.rec.agents.get(d.npc):
                 a.wake = w.now
             continue
+        if bad := agents.foreign(w, d.npc, d.basis, group):
+            # One call decides for several people: a decision resting on what only another of them
+            # knows is not this NPC's to make.
+            report.refused.append(f"{d.npc} 的依据出自别人那一段资料：{'、'.join(bad)}")
+            if a := w.rec.agents.get(d.npc):
+                a.wake, a.refused = w.now, "那个决定依据了他并不知道的事"
+            continue
         ops = []
         for op in d.ops:
             if isinstance(op, SetPlan) and not op.reads:
                 op = op.model_copy(update={"reads": views[d.npc].reads})
             ops.append(op.model_dump(mode="json"))
+        mark = len(report.refused)
         if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report, text=d.judge or d.notice,
                      reads=views[d.npc].reads):
-            # A failed decision must remain eligible on the next turn, with the real
-            # refusal in the diagnostic report, instead of sleeping for four hours.
+            # A failed decision must remain eligible on the next turn, told what stopped it,
+            # instead of sleeping for four hours.
             if a := w.rec.agents.get(d.npc):
-                a.wake = w.now
+                a.wake, a.refused = w.now, "；".join(p.partition(" ")[2] or p for p in report.refused[mark:])[:200]
             report.deferred.append(f"{d.npc}：行动未能执行，需重新决策")
             continue
         accepted.add(d.npc)
         if a := w.rec.agents.get(d.npc):
-            a.wake = w.now + d.wait
+            a.wake, a.refused = w.now + d.wait, ""
             if d.mood:
                 a.mood = d.mood
                 w.touch(a)
-    if scene.summary and len(group) > 1 and accepted == set(group):
-        op = Occur(id=f"{prefix}:scene", actor=group[0], text=scene.summary, place=place, participants=group)
-        if problems := agents.vet(w, group[0], op):
+    if scene.summary and (together := _together(where, accepted)):
+        place, people = together
+        op = Occur(id=f"{prefix}{SCENE}", actor=people[0], text=scene.summary, place=place, participants=people)
+        if problems := agents.vet(w, people[0], op):
             report.refused.extend(problems)
         else:
             r = w.apply(op)
