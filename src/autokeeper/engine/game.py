@@ -30,7 +30,7 @@ from ..rules import commands
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from ..world import adapters, contract, desk, knowledge, rewrite, scheduler, stage
+from ..world import adapters, contract, desk, knowledge, review, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
@@ -39,7 +39,17 @@ from ..world.store import World, digest
 from . import diagnostics, fog, progress, views, world
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
-from .state import KEEP_CHECKS, RECHECK_AFTER, CheckRecord, GameState, LogEntry, Progress, parse_time, time_of_day
+from .state import (
+    KEEP_CHECKS,
+    RECHECK_AFTER,
+    CheckRecord,
+    GameState,
+    LogEntry,
+    Progress,
+    format_time,
+    parse_time,
+    time_of_day,
+)
 from .visuals import Visuals
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -174,6 +184,7 @@ class Game:
         self._world_task: asyncio.Task | None = None
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
+        self._looked = 0  # the turn the director last looked between turns (Game._review)
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -1782,6 +1793,67 @@ class Game:
             self._play(turn, self._dealing)
             await self._flags([f for f in self.state.flags if f not in before], turn, landed=True)
 
+    async def _review(self) -> None:
+        """The director looks between turns (world/review.py): at the turning points held for it,
+        and now and then at the situation, for a backstage adjustment of its own. One call at most;
+        without an answer everything held goes ahead."""
+        w, st = self.world, self.state
+        for proposal in review.due(w):  # put off until now: they go ahead without asking again
+            review.let_through(w, proposal)
+        held = [p for p in review.waiting(w) if p.status == "waiting"]
+        looking = st.turn - self._looked >= REVIEW_EVERY and st.progress_at > self._looked
+        if not held and not looking:
+            return
+        self._looked = st.turn
+        verdict = await self.cast.review(st, self._review_material(held)) if hasattr(self.cast, "review") else None
+        decided = {v.id: v for v in (verdict.verdicts if verdict else [])}
+        for proposal in held:
+            v = decided.get(proposal.id)
+            if v is None or v.choice == "放行":
+                review.let_through(w, proposal)
+            elif v.choice == "推迟":
+                review.put_off(w, proposal, v.minutes or 60, v.why)
+            else:
+                review.turn_down(w, proposal, v.why)
+        self._debug("director", {"phase": "review", "held": [p.id for p in held],
+                                  "verdicts": [v.model_dump(mode="json") for v in decided.values()]})
+        if verdict is not None and verdict.backstage:
+            problems = await self._backstage(list(verdict.backstage), verdict.reason)
+            self._debug("director", {"phase": "review-backstage", "reason": verdict.reason, "problems": problems,
+                                      "ops": [op.model_dump(mode="json") for op in verdict.backstage]})
+
+    def _review_material(self, held: list) -> str:
+        w, st, m = self.world, self.state, self.m
+        rows = [f"- {p.id}（{w.name(p.actor)}，{format_time(p.t)}）：{p.text or '（没写明）'}；会：{'；'.join(p.why)}" for p in held]
+        found = "、".join(m.clue(c).title for c in st.clues) or "还没有"
+        recent = "\n".join(f"- {e.who or e.kind}：{e.text[:120]}" for e in st.log[-8:] if e.kind in ("player", "keeper", "npc"))
+        return (f"【待审】\n{chr(10).join(rows) or '没有'}\n"
+                f"【调查员】在 {m.location(st.location).name}；已找到的线索：{found}\n【最近】\n{recent or '无'}\n"
+                f"【世界】现在是第 {st.minutes} 分钟。\n{world_view.director_view(w).text}")
+
+    async def _backstage(self, ops: list, reason: str) -> list[str]:
+        """The director's own backstage work outside a plan (Game._review): tried on a copy and
+        checked as a plan's is; what touches the investigators' scene waits for the keeper."""
+        w = World(self.m.model_copy(deep=True), self.state.model_copy(deep=True))
+        problems: list[str] = []
+        for i, op in enumerate(ops):
+            done = w.apply(op.model_copy(update={"actor": DIRECTOR, "id": f"review-trial:{i}"}))
+            problems += [f"幕后第 {i + 1} 条（{op.kind}）：{p}" for p in done.problems]
+        problems = problems or contract.cut(self.world, w)
+        if not problems and any(isinstance(op, Rewrite) for op in ops):
+            problems = await self._consistent(Improv(kind="推进", reason=reason or "幕后调整", backstage=ops))
+        if problems:
+            return problems
+        raw = [op.model_dump(mode="json", exclude={"id"}) | {"actor": DIRECTOR} for op in ops]
+        involved = [x for op in ops for x in stage.touches(self.world, op)]
+        if involved:  # someone walks into their scene: the keeper plays it
+            ident = f"review:{self.state.turn}:{digest(raw)[:8]}"
+            stage.queue(self.world, ident, DIRECTOR, raw, involved, [x for op in ops for x in stage.leaves(self.world, op)])
+            return []
+        req = desk.submit(self.world, "director:review", raw, reads={}, reason=reason)
+        landed = desk.land(self.world, req.id)
+        return [] if landed.status == "landed" else list(landed.problems)
+
     def _engaged(self, action: Action | None) -> set[str]:
         """Who the investigators are dealing with in this action: a beat that would move them
         waits for the exchange to end (world/stage.py)."""
@@ -1822,6 +1894,9 @@ class Game:
         try:
             await self._live(late, inline=False)
             self._play(late, self._dealing)
+            if self.world.reviewing:
+                await self._review()
+                self._play(late, self._dealing)
             await self._flags([f for f in self.state.flags if f not in before], late, landed=True)
         except asyncio.CancelledError:
             raise
@@ -2208,6 +2283,7 @@ PLAY_WAIT = 0.0
 PREPARE_LIMIT = 300.0
 PREPARE_DRAWS = 2
 PREPARE_PAUSE = 5.0
+REVIEW_EVERY = 3  # turns between the director's own looks at the situation, when the story has moved
 NOWHERE = (
     "这一轮人还在原地：调查员说要去的地方，没人告诉过他们在哪，从这儿也找不到路（或者没说清去哪）。"
     "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"

@@ -26,7 +26,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from . import agents, context, contract, stage
+from . import agents, context, contract, review, stage
 from .ops import AdvancePlan, Occur, SetPlan, parse
 from .record import Agent
 
@@ -60,6 +60,7 @@ class Report:
     fired: list[str] = field(default_factory=list)  # scheduled ids
     dropped: list[str] = field(default_factory=list)  # scheduled ids gone stale
     staged: list[str] = field(default_factory=list)  # beats left for the keeper: they would change the scene (stage.py)
+    held: list[str] = field(default_factory=list)  # turning points left for the director (review.py)
 
 
 def fresh(w: World, reads: dict[str, int]) -> list[str]:
@@ -67,10 +68,11 @@ def fresh(w: World, reads: dict[str, int]) -> list[str]:
     return [ref for ref, v in reads.items() if w.version(ref) != v]
 
 
-def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, report: Report) -> bool:
+def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, report: Report, text: str = "") -> bool:
     """A decision is one unit: a refused transfer must not leave a successful handover story.
     Work that would change the scene in front of the investigators waits for the keeper as a
-    beat instead of landing behind their backs (stage.py)."""
+    beat instead of landing behind their backs (stage.py); a turning point offscreen waits for
+    the director while one is looking (review.py)."""
     from .store import World
     from .tools import Gateway
 
@@ -79,6 +81,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     prepared = []
     involved: list[str] = []
     leaving: list[str] = []
+    turning: list[str] = []
     for i, raw in enumerate(ops):
         try:
             raw = Gateway(trial, actor).normalize_ops([raw])[0]
@@ -95,6 +98,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
             op.reads = {ref: trial.version(ref) for ref in op.reads}
         involved += stage.touches(trial, op)
         leaving += stage.leaves(trial, op)
+        turning += review.significant(trial, op)
         r = trial.apply(op)
         if not r.ok:
             report.refused.extend(f"{r.op} {p}" for p in r.problems)
@@ -110,6 +114,13 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
             return False
         report.staged.append(beat.id)
         return True
+    if turning and w.reviewing:
+        proposal = review.hold(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], turning, text)
+        if proposal.status == "dropped":
+            report.refused.append(f"{proposal.id} 导演没有放行：{proposal.note}")
+            return False
+        report.held.append(proposal.id)
+        return True
     # No await or model call between validation and commit. The NPC operations are
     # deterministic, so they see exactly the state against which they just checked.
     for op in prepared:
@@ -124,7 +135,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
 def reactions_ready(w: World) -> bool:
     """New experienced information or a prepared action; elapsed minutes are not required."""
     for npc, a in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
+        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc) or review.waiting(w, npc):
             continue
         if any(_affects(e, npc, a.seen) for e in w.rec.events):
             return True
@@ -197,7 +208,7 @@ async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *,
             if "ripple" not in chunk:
                 ripple: dict[str, tuple[str, str]] = {}
                 for npc, a in w.rec.agents.items():
-                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc):
+                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and not review.waiting(w, npc):
                         _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)), since=chunk["before"])
                 chunk["ripple"] = ripple
                 save()
@@ -236,7 +247,7 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
                         and not any(raw.get("kind") == "move" and raw.get("entity") == person for raw in ops)):
                     ops.append({"kind": "move", "entity": person, "to": sch.place})
         ops.append({"kind": "occur", "text": sch.text, "place": sch.place, "participants": people})
-        if not _land(w, ops, prefix=sch.id, actor=sch.actor or "engine", report=report):
+        if not _land(w, ops, prefix=sch.id, actor=sch.actor or "engine", report=report, text=sch.text):
             sch.status = "dropped"
             report.dropped.append(sch.id)
             wake(sch.actor, "blocked", f"原先安排无法执行：{sch.text}")
@@ -249,7 +260,7 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
             for who in (promise.by, promise.to):
                 wake(who, "promise", f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}")
     for npc, agent in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):  # about to act on stage already
+        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc) or review.waiting(w, npc):  # its move is waiting
             continue
         _steps(w, npc, agent, c, budget, report, wake)
         _affected(w, npc, agent, wake)
@@ -374,7 +385,7 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
         if agents.holds(w, s.when):
             if s.ops and not fresh(w, a.reads):
                 ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
-                if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report):
+                if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text):
                     wake(npc, "blocked", f"计划未能执行，需处理实际阻碍：{s.text}")
                     report.blocked.append(f"{npc}:{s.id}")
             elif s.ops:
@@ -408,7 +419,7 @@ def _settle(w: World, scene: agents.Scene | None, group: list[str], place: str, 
             if isinstance(op, SetPlan) and not op.reads:
                 op = op.model_copy(update={"reads": views[d.npc].reads})
             ops.append(op.model_dump(mode="json"))
-        if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report):
+        if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report, text=d.judge or d.notice):
             # A failed decision must remain eligible on the next turn, with the real
             # refusal in the diagnostic report, instead of sleeping for four hours.
             if a := w.rec.agents.get(d.npc):

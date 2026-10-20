@@ -185,6 +185,7 @@ class GameScreen(Screen):
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         self.game.write_progress = True  # someone reads it: the 进展 page
         self.game.world_later = True  # NPCs decide while the player reads, not while they wait
+        self.game.world.reviewing = True  # turning points wait for the director's look between turns (world/review.py)
         channels.listeners.append(self._fell_back)
         paths.games().mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(paths.checkpoints())

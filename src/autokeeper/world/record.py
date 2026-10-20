@@ -254,6 +254,22 @@ class Beat(BaseModel):
     note: str = ""  # why it was dropped
 
 
+class Proposal(BaseModel):
+    """Backstage work that would change where the story can go, waiting for the director to look
+    at it after the turn (world/review.py). It lands whole when let through."""
+
+    id: str
+    actor: str
+    ops: list[dict[str, Any]] = Field(default_factory=list)
+    why: list[str] = Field(default_factory=list)  # what makes it matter: someone dies, a flag starts an ending...
+    text: str = ""  # what it is, in the words of its decision or plan step
+    t: int = 0
+    turn: int = 0
+    status: Literal["waiting", "deferred", "landed", "dropped"] = "waiting"
+    until: int | None = None  # put off to this game minute
+    note: str = ""  # the director's word, or why it no longer fitted
+
+
 class WorldRecord(BaseModel):
     seq: int = 0
     seeded: list[str] = Field(default_factory=list)  # module objects already in the record
@@ -276,6 +292,7 @@ class WorldRecord(BaseModel):
     npc_budget_limit: int = 0
     npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
     beats: list[Beat] = Field(default_factory=list)  # backstage work waiting for the stage (world/stage.py)
+    proposals: list[Proposal] = Field(default_factory=list)  # turning points waiting for the director (world/review.py)
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

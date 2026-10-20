@@ -44,7 +44,7 @@ from ..world import context as world_view
 from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Follow
 from . import guard
-from .director import DIRECTOR_SYSTEM, Improv
+from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
 from .writing import INTERFACE_COPY
 
@@ -1026,6 +1026,26 @@ class Cast:
             return None
         try:
             return Improv.model_validate(reply.data)
+        except ValueError:
+            return None
+
+    async def review(self, state: GameState, material: str) -> Review | None:
+        """The director's look between turns (world/review.py): verdicts on held turning points,
+        and a backstage adjustment of its own if one is called for. Stateless, on the director's
+        model; None when no look was had (everything held then goes ahead)."""
+        from ..harness.replay import CassetteError
+
+        s = self._open("review", "director", REVIEW_SYSTEM, schema=_schema(Review))
+        try:
+            reply = await self._send("review", s, state, material, bind=False)
+        except CassetteError:  # a replay that drifted must fail loudly
+            raise
+        except Exception:
+            return None
+        if not isinstance(reply.data, dict):
+            return None
+        try:
+            return Review.model_validate(reply.data)
         except ValueError:
             return None
 

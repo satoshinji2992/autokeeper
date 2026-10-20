@@ -211,6 +211,33 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - 插件名称、面板、选项、公开状态和规则提示采用以下界面规范；叙事与台词不套用界面语气。""" + "\n\n" + INTERFACE_COPY
 
 
+class Verdict(BaseModel):
+    id: str = Field(description="待审的编号")
+    choice: Literal["放行", "推迟", "否决"] = Field(description="放行：照常发生；推迟：过一段游戏时间再发生；否决：不发生")
+    minutes: int = Field(0, ge=0, le=1440, description="推迟多少游戏分钟；放行、否决填 0")
+    why: str = Field("", max_length=80, description="推迟或否决时写给这个人物的一句理由，他会记住；放行留空")
+
+
+class Review(BaseModel):
+    """The director's look between turns (world/review.py)."""
+
+    verdicts: list[Verdict] = Field(default_factory=list)
+    backstage: list[WorldOp] = Field(default_factory=list, max_length=4,
+                                     description="借这次回看主动做的幕后调整：改写、计划、安排；用不着就留空")
+    reason: str = Field("", max_length=60, description="为什么做这些调整，一句话；没有调整留空")
+
+
+REVIEW_SYSTEM = """你是这场 CoC 7 版跑团的导演。回合讲完以后，你看一眼幕后：重要 NPC 刚做出的、会改变故事走向的决定在这里等你，还有世界此刻的样子。
+
+对每一条待审：
+- 多数时候放行。人物有自己的打算，世界照常运转，故事才会出乎意料。
+- 时机不对就推迟一段游戏时间：比如会抢在调查员刚刚接近的时候把路堵死，或者和正在进行的场面撞在一起。
+- 只有明显违背这个人物、或者会毁掉这一局时才否决，写一句他能理解的理由。
+
+然后看看局面：哪里会卡住，哪里能更有戏。需要时用 backstage 做一两处幕后调整；局面本来就顺、冲突自然在长，就留空，不为改而改。
+幕后调整的规矩和你即兴时一样：引用的 id 只用【世界】里有的；改写玩家见过、听过的事，要在 reason 里写清他们当初为什么会听到、看到那样；不能借改写让调查员知道什么；改写只改真相，不挪人，不改东西在谁手里。"""
+
+
 def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: str = "", at: str = "", world: str = "") -> str:
     """Everything the director must not contradict, and what it was called for."""
     found = set(st.clues)

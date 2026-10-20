@@ -38,7 +38,7 @@ EVENTS_KEEP = 6000
 MEMORY_KEEP = 40  # memories an important NPC keeps
 # The journal's, the desk's, the scheduler's and the game's own clocks: undo leaves them.
 BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "npc_budget_turn", "npc_budget_calls", "npc_budget_limit", "npc_work",
-               "beats"}
+               "beats", "proposals"}
 
 
 @dataclass
@@ -59,6 +59,7 @@ class World:
     def __init__(self, m: Module, st: GameState, *, checker=None, initialize: bool = True):
         self.m, self.st = m, st
         self.checker = checker  # rewrite consistency hook (world/rewrite.py), an LLM check in phase 2
+        self.reviewing = False  # a screen has the director look at turning points first (world/review.py)
         self.clock: int | None = None  # game minutes ops happen at, while the scheduler runs a time skip
         if initialize:
             if self.rec.simulated is None:  # a new game: the world starts with the story

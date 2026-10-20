@@ -115,9 +115,9 @@ def waiting(w: World, actor: str | None = None) -> list[Beat]:
     return [b for b in w.rec.beats if b.status == "waiting" and (actor is None or b.actor == actor)]
 
 
-def play(w: World, beat: Beat) -> list[str]:
-    """Land a beat whole, now; what stops it when it no longer fits (it is dropped then, and
-    its author woken to decide again)."""
+def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
+    """Land work whole, now: tried on a copy first (the actor's own permissions, the world's
+    checks, the module staying solvable); what stops it when it no longer fits."""
     from . import agents, contract
     from .store import World
 
@@ -125,13 +125,13 @@ def play(w: World, beat: Beat) -> list[str]:
     trial.clock = w.clock
     problems: list[str] = []
     ops = []
-    for raw in beat.ops:
+    for raw in raw_ops:
         try:
             op = parse(raw)
         except ValueError as exc:
             problems.append(f"格式不对：{str(exc)[:80]}")
             break
-        if beat.actor in trial.rec.agents and (refused := agents.vet(trial, beat.actor, op)):
+        if actor in trial.rec.agents and (refused := agents.vet(trial, actor, op)):
             problems += refused
             break
         result = trial.apply(op)
@@ -147,6 +147,13 @@ def play(w: World, beat: Beat) -> list[str]:
             if not result.ok:
                 problems += result.problems
                 break
+    return problems
+
+
+def play(w: World, beat: Beat) -> list[str]:
+    """Land a beat whole, now; what stops it when it no longer fits (it is dropped then, and
+    its author woken to decide again)."""
+    problems = commit(w, beat.actor, beat.ops)
     beat.status = "dropped" if problems else "played"
     beat.note = "；".join(problems)[:200]
     if problems and (a := w.rec.agents.get(beat.actor)) is not None:
