@@ -30,7 +30,7 @@ import sqlite3
 import time
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -168,9 +168,15 @@ async def ask_judge(pool: ModelPool, record: str, said_text: str, keeper: str, l
 # The keeper sees everything (the user's call, 2026-10-20); what it lets slip is measured here.
 HIDDEN_KINDS = ("truth", "conclusion", "secret")
 
-LEAK_RULES = """你核对跑团守秘人的一段叙述有没有说漏玩家还不知道的事。给你一份还没向玩家公开的清单（每条前面是编号），和这一轮守秘人的叙述。
-叙述直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，才算说漏；只是写到同一个人、同一个地方、同一样东西，写了眼前看得见的景象和人物的举动，或者写的是清单之外的事，都不算。
+LEAK_RULES = """你核对跑团守秘人的一段叙述有没有说漏玩家还不知道的事。给你一份还没向玩家公开的清单（每条前面是编号）、这一轮本来就可以露出的东西，和这一轮守秘人的叙述。
+叙述直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，才算说漏；只是写到同一个人、同一个地方、同一样东西，写了眼前看得见的景象和人物的举动，写的是这一轮本来就可以露出的东西，或者写的是清单之外的事，都不算。
 逐条核对，没有说漏就留空。"""
+
+FINDING_RULES = """你给跑团叙述里几处“没有经过这一轮结算的具体细节”分类。给你玩家还不知道的真相和线索，以及这些细节。逐条判断：
+- 假线索：和真相或线索对不上，或者指向一个并不存在的方向，会把玩家带偏；
+- 白给：讲出了某条还没找到的线索的内容，玩家没调查到、没检定就知道了；
+- 伏笔：和真相一致的气氛或痕迹，没有讲出线索的内容，也不会把人带偏。
+每一条都要给出分类。"""
 
 
 class Leak(BaseModel):
@@ -180,6 +186,15 @@ class Leak(BaseModel):
 
 class Leaks(BaseModel):
     leaks: list[Leak] = Field(default_factory=list, max_length=6, description="说漏的地方；没有就留空")
+
+
+class Finding(BaseModel):
+    index: int = Field(description="细节的编号")
+    label: Literal["假线索", "白给", "伏笔"]
+
+
+class Findings(BaseModel):
+    findings: list[Finding] = Field(default_factory=list, description="每一处细节一条")
 
 
 def secrets(st: GameState) -> dict[str, str]:
@@ -201,13 +216,21 @@ def seen_before(st: GameState, turn: int) -> str:
     return "\n".join(e.text for e in st.log if e.turn < turn and e.kind in ("opening", "keeper", "npc", "clue", "handout", "event"))
 
 
-async def ask_leaks(pool: ModelPool, hidden: dict[str, str], keeper: str) -> list[dict[str, str]]:
+def shown_now(st: GameState, turn: int, hints: list[str] | None = None) -> str:
+    """What this turn may show anyway: the clues and handouts it gave, the events it played, the
+    NPCs' own words, the module's foreshadowing handed to the keeper."""
+    rows = [e.text for e in st.log if e.turn == turn and e.kind in ("clue", "handout", "event", "npc")]
+    return "\n".join([*rows, *(hints or [])])
+
+
+async def ask_leaks(pool: ModelPool, hidden: dict[str, str], keeper: str, shown: str = "") -> list[dict[str, str]]:
     """Two readings of the narration against what the players do not know yet; a slip stands
     when both readings name the same item."""
     if not keeper.strip() or not hidden:
         return []
     listed = "\n".join(f"- {k}：{v}" for k, v in hidden.items())
-    asked = [{"role": "user", "content": f"【还没向玩家公开的】\n{listed}\n\n【守秘人的叙述】\n{keeper}"}]
+    asked = [{"role": "user", "content": f"【还没向玩家公开的】\n{listed}\n\n【这一轮本来就可以露出的】\n{shown.strip() or '（没有）'}"
+                                         f"\n\n【守秘人的叙述】\n{keeper}"}]  # fmt: skip
 
     async def read() -> list[Leak]:
         reply = await pool.complete(LEAK_RULES, asked, schema=Leaks.model_json_schema())
@@ -219,6 +242,28 @@ async def ask_leaks(pool: ModelPool, hidden: dict[str, str], keeper: str) -> lis
     first, second = await asyncio.gather(read(), read())
     named = {x.secret for x in second}
     return [x.model_dump() for x in first if x.secret in named]
+
+
+async def ask_findings(pool: ModelPool, hidden: dict[str, str], claims: list[str]) -> list[dict[str, str]]:
+    """What the details a turn did not settle are, read against the truth: a false lead or a clue
+    given away (both bad), or foreshadowing that holds (a keeper's craft). Two readings; a label
+    stands when both give it, else 不确定."""
+    if not claims:
+        return []
+    listed = "\n".join(f"- {k}：{v}" for k, v in hidden.items()) or "（没有）"
+    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, 1))
+    asked = [{"role": "user", "content": f"【玩家还不知道的】\n{listed}\n\n【这些细节】\n{numbered}"}]
+
+    async def read() -> dict[int, str]:
+        reply = await pool.complete(FINDING_RULES, asked, schema=Findings.model_json_schema())
+        try:
+            return {x.index: x.label for x in Findings.model_validate(reply.data or {}).findings}
+        except ValueError:
+            return {}
+
+    first, second = await asyncio.gather(read(), read())
+    return [{"claim": c, "label": first[i] if first.get(i) and first.get(i) == second.get(i) else "不确定"}
+            for i, c in enumerate(claims, 1)]
 
 
 async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
@@ -235,7 +280,11 @@ async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
         async with sem:
             got["problems"] = await ask_judge(pool, got["record"], row["input"], got.get("keeper", ""), got.get("npc", []))
             if got.get("hidden") is not None:
-                got["leaks"] = await ask_leaks(pool, got["hidden"], got.get("keeper", ""))
+                # A report from before "shown" was kept: the turn's record (settled results, the
+                # foreshadowing it was handed) and the NPCs' lines stand in for it.
+                shown = got.get("shown") or (got["record"] + "\n" + "\n".join(got.get("npc", [])))
+                got["leaks"] = await ask_leaks(pool, got["hidden"], got.get("keeper", ""), shown)
+                got["findings"] = await ask_findings(pool, got["hidden"], [p["claim"] for p in got["problems"] if p["kind"] == "发现"])
 
     try:
         await asyncio.gather(*(one(r, side) for r in report["rows"] for side in ("recorded", "replayed")))
@@ -350,9 +399,11 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
             return []
         record_text = side["record"] = world_after(m, st, turn, before, ruling, hints)  # kept, so a report can be judged again
         hidden = side["hidden"] = secrets(st)  # kept too: only the narration is read for slips, not the NPCs' own words
-        side["verbatim"] = leaks(keeper, hidden, public=seen_before(st, turn)) if keeper else []
+        shown = side["shown"] = shown_now(st, turn, hints)
+        side["verbatim"] = leaks(keeper, hidden, public=seen_before(st, turn) + "\n" + shown) if keeper else []
         problems, side["leaks"] = await asyncio.gather(ask_judge(pool, record_text, text, keeper, lines),
-                                                      ask_leaks(pool, hidden, keeper))
+                                                      ask_leaks(pool, hidden, keeper, shown))
+        side["findings"] = await ask_findings(pool, hidden, [p["claim"] for p in problems if p["kind"] == "发现"])
         return problems
 
     def measures(m: Module, st: GameState, turn: int, text: str, action: dict | None, before: dict[str, Any]) -> dict[str, Any]:
@@ -436,6 +487,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "turns_with_leaks": sum(bool(x.get("leaks")) for x in done),
             "leaks": sum(len(x.get("leaks", [])) for x in done),
             "verbatim_leaks": sum(len(x.get("verbatim", [])) for x in done),
+            "findings": {label: sum(f["label"] == label for x in done for f in x.get("findings", []))
+                         for label in ("假线索", "白给", "伏笔", "不确定")},
             "target_swaps": sum(bool(x["target"]) for x in done),
             "echo_when_npc_spoke": round(sum(x["echo"] for x in spoke) / len(spoke), 2) if spoke else 0.0,
             "keeper_chars": round(sum(x["chars"] for x in done) / len(done)),

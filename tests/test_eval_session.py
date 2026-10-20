@@ -128,10 +128,16 @@ async def test_a_slip_stands_when_both_readings_name_it():
     hidden = {"truth": "守钟人在钟里藏了一样东西", "npc:warden:secrets:0": "他在钟里藏了东西"}
     pool = Pool({"leaks": [{"secret": "truth", "claim": "钟里藏着东西"}, {"secret": "npc:warden:secrets:0", "claim": "藏了东西"}]},
                 {"leaks": [{"secret": "truth", "claim": "钟里有东西"}, {"secret": "别的", "claim": "没有这一条"}]})
-    got = await session.ask_leaks(pool, hidden, "你听见钟里藏着东西在敲。")
+    got = await session.ask_leaks(pool, hidden, "你听见钟里藏着东西在敲。", "守钟人说：钟楼夜里会多敲一下。")
     assert [x["secret"] for x in got] == ["truth"]
     assert await session.ask_leaks(pool, hidden, "") == []  # no narration, nothing to read
+    pool = Pool({"findings": [{"index": 1, "label": "伏笔"}, {"index": 2, "label": "假线索"}, {"index": 3, "label": "白给"}]},
+                {"findings": [{"index": 1, "label": "伏笔"}, {"index": 2, "label": "假线索"}, {"index": 3, "label": "伏笔"}]})
+    kinds = await session.ask_findings(pool, hidden, ["齿轮上一层新油", "日记被人收走了", "钟里藏着一个盒子"])
+    assert [f["label"] for f in kinds] == ["伏笔", "假线索", "不确定"]  # a label stands when both readings give it
+    assert await session.ask_findings(pool, hidden, []) == []
     rows = [{"turn": 1, "recorded": {"problems": [], "npc": [], "target": "", "echo": 0.0, "chars": 9,
-                                     "leaks": got, "verbatim": ["truth"]}}]  # fmt: skip
+                                     "leaks": got, "verbatim": ["truth"], "findings": kinds}}]  # fmt: skip
     told = session.summarize(rows)["recorded"]
     assert told["turns_with_leaks"] == 1 and told["leaks"] == 1 and told["verbatim_leaks"] == 1
+    assert told["findings"] == {"假线索": 1, "白给": 0, "伏笔": 1, "不确定": 1}
