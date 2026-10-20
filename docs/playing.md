@@ -1,28 +1,46 @@
 # 游玩指南
 
-[回到 README](../README.md) · [安装依赖](#安装依赖) · [模型与花费](#模型与花费) · [操作](#操作) · [联机](#联机) · [模组](#导入生成与观战) · [常见问题](#常见问题)
+[回到 README](../README.md) · [安装](#安装) · [模型与花费](#模型与花费) · [操作](#操作) · [联机](#联机) · [模组](#导入生成与观战) · [常见问题](#常见问题)
 
-## 安装依赖
+## 安装
 
-需要 Python 3.12+、uv 和 Node.js 18+。chafa 用来显示照片字符画，没装时使用手绘图。
+一行命令装好，会自动装 uv 和 Python，下载代码，装好 `autokeeper` 命令，最后问你用哪家模型、填 API Key：
+
+```bash
+# Linux、macOS、WSL
+curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.sh | bash
+```
+
+```powershell
+# Windows PowerShell
+irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
+```
+
+装好以后在任意目录输入 `autokeeper` 开始。代码、模组和存档都在 `~/.local/share/autokeeper`（Windows 是 `%LOCALAPPDATA%\autokeeper`）；再运行一次安装命令就是更新。
+
+脚本自己装不了的是 git、Node.js 18+ 和 chafa。没有 git 装不了；没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
 
 | 系统 | 安装方式 |
 |---|---|
-| macOS | `brew install uv node chafa` |
-| Linux | 按 [uv 安装说明](https://docs.astral.sh/uv/getting-started/installation/)安装 uv；Node.js、chafa 可用发行版包管理器安装，例如 `sudo apt install nodejs npm chafa`。检查 `node --version` 不低于 18。 |
-| Windows | 用 `winget install astral-sh.uv`、`winget install OpenJS.NodeJS` 安装 uv 和 Node.js；使用 Scoop 的话，可用 `scoop install chafa` 安装 chafa。建议在 Windows Terminal 中运行。 |
+| macOS | `brew install node chafa` |
+| Linux | `sudo apt install git nodejs npm chafa`（其他发行版用自己的包管理器）。检查 `node --version` 不低于 18。 |
+| Windows | `winget install Git.Git OpenJS.NodeJS.LTS`；用 Scoop 的话 `scoop install chafa`。建议在 Windows Terminal 中运行。 |
 
-在仓库目录执行：
+换模型、补 Key：`autokeeper login`（Key 存在 `~/.config/autokeeper/.env`，只有你能读）。检查环境：`autokeeper doctor`，加 `--ping` 给每个模型发一句话试试通不通。
+
+安装脚本可以用环境变量调整：`AUTOKEEPER_DIR` 装到别处，`AUTOKEEPER_REF` 选分支或版本（如 `v0.0.2`），`AUTOKEEPER_EXTRAS` 选组件（默认 `claude,graphrag`；`graphrag` 是模组原文检索，约 1 GB，首次使用还会下载嵌入模型）。
+
+### 从源码开发
 
 ```bash
+git clone https://github.com/satoshinji2992/autokeeper
+cd autokeeper
 uv sync --extra claude --extra graphrag
 uv run autokeeper setup
 uv run autokeeper doctor
 ```
 
-`setup` 会安装 BCDice 的 Node 桥接、编译模组，并为 Claude Code / Codex 链接仓库里的 Skills。`graphrag` 安装模组原文检索需要的 LightRAG 和本地嵌入依赖；首次使用可能需要下载嵌入模型。
-
-更新代码后运行 `uv sync --extra claude --extra graphrag`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
+`setup` 会安装 BCDice 的 Node 桥接、编译模组、为 Claude Code / Codex 链接仓库里的 Skills，最后问用哪家模型。更新代码后运行 `uv sync --extra claude --extra graphrag`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
 
 ## 模型与花费
 
@@ -197,7 +215,7 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 
 ## 命令索引
 
-以下命令均接在 `uv run autokeeper` 后；参数细节可用 `--help` 查看。
+以下命令均接在 `autokeeper` 后（从源码运行时是 `uv run autokeeper`）；参数细节可用 `--help` 查看。
 
 | 命令 | 用途 |
 |---|---|
@@ -212,8 +230,9 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `autoplay DIR --party N` | AI 调查员自动跑团 |
 | `plugin list DIR` / `plugin test DIR` | 查看规则插件 / 运行插件测试 |
 | `setup` / `doctor [--ping]` | 准备环境 / 检查环境（可实测连接） |
+| `login [deepseek\|claude\|codex] [--key KEY]` | 选模型、存 API Key |
 | `trace` | 查看模型用量与花费 |
 | `eval context` / `eval rhetoric` / `eval lore` / `eval style` | 运行评测 |
 | `mcp` | 运行 MCP 服务 |
 
-`--preset`、`--model`、`--fallback`、`--search`、`--budget`、`--improv` 等全局选项放在子命令前。例如 `uv run autokeeper --preset deepseek import 模组.pdf`。导入子命令还可以用自己的 `--model` 覆盖本次导入的选择。
+`--preset`、`--model`、`--fallback`、`--search`、`--budget`、`--improv` 等全局选项放在子命令前。例如 `autokeeper --preset deepseek import 模组.pdf`。导入子命令还可以用自己的 `--model` 覆盖本次导入的选择。
