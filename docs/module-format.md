@@ -99,7 +99,7 @@ agendas:                        # 重要 NPC 的打算：调查员不在时照�
     steps:
       - id: take_books
         text: 等屋里人睡熟，从书房松动的窗户翻进去，抱走几本书
-        when: D2 23:00          # 到这个时间去做；也可以写条件 flag:标记、at:谁:地点、gone:谁
+        when: D2 23:00          # 到这个时间去做；也可以写条件 flag:标记、at:谁:地点、gone:谁、hour:22-6（几点到几点），& 连接
       - id: seal
         text: 天亮前抱着书回到隧道，和食尸鬼们一起封死出口
         when: D3 05:00

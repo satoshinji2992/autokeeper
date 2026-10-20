@@ -102,7 +102,7 @@
 
 同行也属于世界状态：`follow` 操作将调查员 id 和目的地写入 NPC 实体的 `following`、`follow_to`。只有 NPC 自己或系统能确认该角色同行，且开始时必须同处一地。角色对话中的确认通过结构化结果提交，未确认的邀请不自动带人走；出发后按实际路线更新位置，到达目的地或玩家明确独行时结束。自主决策若要改变主意，须先结束同行，再另行移动，旧计划不能直接把同行者移走。状态与其他世界操作一样支持存档、重试和撤销。
 
-重要 NPC 每局 3–6 个，由模组标出（NPC 的 `important: true`，`agents.marked` 生成对应的 `enlist`）或导演用 `enlist` 指定。每个有目标、资源、计划步骤（期限、条件、可以预先写好的操作）、记忆和关系。模组的打算（`agendas`）开局时变成计划；步骤写了 `does` 的，`agents.effects` 把它换成预写操作（走动、转交、立标记、某人不见了）和完成条件 `achieved`，到点直接落地。NPC 自己只能立模组打算里写给它的标记（`agents.sanctioned`），立起的标记由引擎照常触发事件和结局（`Game._flags(landed=True)`）。条件语言除 `flag`、`at`、`promise`、`owner`、`knows`、`after` 外还有 `gone:谁`（死了或失踪）。
+重要 NPC 每局 3–6 个，由模组标出（NPC 的 `important: true`，`agents.marked` 生成对应的 `enlist`）或导演用 `enlist` 指定。每个有目标、资源、计划步骤（期限、条件、可以预先写好的操作）、记忆和关系。模组的打算（`agendas`）开局时变成计划；步骤写了 `does` 的，`agents.effects` 把它换成预写操作（走动、转交、立标记、某人不见了）和完成条件 `achieved`，到点直接落地。NPC 自己只能立模组打算里写给它的标记（`agents.sanctioned`），立起的标记由引擎照常触发事件和结局（`Game._flags(landed=True)`）。条件语言除 `flag`、`at`、`promise`、`owner`、`knows`、`after` 外还有 `gone:谁`（死了或失踪）和 `hour:22-6`（游戏时间在几点到几点之间，可以跨过午夜），原作里「只在夜里出来」这类时间习惯可以直接写进打算。
 
 `scheduler.advance(world, brain, start, end)` 在时间推进时运行（赶路、休息、离开某处）：
 

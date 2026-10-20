@@ -121,7 +121,7 @@ DAYS = 3  # how far the world is played forward with no one stepping in
 
 def drift(m: Module, *, days: int = DAYS) -> Drift:
     """The world with no one stepping in: the agendas and timed events in game-time order."""
-    from ..engine.state import parse_time
+    from ..engine.state import parse_time, within
 
     out = Drift()
     support = supporting_clues(m)
@@ -150,7 +150,8 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
                 kind, _, rest = part.partition(":")
                 a, _, b = rest.partition(":")
                 value = {"flag": rest in flags, "at": at.get(a) == b, "owner": owners.get(a) == b, "gone": rest in gone,
-                         "after": rest.isdecimal() and t >= int(rest)}.get(kind, False)  # promises, knowledge: the players'
+                         "after": rest.isdecimal() and t >= int(rest),
+                         "hour": kind == "hour" and within(rest, t)}.get(kind, False)  # promises, knowledge: the players'
                 ok = ok and value != negate
             if ok:
                 return True
@@ -166,6 +167,8 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
                 out.lost[k] = (t, why)
 
     after = {int(x) for _, s in pending for x in re.findall(r"after:(\d+)", s.when)}
+    day = start // 1440 * 1440  # an hour:a-b condition is looked at as each day reaches its hour
+    after |= {day + d * 1440 + int(h) * 60 for _, s in pending for h in re.findall(r"hour:(\d+)-\d+", s.when) for d in range(days + 1)}
     times = sorted({start, *after, *(t for t, _ in timed), *(d for _, s in pending if (d := due(s)) is not None)})
     fired: set[str] = set()
     for t in times:

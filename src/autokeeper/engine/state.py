@@ -257,6 +257,23 @@ def parse_time(text: str) -> int:
     return (day - 1) * 1440 + hour * 60 + minute
 
 
+def hours(rest: str) -> tuple[int, int] | None:
+    """hour:22-6, from ten at night to six in the morning; None when it is not that."""
+    a, sep, b = rest.partition("-")
+    if not (sep and a.isdecimal() and b.isdecimal()) or not (0 <= int(a) <= 24 and 0 <= int(b) <= 24) or int(a) == int(b):
+        return None
+    return int(a), int(b)
+
+
+def within(rest: str, minutes: int) -> bool:
+    """Whether the game time falls in hour:a-b (it may run past midnight)."""
+    span = hours(rest)
+    if span is None:
+        return False
+    a, b, h = span[0] % 24, span[1] % 24, (minutes // 60) % 24
+    return a <= h < b if a < b else (h >= a or h < b)
+
+
 def format_time(minutes: int) -> str:
     day, rest = divmod(minutes, 1440)
     return f"D{day + 1} {rest // 60:02d}:{rest % 60:02d}"

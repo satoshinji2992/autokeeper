@@ -322,3 +322,16 @@ async def test_a_scheduled_scene_brings_its_people_who_learn_of_it_only_when_it_
     report = await scheduler.advance(w, None, w.now, w.now + 90)
     assert report.fired == ["visit"] and w.entity("preacher").at == "office"
     assert any("打听那个记者" in m.text for m in w.agent("preacher").memory)
+
+
+def test_a_plan_can_wait_for_an_hour_of_the_night():
+    from autokeeper.engine.state import parse_time
+    from autokeeper.world.agents import condition_problems, holds
+
+    w = staged(location="office")
+    assert condition_problems(w, "hour:22-6 & at:warden:tower") == []
+    assert condition_problems(w, "hour:6-6")  # not a span
+    w.st.minutes = parse_time("D1 21:00")
+    assert not holds(w, "hour:22-6")
+    w.st.minutes = parse_time("D1 23:00")
+    assert holds(w, "hour:22-6 & at:warden:tower")

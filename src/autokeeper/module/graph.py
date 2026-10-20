@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import networkx as nx
 
+from ..engine.state import hours
 from .schema import Module
 
 
@@ -301,6 +302,9 @@ def audit(m: Module) -> list[Issue]:
             for flag in (x[5:] for x in atoms if x.startswith("flag:")):
                 if flag not in m.flags:
                     err(f"{a.npc} 的打算 {step.id} 依赖未声明的标记 {flag}")
+            for span in (x[5:] for x in atoms if x.startswith("hour:")):
+                if hours(span) is None:
+                    err(f"{a.npc} 的打算 {step.id} 的时段 hour:{span} 要写成 hour:22-6 这样")
             for problem in _outcome(m, a.npc, step.does):
                 err(f"{a.npc} 的打算 {step.id} 的结果 {problem}")
     if len(m.agendas) > 6:

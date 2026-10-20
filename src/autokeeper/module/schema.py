@@ -222,7 +222,8 @@ class Move(BaseModel):
 
     id: str = Field(description="步骤 id，英文小写加下划线")
     text: str = Field(description="这一步做什么，一句话")
-    when: str = Field("", description="'D1 23:00' 表示到这个时间去做；也可以是条件 flag:标记、at:谁:地点；不写就是想到就做")
+    when: str = Field("", description="'D1 23:00' 表示到这个时间去做；也可以是条件 flag:标记、at:谁:地点、hour:22-6（几点到几点），"
+                                      "& 连接；不写就是想到就做")
     does: str = Field("", description="做成了以后实际成立的事，用 & 连接：at:他自己:地点、owner:物件:持有者、flag:标记、"
                                       "gone:谁（死了或不见了）；只写原作里这一步真会造成的，没有就留空")
 

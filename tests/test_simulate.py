@@ -91,3 +91,19 @@ def test_an_agenda_outcome_names_what_the_module_has():
                                              Move(id="b", text="烧掉日记", does="flag:no_such_flag | gone:warden")])]
     errors = [str(i) for i in audit(m) if i.level == "error"]
     assert any("a 的结果" in e for e in errors) and any("b 的结果" in e for e in errors)
+
+
+def test_an_hour_of_the_day_holds_across_midnight_in_play_and_in_the_drift():
+    from autokeeper.engine.state import parse_time, within
+    from autokeeper.module.graph import audit
+    from autokeeper.module.schema import Agenda, Move
+
+    assert within("22-6", parse_time("D1 23:30")) and within("22-6", parse_time("D2 05:59"))
+    assert not within("22-6", parse_time("D2 06:00")) and within("9-17", parse_time("D1 14:00"))
+    m = Module.load(EXAMPLE)
+    m.agendas = [Agenda(npc="warden", steps=[Move(id="night", text="夜里才敢去报社", when="hour:22-6", does="at:warden:office"),
+                                             Move(id="bad", text="写错的时段", when="hour:25-3")])]
+    assert any("hour:25-3" in str(i) for i in audit(m) if i.level == "error")
+    m.agendas[0].steps.pop()
+    run = simulate.drift(m)
+    assert [(d.step, d.t) for d in run.timeline] == [("night", parse_time("D1 22:00"))]

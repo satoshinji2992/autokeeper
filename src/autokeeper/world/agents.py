@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from ..agents import guard
 from ..engine import world as legacy_world
+from ..engine.state import hours, within
 from . import knowledge
 from .ops import (
     AdvancePlan,
@@ -387,6 +388,8 @@ def condition_problems(w: World, when: str) -> list[str]:
             valid = rest.isdecimal()
         elif kind == "gone":
             valid = (e := w.rec.entities.get(rest)) is not None and e.kind == "npc"
+        elif kind == "hour":
+            valid = hours(rest) is not None
         else:
             valid = False
         if not valid or any(c in rest for c in "()!"):
@@ -414,6 +417,8 @@ def holds(w: World, when: str) -> bool:
             ok = knowledge.sees(w.rec.facts[b], a)
         elif kind == "gone":
             ok = w.rec.entities[rest].status in ("死亡", "失踪")
+        elif kind == "hour":
+            ok = within(rest, w.now)
         else:  # after: validated as a nonnegative integer
             ok = w.now >= int(rest)
         return ok != negate

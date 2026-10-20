@@ -122,7 +122,8 @@ class Step(BaseModel):
     text: str = Field(description="这一步做什么，一句话")
     due: int | None = Field(None, description="最早在第几分钟做（游戏时间）；不限时留空")  # None: whenever its condition holds
     when: str = Field("", description="开始条件；& 表示且，| 表示或：flag:标记、!flag:标记、at:谁:地点、promise:约定:状态、"
-                                       "owner:物件:持有者、knows:NPC:事实、after:分钟；状态为 active/fulfilled/broken；调查员集体用 players")
+                                       "owner:物件:持有者、knows:NPC:事实、after:分钟、gone:谁、hour:22-6（几点到几点）；"
+                                       "状态为 active/fulfilled/broken；调查员集体用 players")
     achieved: str = Field("", description="完成后必须实际成立的条件，语法同 when；移动填 at:NPC:目的地，交物填 owner:物品:接收者；不能以打算或口头宣称代替")
     # Lands without a model call while the plan is fresh.
     ops: list[dict[str, Any]] = Field(default_factory=list, description="到时直接结算的操作，格式同操作；要到时再想就留空")
