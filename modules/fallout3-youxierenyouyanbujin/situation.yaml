@@ -160,8 +160,7 @@ mechanics:
   plugin: stowell_survival
   runs: 插件
 - name: 夜间望远镜维系
-  rules: 每晚必须有至少一人通过温室望远镜观看，联系才保持。若望远镜被毁，或哈特整夜无法操作，置 telescope_destroyed；次日黎明联系断开，进入混沌黎明（chaos_dawn）。无备件时哈特修不好；有工作室备件可在一日内造新镜。被毁后每过一小时，知情有福者发现新联系方式的几率
-    +1%；若无人发现望远镜被毁，次日黎明剧情照常发生。
+  rules: 每晚必须有至少一人通过温室望远镜观看，联系才保持。若望远镜被毁，或哈特整夜无法操作，置 telescope_destroyed；除非黎明前修好或造出新镜、或有福者找到别的联系方式，次日黎明联系断开，进入混沌黎明（chaos_dawn）。无备件时哈特修不好；有工作室备件可在一日内造新镜。被毁后每过一小时，知情有福者发现新联系方式的几率 +1%；若无人发现望远镜被毁，次日黎明剧情照常发生。
   why: 真相核心；e_telescope_down、e_chaos_dawn、c_greenhouse_scope、c_workshop_parts。
   runs: 守秘人
 - name: 混沌黎明倒计时
@@ -169,13 +168,11 @@ mechanics:
   why: e_chaos_dawn、e_cut_off、survived_day。
   runs: 守秘人
 - name: 观看望远镜结算
-  rules: 调查员看望远镜时自动崩溃，损失 1D8 理智，退出本次调查，置 viewed_telescope，对应 e_viewed。可选内讧：投理智，失败失 1D8 并崩溃；成功则受福，获得 1D10
-    克苏鲁神话并失去等量理智，成为内奸（慎用）。
+  rules: 调查员看望远镜时自动崩溃，损失 1D8 理智，退出本次调查，置 viewed_telescope，对应 e_viewed。可选内讧：投理智，失败失 1D8 并崩溃；成功则受福，获得 1D10 克苏鲁神话并失去等量理智，成为内奸（慎用）。
   why: c_greenhouse_scope、e_viewed。
   runs: 守秘人
 - name: 麦克迪突袭时序
-  rules: D1 19:30 麦克迪（典型崩溃成人）入室，先挑落单调查员抓走；聆听成功发现有人入室，否则措手不及。约两三轮后斯坦利从背后开三枪击毙（必杀不掷骰），置 mccurdy_dead；20:30
-    詹森皮卡来收尸。守秘人应避免开幕死人。
+  rules: D1 19:30 麦克迪（典型崩溃成人）入室，先挑落单调查员抓走；聆听成功发现有人入室，否则措手不及。约两三轮后斯坦利从背后开三枪击毙（必杀不掷骰），置 mccurdy_dead；20:30 詹森皮卡来收尸。守秘人应避免开幕死人。
   why: e_mccurdy_attack、e_stanley_shoots、e_jensen_arrives、c_intruder、c_mccurdy_body。
   runs: 守秘人
 - name: 收房驱逐倒计时
@@ -183,7 +180,7 @@ mechanics:
   why: 催促玩家事件；c_eviction_notice、c_bingham_meeting。
   runs: 守秘人
 - name: 特别弥撒挑人
-  rules: D2 00:00 菲茨杰拉德在教堂主持特别弥撒；礼拜后单独试探会众，挑合适者送往哈特家看望远镜。被送者按观看结果转为有福者或崩溃者。
+  rules: 菲茨杰拉德每天布道两次，每次礼拜后单独试探几位会众，挑中的叫来半夜的特别弥撒，再送往哈特家看望远镜；每晚都有新人被带去。被送者按观看结果转为有福者或崩溃者。
   why: e_special_mass、c_fitz_talk、k_church。
   runs: 守秘人
 - name: 变装识破
