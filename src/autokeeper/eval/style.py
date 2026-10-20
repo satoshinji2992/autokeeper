@@ -311,6 +311,10 @@ class Beat:
 def _beats_zhuishuren() -> list[Beat]:
     who = "哈罗德"
     return [
+        # The game opens at the station, and a room is reached from its house: walk there first.
+        Beat("我去金博尔家找托马斯",
+             Action(kind="move", summary=f"{who}去艾尔斯伯里大街 218 号的金博尔家", destination="jinboer_jia"),
+             Ruling(needs_roll=False, minutes=0)),
         Beat("我去书房看看叔叔的书架",
              Action(kind="investigate", summary=f"{who}走进道格拉斯的书房，查看书架上的空档", target="书架上的空档",
                     destination="shufang", echo=f"{who}推开书房的门"),
