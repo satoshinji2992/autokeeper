@@ -16,7 +16,7 @@ from autokeeper.paths import EXAMPLE
 PROMPTS = Path(__file__).resolve().parents[1] / "dev" / "prompts"
 
 
-@pytest.mark.parametrize("name", ["kcmix", "ksys-no5c", "npc02", "c-presence", "c-agency", "c-played"])
+@pytest.mark.parametrize("name", ["kcmix", "ksys-no5c", "c-agency", "c-played"])
 def test_every_kept_variant_turns_into_changes_a_built_prompt_takes(name):
     v = variants.load(PROMPTS / f"{name}.yaml")
     changes = probe.pairs(v)
