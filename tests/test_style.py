@@ -115,9 +115,11 @@ class Canned(hm.Model):
 
     async def _call(self, messages, *, schema, images, on_delta):
         Canned.told.append(messages[-1]["content"])
+        text = "雾还没散，你仿佛听见了什么。"
+        if schema and schema.get("title") == "Telling":  # the keeper: the scene as it was, then the words
+            return Reply(text="", data={"scene": {}, "text": text})
         if schema:
             return Reply(text="", data={"text": "（搓着手）说实在的，我不知道。", "changes": []})
-        text = "雾还没散，你仿佛听见了什么。"
         if on_delta:
             await on_delta(text)
         return Reply(text=text)

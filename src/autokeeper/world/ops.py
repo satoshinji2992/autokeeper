@@ -128,6 +128,8 @@ class Follow(Base):
             return ["同行者不是调查员"]
         if e.at != w.st.location or e.status in ("死亡", "失踪"):
             return ["NPC 不在调查员身边，不能开始同行"]
+        if not self.destination and self.actor in STAFF:  # the keeper's scene: along wherever they go, until it ends
+            return []
         dest = w.rec.entities.get(self.destination)
         return [] if dest and dest.kind == "location" else ["同行目的地不存在"]
 
@@ -135,8 +137,8 @@ class Follow(Base):
         e = w.rec.entities[self.npc]
         e.following, e.follow_to = self.leader, self.destination
         w.touch(e)
-        text = (f"{e.name}同意与{w.name(self.leader)}同行至{w.name(self.destination)}"
-                if self.leader else f"{e.name}结束了同行")
+        text = (f"{e.name}同意与{w.name(self.leader)}同行至{w.name(self.destination)}" if self.leader and self.destination
+                else f"{e.name}跟着{w.name(self.leader)}" if self.leader else f"{e.name}结束了同行")
         return w.emit("follow", text, actor=self.npc, place=e.at, visibility=self.visibility, op=oid), None
 
 

@@ -105,7 +105,7 @@ class GameState(BaseModel):
     active: int = 0
     location: str
     journey: str = ""  # intended destination when the player pauses along the way
-    ongoing: str = ""  # what was going on as the last telling stopped (a chase, a stand-off); kept from older saves
+    ongoing: str = ""  # what was going on as the last telling stopped (a chase, a stand-off): the keeper's scene (Game._narrate)
     visited: list[str] = Field(default_factory=list)
     heard: dict[str, str] = Field(default_factory=dict)  # places named in what the players saw: id -> the name heard (engine/fog.py)
     minutes: int = 0
