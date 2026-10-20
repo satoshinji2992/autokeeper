@@ -773,6 +773,7 @@ class GameScreen(Screen):
             animations = config.load().animations
             await self.app.push_screen_wait(PreludeScreen(self.m, ready, style=self.app.art_style,  # type: ignore[attr-defined]
                                                           animations=animations))
+            self.game.prelude_played = True
         await ready
 
     @work(exclusive=True, group="turn")

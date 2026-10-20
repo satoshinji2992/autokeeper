@@ -843,6 +843,7 @@ class Hub:
             await self.game.prepare_opening()
             await asyncio.sleep(max(0.0, duration(shots) - (time.monotonic() - begun)))
         finally:
+            self.game.prelude_played = True
             await self._broadcast({"t": "prelude_ready"})
 
     def _count(self, seat: str) -> int:

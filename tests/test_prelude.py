@@ -87,3 +87,4 @@ async def test_a_new_game_plays_its_prelude_while_the_opening_is_prepared(monkey
         assert isinstance(app.screen, GameScreen)
         await app.workers.wait_for_complete()
         assert order[:3] == ["prepare", "prepared", "start"]  # the keeper starts once the opening is ready
+        assert app.screen.game.prelude_played  # so no big opening picture covers the keeper's first words

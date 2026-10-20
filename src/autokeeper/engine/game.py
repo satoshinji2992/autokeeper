@@ -173,6 +173,7 @@ class Game:
         self._world_owed = False
         self._world_task: asyncio.Task | None = None
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
+        self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
         self.visuals = Visuals(module, state, getattr(cast, "cfg", None), self.emit)
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
@@ -299,7 +300,8 @@ class Game:
             "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
         )
         self.showcases.prepare()  # (already at it when the game was made inside a running loop)
-        await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
+        if not self.prelude_played:  # after the prelude the keeper's first words are not covered by a picture
+            await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
         text = await self._narrate(report, on_delta)
         st.prologue = text  # the 背景 page keeps it after the log has moved on
         st.progress.marks = progress.marks(st)  # milestones count from here
