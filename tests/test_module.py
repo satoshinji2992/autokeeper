@@ -140,6 +140,17 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             ending = next(e for e in then.endings if e.id == "unsolved")
             assert ending.condition.startswith("以上都没有发生")
             ending.condition = "flag:douglas_escaped"
+        # The front matter written alike in every module, and names the players see that gave the story
+        # away: “埃里” in quotes, the ghouls in the tunnels' name, the keeper's word for the Broken.
+        for name in ("subtitle", "era", "setting", "players", "duration", "source", "license"):
+            setattr(then, name, getattr(now, name))
+        renamed = {"erie": "埃里·赫琴斯", "suidao": "地底隧道网", "c_broken_words": "路人的胡话"}
+        for x in [*then.npcs, *then.locations]:
+            x.name = renamed.get(x.id, x.name)
+        for c in then.clues:
+            c.title = renamed.get(c.id, c.title)
+        for p in then.pregens:
+            p.occupation = {"thomas_reed": "县卫生部门调查员（前陆军军医）"}.get(p.id, p.occupation)
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 

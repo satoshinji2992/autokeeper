@@ -128,7 +128,7 @@ npcs:
     MP: 18
   arc: 从热心的护士逐步露出操纵和疯狂
 - id: erie
-  name: “埃里”
+  name: 埃里·赫琴斯
   role: 卡洛琳召来的异界存在，顶着埃里·赫琴斯的外表与声音
   important: true
   look: 一个瘦高的年轻人，面容清秀却总让人说不上哪里不对；不太眨眼，动作比常人慢半拍
@@ -315,7 +315,7 @@ pregens:
   marks: []
 - id: thomas_reed
   name: 托马斯·里德
-  occupation: 县卫生部门调查员，前陆军军医
+  occupation: 县卫生部门调查员（前陆军军医）
   age: 38
   sex: 男
   residence: 北达科他州 Valley City

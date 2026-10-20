@@ -31,6 +31,7 @@ modules/<id>/
 
 | 字段 | 说明 |
 |---|---|
+| `title` / `subtitle` / `era` / `setting` / `players` / `duration` / `source` | 选模组时显示的介绍，照自带模组的写法：`era` 写年份（`1922 年`），`setting` 写国家、州和地方，`players` 写 `1-2 人`，`duration` 写 `约 2-4 小时`，`source` 写《书名》、作者和译者。标题、副标题、`hook` 和 `setting` 提到的地点开局就算听说过，会出现在地图上；要调查才找得到的地方不要在这几处点名（`check` 会提示） |
 | `hook` / `opening` | 玩家已知的来意 / 守秘人开场素材；开场素材融入一次叙述，不重复朗读 |
 | `truth` / `keeper_notes` | 只给守秘人看的真相和跑团建议 |
 | `cover` | 无剧透的原作封面图片键；选模组时显示 ASCII 预览，不作为开局场景 |

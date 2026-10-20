@@ -95,7 +95,7 @@ def test_the_house_answers_to_the_address_on_the_letter(zhui):
     st = Game.new(zhui, [zhui.pregens[0].model_copy(deep=True)])
     st.location, st.visited = "jiefang", ["huochezhan", "zhenzhongxin", "jiefang"]
     st.add("keeper", "托马斯的信上写着地址：艾尔斯伯里大街 218 号。")
-    assert "218 号(jinboer_jia，也叫托马斯家)" in Cast(config.load(), zhui).bearings(st)  # the name they have, then the rest
+    assert "金博尔家(jinboer_jia，也叫托马斯家、218 号)" in Cast(config.load(), zhui).bearings(st)  # the name they have (the setting's), then the rest
     st.location, st.visited = "zhenzhongxin", ["huochezhan", "zhenzhongxin"]
     st.log.clear()
     assert "lingmu" not in Cast(config.load(), zhui).bearings(st)  # other names give away nothing new
@@ -113,7 +113,7 @@ def test_plain_sight_is_what_is_seen_in_the_open(zhui):
 
 def test_opening_material_is_not_knowledge_until_the_keeper_says_it(zhui):
     st = Game.new(zhui, [zhui.pregens[0].model_copy(deep=True)])
-    zhui.opening += " 路人告诉你食尸鬼隧道网就在脚下。"
+    zhui.opening += " 路人告诉你地底隧道网就在脚下。"
     assert "suidao" not in fog.known(zhui, st)
     st.add("keeper", "路人告诉你地下有一片隧道网。")
     assert fog.known(zhui, st)["suidao"] == "隧道网"
