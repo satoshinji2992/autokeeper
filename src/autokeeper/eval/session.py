@@ -41,6 +41,7 @@ from ..engine.state import GameState
 from ..harness import trace
 from ..harness.models import ModelPool
 from ..module.schema import Module
+from ..world import knowledge
 from ..world.context import rooms
 from .style import Loaded, module_of
 
@@ -172,8 +173,8 @@ LEAK_RULES = """你核对跑团守秘人的一段叙述有没有说漏玩家还�
 叙述直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，才算说漏；只是写到同一个人、同一个地方、同一样东西，写了眼前看得见的景象和人物的举动，写的是这一轮本来就可以露出的东西，或者写的是清单之外的事，都不算。
 逐条核对，没有说漏就留空。"""
 
-NPC_LEAK_RULES = """你核对跑团里 NPC 的台词有没有说出玩家还不知道、也还没正式拿到的事。给你一份还没向玩家公开的清单（每条前面是编号）、这一轮已经正式交给玩家的东西（线索、手稿、事件），和这一轮 NPC 说的话。
-NPC 直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，而这一轮并没有把它正式交给玩家，才算说漏；NPC 说的谎、猜测、闲话，只提到同一个人、同一个地方，都不算。
+NPC_LEAK_RULES = """你核对跑团里一个 NPC 的台词有没有说出他本来不可能知道的事。给你一份这个 NPC 不知道的事（每条前面是编号）、这一轮已经正式交给玩家的东西（线索、手稿、事件），和这一轮他说的话。
+他直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，而这一轮并没有把它正式交给玩家，才算说漏；他自己知道的事愿意讲出来，不在清单里，不算；说的谎、猜测、闲话，只提到同一个人、同一个地方，也不算。
 逐条核对，没有说漏就留空。"""
 
 FINDING_RULES = """你给跑团叙述里几处“没有经过这一轮结算的具体细节”分类。给你玩家还不知道的真相和线索，以及这些细节。逐条判断：
@@ -212,6 +213,16 @@ def secrets(st: GameState) -> dict[str, str]:
             continue
         if f.kind in HIDDEN_KINDS or (f.id.startswith("clue:") and f.id.removeprefix("clue:") not in found):
             out[f.id] = f.text.strip()
+    return out
+
+
+def speakers(m: Module, lines: list[str]) -> dict[str, list[str]]:
+    """NPC id -> what it said this turn, from the told lines ("名字：台词")."""
+    out: dict[str, list[str]] = {}
+    for line in lines:
+        name, _, words = line.partition("：")
+        if (n := next((x for x in m.npcs if x.name == name), None)) is not None:
+            out.setdefault(n.id, []).append(words)
     return out
 
 
@@ -291,8 +302,10 @@ async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
                 shown = got.get("shown") or (got["record"] + "\n" + "\n".join(got.get("npc", [])))
                 got["leaks"] = await ask_leaks(pool, got["hidden"], got.get("keeper", ""), shown)
                 got["findings"] = await ask_findings(pool, got["hidden"], [p["claim"] for p in got["problems"] if p["kind"] == "发现"])
-                if got.get("npc"):
-                    got["npc_leaks"] = await ask_leaks(pool, got["hidden"], "\n".join(got["npc"]), got.get("given") or got["record"], npc=True)
+                if got.get("npc_said"):
+                    given = got.get("given") or got["record"]
+                    got["npc_leaks"] = [x for npc, words in got["npc_said"].items() for x in await ask_leaks(
+                        pool, {fid: got["hidden"][fid] for fid in got["npc_unknown"].get(npc, [])}, "\n".join(words), given, npc=True)]
 
     try:
         await asyncio.gather(*(one(r, side) for r in report["rows"] for side in ("recorded", "replayed")))
@@ -408,9 +421,14 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
         shown = side["shown"] = shown_now(st, turn, hints)
         given = side["given"] = shown_now(st, turn, hints, npc=False)  # what an NPC's words may hold: what the turn handed over
         side["verbatim"] = leaks(keeper, hidden, public=seen_before(st, turn) + "\n" + shown) if keeper else []
-        problems, side["leaks"], side["npc_leaks"] = await asyncio.gather(
+        # What an NPC tells of its own knowledge is its call (the user's word, 2026-10-20: 阿萨塔 telling
+        # the party of the handprints once she trusts them is initiative); only what it could not know counts.
+        said = side["npc_said"] = speakers(m, lines)
+        unknown = side["npc_unknown"] = {npc: [fid for fid in hidden if not knowledge.sees(st.record.facts[fid], npc)] for npc in said}
+        problems, side["leaks"], *npc_slips = await asyncio.gather(
             ask_judge(pool, record_text, text, keeper, lines), ask_leaks(pool, hidden, keeper, shown),
-            ask_leaks(pool, hidden, "\n".join(lines), given, npc=True) if lines else asyncio.sleep(0, []))
+            *(ask_leaks(pool, {fid: hidden[fid] for fid in unknown[npc]}, "\n".join(words), given, npc=True) for npc, words in said.items()))
+        side["npc_leaks"] = [x for slips in npc_slips for x in slips]
         side["findings"] = await ask_findings(pool, hidden, [p["claim"] for p in problems if p["kind"] == "发现"])
         return problems
 

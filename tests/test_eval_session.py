@@ -160,3 +160,17 @@ def test_backstage_wakes_are_counted_once_across_the_run_and_calls_are_marked():
     got = session.summarize(rows)["replayed"]
     assert got["woke_pairs"] == 2  # the same wake on every replayed turn counts once
     assert got["world_calls_not_comparable"] == 2
+
+
+def test_an_npc_telling_what_it_knows_is_no_slip():
+    from autokeeper.world import knowledge
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    World(m, st)
+    assert session.speakers(m, ["老守钟人：钟里有东西。", "路人：今天天气不错。"]) == {"warden": ["钟里有东西。"]}
+    hidden = session.secrets(st)
+    unknown = [fid for fid in hidden if not knowledge.sees(st.record.facts[fid], "warden")]
+    assert "npc:warden:secrets:0" in hidden and "npc:warden:secrets:0" not in unknown  # his own secret is his to tell
+    assert "truth" in unknown  # the whole truth he cannot know
