@@ -233,7 +233,9 @@ def test_claude_prompt_marks_the_end_of_history_for_the_prompt_cache():
     assert [b["text"] for b in longer[: len(shorter)]] == [b["text"] for b in shorter]  # append-only text
     marked = [i for i, b in enumerate(longer) if "cache_control" in b]
     assert marked == [len(longer) - 2] and longer[-2]["cache_control"] == {"type": "ephemeral", "ttl": hm.CACHE_TTL[0]}
-    assert "cache_control" not in hm._blocks(turns[:1], None)[0]  # nothing to keep yet
+    alone = hm._blocks(turns[:1], None)  # no history: a fixed block before the prompt is marked, for
+    assert [b["text"] for b in alone] == [hm.ALONE, "第0句"]  # the system prompt and schema in front of it
+    assert "cache_control" in alone[0] and "cache_control" not in alone[1]
 
 
 def test_claude_api_errors_are_errors_and_a_refused_cache_mark_steps_down(monkeypatch):

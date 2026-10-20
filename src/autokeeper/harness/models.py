@@ -340,6 +340,7 @@ def _portable(schema: Any) -> Any:
 
 
 HISTORY = "【下面是系统保存的对话记录，每次完整重发。“〔输入〕”是发给你的消息，“〔你的回复〕”是你之前的回答；只回应最后一条输入。】"
+ALONE = "【本次输入】"  # leads a request without history: a block that never changes, to mark for the cache
 
 
 # The prompt cache keeps a prefix only where a request marks it, and Claude Code marks the end
@@ -354,12 +355,17 @@ CACHE_TTL: list[str | None] = ["1h"]
 
 def _blocks(messages: list[Msg], images: list[bytes] | None) -> list[dict]:
     """One text block per message, history first; the last block of history carries a
-    cache mark, so the next call (which repeats all of it) reads it back from the cache."""
-    rows = [messages[0]["content"]] if len(messages) == 1 else [HISTORY] + [
-        ("〔你的回复〕" if m["role"] == "assistant" else "〔输入〕") + m["content"] for m in messages
-    ]
+    cache mark, so the next call (which repeats all of it) reads it back from the cache.
+    A request without history leads with a fixed block, marked: what comes before it (the
+    system prompt, the schema) is then read back too. Without it nothing of the keeper's
+    plan, the arbiter's first ruling or the director cached at all (the user's game,
+    2026-10-21: 12–37 thousand tokens a call, none of them cached)."""
+    if len(messages) == 1:
+        rows = [ALONE, messages[0]["content"]]
+    else:
+        rows = [HISTORY] + [("〔你的回复〕" if m["role"] == "assistant" else "〔输入〕") + m["content"] for m in messages]
     blocks: list[dict] = [{"type": "text", "text": r} for r in rows]
-    if len(blocks) >= 3 and CACHE_TTL[0]:  # header, some history, the new prompt
+    if CACHE_TTL[0]:  # one mark of ours: Claude Code adds its own, and a request takes four at most
         blocks[-2]["cache_control"] = {"type": "ephemeral", "ttl": CACHE_TTL[0]}
     for img in images or []:
         blocks.insert(-1, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(img).decode()}})
