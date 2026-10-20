@@ -285,6 +285,8 @@ async def test_f12_opens_a_webpage_while_terminal_play_remains_available(monkeyp
         await pilot.press("f12")
         assert await until(pilot, lambda: len(opened) == 2)
         assert opened[0] == opened[1] and server is screen.game.debug_server
+        screen._menu_chosen("developer")  # from the Esc menu: did nothing (an unawaited run_action), 2026-10-21
+        assert await until(pilot, lambda: len(opened) == 3)
 
 
 def test_history_selection_finds_an_old_turn_and_keeps_its_evidence_in_large_modules(fake):

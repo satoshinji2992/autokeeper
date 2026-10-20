@@ -859,7 +859,10 @@ class GameScreen(Screen):
                "guide": lambda: self.app.push_screen(GuideScreen("play")),
                "keys": lambda: self.app.push_screen(GuideScreen("keys")),
                "title": self.action_leave_game, "quit": self.action_quit_game}  # fmt: skip
-        run[choice]() if choice in run else self.run_action(choice)  # a screen's own entry (tui/screens/net.py)
+        if choice in run:
+            run[choice]()
+        else:  # an action of this screen (开发者模式, 规则插件, the LAN screen's own): run_action is a coroutine
+            self.call_later(self.run_action, choice)
 
     def action_settings(self) -> None:
         from ..modals.settings import SettingsModal
