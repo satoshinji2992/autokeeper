@@ -133,6 +133,16 @@ Footer FooterKey.-command-palette {
     color: $foreground;
     padding: 0 1;
 }
+GameScreen.-dev #topbar {
+    background: $warning-darken-2;  /* 开发者模式: the whole screen says so */
+}
+#dev {
+    height: 9;
+    padding: 0 1;
+    border-top: heavy $warning;
+    background: $surface;
+    scrollbar-size-vertical: 1;
+}
 #main {
     height: 1fr;
 }

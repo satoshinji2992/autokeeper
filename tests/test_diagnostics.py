@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 
 import aiohttp
 import pytest
+from rich.console import Console
 
 from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
@@ -281,12 +283,22 @@ async def test_f12_opens_a_webpage_while_terminal_play_remains_available(monkeyp
         assert await until(pilot, lambda: bool(opened))
         assert opened[0].startswith("http://127.0.0.1:") and app.screen is screen
         assert not screen.busy and st.model_dump_json() == before
+        # the mode shows on the screen itself: the top bar and a panel of this turn's calls and the world
+        panel = screen.query_one("#dev")
+        bar = Console(width=200, record=True, file=io.StringIO())
+        bar.print(screen.query_one("#topbar").content)
+        assert panel.display and screen.has_class("-dev") and "开发者模式" in bar.export_text()
+        shown_text = str(panel.body.render())
+        assert "人物实际位置" in shown_text and "接下来" in shown_text
         server = screen.game.debug_server
-        await pilot.press("f12")
+        await pilot.press("f12")  # off again: the page stays, the screen goes back
+        await pilot.pause()
+        assert not panel.display and not screen.has_class("-dev") and len(opened) == 1
+        screen._menu_chosen("developer")  # from the Esc menu: did nothing (an unawaited run_action), 2026-10-21
+        assert await until(pilot, lambda: panel.display)
+        screen.action_open_dev_web()  # the page again, from the panel's link
         assert await until(pilot, lambda: len(opened) == 2)
         assert opened[0] == opened[1] and server is screen.game.debug_server
-        screen._menu_chosen("developer")  # from the Esc menu: did nothing (an unawaited run_action), 2026-10-21
-        assert await until(pilot, lambda: len(opened) == 3)
 
 
 def test_history_selection_finds_an_old_turn_and_keeps_its_evidence_in_large_modules(fake):

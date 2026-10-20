@@ -46,6 +46,7 @@ from ..modals.retell import RetellModal
 from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
 from ..widgets import tips
+from ..widgets.devpanel import DevPanel
 from ..widgets.pages import PagesHead, PagesModal, background_view, progress_view
 from ..widgets.panels import (
     LIGHT_MARK,
@@ -143,6 +144,7 @@ class GameScreen(Screen):
         self.engine_label = ""
         self.busy = False
         self.dev_errors: list[str] = []
+        self.dev_url = ""  # the developer web page, once started
         self._skill_choices: list[str] = []
         self._skill_at = -1
         self._skill_value = ""
@@ -163,6 +165,7 @@ class GameScreen(Screen):
                     yield SceneArt(id="scene")
                     yield Speaker()
                 yield StoryLog(id="story")
+                yield DevPanel(id="dev")
                 yield Static(id="status")
                 yield OptionList(id="picker")
                 yield Input(placeholder="输入行动或对话 · /kp 向守秘人提问 · Esc 菜单", id="command",
@@ -509,6 +512,8 @@ class GameScreen(Screen):
         when = time_of_day(st.minutes)
         left = Text(no_wrap=True, overflow="ellipsis")
         left.append(" AUTOKEEPER ", style="bold reverse")
+        if self.has_class("-dev"):
+            left.append(" 开发者模式 ", style="bold reverse")
         left.append(f"  《{self.m.title}》  ", style="bold")
         left.append(f"{LIGHT_MARK.get(when, '☀')} {st.clock} {when}  ", style="bold")
         left.append(f"◆ {self.m.location(st.location).name}")
@@ -611,6 +616,8 @@ class GameScreen(Screen):
     # -- event handling ----------------------------------------------------------------------
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")
+        if self.has_class("-dev"):
+            self.call_after_refresh(self._dev)
         story = self.story
         if t == "art":
             key = ev["key"]
@@ -848,9 +855,25 @@ class GameScreen(Screen):
                 and (item[0] != "developer" or self.game is not None)]
 
     def action_developer(self) -> None:
+        """F12: 开发者模式 on or off. On, the top bar says so and the panel under the story shows this
+        turn's calls, the roll, where everyone really is and what is due; the first time, the web
+        page with the full records opens too."""
         if self.game is None:
             self.app.notify("完整排查资料位于运行游戏的本机，联机客户端无法读取。", timeout=5)
             return
+        panel = self.query_one(DevPanel)
+        panel.display = not panel.display
+        self.set_class(panel.display, "-dev")
+        self._topbar()
+        if panel.display:
+            self._dev()
+            if not self.dev_url:
+                self.open_developer()
+
+    def _dev(self) -> None:
+        self.query_one(DevPanel).show(self.game, self.dev_url, self.dev_errors)
+
+    def action_open_dev_web(self) -> None:
         self.open_developer()
 
     @work(exclusive=True, group="developer-web")
@@ -863,6 +886,8 @@ class GameScreen(Screen):
         except OSError as exc:
             self.app.notify(f"开发者网页启动失败：{type(exc).__name__}", severity="error", timeout=8)
             return
+        self.dev_url = url
+        self._dev()
         self.app.open_url(url)
         self.app.notify(f"开发者网页：{url}", timeout=10)
 
