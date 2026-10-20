@@ -228,20 +228,25 @@ def join(
 
 
 @app.command()
-def setup() -> None:
-    """安装 BCDice 桥接、编译已导入模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/。"""
+def setup(
+    login_now: Annotated[bool, typer.Option("--login/--no-login", help="最后问用哪家模型、填 API Key（在终端里运行时）")] = True,
+) -> None:
+    """安装 BCDice 桥接、编译模组的 Skill 包、为 Claude Code 和 Codex 链接 skills/，最后选模型、填 API Key。"""
     bridge = paths.ROOT / "bridge"
-    console.print("[bold]1/3[/] 安装 BCDice（npm）…")
-    npm = shutil.which("npm") or "npm"  # npm.cmd on Windows
-    subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
-    console.print("[bold]2/3[/] 编译模组 Skill 包…")
+    console.print("[bold]1/4[/] 安装 BCDice（npm）…")
+    npm = shutil.which("npm")  # npm.cmd on Windows
+    if npm is None:
+        console.print("    [yellow]没找到 npm：先装 Node.js 18+（https://nodejs.org），再运行 autokeeper setup。没有它，伤害和理智的骰子掷不了。[/]")
+    else:
+        subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=bridge, check=True)
+    console.print("[bold]2/4[/] 编译模组 Skill 包…")
     from .module.compiler import compile_module
     from .module.schema import Module
 
     for path in paths.module_folders():
         root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
         console.print(f"    {root.relative_to(paths.ROOT)}")
-    console.print("[bold]3/3[/] 链接 .claude/skills 与 .agents/skills …")
+    console.print("[bold]3/4[/] 链接 .claude/skills 与 .agents/skills …")
     for dot in (".claude", ".agents"):
         target = paths.ROOT / dot / "skills"
         target.parent.mkdir(exist_ok=True)
@@ -254,7 +259,63 @@ def setup() -> None:
         except OSError:  # Windows without developer mode: copy instead of linking
             shutil.copytree(paths.SKILLS, target)
             console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
-    console.print("[green]完成。[/] 运行 [bold]uv run autokeeper[/] 开始游戏。")
+    if login_now and sys.stdin.isatty():
+        console.print("[bold]4/4[/] 选模型")
+        login()
+    else:
+        console.print("[bold]4/4[/] 选模型：跳过（以后运行 [bold]autokeeper login[/]）")
+    console.print("[green]完成。[/] 在任意目录运行 [bold]autokeeper[/] 开始游戏；[bold]autokeeper doctor[/] 检查环境。")
+
+
+LOGINS = {  # what `login` offers: preset, the key it needs (empty: the local program's own login), how to get one
+    "deepseek": ("DeepSeek：要一个 API Key，花费最低", "DEEPSEEK_API_KEY", "https://platform.deepseek.com/api_keys"),
+    "claude": ("Claude：用本机已登录的 Claude Code，或者填 Anthropic API Key", "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys"),
+    "codex": ("Codex：用本机已登录的 Codex", "", ""),
+}
+
+
+@app.command()
+def login(
+    preset: Annotated[str | None, typer.Argument(help="deepseek、claude 或 codex；不写就逐项问")] = None,
+    key: Annotated[str | None, typer.Option(help="API Key；不写就提示输入（输入时不显示）")] = None,
+) -> None:
+    """选用哪家模型，把 API Key 存进 ~/.config/autokeeper/.env（只有你能读），之后在任意目录启动都会用它。"""
+    config.load_env()
+    if preset is None:
+        names = list(LOGINS)
+        for i, name in enumerate(names, 1):
+            console.print(f"  {i}. {LOGINS[name][0]}")
+        console.print(f"  {len(names) + 1}. 先跳过")
+        current = config.ui_settings().get("preset", "")
+        default = str(names.index(current) + 1) if current in names else "1"
+        choice = typer.prompt("用哪个", default=default).strip()
+        if choice == str(len(names) + 1):
+            console.print("跳过。以后运行 [bold]autokeeper login[/] 再选。")
+            return
+        preset = names[int(choice) - 1] if choice.isdigit() and 0 < int(choice) <= len(names) else choice
+    if preset not in LOGINS:
+        console.print(f"[red]没有这个选项：{preset}（可选：{'、'.join(LOGINS)}）[/]")
+        raise typer.Exit(1)
+    _, name, where = LOGINS[preset]
+    program = {"claude": "claude", "codex": "codex"}.get(preset)
+    if key is None and program and shutil.which(program):
+        console.print(f"找到本机的 {program}，用它的登录，不用填 Key。")
+    elif key is None and program == "codex":
+        console.print("[yellow]没找到 codex 命令：先装好 Codex 并登录（https://github.com/openai/codex）。[/]")
+    elif name:
+        if key is None and os.environ.get(name):
+            keep = typer.confirm(f"已经有 {name}，继续用它", default=True)
+            key = None if keep else typer.prompt(f"新的 {name}（输入时不显示）", hide_input=True, default="", show_default=False)
+        elif key is None:
+            console.print(f"去 {where} 新建一个 Key，粘贴到下面。")
+            key = typer.prompt(f"{name}（输入时不显示）", hide_input=True, default="", show_default=False)
+        if key is not None and key.strip():
+            target = config.save_key(name, key.strip())
+            console.print(f"已存到 {target}")
+        elif not os.environ.get(name):
+            console.print(f"[yellow]没填 Key。以后运行 [bold]autokeeper login {preset}[/] 补上。[/]")
+    config.save_ui_settings({"preset": preset})
+    console.print(f"[green]以后默认用 {preset}。[/] 想试试通不通：[bold]autokeeper doctor --ping[/]")
 
 
 KEYS = {"deepseek": ("DEEPSEEK_API_KEY",), "openai": ("OPENAI_API_KEY",), "anthropic": ("ANTHROPIC_API_KEY",),
