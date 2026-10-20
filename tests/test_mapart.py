@@ -71,3 +71,14 @@ def test_a_place_with_no_picture_gets_one_painted_by_program_when_first_shown(tm
     assert scenery.kind_of("道格拉斯的书房") == "study" and scenery.kind_of("公墓") == "graveyard"
     assert scenery.kind_of("报社") == "office" and scenery.kind_of("阿诺兹堡火车站") == "station"
     assert (scenery.paint("钟楼", key="k").tobytes() == scenery.paint("钟楼", key="k").tobytes())  # the same each time
+
+
+def test_people_and_things_with_no_picture_are_painted_too():
+    from autokeeper import scenery
+
+    assert scenery._person("值班警官 警官 制服") == ("uniform", False, False)
+    assert scenery._person("莉拉·奥黛尔 老妇人 七十上下") == ("suit", True, True)
+    assert scenery.thing_of("蓝边瓷杯") == "cup" and scenery.thing_of("左轮手枪") == "gun" and scenery.thing_of("褪色的合影") == "photo"
+    face = scenery.portrait("老守钟人", "花白胡子", "守钟人", key="w")
+    assert face.size == (scenery.PW, scenery.PH) and face.tobytes() == scenery.portrait("老守钟人", "花白胡子", "守钟人", key="w").tobytes()
+    assert scenery.still("蓝边瓷杯", "杯沿一圈靛蓝色的细线", key="c").size == (scenery.W, scenery.H)

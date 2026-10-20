@@ -663,3 +663,125 @@ def fill_people(m: Module) -> list[str]:
 
 
 _faces: dict[str, tuple[str, str, str, str]] = {}  # a portrait fill_people() named: path -> key, name, look, role
+
+
+# -- things ---------------------------------------------------------------------------------------
+COLOURS: list[tuple[tuple[str, ...], Rgb]] = [
+    (("红", "朱", "血"), (150, 46, 40)), (("蓝", "靛"), (54, 82, 140)), (("绿", "翠"), (60, 110, 70)),
+    (("黄", "金"), (196, 160, 70)), (("银", "白", "瓷"), (214, 212, 204)), (("黑", "乌"), (40, 38, 40)),
+    (("铜", "黄铜"), (176, 124, 64)), (("皮", "棕", "褐"), (110, 74, 46)), (("铁", "锈"), (110, 96, 88)),
+]
+THINGS: list[tuple[str, tuple[str, ...]]] = [
+    ("skull", ("头骨", "骷髅", "骨")), ("key", ("钥匙",)), ("gun", ("枪",)), ("blade", ("刀", "匕首", "斧", "剑")),
+    ("watch", ("怀表", "手表", "表", "钟")), ("light", ("灯", "手电", "蜡烛", "烛")), ("photo", ("照片", "相片", "合影", "相框", "肖像", "画")),
+    ("map", ("地图", "图纸")), ("book", ("书", "日记", "笔记", "账本", "信", "手稿", "典籍", "本")),
+    ("cup", ("杯", "碗", "茶")), ("vessel", ("瓶", "罐", "壶", "酒")), ("jewel", ("项链", "戒指", "珍珠", "首饰", "胸针", "坠")),
+    ("shovel", ("铲", "锹")),
+]
+
+
+def thing_of(name: str, description: str = "") -> str:
+    for text in (name, description):
+        for kind, words in THINGS:
+            if any(w in text for w in words):
+                return kind
+    return "box"
+
+
+def still(name: str, description: str = "", *, key: str = "") -> Image.Image:
+    """A thing on a table under a lamp, painted by program, 960x540: shaped by what it is, coloured
+    as its description says."""
+    rng = np.random.default_rng(_seed(key or name, "still"))
+    kind = thing_of(name, description)
+    colour = next((c for words, c in COLOURS if any(w in f"{name}{description}" for w in words)), (120, 88, 60))
+    b = _canvas((54, 44, 36), (26, 22, 18), rng)
+    d = b.d
+    table = H * 0.62
+    d.rectangle([0, table, W, H], fill=b.tone((96, 66, 42)))
+    for y in np.arange(table + 18, H, 26):  # the grain of the table
+        d.line([(0, y), (W, y + rng.uniform(-6, 6))], fill=b.tone((84, 58, 38)), width=2)
+    cx, cy = W / 2, table + 40
+    d.ellipse([cx - 230, cy - 20, cx + 230, cy + 50], fill=(60, 42, 28))  # its shadow
+    dark = tuple(int(c * 0.6) for c in colour)
+    if kind == "book":
+        d.polygon([(cx - 200, cy), (cx + 170, cy - 30), (cx + 210, cy + 10), (cx - 160, cy + 40)], fill=colour)
+        d.polygon([(cx - 200, cy), (cx + 170, cy - 30), (cx + 170, cy - 46), (cx - 200, cy - 16)], fill=(226, 216, 190))  # pages
+        d.line([(cx - 190, cy - 8), (cx + 165, cy - 38)], fill=(190, 180, 156), width=2)
+    elif kind == "key":
+        d.ellipse([cx - 190, cy - 50, cx - 100, cy + 40], outline=colour, width=18)
+        d.rectangle([cx - 104, cy - 10, cx + 170, cy + 8], fill=colour)
+        for x in (cx + 110, cx + 150):
+            d.rectangle([x, cy + 8, x + 18, cy + 40], fill=colour)
+    elif kind == "gun":
+        steel = (126, 128, 136)
+        d.rectangle([cx - 150, cy - 30, cx + 170, cy - 2], fill=steel)  # the barrel
+        d.rectangle([cx - 150, cy - 44, cx - 40, cy + 10], fill=steel)  # the frame and cylinder
+        d.polygon([(cx - 150, cy + 4), (cx - 80, cy + 4), (cx - 110, cy + 70), (cx - 180, cy + 70)], fill=(120, 80, 48))  # the grip
+        d.ellipse([cx - 80, cy - 2, cx - 40, cy + 34], outline=steel, width=7)  # the trigger guard
+    elif kind == "blade":
+        d.polygon([(cx - 60, cy - 6), (cx + 230, cy - 20), (cx - 60, cy + 14)], fill=(196, 198, 200))
+        d.rectangle([cx - 200, cy - 10, cx - 60, cy + 18], fill=dark if kind else (70, 50, 34))
+        d.rectangle([cx - 70, cy - 30, cx - 54, cy + 36], fill=(150, 120, 70))
+    elif kind == "watch":
+        d.ellipse([cx - 110, cy - 130, cx + 110, cy + 90], fill=colour if colour != (120, 88, 60) else (186, 150, 80))
+        d.ellipse([cx - 90, cy - 110, cx + 90, cy + 70], fill=(232, 226, 210))
+        d.line([(cx, cy - 20), (cx, cy - 90)], fill=(40, 34, 30), width=6)
+        d.line([(cx, cy - 20), (cx + 50, cy + 10)], fill=(40, 34, 30), width=6)
+        d.rectangle([cx - 12, cy - 160, cx + 12, cy - 130], fill=(186, 150, 80))
+    elif kind == "light":
+        glow = Image.new("L", (W, H), 0)
+        ImageDraw.Draw(glow).ellipse([cx - 260, cy - 360, cx + 260, cy + 60], fill=140)
+        b.img.paste(Image.new("RGB", (W, H), (255, 214, 140)), (0, 0), glow.filter(ImageFilter.GaussianBlur(60)))
+        d.rectangle([cx - 40, cy - 150, cx + 40, cy], fill=(226, 214, 186))  # a candle, or the lamp's glass
+        d.ellipse([cx - 14, cy - 200, cx + 14, cy - 150], fill=(255, 200, 90))
+        d.rectangle([cx - 70, cy, cx + 70, cy + 16], fill=colour)
+    elif kind == "photo":
+        d.polygon([(cx - 170, cy - 200), (cx + 150, cy - 190), (cx + 160, cy + 30), (cx - 180, cy + 20)], fill=(70, 50, 36))
+        d.polygon([(cx - 145, cy - 175), (cx + 125, cy - 166), (cx + 133, cy + 6), (cx - 153, cy - 2)], fill=(176, 166, 146))
+        d.ellipse([cx - 40, cy - 150, cx + 30, cy - 70], fill=(120, 108, 96))  # a figure, faded
+        d.rectangle([cx - 70, cy - 70, cx + 60, cy], fill=(96, 86, 78))
+    elif kind == "map":
+        d.polygon([(cx - 230, cy - 10), (cx + 220, cy - 40), (cx + 240, cy + 40), (cx - 210, cy + 60)], fill=(214, 196, 158))
+        for _ in range(6):
+            x0, y0 = cx + rng.uniform(-200, 160), cy + rng.uniform(-20, 40)
+            d.line([(x0, y0), (x0 + rng.uniform(30, 90), y0 + rng.uniform(-10, 10))], fill=(120, 80, 50), width=3)
+        d.line([(cx - 10, cy - 30), (cx + 10, cy + 55)], fill=(180, 160, 120), width=2)  # the fold
+    elif kind == "cup":
+        d.polygon([(cx - 90, cy - 110), (cx + 90, cy - 110), (cx + 66, cy + 10), (cx - 66, cy + 10)], fill=(226, 224, 216))
+        d.ellipse([cx - 90, cy - 126, cx + 90, cy - 94], fill=(204, 200, 190))
+        d.arc([cx + 60, cy - 90, cx + 140, cy - 20], 270, 90, fill=(226, 224, 216), width=14)  # the handle
+        d.line([(cx - 88, cy - 104), (cx + 88, cy - 104)], fill=colour if colour != (120, 88, 60) else (54, 82, 140), width=6)  # its rim
+    elif kind == "vessel":
+        d.rounded_rectangle([cx - 70, cy - 170, cx + 70, cy + 10], radius=30, fill=colour)
+        d.rectangle([cx - 30, cy - 220, cx + 30, cy - 160], fill=colour)
+        d.ellipse([cx - 40, cy - 230, cx + 40, cy - 210], fill=tuple(int(c * 1.15) if c < 220 else c for c in colour))
+        d.line([(cx - 40, cy - 130), (cx - 40, cy - 30)], fill=(236, 232, 220), width=6)  # a highlight
+    elif kind == "jewel":
+        for i, a in enumerate(np.linspace(math.pi * 1.05, math.pi * 1.95, 24)):  # a string of beads
+            x, y = cx + math.cos(a) * 180, cy + 30 + math.sin(a) * 110
+            d.ellipse([x - 9, y - 9, x + 9, y + 9], fill=(234, 230, 220) if i % 2 else (210, 204, 192))
+        d.ellipse([cx - 34, cy + 10, cx + 34, cy + 70], fill=colour if colour != (120, 88, 60) else (236, 234, 226))
+    elif kind == "skull":
+        d.ellipse([cx - 110, cy - 200, cx + 110, cy - 10], fill=(222, 214, 192))
+        d.rectangle([cx - 60, cy - 30, cx + 60, cy + 20], fill=(222, 214, 192))
+        for side in (-1, 1):
+            d.ellipse([cx + side * 50 - 30, cy - 120, cx + side * 50 + 30, cy - 70], fill=(40, 34, 30))
+        d.polygon([(cx, cy - 60), (cx - 14, cy - 30), (cx + 14, cy - 30)], fill=(60, 50, 44))
+    elif kind == "shovel":
+        d.rectangle([cx - 250, cy - 14, cx + 80, cy + 4], fill=(110, 80, 52))
+        d.polygon([(cx + 80, cy - 40), (cx + 220, cy - 30), (cx + 220, cy + 20), (cx + 80, cy + 30)], fill=(120, 116, 112))
+    else:  # a box, or a parcel
+        d.polygon([(cx - 150, cy - 120), (cx + 150, cy - 120), (cx + 150, cy + 20), (cx - 150, cy + 20)], fill=colour)
+        d.polygon([(cx - 150, cy - 120), (cx - 100, cy - 170), (cx + 200, cy - 170), (cx + 150, cy - 120)], fill=tuple(int(c * 1.15) if c < 220 else c for c in colour))
+        d.polygon([(cx + 150, cy - 120), (cx + 200, cy - 170), (cx + 200, cy - 30), (cx + 150, cy + 20)], fill=dark)
+    light = np.linspace(1.12, 0.8, W)[None, :, None]  # the lamp to the left
+    arr = np.asarray(b.img, float) * light * (1 + rng.normal(0, 0.03, (H, W, 1)))
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.4))
+
+
+def thing(folder: Path, key: str, name: str, description: str = "") -> Path:
+    """The thing's picture saved in `folder` as <key>.png (made once)."""
+    out = folder / f"{key}.png"
+    if not out.is_file():
+        _save(still(name, description, key=key), out)
+    return out

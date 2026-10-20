@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from .. import artkit, config, imagegen, imagery, paths, scenery
-from ..agents import artist
 from ..module.schema import Module
 from .state import GameState
 
@@ -28,13 +27,6 @@ FALLBACKS = {
     "scene": "",
     "item": "",
 }
-
-COMPOSITION = {
-    "portrait": "人物肖像：以头肩为主体，保持资料中的年龄、外貌和衣着，不画通用火柴人。",
-    "scene": "场景全景：表现空间布局、建筑、陈设与光线，主体是地点，不画人物头像或以人形代替场景。",
-    "item": "物件特写：表现该物件的轮廓、材质与可见细节，不以人物或通用盒子代替。",
-}
-
 
 class Target(NamedTuple):
     entity: Any  # the Location or NPC
@@ -151,8 +143,7 @@ class Visuals:
                 attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
                 if ((record["status"] != "ready" and not record.get("phase") and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
-                    if kind in ("scene", "portrait"):  # painted by program: costs nothing
-                        await self._painted(key, record, subject, kind)
+                    await self._painted(key, record, subject, kind)  # painted by program: costs nothing
                     return  # foreground narration owns the remaining budget
                 if record["status"] != "ready" and not record.get("phase"):
                     record["attempts"] = str(int(record.get("attempts", "0")) + 1)
@@ -177,30 +168,9 @@ class Visuals:
                     record.pop("error", None)
                     await self._cache(key)
                     return
-                # A place neither a photo nor image generation supplied: painted by program
-                # (scenery.py), never the artist's hand-drawn ASCII (2026-10-21).
-                if kind in ("scene", "portrait"):
-                    await self._painted(key, record, subject, kind)
-                    return
-                # A person: hand-drawn ASCII when neither a reference image nor image generation
-                # supplied a picture. Never publish a crude intermediate first.
-                if record["status"] != "ready":
-                    record["phase"] = "ascii"
-                    async with asyncio.timeout(90):
-                        text, mask = await artist.draw(
-                            self.cfg, f"{COMPOSITION[kind]}使用有层次的彩色字符插图。{self.module.era}，"
-                            f"{self.module.setting}。{record.get('brief', subject)}", portrait=kind == "portrait",
-                            on_reply=lambda reply: self.state.record_usage("visual:artist", reply),
-                        )
-                        if not text.strip() or artkit.check(key, text, mask, portrait=kind == "portrait"):
-                            raise ValueError("Invalid illustration")
-                        record.update(art=text, mask=mask, status="ready", photo_status="done")
-                        self._attach(key, record)
-                        await self._publish(key)
-                record["photo_status"] = "done"
-                record.pop("phase", None)
-                record.pop("error", None)
-                await self._cache(key)
+                # Neither a photo nor image generation supplied one: painted by program
+                # (scenery.py), a place, a person or a thing; never hand-drawn ASCII (2026-10-21).
+                await self._painted(key, record, subject, kind)
         except asyncio.CancelledError:
             raise  # still pending: resume the illustration when the save is loaded
         except Exception as exc:
@@ -218,6 +188,10 @@ class Visuals:
             who = next((n for n in self.module.npcs if n.portrait == key), None)
             path = await asyncio.to_thread(scenery.face, self.folder / "people", key, who.name if who else subject,
                                            who.look if who else "", who.role if who else "")
+        elif kind == "item":
+            it = next((i for i in self.module.items if i.art == key), None)
+            path = await asyncio.to_thread(scenery.thing, self.folder, key, it.name if it else subject,
+                                           it.description if it else "")
         else:
             name = next((loc.name for loc in self.module.locations if loc.art == key), "")
             path = await asyncio.to_thread(scenery.picture, self.folder, key, name, subject)

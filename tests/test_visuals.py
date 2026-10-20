@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
-from autokeeper import artkit, config, imagery, paths
+from autokeeper import artkit, config, imagery, paths, scenery
 from autokeeper.agents import artist
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewItem, NewLocation, NewNPC
@@ -101,25 +100,23 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
 async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path)
 
-    async def broken(*args, **kwargs):
-        raise ConnectionError("offline")
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
 
-    monkeypatch.setattr(artist, "draw", broken)
+    for name in ("picture", "face", "thing"):  # painting by program is the last resort: when it fails too
+        monkeypatch.setattr(scenery, name, broken)
     m, st = scene()
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
     await asyncio.gather(*visuals.tasks.values())
-    drawn = {k: v for k, v in st.visuals.items() if k.startswith("improv_item_")}  # only a prop still needs the artist
-    assert drawn and all(record["status"] == "failed" and not record["art"] for record in drawn.values())
-    assert all(record["error"] == "ConnectionError" for record in drawn.values())
-    painted = [v for k, v in st.visuals.items() if not k.startswith("improv_item_")]  # a place and a person: by program
-    assert painted and all(v["status"] == "ready" and Path(v["picture"]).is_file() for v in painted)
+    assert all(record["status"] == "failed" and not record["art"] for record in st.visuals.values())
+    assert all(record["error"] == "OSError" for record in st.visuals.values())
     await visuals.close()
 
     async def slow(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(artist, "draw", slow)
+    monkeypatch.setattr(Visuals, "_painted", slow)
     m, st = scene()
     st.slot = "cancel-test"
     visuals = Visuals(m, st, config.Config(search="none"), silent)
@@ -159,12 +156,11 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
     gate = asyncio.Event()
     configs = []
 
-    async def draw(cfg, *args, **kwargs):
-        configs.append(cfg)
+    async def paint(self, *args, **kwargs):
+        configs.append(self.cfg)
         await gate.wait()
-        return "[]", "yy"
 
-    monkeypatch.setattr(artist, "draw", draw)
+    monkeypatch.setattr(Visuals, "_painted", paint)
     m, st = scene()
     original, replacement = config.Config(search="none"), config.Config(search="none")
     game = Game(m, st, SimpleNamespace(cfg=original), Rules(dice=fake))
@@ -174,7 +170,7 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
     assert all(t.cancelled() for t in old_tasks)
     gate.set()
     await asyncio.gather(*game.visuals.tasks.values())
-    assert configs and configs[-1] is replacement and game.visuals.cfg is replacement  # the prop, drawn on the new model
+    assert all(cfg is replacement for cfg in configs[-3:]) and game.visuals.cfg is replacement
     await game.close()
 
 
@@ -205,20 +201,20 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
     monkeypatch.setattr(paths, "DATA", tmp_path)
     calls = 0
 
-    async def broken(*args, **kwargs):
+    def broken(*args, **kwargs):
         nonlocal calls
         calls += 1
-        raise ConnectionError("offline")
+        raise OSError("disk full")
 
-    monkeypatch.setattr(artist, "draw", broken)
+    for name in ("picture", "face", "thing"):
+        monkeypatch.setattr(scenery, name, broken)
     m, st = scene()
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     for _ in range(4):
         visuals.schedule()
         await asyncio.gather(*visuals.tasks.values())
-    drawn = {k: v for k, v in st.visuals.items() if k.startswith("improv_item_")}  # a place and a person are painted, never fail
-    assert calls == 2 and all(v["attempts"] == "2" for v in drawn.values())
-    assert all(v["status"] == "failed" for v in drawn.values())
+    assert calls == 6 and all(v["attempts"] == "2" for v in st.visuals.values())  # a place, a person, a prop: twice each
+    assert all(v["status"] == "failed" for v in st.visuals.values())
     await visuals.close()
 
 
@@ -264,7 +260,7 @@ async def test_a_prop_card_updates_in_place_when_its_illustration_arrives(monkey
     async def slow(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(artist, "draw", slow)
+    monkeypatch.setattr(Visuals, "_painted", slow)  # the picture is still on its way
     m, st = scene()
     st.location, st.slot = "cafe", "prop-card"
     app = AutoKeeperApp(theme="amber")
