@@ -103,7 +103,7 @@ async def test_handout_keeps_full_text_ascii_preview_and_original_access(monkeyp
         modal = HandoutModal("原作病历", text, [str(original)])
         app.push_screen(modal)
         await pilot.pause()
-        modal.revealed = len(modal.paper) - 1
+        modal.revealed = modal.sheet.size - 1
         modal._develop()
         paper = str(modal.query_one("#paper", Static).render())
         assert "病历第0项" in paper and "病历第99项" in paper
