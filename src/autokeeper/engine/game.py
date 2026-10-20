@@ -315,7 +315,7 @@ class Game:
         self.showcases.prepare()  # (already at it when the game was made inside a running loop)
         if not self.prelude_played:  # after the prelude the keeper's first words are not covered by a picture
             await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
-        text = await self._narrate(report, on_delta)
+        text = await self._narrate(report, on_delta, lore=self._brief())
         st.prologue = text  # the 背景 page keeps it after the log has moved on
         st.progress.marks = progress.marks(st)  # milestones count from here
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
@@ -1467,7 +1467,11 @@ class Game:
             self.told = None
             await self.emit({"type": "dialogue_end"})
             return ""  # the reply, clue cards and roll outcomes have already been shown
-        return await self._narrate(self._report(turn), on_delta, turn=turn)
+        return await self._narrate(self._report(turn), on_delta, lore=self._brief(), turn=turn)
+
+    def _brief(self) -> str:
+        """What the keeper keeps behind the screen for this telling (world/context.keeper_brief)."""
+        return world_view.keeper_brief(self.world) if getattr(self.cast, "backstage", True) else ""
 
     async def remember(self) -> None:
         st = self.state

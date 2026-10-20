@@ -99,10 +99,11 @@ async def test_the_keeper_hears_them_for_one_turn_and_the_rulers_never_do():
     intent, arbiter, keeper = await turn()
     assert _sent(intent) == _sent(plain[0]) and _sent(arbiter) == _sent(plain[1])  # rulings cannot depend on them
     asked = keeper["messages"][-1]["content"]
-    assert "守钟人的旧事" not in asked and "雷区：虫（" in asked and "溺水（" in asked  # preferences reach narration; private lore does not
+    assert "守钟人的旧事" in asked and "雷区：虫（" in asked and "溺水（" in asked  # preferences and the backstage reach this telling
     assert "篇幅短" in asked and "恐怖克制" in asked and "节奏紧凑" in asked and "照样发生" in asked
     assert keeper["system"] == plain[2]["system"]  # the cached prefix stays the same
-    assert "雷区" not in json.dumps(state.transcripts, ensure_ascii=False)  # and the transcript never keeps them
+    kept = json.dumps(state.transcripts, ensure_ascii=False)
+    assert "雷区" not in kept and "守钟人的旧事" not in kept  # and the transcript never keeps either
 
 
 async def test_the_director_keeps_new_scenes_out_of_the_lines():

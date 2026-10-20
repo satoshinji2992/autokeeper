@@ -98,3 +98,40 @@ def test_the_measures(fake):
                                           ("这句与记录不矛盾", False)])  # fmt: skip
 def test_a_judge_note_that_admits_agreement_is_dropped(record, kept):
     assert (session.AGREED.search(record) is None) == kept
+
+
+def test_what_the_players_do_not_know_yet():
+    from autokeeper.world.store import World
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    World(m, st)
+    hidden = session.secrets(st)
+    assert "truth" in hidden and "npc:warden:secrets:0" in hidden and "clue:c_gears" in hidden
+    assert not any(k.startswith("npc:warden:lies") for k in hidden)  # what he says is no secret
+    st.clues.append("c_gears")
+    assert "clue:c_gears" not in session.secrets(st)  # found: no longer the keeper's to keep
+    st.record.facts["truth"].revealed = 0  # an old marker with no source does not count as told
+    assert "truth" in session.secrets(st)
+
+
+async def test_a_slip_stands_when_both_readings_name_it():
+    from autokeeper.harness import Reply
+
+    class Pool:
+        def __init__(self, *answers):
+            self.answers = list(answers)
+
+        async def complete(self, system, messages, schema=None):
+            return Reply(data=self.answers.pop(0))
+
+    hidden = {"truth": "守钟人在钟里藏了一样东西", "npc:warden:secrets:0": "他在钟里藏了东西"}
+    pool = Pool({"leaks": [{"secret": "truth", "claim": "钟里藏着东西"}, {"secret": "npc:warden:secrets:0", "claim": "藏了东西"}]},
+                {"leaks": [{"secret": "truth", "claim": "钟里有东西"}, {"secret": "别的", "claim": "没有这一条"}]})
+    got = await session.ask_leaks(pool, hidden, "你听见钟里藏着东西在敲。")
+    assert [x["secret"] for x in got] == ["truth"]
+    assert await session.ask_leaks(pool, hidden, "") == []  # no narration, nothing to read
+    rows = [{"turn": 1, "recorded": {"problems": [], "npc": [], "target": "", "echo": 0.0, "chars": 9,
+                                     "leaks": got, "verbatim": ["truth"]}}]  # fmt: skip
+    told = session.summarize(rows)["recorded"]
+    assert told["turns_with_leaks"] == 1 and told["leaks"] == 1 and told["verbatim_leaks"] == 1

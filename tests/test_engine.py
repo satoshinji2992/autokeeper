@@ -30,6 +30,7 @@ class FakeCast:
         self.npc_calls: list[tuple[str, str]] = []
         self.performances: list[str] = []
         self.reports: list[str] = []
+        self.lores: list[str] = []  # the backstage each telling was given
 
     async def intent(self, state, text):
         self.heard.append(text)
@@ -50,6 +51,7 @@ class FakeCast:
 
     async def keeper(self, state, report, on_delta=None, lore=""):
         self.reports.append(report)
+        self.lores.append(lore)
         if on_delta:
             await on_delta("叙事")
         return "叙事"
@@ -104,6 +106,24 @@ async def test_start_fires_the_starting_locations_arrival_event_once(module, fak
     assert "arrival" in game.state.fired and "两位访客" in cast.reports[0]
     await game._arrive(module.start, Turn())
     assert sum(event["type"] == "event" and event.get("id") == "arrival" for event in events) == 1
+
+
+async def test_the_keeper_reads_the_backstage_of_where_the_party_stands(module, fake):
+    from autokeeper.world import context as world_view
+    from autokeeper.world.ops import Rewrite
+
+    game, cast, _ = make(module, fake, {}, location="tower")
+    await game.start()
+    brief = cast.lores[0]
+    assert "齿轮间里藏着东西" in brief and "他在钟里藏了东西" in brief  # the place's notes, the warden's secret
+    assert "守钟人的日记" in brief and "街头布道者：" not in brief  # what is still to find here; nobody from elsewhere
+    done = game.world.apply(Rewrite(id="rw", target="fact:npc:warden:secrets:0", text="他在钟里藏了一封信",
+                                    reason="让信接上调查员的背景", actor="director"))
+    assert done.ok, done.problems
+    brief = world_view.keeper_brief(game.world)
+    assert "他在钟里藏了一封信" in brief and "改写过的设定" in brief  # the record's truth, not the module's first draft
+    cast.backstage = False  # the blind keeper, for comparing
+    assert game._brief() == ""
 
 
 async def run_turn(app, text, thread, resume=None):

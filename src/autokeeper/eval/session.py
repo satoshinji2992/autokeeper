@@ -32,8 +32,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from .. import config, paths
-from ..agents.guard import grams
+from ..agents.guard import grams, leaks
 from ..engine import check
 from ..engine.state import GameState
 from ..harness import trace
@@ -162,6 +164,63 @@ async def ask_judge(pool: ModelPool, record: str, said_text: str, keeper: str, l
     return [p.model_dump() for p in first if p.kind in kinds]
 
 
+# -- what the players must not hear yet ----------------------------------------------------------
+# The keeper sees everything (the user's call, 2026-10-20); what it lets slip is measured here.
+HIDDEN_KINDS = ("truth", "conclusion", "secret")
+
+LEAK_RULES = """你核对跑团守秘人的一段叙述有没有说漏玩家还不知道的事。给你一份还没向玩家公开的清单（每条前面是编号），和这一轮守秘人的叙述。
+叙述直接说出、换个说法讲出，或者明白暗示了清单里某一条的内容，才算说漏；只是写到同一个人、同一个地方、同一样东西，写了眼前看得见的景象和人物的举动，或者写的是清单之外的事，都不算。
+逐条核对，没有说漏就留空。"""
+
+
+class Leak(BaseModel):
+    secret: str = Field(description="说漏的是清单里的哪一条，照抄它的编号")
+    claim: str = Field(description="叙述里说漏它的那一小段原文，不超过 40 字")
+
+
+class Leaks(BaseModel):
+    leaks: list[Leak] = Field(default_factory=list, max_length=6, description="说漏的地方；没有就留空")
+
+
+def secrets(st: GameState) -> dict[str, str]:
+    """Fact id -> text of what the players do not know yet, from the record after the turn: the
+    truth, the conclusions, the NPCs' secrets and the clues not found. A reveal counts only with
+    its source; an old marker without one (the 10-19 audit's cascade) stays hidden."""
+    found = set(st.clues)
+    out = {}
+    for f in st.record.facts.values():
+        if f.retracted or not f.text.strip() or (f.revealed is not None and f.reveal_source):
+            continue
+        if f.kind in HIDDEN_KINDS or (f.id.startswith("clue:") and f.id.removeprefix("clue:") not in found):
+            out[f.id] = f.text.strip()
+    return out
+
+
+def seen_before(st: GameState, turn: int) -> str:
+    """What the table had read before this turn: shared words there are not a slip."""
+    return "\n".join(e.text for e in st.log if e.turn < turn and e.kind in ("opening", "keeper", "npc", "clue", "handout", "event"))
+
+
+async def ask_leaks(pool: ModelPool, hidden: dict[str, str], keeper: str) -> list[dict[str, str]]:
+    """Two readings of the narration against what the players do not know yet; a slip stands
+    when both readings name the same item."""
+    if not keeper.strip() or not hidden:
+        return []
+    listed = "\n".join(f"- {k}：{v}" for k, v in hidden.items())
+    asked = [{"role": "user", "content": f"【还没向玩家公开的】\n{listed}\n\n【守秘人的叙述】\n{keeper}"}]
+
+    async def read() -> list[Leak]:
+        reply = await pool.complete(LEAK_RULES, asked, schema=Leaks.model_json_schema())
+        try:
+            return [x for x in Leaks.model_validate(reply.data or {}).leaks if x.secret in hidden]
+        except ValueError:
+            return []
+
+    first, second = await asyncio.gather(read(), read())
+    named = {x.secret for x in second}
+    return [x.model_dump() for x in first if x.secret in named]
+
+
 async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
     """Judge a report's turns again with today's judge, from what it kept (record, narration,
     lines): a change to the judge needs no replay."""
@@ -175,6 +234,8 @@ async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
             return
         async with sem:
             got["problems"] = await ask_judge(pool, got["record"], row["input"], got.get("keeper", ""), got.get("npc", []))
+            if got.get("hidden") is not None:
+                got["leaks"] = await ask_leaks(pool, got["hidden"], got.get("keeper", ""))
 
     try:
         await asyncio.gather(*(one(r, side) for r in report["rows"] for side in ("recorded", "replayed")))
@@ -207,9 +268,11 @@ class _Calls:
 
 
 async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int], *, turn: int,
-                 timeout: float = 240) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
+                 timeout: float = 240, check: bool | None = None, blind: bool = False) -> tuple[GameState, list[dict[str, Any]]]:  # fmt: skip
     """One turn played again from the game as it stood before it: the game after it, and what
-    the turn showed (its events, without the narration's pieces)."""
+    the turn showed (its events, without the narration's pieces). `check` overrides the
+    configuration's reading of tellings (engine/check.py); `blind` keeps the keeper from the
+    backstage, to compare with the keeper that sees it."""
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.types import Command
 
@@ -220,10 +283,13 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
     _turn.set(turn)
     cfg = replace(config.load(), visual_limit=0, imagegen=False, showcase=False)
+    if check is not None:
+        cfg = replace(cfg, check=check)
     m = Module.load(m_dir)
     st = GameState.model_validate(before)
     st.pending_turn = {}
     cast = Cast(cfg, m)
+    cast.backstage = not blind
     game = Game(m, st, cast, Rules(dice=Loaded(dice)))  # type: ignore[arg-type]
     game.director_wait = None  # nobody is waiting: a plan the turn asks for lands in it
     game.world_later = True  # as on a screen: the NPCs' own decisions come after the turn is told
@@ -255,7 +321,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
 
 # -- the whole run -----------------------------------------------------------------------------------
 async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: Path | None = None, parallel: int = 3,
-              log=print) -> dict[str, Any]:  # fmt: skip
+              log=print, check: bool | None = None, blind: bool = False) -> dict[str, Any]:  # fmt: skip
     record = recorded(slot)
     have = sorted(t for t in record if t - 1 in record)
     chosen = parse_turns(turns, have)
@@ -279,10 +345,15 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
     async def judge(m: Module, st: GameState, turn: int, before: dict[str, Any], text: str, ruling: dict | None,
                     side: dict[str, Any], hints: list[str] | None = None) -> list[dict[str, str]]:  # fmt: skip
         keeper, lines = told(st, turn)
+        side["leaks"], side["verbatim"] = [], []
         if not keeper and not lines:
             return []
         record_text = side["record"] = world_after(m, st, turn, before, ruling, hints)  # kept, so a report can be judged again
-        return await ask_judge(pool, record_text, text, keeper, lines)
+        hidden = side["hidden"] = secrets(st)  # kept too: only the narration is read for slips, not the NPCs' own words
+        side["verbatim"] = leaks(keeper, hidden, public=seen_before(st, turn)) if keeper else []
+        problems, side["leaks"] = await asyncio.gather(ask_judge(pool, record_text, text, keeper, lines),
+                                                      ask_leaks(pool, hidden, keeper))
+        return problems
 
     def measures(m: Module, st: GameState, turn: int, text: str, action: dict | None, before: dict[str, Any]) -> dict[str, Any]:
         keeper, lines = told(st, turn)
@@ -309,7 +380,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
             if not recorded_only:
                 started = time.monotonic()
                 try:
-                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn)
+                    st, shown = await replay(m_dir, before, text, rolled(after["state"], turn), turn=turn, check=check, blind=blind)
                     m2 = Module.load(m_dir)
                     if st.improv:
                         improv.restore(m2, st.improv)
@@ -338,7 +409,8 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
         if "replayed" in r:
             r["replayed"]["calls"] = calls.by_turn.get(r["turn"], [])
     summary = summarize(rows)
-    report = {"slot": slot, "module": first.module, "turns": [r["turn"] for r in rows], "summary": summary, "rows": rows}
+    report = {"slot": slot, "module": first.module, "turns": [r["turn"] for r in rows], "summary": summary, "rows": rows,
+              "settings": {"check": check, "blind_keeper": blind}}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     report["out"] = str(out)
@@ -361,6 +433,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "turns_with_problems": sum(bool(x["problems"]) for x in done),
             "problems": sum(len(x["problems"]) for x in done),
             "by_kind": dict(sorted(kinds.items(), key=lambda kv: -kv[1])),
+            "turns_with_leaks": sum(bool(x.get("leaks")) for x in done),
+            "leaks": sum(len(x.get("leaks", [])) for x in done),
+            "verbatim_leaks": sum(len(x.get("verbatim", [])) for x in done),
             "target_swaps": sum(bool(x["target"]) for x in done),
             "echo_when_npc_spoke": round(sum(x["echo"] for x in spoke) / len(spoke), 2) if spoke else 0.0,
             "keeper_chars": round(sum(x["chars"] for x in done) / len(done)),

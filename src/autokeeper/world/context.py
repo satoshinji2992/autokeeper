@@ -4,7 +4,9 @@
                hints, promises, relations, unrevealed facts with their versions (for the
                reads of a backstage plan), pending schedules and requests, recent revisions
     keeper     the scene as the players can see it: who is here now, traces of what happened
-               here while they were away, what the table knows, public promises and events
+               here while they were away, what the table knows, public promises and events;
+               and behind the screen (keeper_brief), what this place hides, what the people
+               here and next door hide and mean to do, what is coming, what was rewritten
     npc        its own sheet, goals, plan, memories, what it knows, its relations, promises,
                things and places; never a fact it does not know
 """
@@ -303,6 +305,68 @@ def keeper_view(w: World, at: str | None = None) -> str:
     if seen:
         lines.append("【调查员亲历的近事】\n" + "\n".join(f"- {format_time(e.t)} {e.text}" for e in seen))
     return "\n".join(lines)
+
+
+BRIEF_ITEM = 160  # characters of one secret, plan step or note in the keeper's brief
+BRIEF_SOON = 4  # coming things listed
+
+
+def _clip(text: str, n: int = BRIEF_ITEM) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def keeper_brief(w: World) -> str:
+    """What the keeper keeps behind the screen for the telling it is about to give (the user's
+    call, 2026-10-20: the keeper sees everything): what this place hides, what the people here and
+    in the other rooms of the building hide and mean to do, what is coming, what was rewritten.
+    Read from the record, so a rewrite shows; sent with each telling and never kept in the
+    keeper's memory. What of it reaches the players stays the keeper's call under its rules."""
+    rec, st, m = w.rec, w.st, w.m
+    here = st.location
+    lines: list[str] = []
+    note = rec.facts.get(f"location:{here}:keeper")
+    if note is not None and not note.retracted and note.text.strip():
+        lines.append(f"此地（{w.name(here)}）的守秘人须知：{_clip(note.text, 400)}")
+
+    def person(npc: str) -> str:
+        own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]
+        goal = next((f.text for f in own if f.kind == "goal"), "")
+        secrets = [_clip(f.text) for f in own if f.kind == "secret" and f.revealed is None]
+        lies = [_clip(f.text) for f in own if f.kind == "lie"]
+        parts = [f"想要：{_clip(goal)}"] if goal else []
+        parts += [f"秘密：{'；'.join(secrets)}"] if secrets else []
+        parts += [f"会说的谎：{'；'.join(lies)}"] if lies else []
+        if (a := rec.agents.get(npc)) is not None:
+            steps = [f"{_clip(s.text, 80)}（{_when(s.due) if s.due is not None else s.when or '想到就做'}）"
+                     for s in a.plan if s.status == "pending"][:3]
+            parts += [f"打算：{'；'.join(steps)}"] if steps else []
+            parts += [f"心境：{_clip(a.mood, 60)}"] if a.mood else []
+        return "；".join(parts) or "没有特别的事"
+
+    present = w.present(here)
+    if present:
+        lines.append("在场的人：\n" + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
+    near = nearby(w, here)
+    if near:
+        lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))
+    hidden = [c for c in m.clues if c.where == here and c.id not in st.clues]
+    if hidden:
+        lines.append("这里还没被找到的东西（别先写出来，也别把它所在的地方写成空的）：" + "；".join(
+            f"{c.title}（{c.feature or '此处'}）" for c in hidden))
+    soon = [(s.at, _clip(s.text)) for s in rec.scheduled.values() if s.status == "pending" and s.at >= w.now]
+    soon += [(s.due, f"{w.name(npc)}：{_clip(s.text)}") for npc, a in rec.agents.items()
+             for s in a.plan if s.status == "pending" and s.due is not None and s.due >= w.now]
+    if soon:
+        lines.append("接下来会发生的事（还没发生，别提前写成发生了）：\n" + "\n".join(
+            f"- {format_time(t)} {text}" for t, text in sorted(soon)[:BRIEF_SOON]))
+    if rec.revisions:
+        lines.append("改写过的设定（以改写后的为准）：\n" + "\n".join(
+            f"- {_clip(r.old, 60)} → {_clip(r.new, 120)}" for r in rec.revisions[-5:]))
+    if not lines:
+        return ""
+    return ("【幕后（只给你看）】这些用来让描写和真相一致、让在场的人照自己的打算行事；对玩家说什么、露出多少，照硬规则。\n"
+            + "\n".join(lines))
 
 
 def director_view(w: World) -> View:

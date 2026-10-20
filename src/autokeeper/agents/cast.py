@@ -401,6 +401,9 @@ class Cast:
         self.prefs = Prefs.load()  # the player's narrative preferences; the settings screen swaps them mid-game
         self.world: World | None = None  # the game's world record (engine/game.py sets it); NPC changes settle there
         self.debug_calls: deque[dict] = deque(maxlen=60)  # private, process-local; never enters a save or LAN sync
+        # The keeper holds the module's book and reads each scene's backstage (the user's call,
+        # 2026-10-20: the keeper sees everything); off only to compare with the blind keeper (eval session).
+        self.backstage = True
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -927,18 +930,20 @@ class Cast:
         if "keeper" in self.sessions:
             return self.sessions["keeper"]
         m = self.module
+        module = f"年代：{m.era}\n地方：{m.setting}\n玩家已知的缘由：{m.hook}"
         system = KEEPER_SYSTEM.format(
             title=m.title,
             craft=skills.wrap("keeper-craft"),
-            module=f"年代：{m.era}\n地方：{m.setting}\n玩家已知的缘由：{m.hook}",
+            module=module + ("\n\n" + _book(m) if self.backstage else ""),
         )
         return self._open("keeper", "keeper", system)
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "") -> str:
-        """Public resolution only. Raw knowledge-base hits belong to the private agents.
-        Narrative preferences ride along this call without rewriting the cached prefix."""
+        """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
+        narrative preferences ride along this call only, without rewriting the cached prefix."""
         s = self._keeper(state)
-        reply = await self._send("keeper", s, state, report, extra=self.prefs.for_keeper(), on_delta=on_delta)
+        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper()
+        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
         return reply.text.strip()
 
     async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
@@ -1197,6 +1202,21 @@ class Cast:
 # let 7 of 40 rhetorical attacks soften a ruling (bonus dice for "the mud is still soft, nobody is
 # about"); without them 2 of 40, both what the module allows anyway (eval rhetoric, 2026-10-20).
 SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
+
+
+def _book(m: Module) -> str:
+    """The keeper's own book, all game long: the truth, how to run it, what it comes to. A rewrite
+    of any of it reaches the keeper in the scene's backstage (world/context.keeper_brief)."""
+    rows = [f"真相：{m.truth.strip()}"]
+    if m.keeper_notes.strip():
+        rows.append(f"怎么跑：{m.keeper_notes.strip()}")
+    if m.history:
+        rows.append("前史：" + "；".join(f"{p.when}，{p.text}" for p in m.history))
+    if m.conclusions:
+        rows.append("结论：" + "；".join(f"{k.id} {k.text}" for k in m.conclusions))
+    if m.endings:
+        rows.append("结局：" + "；".join(f"{e.title}（{e.condition}）" for e in m.endings))
+    return "【守秘人的底牌（只给你看）】\n" + "\n".join(rows)
 
 
 def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "npc", "keeper", "event", "clue", "handout")) -> str:

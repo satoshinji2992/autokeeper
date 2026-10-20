@@ -401,18 +401,39 @@ async def test_the_arbiter_reads_what_happened_and_the_parsed_action_never_the_p
     await cast.close()
 
 
-async def test_upgrading_an_old_save_removes_hidden_keeper_context():
+async def test_upgrading_an_old_save_rebuilds_the_keepers_memory_from_what_was_told():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    state.transcripts["keeper"] = [{"role": "user", "content": m.truth}, {"role": "assistant", "content": "旧叙述"}]
-    state.notes["keeper"] = m.truth
+    state.transcripts["keeper"] = [{"role": "user", "content": "旧版的私人报告"}, {"role": "assistant", "content": "旧叙述"}]
+    state.notes["keeper"] = "旧版的私人摘要"
     state.add("keeper", "钟楼门口的石阶湿漉漉的。")
     SCRIPT.append("你站在石阶前。")
-    await Cast(cfg, m).keeper(state, "你停在钟楼门口。", lore=m.truth)
-    assert m.truth.strip() not in json.dumps(SEEN[-1], ensure_ascii=False)
-    assert "石阶湿漉漉" in json.dumps(SEEN[-1], ensure_ascii=False)
+    await Cast(cfg, m).keeper(state, "你停在钟楼门口。")
+    sent = json.dumps(SEEN[-1], ensure_ascii=False)
+    assert "旧版的私人报告" not in sent and "旧版的私人摘要" not in sent and "旧叙述" not in sent
+    assert "石阶湿漉漉" in sent  # the story so far, from what was told
     assert state.narrator_context_version == 1
+
+
+async def test_the_keeper_holds_the_modules_book_and_the_backstage_rides_one_telling():
+    m = Module.load(EXAMPLE)
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+    cast = Cast(cfg, m)
+    SCRIPT.append("钟楼里很安静。")
+    await cast.keeper(state, "你走进钟楼。", lore="【幕后（只给你看）】守钟人在钟里藏了东西")
+    assert m.truth.strip() in SEEN[-1]["system"] and m.keeper_notes.strip() in SEEN[-1]["system"]
+    assert all(e.title in SEEN[-1]["system"] for e in m.endings)
+    assert "守钟人在钟里藏了东西" in SEEN[-1]["messages"][-1]["content"]  # this telling only
+    assert "【幕后" not in json.dumps(state.transcripts["keeper"], ensure_ascii=False)  # never kept, never saved
+    blind = Cast(cfg, m)  # the keeper before 2026-10-20, kept for comparing (eval session --blind-keeper)
+    blind.backstage = False
+    SCRIPT.append("钟楼里很安静。")
+    await blind.keeper(state, "你走进钟楼。")
+    assert m.truth.strip() not in SEEN[-1]["system"]
+    await cast.close()
+    await blind.close()
 
 
 async def test_an_npc_promise_is_recorded_from_its_actual_structured_reply():
@@ -705,13 +726,13 @@ async def test_companion_consent_is_structured_without_changing_normal_npc_outpu
     await game.close()
 
 
-async def test_raw_lore_reaches_neither_the_keeper_nor_its_memory():
+async def test_the_backstage_reaches_the_keeper_for_one_telling_and_never_its_memory():
     m = Module.load(EXAMPLE)
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
     SCRIPT.append("钟声又响了一下。")
-    await Cast(cfg, m).keeper(state, "【第 1 轮】请叙述。", lore="【模组知识库检索】守钟人的旧事……")
-    assert "守钟人的旧事" not in SEEN[-1]["messages"][-1]["content"]  # private retrieval is never narration context
+    await Cast(cfg, m).keeper(state, "【第 1 轮】请叙述。", lore="【幕后（只给你看）】守钟人的旧事……")
+    assert "守钟人的旧事" in SEEN[-1]["messages"][-1]["content"]  # the keeper sees everything (2026-10-20)
     assert "守钟人的旧事" not in json.dumps(state.transcripts, ensure_ascii=False)  # the window does not keep it
 
 

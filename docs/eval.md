@@ -131,6 +131,8 @@ uv run autokeeper --preset deepseek eval rhetoric --referee deepseek:deepseek-fl
 uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --turns 3-40
 uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --recorded   # 只核对当时的记录
 uv run autokeeper --preset deepseek eval rejudge dev/output/eval/session-xxx.json    # 换了核对规则后重核
+uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --no-check   # 重放时不在显示前核对叙述
+uv run autokeeper --preset deepseek eval session zhuishuren-1019-224053 --no-check --blind-keeper  # 守秘人看不到底牌，作对照
 ```
 
 AI 调查员不像真人，所以拿真人存档来测。回合图在每一轮结束时把整局状态存进检查点，`eval session` 从里面取出第 N-1 轮结束时的局面，用玩家第 N 轮的原话和当时掷出的点数，跑一遍现在的流程；每一轮单独从当时的局面开始，一轮的错不会带到下一轮，也不写存档。
@@ -138,6 +140,8 @@ AI 调查员不像真人，所以拿真人存档来测。回合图在每一轮�
 然后由核对模型（DeepSeek flash，不思考）对照这一轮结束时的世界记录读叙述和 NPC 的话，挑出矛盾：人在不在（同一栋房子别的房间也算在近旁）、谁跟着、调查员手里的东西、结算之外凭空多出的物证、时刻对不对。每一轮读两遍，两遍都挑出同一类问题才算，当时的记录用同样的方法核对，作为对照。
 
 核对模型本身有噪声：同样的叙述核两次，85 轮里有问题的轮数会差 4 轮左右；它对已知的问题大多能挑出来（审计里列出的同行、人在别处、凭空多出的脚印和碎布，9 轮里挑出 8 轮，漏了捡起碎布那一轮），也会误报，所以只比较同一次运行里的两边，不看绝对数。另一个局限：重放从当时的局面开始，当时已经错开的历史（叙述里有人跟着、记录里没有）会带进来，守秘人读到的近期经过也是当时的。
+
+守秘人看得到全部底牌（模组的真相、此地藏着什么、在场的人的秘密和打算），所以每一轮还核对一次叙述有没有说漏：给核对模型一份这一轮结束时玩家还不知道的事（真相、结论、NPC 的秘密、没找到的线索，只拿世界记录，不经过守秘人的报告），读两遍，两遍都点名同一条才算说漏；另外用五字片段比一遍，照抄原文的单独计数。只看守秘人的旁白，NPC 自己的台词不算。`--blind-keeper` 让守秘人回到看不到底牌的样子，和看得到时用同一份代码对照。
 
 2026-10-20，《追书人》一局 118 轮的真人存档：
 
