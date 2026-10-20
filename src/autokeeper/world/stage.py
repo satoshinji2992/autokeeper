@@ -132,8 +132,8 @@ def waiting(w: World, actor: str | None = None) -> list[Beat]:
 
 def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
     """Land work whole, now: tried on a copy first (the actor's own permissions, the world's
-    checks, the module staying solvable); what stops it when it no longer fits."""
-    from . import agents, contract
+    checks); what stops it when it no longer fits."""
+    from . import agents
     from .store import World
 
     trial = World(w.m.model_copy(deep=True), w.st.model_copy(deep=True))
@@ -154,8 +154,6 @@ def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
             problems += result.problems
             break
         ops.append(op)
-    if not problems:
-        problems += contract.cut(w, trial)  # the module must stay solvable
     if not problems:  # no await between the trial and the commit: the same state both times
         for op in ops:
             result = w.apply(op)
