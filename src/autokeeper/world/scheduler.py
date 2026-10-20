@@ -26,7 +26,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from . import agents, context, stage
+from . import agents, context, contract, stage
 from .ops import AdvancePlan, Occur, SetPlan, parse
 from .record import Agent
 
@@ -100,6 +100,9 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
             report.refused.extend(f"{r.op} {p}" for p in r.problems)
             return False
         prepared.append(op)
+    if cuts := contract.cut(w, trial):  # the module must stay solvable (contract.py)
+        report.refused.extend(f"{prefix} {p}" for p in cuts)
+        return False
     if involved:
         beat = stage.queue(w, prefix, actor, [op.model_dump(mode="json") for op in prepared], involved, leaving)
         if beat.status == "dropped":

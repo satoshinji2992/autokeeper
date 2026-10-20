@@ -118,7 +118,7 @@ def waiting(w: World, actor: str | None = None) -> list[Beat]:
 def play(w: World, beat: Beat) -> list[str]:
     """Land a beat whole, now; what stops it when it no longer fits (it is dropped then, and
     its author woken to decide again)."""
-    from . import agents
+    from . import agents, contract
     from .store import World
 
     trial = World(w.m.model_copy(deep=True), w.st.model_copy(deep=True))
@@ -139,6 +139,8 @@ def play(w: World, beat: Beat) -> list[str]:
             problems += result.problems
             break
         ops.append(op)
+    if not problems:
+        problems += contract.cut(w, trial)  # the module must stay solvable
     if not problems:  # no await between the trial and the commit: the same state both times
         for op in ops:
             result = w.apply(op)

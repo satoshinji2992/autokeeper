@@ -30,7 +30,7 @@ from ..rules import commands
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from ..world import adapters, desk, knowledge, rewrite, scheduler, stage
+from ..world import adapters, contract, desk, knowledge, rewrite, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
@@ -750,6 +750,8 @@ class Game:
         for i, op in enumerate(plan.backstage):
             done = w.apply(op.model_copy(update={"actor": DIRECTOR, "id": f"trial:{i}"}))
             problems += [f"幕后第 {i + 1} 条（{op.kind}）：{p}" for p in done.problems]
+        if not problems:  # the module must stay solvable: another way may come in the same plan
+            problems += [f"{p}；在方案里补一条路，或者换个做法" for p in contract.cut(self.world, w)]
         return problems
 
     async def _consistent(self, plan: Improv) -> list[str]:
