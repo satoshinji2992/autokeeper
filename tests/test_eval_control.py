@@ -5,12 +5,9 @@ from __future__ import annotations
 
 import pytest
 
-from autokeeper.engine.game import Game
-from autokeeper.engine.state import LogEntry
 from autokeeper.eval import control, session
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
-from autokeeper.world.store import World
 
 
 @pytest.mark.parametrize("text, said", [
@@ -72,24 +69,32 @@ def test_a_clue_told_without_being_found():
     assert control.clue_slips(m, [], f"老守钟人：{diary}", "", missed=[])["early_told"] == ["c_diary"]  # behind his gate
 
 
-def test_a_failed_check_and_what_the_telling_does_by_rule():
-    log = [LogEntry(turn=3, time="D1 08:00", kind="dice", text="侦查 45 → 93 失败 ✗"), LogEntry(turn=4, time="D1 08:10", kind="dice", text="侦查 45 → 77 失败 ✗"),
-           LogEntry(turn=4, time="D1 08:10", kind="dice", text="花费幸运 32 点，侦查 检定改为成功")]
-    assert control.failed_check(log, 3) and not control.failed_check(log, 4) and not control.failed_check(log, 5)
+RECORD = """时间：D1 17:21（傍晚），这一轮经过 5 分钟
+调查员所在：金博尔家（同一处的其他房间：道格拉斯的书房）
+此刻就在调查员身边的人：没有别人
+同一处别的房间里、不在眼前的人：托马斯·金博尔在道格拉斯的书房
+和调查员同行的人：没有
+在别处的人：阿萨塔在主街午餐柜台、梅洛迪亚斯·杰弗逊在公墓
+这一轮结算的结果：
+- dice：侦查 45 → 93 失败 ✗
+裁定员对这一轮的说明（能有什么结果）：窗外有泥"""
+
+
+def test_what_the_telling_does_read_by_rule_off_the_record():
+    assert control.failed(RECORD) and control.settled(RECORD) == ["dice：侦查 45 → 93 失败 ✗"]
+    assert not control.failed(RECORD.replace("- dice：侦查 45 → 93 失败 ✗", "- dice：侦查 45 → 93 失败 ✗\n- dice：花费幸运 48 点，侦查 检定改为成功"))
     said = "我先假装去告诉阿萨塔蹲守屋子，在确保他不会听到的地方让他偷偷跟踪我们"
     assert control.secret_spoken(said, "你朝门廊那边扬声交代了一句。他点点头。") == ["你朝门廊那边扬声交代了一句。"]
     assert control.secret_spoken("我去书房", "你朝门廊那边喊了一声。") == []  # nothing meant quietly
-    assert ["划破" in x for x in control.unhurt("你的手被铁丝划破了，渗出血来。", log, 3)] == [True]
-    assert control.unhurt("你的手被铁丝划破了。", [*log, LogEntry(turn=3, time="D1 08:00", kind="damage", text="受伤 2")], 3) == []
+    assert ["划破" in x for x in control.unhurt("你的手被铁丝划破了，渗出血来。", RECORD)] == [True]
+    assert control.unhurt("你的手被铁丝划破了。", RECORD.replace("- dice", "- damage：受伤 2\n- dice")) == []
+    got = control.presence_rules(RECORD, "你喊了一声，里面没有应答。客厅里没有人在。阿萨塔从门口探进头来。阿萨塔不在这里。")
+    assert got["nobody"] == ["你喊了一声，里面没有应答。"]  # 托马斯 is in the study, a room of this house
+    assert got["absent"] == ["阿萨塔（在主街午餐柜台）：阿萨塔从门口探进头来。"]
     m = Module.load(EXAMPLE)
-    st = Game.new(m, [m.pregens[0].model_copy(deep=True)])
-    World(m, st)
-    st.location = "square"
-    st.record.entities["warden"].at = "tower"  # the tower is part of the square's place
-    st.record.entities["preacher"].at = "office"
-    got = control.presence_rules(m, st, "你喊了一声，没人应。街头布道者朝你点头。布道者不在这里。")
-    assert got["nobody"] == ["你喊了一声，没人应。"]  # the warden is in the tower, a room of this place
-    assert got["absent"] == ["街头布道者（在报社）：街头布道者朝你点头。"]
+    gears = next(c.text for c in m.clues if c.id == "c_gears")
+    ruled = control.ruled(m, RECORD, said, f"你凑近看：{gears}", [], found=[], public="", ruling={"clues_on_success": ["c_gears"]})
+    assert ruled["clues"] == {"missed_told": ["c_gears"], "early_told": ["c_gears"]} and ruled["rules"]["nobody"] == []
 
 
 def _report(rows: list[tuple[int, int, int]]) -> dict:

@@ -329,14 +329,28 @@ async def rejudge(path: Path, *, out: Path | None = None) -> dict[str, Any]:
 judge_prompt = check.prompt
 
 
-def clue_slips(m: Module, st: GameState, turn: int, ruling: dict | None, keeper: str, lines: list[str]) -> dict[str, list[str]]:
-    """A failed check's clue told anyway, and a clue behind a check told before it was found
-    (eval/control.clue_slips): what was told this turn, keeper and NPCs, against what was public."""
-    words = "\n".join([keeper, *(x.partition("：")[2] for x in lines)])
-    public = seen_before(st, turn) + "\n" + shown_now(st, turn, npc=False)
-    wanted = (ruling or {}).get("clues_on_success") or []
-    missed = [c for c in wanted if c not in st.clues] if control.failed_check(st.log, turn) else []
-    return control.clue_slips(m, st.clues, words, public, missed=missed)
+def recheck(path: Path, *, out: Path | None = None) -> dict[str, Any]:
+    """The rule-read measures of a report done again with today's rules (eval/control.ruled), from what
+    it kept and the save's checkpoints: no model is called."""
+    report = json.loads(Path(path).read_text(encoding="utf-8"))
+    record = recorded(report["slot"])
+    m = module_of(report["module"])
+    assert m is not None
+    for row in report["rows"]:
+        then = GameState.model_validate(record[row["turn"]]["state"])
+        for key in ("recorded", "replayed"):
+            side = row.get(key) or {}
+            if "record" not in side:
+                continue
+            hidden = side.get("hidden") or {}
+            found = [c.id for c in m.clues if f"clue:{c.id}" not in hidden]
+            ruling = side.get("ruling") if key == "replayed" else record[row["turn"]].get("ruling")
+            side.update(control.ruled(m, side["record"], row["input"], side.get("keeper", ""), side.get("npc", []), found=found,
+                                      ruling=ruling, public=seen_before(then, row["turn"]) + "\n" + side.get("given", "")))
+    report["summary"] = summarize(report["rows"])
+    target = out or Path(path)
+    target.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+    return report
 
 
 # -- playing a turn again --------------------------------------------------------------------------
@@ -483,7 +497,9 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
         # the party of the handprints once she trusts them is initiative); only what it could not know counts.
         said = side["npc_said"] = speakers(m, lines)
         unknown = side["npc_unknown"] = {npc: [fid for fid in hidden if not knowledge.sees(st.record.facts[fid], npc)] for npc in said}
-        side["clues"] = clue_slips(m, st, turn, ruling, keeper, lines)
+        # What a rule can see in the telling (eval/control.ruled), from what is kept: a report read again agrees.
+        side.update(control.ruled(m, record_text, text, keeper, lines, found=list(st.clues), ruling=ruling,
+                                  public=seen_before(st, turn) + "\n" + given))
         problems, side["leaks"], *npc_slips = await asyncio.gather(
             ask_judge(pool, record_text, text, keeper, lines), ask_leaks(pool, hidden, keeper, shown),
             *(ask_leaks(pool, {fid: hidden[fid] for fid in unknown[npc]}, "\n".join(words), given, npc=True) for npc, words in said.items()))
@@ -494,10 +510,8 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
     def measures(m: Module, st: GameState, turn: int, text: str, action: dict | None, before: dict[str, Any]) -> dict[str, Any]:
         keeper, lines = told(st, turn)
         then = GameState.model_validate(before)  # whom the player could name: those here before they acted
-        ruled = {"secret_spoken": control.secret_spoken(text, keeper), "unhurt": control.unhurt(keeper, st.log, turn),
-                 **control.presence_rules(m, st, keeper)}  # what the telling does that a rule can see
         return {"target": target(m, then, text, action), "echo": echo(keeper, lines), "chars": len(keeper),
-                "keeper": keeper, "npc": lines, "action": action, "rules": ruled}  # fmt: skip
+                "keeper": keeper, "npc": lines, "action": action}  # fmt: skip
 
     async def one(turn: int) -> None:
         async with sem:

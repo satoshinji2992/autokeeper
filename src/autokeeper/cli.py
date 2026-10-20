@@ -1036,6 +1036,16 @@ def eval_compare(
         console.print(f"明细：{out}")
 
 
+@eval_app.command("recheck")
+def eval_recheck(reports: Annotated[list[Path], typer.Argument(help="eval session 写的报告，就地改写")]) -> None:
+    """按现在的规则重算报告里不经裁判的那几项（规则核对、线索原文），不调用模型。"""
+    from .eval.session import recheck
+
+    for path in reports:
+        got = recheck(path)["summary"].get("replayed", {})
+        console.print(f"{path.name}：规则核对 {got.get('rules')}，线索原文 {got.get('clue_slips')}")
+
+
 @eval_app.command("rejudge")
 def eval_rejudge(report: Annotated[Path, typer.Argument(help="eval session 写的报告")]) -> None:
     """用现在的核对模型重新核对一份 eval session 报告（不重放，只调用核对模型）。"""

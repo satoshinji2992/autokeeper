@@ -237,38 +237,46 @@ class Watch:
                 "meetings_offered": len(offered), "meetings_marked": sum(bool(r["played"]) for r in offered)}
 
 
-# -- what the clues say, in what was told -------------------------------------------------------
-def clue_slips(m: Module, found: list[str], told: str, public: str, *, missed: list[str]) -> dict[str, list[str]]:
-    """`missed`: the clues this turn's failed check would have given. Returns the ones whose text the
-    telling says again (five-字 runs, two or more, not already public), and every clue behind a check
-    or an NPC's gate that nobody has found whose text it says ("early")."""
-    gated = {}
-    for c in m.clues:
-        if c.id in found:
-            continue
-        gate = m.npc(c.npc).gates.get(c.id) if c.npc and any(n.id == c.npc for n in m.npcs) else None
-        if c.check is not None or gate is not None or c.id in missed:
-            gated[c.id] = c.text
-    slips = guard.leaks(told, gated, public=public) if told.strip() and gated else []
-    return {"missed_told": [c for c in slips if c in missed], "early_told": slips}
-
-
-def failed_check(log: list[Any], turn: int) -> bool:
-    """A check this turn ended failed: a dice line that failed, and no later one this turn that turned it."""
-    lines = [e.text for e in log if e.turn == turn and e.kind == "dice"]
-    return bool(lines) and "失败" in lines[0] and not any(("成功" in x and "✓" in x) or "改为成功" in x for x in lines[1:])
-
-
-# -- what the narration does, by rule ------------------------------------------------------------
+# -- what the telling does, by rule ---------------------------------------------------------------
+# Read off the record as eval/session.world_after writes it for the judge, so a report can be read
+# again later (session.recheck) and come out the same.
 _SECRET = re.compile(r"悄悄|偷偷|暗中|暗地|私下|小声|低声|压低声音|不让[^，。]{0,8}(听|知道|发现|看见)|不被[^，。]{0,8}(听|发现|看见)|"
                      r"(听|看)不(到|见)的地方|假装|瞒着")
 _LOUD = re.compile(r"扬声|大声|高声|喊了|喊道|喊一声|喊了一声|喊一句|喊了一句|嚷|吆喝|当着[^，。]{0,6}的面|朝[^，。]{0,10}喊")
 _HURT = re.compile(r"你[^。！？\n]{0,12}(受了伤|受伤|流血|出血|划破|割破|擦破|扭伤|扭了|骨折|撞伤|咬伤|抓伤|昏了过去|晕了过去|昏过去|晕过去|疼得)")
-_NOBODY = re.compile(r"没人应|没有人应|无人应|没人回应|没有人回应|没有回应|屋里没人|屋里没有人|屋里空无一人|空无一人|没有人在|一个人也没有|没人在家")
+_NO_ANSWER = re.compile(r"没人应|没有人应|无人应|没人回应|没有人回应|没有回应|没有应答|无人回应|没人答应|没有人答应")
+_EMPTY_HOUSE = re.compile(r"屋里没人|屋里没有人|屋里空无一人|屋子里没有人|家里没人|家里没有人|没人在家|屋里空荡荡|整栋房子[^。！？]{0,6}(没有人|空)")
 _ACT = re.compile(r"说|道|问|答|点头|摇头|开口|走|站|坐|看|望|笑|递|拿|转身|跟|推|拉|招手|回|进|出来|应声|喊")
 _AWAY = re.compile(r"不在|没有|没在|没见|没来|不见|未见|想起|记得|说过|提过|提到|曾经|信里|信上|据说|听说|也许|大概|可能|如果|要是|"
                    r"回忆|那天|昨天|之前|以前|当时|去找|找到|等|约")
 _SENT = re.compile(r"[^。！？\n]+[。！？]?")
+
+
+def _field(record: str, head: str) -> str:
+    return next((line.split("：", 1)[1] for line in record.splitlines() if line.startswith(head + "：")), "")
+
+
+def _names(text: str) -> list[str]:
+    if text.strip() in ("", "没有", "没有别人", "无"):
+        return []
+    return [re.sub(r"（[^）]*）", "", x).strip() for x in text.split("、") if x.strip()]
+
+
+def settled(record: str) -> list[str]:
+    """The lines under 这一轮结算的结果."""
+    lines = record.split("这一轮结算的结果：", 1)[1].splitlines()[1:] if "这一轮结算的结果：" in record else []
+    out = []
+    for line in lines:
+        if not line.startswith("- "):
+            break
+        out.append(line[2:])
+    return out
+
+
+def failed(record: str) -> bool:
+    """A check this turn ended failed: the first dice line failed, and none after it turned it."""
+    dice = [x for x in settled(record) if x.startswith("dice：")]
+    return bool(dice) and "失败" in dice[0] and not any(("成功" in x and "✓" in x) or "改为成功" in x for x in dice[1:])
 
 
 def secret_spoken(said: str, keeper: str) -> list[str]:
@@ -278,27 +286,58 @@ def secret_spoken(said: str, keeper: str) -> list[str]:
     return [s.strip() for s in _SENT.findall(keeper) if _LOUD.search(s)]
 
 
-def unhurt(keeper: str, log: list[Any], turn: int) -> list[str]:
-    """The telling hurts the investigator, and nothing this turn did (no damage, no sanity loss)."""
-    if any(e.turn == turn and e.kind in ("damage", "sanity") for e in log):
+def unhurt(keeper: str, record: str) -> list[str]:
+    """The telling hurts the investigator, and the turn settled no damage and no sanity loss."""
+    if any(x.startswith(("damage：", "sanity：")) for x in settled(record)):
         return []
     return [m.group(0) for m in _HURT.finditer(keeper)]
 
 
-def presence_rules(m: Module, st: Any, keeper: str) -> dict[str, list[str]]:
-    """Two contradictions a rule can see: nobody answers while someone the record has in this
-    building is there ("nobody"), and someone the record has far off acting in a sentence that
+def presence_rules(record: str, keeper: str) -> dict[str, list[str]]:
+    """Two contradictions a rule can see: nobody answers, or the house is empty, while the record has
+    someone in this building ("nobody"); someone the record has elsewhere acting in a sentence that
     neither remembers nor misses them ("absent")."""
-    near = world_view.rooms(m, st.location) | {st.location}
-    people = {e.id: e for e in st.record.entities.values() if e.kind == "npc" and e.status not in ("死亡", "失踪")}
-    inside = [e.name for e in people.values() if e.at in near]
-    nobody = [s.strip() for s in _SENT.findall(keeper) if _NOBODY.search(s)] if inside else []
+    inside = _names(_field(record, "此刻就在调查员身边的人")) + [x.split("在", 1)[0] for x in _names(
+        _field(record, "同一处别的房间里、不在眼前的人")) if "在" in x]
+    sentences = [s.strip() for s in _SENT.findall(keeper) if s.strip()]
+    nobody = [s for s in sentences if _NO_ANSWER.search(s) or _EMPTY_HOUSE.search(s)] if inside else []
+    away = dict(x.split("在", 1) for x in _names(_field(record, "在别处的人")) if "在" in x)
     absent = []
-    for s in _SENT.findall(keeper):
+    for s in sentences:
         if _AWAY.search(s) or not _ACT.search(s):
             continue
-        for e in people.values():
-            short = e.name.split("·")[0]
-            if e.at not in near and e.at and any(len(x) >= 2 and x in s for x in (e.name, short)):
-                absent.append(f"{e.name}（在{next((loc.name for loc in m.locations if loc.id == e.at), e.at)}）：{s.strip()[:60]}")
+        for name, place in away.items():
+            if any(len(x) >= 2 and x in s for x in (name, name.split("·")[0])):
+                absent.append(f"{name}（在{place}）：{s[:60]}")
     return {"nobody": nobody, "absent": absent}
+
+
+def clue_slips(m: Module, found: list[str], told: str, public: str, *, missed: list[str]) -> dict[str, list[str]]:
+    """`missed`: the clues this turn's failed check would have given. Returns the ones whose text the
+    telling says again (six-字 runs, two or more, not public before), and every clue behind a check or
+    an NPC's gate that nobody has found whose text it says ("early")."""
+    gated = {}
+    for c in m.clues:
+        if c.id in found:
+            continue
+        gate = m.npc(c.npc).gates.get(c.id) if c.npc and any(n.id == c.npc for n in m.npcs) else None
+        if c.check is not None or gate is not None or c.id in missed:
+            gated[c.id] = c.text
+    slips = guard.leaks(told, gated, n=6, public=public) if told.strip() and gated else []
+    return {"missed_told": [c for c in slips if c in missed], "early_told": slips}
+
+
+def public_texts(m: Module) -> str:
+    """What the module lets anyone read: the hook, the setting, the opening, the places' and people's
+    looks. A clue sharing words with these is no slip for saying them."""
+    return "\n".join([m.hook, m.setting, m.opening, *(loc.read_aloud for loc in m.locations), *(n.look for n in m.npcs)])
+
+
+def ruled(m: Module, record: str, said: str, keeper: str, lines: list[str], *, found: list[str], public: str,
+          ruling: dict[str, Any] | None) -> dict[str, Any]:
+    """Everything here, for one side of a turn: {"rules": ..., "clues": ...}."""
+    words = "\n".join([keeper, *(x.partition("：")[2] for x in lines)])
+    wanted = (ruling or {}).get("clues_on_success") or []
+    missed = [c for c in wanted if c not in found] if failed(record) else []
+    rules = {"secret_spoken": secret_spoken(said, keeper), "unhurt": unhurt(keeper, record), **presence_rules(record, keeper)}
+    return {"rules": rules, "clues": clue_slips(m, found, words, public + "\n" + public_texts(m), missed=missed)}
