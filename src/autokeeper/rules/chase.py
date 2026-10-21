@@ -24,9 +24,11 @@ from .bcdice import Level
 from .coc import Check
 from .combat import Fighter, check
 
-LOST = 3  # legs ahead of every pursuer at the end of a round: they have lost you
-HEAD_START = 2  # legs the quarry starts ahead
-SIGHT = 2  # legs ahead at which the quarry is out of the pursuers' sight and may hide
+# These three are the project's simplification, not yet checked against the Keeper Rulebook's chase
+# chapter (p. 132 on): kept as numbers in one place so the check changes them here.
+LOST = 3  # legs ahead of every pursuer at the end of a round: they have lost you (unverified)
+HEAD_START = 2  # legs the quarry starts ahead (unverified)
+SIGHT = 2  # legs ahead at which the quarry is out of the pursuers' sight and may hide (unverified)
 DIFFICULTY = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
 
 
