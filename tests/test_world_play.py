@@ -502,12 +502,12 @@ async def test_a_failed_search_keeps_the_places_foreshadowing_for_a_later_visit(
     missed.checks.append(game.rules.check(game.state.investigator, "侦查"))
     await game._foreshadow(missed)
     assert not missed.checks[0].passed
-    assert not any("比钟摆慢半拍" in n for n in missed.notes) and "f_tick" not in game.state.hinted
+    assert not any("比钟摆慢半拍" in n for n in missed.notes) and "f_tick" not in game.state.signs
     later = Turn()
     await game._arrive("square", Turn())
     await game._arrive("tower", later)
     await game._foreshadow(later)
-    assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.hinted == ["f_tick"]
+    assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.signs == {"f_tick": 1}
 
 
 async def test_what_an_npc_learns_in_the_game_goes_with_each_call_and_keeps_its_session(module, fake):

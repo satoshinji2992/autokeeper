@@ -1,6 +1,6 @@
 """Foreshadowing that changes across visits (Foreshadow.stages, engine/signs.py): one sign per
 arrival, timed and flagged stages, waking up where it shows, the picture that changes with it,
-saves from before stages, `autokeeper check`, and what the replay eval sees of the hints."""
+`autokeeper check`, the compile step, and what the replay eval sees of the hints."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import pytest
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.engine import check
 from autokeeper.engine.game import Turn
-from autokeeper.engine.state import GameState
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Foreshadow, Look, Module, Stage
 from autokeeper.paths import EXAMPLE
@@ -50,15 +49,15 @@ async def test_a_sign_moves_on_one_step_a_visit_and_the_keeper_hears_what_change
     st = game.state
     first = await visit(game, "square")
     assert signs(first) == ["这里可以顺手露出一点端倪，一笔带过，不点破、不解释：告示栏旁挂着一幅海边风景画，岸边空无一人"]
-    assert st.hinted == ["f_painting"] and st.staged == {}
+    assert st.signs == {"f_painting": 1}
     second = await visit(game, "square")
     assert len(signs(second)) == 1 and "先前：告示栏旁挂着一幅海边风景画" in signs(second)[0]
-    assert "这次：画里的海岸边多了一个背对着人的身影" in signs(second)[0] and st.staged == {"f_painting": 1}
+    assert "这次：画里的海岸边多了一个背对着人的身影" in signs(second)[0] and st.signs == {"f_painting": 2}
     early = await visit(game, "square")
-    assert signs(early) == [] and st.staged == {"f_painting": 1}  # its time has not come
+    assert signs(early) == [] and st.signs == {"f_painting": 2}  # its time has not come
     st.minutes = 1440 + 9 * 60  # D2 09:00
     third = await visit(game, "square")
-    assert "这次：画里那个身影转过了半张脸" in signs(third)[0] and st.staged == {"f_painting": 2}
+    assert "这次：画里那个身影转过了半张脸" in signs(third)[0] and st.signs == {"f_painting": 3}
     assert "painting_turned" in st.flags  # its flag, set as it shows
     assert signs(await visit(game, "square")) == []  # nothing past the last
     await game.close()
@@ -74,10 +73,10 @@ async def test_a_failed_search_keeps_the_next_stage_back_and_waking_there_brings
     await game._arrive("square", missed)
     missed.checks.append(game.rules.check(st.investigator, "侦查"))
     await game._foreshadow(missed)
-    assert signs(missed) == [] and st.staged == {}
+    assert signs(missed) == [] and st.signs == {"f_painting": 1}
     rested = Turn(action=Action(kind="wait", summary="周衡在广场的长椅上睡了一觉"), ruling=Ruling(needs_roll=False, rest=True, minutes=480))
     await game._foreshadow(rested)  # waking up where it shows is coming to it again
-    assert "多了一个背对着人的身影" in signs(rested)[0] and st.staged == {"f_painting": 1}
+    assert "多了一个背对着人的身影" in signs(rested)[0] and st.signs == {"f_painting": 2}
     await game.close()
 
 
@@ -91,24 +90,6 @@ async def test_a_stage_can_show_somewhere_else_and_hold_off_for_a_flag(module, f
     st.flags.append("bell_stopped")
     assert "岸边站着一个人" in signs(await visit(game, "office"))[0]
     await game.close()
-
-
-async def test_a_save_from_before_stages_goes_on_from_the_hint_it_was_given(module, fake):
-    game, *_ = make(module, fake, {}, location="tower")
-    old = game.state.model_dump(mode="json")
-    old.pop("staged")
-    old["hinted"] = ["f_painting"]  # given its one hint before stages were written
-    game.state = loaded = GameState.model_validate(old)
-    game.world.st = loaded
-    assert loaded.staged == {}
-    later = await visit(game, "square")
-    assert "这次：画里的海岸边多了一个背对着人的身影" in signs(later)[0] and loaded.hinted == ["f_painting"]
-    plain = Module.load(EXAMPLE)  # a module without stages: one hint, as before
-    plain.foreshadow = [PAINTING.model_copy(update={"stages": []})]
-    game2, *_ = make(plain, fake, {}, location="tower")
-    assert len(signs(await visit(game2, "square"))) == 1 and signs(await visit(game2, "square")) == []
-    await game.close()
-    await game2.close()
 
 
 async def test_a_stages_flag_switches_the_places_picture_with_the_telling(module, fake, tmp_path):
@@ -151,33 +132,23 @@ def test_check_names_a_stage_whose_place_flag_or_time_is_wrong(module):
 
 
 # -- the compile step (autokeeper upgrade --only foreshadow) ----------------------------------------
-def test_the_compile_step_adds_stages_to_old_signs_and_leaves_the_rest_of_them_alone(module):
+def test_the_compile_step_writes_signs_with_their_stages_and_leaves_out_what_gives_a_clue_away(module):
     from autokeeper.module import adapt
 
-    old = module.foreshadow[0].model_copy(update={"stages": []})
-    module.foreshadow = [old]
-    assert adapt.wanted(module, "foreshadow")  # written before stages: they are what is missing
+    module.foreshadow = []
     clue = module.clue("c_archive").text.strip()
     out = adapt.Signs(foreshadow=[
-        adapt.SignDraft(id="f_painting", hint="改写过的端倪", where="office", pays_off="k_tower",
-                        stages=[adapt.StageDraft(hint="画里多了一个人影", when="D2 08:00"),
-                                adapt.StageDraft(hint="画框背面写着字", where="nowhere"),
-                                adapt.StageDraft(hint="画旁贴了一张纸", when="明天")]),
-        adapt.SignDraft(id="f_new", hint="报社的钟总比广场的慢一刻", where="office", pays_off="k_tower",
-                        stages=[adapt.StageDraft(hint=clue), adapt.StageDraft(hint="报社的钟停了", where="office")]),
+        adapt.SignDraft(id="f_clock", hint="报社的钟总比广场的慢一刻", where="office", pays_off="k_tower",
+                        stages=[adapt.StageDraft(hint="报社的钟停了", where="office", when="D2 08:00"),
+                                adapt.StageDraft(hint=clue), adapt.StageDraft(hint="钟面背后写着字", where="nowhere", when="明天")]),
+        adapt.SignDraft(id="f_lost", hint="哪里都不指向", where="office", pays_off="nothing"),
     ])
     found = adapt.edits(module, "foreshadow", out)
-    assert ("put", "foreshadow", "f_painting", "stages", [{"hint": "画里多了一个人影", "when": "D2 08:00"}]) in found
-    new = next(e for e in found if e[0] == "append")[2]
-    assert new == [{"id": "f_new", "hint": "报社的钟总比广场的慢一刻", "where": "office", "pays_off": "k_tower",
-                    "stages": [{"hint": "报社的钟停了"}]}]  # the clue's own words left out; its own place not repeated
+    assert found == [("append", "foreshadow", [{"id": "f_clock", "hint": "报社的钟总比广场的慢一刻", "where": "office",
+                                               "pays_off": "k_tower", "stages": [{"hint": "报社的钟停了", "when": "D2 08:00"}]}])]
     after = adapt.preview(module, found)
-    assert after.foreshadow[0].hint == old.hint and after.foreshadow[0].where == "square"  # only the new field
-    assert "foreshadow:f_painting:1" in {p.ref for p in adapt.conditions.pieces(after)}
-    assert not adapt.wanted(after, "foreshadow")
-    staged = module.model_copy(deep=True)
-    staged.foreshadow = [PAINTING.model_copy(deep=True)]
-    assert not [e for e in adapt.edits(staged, "foreshadow", out) if e[1] == "foreshadow" and e[0] == "put"]  # has stages
+    assert "foreshadow:f_clock:1" in {p.ref for p in adapt.conditions.pieces(after)}  # held to the conditions too
+    assert not [i for i in audit(after) if i.level == "error"]
 
 
 def test_a_stage_the_review_flags_is_taken_out_and_its_sign_kept(tmp_path):
@@ -187,15 +158,17 @@ def test_a_stage_the_review_flags_is_taken_out_and_its_sign_kept(tmp_path):
 
     folder = copy("zhuishuren", tmp_path)
     (folder / "situation.yaml").write_text(SITUATION, encoding="utf-8")
-    m = Module.load(folder)
-    found = [("put", "foreshadow", "f_mud", "stages", [{"hint": "窗台上的土多了一道新的"}, {"hint": "窗框上多了指甲的划痕"}])]
-    assert adapt.without(found, {"foreshadow:f_mud:1"}) == [("put", "foreshadow", "f_mud", "stages", [{"hint": "窗框上多了指甲的划痕"}])]
-    assert adapt.without(found, {"foreshadow:f_mud:1", "foreshadow:f_mud:2"}) == []
+    sign = {"id": "f_window", "hint": "书房窗台上积着一线干土", "where": "shufang", "pays_off": "k_not_burglar",
+            "stages": [{"hint": "窗台上的土多了一道新的"}, {"hint": "窗框上多了指甲的划痕"}]}
+    found = [("append", "foreshadow", [sign])]
+    assert adapt.without(found, {"foreshadow:f_window:1"}) == [("append", "foreshadow", [{**sign, "stages": sign["stages"][1:]}])]
+    assert adapt.without(found, {"foreshadow:f_window"}) == []
     adapt.land(folder, found)
     landed = Module.load(folder)
-    assert [s.hint for s in landed.foreshadow[0].stages] == ["窗台上的土多了一道新的", "窗框上多了指甲的划痕"]
-    assert landed.foreshadow[0].hint == m.foreshadow[0].hint and not [i for i in audit(landed) if i.level == "error"]
-    assert "[foreshadow:f_mud:2]" in "\n".join(adapt._rows(landed, {"foreshadow:f_mud:2"}))
-    adapt.take_out(folder, ["foreshadow:f_mud:1"])
+    assert [s.hint for s in landed.foreshadow[-1].stages] == ["窗台上的土多了一道新的", "窗框上多了指甲的划痕"]
+    assert not [i for i in audit(landed) if i.level == "error"]
+    assert "[foreshadow:f_window:2]" in "\n".join(adapt._rows(landed, {"foreshadow:f_window:2"}))
+    adapt.take_out(folder, ["foreshadow:f_window:1"])
     kept = Module.load(folder)
-    assert [f.id for f in kept.foreshadow] == ["f_mud", "f_hollow"] and [s.hint for s in kept.foreshadow[0].stages] == ["窗框上多了指甲的划痕"]
+    assert [f.id for f in kept.foreshadow] == ["f_mud", "f_hollow", "f_window"]
+    assert [s.hint for s in kept.foreshadow[-1].stages] == ["窗框上多了指甲的划痕"]

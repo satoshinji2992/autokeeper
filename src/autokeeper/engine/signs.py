@@ -4,8 +4,7 @@ A sign's first hint comes the first time the party arrives where it shows. Its s
 (Foreshadow.stages) come after, one on each later arrival where the next one shows, or on
 waking there after a rest, once its time or flag has come: the painting in the inn looks a
 little different each time they pass it. Only the hint goes to the keeper, never the clue it
-points to. GameState.hinted keeps which signs gave their first hint (as saves always have);
-GameState.staged how many of their stages followed.
+points to. GameState.signs keeps how many of each the keeper was handed.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ TIMED = re.compile(r"D\d+ \d{1,2}:\d{2}")
 
 def step(st: GameState, f: Foreshadow) -> int:
     """Which of its signs comes next: 0 its first hint, n its n-th stage."""
-    return 0 if f.id not in st.hinted else 1 + st.staged.get(f.id, 0)
+    return st.signs.get(f.id, 0)
 
 
 def sign(f: Foreshadow, n: int) -> Stage | None:
@@ -60,12 +59,10 @@ def hand(m: Module, st: GameState, ids: list[str]) -> list[tuple[str, Stage]]:
         s = sign(f, n)
         if s is None or s.where != st.location or not ready(st, s):
             continue
+        st.signs[f.id] = n + 1
         if n == 0:
-            st.hinted.append(f.id)
             out.append((f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{s.hint}", s))
         else:
-            st.staged[f.id] = n
-            before = sign(f, n - 1)
-            out.append((f"先前露出过的端倪起了变化，可以顺手带出，一笔带过，不点破、不解释。先前：{before.hint if before else f.hint}；"
-                        f"这次：{s.hint}", s))
+            before = f.stages[n - 2].hint if n > 1 else f.hint
+            out.append((f"先前露出过的端倪起了变化，可以顺手带出，一笔带过，不点破、不解释。先前：{before}；这次：{s.hint}", s))
     return out
