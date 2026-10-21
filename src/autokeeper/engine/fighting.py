@@ -420,7 +420,7 @@ class Fighting:
                 turn.sanity.append((inv.name, s))
                 st.add("sanity", s.describe(), who=inv.name)
                 battle.sync(x, inv)
-                out.append({"type": "sanity", "who": inv.name, **_sanity_view(s)})
+                out.append({"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)})
         return out
 
     async def _fight_turn(self, action: Action, ruling: Ruling, turn: Turn) -> None:
