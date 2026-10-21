@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from ..cards import Drawn
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
-from .combat import Chase, Fight
+from .combat import Chase
 from .encounter.model import EncounterState, EncounterSummary
 
 LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
@@ -152,19 +152,18 @@ class GameState(BaseModel):
     # longest of them took so far (None outside a round), and the reports held for the one telling.
     round_spent: int | None = None
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
-    # A fight or a chase going on (engine/combat.py, engine/fighting.py): every action is an order in it
-    # until it is over. `seen`: creatures whose sight has cost the investigators sanity already.
-    fight: Fight | None = None
+    # A chase going on, run by the old chase engine (engine/fighting.py) inside the encounter until WP-D.
     chase: Chase | None = None
-    seen: list[str] = Field(default_factory=list)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.
-    # `fight`, `chase` and `seen` above are the old engine's, read until a save is converted.
     encounter: EncounterState | None = None
     encounter_log: list[EncounterSummary] = Field(default_factory=list)
     sightings: dict[str, list[str]] = Field(default_factory=dict)  # investigator -> horrors whose first sight they paid for
     identified: list[str] = Field(default_factory=list)  # creatures the players can name (their true name is shown)
     apart: dict[str, str] = Field(default_factory=dict)  # investigator -> place, left behind by a chase; rejoins on the next move
+    # What a LAN client is sent of the encounter going on (engine/encounter/views.table): its public view and
+    # each seat's choices. Only ever in a client's copy; the host's own is computed when it is needed.
+    encounter_public: dict | None = None
     pending_resolution: dict = Field(default_factory=dict)  # direct resolution outside the turn graph
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows

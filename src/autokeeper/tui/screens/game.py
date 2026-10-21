@@ -43,6 +43,7 @@ from ..modals.guide import GuideScreen
 from ..modals.mapview import MapModal
 from ..modals.menu import MENU, Confirm, GameMenu
 from ..modals.plugins import plugin_commands
+from ..modals.reaction import ChoiceModal
 from ..modals.retell import RetellModal
 from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
@@ -152,7 +153,7 @@ class GameScreen(Screen):
         self.cast: Cast | None = None
         self.game: Game | None = None
         self.graph = None
-        self.thread = {"configurable": {"thread_id": state.slot}}
+        self.thread = {"configurable": {"thread_id": state.slot}, "recursion_limit": 100}  # a fight asks a few times a turn (graph offer)
         self.met: set[str] = set()
         self.spinner = 0
         self.status_text = ""
@@ -613,13 +614,14 @@ class GameScreen(Screen):
         left.append(f"  《{self.m.title}》  ", style="bold")
         left.append(f"{LIGHT_MARK.get(when, '☀')} {st.clock} {when}  ", style="bold")
         left.append(f"◆ {self.m.location(st.location).name}")
-        if st.fight is not None:
-            left.append(f"   ⚔ 战斗 · 第 {max(1, st.fight.round)} 轮 ", style="bold #ff4d4d")
+        now = self._battle_now()
+        if now is not None and now["kind"] == "fight":
+            left.append(f"   ⚔ 战斗 · 第 {max(1, now['round'])} 轮 ", style="bold #ff4d4d")
             inv = self._viewer()
             beat = "♡" if self._beat_on else "♥"
             left.append(f"{beat} {inv.hp}/{inv.hp_max}", style="bold #c1121f" if inv.hp * 3 <= inv.hp_max else "bold #ffb000")
-        elif st.chase is not None:
-            left.append(f"   ⟫ 追逐 · 第 {max(1, st.chase.round)} 轮", style="bold #9fb4c8")
+        elif now is not None:
+            left.append(f"   ⟫ 追逐 · 第 {max(1, now['round'])} 轮", style="bold #9fb4c8")
         right = Text(no_wrap=True)
         if not self.query_one("#right").display:
             inv = self._viewer()
@@ -968,7 +970,7 @@ class GameScreen(Screen):
             self._close_orders()
             self.remove_class("-fight")
             self._beat_off()
-            if self.state.chase is None:
+            if (now := self._battle_now()) is None or now["kind"] != "chase":
                 arena.hide()
                 scene.display = True
             story.add("event", banner(ev.get("text", "战斗结束"), colour="#e8dec4"))
@@ -1000,7 +1002,7 @@ class GameScreen(Screen):
             self._close_orders()
             self.remove_class("-chase")
             self._beat_off()
-            if self.state.fight is None:
+            if (now := self._battle_now()) is None or now["kind"] != "fight":
                 arena.hide()
                 scene.display = True
             if ev.get("end") == "caught":  # it is on you: its face over everything, and blood
@@ -1085,17 +1087,28 @@ class GameScreen(Screen):
             arena.hide()
             self.query_one(SceneArt).display = True
 
+    def _battle_now(self) -> dict | None:
+        """The fight or the chase going on as the players' screens hold it, with each investigator's
+        choices this round (engine/encounter/views.table); None outside one."""
+        from ...engine.encounter import views
+
+        if self.game is None or self.state.ending:
+            return None
+        return views.table(self.game)
+
+    def _in_battle(self) -> bool:
+        """Cheaper than _battle_now for the heartbeat: whether a fight or a chase is going on."""
+        return self.game is not None and not self.state.ending and self.game.battling()
+
     def _battle_resumed(self) -> None:
         """A save opened in the middle of a fight or a chase: the stage as it stood (not after the end)."""
-        from ...engine import combat as battle
-
-        st = self.state
-        if st.ending:
+        now = self._battle_now()
+        if now is None:
             return
-        if st.fight is not None:
-            self._battle_event({"type": "fight_start", "fight": battle.view(st.fight), "line": "战斗继续"})
-        elif st.chase is not None:
-            self._battle_event({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "追逐继续"})
+        if now["kind"] == "fight":
+            self._battle_event({"type": "fight_start", "fight": now["fight"], "line": "战斗继续"})
+        else:
+            self._battle_event({"type": "chase_start", "chase": now["chase"], "line": "追逐继续"})
 
     def _title(self, word: str, colour: str = "#c1121f") -> None:
         """The word across the stage as a fight or a chase begins, glitching in and fading (with
@@ -1132,7 +1145,7 @@ class GameScreen(Screen):
 
         def beat(on: bool = True) -> None:
             st = self.state
-            if not self.is_attached or st.ending or (st.fight is None and st.chase is None):
+            if not self.is_attached or st.ending or not self._in_battle():
                 self._beating = False
                 self._beat_off()
                 return
@@ -1160,17 +1173,16 @@ class GameScreen(Screen):
 
     def _next_stance(self, step: int) -> None:
         """Tab over a fight's choices: answer blows the other way this round (dodge, fight back, cover when
-        someone has a gun), every choice written again with it. Only the words change, and the order
-        picked carries the stance: the fight is the engine's (Tab mid-turn used to change how the round
+        someone has a gun), every choice written again with it. Only the words change, and the choice
+        picked carries the answer: the fight is the engine's (Tab mid-turn used to change how the round
         being settled was answered). The clock goes on as it was."""
-        st = self.state
-        me = st.fight.get(self._viewer().id) if st.fight is not None else None
-        if me is None or self.busy or not self._battle_picking:
+        now = self._battle_now()
+        me = self._viewer().id
+        if now is None or now["kind"] != "fight" or me not in now["choices"] or self.busy or not self._battle_picking:
             return
-        armed = any(a.firearm for f in st.fight.foes_of(me) for a in f.attacks)  # type: ignore[union-attr]
-        ways = ["dodge", "fight", *(["cover"] if armed else [])]
-        now = self._stance or me.stance
-        self._stance = ways[(ways.index(now) + step) % len(ways) if now in ways else 0]
+        ways = list(now["choices"][me])
+        current = self._stance or now["presets"].get(me, "dodge")
+        self._stance = ways[(ways.index(current) + step) % len(ways) if current in ways else 0]
         picker = self.query_one("#picker", OptionList)
         at = picker.highlighted or 0
         self._offer_orders()
@@ -1178,32 +1190,32 @@ class GameScreen(Screen):
 
     def _offer_orders(self) -> None:
         """In a fight or a chase, the investigator's choices for the round over the input box; not once
-        the game has ended in the middle of one."""
-        st = self.state
-        if st.ending or (st.fight is None and st.chase is None):
+        the game has ended in the middle of one. Someone who cannot act in a fight is offered to let the
+        round go on (继续): those who can still act do."""
+        now = self._battle_now()
+        if now is None:
             self._close_orders()
             return
         if self.spectate or not self.is_attached or not self._may_order():
             return
-        from ...engine import combat as battle
-
         me = self._viewer().id
-        if st.fight is not None:
-            f = st.fight.get(me)
-            if f is not None and self._stance:  # Tab: the words in the other way of answering a blow
-                f = f.model_copy(update={"stance": self._stance})
-            choices = battle.choices(f, st.fight) if f is not None and f.standing else []
-            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 手动输入"
+        lists = now["choices"].get(me)
+        fighting = now["kind"] == "fight"
+        if not lists:
+            if fighting and self.game is not None and getattr(self, "link", None) is None:
+                choices = [("/encounter", "继续", "你现在无法行动：这一轮由其他人接着打")]
+                title = "战斗 · 回车继续"
+            else:
+                return
         else:
-            assert st.chase is not None
-            f = st.chase.get(me)
-            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing and f.id not in st.chase.hidden else []
-            title = "追逐行动 · 回车选定 · Esc 手动输入"
-        if not choices or f is None:
+            preset = self._stance if self._stance in lists else now["presets"].get(me) or next(iter(lists))
+            choices = [(words, words, note) for words, note in lists.get(preset, [])]
+            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 手动输入" if fighting else "追逐行动 · 回车选定 · Esc 手动输入"
+        if not choices:
             return
         picker = self.query_one("#picker", OptionList)
         picker.clear_options()
-        picker.add_options([Option(Text.assemble((words, "bold"), ("  " + note, "dim")), id=words) for words, note in choices])
+        picker.add_options([Option(Text.assemble((label, "bold"), ("  " + note, "dim")), id=words) for words, label, note in choices])
         picker.highlighted = 0
         picker.border_title = title
         picker.display = True
@@ -1211,9 +1223,11 @@ class GameScreen(Screen):
         self._battle_picking, self._battle_title = True, title
         if self._clock is not None:  # Tab: the same round, the same deadline
             self._clock_tick()
-        elif config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
-            hold = battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run")
-            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, battle.order_text(hold, {}))
+        elif config.load().battle_timer and getattr(self, "link", None) is None and lists:  # a LAN round has its own window
+            hold = next((w for w, _, _ in choices if w.startswith("防守")), "") if fighting else next(
+                (w for w, _, _ in choices if w.startswith("全力奔跑")), "")
+            if hold:
+                self._start_clock(BATTLE_SECONDS if fighting else CHASE_SECONDS, hold)
 
     def _close_orders(self) -> None:
         """The round's list over the box goes, and its clock with it: the player writes their own order
@@ -1259,8 +1273,8 @@ class GameScreen(Screen):
             self._clock.resume()
 
     def _clock_tick(self) -> None:
-        st = self.state
-        if self.busy or not self.is_attached or not self._battle_picking or (st.fight is None and st.chase is None):
+        now = self._battle_now()
+        if self.busy or not self.is_attached or not self._battle_picking or now is None:
             self._stop_clock()
             return
         if self._clock_paused:
@@ -1272,7 +1286,7 @@ class GameScreen(Screen):
         picker.border_title = f"{self._battle_title} · ⏳ {bar} {max(0, int(left + 0.99))} 秒"
         picker.set_class(left <= 5, "-urgent")
         if left <= 0:
-            fallback, fighting = self._fallback, st.fight is not None
+            fallback, fighting = self._fallback, now["kind"] == "fight"
             self._close_orders()
             self.query_one("#command", Input).focus()
             self.app.notify(f"未在时限内选择，本轮改为{'防守' if fighting else '全力奔跑'}。", severity="warning", timeout=4)
@@ -1640,6 +1654,13 @@ class GameScreen(Screen):
                 self._status("等你掷骰…")
                 await self.make_way()
                 choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
+            elif offer.get("kind") in ("reaction", "redeclare"):  # a fight stops to ask (engine/encounter)
+                if auto:
+                    choice = offer.get("default", "")
+                else:
+                    self._status("等你决定怎么应对…")
+                    await self.make_way()
+                    choice = await self.app.push_screen_wait(ChoiceModal(offer))
             elif auto:
                 choice = ai_choice(offer, push)
                 said = f"孤注一掷：{choice['how']}" if isinstance(choice, dict) else {"luck": "花幸运", "drop": "放弃"}[choice]
@@ -1659,8 +1680,8 @@ class GameScreen(Screen):
         """AI companions act after the human, every other turn."""
         st = self.state
         ai = [i for i, inv in enumerate(st.investigators) if inv.id not in st.human and inv.can_act]
-        if not ai or st.ending or st.turn % 2 or st.fight is not None or st.chase is not None:
-            return  # in a fight or a chase they act in its rounds (engine/fighting.py, the tactics)
+        if not ai or st.ending or st.turn % 2 or self._battle_now() is not None:
+            return  # in a fight or a chase they act in its rounds (engine/encounter: Cast.encounter_choice)
         human_idx = st.active
         try:
             for idx in ai:
@@ -1685,7 +1706,7 @@ class GameScreen(Screen):
     def _situation(self) -> str:
         from ...engine.autoplay import situation
 
-        return situation(self.m, self.state, self._viewer().id)
+        return situation(self.m, self.state, self._viewer().id, self.game)
 
     @work(exclusive=True, group="turn")
     async def autoplay(self) -> None:
@@ -1701,7 +1722,7 @@ class GameScreen(Screen):
             if not alive:
                 break
             self._status("AI 调查员在商量…")
-            result = await party.ainvoke({"situation": situation(self.m, st), "ids": alive, "proposals": []})
+            result = await party.ainvoke({"situation": situation(self.m, st, game=self.game), "ids": alive, "proposals": []})
             for inv_id, text, push in result["proposals"]:
                 if st.ending or self._leave_when_ready is not None:  # 讲完再走: after this one
                     break

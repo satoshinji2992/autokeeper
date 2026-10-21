@@ -518,7 +518,7 @@ class Effects(Base):
 
     kind: Literal["effects"] = "effects"
     effects: list[Effect] = Field(default_factory=list)
-    source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, mcp, fight:<…>
+    source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, fight:<…>
     seed: list[str] = Field(default_factory=list)  # NPCs and creatures whose bodies the world starts keeping now
     # Bodies the engine already had numbers for (0.0.4 M1: the old fight engine's fighters), kept by
     # the world from now on when it keeps none yet for them.

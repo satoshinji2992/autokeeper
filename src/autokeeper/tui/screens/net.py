@@ -236,7 +236,12 @@ class NetGameScreen(GameScreen):
         """Your dice, or your push: in a worker, so what the others do keeps coming in while you
         decide (waiting here held every message behind the dialog, 2026-10-21)."""
         await self.make_way()  # a big scene steps aside
-        choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
+        if offer.get("kind") in ("reaction", "redeclare"):  # a fight stops to ask this seat how it answers
+            from ..modals.reaction import ChoiceModal
+
+            choice = await self.app.push_screen_wait(ChoiceModal(offer))
+        else:
+            choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
         await self.link.send({"t": "choice", "mode": choice})
 
     def _viewer(self):
@@ -244,6 +249,13 @@ class NetGameScreen(GameScreen):
         if self.seat:
             return self.state.find(self.seat)
         return self.state.investigator
+
+    def _battle_now(self) -> dict | None:
+        """The fight or the chase as the host sent it (engine/encounter/views.table): this screen has no game."""
+        return None if self.state.ending else self.state.encounter_public
+
+    def _in_battle(self) -> bool:
+        return self._battle_now() is not None
 
     def _sync(self, view: dict[str, Any]) -> None:
         self.state = GameState.model_validate(view)
@@ -260,7 +272,7 @@ class NetGameScreen(GameScreen):
         nothing to offer and the heartbeat stopped at once: both come with the state, and the list with
         every round that opens to this seat; it goes when the round closes."""
         st = self.state
-        if st.ending or (st.fight is None and st.chase is None):
+        if st.ending or self._battle_now() is None:
             self._close_orders()
             return
         self._heartbeat()

@@ -180,14 +180,14 @@ def _strip(node, keys: set[str]):
 
 
 def test_a_save_from_before_the_encounter_loads_unchanged():
-    st = GameState(module="example", investigators=[_inv(hp=3)], location="x", seen=["ghoul"])
+    st = GameState(module="example", investigators=[_inv(hp=3)], location="x")
     st.record.entities["douglas"] = Entity(id="douglas", kind="npc", name="道格拉斯", status="受伤")
     new = {"encounter", "encounter_log", "sightings", "identified", "apart", "injury", "life", "weapon", "fills"}
     old = _strip(json.loads(st.model_dump_json()), new)
     assert not new & set(old) and "injury" not in old["investigators"][0]
     back = GameState.model_validate(old)
     assert back.encounter is None and back.encounter_log == [] and back.sightings == {} and back.apart == {}
-    assert back.seen == ["ghoul"] and back.fight is None and back.chase is None  # the old engine's, still read
+    assert back.chase is None
     assert back.investigators[0].hp == 3 and back.investigators[0].injury == InjuryState()
     assert back.record.entities["douglas"].life is None and back.record.entities["douglas"].status == "受伤"
     assert back == st
@@ -325,7 +325,7 @@ def test_a_change_needs_an_encounter():
 SIZES = {
     p.DeclaredAction: 2800,
     p.NpcArrangement: 4200,
-    p.EncounterTurnPlan: 7000,
+    p.EncounterTurnPlan: 8200,  # + cover and distances (2026-10-21): positions and ranges the book's shots read
     p.EncounterStart: 10500,
     p.SiteDraft: 3600,
 }

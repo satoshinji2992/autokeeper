@@ -671,7 +671,6 @@ async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not
 
 
 async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_once(monkeypatch, tmp_path, skills_dir, fake):
-    from autokeeper.engine import combat as battle
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
@@ -679,8 +678,9 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
     state = Game.new(m, [lead, friend], slot="lan-fight", human=[lead.id, "lin"])
     state.location = "tower"
-    state.fight = battle.Fight(fighters=[battle.from_investigator(lead), battle.from_investigator(friend),
-                                         battle.from_npc(m.npc("warden"))], place="tower")
+    from .test_fight import begun
+
+    begun(m, state, ["warden"])
 
     class Telling(TableCast):
         def __init__(self) -> None:
@@ -690,6 +690,14 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         async def keeper(self, state, report, on_delta=None, lore=""):
             self.reports.append(report)
             return await super().keeper(state, report, on_delta, lore)
+
+        async def plan(self, state, text, *, encounter=None, mode="act", check=None, ask=""):  # the keeper arranges the warden
+            from autokeeper.agents.encounter import Checked
+            from autokeeper.engine.encounter.plan import EncounterTurnPlan
+
+            from .encounter_kit import arrange, attack
+
+            return Checked(value=EncounterTurnPlan(npcs=[arrange("warden", attack("zhouheng"))]))
 
     cast = Telling()
     hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
@@ -706,8 +714,8 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         await b.send_json({"t": "sit", "investigator": "lin"})
         await until(a, pool_open)
         told = len(cast.reports)
-        await a.send_json({"t": "act", "text": "攻击 老守钟人（徒手）｜被攻击时闪避"})
-        await b.send_json({"t": "act", "text": "攻击 老守钟人（徒手）｜被攻击时反击"})
+        await a.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避"})
+        await b.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手）｜被攻击时反击"})
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
         seen: list[dict] = []
@@ -729,7 +737,7 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         kinds = [e["type"] for e in seen]
         assert kinds.count("fight_round") == 1 and kinds.count("fight_act") == 3  # two investigators and the warden
         assert len(cast.reports) == told + 1 and "【战斗 · 第 1 轮】" in cast.reports[-1]
-        assert hub.state.fight is not None and hub.state.fight.round == 1
+        assert hub.state.encounter is not None and hub.state.encounter.round == 1
         await a.close()
         await b.close()
     await closed(task)
@@ -739,6 +747,9 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     from PIL import Image
 
     from autokeeper.engine import combat as battle
+    from autokeeper.engine.encounter import views
+    from autokeeper.engine.encounter.plan import EncounterStart
+    from autokeeper.engine.game import Turn
     from autokeeper.engine.state import GameState
     from autokeeper.module.schema import Creature
 
@@ -752,37 +763,43 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     for key in ("creature-ghoul", "creature-shade"):  # the shade is the module's too, but not in this fight
         Image.new("RGB", (40, 60), (80, 30, 30)).save(tmp_path / f"{key}.png")
         hub.m.pictures[key] = str(tmp_path / f"{key}.png")
-    ghoul = battle.from_creature(Creature(id="ghoul", name="食尸鬼", description="腐烂的脸上长着獠牙", sanity="0/1D6",
-                                          notes="怕火", stats={"生命": 12}), portrait="creature-ghoul")
-    ghoul.hp = 5
-    me = battle.from_investigator(hub.state.investigators[0])
+    hub.m.creatures.append(Creature(id="ghoul", name="食尸鬼", called="腐臭的影子", description="腐烂的脸上长着獠牙",
+                                    sanity="0/1D6", notes="怕火；护甲 1；每轮恢复 1 点", stats={"生命": 12}, attacks=["爪击 40%，伤害 1D6"]))
     st = hub.state
-    st.fight = battle.Fight(fighters=[me, ghoul], place=st.location, reason="它闻到了活人的气味")
-    await hub._event({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】"})
-    await hub._event({"type": "reveal", "id": "ghoul", "name": "食尸鬼", "portrait": "creature-ghoul", "look": ghoul.look})
+    fake.queue(30)  # the first sight holds
+    assert await hub.game._encounter_open(EncounterStart(mode="fight", foes=["ghoul"], pace=6, reason="它闻到了活人的气味"), Turn())
+    hub.game.world.rec.entities["ghoul"].life.hp = 5
+    await hub._event({"type": "fight_start", "fight": views.fight_view(hub.game), "line": "【战斗开始】"})
+    await hub._event({"type": "reveal", "id": "ghoul", "name": "腐臭的影子", "portrait": "creature-ghoul", "look": "腐烂的脸上长着獠牙"})
     events = [m["ev"] for m in sent if m["t"] == "event"]
     kinds = [e["type"] for e in events]
     art = [e for e in events if e["type"] == "art"]
     assert [a["key"] for a in art] == ["creature-ghoul"] and art[0]["picture_data"]  # its face once, never the bestiary
     assert kinds.index("art") < kinds.index("fight_start")  # the face before the fight that shows it
-    start, reveal = events[kinds.index("fight_start")], events[kinds.index("reveal")]
-    foe = next(f for f in start["fight"]["fighters"] if f["id"] == "ghoul")
-    assert "look" not in foe and "dex" not in foe and foe["wound"] == "受伤" and foe["hp"] is None
+    start, reveal = events[len(kinds) - 1 - kinds[::-1].index("fight_start")], events[kinds.index("reveal")]
+    foe = next(f for f in start["fight"]["fighters"] if f["id"] == "f1")  # its seat, never its own id
+    assert "look" not in foe and "dex" not in foe and foe["wound"] == "受伤" and foe["hp"] is None and foe["name"] == "腐臭的影子"
     assert "look" not in reveal and reveal["portrait"] == "creature-ghoul"
     view = hub._view()
-    shown = next(f for f in view["fight"]["fighters"] if f["id"] == "ghoul")
-    assert view["fight"]["reason"] == "" and view["fight"]["orders"] == {}
-    assert shown["hp_max"] == 100 and not {"armor", "regen", "look", "notes", "sanity", "skills", "dex"} & set(shown)
-    assert [a["value"] for a in shown["attacks"]] == [0] * len(ghoul.attacks)  # the weapon by name, not its chance
-    assert next(f for f in view["fight"]["fighters"] if f["id"] == me.id)["hp"] == me.hp  # an investigator whole
-    client = GameState.model_validate(view)  # the screens still read it as a fight
-    assert battle.view(client.fight)["fighters"][1]["wound"] == "受伤"
-    assert battle.choices(client.fight.get(me.id), client.fight) == battle.choices(me, st.fight)
-    st.fight, me.pos, ghoul.pos = None, 2, 0
-    st.chase = battle.Chase(runners=[me, ghoul], track=battle.default_track("street"), quarry="party", reason="它追来了")
+    assert "encounter" not in view and "sightings" not in view  # the keeper's: every HP, the arrangements, true names
+    now = view["encounter_public"]
+    shown = next(f for f in now["fight"]["fighters"] if f["id"] == "f1")
+    assert "ghoul" not in [f["id"] for f in [*now["fight"]["fighters"], *start["fight"]["fighters"]]]
+    assert shown["hp"] is None and shown["wound"] == "受伤" and not {"armor", "regen", "look", "notes", "sanity", "skills", "dex"} & set(shown)
+    assert "食尸鬼" not in str(now)  # the name the players know
+    me = st.investigators[0]
+    assert next(f for f in now["fight"]["fighters"] if f["id"] == me.id)["hp"] == me.hp  # an investigator whole
+    client = GameState.model_validate(view)  # the screens read its choices from the table's view
+    assert client.encounter is None and client.encounter_public["choices"][me.id] == views.table(hub.game)["choices"][me.id]
+    runner = battle.from_investigator(me)
+    ghoul = hub.game._fighter("ghoul")
+    runner.pos, ghoul.pos = 2, 0
+    st.chase = battle.Chase(runners=[runner, ghoul], track=battle.default_track("street"), quarry="party", reason="它追来了")
     view = hub._view()
     legs = [leg["name"] for leg in view["chase"]["track"]["legs"]]
     assert all(legs[:5]) and not any(legs[5:]) and view["chase"]["reason"] == ""  # the way only as far as it is seen
+    legs = [leg["name"] for leg in view["encounter_public"]["chase"]["legs"]]
+    assert all(legs[:5]) and not any(legs[5:])
     await hub.game.close()
 
 
@@ -800,9 +817,12 @@ class FakeLink:
 
 
 async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbeat_in_a_fight(fake):
-    from autokeeper.engine import combat as battle
+    from autokeeper.engine.encounter import views
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens.net import NetGameScreen
+
+    from .encounter_kit import begin
+    from .test_engine import FakeCast
 
     m = Module.load(EXAMPLE)
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan", human=[m.pregens[0].id])
@@ -821,16 +841,17 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         app.push_screen(screen)
         await pilot.pause(0.3)
         picker = screen.query_one("#picker")
-        me, warden = battle.from_investigator(st.investigators[0]), battle.from_npc(m.npc("warden"))
-        st.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
-        await screen.on_msg({"t": "event", "ev": {"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】"}})
-        await screen.on_msg({"t": "sync", "state": st.model_dump(mode="json")})  # the state with the fight, after the turn
+        host = Game(m, st, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
+        await begin(host, ["warden"])
+        view = {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host)}
+        await screen.on_msg({"t": "event", "ev": {"type": "fight_start", "fight": views.fight_view(host), "line": "【战斗开始】"}})
+        await screen.on_msg({"t": "sync", "state": view})  # the state with the fight, after the turn
         await pilot.pause(0.3)
         assert screen._beating and not picker.display  # the round is not open to this seat yet
         await screen.on_msg(pool(True))
         await pilot.pause(0.2)
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)] if picker.display else []
-        assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and screen._clock is None  # the table's own window
+        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手）") for w in words) and screen._clock is None  # the table's own window
         picker.highlighted = 0
         await pilot.press("enter")
         await pilot.pause(0.2)
@@ -846,27 +867,30 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         assert not picker.display  # the round closed: settled by the host
 
 
-def test_an_ai_player_in_a_fight_sees_it_and_the_rounds_choices():
-    from autokeeper.engine import combat as battle
+async def test_an_ai_player_in_a_fight_sees_it_and_the_rounds_choices(fake):
     from autokeeper.engine.autoplay import situation
+    from autokeeper.engine.encounter import choices
+
+    from .encounter_kit import begin
+    from .test_engine import FakeCast
 
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
     st = Game.new(m, [lead, friend], slot="ai-fight")
     st.location = "tower"
-    warden = battle.from_npc(m.npc("warden"))
-    warden.hp = 3
-    fighters = [battle.from_investigator(lead), battle.from_investigator(friend), warden]
-    st.fight = battle.Fight(fighters=fighters, place="tower", round=2)
-    text = situation(m, st, "lin")
-    assert "正在战斗（第 2 轮）" in text and "老守钟人（重伤" in text and "HP 3" not in text  # its wounds in words
+    game = Game(m, st, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
+    await begin(game, ["warden"])
+    game.world.rec.entities["warden"].life.hp = 3
+    text = situation(m, st, "lin", game)
+    assert "正在战斗（第 1 轮）" in text and "楼梯口打盹的老人（重伤" in text and "HP 3" not in text  # its wounds in words
     assert "林秋这一轮可以做的" in text and "周衡这一轮可以做的" not in text
-    order = next(line.strip().split(" —— ")[0] for line in text.splitlines() if line.strip().startswith("攻击 老守钟人"))
-    parsed = battle.parse_order("我" + order, fighters[1], fighters)
-    assert parsed is not None and parsed.do == "attack" and parsed.target == "warden"  # the words the engine reads
-    st.fight = None
-    assert "正在战斗" not in situation(m, st) and situation(m, st).endswith("你下一步做什么？")
+    order = next(line.strip().split(" —— ")[0] for line in text.splitlines() if line.strip().startswith("攻击 楼梯口打盹的老人"))
+    found = choices.match(game, "lin", order)
+    assert found is not None and found.do == "attack" and found.attacks[0].target == "warden"  # the very words the engine matches
+    game.state.encounter = None
+    assert "正在战斗" not in situation(m, st, game=game) and situation(m, st, game=game).endswith("你下一步做什么？")
+    await game.close()
 
 
 async def test_an_ai_seat_pushes_the_way_it_said_it_would_and_the_arbiter_reviews_it(skills_dir, fake):

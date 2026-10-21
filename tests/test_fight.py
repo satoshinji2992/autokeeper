@@ -1,4 +1,5 @@
-"""Fights and chases as the game runs them (engine/fighting.py), through the turn graph."""
+"""Fights and chases as the game runs them (engine/encounter; chases still on engine/fighting.py), through
+the turn graph, and the stage the screens draw them on."""
 
 from __future__ import annotations
 
@@ -6,120 +7,142 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from rich.cells import cell_len
 
-from autokeeper.agents.cast import Action, Outcome, Ruling
-from autokeeper.engine import fighting
+from autokeeper.agents.cast import Action, Ruling
+from autokeeper.agents.encounter import EncounterHint
 from autokeeper.engine import graph as turn_graph
-from autokeeper.module.schema import Creature, Event, Module
+from autokeeper.engine.encounter import telling, views
+from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction, EncounterStart, EncounterTurnPlan
+from autokeeper.module.schema import Creature, Event, Module, Stake
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.chase import Leg, Obstacle
 
-from .test_engine import FakeCast, make, run_turn
+from .encounter_kit import THREAD, Keeper, arrange, attack, play
+from .test_engine import make
 from .test_tui import canned  # noqa: F401  (a fixture, used by name)
-
-THREAD = {"configurable": {"thread_id": "fight"}}
 
 
 @pytest.fixture
 def module() -> Module:
     return Module.load(EXAMPLE)
+
+
 HIT = Action(kind="attack", summary="周衡一拳打向老守钟人", npc="warden", target="老守钟人")
+PUNCH = DeclaredAction(do="attack", attacks=[AttackPick(target="warden", with_="natural:徒手")], summary="周衡一拳打向守钟人")
+WARDEN = arrange("warden", attack("zhouheng", summary="守钟人挥拳还击"))
 
 
-class Fighters(FakeCast):
-    """The scripted cast, with the end of a fight ruled: the flags it is told to give."""
-
-    def __init__(self, script, flags=()):
-        super().__init__(script)
-        self.flags, self.results = list(flags), []
-
-    async def outcome(self, state, result):
-        self.results.append(result)
-        return Outcome(flags=self.flags)
-
-
-def fighters(module, fake, script, flags=(), location="tower"):
-    game, _, events = make(module, fake, script, location=location)
-    cast = Fighters(script, flags)
-    game.cast = cast
-    cast.world = game.world
+def fighters(module, fake, script, *, starts=(), hints=None, location="tower", **modes):
+    """A game in the clock tower with the scripted keeper: the everyday script, the encounters it
+    announces (hints, starts) and the encounter plan's answers by mode."""
+    game, _, events = make(module, fake, {}, location=location)
+    cast = Keeper(script, hints=hints or {}, starts=list(starts), **modes)
+    game.cast, cast.world = cast, game.world
     return game, cast, events
 
 
-async def test_a_blow_starts_a_fight_and_a_knockout_ends_it_with_its_flags(module, fake):
+def fight_now(text: str = "hit"):
+    return {text: EncounterHint(mode="fight", **{"with": ["warden"]})}
+
+
+def opening(stakes=()) -> EncounterStart:
+    return EncounterStart(mode="fight", foes=["warden"], pace=6, reason="周衡动了手", opening=PUNCH, npcs=[WARDEN], stakes=list(stakes))
+
+
+async def test_a_blow_starts_a_fight_and_a_knockout_ends_it_with_its_stakes(module, fake):
     module.npc("warden").stats = {"生命": 4, "体质": 30}
     module.flags["warden_down"] = "守钟人被打倒在地"
-    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)", combat=["warden"], minutes=0)
-    game, cast, _ = fighters(module, fake, {"hit": (HIT, ruling)}, flags=["warden_down"])
+    game, cast, _ = fighters(module, fake, {"hit": (HIT, Ruling(needs_roll=False))}, hints=fight_now(),
+                             starts=[opening([Stake(when="down:warden", flags=["warden_down"])])])
     fake.queue(10, 60, 80).queue_totals(2)  # 周衡 hard; the warden fights back and fails; 2 damage; his CON fails
     app = turn_graph.build(game, InMemorySaver())
-    out, interrupts = await run_turn(app, "hit", THREAD)
+    out, asked = await play(app, "hit")
     st = game.state
     kinds = [e["type"] for e in out]
-    assert not interrupts and kinds.index("fight_start") < kinds.index("fight_act") < kinds.index("fight_end")
+    assert not asked and kinds.index("fight_start") < kinds.index("fight_act") < kinds.index("fight_end")
     act = next(e for e in out if e["type"] == "fight_act")
     assert act["winner"] == "attacker" and act["damage"] == 2 and act["reaction"] == "fight"
     assert act["dice"]["value"] == 10  # the investigator's own roll goes to the dice tray
-    assert st.fight is None and "warden_down" in st.flags  # over: the flag the outcome brought about
+    assert st.encounter is None and "warden_down" in st.flags  # over, archived: the flag its stake brought about
     warden = game.world.rec.entities["warden"]  # knocked out by a major wound, written into the record as it is
     assert warden.status == "重伤" and warden.life.hp == 2 and {"重伤", "昏迷"} <= set(warden.life.conditions)
-    assert "老守钟人" in cast.results[0] and "昏迷" in cast.results[0]
     report = cast.reports[-1]
     assert "【战斗 · 第 1 轮】" in report and "【战斗结束】" in report and "不复述数字" in report.replace("不要复述数字", "不复述数字")
     assert st.investigator.hp == st.investigator.hp_max  # he never got to swing back
 
 
-async def test_a_round_goes_in_dex_order_and_the_stance_answers_the_blow(module, fake):
-    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)", combat=["warden"])
-    game, cast, _ = fighters(module, fake, {"hit": (HIT, ruling)})
+async def test_a_round_goes_in_dex_order_and_the_answer_meets_the_blow(module, fake):
+    game, cast, _ = fighters(module, fake, {"hit": (HIT, Ruling(needs_roll=False))}, hints=fight_now(), starts=[opening()],
+                             arrange=lambda *a: EncounterTurnPlan(npcs=[WARDEN]))
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(90, 60, 20, 50).queue_totals(3)  # 周衡 misses; the warden fights back (no use); then hits; 周衡's dodge fails
-    events, _ = await run_turn(app, "hit", THREAD)
+    events, asked = await play(app, "hit", answers=["dodge"])  # the first blow at him: he is asked, before its dice
     st = game.state
     inv = st.investigator
-    assert st.fight is not None and st.fight.round == 1 and inv.hp == inv.hp_max - 3
+    assert [a["kind"] for a in asked] == ["reaction"]
+    assert st.encounter.round == 1 and inv.hp == inv.hp_max - 3
     order = next(e for e in events if e["type"] == "fight_round")["order"]
-    assert order == ["zhouheng", "warden"]  # DEX 65 before 50
+    assert order == ["zhouheng", "f1"]  # DEX 65 before 50; the warden by his seat, never his own id
     ruled = len(cast.ruled)
     fake.queue(10, 60, 20, 5).queue_totals(1, 2)  # 周衡 hard: 1; the warden hits, 周衡 fights back with an extreme success
-    events, _ = await run_turn(app, "攻击 老守钟人（徒手）｜被攻击时反击", THREAD)
-    assert len(cast.ruled) == ruled  # an order in the screen's words needs no arbiter
+    events, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时反击", thread={**THREAD, "configurable": {"thread_id": "r2"}})
+    assert len(cast.ruled) == ruled and not asked  # a button needs no arbiter; the answer set with it stands
     acts = [e for e in events if e["type"] == "fight_act"][-2:]
-    assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "warden"
+    assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "f1"
     # fighting back does normal damage however well it rolls (Keeper Rulebook p. 87): 1D3, not its most
     assert acts[1]["damage"] == 2 and "反击得手" in acts[1]["line"]
-    assert inv.hp == inv.hp_max - 3 and st.fight.get("warden").hp == 11 - 1 - 2
+    assert inv.hp == inv.hp_max - 3 and game.world.rec.entities["warden"].life.hp == 11 - 1 - 2
     assert "【战斗 · 第 2 轮】" in cast.reports[-1]
 
 
+RUN = Action(kind="move", summary="周衡拔腿就跑")
+CHASE = {"run": EncounterHint(mode="chase", **{"with": ["warden"]})}
+
+
+def chased(stakes=()) -> EncounterStart:
+    return EncounterStart(mode="chase", foes=["warden"], quarry="party", pace=15, reason="守钟人追了上来", stakes=list(stakes))
+
+
 async def test_a_quarry_much_faster_is_gone_at_once(module, fake):
-    flee = Action(kind="move", summary="周衡拔腿就跑")
-    ruling = Ruling(needs_roll=False, chase=["warden"], chase_party="逃")
     module.flags["got_away"] = "调查员从守钟人手里逃脱"
-    game, cast, _ = fighters(module, fake, {"run": (flee, ruling)}, flags=["got_away"])
+    game, _cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE,
+                             starts=[chased([Stake(when="escaped:players", flags=["got_away"])])])
     fake.queue(40, 80)  # 周衡's CON regular: 8; the warden's fails: 7
     app = turn_graph.build(game, InMemorySaver())
-    out, _ = await run_turn(app, "run", THREAD)
+    out, _ = await play(app, "run")
     kinds = [e["type"] for e in out]
     assert "chase_start" in kinds and "chase_end" in kinds and game.state.chase is None
-    assert "got_away" in game.state.flags and "转眼就没了影" in cast.results[0]
+    assert "got_away" in game.state.flags and game.state.encounter_log[-1].ended.how == "fled"
 
 
 async def test_a_chase_runs_leg_by_leg_and_hiding_ends_it(module, fake):
-    flee = Action(kind="move", summary="周衡拔腿就跑")
-    ruling = Ruling(needs_roll=False, chase=["warden"], chase_party="逃")
-    game, cast, _ = fighters(module, fake, {"run": (flee, ruling)})
+    game, cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE, starts=[chased()])
     app = turn_graph.build(game, InMemorySaver())
     # speeds 8 and 8; 周衡 (at 2) crosses the crates (闪避, 10); the warden slips on the ice (敏捷 90) and loses 2
     fake.queue(40, 40, 10, 90).queue_totals(2)
-    await run_turn(app, "run", THREAD)
+    await play(app, "run")
     ch = game.state.chase
-    assert ch is not None and ch.round == 1
+    assert ch is not None and ch.round == 1 and game.state.encounter.mode == "chase"
     me, warden = ch.get("zhouheng"), ch.get("warden")
-    assert (me.pos, warden.pos) == (3, 1)
+    assert (me.pos, warden.pos) == (3, 1) and warden.name == "楼梯口打盹的老人"  # the name the players know
     assert any("堆满木箱的后院" in line for line in cast.reports[-1].splitlines())
     fake.queue(10, 20)  # out of sight: 潜行 hard against 侦查 regular
-    out, _ = await run_turn(app, "躲藏", THREAD)
+    out, _ = await play(app, "躲藏", thread={**THREAD, "configurable": {"thread_id": "c2"}})
     assert game.state.chase is None and any(e["type"] == "chase_end" and e["end"] == "escaped" for e in out)
+    assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "fled"
+
+
+async def test_words_in_a_chase_are_the_keeper_plans_never_parsed(module, fake):
+    """The review: in a chase, 打 at the start of the words turned to fight."""
+    door = EncounterTurnPlan(action=DeclaredAction(do="other", summary="周衡想推开路边的门躲进去"))
+    game, cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE, starts=[chased()], act=door)
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(40, 40, 10, 90).queue_totals(2)
+    await play(app, "run")
+    fake.queue(90)  # the warden runs on: the ice again
+    fake.queue_totals(1)
+    out, _ = await play(app, "打开门躲进去", thread={**THREAD, "configurable": {"thread_id": "c3"}})
+    assert cast.calls[-1][:2] == ("act", "打开门躲进去") and game.state.chase is not None and game.state.encounter.mode == "chase"
+    assert not any(e["type"] == "fight_start" for e in out)
 
 
 # -- what the module scripts: an event's attack, the way a chase from a place runs -------------------
@@ -136,21 +159,23 @@ STAIRS = [Leg(name="齿轮间门口", look="咔哒声就在头顶"),
 
 async def test_an_event_that_scripts_an_attack_begins_the_fight_and_the_next_input_is_its_first_round(module, fake):
     module.events.append(AMBUSH.model_copy())
-    game, cast, _ = fighters(module, fake, {"wait": (WAIT, Ruling(needs_roll=False, minutes=10))})
+    game, cast, _ = fighters(module, fake, {"wait": (WAIT, Ruling(needs_roll=False, minutes=10))},
+                             arrange=lambda *a: EncounterTurnPlan(npcs=[WARDEN], pace=6))
     app = turn_graph.build(game, InMemorySaver())
-    out, _ = await run_turn(app, "wait", THREAD)  # 14:10: the attack at 14:05 has come
+    out, _ = await play(app, "wait")  # 14:10: the attack at 14:05 has come
     st = game.state
     kinds = [e["type"] for e in out]
     assert kinds.index("event") < kinds.index("fight_start") and "fight_act" not in kinds  # begun, nothing settled yet
-    assert st.fight is not None and st.fight.round == 0 and st.fight.get("zhouheng").surprised
-    assert "【战斗开始】" in cast.reports[-1] and fighting.BEGIN_TELL in cast.reports[-1]
+    enc = st.encounter
+    assert enc is not None and enc.round == 0 and enc.get("zhouheng").surprised
+    assert "【战斗开始】" in cast.reports[-1] and telling.BEGIN_TELL in cast.reports[-1]
     ruled = len(cast.ruled)
     fake.queue(90, 60, 10).queue_totals(2)  # 周衡 misses, the warden fights back for nothing, then strikes 周衡, who cannot answer
-    out, _ = await run_turn(app, "攻击 老守钟人（徒手）｜被攻击时闪避", THREAD)
-    assert len(cast.ruled) == ruled and st.fight.round == 1  # the first round's order, with no arbiter
+    out, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "e2"}})
+    assert len(cast.ruled) == ruled and enc is not None and st.encounter.round == 1 and not asked  # surprised: nothing to ask
     blow = [e for e in out if e["type"] == "fight_act"][-1]
-    assert blow["attacker"] == "warden" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
-    assert not st.fight.get("zhouheng").surprised  # the first round only
+    assert blow["attacker"] == "f1" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
+    assert not st.encounter.get("zhouheng").surprised  # the first round only
 
 
 async def test_a_scripted_attack_waits_for_someone_to_meet_it_and_joins_a_fight_going_on(module, fake):
@@ -160,19 +185,19 @@ async def test_a_scripted_attack_waits_for_someone_to_meet_it_and_joins_a_fight_
     game, _, events = fighters(module, fake, {})
     game.state.investigator.add_condition("昏迷")  # nobody here who can still act: nothing begins
     await game._fire(module.events[-1], Turn())
-    assert game.state.fight is None and "e_ambush" in game.state.fired
+    assert game.state.encounter is None and "e_ambush" in game.state.fired
     game.state.investigator.conditions.clear()
     module.npc("warden").status = "死亡"
     second = AMBUSH.model_copy(update={"id": "e_again"})
     await game._fire(second, Turn())
-    assert game.state.fight is None  # the dead attack no one
+    assert game.state.encounter is None  # the dead attack no one
     module.npc("warden").status = ""
     await game._fire(AMBUSH.model_copy(update={"id": "e_third"}), Turn())
-    assert [f.id for f in game.state.fight.fighters] == ["zhouheng", "warden"]
+    assert [p.id for p in game.state.encounter.participants] == ["zhouheng", "warden"]
     turn = Turn()
     await game._fire(Event(id="e_more", title="布道者也冲了上来", when="flag:x", text="", fight=["preacher", "warden"]), turn)
-    assert [f.id for f in game.state.fight.fighters] == ["zhouheng", "warden", "preacher"]  # joined, nobody twice
-    assert any("布道者也扑了上来" in line for line in turn.fight) and events[-1]["type"] == "fight_state"
+    assert [p.id for p in game.state.encounter.participants] == ["zhouheng", "warden", "preacher"]  # joined, nobody twice
+    assert any("街头布道者也扑了上来" in line for line in turn.fight) and events[-1]["type"] == "fight_state"
     assert game.world.rec.entities["preacher"].at == game.state.location  # the record has him come where they are
 
 
@@ -192,9 +217,9 @@ async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fa
     with pytest.raises(ConnectionError):
         await game.resolve(WAIT, ruling)
     resumed, events = reload_game(module, saved[-1], fake)
-    assert resumed.state.fight is not None  # it began before the line broke
+    assert resumed.state.encounter is not None  # it began before the line broke
     turn = await resumed.resolve(WAIT, ruling)
-    assert [f.id for f in resumed.state.fight.fighters] == ["zhouheng", "warden"]
+    assert [p.id for p in resumed.state.encounter.participants] == ["zhouheng", "warden"]
     assert sum(e["type"] == "fight_start" for e in events) == 1 and turn.fight.count(turn.fight[0]) == 1
     assert not resumed.state.pending_resolution
     await game.close()
@@ -211,8 +236,8 @@ async def test_a_creature_the_event_already_paid_for_is_shown_not_paid_for_twice
     fake.queue(10)  # the event's own sanity roll, passed: the only one
     await game._fire(seen, Turn())
     kinds = [e["type"] for e in events]
-    assert kinds.count("sanity") == 1 and "reveal" in kinds and game.state.seen == ["coil"]
-    assert game.state.fight.get("coil").attacks[0].name == "缠绕"
+    assert kinds.count("sanity") == 1 and "reveal" in kinds and game.state.sightings == {"zhouheng": ["coil"]}
+    assert views.Ctx.of(game).view("coil").attacks()[0].name == "缠绕"
 
 
 async def test_a_chase_runs_the_modules_way_from_the_place_or_the_place_it_is_in(module, fake):
@@ -225,21 +250,24 @@ async def test_a_chase_runs_the_modules_way_from_the_place_or_the_place_it_is_in
     await game._fire(hounds, Turn())
     ch = game.state.chase
     assert ch is not None and ch.quarry == "party" and [leg.name for leg in ch.track.legs] == [leg.name for leg in STAIRS]
+    assert game.state.encounter is not None and game.state.encounter.mode == "chase"
     ch.track.legs[3].obstacle.open = True  # what a chase does to its way stays in that chase
     assert not module.location("square").chase[3].obstacle.open
     assert any(e["type"] == "chase_start" for e in events)
-    game.state.chase = None
-    from autokeeper.engine import combat as battle
 
-    fight = battle.Fight(fighters=[battle.from_investigator(game.state.investigator), battle.from_npc(module.npc("warden"))])
-    fake.queue(40, 40)  # the runners' CON for speed
-    game._chase_from_fight(fight, ["zhouheng"], ["warden"])
-    assert game.state.chase.track.legs[1].name == "又窄又陡的楼梯"  # fled from a fight: the same way
-    module.location("square").chase = STAIRS[:3]  # too short for the rules: the one for this kind of place
-    game.state.chase = None
-    fake.queue(40, 40)
-    game._chase_from_fight(fight, ["zhouheng"], ["warden"])
-    assert game.state.chase.track.legs[0].name != "齿轮间门口"
+
+async def test_running_from_a_fight_with_someone_after_you_is_the_same_way(module, fake):
+    module.location("square").chase = STAIRS
+    game, _cast, _events = fighters(module, fake, {"hit": (HIT, Ruling(needs_roll=False))}, hints=fight_now(),
+                                  starts=[opening().model_copy(update={"opening": None, "npcs": [
+                                      arrange("warden", attack("zhouheng"), pursue=["zhouheng"])]})],
+                                  arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", attack("zhouheng"), pursue=["zhouheng"])]))
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "hit")
+    fake.queue(40, 40)  # the speeds
+    _out, _ = await play(app, "逃跑｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "f2"}})
+    assert game.state.chase is not None and game.state.chase.track.legs[1].name == "又窄又陡的楼梯"
+    assert game.state.encounter.mode == "chase" and game.state.encounter.switches == ["r1:chase"]
 
 
 def fight_screen(module):
@@ -250,10 +278,23 @@ def fight_screen(module):
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="fight-screen")
     state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
     state.add("keeper", "钟楼里只有齿轮的声音。")
-    warden = battle.from_npc(module.npc("warden"))
+    warden = battle.from_npc(module.npc("warden"))  # the old chase's runners, for the chase stage
     me = battle.from_investigator(state.investigators[0])
-    state.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
+    begun(module, state, ["warden"], round=1)
     return GameScreen(module, state, resume=True), me, warden
+
+
+def begun(module, state, foes, *, round: int = 0) -> None:
+    """A fight already going on in `state`, as a save holds one (engine/encounter)."""
+    from autokeeper.engine.encounter.plan import EncounterStart
+    from autokeeper.engine.game import Game, Turn
+    from autokeeper.rules.coc import Rules
+
+    from .test_engine import FakeCast
+
+    game = Game(module, state, FakeCast({}), Rules())  # type: ignore[arg-type]
+    game._begin("e1", EncounterStart(mode="fight", foes=foes, pace=6, reason="动起手来"), foes, Turn(), None)
+    state.encounter.round, state.encounter.cursor = round, 2 if round else 0
 
 
 HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": "老守钟人", "attacker_side": "foe",
@@ -288,7 +329,8 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         assert await until(pilot, lambda: picker.display)
         assert screen._clock is not None and "秒" in str(picker.border_title)  # the choice is on a clock
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
-        assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
+        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
+        assert not any("老守钟人" in w for w in words)  # the name the players know, never the keeper's
         await pilot.press("tab")  # the other way of answering a blow, every choice with it
         await pilot.pause()
         assert all("被攻击时反击" in picker.get_option_at_index(i).id for i in range(picker.option_count - 2))
@@ -306,7 +348,7 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         await pilot.pause(0.05)
         assert app.screen is screen
         assert screen.query(".fightcard")
-        state.fight = None
+        state.encounter = None
         await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
         await pilot.pause()
         assert not arena.display and not screen.has_class("-fight") and screen.query_one(SceneArt).display
@@ -395,15 +437,15 @@ async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_ba
     async with app.run_test(size=(150, 44)) as pilot:
         screen, me, warden = fight_screen(module)
         st = screen.state
-        st.fight, me.pos = None, 2
+        me.pos = 2
         st.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party", round=1)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         screen.busy = True  # the round is being settled: the engine ends the chase and starts the fight
-        st.chase, st.fight = None, battle.Fight(fighters=[me, warden], place="tower", reason="追逐中被追上")
+        st.chase = None  # the encounter is a fight again (engine/encounter/runner._chase_closed)
         await screen.handle({"type": "chase_end", "end": "caught", "text": "追逐结束：老守钟人追上了周衡", "hunter": "warden",
                              "hunter_name": "老守钟人", "portrait": "face-warden"})
-        await screen.handle({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】周衡与老守钟人扭打在一起"})
+        await screen.handle({"type": "fight_start", "fight": views.fight_view(screen.game), "line": "【追逐转为战斗】扭打在一起"})
         await pilot.pause(0.05)
         assert isinstance(app.screen, BloodFlash)  # the blood first
         assert await until(pilot, lambda: isinstance(app.screen, ShowcaseScreen))  # then its face, over everything
@@ -507,8 +549,8 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
             sent.append(text)
             screen._busy(True)
             await asyncio.sleep(0.4)
-            seen.append(screen.state.fight.get(me.id).stance)
-            screen.state.fight = None
+            seen.append(screen.state.encounter.get(me.id).react)
+            screen.state.encounter = None
             await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
             screen._busy(False)
 
@@ -521,7 +563,7 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
         await pilot.pause(0.1)
         await pilot.press("tab")  # mid-turn: no stance of the fight being settled changes
         assert await until(pilot, lambda: not screen.busy and seen)
-        assert sent == ["我"] and seen == ["dodge"] and me.stance == "dodge"
+        assert sent == ["我"] and seen == [None] and me.stance == "dodge"  # nothing set by the list's Tab
         await pilot.pause(0.2)
         assert not picker.display and not screen._battle_picking  # nothing of the fight's list after it
         await pilot.press("enter")
@@ -596,15 +638,17 @@ async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, f
 # -- the stage on a small terminal ---------------------------------------------------------------------
 def _crowd(module):
     """Two investigators against the warden and two of his helpers."""
-    from autokeeper.engine import combat as battle
+    from autokeeper.engine.game import Game
+    from autokeeper.tui.screens.game import GameScreen
 
-    screen, me, warden = fight_screen(module)
-    st = screen.state
-    friend = st.investigators[0].model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
-    st.investigators.append(friend)
-    helpers = [warden.model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}) for k in (1, 2)]
-    st.fight = battle.Fight(fighters=[me, battle.from_investigator(friend), warden, *helpers], place="tower", round=1)
-    return screen
+    for k in (1, 2):  # two more of the warden's kind
+        module.npcs.append(module.npc("warden").model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}))
+    lead = module.pregens[0].model_copy(deep=True)
+    state = Game.new(module, [lead, lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)], slot="crowd")
+    state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
+    state.add("keeper", "钟楼里只有齿轮的声音。")
+    begun(module, state, ["warden", "helper1", "helper2"], round=1)
+    return GameScreen(module, state, resume=True)
 
 
 def _all_on_screen(screen, height: int) -> None:
@@ -654,7 +698,7 @@ async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_kee
         await pilot.pause(0.5)
         _all_on_screen(screen, 24)
         assert arena.region.height < 22
-        screen.state.fight, me.pos = None, 2
+        screen.state.encounter, me.pos = None, 2
         await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
         screen.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party")
         await screen.handle({"type": "chase_start", "chase": battle.chase_view(screen.state.chase), "line": "【追逐开始】"})
@@ -782,7 +826,6 @@ async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
         screen, _, _ = fight_screen(module)
-        screen.state.fight.fighters[1].portrait = "warden"
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         canvas = screen.query_one(stage.Arena).canvas
@@ -792,16 +835,14 @@ async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the
 
 @pytest.mark.usefixtures("canned")
 async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module, fake):
-    from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens.game import GameScreen
 
     from .test_tui import story_text, until
 
-    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)", combat=["warden"])
-    game, _, _ = fighters(module, fake, {"hit": (HIT, ruling)})
+    game, _, _ = fighters(module, fake, {"hit": (HIT, Ruling(needs_roll=False))}, hints=fight_now(), starts=[opening()])
     fake.queue(90, 60, 20, 50).queue_totals(3)  # 周衡 misses; the warden hits him for 3
-    events, _ = await run_turn(turn_graph.build(game, InMemorySaver()), "hit", THREAD)
+    events, _ = await play(turn_graph.build(game, InMemorySaver()), "hit", answers=["dodge"])
     acts = [e for e in events if e["type"] == "fight_act"]
     assert len(acts) == 2 and any(e["type"] == "damage" for e in events)
     state = game.state.model_copy(deep=True)
@@ -813,7 +854,7 @@ async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module
         for ev in events:  # the round as the screen hears it
             if ev["type"] in ("damage", "fight_round", "fight_act", "fight_state"):
                 await screen.handle(ev)
-        await screen.handle({"type": "fight_state", "fight": battle.view(state.fight),
+        await screen.handle({"type": "fight_state", "fight": views.fight_view(screen.game),
                              "lines": [acts[1]["line"], "周衡还吊着一口气（体质 30）"]})  # the round's end: something new
         await pilot.pause(0.3)
         text = story_text(screen)
@@ -822,34 +863,30 @@ async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module
         assert "还吊着一口气" in text  # what the cards do not say still comes
 
 
-async def test_a_turn_cut_short_after_its_fight_closed_only_sends_what_it_owed(module, fake):
-    """The user's review, 2026-10-21: the ending notice failed, the retry opened the fight again and
-    the warden, knocked out, struck once more."""
-    from autokeeper.engine import combat as battle
+@pytest.mark.usefixtures("canned")
+async def test_a_blow_aimed_at_the_player_is_asked_in_a_window_and_escape_keeps_their_answer(module, fake):
+    from textual.widgets import Button
 
-    module.events, module.endings = [], []
-    game, _, events = fighters(module, fake, {})
-    me = battle.from_investigator(game.state.investigator)
-    foe = battle.from_npc(module.npc("warden"))
-    foe.hp = 1
-    game.state.fight = battle.Fight(fighters=[me, foe], place="tower", started=1, orders={foe.id: battle.Order(do="hold")})
-    action = Action(kind="attack", summary="攻击老守钟人", npc=foe.id,
-                    order=battle.Order(do="attack", target=foe.id, weapon="徒手").model_dump())
-    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)")
-    original = game.emit
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.reaction import ChoiceModal
 
-    async def broken(ev):
-        if ev["type"] == "fight_end":
-            raise ConnectionError("the ending notice did not go out")
-        await original(ev)
+    from .test_tui import until
 
-    game.emit = broken
-    fake.queue(10, 90).queue_totals(1)
-    with pytest.raises(ConnectionError):
-        await game.resolve(action, ruling)
-    assert game.state.fight is None
-    game.emit = original
-    hp = game.state.investigator.hp
-    resumed = await game.resolve(action, ruling)  # nothing queued: a die thrown again would fail here
-    assert game.state.fight is None and game.state.investigator.hp == hp and not resumed.checks
-    assert [e["type"] for e in events].count("fight_start") == 0 and any(e["type"] == "fight_end" for e in events)
+    offer = {"kind": "reaction", "id": "e1:r1:warden:0:react:0", "who": "zhouheng", "name": "周衡",
+             "prompt": "楼梯口打盹的老人向你扑来，你怎么应对？", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}, {"id": "fight_back", "label": "反击", "note": ""}]}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        answers: list[str] = []
+        app.push_screen(ChoiceModal(offer), answers.append)
+        await pilot.pause(0.1)
+        assert [b.label.plain for b in app.screen.query(Button)] == ["闪避", "反击"]
+        await pilot.click("#o1")
+        assert await until(pilot, lambda: answers == ["fight_back"])
+        app.push_screen(ChoiceModal(offer), answers.append)
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        assert await until(pilot, lambda: answers == ["fight_back", "dodge"])  # what they set for the round

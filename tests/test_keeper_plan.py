@@ -356,11 +356,12 @@ async def test_the_rhetoric_eval_goes_through_the_keepers_plan(tmp_path, monkeyp
 
 
 # -- an encounter announced by the everyday plan (Plan.encounter) -----------------------------------
-async def test_the_plan_may_announce_an_encounter_and_the_arbiter_still_starts_the_old_one(module, fake):
-    """Plan.encounter is one small object on the everyday schema, for the encounter engine (WP-C);
-    until then the arbiter's Ruling.combat/chase start the old engine's fights, as before."""
+async def test_the_plan_announces_an_encounter_and_the_arbiter_no_longer_starts_one(module, fake):
+    """Plan.encounter is one small object on the everyday schema: the encounter engine starts the fight
+    from it. The arbiter's old fields (combat, chase, harm) are gone from its schema and its prompt."""
     cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), module)
     game = make(module, fake, cast)
+    game.state.pending_turn = {"input": "我扑向守钟人"}
     SCRIPT.append({"action": {"kind": "attack", "summary": "周衡扑向守钟人", "npc": "warden"},
                    "encounter": {"mode": "fight", "with": ["warden"], "trigger": "now"}})
     action = await game.parse("我扑向守钟人")
@@ -368,12 +369,15 @@ async def test_the_plan_may_announce_an_encounter_and_the_arbiter_still_starts_t
     hint = sent["schema"]["$defs"]["EncounterHint"]
     assert set(hint["properties"]) == {"mode", "with", "trigger"} and "encounter" in sent["schema"]["properties"]
     assert "【可能动手的】" in sent["messages"][-1]["content"] and "encounter：这一轮真的打起来" in sent["system"]
-    SCRIPT.append({"needs_roll": True, "skill": "格斗(斗殴)", "combat": ["warden"], "surprise": "foe"})
-    ruling = await cast.arbiter(game.state, action)
-    assert ruling.combat == ["warden"] and ruling.surprise == "foe"
+    assert game.state.pending_turn["encounter_hint"]["with"] == ["warden"]  # kept for the turn's resolution
+    ruling = await game.rule(action)
+    assert ruling is not None and not ruling.needs_roll  # the fight itself: its dice are the encounter's
+    game.state.pending_turn = {}
+    SCRIPT.append({"needs_roll": True, "skill": "格斗(斗殴)"})
+    await cast.arbiter(game.state, action)
     sent = SEEN[-1]
-    assert {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} <= set(sent["schema"]["properties"])
-    assert "【可能动手的】" in sent["messages"][-1]["content"] and "chase_party 写调查员是逃还是追" in sent["system"]
+    assert not {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} & set(sent["schema"]["properties"])
+    assert "【可能动手的】" not in sent["messages"][-1]["content"] and "chase_party" not in sent["system"]
     await game.close()
     await cast.close()
 

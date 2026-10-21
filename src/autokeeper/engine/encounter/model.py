@@ -170,7 +170,7 @@ class ActionReceipt(BaseModel):
     id: str  # f"{enc.id}:r{round}:{actor}:{n}", the prefix of its units' op ids
     round: int
     actor: str
-    source: Literal["button", "words", "keeper", "ai", "event", "mcp", "table"]
+    source: Literal["button", "words", "keeper", "ai", "event", "table"]
     declared: DeclaredAction
     summary: str  # neutral, never the player's raw words
     ruling: dict | None = None  # the arbiter's Ruling (JSON) for an `other` action or an unlisted method
@@ -180,6 +180,8 @@ class ActionReceipt(BaseModel):
     effects: list[Effect] = Field(default_factory=list)
     lapsed: str = ""  # why it could not land (the missing condition)
     lines: list[str] = Field(default_factory=list)  # keeper-form lines with {id} refs, rendered per audience
+    settled: int = 0  # attacks of `declared` settled so far (a multi-attack creature makes them all on its slot)
+    prompted: bool = False  # the player throwing their own dice was shown the roll before its first die
 
 
 # -- a choice a player is being asked ------------------------------------------------------------

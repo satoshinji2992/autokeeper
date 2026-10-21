@@ -77,6 +77,7 @@ class Entity(Versioned):
     life: Life | None = None  # an NPC's or a creature's body, once a fight has seeded it; None before
     weapon: WeaponState | None = None  # an item that is a weapon, once it was used in a fight
     fills: dict[str, int] = Field(default_factory=dict)  # numbers the keeper fixed for a sheet that lacked them (生命, 闪避 ...)
+    luck: int | None = None  # an important NPC's Luck pool left (Keeper Rulebook p. 168); None: never drawn on
 
 
 class Fact(Versioned):

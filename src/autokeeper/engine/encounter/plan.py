@@ -4,7 +4,7 @@ The keeper plan (agents/cast.Cast.plan, the keeper model's `plan` role) is the o
 arranges an encounter. Outside one it may start one (`EncounterStart`); inside one, every free-text
 input is planned as an `EncounterTurnPlan`: what the speaking investigator does (a `DeclaredAction`),
 how each NPC and creature means to fight (`NpcArrangement`), who joins, numbers a sheet lacked, what
-the outcome brings about, and how long a round takes. The MCP keeper writes the same shapes.
+the outcome brings about, and how long a round takes.
 
 These are the types a model fills, so their field descriptions are the instructions it reads, in
 Chinese, and the schemas are kept small for cheap models (tests/test_encounter_models.py records
@@ -27,7 +27,7 @@ from ...rules.dice_expr import StoredDiceText
 Mode = Literal["fight", "chase"]
 Side = Literal["party", "foe", "neutral"]
 Reaction = Literal["dodge", "fight_back", "cover", "none"]
-ActionDo = Literal["attack", "shoot", "maneuver", "aid", "reload", "unjam", "ready", "defend", "flee", "pursue",
+ActionDo = Literal["attack", "shoot", "maneuver", "aim", "aid", "reload", "unjam", "ready", "defend", "flee", "pursue",
                    "move", "cross", "hide", "barrier", "help", "speak", "surrender", "stand", "use", "other"]
 Difficulty = Literal["常规", "困难", "极难"]
 
@@ -62,8 +62,8 @@ class Thing(BaseModel):
 
 class DeclaredAction(BaseModel):
     do: ActionDo = Field(description=(
-        "做什么：attack 近战，shoot 开枪或投掷，maneuver 战技，aid 急救救人，reload 装弹，unjam 排除卡壳，ready 拿出武器，"
-        "defend 只防守，flee 逃跑，pursue 追赶，move 追逐中跑一段，cross 过障碍，hide 躲藏，barrier 设路障，"
+        "做什么：attack 近战，shoot 开枪或投掷，maneuver 战技，aim 瞄准（下一枪得奖励骰），aid 急救救人，reload 装弹，unjam 排除卡壳，ready 拿出武器，"
+        "defend 只防守，flee 逃跑，pursue 追赶，move 追逐中跑一段，cross 过障碍，hide 躲藏（潜行，藏好了对手看不见），barrier 设路障，"
         "help 帮同伴（他下一次检定得奖励骰），speak 喊话，surrender 投降，stand 站住迎战，use 用一样东西，other 别的（交给裁定）"))
     attacks: list[AttackPick] = Field(default_factory=list, max_length=4, description=(
         "attack、shoot、maneuver 才写：每次攻击一条，一轮攻击几次的怪物写几条；别的行动留空"))
@@ -90,6 +90,9 @@ class NpcArrangement(BaseModel):
     pursue: list[str] = Field(default_factory=list, description="有调查员逃跑时，他追谁（id）")
     let_go: list[str] = Field(default_factory=list, description="有调查员逃跑时，他放走谁、不追（id）")
     keep: bool = Field(True, description="情况没大变就沿用到下一轮")
+    # An important NPC's Luck pool (Keeper Rulebook p. 168, optional): the keeper may spend it on its
+    # own failed rolls this round, up to this many points; the engine settles it.
+    luck: int = Field(0, ge=0, le=99, description="简报写了幸运池时：这一轮他自己的检定失败，最多花多少点幸运改成成功；不花写 0")
 
 
 class EndProposal(BaseModel):
@@ -166,6 +169,18 @@ class EncounterStart(BaseModel):
     reason: str = Field(max_length=60, description="为什么打起来或追起来，一句话")
 
 
+class CoverNote(BaseModel):
+    who: str = Field(description="谁：遭遇里的人的 id")
+    what: str = Field(max_length=20, description="躲在什么后面：大钟、墓碑、翻倒的桌子")
+    full: bool = Field(False, description="整个人藏住、对手看不见时填 true；只挡住一半填 false")
+
+
+class Distance(BaseModel):
+    a: str = Field(description="一个人的 id")
+    b: str = Field(description="另一个人的 id")
+    yards: int = Field(ge=0, le=2000, description="相隔多少码（1 码约 0.9 米）")
+
+
 class EncounterTurnPlan(BaseModel):
     lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
     action: DeclaredAction | None = Field(None, description="说话的这位调查员这一轮做什么；只安排 NPC 时留空")
@@ -176,3 +191,5 @@ class EncounterTurnPlan(BaseModel):
     stakes: list[Stake] = Field(default_factory=list, max_length=3, description="新出现的胜负后果；没有留空")
     end: EndProposal | None = Field(None, description="有人投降、谈和或放弃，遭遇就此收场时写")
     pace: int | None = Field(None, ge=1, le=600, description="一轮在故事里过几秒；不变留空")
+    cover: list[CoverNote] = Field(default_factory=list, max_length=6, description="谁躲在了什么后面（局面变了才写）；没有留空")
+    distances: list[Distance] = Field(default_factory=list, max_length=6, description="开枪时相隔的距离（定射程用）；近身或不开枪留空")

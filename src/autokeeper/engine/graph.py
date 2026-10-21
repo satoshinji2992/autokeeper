@@ -1,8 +1,8 @@
 """LangGraph orchestration of a turn.
 
-    START ─┬─ command ─────────────────────────────────────────────────────┐
-           └─ parse → rule ─┬─ ask_roll ─┬─ resolve ─┬─ offer_push ─┐       │
-                            └────────────┘           └──────────────┴─ talk → narrate → remember → END
+    START ─┬─ command ──────────────────────────────────────────────────────┐
+           └─ parse → rule ─┬─ ask_roll ─┬─ resolve ─┬─ offer ⟲ ─┐             │
+                            └────────────┘           └───────────┴─ talk → narrate → remember → END
 
 * parse / rule / talk / narrate call agents; resolve is pure engine code.
 * command answers the dice-bot commands that stand outside the story (.r, .st, .coc, ...)
@@ -12,8 +12,11 @@
   ruling calls for a check, the graph pauses with interrupt() showing what is asked and
   why, and resolve rolls once the UI resumes it. AI investigators, autoplay and replays
   never set by_hand, so their dice fall at once, in the same order as ever.
-* offer_push pauses the graph with interrupt() and waits for the player to choose
-  孤注一掷 / 花幸运 / 放弃; the UI resumes it with Command(resume=...).
+* offer pauses the graph with interrupt() and waits for the player: a push (孤注一掷 / 花幸运 /
+  放弃, its resume value passed to Game.push as it came), or a choice a fight waits on (how to
+  answer a blow, a roll of their own, a new declaration: Game.respond). One interrupt per run of
+  the node, as LangGraph matches resume values by their place; it loops while another is pending.
+  In a fight, "/encounter" (the LAN table's settling, the screen's 继续) goes on with the round.
 * Every node streams UI events through get_stream_writer(); the TUI consumes
   stream_mode="custom".
 * The checkpointer stores a snapshot of GameState after every turn, so a save slot
@@ -131,6 +134,8 @@ def build(game: Game, checkpointer=None):
         return {}
 
     def after_rule(state: TurnState) -> str:
+        if (state.get("action") or {}).get("declared") is not None:
+            return "resolve"  # a fight's dice are thrown at the investigator's slot (engine/encounter)
         r = state.get("ruling") or {}
         rolls = r.get("needs_roll") and r.get("skill") and not r.get("repeat")
         return "ask_roll" if rolls and state.get("by_hand") else "resolve"
@@ -152,27 +157,47 @@ def build(game: Game, checkpointer=None):
             ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
             holder["turn"] = await game.resolve(Action.model_validate(state["action"]), ruling)
             keep(holder["turn"])
-        return {"pending": bool(held().push)}
+        return {"pending": pending()}
+
+    def pending() -> bool:
+        journal = game.state.pending_turn
+        return (bool(held().push) and not journal.get("push_merged")) or game.pending_choice() is not None
 
     def after_resolve(state: TurnState) -> str:
-        return "offer_push" if state.get("pending") else "talk"
+        return "offer" if state.get("pending") else "talk"
 
-    async def offer_push(state: TurnState) -> dict:
+    async def offer(state: TurnState) -> dict:
+        # Runs again from the top when resumed: nothing before interrupt() may change state.
         _bind(game)
         journal = game.state.pending_turn
-        if journal.get("push_merged"):
+        if held().push and not journal.get("push_merged"):
+            if "push_choice" not in journal:
+                offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}
+                journal["push_choice"] = interrupt({"kind": "push", **offer})  # as it came: a word, or {choice, how}
+                keep()
+            extra = await game.push(journal["push_choice"])
+            turn = held()
+            turn.absorb(extra)  # the events a failure set off too: who comes to stop them speaks this turn
+            turn.push = None
+            journal["push_merged"] = True
+            keep(turn)
+            return {"pending": pending()}
+        choice = game.pending_choice()
+        if choice is None:
             return {"pending": False}
-        if "push_choice" not in journal:
-            offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}
-            journal["push_choice"] = interrupt({"kind": "push", **offer})  # "push"/"luck"/"drop", or {"choice", "how"}
+        key = f"choice:{choice.id}"
+        if key not in journal:
+            journal[key] = interrupt(game.offer_payload(choice))
             keep()
-        extra = await game.push(journal["push_choice"])
-        turn = held()
-        turn.absorb(extra)  # the events a failure set off too: who comes to stop them speaks this turn
-        turn.push = None
-        journal["push_merged"] = True
-        keep(turn)
-        return {"pending": False}
+        if not journal.get(f"{key}:merged"):
+            extra = await game.respond(choice.id, journal[key])
+            held().absorb(extra)
+            journal[f"{key}:merged"] = True
+            keep(held())
+        return {"pending": pending()}
+
+    def after_offer(state: TurnState) -> str:
+        return "offer" if state.get("pending") else "talk"
 
     async def talk(state: TurnState) -> dict:
         _bind(game)
@@ -207,7 +232,7 @@ def build(game: Game, checkpointer=None):
     g.add_node("prepare", prepare)
     g.add_node("ask_roll", ask_roll)
     g.add_node("resolve", resolve)
-    g.add_node("offer_push", offer_push)
+    g.add_node("offer", offer)
     g.add_node("talk", talk)
     g.add_node("narrate", narrate)
     g.add_node("remember", remember)
@@ -218,8 +243,8 @@ def build(game: Game, checkpointer=None):
     g.add_edge("prepare", "rule")
     g.add_conditional_edges("rule", after_rule, ["ask_roll", "resolve"])
     g.add_edge("ask_roll", "resolve")
-    g.add_conditional_edges("resolve", after_resolve, ["offer_push", "talk"])
-    g.add_edge("offer_push", "talk")
+    g.add_conditional_edges("resolve", after_resolve, ["offer", "talk"])
+    g.add_conditional_edges("offer", after_offer, ["offer", "talk"])
     g.add_edge("talk", "narrate")
     g.add_edge("narrate", "remember")
     g.add_edge("remember", END)

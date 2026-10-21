@@ -652,15 +652,16 @@ class Mishap:
     sanity: Sanity | None = None
 
 
-def deal_mishap(state: GameState, inv: Investigator, card_id: str, rules: Rules) -> Mishap | None:
+def deal_mishap(state: GameState, inv: Investigator, card_id: str, rules: Rules, *, hp: bool = True) -> Mishap | None:
     """A mishap card dealt to an investigator: its immediate effects settled by the rules (a SAN roll,
     HP, SAN or MP lost, Luck halved), the card recorded as holding (GameState.drawn). None when there
-    is no such card."""
+    is no such card. `hp` False: its HP loss is the caller's to land, as every wound is, through
+    engine/effects with an injury id (Game._mishap)."""
     card = find(card_id.strip())
     if not isinstance(card, MishapCard):
         return None
     lines: list[str] = []
-    if card.hp:
+    if card.hp and hp:
         hurt = rules.damage(inv, card.hp)
         lines.append(f"{inv.name}{hurt.describe()}")
     if card.san:

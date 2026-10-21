@@ -1,23 +1,26 @@
-"""Bodies and weapons live in the world (0.0.4 M1): the old fight and chase engine reads them from
-the record and writes every wound, death, round and jam through engine/effects, so the next fight
-finds them as the last one left them. These are the review probes of 2026-10-21 turned around
+"""Bodies and weapons live in the world: the encounter engine reads them from the record and writes
+every wound, death, round and jam through engine/effects, so the next fight finds them as the last
+one left them. These are the review probes of 2026-10-21 turned around
 (dev/output/review/test_battle_review_20261021.py): they assert what should happen."""
 
 from __future__ import annotations
 
 import pytest
 
-from autokeeper.agents.cast import Action, Ruling
+from autokeeper.agents.cast import RuledEffect, Ruling
 from autokeeper.engine import combat as battle
+from autokeeper.engine.encounter.actions import Ctx
+from autokeeper.engine.encounter.plan import DeclaredAction, EncounterStart, EncounterTurnPlan
 from autokeeper.engine.game import Turn
 from autokeeper.module.schema import Creature, Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.chase import Leg, Obstacle, Track
-from autokeeper.world.record import Life
 
-from .test_engine import make
+from .encounter_kit import arrange, begin, fight_game
 
+RIFLE = "杠杆步枪"
 GUN = ".38 左轮手枪"
+DEFEND = DeclaredAction(do="defend", summary="守着")
 
 
 @pytest.fixture
@@ -27,106 +30,122 @@ def module() -> Module:
     return m
 
 
-def fight(game, *foes: str, orders: dict | None = None):
-    """A fight at the tower, built from the world as the engine builds one."""
-    st = game.state
-    me = battle.from_investigator(st.investigator, game._carried_by(st.investigator.id), world=game.world)
-    others = game._others(list(foes))
-    st.fight = battle.Fight(fighters=[me, *others], place="tower", started=st.turn, round=1,
-                            orders={k: battle.Order.model_validate(v) for k, v in (orders or {}).items()})
-    return st.fight, me, others
-
-
 def ghoul(module: Module, hp: int = 12) -> None:
-    module.creatures.append(Creature(id="ghoul", name="食尸鬼", description="墓园中的食尸鬼", stats={"HP": hp},
+    module.creatures.append(Creature(id="ghoul", name="食尸鬼", description="墓园中的食尸鬼", sanity="0/1", stats={"HP": hp},
                                      attacks=["爪击 50%，伤害 1D6"]))
 
 
+def table(*npcs):
+    return lambda *a: EncounterTurnPlan(npcs=list(npcs))
+
+
+async def act(game, text: str) -> Turn:
+    """One round, as the player's choice in the screen's words; nobody stops to ask."""
+    game.asking = False
+    game.state.turn += 1  # a new turn, as Game.parse makes it
+    action = await game.encounter_input(text)
+    turn = await game.resolve(action, await game.rule(action))
+    return turn
+
+
+async def over(game) -> None:
+    await game._encounter_end("dispersed", Turn())
+    await game.archive_encounter()
+
+
+def option(game, who: str, name: str):
+    return next(a for a in Ctx.of(game).view(who).attacks() if a.name == name)
+
+
 async def test_rounds_fired_and_a_jam_carry_into_the_next_fight(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("warden", DEFEND)))
     inv = game.state.investigator
-    inv.inventory.append(GUN)
-    f, me, _ = fight(game, "warden", orders={inv.id: {"do": "shoot", "target": "warden"}})
+    inv.inventory.append(RIFLE)
+    await begin(game, ["warden"])
+    shoot = f"射击 楼梯口打盹的老人（{RIFLE}）｜被攻击时闪避"
     fake.queue(90)  # a miss: one round gone
-    game._fight_act(inv.id, Turn(), None)
-    assert next(a for a in me.attacks if a.firearm).ammo == 5
-    gun = game.world.rec.entities[GUN]
+    await act(game, shoot)
+    gun = game.world.rec.entities[RIFLE]
     assert gun.at == inv.id and gun.weapon.loaded == 5 and not gun.weapon.jammed  # promoted on first use, its rounds kept
-    f.round += 1
-    fake.queue(100)  # the gun jams
-    game._fight_act(inv.id, Turn(), None)
-    await game._fight_end(Turn(), "won", [])
-    again = battle.from_investigator(inv, game._carried_by(inv.id), world=game.world)
-    rebuilt = next(a for a in again.attacks if a.firearm)
-    assert rebuilt.ammo == 5 and rebuilt.jammed  # no fight reloads or clears a gun by itself
+    fake.queue(99)  # at its malfunction number: a lever action jams (Keeper Rulebook p. 98)
+    await act(game, shoot)
+    assert gun.weapon.jammed and gun.weapon.loaded == 5
+    await over(game)
+    await begin(game, ["warden"])
+    again = option(game, inv.id, RIFLE)
+    assert again.loaded == 5 and again.jammed  # no fight reloads or clears a gun by itself
+
+
+async def test_a_revolver_that_misfires_only_had_a_dud(module, fake):
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("warden", DEFEND)))
+    game.state.investigator.inventory.append(GUN)
+    await begin(game, ["warden"])
+    fake.queue(100)
+    await act(game, f"射击 楼梯口打盹的老人（{GUN}）｜被攻击时闪避")
+    gun = game.world.rec.entities[GUN]
+    assert gun.weapon.loaded == 5 and not gun.weapon.jammed
 
 
 async def test_a_disarmed_weapon_leaves_the_inventory_and_lies_on_the_floor(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
+    grab = DeclaredAction(do="maneuver", maneuver="缴械", attacks=[{"target": "zhouheng"}], summary="守钟人去夺枪")
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("warden", grab)))
     inv = game.state.investigator
     inv.inventory.append(GUN)
-    _, me, _ = fight(game, "warden", orders={"warden": {"do": "maneuver", "target": inv.id, "maneuver": "缴械"}})
-    assert me.wielding.name == GUN
+    await begin(game, ["warden"])
     fake.queue(10, 90)  # the warden's grab succeeds; 周衡's dodge fails
-    game._fight_act("warden", Turn(), None)
-    assert not any(a.firearm for a in me.attacks)
+    await act(game, "防守｜被攻击时闪避")
     assert GUN not in inv.inventory and game.world.rec.entities[GUN].at == "tower"
-    assert not any(a.firearm for a in battle.from_investigator(inv, game._carried_by(inv.id), world=game.world).attacks)
+    assert not any(a.firearm for a in Ctx.of(game).view(inv.id).attacks())
 
 
 async def test_claws_cannot_be_disarmed(module, fake):
     ghoul(module)
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    _, _, (beast,) = fight(game, "ghoul", orders={inv.id: {"do": "maneuver", "target": "ghoul", "maneuver": "缴械"}})
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("ghoul", DEFEND)))
+    fake.queue(30)
+    await begin(game, ["ghoul"])
     fake.queue(10, 90)
-    out = game._fight_act(inv.id, Turn(), None)
-    assert [a.name for a in beast.attacks] == ["爪击"] and "夺不走" in out["events"][-1]["lines"][-1]
+    turn = await act(game, "缴械 食尸鬼｜被攻击时闪避")
+    assert [a.name for a in Ctx.of(game).view("ghoul").attacks()] == ["爪击"] and any("夺不走" in line for line in turn.fight)
 
 
 async def test_a_dead_creature_stays_dead(module, fake):
     ghoul(module, hp=3)
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    _, _, (beast,) = fight(game, "ghoul", orders={inv.id: {"do": "attack", "target": "ghoul", "weapon": "徒手"}})
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("ghoul", DEFEND)))
+    fake.queue(30)
+    await begin(game, ["ghoul"])
     assert game.world.rec.entities["ghoul"].kind == "creature"  # a world entity from the moment it fights
-    fake.queue(10, 90).queue_totals(3)  # 周衡 hits; its dodge fails; 3 damage
-    game._fight_act(inv.id, Turn(), None)
-    assert beast.status == "死亡"
-    await game._fight_end(Turn(), "won", [])
+    fake.queue(10, 90).queue_totals(3)  # 周衡 hits; its answer fails; 3 damage
+    await act(game, "攻击 食尸鬼（徒手）｜被攻击时闪避")
     body = game.world.rec.entities["ghoul"].life
     assert body.hp == 0 and "死亡" in body.conditions
-    assert game._fight_begin(Ruling(needs_roll=False, combat=["ghoul"]), Action(kind="attack", summary="攻击食尸鬼")) == []
+    assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "won"  # into the log as it ended
+    assert not await game._encounter_open(EncounterStart(mode="fight", foes=["ghoul"], pace=6, reason="又来"), Turn())
 
 
 async def test_a_hurt_npc_comes_back_hurt(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    _, _, (warden,) = fight(game, "warden", orders={inv.id: {"do": "attack", "target": "warden", "weapon": "徒手"}})
-    full = warden.hp_max
+    game, _cast, _ = fight_game(module, fake, arrange=table(arrange("warden", DEFEND)))
+    await begin(game, ["warden"])
+    full = Ctx.of(game).view("warden").body().hp_max
     fake.queue(10, 90).queue_totals(4)
-    game._fight_act(inv.id, Turn(), None)
-    await game._fight_end(Turn(), "won", [])
-    _, _, (again,) = fight(game, "warden")
-    assert again.hp == full - 4 and game.world.rec.entities["warden"].life.hp == full - 4
+    await act(game, "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避")
+    await over(game)
+    await begin(game, ["warden"])
+    assert Ctx.of(game).view("warden").body().hp == full - 4 and game.world.rec.entities["warden"].life.hp == full - 4
 
 
-async def test_a_model_written_damage_that_is_no_expression_is_a_note_not_a_locked_save(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    fight(game, "warden", orders={inv.id: {"do": "other", "text": "抡起油灯砸过去"}})
-    ruling = Ruling(needs_roll=True, skill="投掷", harm="1D6点", harm_to="warden")
+async def test_a_ruled_damage_that_is_no_expression_is_a_note_not_a_locked_save(module, fake):
+    lamp = DeclaredAction(do="other", summary="周衡抡起油灯砸过去")
+    game, cast, _ = fight_game(module, fake, act=EncounterTurnPlan(action=lamp), arrange=table(arrange("warden", DEFEND)))
+    bad = RuledEffect.model_construct(kind="damage", target="warden", dice="1D6点", bonus=0, what="")  # an old journal's
+    cast.ruling_for[lamp.summary] = Ruling.model_construct(**{**Ruling(needs_roll=True, skill="投掷").__dict__, "effects": [bad]})
+    await begin(game, ["warden"])
     fake.queue(10)
-    out = game._fight_act(inv.id, Turn(), ruling)
-    assert "伤害式无法使用" in out["events"][-1]["lines"][-1]
-    fake.queue(10).queue_totals(3)
-    game.state.fight.round += 1
-    out = game._fight_act(inv.id, Turn(), ruling.model_copy(update={"harm": "1D6+DB"}))  # the bonus put in by the engine
-    assert "受到 1D6" in out["events"][-1]["lines"][-1]
+    turn = await act(game, "抡起油灯砸他")
+    assert any("伤害式无法使用" in line for line in turn.fight) and game.world.rec.entities["warden"].life.hp == 11
 
 
 async def test_a_chase_hazard_with_unreadable_harm_still_delays_and_is_noted(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
+    game, _cast, _ = fight_game(module, fake)
     inv = game.state.investigator
     me = battle.from_investigator(inv, world=game.world)
     (warden,) = game._others(["warden"])
@@ -138,40 +157,3 @@ async def test_a_chase_hazard_with_unreadable_harm_still_delays_and_is_noted(mod
     turn = Turn()
     game._chase_act(inv.id, turn)
     assert inv.hp == inv.hp_max and any("伤害式无法使用" in line for line in turn.fight)
-
-
-async def test_an_act_cut_short_keeps_nothing_and_its_retry_lands_once(module, fake, monkeypatch):
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    _, _, (warden,) = fight(game, "warden", orders={inv.id: {"do": "attack", "target": "warden", "weapon": "徒手"}})
-    full = warden.hp
-    real = battle.view
-    calls = {"n": 0}
-
-    def broken(fight):
-        calls["n"] += 1
-        raise RuntimeError("连接断了")
-
-    monkeypatch.setattr(battle, "view", broken)
-    fake.queue(10, 90).queue_totals(4)
-    with pytest.raises(RuntimeError):
-        game._fight_act(inv.id, Turn(), None)
-    assert warden.hp == full and game.world.rec.entities["warden"].life.hp == full  # nothing of it kept
-    monkeypatch.setattr(battle, "view", real)
-    fake.queue(10, 90).queue_totals(4)  # the journal would replay the same dice
-    game._fight_act(inv.id, Turn(), None)
-    assert warden.hp == full - 4 and game.world.rec.entities["warden"].life.hp == full - 4 and calls["n"] == 1
-
-
-async def test_a_fighter_the_world_had_no_body_for_is_adopted_as_it_stands(module, fake):
-    """A fight built without the world (an old save's fighters) hands its numbers to the world."""
-    game, _, _ = make(module, fake, {}, location="tower")
-    inv = game.state.investigator
-    me, foe = battle.from_investigator(inv), battle.from_npc(game.m.npc("warden"))
-    foe.hp = 3
-    game.state.fight = battle.Fight(fighters=[me, foe], place="tower", started=1, round=1,
-                                    orders={inv.id: battle.Order(do="attack", target="warden", weapon="徒手")})
-    fake.queue(10, 90).queue_totals(1)
-    game._fight_act(inv.id, Turn(), None)
-    life = game.world.rec.entities["warden"].life
-    assert isinstance(life, Life) and (life.hp, life.hp_max) == (2, foe.hp_max) and foe.hp == 2

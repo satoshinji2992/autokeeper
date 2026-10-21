@@ -39,7 +39,9 @@ from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import diagnostics, effects, fog, idea, progress, signs, views, world
-from .fighting import Fighting, tell
+from .encounter.runner import Encounters
+from .encounter.telling import tell
+from .fighting import Fighting
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -179,7 +181,7 @@ class _ResolutionDice:
         return invoke
 
 
-class Game(Fighting):
+class Game(Encounters, Fighting):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
@@ -417,12 +419,13 @@ class Game(Fighting):
         await self._world_settled()  # what the rest of the world did since the last turn, before this one
         await self._curtain(Action(kind="other", summary=text))
         st.turn += 1
-        st.add("player", text, who=st.investigator.name)
+        if text.strip() != "/encounter":
+            st.add("player", text, who=st.investigator.name)
         if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
             return self.idea_action()
         await self.emit({"type": "status", "text": "解析行动…"})
-        if self.battling():  # in a fight or a chase: the words are an order for the round (engine/fighting.py)
-            return await self._battle_action(text)
+        if self.battling():  # in a fight or a chase: a button's words, or the keeper plan's reading (engine/encounter)
+            return await self.encounter_input(text)
         action = await self._arrange(text)
         # What a dice command asks for is read off the command, never taken from the model.
         action = action.model_copy(update={"asked": commands.asked(text), "echo": ""})
@@ -476,6 +479,9 @@ class Game(Fighting):
                 self._directed = {x.npc for x in self.initiative}  # the world does not decide for them this turn
                 if st.pending_turn:
                     st.pending_turn["initiative"] = [x.model_dump() for x in self.initiative]
+                    # A fight or a chase this turn begins (engine/encounter/runner._start_from), kept for resolve.
+                    hint = getattr(plan, "encounter", None)
+                    st.pending_turn["encounter_hint"] = hint.model_dump(mode="json", by_alias=True) if hint else None
                 self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
                                      "kept": [x.npc for x in self.initiative]})
                 return plan.action
@@ -489,8 +495,14 @@ class Game(Fighting):
             return Ruling(needs_roll=True, skill="灵感", difficulty=level, reason=idea.BASIS.get(level, ""))
         if action.kind in ("meta",):
             return None
-        if action.order is not None and self.battling() and (ruled := self._battle_ruling(action)) is not None:
-            return ruled  # a fight's or a chase's order: the roll it makes, no arbiter
+        if action.declared is not None:  # in an encounter: the rules settle it, the arbiter only something else
+            ruled = self.encounter_ruling(action)
+            if ruled is not None:
+                return ruled
+            return await self._encounter_arbiter(action)
+        hint = self.state.pending_turn.get("encounter_hint") if self.state.pending_turn else None
+        if hint and hint.get("trigger", "now") == "now":  # the action is the fight or the run itself
+            return Ruling(needs_roll=False, reason="遭遇开始")
         await self._curtain(action)  # finish a scene this action would otherwise overtake
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
@@ -519,6 +531,25 @@ class Game(Fighting):
             if applied is not None:
                 ruling = self._steer(ruling, applied)
         return self._no_reroll(action, ruling, heading or self.state.location)
+
+    async def _encounter_arbiter(self, action: Action) -> Ruling:
+        """Something else in a fight (a lamp thrown, a door slammed): the arbiter rules it with the
+        encounter's brief, its results in Ruling.effects; a target not in the encounter goes back once."""
+        from .encounter import views
+
+        await self.emit({"type": "status", "text": "裁定中…"})
+        brief = views.keeper_text(self)
+        asked = Action(kind="other", summary=action.summary)
+        arbiter = self.cast.arbiter
+        if not _takes(arbiter, "encounter"):
+            return await arbiter(self.state, asked)
+        ruling = await arbiter(self.state, asked, encounter=brief)
+        enc = self.encounter()
+        known = {p.id for p in enc.participants} if enc is not None else set()
+        problems = [f"effects 里的 {e.target} 不在这场遭遇里" for e in ruling.effects if e.kind in ("damage", "edge") and e.target not in known]
+        if problems:
+            ruling = await arbiter(self.state, asked, encounter=brief, problems=problems)
+        return ruling
 
     async def prepare(self, action: Action) -> None:
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
@@ -1382,10 +1413,12 @@ class Game(Fighting):
             return
         if ruling.missing:
             await step("missing", turn, lambda: self._lacking(ruling, turn))
-        # A round of a fight or a chase, or the start of one. Decided once: a fight an event of this very
-        # turn began (engine/fighting.Fighting._scripted) does not make it one when the turn is resumed.
-        if await step("battle", turn, lambda: self.battling() or bool(ruling.combat or ruling.chase)):
-            await self._battle(action, ruling, turn)
+        # A round of a fight or a chase, the start of one, or an ordinary action. Decided once (I7): a fight
+        # an event of this very turn began, or one that closed before the turn was cut short, does not
+        # change what this turn is when it is resumed.
+        kind = await step("kind", turn, lambda: self._turn_kind(action))
+        if kind["kind"] in ("encounter", "chase"):
+            await self._encounter_stages(action, ruling, turn, kind)
             return
         inv = st.investigator
 
@@ -1479,6 +1512,10 @@ class Game(Fighting):
             await step("check-notice", turn, lambda: self.emit(checked["event"]))
         if checked.get("failed"):
             await self._failed(ruling.on_fail, self._valid_clues(ruling.clues_on_success, action), turn, action)
+        hint = st.pending_turn.get("encounter_hint") if st.pending_turn else None
+        if hint and hint.get("trigger") in ("on_fail", "on_success") and turn.push is None \
+                and passed == (hint["trigger"] == "on_success") and not self.battling():
+            await step("encounter-after", turn, lambda: self._start_from(action, turn))
 
         def available() -> dict:
             gained = self._valid_clues(ruling.auto_clues, action)
@@ -1646,6 +1683,13 @@ class Game(Fighting):
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
         else:
             await self._pushed(mode, pending, turn, record, known, how)
+        # A fight or a chase the plan said this check's outcome sets off (Plan.encounter, on_fail or
+        # on_success): the pushed or dropped roll is that outcome (the review: it never began after a push).
+        hint = st.pending_turn.get("encounter_hint") if st.pending_turn else None
+        if hint and hint.get("trigger") in ("on_fail", "on_success") and not self.battling():
+            passed = mode != "drop" and record is not None and record.passed
+            if passed == (hint["trigger"] == "on_success"):
+                await step("encounter-after", turn, lambda: self._start_from(Action(kind="other", summary=""), turn))
         # What the failure cost settles as any turn's does: the clock moved on, so what was due by
         # now happens (scheduled events, the rest of the world, rule timers), and an ending it
         # brought about ends the game.
@@ -1746,6 +1790,13 @@ class Game(Fighting):
         through _reply; a resumed turn goes on from the receipts it kept (Turn.replies)."""
         st, m = self.state, self.m
         action = turn.action
+        if (action is not None and action.declared is not None) or self.fought_this_turn():
+            # A round of a fight, or a turn that began one (a talk that went wrong): the encounter's voices
+            # are its own (engine/encounter), no ordinary reply on top of it (design §1.6).
+            await self._world(turn)
+            await self._people()
+            self._keep(turn)
+            return
         speaking = (action and action.npc and (action.kind in ("talk", "perform")
                     or (action.kind == "daily" and (action.speech or action.casual))))
         if action and action.destination and not action.speech and action.npc in action.companions:
@@ -2015,6 +2066,7 @@ class Game(Fighting):
 
     async def remember(self) -> None:
         st = self.state
+        await self.archive_encounter()  # an encounter this turn ended goes into the log of finished ones
         st.tally()
         if self._world_owed and self._world_task is None:
             self._world_owed = False
@@ -2102,13 +2154,19 @@ class Game(Fighting):
         def commit() -> dict:
             inv = st.investigator
             trial = inv.model_copy(deep=True)
-            dealt = cards.deal_mishap(st, trial, card_id, self.rules)
+            dealt = cards.deal_mishap(st, trial, card_id, self.rules, hp=False)
             if dealt is None:
                 return {"name": "", "events": []}
             inv.__dict__.update(trial.__dict__)
+            # Its HP loss lands as every wound does (engine/effects): once, by its injury id, with the
+            # CON a major wound calls for (the review: it went straight onto the sheet).
+            wounded = self._wound_event(inv.id, dealt.card.hp, f"mishap:{st.turn}:{self._resolution_key(key)}", turn) \
+                if dealt.card.hp else None
+            if wounded:
+                dealt.lines.insert(0, f"{inv.name}{wounded['text']}")
             st.add("event", f"惨事卡〔{dealt.card.name}〕", who=inv.name)
             turn.notes.append(cards.mishap_note(inv, dealt))
-            events = [{"type": "card", **cards.view(dealt.card, inv.name)}]
+            events = [{"type": "card", **cards.view(dealt.card, inv.name)}, *([wounded] if wounded else [])]
             if dealt.sanity is not None:
                 turn.sanity.append((inv.name, dealt.sanity))
                 st.add("sanity", dealt.sanity.describe(), who=inv.name)
@@ -2738,7 +2796,7 @@ class Game(Fighting):
             if turn.push.get("luck") is not None:
                 opts.append(f"花 {turn.push['luck']} 点幸运")
             out.append(f"（玩家可以选择：{'或'.join(opts)}，结果下一步揭晓；现在只写失败的样子。）")
-        out += turn.fight  # a round of a fight or a chase, as settled (engine/fighting.py)
+        out += turn.fight  # a round of a fight or a chase, as settled (engine/encounter)
         for cid in turn.clues:
             c = m.clue(cid)
             out.append(f"获得线索〔{c.title}〕：{c.text.strip()}")
@@ -2754,7 +2812,7 @@ class Game(Fighting):
         for ev in turn.events:
             if ev.read_aloud.strip():
                 out.append(f"眼前发生：{ev.read_aloud.strip()}")
-        if names := self._unknown(turn.events):  # a horror seen before it is known (Creature.called, NPC.called)
+        if names := self._unknown(turn.events):  # a horror seen before it is known, or anyone in the fight (Creature.called, NPC.called)
             out.append("【称呼】" + "；".join(names) + "。调查员还不知道这是什么：只写看得见、听得见、闻得到的样子，不说出名字和来历")
         out += [f"眼前发生：{text}" for text in turn.world]
         out += [f"备注：{n}" for n in turn.notes]
@@ -2782,6 +2840,14 @@ class Game(Fighting):
                 out.append(f"{c.name}（玩家所见：{c.called or '只写看得见的样子'}）")
             elif (n := next((n for n in m.npcs if n.id == x), None)) is not None and n.called and not st.npc(x).met:
                 out.append(f"{n.name}（玩家所见：{n.called}）")
+        if (enc := st.encounter) is not None:  # those in the fight going on (engine/encounter/telling.name_rows)
+            from .encounter import telling
+            from .encounter import views as encounter_views
+            from .encounter.actions import Ctx
+
+            ctx = Ctx.of(self, enc)
+            rows = telling.name_rows(encounter_views.names(ctx, "keeper"), encounter_views.names(ctx, "players"))
+            out += [r for r in rows if r.split("（")[0] not in {o.split("（")[0] for o in out}]
         return out
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:

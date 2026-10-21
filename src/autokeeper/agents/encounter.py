@@ -139,6 +139,12 @@ class BriefPerson(BaseModel):
     actions: list[BriefAction] | None = None  # None: worked out from the attacks (default_actions)
     traits: list[str] = Field(default_factory=list)  # 护甲 2、枪伤减半、再生 …, and what the engine cannot use
     missing: list[str] = Field(default_factory=list)  # numbers the sheet lacks: fills
+    # What this NPC or creature perceives (the keeper knows all; the NPC does not, guide #25): who it
+    # can see or hear now, who it cannot and why, what it has been told. None: not worked out (a human's).
+    sees: list[str] | None = None
+    unseen: list[str] = Field(default_factory=list)  # "lin（藏在掩体后面，看不见）"
+    told: list[str] = Field(default_factory=list)  # what it was told of the others, in a line each
+    luck: int | None = None  # an important NPC's Luck pool left (Keeper Rulebook p. 168); None: it has none
 
 
 class BriefStake(BaseModel):
@@ -183,6 +189,7 @@ ACTION_NEEDS: dict[str, str] = {
     "attack": "近战。要和目标近身（追逐中在同一节点）；attacks 每次攻击一条，with 填他【攻击】里的近战 id，徒手留空",
     "shoot": "开枪或投掷。with 填手里的枪或投掷物 id；枪要有弹、没卡壳；手枪一轮最多开 3 枪（shots）",
     "maneuver": "战技（缴械、推倒、制住、夺取）。目标体格比他大 3 或以上就无效；attacks 写目标，maneuver 写哪一种",
+    "aim": "瞄准一轮：target 填目标 id；下一枪得一个奖励骰",
     "aid": "急救倒下的人。target 填伤者 id；要在他身边",
     "reload": "装弹。target 填枪的 id；要有备弹",
     "unjam": "排除卡壳。target 填卡壳的枪 id",
@@ -192,7 +199,7 @@ ACTION_NEEDS: dict[str, str] = {
     "pursue": "追逃跑的人。target 填被追的人 id",
     "move": "追逐中跑到相邻节点。to 填节点 id",
     "cross": "过障碍。target 填障碍 id，method 填它的办法 id",
-    "hide": "躲起来。要在追兵视线外",
+    "hide": "躲起来（潜行对对手的侦查）：藏好了对手就看不见他、打不着他；他一出手就暴露",
     "barrier": "设路障（闩门、推倒柜子）",
     "help": "帮同伴，他下一次检定得奖励骰。target 填同伴 id",
     "speak": "喊话、劝说、谈判。target 填对象 id，speech 写说的话；不会说话的不能选",
@@ -292,6 +299,14 @@ def _person(p: BriefPerson, b: Brief) -> list[str]:
         rows.append("  现在能做：" + "、".join(can))
         if cannot:
             rows.append("  现在做不到：" + "、".join(cannot))
+    if p.sees is not None:
+        rows.append("  他察觉得到：" + ("、".join(p.sees) or "谁也看不见")
+                    + ("；察觉不到：" + "、".join(p.unseen) if p.unseen else "")
+                    + "。他只能对察觉得到的人出手、追赶")
+    if p.told:
+        rows.append("  他听说过：" + "；".join(p.told))
+    if p.luck is not None:
+        rows.append(f"  幸运池：{p.luck}（只在他自己的检定失败时可花，用掉不回；安排里 luck 写这一轮最多花多少）")
     if p.controller == "keeper":
         mind = [f"目标：{p.goal}" if p.goal else "", f"现有安排：{p.arranged}" if p.arranged else "还没有安排",
                 f"挨打应对：{p.react}" if p.react else "", "【需要安排】" if p.needs_arrangement or not p.arranged else ""]
