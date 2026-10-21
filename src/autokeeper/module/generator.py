@@ -43,6 +43,10 @@ GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创
 - 至少一个“让玩家画出来”的 sketches 环节；至少三种结局，由剧情标记触发。
 - 在重要节点写 5–15 个 showcases（大场景，整屏一张大图）：开场（when: opening）、突发和危机（event:）、关键地点（visit:）、
   怪物现身和最终 boss（event: 或 creature:）、每个结局（ending:）。title 是不剧透的短标题，prompt 写画面。
+- 有怪物或会动手的人时，战斗和追逐由引擎按规则结算，不写成插件；照 _example/schema.json 的写法把它要的数值写全：
+  怪物的 stats（生命、敏捷必写）、attacks（一条一种：“爪击 50%，伤害 1D6+DB”）、notes 里的特性（护甲 2、枪伤减半、每轮恢复 1 点）；
+  会动手的 NPC 写 stats，带的武器写进 look 或 items；它出没、最可能发生追逐的地点写 chase 路线（4–12 段，约一半有险阻或路障）；
+  剧情里写定的袭击在那个事件写 fight（谁动手）和 surprise。数值照 CoC 7 版的尺度：普通人生命 10–12、格斗 25–50。
 - 全部原创，可以借用公有领域作品的元素，但不要照搬任何受版权保护的模组、怪物设定或插图。
 - 模组 id 用 "{module_id}"。格式照着 _example/module.yaml，字段含义见 _example/schema.json。
 

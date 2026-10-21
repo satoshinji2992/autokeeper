@@ -20,6 +20,11 @@ lacks and leaves what it has:
     prelude     开局演出    a few pictures and lines on the story's background, played before the
                             game screen while the director adapts (module/prelude.py); it reads
                             only what the players are told, never the keeper's book
+    combat      战斗与追逐  what a fight and a chase read of the module (engine/combat.py): creature sheets
+                            the rules can use (hit points, DEX, attacks, the traits of their notes), sheets
+                            for the NPCs who fight, a chase route for the places a chase is likely
+                            (Location.chase), the attack an event scripts (Event.fight, Event.chase);
+                            the numbers from the original text, the rulebook's where it gives none
 
     verify      复核        what this run added, read against the original text by one more call: what gets
                             round a condition the module keeps (a roll, a prerequisite, a gate) is taken out
@@ -44,18 +49,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .. import config
+from ..engine import combat as battle
 from ..harness import Session
+from ..rules.chase import Leg
+from ..rules.combat import stats_of, traits
+from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
-from .graph import audit, supporting_clues
+from .graph import HARM, audit, fighting, known_skill, supporting_clues
 from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Tie
 
-PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude", "verify")
+PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude",
+          "combat", "verify")
 LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "meet": "见面反应", "foreshadow": "伏笔",
           "clueweb": "线索网", "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史",
-          "prelude": "开局演出", "verify": "复核"}  # fmt: skip
+          "prelude": "开局演出", "combat": "战斗与追逐", "verify": "复核"}  # fmt: skip
 # What a pass reads that another pass writes: it waits for that one (the plans read the people as
 # just filled in, the signs the clues just added).
 AFTER: dict[str, tuple[str, ...]] = {
@@ -161,6 +171,61 @@ class Prelude(BaseModel):
     prelude: list[PreludeFrame] = Field(default_factory=list, max_length=prelude.MAX_FRAMES)
 
 
+def _numbers(raw: Any) -> dict[str, int]:
+    """A sheet's numbers as written, less what is no number (a bonus written "+1D4" goes to notes)."""
+    out: dict[str, int] = {}
+    for key, value in (raw or {}).items() if isinstance(raw, dict) else ():
+        try:
+            out[str(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+class CreatureSheet(BaseModel):
+    creature: str = Field(description="怪物 id")
+    stats: dict[str, int] = Field(default_factory=dict, description="缺的战斗数值，键用中文：生命、敏捷、力量、体质、体型、闪避、移动、侦查、潜行……；已有的不写")
+    attacks: list[str] = Field(default_factory=list, description="它还没有读得出的攻击时才写，一条一种：“爪击 50%，伤害 1D6+DB”，命中率带 %")
+    notes: str = Field("", description="原文写到、notes 里还没有的特性，照这些写法：护甲 2、枪伤减半、每轮恢复 1 点、只被拳头打 6 点就会打晕、不追；没有就留空")
+
+    @field_validator("stats", mode="before")
+    @classmethod
+    def numbers_only(cls, value: Any) -> dict[str, int]:
+        return _numbers(value)
+
+
+class NpcSheet(BaseModel):
+    npc: str = Field(description="NPC id：原文写明会动手、或剧情里会被卷进打斗的人")
+    stats: dict[str, int] = Field(default_factory=dict, description="战斗数值：力量、体质、体型、敏捷、生命、闪避、格斗(斗殴)，会用的武器技能（射击(手枪)……）；原文有就照抄")
+    weapon: str = Field("", description="原文写明他带着的武器（.38 左轮手枪、猎枪、斧头）；没有就留空")
+
+    @field_validator("stats", mode="before")
+    @classmethod
+    def numbers_only(cls, value: Any) -> dict[str, int]:
+        return _numbers(value)
+
+
+class Route(BaseModel):
+    location: str = Field(description="地点 id：最可能发生追逐的地方")
+    legs: list[Leg] = Field(description="从那里跑出去的路，4–12 段，按跑的先后排")
+
+
+class Trigger(BaseModel):
+    event: str = Field(description="事件 id：原文写明这件事发生时有人或怪物当场动手、或开始追逐的")
+    fight: list[str] = Field(default_factory=list, description="当场动手的 NPC 或怪物 id")
+    surprise: Literal["", "party", "foe"] = Field("", description="party 调查员被偷袭，foe 对方被偷袭；都有防备留空")
+    chase: list[str] = Field(default_factory=list, description="开始追逐时追或逃的 NPC 或怪物 id；写了 fight 就不写")
+    chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃还是追")
+
+
+class Combat(BaseModel):
+    creatures: list[CreatureSheet] = Field(default_factory=list)
+    npcs: list[NpcSheet] = Field(default_factory=list)
+    # At most three, as the schema says; more do not void the answer: the first three that hold are kept.
+    routes: list[Route] = Field(default_factory=list, json_schema_extra={"maxItems": 3})
+    triggers: list[Trigger] = Field(default_factory=list)
+
+
 ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "npcs": ("给下面标着“缺”的 NPC 补上空着的字段：personality 性格、voice 说话方式、goal 想要什么、knows 他知道的事。"
              "只补空着的，已有的不动。voice 里的口头禅、习惯动作写成偶尔带出的素材，不写成每句话都要做的。"
@@ -196,9 +261,11 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
              "每条牵到一个 NPC 或地点，一句话说清这层关系。开局时导演按调查员的背景挑着用。", Ties),
     "endings": ("原作的结局之外，补 1–2 个玩家很可能走到、原作却没写的结局：放弃调查离开、和对手做了交易、只救下一部分人……"
                 "每个写一个新的剧情标记（写清调查员的行动真正达成什么时它才成立）和结局叙述。不改原作的结局。", Endings),
-    "mechanics": ("列出模组里引擎自己不会管、要插件来管的规则：时钟和倒计时、资源、疾病、仪式进度、追逐、特殊的检定。"
+    "mechanics": ("列出模组里引擎自己不会管、要插件来管的规则：时钟和倒计时、资源、疾病、仪式进度、特殊的检定。"
+                  "战斗和追逐引擎按规则自己结算，不列（怪物数值、追逐路线和事件里写定的袭击由“战斗与追逐”一步补）；"
+                  "原作在战斗或追逐里另有专属规则的（只能用银器伤它、追到第几段塌方），才列那一条。"
                   "每条写规则本身（什么时候、怎么算、有什么后果）和模组里哪里用到。原作没有这样的规则就留空。"
-                  "每条写 runs，谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害就能算的）、插件（已经有插件的，plugin 填它的 id）、"
+                  "每条写 runs，谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害、战斗与追逐就能算的）、插件（已经有插件的，plugin 填它的 id）、"
                   "守秘人（要守秘人临场裁定的）。", Mechanics),
     "history": ("写 3–8 件开局以前发生过、至今还在起作用的事（前史），按时间先后：多久以前、谁在哪做了什么、另外还有谁知道。"
                 "只用原作的真相、守秘人须知和人物资料里写到的，不新编案情；玩家开局就知道的不用写。"
@@ -206,6 +273,18 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
     "prelude": ("写开局演出：进入游戏前播放的 3–5 幕，像电影开头那样一张图配一两句字幕，按先后排，只介绍故事背景："
                 "时代、地方、气氛、事情是怎么找上门的。图只从【可用的图】里挑，没有合适的就留空。"
                 "只用上面玩家知道的内容，不写调查员会怎么做、会发现什么，每幕不超过 60 字。", Prelude),
+    "combat": ("战斗和追逐由引擎按 CoC 7 版规则一轮一轮结算，数值从模组里读；【战斗与追逐】列着引擎现在读到的。照原文补上缺的，已经齐全的不写：\n"
+               "1. creatures：怪物的 stats 要有生命和敏捷（还有力量、体质、体型、闪避、移动），attacks 一条一种，写成“爪击 50%，伤害 1D6+DB”，"
+               "命中率带 %，每轮不止一次攻击另写一条“每轮 3 次”；notes 写原文提到、引擎还没读到的特性（护甲 2、枪伤减半、每轮恢复 1 点、"
+               "只被拳头打 6 点就会打晕、不追）。原文有数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值，不新添能力和设定；"
+               "成群出现、整群当一个对手打的不写数值。\n"
+               "2. npcs：原文写明会动手、或剧情里会被卷进打斗、stats 还空着的 NPC，写上战斗数值；原文写明他带着武器的，weapon 写武器名。普通人不写。\n"
+               "3. routes：还没有路线、最可能发生追逐的 1–3 个地点（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），各画一条追逐路线："
+               "从那里跑出去的 4–12 段路，按先后排，每段写名字（四到八个字）和一句样子；大约一半有一处 obstacle："
+               "hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
+               "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只用这个地方和周围真有的东西，最后一段是能脱身或被逼进绝路的地方。\n"
+               "4. triggers：原文写明这件事发生时有人或怪物当场扑上来动手的事件，fight 写动手的 id，surprise 写哪一方毫无防备；"
+               "写明一开始就是追逐的，chase 写追或逃的 id，chase_party 写调查员是逃还是追。只是可能动手、要看调查员怎么做的不写，那由裁定员临场判。", Combat),
 }
 
 
@@ -335,13 +414,39 @@ def _focus(m: Module, name: str) -> list[str]:
     """The names a pass is about, for picking the parts of a long original."""
     if name == "npcs":
         return [n.name for n in m.npcs if not (n.personality and n.voice and n.goal and n.knows)]
+    if name == "combat":
+        return [c.name for c in m.creatures] + [n.name for n in m.npcs if n.important] + [e.title for e in m.events if e.id in _violent(m)]
     return [n.name for n in m.npcs if n.important] or [n.name for n in m.npcs]
+
+
+# An event whose words tell of an attack or a pursuit (the combat pass asks about it when it scripts none).
+VIOLENT = re.compile(r"扑向|扑上来|扑过来|袭击|突袭|伏击|偷袭|动手|开枪|开火|攻击|追杀|追赶|追捕|围攻|抓咬|撕咬")
+
+
+def _violent(m: Module) -> list[str]:
+    return [e.id for e in m.events if not (e.fight or e.chase) and VIOLENT.search(f"{e.text} {e.read_aloud}")]
+
+
+def _unfit(m: Module) -> list[str]:
+    """The creatures a fight cannot read whole (engine/combat.from_creature): no hit points or DEX,
+    no attack the rules read. A swarm with no sheet needs neither: it fights as one."""
+    out = []
+    for c in m.creatures:
+        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+            continue
+        s = stats_of(c.stats)
+        natural = any(w in k for k in s for w in battle.NATURAL)
+        if "生命" not in s or "敏捷" not in s or not (natural or any(parse_attack(x) for x in c.attacks)):
+            out.append(c.id)
+    return out
 
 
 def wanted(m: Module, name: str) -> bool:
     """Whether the module lacks what a pass fills."""
     if name == "npcs":
         return any(not (n.personality and n.voice and n.goal and n.knows) for n in m.npcs)
+    if name == "combat":  # a sheet the rules cannot read, or a module with something to fight and no way to run
+        return bool(_unfit(m)) or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations))
     if name == "clueweb":
         from .simulate import playthrough
 
@@ -361,7 +466,39 @@ def _unmarked(m: Module) -> list[tuple[str, Any]]:
     return [(a.npc, s) for a in m.agendas for s in a.steps if not s.does and not s.ruling and (s.meet is None or (s.meet and s.once is None))]
 
 
+def _armoury(m: Module) -> str:
+    """What a fight and a chase read of the module now, for the combat pass: each creature's sheet as
+    written and as the rules read it, the NPCs' numbers and weapons, the routes, the events' fights."""
+    unfit = set(_unfit(m))
+    rows = ["\n【战斗与追逐：引擎现在读到的】", "怪物："]
+    for c in m.creatures:
+        f = battle.from_creature(c)
+        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+            rows.append(f"- {c.id} {c.name}：成群，整群当一个对手打，不用写数值。{_clip(c.description, 80)}")
+            continue
+        read = "、".join(f"{a.name} {a.value}%（{a.damage}）" for a in f.attacks)
+        rows.append(f"- {c.id} {c.name}：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；notes {c.notes.strip() or '空'}"
+                    f"\n  引擎读到：生命 {f.hp_max}、敏捷 {f.dex}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
+    if not m.creatures:
+        rows.append("- 没有")
+    rows.append("NPC 的战斗数值：")
+    for n in m.npcs:
+        things = [i.name for i in m.items if i.owner == n.id]
+        weapons = "、".join(w.name for w in carried([n.look, *things])[1:]) or "没有武器"
+        rows.append(f"- {n.id} {n.name}（{n.role}）：" + (f"stats {n.stats}；{weapons}" if n.stats else f"没写（按普通人算）；{weapons}"))
+    ways = [x.id for x in m.locations if x.chase]
+    rows.append(f"追逐路线：已有 {'、'.join(ways)}" if ways else "追逐路线：还没有")
+    rows += [f"事件 {e.id} 写定了" + (f"打斗 {e.fight}" if e.fight else f"追逐 {e.chase}") for e in m.events if e.fight or e.chase]
+    if violent := _violent(m):
+        rows.append(f"字面上写到动手或追赶的事件（看原文判断是不是当场就打起来）：{'、'.join(violent)}")
+    if problems := [i.text for i in fighting(m)]:
+        rows += ["引擎读不出的：", *(f"- {x}" for x in problems)]
+    return "\n".join(rows)
+
+
 def _material(m: Module, name: str) -> str:
+    if name == "combat":
+        return _armoury(m)
     if name == "meet":
         rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") + ("（已标见面反应，只差 once）" if s.meet else "")
                 for npc, s in _unmarked(m)]
@@ -425,7 +562,8 @@ Edit = tuple[str, ...] | tuple[Any, ...]
 
 
 def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
-    """What a pass's answer writes: ("put", group, id, field, value), ("append", group, items), ("key", group, key, value)."""
+    """What a pass's answer writes: ("put", group, id, field, value), ("replace", group, id, field, value) for a field
+    that has a value already, ("append", group, items), ("key", group, key, value)."""
     npcs, places = {n.id for n in m.npcs}, {x.id for x in m.locations}
     if name == "npcs":
         found = []
@@ -478,6 +616,8 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
             found.append(("key", "flags", flag, e.meaning.strip()))
             found.append(("append", "endings", [{"id": e.id, "title": e.title, "condition": f"flag:{flag}", "text": e.text.strip()}]))
         return found
+    if name == "combat":
+        return _armed(m, out)
     if name == "prelude":  # a shot that shows what is not public yet, or says too much, is left out
         art = prelude.public_art(m)
         shots = [f.model_copy(update={"art": f.art if f.art in art else ""}) for f in out.prelude]
@@ -522,6 +662,79 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
     return [("append", name, dumped)] if dumped else []
 
 
+def _marks(notes: str) -> set[str]:
+    """What the rules make of a creature's notes: its traits, letting the runners go, a swarm."""
+    return set(traits(notes)) | ({"lets_go"} if battle.LETS_GO.search(notes) else set()) | (
+        {"swarm"} if battle.SWARM.search(notes) else set())
+
+
+def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
+    """What the combat pass writes, added to what the module has: a creature's missing numbers (a
+    swarm's none: a sheet would make it one beast), attacks when none of its lines reads (in place of
+    the lines with no chance to hit in them, which say less of the same), the traits its notes lack; a sheet for an NPC who fights and has none, the weapon the text gives them as
+    something they carry (Item.owner); a route for a place with none, its obstacles the rules cannot
+    cross left out; the fight or the chase of an event that scripts none. What names someone or
+    somewhere the module lacks is left out."""
+    found: list[tuple[Any, ...]] = []
+    creatures = {c.id: c for c in m.creatures}
+    for x in out.creatures:
+        if (c := creatures.get(x.creature)) is None:
+            continue
+        swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
+        have = set(stats_of(c.stats))
+        added: dict[str, int] = {}
+        for key, value in x.stats.items():
+            canon = next(iter(stats_of({key: value})), "")
+            if canon and canon not in have:
+                have.add(canon)
+                added[key] = value
+        if added and not swarm:
+            found.append(("replace", "creatures", c.id, "stats", {**c.stats, **added}))
+        lines = [a.strip() for a in x.attacks if parse_attack(a.strip()) is not None]
+        if lines and not any(parse_attack(a) for a in c.attacks):  # the old lines with no chance in them go: these say it whole
+            kept = [a for a in c.attacks if not unread(a) or re.search(r"\d\s*[%％]", a)]
+            found.append(("replace", "creatures", c.id, "attacks", [*kept, *lines]))
+        if x.notes.strip() and _marks(x.notes) - _marks(c.notes):
+            found.append(("replace", "creatures", c.id, "notes", f"{c.notes.strip()} {x.notes.strip()}".strip()))
+    npcs, items = {n.id: n for n in m.npcs}, {i.id for i in m.items}
+    for x in out.npcs:
+        if (n := npcs.get(x.npc)) is None:
+            continue
+        if x.stats and not n.stats:
+            found.append(("put", "npcs", n.id, "stats", x.stats))
+        held = carried([n.look, *(i.name for i in m.items if i.owner == n.id)])
+        if (w := weapon_in(x.weapon)) is not None and w not in held:
+            key = next((k for k in (f"{n.id}_weapon", *(f"{n.id}_weapon_{i}" for i in range(2, 9))) if k not in items), "")
+            if not key:
+                continue
+            items.add(key)
+            found.append(("append", "items", [{"id": key, "name": x.weapon.strip(), "description": f"{n.name}随身带着的{x.weapon.strip()}",
+                                                "where": n.location or m.start, "owner": n.id}]))
+    places, taken = {x.id: x for x in m.locations}, set()
+    for r in out.routes:
+        loc = places.get(r.location)
+        if loc is None or loc.chase or loc.id in taken or not 4 <= len(r.legs) <= 12 or len(taken) >= 3:
+            continue
+        legs = []
+        for leg in r.legs:
+            ob = leg.obstacle
+            if ob is not None and (not known_skill(ob.skill) or (ob.harm and not HARM.fullmatch(ob.harm.replace(" ", "")))):
+                leg = leg.model_copy(update={"obstacle": None})  # one the rules cannot cross is no obstacle
+            legs.append(leg.model_dump(mode="json", exclude_defaults=True))
+        taken.add(loc.id)
+        found.append(("put", "locations", loc.id, "chase", legs))
+    people, events = {*npcs, *creatures}, {e.id: e for e in m.events}
+    for t in out.triggers:
+        if (e := events.get(t.event)) is None or e.fight or e.chase or e.ending:
+            continue
+        fight, chase = [x for x in dict.fromkeys(t.fight) if x in people], [x for x in dict.fromkeys(t.chase) if x in people]
+        if fight:
+            found += [("put", "events", e.id, "fight", fight)] + ([("put", "events", e.id, "surprise", t.surprise)] if t.surprise else [])
+        elif chase:
+            found += [("put", "events", e.id, "chase", chase)] + ([("put", "events", e.id, "chase_party", t.chase_party)] if t.chase_party else [])
+    return found
+
+
 def _target(folder: Path, group: str) -> Path:
     """The file a top-level group goes in: its part file when the module is split (made if new)."""
     part = next((n for n, keys in package.PARTS.items() if group in keys), None)
@@ -536,6 +749,8 @@ def land(folder: Path, found: list[tuple[Any, ...]]) -> None:
         text = path.read_text(encoding="utf-8") if path.is_file() else ""
         if kind == "put":
             text = yamledit.put(text, group, edit[2], edit[3], edit[4])
+        elif kind == "replace":  # a field's whole value, what it had kept in it (a sheet's numbers and more)
+            text = yamledit.replace(text, group, edit[2], edit[3], edit[4])
         elif kind == "step":
             text = yamledit.put_step(text, group, edit[2], edit[3], edit[4], edit[5])
         elif kind == "append":
@@ -551,7 +766,7 @@ def preview(m: Module, found: list[tuple[Any, ...]]) -> Module:
     data = m.model_dump(mode="json")
     for e in found:
         kind, group = e[0], e[1]
-        if kind == "put":
+        if kind in ("put", "replace"):
             next(x for x in data[group] if x["id"] == e[2])[e[3]] = e[4]
         elif kind == "step":
             agenda = next(a for a in data[group] if a["npc"] == e[2])

@@ -77,6 +77,18 @@ def reached(work: Path, key: str) -> int:
     return STAGES.index(done["stage"]) + 1
 VISION = "你是跑团模组整理员的读图助手。看图，用简体中文如实回答问题；看不清的地方直说。"
 
+# What a fight and a chase read of a module (engine/combat.py, engine/fighting.py), for the brief.
+FIGHTS = """- 战斗和追逐由引擎按 CoC 7 版规则一轮一轮结算，不用插件；数值从模组里读，照 _example/schema.json 里这几个字段的写法写：
+  - creatures：stats 写战斗数值（生命、敏捷一定要有，还有力量、体质、体型、闪避、移动），原文的数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值；
+    attacks 一条一种，写成“爪击 50%，伤害 1D6+DB”“射击（步枪）30%，射程 110，伤害 2D6+4”，命中率带 %，
+    每轮不止一次攻击另写一条“每轮 3 次”，闪避写进 stats 不写在这里；notes 写规则用得着的特性：护甲 2、枪伤减半、每轮恢复 1 点、
+    只被拳头打 6 点就会打晕、伤害加值 +1D4，调查员逃跑时它不追就写“不追”。成群出现、整群当一个对手打的不写数值，notes 写明成群。
+  - 原文写明会动手、或剧情里会被卷进打斗的 NPC，stats 写战斗数值（格斗(斗殴)、闪避、会用的武器技能），他带着的武器写进 look，或在 items 里交给他。
+  - 最可能发生追逐的 1–3 个地点（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方）写 chase：从那里跑出去的 4–12 段路，
+    每段一个名字、一句样子，大约一半有险阻或路障，写清用什么技能；只写那里和周围真有的东西。
+  - 原文写明某件事发生时有人或怪物当场扑上来动手的，在那个事件写 fight（谁动手）和 surprise（谁被偷袭）；写明一开始就是追逐的，写 chase 和 chase_party。
+    只是可能动手、要看调查员怎么做的不写，由裁定员临场判。"""
+
 
 class ImportState(TypedDict, total=False):
     work: str
@@ -196,10 +208,11 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 只使用 schema 声明的字段，不发明 clues.sets 等不会执行的字段；复杂条件和暂未支持的规则完整写入 keeper_notes。
 - 有时间点的事情写进 events（when 用 "D1 21:00"，或 visit:地点id、flag:标记）；结局 endings 和奖励照原文；
   用到的剧情标记都要在 flags 里声明。
+""" + FIGHTS + """
 - 原文没有预设调查员的话，按模组的年代和地点设计两名，写进 pregens，backstory 里注明“AutoKeeper 补充”。
 - 原文有通用引擎未支持的持续机制时，读 _example/plugins.md，用 write_plugin 编写并运行测试，不能只在 keeper_notes 写“请手动执行”就宣称自动支持。
   插件只补原文规则，不改写原作，不替玩家作决定；保留专属规则全文与具体限制。插件失败可修复后重试，不跳过校验。
-- 原文里有适合做成面板、小游戏或演出的东西（仪式倒数、谜题、密码锁、降神会、追逐、调查板、报纸号外），也鼓励写插件：panels 放在右栏，prompt 让玩家自己解，show 放几秒演出。
+- 原文里有适合做成面板、小游戏或演出的东西（仪式倒数、谜题、密码锁、降神会、调查板、报纸号外），也鼓励写插件：panels 放在右栏，prompt 让玩家自己解，show 放几秒演出。
   这些玩家都看得见，只放玩家能知道的内容；小游戏可玩可不玩，原文的关键线索照旧有别的来路。
   例：原文有三位数密码锁。commands 写 [{{"name":"开锁","description":"拨保险箱的三位密码"}}]，用 style 为 number 的 prompt 一位一位问，三位都对时给出原文那条线索（clue）。
 - 原文里如果有适合让玩家“画出来”的东西（符号、地图、人像），在 sketches 里写一两个。
@@ -516,7 +529,7 @@ async def pipeline(
         from .adapt import adapt, score
 
         if adapting:
-            console.print("[bold]改编[/] 补上跑团用得着、原文没写的：人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局…")
+            console.print("[bold]改编[/] 补上跑团用得着、原文没写的：人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、战斗数值与追逐路线…")
             await adapt(work, cfg=cfg, log=console.print)  # added only, checked pass by pass
             console.print(f"[bold]可玩度[/] {score(Module.load(work)).total}/100")
         from .simulate import playthrough
