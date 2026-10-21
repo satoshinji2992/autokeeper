@@ -178,6 +178,7 @@ async def _replace_game(module: Module, state: GameState) -> None:
     S.game = Game(module, state, Cast(cfg, module), Rules())
     S.game.checkpoint = _save
     S.game.turn_checkpoint = _keep_turn
+    S.game.visuals.fill_gaps = False  # pictures for what the module lacks: nobody here would see them
     S.game.visuals.schedule()
 
 
