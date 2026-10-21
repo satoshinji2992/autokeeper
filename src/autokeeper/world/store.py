@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import jsonpatch
 
+from ..engine.encounter.model import EncounterState, EncounterSummary
 from ..engine.state import GameState, WorldFact
 from ..module.schema import Module
 from ..rules.coc import Investigator
@@ -280,14 +281,21 @@ class World:
 
     # -- the domain an op may change -----------------------------------------------------------
     def domain(self) -> dict[str, Any]:
+        """What an op may change, as JSON: undo patches and the after-digest are taken over it. The
+        encounter (world/ops.EncounterStep) is in it once there has been one; a save that never had
+        one hashes as it did before 0.0.4, so its latest ops can still be undone."""
         st = self.st
-        return {
+        out = {
             "record": st.record.model_dump(mode="json", exclude=BOOKKEEPING),
             "flags": list(st.flags),
             "item_owners": dict(st.item_owners),
             "world": {k: v.model_dump(mode="json") for k, v in st.world.items()},
             "investigators": [i.model_dump(mode="json") for i in st.investigators],
         }
+        if st.encounter is not None or st.encounter_log:
+            out["encounter"] = {"state": st.encounter.model_dump(mode="json") if st.encounter is not None else None,
+                                "log": [x.model_dump(mode="json") for x in st.encounter_log]}
+        return out
 
     def load(self, d: dict[str, Any]) -> None:
         st = self.st
@@ -299,3 +307,6 @@ class World:
         st.item_owners = dict(d["item_owners"])
         st.world = {k: WorldFact.model_validate(v) for k, v in d["world"].items()}
         st.investigators = [Investigator.model_validate(x) for x in d["investigators"]]
+        enc = d.get("encounter") or {}
+        st.encounter = EncounterState.model_validate(enc["state"]) if enc.get("state") is not None else None
+        st.encounter_log = [EncounterSummary.model_validate(x) for x in enc.get("log", [])]

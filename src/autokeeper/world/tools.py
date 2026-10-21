@@ -16,6 +16,7 @@ from pydantic import TypeAdapter
 from ..engine.state import format_time
 from . import agents, context, knowledge
 from .ops import (
+    ENGINE_ONLY,
     OPS,
     STAFF,
     AdvancePlan,
@@ -216,12 +217,18 @@ class Gateway:
             schema["oneOf"] = [branch for branch in schema["oneOf"] if not branch.get("$ref", "").endswith("/Improvise")]
             schema.get("$defs", {}).pop("Improvise", None)
             schema.get("discriminator", {}).get("mapping", {}).pop("improvise", None)
+            for name, kind in (("Effects", "effects"), ("EncounterStep", "encounter")):  # the engine's alone
+                schema["oneOf"] = [branch for branch in schema["oneOf"] if not branch.get("$ref", "").endswith(f"/{name}")]
+                schema.get("discriminator", {}).get("mapping", {}).pop(kind, None)
+                schema.get("$defs", {}).pop(name, None)
         return {"actor": self.actor, "operations": schema,
                 "notice": "actor、操作 id 由宿主绑定。时钟、检定与带图像/插件的场景包由游戏引擎结算。"}
 
     def _bind(self, raw: dict, *, ident: str, depth: int = 0):
         if depth > MAX_DEPTH:
             raise ValueError("嵌套计划或定时操作过深")
+        if isinstance(raw, dict) and raw.get("kind") in ENGINE_ONLY:
+            raise ValueError("伤害、效果与遭遇只由游戏引擎按掷骰结算，世界工具不能提交")
         op = parse({**raw, "actor": self.actor, "id": ident})
         if isinstance(op, Improvise):
             raise ValueError("场景即兴必须通过游戏引擎准备并提交，不能绕过插件、图像与场景校验")

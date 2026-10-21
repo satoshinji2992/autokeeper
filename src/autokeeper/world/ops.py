@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from pydantic.json_schema import SkipJsonSchema
 
 from ..engine import world as legacy_world
+from ..engine.effects import Effect
+from ..engine.encounter.model import Archive, Begin, EncounterChange, SetParticipant
 from .record import (
     DIRECTOR,
     ENGINE,
@@ -25,6 +27,7 @@ from .record import (
     Agent,
     Entity,
     Fact,
+    Life,
     Promise,
     Relation,
     Scheduled,
@@ -40,6 +43,9 @@ if TYPE_CHECKING:
 MAX_AGENTS = 6
 MAX_BRING = 10  # everyday things registered in one turn, by everyone together: a scene's worth, not a shop's stock
 STAFF = (ENGINE, DIRECTOR, KEEPER, "arbiter")
+# Settled by the game engine alone, from dice it rolled: never by a model, the director, an NPC or
+# the keeper's world tools (world/tools.Gateway, world/desk), nor scheduled or planned for later.
+ENGINE_ONLY = ("encounter", "effects")
 Visibility = Literal["auto", "public", "private"]
 
 
@@ -501,6 +507,95 @@ class SetFlag(Base):
                       visibility="private" if self.visibility == "auto" else self.visibility, op=oid), None  # fmt: skip
 
 
+# -- bodies, things and encounters (the engine's) ------------------------------------------------------
+def _engine_only(op: Base) -> list[str]:
+    return [] if op.actor == ENGINE else ["伤害、效果与遭遇只由游戏引擎按掷骰结算"]
+
+
+class Effects(Base):
+    """What happened to people and things outside an encounter, already rolled (engine/effects.py):
+    a trap's or a fall's wound, an event's, a plugin's, the MCP keeper's. All land or none."""
+
+    kind: Literal["effects"] = "effects"
+    effects: list[Effect] = Field(default_factory=list)
+    source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, mcp, fight:<…>
+    seed: list[str] = Field(default_factory=list)  # NPCs and creatures whose bodies the world starts keeping now
+    # Bodies the engine already had numbers for (0.0.4 M1: the old fight engine's fighters), kept by
+    # the world from now on when it keeps none yet for them.
+    adopt: dict[str, Life] = Field(default_factory=dict)
+
+    def check(self, w: World) -> list[str]:
+        from ..engine import effects
+
+        if problems := _engine_only(self):
+            return problems
+        from ..engine.encounter import profiles
+
+        out = [f"{x} 不是 NPC 或怪物" for x in [*self.seed, *self.adopt] if profiles.profile(w, x) is None]
+        return out + effects.problems(w, self.effects)
+
+    def settle(self, w: World, oid: str):
+        from ..engine import effects
+
+        for x, life in self.adopt.items():
+            effects.seed(w, x, life)
+        for x in self.seed:
+            effects.seed(w, x)
+        done = effects.settle(w, self.effects, oid=oid)
+        return _last(w, oid), done
+
+
+class EncounterStep(Base):
+    """One unit of a fight or a chase (engine/encounter): the encounter's changes and their effects
+    on people and things, together, so a unit lands whole or not at all and its id lands it once.
+    Everyone who joins it (Begin, SetParticipant) has their body kept by the world from then on."""
+
+    kind: Literal["encounter"] = "encounter"
+    encounter: str
+    unit: str = ""
+    effects: list[Effect] = Field(default_factory=list)
+    changes: list[EncounterChange] = Field(default_factory=list)
+
+    def check(self, w: World) -> list[str]:
+        from ..engine import effects
+        from ..engine.encounter.model import apply
+
+        if problems := _engine_only(self):
+            return problems
+        enc = w.st.encounter
+        begins = any(isinstance(c, Begin) for c in self.changes)
+        if not begins and (enc is None or enc.id != self.encounter):
+            return [f"遭遇 {self.encounter} 不在进行中"]
+        if begins and enc is not None and enc.id != self.encounter:
+            return [f"遭遇 {enc.id} 还没有结束，不能开始 {self.encounter}"]
+        try:
+            apply(enc, self.changes)
+        except ValueError as exc:
+            return [str(exc)]
+        return effects.problems(w, self.effects)
+
+    def settle(self, w: World, oid: str):
+        from ..engine import effects
+        from ..engine.encounter.model import KEEP_ENCOUNTERS, apply
+
+        for c in self.changes:  # whoever joins: the world keeps their body from now on
+            joined = c.state.participants if isinstance(c, Begin) else [c.participant] if isinstance(c, SetParticipant) else []
+            for p in joined:
+                if p.kind != "investigator":
+                    effects.seed(w, p.id)
+        done = effects.settle(w, self.effects, oid=oid)
+        w.st.encounter = apply(w.st.encounter, self.changes)
+        for c in self.changes:
+            if isinstance(c, Archive):
+                w.st.encounter_log = [*w.st.encounter_log, c.summary.model_copy(deep=True)][-KEEP_ENCOUNTERS:]
+        return _last(w, oid), done
+
+
+def _last(w: World, oid: str) -> Event | None:
+    """The last event this op emitted, for its journal entry."""
+    return next((e for e in reversed(w.rec.events[-16:]) if e.op == oid), None)
+
+
 # -- facts and knowledge -----------------------------------------------------------------------
 class AddFact(Base):
     kind: Literal["fact"] = "fact"
@@ -790,6 +885,8 @@ class Schedule(Base):
                 parse(raw)
             except ValueError:
                 problems.append(f"第 {i + 1} 个操作格式不对")
+            if isinstance(raw, dict) and raw.get("kind") in ENGINE_ONLY:
+                problems.append(f"第 {i + 1} 个操作只能由游戏引擎当场结算，不能安排到以后")
         return problems
 
     def settle(self, w: World, oid: str):
@@ -858,6 +955,8 @@ class SetPlan(Base):
                     parse(raw)
                 except ValueError:
                     problems.append(f"步骤 {s.id} 里有格式不对的操作")
+                if isinstance(raw, dict) and raw.get("kind") in ENGINE_ONLY:
+                    problems.append(f"步骤 {s.id} 里的伤害与遭遇只能由游戏引擎当场结算")
         return problems
 
     def settle(self, w: World, oid: str):
@@ -999,13 +1098,14 @@ class Improvise(Base):
 
 Op = Annotated[
     Move | Follow | Relate | Transfer | Bring | Equip | Condition | SetFlag | AddFact | Learn | Remember | Occur | MakePromise | Fulfil
-    | Break | OpenThread | AdvanceThread | CloseThread | Schedule | Enlist | SetPlan | AdvancePlan | Rewrite | Improvise,
+    | Break | OpenThread | AdvanceThread | CloseThread | Schedule | Enlist | SetPlan | AdvancePlan | Rewrite | Improvise
+    | Effects | EncounterStep,
     Field(discriminator="kind"),
 ]
 OPS: TypeAdapter[Op] = TypeAdapter(Op)
 KINDS = [m.model_fields["kind"].default for m in (Move, Follow, Relate, Transfer, Bring, Equip, Condition, SetFlag, AddFact, Learn, Remember,
                                                   Occur, MakePromise, Fulfil, Break, OpenThread, AdvanceThread, CloseThread, Schedule,
-                                                  Enlist, SetPlan, AdvancePlan, Rewrite, Improvise)]  # fmt: skip
+                                                  Enlist, SetPlan, AdvancePlan, Rewrite, Improvise, Effects, EncounterStep)]  # fmt: skip
 
 
 def parse(data: dict[str, Any]) -> Op:
