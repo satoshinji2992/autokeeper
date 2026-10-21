@@ -1,0 +1,245 @@
+"""An NPC reply settles in one place (engine/game.Game._reply), whatever asked for it: the one spoken
+to, one who steps in before the ruling, one spoken to before the journey, one joining in, a performer.
+Its receipt (Said) is kept with the turn before anything is shown, so a turn resumed after a crash
+goes on from it: the NPC is not asked again, its words are shown, and the clues it told
+(Dialogue.told) reach the notebook once (the review of 2026-10-21). Scripted casts, FakeDice."""
+
+from __future__ import annotations
+
+import pytest
+
+from autokeeper.agents.cast import Action, BeforeTravel, Initiative, Ruling
+from autokeeper.engine.game import TURN_RECORD, Game, Turn
+from autokeeper.engine.state import GameState
+from autokeeper.module.schema import Event, Module
+from autokeeper.paths import EXAMPLE
+from autokeeper.rules.coc import Rules
+from autokeeper.world import ops as O
+
+from .conftest import FakeDice
+from .test_engine import FakeCast
+
+DIARY = "日记里写着，它在钟里很安静，只要钟一直走。"
+ASK = Action(kind="talk", summary="周衡问守钟人日记里写了什么", npc="warden", speech="日记里写了什么？")
+LOOK = Action(kind="investigate", summary="周衡看看钟楼", target="齿轮间")
+
+
+class Teller(FakeCast):
+    """A FakeCast whose NPCs tell the clues `tells` gives them, handed over as Cast.npc hands them
+    (Cast.told), and walk off where `leaves` says, as a reply's leave lands (Dialogue.leave)."""
+
+    def __init__(self, tells: dict[str, list[str]], leaves: dict[str, str] | None = None):
+        super().__init__({})
+        self.tells, self.leaves = tells, leaves or {}
+        self.told: dict[str, list[str]] = {}
+
+    async def npc(self, state, npc_id, message, **kw):
+        self.npc_calls.append((npc_id, message))
+        self.told[npc_id] = list(self.tells.get(npc_id, []))
+        if to := self.leaves.get(npc_id):
+            assert self.world is not None
+            self.world.apply(O.Move(id=f"leave:{state.turn}:{npc_id}", actor=npc_id, entity=npc_id, to=to))
+        return DIARY if self.told[npc_id] else f"{npc_id} 的回答"
+
+
+def table(fake, *, state: GameState | None = None, module: Module | None = None, leaves: dict[str, str] | None = None):
+    """The tower, the warden with his diary unlocked (his to tell, a thing said rather than a paper
+    handed over), and a cast that tells it."""
+    m = module or Module.load(EXAMPLE)
+    m.clue("c_diary").handout = None
+    if state is None:
+        state = Game.new(m, [m.pregens[0].model_copy(deep=True)])
+        state.location, state.turn = "tower", 1
+        state.npc("warden").unlocked = ["c_diary"]
+    cast = Teller({"warden": ["c_diary"]}, leaves)
+    events: list[dict] = []
+
+    async def emit(ev):
+        events.append(ev)
+
+    return Game(m, state, cast, Rules(dice=fake), emit=emit), cast, events  # type: ignore[arg-type]
+
+
+def kinds(events: list[dict]) -> list[str]:
+    return [e["type"] for e in events if e["type"] in ("npc", "performance", "clue", "sanity")]
+
+
+async def test_what_the_one_spoken_to_told_reaches_the_notebook_when_the_turn_is_resumed(fake):
+    """The review of 2026-10-21: the line was kept by the checkpoint, the told clue only in the
+    cast's memory; resumed, the warden was rightly not asked again and the clue never came."""
+    game, _, _ = table(fake)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    saved: dict = {}
+
+    def crash(t: Turn) -> None:  # the first save after the reply, before anything is shown
+        saved.update(state=game.state.model_dump_json(), turn=TURN_RECORD.dump_json(t))
+        raise RuntimeError("断电")
+
+    game.turn_checkpoint = crash
+    with pytest.raises(RuntimeError):
+        await game.talk(turn)
+    await game.close()
+    kept = TURN_RECORD.validate_json(saved["turn"])
+    receipt = kept.replies["talk:warden"]
+    assert (receipt.line, receipt.told, receipt.shown) == (DIARY, ["c_diary"], False)  # kept with the words
+    assert kept.npc_lines == [("warden", DIARY)]
+    resumed, again, events = table(fake, state=GameState.model_validate_json(saved["state"]))
+    await resumed.talk(kept)
+    assert again.npc_calls == []  # never asked again
+    assert resumed.state.clues == ["c_diary"] and kept.clues == ["c_diary"]
+    assert kinds(events) == ["npc", "clue"]  # shown once, the card after the words
+    assert next(e for e in events if e["type"] == "clue")["heard"] == "warden"
+    assert [e.text for e in resumed.state.log if e.kind == "npc"] == [DIARY]  # one line in the log
+    await resumed.talk(kept)  # settled: nothing more to show or to find
+    assert again.npc_calls == [] and kinds(events) == ["npc", "clue"]
+    await resumed.close()
+
+
+async def test_a_told_clue_cut_off_before_its_card_is_not_rolled_for_again(fake):
+    """A clue with a sanity cost, its roll made and kept, the connection gone before its card: the
+    resumed turn shows the card and the roll as they were, and rolls nothing."""
+    m = Module.load(EXAMPLE)
+    m.clue("c_diary").sanity = "0/1"
+    game, _, events = table(fake, module=m)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    saved: dict = {}
+    game.turn_checkpoint = lambda t: saved.update(state=game.state.model_dump_json(), turn=TURN_RECORD.dump_json(t))
+
+    async def cut(ev):
+        if ev["type"] == "clue":
+            raise ConnectionError("断线")
+        events.append(ev)
+
+    game.emit = cut
+    fake.queue(10)  # 理智 55 → 10, passed: nothing lost
+    with pytest.raises(ConnectionError):
+        await game.talk(turn)
+    await game.close()
+    assert kinds(events) == ["npc"] and not fake.values
+    state = GameState.model_validate_json(saved["state"])
+    assert state.clues == ["c_diary"]  # committed with its roll, the card not yet shown
+    resumed, again, shown = table(FakeDice(), state=state, module=m)  # no dice queued: any roll would fail
+    kept = TURN_RECORD.validate_json(saved["turn"])
+    await resumed.talk(kept)
+    assert again.npc_calls == [] and kinds(shown) == ["clue", "sanity"]  # the words were shown before
+    assert resumed.state.clues == ["c_diary"] and len(kept.sanity) == 1 and kept.sanity[0][1].check.value == 10
+    assert [e.kind for e in resumed.state.log].count("sanity") == 1
+    await resumed.close()
+
+
+async def test_what_one_who_steps_in_tells_is_in_the_notebook_before_the_ruling(fake):
+    """The review of 2026-10-21: what the warden told stepping in (Initiative.first) went nowhere;
+    the stages after it pass by whoever already spoke, so nothing took it in."""
+    game, cast, events = table(fake)
+    game.state.pending_turn = {"input": "看看钟楼", "initiative": [
+        Initiative(npc="warden", does="主动把日记里写的告诉他", first=True).model_dump()]}
+    await game.prepare(LOOK)
+    assert game.state.clues == ["c_diary"] and kinds(events) == ["npc", "clue"]
+    ruled: list[list[str]] = []
+
+    async def arbiter(state, action, at=None):
+        ruled.append(list(state.clues))
+        return Ruling(needs_roll=False)
+
+    cast.arbiter = arbiter  # type: ignore[method-assign]
+    ruling = await game.rule(LOOK)
+    assert ruled == [["c_diary"]]  # the arbiter rules knowing it was told
+    turn = await game.resolve(LOOK, ruling)
+    await game.talk(turn)
+    assert turn.clues == ["c_diary"] and turn.npc_lines == [("warden", DIARY)] and turn.joined == ["warden"]
+    assert [n for n, _ in cast.npc_calls] == ["warden"]  # not asked again after the ruling
+    assert "获得线索〔守钟人的日记〕" in game._report(turn)
+    await game.close()
+
+
+async def test_one_who_stepped_in_is_not_asked_again_when_the_preparation_is_resumed(fake):
+    game, _, _ = table(fake)
+    game.state.pending_turn = {"input": "看看钟楼", "initiative": [
+        Initiative(npc="warden", does="主动把日记里写的告诉他", first=True).model_dump()]}
+    saved: dict = {}
+
+    def crash() -> None:
+        saved["state"] = game.state.model_dump_json()
+        if "turn" in game.state.pending_turn.get("preparation", {}):  # his reply kept, nothing shown yet
+            raise RuntimeError("断电")
+
+    game.checkpoint = crash
+    with pytest.raises(RuntimeError):
+        await game.prepare(LOOK)
+    await game.close()
+    assert "c_diary" not in GameState.model_validate_json(saved["state"]).clues
+    resumed, again, events = table(fake, state=GameState.model_validate_json(saved["state"]))
+    await resumed.prepare(LOOK)
+    assert again.npc_calls == [] and resumed.state.clues == ["c_diary"] and kinds(events) == ["npc", "clue"]
+    turn = await resumed.resolve(LOOK, Ruling(needs_roll=False))
+    await resumed.talk(turn)
+    assert again.npc_calls == [] and turn.npc_lines == [("warden", DIARY)] and turn.clues == ["c_diary"]
+    await resumed.close()
+
+
+async def test_what_one_tells_before_the_journey_is_in_the_notebook(fake):
+    game, cast, events = table(fake)
+    go = Action(kind="move", summary="周衡问过日记就去广场", destination="square",
+                before=[BeforeTravel(npc="warden", speech="日记里写了什么？")])
+    await game.prepare(go)
+    assert game.state.clues == ["c_diary"] and kinds(events) == ["npc", "clue"]
+    turn = await game.resolve(go, Ruling(needs_roll=False))
+    await game.talk(turn)
+    assert game.state.location == "square" and turn.clues == ["c_diary"] and turn.npc_lines == [("warden", DIARY)]
+    assert [n for n, _ in cast.npc_calls] == ["warden"]
+    await game.close()
+
+
+async def test_one_who_joins_in_tells_a_clue_and_walks_off_and_the_clue_stays(fake):
+    """Told, then gone in the same reply (Dialogue.leave): the clue was said here, whoever is here now."""
+    game, _, _ = table(fake, leaves={"warden": "tower"})
+    game.world.apply(O.Move(id="down", actor="director", entity="warden", to="square"))
+    game.state.location = "square"
+    game.initiative = [Initiative(npc="warden", does="说起日记里写的，然后回钟楼去")]
+    turn = await game.resolve(Action(kind="investigate", summary="周衡看看告示", target="告示栏"), Ruling(needs_roll=False))
+    await game.talk(turn)
+    assert game.world.place("warden") == "tower" and turn.joined == ["warden"]
+    assert turn.clues == ["c_diary"] and game.state.clues == ["c_diary"]
+    assert any(n.startswith("老守钟人说完就走了") for n in turn.notes)
+    await game.close()
+
+
+async def test_a_performance_cut_off_after_it_was_kept_is_shown_and_not_staged_again(fake):
+    game, cast, _ = table(fake)
+    ev = Event(id="e_warden", title="守钟人赶来", when="flag:warden_woken", text="守钟人赶来。",
+               read_aloud="守钟人提着灯冲上楼梯。", performer="warden", performance="喝止调查员")
+    turn = Turn(action=Action(kind="wait", summary="周衡等着"), events=[ev])
+    saved: dict = {}
+
+    def crash(t: Turn) -> None:
+        saved.update(state=game.state.model_dump_json(), turn=TURN_RECORD.dump_json(t))
+        raise RuntimeError("断电")
+
+    game.turn_checkpoint = crash
+    with pytest.raises(RuntimeError):
+        await game.talk(turn)
+    await game.close()
+    assert len(cast.performances) == 1
+    resumed, again, events = table(fake, state=GameState.model_validate_json(saved["state"]))
+    kept = TURN_RECORD.validate_json(saved["turn"])
+    await resumed.talk(kept)
+    assert again.performances == [] and kinds(events) == ["performance"]
+    assert kept.performance == ("warden", "诸位，钟声会替我们作证……") and kept.performed == ["e_warden"]
+    await resumed.close()
+
+
+async def test_a_turn_journal_from_before_the_receipts_still_resumes(fake):
+    """A save cut off mid-turn by an older version: its preparation kept lines and notes of its own,
+    its turn no receipts. They still join the turn, and no one who spoke is asked again."""
+    game, cast, _ = table(fake)
+    game.state.pending_turn = {"input": "问日记", "preparation": {
+        "done": ["first:warden"], "lines": [["warden", "别碰！"]], "notes": ["旧的备注"], "joined": ["warden"], "blocked": False}}
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    assert turn.npc_lines == [("warden", "别碰！")] and turn.joined == ["warden"] and "旧的备注" in turn.notes
+    await game.talk(turn)
+    assert cast.npc_calls == []  # he spoke already this turn
+    old = TURN_RECORD.validate_python({**TURN_RECORD.dump_python(Turn(action=ASK), mode="json"),
+                                       "npc_lines": [["warden", DIARY]]} | {"replies": {}})
+    await game.talk(old)
+    assert cast.npc_calls == []
+    await game.close()

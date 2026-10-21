@@ -4,7 +4,7 @@ import json
 
 from autokeeper import config, paths
 from autokeeper.agents.cast import Action, Cast, Ruling
-from autokeeper.engine.game import Game
+from autokeeper.engine.game import TURN_RECORD, Game
 from autokeeper.module.schema import Module
 from autokeeper.rules.coc import Rules
 
@@ -38,7 +38,8 @@ async def test_prepare_accepts_a_false_public_agreement_without_forcing_follow_o
     try:
         await game.prepare(action)
         preparation = state.pending_turn["preparation"]
-        assert not preparation["blocked"] and preparation["lines"] == [["warden", claim]]
+        said = TURN_RECORD.validate_python(preparation["turn"]).npc_lines  # the preparation's own turn
+        assert not preparation["blocked"] and said == [("warden", claim)]
         assert state.minutes == before and state.location == "tower"
         assert not game.world.entity("warden").following and game.world.place("warden") == "tower"
         assert cast.claimed_accompany(state, "warden", "square")
