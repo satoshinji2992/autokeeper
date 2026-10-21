@@ -146,9 +146,10 @@ class Sheet(BaseModel):
     residence: str = ""
     birthplace: str = ""
     characteristics: Stats = Field(description="八项属性，原卡写多少填多少，没写的填 0")
-    luck: int = Field(0, description="幸运，没写填 0")
-    san: int = Field(0, description="当前理智，没写填 0")
-    hp: int = Field(0, description="当前 HP，没写填 0")
+    # A 0 the card writes stands (luck spent, sanity gone); one it does not write is None (rules/creation.accept).
+    luck: int | None = Field(None, description="幸运，原卡写多少填多少，写的是 0 也填 0；没写填 null")
+    san: int | None = Field(None, description="当前理智，原卡写多少填多少，写的是 0 也填 0；没写填 null")
+    hp: int | None = Field(None, description="当前 HP，原卡写多少填多少，写的是 0 也填 0；没写填 null")
     skills: dict[str, int] = Field(default_factory=dict, description="技能的最终值，原卡写多少填多少")
     backstory: dict[str, str] = Field(default_factory=dict, description="背景各项（个人描述、思想与信念、重要之人、意义非凡之地、宝贵之物、特质等），原卡有什么写什么")
     inventory: list[str] = Field(default_factory=list)
@@ -439,7 +440,8 @@ class Builder:
             self.kind = "figure"
             return "persona"
         skills_found = {**sheet.skills, **(numbers["skills"] if numbers else {})}
-        pools = {k: (numbers or {}).get(k) or getattr(sheet, k, 0) for k in ("luck", "san", "hp")} | {"mp": (numbers or {}).get("mp", 0)}
+        found = numbers or {}  # what the .st line says stands over the model's reading, a 0 too; neither: None
+        pools = {k: found[k] if k in found else getattr(sheet, k) for k in ("luck", "san", "hp")} | {"mp": found.get("mp")}
         self.card, self.fixes = accept(
             self.id, name=sheet.name or "无名调查员", occupation=sheet.occupation, age=sheet.age or 30, sex=sheet.sex,
             residence=sheet.residence, birthplace=sheet.birthplace, characteristics=stats, skills=skills_found,
@@ -504,11 +506,13 @@ class Builder:
         prompt = f"【现在的卡】{describe(c)}\n当前理智{c.san} HP{c.hp}\n【玩家的要求】{request}"
         d = await self._ask_model(REVISE_SYSTEM, prompt, Sheet)
         story = {"说明": c.backstory.get("说明", "玩家带来的人物卡")} | {k: v for k, v in d.backstory.items() if v and k != "说明"}
+        # What the request leaves alone stays as it was, a 0 too, and MP with it (the sheet has none).
         card, self.fixes = accept(
             self.id, name=d.name or c.name, occupation=d.occupation or c.occupation, age=d.age or c.age, sex=d.sex or c.sex,
             residence=d.residence or c.residence, birthplace=d.birthplace or c.birthplace,
-            characteristics=d.characteristics.model_dump(), skills=d.skills, luck=d.luck or c.luck, san=d.san or c.san,
-            hp=d.hp or c.hp, backstory=story or c.backstory, inventory=d.inventory or c.inventory, portrait=self.id,
+            characteristics=d.characteristics.model_dump(), skills=d.skills, luck=c.luck if d.luck is None else d.luck,
+            san=c.san if d.san is None else d.san, hp=c.hp if d.hp is None else d.hp, mp=c.mp,
+            backstory=story or c.backstory, inventory=d.inventory or c.inventory, portrait=self.id,
         )  # fmt: skip
         self.card, self.note = card, d.note
         return card

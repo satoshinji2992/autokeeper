@@ -47,16 +47,22 @@ class Investigator(BaseModel):
     marks: list[str] = Field(default_factory=list)  # skills ticked for improvement
 
     def model_post_init(self, _context) -> None:
-        c = self.characteristics
-        if not self.hp_max:
+        """What a sheet leaves out is worked out from its characteristics; what it gives stands, a 0
+        as much as any other number. An investigator at SAN 0 is permanently insane and one at HP 0
+        is down, not one whose numbers were never written (the review of 2026-10-21: a save at SAN 0
+        came back at POW)."""
+        c, given = self.characteristics, self.model_fields_set
+        if "hp_max" not in given:
             self.hp_max = (c["体质"] + c["体型"]) // 10
-            self.hp = self.hp or self.hp_max
-        if not self.mp_max:
+        if "hp" not in given:
+            self.hp = self.hp_max
+        if "mp_max" not in given:
             self.mp_max = c["意志"] // 5
-            self.mp = self.mp or self.mp_max
-        if not self.san:
+        if "mp" not in given:
+            self.mp = self.mp_max
+        if "san" not in given:
             self.san = c["意志"]
-        if not self.san_start_of_day:
+        if "san_start_of_day" not in given:
             self.san_start_of_day = self.san
 
     # -- lookups ------------------------------------------------------------

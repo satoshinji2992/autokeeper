@@ -90,10 +90,16 @@ def vet(data: Any, inv_id: str) -> Investigator:
     )  # fmt: skip  (HP, MP and SAN from the characteristics, as a new sheet has them)
     for pool, top in (("hp", inv.hp_max), ("mp", inv.mp_max), ("san", inv.san_max)):
         now = data.get(pool)
-        if isinstance(now, int) and not isinstance(now, bool) and 0 < now <= top:  # an old wound, sanity already spent
+        if isinstance(now, int) and not isinstance(now, bool) and 0 <= now <= top:  # an old wound, sanity already spent, a 0 too
             setattr(inv, pool, now)
         else:
             setattr(inv, pool, min(getattr(inv, pool), top))
+    # A 0 the card writes is where they stand, not a blank to fill: at SAN 0 they are permanently
+    # insane, at HP 0 down, and neither takes a seat (the review of 2026-10-21).
+    if inv.san == 0:
+        raise Refused("调查员已死亡或永久疯狂，无法参加调查。")
+    if inv.hp == 0:
+        raise Refused("调查员生命值为 0，无法参加调查。")
     inv.san_start_of_day = inv.san
     return inv
 

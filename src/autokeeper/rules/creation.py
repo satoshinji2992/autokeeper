@@ -95,15 +95,16 @@ def accept(
     name: str,
     characteristics: dict[str, int],
     skills: dict[str, int],
-    luck: int = 0,
-    san: int = 0,
-    hp: int = 0,
-    mp: int = 0,
+    luck: int | None = None,
+    san: int | None = None,
+    hp: int | None = None,
+    mp: int | None = None,
     age: int = 30,
     **profile,
 ) -> tuple[Investigator, list[str]]:
     """A card made elsewhere (another tool, a dice bot, paper), taken as written: only what
-    cannot be is corrected, and every correction is said."""
+    cannot be is corrected, and every correction is said. None is a number the card does not
+    write; a 0 it writes stands (luck spent, sanity gone, a wound to 0)."""
     fixes: list[str] = []
     stats: dict[str, int] = {}
     for k in CHARACTERISTICS:
@@ -112,8 +113,11 @@ def accept(
             fixes.append(f"原卡的{k}是 {value or '空的'}，按 50 算")
             value = 50
         stats[k] = value
-    if not 1 <= int(luck or 0) <= 99:
+    if luck is None:
         fixes.append("原卡没写幸运，按 50 算")
+        luck = 50
+    elif not 0 <= int(luck) <= 99:
+        fixes.append(f"原卡的幸运是 {luck}，按 50 算")
         luck = 50
     kept: dict[str, int] = {}
     for raw, value in skills.items():
@@ -128,7 +132,7 @@ def accept(
     kept = dict(sorted(kept.items(), key=lambda kv: -kv[1]))
     inv = Investigator(id=inv_id, name=name, age=max(15, min(int(age or 30), 89)), characteristics=stats, luck=int(luck), skills=kept, **profile)
     for field_name, value, top in (("san", san, inv.san_max), ("hp", hp, inv.hp_max), ("mp", mp, inv.mp_max)):
-        if value and 0 < int(value) <= top:  # the card says where they stand now: an old wound, sanity already spent
+        if value is not None and 0 <= int(value) <= top:  # the card says where they stand now: an old wound, sanity already spent
             setattr(inv, field_name, int(value))
     inv.san_start_of_day = inv.san
     return inv, fixes
