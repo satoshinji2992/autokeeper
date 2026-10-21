@@ -705,6 +705,32 @@ def plugin_test(path: Annotated[Path, typer.Argument(help="插件目录（含 ma
     raise typer.Exit(1 if failed else 0)
 
 
+cards_app = typer.Typer(help="守秘人卡组：好事者、恐惧症、惨事、武器")
+app.add_typer(cards_app, name="cards")
+
+
+@cards_app.command("import")
+def cards_import(
+    path: Annotated[Path | None, typer.Argument(help="卡组的 zip、PDF 所在目录或单个 PDF；默认取 rule/ 里的卡组")] = None,
+) -> None:
+    """读入守秘人卡组：每张卡的文字存成结构化数据，卡面存成图片，都放在本机缓存里。"""
+    from . import cards
+
+    source = path or cards.default_source()
+    if source is None or not source.exists():
+        console.print(f"没有找到卡组。把卡组的 zip 或 PDF 放进 {paths.rulebooks()}，或在命令后写出路径。")
+        raise typer.Exit(1)
+    console.print(f"正在读取 {source}……")
+    decks = cards.read(source)
+    if not decks.all():
+        console.print("没有读到任何卡牌：文件里没有好事者、恐惧症、惨事或武器卡组。")
+        raise typer.Exit(1)
+    target = cards.save(decks)
+    for line in cards.summary(decks):
+        console.print(line)
+    console.print(f"已保存到 {target.parent}")
+
+
 art_app = typer.Typer(help="ASCII 美术")
 app.add_typer(art_app, name="art")
 

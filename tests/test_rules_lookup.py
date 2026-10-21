@@ -112,9 +112,14 @@ def test_with_embeddings_the_vectors_rank_and_are_kept_beside_the_passages(books
 
 
 def test_the_books_folder_is_the_checkouts_rule_unless_told(monkeypatch, tmp_path):
-    monkeypatch.delenv("AUTOKEEPER_RULEBOOKS", raising=False)
-    assert paths.rulebooks().name == "rule"
-    monkeypatch.setenv("AUTOKEEPER_RULEBOOKS", str(tmp_path / "books"))
+    for var in ("AUTOKEEPER_RULES", "AUTOKEEPER_RULEBOOKS"):
+        monkeypatch.delenv(var, raising=False)
+    assert paths.rulebooks() == paths.ROOT / "rule"
+    monkeypatch.setattr(paths, "INSTALLED", True)  # a package install keeps them in the data folder
+    assert paths.rulebooks() == paths.DATA / "rule"
+    monkeypatch.setenv("AUTOKEEPER_RULEBOOKS", str(tmp_path / "old"))
+    assert paths.rulebooks() == tmp_path / "old"
+    monkeypatch.setenv("AUTOKEEPER_RULES", str(tmp_path / "books"))  # the name the card decks read too
     assert paths.rulebooks() == tmp_path / "books"
     assert paths.rules_index() == paths.cache() / "kb" / "rules"
     (paths.USER_DIR).mkdir(parents=True, exist_ok=True)

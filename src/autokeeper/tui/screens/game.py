@@ -36,6 +36,7 @@ from ...rules import commands
 from ...rules.coc import Investigator, Rules
 from ..library import THEMES, art_text, face_text, write_save
 from ..modals.debrief import DebriefModal
+from ..modals.deck import DeckCardModal
 from ..modals.dialogs import HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
 from ..modals.engine import EngineModal
 from ..modals.guide import GuideScreen
@@ -465,6 +466,13 @@ class GameScreen(Screen):
         if isinstance(flash := self.app.screen, BloodFlash) and (gone := flash.finish()) is not None:
             await gone
 
+    def _dealt(self, card: dict) -> None:
+        """A keeper card someone was dealt: a line in the story, and the card itself."""
+        line = Text(f"▣ {card.get('who', '')} {card.get('kind', '')}〔{card.get('name', '')}〕", style="bold")
+        self.story.add("sanity", line)
+        self._flash_off()
+        self.app.push_screen(DeckCardModal(card))
+
     def _flash_off(self) -> None:
         """A window coming up over the screen (a handout) ends the blood flash first."""
         if isinstance(flash := self.app.screen, BloodFlash):
@@ -857,6 +865,11 @@ class GameScreen(Screen):
             story.add("sanity", body)
             if ev.get("loss"):
                 self.query_one(SceneArt).glitch(10 + min(30, ev["loss"] * 3))
+            self._panels()
+            if ev.get("card"):  # a phobia, a mania or a bout drawn from the imported deck (cards.py)
+                self._dealt(ev["card"])
+        elif t == "card":  # a mishap the arbiter dealt
+            self._dealt(ev)
             self._panels()
         elif t == "event":
             body = Text()

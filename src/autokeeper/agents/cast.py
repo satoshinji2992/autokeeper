@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import from_json
 
-from .. import rules_lookup, skills
+from .. import cards, rules_lookup, skills
 from ..config import Config
 from ..engine import fog, world
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
@@ -163,6 +163,7 @@ class Failure(BaseModel):
     flags: list[str] = Field(default_factory=list, description="失败时成立的剧情标记（比如打碎了贵重物件）；没有就留空")
     minutes: int = Field(0, ge=0, le=240, description="失败额外耗掉的分钟数")
     damage: str = Field("", description="失败时调查员受的伤，骰子式如 1D3；没有就留空")
+    mishap: str = Field("", description="惨事卡 id，只从【惨事卡】里选，卡上的效果由引擎结算；没有这一栏的卡或用不着就留空")
 
 
 class RuledEffect(BaseModel):
@@ -193,6 +194,7 @@ class Ruling(BaseModel):
     takes: list[Thing] = Field(default_factory=list, max_length=3, description="成功后调查员当场拿起的日常物件，如屋里的手杖、桌上的火柴；没有就留空")
     missing: list[str] = Field(default_factory=list, max_length=4, description="这次行动缺少、因而做不成的工具或条件；没有就留空")
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
+    mishap: str = Field("", description="休息或过夜时出了岔子：惨事卡 id，只从【惨事卡】里选；多数时候留空")
     scope: Literal["模组内", "可即兴", "出格"] = Field(
         "模组内", description="模组内：场景资料有对应内容；可即兴：合理但模组未写；出格：确实违背时代或能力；捷径和偏离主线不算出格"
     )
@@ -1151,6 +1153,7 @@ class Cast:
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
         )
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
+        prompt += cards.arbiter_context(state, inv)  # the imported keeper decks: what holds on them, mishaps to deal
         named = next((n.name for n in m.npcs if n.id == action.npc), "")
         prompt += await self._private_lore(state, action.summary, [m.location(where).name, action.target, named])
         if action.kind == "perform" and action.speech:

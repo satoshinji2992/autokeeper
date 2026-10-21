@@ -40,6 +40,7 @@ The data folder:
         models/         local embedding models (about 90 MB)
         kb/             LightRAG knowledge base per module; kb/rules/ the rulebooks' index
         showcases/      big-scene pictures per module
+        cards/          the keeper card decks read from their PDFs (cards.py)
         pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
       logs/             traces/<date>.jsonl, stderr.log, web.log
@@ -263,14 +264,6 @@ def rules_index() -> Path:
     return cache() / "kb" / "rules"
 
 
-def rulebooks() -> Path:
-    """The official rulebooks the rules lookup reads: AUTOKEEPER_RULEBOOKS, else rule/ in the
-    checkout (in the data folder when installed). Copyrighted: never committed (.gitignore)."""
-    if given := os.environ.get("AUTOKEEPER_RULEBOOKS"):
-        return Path(given).expanduser()
-    return (DATA if INSTALLED else ROOT) / "rule"
-
-
 def showcases(module_id: str) -> Path:
     return cache() / "showcases" / _safe(module_id)
 
@@ -282,6 +275,11 @@ def module_art(module_id: str) -> Path:
     return cache() / "art" / _safe(module_id)
 
 
+def keeper_decks() -> Path:
+    """The keeper card decks read from their PDFs (cards.py): decks.json and faces/<deck>/<id>.png."""
+    return cache() / "cards"
+
+
 def prepared_pictures() -> Path:
     return cache() / "pictures"
 
@@ -289,6 +287,17 @@ def prepared_pictures() -> Path:
 def sessions() -> Path:
     """cwd for Claude Code and Codex processes, which keeps them out of other projects."""
     return cache() / "sessions"
+
+
+# -- the rulebooks ---------------------------------------------------------------------------
+def rulebooks() -> Path:
+    """The rulebooks and card decks the user keeps beside the code (rule/, not in git; in the data
+    folder when installed), or the folder AUTOKEEPER_RULES names (AUTOKEEPER_RULEBOOKS too). Read by
+    `autokeeper cards import` (cards.py) and `autokeeper rules index` (rules_lookup.py, whose
+    `rulebooks` setting in config.toml comes first)."""
+    if env := os.environ.get("AUTOKEEPER_RULES") or os.environ.get("AUTOKEEPER_RULEBOOKS"):
+        return Path(env).expanduser()
+    return (DATA if INSTALLED else ROOT) / "rule"
 
 
 # -- logs ------------------------------------------------------------------------------------

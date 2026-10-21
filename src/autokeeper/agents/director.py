@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
+from .. import cards
 from ..engine.state import GameState
 from ..module.schema import Module
 from ..plugins.schema import Plugin
@@ -56,6 +57,7 @@ class NewNPC(BaseModel):
     knows: list[str] = Field(default_factory=list, description="肯说的事")
     secrets: list[str] = Field(default_factory=list, description="不被逼问不会说的事")
     lies: list[str] = Field(default_factory=list, description="会主动撒的谎")
+    card: str = Field("", description="用【好事者卡】里的一张做底子时填卡 id：人物得到卡上的属性、技能与攻击；不用就留空")
 
 
 class NewClue(BaseModel):
@@ -285,6 +287,8 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
         lines.append("【模组需要、还没有插件的规则】\n" + "\n".join(f"- {x.name}：{x.rules}" for x in wanted))
     if world:  # the world record's backstage, as the director may see it (world/context.director_view)
         lines.append(f"【世界】现在是第 {st.minutes} 分钟。\n{world}")
+    if ready_made := cards.npc_menu(f"{action} {reason}"):  # the imported 好事者 deck (cards.py)
+        lines.append(ready_made)
     if action:
         lines.append(f"【调查员的行动】{action}")
     if reason:
