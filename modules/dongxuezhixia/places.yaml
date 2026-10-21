@@ -150,12 +150,12 @@ locations:
   - snow
   - flicker
   chase:
-  - name: 地下室
-    look: 香炉摆在地下室当中
-  - name: 地下室的门
-    look: 这扇门通到屋后
-  - name: 屋后清理过的雪道
-    look: 雪地上一道被清理过的痕迹
+  - name: 堆满古怪物件的客厅
+    look: 地上散落着关于咒语、符文和药剂的笔记
+    obstacle:
+      kind: hazard
+      what: 满地的笔记和古怪物件
+      skill: 敏捷
   - name: 没人扫雪的院子
     look: 院子里的雪没人扫过
     obstacle:
@@ -163,7 +163,7 @@ locations:
       what: 院子里的积雪
       skill: 敏捷
   - name: 院外的街
-    look: 窗后都没有灯
+    look: 身后那栋房子的窗口全是黑的
   - name: 主街外的雪墙
     look: 雪犁推出来的雪墙比人还高
     obstacle:

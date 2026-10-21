@@ -286,10 +286,10 @@ locations:
   - name: 温室入口
     look: 温室连在老宅后面
   - name: 工作室
-    look: 到处是修望远镜用的备件
+    look: 桌上架上堆满了东西
     obstacle:
       kind: hazard
-      what: 堆满的备件
+      what: 堆满的杂物
       skill: 敏捷
   - name: 门廊
     look: 几只猫在门廊上打盹

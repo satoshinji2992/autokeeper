@@ -52,16 +52,10 @@ locations:
         kind: hazard
         what: 挨在一起的墓穴和墓碑
         skill: 跳跃
-    - name: 墓地深处的矮墓碑
-      look: 墓地深处，一块矮墓碑立在树下
-    - name: 几座陵墓之间
-      look: 再往里是几座陵墓
-    - name: 半埋的陵墓门前
-      look: 石砌陵墓半埋在土坡里，门前的泥地踩得乱七八糟
-      obstacle:
-        kind: hazard
-        what: 踩烂的泥地
-        skill: 敏捷
+    - name: 墓地深处
+      look: 墓碑越往里越老，灌木越来越密
+    - name: 墓地最深处的树丛
+      look: 古老的树木挤在一起，看不清后面还有什么
   - id: shufang
     name: 道格拉斯的书房
     within: jinboer_jia
@@ -123,16 +117,10 @@ locations:
         skill: 跳跃
     - name: 古老的树下
       look: 古老的树木把路遮得半明半暗
-    - name: 墓地深处的矮墓碑
-      look: 墓地深处，一块矮墓碑立在树下
-    - name: 几座陵墓之间
-      look: 再往里是几座陵墓
-    - name: 半埋的陵墓门前
-      look: 石砌陵墓半埋在土坡里，门前的泥地踩得乱七八糟
-      obstacle:
-        kind: hazard
-        what: 踩烂的泥地
-        skill: 敏捷
+    - name: 墓地深处
+      look: 墓碑越往里越老，灌木越来越密
+    - name: 墓地最深处的树丛
+      look: 古老的树木挤在一起，看不清后面还有什么
   - id: lingmu
     name: 墓地深处的陵墓
     within: mudi
@@ -149,6 +137,39 @@ locations:
     looks:
       - when: flag:tomb_opened
         change: 陵墓的石门被推开了，门缝里的泥掉了一地，门后是一片漆黑
+    chase:
+    - name: 陵墓门前的泥地
+      look: 门前的泥地踩得乱七八糟
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
+    - name: 几座陵墓之间
+      look: 几座陵墓的石门都关着
+    - name: 墓地深处
+      look: 墓碑越往里越老，灌木越来越密
+    - name: 墓穴与墓碑之间
+      look: 墓穴和墓碑挨得很近，脚下高低不平
+      obstacle:
+        kind: hazard
+        what: 挨在一起的墓穴和墓碑
+        skill: 跳跃
+    - name: 穿过墓碑的土路
+      look: 一条土路弯弯曲曲穿过墓碑
+    - name: 灌木和老树之间
+      look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+      obstacle:
+        kind: hazard
+        what: 伸到路上的灌木
+        skill: 敏捷
+    - name: 隔开公墓的矮墙
+      look: 墙那边就是金博尔家的后院
+      obstacle:
+        kind: barrier
+        what: 矮墙
+        skill: 攀爬
+    - name: 屋后的小路
+      look: 小路通向金博尔家的后门
   - id: suidao
     name: 地底隧道网
     within: mudi
