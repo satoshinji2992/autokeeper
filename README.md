@@ -223,8 +223,6 @@ uv tool upgrade autokeeper   # 更新
   <br><sub>模型设置（F9）的「各分工模型」页：每个分工一行，写明它做什么；只有「读图」需要能看图的模型。</sub>
 </p>
 
-仓库本身也是一个 **Claude Code 插件**与 **MCP 服务端**——如果你想直接在 Claude Code 或 Codex 对话框里调用它的骰子、模组 Skills 与状态引擎来跑团（战斗与追逐同样由引擎逐轮结算），可参考[在 Claude Code / Codex 中主持](docs/playing.md#在-claude-code--codex-中主持)。
-
 <details>
 <summary><b>0.0.3 更新亮点</b></summary>
 <br>
@@ -253,7 +251,7 @@ uv tool upgrade autokeeper   # 更新
 
 ## 文档与开发
 
-- [游玩指南](docs/playing.md)：安装、模型配置、快捷键、联机排查、MCP 与 Claude Code 插件用法。
+- [游玩指南](docs/playing.md)：安装、模型配置、快捷键、联机排查。
 - [模组格式](docs/module-format.md) / [规则插件](docs/plugins.md)：手工编写剧本、配置大场景与开发自定义机制。
 - [守秘人体验设计](docs/keeper-experience.md)：开场引入、导演即兴、线索节奏与配图设计。
 - [模型运行机制](docs/harness.md) / [评测记录](docs/eval.md) / [世界引擎设计](docs/world.md)：多智能体架构、修辞防注入评测与后续计划。
