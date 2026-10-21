@@ -826,6 +826,25 @@ def upgrade(
             console.print(f"  [{'red' if f.severity == '高' else 'yellow'}]{f.severity}[/] {f.where}：{f.problem}\n     [dim]补：{f.fix}[/]")
 
 
+@art_app.command("prepare")
+def art_prepare(module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
+    """给模组里没有图的地点、人物（路人除外）、重要物件和怪物配图：先找照片并处理，找不到合适的再由 AI 画。
+    图存在本机缓存里，每局都用，模组文件夹不变；两样都不行的，游戏里用程序画的图。"""
+    from . import imagegen, pictures
+    from .module.schema import Module
+
+    cfg, m = config.load(), Module.load(_module(module))
+    pictures.adopt(m)
+    todo = pictures.gaps(m)
+    if not todo:
+        console.print(f"《{m.title}》没有缺图的地方")
+        return
+    off = imagegen.why_off(cfg)
+    console.print(f"[bold]配图[/] 《{m.title}》缺 {len(todo)} 张，" + ("找不到照片时由 AI 画" if not off else f"{off}，只找照片"))
+    done = asyncio.run(pictures.fill(cfg, m, log=console.print, where="import"))
+    console.print(f"配好 {len(done)}/{len(todo)} 张" + ("" if off else f"；这个模组还能用 AI 画 {imagegen.left(m.id)} 张"))
+
+
 @art_app.command("credits")
 def art_credits(module: Path) -> None:
     """列出模组里真实图片的来源与授权。"""

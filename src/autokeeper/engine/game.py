@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .. import scenery, weather
+from .. import pictures, scenery, weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
 from ..agents.director import Improv
@@ -161,7 +161,8 @@ class _ResolutionDice:
 class Game(Fighting):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
-        scenery.fill(module)  # every place with a picture: painted by program where the module has none
+        pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
+        scenery.fill(module)  # every place with a picture: painted by program where it has none yet
         scenery.fill_people(module)  # every person a portrait, likewise
         scenery.fill_creatures(module)  # and every creature, for when it comes to a fight (engine/fighting.py)
         self.emit: Emit = emit or _silent
@@ -218,7 +219,6 @@ class Game(Fighting):
         diagnostics.attach(self)
         self.visuals.schedule()
         self.showcases.prepare()
-        self.visuals.creatures()
 
     async def close(self) -> None:
         """Stop work owned by this game before the model sessions and screen disappear."""

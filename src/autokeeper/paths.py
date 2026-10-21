@@ -262,9 +262,11 @@ def showcases(module_id: str) -> Path:
     return cache() / "showcases" / _safe(module_id)
 
 
-def creatures(module_id: str) -> Path:
-    """A module's creatures drawn by an image model (imagegen), for all its games; scenery paints the rest."""
-    return cache() / "creatures" / _safe(module_id)
+def module_art(module_id: str) -> Path:
+    """Pictures found or drawn on this machine for a module's places, people, things and creatures
+    that it has none of (pictures.py), for all its games: places/, people/, items/, each with its
+    credits.yaml. The module's own folder is left alone."""
+    return cache() / "art" / _safe(module_id)
 
 
 def prepared_pictures() -> Path:

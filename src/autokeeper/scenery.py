@@ -719,11 +719,13 @@ def face(folder: Path, key: str, name: str, look: str = "", role: str = "") -> P
 
 def fill_people(m: Module) -> list[str]:
     """Every person of the module with no picture (an NPC, a pregen) gets a portrait painted by
-    program, in place of the hand-drawn face; painted when first shown."""
+    program, in place of the hand-drawn face; painted when first shown. Passers-by get none."""
     from . import paths
+    from .pictures import passerby
 
     folder, made = paths.scenery() / m.id / "people", []  # "people": imagery prepares it as a portrait
-    for who, look, role in [*((n, n.look, n.role) for n in m.npcs), *((p, "", p.occupation) for p in m.pregens)]:
+    people = [*((n, n.look, n.role) for n in m.npcs if not passerby(n)), *((p, "", p.occupation) for p in m.pregens)]
+    for who, look, role in people:
         key = who.portrait or f"face-{who.id}"
         if key in m.pictures:
             continue
@@ -923,18 +925,15 @@ def _noise_at(rng: np.random.Generator, w: int, h: int, scale: int) -> np.ndarra
 
 
 def fill_creatures(m: Module) -> list[str]:
-    """Every creature of the module with no picture gets one under the key creature-<id>: the one
-    an image model drew for the module (paths.creatures), else one painted by program (creature),
-    painted when first shown (ensure)."""
+    """Every creature of the module with no picture (its own, or one drawn for it: pictures.adopt)
+    gets one painted by program (creature) under the key creature-<id>, painted when first shown
+    (ensure)."""
     from . import paths
 
     folder, made = paths.scenery() / m.id / "people", []
     for c in m.creatures:
         key = f"creature-{c.id}"
-        if key in m.pictures and not painted(m.pictures[key]):
-            continue
-        if (drawn := paths.creatures(m.id) / f"{c.id}.jpg").is_file():  # an image model drew it (engine/visuals.py)
-            m.pictures[key] = str(drawn)
+        if key in m.pictures:  # its own, or drawn for it (pictures.adopt)
             continue
         out = folder / f"{key}.png"
         _beasts[str(out)] = (key, c.name, c.description)

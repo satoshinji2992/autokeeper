@@ -18,7 +18,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from .. import artkit, config, imagegen, imagery, paths, scenery
+from .. import artkit, config, imagegen, imagery, paths, pictures, scenery
 from ..module.schema import Module
 from .state import GameState
 
@@ -41,6 +41,7 @@ class Visuals:
     def __init__(self, module: Module, state: GameState, cfg: config.Config | None, emit: Callable[[dict], Awaitable[None]]):
         self.module, self.state, self.cfg, self.emit = module, state, cfg, emit
         self.tasks: dict[str, asyncio.Task] = {}
+        self.fill_gaps = True  # the module's own gaps looked for in the background (off where nobody sees pictures: MCP)
         self.limit = asyncio.Semaphore(2)
         self.idle = asyncio.Event()
         self.idle.set()
@@ -104,6 +105,7 @@ class Visuals:
                 self.tasks[key] = asyncio.create_task(self._make(key, subject, kind), name=f"illustrate:{key}")
         if keys is None:
             self._looks()
+            self.gaps()
 
     async def prepare(self, keys: set[str]) -> list[str]:
         """Finish first illustrations before exposing a new scene. Redraws keep their old art.
@@ -240,35 +242,28 @@ class Visuals:
             task.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
 
-    # -- the module's creatures, drawn once for all its games -----------------------------------
-    def creatures(self) -> None:
-        """The module's creatures with no picture of their own, drawn by Codex in the background
-        once for all its games (paths.creatures, imagegen's "creature"): what a fight and a chase
-        show of them. scenery's painted ones show until then, and wherever Codex is not."""
-        if "creatures" in self.tasks or not self.module.creatures or not imagegen.enabled(self.cfg):
+    # -- the module's own places, people, things and creatures with no picture -------------------
+    def gaps(self) -> None:
+        """What the module has no picture of its own for (pictures.gaps), looked for in the
+        background once for all its games: a photo, else a drawing by Codex (pictures.fill). The
+        painted ones show until then, and wherever neither is to be had."""
+        if not self.fill_gaps or self.cfg is None or "gaps" in self.tasks or not pictures.gaps(self.module):
             return
         try:
             asyncio.get_running_loop()
-        except RuntimeError:
+        except RuntimeError:  # built off the loop (a screen's thread): the next schedule() starts it
             return
-        self.tasks["creatures"] = asyncio.create_task(self._creatures(), name="creatures")
+        self.tasks["gaps"] = asyncio.create_task(self._gaps(), name="gaps")
 
-    async def _creatures(self) -> None:
-        world = {"era": self.module.era, "setting": self.module.setting}
-        for c in self.module.creatures:
-            key, target = f"creature-{c.id}", paths.creatures(self.module.id) / f"{c.id}.jpg"
-            if target.is_file() or not scenery.painted(self.module.pictures.get(key, "")):
-                continue  # drawn already, or the module has a picture of its own
-            async with self.limit:
-                await self.idle.wait()
-                try:
-                    await imagegen.make(imagegen.prompt(f"{c.name}：{c.description}", "creature", **world), target,
-                                        kind="creature", module=self.module.id, title=c.name, where="game", on_reply=self._usage)
-                except (imagegen.Unavailable, imagegen.OverBudget):
-                    return
-                except (imagegen.Failed, OSError, ValueError):
-                    continue
-            self.module.pictures[key] = str(target)
+    async def _gaps(self) -> None:
+        async def landed(key: str, path: Path) -> None:
+            await self.emit({"type": "art", "key": key, "art": self.module.art.get(key, ""), "status": "ready",
+                             "mask": self.module.art_colors.get(key, ""), "picture": str(path)})
+
+        assert self.cfg is not None
+        await pictures.fill(self.cfg, self.module, log=lambda _: None, where="game", limit=self.limit, ready=self.idle.wait,
+                            on_search=lambda role, reply: self.state.record_usage(f"visual:{role}", reply),
+                            on_draw=self._usage, done=landed)
 
     # -- pictures from Codex: what no photo was found for, and what the story changed ----------
     def made(self) -> int:

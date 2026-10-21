@@ -39,6 +39,19 @@ def no_codex_pictures(monkeypatch):
 
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(False, "测试里不生图"))
 
+@pytest.fixture(autouse=True)
+def no_picture_hunt(monkeypatch):
+    """No game in a test goes looking for the module's missing pictures on the web or has them
+    drawn (Visuals.gaps, pictures.fill); a test of that puts the real ones back itself."""
+    from autokeeper import pictures
+    from autokeeper.engine.visuals import Visuals
+
+    async def nothing(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(pictures, "fill", nothing)
+    monkeypatch.setattr(Visuals, "gaps", lambda self: None)
+
 LABEL = {"critical": "大成功", "extreme": "極限成功", "hard": "困難成功", "regular": "一般成功", "failure": "失敗", "fumble": "大失敗"}
 
 
