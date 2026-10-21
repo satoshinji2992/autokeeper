@@ -216,6 +216,7 @@ class GameState(BaseModel):
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own
     view_kind: str = ""  # "" the place's picture for the hour, "focus" a view of what they look at, "moment" an event's
     hinted: list[str] = Field(default_factory=list)  # foreshadowing the keeper has been given (Module.foreshadow)
+    staged: dict[str, int] = Field(default_factory=dict)  # of those, how many of its later stages (Foreshadow.stages, engine/signs.py)
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
     epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)

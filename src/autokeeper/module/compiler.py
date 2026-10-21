@@ -502,7 +502,12 @@ def _situation_md(m: Module) -> str:
             out += [f"想要：{'；'.join(a.goals)}", ""]
         out += [_step_md(s) for s in a.steps] + [""]
     if m.foreshadow:
-        out += ["## 伏笔", ""] + [f"- `{f.id}` 在 `{f.where}`：{f.hint} → `{f.pays_off}`" for f in m.foreshadow] + [""]
+        out += ["## 伏笔", ""]
+        for f in m.foreshadow:
+            out.append(f"- `{f.id}` 在 `{f.where}`：{f.hint} → `{f.pays_off}`")
+            out += [f"  {n}. 之后再来" + (f"（`{s.where}`）" if s.where else "") + (f"（{s.when} 起）" if s.when else "") + f"：{s.hint}"
+                    for n, s in enumerate(f.stages, 1)]
+        out.append("")
     if m.history:
         out += ["## 前史", ""]
         for p in m.history:

@@ -38,7 +38,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, effects, fog, idea, progress, views, world
+from . import diagnostics, effects, fog, idea, progress, signs, views, world
 from .fighting import Fighting, tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
@@ -1924,20 +1924,23 @@ class Game(Fighting):
             keep(turn)
         return said
 
-    def _foreshadow(self, turn: Turn) -> None:
-        """The hints of the place they came to, given to the keeper as this turn is told. A roll
-        that failed and found nothing keeps them back: a trace on the very thing they searched is
-        what the failure did not find. They come out on a later visit."""
+    async def _foreshadow(self, turn: Turn) -> None:
+        """The signs of the place they came to, given to the keeper as this turn is told: a first
+        hint, or the next stage of one seen before (engine/signs.py); waking there after a rest
+        counts as coming to it. A roll that failed and found nothing keeps them back: a trace on
+        the very thing they searched is what the failure did not find. They come out on a later
+        visit. A stage's flag is set as it shows, so the place's picture changes with it."""
         st = self.state
         missed = not turn.clues and not turn.events and (
             any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
-        for fid in turn.foreshadow:
-            f = next((x for x in self.m.foreshadow if x.id == fid), None)
-            if f is None or f.id in st.hinted or missed:
-                continue
-            st.hinted.append(f.id)
-            turn.notes.append(f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{f.hint}")
+        if turn.ruling is not None and turn.ruling.rest:
+            turn.foreshadow += signs.at(self.m, st, st.location)
+        handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
         turn.foreshadow = []
+        turn.notes += [note for note, _ in handed]
+        if flags := [s.flag for _, s in handed if s.flag]:
+            await self._flags(flags, turn)
+            self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
@@ -1949,7 +1952,7 @@ class Game(Fighting):
             self.told = None
             await self.emit({"type": "held"})
             return ""
-        self._foreshadow(turn)
+        await self._foreshadow(turn)
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling.
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
@@ -2211,7 +2214,7 @@ class Game(Fighting):
             self._here = self._present()
             if traces := world_view.traces(self.world, loc_id):
                 self.visuals.look(f"location:{loc_id}", "；".join(traces))
-            turn.foreshadow += [f.id for f in m.foreshadow if f.where == loc_id and f.id not in st.hinted]
+            turn.foreshadow += signs.at(m, st, loc_id)
             return {"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", ""), "view": st.view}
 
         async def arrive() -> None:

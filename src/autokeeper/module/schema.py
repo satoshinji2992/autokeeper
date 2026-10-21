@@ -364,11 +364,23 @@ class Agenda(BaseModel):
     steps: list[Move] = Field(default_factory=list, max_length=6, description="他会怎么做，按先后排")
 
 
+class Stage(BaseModel):
+    """A later look at the same sign (Foreshadow.stages): what is different on a later visit, or after
+    a while. Handed to the keeper as the first hint is (engine/signs.py), one step per arrival."""
+
+    hint: str = Field(description="这一次看见、听见的变化，一句：和上一次比哪里不一样了；一步比一步近，仍不点破，不说出线索的内容")
+    when: str = Field("", description="最早什么时候露出：'D2 08:00' 这样的时间，或 flag:标记；不写就是下一次来到这里")
+    where: str = Field("", description="在别的地点露出时写那个地点 id；不写就是伏笔原来的地点")
+    flag: str = Field("", description="露出这一步时设上的剧情标记（要在 flags 里声明）；地点的 looks 写 when: flag:这个标记，场景图就跟着换")
+
+
 class Foreshadow(BaseModel):
     id: str
     hint: str = Field(description="可以早早露出来的一点端倪，玩家看得见、听得见的一句：一个声音、一样摆错位的东西")
     where: str = Field(description="在哪个地点露出来（地点 id）")
     pays_off: str = Field(description="最后指向什么：结论、事件或结局 id")
+    stages: list[Stage] = Field(default_factory=list, max_length=4, description=(
+        "之后再来时这点端倪的变化，按先后排，一次来露一步：旅馆的画第二次看，画里的人转过了头；没有就不写"))
 
 
 class Tie(BaseModel):

@@ -78,7 +78,8 @@ ANSWERS = {
                                 {"a": "ghost", "b": "warden", "kind": "信任"}]},
     "agendas": {"agendas": [{"npc": "warden", "goals": ["守住齿轮间"], "steps": [{"id": "lock", "text": "半夜锁上齿轮间", "when": "D1 23:00",
                                                                              "meet": False}]}]},
-    "foreshadow": {"foreshadow": [{"id": "f1", "hint": "咔哒声慢半拍", "where": "tower", "pays_off": "k_motive"},
+    "foreshadow": {"foreshadow": [{"id": "f1", "hint": "咔哒声慢半拍", "where": "tower", "pays_off": "k_motive",
+                                   "stages": [{"hint": "咔哒声慢了整整一拍"}]},
                                   {"id": "f2", "hint": "不存在的结论", "where": "tower", "pays_off": "nothing"}]},
     "clueweb": {"clues": [{"id": "c_extra", "title": "旧账本", "text": "账本上记着守钟人每月买一次新弦", "where": "office",
                            "feature": "旧报合订本", "skill": "图书馆使用", "points_to": ["k_motive"]}]},
@@ -116,6 +117,7 @@ async def test_each_pass_adds_only_what_the_module_lacks_and_checks_what_it_adds
     assert m.npc("preacher").personality == "固执，好面子" and m.npc("preacher").goal == "让镇上的人听他讲完"
     assert [(b.a, b.b) for b in m.relations] == [("preacher", "warden")]
     assert m.agendas[0].steps[0].when == "D1 23:00" and [f.id for f in m.foreshadow] == ["f1"]
+    assert [s.hint for s in m.foreshadow[0].stages] == ["咔哒声慢了整整一拍"]  # with its later stage
     assert m.clue("c_extra").check.skill == "图书馆使用" and m.ties[0].npc == "warden"
     assert m.flags["left_town"] and any(e.condition == "flag:left_town" for e in m.endings)
     assert not [i for i in adapt.audit(m) if i.level == "error"]

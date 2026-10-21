@@ -61,7 +61,7 @@ from ..rules.combat import stats_of, traits
 from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
 from .graph import SLUG, audit, fighting, known_skill, leg_key, stake_problems, supporting_clues, ways
-from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Stake, Tie
+from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Stage, Stake, Tie
 
 PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude",
           "combat", "verify")
@@ -126,8 +126,21 @@ class Meets(BaseModel):
     steps: list[MeetMark] = Field(default_factory=list)
 
 
+class StageDraft(BaseModel):
+    """A later look at a sign as the pass writes it (Stage, less the flag a picture would hang on:
+    a hand-written module's to add with its Location.looks)."""
+
+    hint: str = Field(description="这一次看见、听见的变化，一句：和上一次比哪里不一样了；一步比一步近，仍不点破")
+    when: str = Field("", description="最早什么时候露出：'D2 08:00' 这样的时间，或 flag:已声明的标记；不写就是下一次来到这里")
+    where: str = Field("", description="在别的地点露出时写那个地点 id；不写就是伏笔原来的地点")
+
+
+class SignDraft(Foreshadow):
+    stages: list[StageDraft] = Field(default_factory=list, max_length=3, description="之后再来时这点端倪的变化，按先后排；不值得的不写")
+
+
 class Signs(BaseModel):
-    foreshadow: list[Foreshadow] = Field(default_factory=list)
+    foreshadow: list[SignDraft] = Field(default_factory=list)
 
 
 class NewClue(BaseModel):
@@ -267,7 +280,11 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
              "已经标了见面、只差 once 的，照样填 meet: true 和 once。只判断，不改步骤。", Meets),
     "foreshadow": ("写 3–6 条伏笔：调查员早早能在某个地点看见、听见的一点端倪，最后指向某个结论、事件或结局。"
                    "端倪本身不说破真相，只让人觉得哪里不对；也不能说出某条线索本身的内容（线索是窗锁松了，端倪就不写窗钩是松的），"
-                   "不然等于不用检定就把线索给了。", Signs),
+                   "不然等于不用检定就把线索给了。"
+                   "调查员会反复经过的地方，可以再写 stages：之后每次再来时这点端倪的变化，1–3 步，按先后排，"
+                   "比如旅馆的画第二次看多了一个人影，第三次那人转过了头。变化要有世界里的原因（它指向的那件事正在推进），"
+                   "一步比一步近，仍不点破、不说出线索；when 写最早什么时候露出（'D2 08:00' 或 flag:已声明的标记），在别处露出的写 where。"
+                   "【伏笔（已写）】里已有的伏笔，照原样写出它的 id、hint、where 和 pays_off，只补 stages，已经有 stages 的不写。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
                 "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。", NewClues),
     "ties": ("写 4–8 条私人牵连：调查员背景里的重要之人、意义非凡之地、思想与信念、宝贵之物、职业，可以怎样接上这个模组的人和地方。"
@@ -409,7 +426,10 @@ def _book(m: Module, short: int | None) -> str:
         lines.append("【各人的打算（已写）】\n" + "\n".join(
             f"- {a.npc} 想要 {'；'.join(a.goals) or '无'}\n" + "\n".join(f"  · {_when_row(s)}" for s in a.steps) for a in m.agendas))
     if m.foreshadow:
-        lines.append("【伏笔（已写）】\n" + "\n".join(f"- {f.id} 在 {f.where}：{f.hint} → {f.pays_off}" for f in m.foreshadow))
+        lines.append("【伏笔（已写）】\n" + "\n".join(
+            f"- {f.id} 在 {f.where}：{f.hint} → {f.pays_off}" + "".join(
+                f"\n  · 第 {n} 步" + (f"（{s.where}）" if s.where else "") + (f"（{s.when} 起）" if s.when else "") + f"：{s.hint}"
+                for n, s in enumerate(f.stages, 1)) for f in m.foreshadow))
     return "\n".join(lines)
 
 
@@ -511,6 +531,8 @@ def wanted(m: Module, name: str) -> bool:
         return len(m.endings) < 3
     if name == "meet":
         return bool(_unmarked(m))
+    if name == "foreshadow":  # a module whose signs were written before stages: their stages are what is missing
+        return not m.foreshadow or not any(f.stages for f in m.foreshadow)
     return not getattr(m, name)
 
 
@@ -712,13 +734,7 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
                 # Without a time or a condition the step is the NPC's to judge in play: no outcome done for it.
                 step.does = " & ".join(x for x in parts if not _outcome(m, a.npc, x)) if step.when.strip() else ""
     elif name == "foreshadow":
-        from ..agents import guard
-
-        targets = {k.id for k in m.conclusions} | {e.id for e in m.events} | {e.id for e in m.endings}
-        clues = {c.id: c.text for c in m.clues}
-        names = " ".join([*(n.name for n in m.npcs), *(x.name for x in m.locations), m.setting, m.hook])
-        items = [f for f in items if f.where in places and f.pays_off in targets
-                 and not guard.leaks(f.hint, clues, public=names)]  # a sign that says a clue's words gives it away
+        return _signs(m, out)
     elif name == "ties":
         items = [t for t in items if (t.npc in npcs or not t.npc) and (t.place in places or not t.place) and t.hook.strip()]
     elif name == "history":  # names the module does not have are left out, the event kept
@@ -726,6 +742,47 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
                                       "where": p.where if p.where in places else ""}) for p in items if p.text.strip()][:8]
     dumped = [x.model_dump(mode="json", exclude_defaults=True) for x in items]
     return [("append", name, dumped)] if dumped else []
+
+
+def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
+    """What the foreshadowing pass writes: new signs, with their stages; and stages for the signs
+    already written that have none (Foreshadow.stages), nothing else of theirs touched. A sign or a
+    stage that says a clue's words gives it away and is left out, as is a stage whose place or
+    condition the module does not have."""
+    from ..agents import guard
+    from ..engine.signs import TIMED
+
+    places = {x.id for x in m.locations}
+    targets = {k.id for k in m.conclusions} | {e.id for e in m.events} | {e.id for e in m.endings}
+    clues = {c.id: c.text for c in m.clues}
+    names = " ".join([*(n.name for n in m.npcs), *(x.name for x in m.locations), m.setting, m.hook])
+    have = {f.id: f for f in m.foreshadow}
+
+    def stages(f: SignDraft) -> list[dict[str, Any]]:
+        kept = []
+        for s in f.stages:
+            when, where = s.when.strip(), s.where.strip()
+            if not s.hint.strip() or guard.leaks(s.hint, clues, public=names) or (where and where not in places):
+                continue
+            if when and not (TIMED.fullmatch(when) or (when.startswith("flag:") and when[5:] in m.flags)):
+                continue
+            stage = Stage(hint=s.hint.strip(), when=when, where="" if where == f.where else where)
+            kept.append(stage.model_dump(mode="json", exclude_defaults=True))
+        return kept[:3]
+
+    found: list[tuple[Any, ...]] = []
+    new = []
+    for f in out.foreshadow:
+        if f.id in have:  # written already: only its stages, if it has none
+            if not have[f.id].stages and (more := stages(f.model_copy(update={"where": have[f.id].where}))):
+                found.append(("put", "foreshadow", f.id, "stages", more))
+        elif f.where in places and f.pays_off in targets and not guard.leaks(f.hint, clues, public=names):
+            item = Foreshadow(id=f.id, hint=f.hint, where=f.where, pays_off=f.pays_off).model_dump(mode="json", exclude_defaults=True)
+            if more := stages(f):
+                item["stages"] = more
+            new.append(item)
+            have[f.id] = Foreshadow.model_validate(item)
+    return ([("append", "foreshadow", new)] if new else []) + found
 
 
 def _marks(notes: str) -> set[str]:
@@ -943,13 +1000,21 @@ def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...
             kept = [{**a, "steps": [x for x in a.get("steps", []) if f"agendas:{a['npc']}:{x['id']}" not in refs]} for a in e[2]]
             e = ("append", "agendas", [a for a in kept if a["steps"]])  # an agenda with nothing left to do is no agenda
         elif e[0] == "append" and e[1] == "foreshadow":
-            e = ("append", "foreshadow", [f for f in e[2] if f"foreshadow:{f['id']}" not in refs])
+            e = ("append", "foreshadow", [{**f, "stages": _kept(f["id"], f.get("stages", []), refs)} if f.get("stages") else f
+                                          for f in e[2] if f"foreshadow:{f['id']}" not in refs])
+        elif e[0] == "put" and e[1] == "foreshadow" and e[3] == "stages":
+            e = (*e[:4], _kept(e[2], e[4], refs))
         elif e[0] == "put" and e[3] == "knows":
             e = (*e[:4], [k for i, k in enumerate(e[4]) if f"knows:{e[2]}:{i}" not in refs])
-        if (e[0] == "append" and not e[2]) or (e[0] == "put" and e[3] == "knows" and not e[4]):
+        if (e[0] == "append" and not e[2]) or (e[0] == "put" and e[3] in ("knows", "stages") and not e[4]):
             continue
         out.append(e)
     return out
+
+
+def _kept(sign: str, stages: list[Any], refs: set[str]) -> list[Any]:
+    """A sign's stages less those named in `refs` (foreshadow:<id>:<n>, counted from 1)."""
+    return [s for n, s in enumerate(stages, 1) if f"foreshadow:{sign}:{n}" not in refs]
 
 
 def take_out(folder: Path, refs: list[str]) -> None:
@@ -967,13 +1032,20 @@ def take_out(folder: Path, refs: list[str]) -> None:
             past.append(int(rest))
         elif kind == "mechanics":
             rules.append(int(rest))
+    signs = {r.partition(":")[2] for r in refs if r.startswith("foreshadow:") and r.count(":") == 1}
+    staged = {sign for r in refs if r.startswith("foreshadow:") and r.count(":") == 2 and (sign := r.split(":")[1]) not in signs}
+    for sign in staged:  # a sign kept, some of its later stages taken out
+        path = _target(folder, "foreshadow")
+        stages = next((f.stages for f in m.foreshadow if f.id == sign), [])
+        kept = _kept(sign, [s.model_dump(mode="json", exclude_defaults=True) for s in stages], set(refs))
+        path.write_text(yamledit.replace(path.read_text(encoding="utf-8"), "foreshadow", sign, "stages", kept), encoding="utf-8")
     for ref in refs:
         kind, _, rest = ref.partition(":")
         if kind == "agendas":
             npc, _, step = rest.partition(":")
             path = _target(folder, "agendas")
             path.write_text(yamledit.drop_step(path.read_text(encoding="utf-8"), "agendas", npc, step), encoding="utf-8")
-        elif kind == "foreshadow":
+        elif kind == "foreshadow" and rest in signs:
             path = _target(folder, "foreshadow")
             path.write_text(yamledit.drop_entry(path.read_text(encoding="utf-8"), "foreshadow", rest), encoding="utf-8")
     for group, gone in (("history", past), ("mechanics", rules)):
@@ -1104,6 +1176,8 @@ def _rows(m: Module, refs: set[str]) -> list[str]:
     for a in m.agendas:
         rows += [f"[agendas:{a.npc}:{s.id}] {a.npc} 的打算 {_when_row(s)}" for s in a.steps if f"agendas:{a.npc}:{s.id}" in refs]
     rows += [f"[foreshadow:{f.id}] 伏笔，在 {f.where}：{f.hint} → 指向 {f.pays_off}" for f in m.foreshadow if f"foreshadow:{f.id}" in refs]
+    rows += [f"[foreshadow:{f.id}:{n}] 伏笔 {f.id} 之后第 {n} 次露出，在 {s.where or f.where}" + (f"（{s.when} 起）" if s.when else "")
+             + f"：{s.hint} → 指向 {f.pays_off}" for f in m.foreshadow for n, s in enumerate(f.stages, 1) if f"foreshadow:{f.id}:{n}" in refs]
     rows += [f"[history:{i}] 前史 {p.when}：{p.text}（牵涉 {'、'.join(p.who) or '无'}；另外知道的 {'、'.join(p.known_by) or '无'}）"
              for i, p in enumerate(m.history) if f"history:{i}" in refs]
     rows += [f"[knows:{n.id}:{i}] {n.name}知道：{k}" for n in m.npcs for i, k in enumerate(n.knows) if f"knows:{n.id}:{i}" in refs]
