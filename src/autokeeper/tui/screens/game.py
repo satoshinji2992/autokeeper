@@ -226,6 +226,7 @@ class GameScreen(Screen):
         await saver.setup()
         self.graph = turn_graph.build(self.game, saver)
         self.game.checkpoint = lambda: write_save(self.state, self.m)
+        self.game.ask_reactions = "always" if cfg.ask_every_blow else "major"  # 设置: 每次被攻击都询问应对
         self._scene(self.state.location)
         self._panels()
         self.call_after_refresh(self._battle_resumed)
@@ -1224,8 +1225,7 @@ class GameScreen(Screen):
         if self._clock is not None:  # Tab: the same round, the same deadline
             self._clock_tick()
         elif config.load().battle_timer and getattr(self, "link", None) is None and lists:  # a LAN round has its own window
-            hold = next((w for w, _, _ in choices if w.startswith("防守")), "") if fighting else next(
-                (w for w, _, _ in choices if w.startswith("全力奔跑")), "")
+            hold = next((w for w, _, _ in choices if w.startswith("防守")), "") if fighting else choices[0][0]
             if hold:
                 self._start_clock(BATTLE_SECONDS if fighting else CHASE_SECONDS, hold)
 
@@ -1289,7 +1289,7 @@ class GameScreen(Screen):
             fallback, fighting = self._fallback, now["kind"] == "fight"
             self._close_orders()
             self.query_one("#command", Input).focus()
-            self.app.notify(f"未在时限内选择，本轮改为{'防守' if fighting else '全力奔跑'}。", severity="warning", timeout=4)
+            self.app.notify(f"未在时限内选择，本轮改为{'防守' if fighting else fallback}。", severity="warning", timeout=4)
             self.send_line(fallback)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
