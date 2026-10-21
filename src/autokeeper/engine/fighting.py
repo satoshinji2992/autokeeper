@@ -265,20 +265,18 @@ class Fighting:
         return key if key in self.m.pictures else ""
 
     def _sights(self, turn: Turn) -> list[dict]:
-        """A creature seen for the first time in a fight costs every investigator in it sanity."""
+        """A creature seen for the first time in a fight or a chase costs every investigator in it sanity."""
         from .game import _sanity_view
 
         st = self.state
         out: list[dict] = []
-        fight = st.fight
-        if fight is None:
-            return out
-        for c in fight.side("foe"):
+        people = st.fight.fighters if st.fight is not None else st.chase.runners if st.chase is not None else []
+        for c in [f for f in people if f.side != "party"]:
             if c.kind != "creature" or not c.sanity or c.id in st.seen or "/" not in c.sanity:
                 continue
             st.seen.append(c.id)
             ok, bad = c.sanity.split("/", 1)
-            for x in fight.standing("party"):
+            for x in [f for f in people if f.side == "party" and f.standing]:
                 inv = st.find(x.id)
                 s = self.rules.sanity(inv, ok.strip(), bad.strip())
                 turn.sanity.append((inv.name, s))
@@ -762,6 +760,9 @@ class Fighting:
             ch = st.chase
             turn.fight.append(begun[0]["line"] if begun else "【追逐开始】")
             turn.fight += begun[0].get("speeds", []) if begun else []
+            seen = await step("chase-sight", turn, lambda: self._sights(turn))
+            for i, ev in enumerate(seen):
+                await step(f"chase-sight:{i}", turn, lambda ev=ev: self.emit(ev))
             if ruling.set_flags:
                 await step("chase-flags", turn, lambda: self._flags(ruling.set_flags, turn))
             quarry = ch.running(ch.quarry)

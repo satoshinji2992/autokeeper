@@ -673,6 +673,11 @@ class Hub:
     def _view(self) -> dict[str, Any]:
         view = self.state.model_dump(mode="json", exclude=PRIVATE)
         view["flags"], view["fired"] = [], []
+        for key, people in (("fight", "fighters"), ("chase", "runners")):  # what the module says of a foe is the keeper's
+            if view.get(key):
+                for f in view[key][people]:
+                    f["notes"] = ""
+                view[key]["orders"] = {}
         if view.get("pending_push"):
             view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
         return view

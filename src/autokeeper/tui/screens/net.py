@@ -173,6 +173,7 @@ class NetGameScreen(GameScreen):
         self.engine_label = "局域网联机" + ("" if self.seat else " · 观战")
         self._scene(self.state.location)
         self._panels()
+        self.call_after_refresh(self._battle_resumed)  # sat down in the middle of a fight or a chase
         self.set_interval(0.1, self._spin)
         self.set_interval(0.5, self._countdown)
         for e in self.backlog:  # what happened before you sat down

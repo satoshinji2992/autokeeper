@@ -18,7 +18,7 @@
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-[项目网页](https://satoshinji2992.github.io/autokeeper/) · [游玩体验](#从早班火车进站开始) · [画面](#照片画字符没有照片就现场画) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
+[项目网页](https://satoshinji2992.github.io/autokeeper/) · [游玩体验](#从早班火车进站开始) · [画面](#照片画字符没有照片就现场画) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [战斗与追逐](#打起来或者拼命跑) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
 
 </div>
 
@@ -26,6 +26,7 @@ AutoKeeper 把《克苏鲁的呼唤》第 7 版的跑团桌面搬进了终端。
 
 - **会自己运转的小镇**：守秘人看得到模组的全部底牌，每局有一份世界记录，记着谁在哪、知道什么、答应过谁；NPC 照自己的打算行事，你不去找他们，他们也在走自己的日程。
 - **七版规则与物理十面骰**：检定时亲手投掷 3D 物理十面骰；失败就是失败，花幸运、孤注一掷、理智与不定性疯狂、重伤和幕间成长都按规则结算。
+- **战斗与追逐**：按第 7 版一轮一轮结算，血色场景、对手卡片、追逐胶片路线；对手和怪物的行动由守秘人的战术分工安排，没有图的怪物由程序画出来。
 - **字符画演出**：老照片与插图转成真彩字符画，随时间和叙事飘起雨雪浓雾、摇曳灯影；没有照片的地点、人物和物件由程序现场画出，地图是一张彩绘的羊皮纸。
 - **按纸张排版的手稿**：信件、日记、剪报、电报、典籍各有纸色、墨色与版式，手写的信和日记用斜体，墨迹逐字渐显。
 - **AI 辅助车卡与多格式导卡**：一句人设或一个人名即可按七版规则建卡；也能导入骰娘 `.st`、表格、PDF、纸质卡照片与酒馆卡。
@@ -123,6 +124,24 @@ CoC 模组常有标准规则之外的特殊机制——比如《冬雪之下》�
 </p>
 
 更多细节见[导入与生成说明](docs/playing.md#导入生成与观战)、[模组格式文档](docs/module-format.md)与[规则插件文档](docs/plugins.md)。
+
+## 打起来，或者拼命跑
+
+撞上怪物或者谈崩了，守秘人判定打起来以后，游戏进入按第 7 版规则一轮一轮结算的战斗。场景沉入暗红，血顺着画面往下流，心跳一样明暗起伏。右侧是对手的卡片和出手先后，对手只写伤势，不给数字，下面是你们的生命值。
+
+每一轮从列出的行动里选，也可以自己写：攻击、射击、推倒缴械制住、急救、装填、防守、逃跑。闪避与反击、以多打少、卡壳、贯穿、重伤和濒死都按规则来。对手、怪物和 AI 队友怎么出手，由守秘人的战术分工安排。
+
+<p align="center">
+  <a href="docs/img/fight.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/fight.png" width="100%" alt="与食尸鬼道格拉斯的战斗：血色场景、右侧对手卡片与出手先后、故事里的战斗卡片和下方的行动选单"></a>
+  <br><sub>《追书人》书房里的战斗：对手卡片只写伤势，每次交锋一张战斗卡，行动在输入框上方选。</sub>
+</p>
+
+逃跑或追赶时进入追逐：先过体质定速度，路线像胶片一样铺在场景下方，每一段是一幅小画，标着要跳、要爬、要撞开的东西，追兵是一双不停闪动的眼睛。离得够远可以躲起来，被追上就打起来。
+
+<p align="center">
+  <a href="docs/img/chase.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/chase.png" width="100%" alt="墓园里的追逐：场景下方的追逐路线，每段小画上标着险阻和路障，调查员与追兵的位置"></a>
+  <br><sub>墓园里的追逐：⚠ 是边跑边过的险阻，▦ 是要翻过去的路障。</sub>
+</p>
 
 ## 一个人随时开，或者叫朋友凑一桌
 
@@ -248,6 +267,7 @@ uv tool upgrade autokeeper   # 更新
 - [模组格式](docs/module-format.md) / [规则插件](docs/plugins.md)：手工编写剧本、配置大场景与开发自定义机制。
 - [守秘人体验设计](docs/keeper-experience.md)：开场引入、导演即兴、线索节奏与配图设计。
 - [模型运行机制](docs/harness.md) / [评测记录](docs/eval.md) / [世界引擎设计](docs/world.md)：多智能体架构、修辞防注入评测与后续计划。
+- [战斗与追逐](docs/combat.md)：规则怎么分层、一轮怎么结算、战术分工怎么接、画面怎么做。
 - [开发者模式](docs/developer-mode.md)：游戏中按 `F12`，查看本轮每次调用的分工、模型、用时与缓存命中，所有人物的实际位置和接下来的日程。
 
 遇到不合理的裁定或报错，欢迎提交 [Issue](https://github.com/satoshinji2992/autokeeper/issues) 并附上模组名、当轮行动与日志。源码位于 [`src/autokeeper/`](src/autokeeper/)，测试位于 [`tests/`](tests/)；提交 PR 前请运行 `uv run ruff check src tests` 与 `uv run pytest -q`。开发约定详见 [AGENTS.md](AGENTS.md)。README 的截图由 [`dev/screenshots.py`](dev/screenshots.py) 生成。
