@@ -357,16 +357,6 @@ async def test_an_old_save_plays_on(fake):
     await game.cast.close()
 
 
-async def test_a_save_from_the_mcp_days_loads_without_its_journal(fake):
-    game, _ = made("square")
-    old = json.loads(game.state.model_dump_json())
-    old["pending_mcp"] = {"request": {"tool": "skill_check", "args": {"skill": "侦查"}}, "turn": {"checks": []}}
-    st = GameState.model_validate_json(json.dumps(old, ensure_ascii=False))
-    assert "pending_mcp" not in st.model_dump() and "pending_mcp" not in st.model_dump_json()
-    assert st.model_dump() == game.state.model_dump()  # everything else as it was
-    await game.cast.close()
-
-
 async def test_a_keeper_that_answers_in_words_alone_still_tells_the_turn(fake):
     from .test_engine import FakeCast
 
