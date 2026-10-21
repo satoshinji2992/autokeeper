@@ -6,10 +6,11 @@ narrates, and calls these tools for everything that must not be made up — dice
 from their own isolated sessions (Haiku by default), so the keeper cannot leak an
 NPC's secrets by accident and NPCs remember what they were told.
 
-Fights and chases are the engine's too (engine/fighting.py), as on the screens: the keeper
-says who it is with and plays the investigator's order each round; the foes' orders, every
-roll and every wound are settled here, and what comes back is what the players' screens
-show (a foe's wounds in words, never its hit points).
+Fights and chases are the engine's too (engine/encounter), as on the screens: the keeper
+says who it is with and plays the investigator's choice each round; the foes' arrangements come
+from the keeper plan, every roll and every wound is settled here, and what comes back is what
+the players' screens show (a foe's wounds in words, never its hit points). start_fight,
+start_chase and battle_round are 0.0.4's thin wrappers over the encounter engine.
 
 Register it with Claude Code via the plugin's .mcp.json, or with Codex:
 
@@ -27,14 +28,12 @@ from mcp.server.fastmcp import FastMCP
 
 from . import artkit, config, paths
 from .agents.cast import Action, Cast, Ruling
-from .engine import combat as battle
 from .engine import effects
 from .engine.game import TURN_RECORD, Game, Turn
 from .engine.state import GameState
 from .module.compiler import ensure_compiled, skill_name
 from .module.schema import Module
 from .rules import chase as chase_rules
-from .rules import combat as combat_rules
 from .rules import commands
 from .rules.coc import DIFFICULTY_ZH, Rules
 from .world.record import DIRECTOR
@@ -121,13 +120,13 @@ async def _resolved(tool: str, arguments: dict, action: Action, ruling: Ruling, 
                 if event.get("type") in HEARD:  # kept with its stage's receipt: shown once, reported every time
                     journal.setdefault("heard", []).append(_heard(event))
 
-            g.emit, g.holding = hear, hold
+            g.emit, g.holding, g.asking = hear, hold, False  # no tool answers a fight's question yet (WP-E): presets stand
             try:
                 # Use the original ruling even when a partially settled clue changed which
                 # gates would be offered by a new invocation of the same tool.
                 turn = await g.resolve(Action.model_validate(journal["action"]), Ruling.model_validate(journal["ruling"]))
             finally:
-                g.emit, g.holding = emit, False
+                g.emit, g.holding, g.asking = emit, False, True
             _keep_turn(turn)
         if talk:
             await g.talk(turn)
@@ -231,25 +230,23 @@ def _heard(event: dict) -> dict:
 def _battle_now() -> dict | None:
     """The fight or the chase going on, as the players' screens show it (a foe's wounds in words,
     never its hit points), with what the investigator may do this round in the words battle_round
-    reads. None outside one."""
-    st = _need().state
-    me = st.investigator.id
-    if st.fight is not None:
-        fight = st.fight
-        mine = fight.get(me)
-        standing = {f.id: f.name for f in fight.fighters if f.standing}
-        offer = battle.choices(mine, fight) if mine is not None and mine.standing else []
-        return {"kind": "fight", **battle.view(fight),
-                "initiative": [standing[i] for i in combat_rules.order([f for f in fight.fighters if f.standing])],
-                "choices": [{"order": words, "note": note} for words, note in offer]}
-    if st.chase is not None:
-        ch = st.chase
-        mine = ch.get(me)
-        offer = battle.chase_choices(mine, ch) if mine is not None and mine.standing and mine.id not in ch.hidden else []
-        hunters = ch.running("foe" if ch.quarry == "party" else "party")
-        return {"kind": "chase", **battle.chase_view(ch), "gap": chase_rules.gap(ch.running(ch.quarry), hunters),
-                "choices": [{"order": words, "note": note} for words, note in offer]}
-    return None
+    matches. None outside one."""
+    from .engine.encounter import views
+
+    g = _need()
+    now = views.table(g)
+    if now is None:
+        return None
+    me = g.state.investigator.id
+    lists = now["choices"].get(me, {})
+    offer = lists.get(now["presets"].get(me, ""), next(iter(lists.values()), []))
+    choices = [{"order": words, "note": note} for words, note in offer]
+    if now["kind"] == "fight":
+        return {"kind": "fight", **now["fight"], "initiative": views.initiative(g), "choices": choices}
+    ch = g.state.chase
+    assert ch is not None
+    hunters = ch.running("foe" if ch.quarry == "party" else "party")
+    return {"kind": "chase", **now["chase"], "gap": chase_rules.gap(ch.running(ch.quarry), hunters), "choices": choices}
 
 
 def _battle_report(turn: Turn, heard: list[dict]) -> dict:
@@ -453,6 +450,8 @@ async def start_fight(foes: list[str], surprise: str = "", reason: str = "") -> 
     （见 scene 的 npcs 与 creatures）；surprise：party 调查员被偷袭，foe 对方毫无防备，留空为双方都有防备；reason 写一句起因。
     初次看见的怪物先结算理智。返回参战各方、出手先后、对手肖像（原样放进代码块）和调查员第一轮可选的行动（battle.now.choices），
     之后每一轮用 battle_round。"""
+    from .engine.encounter.plan import EncounterStart
+
     arguments = {"foes": foes, "surprise": surprise, "reason": reason}
     saved = _again("start_fight", arguments)
     if saved is None:
@@ -461,11 +460,13 @@ async def start_fight(foes: list[str], surprise: str = "", reason: str = "") -> 
         if surprise not in ("", "none", "party", "foe"):
             raise ValueError("surprise 只能是 party、foe 或留空")
         why = reason.strip() or f"与{_names(ids)}打了起来"
-        saved = (Action(kind="attack", summary=why, npc=next((i for i in ids if i in g._present()), "")),
-                 Ruling(needs_roll=False, combat=ids, surprise="" if surprise == "none" else surprise, reason=why))  # type: ignore[arg-type]
+        start = EncounterStart(mode="fight", foes=ids, surprise="" if surprise == "none" else surprise, reason=why[:60])  # type: ignore[arg-type]
+        saved = (Action(kind="attack", summary=why, npc=next((i for i in ids if i in g._present()), ""),
+                        declared={"start": start.model_dump(mode="json", by_alias=True)}),
+                 Ruling(needs_roll=False, reason=why))
     heard: list[dict] = []
-    # The fight begins and waits for the investigator's order (hold): every round, the first one
-    # too, is battle_round's, so the keeper offers the choices before anyone strikes.
+    # The fight begins and waits for the investigator's choice: every round, the first one too, is
+    # battle_round's, so the keeper offers the choices before anyone strikes.
     turn = await _resolved("start_fight", arguments, *saved, hold=True, heard=heard)
     _save()
     return _battle_report(turn, heard)
@@ -476,6 +477,8 @@ async def start_chase(others: list[str], party: str = "逃", reason: str = "") -
     """开始一场追逐。others 填追赶调查员或被调查员追赶的在场 NPC 或怪物 id；party：调查员一方是“逃”还是“追”；reason 写一句起因。
     每人先过体质定速度；逃的一方快得多时当场甩开，追逐随即结束（battle.over）。返回路线、各人位置、相隔段数（gap）
     和调查员这一轮可选的行动（battle.now.choices），之后每一轮用 battle_round。"""
+    from .engine.encounter.plan import EncounterStart
+
     arguments = {"others": others, "party": party, "reason": reason}
     saved = _again("start_chase", arguments)
     if saved is None:
@@ -484,8 +487,10 @@ async def start_chase(others: list[str], party: str = "逃", reason: str = "") -
         if party not in ("逃", "追"):
             raise ValueError("party 只能是“逃”或“追”")
         why = reason.strip() or (f"被{_names(ids)}追赶" if party == "逃" else f"追赶{_names(ids)}")
-        saved = (Action(kind="move", summary=why, npc=next((i for i in ids if i in g._present()), "")),
-                 Ruling(needs_roll=False, chase=ids, chase_party=party, reason=why))  # type: ignore[arg-type]
+        start = EncounterStart(mode="chase", foes=ids, quarry="party" if party == "逃" else "foe", reason=why[:60])
+        saved = (Action(kind="move", summary=why, npc=next((i for i in ids if i in g._present()), ""),
+                        declared={"start": start.model_dump(mode="json", by_alias=True)}),
+                 Ruling(needs_roll=False, reason=why))
     heard: list[dict] = []
     turn = await _resolved("start_chase", arguments, *saved, hold=True, heard=heard)
     _save()
@@ -495,11 +500,15 @@ async def start_chase(others: list[str], party: str = "逃", reason: str = "") -
 @server.tool()
 async def battle_round(order: str, skill: str = "", difficulty: str = "常规", harm: str = "", target: str = "") -> dict:
     """战斗或追逐中调查员这一轮的行动。order 照 battle.now.choices 的原文写（如“攻击 老守钟人（徒手）｜被攻击时闪避”），
-    也可以写玩家自己的话。攻击、射击、战技、急救、装填、排除故障、防守、逃跑，追逐中的奔跑、躲藏、设置障碍与回身迎战，都由引擎掷骰。
-    玩家做的是别的事（把油灯砸过去、关门）时由你裁定：skill 填检定技能，difficulty 填难度，harm 填成功时造成的伤害骰式，
-    target 填受伤对象的 id；不需要检定就留空。引擎把这句话读成了什么见 battle.order。
+    原文对得上的由引擎按规则掷骰结算；对不上的（把油灯砸过去、关门）由你裁定：skill 填检定技能，difficulty 填难度，
+    harm 填成功时造成的伤害骰式，target 填受伤对象的 id；不需要检定就留空。
     对手和怪物的行动、全部骰子与伤害都在这里结算，返回这一轮的经过（battle.lines 与 exchanges）、是否结束（battle.over）、
     之后的局面和下一轮可选的行动（battle.now）。"""
+    from .agents.cast import RuledEffect
+    from .engine.encounter import choices
+    from .engine.encounter.plan import DeclaredAction, EncounterTurnPlan
+    from .engine.encounter.runner import _order_of, chase_options
+
     g = _need()
     arguments = {"order": order, "skill": skill, "difficulty": difficulty, "harm": harm, "target": target}
     saved = _again("battle_round", arguments)
@@ -509,17 +518,35 @@ async def battle_round(order: str, skill: str = "", difficulty: str = "常规", 
             raise ValueError("现在没有战斗或追逐：先用 start_fight 或 start_chase")
         if harm.strip() and not skill.strip():
             raise ValueError("harm 是检定成功时的伤害，需要同时填 skill")
-        action = await g._battle_action(order)
-        ruling = g._battle_ruling(action)
-        if ruling is None:  # something else than fighting or running: the keeper rules it, as the arbiter does on the screens
-            aim = target.strip() or (action.order or {}).get("target", "")
-            if harm.strip() and st.fight is not None and st.fight.get(aim) is None:
-                raise ValueError(f"target 不在这场战斗中：{aim or '未填'}。参战的：" + "、".join(f"{f.name}({f.id})" for f in st.fight.fighters))
-            ruling = Ruling(needs_roll=bool(skill.strip()), skill=skill.strip(), harm=harm.strip(), harm_to=aim, reason="战斗中的其他行动",
-                            difficulty=difficulty if difficulty in DIFFICULTY_ZH else "常规")  # type: ignore[arg-type]
+        enc = g.encounter()
+        me, words = st.investigator, order.strip()
+        if st.chase is not None:
+            mine = st.chase.get(me.id)
+            found = next((o for label, _n, o in (chase_options(mine, st.chase) if mine is not None else []) if label == words), None)
+            chased = found or _order_of(DeclaredAction(do="other", summary=f"{me.name}：{words}"))
+            action = Action(kind="move", summary=f"{me.name}：{words}", encounter=enc.id if enc else "", declared={"chase": chased.model_dump()})
+            ruling = Ruling(needs_roll=False, reason="追逐中")
+        else:
+            d = choices.match(g, me.id, words)
+            ruling = Ruling(needs_roll=False, reason="战斗中")
+            if d is None:  # something else than the rules settle: the keeper rules it, as the arbiter does on the screens
+                aim = target.strip()
+                known = {p.id for p in enc.participants} if enc is not None else set()
+                if harm.strip() and aim not in known:
+                    raise ValueError(f"target 不在这场战斗中：{aim or '未填'}。参战的：" + "、".join(
+                        f"{g.world.name(p)}({p})" for p in known))
+                d = DeclaredAction(do="other", summary=f"{me.name}：{words}")
+                ruling = Ruling(needs_roll=bool(skill.strip()), skill=skill.strip(), reason="战斗中的其他行动",
+                                difficulty=difficulty if difficulty in DIFFICULTY_ZH else "常规",  # type: ignore[arg-type]
+                                effects=[RuledEffect(kind="damage", target=aim, dice=harm.strip())] if harm.strip() else [])
+            declared = {"plan": EncounterTurnPlan(action=d).model_dump(mode="json", by_alias=True), "source": "mcp",
+                        "ruling": ruling.model_dump(mode="json")}
+            action = Action(kind="attack" if d.do in ("attack", "shoot", "maneuver") else "other", summary=d.summary,
+                            encounter=enc.id if enc else "", declared=declared)
         saved = (action, ruling)
     heard: list[dict] = []
     turn = await _resolved("battle_round", arguments, *saved, heard=heard)
+    await _need().archive_encounter()
     _save()
     report = _battle_report(turn, heard)
     report["battle"]["order"] = saved[0].summary

@@ -96,10 +96,14 @@ PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes cam
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
+# The encounter is the keeper's: true names, every HP, the arrangements (engine/encounter); the table gets
+# its public view instead (views.table, as encounter_public).
+PRIVATE |= {"encounter", "encounter_log", "sightings", "encounter_public"}
 # What a fight or a chase shows of someone who is not an investigator (engine/combat.view): no sheet behind it
 SHOWN = ("id", "name", "kind", "side", "status", "prone", "held_by", "stance", "weapon", "portrait", "build", "pos", "speed",
          "actions")
 LOOKS = {"轻伤": 90, "受伤": 60, "重伤": 20}  # hit points out of 100 that look as hurt as the word says (Fighter.wound_word)
+REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
           "reveal"}
@@ -504,7 +508,7 @@ class Hub:
         """Three ideas for a seated player's next move, from the view the AI seats get. The game
         does not wait for them, and they go to that player alone."""
         try:
-            ideas = await self.cast.suggest(self.state, seat, situation(self.m, self.state, seat))
+            ideas = await self.cast.suggest(self.state, seat, situation(self.m, self.state, seat, self.game))
         except Exception:  # the table plays on without them; the player's screen says none came
             ideas = []
         finally:
@@ -718,10 +722,14 @@ class Hub:
         st = self.state
         view = st.model_dump(mode="json", exclude=PRIVATE)
         view["flags"], view["fired"] = [], []
-        if st.fight is not None:  # a foe as the table sees it (public_fighter); the orders and the arbiter's reason stay here
-            words = {f.id: f.wound_word() for f in st.fight.fighters}
-            view["fight"]["fighters"] = [public_fighter(f, words.get(f["id"], "无伤")) for f in view["fight"]["fighters"]]
-            view["fight"]["orders"], view["fight"]["reason"] = {}, ""
+        view["fight"] = None  # an old save's, converted on load (engine/encounter/migrate)
+        from ..engine.encounter import views
+
+        game = getattr(self, "game", None)
+        now = views.table(game) if game is not None else None
+        if now is not None:  # the fight as the table sees it, each seat's choices with it
+            now = public_battle(now)
+        view["encounter_public"] = now
         if st.chase is not None:
             ch = st.chase
             words = {f.id: f.wound_word() for f in ch.runners}
@@ -1037,6 +1045,10 @@ class Hub:
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
         try:
             await self._settle_round(order)
+            if self.game.fighting() and not any(self._acts(seat) for seat, _ in order) and not st.ending:
+                # Nobody at the table can act (all down): the fight goes on without them, a round at a time.
+                lead = next((i.id for i in st.investigators), "")
+                await self._safely(self._run("/encounter", lead, ai=True), "这一轮战斗", "/encounter")
         finally:
             self.game.end_round()
         if st.held and not st.ending:  # the round's last action was not told (it failed, or was let go): told now
@@ -1278,7 +1290,7 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id))  # in a fight: its choices
+        text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game))  # in a fight: its choices
         await self._event({"type": "said", "who": inv.name, "player": "", "text": text, "ai": True})
         await self._run(text, inv.id, ai=True)
 
@@ -1294,14 +1306,20 @@ class Hub:
             if offer is None:
                 break
             choice = None
-            who = self.sits.get(inv_id)
-            if not ai and who is not None:
-                queue = self.choices[inv_id]
+            asked = offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id  # a blow's answer: the defender's
+            who = self.sits.get(asked)
+            if (not ai or asked != inv_id) and who is not None:
+                queue = self.choices[asked]
                 while not queue.empty():
                     queue.get_nowait()
                 await self._send(who, {"t": "offer", "offer": offer})
-                choice = await queue.get()
-            if offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
+                try:
+                    choice = await asyncio.wait_for(queue.get(), REACTION_WAIT if asked != inv_id else None)
+                except TimeoutError:
+                    choice = None
+            if offer.get("kind") in ("reaction", "redeclare"):  # answered, or the default (what they set for the round)
+                choice = choice if any(o["id"] == choice for o in offer.get("options", [])) else offer.get("default")
+            elif offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
                 choice = "roll"
             elif choice not in ("push", "luck", "drop"):
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
