@@ -291,7 +291,7 @@ class Fighting:
         for fid in who:
             ent = self.world.rec.entities.get(fid) if self.world is not None and fid in npcs else None
             if ent is not None and ent.at != st.location:
-                self.world.apply(Move(id=f"scripted:{st.turn}:{fid}", actor=ENGINE, entity=fid, to=st.location))
+                self.world.apply(Move(id=f"scripted:{st.turn}:{fid}:{st.location}", actor=ENGINE, entity=fid, to=st.location))
         return who
 
     def _ambush(self, ev: Event) -> list[dict]:

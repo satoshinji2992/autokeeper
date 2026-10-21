@@ -192,3 +192,17 @@ async def test_a_players_copy_at_a_lan_table_keeps_the_routes_back(fake):
     copy = table(m, game.state)
     assert all(loc["chase"] == [] for loc in copy["locations"]) and copy["creatures"] == []
     await game.close()
+
+
+def test_a_second_answer_for_the_same_one_is_not_written_twice():
+    """A field written twice would not land (yamledit.put refuses a field that has a value): the
+    whole pass would be taken back. The first answer for each creature, NPC and event stands."""
+    m = Module.load(EXAMPLE)
+    m.creatures.append(Creature(id="coil", name="齿轮背后的藤", description="缠在齿轮背后的东西"))
+    m.events.append(Event(id="e_coil", title="藤扑了出来", when="flag:x", text=""))
+    out = adapt.Combat.model_validate({
+        "creatures": [{"creature": "coil", "called": "缠在齿轮上的东西"}, {"creature": "coil", "called": "黑影"}],
+        "npcs": [{"npc": "warden", "stats": {"生命": 9}}, {"npc": "warden", "stats": {"生命": 7}}],
+        "triggers": [{"event": "e_coil", "fight": ["coil"]}, {"event": "e_coil", "fight": ["warden"]}]})
+    assert adapt._armed(m, out) == [("put", "creatures", "coil", "called", "缠在齿轮上的东西"), ("put", "npcs", "warden", "stats", {"生命": 9}),
+                                    ("put", "events", "e_coil", "fight", ["coil"])]

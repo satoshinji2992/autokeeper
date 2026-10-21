@@ -686,9 +686,11 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
     lacks is left out."""
     found: list[tuple[Any, ...]] = []
     creatures = {c.id: c for c in m.creatures}
+    done: set[str] = set()  # each one once: a second answer for the same would write a field twice
     for x in out.creatures:
-        if (c := creatures.get(x.creature)) is None:
+        if (c := creatures.get(x.creature)) is None or f"creature:{c.id}" in done:
             continue
+        done.add(f"creature:{c.id}")
         called = x.called.strip()
         if called and not c.called.strip() and c.name not in called and len(called) <= 20:  # what it is stays the keeper's
             found.append(("put", "creatures", c.id, "called", called))
@@ -710,8 +712,9 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
             found.append(("replace", "creatures", c.id, "notes", f"{c.notes.strip()} {x.notes.strip()}".strip()))
     npcs, items = {n.id: n for n in m.npcs}, {i.id for i in m.items}
     for x in out.npcs:
-        if (n := npcs.get(x.npc)) is None:
+        if (n := npcs.get(x.npc)) is None or f"npc:{n.id}" in done:
             continue
+        done.add(f"npc:{n.id}")
         if x.stats and not n.stats:
             found.append(("put", "npcs", n.id, "stats", x.stats))
         held = carried([n.look, *(i.name for i in m.items if i.owner == n.id)])
@@ -737,8 +740,9 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
         found.append(("put", "locations", loc.id, "chase", legs))
     people, events = {*npcs, *creatures}, {e.id: e for e in m.events}
     for t in out.triggers:
-        if (e := events.get(t.event)) is None or e.fight or e.chase or e.ending:
+        if (e := events.get(t.event)) is None or e.fight or e.chase or e.ending or f"event:{e.id}" in done:
             continue
+        done.add(f"event:{e.id}")
         fight, chase = [x for x in dict.fromkeys(t.fight) if x in people], [x for x in dict.fromkeys(t.chase) if x in people]
         if fight:
             found += [("put", "events", e.id, "fight", fight)] + ([("put", "events", e.id, "surprise", t.surprise)] if t.surprise else [])
