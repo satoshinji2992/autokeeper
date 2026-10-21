@@ -942,6 +942,8 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
     else:
         figure = Image.open(picture_source(path)).convert("RGB")
         cut = silhouette(figure)
+    if cut is not None:  # lit low out of the black: brought up, or a few dozen cells keep only murk
+        figure = ImageEnhance.Brightness(ImageOps.autocontrast(figure, cutoff=0.5)).enhance(1.12)
     yy, xx = np.mgrid[0:h, 0:w].astype(float)
     if scene:
         scenery.ensure(scene)
@@ -954,11 +956,16 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
         back = ImageEnhance.Brightness(back).enhance(0.2)
     else:
         glow = np.exp(-(((xx - w / 2) / (w * 0.32)) ** 2 + ((yy - h * 0.35) / (h * 0.55)) ** 2))
-        back = Image.fromarray(np.stack([glow * 96 + 6, glow * 6 + 2, glow * 8 + 3], axis=-1).astype(np.uint8))
-    tall = h * (0.4 + 0.75 * near)
+        back = Image.fromarray(np.stack([glow * 70 + 5, glow * 5 + 2, glow * 6 + 3], axis=-1).astype(np.uint8))
+    if scene:  # standing in the place: its lower part always below the frame, so no edge to it
+        tall = h * (0.4 + 0.75 * near)
+        top = h - tall * 0.86
+    else:  # face to face: its face (a third of the way down a head-and-shoulders picture) high in the middle
+        tall = h * (1.1 + 0.35 * near)
+        top = h * 0.4 - tall * 0.3
     size = (max(1, round(figure.width * tall / figure.height)), max(1, round(tall)))
     figure = figure.resize(size, Image.Resampling.LANCZOS)
-    x, y = (w - size[0]) // 2, round(h - tall * 0.86)  # its lower part always below the frame: no edge to it
+    x, y = (w - size[0]) // 2, round(top)
     if cut is not None:
         mask = cut.resize(size, Image.Resampling.BILINEAR)
     elif scene:

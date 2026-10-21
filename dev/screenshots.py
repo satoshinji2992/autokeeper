@@ -328,6 +328,9 @@ async def main(names: list[str]) -> None:
     scratch = OUT / "data"
     shutil.rmtree(scratch, ignore_errors=True)
     paths.DATA, paths.USER_DIR = scratch, OUT / "user"  # nothing written to the real data folder
+    drawn = ROOT / "data" / "cache" / "creatures"
+    if drawn.is_dir():  # creatures an image model already drew here (engine/visuals.py): shown as a game shows them
+        shutil.copytree(drawn, paths.creatures("_").parent)
     for name in names or list(SHOTS):
         svg = await SHOTS[name]()
         print(png(svg))
