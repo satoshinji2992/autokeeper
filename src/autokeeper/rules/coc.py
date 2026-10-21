@@ -401,30 +401,22 @@ class Rules:
             result.bout = self.dice.table("BMR")
         return result
 
-    def damage(self, inv: Investigator, amount: int | str) -> Damage:
+    def damage(self, inv: Investigator, amount: int | str, *, means: str = "other", injury: str = "") -> Damage:
+        """A wound to an investigator, through rules/wounds (Keeper Rulebook p. 100): a major wound
+        rolls CON or falls unconscious, more than the maximum kills, 0 HP is unconscious or, with a
+        major wound, dying. `amount` a number or dice to roll; `injury` the wound's id (once only)."""
+        from . import wounds
+
         amount = amount if isinstance(amount, int) else self.dice.total(amount)
-        before = inv.hp
-        result = Damage(amount, before, max(0, before - amount))
-        if amount > inv.hp_max:  # more than the maximum kills; exactly it is a major wound (Keeper Rulebook p. 100)
-            inv.hp = 0
-            result.after, result.dead = 0, True
-            inv.add_condition("死亡")
-            return result
-        inv.hp = result.after
-        if amount * 2 >= inv.hp_max:
-            result.major_wound = True
-            inv.add_condition("重伤")
-            result.con_check = self.check(inv, "体质", mark=False)
-            if not result.con_check.passed:
-                result.unconscious = True
-                inv.add_condition("昏迷")
-        if inv.hp == 0:
-            if "重伤" in inv.conditions:
-                result.dying = True
-                inv.add_condition("濒死")
-            else:
-                result.unconscious = True
-                inv.add_condition("昏迷")
+        body = wounds.Body.of(inv)
+        found = wounds.assess(body, amount, means)  # type: ignore[arg-type]
+        con = self.check(inv, "体质", mark=False) if found.con else None
+        hurt = wounds.apply_wound(body, amount, means, con=con.level if con else None,  # type: ignore[arg-type]
+                                  injury=injury)
+        result = Damage(amount, inv.hp, hurt.body.hp, major_wound=hurt.major, con_check=con,
+                        unconscious=hurt.unconscious or (hurt.major and con is not None and not con.passed),
+                        dying=hurt.dying, dead=hurt.dead)
+        wounds.onto(inv, hurt.body)
         return result
 
     def heal(self, inv: Investigator, amount: int) -> int:
