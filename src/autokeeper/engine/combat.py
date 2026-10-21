@@ -281,7 +281,7 @@ def choices(me: Fighter, fight: Fight) -> list[tuple[str, str]]:
                 out.append((order_text(o, names), f"{a.skill} {a.value} · 余弹 {a.ammo}" if a.ammo is not None else f"{a.skill} {a.value}"))
             else:
                 o = Order(do="attack", target=f.id, weapon=a.name, stance=stance)
-                out.append((order_text(o, names), f"{a.skill} {a.value} · 伤害 {a.damage.replace('DB', me.db if me.db not in ('0', '') else '').rstrip('+')}"))
+                out.append((order_text(o, names), f"{a.skill} {a.value} · 伤害 {damage_words(a.damage, me.db)}"))
         for m in ("推倒", "缴械", "制住"):
             out.append((order_text(Order(do="maneuver", target=f.id, maneuver=m, stance=stance), names), f"战技 · 体格 {me.build} 对 {f.build}"))
     for f in allies:
@@ -298,9 +298,21 @@ def choices(me: Fighter, fight: Fight) -> list[tuple[str, str]]:
     return out
 
 
+def damage_words(damage: str, db: str) -> str:
+    """A weapon's damage as a player reads it: the bonus written in (1D3+1D4), none when it has none."""
+    bonus = db.strip()
+    has = "DB" in damage
+    plain = damage.replace("+半DB", "").replace("+DB", "").replace("半DB", "").replace("DB", "").replace("+灼烧", "+火")
+    if not has or bonus in ("", "0", "+0"):
+        return plain
+    return plain + (bonus if bonus.startswith(("+", "-")) else "+" + bonus) + ("（减半）" if "半DB" in damage else "")
+
+
 def chase_choices(me: Fighter, ch: Chase) -> list[tuple[str, str]]:
     names = {f.id: f.name for f in ch.runners}
-    out = [(order_text(Order(do="run"), names), f"移动 {me.actions or me.speed} 格")]
+    moving = [f for f in ch.runners if f.standing and f.id not in ch.hidden]
+    steps = chase_rules.actions_for(me, min((f.speed for f in moving), default=me.speed))
+    out = [(order_text(Order(do="run"), names), f"这一轮能跑 {steps} 段")]
     if me.side == ch.quarry:
         lead = chase_rules.gap(ch.running(ch.quarry), ch.running("foe" if ch.quarry == "party" else "party"))
         if lead >= chase_rules.SIGHT:

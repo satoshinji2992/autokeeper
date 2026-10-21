@@ -74,6 +74,12 @@ TONES: dict[str, tuple[float, float, float, tuple[int, int, int] | None, float, 
     "友善": (1.08, 1.12, 1.00, (255, 190, 120), 0.35, 0.10),
     "慌乱": (1.12, 0.60, 0.85, (255, 245, 170), 0.30, 0.00),
 }
+# The same six numbers for the scene while a fight is on (dark, drained, a blood-red cast, closing
+# in) and while a chase is (dark and cold, the edges falling away): tui/widgets/panels.SceneArt.mode.
+STAGES: dict[str, tuple[float, float, float, tuple[int, int, int] | None, float, float]] = {
+    "战斗": (0.62, 0.6, 1.3, (150, 14, 12), 0.30, 0.70),
+    "追逐": (0.70, 0.55, 1.30, (60, 80, 140), 0.30, 0.80),
+}
 _HEX = re.compile(r"#([0-9a-fA-F]{6})")
 DEFAULT_INK = "#c8c8c8"  # unmasked strokes, so they take the light too
 GLOW = set("oyYW")  # lamplight, candles, lit windows: they stay bright after dark
@@ -105,11 +111,15 @@ def regrade(color: str, grade: str, when: str = "") -> str:
     only half as far, as in shade)."""
     if not grade:
         return color
+    if "+" in grade:  # a graded copy of a graded scene: the fight's red, then the heartbeat's dark
+        for part in grade.split("+"):
+            color = regrade(color, part, when)
+        return color
 
     def one(m: re.Match) -> str:
         rgb = [int(m.group(1)[i : i + 2], 16) for i in (0, 2, 4)]
-        if grade in TONES:
-            bright, sat, _, tint, amount, _ = TONES[grade]
+        if grade in TONES or grade in STAGES:
+            bright, sat, _, tint, amount, _ = TONES.get(grade) or STAGES[grade]
             rgb = _toned(rgb, 1 - (1 - bright) * 0.5, sat, tint, amount)
         elif grade in GRADES:
             rgb = [c * GRADES[grade] for c in rgb]

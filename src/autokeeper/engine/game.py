@@ -163,6 +163,7 @@ class Game(Fighting):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         scenery.fill(module)  # every place with a picture: painted by program where the module has none
         scenery.fill_people(module)  # every person a portrait, likewise
+        scenery.fill_creatures(module)  # and every creature, for when it comes to a fight (engine/fighting.py)
         self.emit: Emit = emit or _silent
         self.checkpoint: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None

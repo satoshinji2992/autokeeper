@@ -582,7 +582,9 @@ class Fighting:
         mine = ex.roll if who.kind == "investigator" else ex.answer if target.kind == "investigator" else None
         out["events"].append({
             "type": "fight_act", "round": fight.round, "attacker": who.id, "defender": target.id, "attacker_name": who.name,
-            "defender_name": target.name, "kind": ex.kind, "attack": atk.name, "verb": verb,
+            "defender_name": target.name, "attacker_side": who.side, "defender_side": target.side,
+            "hurt_side": (fight.get(ex.hurt).side if ex.hurt and fight.get(ex.hurt) else ""),  # type: ignore[union-attr]
+            "kind": ex.kind, "attack": atk.name, "verb": verb,
             "roll": self._dice(ex.roll) if ex.roll is not None else None,
             "answer": self._dice(ex.answer) if ex.answer is not None else None, "reaction": ex.reaction, "winner": ex.winner,
             "hurt": ex.hurt, "damage": ex.damage, "damage_text": ex.damage_text, "effect": ex.effect, "extreme": ex.extreme,

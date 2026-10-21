@@ -11,6 +11,7 @@ from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 
 from .test_engine import FakeCast, make, run_turn
+from .test_tui import canned  # noqa: F401  (a fixture, used by name)
 
 THREAD = {"configurable": {"thread_id": "fight"}}
 
@@ -114,3 +115,56 @@ async def test_a_chase_runs_leg_by_leg_and_hiding_ends_it(module, fake):
     fake.queue(10, 20)  # out of sight: 潜行 hard against 侦查 regular
     out, _ = await run_turn(app, "躲藏", THREAD)
     assert game.state.chase is None and any(e["type"] == "chase_end" and e["end"] == "escaped" for e in out)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.engine.game import Game
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+    from autokeeper.tui.widgets.fight import ChaseStage, FightStage
+
+    from .test_tui import until
+
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="fight-screen")
+    state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
+    state.add("keeper", "钟楼里只有齿轮的声音。")
+    warden = battle.from_npc(module.npc("warden"))
+    me = battle.from_investigator(state.investigators[0])
+    state.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen = GameScreen(module, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        await pilot.pause(0.3)
+        stage = screen.query_one(FightStage)
+        assert stage.display and screen.has_class("-fight")  # a save opened mid-fight comes back to it
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display)
+        words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
+        assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
+        sent = []
+        screen.send_line = sent.append  # what picking sends, without playing it
+        picker.highlighted = 0
+        await pilot.press("enter")
+        await pilot.pause()
+        assert sent == [words[0]] and not picker.display
+        await screen.handle({"type": "fight_act", "round": 1, "attacker": "warden", "defender": me.id,
+                             "attacker_name": "老守钟人", "defender_name": me.name, "attacker_side": "foe",
+                             "defender_side": "party", "hurt_side": "party", "kind": "melee", "attack": "徒手",
+                             "roll": None, "answer": None, "reaction": "none", "winner": "attacker", "hurt": me.id,
+                             "damage": 2, "damage_text": "1D3 = 2", "effect": "", "extreme": False, "jammed": False,
+                             "empty": False, "notes": [], "line": "", "dice": None})
+        await pilot.pause(0.05)
+        assert screen.has_class("-hit")  # hurt: the stage shakes and flashes
+        assert screen.query(".fightcard")
+        state.fight = None
+        await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
+        await pilot.pause()
+        assert not stage.display and not screen.has_class("-fight")
+        await screen.handle({"type": "chase_start", "chase": battle.chase_view(battle.Chase(
+            runners=[me, warden], track=battle.default_track("street"), quarry="party")), "line": "【追逐开始】"})
+        await pilot.pause()
+        assert screen.query_one(ChaseStage).display and screen.has_class("-chase")

@@ -672,9 +672,15 @@ def frame(im: Image.Image, cols: int, rows: int, *, cell: float = 0.5, widest: f
 
 def grade(im: Image.Image, name: str, when: str = "") -> Image.Image:
     """A copy for the weather layer: torchlight and flicker exposures, fog, lightning. Or a
-    portrait in a speaker's mood (artkit.TONES)."""
+    portrait in a speaker's mood (artkit.TONES). "战斗+dim": one grade on top of another."""
+    if "+" in name:
+        for part in name.split("+"):
+            im = grade(im, part, when)
+        return im
     if name in artkit.TONES:
         return _expose(im, *artkit.TONES[name], glaze=True)
+    if name in artkit.STAGES:
+        return _expose(im, *artkit.STAGES[name])
     if name in artkit.GRADES:
         return ImageEnhance.Brightness(im).enhance(artkit.GRADES[name])
     if name in artkit.HAZE:

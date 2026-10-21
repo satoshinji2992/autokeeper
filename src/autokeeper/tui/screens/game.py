@@ -47,6 +47,7 @@ from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
 from ..widgets import tips
 from ..widgets.devpanel import DevPanel
+from ..widgets.fight import ChaseStage, FightStage, banner, chase_lines, fight_card, pulse_rate, title_frames
 from ..widgets.pages import Page, PagesHead, PagesModal, background_view, progress_view
 from ..widgets.panels import (
     LIGHT_MARK,
@@ -100,6 +101,8 @@ COMMANDS = (
 
 
 
+FIGHT_EVENTS = ("fight_start", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
+                "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
 
 
@@ -165,6 +168,8 @@ class GameScreen(Screen):
                 with Container(id="stage"):  # the scene, and over its right side whoever is talking
                     yield SceneArt(id="scene")
                     yield Speaker()
+                    yield FightStage()  # a fight over the right of it, a chase along its bottom (widgets/fight.py)
+                    yield ChaseStage()
                 yield StoryLog(id="story")
                 yield DevPanel(id="dev")
                 yield Static(id="status")
@@ -204,6 +209,7 @@ class GameScreen(Screen):
         self.game.checkpoint = lambda: write_save(self.state, self.m)
         self._scene(self.state.location)
         self._panels()
+        self.call_after_refresh(self._battle_resumed)
         self.set_interval(0.1, self._spin)
         self.set_interval(1.0, self._backstage)
         if self.spectate:
@@ -294,6 +300,7 @@ class GameScreen(Screen):
         picker = self.query_one("#picker", OptionList)
         if not picker.display:
             return False
+        self._battle_picking = False
         picker.display = False
         self.query_one("#command", Input).focus()
         return True
@@ -302,6 +309,12 @@ class GameScreen(Screen):
     def _picked(self, event: OptionList.OptionSelected) -> None:
         key = event.option.id or ""
         box = self.query_one("#command", Input)
+        if getattr(self, "_battle_picking", False):  # a fight's or a chase's order: sent as picked
+            self._battle_picking = False
+            self._unpick()
+            if not self.busy:
+                self.send_line(key)
+            return
         box.value = self._skill_value = key
         box.cursor_position = len(key)
         self._unpick()
@@ -348,6 +361,7 @@ class GameScreen(Screen):
                 self.set_timer(0.05, self._send_queued)
             else:
                 self.plays.ready()  # a plugin's question waited for the turn to end
+                self.call_after_refresh(self._offer_orders)  # in a fight or a chase: this round's choices
 
     def _send_queued(self) -> None:
         """The keeper is done: the action typed ahead goes in. A turn that broke off goes on
@@ -528,6 +542,13 @@ class GameScreen(Screen):
         left.append(f"  《{self.m.title}》  ", style="bold")
         left.append(f"{LIGHT_MARK.get(when, '☀')} {st.clock} {when}  ", style="bold")
         left.append(f"◆ {self.m.location(st.location).name}")
+        if st.fight is not None:
+            left.append(f"   ⚔ 战斗 · 第 {max(1, st.fight.round)} 轮 ", style="bold #ff4d4d")
+            inv = self._viewer()
+            beat = "♥" if not self.has_class("-beat") else "♡"
+            left.append(f"{beat} {inv.hp}/{inv.hp_max}", style="bold #c1121f" if inv.hp * 3 <= inv.hp_max else "bold #ffb000")
+        elif st.chase is not None:
+            left.append(f"   ⟫ 追逐 · 第 {max(1, st.chase.round)} 轮", style="bold #9fb4c8")
         right = Text(no_wrap=True)
         if not self.query_one("#right").display:
             inv = self._viewer()
@@ -728,6 +749,8 @@ class GameScreen(Screen):
         elif t == "held":  # a LAN round: the others' actions first, then one telling of them all
             story.add("system", Text("本轮其他调查员的行动结算后，守秘人一并讲述。", style="dim"))
             self._status("")
+        elif t in FIGHT_EVENTS:
+            self._battle_event(ev)
         elif t == "waived":  # a check asked for with .ra that the keeper needs no dice for
             story.add("dice", Text(f"◈ {ev['who']} 的{ev['skill']}不用掷：守秘人直接说结果", style="dim"))
         elif t == "repeat":  # the same attempt again: no dice, the earlier result stands
@@ -818,6 +841,174 @@ class GameScreen(Screen):
         elif t in ("plugin_show", "plugin_prompt", "plugin_closed", "plugin_answered"):
             self.plays.handle(ev)
         tips.after(self, ev)  # the first time something happens: one line on how it works
+
+    # -- a fight and a chase on the stage (widgets/fight.py) ----------------------------------
+    def _battle_event(self, ev: dict) -> None:
+        t = ev["type"]
+        story, scene = self.story, self.query_one(SceneArt)
+        fight, chase = self.query_one(FightStage), self.query_one(ChaseStage)
+        style = getattr(self.app, "art_style", "photo")
+        if t == "fight_start":
+            self.query_one(Speaker).leave()
+            chase.hide()
+            scene.glitch(18)  # the picture tears, then comes back dark and red (the glitch and a redraw share a worker)
+            self.set_timer(0.7, lambda: scene.set_mode("fight"))
+            fight.show(ev["fight"], self.m, style)
+            self.add_class("-fight")
+            self.remove_class("-chase")
+            story.add("event", banner(ev.get("line", "").replace("【", "").replace("】", " · ") or "战斗开始"))
+            self._title("战斗")
+            self._heartbeat()
+            if not self.busy:
+                self.call_after_refresh(self._offer_orders)
+        elif t == "fight_round":
+            fight.round_begins(ev["order"], ev["fight"])
+            story.add("system", Text(f"── 第 {ev['round']} 轮 ──", style="#7a0a0a", justify="center"))
+        elif t == "fight_act":
+            story.add("fightcard", fight_card(ev))
+            fight.act(ev)
+            if ev.get("dice"):
+                self.query_one(DiceTray).roll(ev["dice"])
+            if ev.get("damage") and ev.get("winner") != "none":
+                scene.splash()
+                if ev.get("hurt_side") == "party":
+                    self._hit()
+        elif t == "fight_state":
+            fight.show(ev["fight"], self.m, style)
+            if ev.get("lines"):
+                story.add("system", Text("\n".join(f"· {line}" for line in ev["lines"]), style="#b39b8a"))
+            self._panels()
+        elif t == "fight_say":
+            body = Text()
+            body.append(f"{ev['name']}\n", style="bold")
+            body.append(ev["text"])
+            story.add("npc", body)
+        elif t == "fight_end":
+            fight.hide()
+            self.remove_class("-fight", "-beat")
+            if self.state.chase is None:
+                scene.set_mode("")
+            story.add("event", banner(ev.get("text", "战斗结束"), colour="#e8dec4"))
+            self._panels()
+        elif t == "chase_start":
+            fight.hide()
+            self.query_one(Speaker).leave()
+            scene.set_mode("chase")
+            chase.show(ev["chase"], style, time_of_day(self.state.minutes))
+            self.add_class("-chase")
+            self.remove_class("-fight")
+            story.add("event", banner((ev.get("line") or "追逐开始").replace("【", "").replace("】", " · "), colour="#9fb4c8"))
+            if ev.get("speeds"):
+                story.add("system", chase_lines(ev["speeds"]))
+            self._title("追逐", colour="#9fb4c8")
+            self._heartbeat()
+            if not self.busy:
+                self.call_after_refresh(self._offer_orders)
+        elif t in ("chase_round", "chase_state"):
+            chase.show(ev["chase"], style, time_of_day(self.state.minutes))
+            if ev.get("lines"):
+                story.add("system", chase_lines(ev["lines"]))
+            self._panels()
+        elif t == "chase_end":
+            chase.hide()
+            self.remove_class("-chase", "-beat")
+            if self.state.fight is None:
+                scene.set_mode("")
+            story.add("event", banner(ev.get("text", "追逐结束"), colour="#e8dec4"))
+        self._topbar()
+
+    def _battle_resumed(self) -> None:
+        """A save opened in the middle of a fight or a chase: the stage as it stood."""
+        from ...engine import combat as battle
+
+        st = self.state
+        if st.fight is not None:
+            self._battle_event({"type": "fight_start", "fight": battle.view(st.fight), "line": "战斗继续"})
+        elif st.chase is not None:
+            self._battle_event({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "追逐继续"})
+
+    def _title(self, word: str, colour: str = "#c1121f") -> None:
+        """The word across the stage as a fight or a chase begins, glitching in and fading."""
+        stage = self.query_one("#stage")
+        width = stage.size.width or 80
+        title = Static(classes="battle-title")
+        stage.mount(title)
+        frames = title_frames(word, width)
+
+        def play(k: int = 0) -> None:
+            if not title.is_attached:
+                return
+            if k < len(frames):
+                title.update(frames[k])
+                self.set_timer(0.07, lambda: play(k + 1))
+            else:
+                title.styles.animate("opacity", 0.0, duration=0.9, on_complete=title.remove)
+
+        play()
+
+    def _hit(self) -> None:
+        """An investigator was hurt: the stage shakes and flashes red."""
+        stage = self.query_one("#stage")
+        self.add_class("-hit")
+        steps = iter([(2, 0), (-2, 0), (1, 0), (-1, 0), (0, 0)])
+
+        def step() -> None:
+            try:
+                stage.styles.offset = next(steps)
+                self.set_timer(0.045, step)
+            except StopIteration:
+                self.remove_class("-hit")
+
+        step()
+
+    def _heartbeat(self) -> None:
+        """While a fight or a chase is on, a heartbeat on the top bar and the stage's edge, quicker
+        the worse the investigator is hurt."""
+        if getattr(self, "_beating", False):
+            return
+        self._beating = True
+
+        def beat(on: bool = True) -> None:
+            st = self.state
+            if not self.is_attached or (st.fight is None and st.chase is None):
+                self._beating = False
+                self.remove_class("-beat")
+                return
+            self.set_class(on, "-beat")
+            self._topbar()
+            inv = self._viewer()
+            rate = pulse_rate(inv.hp, inv.hp_max)
+            self.set_timer(0.12 if on else rate, lambda: beat(not on))
+
+        beat()
+
+    def _offer_orders(self) -> None:
+        """In a fight or a chase, the investigator's choices for the round over the input box."""
+        st = self.state
+        if self.busy or self.spectate or (st.fight is None and st.chase is None) or not self.is_attached:
+            return
+        from ...engine import combat as battle
+
+        me = st.investigator.id
+        if st.fight is not None:
+            f = st.fight.get(me)
+            choices = battle.choices(f, st.fight) if f is not None and f.standing else []
+            title = "战斗行动 · 回车选定 · Esc 自己输入"
+        else:
+            assert st.chase is not None
+            f = st.chase.get(me)
+            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing else []
+            title = "追逐行动 · 回车选定 · Esc 自己输入"
+        if not choices:
+            return
+        picker = self.query_one("#picker", OptionList)
+        picker.clear_options()
+        picker.add_options([Option(Text.assemble((words, "bold"), ("  " + note, "dim")), id=words) for words, note in choices])
+        picker.highlighted = 0
+        picker.border_title = title
+        picker.display = True
+        picker.focus()
+        self._battle_picking = True
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         """Their face is on the stage while they talk (Speaker), so the story keeps to words."""
@@ -1169,8 +1360,8 @@ class GameScreen(Screen):
         """AI companions act after the human, every other turn."""
         st = self.state
         ai = [i for i, inv in enumerate(st.investigators) if inv.id not in st.human and inv.can_act]
-        if not ai or st.ending or st.turn % 2:
-            return
+        if not ai or st.ending or st.turn % 2 or st.fight is not None or st.chase is not None:
+            return  # in a fight or a chase they act in its rounds (engine/fighting.py, the tactics)
         human_idx = st.active
         try:
             for idx in ai:

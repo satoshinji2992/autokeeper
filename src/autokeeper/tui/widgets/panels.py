@@ -91,6 +91,7 @@ class SceneArt(Static):
         self.style_name = "picture"
         self.when = ""  # time of day, lights the art
         self.effects = True  # weather animation (Esc menu → 设置 switches it; Ctrl+P too)
+        self.mode = ""  # "fight" or "chase" while one is on: the scene graded and moving with it (set_mode)
         self.madness = 0.0
         self._burst = 0
         self._art: Text | None = None  # the current art, ready to paint
@@ -178,6 +179,8 @@ class SceneArt(Static):
         own (the module's, else read off the place for this hour). At most two."""
         if not self.effects or not (self.picture or self._uses_image()):
             return []
+        if self.mode:  # a fight: blood running down and a heartbeat; a chase: the world rushing past
+            return ["blood", "pulse"] if self.mode == "fight" else ["rush", "pulse"]
         own = self.weather[:2] or weather.infer(self.place, self.description, self.when)
         if self.image and scenery.painted(self.image) and scenery.kind_of(self.place, self.description) in scenery.INDOOR:
             own = [k for k in own if k not in ("rain", "snow")]  # a painted room: the module's snow was for its photo of the outside
@@ -198,6 +201,8 @@ class SceneArt(Static):
         `graded` makes a copy for the weather layer; "beam" is plain white light (a torch)."""
         w, h = self._fit()
         when, graded = ("", "") if graded == "beam" else (self.when, graded)
+        tone = {"fight": "战斗", "chase": "追逐"}.get(self.mode, "")  # a fight's red, a chase's cold, under everything
+        graded = f"{tone}+{graded}" if tone and graded else tone or graded
         if self._uses_image():
             return _tall(center(Text.from_ansi(imagery.render(self.image, w, h, self.style_name, when, True, graded, people=self.people)), w), h)
         if self.picture:
@@ -227,7 +232,7 @@ class SceneArt(Static):
     def _look(self) -> tuple:
         """Everything a load draws from."""
         return (self.place, self.picture, self.mask, self.image, self.people, tuple(self.weather), self.description, self.sky,
-                self.style_name, self.when, self.effects, self.covered, self._fit())
+                self.style_name, self.when, self.effects, self.covered, self._fit(), self.mode)
 
     def _refresh(self, reveal: bool = False) -> None:
         self._reveal = self._reveal or reveal
@@ -280,6 +285,19 @@ class SceneArt(Static):
                 done = styles[style] = TextualStyle.from_rich_style(RichStyle.parse(style) if isinstance(style, str) else style, self.app.ansi_theme)
             spans.append(Span(start, end, done))
         return Content(frame.plain, spans)
+
+    def set_mode(self, mode: str) -> None:
+        """A fight ("fight") or a chase ("chase") begins or ends (""): the scene drawn again in its
+        light, with its weather."""
+        if mode != self.mode:
+            self.mode = mode
+            self.set_class(mode == "fight", "dread")
+            self._refresh()
+
+    def splash(self) -> None:
+        """A blow landed: blood over the picture (atmosphere.splash), during a fight."""
+        if self._atmo is not None and self.mode == "fight":
+            self._atmo.splash()
 
     def quiet(self, seconds: float) -> None:
         """Hold the weather still for a while (the player is typing)."""

@@ -668,3 +668,68 @@ async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not
         await a.close()
         await b.close()
     await closed(task)
+
+
+async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_once(monkeypatch, tmp_path, skills_dir, fake):
+    from autokeeper.engine import combat as battle
+
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-fight", human=[lead.id, "lin"])
+    state.location = "tower"
+    state.fight = battle.Fight(fighters=[battle.from_investigator(lead), battle.from_investigator(friend),
+                                         battle.from_npc(m.npc("warden"))], place="tower")
+
+    class Telling(TableCast):
+        def __init__(self) -> None:
+            super().__init__()
+            self.reports: list[str] = []
+
+        async def keeper(self, state, report, on_delta=None, lore=""):
+            self.reports.append(report)
+            return await super().keeper(state, report, on_delta, lore)
+
+    cast = Telling()
+    hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    fake.queue(*[90] * 6)  # every blow misses and every answer fails: nobody is hurt
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await a.send_json({"t": "hello", "name": "小明"})
+        await b.send_json({"t": "hello", "name": "小红"})
+        await until(a, lambda x: x["t"] == "welcome")
+        await until(b, lambda x: x["t"] == "welcome")
+        await a.send_json({"t": "sit", "investigator": "zhouheng"})
+        await b.send_json({"t": "sit", "investigator": "lin"})
+        await until(a, pool_open)
+        told = len(cast.reports)
+        await a.send_json({"t": "act", "text": "攻击 老守钟人（徒手）｜被攻击时闪避"})
+        await b.send_json({"t": "act", "text": "攻击 老守钟人（徒手）｜被攻击时反击"})
+        await a.send_json({"t": "done"})
+        await b.send_json({"t": "done"})
+        seen: list[dict] = []
+        while True:  # each throws their own dice when asked; the round goes on until it is told
+            msg = await asyncio.wait_for(a.receive_json(), 5)
+            if msg["t"] == "offer":
+                await a.send_json({"t": "choice", "mode": "roll"})
+            if msg["t"] == "event":
+                seen.append(msg["ev"])
+                if msg["ev"]["type"] == "keeper_end":
+                    break
+            while True:
+                try:
+                    other = await asyncio.wait_for(b.receive_json(), 0.01)
+                except TimeoutError:
+                    break
+                if other["t"] == "offer":
+                    await b.send_json({"t": "choice", "mode": "roll"})
+        kinds = [e["type"] for e in seen]
+        assert kinds.count("fight_round") == 1 and kinds.count("fight_act") == 3  # two investigators and the warden
+        assert len(cast.reports) == told + 1 and "【战斗 · 第 1 轮】" in cast.reports[-1]
+        assert hub.state.fight is not None and hub.state.fight.round == 1
+        await a.close()
+        await b.close()
+    await closed(task)

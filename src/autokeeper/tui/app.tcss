@@ -214,6 +214,51 @@ GameScreen.-dev #topbar {
 .dice {
     color: $secondary;
 }
+/* ---------- a fight and a chase (widgets/fight.py) ---------- */
+.fightcard {
+    padding: 0 1;
+    border-left: outer #7a0a0a;
+    background: #160606;
+}
+GameScreen.-fight #topbar {
+    background: #3a0606;
+}
+GameScreen.-fight #stage {
+    border-bottom: heavy #5c0606;
+}
+GameScreen.-fight.-beat #stage {
+    border-bottom: heavy #c1121f;
+}
+GameScreen.-fight #command {
+    border: tall #7a0a0a;
+}
+GameScreen.-fight #command:focus {
+    border: tall #c1121f;
+}
+GameScreen.-hit #stage {
+    background: #2a0404;
+}
+GameScreen.-hit #topbar {
+    background: #7a0a0a;
+}
+GameScreen.-chase #topbar {
+    background: #0e1626;
+}
+GameScreen.-chase #stage {
+    border-bottom: heavy #2a3448;
+}
+GameScreen.-chase.-beat #stage {
+    border-bottom: heavy #5a6478;
+}
+.battle-title {
+    layer: speaker;
+    dock: top;
+    width: 100%;
+    height: 1;
+    margin-top: 2;
+    content-align: center middle;
+    background: #0b0505 70%;
+}
 .clue {
     border: round $success;
     padding: 0 1;

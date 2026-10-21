@@ -27,8 +27,9 @@ GRADES_FOR = {
     "flicker": ("glow", "fade"),
     "torch": ("beam", "dim"),
     "redlight": ("red",),
+    "pulse": ("half",),  # a fight's or a chase's heartbeat: the scene darkens on the beat
 }
-LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash", "red")  # index order of the layer map
+LAYERS = ("", "glow", "fade", "haze", "haze2", "beam", "dim", "flash", "red", "half")  # index order of the layer map
 
 
 def grades(kinds: list[str]) -> list[str]:
@@ -105,7 +106,29 @@ class Atmosphere:
             return [Mote(kind, r.uniform(0, w), r.uniform(0, h), 0, 0, r.choice("·.·'"), colour) for _ in range(8 + w // 8)]
         if kind == "embers":
             return [self._ember(top=False) for _ in range(6 + w // 14)]
+        if kind == "blood":  # slow drips down the picture, from its top
+            return [self._drip(top=False) for _ in range(4 + w // 12)]
+        if kind == "rush":  # streaks going past: running
+            return [self._streak(edge=False) for _ in range(6 + w * h // 60)]
         return []
+
+    def _drip(self, *, top: bool = True) -> Mote:
+        r = self.rng
+        return Mote("blood", r.uniform(0, self.w), 0 if top else r.uniform(0, self.h * 0.6), 0, r.uniform(0.05, 0.22),
+                    r.choice("╷│┃╿"), r.choice(("#7a0a0a", "#8f1010", "#5c0606")))
+
+    def _streak(self, *, edge: bool = True) -> Mote:
+        r = self.rng
+        return Mote("rush", self.w + r.uniform(0, 8) if edge else r.uniform(0, self.w), r.uniform(0, self.h),
+                    -r.uniform(2.2, 4.0), 0, r.choice("─━╌"), r.choice(("#5a6478", "#3c4352", "#7a8496")))
+
+    def splash(self, n: int = 12) -> None:
+        """Blood over the picture where a blow landed: a burst of marks that run down with the drips."""
+        r = self.rng
+        x0, y0 = r.uniform(self.w * 0.2, self.w * 0.8), r.uniform(self.h * 0.2, self.h * 0.7)
+        for _ in range(n):
+            self.motes.append(Mote("blood", x0 + r.gauss(0, self.w * 0.06), y0 + r.gauss(0, self.h * 0.08), 0,
+                                   r.uniform(0.02, 0.12), r.choice("▓▒░●•"), r.choice(("#a01212", "#7a0a0a", "#c41a1a"))))
 
     def _drop(self, colour: str, heavy: bool, *, top: bool = True) -> Mote:
         r = self.rng
@@ -134,6 +157,16 @@ class Atmosphere:
                 m.y += m.vy + 0.35 * math.sin(self.t * 0.4 + i)
                 if m.x >= w or m.y >= h or m.y < 0:
                     m.x, m.y = r.uniform(-4, 0), r.uniform(0, h * 0.7)
+            elif m.kind == "blood":  # runs down slowly, thinning, and a fresh drip starts at the top
+                m.y += m.vy
+                if m.glyph in "▓▒░●•" and r.random() < 0.06:
+                    m.glyph = "▒" if m.glyph == "▓" else "░" if m.glyph == "▒" else "╷"
+                if m.y >= h:
+                    self.motes[i] = self._drip()
+            elif m.kind == "rush":
+                m.x += m.vx
+                if m.x < -2:
+                    self.motes[i] = self._streak()
             elif m.kind == "snow":
                 m.x += r.uniform(-0.3, 0.3)
                 m.y += m.vy
@@ -208,6 +241,8 @@ class Atmosphere:
                 self.flash = self.rng.choice((1, 2, 3))
         if ("flicker" in self.kinds or "embers" in self.kinds) and self.rng.random() < 0.4:
             self.level = self.rng.choice(("", "", "", "glow", "fade"))
+        if "pulse" in self.kinds:  # lub-dub, then a pause: about a beat a second and a half at seven frames a second
+            self.level = "half" if self.t % 10 in (0, 2) else ""
 
     def frame(self) -> Text:
         self.step()

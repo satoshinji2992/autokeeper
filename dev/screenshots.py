@@ -167,6 +167,66 @@ async def _talk(app, pilot, screen, m):
                          "多琳朝他摆摆手，他又咳了两声，退回雪里去了。"})
 
 
+def _fighting(app, pilot, screen, m):
+    """A fight with the ghoul in the study: two rounds of it on the stage and in the story."""
+    from autokeeper.engine import combat as battle
+
+    st = screen.state
+    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
+    party = [battle.from_investigator(inv) for inv in st.investigators]
+    st.fight = battle.Fight(fighters=[*party, ghoul], place=st.location, round=2)
+    me = party[0]
+    names = {f.id: f.name for f in st.fight.fighters}
+    return [
+        {"type": "fight_start", "fight": battle.view(st.fight), "line": f"【战斗开始】{me.name}一方对上{ghoul.name}"},
+        {"type": "fight_round", "round": 2, "order": [me.id, ghoul.id], "fight": battle.view(st.fight)},
+        {"type": "fight_act", "round": 2, "attacker": me.id, "defender": ghoul.id, "attacker_name": me.name,
+         "defender_name": ghoul.name, "attacker_side": "party", "defender_side": "foe", "hurt_side": "foe", "kind": "melee",
+         "attack": "棍棒", "roll": {"skill": "格斗(斗殴)", "target": 60, "value": 23, "level": "困难成功", "passed": True},
+         "answer": {"skill": "闪避", "target": 30, "value": 71, "level": "失败", "passed": False}, "reaction": "dodge",
+         "winner": "attacker", "hurt": ghoul.id, "damage": 7, "damage_text": "1D8+1D4 = 7", "effect": "", "extreme": False,
+         "jammed": False, "empty": False, "notes": ["重伤"], "line": "", "dice": None},
+        {"type": "fight_say", "who": ghoul.id, "name": ghoul.name, "text": "……把书……留下……"},
+        {"type": "fight_act", "round": 2, "attacker": ghoul.id, "defender": me.id, "attacker_name": ghoul.name,
+         "defender_name": me.name, "attacker_side": "foe", "defender_side": "party", "hurt_side": "party", "kind": "melee",
+         "attack": "爪击", "roll": {"skill": "格斗(斗殴)", "target": 50, "value": 12, "level": "困难成功", "passed": True},
+         "answer": {"skill": "闪避", "target": 32, "value": 58, "level": "失败", "passed": False}, "reaction": "dodge",
+         "winner": "attacker", "hurt": me.id, "damage": 4, "damage_text": "1D6 = 4", "effect": "", "extreme": False,
+         "jammed": False, "empty": False, "notes": ["受到 4 点伤害（HP 12 → 8）"], "line": "", "dice": None},
+    ], names
+
+
+async def _fight(app, pilot, screen, m):
+    events, _ = _fighting(app, pilot, screen, m)
+    st = screen.state
+    st.fight.fighters[-1].hp = 5  # the ghoul hurt, the investigator too
+    st.fight.fighters[-1].status = "重伤"
+    st.investigators[0].hp -= 4
+    for ev in events:
+        if ev["type"] in ("fight_start", "fight_round"):
+            ev["fight"] = __import__("autokeeper.engine.combat", fromlist=["view"]).view(st.fight)
+        await screen.handle(ev)
+        await pilot.pause(0.3)
+    await pilot.pause(2.5)
+
+
+async def _chase(app, pilot, screen, m):
+    from autokeeper.engine import combat as battle
+
+    st = screen.state
+    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
+    me = battle.from_investigator(st.investigators[0])
+    track = battle.default_track("graveyard")
+    me.pos, ghoul.pos, me.speed, ghoul.speed = 3, 1, 8, 9
+    st.chase = battle.Chase(runners=[me, ghoul], track=track, quarry="party", place=st.location, round=2)
+    await screen.handle({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【追逐开始】调查员在逃，身后是食尸鬼",
+                         "speeds": [f"{me.name}的体质 41 常规成功：速度 8", f"{ghoul.name}的体质 9 极难成功：速度 9"]})
+    await pilot.pause(0.5)
+    await screen.handle({"type": "chase_state", "chase": battle.chase_view(st.chase),
+                         "lines": [f"{me.name}越过了倒伏的墓碑（跳跃 18 常规成功）", f"{ghoul.name}跑到了墓碑间的窄道"]})
+    await pilot.pause(4.0)
+
+
 SHOTS = {
     "title": title,
     "game": lambda: in_game("game", "zhuishuren", "tushuguan", ZHUI),
@@ -178,6 +238,8 @@ SHOTS = {
     "developer": lambda: in_game("developer", "zhuishuren", "jingju", ZHUI, met=("jingguan",), then=_developer),
     "host": host,
     "talk": lambda: in_game("talk", "dongxuezhixia", "ratger_house", DONG, met=("doreen_ratger",), then=_talk),
+    "fight": lambda: in_game("fight", "zhuishuren", "shufang", ZHUI, then=_fight),
+    "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, then=_chase),
 }
 
 

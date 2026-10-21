@@ -554,8 +554,8 @@ _pending: dict[str, tuple[str, str, str]] = {}  # a picture fill() named, not pa
 
 
 def ensure(path: str | Path) -> None:
-    """Paint a picture fill() or fill_people() named if it is not there yet (imagery reads
-    pictures through here)."""
+    """Paint a picture fill(), fill_people() or fill_creatures() named if it is not there yet
+    (imagery reads pictures through here)."""
     if Path(path).is_file():
         return
     try:
@@ -563,6 +563,9 @@ def ensure(path: str | Path) -> None:
             picture(Path(path).parent, *found)
         elif (person := _faces.get(str(path))) is not None:
             face(Path(path).parent, *person)
+        elif (beast := _beasts.get(str(path))) is not None:
+            out = Path(path)
+            _save(creature(beast[1], beast[2], key=beast[0]), out)
     except OSError:
         pass
 
@@ -573,7 +576,7 @@ def painted(path: str | Path) -> bool:
     p = Path(path)
     from . import paths
 
-    return (str(p) in _pending or str(p) in _faces or p.is_relative_to(paths.scenery())
+    return (str(p) in _pending or str(p) in _faces or str(p) in _beasts or p.is_relative_to(paths.scenery())
             or (p.suffix == ".png" and p.stem.startswith(("improv_scene_", "improv_portrait_"))))
 
 
@@ -733,6 +736,153 @@ def fill_people(m: Module) -> list[str]:
 
 
 _faces: dict[str, tuple[str, str, str, str]] = {}  # a portrait fill_people() named: path -> key, name, look, role
+
+
+# -- creatures ------------------------------------------------------------------------------------
+# What a description says a thing has, and how it shows in a portrait.
+CANINE = ("犬", "狗", "狼", "豺", "鬣")
+FACELESS = ("无脸", "无定形", "没有脸", "涂黑", "无形", "不定形")
+TENTACLES = ("触手", "触须", "章鱼")
+CLAWS = ("爪", "利爪", "钩")
+SLIMY = ("胶", "黏", "粘液", "苔藓", "腐", "尸")
+
+
+def creature(name: str, description: str = "", *, key: str = "") -> Image.Image:
+    """A creature's portrait painted by program, 600x800: a shape in the dark lit from below by a
+    sick light, with what its description gives it (a dog's muzzle, claws, tentacles, no face at
+    all), eye sockets in shadow and eyes that catch the light. Mostly silhouette: what is not seen
+    frightens more, and a few dozen characters keep a silhouette and two eyes, not detail."""
+    text = f"{name} {description}"
+    rng = np.random.default_rng(_seed(key or name, "creature"))
+    canine = any(w in text for w in CANINE)
+    faceless = any(w in text for w in FACELESS)
+    tentacled = any(w in text for w in TENTACLES)
+    clawed = any(w in text for w in CLAWS)
+    slimy = any(w in text for w in SLIMY)
+    skin = np.array((92, 104, 84) if slimy else (60, 52, 60) if faceless else (112, 96, 88), float)
+    glow = np.array((140, 200, 90) if slimy else (210, 50, 36), float)  # the light from below: bile green or blood
+    yy, xx = np.mgrid[0:PH, 0:PW].astype(float)
+    cx, top = PW / 2 + rng.uniform(-16, 16), 120.0
+
+    head = Image.new("L", (PW, PH), 0)  # the head (and muzzle, ears): lit from below
+    torso = Image.new("L", (PW, PH), 0)  # the shoulders: mostly in the dark
+    dark = Image.new("L", (PW, PH), 0)  # sockets, mouth: holes the light does not reach
+    teeth = Image.new("L", (PW, PH), 0)
+    hd, bd, dd, td = ImageDraw.Draw(head), ImageDraw.Draw(torso), ImageDraw.Draw(dark), ImageDraw.Draw(teeth)
+    long = 1.18 if canine and not faceless else 1.0
+    chin = top + (330 if canine and not faceless else 250)
+    hunch = rng.uniform(30, 60)  # shoulders riding up round the head
+    bd.ellipse([cx - 300, chin - hunch, cx + 300, PH + 520], fill=255)
+    if faceless:
+        hd.ellipse([cx - 125, top - 10, cx + 125, top + 290], fill=255)
+        dd.ellipse([cx - 95, top + 30, cx + 95, top + 250], fill=255)  # where a face should be, nothing
+    else:
+        hd.ellipse([cx - 108, top, cx + 108, top + 245 * long], fill=255)
+        if canine:  # a muzzle pushed forward and down, ears laid back
+            hd.polygon([(cx - 78, top + 150), (cx + 78, top + 150), (cx + 58, chin), (cx - 58, chin)], fill=255)
+            dd.ellipse([cx - 28, chin - 96, cx + 28, chin - 66], fill=200)  # the nose, at the end of the muzzle
+            for side in (-1, 1):
+                hd.polygon([(cx + side * 58, top + 50), (cx + side * 128, top - 70), (cx + side * 118, top + 80)], fill=255)
+        for side in (-1, 1):  # deep sockets
+            dd.ellipse([cx + side * 44 - 34, top + 82, cx + side * 44 + 34, top + 128], fill=230)
+        mouth = chin - (40 if canine else 64)
+        width = 52 if canine else 50
+        dd.chord([cx - width, mouth - 20, cx + width, mouth + 36], 0, 180, fill=255)  # a mouth that does not close
+        for i in range(11):
+            tx = cx - width + 6 + i * (2 * width - 12) / 10
+            td.polygon([(tx - 4, mouth + 2), (tx + 4, mouth + 2), (tx, mouth + 20 + rng.uniform(0, 9))], fill=255)
+    shape = Image.fromarray(np.maximum(np.asarray(head), np.asarray(torso)))
+    arms = Image.new("L", (PW, PH), 0)
+    ad = ImageDraw.Draw(arms)
+    if tentacled:  # thick arms out of the dark, curling up past the body
+        for i in range(4):
+            side = -1 if i % 2 else 1
+            x0, reach = cx + side * rng.uniform(200, 280), rng.uniform(420, 560)
+            curl = rng.uniform(0.8, 1.4)
+            pts = [(x0 + side * (math.sin(t * math.pi * curl) * 90 - t * t * 140), PH + 30 - t * reach) for t in np.linspace(0, 1, 90)]
+            for k, (px, py) in enumerate(pts):
+                r = 12 + 62 * (1 - k / 90)
+                ad.ellipse([px - r / 2, py - r / 2, px + r / 2, py + r / 2], fill=255)
+    if clawed:  # hands coming up at the bottom, fingers too long, nails catching the light
+        for side in (-1, 1):
+            hx = cx + side * rng.uniform(175, 215)
+            ad.ellipse([hx - 70, PH - 250, hx + 70, PH - 110], fill=255)
+            for f in range(4):
+                fx = hx - 51 + f * 34
+                tip = PH - 430 - f * 18 * side
+                bend = side * (24 + f * 4)
+                ad.polygon([(fx - 11, PH - 220), (fx + 11, PH - 220), (fx + bend + 4, tip), (fx + bend - 4, tip)], fill=255)
+                td.polygon([(fx + bend - 4, tip + 4), (fx + bend + 4, tip + 4), (fx + bend + side * 16, tip - 48)], fill=255)
+
+    body = np.asarray(shape.filter(ImageFilter.GaussianBlur(2.5)), float) / 255
+    face = np.asarray(head.filter(ImageFilter.GaussianBlur(2.5)), float) / 255
+    limbs = np.asarray(arms.filter(ImageFilter.GaussianBlur(2)), float) / 255
+    holes = np.asarray(dark.filter(ImageFilter.GaussianBlur(5)), float) / 255
+    fangs = np.asarray(teeth.filter(ImageFilter.GaussianBlur(1)), float) / 255
+    # the head lit from under the chin, brightest low on it; the shoulders only caught along their top
+    up = np.clip((yy - top) / max(1.0, chin - top), 0, 1.15) ** 1.4
+    lit_head = 0.12 + 1.05 * up * (1 / (1 + ((xx - cx) / 170) ** 2))
+    lit_body = 0.1 + 0.45 * np.exp(-(((yy - (chin - hunch)) / 90) ** 2)) * (1 / (1 + ((xx - cx) / 240) ** 2))
+    lit = face * lit_head + (1 - face) * lit_body
+    grain = 1 + (_noise_at(rng, PW, PH, 5) - 0.5) * 0.16 + (_noise_at(rng, PW, PH, 24) - 0.5) * 0.22
+    flesh = skin * 0.16 + skin * 1.1 * lit[..., None] + glow * 0.5 * lit[..., None] ** 2
+    flesh = flesh * grain[..., None] * (1 - holes[..., None] * 0.92)
+    back = np.exp(-(((xx - cx) / 320) ** 2 + ((yy - PH * 0.6) / 420) ** 2)) * 22
+    arr = np.stack([back + 5, back * 0.4 + 3, back * 0.45 + 5], axis=-1)
+    limb_skin = skin * 0.25 + skin * 0.9 * lit[..., None] + glow * 0.4 * lit[..., None]
+    arr = arr * (1 - body[..., None]) + flesh * body[..., None]
+    arr = arr * (1 - limbs[..., None]) + limb_skin * (0.7 + 0.3 * grain[..., None]) * limbs[..., None]
+    arr += fangs[..., None] * np.array((205, 196, 160)) * np.clip(lit * 1.6, 0.35, 1)[..., None]
+    edges = Image.fromarray(np.maximum(np.asarray(shape), np.asarray(arms)))
+    rim = np.asarray(edges.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(5)), float) / 255
+    arr += rim[..., None] * glow * 1.7
+    if slimy:  # a wet shine where the light catches, fine and broken
+        wet = np.clip((_noise_at(rng, PW, PH, 9) - 0.74) * 4, 0, 1) * face * lit
+        arr += wet[..., None] * np.array((170, 190, 150)) * 0.3
+    # mist rolling at the bottom, the colour of the light
+    mist = np.clip((yy - PH * 0.62) / (PH * 0.38), 0, 1) * _noise_at(rng, PW, PH, 60)
+    arr = arr * (1 - mist[..., None] * 0.45) + glow * 0.35 * mist[..., None]
+    # eyes in the sockets: two that catch the light, or many where a face should be
+    eyes = Image.new("L", (PW, PH), 0)
+    ed = ImageDraw.Draw(eyes)
+    spots = ([(cx + rng.uniform(-80, 80), top + 140 + rng.uniform(-80, 80)) for _ in range(int(rng.integers(6, 10)))]
+             if faceless else [(cx - 44, top + 106), (cx + 44, top + 106)])
+    for ex, ey in spots:
+        r = rng.uniform(4, 8) if faceless else 9
+        ed.ellipse([ex - r * 1.5, ey - r * 0.8, ex + r * 1.5, ey + r * 0.8], fill=255)
+    halo = np.asarray(eyes.filter(ImageFilter.GaussianBlur(16)), float)[..., None] / 255
+    core = np.asarray(eyes.filter(ImageFilter.GaussianBlur(1.2)), float)[..., None] / 255
+    shine = np.array((215, 240, 130) if slimy else (255, 196, 110), float)
+    arr += halo * shine * 1.3 + core * shine
+    vignette = np.clip(1 - 0.85 * (((xx - PW / 2) / (PW / 2)) ** 2 * 0.55 + ((yy - PH * 0.45) / (PH / 2)) ** 2 * 0.45), 0.08, 1)
+    arr = arr * vignette[..., None] * (1 + rng.normal(0, 0.05, (PH, PW, 1)))
+    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.9))
+    return _finish(out, saturation=1.08, contrast=0.38)
+
+
+def _noise_at(rng: np.random.Generator, w: int, h: int, scale: int) -> np.ndarray:
+    small = rng.uniform(0, 1, (h // scale + 2, w // scale + 2))
+    return np.asarray(Image.fromarray((small * 255).astype(np.uint8)).resize((w, h), Image.Resampling.BICUBIC), float) / 255
+
+
+def fill_creatures(m: Module) -> list[str]:
+    """Every creature of the module with no picture gets one painted by program (creature),
+    under the key creature-<id>; painted when first shown (ensure)."""
+    from . import paths
+
+    folder, made = paths.scenery() / m.id / "people", []
+    for c in m.creatures:
+        key = f"creature-{c.id}"
+        if key in m.pictures:
+            continue
+        out = folder / f"{key}.png"
+        _beasts[str(out)] = (key, c.name, c.description)
+        m.pictures[key] = str(out)
+        made.append(key)
+    return made
+
+
+_beasts: dict[str, tuple[str, str, str]] = {}  # a creature's portrait fill_creatures() named: path -> key, name, words
 
 
 # -- things ---------------------------------------------------------------------------------------
