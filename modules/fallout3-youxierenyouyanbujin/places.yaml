@@ -236,6 +236,33 @@ locations:
   - 被钉住的窗户
   exits:
   - main_street
+  chase:
+  - name: 农舍里
+    look: 窗户钉着木板，屋里昏暗
+  - name: 被钉住的窗户
+    look: 窗户钉着木板
+    obstacle:
+      kind: barrier
+      what: 钉着木板的窗户
+      skill: 力量
+  - name: 猪圈边
+    look: 猪圈里的猪拱着泥
+    obstacle:
+      kind: hazard
+      what: 猪圈边的烂泥
+      skill: 敏捷
+  - name: 停满汽车的田地
+    look: 田里停满了各式汽车
+  - name: 烂泥路
+    look: 一条烂泥路通向镇东头
+    obstacle:
+      kind: hazard
+      what: 没过脚面的烂泥
+      skill: 敏捷
+  - name: 镇东头
+    look: 一排工人住的房子
+  - name: 斯托威尔大街
+    look: 高高的电话线杆一路排开
 - id: hart_house
   name: 哈特教授宅
   art: hart_house
@@ -253,6 +280,29 @@ locations:
   exits:
   - main_street
   - greenhouse
+  chase:
+  - name: 玻璃温室
+    look: 铜管望远镜斜斜指向夜空
+  - name: 温室入口
+    look: 温室连在老宅后面
+  - name: 工作室
+    look: 到处是修望远镜用的备件
+    obstacle:
+      kind: hazard
+      what: 堆满的备件
+      skill: 敏捷
+  - name: 门廊
+    look: 几只猫在门廊上打盹
+    obstacle:
+      kind: hazard
+      what: 脚下的猫
+      skill: 敏捷
+  - name: 老宅门前
+    look: 镇西一栋漂亮的老宅
+  - name: 镇西的路
+    look: 路灯一盏接一盏
+  - name: 斯托威尔大街
+    look: 高高的电话线杆一路排开
 - id: greenhouse
   name: 温室天文台
   within: hart_house

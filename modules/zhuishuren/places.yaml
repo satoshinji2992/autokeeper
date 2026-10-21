@@ -29,6 +29,39 @@ locations:
       若调查员找到隧道却没下去、当晚又在熟睡（没有设岗），道格拉斯会来到调查员的房间唤醒他，想和他交谈。
     features: [托马斯·金博尔, 客厅, 调查员的空卧室, 屋后通往公墓的小路]
     exits: [shufang, jiefang, mudi]
+    chase:
+    - name: 屋后的小路
+      look: 小路从屋后通向公墓，老树的影子压在上面
+    - name: 隔开公墓的矮墙
+      look: 一道矮墙，墙那边就是墓地
+      obstacle:
+        kind: barrier
+        what: 矮墙
+        skill: 攀爬
+    - name: 灌木和老树之间
+      look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+      obstacle:
+        kind: hazard
+        what: 伸到路上的灌木
+        skill: 敏捷
+    - name: 穿过墓碑的土路
+      look: 一条土路弯弯曲曲穿过墓碑
+    - name: 墓穴与墓碑之间
+      look: 墓穴和墓碑挨得很近，脚下高低不平
+      obstacle:
+        kind: hazard
+        what: 挨在一起的墓穴和墓碑
+        skill: 跳跃
+    - name: 墓地深处的矮墓碑
+      look: 墓地深处，一块矮墓碑立在树下
+    - name: 几座陵墓之间
+      look: 再往里是几座陵墓
+    - name: 半埋的陵墓门前
+      look: 石砌陵墓半埋在土坡里，门前的泥地踩得乱七八糟
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
   - id: shufang
     name: 道格拉斯的书房
     within: jinboer_jia
@@ -73,6 +106,33 @@ locations:
       夜里若调查员被熏昏，会在晚上醒来，道格拉斯就坐在一旁的墓碑上。
     features: [梅洛迪亚斯·杰弗逊, 杰弗逊的外套口袋, 道格拉斯最喜欢的墓碑, 墓碑周围的地面, 陵墓群]
     exits: [jinboer_jia, jiefang, lingmu]
+    chase:
+    - name: 公墓边的灌木
+      look: 高大的灌木和古老的树木点缀在墓碑之间
+      obstacle:
+        kind: hazard
+        what: 伸到路上的灌木
+        skill: 敏捷
+    - name: 穿过墓碑的土路
+      look: 一条土路弯弯曲曲穿过墓碑
+    - name: 墓穴与墓碑之间
+      look: 墓穴和墓碑挨得很近，脚下高低不平
+      obstacle:
+        kind: hazard
+        what: 挨在一起的墓穴和墓碑
+        skill: 跳跃
+    - name: 古老的树下
+      look: 古老的树木把路遮得半明半暗
+    - name: 墓地深处的矮墓碑
+      look: 墓地深处，一块矮墓碑立在树下
+    - name: 几座陵墓之间
+      look: 再往里是几座陵墓
+    - name: 半埋的陵墓门前
+      look: 石砌陵墓半埋在土坡里，门前的泥地踩得乱七八糟
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
   - id: lingmu
     name: 墓地深处的陵墓
     within: mudi
@@ -102,6 +162,37 @@ locations:
       （照“如果调查员试图和人影交谈”处理，信息不变，只是前提换成在隧道里相遇）。
     features: [爪痕累累的土壁, 岔路, 通往地面的出口]
     exits: [lingmu]
+    chase:
+    - name: 又低又窄的通道
+      look: 泥土通道又低又窄，手电只照得出前面几步
+      obstacle:
+        kind: hazard
+        what: 低矮的土顶
+        skill: 敏捷
+    - name: 爪痕累累的土壁
+      look: 四壁留着一道道爪痕，空气又湿又冷
+    - name: 一条接一条的岔路
+      look: 岔路一条接一条，似乎铺满了整个公墓的地下
+      obstacle:
+        kind: hazard
+        what: 认不清的岔路
+        skill: 导航
+    - name: 通往地面的出口
+      look: 前面的土里透出一点冷风
+    - name: 陵墓里的隧道口
+      look: 徒手挖出来的洞口通进陵墓
+      obstacle:
+        kind: barrier
+        what: 窄小的隧道口
+        skill: 攀爬
+    - name: 陵墓内部
+      look: 积了多年的腐臭
+    - name: 半埋的陵墓门前
+      look: 门前的泥地踩得乱七八糟
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
   - id: zhenzhongxin
     public: true
     name: 阿诺兹堡镇中心

@@ -348,3 +348,9 @@ sketches:
   target: 一条主街贯穿镇中心，沿街是牛排馆、银行、警察局、教堂；镇西一栋带温室的老宅，镇东一条土路通向农场
   threshold: 0.5
   after: c_pearson_rumors
+items:
+- id: stanley_revolver
+  name: 警用左轮手枪
+  description: 副警长斯坦利腰间的左轮手枪
+  where: police_station
+  owner: stanley

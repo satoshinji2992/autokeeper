@@ -253,6 +253,7 @@ npcs:
 creatures:
 - id: erie_entity
   name: “埃里”（异界存在）
+  called: 正在崩解的人形
   description: 卡洛琳召来的无定形存在，被固定成埃里·赫琴斯的外表与声音。以埃里外貌出现时没有理智损失， 但一旦攻击或造成伤害，会暂时显露异界形态（理智损失 1/1D4+1）。
   sanity: 0/1D4+1
   stats:
