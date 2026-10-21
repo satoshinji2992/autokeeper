@@ -79,13 +79,14 @@ async def test_a_round_goes_in_dex_order_and_the_stance_answers_the_blow(module,
     order = next(e for e in events if e["type"] == "fight_round")["order"]
     assert order == ["zhouheng", "warden"]  # DEX 65 before 50
     ruled = len(cast.ruled)
-    fake.queue(10, 60, 20, 5).queue_totals(1)  # 周衡 hard: 1; the warden hits, 周衡 fights back with an extreme success
+    fake.queue(10, 60, 20, 5).queue_totals(1, 2)  # 周衡 hard: 1; the warden hits, 周衡 fights back with an extreme success
     events, _ = await run_turn(app, "攻击 老守钟人（徒手）｜被攻击时反击", THREAD)
     assert len(cast.ruled) == ruled  # an order in the screen's words needs no arbiter
     acts = [e for e in events if e["type"] == "fight_act"][-2:]
     assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "warden"
-    assert acts[1]["damage"] == 3 and "反击得手" in acts[1]["line"]  # the most fists can do
-    assert inv.hp == inv.hp_max - 3 and st.fight.get("warden").hp == 11 - 1 - 3
+    # fighting back does normal damage however well it rolls (Keeper Rulebook p. 87): 1D3, not its most
+    assert acts[1]["damage"] == 2 and "反击得手" in acts[1]["line"]
+    assert inv.hp == inv.hp_max - 3 and st.fight.get("warden").hp == 11 - 1 - 2
     assert "【战斗 · 第 2 轮】" in cast.reports[-1]
 
 

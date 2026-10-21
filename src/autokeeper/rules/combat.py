@@ -2,10 +2,10 @@
 damage and what it does to someone. The engine (engine/combat.py) keeps a fight going round by
 round and tells the screens and the keeper; here are only the numbers.
 
-- Who acts first: the higher DEX, a readied firearm +50 (order).
+- Who acts first: the higher DEX, a readied firearm the actor fires this round +50 (order, turn_order).
 - A melee attack is answered by a dodge or by fighting back (melee). Both roll; the better level
   of success wins. A tie goes to the dodger against a dodge, to the attacker against fighting back.
-  An attack nobody answers (surprised, already down) needs only to succeed. Someone who has already
+  An attack nobody answers (surprised, already down) lands unless it fumbles. Someone who has already
   answered as many attacks this round as they make attacks is outnumbered: every further attacker
   gets a bonus die.
 - A shot cannot be fought back; diving for cover is a dodge roll that, if it succeeds, gives the
@@ -14,7 +14,12 @@ round and tells the screens and the keeper; here are only the numbers.
 - A manoeuvre (disarm, knock down, hold) is an attack that does no damage; a bigger target gives a
   penalty die for every point of build it has over the attacker, and three or more make it impossible.
 - Damage is the weapon's plus the damage bonus for a melee weapon (half of it thrown). An extreme
-  success does the most the weapon can and, with an impaling weapon, its damage again on top.
+  success on the attacker's own turn does the most the weapon can and, with an impaling weapon, its
+  damage again on top; fighting back never does. A throw can be dodged, not fought back.
+
+The encounter engine of 0.0.4 uses the pure rules in rules/melee.py, firearms.py and wounds.py; the
+Fighter, Exchange, melee, shoot, wound, dying and heal_round here serve the old engine
+(engine/fighting.py) until it is replaced.
 - A blow of half someone's hit points or more is a major wound: a CON roll or they fall
   unconscious. At 0 hit points a human with a major wound is dying (a CON roll every round, death on
   a failure), without one unconscious. A creature at 0 is dead, or down for now if it heals itself.
@@ -169,13 +174,39 @@ def first_firearm(f: Fighter) -> bool:
     return f.wielding.firearm and f.wielding.usable()
 
 
-def order(fighters: list[Fighter]) -> list[str]:
-    """Who acts in what order this round: DEX, a readied firearm +50, the better fighter on a tie,
-    an investigator before anyone else on a tie still."""
-    def key(f: Fighter) -> tuple:
-        return (-(f.dex + (50 if first_firearm(f) else 0)), -max(f.fighting, f.wielding.value), f.kind != "investigator")
+@dataclass(frozen=True)
+class Slot:
+    """One combatant's place in the round's order: DEX, the +50 of a readied firearm it means to fire
+    this round (rules/firearms.readied_bonus), its best combat skill for a tie."""
 
-    return [f.id for f in sorted(fighters, key=key)]
+    id: str
+    dex: int
+    combat: int = 0
+    readied: int = 0  # 50 or 0
+    first_on_tie: bool = False  # the project's last tie-break: an investigator before anyone else
+
+
+def turn_order(slots: list[Slot]) -> list[str]:
+    """Who acts in what order this round (Keeper Rulebook p. 86): DEX from high to low, a readied
+    firearm being fired this round +50 (p. 95), the higher combat skill first on a tie (p. 86); still
+    tied, an investigator first (the project's)."""
+    return [s.id for s in sorted(slots, key=lambda s: (-(s.dex + s.readied), -s.combat, not s.first_on_tie))]
+
+
+def order(fighters: list[Fighter], firing: set[str] | None = None) -> list[str]:
+    """Who acts in what order this round: DEX, +50 for a readied, loaded, unjammed firearm, the better
+    fighter on a tie, an investigator before anyone else on a tie still. `firing`: the ids that mean to
+    fire this round; only they get the +50 (p. 95). None (the old engine, which does not know yet): the
+    +50 goes to whoever has a usable firearm in hand."""
+    from .firearms import readied_bonus
+
+    def slot(f: Fighter) -> Slot:
+        gun = f.wielding
+        shooting = gun.firearm and (f.id in firing if firing is not None else True)
+        bonus = readied_bonus(firing=shooting, loaded=gun.ammo, jammed=gun.jammed) if gun.firearm else 0
+        return Slot(f.id, f.dex, max(f.fighting, gun.value), bonus, f.kind == "investigator")
+
+    return turn_order([slot(f) for f in fighters])
 
 
 # -- rolling ------------------------------------------------------------------------------------
@@ -296,11 +327,11 @@ def melee(dice, a: Fighter, atk: Attack, d: Fighter, *, bonus: int = 0, reasons:
     ex = Exchange(a.id, d.id, "maneuver" if maneuver else "melee", maneuver or atk.name, roll=roll,
                   bonus=max(-2, min(2, bonus)), reasons=reasons)
     la = roll.level
-    if not answering:
-        ex.winner = "attacker" if la.ok else "none"
+    if not answering:  # nobody answers: it lands unless it fumbles (Keeper Rulebook p. 91)
+        ex.winner = "attacker" if la != Level.FUMBLE else "none"
     else:
         d.responded += 1
-        if d.stance == "fight":
+        if d.stance == "fight" and not atk.thrown:  # a throw can be dodged, not fought back (p. 91)
             own = d.best_melee()
             ex.reaction, ex.answer = "fight", check(dice, own.skill if not own.unarmed else BRAWL, own.value)
             ld = ex.answer.level
@@ -324,7 +355,8 @@ def melee(dice, a: Fighter, atk: Attack, d: Fighter, *, bonus: int = 0, reasons:
     else:  # fought back and won: the defender's blow lands
         ex.hurt, level, hit = a.id, ex.answer.level if ex.answer else Level.REGULAR, d.best_melee()
         db = d.db
-    ex.extreme = level >= Level.EXTREME
+    # Extreme damage only for the attacker on its own turn; fighting back never does it (p. 87).
+    ex.extreme = ex.winner == "attacker" and level >= Level.EXTREME
     weapon, bonus = split_damage(hit.damage, db)
     ex.damage, ex.damage_text = roll_damage(dice, weapon, bonus, extreme=ex.extreme, impale=hit.impale)
     return ex
@@ -359,7 +391,7 @@ def shoot(dice, a: Fighter, atk: Attack, d: Fighter, *, band: int = 0, into_mele
     if not ex.roll.passed:
         return ex
     ex.winner, ex.hurt = "attacker", d.id
-    ex.extreme = ex.roll.level >= Level.EXTREME
+    ex.extreme = ex.roll.level >= (Level.CRITICAL if band >= 2 else Level.EXTREME)  # only a critical impales at extreme range (p. 95)
     weapon, _ = split_damage(atk.damage, "0", band=band)
     ex.damage, ex.damage_text = roll_damage(dice, weapon, extreme=ex.extreme, impale=atk.impale)
     if d.guns_halved and ex.damage:
