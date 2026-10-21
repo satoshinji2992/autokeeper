@@ -142,7 +142,9 @@ def test_life_weapon_and_injury_round_trip_zero_hp_and_none():
 def test_investigator_injury_defaults_empty_and_zero_values_stand():
     inv = _inv(hp=0, san=0)
     assert inv.injury == InjuryState() and inv.hp == 0 and inv.san == 0
+    assert "injury" not in inv.model_dump() and "injury" not in json.loads(inv.model_dump_json())  # dumps as before 0.0.4
     inv.injury.dying_since = 0
+    assert inv.model_dump()["injury"]["dying_since"] == 0
     back = Investigator.model_validate_json(inv.model_dump_json())
     assert back == inv and back.hp == 0 and back.injury.dying_since == 0
     assert "injury" not in Investigator.model_json_schema()["properties"]  # the rules keep it; no module or model writes it

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from .bcdice import BCDice, Level, Roll
@@ -60,8 +60,19 @@ class Investigator(BaseModel):
 
     conditions: list[str] = Field(default_factory=list)  # 重伤 / 昏迷 / 濒死 / 死亡 / 临时疯狂 / 不定性疯狂 / 永久疯狂
     marks: list[str] = Field(default_factory=list)  # skills ticked for improvement
-    # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model.
+    # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model: out
+    # of the schema, and out of the dump while there is nothing in it (_without_empty_injury).
     injury: SkipJsonSchema[InjuryState] = Field(default_factory=InjuryState)
+
+    @model_serializer(mode="wrap")
+    def _without_empty_injury(self, handler: SerializerFunctionWrapHandler) -> dict:
+        """A sheet nobody has hurt dumps as it did before 0.0.4: a module's pregens carry no field the
+        module format does not have (module/importer._unknown_fields), and an old save's world domain
+        (world/store.World.domain) hashes the same, so its ops can still be undone."""
+        out = handler(self)
+        if isinstance(out, dict) and out.get("injury") in ({}, InjuryState().model_dump()):
+            out.pop("injury")
+        return out
 
     def model_post_init(self, _context) -> None:
         """What a sheet leaves out is worked out from its characteristics; what it gives stands, a 0
