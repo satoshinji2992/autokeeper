@@ -78,14 +78,24 @@ foreshadow:
   hint: 弗朗西斯端着汤绕开后廊那一步，抬头看了一眼天花板上的水渍，什么也没说；那圈水渍比昨天大了一圈。
   where: ratger_house
   pays_off: e_porch
+  stages:
+  - hint: 后廊水渍的边缘垂下一滴水，弗朗西斯把接水的盆往墙边挪了挪。
+    when: flag:disease_phase2
+    flag: sign_porch_stain_1
 - id: same_hour_wake
   hint: 候诊室里靠墙睡着的男人忽然抽了一下，嘟囔“别再往上堆了”，随后几个睡着的病人几乎在同一刻翻身、皱眉，像被同一个声音点到。
   where: clinic
   pays_off: k_nightmare
+  stages:
+  - hint: 候诊室里又有人睡着时猛地抽动，旁边原本打盹的人立刻撑开眼皮，把椅子挪离了墙。
+    when: flag:disease_phase2
 - id: lime_dust
   hint: 长椅底下扫出一小堆石灰渣，是从地下室门口被风吹上来的；牧师说上周地上还是干净的，那面墙也从没渗过水。
   where: church
   pays_off: k_disease
+  stages:
+  - hint: 牧师刚扫净地下室门槛，搬棺木的脚步一震，又有几粒灰渣顺着台阶滚下来。
+    when: flag:disease_phase2
 - id: unsent_letter
   hint: 安娜盖戳时漏了一封，那是一封写给“埃里·赫琴斯”的信，她把信封翻过去，压在最底下，说这信退过一次，收件人从来不来取。
   where: post_office

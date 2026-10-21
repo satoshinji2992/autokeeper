@@ -64,6 +64,10 @@ foreshadow:
   hint: 书房窗台内侧积着一线细干土，像被什么东西蹭过；凑近闻，土腥里带一点说不出的甜腻。
   where: shufang
   pays_off: k_not_burglar
+  stages:
+  - hint: 人影已经从窗口进屋后，未被清理的窗台上又落了几粒湿泥，压在原先的干土上，甜腻气味比先前重了一点。
+    when: flag:figure_seen
+    flag: sign_f_mud_on_sill_1
 - id: f_prints_by_wall
   hint: 人行道边的湿泥上有一串印子，看着像狗爪，却陷得太深、步幅太大，一路朝金博尔家后面的矮墙去了。
   where: jiefang

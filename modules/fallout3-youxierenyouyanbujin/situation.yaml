@@ -88,6 +88,9 @@ foreshadow:
   hint: 街角的电话线杆上蹲着老头皮尔森，他把一只铜夹子夹在线上，凑着耳机直笑；你们经过时他朝你们挥手，又比了个“嘘”。
   where: main_street
   pays_off: k_blessed
+  stages:
+  - hint: 线杆上多挂了一只装着面包的篮子，皮尔森腾出一只手吃东西，另一只手始终按着耳机。
+    flag: sign_pole_tapping_1
 - id: side_door_three
   hint: 礼拜散场后，牧师把最后一排的三个人留下，领进侧门；他们再出来时右眼发红、瞳孔散得很大，彼此不说话，只点点头就各自走了。
   where: church
@@ -96,6 +99,8 @@ foreshadow:
   hint: 门口的狗窝空着，铁链还挂在桩上；屋后窗里两个孩子一唱一和地数数：“一、二、三……你说青蛙的心有几个腔？”
   where: ferguson_house
   pays_off: k_blessed
+  stages:
+  - hint: 格兰达端着蛋糕走到屋后窗下，孩子们谁也没伸手接，她便一直端着，直到蛋糕上的热气散尽。
 ties:
 - id: tie_glenda_kin
   hook: 格兰达·弗格森是调查员从小喊“姐”的邻家嫂子，上周还托他捎话给卫斯理，说家里出了点事。
