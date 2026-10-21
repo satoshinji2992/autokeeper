@@ -164,7 +164,7 @@ def build(game: Game, checkpointer=None):
             return {"pending": False}
         if "push_choice" not in journal:
             offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}
-            journal["push_choice"] = str(interrupt({"kind": "push", **offer}))
+            journal["push_choice"] = interrupt({"kind": "push", **offer})  # "push"/"luck"/"drop", or {"choice", "how"}
             keep()
         extra = await game.push(journal["push_choice"])
         turn = held()

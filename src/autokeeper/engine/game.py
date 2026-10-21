@@ -1468,7 +1468,8 @@ class Game(Fighting):
                                      "can_push": rolled.can_push, "luck": luck, "left": inv.luck - (luck or 0),
                                      "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
                                      "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
-                                     "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value}
+                                     "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
+                                     "action": action.summary}
                         st.pending_push = turn.push
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
@@ -1590,15 +1591,17 @@ class Game(Fighting):
                         turn.notes.append(f"调查员的重要装备已更新：{item.name}，{mode}，余量{item.quantity}"
                                           + (f"，{item.status}" if item.status else "") + "。只在与本次动作有关时叙述，不逐项播报装备栏。")
 
-    async def push(self, mode: str) -> Turn:
-        """Resume the saved choice without paying luck or rolling its push twice."""
-        if mode not in ("push", "luck", "drop"):
-            raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    async def push(self, choice: str | dict) -> Turn:
+        """Resume the saved choice without paying luck or rolling its push twice. `choice` is "push",
+        "luck" or "drop" (as old saves and journals have it), or {"choice": "push", "how": "..."}: a
+        push the player said how to make (Keeper Rulebook p. 73), ruled again once before it is
+        rolled (_method)."""
+        mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
             direct = not st.pending_turn
             saved = (st.pending_resolution or None) if direct else st.pending_turn.get("push_resolution")
-            identity = {"kind": "push", "at": st.turn, "mode": mode, "active": st.active}
+            identity = {"kind": "push", "at": st.turn, "mode": mode, "active": st.active} | ({"how": how} if how else {})
             if saved is not None and saved.get("identity") != identity:
                 raise ValueError("已有未完成的检定选择，请先继续原选择")
             if saved is None and not st.pending_push:
@@ -1612,7 +1615,7 @@ class Game(Fighting):
             turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn()
             try:
                 if not journal.get("complete"):
-                    await self._push_stages(mode, journal["pending"], turn)
+                    await self._push_stages(mode, journal["pending"], turn, how)
                     journal["complete"] = True
                     self._resolution_save(turn)
                 if direct:
@@ -1623,7 +1626,7 @@ class Game(Fighting):
             finally:
                 self._resolution, self._resolution_scope = None, []
 
-    async def _push_stages(self, mode: str, pending: dict, turn: Turn) -> None:
+    async def _push_stages(self, mode: str, pending: dict, turn: Turn, how: str = "") -> None:
         st = self.state
         step = self._resolution_step
         record = st.checks[-1] if st.checks and st.checks[-1].turn == st.turn else None
@@ -1642,7 +1645,7 @@ class Game(Fighting):
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
         else:
-            await self._pushed(mode, pending, turn, record, known)
+            await self._pushed(mode, pending, turn, record, known, how)
         # What the failure cost settles as any turn's does: the clock moved on, so what was due by
         # now happens (scheduled events, the rest of the world, rule timers), and an ending it
         # brought about ends the game.
@@ -1651,11 +1654,34 @@ class Game(Fighting):
         await step("ending", turn, lambda: self._check_ending(turn))
         await step("settle", turn, lambda: self._settle(record))
 
-    async def _pushed(self, mode: str, pending: dict, turn: Turn, record: CheckRecord | None, known: list[str]) -> None:
-        """The second chance: luck spent, or the pushed roll and what it brings."""
+    async def _pushed(self, mode: str, pending: dict, turn: Turn, record: CheckRecord | None, known: list[str],
+                      how: str = "") -> None:
+        """The second chance: luck spent, or the pushed roll and what it brings. A push made a stated
+        way is ruled again first (_method): a way that cannot reach the goal is refused and nothing is
+        rolled, the failure standing as when it is dropped; otherwise its time passes before the roll."""
         st, step = self.state, self._resolution_step
         inv, npc = st.investigator, pending.get("npc", "")
         lucky = mode == "luck" and pending.get("luck") is not None
+        if mode == "push" and how:
+            method = await step("method", turn, lambda: self._method(pending, how))
+
+            def told() -> None:
+                st.add("player", f"孤注一掷：{how}", who=inv.name)
+                if method["achievable"]:
+                    st.minutes += method["minutes"]
+                    turn.notes.append(f"孤注一掷的做法：{how}（约 {method['minutes']} 分钟）")
+                else:
+                    why = method["why"].rstrip("。") or "这样做达不到目标"
+                    turn.notes.append(f"孤注一掷不成立（{how}）：{why}。没有掷骰，原来的失败照旧。")
+
+            await step("method-told", turn, told)
+            if not method["achievable"]:
+                await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
+                await step("plugins", turn, lambda: self.plugins.settled(turn))
+                await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
+                           "lines": [f"孤注一掷不成立：{method['why'] or '这样做达不到目标'}", "没有掷骰，按放弃处理"]}))
+                return
+            pending = {**pending, **method["pending"]}
 
         def check() -> dict:
             if lucky:
@@ -1688,6 +1714,32 @@ class Game(Fighting):
         elif not passed:
             lines.insert(0, f"孤注一掷也没成：{pending['risk']}" if pending.get("risk") else "孤注一掷也没成")
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
+
+    async def _method(self, pending: dict, how: str) -> dict:
+        """The arbiter's word on how a push is made (Cast.repush, one call): can the goal still be
+        reached this way, the skill and difficulty for it (unchanged unless the situation changed),
+        the time it takes, and what failing it this way brings. Without an arbiter for it (a scripted
+        cast), the push goes as offered and takes PUSH_MINUTES."""
+        out = {"achievable": True, "why": "", "minutes": PUSH_MINUTES, "pending": {}}
+        ask = getattr(self.cast, "repush", None)
+        if ask is None:
+            return out
+        r = await ask(self.state, pending, how)
+        out.update(achievable=r.achievable, why=r.why.strip(), minutes=max(1, min(r.minutes, ACT_CAP)))
+        changed: dict = {}
+        skill = canonical(r.skill) if r.skill.strip() else pending["skill"]
+        if skill != pending["skill"]:
+            target = self.state.investigator.value(skill)
+            changed.update(skill=skill, target=target)
+        if r.difficulty and r.difficulty != pending["difficulty"]:
+            changed["difficulty"] = r.difficulty
+        if changed:
+            changed["need"] = _threshold(changed.get("target", pending["target"]), changed.get("difficulty", pending["difficulty"]))
+        risk = r.on_push_fail
+        if risk.model_dump() != Failure().model_dump():
+            changed.update(on_push_fail=risk.model_dump(), risk=risk.text.strip() or pending.get("risk", ""))
+        out["pending"] = changed
+        return out
 
     async def talk(self, turn: Turn) -> None:
         """NPC replies and stage performances, after the engine has resolved checks. Each settles
@@ -2959,7 +3011,9 @@ NOWHERE = (
     "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"
     "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
 )
-STALL_TURNS = 12  # turns without a clue, flag, event or new place before the director sends a lead
+STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
+PUSH_MINUTES = 10  # what a push made a stated way takes when no arbiter rules it (time always passes, p. 73)
+PUSH_HOW = 200  # characters of a push's stated way that are kept
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
@@ -3014,6 +3068,17 @@ def _clip(text: str, n: int) -> str:
 
 def _threshold(target: int, difficulty: str) -> int:
     return {"困难": target // 2, "极难": target // 5}.get(difficulty, target)
+
+
+def push_choice(value: Any) -> tuple[str, str]:
+    """A push offer's answer as (mode, how): the old strings, or {"choice": ..., "how": ...}."""
+    if isinstance(value, dict):
+        mode, how = str(value.get("choice", "")), " ".join(str(value.get("how") or "").split())[:PUSH_HOW]
+    else:
+        mode, how = str(value), ""
+    if mode not in ("push", "luck", "drop"):
+        raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    return mode, how if mode == "push" else ""
 
 
 def _refused(text: str) -> commands.CommandResult:
