@@ -198,3 +198,14 @@ def test_out_of_sight_the_quarry_can_hide(fake):
     assert hidden and seen[0][0] == "p"
     fake.queue(10, 8)  # hard against hard: not hidden
     assert not chase.hide(fake, 60, [p])[2]
+
+
+def test_whatever_comes_to_hand_is_a_club():
+    from autokeeper.engine.combat import Order
+    from autokeeper.engine.fighting import Fighting
+
+    me = fighter("me", fighting=45, attacks=[FIST])
+    candlestick = Fighting._weapon(me, Order(do="attack", target="x", weapon="铜烛台"))
+    assert (candlestick.name, candlestick.damage, candlestick.value) == ("铜烛台", "1D6+DB", 45)
+    poker = Fighting._weapon(me, Order(do="attack", target="x", weapon="拨火棍"))
+    assert poker.damage == "1D8+DB" and poker.name == "拨火棍"  # what it is most like

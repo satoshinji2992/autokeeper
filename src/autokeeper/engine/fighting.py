@@ -136,11 +136,20 @@ class Fighting:
 
     @staticmethod
     def _weapon(f: Fighter, order: Order) -> Attack:
-        """The attack an order names, else the one in hand."""
+        """The attack an order names, else the one in hand. Something picked up on the spot (a
+        candlestick, a chair) is the weapon it is most like, or a club made of whatever it is."""
+        from ..rules.weapons import weapon_in
+
         if order.weapon:
             for a in f.attacks:
                 if a.name == order.weapon or order.weapon in a.name or a.name in order.weapon:
                     return a
+            if order.do in ("attack", "shoot"):
+                like = weapon_in(order.weapon)
+                if like is not None and not like.firearm:
+                    return rules.attack_of(like, f.value(like.skill)).model_copy(update={"name": order.weapon})
+                if like is None:  # 7th edition's improvised club
+                    return Attack(name=order.weapon, skill=rules.BRAWL, value=f.fighting, damage="1D6+DB")
         if order.do == "shoot":
             guns = [a for a in f.attacks if a.firearm and a.usable()]
             if guns:
