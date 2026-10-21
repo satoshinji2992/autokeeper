@@ -214,7 +214,7 @@ class GameState(BaseModel):
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own
     view_kind: str = ""  # "" the place's picture for the hour, "focus" a view of what they look at, "moment" an event's
-    hinted: list[str] = Field(default_factory=list)  # foreshadowing the keeper has been given (Module.foreshadow)
+    signs: dict[str, int] = Field(default_factory=dict)  # foreshadow id -> signs of it the keeper was handed: its hint, then its stages (engine/signs.py)
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
     epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)

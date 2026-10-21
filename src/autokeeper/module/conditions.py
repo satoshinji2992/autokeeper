@@ -34,7 +34,7 @@ PROGRESS_ID = re.compile(r"^(learned|found|knows?|has|got|saw|heard|read)_")
 class Piece:
     """One thing compile time added that an NPC plays or knows, or the keeper shows the players."""
 
-    ref: str  # agendas:<npc>:<step> / knows:<npc>:<i> / foreshadow:<id>
+    ref: str  # agendas:<npc>:<step> / knows:<npc>:<i> / foreshadow:<id> / foreshadow:<id>:<stage, from 1>
     kind: str  # meet / backstage / knows / foreshadow
     text: str
     npc: str = ""
@@ -65,7 +65,9 @@ def pieces(m: Module) -> list[Piece]:
         for s in a.steps:
             kind = "meet" if s.meet else "backstage"
             out.append(Piece(f"agendas:{a.npc}:{s.id}", kind, s.text, a.npc, s.when, s.only_if, s.ruling, s.does))
-    out += [Piece(f"foreshadow:{f.id}", "foreshadow", f.hint) for f in m.foreshadow]
+    for f in m.foreshadow:  # a sign, and each later look at it (Foreshadow.stages)
+        out.append(Piece(f"foreshadow:{f.id}", "foreshadow", f.hint))
+        out += [Piece(f"foreshadow:{f.id}:{n}", "foreshadow", s.hint, when=s.when) for n, s in enumerate(f.stages, 1)]
     return out
 
 

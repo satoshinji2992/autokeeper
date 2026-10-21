@@ -360,6 +360,16 @@ def audit(m: Module) -> list[Issue]:
             err(f"伏笔 {f.id} 的地点 {f.where} 不存在")
         if f.pays_off not in targets:
             err(f"伏笔 {f.id} 指向的 {f.pays_off} 不是结论、事件或结局")
+        for n, s in enumerate(f.stages, 1):  # engine/signs.py
+            if s.where and s.where not in locs:
+                err(f"伏笔 {f.id} 第 {n} 步的地点 {s.where} 不存在")
+            if s.flag and s.flag not in m.flags:
+                err(f"伏笔 {f.id} 第 {n} 步设的标记 {s.flag} 未声明")
+            when = s.when.strip()
+            if when and not (re.fullmatch(r"D\d+ \d{1,2}:\d{2}", when) or (when.startswith("flag:") and when[5:] in m.flags)):
+                err(f"伏笔 {f.id} 第 {n} 步的 when 要写成 'D2 08:00' 这样的时间或 flag:已声明的标记，现在是 {s.when}")
+            if not s.hint.strip():
+                err(f"伏笔 {f.id} 第 {n} 步没有写 hint")
     for t in m.ties:
         if t.npc and t.npc not in npcs:
             err(f"牵连 {t.id} 的 NPC {t.npc} 不存在")
