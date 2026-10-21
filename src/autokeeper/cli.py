@@ -741,7 +741,7 @@ def art_fetch(
     module: Path,
     only: Annotated[list[str] | None, typer.Option(help="只处理这些图名")] = None,
     force: bool = False,
-    codex: Annotated[bool, typer.Option("--codex/--no-codex", help="找不到照片时用 AI 画，并画出模组里写的变样图（只用于本机导入的模组）")] = True,
+    codex: Annotated[bool, typer.Option("--codex/--no-codex", help="找不到照片时用 AI 画，并画出模组里写的变样图（伏笔步骤的除外，游戏里才画；只用于本机导入的模组）")] = True,
 ) -> None:
     """从 Wikimedia Commons 找真实图片（公有领域 / CC），读图员挑图裁剪，存成 art/<名字>.jpg 并记录署名。"""
     from . import imagegen

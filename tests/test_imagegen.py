@@ -407,6 +407,68 @@ async def test_an_import_draws_what_no_photo_was_found_for_and_the_states_the_mo
     assert await imagegen.looks(config.Config(), m, paths.MODULES / "zhuishuren" / "art") == []
 
 
+def staged(root: Path) -> Path:
+    """The format example as an imported module, with two changes on the square: the bell stopped
+    (an event's), and a step of foreshadowing's (a figure in the painting), on a picture of its own."""
+    from autokeeper.module import yamledit
+
+    work = root / "example"
+    shutil.copytree(EXAMPLE, work)
+    places = yamledit.put((work / "places.yaml").read_text(encoding="utf-8"), "locations", "square", "looks", [
+        {"when": "flag:bell_stopped", "change": "钟停了，广场上的人都抬头望着它"},
+        {"when": "flag:sign_f_painting_1", "change": "告示栏旁的画里多了一个背对着人的小小人影"}])
+    (work / "places.yaml").write_text(places, encoding="utf-8")
+    main = (work / "module.yaml").read_text(encoding="utf-8")
+    (work / "module.yaml").write_text(yamledit.put_key(main, "flags", "sign_f_painting_1", "伏笔 f_painting 第 1 步露出了"), encoding="utf-8")
+    (work / "situation.yaml").write_text(yaml.safe_dump({"foreshadow": [{
+        "id": "f_painting", "hint": "告示栏旁挂着一幅海边风景画，岸边空无一人", "where": "square", "pays_off": "k_tower",
+        "stages": [{"hint": "画里的海岸边多了一个背对着人的身影", "flag": "sign_f_painting_1"}]}]}, allow_unicode=True), encoding="utf-8")
+    picture(work / "art" / "places" / "square.jpg")
+    return work
+
+
+async def test_an_import_draws_the_states_the_story_brings_but_not_a_foreshadowing_steps(codex, monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
+    work = staged(paths.LOCAL_MODULES)
+    m = Module.load(work)
+    assert m.stage_flags() == {"sign_f_painting_1"} and not [i for i in graph.audit(m) if i.level == "error"]
+    assert await imagegen.looks(config.Config(), m, work / "art") == ["square_bell_stopped"]
+    assert len(codex.prompts) == 1 and "钟停了" in codex.prompts[0] and codex.attached
+    (work / "art" / "places" / "square_bell_stopped.jpg").unlink()
+
+    async def nothing(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(imagery, "fetch_folder", nothing)  # the photos: none found, none drawn
+    monkeypatch.setattr(imagery, "available", lambda: True)
+    log = io.StringIO()
+    await find_photos(m, work, config.Config(), Console(file=log, width=200))
+    pictures = Module.load(work).pictures
+    assert "square_bell_stopped" in pictures and "square_sign_f_painting_1" not in pictures
+    assert len(codex.prompts) == 2 and "变样图 画好 1 张" in log.getvalue()
+
+
+def test_art_fetch_and_art_prepare_leave_a_foreshadowing_steps_picture_for_the_game(codex, monkeypatch, tmp_path):
+    from typer.testing import CliRunner
+
+    from autokeeper import pictures
+    from autokeeper.cli import app
+
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
+    work = staged(paths.LOCAL_MODULES)
+
+    async def nothing(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(imagery, "fetch_folder", nothing)
+    result = CliRunner().invoke(app, ["art", "fetch", str(work)])
+    assert result.exit_code == 0, result.output
+    assert "变样图 1 张" in result.output and len(codex.prompts) == 1 and "钟停了" in codex.prompts[0]
+    m = Module.load(work)
+    assert "square_bell_stopped" in m.pictures and "square_sign_f_painting_1" not in m.pictures
+    assert not {"square_bell_stopped", "square_sign_f_painting_1"} & {g.key for g in pictures.gaps(m)}  # art prepare: no changed states
+
+
 def test_a_module_s_changes_are_checked():
     m = Module.load(EXAMPLE)
     m.location("square").looks = [Look(when="visit:square", change="x"), Look(when="flag:nobody", change="y")]

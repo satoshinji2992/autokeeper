@@ -5,6 +5,10 @@ A sign's first hint comes the first time the party arrives where it shows. Its s
 waking there after a rest, once its time or flag has come: the painting in the inn looks a
 little different each time they pass it. Only the hint goes to the keeper, never the clue it
 points to. GameState.signs keeps how many of each the keeper was handed.
+
+A stage's flag can change a place's picture (Location.looks). That picture is not drawn ahead of
+play: once the sign before it is handed, coming() names the flag, and the picture is drawn in the
+background (engine/visuals.Visuals.ahead), there by the time the stage shows.
 """
 
 from __future__ import annotations
@@ -47,9 +51,9 @@ def at(m: Module, st: GameState, place: str) -> list[str]:
     return [f.id for f in m.foreshadow if (s := sign(f, step(st, f))) is not None and s.where == place]
 
 
-def hand(m: Module, st: GameState, ids: list[str]) -> list[tuple[str, Stage]]:
-    """The signs of `ids` that come now, where the party is, each moved on by one: the keeper's
-    note for each, and its sign (whose flag the game sets)."""
+def hand(m: Module, st: GameState, ids: list[str]) -> list[tuple[str, str, Stage]]:
+    """The signs of `ids` that come now, where the party is, each moved on by one: its id, the
+    keeper's note for it, and the sign (whose flag the game sets)."""
     out = []
     for fid in dict.fromkeys(ids):
         f = next((x for x in m.foreshadow if x.id == fid), None)
@@ -61,8 +65,19 @@ def hand(m: Module, st: GameState, ids: list[str]) -> list[tuple[str, Stage]]:
             continue
         st.signs[f.id] = n + 1
         if n == 0:
-            out.append((f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{s.hint}", s))
+            out.append((f.id, f"这里可以顺手露出一点端倪，一笔带过，不点破、不解释：{s.hint}", s))
         else:
             before = f.stages[n - 2].hint if n > 1 else f.hint
-            out.append((f"先前露出过的端倪起了变化，可以顺手带出，一笔带过，不点破、不解释。先前：{before}；这次：{s.hint}", s))
+            out.append((f.id, f"先前露出过的端倪起了变化，可以顺手带出，一笔带过，不点破、不解释。先前：{before}；这次：{s.hint}", s))
+    return out
+
+
+def coming(m: Module, st: GameState, ids: list[str]) -> list[str]:
+    """The flags of the stages that come next for the signs of `ids` (just handed): a picture hung on
+    one is drawn now, in the background, ready by the time the stage shows (Visuals.ahead)."""
+    out = []
+    for fid in dict.fromkeys(ids):
+        f = next((x for x in m.foreshadow if x.id == fid), None)
+        if f is not None and (s := sign(f, step(st, f))) is not None and s.flag:
+            out.append(s.flag)
     return out
