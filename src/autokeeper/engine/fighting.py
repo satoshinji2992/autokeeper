@@ -72,6 +72,7 @@ class Fighting:
         _check_ending: Any
         _debug: Any
         _sights: Any
+        _filled: Any
         _chase_closed: Any
         _encounter_end: Any
 
@@ -334,7 +335,7 @@ class Fighting:
         track = await step("chase-track", turn, self._chase_track)
         begun = await step("chase-begin", turn, lambda: self._chase_begin(foes, quarry, reason, track))
         for i, ev in enumerate(begun):
-            await step(f"chase-begin:{i}", turn, lambda ev=ev: self.emit(ev))
+            await step(f"chase-begin:{i}", turn, lambda ev=ev: self.emit(self._filled(ev)))
         if not begun:
             return "none"
         await step("chase-told", turn, lambda: turn.fight.extend([begun[0]["line"], *begun[0].get("speeds", [])]))
@@ -386,13 +387,13 @@ class Fighting:
             return rules.order(moving, set())  # the old chase has no shooting
 
         sequence = await step("chase-round", turn, begin)
-        await step("chase-round-notice", turn, lambda: self.emit({"type": "chase_round", "round": ch.round,
-                                                                   "chase": battle.chase_view(ch)}))
+        await step("chase-round-notice", turn, lambda: self.emit(self._filled({"type": "chase_round", "round": ch.round,
+                                                                   "chase": battle.chase_view(ch)})))
         turned = None
         for i, fid in enumerate(sequence):
             out = await step(f"chase-act:{i}", turn, lambda fid=fid: self._chase_act(fid, turn))
             for k, ev in enumerate(out["events"]):
-                await step(f"chase-act:{i}:{k}", turn, lambda ev=ev: self.emit(ev))
+                await step(f"chase-act:{i}:{k}", turn, lambda ev=ev: self.emit(self._filled(ev)))
             if out.get("turned"):
                 turned = out["turned"]
                 break
@@ -553,7 +554,7 @@ class Fighting:
         ch = st.chase
         if ch is None:  # closed before the turn was cut short: what it owed the screens goes out
             for i, ev in enumerate(await step("chase-close", turn, lambda: [])):
-                await step(f"chase-close:{i}", turn, lambda ev=ev: self.emit(ev))
+                await step(f"chase-close:{i}", turn, lambda ev=ev: self.emit(self._filled(ev)))
             return
         names = "、".join(f.name for f in ch.runners if f.side != "party")
         if end == "caught":
@@ -582,16 +583,15 @@ class Fighting:
         quarry = ch.quarry
         await self._chase_closed(end, text, fight_ids, turn)
         for i, ev in enumerate(events):
-            await step(f"chase-close:{i}", turn, lambda ev=ev: self.emit(ev))
+            await step(f"chase-close:{i}", turn, lambda ev=ev: self.emit(self._filled(ev)))
         enc = st.encounter
         if enc is None or enc.phase == "ended":
             return
         if end == "caught":
-            from .encounter import views
 
             line = "【追逐转为战斗】扭打在一起"
-            await step("chase-fight", turn, lambda: self.emit({"type": "fight_start", "fight": views.fight_view(self),
-                                                               "line": line, "surprise": ""}))
+            await step("chase-fight", turn, lambda: self.emit(self._filled({"type": "fight_start", "fight": None,
+                                                               "line": line, "surprise": ""})))
             return
         await self._encounter_end("fled" if quarry == "party" else "escaped", turn)
 

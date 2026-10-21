@@ -1683,6 +1683,13 @@ class Game(Encounters, Fighting):
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
         else:
             await self._pushed(mode, pending, turn, record, known, how)
+        # A fight or a chase the plan said this check's outcome sets off (Plan.encounter, on_fail or
+        # on_success): the pushed or dropped roll is that outcome (the review: it never began after a push).
+        hint = st.pending_turn.get("encounter_hint") if st.pending_turn else None
+        if hint and hint.get("trigger") in ("on_fail", "on_success") and not self.battling():
+            passed = mode != "drop" and record is not None and record.passed
+            if passed == (hint["trigger"] == "on_success"):
+                await step("encounter-after", turn, lambda: self._start_from(Action(kind="other", summary=""), turn))
         # What the failure cost settles as any turn's does: the clock moved on, so what was due by
         # now happens (scheduled events, the rest of the world, rule timers), and an ending it
         # brought about ends the game.
@@ -1783,7 +1790,9 @@ class Game(Encounters, Fighting):
         through _reply; a resumed turn goes on from the receipts it kept (Turn.replies)."""
         st, m = self.state, self.m
         action = turn.action
-        if action is not None and action.declared is not None:  # a round of a fight: voices are its own (engine/encounter)
+        if (action is not None and action.declared is not None) or self.fought_this_turn():
+            # A round of a fight, or a turn that began one (a talk that went wrong): the encounter's voices
+            # are its own (engine/encounter), no ordinary reply on top of it (design §1.6).
             await self._world(turn)
             await self._people()
             self._keep(turn)

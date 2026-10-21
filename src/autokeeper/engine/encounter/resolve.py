@@ -65,6 +65,7 @@ class Unit:
     flags: list[str] = field(default_factory=list)
     rest: dict | None = None  # an `other` ruling's remainder for the turn's investigator (clues, takes, changes)
     stop: bool = False
+    fired: list[str] = field(default_factory=list)  # flags of the stakes an encounter's end fired (set after it is archived)
 
 
 def check_view(c: Check) -> dict:
@@ -139,7 +140,8 @@ class Work:
         c.luck_spent = need
         self.luck_left[pid] = pool - need
         self.unit.effects.append(effects.Luck(who=pid, left=pool - need))
-        self.unit.lines.append(f"{{{pid}}}花了 {need} 点幸运，这一下算成功（幸运池还剩 {pool - need}）")
+        # The keeper's alone: the players see a roll that passed, not the pool behind it.
+        self.unit.lines.append(f"【幸运池】{{{pid}}}花了 {need} 点幸运，这一下算成功（幸运池还剩 {pool - need}）")
         return c
 
     # -- harm -----------------------------------------------------------------------------------
@@ -599,10 +601,8 @@ def _aid(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
             if injury:
                 w.apply(target, effects.Heal(target=target, amount=0, means="first_aid", injury=injury))
         return head + "，手忙脚乱没能止住血"
-    if care.stabilized:
+    if care.stabilized:  # 1 temporary HP, no more (p. 101): Stabilize gives it
         w.apply(target, effects.Stabilize(target=target))
-        if body.hp < 1:
-            w.apply(target, effects.Heal(target=target, amount=1, means="first_aid"))
         return head + "，暂时稳住了伤势"
     injury = wounds._last_injury(body)
     w.apply(target, effects.Heal(target=target, amount=1, means="first_aid", injury=injury))

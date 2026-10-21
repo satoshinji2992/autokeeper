@@ -54,7 +54,7 @@ async def test_a_round_asks_the_player_before_any_die_of_the_blow_aimed_at_them(
         if mode == "custom":
             more.append(chunk)
     acts = [e for e in more if e["type"] == "fight_act"]
-    assert len(acts) == 1 and acts[0]["attacker"] == "warden" and acts[0]["reaction"] == "dodge"
+    assert len(acts) == 1 and acts[0]["attacker"] == "f1" and acts[0]["reaction"] == "dodge"
     assert st.investigator.hp == 8 and game.world.rec.entities["warden"].life.hp == 9
     assert not fake.values and not fake.totals and not st.pending_turn
     report = cast.reports[-1]
@@ -74,7 +74,7 @@ async def test_words_are_the_keeper_plans_never_parsed_by_their_first_word(modul
     assert [c[0] for c in cast.calls][:1] == ["act"] and cast.calls[0][1] == "打开门逃跑"  # the plan read the words
     assert [a.summary for a in cast.ruled] == ["周衡想拉开门逃出去"]  # the arbiter ruled it, from the neutral summary
     acts = [e for e in out if e["type"] == "fight_act"]
-    assert [a["attacker"] for a in acts] == ["warden"]  # nobody attacked the warden
+    assert [a["attacker"] for a in acts] == ["f1"]  # nobody attacked the warden
     report = cast.reports[-1]
     assert "打开门逃跑" not in report and "周衡想拉开门逃出去" in report  # never the player's raw words
 
@@ -107,7 +107,7 @@ async def test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all(
     fake.queue(90, 90, 90, 90, 90, 90, 90, 90)
     out, asked = await play(app, "攻击 食尸鬼（徒手）｜被攻击时闪避")
     acts = [e for e in out if e["type"] == "fight_act"]
-    assert not asked and [a["attacker"] for a in acts] == ["ghoul", "ghoul", "ghoul", "zhouheng"]
+    assert not asked and [a["attacker"] for a in acts] == ["f1", "f1", "f1", "zhouheng"]
     assert acts[-1]["reaction"] == "fight"  # the keeper's people fight back unless arranged otherwise (p. 87)
     assert not fake.values
 
@@ -315,10 +315,13 @@ async def test_an_important_npc_spends_its_luck_pool_on_its_own_roll(module, fak
     game.state.encounter.participants[0].asked, game.state.encounter.participants[0].react = True, "dodge"
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(90, 50, 90, 50).queue_totals(1)  # 周衡 misses (the warden fights back: 50 against 45, 5 short); its blow, the dodge
-    _out, _asked = await play(app, HIT)
+    out, _asked = await play(app, HIT)
     ent = game.world.rec.entities["warden"]
     assert ent.luck == 50 - 5  # its POW, less what it spent; it does not come back
-    assert any("花了 5 点幸运" in line for line in cast.reports[-1].splitlines())
+    assert any("花了 5 点幸运" in line for line in cast.reports[-1].splitlines())  # the keeper knows
+    shown = [line for e in out if e["type"] == "fight_state" for line in e.get("lines", [])]
+    shown += [e.get("line", "") for e in out if e["type"] == "fight_act"]
+    assert not any("幸运" in line for line in shown) and not any("幸运" in e.text for e in game.state.log)  # the players do not
 
 
 # -- something else, as the arbiter rules it ------------------------------------------------------------
@@ -455,3 +458,19 @@ async def test_the_push_offer_passes_its_answer_on_as_it_came(module, fake, monk
     answer = {"choice": "push", "how": "把齿轮一个个拆下来看"}
     await play(app, "look", answers=[answer])
     assert got == [answer]
+
+
+async def test_a_fight_the_plan_said_a_failure_sets_off_begins_after_a_failed_push(module, fake):
+    """The review: with a pushable failure the fight of an on_fail hint never began."""
+    talk = Action(kind="talk", summary="周衡想骗守钟人交出日记", npc="warden", speech="把日记给我")
+    ruling = Ruling(needs_roll=True, skill="话术", clues_on_success=["c_diary"])
+    start = EncounterStart(mode="fight", foes=["warden"], pace=6, reason="守钟人恼了", npcs=[arrange("warden", attack("zhouheng"))])
+    game, cast, _events = fight_game(module, fake, starts=[start],
+                                    hints={"lie": EncounterHint(mode="fight", trigger="on_fail", **{"with": ["warden"]})})
+    cast.script["lie"] = (talk, ruling)
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90, 90)  # the lie fails; pushed, it fails again
+    out, asked = await play(app, "lie", answers=["push"])
+    assert [a["kind"] for a in asked] == ["push"]
+    assert game.state.encounter is not None and any(e["type"] == "fight_start" for e in out)
+    assert not any(e["type"] == "npc" for e in out)  # the fight it set off: no ordinary reply on top of it

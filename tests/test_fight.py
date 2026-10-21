@@ -81,13 +81,13 @@ async def test_a_round_goes_in_dex_order_and_the_answer_meets_the_blow(module, f
     assert [a["kind"] for a in asked] == ["reaction"]
     assert st.encounter.round == 1 and inv.hp == inv.hp_max - 3
     order = next(e for e in events if e["type"] == "fight_round")["order"]
-    assert order == ["zhouheng", "warden"]  # DEX 65 before 50
+    assert order == ["zhouheng", "f1"]  # DEX 65 before 50; the warden by his seat, never his own id
     ruled = len(cast.ruled)
     fake.queue(10, 60, 20, 5).queue_totals(1, 2)  # 周衡 hard: 1; the warden hits, 周衡 fights back with an extreme success
     events, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时反击", thread={**THREAD, "configurable": {"thread_id": "r2"}})
     assert len(cast.ruled) == ruled and not asked  # a button needs no arbiter; the answer set with it stands
     acts = [e for e in events if e["type"] == "fight_act"][-2:]
-    assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "warden"
+    assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "f1"
     # fighting back does normal damage however well it rolls (Keeper Rulebook p. 87): 1D3, not its most
     assert acts[1]["damage"] == 2 and "反击得手" in acts[1]["line"]
     assert inv.hp == inv.hp_max - 3 and game.world.rec.entities["warden"].life.hp == 11 - 1 - 2
@@ -174,7 +174,7 @@ async def test_an_event_that_scripts_an_attack_begins_the_fight_and_the_next_inp
     out, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "e2"}})
     assert len(cast.ruled) == ruled and enc is not None and st.encounter.round == 1 and not asked  # surprised: nothing to ask
     blow = [e for e in out if e["type"] == "fight_act"][-1]
-    assert blow["attacker"] == "warden" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
+    assert blow["attacker"] == "f1" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
     assert not st.encounter.get("zhouheng").surprised  # the first round only
 
 

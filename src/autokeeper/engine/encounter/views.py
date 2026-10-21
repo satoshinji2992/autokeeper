@@ -64,6 +64,31 @@ def down(ctx: Ctx, pid: str) -> bool:
     return status(ctx, pid) in ("死亡", "濒死", "昏迷", "倒下")
 
 
+def masks(enc: EncounterState | None) -> dict[str, str]:
+    """The ids the screens get for everyone who is not an investigator: one per encounter seat ("f2"),
+    never the NPC's or the creature's own (a creature form's id would name the NPC behind it)."""
+    if enc is None:
+        return {}
+    return {p.id: f"f{i}" for i, p in enumerate(enc.participants) if p.kind != "investigator"}
+
+
+def masked(ev: dict, enc: EncounterState | None) -> dict:
+    """An event for the screens with every id in it masked (masks)."""
+    m = masks(enc)
+    if not m:
+        return ev
+    ev = dict(ev)
+    for key in ("attacker", "defender", "hurt", "who", "id", "hunter"):
+        if isinstance(ev.get(key), str) and ev[key] in m:
+            ev[key] = m[ev[key]]
+    if isinstance(ev.get("order"), list):
+        ev["order"] = [m.get(x, x) for x in ev["order"]]
+    for key, people in (("fight", "fighters"), ("chase", "runners")):
+        if isinstance(ev.get(key), dict) and isinstance(ev[key].get(people), list):
+            ev[key] = {**ev[key], people: [{**f, "id": m.get(f.get("id", ""), f.get("id", ""))} for f in ev[key][people]]}
+    return ev
+
+
 def names(ctx: Ctx, audience: str = "players") -> dict[str, str]:
     return {p.id: ctx.name(p.id, audience) for p in ctx.enc.participants}
 
@@ -72,6 +97,9 @@ def portrait(game: Any, pid: str) -> str:
     inv = next((i for i in game.state.investigators if i.id == pid), None)
     if inv is not None:
         return inv.portrait
+    form = profiles.form_of(game.world, pid)  # an NPC fighting as its creature sheet: that face (犬脸的佝偻身影)
+    if form is not None and f"creature-{form.id}" in game.m.pictures:
+        return f"creature-{form.id}"
     npc = next((n for n in game.m.npcs if n.id == pid), None)
     if npc is not None:
         return npc.portrait or ""
@@ -105,6 +133,9 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
                     "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
                     "weapon": weapon.name if weapon is not None else "徒手", "stance": STANCES.get(p.react or "dodge", "dodge"),
                     "prone": p.id in ctx.enc.scene.prone, "held": bool(ctx.held_by(p.id)), "dex": v.char("敏捷")})
+    m = masks(ctx.enc)
+    for f in out:
+        f["id"] = m.get(f["id"], f["id"])
     return {"round": ctx.enc.round, "place": ctx.enc.place, "fighters": out}
 
 
@@ -289,7 +320,8 @@ def table(game: Any) -> dict | None:
     st = game.state
     if st.chase is not None:
         ch = st.chase
-        out = {"kind": "chase", "round": ch.round, "chase": battle.chase_view(ch), "choices": {}, "presets": {}}
+        out = {"kind": "chase", "round": ch.round, "chase": masked({"chase": battle.chase_view(ch)}, st.encounter)["chase"],
+               "choices": {}, "presets": {}}
         for f in ch.runners:
             if f.kind == "investigator" and f.standing and f.id not in ch.hidden:
                 out["choices"][f.id] = {"run": [[label, note] for label, note, _ in chase_options(f, ch)]}

@@ -54,6 +54,8 @@ if TYPE_CHECKING:
     from ..game import Turn
 
 UNSETTLED = "【未落实】"
+# The keeper's lines the screens never get: cues, what did not land, the round's order line, stakes, a Luck pool.
+KEEPER_ONLY = ("【可观察】", UNSETTLED, "【战斗 · 第", "【后果】", "【幸运池】")
 OUTCOME_WORDS = {"won": "调查员一方占了上风", "fled": "调查员逃离了", "lost": "调查员一方全部倒下", "escaped": "对手跑了",
                  "parley": "双方停手谈和", "surrender": "有一方投降了", "dispersed": "各自散去", "caught": "被抓住了",
                  "aftermath_done": "战斗结束"}
@@ -109,6 +111,12 @@ class Encounters:
     def fighting(self) -> bool:
         enc = self.encounter()
         return enc is not None and enc.mode == "fight" and self.state.chase is None
+
+    def fought_this_turn(self) -> bool:
+        """A fight or a chase is going on, or this turn began one (and it is already over)."""
+        st = self.state
+        return self.battling() or any(x.started_turn == st.turn for x in st.encounter_log[-3:]) or (
+            st.encounter is not None and st.encounter.started_turn == st.turn)
 
     def pending_choice(self) -> PendingChoice | None:
         enc = self.encounter()
@@ -211,9 +219,10 @@ class Encounters:
     async def _encounter_stages(self, action: Action, ruling: Ruling, turn: Turn, kind: dict) -> None:
         st, step = self.state, self._resolution_step
         declared = action.declared or {}
+        started = ""
         if kind.get("start"):
-            opened = await self._start_from(action, turn)
-            if not opened:
+            started = await self._start_from(action, turn)
+            if not started:
                 return
             if st.chase is not None and not declared.get("start"):  # they ran: the chase's first round, running
                 await self._chase_turn(action, ruling, turn)  # type: ignore[attr-defined]
@@ -222,11 +231,10 @@ class Encounters:
             await self._chase_round_turn(action, ruling, turn)
             return
         enc = st.encounter
-        eid = kind.get("id") or (enc.id if enc else "")
-        if enc is None or enc.id != eid:
-            return  # archived: the turn this was is over
-        if enc.phase == "ended":
-            await self._encounter_end(enc.ended.how if enc.ended else "won", turn)  # its notices, flags once more
+        eid = kind.get("id") or started or (enc.id if enc else "")
+        if enc is None or enc.id != eid or enc.phase == "ended":
+            if self._ending_owed(eid):  # it ended (and perhaps went into the log) before the turn was cut short
+                await self._encounter_end("", turn, eid=eid)
             return
         if st.chase is not None:  # the start opened a chase (the old engine runs its rounds)
             return
@@ -243,7 +251,7 @@ class Encounters:
         await step("ending", turn, lambda: self._check_ending(turn))
 
     # -- starting one -----------------------------------------------------------------------------
-    async def _start_from(self, action: Action, turn: Turn) -> bool:
+    async def _start_from(self, action: Action, turn: Turn) -> str:
         """The encounter this turn begins: one the MCP keeper or an event wrote out, or the one the
         keeper plan announced (Plan.encounter), set up by one more keeper-plan call (plan_encounter)."""
         from ...agents.encounter import EncounterHint
@@ -295,31 +303,32 @@ class Encounters:
         return start
 
     async def _encounter_open(self, start: EncounterStart, turn: Turn, *, event: Event | None = None,
-                              actor: str = "") -> bool:
+                              actor: str = "") -> str:
         """An encounter begins where the investigators are: who is in it, their bodies kept by the world
         from now on, the creatures first seen (sanity, per investigator), its stakes. A fight's
         `opening` is the investigator's first action: the first round runs at once; otherwise the next
-        input is the first round. False when there is nobody there to fight after all."""
+        input is the first round. Its id; "" when there is nobody there to fight after all."""
         st, step = self.state, self._resolution_step
         eid = await step("enc-id", turn, lambda: f"e{st.turn}n{len(st.encounter_log)}" + (f"x{event.id}" if event else ""))
-        foes = self._coming(start.foes, fight_ok=True)
+        # Who comes, decided once: resumed after the opening blow killed its foe, the fight still ends.
+        foes = await step("enc-foes", turn, lambda: self._coming(start.foes, fight_ok=True))
         if not foes:
             if not event:
                 turn.notes.append("没有可以动手的对象")
-            return False
+            return ""
         base = f"enc/{eid}/begin"
         done = await step("/" + base, turn, lambda: self._begin(eid, start, foes, turn, event))
         await self._notify(base, done["notices"], turn)
         if not done.get("ok"):
-            return False
+            return ""
         await self._sights(turn, paid=bool(event and event.sanity), event=event)
         if start.mode == "chase":
             await self._chase_bridge_open(start, turn, event=event)
-            return True
+            return eid
         opening = start.opening
         if opening is not None and actor and not event:
             await self._declare(turn, actor, opening, "words", None)
-        return True
+        return eid
 
     def _begin(self, eid: str, start: EncounterStart, foes: list[str], turn: Turn, event: Event | None) -> dict:
         st = self.state
@@ -415,21 +424,25 @@ class Encounters:
             first = not any(horror in seen for seen in st.sightings.values())
             if first:
                 face = f"creature-{sheet}" if f"creature-{sheet}" in self.m.pictures else views.portrait(self, horror)
-                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda prof=prof, horror=horror, face=face: self.emit({
+                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda prof=prof, horror=horror, face=face: self.emit(self._filled({
                     "type": "reveal", "id": horror, "name": ctx.name(horror, "players"), "portrait": face,
-                    "look": prof.look[:120]}))
+                    "look": prof.look[:120]})))
             for inv in st.investigators:
                 if horror in st.sightings.get(inv.id, []) or not inv.can_act:
                     continue
 
                 def pay(inv=inv, horror=horror, prof=prof, free=free) -> dict | None:
-                    st.sightings.setdefault(inv.id, []).append(horror)
+                    # The loss is rolled on a copy and lands with the sighting, together: a die that fails
+                    # leaves neither, and the retry rolls (or replays) it (the review: a sighting kept
+                    # before its dice skipped the loss for good).
                     if free:
+                        st.sightings.setdefault(inv.id, []).append(horror)
                         return None
                     ok, bad = prof.sanity.split("/", 1)
                     trial = inv.model_copy(deep=True)
                     s = self.rules.sanity(trial, ok.strip(), bad.strip())
                     inv.__dict__.update(trial.__dict__)
+                    st.sightings.setdefault(inv.id, []).append(horror)
                     turn.sanity.append((inv.name, s))
                     st.add("sanity", s.describe(), who=inv.name)
                     return {"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)}
@@ -625,9 +638,12 @@ class Encounters:
                     return
                 ctx = Ctx.of(self)
                 nxt = enc.round + 1
-                waiting = [p.id for p in enc.participants if p.controller == "human" and ctx.acting(p.id)
-                           and self._declared(enc, p.id, nxt) is None]
-                declared = any(self._declared(enc, p.id, nxt) is not None for p in enc.participants if p.controller == "human")
+                humans = [p.id for p in enc.participants if p.controller == "human" and ctx.acting(p.id)]
+                waiting = [x for x in humans if self._declared(enc, x, nxt) is None]
+                # With a human who can act, the round waits for them; with none (autoplay, watching, everyone
+                # down), the declaration of whoever's input this was settles it (the review: it never began).
+                declared = any(self._declared(enc, p.id, nxt) is not None for p in enc.participants
+                               if p.kind == "investigator" and (p.controller == "human" or not humans))
                 if (waiting and not settle) or (not declared and not settle) or started:
                     return
                 started += 1
@@ -673,7 +689,7 @@ class Encounters:
             after = Ctx.of(self, self.state.encounter or w.enc)
             kn, pn = views.names(after, "keeper"), views.names(after, "players")
             turn.fight += [telling.render(x, kn) for x in w.unit.lines]
-            shown = [telling.render(x, pn) for x in w.unit.lines if not x.startswith(("【可观察】", UNSETTLED, "【战斗 · 第", "【后果】"))]
+            shown = [telling.render(x, pn) for x in w.unit.lines if not x.startswith(KEEPER_ONLY)]
             notices = []
             for ev in w.unit.notices:
                 ev = dict(ev)
@@ -686,7 +702,7 @@ class Encounters:
                 for x in shown:
                     if not x.startswith("【"):
                         st.add("dice", x)
-            return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags}
+            return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired}
 
         value = await self._resolution_step("/" + key, turn, run)
         await self._notify(key, value.get("notices", []), turn)
@@ -701,11 +717,12 @@ class Encounters:
             await self._resolution_step(f"/{key}/n{k}", turn, lambda ev=ev: self.emit(self._filled(ev)))
 
     def _filled(self, ev: dict) -> dict:
-        """A notice with the fight as it now stands, for those that carry it."""
+        """A notice as the screens get it: with the fight as it now stands, for those that carry it, and
+        no one's own id but an investigator's (views.masked: never "douglas" behind 犬脸的佝偻身影)."""
+        enc = self.state.encounter
         if "fight" in ev and ev["fight"] is None:
-            enc = self.state.encounter
             ev = {**ev, "fight": views.fight_view(self, enc) if enc is not None else {"round": 0, "place": "", "fighters": []}}
-        return ev
+        return views.masked(ev, enc)
 
     async def _settle_rest(self, key: str, rest: dict, turn: Turn) -> None:
         """The rest of an `other` ruling for the investigator whose action it was (the review: most of
@@ -924,10 +941,12 @@ class Encounters:
         p = ctx.p(actor)
         assert p is not None
         able = [a for a in (p.arrangement.actions if p.arrangement else []) if not actions.preconditions(ctx, actor, a)]
-        units = (self._resolution or {}).get("enc-units", [])
-        if not able and getattr(self.cast, "plan", None) is not None and f"{base}/replan" not in units:
-            if self._resolution is not None:
-                units.append(f"{base}/replan")
+        asked = ((self._resolution or {}).get("steps") or {}).get(f"{base}/replan", {}).get("done")
+        if self._resolution is None:  # no journal (a test's direct call): once a slot all the same
+            replans: set = self.__dict__.setdefault("_replans", set())
+            asked, _ = base in replans, replans.add(base)
+        if not able and getattr(self.cast, "plan", None) is not None and not asked:
+            # Asked once a slot: a call that failed (a timeout) is asked again when the turn is retried.
             checked = await self._resolution_step(f"/{base}/replan", turn, lambda: self._arrange_call())
             if checked:
                 await self._plan_unit(f"{base}/replanned", checked["plan"], checked["unsettled"], turn)
@@ -1224,14 +1243,16 @@ class Encounters:
             rows.append(f"{v.public_name('players')}{word}")
         return f"{OUTCOME_WORDS.get(how, how)}：" + "，".join(rows)
 
-    async def _encounter_end(self, how: str, turn: Turn) -> None:
-        """Over: who ended how, the stakes that hold, the record, the minutes; notices, flags. A turn
-        resumed after the end op replays only what it still owed (I7)."""
+    async def _encounter_end(self, how: str, turn: Turn, *, eid: str = "") -> None:
+        """Over: who ended how, the stakes that hold, the record, the minutes; its notices; then it goes
+        into the log of finished encounters (archived) before its stakes' flags set off anything, so a
+        fight a flag begins (an event's) begins cleanly. A turn resumed after any of it goes on from
+        there and replays only what it still owed (I7)."""
         st, step = self.state, self._resolution_step
         enc = st.encounter
-        assert enc is not None
-        key = f"enc/{enc.id}/end"
-        if enc.phase != "ended":
+        eid = eid or (enc.id if enc is not None else "")
+        key = f"enc/{eid}/end"
+        if enc is not None and enc.id == eid and enc.phase != "ended":
             ctx = Ctx.of(self)
             due = stakes.due(self, enc, how)
             text = self._summary(ctx, how)
@@ -1240,6 +1261,7 @@ class Encounters:
                 e = w.enc
                 for i in due:
                     e.stakes[i].fired = True
+                w.unit.fired = [f for s in e.stakes if s.fired for f in s.flags]
                 per = {p.id: (views.status(w.ctx, p.id) or p.presence) for p in e.participants}
                 minutes = clock.settle_minutes(e.clock)
                 e.ended = EndRecord(round=e.round, how=how, per=per, places={p.id: e.place for p in e.participants},  # type: ignore[arg-type]
@@ -1260,16 +1282,34 @@ class Encounters:
                 st.add("event", f"战斗结束：{text}")
 
             await step(f"/{key}/record", turn, land)
-            await self._unit(key, turn, close)
+            value = await self._unit(key, turn, close)
         else:  # resumed after the end landed: its notices as the journal has them
-            await self._unit(key, turn, lambda w: None)
-        enc = st.encounter
-        fired = [f for s in (enc.stakes if enc is not None else []) if s.fired for f in s.flags]
+            row = ((self._resolution or {}).get("steps") or {}).get(key) or {}
+            value = row.get("value") if row.get("done") else None
+            if value:
+                await self._notify(key, value.get("notices", []), turn)
+            elif enc is not None and enc.id == eid:
+                value = {"fired": [f for s in enc.stakes if s.fired for f in s.flags]}
+        fired = list((value or {}).get("fired") or [])
+        await step(f"/{key}/archive", turn, lambda: self._archive(eid))
         if fired:
             await step(f"/{key}/flags", turn, lambda: self._flags(fired, turn))
 
+    def _ending_owed(self, eid: str) -> bool:
+        """This turn's journal began ending encounter `eid`: what is left of that is still owed."""
+        steps = (self._resolution or {}).get("steps") or {}
+        return f"enc/{eid}/end/record" in steps or f"enc/{eid}/end" in steps
+
+    def _archive(self, eid: str) -> None:
+        enc = self.state.encounter
+        if enc is not None and enc.id == eid:
+            self._archive_now()
+
     async def archive_encounter(self) -> None:
-        """An ended encounter into GameState.encounter_log (the turn that ended it is complete)."""
+        """An ended encounter into GameState.encounter_log (normally done as it ends)."""
+        self._archive_now()
+
+    def _archive_now(self) -> None:
         enc = self.state.encounter
         if enc is None or enc.phase != "ended" or self.state.chase is not None:
             return
@@ -1457,7 +1497,7 @@ class Encounters:
             return {"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【战斗转为追逐】", "speeds": speeds}
 
         ev = await self._resolution_step(f"/enc/{enc.id}/r{enc.round}/chase", turn, setup)
-        await self._resolution_step(f"/enc/{enc.id}/r{enc.round}/chase/n", turn, lambda: self.emit(ev))
+        await self._resolution_step(f"/enc/{enc.id}/r{enc.round}/chase/n", turn, lambda: self.emit(self._filled(ev)))
         turn.fight += ev.get("speeds", [])
 
     def _fighter(self, pid: str):

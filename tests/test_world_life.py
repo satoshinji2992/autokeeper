@@ -118,8 +118,7 @@ async def test_a_dead_creature_stays_dead(module, fake):
     await act(game, "攻击 食尸鬼（徒手）｜被攻击时闪避")
     body = game.world.rec.entities["ghoul"].life
     assert body.hp == 0 and "死亡" in body.conditions
-    assert game.state.encounter is not None and game.state.encounter.phase == "ended"
-    await game.archive_encounter()
+    assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "won"  # into the log as it ended
     assert not await game._encounter_open(EncounterStart(mode="fight", foes=["ghoul"], pace=6, reason="又来"), Turn())
 
 

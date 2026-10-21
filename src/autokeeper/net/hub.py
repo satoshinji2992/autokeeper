@@ -1320,7 +1320,8 @@ class Hub:
                 except TimeoutError:
                     choice = None
             if offer.get("kind") in ("reaction", "redeclare"):  # answered, or the default (what they set for the round)
-                choice = choice if any(o["id"] == choice for o in offer.get("options", [])) else offer.get("default")
+                words = isinstance(choice, dict) and str(choice.get("text", "")).strip()  # their own words: the keeper reads them
+                choice = choice if words or any(o["id"] == choice for o in offer.get("options", [])) else offer.get("default")
             elif offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
                 choice = "roll"
             elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice

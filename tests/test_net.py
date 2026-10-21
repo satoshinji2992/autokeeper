@@ -777,13 +777,14 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     assert [a["key"] for a in art] == ["creature-ghoul"] and art[0]["picture_data"]  # its face once, never the bestiary
     assert kinds.index("art") < kinds.index("fight_start")  # the face before the fight that shows it
     start, reveal = events[len(kinds) - 1 - kinds[::-1].index("fight_start")], events[kinds.index("reveal")]
-    foe = next(f for f in start["fight"]["fighters"] if f["id"] == "ghoul")
+    foe = next(f for f in start["fight"]["fighters"] if f["id"] == "f1")  # its seat, never its own id
     assert "look" not in foe and "dex" not in foe and foe["wound"] == "受伤" and foe["hp"] is None and foe["name"] == "腐臭的影子"
     assert "look" not in reveal and reveal["portrait"] == "creature-ghoul"
     view = hub._view()
     assert "encounter" not in view and "sightings" not in view  # the keeper's: every HP, the arrangements, true names
     now = view["encounter_public"]
-    shown = next(f for f in now["fight"]["fighters"] if f["id"] == "ghoul")
+    shown = next(f for f in now["fight"]["fighters"] if f["id"] == "f1")
+    assert "ghoul" not in [f["id"] for f in [*now["fight"]["fighters"], *start["fight"]["fighters"]]]
     assert shown["hp"] is None and shown["wound"] == "受伤" and not {"armor", "regen", "look", "notes", "sanity", "skills", "dex"} & set(shown)
     assert "食尸鬼" not in str(now)  # the name the players know
     me = st.investigators[0]
