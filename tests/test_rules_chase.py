@@ -14,7 +14,7 @@ def test_every_number_cites_its_page_and_the_unverified_ones_are_listed():
     for f in fields(ChaseRules):
         assert f.metadata["page"].isdigit() and 111 <= int(f.metadata["page"]) <= 128, f.name
     # what the book leaves to the keeper and the project fixed (docs/rules-reference.md lists them)
-    assert ChaseRules.unverified() == ["speed_floor", "barrier_cost", "sight_gap", "hide_far"]
+    assert ChaseRules.unverified() == ["speed_floor", "barrier_cost", "act_cost", "sight_gap", "hide_far"]
     assert ChaseRules.cite("start_gap") == "p. 112" and "未核验" in ChaseRules.cite("sight_gap")
     assert (RULES.start_gap, RULES.hazard_loss, RULES.careful_max, RULES.attack_cost) == (2, "1D3", 2, 1)
     assert RULES.delay_carries and RULES.hazard_moves
@@ -82,7 +82,7 @@ def test_hiding_and_losing_track():
     assert chase.hide_difficulty([40]) == Level.REGULAR and chase.hide_difficulty([40, 60]) == Level.HARD
     assert chase.hide_bonus(1) == 0 and chase.hide_bonus(2) == 1 and chase.hide_bonus(4) == 2
     assert chase.hidden(Level.REGULAR, Level.REGULAR) and not chase.hidden(Level.REGULAR, Level.HARD)
-    assert chase.out_of_sight(2) and not chase.out_of_sight(1) and chase.out_of_sight(0, blocked=True)
+    assert chase.out_of_sight(3) and not chase.out_of_sight(2) and chase.out_of_sight(0, blocked=True)  # the start's two: in sight
     assert chase.lost_track(Level.FAILURE) and not chase.lost_track(Level.REGULAR)
 
 

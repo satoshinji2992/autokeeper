@@ -6,7 +6,7 @@
                                     the way a chase from it runs
       references/npcs/<id>.md       one file per NPC: persona, secrets, lies, gated clues, the numbers a
                                     fight reads of them
-      references/creatures.md       each creature as a fight reads it (engine/combat.from_creature):
+      references/creatures.md       each creature as a fight reads it (engine/encounter/profiles):
                                     hit points, armour, attacks, what else of its notes the rules use
       references/handouts/<id>.md   handout full text
       references/events.md          timed and triggered events, and the fights and chases they begin
@@ -33,8 +33,7 @@ from typing import Any
 import yaml
 
 from .. import credits
-from ..engine import combat as battle
-from ..rules.combat import Fighter
+from ..engine.encounter import profiles
 from ..rules.weapons import unread
 from .graph import supporting_clues
 from .schema import NPC, Clue, Location, Module
@@ -253,16 +252,16 @@ def _has_fights(m: Module) -> bool:
                 or any(e.fight or e.chase for e in m.events))
 
 
-def _sheet(f: Fighter) -> list[str]:
-    """A fighter as the engine builds it from the module, in a few lines (engine/combat.py)."""
+def _sheet(f: profiles.CombatProfile) -> list[str]:
+    """A sheet as the engine reads it from the module, in a few lines (engine/encounter/profiles.py)."""
     db = f.db if f.db.startswith(("+", "-")) or f.db == "0" else f"+{f.db}"
-    rows = [f"生命 {f.hp_max}，敏捷 {f.dex}，闪避 {f.dodge}，格斗 {f.fighting}，移动 {f.move}，体格 {f.build}，伤害加值 {db}"]
+    rows = [f"生命 {f.hp_max}，敏捷 {f.chars.get('敏捷', 50)}，闪避 {f.dodge}，格斗 {f.fighting}，移动 {f.mov}，体格 {f.build}，伤害加值 {db}"]
     attacks = []
     for a in f.attacks:
         bits = [f"{a.skill}", f"伤害 {a.damage}"] + (["贯穿"] if a.impale and not a.firearm else [])
         if a.firearm:
             bits += [f"射程 {a.range} 码"] if a.range else []
-            bits += [f"还剩 {a.ammo} 发"] if a.ammo is not None else []
+            bits += [f"装弹 {a.capacity} 发"] if a.capacity else []
         attacks.append(f"{a.name} {a.value}%（{'，'.join(bits)}）")
     rows.append("攻击：" + ("；".join(attacks) or "徒手"))
     if f.per_round > 1:
@@ -288,8 +287,8 @@ def _creatures_md(m: Module) -> str:
             seen := [e.id for e in m.events if c.id in e.sights]) else "") + "）")
         if c.pursues is not None:
             out.append("- 调查员逃跑时：" + ("会追" if c.pursues else "不追"))
-        f = battle.from_creature(c)
-        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+        f = profiles.of_creature(c)
+        if profiles.SWARM.search(c.notes + c.description) and not c.stats:
             out.append("- 成群：整群当一个对手打，很难打倒")
         out += [f"- {row}" for row in _sheet(f)]
         if c.notes.strip():
@@ -417,7 +416,7 @@ def _npc_md(m: Module, n: NPC) -> str:
         out += ["", "## 打起来时", "", f"他打起来就是怪物 `{form.id}` {form.name}：数值、攻击和特性见 [怪物](../creatures.md)；同一个人，同一条命。"]
     elif n.stats or n.attacks:
         things = [i.name for i in m.items if i.owner == n.id]  # what the record has them hold at the start
-        rows = _sheet(battle.from_npc(n, things))
+        rows = _sheet(profiles.of_npc(n, things))
         if n.attacks:
             rows.append("原文的攻击：" + "；".join(n.attacks))
         out += ["", "## 打起来时（引擎读到的）", "", *[f"- {row}" for row in rows]]
@@ -445,7 +444,7 @@ def _events_md(m: Module) -> str:
             meta.append(f"进入结局 `{e.ending}`")
         if e.sets:
             meta.append("设置标记 " + "、".join(f"`{f}`" for f in e.sets))
-        if e.fight:  # begun by the engine where the investigators are (engine/fighting.Fighting._scripted)
+        if e.fight:  # begun by the engine where the investigators are (engine/encounter/runner._scripted)
             meta.append("当场打起来：" + "、".join(f"`{x}`" for x in e.fight)
                         + {"party": "（调查员被偷袭）", "foe": "（对方毫无防备）"}.get(e.surprise, ""))
         elif e.chase:

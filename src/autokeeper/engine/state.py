@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from ..cards import Drawn
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
-from .combat import Chase
 from .encounter.model import EncounterState, EncounterSummary
 
 LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
@@ -152,8 +151,6 @@ class GameState(BaseModel):
     # longest of them took so far (None outside a round), and the reports held for the one telling.
     round_spent: int | None = None
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
-    # A chase going on, run by the old chase engine (engine/fighting.py) inside the encounter until WP-D.
-    chase: Chase | None = None
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.
     encounter: EncounterState | None = None

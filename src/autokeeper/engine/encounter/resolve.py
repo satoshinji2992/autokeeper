@@ -67,6 +67,7 @@ class Unit:
     rest: dict | None = None  # an `other` ruling's remainder for the turn's investigator (clues, takes, changes)
     stop: bool = False
     fired: list[str] = field(default_factory=list)  # flags of the stakes an encounter's end fired (set after it is archived)
+    extra: dict = field(default_factory=dict)  # what the runner does after the op (an end's party arrival)
 
 
 def check_view(c: Check) -> dict:
@@ -91,7 +92,7 @@ class Work:
         self.unit = Unit()
         self.wounds = 0
         self.luck_left: dict[str, int] = {}
-        self.after: list = []  # what happens outside the world once the unit's op has landed (the old chase)
+        self.after: list = []  # what happens outside the world once the unit's op has landed
 
     # -- who ------------------------------------------------------------------------------------
     def investigator(self, pid: str):
@@ -331,17 +332,23 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
     if any(c.who == a and not c.partial for c in enc.scene.cover):  # striking from hiding gives them away
         enc.scene.cover = [c for c in enc.scene.cover if c.who != a]
     head = f"{an}用{opt.name}{'射击' if kind == 'firearm' else ('施展' + r.declared.maneuver) if maneuver else '攻击'}{dn}"
-    bonus, reasons = 0, []
-    # edges waiting for the attacker's next roll (a companion's help)
+    bonus, reasons, aimed = 0, [], False
+    # edges waiting for the attacker's next roll (a companion's help); a round's aim only for the next shot (p. 95)
     me = enc.get(a)
     for e in list(me.edges if me else []):
-        if e.until == "next_roll":
-            bonus += e.dice
-            reasons.append(e.why)
-            me.edges.remove(e)
+        if e.until != "next_roll":
+            continue
+        if e.source.startswith("aim"):
+            if kind == "firearm":
+                aimed = True
+                me.edges.remove(e)
+            continue
+        bonus += e.dice
+        reasons.append(e.why)
+        me.edges.remove(e)
     if kind == "firearm":
         ev["kind"] = "shot"
-        return _shot(w, receipt, k, pick, opt, reaction, head, bonus, reasons, ev)
+        return _shot(w, receipt, k, pick, opt, reaction, head, bonus, reasons, ev, aimed=aimed)
     ev["kind"] = "maneuver" if maneuver else "melee"
     if maneuver:
         ok, penalty = melee.maneuver_feasible(av.build(), dv.build())
@@ -427,6 +434,15 @@ def _maneuver(w: Work, a: str, d: str, which: str, ev: dict, *, attacker_won: bo
         return f"{{{d}}}反手一推，挣开了{{{a}}}"
     ev["effect"] = which
     dv = ctx.view(d)
+    if enc.mode == "chase" and which not in ("缴械", "夺取", "制住"):  # in a chase: as a failed hazard, 1D3 points lost (p. 116)
+        from ...rules.chase import RULES as CHASE
+        from .chase import pay
+
+        loss = w.game.rules.dice.total(CHASE.maneuver_loss)
+        pay(w, d, loss)
+        if which == "推倒" and d not in enc.scene.prone:
+            enc.scene.prone.append(d)
+        return f"把{{{d}}}撞倒在地，他耽搁了 {loss} 行动点"
     if which in ("缴械", "夺取"):
         held = [x for x in dv.attacks() if not x.natural and x.item]
         if not held:
@@ -449,7 +465,7 @@ def _maneuver(w: Work, a: str, d: str, which: str, ev: dict, *, attacker_won: bo
 
 
 def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: str, bonus: int, reasons: list[str],
-          ev: dict) -> None:
+          ev: dict, *, aimed: bool = False) -> None:
     """Shots (pp. 95–98): one roll each against the firearms skill, the dice for the circumstances;
     rounds spent, a malfunction a dud or a jam by the gun's action."""
     ctx, enc = w.ctx, w.enc
@@ -488,7 +504,8 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
     running = _running(ctx, d)
     mods = firearms.shot_modifiers(firearms.Shot(band=band, shotgun=shotgun, point_blank=point_blank, dived=dived,
                                                  partial_cover=partial and not dived, fast_target=running and dv.mov() >= 8,
-                                                 target_build=dv.build(), into_melee=into, volley=shots,
+                                                 target_build=dv.build(), into_melee=into, volley=shots, aimed=aimed,
+                                                 moving=enc.mode == "chase" and bool(receipt.declared.to),
                                                  prone_target=d in enc.scene.prone, bonus=bonus))
     if band:
         reasons = [*reasons, f"{firearms.BAND_NAMES[band]}（{yards} 码）"]
@@ -615,8 +632,9 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
         lines.append(f"{an}追向{{{d.target}}}")
     elif d.do == "hide":
         lines.append(_hide(w, receipt, a, d.summary))
-    elif d.do == "aim":
-        me.edges.append(Edge(dice=1, why="瞄准了一轮", source=d.target or a, until="next_roll"))
+    elif d.do == "aim":  # the next shot, next round: lost if it is not fired then (round_end)
+        me.edges = [e for e in me.edges if not e.source.startswith("aim")]
+        me.edges.append(Edge(dice=1, why="瞄准了一轮", source=f"aim:{d.target}:r{enc.round}", until="next_roll"))
         lines.append(f"{an}稳住手，瞄准了{{{d.target}}}" if d.target else f"{an}稳住手瞄准")
     elif d.do == "speak":
         said = d.speech.strip()
@@ -625,7 +643,7 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
             w.unit.notices.append({"type": "fight_say", "who": a, "name": ctx.name(a, "players"), "text": said})
     elif d.do in ("other", "use"):
         lines += _other(w, receipt, a, ruling)
-    else:
+    elif enc.mode == "fight":
         lines.append(f"{an}这一轮没能做成：{actions.VERBS.get(d.do, d.do)}只在追逐中用")
     receipt.lines += lines
     w.unit.lines += lines
@@ -765,6 +783,8 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
             if "倒" in e.get("what", "") and w.enc.get(target) is not None and target not in w.enc.scene.prone:
                 w.enc.scene.prone.append(target)
             out.append(f"{{{target}}}：{e.get('what', '')}")
+        elif kind == "obstacle" and w.enc.chase is not None:
+            out.append(_obstacle(w, a, target, e.get("what", "")))
         elif kind == "item":
             out.append(f"{e.get('what', '')}")
         else:
@@ -772,7 +792,49 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     return [x for x in out if x]
 
 
+def _obstacle(w: Work, a: str, target: str, what: str) -> str:
+    """An obstacle the arbiter ruled changed in a chase: opened or broken for everyone after, or the way
+    blocked (a door slammed and wedged: a barrier where there was none, at the place named or where
+    the actor stands)."""
+    import re
+
+    from ...module.schema import Method
+    from .plan import ObstacleState
+    from .site import node
+
+    ch = w.enc.chase
+    assert ch is not None
+    here = node(ch.site, target) or next((n for n in ch.site.nodes if n.obstacle == target), None) \
+        or node(ch.site, w.enc.get(a).node if w.enc.get(a) else "")
+    ob = ch.site.obstacles.get(target) or (ch.site.obstacles.get(here.obstacle) if here is not None else None)
+    if ob is not None and re.search(r"破|毁|砸|塌", what):
+        ob.state, ob.by = "broken", a
+        return f"{ob.what}被毁掉了，后面的人可以直接过去：{what}"
+    if ob is not None and re.search(r"开|移|推倒|搬走|清", what):
+        ob.state, ob.by = "open", a
+        return f"{ob.what}打开了，后面的人可以直接过去：{what}"
+    if re.search(r"堵|挡|锁|闩|封|关", what) and here is not None:
+        if ob is not None:
+            ob.state, ob.by = "blocked", a
+            return f"{ob.what}被堵上了：{what}"
+        oid = f"made_{here.id}_{w.enc.round}"
+        ch.site.obstacles[oid] = ObstacleState(id=oid, kind="barrier", what=what[:20] or "挡住的路", hp=10, state="blocked", by=a,
+                                               methods=[Method(id="force", label="推开", skill="力量", opens=True),
+                                                        Method(id="climb", label="翻过去", skill="攀爬")])
+        here.obstacle = oid
+        return f"{here.name}的路被挡住了：{what}"
+    return what
+
+
 # -- the end of a round ----------------------------------------------------------------------------
+def _stale_aim(e: Edge, rnd: int) -> bool:
+    """An aim taken before this round and not used for a shot in it: gone (p. 95: the round after)."""
+    if not e.source.startswith("aim"):
+        return False
+    taken = e.source.rsplit(":r", 1)[-1]
+    return taken.isdigit() and int(taken) < rnd
+
+
 def round_end(w: Work) -> None:
     """The dying roll CON from the end of the round after they began dying (p. 101), a creature
     that heals itself heals (and may rise), surprise and this round's edges are over."""
@@ -800,7 +862,7 @@ def round_end(w: Work) -> None:
                 w.change("freed", p.id)
         if enc.round >= 1:
             p.surprised = False
-        p.edges = [e for e in p.edges if e.until != "round_end"]
+        p.edges = [e for e in p.edges if e.until != "round_end" and not _stale_aim(e, enc.round)]
 
 
 __all__ = ["Unit", "Work", "act", "diff", "round_end", "round_order", "strike"]

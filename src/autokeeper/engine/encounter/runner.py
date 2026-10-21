@@ -16,8 +16,14 @@ the keeper plan, which also arranges the keeper's people); AI companions pick fr
 player stops, before any of its dice, to ask how they answer it (choices.should_ask): the turn
 graph's `offer` node shows the question and `respond` goes on from it. At the round's end the
 dying roll CON, healing creatures heal, the clock moves, whoever fled is chased or gets away, and the
-stakes that now hold set their flags. Chases still run on the old engine (engine/fighting.py) in
-0.0.4's M2, inside the same encounter (its mode "chase"), until WP-D replaces them.
+stakes that now hold set their flags.
+
+A chase is the same encounter in mode "chase" (engine/encounter/chase.py, site.py): the same units,
+the same declarations and arrangements, the round's action points spent running across the site, the
+obstacles crossed, attacks where the book allows them. It turns into a fight where they meet and
+someone turns to fight, and back into a chase when someone flees and is chased; wounds, guns, speeds
+and stakes carry over. When it ends the keeper's people are where they ran to, and the party where
+its players ended up (GameState.apart for those left elsewhere).
 """
 
 from __future__ import annotations
@@ -29,7 +35,8 @@ from ...rules.melee import opposed_difficulty
 from ...world.ops import Bring, EncounterStep, Occur
 from ...world.record import ENGINE
 from .. import effects
-from . import actions, choices, clock, plan_check, profiles, stakes, telling, views
+from . import actions, choices, clock, plan_check, profiles, site, stakes, telling, views
+from . import chase as chasing
 from .actions import ATTACKING, Ctx
 from .model import (
     ActionReceipt,
@@ -75,6 +82,8 @@ class Encounters:
     """The fight engine, mixed into Game."""
 
     asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (a direct resolution)
+    by_hand_seats: frozenset[str] = frozenset()  # LAN: seated players, who throw their own dice in a fight (net/hub.py)
+    ask_reactions = "major"  # when a player is asked how to answer a blow: "always" (设置: 每次被攻击都询问应对) or "major"
 
     if TYPE_CHECKING:  # what the Game it is mixed into has
         from ...module.schema import Module
@@ -99,6 +108,7 @@ class Encounters:
         _valid_clues: Any
         _takes: Any
         _equipment: Any
+        _arrive: Any
 
     # -- whether there is one -------------------------------------------------------------------
     def encounter(self) -> EncounterState | None:
@@ -107,11 +117,15 @@ class Encounters:
         return enc if enc is not None and enc.phase != "ended" else None
 
     def battling(self) -> bool:
-        return self.encounter() is not None or self.state.chase is not None
+        return self.encounter() is not None
 
     def fighting(self) -> bool:
         enc = self.encounter()
-        return enc is not None and enc.mode == "fight" and self.state.chase is None
+        return enc is not None and enc.mode == "fight"
+
+    def chasing(self) -> bool:
+        enc = self.encounter()
+        return enc is not None and enc.mode == "chase"
 
     def fought_this_turn(self) -> bool:
         """A fight or a chase is going on, or this turn began one (and it is already over)."""
@@ -136,8 +150,6 @@ class Encounters:
         me = st.investigator
         if text.strip() == "/encounter":
             return Action(kind="other", summary="（这一轮接着结算）", encounter=enc.id, declared={"beat": True})
-        if st.chase is not None:
-            return await self._chase_input(text)
         found = choices.match(self, me.id, text)
         planner = getattr(self.cast, "plan", None)
         if found is not None:
@@ -206,8 +218,6 @@ class Encounters:
         round of the old chase, or an ordinary action."""
         st = self.state
         declared = action.declared or {}
-        if st.chase is not None:
-            return {"kind": "chase", "id": st.encounter.id if st.encounter else ""}
         if (enc := self.encounter()) is not None:
             return {"kind": "encounter", "id": enc.id}
         if declared.get("start"):
@@ -225,19 +235,11 @@ class Encounters:
             started = await self._start_from(action, turn)
             if not started:
                 return
-            if st.chase is not None and not declared.get("start"):  # they ran: the chase's first round, running
-                await self._chase_turn(action, ruling, turn)  # type: ignore[attr-defined]
-                return
-        if kind["kind"] == "chase":
-            await self._chase_round_turn(action, ruling, turn)
-            return
         enc = st.encounter
         eid = kind.get("id") or started or (enc.id if enc else "")
         if enc is None or enc.id != eid or enc.phase == "ended":
             if self._ending_owed(eid):  # it ended (and perhaps went into the log) before the turn was cut short
                 await self._encounter_end("", turn, eid=eid)
-            return
-        if st.chase is not None:  # the start opened a chase (the old engine runs its rounds)
             return
         if plan := declared.get("plan"):
             await self._plan_unit(f"enc/{enc.id}/plan/t{st.turn}", plan, declared.get("unsettled") or [], turn)
@@ -324,12 +326,39 @@ class Encounters:
             return ""
         await self._sights(turn, paid=bool(event and event.sanity), event=event)
         if start.mode == "chase":
-            await self._chase_bridge_open(start, turn, event=event)
-            return eid
+            if not await self._chase_open(start, turn):
+                return eid
         opening = start.opening
         if opening is not None and actor and not event:
             await self._declare(turn, actor, opening, "words", None)
         return eid
+
+    async def _chase_open(self, start: EncounterStart, turn: Turn) -> bool:
+        """A chase from the start: the side in flight (EncounterStart.quarry) runs from everyone of the
+        other side who can, on the site built where it begins; True while it goes on (a quarry faster
+        than everyone after them is away at once, and it ends)."""
+        enc = self.encounter()
+        assert enc is not None
+        ctx = Ctx.of(self)
+        party = [p.id for p in enc.participants if p.side == "party" and ctx.acting(p.id)]
+        foes = [p.id for p in enc.participants if p.side == "foe" and ctx.acting(p.id)]
+        quarry, pursuers = (foes, party) if start.quarry == "foe" else (party, foes)
+        built = site.build(self.m, enc.place, start.site)
+        await self._unit(f"enc/{enc.id}/chase/r{enc.round}", turn,
+                         lambda w: chasing.begin(w, quarry, pursuers, built, why=start.reason))
+        return await self._chase_settled(turn)
+
+    async def _chase_settled(self, turn: Turn) -> bool:
+        """A chase over as soon as it begins (all away at once, nobody left to run after) ends; True
+        while it goes on."""
+        enc = self.encounter()
+        if enc is None or enc.mode != "chase":
+            return enc is not None
+        how = chasing.verdict(Ctx.of(self))
+        if how:
+            await self._encounter_end(how, turn)
+            return False
+        return True
 
     def _begin(self, eid: str, start: EncounterStart, foes: list[str], turn: Turn, event: Event | None) -> dict:
         st = self.state
@@ -338,7 +367,8 @@ class Encounters:
         parts: list[Participant] = []
         for inv in st.investigators:
             parts.append(Participant(id=inv.id, kind="investigator", side="party", controller="human" if inv.id in humans else "ai",
-                                     surprised=start.surprise == "party", node=st.location))
+                                     surprised=start.surprise == "party", node=st.location,
+                                     ask="always" if inv.id in humans and self.ask_reactions == "always" else "major"))
         for x, side in [*((f, "foe") for f in foes), *((a, "party") for a in allies)]:
             p = profiles.profile(self.world, x)
             if p is None or any(q.id == p.id for q in parts):
@@ -459,7 +489,7 @@ class Encounters:
         st = self.state
         # Decided once, in the event's own stages: resumed after its fight began, it does not join it.
         how = await self._resolution_step("enc-how", turn, lambda: (
-            "none" if st.chase is not None or not any(i.can_act for i in st.investigators)
+            "none" if self.chasing() or not any(i.can_act for i in st.investigators)
             else "join" if self.fighting() else "begin"))
         if ev.fight:
             if how == "none":
@@ -576,6 +606,8 @@ class Encounters:
                 if a.side:
                     p.side = a.side  # type: ignore[assignment]
                 p.arrangement, p.arranged_round, p.react = a, upcoming, a.react
+                if a.speak and (prof := profiles.profile(self.world, a.who)) is not None and (prof.human or prof.kind == "npc"):
+                    w.unit.extra.setdefault("voices", []).append(a.who)  # his own words, through the NPC's reply (Game.talk)
                 if a.say.strip():
                     w.unit.lines.append(f"{{{a.who}}}喊：「{a.say.strip()}」")
                     w.unit.notices.append({"type": "fight_say", "who": a.who, "name": w.ctx.name(a.who, "players"), "text": a.say.strip()})
@@ -604,7 +636,8 @@ class Encounters:
             for x in unsettled:
                 w.unit.lines.append(f"{UNSETTLED}{x}")
 
-        await self._unit(key, turn, apply)
+        value = await self._unit(key, turn, apply)
+        turn.voices += [x for x in (value.get("extra") or {}).get("voices", []) if x not in turn.voices]
         if landed.end is not None:
             await self._propose_end(landed.end, turn)
 
@@ -635,7 +668,7 @@ class Encounters:
         started = 0
         for _ in range(400):
             enc = self.encounter()
-            if enc is None or enc.pending is not None or enc.mode != "fight" or self.state.chase is not None:
+            if enc is None or enc.pending is not None:
                 return
             if _between(enc):
                 how = self._outcome(Ctx.of(self))
@@ -702,13 +735,15 @@ class Encounters:
                 if ev.get("line"):
                     ev["line"] = telling.render(ev["line"], pn)
                 notices.append(ev)
-            if shown or any(ev["type"] == "fight_act" for ev in notices):
-                notices.append({"type": "fight_state", "fight": None, "lines": shown})
+            now = self.state.encounter or w.enc
+            if now.phase != "ended" and (shown or any(ev["type"] == "fight_act" for ev in notices)):
+                notices.append({"type": "chase_state", "chase": None, "lines": shown} if now.mode == "chase"
+                               else {"type": "fight_state", "fight": None, "lines": shown})
             if w.unit.lines and (st := self.state):
                 for x in shown:
                     if not x.startswith("【"):
                         st.add("dice", x)
-            return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired}
+            return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired, "extra": w.unit.extra}
 
         value = await self._resolution_step("/" + key, turn, run)
         await self._notify(key, value.get("notices", []), turn)
@@ -728,6 +763,9 @@ class Encounters:
         enc = self.state.encounter
         if "fight" in ev and ev["fight"] is None:
             ev = {**ev, "fight": views.fight_view(self, enc) if enc is not None else {"round": 0, "place": "", "fighters": []}}
+        if "chase" in ev and ev["chase"] is None:
+            ev = {**ev, "chase": views.chase_view(self, enc) if enc is not None else {"round": 0, "quarry": "party", "legs": [],
+                                                                                         "runners": []}}
         return views.masked(ev, enc)
 
     async def _settle_rest(self, key: str, rest: dict, turn: Turn) -> None:
@@ -771,23 +809,35 @@ class Encounters:
 
         def start(w: Work) -> None:
             e = w.enc
-            if settle:  # the window closed: a player who put nothing in only defends this round (net/hub.py)
+            chase = e.mode == "chase"
+            if settle:  # the window closed: a player who put nothing in only defends this round (in a chase, runs on)
                 for p in e.participants:
                     if p.kind == "investigator" and w.ctx.acting(p.id) and self._declared(e, p.id, nxt) is None:
+                        d = DeclaredAction(do="defend", summary="只防守")
+                        if chase and (offered := choices.options(self, p.id, ctx=w.ctx)):
+                            d = DeclaredAction.model_validate(offered[0].value)
                         e.receipts.append(ActionReceipt(id=f"{e.id}:r{nxt}:{p.id}:0", round=nxt, actor=p.id, source="table",
-                                                        declared=DeclaredAction(do="defend", summary="只防守"), summary="只防守"))
+                                                        declared=d, summary=d.summary))
             declared = {r.actor: r.declared for r in e.receipts if r.round == nxt and r.phase == "declared"}
             for p in e.participants:
                 if p.controller == "keeper" and p.arrangement is not None and p.arrangement.actions:
                     declared.setdefault(p.id, p.arrangement.actions[0])
-            order = round_order(w.ctx, declared)
+            order = chasing.order(w) if chase else round_order(w.ctx, declared)
             lost = dict(e.budget.lost_next)
+            owed = dict(e.budget.owed)
             # the round before last folds into the history: its receipts' lines, compact
             old = [r for r in e.receipts if r.round < nxt - 1]
             if old:
                 e.history += [f"第 {r.round} 轮：" + "；".join(r.lines) for r in old if r.lines]
                 e.receipts = [r for r in e.receipts if r.round >= nxt - 1]
-            e.round, e.order, e.cursor, e.budget = nxt, order, 0, RoundBudget(lost_next=lost)
+            e.round, e.order, e.cursor, e.budget = nxt, order, 0, RoundBudget(lost_next=lost, owed=owed)
+            if chase:
+                chasing.round_points(w, order)
+                where = "；".join(f"{{{x}}}在{chasing.node_name(e, chasing.at(e, x))}，{e.budget.movement.get(x, 0)} 行动点"
+                                 for x in order)
+                w.unit.lines.append(f"【追逐 · 第 {nxt} 轮】先后：" + " → ".join(f"{{{x}}}" for x in order) + f"。{where}")
+                w.unit.notices.append({"type": "chase_round", "round": nxt, "chase": None})
+                return
             w.unit.lines.append(f"【战斗 · 第 {nxt} 轮】先后：" + " → ".join(f"{{{x}}}" for x in order))
             w.unit.notices.append({"type": "fight_round", "round": nxt, "order": order, "fight": None})
 
@@ -837,8 +887,11 @@ class Encounters:
         return "\n".join(rows)
 
     def _by_hand(self, actor: str) -> bool:
-        """The player at the screen throws this investigator's dice themselves (graph: by_hand)."""
+        """The player throws this investigator's dice themselves: the one at the screen (graph: by_hand),
+        or at a LAN table every seated player, whoever's input settles the round (`by_hand_seats`)."""
         st = self.state
+        if actor in self.by_hand_seats:
+            return True
         return bool(st.pending_turn.get("by_hand")) and actor == st.investigator.id and actor in st.human
 
     async def _slot(self, enc: EncounterState, turn: Turn) -> bool:
@@ -884,7 +937,7 @@ class Encounters:
             assert enc is not None
             r = self._declared(enc, actor, enc.round) or r
             d = r.declared
-        problems = actions.preconditions(ctx, actor, d) if not r.settled else []
+        problems = actions.preconditions(ctx, actor, d) if not r.settled and not r.moved else []
         if problems:
             if (p.controller == "human" and r.source not in ("table",) and self.asking and not self.holding
                     and self.state.round_spent is None):
@@ -893,10 +946,15 @@ class Encounters:
             await self._unit(f"{base}/lapse", turn, lambda w: (
                 w.unit.lines.append(f"{{{actor}}}没能{actions.VERBS.get(d.do, d.do)}：{problems[0]}"), advance(w, r, "lapsed", problems[0])))
             return True
+        if d.after and (wait := self._delay(enc, r)) is not None:  # waiting for someone to act first (pp. 86, 113)
+            await self._unit(f"{base}/delay/{r.id}", turn, wait)
+            return True
         rolls = d.do in ATTACKING or d.do == "aid" or (d.do in ("other", "use") and (r.ruling or {}).get("needs_roll"))
         if self.asking and self._by_hand(actor) and rolls and not r.prompted:
             await self._unit(f"{base}/prompt", turn, lambda w: self._prompt(w, r))
             return False
+        if enc.mode == "chase":
+            return await self._chase_slot(enc, r, base, turn, advance)
         if d.do not in ATTACKING:
             def settle(w: Work) -> None:
                 act(w, r, ruling=r.ruling)
@@ -904,25 +962,54 @@ class Encounters:
 
             await self._unit(f"{base}/act", turn, settle)
             return True
+        return await self._attacks(enc, r, base, turn, lambda w: advance(w, r))
+
+    def _delay(self, enc: EncounterState, r: ActionReceipt):
+        """A declaration that waits for `after` to act first: its slot moves to just after theirs, once
+        (the book lets anyone delay; two who wait for each other both end up acting). None when there is
+        nothing to wait for (they acted already, or are not coming)."""
+        later = enc.order[enc.cursor + 1:]
+        if r.declared.after not in later:
+            return None
+
+        def wait(w: Work) -> None:
+            e = w.enc
+            rr = next(x for x in e.receipts if x.id == r.id)
+            rr.declared = rr.declared.model_copy(update={"after": ""})
+            order = list(e.order)
+            me = order.pop(e.cursor)
+            order.insert(order.index(r.declared.after, e.cursor) + 1, me)
+            e.order = order
+            w.unit.lines.append(f"{{{r.actor}}}等着{{{r.declared.after}}}先动")
+
+        return wait
+
+    async def _attacks(self, enc: EncounterState, r: ActionReceipt, base: str, turn: Turn, finish) -> bool:
+        """The attacks of a declaration, one unit each, on the actor's slot: each one's answer decided (or
+        asked) before any of its dice, then its roll; `finish` lands with the last of them."""
+        ctx = Ctx.of(self)
+        actor, d = r.actor, r.declared
         av = ctx.view(actor)
         picks = actions.picks(d, av.attacks_per_round())
         k = r.settled
         if k >= len(picks):
-            await self._unit(f"{base}/done", turn, lambda w: advance(w, r))
+            await self._unit(f"{base}/done", turn, finish)
             return True
         pick = picks[k]
         last = k + 1 >= len(picks)
-        if not ctx.present(pick.target) or not ctx.alive(pick.target) or ctx.hidden_from(actor, pick.target):
-            why = ctx.hidden_from(actor, pick.target) or ("已经死了" if not ctx.alive(pick.target) else "已经不在现场")
-
+        why = ctx.hidden_from(actor, pick.target) or ("" if ctx.present(pick.target) and ctx.alive(pick.target)
+                                                      else "已经死了" if not ctx.alive(pick.target) else "已经不在现场")
+        reach = actions.out_of_reach(ctx, actor, d.model_copy(update={"attacks": [pick]})) if not why and k == 0 else []
+        if why or reach:
             def miss(w: Work) -> None:
                 rr = next(x for x in w.enc.receipts if x.id == r.id)
-                rr.settled = k + 1
-                line = f"{{{actor}}}的第 {k + 1} 下没有出手：{{{pick.target}}}{why}"
+                rr.settled = len(picks) if reach else k + 1  # out of reach: none of its attacks can be made
+                said = "；".join(reach) if reach else f"{{{pick.target}}}{why}"
+                line = f"{{{actor}}}的第 {k + 1} 下没有出手：{said}" if len(picks) > 1 and not reach else f"{{{actor}}}没有出手：{said}"
                 rr.lines.append(line)
                 w.unit.lines.append(line)
-                if last:
-                    advance(w, r)
+                if last or reach:
+                    finish(w)
 
             await self._unit(f"{base}/a{k}/gone", turn, miss)
             return True
@@ -935,9 +1022,71 @@ class Encounters:
         def roll(w: Work) -> None:
             strike(w, r, k, pick)
             if last:
-                advance(w, r)
+                finish(w)
 
         await self._unit(f"{base}/a{k}/roll", turn, roll)
+        return True
+
+    async def _chase_slot(self, enc: EncounterState, r: ActionReceipt, base: str, turn: Turn, advance) -> bool:
+        """A slot in a chase (pp. 113–121): running first for a running declaration (then its attack, if it
+        caught up), an attack first for an attack (then running on, if it named where); hiding, a barrier,
+        turning to fight; anything else costs a point and is settled as in a fight."""
+        d, actor = r.declared, r.actor
+        moving = d.do in chasing.MOVING or (d.to and d.do not in ATTACKING)
+        if moving and not r.moved:
+            def go(w: Work) -> None:
+                if chasing.points(w.enc, actor) < 1:
+                    owed = w.enc.budget.owed.get(actor, 0)
+                    why = f"还在补上一轮耽搁的行动点（欠 {owed}）" if owed else "这一轮的行动点用完了"
+                    w.unit.lines.append(f"{{{actor}}}这一轮没能跑：{why}")
+                    advance(w, r, "lapsed", why)
+                    return
+                chasing.run(w, r)
+                if not d.attacks or w.enc.get(actor).presence != "in":  # type: ignore[union-attr]
+                    advance(w, r)
+
+            await self._unit(f"{base}/run", turn, go)
+            return True
+        if d.attacks and (d.do in ATTACKING or d.do == "pursue"):
+            av = Ctx.of(self).view(actor)
+            if r.settled < len(actions.picks(d, av.attacks_per_round())):
+                def finish(w: Work) -> None:
+                    rr = next(x for x in w.enc.receipts if x.id == r.id)
+                    if not (d.do == "shoot" and d.to) and any(x.purpose in ("attack", "shoot", "maneuver") for x in rr.rolls):
+                        chasing.pay(w, actor, chasing.RULES.attack_cost)  # stopping to shoot or strike: a point (pp. 116, 120)
+                    if not (d.to and d.do in ATTACKING and not rr.moved):
+                        advance(w, r)
+
+                return await self._attacks(enc, r, base, turn, finish)
+        if d.to and not r.moved and d.do in ATTACKING:  # attacked, now runs on (shooting on the move)
+            def on(w: Work) -> None:
+                chasing.run(w, r)
+                advance(w, r)
+
+            await self._unit(f"{base}/run", turn, on)
+            return True
+
+        def settle(w: Work) -> None:
+            rr = next(x for x in w.enc.receipts if x.id == r.id)
+            if d.do == "hide":
+                chasing.hide(w, rr)
+            elif d.do == "barrier":
+                chasing.barrier(w, rr)
+            elif d.do == "stand":
+                chasing.stand(w, rr)
+            elif d.do in chasing.FREE:
+                act(w, r, ruling=r.ruling)
+            elif chasing.points(w.enc, actor) < 1:
+                why = "这一轮的行动点用完了"
+                w.unit.lines.append(f"{{{actor}}}没能{actions.VERBS.get(d.do, d.do)}：{why}")
+                advance(w, r, "lapsed", why)
+                return
+            else:
+                chasing.pay(w, actor, chasing.RULES.act_cost)
+                act(w, r, ruling=r.ruling)
+            advance(w, r)
+
+        await self._unit(f"{base}/act", turn, settle)
         return True
 
     async def _keeper_slot(self, enc: EncounterState, actor: str, base: str, turn: Turn, advance) -> bool:
@@ -946,7 +1095,8 @@ class Encounters:
         ctx = Ctx.of(self)
         p = ctx.p(actor)
         assert p is not None
-        able = [a for a in (p.arrangement.actions if p.arrangement else []) if not actions.preconditions(ctx, actor, a)]
+        able = [a for a in (p.arrangement.actions if p.arrangement else []) if not actions.preconditions(ctx, actor, a)
+                and not actions.out_of_reach(ctx, actor, a)]
         asked = ((self._resolution or {}).get("steps") or {}).get(f"{base}/replan", {}).get("done")
         if self._resolution is None:  # no journal (a test's direct call): once a slot all the same
             replans: set = self.__dict__.setdefault("_replans", set())
@@ -958,6 +1108,12 @@ class Encounters:
                 await self._plan_unit(f"{base}/replanned", checked["plan"], checked["unsettled"], turn)
             return True
         chosen = able[0] if able else None
+        if chosen is not None and enc.mode == "chase" and chosen.do == "pursue" and not chosen.attacks:
+            # running after someone and striking when it gets there, as the arrangement means (p. 116)
+            strike_at = next((a for a in (p.arrangement.actions if p.arrangement else [])
+                              if a.do in ("attack", "maneuver") and a.attacks and a.attacks[0].target == chosen.target), None)
+            if strike_at is not None:
+                chosen = chosen.model_copy(update={"attacks": strike_at.attacks, "maneuver": strike_at.maneuver})
 
         def declare(w: Work) -> None:
             e = w.enc
@@ -1082,7 +1238,8 @@ class Encounters:
                 w.enc.pending = PendingChoice(
                     id=f"{r.id}:react:{k}", kind="reaction", who=pick.target, receipt=r.id,
                     prompt=f"{ctx.name(r.actor, 'players')}{weapon}{'朝你开枪' if kind == 'firearm' else '向你扑来'}，你怎么应对？",
-                    options=[ChoiceOption(id=x, label=choices.REACTION_LABELS[x]) for x in options], default=default)
+                    options=[ChoiceOption(id=x, label=choices.REACTION_LABELS[x], note=choices.reaction_note(ctx, pick.target, x))
+                             for x in options], default=default)
                 return
             chosen, by = react_choice(w.ctx, pick.target, kind)
             rr.reactions.append(ReactionReceipt(attack=k, attacker=r.actor, defender=pick.target, options=options,  # type: ignore[arg-type]
@@ -1101,15 +1258,16 @@ class Encounters:
             def end(w: Work) -> None:
                 round_end(w)
                 w.enc.clock = clock.tick(w.enc.clock)
-                ctx = w.ctx
-                foes_up = [p.id for p in w.enc.participants if p.side == "foe" and p.presence == "in" and w.standing(p.id)]
-                lingering = [p.id for p in w.enc.participants if p.presence == "in" and
-                             ((w.body(p.id).dying and not w.body(p.id).stabilized) or w.body(p.id).regenerating)]
-                if not foes_up and lingering and w.enc.phase == "open":
-                    w.enc.phase = "aftermath"
-                    w.unit.lines.append("对手已经倒下，还有人要救、要收拾：接下来一轮一轮善后")
+                if w.enc.mode == "chase":
+                    chasing.round_end(w)
+                else:
+                    foes_up = [p.id for p in w.enc.participants if p.side == "foe" and p.presence == "in" and w.standing(p.id)]
+                    lingering = [p.id for p in w.enc.participants if p.presence == "in" and
+                                 ((w.body(p.id).dying and not w.body(p.id).stabilized) or w.body(p.id).regenerating)]
+                    if not foes_up and lingering and w.enc.phase == "open":
+                        w.enc.phase = "aftermath"
+                        w.unit.lines.append("对手已经倒下，还有人要救、要收拾：接下来一轮一轮善后")
                 w.enc.cursor = _end_slot(w.enc) + 1
-                del ctx
 
             await self._unit(base, turn, end)
         await step(f"/{base}/time", turn, lambda: self._clock_minutes())
@@ -1117,6 +1275,9 @@ class Encounters:
         enc = self.encounter()
         if enc is None:
             return
+        if enc.mode == "fight" and enc.place != self.state.location and any(
+                p.kind == "investigator" and p.presence == "in" for p in enc.participants):
+            await self._arrive(enc.place, turn)  # caught up somewhere else: the party is where the fight is now
         if enc.cursor == _end_slot(enc) + 1:
             await self._switch(enc, turn)
         enc = self.encounter()
@@ -1188,19 +1349,19 @@ class Encounters:
                     w.unit.lines.append(f"{{{x}}}脱身了，没有人追上去")
             e.cursor = _end_slot(e) + 2
             if chasers:
-                e.mode = "chase"
-                e.switches.append(f"r{e.round}:chase")
-                w.change("switched", next(iter(chasers)))
                 quarry = sorted(chasers)
                 hunters = sorted({h for hs in chasers.values() for h in hs})
-                e.history.append(f"chase:{','.join(quarry)}:{','.join(hunters)}")
                 w.unit.lines.append("【战斗转为追逐】" + "、".join(f"{{{x}}}" for x in quarry) + "在逃，"
                                     + "、".join(f"{{{h}}}" for h in hunters) + "追了上去")
+                e.mode = "chase"
+                e.switches.append(f"r{e.round}:chase")
+                e.scene.engaged = [g for g in e.scene.engaged if not ({g.a, g.b} & set(quarry))]
+                chasing.begin(w, quarry, hunters, site.build(self.m, e.place))
 
         await self._unit(base, turn, switch)
         enc = self.encounter()
         if enc is not None and enc.mode == "chase":
-            await self._chase_bridge_from_fight(enc, turn)
+            await self._chase_settled(turn)
 
     async def _stakes(self, enc: EncounterState, turn: Turn, key: str, ended: str = "") -> list[str]:
         """The stakes that hold now fire, once: their flags set, what hangs on them happens."""
@@ -1225,8 +1386,9 @@ class Encounters:
         """"" while it goes on; else how it ended: won (no foe can fight on, nobody left dying or coming
         back), fled (the investigators got away), lost (nobody of theirs is left standing)."""
         enc = ctx.enc
+        if enc.mode == "chase":
+            return chasing.verdict(ctx)
         foes = [p.id for p in enc.participants if p.side == "foe" and p.presence == "in"]
-        [p.id for p in enc.participants if p.side == "party" and p.presence == "in"]
         invs = [p for p in enc.participants if p.kind == "investigator"]
         lingering = [p.id for p in enc.participants if p.presence == "in" and (v := ctx.view(p.id)) is not None
                      and ((v.body().dying and not v.body().stabilized) or v.body().regenerating)]
@@ -1262,6 +1424,10 @@ class Encounters:
             ctx = Ctx.of(self)
             due = stakes.due(self, enc, how)
             text = self._summary(ctx, how)
+            ran = enc.mode == "chase" and enc.chase is not None
+            word = "追逐" if ran else "战斗"
+            where = chasing.places(ctx, enc) if ran else {p.id: enc.place for p in enc.participants}
+            party_at, apart = chasing.party_place(self, enc, where) if ran else (st.location, {})
 
             def close(w: Work) -> None:
                 e = w.enc
@@ -1270,11 +1436,15 @@ class Encounters:
                 w.unit.fired = [f for s in e.stakes if s.fired for f in s.flags]
                 per = {p.id: (views.status(w.ctx, p.id) or p.presence) for p in e.participants}
                 minutes = clock.settle_minutes(e.clock)
-                e.ended = EndRecord(round=e.round, how=how, per=per, places={p.id: e.place for p in e.participants},  # type: ignore[arg-type]
+                e.ended = EndRecord(round=e.round, how=how, per=per, places=where,  # type: ignore[arg-type]
                                     minutes=minutes, text=text)
                 e.phase, e.pending = "ended", None
-                w.unit.lines.append(f"【战斗结束】{text}")
-                w.unit.notices.append({"type": "fight_end", "end": how, "text": text})
+                for p in e.participants:  # the route's end moves the world: the keeper's people are where they ran to
+                    if ran and p.kind != "investigator" and where.get(p.id) and self.world.place(p.id) not in ("", where[p.id]):
+                        w.unit.effects.append(effects.Relocate(who=p.id, place=where[p.id]))
+                w.unit.extra = {"arrive": party_at if party_at != st.location else "", "apart": apart}
+                w.unit.lines.append(f"【{word}结束】{text}")
+                w.unit.notices.append({"type": "chase_end" if ran else "fight_end", "end": how, "text": text})
                 if minutes:
                     e.clock = e.clock.model_copy(update={"applied": e.clock.applied + minutes})
 
@@ -1285,7 +1455,7 @@ class Encounters:
                           or p.kind == "investigator"]
                 self.world.apply(Occur(id=f"{key}/occur", actor=ENGINE, participants=[x for x in people if x], place=enc.place,
                                        text=text[:300], visibility="public"))
-                st.add("event", f"战斗结束：{text}")
+                st.add("event", f"{word}结束：{text}")
 
             await step(f"/{key}/record", turn, land)
             value = await self._unit(key, turn, close)
@@ -1297,9 +1467,22 @@ class Encounters:
             elif enc is not None and enc.id == eid:
                 value = {"fired": [f for s in enc.stakes if s.fired for f in s.flags]}
         fired = list((value or {}).get("fired") or [])
+        extra = (value or {}).get("extra") or {}
         await step(f"/{key}/archive", turn, lambda: self._archive(eid))
         if fired:
             await step(f"/{key}/flags", turn, lambda: self._flags(fired, turn))
+        if extra.get("arrive"):
+            await self._arrive(extra["arrive"], turn)
+        if extra.get("apart"):
+            await step(f"/{key}/apart", turn, lambda: self._left_apart(extra["apart"], turn))
+
+    def _left_apart(self, apart: dict[str, str], turn: Turn) -> None:
+        """Investigators the chase left somewhere else than the party: noted, until their next move."""
+        st = self.state
+        st.apart = dict(apart)
+        for inv, place in apart.items():
+            who = next((i.name for i in st.investigators if i.id == inv), inv)
+            turn.notes.append(f"{who}落在了{self.world.name(place)}，和大家分开了；下次移动时归队。")
 
     def _ending_owed(self, eid: str) -> bool:
         """This turn's journal began ending encounter `eid`: what is left of that is still owed."""
@@ -1317,7 +1500,7 @@ class Encounters:
 
     def _archive_now(self) -> None:
         enc = self.state.encounter
-        if enc is None or enc.phase != "ended" or self.state.chase is not None:
+        if enc is None or enc.phase != "ended":
             return
         summary = EncounterSummary(id=enc.id, mode=enc.mode, place=enc.place, reason=enc.reason, started_turn=enc.started_turn,
                                    rounds=enc.round, participants=[p.id for p in enc.participants], ended=enc.ended,
@@ -1334,11 +1517,12 @@ class Encounters:
         name = next((i.name for i in st.investigators if i.id == choice.who), choice.who)
         enc = self.encounter()
         if choice.kind == "roll":
-            return {"kind": "roll", "id": choice.id, "encounter": enc.id if enc else "", **choice.options[0].value}
+            return {"kind": "roll", "id": choice.id, "encounter": enc.id if enc else "", "seat": choice.who, **choice.options[0].value}
         return {"kind": choice.kind, "id": choice.id, "encounter": enc.id if enc else "", "receipt": choice.receipt,
-                "who": choice.who, "name": name, "prompt": choice.prompt,
+                "who": choice.who, "seat": choice.who, "name": name, "prompt": choice.prompt,
                 "options": [{"id": o.id, "label": o.label, "note": o.note} for o in choice.options],
-                "default": choice.default, "deadline": choice.deadline, "free_text": choice.free_text}
+                "default": choice.default, "deadline": choice.deadline, "free_text": choice.free_text,
+                "ask": me.ask if (me := enc.get(choice.who) if enc else None) is not None else "major"}
 
     async def respond(self, cid: str, value: Any, *, who: str = "") -> Turn:
         """The answer to the choice the encounter waits on (a reaction, a roll, a new declaration), then
@@ -1392,6 +1576,9 @@ class Encounters:
             if p is None or p.id != cid:
                 return
             r = next(x for x in w.enc.receipts if x.id == p.receipt)
+            me = w.enc.get(p.who)
+            if me is not None and answer.get("ask") in ("always", "major"):  # 每次都询问: the player's own setting
+                me.ask = answer["ask"]
             if p.kind == "reaction":
                 k = len(r.reactions) - 1
                 r.reactions[k].chosen, r.reactions[k].by = answer["choice"], "player"
@@ -1418,193 +1605,24 @@ class Encounters:
         if pend is None:
             return {"choice": ""}
         ids = [o.id for o in pend.options]
-        text = ""
+        text, setting = "", {}
         if isinstance(value, dict):
             chosen, text = str(value.get("choice", "") or ""), str(value.get("text", "") or "")
+            if value.get("ask") in ("always", "major"):
+                setting = {"ask": value["ask"]}
         else:
             chosen = str(value)
         if chosen in ids:
-            return {"choice": chosen}
+            return {"choice": chosen, **setting}
         if pend.kind == "roll":
             return {"choice": "roll"}
         if pend.kind == "reaction" and text.strip() and getattr(self.cast, "plan", None) is not None:
             ask = "【可选的应对】" + "、".join(f"{o.id}（{o.label}）" for o in pend.options)
             checked = await self._ask_plan(text, "react", ask=ask, check=plan_check.react(ids))
             if checked is not None and checked.value is not None and not checked.problems:
-                return {"choice": checked.value.reaction, "summary": checked.value.summary}
-        return {"choice": pend.default}
-
-    # -- the chase (0.0.4 M2: the old engine runs it, inside the encounter) ---------------------------------
-    async def _chase_input(self, text: str) -> Action:
-        """A player's input in the old chase: one of its choices, exactly; anything else the keeper plan
-        reads (as for a fight) and is mapped onto what the old chase can do."""
-        from ...agents.cast import Action
-
-        st = self.state
-        ch = st.chase
-        assert ch is not None
-        enc = self.encounter()
-        me = ch.get(st.investigator.id)
-        order = None
-        if me is not None:
-            for label, _note, o in chase_options(me, ch):
-                if label == text.strip():
-                    order = o
-        summary = f"{st.investigator.name}：{text.strip()}" if order is not None else ""
-        if order is None:
-            d: DeclaredAction | None = None
-            if getattr(self.cast, "plan", None) is not None and enc is not None:
-                checked = await self._ask_plan(text, "act", check=lambda plan: [])
-                d = checked.value.action if checked is not None and checked.value is not None else None
-            if d is None:
-                parsed = await self.cast.intent(st, text)
-                d = DeclaredAction(do="other", summary=parsed.summary)
-            order = _order_of(d)
-            summary = d.summary
-        return Action(kind="move", summary=summary, encounter=enc.id if enc else "", declared={"chase": order.model_dump()})
-
-    async def _chase_round_turn(self, action: Action, ruling: Ruling, turn: Turn) -> None:
-        await self._chase_turn(action, ruling, turn)  # type: ignore[attr-defined]
-
-    async def _chase_bridge_open(self, start: EncounterStart, turn: Turn, *, event: Event | None = None) -> None:
-        """A chase begins (from the plan or an event): the old chase engine runs it, the encounter in
-        chase mode keeps its stakes and its people."""
-        foes = [p.id for p in self.state.encounter.participants if p.side == "foe"]  # type: ignore[union-attr]
-        opened = await self._chase_open(foes, "foe" if start.quarry == "foe" else "party", start.reason, turn,  # type: ignore[attr-defined]
-                                        paid=True)
-        if opened == "none":
-            await self._encounter_end("dispersed", turn)
-
-    async def _chase_bridge_from_fight(self, enc: EncounterState, turn: Turn) -> None:
-        """Fight to chase: the old chase's runners made from the encounter's people as the world keeps
-        them (hit points, guns, wounds carry over), the fled ahead."""
-        from ... import scenery
-        from .. import combat as battle
-
-        st = self.state
-        record = next((h for h in reversed(enc.history) if h.startswith("chase:")), "chase::")
-        _, quarry, hunters = record.split(":")
-        quarry_ids, hunter_ids = [x for x in quarry.split(",") if x], [x for x in hunters.split(",") if x]
-
-        def setup() -> dict:
-            runners = []
-            ctx = Ctx.of(self)
-            for x in [*quarry_ids, *hunter_ids]:
-                f = self._fighter(x)
-                if f is None:
-                    continue
-                f.side = "party" if ctx.side(x) == "party" else "foe"  # type: ignore[assignment]
-                runners.append(f)
-            loc = self.m.location(st.location)
-            track = self._chase_way() or battle.default_track(scenery.kind_of(loc.name, loc.read_aloud))  # type: ignore[attr-defined]
-            quarry_side = "party" if any(Ctx.of(self).side(x) == "party" for x in quarry_ids) else "foe"
-            speeds = self._chase_setup(runners, track, quarry_side, f"逃离{loc.name}的战斗", rolled=False)  # type: ignore[attr-defined]
-            assert st.chase is not None
-            return {"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【战斗转为追逐】", "speeds": speeds}
-
-        ev = await self._resolution_step(f"/enc/{enc.id}/r{enc.round}/chase", turn, setup)
-        await self._resolution_step(f"/enc/{enc.id}/r{enc.round}/chase/n", turn, lambda: self.emit(self._filled(ev)))
-        turn.fight += ev.get("speeds", [])
-
-    def _fighter(self, pid: str):
-        """An old-engine runner for someone in the encounter, from the world (engine/combat)."""
-        from .. import combat as battle
-
-        st = self.state
-        inv = next((i for i in st.investigators if i.id == pid), None)
-        if inv is not None:
-            return battle.from_investigator(inv, self._carried_by(inv.id), world=self.world)  # type: ignore[attr-defined]
-        npc = next((n for n in self.m.npcs if n.id == pid), None)
-        creature = profiles.form_of(self.world, pid) or next((c for c in self.m.creatures if c.id == pid), None)
-        if creature is not None:
-            f = battle.from_creature(creature, portrait=views.portrait(self, pid), world=self.world)
-            f.id = pid
-        elif npc is not None:
-            f = battle.from_npc(npc, self._carried_by(pid), world=self.world)  # type: ignore[attr-defined]
-        else:
-            return None
-        from .combatant import view
-
-        v = view(self.world, pid)
-        if v is not None:
-            f.name = v.public_name("players")
-        return f
-
-    async def _chase_closed(self, end: str, text: str, fight_ids: list[str] | None, turn: Turn) -> list[dict]:
-        """The old chase is over: caught, it comes to blows (the encounter is a fight again, the two at
-        it engaged); escaped, those who ran got away and the encounter ends with its stakes judged."""
-        st = self.state
-        enc = self.encounter()
-        if enc is None:
-            return []
-        ch = st.chase
-        assert ch is not None
-
-        def close(w: Work) -> None:
-            e = w.enc
-            hidden = set(ch.hidden)
-            if end == "caught" and fight_ids:
-                hunter, prey = fight_ids
-                for p in e.participants:
-                    runner = ch.get(p.id)
-                    if runner is not None and p.presence in ("fled", "in"):
-                        p.presence = "in"
-                w.engage(hunter, prey)
-                e.mode = "fight"
-                e.switches.append(f"r{e.round}:fight")
-                w.change("switched", prey)
-                w.unit.lines.append("【追逐转为战斗】{" + hunter + "}追上了{" + prey + "}")
-            else:
-                quarry = [r.id for r in ch.runners if r.side == ch.quarry]
-                for x in quarry:
-                    p = e.get(x)
-                    if p is not None and (x in hidden or p.presence in ("fled", "in")):
-                        p.presence = "escaped"
-                e.mode = "fight"
-            e.round = e.round or 0
-            e.cursor = max(e.cursor, len(e.order) + 2)
-            w.after.append(lambda: setattr(st, "chase", None))
-
-        await self._unit(f"enc/{enc.id}/chase-end/t{st.turn}", turn, close)
-        return []
+                return {"choice": checked.value.reaction, "summary": checked.value.summary, **setting}
+        return {"choice": pend.default, **setting}
 
 
-# -- the old chase's choices, matched exactly ---------------------------------------------------------
-def chase_options(me, ch) -> list:
-    """The old chase's choices for `me`: (words, note, order)."""
-    from ...rules import chase as chase_rules
-    from .. import combat as battle
 
-    names = {f.id: f.name for f in ch.runners}
-    moving = [f for f in ch.runners if f.standing and f.id not in ch.hidden]
-    steps = chase_rules.actions_for(me, min((f.speed for f in moving), default=me.speed))
-    out = [(battle.order_text(battle.Order(do="run"), names), f"这一轮能跑 {steps} 段", battle.Order(do="run"))]
-    if me.side == ch.quarry:
-        lead = chase_rules.gap(ch.running(ch.quarry), ch.running("foe" if ch.quarry == "party" else "party"))
-        if lead >= chase_rules.SIGHT:
-            out.append((battle.order_text(battle.Order(do="hide"), names), f"潜行 {me.value('潜行')} 对追兵的侦查", battle.Order(do="hide")))
-        out.append((battle.order_text(battle.Order(do="barrier"), names), "在身后制造障碍，失去一次移动", battle.Order(do="barrier")))
-    for f in ch.runners:
-        if f.side != me.side and f.standing and abs(f.pos - me.pos) <= 0:
-            o = battle.Order(do="turn", target=f.id)
-            out.append((battle.order_text(o, names), "停下来动手，追逐转为战斗", o))
-    return out
-
-
-def _order_of(d: DeclaredAction):
-    """A keeper-plan declaration as the old chase engine's order."""
-    from .. import combat as battle
-
-    target = d.attacks[0].target if d.attacks else d.target
-    if d.do in ("attack", "shoot", "maneuver", "stand"):
-        return battle.Order(do="turn", target=target)
-    if d.do == "hide":
-        return battle.Order(do="hide")
-    if d.do == "barrier":
-        return battle.Order(do="barrier")
-    if d.do in ("move", "flee", "pursue", "cross"):
-        return battle.Order(do="run")
-    return battle.Order(do="other", text=d.summary)
-
-
-__all__ = ["Encounters", "chase_options"]
+__all__ = ["Encounters"]

@@ -58,28 +58,38 @@ def _arrangement(ctx: Ctx, a: NpcArrangement, joining: set[str]) -> tuple[NpcArr
     kept = []
     for i, d in enumerate(a.actions, 1):
         found = actions.preconditions(ctx, a.who, d) if p is not None else []
-        if d.do == "pursue":
+        if d.do == "pursue" and ctx.enc.chase is None:
             found += _pursue(ctx, a.who, [d.target])
         if found:
             problems += [f"{a.who} 的第 {i} 个行动（{d.do}）：{x}" for x in found]
         else:
             kept.append(d)
-    problems += _pursue(ctx, a.who, a.pursue)
+    problems += _pursue(ctx, a.who, a.pursue, ahead=True)
     for x in a.let_go:
         q = ctx.p(x)
-        if q is None or q.presence != "fled":
-            problems.append(f"{a.who} 的 let_go 里 {x} 没有在逃")
+        if q is None or q.presence not in ("fled", "in"):
+            problems.append(f"{a.who} 的 let_go 里 {x} 不在这场遭遇里")
     if not kept:
         return None, problems or [f"{a.who} 没有一个做得到的行动"]
-    return a.model_copy(update={"actions": kept, "pursue": [x for x in a.pursue if not _pursue(ctx, a.who, [x])]}), problems
+    return a.model_copy(update={"actions": kept, "pursue": [x for x in a.pursue if not _pursue(ctx, a.who, [x], ahead=True)]}), problems
 
 
-def _pursue(ctx: Ctx, who: str, ids: list[str]) -> list[str]:
+def _pursue(ctx: Ctx, who: str, ids: list[str], *, ahead: bool = False) -> list[str]:
+    """Why `who` cannot go after `ids`. `ahead`: said in advance in a fight, for whoever may run (a
+    pursuit of someone still fighting holds, should they flee)."""
     out = []
+    ch = ctx.enc.chase
     for x in ids:
         q = ctx.p(x)
-        if q is None or q.presence != "fled":
+        if ch is not None:  # a chase: those still running, as far as he can tell where they are
+            if q is None or x not in ch.quarry or q.presence != "in":
+                out.append(f"{who} 要追的 {x} 不是还在跑的人（在逃的：{'、'.join(ch.quarry) or '无'}）")
+            elif why := ctx.hidden_from(who, x):
+                out.append(f"{who} 追不了 {x}：{why}")
+        elif q is None or q.presence not in (("fled", "in") if ahead else ("fled",)):
             out.append(f"{who} 要追的 {x} 没有在逃")
+        elif not ctx.opposed(who, x):
+            out.append(f"{who} 和 {x} 是一边的，不用追")
         elif why := ctx.hidden_from(who, x):
             out.append(f"{who} 追不了 {x}：{why}")
     return out
@@ -212,6 +222,10 @@ def start(game: Any, candidates: set[str]) -> Callable[[EncounterStart], list[st
             out.append("pace 必填：一轮在故事里过几秒")
         if s.mode == "chase" and not s.quarry:
             out.append("追逐要写 quarry：谁在逃")
+        if s.site is not None:
+            from .site import site_problems
+
+            out += site_problems(s.site)
         return out
 
     return check

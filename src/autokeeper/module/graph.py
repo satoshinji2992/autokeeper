@@ -15,7 +15,7 @@ from itertools import pairwise
 
 import networkx as nx
 
-from ..engine import combat as battle
+from ..engine.encounter import profiles
 from ..engine.state import hours
 from ..rules import dice_expr
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
@@ -476,8 +476,7 @@ def stake_problems(m: Module, when: str) -> list[str]:
 
 
 def fighting(m: Module) -> list[Issue]:
-    """What a fight or a chase reads of the module and cannot use as written (engine/combat.py,
-    engine/encounter): a creature with no word for the players (Creature.called) or one that names it,
+    """What a fight or a chase reads of the module and cannot use as written (engine/encounter): a creature with no word for the players (Creature.called) or one that names it,
     a sheet without hit points or DEX, an attack line with no chance to hit, a gun skill with no gun,
     a chase route the rules cannot run, an event charging the first sight of a horror twice. What
     names someone, somewhere or a flag the module does not have is an error (a creature's NPC, a leg's
@@ -497,14 +496,14 @@ def fighting(m: Module) -> list[Issue]:
             warn(f"怪物 {c.id} 没写 called：调查员还不知道它是什么时，屏幕上就是它的名字「{c.name}」")
         elif c.name in c.called:
             warn(f"怪物 {c.id} 的 called「{c.called}」带着它的名字：只写看得见的样子，不写学名、真名和真相")
-        swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
+        swarm = bool(profiles.SWARM.search(c.notes + c.description)) and not c.stats
         s = stats_of(c.stats)
         if not swarm and (lacking := [k for k in ("生命", "敏捷") if k not in s]):
             warn(f"怪物 {c.id} 的 stats 缺{'、'.join(lacking)}：打起来生命按体质、体型算（没写的各 60），敏捷按 50")
         for line in c.attacks:
             if problem := unread(line):
                 warn(f"怪物 {c.id} 的攻击「{line.strip()[:40]}」{problem}")
-        natural = any(w in k for k in s for w in battle.NATURAL)
+        natural = any(w in k for k in s for w in profiles.NATURAL)
         if not swarm and not natural and not any(parse_attack(x) for x in c.attacks):
             warn(f"怪物 {c.id} 没有读得出的攻击：打起来按 45% 的“攻击”、伤害 1D6+DB 算")
         if c.npc:

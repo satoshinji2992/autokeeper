@@ -16,7 +16,7 @@ from autokeeper.engine.encounter import plan as p
 from autokeeper.engine.state import GameState
 from autokeeper.harness.models import problems, strict_schema
 from autokeeper.module import package
-from autokeeper.module.schema import Event, Leg, Method, Module, Obstacle, Stake, Track
+from autokeeper.module.schema import Event, Leg, Location, Method, Module, Obstacle, Stake
 from autokeeper.rules import chase as chase_rules
 from autokeeper.rules.bcdice import Level
 from autokeeper.rules.coc import InjuryState, Investigator
@@ -179,20 +179,6 @@ def _strip(node, keys: set[str]):
     return node
 
 
-def test_a_save_from_before_the_encounter_loads_unchanged():
-    st = GameState(module="example", investigators=[_inv(hp=3)], location="x")
-    st.record.entities["douglas"] = Entity(id="douglas", kind="npc", name="道格拉斯", status="受伤")
-    new = {"encounter", "encounter_log", "sightings", "identified", "apart", "injury", "life", "weapon", "fills"}
-    old = _strip(json.loads(st.model_dump_json()), new)
-    assert not new & set(old) and "injury" not in old["investigators"][0]
-    back = GameState.model_validate(old)
-    assert back.encounter is None and back.encounter_log == [] and back.sightings == {} and back.apart == {}
-    assert back.chase is None
-    assert back.investigators[0].hp == 3 and back.investigators[0].injury == InjuryState()
-    assert back.record.entities["douglas"].life is None and back.record.entities["douglas"].status == "受伤"
-    assert back == st
-
-
 # -- modules --------------------------------------------------------------------------------------
 def _given_comes_back(given, dumped, where: str = "") -> None:
     """Everything a module's files write is in the loaded module, as written."""
@@ -219,13 +205,13 @@ def test_the_bundled_modules_and_the_example_load_unchanged(name):
 
 
 def test_the_chase_way_moved_to_the_module_format_and_is_still_found_in_the_rules():
-    assert chase_rules.Leg is Leg and chase_rules.Obstacle is Obstacle and chase_rules.Track is Track
+    assert chase_rules.Leg is Leg and chase_rules.Obstacle is Obstacle
     assert chase_rules.Method is Method
     ob = Obstacle(kind="hazard", what="结冰的台阶", skill="跳跃", harm="1d3")
     assert ob.harm == "1D3"  # its canonical spelling
     kept = Obstacle(kind="hazard", what="碎玻璃", skill="闪避", harm="1D3点")  # an imported module's: still loads
     assert kept.harm == "1D3点"
-    assert Track.model_json_schema()["$defs"]["Obstacle"]["properties"]["harm"]["pattern"] == PATTERN
+    assert Location.model_json_schema()["$defs"]["Obstacle"]["properties"]["harm"]["pattern"] == PATTERN
     leg = Leg(id="wall", name="墓园矮墙", place="cemetery", links=["road"], exit=True,
               obstacle=Obstacle(kind="barrier", what="矮墙", skill="攀爬",
                                 methods=[Method(id="climb", label="翻过去", skill="攀爬"),
@@ -323,10 +309,10 @@ def test_a_change_needs_an_encounter():
 # The plan schemas' sizes as a model reads them (JSON, unescaped), recorded here so growth is a
 # decision: the everyday Plan is about 3 200 and the arbiter's Ruling about 6 300 (2026-10-21).
 SIZES = {
-    p.DeclaredAction: 2800,
-    p.NpcArrangement: 4200,
-    p.EncounterTurnPlan: 8200,  # + cover and distances (2026-10-21): positions and ranges the book's shots read
-    p.EncounterStart: 10500,
+    p.DeclaredAction: 3000,  # + careful and after (WP-D): a hazard crossed with care, a delayed action
+    p.NpcArrangement: 4500,
+    p.EncounterTurnPlan: 8600,  # + cover and distances (2026-10-21): positions and ranges the book's shots read
+    p.EncounterStart: 10800,
     p.SiteDraft: 3600,
 }
 

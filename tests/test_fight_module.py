@@ -54,7 +54,7 @@ def test_the_schema_tells_the_import_models_what_a_fight_reads():
     assert "格斗(斗殴)" in defs["NPC"]["properties"]["stats"]["description"]
     assert "4–12 段" in location["chase"]["description"] and location["chase"]["items"]["$ref"].endswith("/Leg")
     assert "当场动手" in event["fight"]["description"] and event["surprise"]["enum"] == ["", "party", "foe"]
-    assert event["chase_party"]["enum"] == ["", "逃", "追"] and "不用写" in defs["Obstacle"]["properties"]["open"]["description"]
+    assert event["chase_party"]["enum"] == ["", "逃", "追"] and "open" not in defs["Obstacle"]["properties"]  # the chase keeps it
     assert "追逐" not in defs["Mechanic"]["properties"]["plugin"]["description"] and "战斗与追逐" in schema
     assert "不写怪物的学名、真名或剧情真相" in creature["called"]["description"] and creature["called"]["default"] == ""
 

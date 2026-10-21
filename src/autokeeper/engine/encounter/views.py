@@ -116,7 +116,7 @@ def readiest(v) -> Any:
 
 
 def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
-    """The fight as the screens draw it (the shape engine/combat.view had): public names, a foe's
+    """The fight as the screens draw it (the shape the screens have always drawn): public names, a foe's
     wounds in words, an investigator's and an ally's hit points."""
     ctx = Ctx.of(game, enc)
     out = []
@@ -137,6 +137,19 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
     for f in out:
         f["id"] = m.get(f["id"], f["id"])
     return {"round": ctx.enc.round, "place": ctx.enc.place, "fighters": out}
+
+
+def chase_view(game: Any, enc: EncounterState | None = None) -> dict:
+    """The chase as the screens draw it (engine/encounter/chase.view): the way run and ahead, everyone
+    on it by public name, a foe's wounds in words; ids masked as in the fight's view."""
+    from . import chase as chasing
+
+    ctx = Ctx.of(game, enc)
+    out = chasing.view(ctx, game)
+    m = masks(ctx.enc)
+    for r in out["runners"]:
+        r["id"] = m.get(r["id"], r["id"])
+    return out
 
 
 def initiative(game: Any, enc: EncounterState | None = None) -> list[str]:
@@ -184,7 +197,24 @@ def brief_actions(ctx: Ctx, pid: str) -> list:
             out.append(BriefAction(do=do, why=f"打：{'、'.join(ok_targets)}" + (f"；用：{'、'.join(using)}" if using else "")))
         else:
             out.append(BriefAction(do=do, ok=False, why=why or "没有看得见的对手"))
+    if ctx.enc.mode == "chase" and ctx.enc.chase is not None:
+        from . import chase as chasing
+        from . import site
+
+        ch = ctx.enc.chase
+        here = chasing.at(ctx.enc, pid)
+        nxt = [n for n, _ in site.neighbours(ch.site, here)]
+        out.append(BriefAction(do="move", why=f"在 {here}；相邻：{'、'.join(nxt) or '无'}；to 可填路线上任一节点，沿最短路跑"))
+        prey = [q for q in ch.quarry if ctx.present(q) and not ctx.hidden_from(pid, q)]
+        if pid not in ch.quarry and ctx.opposed(pid, (ch.quarry or [""])[0]):
+            out.append(BriefAction(do="pursue", ok=bool(prey), why=("可追：" + "、".join(f"{q}（在 {chasing.at(ctx.enc, q)}）" for q in prey))
+                                   if prey else "看得见的逃跑者都跟丢了"))
+        out += [BriefAction(do="hide"), BriefAction(do="barrier")]
+        stand = actions.preconditions(ctx, pid, DeclaredAction(do="stand", summary="-"))
+        out.append(BriefAction(do="stand", ok=not stand, why=stand[0] if stand else "转为战斗"))
     for do in ("aid", "reload", "unjam", "flee", "pursue"):
+        if do == "pursue" and ctx.enc.mode == "chase":
+            continue
         target = ""
         if do == "aid":
             hurt = [x for x in ctx.allies(pid) if not actions._aid(ctx, pid, x)]
@@ -277,6 +307,9 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
         told = [f"{ctx.name(x, 'keeper')}：{t}" for x in (q.id for q in enc.participants if q.id != p.id)
                 for t in ctx.told(p.id, x)] if p.controller == "keeper" else []
         conditions = list(b.conditions) + (["倒地"] if p.id in enc.scene.prone else []) + (["被制住"] if ctx.held_by(p.id) else [])
+        if enc.mode == "chase" and enc.round:
+            owed = enc.budget.owed.get(p.id, 0)
+            conditions.append(f"这一轮行动点 {enc.budget.movement.get(p.id, 0)}" + (f"，欠下一轮 {owed}" if owed else ""))
         people.append(BriefPerson(
             id=p.id, name=v.true_name, public=v.public_name("players"), kind=p.kind, side=p.side, controller=p.controller,
             presence=p.presence, node=p.node, hp=b.hp, hp_max=b.hp_max, conditions=conditions, dex=v.char("敏捷"),
@@ -294,9 +327,13 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
     if not recent:
         last = [r for r in enc.receipts if r.round == enc.round and r.phase in ("committed", "lapsed")]
         recent = [line for r in last for line in r.lines]
+    ch = enc.chase
     return Brief(id=enc.id, mode=enc.mode, round=enc.round, phase=enc.phase, place=game.world.name(enc.place), reason=enc.reason,
                  pace=enc.clock.pace, people=people, engaged=[(e.a, e.b) for e in enc.scene.engaged], cover=cover,
                  prone=list(enc.scene.prone), holds=held, distances=dict(enc.scene.distance), fled=fled,
+                 nodes=list(ch.site.nodes) if ch else [], edges=list(ch.site.edges) if ch else [],
+                 obstacles=list(ch.site.obstacles.values()) if ch else [], quarry=list(ch.quarry) if ch else [],
+                 pursuers=list(ch.pursuers) if ch else [], lost_sight=list(ch.lost_sight) if ch else [],
                  stakes=[BriefStake(when=s.when, flags=list(s.flags), note=s.note, fired=s.fired) for s in enc.stakes],
                  lines=recent, history=list(enc.history), unsettled=list(unsettled or []), waiting=waiting)
 
@@ -307,7 +344,7 @@ def keeper_text(game: Any, **kw) -> str:
     return encounter_brief(brief(game, **kw))
 
 
-__all__ = ["brief", "fight_view", "initiative", "keeper_text", "names", "status", "wound_word"]
+__all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "names", "status", "wound_word"]
 
 
 # -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------
@@ -315,24 +352,21 @@ def table(game: Any) -> dict | None:
     """The fight or the chase going on as the players' screens hold it, with each investigator's
     choices for this round in the words the engine matches (one list per answer to blows), or None
     outside one. Nothing in it is the keeper's: public names, a foe's wounds in words."""
-    from .. import combat as battle
     from . import choices
-    from .runner import chase_options
 
     st = game.state
-    if st.chase is not None:
-        ch = st.chase
-        out = {"kind": "chase", "round": ch.round, "chase": masked({"chase": battle.chase_view(ch)}, st.encounter)["chase"],
-               "choices": {}, "presets": {}}
-        for f in ch.runners:
-            if f.kind == "investigator" and f.standing and f.id not in ch.hidden:
-                out["choices"][f.id] = {"run": [[label, note] for label, note, _ in chase_options(f, ch)]}
-                out["presets"][f.id] = "run"
-        return out
     enc = st.encounter
     if enc is None or enc.phase == "ended":
         return None
     ctx = Ctx.of(game, enc)
+    if enc.mode == "chase" and enc.chase is not None:
+        out = {"kind": "chase", "round": enc.round, "chase": chase_view(game, enc), "choices": {}, "presets": {}, "acting": []}
+        for p in enc.participants:
+            if p.kind == "investigator" and ctx.acting(p.id):
+                out["acting"].append(p.id)
+                out["choices"][p.id] = {"run": [[o.label, o.note] for o in choices.options(game, p.id, ctx=ctx)]}
+                out["presets"][p.id] = "run"
+        return out
     out = {"kind": "fight", "round": enc.round, "fight": fight_view(game, enc), "choices": {}, "presets": {}, "acting": []}
     for p in enc.participants:
         if p.kind != "investigator":
