@@ -227,3 +227,53 @@ def test_whatever_comes_to_hand_is_a_club():
     assert (candlestick.name, candlestick.damage, candlestick.value) == ("铜烛台", "1D6+DB", 45)
     poker = Fighting._weapon(me, Order(do="attack", target="x", weapon="拨火棍"))
     assert poker.damage == "1D8+DB" and poker.name == "拨火棍"  # what it is most like
+
+
+def test_a_readied_gun_counts_only_for_who_fires_it_and_a_tie_goes_to_the_better_fighter():
+    """Keeper Rulebook p. 95: +50 to a readied firearm the character means to fire; p. 86: a DEX tie
+    goes to the higher combat skill."""
+    gunman = fighter("gunman", dex=40, attacks=[GUN])
+    quick = fighter("quick", dex=70, attacks=[FIST])
+    assert combat.order([quick, gunman], firing={"gunman"}) == ["gunman", "quick"]
+    assert combat.order([quick, gunman], firing=set()) == ["quick", "gunman"]  # punching with it in hand
+    jammed = fighter("j", dex=40, attacks=[GUN.model_copy(update={"jammed": True})])
+    assert combat.order([quick, jammed], firing={"j"}) == ["quick", "j"]
+    slots = [combat.Slot("a", 55, 25), combat.Slot("b", 55, 70), combat.Slot("c", 55, 70, first_on_tie=True)]
+    assert combat.turn_order(slots) == ["c", "b", "a"]  # the cultist's 70% before Harvey's 25%, p. 86
+
+
+def test_fighting_back_never_does_extreme_damage_and_a_throw_cannot_be_fought_back(fake):
+    """p. 87: extreme damage only on the attacker's own turn; p. 91: a throw is dodged."""
+    a = fighter("a", attacks=[FIST])
+    d = fighter("d", side="foe", stance="fight", fighting=60, attacks=[KNIFE.model_copy(update={"value": 60})])
+    fake.queue(40, 5).queue_totals(2)  # a regular, d extreme: the knife's normal 1D4
+    ex = combat.melee(fake, a, FIST, d)
+    assert ex.winner == "defender" and not ex.extreme and ex.damage == 2
+    rock = Attack(name="投掷石块", skill="投掷", value=50, damage="1D4+半DB")
+    fake.queue(40, 20)  # the throw regular, the dodge (30) regular: a tie, the dodger's
+    ex = combat.melee(fake, a, rock, fighter("t", side="foe", stance="fight"))
+    assert ex.reaction == "dodge" and ex.winner == "none"
+
+
+def test_a_surprised_defender_is_hit_unless_the_attack_fumbles(fake):
+    """p. 91: an attack nobody answers fails only on a fumble."""
+    a, d = fighter("a", attacks=[FIST]), fighter("d", side="foe", surprised=True)
+    fake.queue(80).queue_totals(2)
+    assert combat.melee(fake, a, FIST, d).winner == "attacker"
+    fake.queue(100)
+    assert combat.melee(fake, a, FIST, d).winner == "none"
+
+
+def test_weapon_skills_start_at_the_books_base_and_claws_are_no_weapon_to_take():
+    """pp. 46, 53–54: an untrained sword is 20%, an axe 15%, a submachine gun 15% — never 1%."""
+    from autokeeper.rules.catalog import base_value, canonical
+
+    bases = {"格斗(斧)": 15, "格斗(刀剑)": 20, "格斗(链枷)": 10, "格斗(矛)": 20, "格斗(鞭)": 5, "格斗(绞索)": 15,
+             "射击(冲锋枪)": 15, "射击(弓)": 15, "射击(重武器)": 10, "射击(机枪)": 10, "射击(火焰喷射器)": 10}
+    assert {k: base_value(k, {}) for k in bases} == bases
+    assert canonical("格斗（刀剑）") == "格斗(剑)" and canonical("射击(霰弹枪)") == "射击(步枪/霰弹枪)"
+    claw = parse_attack("格斗（剥皮爪击）60%，伤害 1D4+2+DB")
+    knife = parse_attack("攻击：小刀 40%，伤害 1D4+DB")
+    rifle = parse_attack("射击（步枪）30%，2D6+4")
+    assert claw.natural and not knife.natural and not rifle.natural
+    assert weapon_in("拳头").natural

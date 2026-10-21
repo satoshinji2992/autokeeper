@@ -196,3 +196,11 @@ def test_bcdice_rolls_every_rollable_within_its_bounds(bcdice):
             if command := expr.rollable(db):
                 total = bcdice.total(command)  # BCDiceError if it refused the command
                 assert total <= expr.maximum(db) or total < 0, (command, total)
+
+
+def test_the_weapons_own_damage_without_its_bonus():
+    """An impaling hit rolls the weapon's damage again, never the bonus (Keeper Rulebook p. 87)."""
+    assert DamageExpr.parse("1D4+2+DB").weapon().text() == "1D4+2"
+    assert DamageExpr.parse("1D4+半DB").weapon().rollable() == "1D4"
+    assert DamageExpr.parse("4D6/2D6/1D6").weapon(1).text() == "2D6"
+    assert DamageExpr.parse("").weapon().none

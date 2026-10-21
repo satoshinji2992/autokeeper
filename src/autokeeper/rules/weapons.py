@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Literal
 
 from .catalog import canonical
 
@@ -20,50 +21,94 @@ RIFLE = "射击(步枪/霰弹枪)"
 THROW = "投掷"
 
 
+Kind = Literal["melee", "thrown", "missile", "firearm"]
+
+
 @dataclass(frozen=True)
 class Weapon:
+    """A weapon of the Keeper Rulebook's weapon table (Table XVII, pp. 371–375)."""
+
     name: str
     skill: str
-    damage: str  # "1D3+DB"; a shotgun's by range: "4D6/2D6/1D6"
+    damage: str  # "1D3+DB"; a shotgun's by range: "4D6/2D6/1D6"; 半DB for a throw
     impale: bool = False  # an extreme success rolls the weapon's damage again on top of its maximum
     firearm: bool = False
-    range: int = 0  # yards of its base range; a melee weapon 0
-    shots: int = 1
+    range: int = 0  # yards of its base range; a melee weapon 0; a throw STR/5 (base_range)
+    shots: int = 1  # attacks a round at no penalty (the table's 每轮; a double barrel's "1或2" is 2)
     ammo: int = 0  # rounds a full load holds; 0 for no ammunition
-    malfunction: int = 100  # a roll of this or more jams it
+    malfunction: int = 100  # a roll of this or more and it does not fire
     aliases: tuple[str, ...] = field(default_factory=tuple)
+    natural: bool = False  # the body's own (fists, claws, a bite): never disarmed, never dropped
+    volley: int = 1  # a handgun's "1(3)": up to 3 shots a round, each at a penalty die (p. 96)
+    mechanism: str = ""  # revolver, break, bolt, lever, pump, auto: what a malfunction is (rules/firearms)
+    loading: str = "rounds"  # rounds (two a round), magazine (one round), belt (two rounds) (p. 96)
+    burns: bool = False  # sets alight: a Luck roll or burn (the table's notes, p. 375)
+
+    @property
+    def kind(self) -> Kind:
+        if self.firearm:
+            return "firearm"
+        if self.skill == THROW:
+            return "thrown"
+        return "missile" if self.skill.startswith("射击") else "melee"
 
     @property
     def melee(self) -> bool:
-        return not self.firearm and self.skill != THROW
+        return self.kind == "melee"
+
+    def base_range(self, strength: int = 50) -> int:
+        """Yards of its base range: a throw's is STR/5 (the weapon table, p. 371)."""
+        return strength // 5 if self.kind == "thrown" and not self.range else self.range
 
 
-UNARMED = Weapon("徒手", BRAWL, "1D3+DB", aliases=("拳头", "拳脚", "拳", "空手", "徒手格斗"))
+UNARMED = Weapon("徒手", BRAWL, "1D3+DB", natural=True, aliases=("拳头", "拳脚", "拳", "空手", "徒手格斗"))
 
+# The weapon table's entries an investigator of the 1920s is likely to carry or pick up (pp. 371–375):
+# damage, base range, attacks a round, capacity and malfunction number as printed there.
 WEAPONS: tuple[Weapon, ...] = (
     UNARMED,
-    Weapon("小刀", BRAWL, "1D4+DB", impale=True, aliases=("折刀", "刀子", "匕首", "剃刀", "削笔刀", "刀")),
-    Weapon("大刀", "格斗(刀剑)", "1D8+DB", impale=True, aliases=("砍刀", "军刀", "刺刀", "猎刀", "剑", "大砍刀")),
-    Weapon("斧头", "格斗(斧)", "1D8+2+DB", impale=True, aliases=("斧", "手斧", "柴刀")),
-    Weapon("棍棒", BRAWL, "1D8+DB", aliases=("球棒", "撬棍", "铁棍", "拨火棍", "手杖", "木棍", "警棍", "扳手", "铁锹", "铲子", "铲", "锹")),
-    Weapon("火把", BRAWL, "1D6+灼烧", aliases=("火炬", "燃着的木柴")),
-    Weapon("投掷石块", THROW, "1D4+半DB", range=10, aliases=("石块", "石头", "砖头")),
-    Weapon(".22 小手枪", HANDGUN, "1D6", impale=True, firearm=True, range=10, shots=1, ammo=6, malfunction=100,
-           aliases=(".22", "小口径手枪")),
-    Weapon(".32 自动手枪", HANDGUN, "1D8", impale=True, firearm=True, range=15, shots=1, ammo=8, malfunction=99,
-           aliases=(".32", "7.65", "自动手枪", "勃朗宁")),
-    Weapon(".38 左轮手枪", HANDGUN, "1D10", impale=True, firearm=True, range=15, shots=1, ammo=6, malfunction=100,
-           aliases=(".38", "左轮", "转轮手枪", "手枪", "警用左轮")),
-    Weapon(".45 自动手枪", HANDGUN, "1D10+2", impale=True, firearm=True, range=15, shots=1, ammo=7, malfunction=100,
-           aliases=(".45", "柯尔特", "M1911")),
-    Weapon("猎枪", RIFLE, "1D6+1", impale=True, firearm=True, range=30, shots=1, ammo=6, malfunction=99,
-           aliases=(".22 步枪", "小口径步枪")),
-    Weapon("步枪", RIFLE, "2D6+4", impale=True, firearm=True, range=110, shots=1, ammo=5, malfunction=100,
-           aliases=("春田", "栓动步枪", ".30-06", "M1903", "温彻斯特", "来复枪")),
-    Weapon("霰弹枪", RIFLE, "4D6/2D6/1D6", firearm=True, range=10, shots=1, ammo=2, malfunction=100,
+    Weapon("黄铜指虎", BRAWL, "1D3+1+DB", aliases=("指虎", "铜指虎")),
+    Weapon("小刀", BRAWL, "1D4+DB", impale=True, aliases=("折刀", "刀子", "匕首", "剃刀", "削笔刀", "弹簧刀", "刀")),
+    Weapon("切肉刀", BRAWL, "1D4+2+DB", impale=True, aliases=("菜刀", "剁刀", "中型刀具")),
+    Weapon("大砍刀", BRAWL, "1D8+DB", impale=True, aliases=("砍刀", "弯刀", "猎刀", "柴刀", "刺刀", "大刀", "大型刀具")),
+    Weapon("马刀", "格斗(剑)", "1D8+1+DB", impale=True, aliases=("军刀", "大型剑")),
+    Weapon("长剑", "格斗(剑)", "1D6+1+DB", impale=True, aliases=("重剑", "剑")),
+    Weapon("剑杖", "格斗(剑)", "1D6+DB", impale=True, aliases=("花剑", "轻型剑")),
+    Weapon("斧头", "格斗(斧)", "1D8+2+DB", impale=True, aliases=("伐木斧", "斧", "大斧")),
+    Weapon("手斧", "格斗(斧)", "1D6+1+DB", impale=True, aliases=("镰刀", "短柄斧")),
+    Weapon("棍棒", BRAWL, "1D8+DB", aliases=("球棒", "棒球棍", "撬棍", "铁棍", "拨火棍", "铁锹", "铲子", "铲", "锹", "扳手", "大型棍棒")),
+    Weapon("警棍", BRAWL, "1D6+DB", aliases=("手杖", "木棍", "短棍", "小型棍棒")),
+    Weapon("火把", BRAWL, "1D6", burns=True, aliases=("火炬", "燃着的木柴")),
+    Weapon("矛", "格斗(矛)", "1D8+1", impale=True, aliases=("长矛", "骑枪")),
+    Weapon("投掷石块", THROW, "1D4+半DB", aliases=("石块", "石头", "砖头")),
+    Weapon(".22 自动手枪", HANDGUN, "1D6", impale=True, firearm=True, range=10, ammo=6, malfunction=100, volley=3,
+           mechanism="auto", loading="magazine", aliases=(".22", "小口径手枪", ".22 小手枪")),
+    Weapon(".25 德林杰手枪", HANDGUN, "1D6", impale=True, firearm=True, range=3, ammo=1, malfunction=100,
+           mechanism="break", aliases=(".25", "德林杰")),
+    Weapon(".32 左轮手枪", HANDGUN, "1D8", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
+           mechanism="revolver", aliases=(".32 左轮", "7.65mm 左轮")),
+    Weapon(".32 自动手枪", HANDGUN, "1D8", impale=True, firearm=True, range=15, ammo=8, malfunction=99, volley=3,
+           mechanism="auto", loading="magazine", aliases=(".32", "7.65", "自动手枪", "勃朗宁")),
+    Weapon(".38 左轮手枪", HANDGUN, "1D10", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
+           mechanism="revolver", aliases=(".38", "左轮", "转轮手枪", "手枪", "警用左轮")),
+    Weapon(".38 自动手枪", HANDGUN, "1D10", impale=True, firearm=True, range=15, ammo=8, malfunction=99, volley=3,
+           mechanism="auto", loading="magazine", aliases=("9mm 自动手枪", "鲁格", "9mm")),
+    Weapon(".45 左轮手枪", HANDGUN, "1D10+2", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
+           mechanism="revolver", aliases=(".45 左轮",)),
+    Weapon(".45 自动手枪", HANDGUN, "1D10+2", impale=True, firearm=True, range=15, ammo=7, malfunction=100, volley=3,
+           mechanism="auto", loading="magazine", aliases=(".45", "柯尔特", "M1911")),
+    Weapon("猎枪", RIFLE, "1D6+1", impale=True, firearm=True, range=30, ammo=6, malfunction=99, mechanism="bolt",
+           aliases=(".22 步枪", "小口径步枪", ".22 栓动步枪")),
+    Weapon("杠杆步枪", RIFLE, "2D6", impale=True, firearm=True, range=50, ammo=6, malfunction=98, mechanism="lever",
+           aliases=(".30 杠杆步枪", "温彻斯特", "杠杆式步枪")),
+    Weapon("步枪", RIFLE, "2D6+4", impale=True, firearm=True, range=110, ammo=5, malfunction=100, mechanism="bolt",
+           aliases=("春田", "栓动步枪", ".30-06", "M1903", "来复枪")),
+    Weapon("李-恩菲尔德步枪", RIFLE, "2D6+4", impale=True, firearm=True, range=110, ammo=10, malfunction=100,
+           mechanism="bolt", aliases=(".303", "李-恩菲尔德", "李恩菲尔德")),
+    Weapon("霰弹枪", RIFLE, "4D6/2D6/1D6", firearm=True, range=10, shots=2, ammo=2, malfunction=100, mechanism="break",
            aliases=("双管", "猎用霰弹枪", "散弹枪", "12 号")),
-    Weapon("汤普森冲锋枪", "射击(冲锋枪)", "1D10+2", impale=True, firearm=True, range=20, shots=1, ammo=20, malfunction=96,
-           aliases=("汤普森", "冲锋枪", "芝加哥打字机")),
+    Weapon("汤普森冲锋枪", "射击(冲锋枪)", "1D10+2", impale=True, firearm=True, range=20, ammo=20, malfunction=96,
+           mechanism="auto", loading="magazine", aliases=("汤普森", "冲锋枪", "芝加哥打字机")),
 )
 
 _KEYS: list[tuple[str, Weapon]] = sorted(((key, w) for w in WEAPONS for key in (w.name, *w.aliases)),
@@ -111,6 +156,7 @@ class Written:
     impale: bool = False
     range: int = 0
     ammo: int = 0
+    natural: bool = False  # claws, a bite, fists: the body's own, never disarmed
 
 
 def parse_attack(line: str) -> Written | None:
@@ -142,7 +188,8 @@ def parse_attack(line: str) -> Written | None:
     clip = re.search(r"弹夹\s*(\d+)", text)
     left = re.search(r"(?:只有|仅有|还剩)\s*(\d+)\s*发", text)
     impale = firearm or any(w in name for w in ("刺", "咬", "獠牙", "角", "刀", "矛"))
-    return Written(name=name, skill=skill, value=value, damage=damage, firearm=firearm, impale=impale,
+    natural = not firearm and canonical(kind) != THROW and weapon_in(name) is None
+    return Written(name=name, skill=skill, value=value, damage=damage, firearm=firearm, impale=impale, natural=natural,
                    range=int(rng.group(1)) if rng else (gun.range if gun else 0),
                    ammo=int(left.group(1)) if left else int(clip.group(1)) if clip else (gun.ammo if gun else 0))
 
