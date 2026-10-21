@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from autokeeper import config, credits, imagegen, imagery, paths, scenery
+from autokeeper import config, credits, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewShowcase
 from autokeeper.engine import showcase
@@ -284,8 +284,6 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
 
 # -- on screen -------------------------------------------------------------------------------------
 async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_itself(canned, monkeypatch, tmp_path):  # noqa: F811
-    monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
-    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.modals import showcase as screen_module
     from autokeeper.tui.modals.dialogs import RollModal

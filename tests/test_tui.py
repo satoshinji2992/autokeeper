@@ -12,7 +12,7 @@ from PIL import Image
 from rich.text import Text
 from textual.widgets import Button, Input, RadioButton, Static
 
-from autokeeper import artkit, config, imagery, paths, scenery
+from autokeeper import artkit, config, imagery, paths
 from autokeeper.config import Role
 from autokeeper.engine.game import Game
 from autokeeper.harness import Reply
@@ -378,8 +378,6 @@ def test_the_sheet_lists_every_skill_and_the_specialisms():
 
 
 async def test_f7_opens_the_whole_sheet_and_walks_the_party(monkeypatch, tmp_path, skills_dir):
-    monkeypatch.setattr(scenery, "fill", lambda m: [])  # these are about the hand-drawn scenes and faces
-    monkeypatch.setattr(scenery, "fill_people", lambda m: [])
     from autokeeper.tui.modals.sheet import SheetModal
 
     monkeypatch.setattr(paths, "DATA", tmp_path)
@@ -609,18 +607,18 @@ def test_a_sheet_s_photo_keeps_its_rows_in_a_narrow_pane(width):
     assert len(rows) == 14 and all("▓" * 30 in line for line in rows)
 
 
-def test_a_painted_room_has_no_snow_from_the_modules_photo():
+def test_a_room_found_for_the_module_has_no_snow_from_its_photos():
     from autokeeper import paths
     from autokeeper.tui.widgets.panels import SceneArt
 
     art = SceneArt()
     art.picture, art.place, art.weather = "#", "邮局", ["snow", "flicker"]
-    art.image = str(paths.scenery() / "dongxuezhixia" / "post_office.png")  # painted by program
+    art.image = str(paths.module_art("dongxuezhixia") / "places" / "post_office.jpg")  # found or drawn on this machine
     assert art.kinds() == ["flicker"]
     art.image = str(paths.MODULES / "dongxuezhixia" / "art" / "places" / "post_office.jpg")  # the module's own photo
     assert art.kinds() == ["snow", "flicker"]
-    art.place, art.image = "主街", str(paths.scenery() / "dongxuezhixia" / "main_street.png")
-    assert art.kinds() == ["snow", "flicker"]  # painted, but out under the sky
+    art.place, art.image = "主街", str(paths.module_art("dongxuezhixia") / "places" / "main_street.jpg")
+    assert art.kinds() == ["snow", "flicker"]  # found, but out under the sky
 
 
 def test_a_line_the_keeper_gives_a_passer_by_gets_a_box_of_its_own():

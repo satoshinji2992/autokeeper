@@ -65,7 +65,7 @@ from aiohttp import WSCloseCode, WSMsgType, web
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .. import __version__, artkit, config, paths, roster, scenery
+from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
 from ..engine import debrief, fog
 from ..engine import graph as turn_graph
@@ -733,9 +733,6 @@ class Hub:
 
     def _pictures(self, book: dict, keys: set[str]) -> dict[str, str]:
         handouts = {key for h in book["handouts"] for key in _handout_keys(h)}
-        for k in keys:  # a scene painted by program is made before it is sent
-            if k in self.m.pictures:
-                scenery.ensure(self.m.pictures[k])
         return {k: media.pack(v, max_size=1600 if k in handouts else 512)
                 for k, v in self.m.pictures.items() if k in keys}
 

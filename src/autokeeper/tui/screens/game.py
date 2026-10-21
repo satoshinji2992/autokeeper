@@ -942,12 +942,9 @@ class GameScreen(Screen):
 
     async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
         """A face over the whole screen: a creature first seen, the thing that caught you."""
-        from ... import scenery
-
         path = self.m.pictures.get(portrait or "", "")
         if not path:
             return
-        await asyncio.to_thread(scenery.ensure, path)  # painted the first time it is shown
         if not Path(path).is_file() or isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
             return
         self.app.push_screen(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]

@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .. import pictures, scenery, weather
+from .. import pictures, weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
 from ..agents.director import Improv
@@ -162,9 +162,6 @@ class Game(Fighting):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
-        scenery.fill(module)  # every place with a picture: painted by program where it has none yet
-        scenery.fill_people(module)  # every person a portrait, likewise
-        scenery.fill_creatures(module)  # and every creature, for when it comes to a fight (engine/fighting.py)
         self.emit: Emit = emit or _silent
         self.checkpoint: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None

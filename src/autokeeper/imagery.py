@@ -82,14 +82,15 @@ class Pick(BaseModel):
 
 QUERY_SYSTEM = """你为一个 1920 年代背景的克苏鲁跑团游戏找配图。根据描述写 3 条英文检索词，用于在 Wikimedia Commons 搜索：
 - 每条只有 2–4 个常见英文词，越宽泛越容易搜到，比如 "old graveyard"、"Victorian house night"、"portrait old man"；
-- 第一条写画面主体，第二条加一个年代或画种词（painting / photograph / 1920s），第三条换一个近义说法；
+- 第一条写画面主体，第二条加 vintage photograph 或 1920s photo，第三条换一个近义说法；只找照片，不写 painting、drawing、illustration；
 - 人物写性别、年龄段和身份（portrait elderly woman、portrait policeman），不要写名字；不要引号和语法符号。"""
 
 PICK_SYSTEM = """你是游戏美术，从一张编号联系表里挑最适合做终端字符画的图：
 - 内容贴合描述，年代和气氛对得上；
 - 主体清楚、明暗对比强、背景简单（转成字符画后还能认出来）；
 - 头像要能看清一张脸；
-- 不选带大段文字、水印、现代物件或明显不合适的图。
+- 只选写实照片：不选油画、素描、版画、插画、海报、渲染图或博物馆里的画作；画面里的东西要符合年代，照片本身新旧都可以；
+- 不选带大段文字、水印、现代物件（汽车、电线杆以外的现代设施、塑料招牌、现代服装）或明显不合适的图。
 给出裁剪框（相对坐标）：头像裁到头肩，场景裁掉无关边缘。都不合适就填 -1。"""
 
 
@@ -378,7 +379,7 @@ def targets(m) -> list[tuple[str, str, str]]:
     out += [(i.art, f"{i.name}（{era}）：{i.description}", "item") for i in m.items if i.art]
     out += [(c.art, f"{c.feature or c.title}（{era}）", "item") for c in m.clues if c.art]
     out += [(e.art, f"{e.title}（{era}）：{e.read_aloud.strip()[:160]}", "scene") for e in m.events if e.art and e.read_aloud.strip()]
-    out += [(n.portrait, f"{n.name}，{n.role}；{n.look}（{era}）", "portrait") for n in m.npcs if n.portrait]
+    out += [(n.portrait, f"{n.look or '衣着朴素的当地成年人'}（{era}）", "portrait") for n in m.npcs if n.portrait]  # never the role: the keeper's
     out += [(p.portrait, f"{p.name}，{p.occupation}，{p.age} 岁，{p.backstory.get('个人描述', '')}（{era}）", "portrait") for p in m.pregens if p.portrait]
     return out
 
@@ -431,7 +432,7 @@ async def fetch_folder(
                 return
             im, c = found
             target.parent.mkdir(parents=True, exist_ok=True)
-            im.save(target, quality=92)
+            shared_look(im).save(target, quality=92)
             credits.put(target, asdict(c) | {"kind": kind})
             await asyncio.to_thread(preprocess, target, kind)
             done.append(name)
@@ -604,11 +605,6 @@ def picture_source(path: str | Path) -> str:
     original."""
     p = Path(path)
     prep = prepared(p)
-    from . import scenery
-
-    scenery.ensure(p)  # a scene painted by program, made the first time it is shown
-    if scenery.painted(p):  # already clean: the clean-up for faded photos turned its browns red
-        return str(p)
     try:
         if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
             return str(prep)
@@ -619,6 +615,24 @@ def picture_source(path: str | Path) -> str:
         return str(preprocess(p, kind))
     except (OSError, ValueError, Image.UnidentifiedImageError):
         return str(p)
+
+
+def shared_look(im: Image.Image) -> Image.Image:
+    """The look every picture found or drawn for a module shares, so a photo from one place and a
+    drawing from another sit together: its own colours, a little drained, a gentle S-curve, the
+    corners darkened, a touch of grain. Not an old photograph's (the user, 2026-10-21). Deep blacks
+    stay black (a creature is cut out of them, imagery.silhouette), and the grain follows the
+    picture, so the same picture comes out the same."""
+    arr = np.asarray(im.convert("RGB"), float) / 255
+    grey = arr @ np.array([0.299, 0.587, 0.114])
+    arr = arr * 0.78 + grey[..., None] * 0.22
+    arr = arr + 0.25 * arr * (1 - arr) * (2 * arr - 1)  # an S-curve round the middle
+    h, w = grey.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(float)
+    arr *= (1 - 0.35 * np.clip(((xx / w - 0.5) ** 2 + (yy / h - 0.5) ** 2) * 2.2, 0, 1))[..., None]
+    rng = np.random.default_rng(int(grey[:: max(1, h // 16), :: max(1, w // 16)].sum() * 1000) % 2**32)
+    arr += rng.normal(0, 0.018, (h, w))[..., None] * np.clip(grey * 2, 0, 1)[..., None]  # none in the black
+    return Image.fromarray(np.clip(arr * 255, 0, 255).astype(np.uint8))
 
 
 def light(im: Image.Image, when: str) -> Image.Image:
@@ -883,9 +897,6 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
     the same photo blown up, blurred and darkened, as a phone shows a tall photo on a wide
     screen: a tall old studio portrait no longer stands between two black bands."""
     room = (max(64, cols * 12), max(64, rows * 24))  # a dozen pixels a cell is plenty for chafa: blurring more is slow
-    from . import scenery
-
-    scenery.ensure(path)  # a portrait painted by program, made the first time it is shown
     photo = Image.open(path).convert("RGB")
     photo.thumbnail(room)
     source = picture_source(path)
@@ -930,10 +941,7 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
     heels, more is closer still). It is cut out by its alpha (a creature painted by program) or out
     of a black background (one drawn on black, imagegen); any other picture comes out of the dark
     in a soft oval, or in a fight fills the stage with itself blurred round it."""
-    from . import scenery
-
     w, h = max(64, cols * 8), max(64, rows * 16)  # cells half as wide as tall
-    scenery.ensure(path)
     raw = Image.open(path)
     if raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info):
         figure = raw.convert("RGBA")
@@ -946,7 +954,6 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
         figure = ImageEnhance.Brightness(ImageOps.autocontrast(figure, cutoff=0.5)).enhance(1.12)
     yy, xx = np.mgrid[0:h, 0:w].astype(float)
     if scene:
-        scenery.ensure(scene)
         place = ImageOps.fit(Image.open(picture_source(scene)).convert("RGB"), (w, h), Image.Resampling.BILINEAR)
         place = _expose(place, *artkit.STAGES["追逐"])  # cold and dark whatever the hour: it is behind you
         smear = place.resize((max(8, w // 10), h), Image.Resampling.BOX).resize((w, h), Image.Resampling.BILINEAR)

@@ -145,3 +145,27 @@ async def test_a_search_that_breaks_is_not_held_against_it(module, monkeypatch):
     await real_fill(config.Config(), module, log=lambda _: None)
     await real_fill(config.Config(), module, log=lambda _: None)
     assert len(calls) == 2 * len([g for g in pictures.gaps(module) if g.kind != "creature"])
+
+
+def test_pictures_are_looked_for_by_what_can_be_seen_never_the_keepers_notes(module):
+    module.npcs.append(NPC(id="killer", name="哈罗德·格雷", role="真凶，杀了三个人", look="灰色大衣的中年人", goal="灭口"))
+    subjects = {g.key: g.subject for g in pictures.gaps(module)}
+    assert subjects["face-killer"] == "灰色大衣的中年人"
+    assert not any("真凶" in s or "哈罗德" in s for s in subjects.values())
+
+
+async def test_the_wait_runs_from_the_last_real_try(module, monkeypatch):
+    import datetime as dt
+    import json
+
+    async def none(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(imagery, "find_picture", none)
+    target = paths.module_art(module.id) / "places" / "scene-tower.jpg"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    then = (dt.datetime.now() - dt.timedelta(days=6)).isoformat(timespec="seconds")
+    note = target.with_suffix(".tried.json")
+    note.write_text(json.dumps({"at": then, "searched": True, "failed": 2}), encoding="utf-8")
+    await real_fill(config.Config(), module, log=lambda _: None)
+    assert json.loads(note.read_text(encoding="utf-8"))["at"] == then  # nothing tried for it this time

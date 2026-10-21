@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from autokeeper import artkit, config, imagery, paths, scenery
+from autokeeper import artkit, config, imagery, paths
 from autokeeper.agents import artist
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewItem, NewLocation, NewNPC
@@ -100,11 +100,10 @@ async def test_images_arrive_in_background_and_survive_loading(monkeypatch, tmp_
 async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path)
 
-    def broken(*args, **kwargs):
+    async def broken(*args, **kwargs):
         raise OSError("disk full")
 
-    for name in ("picture", "face", "thing"):  # painting by program is the last resort: when it fails too
-        monkeypatch.setattr(scenery, name, broken)
+    monkeypatch.setattr(Visuals, "_without", broken)  # the last step, when no picture can be had: when it fails too
     m, st = scene()
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     visuals.schedule()
@@ -116,7 +115,7 @@ async def test_illustration_failure_and_cancellation_do_not_break_play(monkeypat
     async def slow(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(Visuals, "_painted", slow)
+    monkeypatch.setattr(Visuals, "_without", slow)
     m, st = scene()
     st.slot = "cancel-test"
     visuals = Visuals(m, st, config.Config(search="none"), silent)
@@ -160,7 +159,7 @@ async def test_switching_models_also_restarts_pending_art_on_the_new_model(monke
         configs.append(self.cfg)
         await gate.wait()
 
-    monkeypatch.setattr(Visuals, "_painted", paint)
+    monkeypatch.setattr(Visuals, "_without", paint)
     m, st = scene()
     original, replacement = config.Config(search="none"), config.Config(search="none")
     game = Game(m, st, SimpleNamespace(cfg=original), Rules(dice=fake))
@@ -201,13 +200,12 @@ async def test_a_failed_picture_retries_but_does_not_loop_forever(monkeypatch, t
     monkeypatch.setattr(paths, "DATA", tmp_path)
     calls = 0
 
-    def broken(*args, **kwargs):
+    async def broken(*args, **kwargs):
         nonlocal calls
         calls += 1
         raise OSError("disk full")
 
-    for name in ("picture", "face", "thing"):
-        monkeypatch.setattr(scenery, name, broken)
+    monkeypatch.setattr(Visuals, "_without", broken)
     m, st = scene()
     visuals = Visuals(m, st, config.Config(search="none"), silent)
     for _ in range(4):
@@ -260,7 +258,7 @@ async def test_a_prop_card_updates_in_place_when_its_illustration_arrives(monkey
     async def slow(*args, **kwargs):
         await asyncio.Event().wait()
 
-    monkeypatch.setattr(Visuals, "_painted", slow)  # the picture is still on its way
+    monkeypatch.setattr(Visuals, "_without", slow)  # the picture is still on its way
     m, st = scene()
     st.location, st.slot = "cafe", "prop-card"
     app = AutoKeeperApp(theme="amber")

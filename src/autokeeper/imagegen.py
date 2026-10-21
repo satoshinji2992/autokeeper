@@ -69,7 +69,8 @@ INSTRUCTIONS = """You make exactly one picture with the image_gen tool, then sto
 - No text, letters, captions, signatures, watermarks or borders in the picture. Keep violence non-graphic: no gore.
 - After the tool returns, reply with only the full path of the saved image file; if it failed, reply "failed:" and the reason."""
 
-STYLE = ("Style: like a period photograph or a muted oil painting of that time; moody light, clear shapes and strong "
+STYLE = ("Style: a realistic photograph of real places, people and things, natural detail; everything in it belongs to "
+         "that time, but the photograph itself may look like a good modern one; never a painting, an illustration or a render; moody light, clear shapes and strong "
          "contrast, so it still reads when shrunk to a few dozen characters; nothing modern.")
 FRAMING = {
     "scene": "A wide landscape view of the place (about 3:2).",
@@ -368,11 +369,14 @@ def _credit(picture: Path | None) -> dict[str, Any] | None:
 def _store(data: bytes, target: Path, credit: dict[str, Any]) -> Path:
     """The picture at a sane size as <target>.jpg, and its credit. Written whole or not at all: another
     game, or a renderer, may read it meanwhile."""
+    from .imagery import shared_look
+
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_name(f"{target.stem}.{os.getpid()}-{threading.get_ident()}.part.jpg")
     with Image.open(io.BytesIO(data)) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
         im.thumbnail((LONG_SIDE, LONG_SIDE), Image.Resampling.LANCZOS)
+        im = shared_look(im)  # the look the photos found for the module have
         im.save(part, "JPEG", quality=90)
         size = im.size
     os.replace(part, target)

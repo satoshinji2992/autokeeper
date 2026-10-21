@@ -18,7 +18,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from .. import artkit, config, imagegen, imagery, paths, pictures, scenery
+from .. import artkit, config, imagegen, imagery, paths, pictures
 from ..module.schema import Module
 from .state import GameState
 
@@ -146,7 +146,7 @@ class Visuals:
                 attempts = sum(int(r.get("attempts", "0")) for r in self.state.visuals.values())
                 if ((record["status"] != "ready" and not record.get("phase") and attempts >= self.cfg.visual_limit)
                         or self.cfg.visual_limit == 0 or spent >= self.cfg.visual_budget_usd):
-                    await self._painted(key, record, subject, kind)  # painted by program: costs nothing
+                    await self._without(key, record)
                     return  # foreground narration owns the remaining budget
                 if record["status"] != "ready" and not record.get("phase"):
                     record["attempts"] = str(int(record.get("attempts", "0")) + 1)
@@ -171,9 +171,9 @@ class Visuals:
                     record.pop("error", None)
                     await self._cache(key)
                     return
-                # Neither a photo nor image generation supplied one: painted by program
-                # (scenery.py), a place, a person or a thing; never hand-drawn ASCII (2026-10-21).
-                await self._painted(key, record, subject, kind)
+                # Neither a photo nor image generation supplied one: no picture, never one painted by
+                # program or hand-drawn ASCII (the user, 2026-10-21).
+                await self._without(key, record)
         except asyncio.CancelledError:
             raise  # still pending: resume the illustration when the save is loaded
         except Exception as exc:
@@ -183,22 +183,12 @@ class Visuals:
             record.pop("phase", None)
             await self._cache(key)
 
-    async def _painted(self, key: str, record: dict[str, str], subject: str, kind: str = "scene") -> None:
-        """The place's scene, or the person's portrait, painted by program in this game's pictures folder."""
+    async def _without(self, key: str, record: dict[str, str]) -> None:
+        """Done without a picture: neither a photo nor a drawing could be had (offline, no Codex, the
+        budget spent). The place, the person or the thing is told in words."""
         if record.get("picture"):
             return
-        if kind == "portrait":
-            who = next((n for n in self.module.npcs if n.portrait == key), None)
-            path = await asyncio.to_thread(scenery.face, self.folder / "people", key, who.name if who else subject,
-                                           who.look if who else "", who.role if who else "")
-        elif kind == "item":
-            it = next((i for i in self.module.items if i.art == key), None)
-            path = await asyncio.to_thread(scenery.thing, self.folder, key, it.name if it else subject,
-                                           it.description if it else "")
-        else:
-            name = next((loc.name for loc in self.module.locations if loc.art == key), "")
-            path = await asyncio.to_thread(scenery.picture, self.folder, key, name, subject)
-        record.update(picture=str(path), status="ready", photo_status="done")
+        record.update(status="ready", photo_status="done")
         record.pop("phase", None)
         record.pop("error", None)
         self._attach(key, record)
@@ -395,7 +385,7 @@ class Visuals:
                 kind, change = record.get("kind", "scene"), record.get("change", "")
                 record["attempts"] = str(int(record.get("attempts", "0")) + 1)
                 shown = self.module.pictures.get(key, "")
-                original = Path(shown) if shown and Path(shown).is_file() and not scenery.painted(shown) else None
+                original = Path(shown) if shown and Path(shown).is_file() else None
                 made = int(record.get("made", "0")) + 1
                 world = {"era": self.module.era, "setting": self.module.setting}
                 text = (imagegen.prompt(subject, kind, change=change, **world) if original is not None
