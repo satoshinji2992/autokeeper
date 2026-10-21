@@ -255,12 +255,13 @@ async def _chase(app, pilot, screen, m):
     ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
     me = battle.from_investigator(st.investigators[0])
     track = battle.default_track("graveyard")
-    me.pos, ghoul.pos, me.speed, ghoul.speed = 3, 1, 8, 9
-    st.chase = battle.Chase(runners=[me, ghoul], track=track, quarry="party", place=st.location, round=2)
+    me.pos, ghoul.pos, me.speed, ghoul.speed, me.actions, ghoul.actions = 2, 0, 8, 9, 1, 2
+    st.chase = battle.Chase(runners=[me, ghoul], track=track, quarry="party", place=st.location, round=1)
     await screen.handle({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【追逐开始】调查员在逃，身后是食尸鬼",
                          "speeds": [f"{me.name}的体质 41 常规成功：速度 8", f"{ghoul.name}的体质 9 极难成功：速度 9"]})
     await pilot.pause(0.5)
-    await screen.handle({"type": "chase_state", "chase": battle.chase_view(st.chase),
+    me.pos, ghoul.pos, st.chase.round = 4, 2, 2  # a round run: two stretches each
+    await screen.handle({"type": "chase_round", "chase": battle.chase_view(st.chase),
                          "lines": [f"{me.name}越过了倒伏的墓碑（跳跃 18 常规成功）", f"{ghoul.name}跑到了墓碑间的窄道"]})
     await pilot.pause(4.0)
 

@@ -256,3 +256,23 @@ async def test_the_modules_creatures_are_drawn_once_for_all_its_games(module, tm
     other.creatures = module.creatures
     scenery.fill_creatures(other)
     assert other.pictures["creature-hound"] == str(drawn)
+
+
+def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(module):
+    from autokeeper.engine import combat as battle
+    from autokeeper.engine.game import Game
+    from autokeeper.tui.widgets.fight import chase_route
+
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="route")
+    me, warden = battle.from_investigator(state.investigators[0]), battle.from_npc(module.npc("warden"))
+    me.pos, warden.pos, me.speed, warden.speed, me.actions, warden.actions = 4, 2, 8, 9, 1, 2
+    ch = battle.Chase(runners=[me, warden], track=battle.default_track("graveyard"), quarry="party", round=2)
+    lines = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain.splitlines()
+    legs = [leg.name for leg in ch.track.legs]
+    row = {name: next(line for line in lines if name in line) for name in legs}
+    assert "在你身后 2 段" in lines[1] and "再拉开 1 段就甩掉了" in lines[2] and "可以躲藏" in lines[2]
+    assert lines.index(row[legs[-1]]) < lines.index(row[legs[0]])  # the way ahead at the top
+    assert "◆" in row[legs[4]] and "◉◉" in row[legs[2]] and "老守钟人" in row[legs[2]]
+    assert "┆" in row[legs[3]] and "┆" in row[legs[1]]  # run through this round
+    assert "到这里就甩开" in row[legs[5]] and "▦攀爬" in row[legs[4]]  # three ahead of it; the fence in the way
+    assert any("每轮跑 2 段" in line for line in lines)

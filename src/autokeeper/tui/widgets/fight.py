@@ -23,6 +23,7 @@ import asyncio
 import time
 from functools import lru_cache
 
+from rich.cells import cell_len
 from rich.style import Style
 from rich.text import Text
 from textual import events
@@ -34,10 +35,12 @@ from textual.widgets import Static
 
 from ... import atmosphere, imagery
 from ...module.schema import Module
+from ...rules.chase import LOST, SIGHT
 from ...rules.combat import STANCES
 
 BLOOD, DEEP, EMBER, AMBER, BONE, ASH, BILE = "#c1121f", "#7a0a0a", "#ff6b35", "#ffb000", "#e8dec4", "#8a7f72", "#9bd770"
 GORE = "#ff1a1a"  # fresh blood: the claw marks, the numbers
+CHILL, MIST, SAFE = "#9fb4c8", "#5a6478", "#7fd18b"  # a chase: the cold of it, the way behind, the way out
 WOUND = {"无伤": 4, "轻伤": 3, "受伤": 2, "重伤": 1}  # segments of a foe's meter, in words
 DOWN = ("昏迷", "濒死", "死亡", "倒下")
 GONE = ("逃走", "投降")
@@ -315,7 +318,7 @@ class Arena(Horizontal):
     DEFAULT_CSS = """
     Arena { height: 20; display: none; background: #050303; }
     Arena .side { width: 38; height: 100%; padding: 0 1; border-left: tall #3a0a0a; background: #0b0505; }
-    Arena.-chase .side { border-left: tall #2a3448; background: #07080c; }
+    Arena.-chase .side { width: 46; border-left: tall #2a3448; background: #07080c; }
     Arena.-close .side { border-left: tall #c1121f; background: #160506; }
     """
 
@@ -331,6 +334,7 @@ class Arena(Horizontal):
         self.scene = ""  # a chase's place, behind what chases
         self.last_gap = 9
         self.blink = 0
+        self.was: dict[str, int] = {}  # a chase's runners where they were before the last round
 
     def compose(self) -> ComposeResult:
         yield Canvas()
@@ -347,7 +351,7 @@ class Arena(Horizontal):
         if mode != self.mode:
             self.canvas.clear()
             self.canvas.kinds = ["rush", "pulse"] if mode == "chase" else ["blood", "pulse"]
-            self.order, self.acting, self.facing, self.last_gap = [], "", "", 9
+            self.order, self.acting, self.facing, self.last_gap, self.was = [], "", "", 9, {}
         self.mode, self.view, self.m, self.style = mode, view, m, style
         self.set_class(mode == "chase", "-chase")
         if rows:
@@ -367,6 +371,9 @@ class Arena(Horizontal):
 
     def show_chase(self, view: dict, m: Module, style: str = "photo", rows: int | None = None, scene: str = "") -> None:
         """A chase: the place rushing past, and what is behind you in it, the bigger the nearer."""
+        before = self.view if self.mode == "chase" else None
+        if before is not None and before.get("round") != view.get("round"):  # a round run: the trail it left
+            self.was = {r["id"]: r["pos"] for r in before.get("runners", [])}
         self._open("chase", view, m, style, rows)
         self.scene = scene
         gap = chase_gap(view)
@@ -442,44 +449,9 @@ class Arena(Horizontal):
         return out
 
     def _chase_side(self) -> Text:
-        view = self.view or {}
-        quarry = view.get("quarry", "party")
-        runners, legs = view.get("runners", []), view.get("legs", [])
-        gap = chase_gap(view)
-        close = gap <= 1
-        them = [r for r in runners if r["side"] != "party" and r["status"] not in DOWN]
-        out = Text()
-        out.append("⟫ 追逐", style=f"bold {GORE if close else '#9fb4c8'}")
-        out.append(f"  第 {max(1, view.get('round', 1))} 轮\n\n", style=f"bold {BONE}")
-        out.append("、".join(r["name"][:10] for r in them) or "它", style=f"bold {BONE}")
-        if quarry == "party":
-            out.append("\n就在你背后！\n" if gap <= 0 else "\n在你身后\n", style=f"bold {GORE if close else AMBER}")
-        else:
-            out.append("\n在你们前面\n", style=f"bold {AMBER}")
-        if 0 < gap < 9:
-            hot = GORE if close else AMBER
-            lines = big_number(gap, f"bold {'#5a0000' if close and self.blink % 2 else hot}")
-            for i, line in enumerate(lines):
-                out.append("  ")
-                out.append_text(line)
-                out.append("  段\n" if i == 4 else "\n", style=f"bold {hot}")
-        out.append("\n")
-        span = max(1, gap) if gap < 9 else 6
-        cell = max(2, min(8, 24 // span))
-        out.append("◉◉ " if self.blink % 3 else "◎◎ ", style=f"bold {GORE}")
-        for i in range(span):
-            heat = 1 - i / max(1, span)
-            shade = "▓" if heat > 0.66 else "▒" if heat > 0.33 else "░"
-            out.append(shade * (cell - 1) + " ", style=GORE if close else DEEP if heat > 0.5 else "#3a3f52")
-        out.append("◆你\n" if quarry == "party" else "◆你们\n", style=f"bold {AMBER}")
-        me = max((r["pos"] for r in runners if r["side"] == quarry), default=0)
-        nxt = legs[me + 1] if me + 1 < len(legs) else None
-        if nxt and nxt.get("obstacle") and not nxt["obstacle"].get("open"):
-            ob = nxt["obstacle"]
-            out.append("\n前方 ", style=ASH)
-            out.append(f"{'▦' if ob['kind'] == 'barrier' else '⚠'} {ob['what']}", style=f"bold {BLOOD if ob['kind'] == 'barrier' else AMBER}")
-            out.append(f"\n     {ob['skill']}\n", style=ASH)
-        return out
+        side = self.query_one(".side", Static)
+        width, height = side.content_size.width or 42, side.content_size.height or 20
+        return chase_route(self.view or {}, width, height, self.blink, self.was)
 
     def round_begins(self, order: list[str], view: dict) -> None:
         self.order, self.acting = order, ""
@@ -510,6 +482,120 @@ class Arena(Horizontal):
         self.view, self.order, self.acting, self.facing, self.mode = None, [], "", "", ""
         self.canvas.clear()
         self.remove_class("-chase", "-close")
+
+
+def short_name(name: str) -> str:
+    """A name as a crowded line has room for: the part before the 「·」 (哈罗德·布伦南: 哈罗德)."""
+    return name.replace("・", "·").split("·")[0] or name
+
+
+def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[str, int] | None = None) -> Text:
+    """A chase as a way up the column: the way ahead at the top, where it began at the bottom. Every
+    stretch by name with what is in the way on it and who is on it, a trail over the stretches each
+    ran this round (`was`: where they were before it); the stretch where they lose you (or it gets
+    away from you); how far behind it is and what it takes to get away; everyone's speed and how
+    many stretches a round that makes."""
+    quarry = view.get("quarry", "party")
+    runners, legs = view.get("runners", []), view.get("legs", [])
+    gap = chase_gap(view)
+    close, fleeing = gap <= 1, quarry == "party"
+    ahead = [r for r in runners if r["side"] == quarry and r["status"] not in DOWN]
+    behind = [r for r in runners if r["side"] != quarry and r["status"] not in DOWN]
+    them = [r for r in runners if r["side"] != "party" and r["status"] not in DOWN]
+    hot = GORE if close else AMBER
+    out = Text(no_wrap=True, overflow="crop")
+    out.append("⟫ 追逐", style=f"bold {GORE if close else CHILL}")
+    out.append(f"  第 {max(1, view.get('round', 1))} 轮\n", style=f"bold {BONE}")
+    if gap >= 9:
+        status = "甩开了" if fleeing else "跟丢了"
+    elif fleeing:
+        status = "就在你背后！" if gap <= 0 else f"在你身后 {gap} 段"
+    else:
+        status = f"在前面 {gap} 段"
+    who = "、".join(r["name"] for r in them) or "它"
+    out.append_text(cell_text(who, max(4, width - cell_len(status) - 1), f"bold {BONE}"))
+    out.append(" ")
+    out.append(status, style=f"bold {'reverse ' if gap <= 0 and blink % 2 else ''}{hot}")
+    out.append("\n")
+    if 0 <= gap < 9:
+        need = LOST - gap
+        if fleeing:
+            goal = f"再拉开 {need} 段就甩掉了" if need > 0 else "这一轮守住就甩掉了"
+            goal += "  ·  可以躲藏" if gap >= SIGHT else ""
+        else:
+            goal = "追上它就打起来" if gap <= 1 else f"它再拉开 {max(0, need)} 段就跑了"
+        out.append(goal + "\n", style=SAFE if fleeing and gap >= SIGHT else ASH)
+    else:
+        out.append("\n")
+    out.append("─" * width + "\n", style=DEEP)
+    # the way: as many stretches as the column holds, round the runners
+    room = max(3, height - 6 - len(runners))
+    marks = [r["pos"] for r in runners if r["status"] not in DOWN] or [0]
+    front, hind = max(marks), min(marks)
+    lo = max(0, min(hind - 1, len(legs) - room))
+    hi = min(len(legs) - 1, lo + room - 1)
+    lost = max((r["pos"] for r in behind), default=-9) + LOST if fleeing else -1
+    if hi < len(legs) - 1:
+        out.append(f"   ⋮ 前面还有 {len(legs) - 1 - hi} 段\n", style=MIST)
+    elif fleeing:
+        out.append("   ⇡ 跑出这条路就甩开了\n", style=SAFE)
+    for i in range(hi, lo - 1, -1):
+        leg = legs[i]
+        up = [r for r in ahead if r["pos"] == i and not r.get("hidden")]
+        down = [r for r in behind if r["pos"] == i]
+        hid = [r for r in ahead if r["pos"] == i and r.get("hidden")]
+        if up and down:
+            mark, mark_style = "✖", f"bold reverse {GORE}"
+        elif down:
+            mark, mark_style = ("◉◉" if blink % 3 else "◎◎"), f"bold {GORE}"
+        elif up:
+            mark, mark_style = "◆", f"bold {AMBER if fleeing else BLOOD}"
+        elif hid:
+            mark, mark_style = "◌", ASH
+        elif ran := [r for r in runners if (was or {}).get(r["id"], r["pos"]) < i < r["pos"]]:
+            mark, mark_style = "┆", f"bold {AMBER if ran[0]['side'] == 'party' else GORE}"  # run through this round
+        else:
+            mark, mark_style = "│" if hind <= i <= front else "·", DEEP if hind <= i <= front else MIST
+        hunter_row = bool(down)
+        danger = min(r["pos"] for r in behind) <= i <= max(r["pos"] for r in ahead) if ahead and behind else False
+        name_style = (f"bold {GORE}" if hunter_row else f"bold {AMBER}" if up else "#c48a8a" if danger
+                      else ASH if i < hind else BONE)
+        row = Text(no_wrap=True)
+        row.append_text(cell_text(f" {mark}", 4, mark_style))
+        row.append_text(cell_text(leg["name"], 14, name_style))
+        ob = leg.get("obstacle")
+        if ob:
+            if ob.get("open"):
+                tag, tag_style = f"▢ {ob['what']}", ASH
+            else:
+                hard = "" if ob.get("difficulty", "常规") == "常规" else ob["difficulty"][:1]
+                tag = f"{'▦' if ob['kind'] == 'barrier' else '⚠'}{ob['skill']}{hard}{ob.get('harm') or ''}"
+                tag_style = f"bold {BLOOD}" if ob["kind"] == "barrier" else AMBER
+        else:
+            tag, tag_style = "", ASH
+        row.append_text(cell_text(tag, 10, tag_style))
+        here = [*down, *up, *hid]
+        names = "、".join(short_name(r["name"]) + ("（藏）" if r.get("hidden") else "") for r in here)
+        if i == lost and fleeing and not here:
+            names, who_style = "◁ 到这里就甩开", SAFE
+        else:
+            who_style = f"bold {GORE}" if down else f"bold {AMBER}" if up else ASH
+        row.append_text(cell_text(names, max(0, width - 28), who_style))
+        if hunter_row:
+            row.stylize("on #2a0505")
+        out.append_text(row)
+        out.append("\n")
+    out.append("─" * width, style=DEEP)
+    for r in [r for r in runners if r["side"] == "party"] + [r for r in runners if r["side"] != "party"]:
+        mine = r["side"] == "party"
+        out.append("\n")
+        out.append_text(cell_text(("◆ " if mine else "◉ ") + short_name(r["name"]), 18, f"bold {AMBER if mine else BLOOD}"))
+        out.append(f"速度 {r['speed']}", style=BONE)
+        if r.get("actions"):
+            out.append(f" · 每轮跑 {r['actions']} 段", style=ASH)
+        if r["status"] in DOWN:
+            out.append(f" · {r['status']}", style=f"bold {GORE}")
+    return out
 
 
 NEAR = {0: 1.0, 1: 0.78, 2: 0.55, 3: 0.38}  # how large what chases you stands, by stretches between you
