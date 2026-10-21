@@ -102,6 +102,13 @@ class DamageExpr:
             return ()
         return self.bands[max(0, min(band, len(self.bands) - 1))]
 
+    def weapon(self, band: int = 0) -> DamageExpr:
+        """The band without its damage bonus: the weapon's own damage, which an impaling hit rolls
+        once more on top of the maximum (Keeper Rulebook p. 87: 1D4+DB at extreme is 1D4+4+4; the
+        .45's 1D10+2 impales for 12+1D10+2, p. 99)."""
+        kept = tuple(t for t in self.band(band) if not t.bonus)
+        return DamageExpr((kept,)) if kept else DamageExpr()
+
     # -- rolling it -------------------------------------------------------------------------
     def terms(self, db: str = "0", band: int = 0) -> Band:
         """The band's terms with the damage bonus `db` put in for DB (half of it for 半DB)."""
