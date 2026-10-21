@@ -503,7 +503,7 @@ class Hub:
         """Three ideas for a seated player's next move, from the view the AI seats get. The game
         does not wait for them, and they go to that player alone."""
         try:
-            ideas = await self.cast.suggest(self.state, seat, situation(self.m, self.state))
+            ideas = await self.cast.suggest(self.state, seat, situation(self.m, self.state, seat))
         except Exception:  # the table plays on without them; the player's screen says none came
             ideas = []
         finally:
@@ -1281,7 +1281,7 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state))
+        text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id))  # in a fight: its choices
         await self._event({"type": "said", "who": inv.name, "player": "", "text": text, "ai": True})
         await self._run(text, inv.id, ai=True)
 

@@ -1616,7 +1616,7 @@ class GameScreen(Screen):
     def _situation(self) -> str:
         from ...engine.autoplay import situation
 
-        return situation(self.m, self.state)
+        return situation(self.m, self.state, self._viewer().id)
 
     @work(exclusive=True, group="turn")
     async def autoplay(self) -> None:

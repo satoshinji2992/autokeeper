@@ -27,8 +27,10 @@ from ..harness import replay as tapes
 from ..harness import trace
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
+from ..rules import chase as chase_rules
 from ..rules.bcdice import shared
 from ..rules.coc import Investigator, Rules
+from . import combat as battle
 from . import fog
 from . import graph as turn_graph
 from .game import Game
@@ -63,7 +65,7 @@ TOLD = ("opening", "keeper", "npc", "player", "dice", "clue", "handout", "event"
 TELLER = {"opening": "开场", "clue": "线索", "handout": "手稿", "event": "事件"}
 
 
-def situation(m: Module, st: GameState) -> str:
+def situation(m: Module, st: GameState, who: str | None = None) -> str:
     """What an AI player sees, and no more than the players have been shown: where they are
     and what they saw on arriving, the places they know (engine/fog.py: been to, or heard of
     by the name they heard), the people they have met and where, the clues and handouts they
@@ -71,6 +73,9 @@ def situation(m: Module, st: GameState) -> str:
     things to search, its exits, or the people there they have not met: those are the
     keeper's. A companion who knew them would play another game than the human beside it,
     and autoplay would finish modules no table could.
+
+    In a fight or a chase, also how it stands as the players' screens show it and the round's choices
+    in the words the engine reads (battle_now): for `who`, or for every investigator in it.
 
     The first line is what the investigator's memory keeps of each turn (Cast.investigator)."""
     loc = m.location(st.location)
@@ -102,7 +107,43 @@ def situation(m: Module, st: GameState) -> str:
     out.append(f"队伍：\n{party}")
     if st.memory:
         out.append(f"更早的经过：{st.memory}")
+    if now := battle_now(st, who):
+        out.append(f"最近发生的事：\n{lines or '（刚开场）'}")
+        out.append(now)
+        return "\n".join(out)
     out.append(f"最近发生的事：\n{lines or '（刚开场）'}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？")
+    return "\n".join(out)
+
+
+def battle_now(st: GameState, who: str | None = None) -> str:
+    """A fight or a chase going on, as the players' screens show it (a foe's wounds in words, never its
+    numbers), and the round's choices in the words the engine reads (engine/combat.choices,
+    chase_choices) for `who`, or for every investigator still in it: an AI player picks a real order
+    instead of words the engine has to guess at. "" outside one."""
+    if st.fight is not None:
+        fight = st.fight
+        foes = "；".join(f"{f.name}（{f.wound_word()}，{f.wielding.name}）" for f in fight.fighters if f.side != "party")
+        party = "；".join(f"{f.name} HP {f.hp}/{f.hp_max}" + (f"，{f.status}" if f.status else "")
+                          for f in fight.fighters if f.side == "party")
+        head = f"正在战斗（第 {max(1, fight.round)} 轮）。对手：{foes}。你们：{party}。"
+        mine = [f for f in fight.fighters if f.kind == "investigator" and f.standing and who in (None, f.id)]
+        offers = [(f.name, battle.choices(f, fight)) for f in mine]
+    elif st.chase is not None:
+        ch = st.chase
+        hunters = ch.running("foe" if ch.quarry == "party" else "party")
+        gap = chase_rules.gap(ch.running(ch.quarry), hunters)
+        others = "、".join(f.name for f in ch.runners if f.side != "party")
+        how = f"你们在逃，{others}在身后 {gap} 段" if ch.quarry == "party" else f"你们在追，{others}在前方 {gap} 段"
+        head = f"正在追逐（第 {max(1, ch.round)} 轮）：{how}；领先 {chase_rules.LOST} 段即脱离。"
+        mine = [f for f in ch.runners if f.kind == "investigator" and f.standing and f.id not in ch.hidden and who in (None, f.id)]
+        offers = [(f.name, battle.chase_choices(f, ch)) for f in mine]
+    else:
+        return ""
+    out = [head]
+    for name, choices in offers:  # one to a line, no bullet: the line copied is the order (parse_order reads it)
+        out.append(f"{name}这一轮可以做的（照原样写出其中一行“——”前面的文字；别的具体动作也可以，写清楚做什么）：")
+        out += [f"  {words} —— {note}" for words, note in choices]
+    out.append("这一轮你做什么？")
     return "\n".join(out)
 
 

@@ -845,3 +845,25 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         await pilot.pause(0.1)
         assert not picker.display  # the round closed: settled by the host
 
+
+def test_an_ai_player_in_a_fight_sees_it_and_the_rounds_choices():
+    from autokeeper.engine import combat as battle
+    from autokeeper.engine.autoplay import situation
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    st = Game.new(m, [lead, friend], slot="ai-fight")
+    st.location = "tower"
+    warden = battle.from_npc(m.npc("warden"))
+    warden.hp = 3
+    fighters = [battle.from_investigator(lead), battle.from_investigator(friend), warden]
+    st.fight = battle.Fight(fighters=fighters, place="tower", round=2)
+    text = situation(m, st, "lin")
+    assert "正在战斗（第 2 轮）" in text and "老守钟人（重伤" in text and "HP 3" not in text  # its wounds in words
+    assert "林秋这一轮可以做的" in text and "周衡这一轮可以做的" not in text
+    order = next(line.strip().split(" —— ")[0] for line in text.splitlines() if line.strip().startswith("攻击 老守钟人"))
+    parsed = battle.parse_order("我" + order, fighters[1], fighters)
+    assert parsed is not None and parsed.do == "attack" and parsed.target == "warden"  # the words the engine reads
+    st.fight = None
+    assert "正在战斗" not in situation(m, st) and situation(m, st).endswith("你下一步做什么？")
