@@ -156,6 +156,17 @@ async def _developer(app, pilot, screen, m):
     screen.action_developer()
 
 
+async def _talk(app, pilot, screen, m):
+    """A conversation as it comes in: the cook's reply, the keeper's telling with a passer-by's line."""
+    await screen.handle({"type": "npc", "npc": "doreen_ratger", "name": "多琳·拉特格", "portrait": "",
+                         "text": "（手停在围裙上，把面粉拍了拍）死人？这种话在我们这儿可不兴这么大声说。年头不好，"
+                                 "老人孩子一场病就过去了……您打听这个做什么？您是从城里来的吧，看您这双鞋就知道。"})
+    await screen.handle({"type": "keeper_start"})
+    await screen.handle({"type": "keeper_end", "text": "弗朗西斯把碗往桌上一放，窗外有辆卡车慢慢停在街角，车斗上盖着油布。\n\n"
+                         "【开卡车的年轻人】（探进门来，哈出一口白气）拉特格太太，赫琴斯让我问一声，今晚还留不留汤？\n\n"
+                         "多琳朝他摆摆手，他又咳了两声，退回雪里去了。"})
+
+
 SHOTS = {
     "title": title,
     "game": lambda: in_game("game", "zhuishuren", "tushuguan", ZHUI),
@@ -166,6 +177,7 @@ SHOTS = {
     "models": lambda: in_game("models", "zhuishuren", "tushuguan", ZHUI, then=_models),
     "developer": lambda: in_game("developer", "zhuishuren", "jingju", ZHUI, met=("jingguan",), then=_developer),
     "host": host,
+    "talk": lambda: in_game("talk", "dongxuezhixia", "ratger_house", DONG, met=("doreen_ratger",), then=_talk),
 }
 
 

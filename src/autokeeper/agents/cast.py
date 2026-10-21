@@ -190,6 +190,7 @@ class Dialogue(BaseModel):
     items: list[Gift] = Field(default_factory=list, max_length=3, description="当场拿出或递出的东西；没有就留空")
     leave: str = Field("", description="说完马上走开时，填要去的地点 id；留下就留空")
     played: list[str] = Field(default_factory=list, description="【见到调查员时，你会】里这次已经做了的几条，填括号里的编号；没做就留空")
+    told: list[str] = Field(default_factory=list, description="这次台词里已经说出要点的已解锁线索 id；只是提了一句、绕开了或留着下回说的不填")
     deceptions: list[Deception] = Field(default_factory=list, max_length=3, description="本次有意欺骗的私有说明，玩家不可见；未故意说谎时留空，不固定比例撒谎")
 
 
@@ -394,6 +395,8 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
    线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；它意味着什么、指向哪里，留给玩家自己推理。
+   消息出自人口时（路人、店主这些由你扮演的人），让他用自己的话说，有来有往；不要用“他说……”把一整条消息概括转述。一次只带出一两处，其余留给玩家追问。
+   由你扮演的人开口时，他的话单独成段，段首用【】写玩家对他的称呼，紧接着写他说的话，比如：【开卡车的年轻人】赫琴斯自个儿不在这儿。动作和神情写在前后的叙述段里。模组里的 NPC 不这样写，他们的话系统另外显示。
 9. 先让地方像有人生活：人有手头的活、口味、习惯和琐事；没给新线索的一顿饭、一次问路也可以完整成立。
    可以补符合年代的气味、街边营生和普通过客的一两句应答；不借此新增案情、危险、物品效果或检定结果。
    已有 NPC 的对话仍由对应角色说。玩家愿意停下来就展开，明确赶路或略过时压缩过渡；不能替调查员决定行动、态度或内心感受。
@@ -435,7 +438,8 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 说你自己的事：你的营生、家里人、身上的毛病、你在乎的东西，这些家常可以随口带出来。回答问题时带上你的看法和偏见，不光交代事实；但和案子有关的人、事、怪象，只说上面写着的，别添新的。
 - 大多数时候直接开口说话。动作和神态写在（）里，只在它比话更能说明问题时才写，一次最多一处。
 - 口头禅偶尔带一下就好；上一轮说过的话，换个说法或者干脆不提。
-- 日常闲聊通常一至三句。只回答他实际问的话，不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
+- 有来有往地聊：一般说三到六句，接住对方的话，说说你的看法和手头的琐事，常常顺口反问一句；被惹恼、急着打发人时才一两句。只回答他实际问的话，不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
+- 已解锁的线索是你知道、也愿意说的事，不是要一口气交代的清单。先接着对方的话聊，把其中一两处细节揉进家常、抱怨或别人的闲话里带出来，别的留着等对方追问；对方问得具体，再说得具体。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
 - 角色可以有意说谎、敷衍或假答应，包括为了自保、保护他人、利益、羞耻或体面；不限定反派，也不要求每次坦白。根据具体处境决定，不按比例撒谎。新编的有意欺骗在 deceptions 私下说明逐字台词、真实意图与动机，不能仅凭一句话就获知角色未知的真相。
@@ -526,6 +530,7 @@ class Cast:
         # 2026-10-20: the keeper sees everything); off only to compare with the blind keeper (eval session).
         self.backstage = True
         self.unsettled: dict[str, list[str]] = {}  # npc id -> what its last reply could not do (Game._unsettled)
+        self.told: dict[str, list[str]] = {}  # npc id -> the clues its last reply told (Game._heard)
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -1110,6 +1115,9 @@ class Cast:
                 self.world.touch(agent)
         else:
             world.apply(self.module, state, dialogue.changes, source=npc_id, spoken=text)
+        npc_sheet = self.module.npc(npc_id)
+        allowed = set(state.npc(npc_id).unlocked) | {c for c in npc_sheet.clues if c not in npc_sheet.gates}
+        self.told[npc_id] = [c for c in dict.fromkeys(dialogue.told) if c in allowed and c not in state.clues]
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
         return text

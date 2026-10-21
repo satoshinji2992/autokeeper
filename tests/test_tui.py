@@ -621,3 +621,39 @@ def test_a_painted_room_has_no_snow_from_the_modules_photo():
     assert art.kinds() == ["snow", "flicker"]
     art.place, art.image = "主街", str(paths.scenery() / "dongxuezhixia" / "main_street.png")
     assert art.kinds() == ["snow", "flicker"]  # painted, but out under the sky
+
+
+def test_a_line_the_keeper_gives_a_passer_by_gets_a_box_of_its_own():
+    from autokeeper.tui.widgets.panels import speech, voices
+
+    told = "你走近街角，那个年轻人已经下了车。\n\n【开卡车的年轻人】（哈出一口白气）赫琴斯自个儿不在这儿。\n\n他说完钻进驾驶室。\n\n卡车往诊所去了。"
+    assert voices(told) == [("keeper", "", "你走近街角，那个年轻人已经下了车。"),
+                            ("npc", "开卡车的年轻人", "（哈出一口白气）赫琴斯自个儿不在这儿。"),
+                            ("keeper", "", "他说完钻进驾驶室。\n\n卡车往诊所去了。")]
+    assert voices("只有叙述。") == [("keeper", "", "只有叙述。")]
+    line = speech("（把碗往桌上一放）嗯，这冬天。")
+    assert any("italic" in str(span.style) for span in line.spans)  # what they do, set apart from what they say
+
+
+async def test_the_keepers_passer_by_speaks_in_a_box_after_the_telling():
+    from textual.app import App, ComposeResult
+
+    from autokeeper.tui.widgets.panels import StoryLog
+
+    class Host(App):
+        def compose(self) -> ComposeResult:
+            yield StoryLog()
+
+    app = Host()
+    async with app.run_test() as pilot:
+        story = app.query_one(StoryLog)
+        story.begin_keeper()
+        story.end_keeper("街角停着卡车。\n\n【开卡车的年轻人】他不在这儿。\n\n引擎响了。")
+        await pilot.pause()
+        kinds = [next(c for c in ("keeper", "npc") if b.has_class(c)) for b in story.query(".entry")]
+        assert kinds == ["keeper", "npc", "keeper"]
+        first = story.query(".entry").first()
+        story.begin_keeper(first)  # told again: the first telling's lines go
+        story.end_keeper("换个讲法，没人开口。")
+        await pilot.pause()
+        assert [b for b in story.query(".entry") if b.display] == [first]

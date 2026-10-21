@@ -220,6 +220,36 @@ async def test_social_check_unlocks_npc_clue_handout_and_flag(module, fake):
     assert "获得线索〔守钟人的日记〕" in cast.reports[-1]
 
 
+async def test_what_a_person_knows_reaches_the_notebook_when_they_say_it(module, fake):
+    module.clue("c_diary").handout = None  # told, not a paper handed over
+    talk = Action(kind="talk", summary="周衡劝守钟人说实话", npc="warden", speech="钟里到底有什么？", approach="说服")
+    ruling = Ruling(needs_roll=True, skill="说服", difficulty="困难", clues_on_success=["c_diary"], minutes=15)
+    again = Action(kind="talk", summary="周衡追问守钟人", npc="warden", speech="您接着说，那本日记呢？")
+    game, cast, _ = make(module, fake, {"ask": (talk, ruling), "more": (again, Ruling(needs_roll=False))}, location="tower")
+    cast.told = {}
+    fake.queue(8)  # 说服 40 → success
+    app = turn_graph.build(game, InMemorySaver())
+    events, _ = await run_turn(app, "ask", {"configurable": {"thread_id": "t1"}})
+    st = game.state
+    assert st.clues == [] and st.npc("warden").unlocked == ["c_diary"]  # his to tell; he has not yet
+    assert "已解锁" in cast.npc_calls[-1][1] and "told" in cast.npc_calls[-1][1]
+    assert "clue" not in [e["type"] for e in events]
+    cast.told = {"warden": ["c_diary"]}  # this time he says it (Dialogue.told)
+    original = cast.npc
+
+    async def says(state, npc_id, message):
+        line = await original(state, npc_id, message)
+        cast.told = {"warden": ["c_diary"]}
+        return line
+
+    cast.npc = says
+    events, _ = await run_turn(app, "more", {"configurable": {"thread_id": "t2"}})
+    assert st.clues == ["c_diary"]
+    kinds = [e["type"] for e in events]
+    assert kinds.index("npc") < kinds.index("clue")  # the card after his words
+    assert next(e for e in events if e["type"] == "clue")["heard"] == "warden"
+
+
 async def test_failed_core_clue_offers_push_through_interrupt(module, fake):
     look = Action(kind="investigate", summary="周衡翻旧报", target="旧报合订本")
     ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=30)

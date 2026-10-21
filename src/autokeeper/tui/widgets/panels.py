@@ -493,6 +493,9 @@ class StoryLog(VerticalScroll):
         narration being told again, whose old words fade until the new ones come in."""
         if again is not None and again.parent is self:
             again.styles.text_opacity = 0.45
+            again.display = True
+            for old in getattr(again, "voices", []):  # the lines of the first telling go with it
+                old.remove()
             self._live = again
         else:
             self._live = self.add("keeper", Text(""))
@@ -527,12 +530,30 @@ class StoryLog(VerticalScroll):
         return not size.width or block.get_content_height(size, size, size.width) != size.height
 
     def end_keeper(self, full: str) -> None:
+        """The narration told: its words in the block, and the lines of people the keeper plays
+        (a passer-by, a clerk), written as 【称呼】 paragraphs, out in boxes of their own the way
+        an NPC's are, in their place in the telling."""
         if self._live is None:
             self._live = self.add("keeper", Text(""))
         self._pending = ""
         self._typing = False
         self._unfade(self._live)
-        self._live.update(self.lit(Text(full)))
+        parts = voices(full)
+        block = self._live
+        lines: list[Static] = []
+        block.update(self.lit(Text(parts[0][2] if parts and parts[0][0] == "keeper" else "")))
+        if parts and parts[0][0] != "keeper":
+            block.display = False  # the telling opens with a line: no empty narration above it
+        for kind, who, words in parts[1:] if parts and parts[0][0] == "keeper" else parts:
+            body = Text()
+            if who:
+                body.append(f"{who}\n", style="bold")
+            body.append_text(speech(words))
+            nxt = Static(self.lit(body), classes=f"entry {kind}")
+            self.mount(nxt, after=block)
+            lines.append(nxt)
+            block = nxt
+        self._live.voices = lines  # type: ignore[attr-defined]
         self._live = None
         self.scroll_end(animate=False)
 
@@ -540,6 +561,34 @@ class StoryLog(VerticalScroll):
     def _unfade(block: Static) -> None:
         if block.styles.text_opacity < 1:
             block.styles.text_opacity = 1.0
+
+
+VOICE = re.compile(r"^【([^】\n]{1,16})】[：:\s]*(.+)$", re.S)
+
+
+ASIDE = re.compile(r"（[^（）]*）|\([^()]*\)")  # what they do while they talk
+
+
+def speech(words: str) -> Text:
+    """Someone's line: the words as they are, what they do in （） set apart, dim and slanted."""
+    out = Text(words)
+    out.highlight_regex(ASIDE, "italic dim")
+    return out
+
+
+def voices(text: str) -> list[tuple[str, str, str]]:
+    """A narration cut where the keeper gives someone a line: (kind, who, words) in order,
+    "keeper" for the telling and "npc" for a 【称呼】 paragraph. Runs of telling stay one."""
+    out: list[tuple[str, str, str]] = []
+    for para in re.split(r"\n\s*\n", text.strip()):
+        found = VOICE.match(para.strip())
+        if found:
+            out.append(("npc", found.group(1).strip(), found.group(2).strip()))
+        elif out and out[-1][0] == "keeper":
+            out[-1] = ("keeper", "", out[-1][2] + "\n\n" + para.strip())
+        else:
+            out.append(("keeper", "", para.strip()))
+    return out
 
 
 PASS, MISS = "#3cb371", "#ff6347"

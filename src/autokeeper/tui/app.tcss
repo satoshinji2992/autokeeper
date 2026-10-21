@@ -207,8 +207,9 @@ GameScreen.-dev #topbar {
     text-style: italic;
 }
 .npc {
-    padding: 0 1;
-    border-left: thick $accent;
+    padding: 0 2 0 1;
+    border-left: outer $accent;
+    background: $accent 7%;
 }
 .dice {
     color: $secondary;

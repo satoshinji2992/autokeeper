@@ -63,6 +63,7 @@ from ..widgets.panels import (
     history_line,
     log_line,
     skill_completions,
+    speech,
 )
 from ..widgets.plugin_ui import Plays, panel_view, tab_label
 from ..widgets.speaker import Speaker
@@ -183,8 +184,9 @@ class GameScreen(Screen):
         self._start_history([e for e in self.state.log])
         cfg = config.load()
         self.engine_label = self._engine_label(cfg)
-        self.cast = Cast(cfg, self.m)
-        self.game = Game(self.m, self.state, self.cast, Rules(), emit=self.handle)
+        # Off the screen's thread: the model clients' first import and the world record's replay
+        # took over a second, and the screen stood still that long.
+        self.cast, self.game = await asyncio.to_thread(self._build, cfg)
         self.query_one(SceneArt).effects = cfg.animations
         self.query_one(DiceTray).tumbling = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
@@ -205,6 +207,10 @@ class GameScreen(Screen):
         if self.spectate:
             self.query_one(Input).disabled = True
         self.boot()
+
+    def _build(self, cfg) -> tuple[Cast, Game]:
+        cast = Cast(cfg, self.m)
+        return cast, Game(self.m, self.state, cast, Rules(), emit=self.handle)
 
     async def on_unmount(self) -> None:
         # A turn may still be writing its checkpoint: stop it before the database closes, or it
@@ -707,7 +713,9 @@ class GameScreen(Screen):
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
         elif t == "clue":
             art = next((c.art for c in self.m.clues if c.id == ev["id"]), "")
-            if art and art in self.m.pictures and imagery.available():  # the thing it was found in, photographed
+            if ev.get("heard"):  # said in conversation, already on screen in their words: a line, not the module's text again
+                story.add("clue", Text(f"✎ 记入线索本：〔{ev['title']}〕", style="bold"))
+            elif art and art in self.m.pictures and imagery.available():  # the thing it was found in, photographed
                 story.add("clue", ItemCard(self.m, {"id": ev["id"], "name": f"〔{ev['title']}〕", "text": ev["text"], "art": art},
                                            self.app.art_style))  # fmt: skip
             else:
@@ -787,7 +795,7 @@ class GameScreen(Screen):
         # What they look like, the first time; never their role, which is the keeper's note
         # ("失踪的叔叔，如今是半食尸鬼——那个偷书贼").
         body.append("  登台\n" if kind != "npc" else f"  {npc.look}\n" if first and npc.look else "\n", style="dim")
-        body.append(ev["text"])
+        body.append_text(speech(ev["text"]))
         self.story.add(kind, body)
 
     # -- turns ----------------------------------------------------------------------------------

@@ -51,6 +51,35 @@ class Result:
     data: Any = None
 
 
+def _pointer(path: str, key: str | int) -> str:
+    return f"{path}/{str(key).replace('~', '~0').replace('/', '~1')}"
+
+
+def undo_patch(after: Any, before: Any, path: str = "") -> list[dict]:
+    """The JSON patch that turns `after` back into `before`. Unchanged parts are skipped with
+    a plain ==, which runs in C; jsonpatch.make_patch compared the whole record item by item,
+    and the record only grows (thousands of events late in a game). Lists that only grew at
+    the end become removals from the end; any other changed list goes to jsonpatch."""
+    if after == before:
+        return []
+    if isinstance(after, dict) and isinstance(before, dict):
+        ops: list[dict] = []
+        for k in after.keys() - before.keys():
+            ops.append({"op": "remove", "path": _pointer(path, k)})
+        for k, v in before.items():
+            if k not in after:
+                ops.append({"op": "add", "path": _pointer(path, k), "value": v})
+            elif after[k] != v:
+                ops += undo_patch(after[k], v, _pointer(path, k))
+        return ops
+    if isinstance(after, list) and isinstance(before, list):
+        if len(after) > len(before) and after[: len(before)] == before:  # appended to
+            return [{"op": "remove", "path": _pointer(path, i)} for i in range(len(after) - 1, len(before) - 1, -1)]
+        return [{**op, "path": path + op["path"], **({"from": path + op["from"]} if "from" in op else {})}
+                for op in jsonpatch.make_patch(after, before).patch]
+    return [{"op": "replace", "path": path, "value": before}]
+
+
 def digest(data: Any) -> str:
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
@@ -206,7 +235,7 @@ class World:
         entry = Entry(id=oid, seq=self.rec.seq, kind=op.kind, digest=dig, turn=self.st.turn, t=self.now, actor=op.actor,
                       summary=(event.text if event else op.kind)[:200], public=bool(event and event.visibility == "public"),
                       event=event.id if event else "", after=digest(after),
-                      undo=jsonpatch.make_patch(after, before).patch if op.undoable else None)  # fmt: skip
+                      undo=undo_patch(after, before) if op.undoable else None)  # fmt: skip
         self.rec.journal.append(entry)
         for old in self.rec.journal[:-UNDO_KEEP]:
             old.undo = None

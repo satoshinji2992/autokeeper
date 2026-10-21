@@ -1313,7 +1313,9 @@ class Game:
             gained = self._valid_clues(ruling.auto_clues, action)
             if passed:
                 gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
-            return {"known": list(st.flags), "gained": gained[: MAX_FOUND if action.target else 1]}
+            spoken = self._spoken(gained, action)  # the one talked to tells these, in their own time (talk)
+            gained = [c for c in gained if c not in spoken]
+            return {"known": list(st.flags), "gained": gained[: MAX_FOUND if action.target else 1], "spoken": spoken}
 
         found = await step("available", turn, available)
         if passed:
@@ -1502,7 +1504,8 @@ class Game:
         await step("check-notice", turn, lambda: self.emit(checked["notice"]))
         if passed:
             await step("flags", turn, lambda: self._flags(pending.get("flags", []), turn))
-            await step("gain", turn, lambda: self._gain(pending["clues"], turn, None))
+            spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], turn.action, npc))
+            await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
         else:  # what was said before the choice now happens (Failure, Ruling.on_push_fail)
             await self._failed(Failure.model_validate(pending.get("on_push_fail") or {}), pending["clues"], turn, None, pushed=True)
         await step("plugins", turn, lambda: self.plugins.settled(turn))
@@ -1544,6 +1547,7 @@ class Game:
                 if self.turn_checkpoint:
                     self.turn_checkpoint(turn)
                 await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
+                await self._heard(npc.id, turn)
         await self._join_in(turn)
         for ev in turn.events:
             if ev.performer and ev.id not in turn.performed:
@@ -1593,6 +1597,7 @@ class Game:
             if self.turn_checkpoint:
                 self.turn_checkpoint(turn)
             await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
+            await self._heard(npc.id, turn)
 
     async def _step_in(self, action: Action) -> None:
         """Those the keeper's plan has step in before the action is settled (Initiative.first: the
@@ -1887,6 +1892,27 @@ class Game:
 
         await step(f"arrive:{loc_id}", turn, arrive)
 
+    def _spoken(self, ids: list[str], action: Action | None, npc: str = "") -> list[str]:
+        """Of the clues a ruling gives, those the person being talked to knows: not handed over
+        as a card the moment the subject comes up, but left to them to tell, a piece at a time in
+        their own words (Cast.npc, Dialogue.told); the card comes when they have said it (_heard).
+        The user, 2026-10-21: the gossip came as a card while the cook was still asking who died."""
+        st, m = self.state, self.m
+        npc = npc or (action.npc if action and action.kind in ("talk", "daily", "perform") else "")
+        if not npc or not any(n.id == npc for n in m.npcs_at(st.location)):
+            return []
+        sheet = m.npc(npc)
+        spoken = [c for c in ids if (m.clue(c).npc == npc or c in sheet.clues) and not m.clue(c).handout]  # a paper is handed over
+        unlocked = st.npc(npc).unlocked
+        unlocked += [c for c in spoken if c not in unlocked]  # theirs to tell from now on
+        return spoken
+
+    async def _heard(self, npc_id: str, turn: Turn) -> None:
+        """The clues a reply told (Dialogue.told), now in the notebook."""
+        told = self.cast.told.pop(npc_id, []) if hasattr(self.cast, "told") else []
+        if told:
+            await self._gain(self._valid_clues(told, None), turn, None, heard=npc_id)
+
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
         st, m = self.state, self.m
         here = {c.id for c in m.clues_at(st.location)}
@@ -1905,7 +1931,7 @@ class Game:
             found = [cid for cid in found if observable(cid)]
         return found
 
-    async def _gain(self, ids: list[str], turn: Turn, action: Action | None) -> None:
+    async def _gain(self, ids: list[str], turn: Turn, action: Action | None, heard: str = "") -> None:
         st, m = self.state, self.m
         step = self._resolution_step
         for cid in ids:
@@ -1932,7 +1958,7 @@ class Game:
                     if cid not in unlocked:
                         unlocked.append(cid)
                 st.add("clue", f"〔{clue.title}〕{clue.text.strip()}")
-                notices = [{"type": "clue", "id": cid, "title": clue.title, "text": clue.text.strip()}]
+                notices = [{"type": "clue", "id": cid, "title": clue.title, "text": clue.text.strip(), "heard": heard}]
                 if clue.handout and clue.handout not in st.handouts:
                     h = m.handout(clue.handout)
                     st.handouts.append(h.id)
@@ -2293,7 +2319,8 @@ class Game:
         available |= {c for c in turn.clues if m.clue(c).npc == npc_id or c in npc.clues}
         mine = [c.id for c in m.clues if c.id in available]
         if mine:
-            parts.append("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine) + "。")
+            parts.append("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine)
+                         + "。不必这一回都说完：顺着他的话聊，带出一两处，说出了要点就填进 told。")
         else:
             parts.append("尚无可公开的门槛线索；仍可按你已知的日常信息正常回答。")
         parts.append("用你的口吻回答。）")

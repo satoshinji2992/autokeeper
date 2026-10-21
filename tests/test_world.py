@@ -407,3 +407,37 @@ def test_what_an_npc_learns_reaches_its_sheet_even_when_it_knew_nothing_before()
     w.rec.facts.pop("npc:preacher:knows:0")
     w.apply(O.AddFact(fact="f_rumour", text="报社的档案室晚上不锁门", known_by=["preacher"]))
     assert w.m.npc("preacher").knows == ["报社的档案室晚上不锁门"]
+
+
+def test_the_undo_patch_turns_after_back_into_before():
+    import copy
+    import random
+
+    import jsonpatch
+
+    from autokeeper.world.store import undo_patch
+
+    rng = random.Random(7)
+    base = {"record": {"events": [{"id": f"e{i}", "text": "x" * i} for i in range(30)], "facts": {"a": {"known_by": ["n1"]}},
+                       "a/b": 1, "t~x": [1, 2]}, "flags": ["f1"], "world": {}}
+    for _ in range(300):
+        after = copy.deepcopy(base)
+        rec = after["record"]
+        move = rng.randrange(7)
+        if move == 0:
+            rec["events"].append({"id": "new", "text": "y"})
+        elif move == 1:
+            del rec["events"][:2]
+            rec["events"].append({"id": "late"})
+        elif move == 2:
+            rec["facts"]["a"]["known_by"].append("n2")
+        elif move == 3:
+            rec["facts"]["b"] = {"known_by": []}
+            rec.pop("a/b", None)
+        elif move == 4:
+            after["flags"] = []
+            rec["t~x"][0] = 9
+        elif move == 5:
+            rec["events"][3]["text"] = "changed"
+        assert jsonpatch.apply_patch(after, undo_patch(after, base)) == base
+        base = after if rng.random() < 0.5 else base
