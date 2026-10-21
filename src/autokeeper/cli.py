@@ -1213,15 +1213,6 @@ def eval_blind(
     console.print(f"明细：{out}")
 
 
-@eval_app.command("context")
-def eval_context(modules: list[Path]) -> None:
-    """渐进式披露的上下文账本：整本模组 vs 总览 + 当前地点文件。"""
-    from .eval.context import ledger
-
-    for m in modules:
-        console.print_json(data=ledger(m))
-
-
 @eval_app.command("experience")
 def eval_experience(
     module: Path = Path("modules/zhuishuren"),
