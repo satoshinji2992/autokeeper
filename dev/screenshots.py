@@ -211,6 +211,18 @@ async def _fight(app, pilot, screen, m):
     await pilot.pause(2.5)
 
 
+async def _horde(app, pilot, screen, m):
+    """Every creature of the module in one fight: their portraits as the fight panel shows them."""
+    from autokeeper.engine import combat as battle
+
+    st = screen.state
+    foes = [battle.from_creature(c, portrait=f"creature-{c.id}") for c in m.creatures]
+    party = [battle.from_investigator(inv) for inv in st.investigators]
+    st.fight = battle.Fight(fighters=[*party, *foes], place=st.location, round=1)
+    await screen.handle({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】"})
+    await pilot.pause(4.0)
+
+
 async def _chase(app, pilot, screen, m):
     from autokeeper.engine import combat as battle
 
@@ -242,6 +254,7 @@ SHOTS = {
     "fight": lambda: in_game("fight", "zhuishuren", "shufang", ZHUI, then=_fight),
     "fight-narrow": lambda: in_game("fight-narrow", "zhuishuren", "shufang", ZHUI, then=_fight, size=(120, 36)),
     "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, then=_chase),
+    "creatures": lambda: in_game("creatures", "zhuishuren", "mudi", ZHUI, then=_horde),
 }
 
 

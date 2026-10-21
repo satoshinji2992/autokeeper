@@ -109,7 +109,7 @@ class FoeCard(Horizontal):
         yield self.face
         yield self.info
 
-    def show(self, f: dict, m: Module, rows: int, style: str) -> None:
+    def show(self, f: dict, m: Module, rows: int, style: str, *, alone: bool = True) -> None:
         name = Text(f["name"], style=f"bold {BONE}")
         if f.get("prone"):
             name.append(" 倒地", style=EMBER)
@@ -117,8 +117,15 @@ class FoeCard(Horizontal):
             name.append(" 被制住", style=EMBER)
         lines = [name, wound_meter(f["wound"], f["status"]),
                  Text(f"{f['weapon']} · {STANCES.get(f['stance'], '')}", style=ASH)]
-        if f.get("look"):
-            lines.append(Text(f["look"], style=f"italic {ASH}", overflow="ellipsis", no_wrap=True))
+        room = max(8, (self.size.width or 40) - min(18, rows * 2) - 3)  # beside the portrait
+        if f.get("look") and alone:  # one foe: what it looks like too, in two lines at most
+            look = f["look"]
+            for _ in range(2):
+                line = cell_text(look, room, f"italic {ASH}")
+                lines.append(line)
+                look = look[len(line.plain.rstrip()):]
+                if not look:
+                    break
         self.info.update(Text("\n").join(lines))
         self.set_class(f["status"] in DOWN or f["status"] in GONE, "-down")
         cols = max(6, min(18, rows * 2))
@@ -204,7 +211,11 @@ class FightStage(Vertical):
                 box.mount(card)
                 cards[f["id"]] = card
             card.set_class(f["id"] == self.acting, "-acting")
-            card.call_after_refresh(card.show, f, m, rows, style) if not card.is_mounted else card.show(f, m, rows, style)
+            alone = len(foes) == 1
+            if card.is_mounted:
+                card.show(f, m, rows, style, alone=alone)
+            else:
+                card.call_after_refresh(card.show, f, m, rows, style, alone=alone)
         self._head()
         self._party()
 
