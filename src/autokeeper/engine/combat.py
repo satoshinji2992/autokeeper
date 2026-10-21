@@ -10,7 +10,7 @@ agent cannot be asked; the views and the report."""
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,9 @@ from ..rules.combat import (
     traits,
 )
 from ..rules.weapons import BRAWL, UNARMED, attacks_per_round, carried, parse_attack, weapon_in
+
+if TYPE_CHECKING:
+    from ..world.store import World
 
 Do = Literal["attack", "shoot", "maneuver", "aid", "reload", "unjam", "flee", "hold", "other",
              "run", "hide", "barrier", "turn"]
@@ -102,9 +105,10 @@ class Chase(BaseModel):
 INV_SKILLS = ("侦查", "潜行", "攀爬", "跳跃", "急救", "医学", "投掷", "游泳", "锁匠", "汽车驾驶", "聆听", "机械维修")
 
 
-def from_investigator(inv: Investigator, things: list[str] | None = None, side: Side = "party") -> Fighter:
+def from_investigator(inv: Investigator, things: list[str] | None = None, side: Side = "party", world: World | None = None) -> Fighter:
     """An investigator in a fight: their sheet's numbers, and every weapon they carry (the bare
-    hands always), the readiest first: a loaded gun, else the best melee weapon."""
+    hands always), the readiest first: a loaded gun, else the best melee weapon. With the `world`,
+    a gun's rounds and jam are its item's (worldly)."""
     c = inv.characteristics
     weapons = carried([*inv.inventory, *(things or [])])
     attacks = [attack_of(w, inv.value(w.skill)) for w in weapons]
@@ -113,6 +117,8 @@ def from_investigator(inv: Investigator, things: list[str] | None = None, side: 
                 dodge=inv.value("闪避"), fighting=inv.value(BRAWL), attacks=attacks, portrait=inv.portrait,
                 skills={k: inv.value(k) for k in INV_SKILLS})
     sync(f, inv)
+    if world is not None:
+        worldly(f, world)
     f.weapon = readiest(f)
     return f
 
@@ -143,9 +149,10 @@ def _natural(stats: dict[str, int], db: str) -> list[Attack]:
             for k, v in stats.items() if any(w in k for w in NATURAL) and isinstance(v, int)]
 
 
-def from_npc(npc: NPC, things: list[str] | None = None, side: Side = "foe") -> Fighter:
+def from_npc(npc: NPC, things: list[str] | None = None, side: Side = "foe", world: World | None = None) -> Fighter:
     """A module NPC in a fight. A sheet left empty is an ordinary person's numbers; what they carry
-    is what the record has them hold, and what their look says they carry."""
+    is what the record has them hold, and what their look says they carry. With the `world`, their
+    body is the one it keeps (Entity.life: hurt stays hurt) and their weapons its items (worldly)."""
     s = {**HUMAN, **stats_of(npc.stats)}
     db, build = damage_bonus(s["力量"], s["体型"])
     hp = s.get("生命") or max(1, (s["体质"] + s["体型"]) // 10)
@@ -163,11 +170,13 @@ def from_npc(npc: NPC, things: list[str] | None = None, side: Side = "foe") -> F
     if npc.status in ("受伤", "重伤"):
         f.status = "重伤" if npc.status == "重伤" else ""
         f.hp = max(1, hp // 2)
+    if world is not None:
+        worldly(f, world)
     f.weapon = readiest(f)
     return f
 
 
-def from_creature(c: Creature, side: Side = "foe", portrait: str = "") -> Fighter:
+def from_creature(c: Creature, side: Side = "foe", portrait: str = "", world: World | None = None) -> Fighter:
     """A creature in a fight: its sheet's numbers, its attacks as written, what its notes say the
     rules can use (rules/combat.traits). A swarm (几十只, 无法对抗) fights as one, hard to put down."""
     s = stats_of(c.stats)
@@ -179,7 +188,7 @@ def from_creature(c: Creature, side: Side = "foe", portrait: str = "") -> Fighte
     if not attacks:
         attacks = [Attack(name="撕扯" if swarm else "攻击", skill=BRAWL, value=50 if swarm else 45, damage="1D6+DB")]
     hp = s.get("生命") or max(1, (con + size) // 10)
-    return Fighter(id=c.id, name=c.name, kind="creature", side=side, dex=dex, con=con, str=strength,
+    f = Fighter(id=c.id, name=c.name, kind="creature", side=side, dex=dex, con=con, str=strength,
                    hp=60 if swarm else hp, hp_max=60 if swarm else hp, build=t.get("build", build), db=t.get("db", db),
                    move=t.get("move") or s.get("移动", 8), dodge=s.get("闪避", dex // 2),
                    fighting=max(a.value for a in attacks if not a.firearm) if any(not a.firearm for a in attacks) else 40,
@@ -187,6 +196,78 @@ def from_creature(c: Creature, side: Side = "foe", portrait: str = "") -> Fighte
                    armor=t.get("armor", 0), guns_halved=t.get("guns_halved", False), regen=t.get("regen", 0),
                    knockout=t.get("knockout", 0), human=False, look=c.description, notes=c.notes, sanity=c.sanity,
                    portrait=portrait, skills={k: v for k, v in s.items() if k not in ("力量", "体质", "体型", "敏捷", "生命")})
+    if world is not None:
+        worldly(f, world)
+        f.weapon = readiest(f)
+    return f
+
+
+# -- the world's bodies and things (0.0.4 M1: the old engine reads and writes them through effects) ----
+def holder_of(world: World, f: Fighter) -> str:
+    """The world id whose body and things a fighter's are: a creature sheet that is an NPC's form is the NPC."""
+    from .encounter.profiles import combatant
+
+    return f.id if f.kind == "investigator" else combatant(world, f.id)
+
+
+def item_for(world: World, f: Fighter, a: Attack) -> str | None:
+    """The item an attack is: the record's item entity they hold, an investigator's inventory line,
+    or a weapon written on their sheet ("<holder>:<name>"); None for their own claws, teeth and
+    fists, which nobody can take."""
+    if a.unarmed:
+        return None
+    holder = holder_of(world, f)
+    known = weapon_in(a.name)
+    for e in world.rec.entities.values():
+        if e.kind == "item" and e.at == holder and (e.name == a.name or (known is not None and weapon_in(e.name) is known)):
+            return e.id
+    if f.kind == "investigator":
+        inv = next((i for i in world.st.investigators if i.id == f.id), None)
+        lines = inv.inventory if inv is not None else []
+        return next((line for line in lines if line == a.name or (known is not None and weapon_in(line) is known)), None)
+    if f"{holder}:{a.name}" in world.rec.entities:
+        return f"{holder}:{a.name}"
+    if not a.firearm and (known is None or known is UNARMED) and (f.kind == "creature" or any(w in a.name for w in NATURAL)):
+        return None  # natural: claws, teeth, the sheet's own 爪击
+    return f"{holder}:{a.name}"
+
+
+def life_status(conditions: list[str], regenerating: bool, current: str) -> str:
+    """A fighter's status from a body's conditions (the old engine's words)."""
+    for c in ("死亡", "濒死"):
+        if c in conditions:
+            return c
+    if regenerating:
+        return "倒下"
+    if "昏迷" in conditions:
+        return "昏迷"
+    if current in OUT:
+        return current
+    return "重伤" if "重伤" in conditions else ""
+
+
+def worldly(f: Fighter, world: World) -> None:
+    """The fighter as the world keeps them: an NPC's or a creature's HP and state from Entity.life;
+    a weapon that left them (disarmed, handed over) gone from their attacks; a gun's rounds and jam
+    its item's WeaponState. A fight no longer reloads or unjams anything by itself."""
+    if f.kind != "investigator":
+        ent = world.rec.entities.get(holder_of(world, f))
+        if ent is not None and ent.life is not None:
+            life = ent.life
+            f.hp, f.hp_max = life.hp, life.hp_max
+            f.status = life_status(life.conditions, life.regenerating, f.status)
+    kept = []
+    for a in f.attacks:
+        item = item_for(world, f, a)
+        ent = world.rec.entities.get(item) if item else None
+        if ent is not None and ent.at != holder_of(world, f):
+            continue
+        if ent is not None and ent.weapon is not None and a.firearm:
+            if ent.weapon.loaded is not None:
+                a.ammo = ent.weapon.loaded
+            a.jammed = ent.weapon.jammed
+        kept.append(a)
+    f.attacks = kept
 
 
 # -- an order from the screen or the player's words ------------------------------------------------

@@ -114,11 +114,11 @@ async def test_the_fight_ends_with_its_flags_and_play_goes_on(table, fake, modul
     out = await server.battle_round(HIT)
     battle = out["battle"]
     (blow,) = battle["exchanges"]
-    assert blow["answer"] == "" and blow["reaction"] == "" and blow["notes"] == ["重伤", "昏死过去"]  # no answer to a surprise
+    assert blow["answer"] == "" and blow["reaction"] == "" and blow["notes"] == ["重伤倒地", "昏死过去"]  # no answer to a surprise
     assert battle["over"]["kind"] == "fight" and battle["over"]["result"] == "won" and "老守钟人昏迷" in battle["over"]["text"]
     assert battle["now"] is None and battle["lines"][-1].startswith("【战斗结束】")
     assert "warden_down" in game.state.flags and cast.results  # the outcome's flags, as on the screens
-    assert game.world.rec.entities["warden"].status == "受伤" and game.state.fight is None
+    assert game.world.rec.entities["warden"].status == "重伤" and game.state.fight is None  # a major wound, kept
     assert server.scene()["battle"] is None
     fake.queue(30)
     assert (await server.skill_check("侦查"))["checks"]  # out of the fight: everything else works again

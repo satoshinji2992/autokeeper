@@ -357,8 +357,9 @@ def project(m: Module, rec: WorldRecord) -> None:
     for n in m.npcs:
         if (ent := rec.entities.get(n.id)) and ent.at:
             n.location = ent.at
-        if ent is not None:
-            n.status = ent.status  # the screens leave the dead and the missing out of a scene
+        if ent is not None:  # the screens leave the dead and the missing out of a scene
+            # A body the world keeps (Entity.life, engine/effects) that died is dead, whatever word was set.
+            n.status = "死亡" if ent.life is not None and "死亡" in ent.life.conditions else ent.status
         n.goal = text(f"npc:{n.id}:goal", n.goal)
         for field in ("knows", "secrets", "lies"):
             prefix = f"npc:{n.id}:{field}:"

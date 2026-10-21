@@ -8,6 +8,8 @@ import pytest
 
 from autokeeper import paths
 from autokeeper.engine import world as legacy_world
+from autokeeper.engine.effects import Wound
+from autokeeper.engine.encounter.model import Begin, EncounterState, Participant, SetCursor
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState, WorldChange
 from autokeeper.module.schema import Item, Module
@@ -67,6 +69,10 @@ def VALID(me: str, now: int) -> list:
         O.SetPlan(npc="warden", steps=[Step(id="s1", text="去报社", due=now + 120)]),
         O.AdvancePlan(npc="preacher", step="a1", status="blocked"),
         O.Rewrite(target="fact:npc:warden:secrets:0", text="他在钟里藏了亡子的怀表", reason="更有人情味"),
+        O.Effects(effects=[Wound(target=me, amount=2, means="fall", injury="fall:1"), Wound(target="warden", amount=3, injury="w:1")],
+                  source="test"),
+        O.EncounterStep(encounter="e1", changes=[Begin(state=EncounterState(id="e1", mode="fight", place="office", started_turn=0,
+                        participants=[Participant(id="warden", kind="npc", side="foe", controller="keeper")]))]),
     ]
 
 
@@ -97,6 +103,9 @@ INVALID = [
     O.AdvancePlan(npc="warden", step="nope", status="done"),
     O.Rewrite(target="fact:nope", text="x"),
     O.Rewrite(target="flag:x", text="x"),
+    O.Effects(effects=[Wound(target="zhouheng", amount=2, injury="x")], actor="keeper"),
+    O.Effects(effects=[Wound(target="nobody", amount=2, injury="x")]),
+    O.EncounterStep(encounter="e9", changes=[SetCursor(cursor=1)]),
 ]
 
 

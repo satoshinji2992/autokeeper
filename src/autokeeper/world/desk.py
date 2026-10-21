@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .ops import parse
+from .ops import ENGINE_ONLY, parse
 from .record import DIRECTOR, Request
 from .scheduler import fresh
 from .store import digest
@@ -40,6 +40,8 @@ def submit(w: World, kind: str, ops: list[dict[str, Any]], *, reads: dict[str, i
            key: str = "") -> Request:  # fmt: skip
     for raw in ops:
         parse(raw)  # a malformed op is the caller's mistake, raised now rather than at landing
+        if raw.get("kind") in ENGINE_ONLY:
+            raise ValueError("伤害、效果与遭遇只由游戏引擎按掷骰结算，不能由导演提交")
     rid = f"req:{digest([kind, ops])[:12]}"
     if (same := w.rec.requests.get(rid)) and same.status == "pending":
         return same

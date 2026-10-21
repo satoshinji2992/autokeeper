@@ -9,7 +9,7 @@
 | 条目 | 页 | 原文要点 | 当前 | 状态 | 测试 |
 |---|---|---|---|---|---|
 | 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
-| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎不传 `firing` 时仍按手里有枪算 | 符合（规则层）；旧引擎待 WP-C | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
+| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
 | 推迟行动 | 86 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 无 | 未做 | 重构 |
 | 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 每人每轮只打一次，`per_round` 只用于寡不敌众 | 错误 | 重构 WP-C |
 | 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
@@ -20,7 +20,7 @@
 | 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 按名称近似匹配，未登记的东西也能拿来用 | 简化 | 重构（先取用再使用） |
 | 武器技能基础值 | 87 | 剑 20% 等，见武器表 | `rules/catalog.SKILL_BASE`：斧 15、剑 20、连枷 10、矛 20、鞭 5、绞索 15、链锯 10、冲锋枪 15、弓 15、重武器 10、机枪 10、火焰喷射器 10；`格斗(刀剑)` 是 `格斗(剑)` 的别名 | 符合 | `test_combat_rules::test_weapon_skills_start_at_the_books_base…` |
 | 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible`；旧引擎 `combat.melee` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
-| 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械不改物品归属，能缴掉怪物的爪子 | 错误 | 重构 WP-B |
+| 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械让武器掉在原地，物件归属和背包随之改变（`effects.Drop`）；天生的爪牙夺不走；夺物、持续劣势未做 | 简化 | `test_world_life::test_a_disarmed_weapon_leaves_the_inventory…`、`test_claws_cannot_be_disarmed` |
 | 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | `rules/melee.opposed_difficulty`、`surprise_attack`、`surprise_bonus`：没准备好的目标除大失败外命中，或给奖励骰；远程总要掷骰。旧引擎被偷袭方除大失败外命中 | 符合（规则层）；谁被突袭由守秘人计划定（WP-C/G） | `test_rules_melee::test_surprise_and_disadvantage`、`test_combat_rules::test_a_surprised_defender…` |
 | 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`（含永不寡不敌众的神话存在）；旧引擎 `_outnumbered` | 符合 | `test_rules_melee::test_outnumbered…`、`test_combat_rules` |
 | 投掷武器 | 91 | 可闪避；不能反击，除非在敏捷五分之一英尺内；加一半伤害加值 | `rules/melee.reactions_against`：投掷可闪避，投射（弓）找掩体，敏捷五分之一英尺内才可反击；`半DB` 加一半伤害加值。旧引擎投掷不再可反击 | 符合 | `test_rules_melee::test_what_a_throw…`、`test_combat_rules::test_fighting_back_never…` |
@@ -37,7 +37,7 @@
 | 射击近战中的目标 | 96 | 一颗惩罚骰；大失败打中队友 | `rules/firearms.shot_modifiers`（`into_melee`）、`fumble_hits`：大失败打中幸运最低的队友 | 符合（规则层）；扭打关系的延续待 WP-C | `test_rules_firearms::test_a_fumble_into_a_melee…` |
 | 自动武器 | 96–98 | 弹幕、短点射、逐组惩罚骰 | 不在规则层：交守秘人按 `other` 裁定（`rules/firearms` 文档写明） | 未做 | — |
 | 故障 | 98 | 出目不低于故障值就没开火；转轮、中折、手动枪机只是哑弹；杠杆式卡壳，修理 1D6 轮并需机械维修或射击检定 | `rules/firearms.malfunction`、`jam_cleared`；武器表登记机构（`Weapon.mechanism`）。转轮、中折、手动枪机是哑弹；杠杆式卡壳，1D6 轮且机械维修或射击检定成功才排除；书上没写的自动、泵动按卡壳（项目设定） | 符合（规则层）；旧引擎仍一律卡壳 | `test_rules_firearms::test_malfunction…` |
-| 弹药与卡壳的延续 | — | 打空、卡壳要延续到下一场 | 每场重新满弹 | 错误 | 重构 WP-B |
+| 弹药与卡壳的延续 | — | 打空、卡壳要延续到下一场 | 枪是物件（`Entity.weapon`），每次开火、卡壳、装填都经 `engine/effects` 写进世界，下一场照旧 | 符合 | `test_world_life::test_rounds_fired_and_a_jam_carry_into_the_next_fight` |
 
 ## 伤害与治疗（第六章，100–103 页）
 
@@ -53,6 +53,7 @@
 | 轻伤恢复 | 101 | 每天 1 点 | `rules/wounds.heal_day` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
 | 重伤恢复 | 101–102 | 每周体质检定回复 1D3，极难 2D3；静养、医疗加奖励骰；极难或回到一半以上时去掉重伤 | `rules/wounds.heal_week`、`week_dice`、`week_bonus` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
 | 其他伤害 | 102–103 | 表 III：轻度 1D3、中度 1D6、重度 1D10、致命 2D10、终结 4D10、血肉横飞 8D10；窒息与溺水每轮过体质；毒药极难成功减半 | `rules/wounds.OTHER_DAMAGE`（表 III）、`harm_dice`、`asphyxia_round`（困难若在剧烈活动，失败后每轮受伤，归零即死）、`poison_damage`（极难减半） | 符合（规则层）；提示里给表待 WP-G | `test_rules_wounds::test_suffocating_to_zero…` |
+| 伤势的延续 | — | 同一个人物、怪物跨场景、跨战斗保持生命值与状态；同一次伤害只扣一次 | NPC 与怪物的身体记在世界（`Entity.life`），怪物入战即成为世界实体；所有伤害经 `engine/effects`（调用 `rules/wounds`），每次带 injury id，重复的被拒绝（插件与引擎不会重复扣） | 符合 | `test_world_life::test_a_dead_creature_stays_dead`、`test_a_hurt_npc_comes_back_hurt`，`test_effects::test_a_plugin_cannot_take_off…` |
 | 枪伤减半与护甲 | 256、258、274 | 食尸鬼“枪械和抛射武器造成掷出的伤害的一半”；飞水螅先取最低伤害再扣护甲 | `rules/wounds.apply_wound`：先把掷出的枪伤减半（向下取整），再扣护甲 | 符合（按怪物条目推定的顺序） | `test_rules_wounds::test_guns_halved_before_the_armour` |
 | 击晕（可选） | 105 | 钝器战技成功，目标昏迷并只受 1 点伤害 | `rules/wounds.knockout_blow`；模组写的“只被拳头打 X 点就击晕”另由 `Body.knockout` 处理 | 符合（规则层） | `test_rules_wounds::test_a_knockout_from_fists` |
 
@@ -85,7 +86,7 @@
 | 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`：无数据按 MOV 一半 | 符合（规则层） | 同上 |
 | 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | `rules/chase.CREATED`：闩门 1 行动点免检定、锁匠锁门一整轮加检定、推重物挡门力量加 1 行动点、掀摊子 1 行动点、开枪惊散人群幸运、喊人帮忙话术或恐吓 | 符合（规则层）；接入待 WP-D | 同上 |
 | 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做） | 简化 | — |
-| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | `rules/chase.monster_skill`：擅长用敏捷，平常一半，不擅长五分之一 | 符合（规则层）；档案接入待 WP-B | 同上 |
+| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | `rules/chase.monster_skill`：擅长用敏捷，平常一半，不擅长五分之一 | 符合（规则层）；`engine/encounter/profiles` 读怪物卡，缺的技能用技能表基础值，读不懂的特性列进 `unread`；按擅长程度折算接入待 WP-C/D | `test_combatant_profiles` |
 | 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement` | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_placing_three_cultists…` |
 | 载具 | 115–123 | 猛踩油门、乘客、交通事故、载具速度表 | 无 | 未做 | 以后 |
 

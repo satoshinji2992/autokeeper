@@ -28,6 +28,7 @@ from mcp.server.fastmcp import FastMCP
 from . import artkit, config, paths
 from .agents.cast import Action, Cast, Ruling
 from .engine import combat as battle
+from .engine import effects
 from .engine.game import TURN_RECORD, Game, Turn
 from .engine.state import GameState
 from .module.compiler import ensure_compiled, skill_name
@@ -536,13 +537,21 @@ def sanity_check(success_loss: str, failure_loss: str) -> dict:
 
 
 @server.tool()
-def apply_damage(amount: str) -> dict:
-    """结算战斗以外的伤害，amount 可以是数字或骰式（如 1D6+1）。"""
+def apply_damage(amount: str, target: str = "") -> dict:
+    """结算战斗以外的伤害，amount 可以是数字或骰式（如 1D6+1）；target 是受伤的调查员、NPC 或怪物 id，留空为当前调查员。"""
     g = _calm()
-    d = g.rules.damage(g.state.investigator, int(amount) if amount.isdigit() else amount)
-    g.state.add("dice", d.describe(), who=g.state.investigator.name)
+    st = g.state
+    who = target or st.investigator.id
+    injury = f"mcp:{st.turn}:{st.logged}:{who}"
+    wound = effects.harm(g, who, int(amount) if amount.strip().isdigit() else amount, injury=injury)  # ValueError: a reason
+    done = effects.commit(g.world, [wound], op_id=f"effects:{injury}", source="mcp")
+    if not done.ok:
+        raise ValueError("；".join(done.problems))
+    name = g.world.name(who)
+    text = done.told(injury, name) if any(i.id == who for i in st.investigators) else next(iter(done.texts), "").removeprefix(name)
+    st.add("dice", text, who=name)
     _save()
-    return {"result": d.describe()}
+    return {"result": text}
 
 
 @server.tool()

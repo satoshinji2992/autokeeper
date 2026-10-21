@@ -38,7 +38,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, fog, progress, views, world
+from . import diagnostics, effects, fog, progress, views, world
 from .fighting import Fighting, tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
@@ -1101,16 +1101,11 @@ class Game(Fighting):
         if clues:
             await step("fail-clues", turn, lambda: self._gain(clues, turn, action))
         if failure.damage.strip():
-            def wound() -> dict:
-                inv = st.investigator
-                trial = inv.model_copy(deep=True)
-                hurt = self.rules.damage(trial, failure.damage.strip())
-                inv.__dict__.update(trial.__dict__)
-                st.add("damage", hurt.describe(), who=inv.name)
-                return {"type": "damage", "who": inv.name, "text": hurt.describe()}
-
-            notice = await step("fail-damage", turn, wound)
-            await step("fail-damage-notice", turn, lambda: self.emit(notice))
+            injury = f"fail:{st.turn}:{self._resolution_key('fail-damage')}"
+            notice = await step("fail-damage", turn, lambda: self._wound_event(st.investigator.id, failure.damage.strip(), injury,
+                                                                               turn))
+            if notice:
+                await step("fail-damage-notice", turn, lambda: self.emit(notice))
         mishap = await self._mishap(failure.mishap, turn, "fail-mishap") if failure.mishap.strip() else ""
         happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
                                 f"{st.investigator.name}受了伤" if failure.damage.strip() else "",
@@ -1121,6 +1116,24 @@ class Game(Fighting):
         note += f"。实际发生：{'；'.join(happened)}" if happened else "。没有别的后果"
         await step("fail-note", turn, lambda: turn.notes.append(
             note + "。照实讲失败，不在叙述里补出没拿到的东西；之后可以有新的机会，这一轮不补偿。"))
+
+    def _wound_event(self, who: str, amount: str, injury: str, turn: Turn) -> dict | None:
+        """A wound outside a fight (an event's, a failed check's), rolled and landed through
+        engine/effects in one world op whose id is the injury's: the damage notice, or None (and a
+        note for the keeper) when the damage is no expression the dice can roll."""
+        try:
+            wound = effects.harm(self, who, amount, injury=injury)
+        except ValueError as exc:
+            turn.notes.append(f"伤害式无法使用：{exc}")
+            return None
+        done = effects.commit(self.world, [wound], op_id=f"effects:{injury}", source=injury.partition(":")[0])
+        if not done.ok:
+            turn.notes.append("伤害没有结算：" + "；".join(done.problems))
+            return None
+        inv = self.state.find(who)
+        text = done.told(injury, inv.name)
+        self.state.add("damage", text, who=inv.name)
+        return {"type": "damage", "who": inv.name, "text": text, "injury": injury}
 
     async def _nudge(self, turn: Turn) -> None:
         """Stuck for a while: resume the same lead even after its cooldown was saved."""
@@ -2393,14 +2406,11 @@ class Game(Fighting):
             st.add("sanity", sanity.describe(), who=inv.name)
             return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
 
-        def damage() -> dict:
-            inv = st.investigator
-            trial = inv.model_copy(deep=True)
-            hurt = self.rules.damage(trial, ev.damage)
-            inv.__dict__.update(trial.__dict__)
-            st.add("damage", hurt.describe(), who=inv.name)
-            turn.notes.append(f"{inv.name}{hurt.describe()}")
-            return {"type": "damage", "who": inv.name, "text": hurt.describe()}
+        def damage() -> dict | None:
+            notice = self._wound_event(st.investigator.id, ev.damage or "", f"event:{ev.id}:{st.turn}", turn)
+            if notice:
+                turn.notes.append(f"{notice['who']}{notice['text']}")
+            return notice
 
         def sets() -> None:
             for flag in ev.sets:
@@ -2424,7 +2434,8 @@ class Game(Fighting):
                         await step(f"sanity-notice:{inv.id}", turn, lambda notice=notice: self.emit(notice))
             if ev.damage:
                 notice = await step("damage", turn, damage)
-                await step("damage-notice", turn, lambda: self.emit(notice))
+                if notice:
+                    await step("damage-notice", turn, lambda: self.emit(notice))
             await step("sets", turn, sets)
             for flag in ev.sets:
                 await step(f"flag-showcase:{flag}", turn, lambda flag=flag: self.showcases.fire(f"flag:{flag}"))
