@@ -269,7 +269,7 @@ async def _chase(app, pilot, screen, m):
 SHOTS = {
     "title": title,
     "game": lambda: in_game("game", "zhuishuren", "tushuguan", ZHUI),
-    "painted": lambda: in_game("painted", "dongxuezhixia", "post_office", DONG),
+    "found": lambda: in_game("found", "dongxuezhixia", "post_office", DONG),  # a place with a picture found for it (pictures.py)
     "map": lambda: in_game("map", "dongxuezhixia", "main_street", DONG, then=_map),
     "handout": lambda: in_game("handout", "zhuishuren", "shufang", ZHUI, then=_handout("h_diary")),
     "telegram": lambda: in_game("telegram", "dongxuezhixia", "main_street", DONG, then=_handout("h_telegram")),

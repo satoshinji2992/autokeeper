@@ -12,7 +12,7 @@
 
 **在终端里玩《克苏鲁的呼唤》第 7 版**
 
-中文跑团 · 程序绘制的字符画 · 终端 / 浏览器
+中文跑团 · 照片转成的字符画 · 终端 / 浏览器
 
 [![Release](https://img.shields.io/github/v/release/satoshinji2992/autokeeper?label=version&color=B8860B)](https://github.com/satoshinji2992/autokeeper/releases/latest)
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
@@ -59,17 +59,7 @@ AutoKeeper 把《克苏鲁的呼唤》第 7 版的跑团桌面搬进了终端。
 
 模组自带的老照片与插图会转成彩色字符画，窗外的天色和天气跟着叙事流转：细雨、大雪、浓雾，夜里的台灯会摇曳（也可按 `Ctrl+A` 切换纯 ASCII 等画法）。NPC 开口时，人物立绘站到画面一侧，色调随台词里的情绪变化。
 
-模组没有配图的地点、人物、重要物件和怪物，以及守秘人即兴加出来的，先上网找照片，由读图模型挑选、裁剪，再处理成和原图一样的色调；找不到合适的，本机有 Codex 时由 AI 照描述画一张。图存在本机，每个模组只找、只画一次，以后每局都用；`autokeeper art prepare 模组` 可以在开局前全部准备好。路人不配头像。只有离线、又没有 Codex 时，才由程序当场画一张：室内的光只从灯和窗户来，肖像按身份配衣着，物件摆在灯下的桌面上。
-
-<p align="center">
-  <a href="docs/img/painted.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/painted.png" width="100%" alt="冬雪之下的邮局：程序绘制的室内场景转成字符画，窗户、信格、柜台和角落的台灯"></a>
-  <br><sub>离线又没有 Codex 时的兜底：《冬雪之下》的邮局由程序绘制，窗户的天光、柜台后的信格、左下角的台灯。</sub>
-</p>
-
-<p align="center">
-  <a href="docs/img/art.jpg"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/art.jpg" width="100%" alt="程序绘制的原画：室内与室外场景和六位人物肖像"></a>
-  <br><sub>程序绘制的原画（游戏中会转成字符画）：按地名分出的室内外场景，按身份和描述画出的肖像。</sub>
-</p>
+模组没有配图的地点、人物、重要物件和怪物，以及守秘人即兴加出来的，先上网找写实照片，由读图模型挑选、裁剪；找不到合适的，本机有 Codex 时由 AI 按写实照片的样子画一张。两者都统一轻度调色，放在一起不突兀。图存在本机，每个模组只找、只画一次，以后每局都用；`autokeeper art prepare 模组` 可以在开局前全部准备好。路人不配头像；离线又没有 Codex 时不配图，只用文字。
 
 到了开场、撞见异状或步入结局的关头，画面会展开成整屏「大场景」插图。本机装有 Codex 时，开启「AI 画图」还能让即兴人物与地点改由图像模型配图；若是剧情里老宅失火、NPC 负伤，场景和头像也会按原图重新绘制。
 
@@ -242,7 +232,7 @@ uv tool upgrade autokeeper   # 更新
 - **会自己运转的世界**：每局有一份世界记录，记着谁在哪、谁知道什么、谁答应过谁；重要 NPC 照自己的打算行事，说了就做。
 - **守秘人统一主持**：守秘人看得到全部底牌，每轮先安排玩家的行动和在场人物的主动参与，讲完的场面先记进世界再显示。
 - **检定更像真的跑团**：失败就是失败，孤注一掷先说后果；日常物件可以当场拿、当场借。
-- **配图**：彩绘地图；没有图片的地点、人物、物件和怪物先找照片，再由 AI 画，离线时由程序画；手稿按信件、日记、报纸、电报、典籍排版。
+- **配图**：彩绘地图；没有图片的地点、人物、物件和怪物先找写实照片，再由 AI 画；手稿按信件、日记、报纸、电报、典籍排版。
 - **模型按分工配置**：每个分工可以单独选模型，Claude 方案的裁定改用 Sonnet；提示词缓存命中更高，等待更短。
 - **一条命令安装**：`uv tool install autokeeper`，在任意目录启动；以前的存档自动带过来。AutoKeeper 本体不绑定模型，Claude 是可选组件。
 - 详见[完整更新记录](CHANGELOG.md)。
