@@ -125,6 +125,8 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             old.looks = new.looks
             if hasattr(old, "chase"):  # the way a chase from a place runs, drawn from the text (2026-10-21)
                 old.chase = new.chase
+            else:  # what unmet players call them and the attacks the text gives them (2026-10-21)
+                old.called, old.attacks = new.called, new.attacks
             if folder.name == "zhuishuren" and old.id == "thomas":
                 # The original temperament and investigation goal remain; the added
                 # guidance makes his existing commission an active cooperation motive.
@@ -170,8 +172,12 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
         # own text on 2026-10-21.
         for e, f in zip(then.events, now.events, strict=True):
             e.fight, e.surprise, e.chase, e.chase_party = f.fight, f.surprise, f.chase, f.chase_party
+            e.stakes, e.sights = f.stakes, f.sights  # what a fight decides, which first sights its sanity roll is
         for c, d in zip(then.creatures, now.creatures, strict=True):
             c.called = d.called
+            # The NPC a sheet is the fighting form of, whether it pursues, and the sheets held to the books
+            # (2026-10-21): the horde's attacks from the rulebook's ghoul, Erie's sanity from the module's page.
+            c.npc, c.pursues, c.attacks, c.notes, c.sanity = d.npc, d.pursues, d.attacks, d.notes, d.sanity
         then.items += [i for i in now.items if i.id == "stanley_revolver"]
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}

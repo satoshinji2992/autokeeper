@@ -49,6 +49,7 @@ events:
     text: 被恶臭熏昏的调查员在晚上苏醒，道格拉斯就坐在一旁的墓碑上。照“如果调查员试图和人影交谈”处理。
     read_aloud: 你在冰冷的草地上醒来，天已经黑透了。月光下，旁边那块矮墓碑上坐着一个人，膝上摊着一本书。
     sanity: 0/1D4
+    sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
   - id: e_tunnel_maze
     title: 迷宫中的相遇
@@ -58,6 +59,7 @@ events:
       调查员在返回地面途中与道格拉斯·金博尔不期而遇（照“如果调查员试图和人影交谈”处理）。
     read_aloud: 手电的光圈里，前方拐角处有什么东西停住了。它抱着一摞书，慢慢转过头来。
     sanity: 0/1D4
+    sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
   - id: e_night_visit
     title: 深夜来客
@@ -68,6 +70,7 @@ events:
       若调查员正在熟睡，道格拉斯会来到他的房间唤醒他，因为他想和调查员交谈。
     read_aloud: 有什么东西轻轻碰了碰你的肩膀。你睁开眼，床边站着一个弯腰的黑影，一股泥土味。“你好。”
     sanity: 0/1D4
+    sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
   - id: e_figure
     title: 离开公墓的人影
@@ -89,6 +92,7 @@ events:
       他说完后矮身钻进陵墓、下到隧道，拖动一块巨大石板封住入口。调查员若想跟随他去地下，可以，但也会从此失踪。
     read_aloud: 那身影在矮墓碑上坐下，把书摞在膝头，抬起一张不该属于人的脸。圆框眼镜的位置上，是一双温和的眼睛。“你好。”
     sanity: 0/1D4
+    sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: [talked_douglas]
   - id: e_unmasked
     title: 熟悉的脸
@@ -97,6 +101,7 @@ events:
       调查员杀死或击晕人影后凑近观察它的脸，要做两次理智检定。第一次（遭遇食尸鬼的震惊）：成功无损失，
       失败失去 1D6 并做一个守秘人决定的强制动作（扔下武器或手电、放声尖叫）。随后进入“认出道格拉斯”的第二次检定。
     sanity: 0/1D6
+    sights: [douglas_ghoul]  # 原文：第一次检定就是遭遇食尸鬼的震惊，打斗中不另扣
     sets: [unmasked]
   - id: e_recognized
     title: 是他
@@ -114,8 +119,16 @@ events:
       逃跑则它们不追，带走道格拉斯返回墓地（“空墓”）。
     read_aloud: 四周的灌木里响起细碎的脚步声，一下，又一下，越来越多。月光里，一张又一张犬一样的脸从墓碑后面探了出来。
     sanity: 0/6
+    sights: [ghouls]  # 这次检定就是看见食尸鬼群的，照面时不再另扣
     sets: [horde_arrived]
     fight: [ghouls]  # 一群食尸鬼正扑向他：打起来，下一步由玩家选打还是逃（逃则它们不追）
+    stakes:
+      - when: ended:lost | down:players
+        flags: [taken_by_ghouls]
+        note: 搏斗或开枪都会被数量淹没，带回地下洞穴（人间蒸发）
+      - when: ended:fled | ended:escaped | escaped:players
+        flags: [fled_ghouls]
+        note: 逃跑则它们不追，带走道格拉斯回墓地（空墓）
 endings:
   - id: asylum
     title: 疗养院

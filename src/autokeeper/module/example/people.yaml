@@ -14,6 +14,9 @@ npcs:
       c_diary: {skill: 说服, difficulty: 困难}
     location: tower
     portrait: warden
+    called: 楼梯口打盹的老人         # 调查员还不知道他是谁时的叫法
+    attacks:                          # 会动手的人：写法同怪物
+      - 格斗(斗殴) 45%，伤害 1D3+DB
   - id: preacher
     name: 街头布道者
     role: 每晚在广场布道的人

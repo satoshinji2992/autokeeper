@@ -215,17 +215,7 @@ def test_the_bundled_modules_and_the_example_load_unchanged(name):
     assert folder is not None
     data = package.read(folder)
     module = Module.load(folder)
-    _given_comes_back(data, module.model_dump(mode="json"))
-    for c in module.creatures:
-        assert c.npc == "" and c.pursues is None
-    for n in module.npcs:
-        assert n.called == "" and n.attacks == []
-    for e in module.events:
-        assert e.stakes == [] and e.sights == []
-    for leg in (leg for loc in module.locations for leg in loc.chase):
-        assert (leg.id, leg.place, leg.links, leg.exit) == ("", "", [], False)
-        if leg.obstacle:
-            assert leg.obstacle.methods == []
+    _given_comes_back(data, module.model_dump(mode="json"))  # what they write of the new fields: tests/test_fight_module.py
 
 
 def test_the_chase_way_moved_to_the_module_format_and_is_still_found_in_the_rules():

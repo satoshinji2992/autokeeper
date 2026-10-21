@@ -20,6 +20,8 @@ npcs:
   - c_hart_talk
   location: hart_house
   portrait: hart
+  attacks:
+  - 格斗(斗殴) 25%，伤害 1D3+DB
   stats:
     力量: 45
     体质: 60
@@ -60,6 +62,9 @@ npcs:
   clues: []
   location: police_station
   portrait: stanley
+  attacks:
+  - 格斗(斗殴) 50%，伤害 1D3+DB
+  - 射击（.38 左轮手枪）50%，伤害 1D10
   stats:
     力量: 65
     体质: 70
@@ -111,6 +116,9 @@ npcs:
   - 我是来替县里收尸的
   location: jensen_farm
   portrait: jensen
+  attacks:
+  - 格斗(斗殴) 60%，伤害 1D3+DB
+  - 射击（霰弹枪）40%，伤害 4D6/2D6/1D6，保养很差，故障 96  # 原文：故障骰为 96+
   stats:
     力量: 75
     体质: 70
@@ -143,6 +151,10 @@ npcs:
   - 与大智慧断开后清醒过来，他们也许会痛改前非
   location: jensen_farm
   portrait: jensen_gang
+  attacks:
+  - 格斗(斗殴) 40%，伤害 1D3+DB
+  - 刀 40%，伤害 1D6+DB
+  - 射击（手枪）60%，伤害 1D10  # 麦加维身藏手枪；原文只给了技能，伤害按规则书的 .38 左轮
   stats:
     力量: 60
     体质: 80
@@ -173,6 +185,9 @@ npcs:
   - 看过教授的望远镜
   location: meeting_house
   portrait: mccurdy
+  called: 衣衫褴褛的闯入者
+  attacks:
+  - 格斗(斗殴) 25%，伤害 1D3  # 原文：属性同典型崩溃成人
   stats:
     力量: 60
     体质: 50

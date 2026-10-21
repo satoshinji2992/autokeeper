@@ -55,12 +55,13 @@ from pydantic import BaseModel, Field, field_validator
 from .. import config
 from ..engine import combat as battle
 from ..harness import Session
+from ..rules import dice_expr
 from ..rules.chase import Leg
 from ..rules.combat import stats_of, traits
 from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
-from .graph import HARM, audit, fighting, known_skill, supporting_clues
-from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Tie
+from .graph import SLUG, audit, fighting, known_skill, leg_key, stake_problems, supporting_clues, ways
+from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Stake, Tie
 
 PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude",
           "combat", "verify")
@@ -185,6 +186,9 @@ def _numbers(raw: Any) -> dict[str, int]:
 
 class CreatureSheet(BaseModel):
     creature: str = Field(description="怪物 id")
+    npc: str = Field("", description="还没写 npc 时才写：这张怪物卡是哪个 NPC 变成的、打起来的样子（NPC id），"
+                                     "原文写明是同一个人的才写（变成食尸鬼的叔叔）；不是就留空")
+    pursues: bool | None = Field(None, description="还没写时才写：原文写明调查员逃跑时它追（true）还是不追（false）；没写明就不填")
     called: str = Field("", description="还没写 called 时才写：调查员还不知道它是什么时怎么称呼它，只写看得见的样子，"
                                         "如「披着人皮的东西」「墓地里的黑影」；不写学名、真名和剧情真相")
     stats: dict[str, int] = Field(default_factory=dict, description="缺的战斗数值，键用中文：生命、敏捷、力量、体质、体型、闪避、移动、侦查、潜行……；已有的不写")
@@ -198,7 +202,11 @@ class CreatureSheet(BaseModel):
 
 
 class NpcSheet(BaseModel):
-    npc: str = Field(description="NPC id：原文写明会动手、或剧情里会被卷进打斗的人")
+    npc: str = Field(description="NPC id：原文写明会动手、或剧情里会被卷进打斗的人；或要补 called 的人")
+    called: str = Field("", description="还没写 called 时才写：调查员可能在不知道他是谁时先碰上他（夜里的人影、蒙面人、街上的陌生人），"
+                                        "那时怎么称呼他：只写原文里调查员看得见的样子，不带名字，不点破身份；一见面就知道名字的不写")
+    attacks: list[str] = Field(default_factory=list, description="还没写 attacks 时才写：原文写明的攻击，写法同怪物："
+                                                                 "“格斗(斗殴) 50%，伤害 1D3+DB”“射击（.38 左轮手枪）50%，伤害 1D10”")
     stats: dict[str, int] = Field(default_factory=dict, description="战斗数值：力量、体质、体型、敏捷、生命、闪避、格斗(斗殴)，会用的武器技能（射击(手枪)……）；原文有就照抄")
     weapon: str = Field("", description="原文写明他带着的武器（.38 左轮手枪、猎枪、斧头）；没有就留空")
 
@@ -209,16 +217,18 @@ class NpcSheet(BaseModel):
 
 
 class Route(BaseModel):
-    location: str = Field(description="地点 id：最可能发生追逐的地方")
+    location: str = Field(description="地点 id：最可能发生追逐的地方，或路线还没有 id 的地方")
     legs: list[Leg] = Field(description="从那里跑出去的路，4–12 段，按跑的先后排")
 
 
 class Trigger(BaseModel):
-    event: str = Field(description="事件 id：原文写明这件事发生时有人或怪物当场动手、或开始追逐的")
-    fight: list[str] = Field(default_factory=list, description="当场动手的 NPC 或怪物 id")
+    event: str = Field(description="事件 id：原文写明这件事发生时有人或怪物当场动手、或开始追逐的；或要补 stakes、sights 的")
+    fight: list[str] = Field(default_factory=list, description="当场动手的 NPC 或怪物 id；事件已经写了就不写")
     surprise: Literal["", "party", "foe"] = Field("", description="party 调查员被偷袭，foe 对方被偷袭；都有防备留空")
     chase: list[str] = Field(default_factory=list, description="开始追逐时追或逃的 NPC 或怪物 id；写了 fight 就不写")
     chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃还是追")
+    stakes: list[Stake] = Field(default_factory=list, description="这场打斗或追逐的胜负会带来什么：原文写明的每种收场一条，条件成立时设上的标记只用已声明的")
+    sights: list[str] = Field(default_factory=list, description="这件事的理智检定就是看见哪些怪物的那一次（怪物 id）：照面时不再另扣；事件没有理智检定就不写")
 
 
 class Combat(BaseModel):
@@ -281,16 +291,31 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                "只写原文里调查员看得见的样子（“墓地里的黑影”“披着人皮的东西”），不写学名、真名和剧情真相，不点破它是谁变的。"
                "怪物的 stats 要有生命和敏捷（还有力量、体质、体型、闪避、移动），attacks 一条一种，写成“爪击 50%，伤害 1D6+DB”，"
                "命中率带 %，每轮不止一次攻击另写一条“每轮 3 次”；notes 写原文提到、引擎还没读到的特性（护甲 2、枪伤减半、每轮恢复 1 点、"
-               "只被拳头打 6 点就会打晕、不追）。原文有数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值，不新添能力和设定；"
-               "成群出现、整群当一个对手打的不写数值。\n"
-               "2. npcs：原文写明会动手、或剧情里会被卷进打斗、stats 还空着的 NPC，写上战斗数值；原文写明他带着武器的，weapon 写武器名。普通人不写。\n"
-               "3. routes：还没有路线、最可能发生追逐的 1–3 个地点（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），各画一条追逐路线："
-               "从那里跑出去的 4–12 段路，按先后排，每段写名字（四到八个字）和一句样子；大约一半有一处 obstacle："
-               "hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
-               "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只用这个地方和周围真有的东西，最后一段是能脱身或被逼进绝路的地方；"
-               "追逐时玩家会看到跑过和看得见的路段，不写线索、秘密和还没找到的地方。\n"
+               "只被拳头打 6 点就会打晕）。原文有数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值，不新添能力和设定；"
+               "成群出现、整群当一个对手打的不写 stats。原文写明这张怪物卡就是某个 NPC 变成的（变成食尸鬼的叔叔），npc 写那个 NPC 的 id："
+               "同一个人只有一条命。原文写明调查员逃跑时它追不追的，pursues 写 true 或 false。\n"
+               "2. npcs：原文写明会动手、或剧情里会被卷进打斗、stats 还空着的 NPC，写上战斗数值；原文写明他带着武器的，weapon 写武器名；"
+               "原文写了他的攻击（格斗、武器、伤害）的，attacks 照抄成一条一种。普通人不写数值。"
+               "调查员可能在不知道他是谁时先碰上的 NPC（夜里的人影、街上的老妇人），called 写那时的叫法：只写看得见的样子，不带名字。\n"
+               "3. routes：还没有路线、最可能发生追逐的 1–3 个地点（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），"
+               "和【战斗与追逐】里标着“没有 id”的旧路线，各画一条追逐路线：从那里跑出去的 4–12 段路，按先后排，"
+               "每段写 id（英文小写加下划线）、名字（四到八个字）、一句样子，place 写它在哪个地点里（地点 id；不在模组的地点里留空）。"
+               "一段接着下一段；从一段还能岔去的写进 links（段的 id，可以是附近地点路线里的段，同一处用同一个 id，写法一致）；"
+               "跑到就能脱身的段（出了墓园、钻进地道、回到屋里）写 exit: true，它是一条岔路的尽头，列在它后面的段要由别的段的 links 连过来。"
+               "大约一半的段有一处 obstacle，照规则书分清两种：hazard 险阻边跑边过，失败耽搁、可能受伤，人还是过去了"
+               "（矮墙、矮栅栏、灌木丛、泥地、湿滑的台阶、拥挤的街道）；barrier 路障不过检定就过不去（高墙、锁着的门、深沟、钉死的窗）。"
+               "methods 写过它的一到三种办法，各有 id、label（给玩家的按钮，几个字）、skill（跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性），"
+               "路障的办法成功后就打开了、后面的人直接过（撞开的门、撬开的锁）写 opens: true；skill 写最常用的那一种。"
+               "harm 写失败时受的伤，骰子式，照规则书其他伤害表：摔一跤、撞一下 1D3，火、狗咬、从高处摔到草地 1D6；只耽搁不受伤就不写。"
+               "能打破的路障写 hp，照规则书：室内门或薄围栏 5，普通后门 10，坚固的外门 15，9 寸砖墙 25，大树 50。"
+               "只用这个地方和周围真有的东西；追逐时玩家会看到跑过和看得见的路段，不写线索、秘密和还没找到的地方。\n"
                "4. triggers：原文写明这件事发生时有人或怪物当场扑上来动手的事件，fight 写动手的 id，surprise 写哪一方毫无防备；"
-               "写明一开始就是追逐的，chase 写追或逃的 id，chase_party 写调查员是逃还是追。只是可能动手、要看调查员怎么做的不写，那由裁定员临场判。", Combat),
+               "写明一开始就是追逐的，chase 写追或逃的 id，chase_party 写调查员是逃还是追。只是可能动手、要看调查员怎么做的不写，那由裁定员临场判。"
+               "这件事有 fight 或 chase 的（原来就有的也算），原文写明的每种收场写一条 stakes：when 用条件写什么时候算数"
+               "（down:谁 倒下、dead:谁、escaped:谁 脱身、caught:谁 被抓住、surrendered:谁，谁写 NPC、怪物的 id 或 players；"
+               "ended:won 赢、lost 输、fled 逃了、escaped、parley 谈和；也可以用 flag:、at:谁:地点；& 表示且，| 表示或），flags 写成立时设上的已声明标记，"
+               "note 一句话说它意味着什么。事件自己的理智检定就是看见某个怪物的那一次的（原文写明这次检定是遭遇它的震惊），sights 写那个怪物的 id，"
+               "照面时就不再另扣；没有 fight 的事件也可以只写 sights。", Combat),
 }
 
 
@@ -447,13 +472,36 @@ def _unfit(m: Module) -> list[str]:
     return out
 
 
+def _unlinked(m: Module) -> list[str]:
+    """The places whose chase route is written the old way: a list of legs with no ids, so it joins
+    no other route and runs through none of the module's places (Leg.id, place, links, exit)."""
+    return [x.id for x in m.locations if 4 <= len(x.chase) <= 12 and not any(leg.id for leg in x.chase)]
+
+
+def _twice(m: Module) -> list[str]:
+    """Events that ask a sanity roll of their own and begin a fight with a creature whose first sight
+    costs sanity too, without saying the roll is that sight (Event.sights): charged twice."""
+    sheets = {c.id: c for c in m.creatures}
+    return [e.id for e in m.events if e.sanity and any((c := sheets.get(x)) is not None and c.sanity and x not in e.sights
+                                                       for x in e.fight + e.chase)]
+
+
+def _forms(m: Module) -> list[tuple[str, str]]:
+    """Creatures that look like an NPC's fighting form and do not say so (Creature.npc): the sheet's
+    name holds the NPC's whole name (食尸鬼道格拉斯·金博尔). Two sheets would be two lives."""
+    taken = {c.npc for c in m.creatures if c.npc}
+    return [(c.id, n.id) for c in m.creatures if not c.npc for n in m.npcs if n.id not in taken and len(n.name) >= 2 and n.name in c.name]
+
+
 def wanted(m: Module, name: str) -> bool:
     """Whether the module lacks what a pass fills."""
     if name == "npcs":
         return any(not (n.personality and n.voice and n.goal and n.knows) for n in m.npcs)
-    if name == "combat":  # a sheet the rules cannot read or a creature with no word for the players, or nowhere to run
+    if name == "combat":  # a sheet the rules cannot read or a creature with no word for the players, or nowhere to run,
+        # a route written the old way, a first sight charged twice, an NPC's fighting form as a second life
         return (bool(_unfit(m)) or any(not c.called.strip() for c in m.creatures)
-                or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations)))
+                or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations))
+                or bool(_unlinked(m) or _twice(m) or _forms(m)))
     if name == "clueweb":
         from .simulate import playthrough
 
@@ -475,27 +523,38 @@ def _unmarked(m: Module) -> list[tuple[str, Any]]:
 
 def _armoury(m: Module) -> str:
     """What a fight and a chase read of the module now, for the combat pass: each creature's sheet as
-    written and as the rules read it, the NPCs' numbers and weapons, the routes, the events' fights."""
-    unfit = set(_unfit(m))
+    written and as the rules read it, whose fighting form it is, the NPCs' numbers, weapons, attacks and
+    what unmet players call them, the routes and their legs, the events' fights, stakes and sights."""
+    unfit, forms = set(_unfit(m)), dict(_forms(m))
     rows = ["\n【战斗与追逐：引擎现在读到的】", "怪物："]
     for c in m.creatures:
         f = battle.from_creature(c)
+        whose = (f"；是 NPC {c.npc} 打起来的样子" if c.npc else f"；名字里有 NPC {forms[c.id]} 的名字，是他变的就写 npc" if c.id in forms else "")
+        whose += "" if c.pursues is None else f"；pursues {'true' if c.pursues else 'false'}"
         if battle.SWARM.search(c.notes + c.description) and not c.stats:
-            rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}）：成群，整群当一个对手打，不用写数值。{_clip(c.description, 80)}")
+            rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}{whose}）：成群，整群当一个对手打，不用写 stats。{_clip(c.description, 80)}")
             continue
         read = "、".join(f"{a.name} {a.value}%（{a.damage}）" for a in f.attacks)
-        rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}）：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；notes {c.notes.strip() or '空'}"
-                    f"\n  引擎读到：生命 {f.hp_max}、敏捷 {f.dex}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
+        rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}{whose}）：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；"
+                    f"notes {c.notes.strip() or '空'}\n  引擎读到：生命 {f.hp_max}、敏捷 {f.dex}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
     if not m.creatures:
         rows.append("- 没有")
     rows.append("NPC 的战斗数值：")
     for n in m.npcs:
         things = [i.name for i in m.items if i.owner == n.id]
         weapons = "、".join(w.name for w in carried([n.look, *things])[1:]) or "没有武器"
-        rows.append(f"- {n.id} {n.name}（{n.role}）：" + (f"stats {n.stats}；{weapons}" if n.stats else f"没写（按普通人算）；{weapons}"))
-    ways = [x.id for x in m.locations if x.chase]
-    rows.append(f"追逐路线：已有 {'、'.join(ways)}" if ways else "追逐路线：还没有")
-    rows += [f"事件 {e.id} 写定了" + (f"打斗 {e.fight}" if e.fight else f"追逐 {e.chase}") for e in m.events if e.fight or e.chase]
+        rows.append(f"- {n.id} {n.name}（{n.role}；called {n.called or '没写'}）：" + (f"stats {n.stats}；{weapons}" if n.stats else f"没写（按普通人算）；{weapons}")
+                    + (f"；attacks {n.attacks}" if n.attacks else ""))
+    old = set(_unlinked(m))
+    ways_ = [f"- {x.id}：{len(x.chase)} 段" + ("，没有 id（旧写法，重画）" if x.id in old else "，段 " + "、".join(f"{leg_key(leg)}" + ("（出口）" if leg.exit else "")
+                                                                                                    for leg in x.chase)) for x in m.locations if x.chase]
+    rows += ["追逐路线：", *ways_] if ways_ else ["追逐路线：还没有"]
+    for e in m.events:
+        if e.fight or e.chase:
+            rows.append(f"事件 {e.id} 写定了" + (f"打斗 {e.fight}" if e.fight else f"追逐 {e.chase}")
+                        + (f"；stakes {[x.when for x in e.stakes]}" if e.stakes else "；还没有 stakes") + (f"；sights {e.sights}" if e.sights else ""))
+    if twice := _twice(m):
+        rows.append(f"有自己的理智检定、打起来的怪物照面还要再扣一次的事件（原文写明这次检定就是照面的，写 sights）：{'、'.join(twice)}")
     if violent := _violent(m):
         rows.append(f"字面上写到动手或追赶的事件（看原文判断是不是当场就打起来）：{'、'.join(violent)}")
     if problems := [i.text for i in fighting(m)]:
@@ -677,16 +736,19 @@ def _marks(notes: str) -> set[str]:
 
 def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
     """What the combat pass writes, added to what the module has: what the players call a creature
-    (Creature.called; one that says its name is left out), its missing numbers (a swarm's none: a
-    sheet would make it one beast), attacks when none of its lines reads (in place of the lines with
-    no chance to hit in them, which say less of the same), the traits its notes lack; a sheet for an
-    NPC who fights and has none, the weapon the text gives them as something they carry
-    (Item.owner); a route for a place with none, its obstacles the rules cannot cross left out; the
-    fight or the chase of an event that scripts none. What names someone or somewhere the module
-    lacks is left out."""
+    (Creature.called; one that says its name is left out), the NPC it is the fighting form of and
+    whether it pursues, its missing numbers (a swarm's none: a sheet would make it one beast), attacks
+    when none of its lines reads (in place of the lines with no chance to hit in them, which say less
+    of the same), the traits its notes lack; a sheet for an NPC who fights and has none, their attacks,
+    what unmet players call them, the weapon the text gives them as something they carry
+    (Item.owner); a route for a place with none or with one written the old way, cut to what the
+    rules can run; the fight or the chase of an event that scripts none, its stakes and the sights
+    its sanity roll covers. What names someone, somewhere or a flag the module lacks is left out."""
     found: list[tuple[Any, ...]] = []
     creatures = {c.id: c for c in m.creatures}
+    npcs, items = {n.id: n for n in m.npcs}, {i.id for i in m.items}
     done: set[str] = set()  # each one once: a second answer for the same would write a field twice
+    forms = {c.npc for c in m.creatures if c.npc}
     for x in out.creatures:
         if (c := creatures.get(x.creature)) is None or f"creature:{c.id}" in done:
             continue
@@ -695,6 +757,11 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
         if called and not c.called.strip() and c.name not in called and len(called) <= 20:  # what it is stays the keeper's
             found.append(("put", "creatures", c.id, "called", called))
         swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
+        if x.npc and not c.npc and not swarm and x.npc in npcs and x.npc not in forms:  # one person, one life: one sheet each
+            forms.add(x.npc)
+            found.append(("put", "creatures", c.id, "npc", x.npc))
+        if x.pursues is not None and c.pursues is None:
+            found.append(("put", "creatures", c.id, "pursues", x.pursues))
         have = set(stats_of(c.stats))
         added: dict[str, int] = {}
         for key, value in x.stats.items():
@@ -710,13 +777,19 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
             found.append(("replace", "creatures", c.id, "attacks", [*kept, *lines]))
         if x.notes.strip() and _marks(x.notes) - _marks(c.notes):
             found.append(("replace", "creatures", c.id, "notes", f"{c.notes.strip()} {x.notes.strip()}".strip()))
-    npcs, items = {n.id: n for n in m.npcs}, {i.id for i in m.items}
     for x in out.npcs:
         if (n := npcs.get(x.npc)) is None or f"npc:{n.id}" in done:
             continue
         done.add(f"npc:{n.id}")
         if x.stats and not n.stats:
             found.append(("put", "npcs", n.id, "stats", x.stats))
+        names = [n.name, *(p for p in re.split(r"[·・\s]", n.name) if len(p) >= 2)]
+        called = x.called.strip()
+        if called and not n.called and len(called) <= 20 and not any(p in called for p in names):
+            found.append(("put", "npcs", n.id, "called", called))
+        lines = [a.strip() for a in x.attacks if parse_attack(a.strip()) is not None and not unread(a.strip())]
+        if lines and not n.attacks:
+            found.append(("put", "npcs", n.id, "attacks", lines))
         held = carried([n.look, *(i.name for i in m.items if i.owner == n.id)])
         if (w := weapon_in(x.weapon)) is not None and w not in held:
             key = next((k for k in (f"{n.id}_weapon", *(f"{n.id}_weapon_{i}" for i in range(2, 9))) if k not in items), "")
@@ -725,30 +798,65 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
             items.add(key)
             found.append(("append", "items", [{"id": key, "name": x.weapon.strip(), "description": f"{n.name}随身带着的{x.weapon.strip()}",
                                                 "where": n.location or m.start, "owner": n.id}]))
-    places, taken = {x.id: x for x in m.locations}, set()
+    places, taken, old = {x.id: x for x in m.locations}, set(), set(_unlinked(m))
     for r in out.routes:
         loc = places.get(r.location)
-        if loc is None or loc.chase or loc.id in taken or not 4 <= len(r.legs) <= 12 or len(taken) >= 3:
+        if loc is None or (loc.chase and loc.id not in old) or loc.id in taken or not 4 <= len(r.legs) <= 12 or len(taken) >= 3:
             continue
-        legs = []
-        for leg in r.legs:
-            ob = leg.obstacle
-            if ob is not None and (not known_skill(ob.skill) or (ob.harm and not HARM.fullmatch(ob.harm.replace(" ", "")))):
-                leg = leg.model_copy(update={"obstacle": None})  # one the rules cannot cross is no obstacle
-            legs.append(leg.model_dump(mode="json", exclude_defaults=True))
+        legs = _route(m, r.legs, places)
         taken.add(loc.id)
-        found.append(("put", "locations", loc.id, "chase", legs))
+        found.append(("replace" if loc.chase else "put", "locations", loc.id, "chase", legs))
     people, events = {*npcs, *creatures}, {e.id: e for e in m.events}
     for t in out.triggers:
-        if (e := events.get(t.event)) is None or e.fight or e.chase or e.ending or f"event:{e.id}" in done:
+        if (e := events.get(t.event)) is None or e.ending or f"event:{e.id}" in done:
             continue
         done.add(f"event:{e.id}")
         fight, chase = [x for x in dict.fromkeys(t.fight) if x in people], [x for x in dict.fromkeys(t.chase) if x in people]
-        if fight:
+        begins = bool(e.fight or e.chase)
+        if not begins and fight:
+            begins = True
             found += [("put", "events", e.id, "fight", fight)] + ([("put", "events", e.id, "surprise", t.surprise)] if t.surprise else [])
-        elif chase:
+        elif not begins and chase:
+            begins = True
             found += [("put", "events", e.id, "chase", chase)] + ([("put", "events", e.id, "chase_party", t.chase_party)] if t.chase_party else [])
+        stakes = [x.model_dump(mode="json", exclude_defaults=True) for x in t.stakes
+                  if x.flags and all(f in m.flags for f in x.flags) and not stake_problems(m, x.when)][:4]
+        if begins and stakes and not e.stakes:
+            found.append(("put", "events", e.id, "stakes", stakes))
+        sights = [x for x in dict.fromkeys(t.sights) if x in creatures]
+        if sights and e.sanity and not e.sights:
+            found.append(("put", "events", e.id, "sights", sights))
     return found
+
+
+def _route(m: Module, legs: list[Leg], places: dict[str, Any]) -> list[dict[str, Any]]:
+    """A drawn route as the rules can run it: a place the module lacks left blank, a link to no leg
+    (of this route or of another place's) left out, an id that is no id or comes twice left blank, an
+    obstacle the rules cannot cross left out (no skill they know, a harm that is no dice), its ways
+    with no skill they know left out; a hazard keeps no hit points and opens nothing."""
+    known = {**{k: leg for k, leg in ways(m).items()}, **{leg_key(leg): leg for leg in legs}, **{leg.name: leg for leg in legs}}
+    ids: set[str] = set()
+    out = []
+    for leg in legs:
+        update: dict[str, Any] = {"place": leg.place if leg.place in places else "",
+                                  "links": [x for x in dict.fromkeys(leg.links) if x in known and x not in (leg.id, leg.name)]}
+        if leg.id and (not SLUG.fullmatch(leg.id) or leg.id in ids or leg.id in places):
+            update["id"] = ""
+        ids.add(leg.id)
+        ob = leg.obstacle
+        if ob is not None:
+            methods = [x for x in ob.methods if known_skill(x.skill) and SLUG.fullmatch(x.id)]
+            if ob.kind == "hazard":
+                methods = [x.model_copy(update={"opens": False}) for x in methods]
+            if not known_skill(ob.skill) and methods:
+                ob = ob.model_copy(update={"skill": methods[0].skill})
+            if not known_skill(ob.skill) or (ob.harm and not dice_expr.valid(ob.harm)):
+                ob = None  # one the rules cannot cross is no obstacle
+            else:
+                ob = ob.model_copy(update={"methods": methods, "hp": ob.hp if ob.kind == "barrier" else None, "open": False})
+            update["obstacle"] = ob
+        out.append(leg.model_copy(update=update).model_dump(mode="json", exclude_defaults=True))
+    return out
 
 
 def _target(folder: Path, group: str) -> Path:

@@ -55,6 +55,74 @@ locations:
   looks:
     - when: flag:chaos_dawn
       change: 大街上一片狼藉：橱窗破碎，门板被砸开，路上散落着翻倒的杂物
+  chase:
+  - id: poles
+    name: 电话线杆下
+    look: 街边的电话线杆一根接一根
+    place: main_street
+  - id: barricade
+    name: 筑起街垒的小巷
+    look: 有人用家具和门板把小巷堵了一半
+    obstacle:
+      kind: hazard
+      what: 街垒后面的守卫者
+      skill: 闪避
+      harm: 1D3
+      methods:
+      - {id: dodge, label: 躲着冲过去, skill: 闪避}
+  - id: dogs
+    name: 放出饿狗的院子
+    look: 院门开着，狗链拖在地上
+    obstacle:
+      kind: hazard
+      what: 见人就咬的饿狗
+      skill: 闪避
+      harm: 1D6
+      methods:
+      - {id: dodge, label: 躲开狗嘴, skill: 闪避}
+  - id: sniper
+    name: 屋顶下的路口
+    look: 对面屋顶上坐着一个端枪的人
+    obstacle:
+      kind: hazard
+      what: 屋顶上的狙击手
+      skill: 幸运
+      harm: 1D6
+      methods:
+      - {id: luck, label: 低头跑过去, skill: 幸运}
+  - id: fire
+    name: 街上的火障
+    look: 街当中烧着一道火障
+    obstacle:
+      kind: hazard
+      what: 火障
+      skill: 跳跃
+      harm: 1D6
+      methods:
+      - {id: leap, label: 跳过去, skill: 跳跃}
+  - id: flood
+    name: 泥沙俱下的街道
+    look: 雨水裹着泥沙从坡上冲下来
+    obstacle:
+      kind: hazard
+      what: 浊流
+      skill: 敏捷
+      methods:
+      - {id: brace, label: 稳住脚步, skill: 敏捷}
+  - id: roadblock
+    name: 警用路障
+    look: 一道警用路障横在路上
+    obstacle:
+      kind: barrier
+      what: 警用路障
+      skill: 攀爬
+      hp: 15
+      methods:
+      - {id: climb, label: 翻过去, skill: 攀爬}
+  - id: woods
+    name: 镇外的树林
+    look: 树林那边就出了镇
+    exit: true
 - id: ferguson_house
   name: 弗格森家
   art: ferguson_house
@@ -237,32 +305,54 @@ locations:
   exits:
   - main_street
   chase:
-  - name: 农舍里
+  - id: farmhouse
+    name: 农舍里
     look: 窗户钉着木板，屋里昏暗
-  - name: 被钉住的窗户
+    place: jensen_farm
+  - id: boarded_window
+    name: 被钉住的窗户
     look: 窗户钉着木板
+    place: jensen_farm
     obstacle:
       kind: barrier
       what: 钉着木板的窗户
       skill: 力量
-  - name: 猪圈边
+      hp: 10
+      methods:
+      - {id: force, label: 撞开木板, skill: 力量, opens: true}
+  - id: pigsty
+    name: 猪圈边
     look: 猪圈里的猪拱着泥
+    place: jensen_farm
     obstacle:
       kind: hazard
       what: 猪圈边的烂泥
       skill: 敏捷
-  - name: 停满汽车的田地
+      methods:
+      - {id: run, label: 冲过去, skill: 敏捷}
+      - {id: wade, label: 硬蹚过去, skill: 力量}
+  - id: car_field
+    name: 停满汽车的田地
     look: 田里停满了各式汽车
-  - name: 烂泥路
+    place: jensen_farm
+  - id: mud_road
+    name: 烂泥路
     look: 一条烂泥路通向镇东头
     obstacle:
       kind: hazard
       what: 没过脚面的烂泥
       skill: 敏捷
-  - name: 镇东头
+      methods:
+      - {id: run, label: 冲过去, skill: 敏捷}
+      - {id: wade, label: 硬蹚过去, skill: 力量}
+  - id: east_end
+    name: 镇东头
     look: 一排工人住的房子
-  - name: 斯托威尔大街
+  - id: town_street
+    name: 斯托威尔大街
     look: 高高的电话线杆一路排开
+    place: main_street
+    exit: true
 - id: hart_house
   name: 哈特教授宅
   art: hart_house
@@ -281,28 +371,47 @@ locations:
   - main_street
   - greenhouse
   chase:
-  - name: 玻璃温室
+  - id: glasshouse
+    name: 玻璃温室
     look: 铜管望远镜斜斜指向夜空
-  - name: 温室入口
+    place: greenhouse
+  - id: greenhouse_door
+    name: 温室入口
     look: 温室连在老宅后面
-  - name: 工作室
+    place: hart_house
+  - id: workshop
+    name: 工作室
     look: 桌上架上堆满了东西
+    place: hart_house
     obstacle:
       kind: hazard
       what: 堆满的杂物
       skill: 敏捷
-  - name: 门廊
+      methods:
+      - {id: weave, label: 绕开杂物, skill: 敏捷}
+  - id: porch
+    name: 门廊
     look: 几只猫在门廊上打盹
+    place: hart_house
     obstacle:
       kind: hazard
       what: 脚下的猫
       skill: 敏捷
-  - name: 老宅门前
+      methods:
+      - {id: step, label: 跨过去, skill: 敏捷}
+      - {id: leap, label: 跳下门廊, skill: 跳跃}
+  - id: front
+    name: 老宅门前
     look: 镇西一栋漂亮的老宅
-  - name: 镇西的路
+    place: hart_house
+  - id: west_road
+    name: 镇西的路
     look: 路灯一盏接一盏
-  - name: 斯托威尔大街
+  - id: town_street
+    name: 斯托威尔大街
     look: 高高的电话线杆一路排开
+    place: main_street
+    exit: true
 - id: greenhouse
   name: 温室天文台
   within: hart_house

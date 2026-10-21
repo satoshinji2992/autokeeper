@@ -68,14 +68,14 @@
 | 行动点 | 113 | 每人 1 点，MOV 每比全场最慢者高 1 多 1 点 | `rules/chase.action_points` | 符合 | `test_rules_chase::test_action_points…` |
 | 可做的事 | 113 | 前进、攻击、施法、撬锁等耗时动作；可推迟；多次攻击的怪物在自己回合全打完 | 只有奔跑、躲藏、设路障、回身 | 简化 | 重构 WP-D |
 | 不可孤注一掷 | 113 | 追逐中不能，可下轮再试 | 同 | 符合 | — |
-| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `rules/chase.careful`、`hazard`：花 1–2 行动点换奖励骰；失败守秘人定伤害并失去 1D3 行动点，仍到下一地点 | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_hazards_and_barriers` |
-| 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `rules/chase.spend`、`start_round`：不够扣的行动点记作欠下，从下一轮扣 | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_action_points…` |
-| 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | `rules/chase.barrier`：失败不前进；可开路的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定） | 符合（规则层） | `test_rules_chase::test_hazards_and_barriers` |
-| 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | `rules/chase.barrier_hit`、`BARRIER_HP`（室内门/薄围栏 5、后门 10、外门 15、砖墙 25、大树 50、桥墩 100） | 符合（规则层）；接入待 WP-D | 同上 |
-| 追逐中的攻击 | 116 | 只能打同一地点的目标（有枪除外）；花 1 行动点；受每轮攻击次数限制；按普通战斗处理；无论剩不剩行动点，被攻击时总能应对 | `rules/chase.attack_problems`：同一地点（有枪除外）、1 行动点、每轮攻击次数上限；被攻击时总能应对 | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_attacks_and_shots…` |
+| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `rules/chase.careful`、`hazard`：花 1–2 行动点换奖励骰；失败守秘人定伤害并失去 1D3 行动点，仍到下一地点。模组路线的险境写几种办法（`methods`）和按表 III 的伤害骰式（`harm`），矮墙、矮栅栏按原文算险境 | 符合（规则层与模组数据）；接入待 WP-D | `test_rules_chase::test_hazards_and_barriers`、`test_fight_module` |
+| 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `rules/chase.spend`、`start_round`：不够扣的行动点记作欠下，从下一轮扣 | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
+| 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | `rules/chase.barrier`：失败不前进；可开路的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定）。模组路线写多种办法（`methods`，打开后后面的人直接过的写 `opens`） | 符合 | `test_rules_chase::test_hazards_and_barriers`、`test_fight_module` |
+| 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | `rules/chase.barrier_hit`、`BARRIER_HP`（室内门/薄围栏 5、后门 10、外门 15、砖墙 25、大树 50、桥墩 100）；模组路线按耐久表写 `hp`（自带模组已写，`check` 提醒没写的门和墙） | 符合（规则层与模组数据）；接入待 WP-D | `test_rules_chase`、`test_fight_module` |
+| 追逐中的攻击 | 116 | 只能打同一地点的目标（有枪除外）；花 1 行动点；受每轮攻击次数限制；按普通战斗处理；无论剩不剩行动点，被攻击时总能应对 | `rules/chase.attack_problems`：同一地点（有枪除外）、1 行动点、每轮攻击次数上限；被攻击时总能应对。旧引擎里选开枪仍会变成奔跑 | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
 | 追逐中的战技 | 116 | 成功则目标如同险境失败：失去 1D3 行动点，可能受伤；或照战斗中的战技目的生效 | `ChaseRules.maneuver_loss` 1D3，按险境失败结算（`hazard`） | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
-| 择路而逃 | 117 | 逃离者可选岔路，守秘人应常给岔路 | 一条直线 | 未做 | 重构 WP-D（地点图） |
-| 随机险境 | 117 | 1D100：60+ 普通，85+ 困难，96+ 极难 | `rules/chase.random_hazard` | 符合（规则层，可选） | `test_rules_chase::test_monsters_joiners…` |
+| 择路而逃 | 117 | 逃离者可选岔路，守秘人应常给岔路 | 模组路线有岔路和出口（`links`、`exit`），各地点的路线按段 id 连成一张图、段落在真实地点里（`place`；自带模组已写，`graph.route_edges`）；引擎仍走一条直线 | 未做（数据已备） | 重构 WP-D；`test_fight_module` |
+| 随机险境 | 117 | 1D100：60+ 普通，85+ 困难，96+ 极难 | `rules/chase.random_hazard` | 符合（规则层，可选） | `test_rules_chase` |
 | 突发险境 | 117–118 | 团体幸运检定，玩家与守秘人轮流放置 | 无 | 未做（可选） | — |
 | 跟丢 | 119 | 守秘人判定在哪里跟丢：例如逃出视线后追逐者过追踪检定 | `rules/chase.out_of_sight`、`lost_track`：领先两个地点以上或隔着挡视线的地点（项目设定 `sight_gap`）后，追逐者过追踪（或侦查），失败就跟丢 | 简化（规则层）；接入待 WP-D | `test_rules_chase::test_hiding_and_losing_track` |
 | 躲藏 | 119 | **任何时候**都可尝试；潜行难度视情况，领先多可给奖励骰；追逐者侦查不成功则逃脱 | `rules/chase.hide_difficulty`、`hide_bonus`、`hidden`：任何时候；潜行难度按追逐者侦查定，领先多给奖励骰（项目设定 `hide_far`） | 符合（规则层）；旧引擎仍要领先两段 | 同上 |
