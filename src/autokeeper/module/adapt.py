@@ -20,8 +20,9 @@ lacks and leaves what it has:
     prelude     开局演出    a few pictures and lines on the story's background, played before the
                             game screen while the director adapts (module/prelude.py); it reads
                             only what the players are told, never the keeper's book
-    combat      战斗与追逐  what a fight and a chase read of the module (engine/combat.py): creature sheets
-                            the rules can use (hit points, DEX, attacks, the traits of their notes), sheets
+    combat      战斗与追逐  what a fight and a chase read of the module (engine/combat.py): what the players
+                            call each creature (Creature.called), creature sheets the rules can use
+                            (hit points, DEX, attacks, the traits of their notes), sheets
                             for the NPCs who fight, a chase route for the places a chase is likely
                             (Location.chase), the attack an event scripts (Event.fight, Event.chase);
                             the numbers from the original text, the rulebook's where it gives none
@@ -184,6 +185,8 @@ def _numbers(raw: Any) -> dict[str, int]:
 
 class CreatureSheet(BaseModel):
     creature: str = Field(description="怪物 id")
+    called: str = Field("", description="还没写 called 时才写：调查员还不知道它是什么时怎么称呼它，只写看得见的样子，"
+                                        "如「披着人皮的东西」「墓地里的黑影」；不写学名、真名和剧情真相")
     stats: dict[str, int] = Field(default_factory=dict, description="缺的战斗数值，键用中文：生命、敏捷、力量、体质、体型、闪避、移动、侦查、潜行……；已有的不写")
     attacks: list[str] = Field(default_factory=list, description="它还没有读得出的攻击时才写，一条一种：“爪击 50%，伤害 1D6+DB”，命中率带 %")
     notes: str = Field("", description="原文写到、notes 里还没有的特性，照这些写法：护甲 2、枪伤减半、每轮恢复 1 点、只被拳头打 6 点就会打晕、不追；没有就留空")
@@ -274,7 +277,9 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "时代、地方、气氛、事情是怎么找上门的。图只从【可用的图】里挑，没有合适的就留空。"
                 "只用上面玩家知道的内容，不写调查员会怎么做、会发现什么，每幕不超过 60 字。", Prelude),
     "combat": ("战斗和追逐由引擎按 CoC 7 版规则一轮一轮结算，数值从模组里读；【战斗与追逐】列着引擎现在读到的。照原文补上缺的，已经齐全的不写：\n"
-               "1. creatures：怪物的 stats 要有生命和敏捷（还有力量、体质、体型、闪避、移动），attacks 一条一种，写成“爪击 50%，伤害 1D6+DB”，"
+               "1. creatures：还没有 called 的怪物写上 called，玩家的屏幕上显示的是它：调查员还不知道它是什么时怎么称呼它，"
+               "只写原文里调查员看得见的样子（“墓地里的黑影”“披着人皮的东西”），不写学名、真名和剧情真相，不点破它是谁变的。"
+               "怪物的 stats 要有生命和敏捷（还有力量、体质、体型、闪避、移动），attacks 一条一种，写成“爪击 50%，伤害 1D6+DB”，"
                "命中率带 %，每轮不止一次攻击另写一条“每轮 3 次”；notes 写原文提到、引擎还没读到的特性（护甲 2、枪伤减半、每轮恢复 1 点、"
                "只被拳头打 6 点就会打晕、不追）。原文有数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值，不新添能力和设定；"
                "成群出现、整群当一个对手打的不写数值。\n"
@@ -282,7 +287,8 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                "3. routes：还没有路线、最可能发生追逐的 1–3 个地点（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），各画一条追逐路线："
                "从那里跑出去的 4–12 段路，按先后排，每段写名字（四到八个字）和一句样子；大约一半有一处 obstacle："
                "hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
-               "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只用这个地方和周围真有的东西，最后一段是能脱身或被逼进绝路的地方。\n"
+               "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只用这个地方和周围真有的东西，最后一段是能脱身或被逼进绝路的地方；"
+               "追逐时整条路都显示给玩家，不写线索、秘密和还没找到的地方。\n"
                "4. triggers：原文写明这件事发生时有人或怪物当场扑上来动手的事件，fight 写动手的 id，surprise 写哪一方毫无防备；"
                "写明一开始就是追逐的，chase 写追或逃的 id，chase_party 写调查员是逃还是追。只是可能动手、要看调查员怎么做的不写，那由裁定员临场判。", Combat),
 }
@@ -445,8 +451,9 @@ def wanted(m: Module, name: str) -> bool:
     """Whether the module lacks what a pass fills."""
     if name == "npcs":
         return any(not (n.personality and n.voice and n.goal and n.knows) for n in m.npcs)
-    if name == "combat":  # a sheet the rules cannot read, or a module with something to fight and no way to run
-        return bool(_unfit(m)) or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations))
+    if name == "combat":  # a sheet the rules cannot read or a creature with no word for the players, or nowhere to run
+        return (bool(_unfit(m)) or any(not c.called.strip() for c in m.creatures)
+                or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations)))
     if name == "clueweb":
         from .simulate import playthrough
 
@@ -474,10 +481,10 @@ def _armoury(m: Module) -> str:
     for c in m.creatures:
         f = battle.from_creature(c)
         if battle.SWARM.search(c.notes + c.description) and not c.stats:
-            rows.append(f"- {c.id} {c.name}：成群，整群当一个对手打，不用写数值。{_clip(c.description, 80)}")
+            rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}）：成群，整群当一个对手打，不用写数值。{_clip(c.description, 80)}")
             continue
         read = "、".join(f"{a.name} {a.value}%（{a.damage}）" for a in f.attacks)
-        rows.append(f"- {c.id} {c.name}：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；notes {c.notes.strip() or '空'}"
+        rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}）：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；notes {c.notes.strip() or '空'}"
                     f"\n  引擎读到：生命 {f.hp_max}、敏捷 {f.dex}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
     if not m.creatures:
         rows.append("- 没有")
@@ -669,17 +676,22 @@ def _marks(notes: str) -> set[str]:
 
 
 def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
-    """What the combat pass writes, added to what the module has: a creature's missing numbers (a
-    swarm's none: a sheet would make it one beast), attacks when none of its lines reads (in place of
-    the lines with no chance to hit in them, which say less of the same), the traits its notes lack; a sheet for an NPC who fights and has none, the weapon the text gives them as
-    something they carry (Item.owner); a route for a place with none, its obstacles the rules cannot
-    cross left out; the fight or the chase of an event that scripts none. What names someone or
-    somewhere the module lacks is left out."""
+    """What the combat pass writes, added to what the module has: what the players call a creature
+    (Creature.called; one that says its name is left out), its missing numbers (a swarm's none: a
+    sheet would make it one beast), attacks when none of its lines reads (in place of the lines with
+    no chance to hit in them, which say less of the same), the traits its notes lack; a sheet for an
+    NPC who fights and has none, the weapon the text gives them as something they carry
+    (Item.owner); a route for a place with none, its obstacles the rules cannot cross left out; the
+    fight or the chase of an event that scripts none. What names someone or somewhere the module
+    lacks is left out."""
     found: list[tuple[Any, ...]] = []
     creatures = {c.id: c for c in m.creatures}
     for x in out.creatures:
         if (c := creatures.get(x.creature)) is None:
             continue
+        called = x.called.strip()
+        if called and not c.called.strip() and c.name not in called and len(called) <= 20:  # what it is stays the keeper's
+            found.append(("put", "creatures", c.id, "called", called))
         swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
         have = set(stats_of(c.stats))
         added: dict[str, int] = {}

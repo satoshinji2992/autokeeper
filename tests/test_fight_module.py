@@ -30,7 +30,7 @@ def armed() -> Module:
     with a wrench, a way down from the tower, and an event that scripts the attack."""
     m = Module.load(EXAMPLE)
     m.flags["gears_opened"] = "齿轮间的门被打开了"
-    m.creatures.append(Creature(id="coil", name="齿轮背后的藤", description="缠在齿轮背后、还在动的东西", sanity="1/1D6",
+    m.creatures.append(Creature(id="coil", name="齿轮背后的藤", called="缠在齿轮上的东西", description="缠在齿轮背后、还在动的东西", sanity="1/1D6",
                                 stats={"生命": 9, "敏捷": 60, "力量": 70, "体型": 50},
                                 attacks=["缠绕 45%，伤害 1D4+DB", "每轮 2 次"], notes="护甲 2；枪伤减半；每轮恢复 1 点；不追"))
     m.npc("warden").stats = {"力量": 60, "敏捷": 50, "生命": 11, "格斗(斗殴)": 45}
@@ -52,6 +52,7 @@ def test_the_schema_tells_the_import_models_what_a_fight_reads():
     assert "当场动手" in event["fight"]["description"] and event["surprise"]["enum"] == ["", "party", "foe"]
     assert event["chase_party"]["enum"] == ["", "逃", "追"] and "不用写" in defs["Obstacle"]["properties"]["open"]["description"]
     assert "追逐" not in defs["Mechanic"]["properties"]["plugin"]["description"] and "战斗与追逐" in schema
+    assert "不写怪物的学名、真名或剧情真相" in creature["called"]["description"] and creature["called"]["default"] == ""
 
 
 def test_check_reads_a_modules_fights_as_the_engine_would():
@@ -59,13 +60,16 @@ def test_check_reads_a_modules_fights_as_the_engine_would():
     assert not graph.fighting(m)  # a module that writes it all as the rules read it
     m.creatures += [Creature(id="shade", name="影子", description="墙上的影子", stats={"力量": 50},
                              attacks=["扑咬 50，伤害 1D6", "闪避 40%", "触手 45%"]),
-                    Creature(id="rats", name="鼠群", description="几十只老鼠蜂拥而出", notes="成群，不追")]  # a swarm needs no sheet
+                    Creature(id="rats", name="鼠群", called="鼠群里的一团黑影", description="几十只老鼠蜂拥而出",
+                             notes="成群，不追")]  # a swarm needs no sheet
     m.npc("preacher").stats = {"射击(手枪)": 40}
     m.location("square").chase = WAY[:3]
     m.location("office").chase = [*WAY[:3], Leg(name="钟绳", obstacle=Obstacle(kind="barrier", what="垂下的钟绳", skill="爬绳", harm="一点"))]
     m.events.append(Event(id="e_bad", title="乱写的", when="flag:gears_opened", text="", fight=["nobody"], chase=["warden"], ending="toll"))
     found = [str(i) for i in graph.fighting(m)]
-    assert any("shade 的 stats 缺生命、敏捷" in x for x in found) and not any("rats" in x for x in found)
+    assert any("shade 的 stats 缺生命、敏捷" in x for x in found) and any("shade 没写 called" in x and "「影子」" in x for x in found)
+    assert any("rats 的 called「鼠群里的一团黑影」带着它的名字" in x for x in found)  # what it is, said to the players
+    assert not any("rats" in x and "called" not in x for x in found)
     assert any("「扑咬 50，伤害 1D6」读不出命中率" in x for x in found) and any("闪避不是攻击" in x for x in found)
     assert any("「触手 45%」没写伤害" in x for x in found)
     assert any("preacher 会射击(手枪)" in x for x in found) and not any("NPC warden" in x for x in found)  # his wrench is no gun, but he has no gun skill
@@ -82,6 +86,7 @@ def test_the_skill_package_carries_the_sheets_the_routes_and_the_scripted_attack
     root = compile_module(armed(), tmp_path)
     beasts = (root / "references" / "creatures.md").read_text(encoding="utf-8")
     assert "## 齿轮背后的藤（`coil`）" in beasts and "生命 9，敏捷 60" in beasts and "缠绕 45%（格斗(斗殴)，伤害 1D4+DB）" in beasts
+    assert "调查员认出它以前叫它「缠在齿轮上的东西」" in beasts
     assert "护甲 2（每次受伤先减掉）" in beasts and "枪伤减半" in beasts and "每轮 2 次攻击" in beasts and "理智：1/1D6" in beasts
     assert "AutoKeeper MCP 服务器的战斗与追逐工具" in beasts
     tower = (root / "references" / "locations" / "tower.md").read_text(encoding="utf-8")
@@ -117,7 +122,7 @@ def _unready(tmp_path):
 
 LEGS = [leg.model_dump(mode="json", exclude_defaults=True) for leg in WAY]
 ANSWER = {
-    "creatures": [{"creature": "coil", "stats": {"力量": 99, "生命": 9, "敏捷": 60, "体型": "+1D4"},  # 力量 is the module's: kept
+    "creatures": [{"creature": "coil", "called": "缠在齿轮上的东西", "stats": {"力量": 99, "生命": 9, "敏捷": 60, "体型": "+1D4"},  # 力量 is the module's: kept
                    "attacks": ["缠绕 45%，伤害 1D4+DB", "抽打 30"], "notes": "护甲 2，枪伤减半"},
                   {"creature": "nobody", "stats": {"生命": 5}}],
     "npcs": [{"npc": "warden", "stats": {"力量": 60, "敏捷": 50, "生命": 11, "格斗(斗殴)": 45, "射击(手枪)": 40}, "weapon": ".38 左轮手枪"},
@@ -146,7 +151,7 @@ async def test_the_combat_pass_fills_what_the_rules_cannot_read_and_leaves_the_r
     assert asked == ["combat"] and results[0].written and not results[0].problems
     m = Module.load(folder)
     coil = m.creatures[0]
-    assert coil.stats == {"力量": 70, "生命": 9, "敏捷": 60}  # added to, never changed; a bonus is no number
+    assert coil.called == "缠在齿轮上的东西" and coil.stats == {"力量": 70, "生命": 9, "敏捷": 60}  # added to, never changed; a bonus is no number
     assert coil.attacks == ["缠绕 45%，伤害 1D4+DB"] and coil.notes == "怕火 护甲 2，枪伤减半"  # the line with no chance in it goes
     assert m.npc("warden").stats["射击(手枪)"] == 40 and not m.npc("preacher").stats
     gun = next(i for i in m.items if i.owner == "warden")
@@ -158,6 +163,10 @@ async def test_the_combat_pass_fills_what_the_rules_cannot_read_and_leaves_the_r
     assert (event.fight, event.surprise) == (["coil"], "party") and not next(e for e in m.events if e.id == "e_finale").fight
     assert not [i for i in graph.audit(m) if i.level == "error"] and not graph.fighting(m)
     assert not adapt.wanted(m, "combat")  # run again: nothing left
+    bare = m.model_copy(update={"creatures": [coil.model_copy(update={"called": ""})]})
+    assert adapt.wanted(bare, "combat")  # the players' word for it is still to write
+    told = adapt.Combat.model_validate({"creatures": [{"creature": "coil", "called": "齿轮背后的藤"}]})
+    assert not adapt._armed(bare, told)  # one that says what it is goes unwritten
     for name, text in before.items():  # what was there is still there, but the fields written whole again
         now = (folder / name).read_text(encoding="utf-8").split("\n")
         assert all(line in now for line in text.split("\n") if line.strip() not in ("stats:", "attacks:", "- 缠绕 45", "notes: 怕火")

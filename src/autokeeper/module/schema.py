@@ -125,7 +125,7 @@ class Location(BaseModel):
     chase: list[Leg] = Field(default_factory=list, description=(
         "追逐路线：从这里（和它里面的地方）跑出去的一场追逐沿着跑的路，4–12 段，按跑的先后排，最后一段是能脱身或被逼进绝路的地方。"
         "每段写名字和一句样子；大约一半有一处 obstacle：hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
-        "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只写这里和周围真有的东西；"
+        "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只写这里和周围真有的东西，追逐时整条路都显示给玩家，不写线索、秘密和还没找到的地方；"
         "只给最可能发生追逐的地方写（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），不写就由引擎临场画"))
 
 
@@ -163,6 +163,11 @@ class Creature(BaseModel):
 
     id: str
     name: str
+    # What the players' screens call it (a fight's panel and choices, the reveal), so `name` stays the
+    # keeper's: the ghoul that was the missing uncle is a hunched figure to them, not 食尸鬼道格拉斯.
+    called: str = Field("", description=(
+        "调查员还不知道它是什么时怎么称呼它：只写看得见的样子，如「披着人皮的东西」「墓地里的黑影」；"
+        "不写怪物的学名、真名或剧情真相；留空就用 name"))
     description: str
     sanity: str = Field("0/1D6", description="看见它时的理智检定，如 0/1D6；战斗或追逐里第一次照面时结算")
     stats: dict[str, int] = Field(default_factory=dict, description=(

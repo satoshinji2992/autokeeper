@@ -280,7 +280,10 @@ def _sheet(f: Fighter) -> list[str]:
 def _creatures_md(m: Module) -> str:
     out = ["# 怪物", "", FIGHTS, ""]
     for c in m.creatures:
-        out += [f"## {c.name}（`{c.id}`）", "", c.description.strip(), "", f"- 理智：{c.sanity}（第一次照面时）"]
+        out += [f"## {c.name}（`{c.id}`）", "", c.description.strip(), ""]
+        out.append(f"- 调查员认出它以前叫它「{c.called}」：叙述里用这个叫法，名字只给守秘人" if c.called.strip()
+                   else "- 没写调查员对它的叫法：叙述里别说出它的名字，只写看得见的样子")
+        out.append(f"- 理智：{c.sanity}（第一次照面时）")
         f = battle.from_creature(c)
         if battle.SWARM.search(c.notes + c.description) and not c.stats:
             out.append("- 成群：整群当一个对手打，很难打倒")

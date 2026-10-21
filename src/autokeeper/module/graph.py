@@ -403,15 +403,20 @@ def known_skill(name: str) -> bool:
 
 def fighting(m: Module) -> list[Issue]:
     """What a fight or a chase reads of the module and cannot use as written (engine/combat.py): a
-    creature's sheet without hit points or DEX, an attack line with no chance to hit, a gun skill with
-    no gun, a chase route the rules cannot run, an event sending someone the module does not have.
-    Only the last is an error: the rest still play, on the rules' defaults."""
+    creature with no word for the players (Creature.called) or one that names it, a sheet without hit
+    points or DEX, an attack line with no chance to hit, a gun skill with no gun, a chase route the
+    rules cannot run, an event sending someone the module does not have. Only the last is an error:
+    the rest still play, on the rules' defaults."""
     out: list[Issue] = []
 
     def warn(text: str) -> None:
         out.append(Issue("warning", text))
 
     for c in m.creatures:
+        if not c.called.strip():
+            warn(f"怪物 {c.id} 没写 called：调查员还不知道它是什么时，屏幕上就是它的名字「{c.name}」")
+        elif c.name in c.called:
+            warn(f"怪物 {c.id} 的 called「{c.called}」带着它的名字：只写看得见的样子，不写学名、真名和真相")
         swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
         s = stats_of(c.stats)
         if not swarm and (lacking := [k for k in ("生命", "敏捷") if k not in s]):
