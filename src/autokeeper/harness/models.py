@@ -93,8 +93,7 @@ CALL_TIMEOUT = float(os.environ.get("AUTOKEEPER_TIMEOUT", 600))
 # What the player waits on gives up sooner, then retries or goes to the fallback: at ten minutes a
 # try, a stuck keeper's plan could hold a turn for half an hour. Long jobs (imports, the director,
 # pictures) keep CALL_TIMEOUT; AUTOKEEPER_TIMEOUT, when set, applies to every role.
-WAITED_ON = {"plan": 120.0, "intent": 90.0, "arbiter": 120.0, "npc": 120.0, "keeper": 180.0, "investigator": 120.0,
-             "tactics": 60.0, "order": 60.0, "outcome": 90.0, "track": 90.0}  # a fight's round falls back on rules of thumb
+WAITED_ON = {"plan": 120.0, "intent": 90.0, "arbiter": 120.0, "npc": 120.0, "keeper": 180.0, "investigator": 120.0}
 
 
 def call_timeout(label: str) -> float:

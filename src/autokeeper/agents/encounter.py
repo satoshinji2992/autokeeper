@@ -139,6 +139,12 @@ class BriefPerson(BaseModel):
     actions: list[BriefAction] | None = None  # None: worked out from the attacks (default_actions)
     traits: list[str] = Field(default_factory=list)  # 护甲 2、枪伤减半、再生 …, and what the engine cannot use
     missing: list[str] = Field(default_factory=list)  # numbers the sheet lacks: fills
+    # What this NPC or creature perceives (the keeper knows all; the NPC does not, guide #25): who it
+    # can see or hear now, who it cannot and why, what it has been told. None: not worked out (a human's).
+    sees: list[str] | None = None
+    unseen: list[str] = Field(default_factory=list)  # "lin（藏在掩体后面，看不见）"
+    told: list[str] = Field(default_factory=list)  # what it was told of the others, in a line each
+    luck: int | None = None  # an important NPC's Luck pool left (Keeper Rulebook p. 168); None: it has none
 
 
 class BriefStake(BaseModel):
@@ -292,6 +298,14 @@ def _person(p: BriefPerson, b: Brief) -> list[str]:
         rows.append("  现在能做：" + "、".join(can))
         if cannot:
             rows.append("  现在做不到：" + "、".join(cannot))
+    if p.sees is not None:
+        rows.append("  他察觉得到：" + ("、".join(p.sees) or "谁也看不见")
+                    + ("；察觉不到：" + "、".join(p.unseen) if p.unseen else "")
+                    + "。他只能对察觉得到的人出手、追赶")
+    if p.told:
+        rows.append("  他听说过：" + "；".join(p.told))
+    if p.luck is not None:
+        rows.append(f"  幸运池：{p.luck}（只在他自己的检定失败时可花，用掉不回；安排里 luck 写这一轮最多花多少）")
     if p.controller == "keeper":
         mind = [f"目标：{p.goal}" if p.goal else "", f"现有安排：{p.arranged}" if p.arranged else "还没有安排",
                 f"挨打应对：{p.react}" if p.react else "", "【需要安排】" if p.needs_arrangement or not p.arranged else ""]

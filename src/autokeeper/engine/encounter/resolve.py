@@ -296,10 +296,11 @@ def react_choice(ctx: Ctx, defender: str, kind: str) -> tuple[str, str]:
         want = p.arrangement.react if p.arrangement is not None else p.react or melee.keeper_default()
         if want in opts:
             return want, "keeper"
-        return ("fight_back" if "fight_back" in opts else opts[0]), "rule"
+        return next(x for x in ("fight_back", "dodge", "none") if x in opts), "rule"
     if p is not None and p.react in opts:
         return p.react, "preset"  # type: ignore[return-value]
-    return opts[0], "rule"
+    # Diving for cover costs the next action: never chosen for anyone who did not choose it.
+    return next(x for x in ("dodge", "none") if x in opts), "rule"
 
 
 def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
@@ -648,7 +649,7 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     damage, conditions, edges and things; the rest of the ruling (clues, flags, takes, changes) is
     settled for the turn's investigator after the unit (`Unit.rest`)."""
     d = receipt.declared
-    head = f"{{{a}}}：{d.summary}"
+    head = d.summary if d.summary.strip() else f"{{{a}}}做了别的事"
     if ruling is None:
         return [head]
     passed = True

@@ -443,16 +443,20 @@ class Encounters:
         attack while a fight goes on joins it; nothing begins during a chase, with no investigator
         left who can act, or by those dead or gone. Begun, the next input is the first round."""
         st = self.state
+        # Decided once, in the event's own stages: resumed after its fight began, it does not join it.
+        how = await self._resolution_step("enc-how", turn, lambda: (
+            "none" if st.chase is not None or not any(i.can_act for i in st.investigators)
+            else "join" if self.fighting() else "begin"))
         if ev.fight:
-            if st.chase is not None or not any(i.can_act for i in st.investigators):
+            if how == "none":
                 return
-            if self.fighting():
+            if how == "join":
                 await self._join(ev.fight, ev, turn)
                 return
             start = EncounterStart(mode="fight", foes=list(ev.fight), surprise=ev.surprise, reason=ev.title[:60], pace=None)
             await self._encounter_open(start, turn, event=ev)
             return
-        if self.battling() or not any(i.can_act for i in st.investigators):
+        if how != "begin":
             return
         start = EncounterStart(mode="chase", foes=list(ev.chase), reason=ev.title[:60], pace=None,
                                quarry="foe" if ev.chase_party == "追" else "party")
@@ -709,7 +713,7 @@ class Encounters:
         from ...agents.cast import Ruling
         from ...world import adapters
 
-        ruling = Ruling.model_validate(rest["ruling"])
+        ruling = Ruling.model_validate({**rest["ruling"], "effects": []})  # its effects landed with the unit
         step = self._resolution_step
         if not rest.get("passed"):
             return
@@ -1197,7 +1201,7 @@ class Encounters:
         back), fled (the investigators got away), lost (nobody of theirs is left standing)."""
         enc = ctx.enc
         foes = [p.id for p in enc.participants if p.side == "foe" and p.presence == "in"]
-        party = [p.id for p in enc.participants if p.side == "party" and p.presence == "in"]
+        [p.id for p in enc.participants if p.side == "party" and p.presence == "in"]
         invs = [p for p in enc.participants if p.kind == "investigator"]
         lingering = [p.id for p in enc.participants if p.presence == "in" and (v := ctx.view(p.id)) is not None
                      and ((v.body().dying and not v.body().stabilized) or v.body().regenerating)]
@@ -1207,7 +1211,6 @@ class Encounters:
             return "" if lingering else "won"
         # The investigators down but alive: it is not over, the foes and anyone still standing go on (继续,
         # /encounter), and the dying roll on (the review: downed investigators were frozen).
-        del party
         return ""
 
     def _summary(self, ctx: Ctx, how: str) -> str:
@@ -1477,7 +1480,9 @@ class Encounters:
             f = battle.from_npc(npc, self._carried_by(pid), world=self.world)  # type: ignore[attr-defined]
         else:
             return None
-        v = Ctx.of(self).view(pid)
+        from .combatant import view
+
+        v = view(self.world, pid)
         if v is not None:
             f.name = v.public_name("players")
         return f

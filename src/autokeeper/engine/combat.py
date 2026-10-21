@@ -1,11 +1,10 @@
-"""A fight and a chase in the game: who is in it, what each of them does this round, what the
-screens show and what the keeper is told. The numbers are rules/combat.py's and rules/chase.py's;
-the rounds are run by Game (engine/fighting.py).
+"""The old chase engine's pieces (0.0.4 M2: fights run on engine/encounter; WP-D removes this file).
 
-Everything here is plain: building a fighter from an investigator's sheet, a module NPC or a
-creature; reading an order out of what a player typed or picked (the screen offers them as text,
-so a LAN table sends them like any action); the rules of thumb the NPCs follow when the tactics
-agent cannot be asked; the views and the report."""
+Building a runner from an investigator's sheet, a module NPC or a creature as the world keeps them
+(the encounter's people, when a fight turns into a chase), the old chase's orders and their words
+(engine/encounter/runner.chase_options offers them, matched exactly), its view for the screens, and
+the ways a chase runs along when the module draws none. `Fight` is only an old save's, read by
+engine/encounter/migrate."""
 
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field
 
 from ..module.schema import NPC, Creature
-from ..rules import chase as chase_rules
 from ..rules.catalog import canonical
 from ..rules.chase import Leg, Obstacle, Track
 from ..rules.coc import Investigator
@@ -270,71 +268,7 @@ def worldly(f: Fighter, world: World) -> None:
     f.attacks = kept
 
 
-# -- an order from the screen or the player's words ------------------------------------------------
-_STANCE = {"闪避": "dodge", "躲闪": "dodge", "反击": "fight", "还手": "fight", "掩护": "cover", "掩体": "cover", "找掩护": "cover"}
-_PREFIX: list[tuple[tuple[str, ...], Do]] = [
-    (("射击", "开枪", "开火", "射"), "shoot"),
-    (("缴械", "推倒", "摔倒", "制住", "擒抱", "压制"), "maneuver"),
-    (("急救", "包扎", "止血"), "aid"),
-    (("装填", "上膛", "换弹"), "reload"),
-    (("排除故障", "排故", "修枪"), "unjam"),
-    (("逃跑", "逃走", "撤退", "快逃"), "flee"),
-    (("防守", "只防守", "闪避", "格挡", "等待"), "hold"),
-    (("全力奔跑", "快跑", "奔跑", "跑"), "run"),
-    (("躲藏", "藏起来", "躲起来"), "hide"),
-    (("设置障碍", "推倒障碍", "挡住"), "barrier"),
-    (("回身迎战", "转身迎战", "迎战"), "turn"),
-    (("攻击", "打", "砍", "刺", "砸", "踢", "揍", "扑向"), "attack"),
-]
-
-
-def names_of(f: Fighter) -> list[str]:
-    """What a player may call them: the whole name, its parts, the name without a quoted epithet."""
-    plain = f.name.replace("“", "").replace("”", "").replace("（", "(").replace("）", ")")
-    parts = re.split(r"[·・()\s]", plain)
-    return sorted({f.name, plain, *(p for p in parts if len(p) >= 2)}, key=len, reverse=True)
-
-
-def target_in(text: str, fighters: list[Fighter]) -> Fighter | None:
-    """The fighter the words name, the longest name first."""
-    hits = [(len(n), f) for f in fighters for n in names_of(f) if n and n in text]
-    return max(hits, key=lambda h: h[0])[1] if hits else None
-
-
-def parse_order(text: str, me: Fighter, fighters: list[Fighter], *, chase: bool = False) -> Order | None:
-    """An order in the words the screen writes ("攻击 食尸鬼道格拉斯（.38 左轮手枪）｜被攻击时反击"), or
-    words that start the same way ("我开枪打它"). None for anything else: the model reads those."""
-    t = text.strip().replace("|", "｜")
-    stance: Stance = me.stance
-    if found := re.search(r"被攻击时\s*(闪避|反击|找掩护)", t):
-        stance = _STANCE[found.group(1)]  # type: ignore[assignment]
-        t = t[: found.start()].rstrip("｜ ，,")
-    head = re.sub(r"^(我|我要|我想|我来)", "", t).strip()
-    do: Do | None = next((d for words, d in _PREFIX if head.startswith(words)), None)
-    if do is None:
-        return None
-    if chase and do == "attack":
-        do = "turn"
-    others = [f for f in fighters if f.id != me.id]
-    target = target_in(head, others)
-    weapon = ""
-    if found := re.search(r"[（(]([^）)]+)[）)]", head):
-        weapon = found.group(1).strip()
-    elif w := weapon_in(head):
-        weapon = w.name
-    else:
-        weapon = next((a.name for a in me.attacks if a.name in head), "")
-    maneuver = next((m for m in ("缴械", "推倒", "制住") if m in head), "")
-    if do == "maneuver" and not maneuver:
-        maneuver = "推倒" if "摔" in head else "制住"
-    if do == "attack" and weapon and (w := next((a for a in me.attacks if a.name == weapon), None)) and w.firearm:
-        do = "shoot"
-    if do == "hold" and (st := next((v for k, v in _STANCE.items() if k in head), None)):
-        stance = st  # type: ignore[assignment]
-    return Order(do=do, target=target.id if target else "", weapon=weapon, maneuver=maneuver, stance=stance,  # type: ignore[arg-type]
-                 text=text.strip())
-
-
+# -- an old chase's order in words ------------------------------------------------------------------
 def order_text(o: Order, names: dict[str, str]) -> str:
     """The order as the screen writes it, which parse_order reads back."""
     verb = o.maneuver if o.do == "maneuver" and o.maneuver else VERBS[o.do]
@@ -345,126 +279,6 @@ def order_text(o: Order, names: dict[str, str]) -> str:
     if o.do not in ("run", "hide", "barrier", "turn"):
         out += f"｜被攻击时{STANCES[o.stance]}"
     return out
-
-
-def choices(me: Fighter, fight: Fight) -> list[tuple[str, str]]:
-    """What the screen offers an investigator this round: (the order's words, a line saying it)."""
-    foes = fight.foes_of(me)
-    allies = [x for x in fight.side(me.side) if x.id != me.id]
-    names = {f.id: f.name for f in fight.fighters}
-    stance: Stance = me.stance if me.stance != "cover" or any(a.firearm for f in foes for a in f.attacks) else "dodge"
-    out: list[tuple[str, str]] = []
-    for f in foes:
-        for a in me.attacks:
-            if a.firearm:
-                if a.jammed or a.ammo == 0:
-                    continue
-                o = Order(do="shoot", target=f.id, weapon=a.name, stance=stance)
-                out.append((order_text(o, names), f"{a.skill} {a.value} · 余弹 {a.ammo}" if a.ammo is not None else f"{a.skill} {a.value}"))
-            else:
-                o = Order(do="attack", target=f.id, weapon=a.name, stance=stance)
-                out.append((order_text(o, names), f"{a.skill} {a.value} · 伤害 {damage_words(a.damage, me.db)}"))
-        for m in ("推倒", "缴械", "制住"):
-            out.append((order_text(Order(do="maneuver", target=f.id, maneuver=m, stance=stance), names), f"战技 · 体格 {me.build} 对 {f.build}"))
-    for f in allies:
-        if f.status in ("濒死", "昏迷", "重伤") or f.hp < f.hp_max:
-            out.append((order_text(Order(do="aid", target=f.id, stance=stance), names), f"急救 {me.value('急救')}"))
-    for a in me.attacks:
-        if a.firearm and a.ammo is not None and a.ammo < a.load:
-            out.append((order_text(Order(do="reload", stance=stance), names), f"{a.name} 装满 {a.load} 发"))
-            break
-    if any(a.jammed for a in me.attacks):
-        out.append((order_text(Order(do="unjam", stance=stance), names), "这一轮不能射击"))
-    out.append((order_text(Order(do="hold", stance="fight" if stance == "dodge" else "dodge"), names), "不出手，换一种防守"))
-    out.append((order_text(Order(do="flee", stance=stance), names), "离开战斗"))
-    return out
-
-
-def damage_words(damage: str, db: str) -> str:
-    """A weapon's damage as a player reads it: the bonus written in (1D3+1D4), none when it has none."""
-    bonus = db.strip()
-    has = "DB" in damage
-    plain = damage.replace("+半DB", "").replace("+DB", "").replace("半DB", "").replace("DB", "").replace("+灼烧", "+火")
-    if not has or bonus in ("", "0", "+0"):
-        return plain
-    return plain + (bonus if bonus.startswith(("+", "-")) else "+" + bonus) + ("（减半）" if "半DB" in damage else "")
-
-
-def chase_choices(me: Fighter, ch: Chase) -> list[tuple[str, str]]:
-    names = {f.id: f.name for f in ch.runners}
-    moving = [f for f in ch.runners if f.standing and f.id not in ch.hidden]
-    steps = chase_rules.actions_for(me, min((f.speed for f in moving), default=me.speed))
-    out = [(order_text(Order(do="run"), names), f"这一轮能跑 {steps} 段")]
-    if me.side == ch.quarry:
-        lead = chase_rules.gap(ch.running(ch.quarry), ch.running("foe" if ch.quarry == "party" else "party"))
-        if lead >= chase_rules.SIGHT:
-            out.append((order_text(Order(do="hide"), names), f"潜行 {me.value('潜行')} 对追兵的侦查"))
-        out.append((order_text(Order(do="barrier"), names), "在身后制造障碍，失去一次移动"))
-    near = [f for f in ch.runners if f.side != me.side and f.standing and abs(f.pos - me.pos) <= 0]
-    for f in near:
-        out.append((order_text(Order(do="turn", target=f.id), names), "停下来动手，追逐转为战斗"))
-    return out
-
-
-# -- when nobody is asked ------------------------------------------------------------------------
-def rule_of_thumb(fight: Fight, who: Fighter) -> Order:
-    """What someone does when the tactics agent cannot be asked: a badly hurt person runs, a
-    hurt ally with a first-aider at hand gets help, everyone else hits the foe that looks weakest
-    with their best attack, fighting back when they fight better than they dodge."""
-    foes = fight.foes_of(who)
-    stance: Stance = "fight" if who.fighting >= who.dodge else "dodge"
-    if not foes:
-        return Order(do="hold", stance=stance)
-    if who.human and who.kind == "npc" and who.hp * 4 <= who.hp_max:
-        return Order(do="flee", stance=stance)
-    if who.kind == "investigator" and who.value("急救") >= 30:
-        dying = [x for x in fight.side(who.side) if x.status == "濒死"]
-        if dying:
-            return Order(do="aid", target=dying[0].id, stance=stance)
-    if any(a.jammed for a in who.attacks) and not any(not a.firearm and not a.unarmed for a in who.attacks):
-        return Order(do="unjam", stance=stance)
-    target = min(foes, key=lambda f: (f.hp / max(1, f.hp_max), -f.dex))
-    atk = who.attacks[readiest(who)] if who.attacks else None
-    if atk is None:
-        return Order(do="attack", target=target.id, stance=stance)
-    return Order(do="shoot" if atk.firearm else "attack", target=target.id, weapon=atk.name, stance=stance)
-
-
-def pursuers(fight: Fight) -> list[str]:
-    """Who goes after investigators that ran, when nobody is asked: creatures do, unless their
-    notes say they let them go; people do not."""
-    return [f.id for f in fight.standing("foe") if not f.human and not LETS_GO.search(f.notes)]
-
-
-# -- how it ends ---------------------------------------------------------------------------------
-def outcome(fight: Fight) -> str:
-    """"" while it goes on; else won (no foe standing), fled (the investigators all got away), lost."""
-    if not fight.standing("foe"):
-        return "won"
-    party = fight.side("party")
-    if not any(f.standing for f in party):
-        return "fled" if any(f.status == "逃走" for f in party) and not all(f.status in DOWN for f in party) else "lost"
-    return ""
-
-
-def summary(fight: Fight, end: str) -> str:
-    """The end of a fight in a line: who is down, who ran, who is hurt."""
-    rows = []
-    for f in fight.fighters:
-        word = f.status if f.status in (*DOWN, *OUT) else f.wound_word() if f.kind != "investigator" else (
-            f.status or ("受伤" if f.hp < f.hp_max else "无伤"))
-        rows.append(f"{f.name}{word}")
-    head = {"won": "调查员一方占了上风", "fled": "调查员逃离了", "lost": "调查员一方全部倒下", "": "战斗中止"}[end]
-    return f"{head}：" + "，".join(rows)
-
-
-def view(fight: Fight) -> dict:
-    """The fight as the screens draw it. A foe's hit points stay off it: its wounds in words."""
-    return {"round": fight.round, "place": fight.place, "fighters": [{
-        "id": f.id, "name": f.name, "kind": f.kind, "side": f.side, "status": f.status, "wound": f.wound_word(),
-        "hp": f.hp if f.side == "party" else None, "hp_max": f.hp_max if f.side == "party" else None,
-        "portrait": f.portrait, "look": f.look[:60], "weapon": f.wielding.name, "stance": f.stance,
-        "prone": f.prone, "held": bool(f.held_by), "dex": f.dex} for f in fight.fighters]}
 
 
 def chase_view(ch: Chase) -> dict:
