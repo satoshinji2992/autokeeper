@@ -15,6 +15,9 @@
     investigator  AI players (companions and autoplay); see only what players see
                   (engine/autoplay.situation); also writes the ideas a player asks for (F5)
     vision        reads sketches
+    plan          the keeper's arrangement of a turn, on the keeper's model: the everyday Plan, and in
+                  a fight or a chase the encounter's (agents/encounter.py): EncounterTurnPlan,
+                  EncounterStart, a reaction, a pursuit, each checked by the engine and sent back once
 """
 
 from __future__ import annotations
@@ -24,16 +27,17 @@ import json
 from collections import deque
 from collections.abc import Callable
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import from_json
 
-from .. import skills
+from .. import rules_lookup, skills
 from ..config import Config
 from ..engine import fog, world
+from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
 from ..harness import OnDelta, Reply, Session, Summarizer, trace
 from ..module import graph as module_graph
@@ -42,6 +46,7 @@ from ..plugins.schema import Call as PluginCall
 from ..prefs import LINES, Prefs
 from ..rules import commands
 from ..rules.coc import Investigator
+from ..rules.dice_expr import DiceText
 from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
@@ -50,6 +55,21 @@ from ..world.scene import Scene
 from . import guard
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
+from .encounter import (
+    ARBITER_ENCOUNTER,
+    CHOICE_SYSTEM,
+    ENCOUNTER_PLAN_SYSTEM,
+    ENCOUNTER_START_SYSTEM,
+    MODE_ASKS,
+    OTHER_DAMAGE,
+    ArrangePlan,
+    Checked,
+    Choice,
+    EncounterHint,
+    PlanMode,
+    PursuitAnswer,
+    ReactionAnswer,
+)
 from .writing import INTERFACE_COPY
 
 if TYPE_CHECKING:
@@ -110,6 +130,9 @@ class Plan(BaseModel):
     # that hold (Game._arrange).
     initiative: list[Initiative] = Field(default_factory=list, json_schema_extra={"maxItems": 2},
                                          description="在场的人这一轮主动开口、帮忙或阻拦，最多 2 条；大多数轮次留空")
+    # A fight or a chase this turn begins (the engine then asks Cast.plan_encounter how); one small
+    # object, so the everyday schema stays small for cheap models.
+    encounter: EncounterHint | None = Field(None, description="这一轮真的打起来或追起来时写；大多数轮次留空")
 
 
 class EquipmentChange(BaseModel):
@@ -142,6 +165,19 @@ class Failure(BaseModel):
     damage: str = Field("", description="失败时调查员受的伤，骰子式如 1D3；没有就留空")
 
 
+class RuledEffect(BaseModel):
+    """What an action the arbiter ruled brings about in a fight or a chase (engine/encounter rolls
+    and applies it): harm by the book's dice, a condition, an obstacle opened or blocked, a bonus
+    or penalty die, a thing lost or broken."""
+
+    kind: Literal["damage", "condition", "obstacle", "edge", "item"] = Field(
+        description="damage 伤害，condition 状态，obstacle 障碍变化，edge 下一次检定的奖励或惩罚骰，item 物品")
+    target: str = Field(description="对象 id：人、障碍或物品")
+    dice: DiceText = Field("", description="damage 的骰子式，如 1D6、2D10；别的留空")
+    bonus: int = Field(0, ge=-2, le=2, description="edge 时：奖励骰为正，惩罚骰为负")
+    what: str = Field("", max_length=60, description="一句话：发生了什么（着火、倒地、门被堵上、手枪掉了）")
+
+
 class Ruling(BaseModel):
     needs_roll: bool = Field(description="这次行动要不要掷骰")
     skill: str = Field("", description="技能或属性名，如 侦查、图书馆使用、说服、力量")
@@ -164,14 +200,22 @@ class Ruling(BaseModel):
     on_fail: Failure = Field(default_factory=Failure, description="这次检定失败、不再孤注一掷时的后果；多数时候留空")
     on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
-    combat: list[str] = Field(default_factory=list, max_length=6,
-                              description="这次行动之后当场打起来了：动手的 NPC 或怪物 id（调查员要打的对象也算），只从【可能动手的】里选；没真打起来就留空")
-    surprise: Literal["", "party", "foe"] = Field("", description="打起来时一方毫无防备：party 调查员被偷袭，foe 对方被偷袭；都有防备留空")
-    chase: list[str] = Field(default_factory=list, max_length=4, description="这次行动之后开始追逐：追或逃的 NPC 或怪物 id，只从【可能动手的】里选；没有就留空")
-    chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃的一方还是追的一方")
-    harm: str = Field("", description="战斗中这次行动成功时对对象造成的伤害，骰子式如 1D6（砸过去的油灯、推下楼梯）；不伤人的行动留空")
-    harm_to: str = Field("", description="harm 的对象 id")
+    effects: list[RuledEffect] = Field(default_factory=list, max_length=4, description=(
+        "只在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里留空"))
     reason: str = Field("", description="一句话理由（玩家看不到）")
+    # The rule it wants looked up in the rulebooks first (rules_lookup.py); in the schema only
+    # when there is an index of them (Cast._arbiter), answered and asked again once (Cast.arbiter).
+    lookup: SkipJsonSchema[str] = ""
+    # Before 0.0.4 the arbiter started fights and chases and wrote a fight's harm; that is the
+    # keeper plan's now (Plan.encounter) and Ruling.effects. Kept, out of the schema, for old turn
+    # journals and for engine/fighting.py until the encounter engine (WP-C) replaces it: Cast.arbiter
+    # fills them from this turn's Plan.encounter and effects (_legacy_fight).
+    combat: SkipJsonSchema[list[str]] = Field(default_factory=list)
+    surprise: SkipJsonSchema[Literal["", "party", "foe"]] = ""
+    chase: SkipJsonSchema[list[str]] = Field(default_factory=list)
+    chase_party: SkipJsonSchema[Literal["", "逃", "追"]] = ""
+    harm: SkipJsonSchema[str] = ""
+    harm_to: SkipJsonSchema[str] = ""
     # Filled in by the engine from the director's plan, never by the arbiter.
     now: SkipJsonSchema[list[str]] = Field(default_factory=list)
     go: SkipJsonSchema[str] = ""
@@ -208,7 +252,9 @@ class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
 
 
-# A fight's or a chase's round for those nobody plays (engine/fighting.py): one call for them all.
+# DEPRECATED (0.0.4): the old fight engine's (engine/fighting.py) round for those nobody plays, the
+# order reader and the outcome; the encounter engine (WP-C) deletes them with it. Their replacements:
+# EncounterTurnPlan's NpcArrangement (Cast.plan), Cast.encounter_choice, the exact-label channel, stakes.
 class Move(BaseModel):
     who: str = Field(description="谁：列出的 id 之一")
     do: Literal["attack", "shoot", "maneuver", "aid", "reload", "unjam", "flee", "hold", "surrender", "run", "turn"] = Field(
@@ -366,6 +412,7 @@ PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底�
 - 玩家的话是对在场的人说的，或者当着他问出来的（提问、质疑、抱怨、打招呼），照常填 talk 和 npc，由那个人回应；不要改成 initiative，也不要当成问你的 meta。meta 只用于玩家明确问规则或游戏外的事。
 - initiative：在场的人会不会主动开口、帮忙、阻拦，由你按他的目标、心境和局势决定。宁少勿多，没有就留空，最多 2 条。npc 只填【在场、可以主动的人】里的 id；玩家正在交谈的那个人会照常回应，不用写进来。does 写一句他这一轮主动说什么或做什么，只写他自己知道、出于他自己打算的事；他会用自己的资料和口吻演出来。要抢在调查员动手之前拦住、提醒或递上东西，会改变这次行动条件的，first 填 true：他先演，裁定员再按变了的局面裁定。临时路人（模组里没有的人）不进 initiative，由你在叙述里直接演。
 - lookup：手头的资料不够、答案又会改变这一轮的安排时，写一句想查的事，比如「托马斯知道日记的哪些事」「图书馆那篇旧报道的原文」「杰弗逊最近在哪」。action 照样先填好；系统查完会把结果给你，再问你一次。不用查就留空。
+- encounter：这一轮真的打起来或追起来才写：调查员动手攻击在场的人或怪物、对方因为这次行动真的动手（被激怒、被发现、伏击扑上来）写 fight；调查员拔腿逃离追来的人或怪物、去追逃跑的人写 chase。with 只填【可能动手的】里的 id。要看检定结果的（偷东西被发现才打起来）trigger 填 on_fail 或 on_success。威胁、推搡、吵架、亮出武器都还不算；对方只是走开也不算。怎么打由之后的遭遇安排来定，这里不写。
 
 【action 的填法】
 """
@@ -408,14 +455,21 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 检定不重掷。【最近的检定】里，同一个调查员刚对同一个对象用同一个技能检定过，而情况没变（没有新的线索或筹码，没换做法，
   也没过多久），这次就是重复：needs_roll 填 false，repeat 填 true，那次的结果照旧，不给 clues_on_success。
   换了做法或技能、拿到了新的线索或筹码、过了相当一段时间，或者换一位调查员来试，可以重新检定。
-- 打斗：调查员真的动手攻击在场的人或怪物，或者对方因为这次行动真的动手（被激怒、被发现、伏击扑上来），就在 combat 写上动手的一方的 id（调查员要打的对象也写），
-  surprise 写哪一方毫无防备。之后由战斗规则一轮一轮结算命中和伤害：这里 needs_roll 照攻击填（格斗、射击），不要写 on_fail 的伤害。
-  威胁、推搡、吵架、亮出武器都还不算打起来；对方只是逃开也不算。行动本身达成的剧情标记（比如攻击了某人）照常写进 set_flags。
-- 追逐：调查员拔腿逃离追来的人或怪物，或者去追逃跑的人，就在 chase 写对方的 id，chase_party 写调查员是逃还是追；之后按追逐规则结算。
-- 【战斗中】出现时，这一轮的打斗由战斗规则结算，你只裁定调查员做的别的事（砸油灯、关门、喊人、念咒）：
-  要掷就照常给技能和难度，成功时会伤到人的，在 harm 写伤害的骰子式、harm_to 写对象 id。
+- 打斗与追逐：打不打起来、追不追由守秘人的安排决定，这里不写。调查员动手攻击时 needs_roll 照攻击填（格斗、射击），命中和伤害由战斗规则结算，不要写 on_fail 的伤害；行动本身达成的剧情标记（比如攻击了某人）照常写进 set_flags。
+- 失败或行动本身会伤人时（on_fail.damage、遭遇里的 effects），伤害的骰子式照下面的表 III 比类似的伤害来定。
+{lookup}
+{damage}
 
 {rules}"""
+
+# How the engine's report puts a /kp question to the keeper (engine/game.Game._report); Cast.keeper
+# looks the question up in the rulebooks.
+KP_QUESTION = "玩家在问游戏外的问题："
+
+# The arbiter's line about the rulebooks, when they are indexed (rules_lookup.py; Ruling.lookup).
+ARBITER_LOOKUP = ("- lookup：裁定要用到规则书里有、上面没写的规则（溺水、毒、坠落、火、法术、恐惧症与躁狂的效果、车祸、特殊环境）时，"
+                  "写一句想查的规则；系统把规则书原文给你，再问你一次。手头的规则够用就留空。")
+LOOKUP_SCHEMA = {"type": "string", "description": "要查的规则，一句话；不用查留空"}
 
 KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持模组《{title}》。
 
@@ -500,6 +554,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 那家人？你可别在我这儿提他们。去年冬天他家小子偷了我两罐咸鱼，我追到街口，他娘倒先骂上我了，说我一个寡妇盯着人家孩子不放。打那以后我就不往那边看。不过你真想知道的话——他家那扇窗这一个月夜夜亮到两三点，烧的也不知道是谁的煤油。我男人在的时候，可没人敢这么欺负我。
 {extra}"""
 
+# DEPRECATED (0.0.4), with Cast.tactics, order, outcome and track: WP-C deletes them.
 TACTICS_SYSTEM = """你在 CoC 7 版跑团里替守秘人安排战斗或追逐中，NPC、怪物和 AI 调查员这一轮做什么。
 - 照每个人的本性、目标和处境：模组写了它的打算（只想带东西逃走、不追逃跑的人、听命于谁、怕火）就照办；野兽和怪物凭本能扑向最近或最弱的人；
   普通人受了重伤会想逃、投降或求饶；狂热的、被控制的、没有理智可言的不会。
@@ -583,6 +638,10 @@ class Cast:
         self.module = module
         self.sessions: dict[str, Session] = {}
         self._arbiter_flags: set[str] = set(module.flags)
+        self._rulebooks = False  # the arbiter may look up the rulebooks (rules_lookup.ready, Cast._arbiter)
+        # This turn's Plan.encounter, for the old fight engine's Ruling fields (_legacy_fight) until
+        # WP-C reads the plan itself: (turn, hint).
+        self.hint: tuple[int, EncounterHint] | None = None
         self.summarizer = Summarizer(cfg.role("summarizer"))
         self.kb = None  # LightRAG knowledge base, opened on first lookup
         self.prefs = Prefs.load()  # the player's narrative preferences; the settings screen swaps them mid-game
@@ -759,9 +818,14 @@ class Cast:
     def _arbiter(self, state: GameState) -> Session:
         if "arbiter" not in self.sessions:
             self._arbiter_flags = set(self.module.flags)  # later ones (improvised) go in each turn's prompt
+            self._rulebooks = rules_lookup.ready()  # asked once a session: the schema is the session's
         flags = "\n".join(f"- {k}：{v}" for k, v in self.module.flags.items() if k in self._arbiter_flags)
-        system = ARBITER_SYSTEM.format(rules=skills.wrap("coc7-core")) + f"\n\n剧情标记：\n{flags}"
-        return self._open("arbiter", "arbiter", system, schema=_schema(Ruling))
+        system = ARBITER_SYSTEM.format(rules=skills.wrap("coc7-core"), damage=OTHER_DAMAGE,
+                                       lookup=ARBITER_LOOKUP if self._rulebooks else "") + f"\n\n剧情标记：\n{flags}"
+        schema = _schema(Ruling)
+        if self._rulebooks:
+            schema["properties"]["lookup"] = LOOKUP_SCHEMA
+        return self._open("arbiter", "arbiter", system, schema=schema)
 
     def _npc(self, state: GameState, npc_id: str) -> Session:
         return self._open(f"npc:{npc_id}", "npc", self._npc_system(self.module.npc(npc_id)), schema=_schema(Dialogue))
@@ -798,15 +862,26 @@ class Cast:
         place, alive and not gone."""
         return [n for n in self.module.npcs_at(state.location) if n.status not in ("死亡", "失踪")]
 
-    async def plan(self, state: GameState, text: str) -> Plan:
+    async def plan(self, state: GameState, text: str, *, encounter: str | None = None, mode: PlanMode = "act",
+                   check: Callable[[Any], list[str]] | None = None, ask: str = "") -> Any:
         """The keeper arranges the turn: the player's action (as the parser would make it) and who of
         those here joins in. It sees the book and the scene's backstage; the summary still goes up
         on the player's screen, so PLAN_SYSTEM keeps it to the names the players know. A reply that
-        is not a Plan raises (Game.parse falls back to the parser)."""
+        is not a Plan raises (Game.parse falls back to the parser).
+
+        Inside a fight or a chase (`encounter`: the brief, agents/encounter.encounter_brief) it is
+        the encounter's plan instead, by `mode`: "act" an EncounterTurnPlan for the player's words,
+        "arrange" the NPCs alone (ArrangePlan), "react" a reaction in the player's own words
+        (ReactionAnswer; `ask` lists the reactions offered), "pursuit" who chases whom
+        (PursuitAnswer; `ask` names those who must decide). `check` is the engine's deterministic
+        validator (engine/encounter/plan_check): what it finds goes back once; a Checked comes back."""
+        if encounter is not None:
+            return await self._encounter_plan(state, text, encounter, mode, check, ask)
         s = self._plan(state)
         brief = world_view.keeper_brief(self.world) if self.backstage and self.world is not None else ""
         prompt = (brief + "\n\n" if brief else "") + self._heard(state, text)
         prompt += "\n【在场、可以主动的人】" + ("、".join(f"{n.name}({n.id})" for n in self.able(state)) or "无")
+        prompt += "\n【可能动手的】" + self._fighters(state)
         reply = await self._send("plan", s, state, prompt)
         plan = Plan.model_validate(reply.data)
         # What it asks to look up is answered and it is asked again, twice at most; a lookup after
@@ -830,7 +905,142 @@ class Cast:
                 if journal:
                     journal.append("lookup", {"status": "failed", "error": type(exc).__name__}, turn=state.turn)
                 break
+        self.hint = (state.turn, plan.encounter) if plan.encounter is not None else None
         return plan.model_copy(update={"lookup": "", "action": plan.action.model_copy(update={"echo": ""})})
+
+    def _fighters(self, state: GameState) -> str:
+        """Who may fight or be chased here, by id (Plan.encounter)."""
+        able = [f"{n.name}({n.id})" for n in self.able(state)]
+        able += [f"{c.name}({c.id})：{c.description[:40]}" for c in self.module.creatures]
+        return ("；".join(able) or "无") + "（怪物只在本地资料或剧情写明它此刻在场时才算在场）"
+
+    # -- fights and chases: the keeper's plan (agents/encounter.py) ---------------------------------
+    def _journal(self, kind: str, data: dict, state: GameState) -> None:
+        """Private evidence for developer mode (Game.debug_journal); never the players'."""
+        if journal := getattr(self, "debug_journal", None):
+            journal.append(kind, data, turn=state.turn)
+
+    def _session(self, key: str, system: str) -> Session:
+        """A stateless session on the keeper's plan role (its calls count as "plan"), with the book."""
+        if key not in self.sessions:
+            book = "\n\n" + _book(self.module) if self.backstage else ""
+            self.sessions[key] = Session("plan", self.cfg.role("plan"), system + book, key=key, summarizer=self.summarizer)
+        return self.sessions[key]
+
+    @staticmethod
+    def _judge[T: BaseModel](model: type[T], data: object,
+                             check: Callable[[Any], list[str]] | None) -> tuple[T | None, list[str]]:
+        """The answer as `model`, and what is wrong with it: its shape first, then the engine's check."""
+        try:
+            value = model.model_validate(data if isinstance(data, dict) else {})
+        except ValidationError as exc:
+            return None, [f"格式不对：{'.'.join(str(x) for x in e['loc']) or '整体'} {e['msg']}" for e in exc.errors()[:6]]
+        return value, [str(p) for p in (check(value) if check is not None else []) if str(p).strip()]
+
+    async def _checked[T: BaseModel](self, key: str, s: Session, state: GameState, prompt: str, model: type[T],
+                                     check: Callable[[Any], list[str]] | None, *, schema: dict | None = None,
+                                     reply: Reply | None = None, what: str = "plan") -> Checked[T]:
+        """Ask (unless `reply` already came back), check, and send it back once with the problems.
+        Still wrong: the answer and its problems come back for the caller to note as 【未落实】, and
+        go to the debug journal whole, so the prompt or the context can be fixed (the user's call,
+        2026-10-21: nothing is put in its place)."""
+        schema = schema or _schema(model)
+        if reply is None:
+            reply = await self._send(key, s, state, prompt, schema=schema, bind=False)
+        value, problems = self._judge(model, reply.data, check)
+        if problems:
+            first = reply.data
+            fix = ("\n\n【上一份回答的问题】\n" + "\n".join(f"- {p}" for p in problems)
+                   + f"\n【上一份回答】{dumps(first)}\n改正这些问题，重交一份完整的回答。")
+            reply = await self._send(key, s, state, prompt, extra=fix, schema=schema, bind=False)
+            value, problems = self._judge(model, reply.data, check)
+            if problems:
+                self._journal(what, {"phase": "invalid", "session": key, "answer": reply.data, "problems": problems,
+                                     "first": first}, state)
+        return Checked(value=value, problems=problems, raw=reply.data)
+
+    async def _encounter_plan(self, state: GameState, text: str, encounter: str, mode: PlanMode,
+                              check: Callable[[Any], list[str]] | None, ask: str) -> Checked:
+        model: type[BaseModel] = {"act": EncounterTurnPlan, "arrange": ArrangePlan, "react": ReactionAnswer,
+                                  "pursuit": PursuitAnswer}[mode]
+        s = self._session("plan:encounter", ENCOUNTER_PLAN_SYSTEM)
+        world_brief = world_view.keeper_brief(self.world) if self.backstage and self.world is not None else ""
+        prompt = (world_brief + "\n\n" if world_brief else "") + encounter
+        prompt += f"\n【刚才的经过】\n{_recent(state, 6)}"
+        prompt += f"\n【要你做的】{MODE_ASKS[mode]}" + (f"\n{ask}" if ask else "")
+        if mode in ("act", "react"):
+            prompt += f"\n【玩家】{state.investigator.name}：{text}"
+        schema = _schema(model)
+        reply = await self._send("plan:encounter", s, state, prompt, schema=schema, bind=False)
+        if mode in ("act", "arrange"):  # what it asks to look up first, as the everyday plan (LOOKUPS)
+            for _asked in range(LOOKUPS):
+                query = reply.data.get("lookup", "") if isinstance(reply.data, dict) else ""
+                if not isinstance(query, str) or not query.strip():
+                    break
+                found = await self.look_up(state, query.strip())
+                self._journal("lookup", {"query": query, "found": found}, state)
+                prompt += f"\n\n【查询结果】（{query.strip()}）\n{found}\n现在给出安排，lookup 留空。"
+                reply = await self._send("plan:encounter", s, state, prompt, schema=schema, bind=False)
+        out = await self._checked("plan:encounter", s, state, prompt, model, check, schema=schema, reply=reply)
+        if isinstance(out.value, EncounterTurnPlan):
+            out.value = out.value.model_copy(update={"lookup": ""})
+        return out
+
+    async def plan_encounter(self, state: GameState, text: str, hint: EncounterHint,
+                             check: Callable[[Any], list[str]] | None = None, *, brief: str = "") -> Checked:
+        """How the encounter the turn's plan announced (Plan.encounter) begins: an EncounterStart.
+        One extra call, only on a turn that starts one. `brief`: the engine's view of who may be in
+        it (attacks by id, the site there is or is not); without it the module's sheets stand in."""
+        s = self._session("plan:start", ENCOUNTER_START_SYSTEM)
+        world_brief = world_view.keeper_brief(self.world) if self.backstage and self.world is not None else ""
+        prompt = (world_brief + "\n\n" if world_brief else "") + self._heard(state, text)
+        mode = {"fight": "打起来", "chase": "追逐"}[hint.mode]
+        when = {"now": "这次行动就开始", "on_fail": "检定失败后开始", "on_success": "检定成功后开始"}[hint.trigger]
+        prompt += f"\n【要开始的遭遇】{mode}，和 {'、'.join(hint.with_)}，{when}"
+        prompt += "\n【可能卷入的人】\n" + (brief or self._candidates(state, hint))
+        if flags := {k: v for k, v in self.module.flags.items() if k not in state.flags}:
+            prompt += "\n【可用的剧情标记】" + "；".join(f"{k}：{v}" for k, v in flags.items())
+        return await self._checked("plan:start", s, state, prompt, EncounterStart, check)
+
+    def _candidates(self, state: GameState, hint: EncounterHint) -> str:
+        """Who may be in it, from the module's sheets: the investigators, the people here and those
+        named, the creatures; numbers and attacks as the sheets write them."""
+        m = self.module
+        rows = [f"- `{inv.id}` {inv.name}｜调查员｜生命 {inv.hp}/{inv.hp_max}｜{_skills(inv)}｜身上：{'、'.join(inv.inventory) or '无'}"
+                for inv in state.investigators]
+        npcs = {n.id: n for n in self.able(state)} | {n.id: n for n in m.npcs if n.id in hint.with_}
+        for n in npcs.values():
+            stats = "，".join(f"{k}{v}" for k, v in n.stats.items()) or "普通人的数值"
+            rows.append(f"- `{n.id}` {n.name}" + (f"（玩家叫他：{n.called}）" if n.called else "")
+                        + f"｜NPC｜{stats}｜攻击：{'；'.join(n.attacks) or '徒手'}｜想要：{n.goal or '无'}")
+        for c in m.creatures:
+            stats = "，".join(f"{k}{v}" for k, v in c.stats.items())
+            rows.append(f"- `{c.id}` {c.name}" + (f"（就是 NPC {c.npc}）" if c.npc else "")
+                        + (f"（玩家叫它：{c.called}）" if c.called else "") + f"｜怪物｜{stats}｜攻击：{'；'.join(c.attacks) or '无'}"
+                        + ("" if c.pursues is None else "｜会追逃跑的人" if c.pursues else "｜不追逃跑的人")
+                        + (f"｜{c.notes}" if c.notes else ""))
+        return "\n".join(rows) + "\n（怪物只在本地资料或剧情写明它此刻在场时才算在场）"
+
+    async def encounter_choice(self, state: GameState, inv_id: str, situation: str, options: list[Any]) -> Checked:
+        """An AI investigator's pick in a fight or a chase, on the investigator role: `situation` is
+        the public view only (engine/encounter/views), `options` the offered choices (anything with
+        `id` and `label`, or (id, label) pairs). The schema is an enum of their ids."""
+        pairs = [(o.id, o.label) if hasattr(o, "id") else (str(o[0]), str(o[1])) for o in options]
+        ids = [i for i, _ in pairs]
+        inv = state.find(inv_id)
+        key = f"choice:{inv_id}"
+        if key not in self.sessions:
+            system = CHOICE_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv))
+            self.sessions[key] = Session("investigator", self.cfg.role("investigator"), system, key=key)
+        schema = _schema(Choice)
+        schema["properties"]["choice"]["enum"] = ids
+        prompt = f"{situation}\n【可选】\n" + "\n".join(f"- {i}：{label}" for i, label in pairs)
+
+        def check(answer: Choice) -> list[str]:
+            return [] if answer.choice in ids else [f"{answer.choice} 不是列出的选项；只能填：{'、'.join(ids)}"]
+
+        out = await self._checked(key, self.sessions[key], state, prompt, Choice, check, schema=schema, what="choice")
+        return Checked(value=out.value.choice if out.value is not None else None, problems=out.problems, raw=out.raw)
 
     async def look_up(self, state: GameState, query: str) -> str:
         """What the keeper asks before it arranges the turn (Plan.lookup), never shown to the players:
@@ -857,10 +1067,32 @@ class Cast:
                 rows.append("【记录里相关的】\n" + "\n".join(f"- {h.text.strip()}" for h in hits))
         if lore := await self._private_lore(state, query, names):
             rows.append(lore.strip())
+        if passages := await self._rules(state, query, k=2):
+            rows.append("【规则书】\n" + rules_lookup.quote(passages))
         return "\n".join(rows) or "没有查到相关的记录，按手头的资料安排。"
 
-    async def arbiter(self, state: GameState, action: Action, at: str | None = None) -> Ruling:
-        """`at`: the place the investigator walks to for this action; it is ruled there."""
+    async def _rules(self, state: GameState, query: str, k: int = rules_lookup.HITS) -> list[rules_lookup.Passage]:
+        """The rulebooks' passages on `query` (rules_lookup.py), journaled; none without an index."""
+        if not query.strip() or not rules_lookup.ready():
+            return []
+        try:
+            found = await rules_lookup.alookup(query, k)
+        except Exception as exc:  # a damaged index is a missing one
+            self._journal("rules-lookup", {"query": query, "status": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]},
+                          state)
+            return []
+        self._journal("rules-lookup", {"query": query, "found": [p.cite() for p in found]}, state)
+        return found
+
+    async def arbiter(self, state: GameState, action: Action, at: str | None = None, *, encounter: str = "",
+                      problems: list[str] | None = None) -> Ruling:
+        """`at`: the place the investigator walks to for this action; it is ruled there.
+
+        In a fight or a chase, `encounter` is its brief (agents/encounter.encounter_brief): the
+        arbiter rules the one `other` action or unusual way past an obstacle, with its results in
+        Ruling.effects. `problems`: what the engine found wrong with its last ruling of this action
+        (a target not in the encounter), sent back once. A rule it asks for (Ruling.lookup) is
+        looked up in the rulebooks and it is asked again, once."""
         m = self.module
         s = self._arbiter(state)
         inv = state.investigator
@@ -913,13 +1145,12 @@ class Cast:
             prompt += "\n【本局新增的剧情标记】" + "；".join(f"{k}：{v}" for k, v in later.items())
         if checks := self._recent_checks(state):
             prompt += f"\n【最近的检定】\n{checks}"
-        able = [f"{n.name}({n.id})" for n in near["npcs"] if n.status not in ("死亡", "失踪")]
-        able += [f"{c.name}({c.id})：{c.description[:40]}" for c in m.creatures]
-        prompt += "\n【可能动手的】" + ("；".join(able) or "无") + "（怪物只在本地资料或剧情写明它此刻在场时才算在场）"
-        if state.fight is not None:
+        if encounter:
+            prompt += f"\n{ARBITER_ENCOUNTER}\n{encounter}"
+        elif state.fight is not None:  # DEPRECATED: the old fight engine's (engine/fighting.py), until WP-C
             rows = "；".join(f"{f.name}({f.id})·{'调查员一方' if f.side == 'party' else '对手'}·{f.wound_word()}"
                              for f in state.fight.fighters)
-            prompt += f"\n【战斗中】第 {state.fight.round + 1} 轮：{rows}"
+            prompt += f"\n{ARBITER_ENCOUNTER}\n【遭遇】战斗，第 {state.fight.round + 1} 轮\n【这场遭遇里的 id】{rows}"
         extensions = [f"{p.id}.{a.name}：{a.description}" for p in m.extensions.values()
                       if p.id not in state.plugin_errors for a in p.actions]
         if extensions:
@@ -927,8 +1158,33 @@ class Cast:
             prompt += "\n仅按玩家的实际行动填写 plugin_calls，不猜测插件结果；参数范围遵守上述说明。"
         # Memory keeps what was asked, not the whole scene sheet: the sheet is rebuilt every turn.
         remember = f"【行动】{action.ruled()}\n【地点】{m.location(where).name}"
-        reply = await self._send("arbiter", s, state, prompt, remember=remember)
-        return Ruling.model_validate(reply.data)  # invalid rulings are retryable failures, never silent success
+        extra = ("\n\n【上一次裁定的问题，请改正】\n" + "\n".join(f"- {p}" for p in problems)) if problems else ""
+        reply = await self._send("arbiter", s, state, prompt, remember=remember, extra=extra)
+        ruling = Ruling.model_validate(reply.data)  # invalid rulings are retryable failures, never silent success
+        if self._rulebooks and ruling.lookup.strip():
+            if found := await self._rules(state, ruling.lookup.strip()):
+                text = rules_lookup.quote(found)
+            else:
+                text = "规则书里没有查到，按手头的规则裁定。"
+            s.forget()  # the ruling it gives knowing the rule takes the place of the one that asked
+            extra += f"\n\n【规则书查询】（{ruling.lookup.strip()}）\n{text}\n现在给出裁定，lookup 留空。"
+            reply = await self._send("arbiter", s, state, prompt, remember=remember, extra=extra)
+            ruling = Ruling.model_validate(reply.data)
+        return self._legacy_fight(state, ruling.model_copy(update={"lookup": ""}))
+
+    def _legacy_fight(self, state: GameState, ruling: Ruling) -> Ruling:
+        """DEPRECATED bridge, until the encounter engine (WP-C) reads Plan.encounter and
+        Ruling.effects itself: the old fight engine (engine/fighting.py) starts a fight or a chase from
+        Ruling.combat / chase and deals an `other` action's harm from harm / harm_to. This turn's
+        Plan.encounter fills the first two (its trigger is not kept: the old engine starts it after
+        the check either way), the first damage effect the others."""
+        update: dict[str, Any] = {}
+        if self.hint is not None and self.hint[0] == state.turn and not ruling.combat and not ruling.chase:
+            hint = self.hint[1]
+            update["combat" if hint.mode == "fight" else "chase"] = list(hint.with_)
+        if not ruling.harm and (hurt := next((e for e in ruling.effects if e.kind == "damage" and e.dice), None)):
+            update |= {"harm": hurt.dice, "harm_to": hurt.target}
+        return ruling.model_copy(update=update) if update else ruling
 
     def _recent_checks(self, state: GameState) -> str:
         """The last few turns' checks, for telling a fresh attempt from a re-roll."""
@@ -1259,6 +1515,10 @@ class Cast:
         time. It comes back as a Narration. The keeper's memory keeps the words alone, and only of a
         telling whose scene held or that the player already saw: one turned back is not remembered."""
         s = self._keeper(state)
+        if KP_QUESTION in report and (question := report.split(KP_QUESTION, 1)[1].split("\n", 1)[0].strip()):
+            if found := await self._rules(state, question):  # a /kp question about the rules: the book's words
+                lore += ("\n【规则书原文】（玩家问的是规则时，照原文回答并说出书名和页码；不是规则问题就不用管）\n"
+                         + rules_lookup.quote(found))
         extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper() + fix
         if check is None:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
@@ -1373,21 +1633,25 @@ class Cast:
         return [t for t in dict.fromkeys(said) if t]
 
     # -- a fight and a chase (engine/fighting.py) ----------------------------------------------
+    # DEPRECATED (0.0.4): the old fight engine's calls (engine/fighting.py). The `tactics` role is
+    # gone (config.RETIRED_ROLES): tactics and track run on the arbiter's model, thinking low, as
+    # that role did. The encounter engine (WP-C) deletes all four with engine/fighting.py.
     def _oneshot(self, key: str, role: str, system: str, schema: type[BaseModel]) -> Session:
         """A call that remembers nothing: everything it needs is in its prompt."""
         if key not in self.sessions:
-            self.sessions[key] = Session(key, self.cfg.role(role), system, schema=_schema(schema), key=key)
+            spec = replace(self.cfg.role("arbiter"), effort="low") if role == "tactics" else self.cfg.role(role)
+            self.sessions[key] = Session(key, spec, system, schema=_schema(schema), key=key)
         return self.sessions[key]
 
     async def tactics(self, state: GameState, brief: str, ids: list[str]) -> Tactics:
-        """What the NPCs, the creatures and the AI investigators of a fight or a chase do this round."""
+        """DEPRECATED (WP-C deletes it). What the NPCs, the creatures and the AI investigators of a fight or a chase do this round."""
         s = self._oneshot("tactics", "tactics", TACTICS_SYSTEM, Tactics)
         prompt = f"{brief}\n\n请安排这些 id 这一轮的行动：{'、'.join(ids)}"
         reply = await self._send("tactics", s, state, prompt, bind=False)
         return Tactics.model_validate(reply.data)
 
     async def order(self, state: GameState, text: str, brief: str) -> dict:
-        """A player's words in a fight or a chase as an order (engine/combat.Order), when the
+        """DEPRECATED (WP-C deletes it). A player's words in a fight or a chase as an order (engine/combat.Order), when the
         engine could not read them itself."""
         from ..engine.combat import Order
 
@@ -1396,7 +1660,7 @@ class Cast:
         return Order.model_validate(reply.data).model_dump()
 
     async def outcome(self, state: GameState, result: str) -> Outcome:
-        """The story flags a fight's or a chase's end brings about, from the module's own."""
+        """DEPRECATED (WP-C deletes it). The story flags a fight's or a chase's end brings about, from the module's own."""
         open_flags = {k: v for k, v in self.module.flags.items() if k not in state.flags}
         if not open_flags:
             return Outcome()
@@ -1408,7 +1672,7 @@ class Cast:
         return found.model_copy(update={"flags": [f for f in dict.fromkeys(found.flags) if f in open_flags]})
 
     async def track(self, state: GameState, brief: str):
-        """The way a chase runs along (rules/chase.Track)."""
+        """DEPRECATED (WP-C deletes it). The way a chase runs along (rules/chase.Track)."""
         from ..rules.chase import Track
 
         s = self._oneshot("track", "tactics", TRACK_SYSTEM, Track)
