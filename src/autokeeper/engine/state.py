@@ -121,6 +121,10 @@ class GameState(BaseModel):
     # threads, important NPCs and the event stream. Private at a LAN table (net/hub.py PRIVATE).
     record: WorldRecord = Field(default_factory=WorldRecord)
     pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
+    # A LAN round's actions happen at once (net/hub.py _settle, Game.begin_round): the minutes the
+    # longest of them took so far (None outside a round), and the reports held for the one telling.
+    round_spent: int | None = None
+    held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
     pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
     pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
     narrator_context_version: int = 0

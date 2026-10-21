@@ -725,6 +725,9 @@ class GameScreen(Screen):
             story.end_keeper(ev["text"])
             self._status("")
             self._pages()  # the opening, once told, is on the 背景 page
+        elif t == "held":  # a LAN round: the others' actions first, then one telling of them all
+            story.add("system", Text("本轮其他调查员的行动结算后，守秘人一并讲述。", style="dim"))
+            self._status("")
         elif t == "waived":  # a check asked for with .ra that the keeper needs no dice for
             story.add("dice", Text(f"◈ {ev['who']} 的{ev['skill']}不用掷：守秘人直接说结果", style="dim"))
         elif t == "repeat":  # the same attempt again: no dice, the earlier result stands

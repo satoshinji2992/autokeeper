@@ -939,17 +939,41 @@ class Hub:
 
     async def _settle(self) -> None:
         """The pooled actions in the order they came in, then one for each seat nobody is
-        playing (the AI's, and a player's who left without putting anything in)."""
+        playing (the AI's, and a player's who left without putting anything in). They happen
+        at once: each is ruled and rolled in that order, the clock moves by the longest of them,
+        and the keeper tells the round in one go after the last (the user, 2026-10-21: 「可以行动
+        不排着吗，因为可能是多人同时行动」)."""
         st = self.state
         acted = {seat for seat, _ in self.pool}
         order = [*self.pool, *[(inv.id, None) for inv in st.investigators
                                if inv.id not in acted and inv.id not in self.done and self.sits.get(inv.id) is None]]
+        self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
+        try:
+            await self._settle_round(order)
+        finally:
+            self.game.end_round()
+        if st.held and not st.ending:  # the round's last action was not told (it failed, or was let go): told now
+            await self._safely(self._tell_held(), "这一轮的叙述")
+
+    async def _tell_held(self) -> None:
+        self.game.emit = self._event
+        await self.game.tell_held()
+        self._save()
+        await self._broadcast({"t": "sync", "state": self._view()})
+
+    def _acts(self, seat: str) -> bool:
+        inv = next((i for i in self.state.investigators if i.id == seat), None)
+        return inv is not None and inv.can_act
+
+    async def _settle_round(self, order: list[tuple[str, str | None]]) -> None:
+        st = self.state
         for n, (seat, text) in enumerate(order, 1):
             inv = next((i for i in st.investigators if i.id == seat), None)
             if st.ending:
                 return
             if inv is None or not inv.can_act:
                 continue
+            self.game.holding = any(self._acts(later) for later, _ in order[n:])  # someone after: they tell it
             await self._plays()  # what was answered meanwhile goes in before the next action
             st.active = st.investigators.index(inv)
             who = self.sits.get(seat)

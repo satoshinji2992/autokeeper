@@ -185,6 +185,9 @@ class Game:
         self._late = Turn()  # what landed from backstage, told in the next narration
         self.debug_world: list[scheduler.Report] = []  # recent scheduling decisions, including refused operations
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
+        self.holding = False  # a round's action that is not its last: its telling waits for the others (narrate)
+        if not state.pending_turn:  # a round cut short by a crash is over: no overlap for the next turn
+            state.round_spent = None
         # The players' 故事至今 (engine/progress.py), written in the background when the story
         # has moved. Off in autoplay and replays, where nobody reads it; a screen and the Hub
         # turn it on.
@@ -1241,6 +1244,8 @@ class Game:
                 return {}
             turn.route = self._route(st.location, heading) or []
             st.minutes += minutes
+            if st.round_spent is not None:  # the round goes on from the arrival
+                st.round_spent = 0
             return {"heading": heading, "intended": intended, "stopping": stopping}
 
         moving = await step("travel", turn, travel)
@@ -1341,7 +1346,7 @@ class Game:
             if ruling.note:
                 turn.notes.append(f"导演的安排：{ruling.note}")
             resting = action.kind == "wait" or ruling.rest
-            st.minutes += max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
+            st.minutes += self._overlap(max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP)))
 
         await step("elapsed", turn, elapsed)
         if passed:
@@ -1698,14 +1703,60 @@ class Game:
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         self._foreshadow(turn)
+        st = self.state
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling.
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
                 and not turn.arrived and not turn.world and not turn.sanity and not turn.hints):
             self.told = None
             await self.emit({"type": "dialogue_end"})
-            return ""  # the reply, clue cards and roll outcomes have already been shown
-        return await self._narrate(self._report(turn), on_delta, lore=self._brief(), turn=turn)
+            if not st.held or self.holding:
+                return ""  # the reply, clue cards and roll outcomes have already been shown
+            return await self.tell_held(turn=turn, on_delta=on_delta)  # the round's last: the others still want telling
+        report = self._report(turn)
+        if self.holding and not turn.ending:  # others act in this round too: told together, by the last
+            if not any(h["turn"] == st.turn for h in st.held):  # a resumed turn holds it once
+                st.held.append({"turn": st.turn, "who": st.investigator.name, "report": report})
+            self.told = None
+            await self.emit({"type": "held"})
+            return ""
+        if st.held:
+            return await self.tell_held(report, turn=turn, on_delta=on_delta)
+        return await self._narrate(report, on_delta, lore=self._brief(), turn=turn)
+
+    # -- a round of simultaneous actions (a LAN table: net/hub.py _settle) -------------------
+    def begin_round(self) -> None:
+        """The actions about to be settled happen at once: the clock moves by the longest of
+        them (_overlap), not their sum, and the keeper tells them together (narrate, holding)."""
+        self.state.round_spent = 0
+
+    def end_round(self) -> None:
+        self.state.round_spent = None
+        self.holding = False
+
+    def _overlap(self, minutes: int) -> int:
+        """The minutes an action adds to the clock: all of them outside a round; in one, only
+        what it takes beyond the longest action of the round so far."""
+        st = self.state
+        if st.round_spent is None:
+            return minutes
+        extra = max(0, minutes - st.round_spent)
+        st.round_spent = max(st.round_spent, minutes)
+        return extra
+
+    async def tell_held(self, report: str = "", *, turn: Turn | None = None, on_delta=None) -> str:
+        """The round told in one: what each investigator did, held as it was settled, and `report`,
+        the last action's; the keeper weaves them into one telling."""
+        st = self.state
+        parts = [*(f"〔{h['who']}〕\n{h['report']}" for h in st.held), *([f"〔{st.investigator.name}〕\n{report}"] if report else [])]
+        combined = ("【这一轮几位调查员同时行动】下面按结算的先后列出各人的经过，前面几段里的在场人物和时间是当时的。"
+                    "讲成一段连贯的叙述：几件事同时在发生，交代每个人做了什么、结果怎样、彼此有没有看见或听见；"
+                    "不逐条罗列，不重复已经显示过的台词和检定，可以比平常长一些。\n\n" + "\n\n".join(parts))
+        told = await self._narrate(combined, on_delta, lore=self._brief(), turn=turn)
+        st.held.clear()
+        if self.checkpoint:
+            self.checkpoint()
+        return told
 
     def _brief(self) -> str:
         """What the keeper keeps behind the screen for this telling (world/context.keeper_brief),

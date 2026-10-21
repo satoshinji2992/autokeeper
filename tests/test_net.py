@@ -582,3 +582,55 @@ async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next
         assert "c_notice" in hub.state.clues
         await a.close()
     await closed(task)
+
+
+async def test_a_rounds_actions_happen_at_once_and_are_told_together(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-round", human=[lead.id, "lin"])
+
+    class Timed(TableCast):
+        def __init__(self) -> None:
+            super().__init__()
+            self.reports: list[str] = []
+
+        async def arbiter(self, state, action, at=None):
+            ruling = await super().arbiter(state, action, at)
+            return ruling.model_copy(update={"minutes": 30 if "翻" in action.summary else 10})
+
+        async def keeper(self, state, report, on_delta=None, lore=""):
+            self.reports.append(report)
+            return await super().keeper(state, report, on_delta, lore)
+
+    cast = Timed()
+    hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await a.send_json({"t": "hello", "name": "小明"})
+        await b.send_json({"t": "hello", "name": "小红"})
+        await until(a, lambda x: x["t"] == "welcome")
+        await until(b, lambda x: x["t"] == "welcome")
+        await a.send_json({"t": "sit", "investigator": "zhouheng"})
+        await b.send_json({"t": "sit", "investigator": "lin"})
+        await until(a, pool_open)
+        told_before, start = len(cast.reports), hub.state.minutes
+        await a.send_json({"t": "act", "text": "我翻翻旧报纸"})  # 30 minutes
+        await b.send_json({"t": "act", "text": "我和站长聊几句"})  # 10, at the same time
+        await a.send_json({"t": "done"})
+        await b.send_json({"t": "done"})
+        held = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "held")  # the first waits for the second
+        assert held
+        end = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
+        assert end and len(cast.reports) == told_before + 1  # one telling for the round
+        report = cast.reports[-1]
+        assert "同时行动" in report and "〔周衡〕" in report and "〔林秋〕" in report
+        await until(a, pool_open)
+        assert hub.state.minutes - start == 30  # the longest of them, not their sum
+        assert hub.state.round_spent is None and not hub.state.held
+        await a.close()
+        await b.close()
+    await closed(task)
