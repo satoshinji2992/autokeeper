@@ -101,7 +101,7 @@ async def test_a_game_fills_them_in_the_background_and_the_screen_hears(module, 
     arrived = {e["key"] for e in events if e["type"] == "art"}
     assert {"scene-tower", "warden", "item-ledger"} <= arrived and all(Path(e["picture"]).is_file() for e in events)
     quiet = Visuals(module, state, config.Config(), emit)
-    quiet.fill_gaps = False  # where nobody sees pictures (MCP)
+    quiet.fill_gaps = False  # where nobody sees pictures
     quiet.schedule()
     assert "gaps" not in quiet.tasks
 

@@ -363,37 +363,3 @@ async def test_ctrl_l_asks_for_an_idea_roll_on_the_game_screen(canned, fake):  #
         await pilot.press("ctrl+l")  # once a game day
         await pilot.pause(0.2)
         assert app.screen is screen and len(screen.state.ideas) == 1
-
-
-async def test_mcp_pushes_say_how_and_the_idea_roll_is_a_tool(monkeypatch, tmp_path, fake):
-    from autokeeper import mcp_server as srv
-    from autokeeper import paths
-
-    monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(paths, "SKILLS", tmp_path / "skills")
-    monkeypatch.setattr(srv, "_dirs", lambda: {"example": EXAMPLE})
-    await srv.new_game("example", "zhouheng", slot="t")
-    g = srv.S.game
-    g.rules = Rules(dice=fake)
-    asked: list[str] = []
-
-    async def repush(state, pending, how):
-        asked.append(how)
-        return PushRuling(achievable=True, minutes=15)
-
-    monkeypatch.setattr(g.cast, "repush", repush)
-    fake.queue(90)
-    failed = await srv.skill_check("侦查", clues_on_success=["c_notice"], minutes=5)
-    assert failed["can_push_or_luck"]["can_push"]
-    with pytest.raises(ValueError, match="如何行动以孤注一掷"):
-        await srv.push_or_luck("push")
-    fake.queue(30)
-    pushed = await srv.push_or_luck("push", how="踮脚凑近告示，一个字一个字地辨认")
-    assert asked == ["踮脚凑近告示，一个字一个字地辨认"] and [c["id"] for c in pushed["clues"]] == ["c_notice"]
-    assert pushed["time"] == "D1 14:20"  # five minutes looking, fifteen for the push
-    fake.queue(20, 10)  # INT 75: a success; the gears' sanity check passes
-    rolled = await srv.idea_roll()
-    assert [c["id"] for c in rolled["clues"]] == ["c_gears"] and any("灵感检定成功" in n for n in rolled["notes"])
-    assert (await srv.idea_roll()) == {"refused": idea.TODAY}
-    await g.close()
-    await g.cast.close()

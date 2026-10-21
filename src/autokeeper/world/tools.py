@@ -1,4 +1,4 @@
-"""One actor-bound world gateway for internal agents and the local GM MCP server.
+"""One actor-bound world gateway for the internal agents.
 
 Queries are permission-filtered. Previews settle only into a detached copy; commits
 publish a fully validated batch, never an incomplete prefix or a narrative promise.

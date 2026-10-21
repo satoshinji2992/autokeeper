@@ -6,8 +6,7 @@
     .coc [n]          roll characteristics .en [技能]  development roll
     .ti / .li         bout of madness (real time / summary)
 
-run() is the bare dice bot, as the MCP keeper uses it. In a game the player's commands
-go through Game.command, which keeps the keeper in charge: a check is only a request
+run() is the bare dice bot. In a game the player's commands go through Game.command, which keeps the keeper in charge: a check is only a request
 (asked() reads it, the turn pipeline rules it), and nothing changes the sheet behind
 the keeper's back.
 """

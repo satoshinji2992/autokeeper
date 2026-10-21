@@ -19,7 +19,7 @@ from . import artkit, config, paths
 
 app = typer.Typer(help="AutoKeeper：自动化 CoC 7 版中文跑团", no_args_is_help=False, add_completion=False)
 console = Console()
-notices = Console(stderr=True)  # before a command runs: stdout may be an MCP connection
+notices = Console(stderr=True)  # before a command runs: stdout stays the command's own
 
 
 def _version(value: bool) -> None:
@@ -1387,14 +1387,6 @@ def eval_rejudge(report: Annotated[Path, typer.Argument(help="eval session 写�
         if got := done["summary"].get(side):
             console.print(f"[bold]{label}[/] {got['turns']} 轮：{got['turns_with_problems']} 轮有矛盾（共 {got['problems']} 处 {got['by_kind']}）")
     console.print(f"报告：{done['out']}")
-
-
-@app.command()
-def mcp() -> None:
-    """以 MCP 服务运行（给 Claude Code / Codex 的嵌入模式用）。"""
-    from .mcp_server import server
-
-    server.run()
 
 
 if __name__ == "__main__":
