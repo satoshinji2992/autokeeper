@@ -1653,6 +1653,12 @@ class Cast:
         said = (" ".join(t.split()).strip("“”\"「」") for t in (ideas.look, ideas.ask, ideas.dare))
         return [t for t in dict.fromkeys(said) if t]
 
+    def _oneshot(self, key: str, role: str, system: str, schema: type[BaseModel]) -> Session:
+        """A call that remembers nothing: everything it needs is in its prompt."""
+        if key not in self.sessions:
+            self.sessions[key] = Session(key, self.cfg.role(role), system, schema=_schema(schema), key=key)
+        return self.sessions[key]
+
     @property
     def improvising(self) -> bool:
         return self.cfg.improvising

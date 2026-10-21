@@ -258,13 +258,10 @@ async def test_the_arbiter_rules_an_other_action_with_effects_by_the_books_table
     assert ARBITER_ENCOUNTER.splitlines()[0] in prompt and "【遭遇 enc1】" in prompt
     assert "【上一次裁定的问题，请改正】\n- target 不在这场遭遇里：ghoul" in prompt
     assert "lookup" not in sent["schema"]["properties"] and "【可能动手的】" not in prompt
-    assert ruling.harm == "" and ruling.combat == []  # the old engine's fields are its own (until WP-C)
+    assert not {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} & set(sent["schema"]["properties"])
 
 
-def test_old_journals_with_the_old_combat_fields_still_read_and_bad_dice_fail():
-    old = Ruling.model_validate({"needs_roll": True, "combat": ["warden"], "surprise": "foe", "chase_party": "逃",
-                                 "harm": "1D6", "harm_to": "warden"})
-    assert old.combat == ["warden"] and old.surprise == "foe" and old.harm == "1D6"
+def test_a_ruling_with_bad_dice_fails_before_the_engine_sees_it():
     with pytest.raises(ValueError):
         Ruling.model_validate({"needs_roll": False, "effects": [{"kind": "damage", "target": "x", "dice": "1D6点伤害"}]})
     pattern = Ruling.model_json_schema()["$defs"]["RuledEffect"]["properties"]["dice"]
