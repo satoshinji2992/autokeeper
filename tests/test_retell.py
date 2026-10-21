@@ -126,7 +126,7 @@ async def test_an_interlude_can_be_told_again(module, fake):
     game, *_ = make(module, fake, script)
     cast = teller(SlowDirector(script, [NEWSSTAND]))
     game.cast, game.director_wait = cast, PLAY_WAIT
-    await game._improvise("推进", at=game.state.location, patience=0.0)
+    await game._improvise("展开", at=game.state.location, patience=0.0)
     await asyncio.sleep(0.3)
     assert (await game.interlude()).interlude
     await game.retell()
