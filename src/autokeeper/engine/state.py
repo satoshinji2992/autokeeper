@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
+from .combat import Chase, Fight
 
 LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
@@ -125,6 +126,11 @@ class GameState(BaseModel):
     # longest of them took so far (None outside a round), and the reports held for the one telling.
     round_spent: int | None = None
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
+    # A fight or a chase going on (engine/combat.py, engine/fighting.py): every action is an order in it
+    # until it is over. `seen`: creatures whose sight has cost the investigators sanity already.
+    fight: Fight | None = None
+    chase: Chase | None = None
+    seen: list[str] = Field(default_factory=list)
     pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
     pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
     narrator_context_version: int = 0

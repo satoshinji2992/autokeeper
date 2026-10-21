@@ -85,6 +85,9 @@ class Action(BaseModel):
     # The check a dice command asked for (.ra 恐吓). Filled in by the engine from the command
     # itself, never by the intent agent.
     asked: SkipJsonSchema[commands.Asked | None] = None
+    # In a fight or a chase: the investigator's order for the round (engine/combat.Order), read off
+    # the words by the engine or by Cast.order, never filled in by the plan.
+    order: SkipJsonSchema[dict | None] = None
 
     def ruled(self) -> str:
         """The action as the arbiter reads it: no first beat, and no request when there is none."""
@@ -161,6 +164,13 @@ class Ruling(BaseModel):
     on_fail: Failure = Field(default_factory=Failure, description="这次检定失败、不再孤注一掷时的后果；多数时候留空")
     on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
+    combat: list[str] = Field(default_factory=list, max_length=6,
+                              description="这次行动之后当场打起来了：动手的 NPC 或怪物 id（调查员要打的对象也算），只从【可能动手的】里选；没真打起来就留空")
+    surprise: Literal["", "party", "foe"] = Field("", description="打起来时一方毫无防备：party 调查员被偷袭，foe 对方被偷袭；都有防备留空")
+    chase: list[str] = Field(default_factory=list, max_length=4, description="这次行动之后开始追逐：追或逃的 NPC 或怪物 id，只从【可能动手的】里选；没有就留空")
+    chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃的一方还是追的一方")
+    harm: str = Field("", description="战斗中这次行动成功时对对象造成的伤害，骰子式如 1D6（砸过去的油灯、推下楼梯）；不伤人的行动留空")
+    harm_to: str = Field("", description="harm 的对象 id")
     reason: str = Field("", description="一句话理由（玩家看不到）")
     # Filled in by the engine from the director's plan, never by the arbiter.
     now: SkipJsonSchema[list[str]] = Field(default_factory=list)
@@ -196,6 +206,29 @@ class Dialogue(BaseModel):
 
 class TravelDialogue(Dialogue):
     accompany: str = Field(description="真正同意同行时填写目的地 id；假答应或不同意时填空字符串。必须明确给出此字段。")
+
+
+# A fight's or a chase's round for those nobody plays (engine/fighting.py): one call for them all.
+class Move(BaseModel):
+    who: str = Field(description="谁：列出的 id 之一")
+    do: Literal["attack", "shoot", "maneuver", "aid", "reload", "unjam", "flee", "hold", "surrender", "run", "turn"] = Field(
+        description="attack 近战；shoot 开枪；maneuver 战技；aid 急救同伴；reload 装填；unjam 排除故障；flee 逃跑；hold 只防守；"
+                    "surrender 投降；追逐中 run 追或逃，turn 停下来动手")
+    target: str = Field("", description="对象 id")
+    weapon: str = Field("", description="用哪种攻击，照列出的名字写；留空用最顺手的")
+    maneuver: Literal["", "缴械", "推倒", "制住"] = ""
+    stance: Literal["dodge", "fight", "cover"] = Field("dodge", description="被攻击时：dodge 闪避，fight 反击，cover 扑向掩体")
+    say: str = Field("", max_length=24, description="这一轮喊出口的一句话，会说话的人才写，可以留空")
+
+
+class Tactics(BaseModel):
+    moves: list[Move] = Field(description="每个列出的 id 一条")
+    pursue: list[str] = Field(default_factory=list, description="调查员逃跑时会追上去的对手 id；不追就留空")
+
+
+class Outcome(BaseModel):
+    flags: list[str] = Field(default_factory=list, description="因为这个结果而成立的剧情标记，只从列出的标记里选")
+    reason: str = Field("", description="一句话理由")
 
 
 # The keeper's telling: how things stand as it ends, then the words (engine/game.Game._narrate). The
@@ -375,6 +408,12 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 检定不重掷。【最近的检定】里，同一个调查员刚对同一个对象用同一个技能检定过，而情况没变（没有新的线索或筹码，没换做法，
   也没过多久），这次就是重复：needs_roll 填 false，repeat 填 true，那次的结果照旧，不给 clues_on_success。
   换了做法或技能、拿到了新的线索或筹码、过了相当一段时间，或者换一位调查员来试，可以重新检定。
+- 打斗：调查员真的动手攻击在场的人或怪物，或者对方因为这次行动真的动手（被激怒、被发现、伏击扑上来），就在 combat 写上动手的一方的 id（调查员要打的对象也写），
+  surprise 写哪一方毫无防备。之后由战斗规则一轮一轮结算命中和伤害：这里 needs_roll 照攻击填（格斗、射击），不要写 on_fail 的伤害。
+  威胁、推搡、吵架、亮出武器都还不算打起来；对方只是逃开也不算。行动本身达成的剧情标记（比如攻击了某人）照常写进 set_flags。
+- 追逐：调查员拔腿逃离追来的人或怪物，或者去追逃跑的人，就在 chase 写对方的 id，chase_party 写调查员是逃还是追；之后按追逐规则结算。
+- 【战斗中】出现时，这一轮的打斗由战斗规则结算，你只裁定调查员做的别的事（砸油灯、关门、喊人、念咒）：
+  要掷就照常给技能和难度，成功时会伤到人的，在 harm 写伤害的骰子式、harm_to 写对象 id。
 
 {rules}"""
 
@@ -460,6 +499,29 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 示例（人和事都与本局无关，只看说话的样子，不要照搬内容）。一个守杂货铺的寡妇，被问起对门那户人家：
 那家人？你可别在我这儿提他们。去年冬天他家小子偷了我两罐咸鱼，我追到街口，他娘倒先骂上我了，说我一个寡妇盯着人家孩子不放。打那以后我就不往那边看。不过你真想知道的话——他家那扇窗这一个月夜夜亮到两三点，烧的也不知道是谁的煤油。我男人在的时候，可没人敢这么欺负我。
 {extra}"""
+
+TACTICS_SYSTEM = """你在 CoC 7 版跑团里替守秘人安排战斗或追逐中，NPC、怪物和 AI 调查员这一轮做什么。
+- 照每个人的本性、目标和处境：模组写了它的打算（只想带东西逃走、不追逃跑的人、听命于谁、怕火）就照办；野兽和怪物凭本能扑向最近或最弱的人；
+  普通人受了重伤会想逃、投降或求饶；狂热的、被控制的、没有理智可言的不会。
+- 只用他们自己有的攻击和东西，不添武器、法术或帮手；枪没子弹或卡壳了就换办法。
+- AI 调查员（调查员一方、由你安排的）像一个谨慎的玩家：先救濒死的同伴，打得过就打，打不过就退，不去送死。
+- 不追打已经倒下的人，除非它的本性就是这样（食尸鬼会把倒下的人拖走）。
+- stance 是他这一轮被攻击时怎么应对：格斗比闪避好就反击，对方有枪就考虑扑向掩体。
+- say：一句喊出口的话，十个字上下，只有会说话、此刻有话要喊的人才写，大多数时候留空。
+- 每个列出的 id 都给一条，不写别的 id。pursue：调查员一方逃跑时，哪些对手会追上去。"""
+
+ORDER_SYSTEM = """玩家在一场战斗或追逐里说了这一轮要做的事。把它整理成一条行动：动作、对象 id、武器、战技、被攻击时怎么应对。
+只照玩家说的写，不替他加动作；说的是攻击、开枪、战技、急救、装填、逃跑、只防守以外的事（砸油灯、关门、喊人、念咒、找东西），do 填 other，text 照抄原话。
+对象和武器只从列出的里选，说不清对象就留空。"""
+
+OUTCOME_SYSTEM = """你是 CoC 7 版跑团的裁定员。一场战斗或追逐刚刚结束，下面是结算出来的结果。
+从列出的剧情标记里，选出因为这个结果而真的成立的（比如某人被打倒、某人逃走、调查员被制服带走）。
+只看结果本身，不推测之后会发生什么；没有成立的就留空。"""
+
+TRACK_SYSTEM = """你在为 CoC 7 版跑团里的一场追逐画路线：从出发的地方往前跑，一段接一段，6 到 8 段。
+每段写名字（四到八个字）和一句样子；大约一半的路段有东西挡着：hazard 是边跑边过的险阻（结冰的台阶、倒伏的墓碑、迎面的马车），
+失败会耽搁、可能受伤；barrier 是必须过了检定才过得去的路障（锁着的铁门、一人高的围墙）。技能用跳跃、攀爬、敏捷、力量、闪避、游泳、锁匠这类。
+符合这个地方、这个时间、这样的天气，是实际会有的东西；不新增案情、怪物或别的人。最后一段是能脱身或被逼进绝路的地方。"""
 
 CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录，按要求写摘要或前情回顾。
 摘要：客观、紧凑，记下调查员去过哪里、见过谁、拿到哪些线索、做了哪些关键决定、身心状态。
@@ -849,6 +911,13 @@ class Cast:
             prompt += "\n【本局新增的剧情标记】" + "；".join(f"{k}：{v}" for k, v in later.items())
         if checks := self._recent_checks(state):
             prompt += f"\n【最近的检定】\n{checks}"
+        able = [f"{n.name}({n.id})" for n in near["npcs"] if n.status not in ("死亡", "失踪")]
+        able += [f"{c.name}({c.id})：{c.description[:40]}" for c in m.creatures]
+        prompt += "\n【可能动手的】" + ("；".join(able) or "无") + "（怪物只在本地资料或剧情写明它此刻在场时才算在场）"
+        if state.fight is not None:
+            rows = "；".join(f"{f.name}({f.id})·{'调查员一方' if f.side == 'party' else '对手'}·{f.wound_word()}"
+                             for f in state.fight.fighters)
+            prompt += f"\n【战斗中】第 {state.fight.round + 1} 轮：{rows}"
         extensions = [f"{p.id}.{a.name}：{a.description}" for p in m.extensions.values()
                       if p.id not in state.plugin_errors for a in p.actions]
         if extensions:
@@ -1297,6 +1366,49 @@ class Cast:
         ideas = _parse(Ideas, reply.data, {"look": "", "ask": "", "dare": ""})
         said = (" ".join(t.split()).strip("“”\"「」") for t in (ideas.look, ideas.ask, ideas.dare))
         return [t for t in dict.fromkeys(said) if t]
+
+    # -- a fight and a chase (engine/fighting.py) ----------------------------------------------
+    def _oneshot(self, key: str, role: str, system: str, schema: type[BaseModel]) -> Session:
+        """A call that remembers nothing: everything it needs is in its prompt."""
+        if key not in self.sessions:
+            self.sessions[key] = Session(key, self.cfg.role(role), system, schema=_schema(schema), key=key)
+        return self.sessions[key]
+
+    async def tactics(self, state: GameState, brief: str, ids: list[str]) -> Tactics:
+        """What the NPCs, the creatures and the AI investigators of a fight or a chase do this round."""
+        s = self._oneshot("tactics", "tactics", TACTICS_SYSTEM, Tactics)
+        prompt = f"{brief}\n\n请安排这些 id 这一轮的行动：{'、'.join(ids)}"
+        reply = await self._send("tactics", s, state, prompt, bind=False)
+        return Tactics.model_validate(reply.data)
+
+    async def order(self, state: GameState, text: str, brief: str) -> dict:
+        """A player's words in a fight or a chase as an order (engine/combat.Order), when the
+        engine could not read them itself."""
+        from ..engine.combat import Order
+
+        s = self._oneshot("order", "intent", ORDER_SYSTEM, Order)
+        reply = await self._send("order", s, state, f"{brief}\n\n【玩家说】{text}", bind=False)
+        return Order.model_validate(reply.data).model_dump()
+
+    async def outcome(self, state: GameState, result: str) -> Outcome:
+        """The story flags a fight's or a chase's end brings about, from the module's own."""
+        open_flags = {k: v for k, v in self.module.flags.items() if k not in state.flags}
+        if not open_flags:
+            return Outcome()
+        s = self._oneshot("outcome", "arbiter", OUTCOME_SYSTEM, Outcome)
+        prompt = (f"【结果】{result}\n【地点】{self.module.location(state.location).name}\n"
+                  f"【可选的剧情标记】\n" + "\n".join(f"- {k}：{v}" for k, v in open_flags.items()))
+        reply = await self._send("outcome", s, state, prompt, bind=False)
+        found = Outcome.model_validate(reply.data)
+        return found.model_copy(update={"flags": [f for f in dict.fromkeys(found.flags) if f in open_flags]})
+
+    async def track(self, state: GameState, brief: str):
+        """The way a chase runs along (rules/chase.Track)."""
+        from ..rules.chase import Track
+
+        s = self._oneshot("track", "tactics", TRACK_SYSTEM, Track)
+        reply = await self._send("track", s, state, brief, bind=False)
+        return Track.model_validate(reply.data)
 
     @property
     def improvising(self) -> bool:

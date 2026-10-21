@@ -37,6 +37,7 @@ from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import diagnostics, fog, progress, views, world
+from .fighting import CHASE_TELL, FIGHT_TELL, Fighting
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -81,11 +82,13 @@ class Turn:
     world: list[str] = field(default_factory=list)  # what the rest of the world did in front of the party (world/)
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
+    fight: list[str] = field(default_factory=list)  # a fight's or a chase's round as settled, for the keeper (engine/fighting.py)
+    declared: bool = False  # a LAN round's order, settled with the others' by the last of them
 
     def absorb(self, later: Turn) -> None:
         """What a later stage of the same turn settled (the push choice): its rolls, finds, events,
         lines and notes join this turn's, so the NPCs on stage and the keeper's report have them."""
-        for name in ("checks", "sanity", "npc_lines", "joined", "notes", "hints", "world"):
+        for name in ("checks", "sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
         self.clues += [c for c in later.clues if c not in self.clues]
         self.events += [e for e in later.events if all(e.id != x.id for x in self.events)]
@@ -155,7 +158,7 @@ class _ResolutionDice:
         return invoke
 
 
-class Game:
+class Game(Fighting):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         scenery.fill(module)  # every place with a picture: painted by program where the module has none
@@ -392,6 +395,8 @@ class Game:
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
         await self.emit({"type": "status", "text": "解析行动…"})
+        if self.battling():  # in a fight or a chase: the words are an order for the round (engine/fighting.py)
+            return await self._battle_action(text)
         action = await self._arrange(text)
         # What a dice command asks for is read off the command, never taken from the model.
         action = action.model_copy(update={"asked": commands.asked(text), "echo": ""})
@@ -453,6 +458,8 @@ class Game:
     async def rule(self, action: Action) -> Ruling | None:
         if action.kind in ("meta",):
             return None
+        if action.order is not None and self.battling() and (ruled := self._battle_ruling(action)) is not None:
+            return ruled  # a fight's or a chase's order: the roll it makes, no arbiter
         await self._curtain(action)  # finish a scene this action would otherwise overtake
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
@@ -1222,6 +1229,9 @@ class Game:
             return
         if ruling.missing:
             await step("missing", turn, lambda: self._lacking(ruling, turn))
+        if self.battling() or ruling.combat or ruling.chase:  # a round of a fight or a chase, or the start of one
+            await self._battle(action, ruling, turn)
+            return
         inv = st.investigator
 
         def travel() -> dict:
@@ -1702,8 +1712,12 @@ class Game:
         turn.foreshadow = []
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
-        self._foreshadow(turn)
         st = self.state
+        if turn.declared:  # a LAN round's order: told with the round, by the one who settles it
+            self.told = None
+            await self.emit({"type": "held"})
+            return ""
+        self._foreshadow(turn)
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling.
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
@@ -2439,7 +2453,7 @@ class Game:
         elif a and a.asked and a.kind != "move":
             why = turn.ruling.reason if turn.ruling else ""
             out.append(f"检定：玩家要求{a.asked.skill}检定，裁定这次不用掷" + (f"（{why}）" if why else "") + "。")
-        elif a and a.kind not in ("move",):
+        elif a and a.kind not in ("move",) and not turn.fight:
             out.append("检定：无需检定")
         if turn.push:
             opts = []
@@ -2448,6 +2462,7 @@ class Game:
             if turn.push.get("luck") is not None:
                 opts.append(f"花 {turn.push['luck']} 点幸运")
             out.append(f"（玩家可以选择：{'或'.join(opts)}，结果下一步揭晓；现在只写失败的样子。）")
+        out += turn.fight  # a round of a fight or a chase, as settled (engine/fighting.py)
         for cid in turn.clues:
             c = m.clue(cid)
             out.append(f"获得线索〔{c.title}〕：{c.text.strip()}")
@@ -2471,6 +2486,9 @@ class Game:
             out.append(f"【结局：{end.title}】{end.text.strip()}\n请用 150–250 字为这个结局收尾，不再留行动钩子。")
         elif turn.interlude:
             out.append("请用 60–150 字接着上一段写这些事，像“就在这时”一样自然地插进来，收在一个能行动的细节上。")
+        elif turn.fight:
+            out.append(CHASE_TELL if any(line.startswith("【追逐") for line in turn.fight) and not any(
+                line.startswith("【战斗") for line in turn.fight) else FIGHT_TELL)
         else:
             out.append("请叙述。")
         return "\n".join(out)
@@ -2750,7 +2768,7 @@ class _Minds:
 def _staged(turn: Turn | None) -> bool:
     """A telling with a scene: the opening, a turn, an interlude; not an answer to a question put to
     the KP, nor the ending."""
-    return turn is None or not (turn.ending or (turn.action is not None and turn.action.kind == "meta"))
+    return turn is None or not (turn.ending or turn.fight or (turn.action is not None and turn.action.kind == "meta"))
 
 
 def _takes(fn: Any, name: str) -> bool:

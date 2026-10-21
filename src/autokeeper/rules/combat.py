@@ -101,13 +101,14 @@ class Fighter(BaseModel):
     regen: int = 0  # hit points it heals at the end of every round
     knockout: int = 0  # stunned once fists alone have done this much
     human: bool = True
-    status: str = ""  # "", 重伤, 倒地, 被制住, 昏迷, 濒死, 死亡, 倒下, 逃走, 投降
+    status: str = ""  # "", 重伤, 昏迷, 濒死, 死亡, 倒下, 逃走, 投降
+    prone: bool = False  # knocked down: their next action goes on getting up, and blows land easier
+    held_by: str = ""  # who holds them (制住): they can only try to break free
     stance: Stance = "dodge"
     weapon: int = 0  # the attack in hand
     responded: int = 0  # attacks answered this round
     lost_action: bool = False  # dived for cover or was knocked down: their next action is gone
     surprised: bool = False
-    held_by: str = ""  # who holds them (制住)
     punched: int = 0  # damage done by bare hands (knockout)
     struck: bool = False  # hurt by anything else
     skills: dict[str, int] = Field(default_factory=dict)  # the rest of its sheet: 侦查, 潜行, 攀爬, 跳跃 ...
@@ -284,13 +285,13 @@ def melee(dice, a: Fighter, atk: Attack, d: Fighter, *, bonus: int = 0, reasons:
         if over > 0:
             bonus -= over
             reasons.append(f"对方体格大 {over}")
-    answering = d.standing and not d.surprised and d.status != "被制住"
+    answering = d.standing and not d.surprised and not d.held_by
     if answering and _outnumbered(d):
         bonus += 1
         reasons.append("以多打少")
-    if d.status == "被制住" or d.status == "倒地":
+    if d.held_by or d.prone:
         bonus += 1
-        reasons.append("对方" + ("被制住" if d.status == "被制住" else "倒在地上"))
+        reasons.append("对方" + ("被制住" if d.held_by else "倒在地上"))
     roll = check(dice, atk.skill if not atk.unarmed else BRAWL, atk.value, bonus=bonus)
     ex = Exchange(a.id, d.id, "maneuver" if maneuver else "melee", maneuver or atk.name, roll=roll,
                   bonus=max(-2, min(2, bonus)), reasons=reasons)
@@ -388,7 +389,7 @@ def wound(dice, f: Fighter, amount: int, *, unarmed: bool = False) -> list[str]:
         f.status = "昏迷"
         return ["被打晕了"]
     if f.human and amount * 2 >= f.hp_max and amount:
-        f.status = "重伤" if f.status in ("", "倒地", "被制住") else f.status
+        f.status = "重伤" if f.status == "" else f.status
         notes.append("重伤")
         con = check(dice, "体质", f.con)
         if not con.passed:
