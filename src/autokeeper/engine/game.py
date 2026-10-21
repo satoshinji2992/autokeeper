@@ -20,7 +20,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .. import pictures, weather
+from .. import cards, pictures, weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
 from ..agents.director import Improv
@@ -1111,8 +1111,10 @@ class Game(Fighting):
 
             notice = await step("fail-damage", turn, wound)
             await step("fail-damage-notice", turn, lambda: self.emit(notice))
+        mishap = await self._mishap(failure.mishap, turn, "fail-mishap") if failure.mishap.strip() else ""
         happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
-                                f"{st.investigator.name}受了伤" if failure.damage.strip() else "") if x]
+                                f"{st.investigator.name}受了伤" if failure.damage.strip() else "",
+                                f"惨事卡〔{mishap}〕" if mishap else "") if x]
         if not missed and not happened:
             return  # the roll's card says it: nothing was within reach and nothing else came of it
         note = ("孤注一掷也没有成功" if pushed else "这次检定失败") + (f"，没有取得：{'、'.join(missed)}" if missed else "")
@@ -1414,6 +1416,8 @@ class Game(Fighting):
             st.minutes += self._overlap(max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP)))
 
         await step("elapsed", turn, elapsed)
+        if (action.kind == "wait" or ruling.rest) and ruling.mishap.strip():  # a bad night (cards.py)
+            await self._mishap(ruling.mishap, turn, "rest-mishap")
         if passed:
             for index, call in enumerate(ruling.plugin_calls):
                 await step(f"action-plugin:{index}", turn, lambda call=call: self.plugins.run("action", turn, **call.model_dump(mode="json")))
@@ -1925,13 +1929,49 @@ class Game(Fighting):
                     s = self.rules.sanity(inv, ok, bad)
                     turn.sanity.append((inv.name, s))
                     st.add("sanity", s.describe(), who=inv.name)
-                    await self.emit({"type": "sanity", "who": inv.name, **_sanity_view(s)})
+                    await self.emit({"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)})
                 turn.notes.append("画得太像了——他本不该画得出来")
             if prompt.clue:
                 await self._gain([prompt.clue], turn, None)
         return await self.narrate(turn)
 
     # -- helpers --------------------------------------------------------------------------
+    async def _mishap(self, card_id: str, turn: Turn, key: str) -> str:
+        """A mishap card the arbiter dealt the investigator (cards.deal_mishap): what it does at once
+        settled by the rules, the card shown and its words given to the keeper. Its name, or "" when
+        there is no such card."""
+        st, step = self.state, self._resolution_step
+
+        def commit() -> dict:
+            inv = st.investigator
+            trial = inv.model_copy(deep=True)
+            dealt = cards.deal_mishap(st, trial, card_id, self.rules)
+            if dealt is None:
+                return {"name": "", "events": []}
+            inv.__dict__.update(trial.__dict__)
+            st.add("event", f"惨事卡〔{dealt.card.name}〕", who=inv.name)
+            turn.notes.append(cards.mishap_note(inv, dealt))
+            events = [{"type": "card", **cards.view(dealt.card, inv.name)}]
+            if dealt.sanity is not None:
+                turn.sanity.append((inv.name, dealt.sanity))
+                st.add("sanity", dealt.sanity.describe(), who=inv.name)
+                events.append({"type": "sanity", "who": inv.name, **_sanity_view(dealt.sanity), **self._madness(inv, dealt.sanity, turn)})
+            return {"name": dealt.card.name, "events": [*events, {"type": "sheet"}]}
+
+        done = await step(key, turn, commit)
+        for index, notice in enumerate(done["events"]):
+            await step(f"{key}-notice:{index}", turn, lambda notice=notice: self.emit(notice))
+        return done["name"]
+
+    def _madness(self, inv: Investigator, s: Sanity, turn: Turn) -> dict[str, Any]:
+        """The phobia deck's card for this madness (cards.for_sanity): on the sheet, in the keeper's
+        notes, shown with the SAN result. Nothing without imported decks."""
+        card = cards.for_sanity(self.state, inv, s)
+        if card is None:
+            return {}
+        turn.notes.append(cards.madness_note(inv, card))
+        return {"card": cards.view(card, inv.name)}
+
     def _items_for(self, action: Action) -> list[Item]:
         if not action.target:
             return []
@@ -2111,7 +2151,7 @@ class Game(Fighting):
                 if sanity is not None:
                     turn.sanity.append((inv.name, sanity))
                     st.add("sanity", sanity.describe(), who=inv.name)
-                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity)})
+                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)})
                 return notices
 
             async def gain() -> None:
@@ -2351,7 +2391,7 @@ class Game(Fighting):
             inv.__dict__.update(trial.__dict__)
             turn.sanity.append((inv.name, sanity))
             st.add("sanity", sanity.describe(), who=inv.name)
-            return {"type": "sanity", "who": inv.name, **_sanity_view(sanity)}
+            return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
 
         def damage() -> dict:
             inv = st.investigator

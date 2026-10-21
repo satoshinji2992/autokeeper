@@ -40,6 +40,7 @@ The data folder:
         models/         local embedding models (about 90 MB)
         kb/             LightRAG knowledge base per module
         showcases/      big-scene pictures per module
+        cards/          the keeper card decks read from their PDFs (cards.py)
         pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
       logs/             traces/<date>.jsonl, stderr.log, web.log
@@ -269,6 +270,11 @@ def module_art(module_id: str) -> Path:
     return cache() / "art" / _safe(module_id)
 
 
+def keeper_decks() -> Path:
+    """The keeper card decks read from their PDFs (cards.py): decks.json and faces/<deck>/<id>.png."""
+    return cache() / "cards"
+
+
 def prepared_pictures() -> Path:
     return cache() / "pictures"
 
@@ -276,6 +282,14 @@ def prepared_pictures() -> Path:
 def sessions() -> Path:
     """cwd for Claude Code and Codex processes, which keeps them out of other projects."""
     return cache() / "sessions"
+
+
+# -- the rulebooks ---------------------------------------------------------------------------
+def rulebooks() -> Path:
+    """The rulebooks and card decks the user keeps beside the code (rule/, not in git), or the folder
+    AUTOKEEPER_RULES names."""
+    env = os.environ.get("AUTOKEEPER_RULES")
+    return Path(env).expanduser() if env else ROOT / "rule"
 
 
 # -- logs ------------------------------------------------------------------------------------

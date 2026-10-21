@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ..cards import Drawn
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
 from .combat import Chase, Fight
@@ -178,6 +179,7 @@ class GameState(BaseModel):
     plugin_marks: dict[str, dict] = Field(default_factory=dict)
     plugin_serial: int = 0
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts, from older saves (a failure no longer hands a clue over)
+    drawn: list[Drawn] = Field(default_factory=list)  # keeper cards dealt: phobias, manias, bouts, mishaps (cards.py)
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own

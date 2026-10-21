@@ -168,6 +168,10 @@ def apply(m: Module, plan: Any) -> Applied:
             NPC(id=n.id, name=n.name, role=n.role, look=n.look, personality=n.personality, voice=n.voice, goal=n.goal,
                 knows=n.knows, secrets=n.secrets, lies=n.lies, location=n.location, portrait=visual_key("portrait", n.id))
         )  # fmt: skip
+        if getattr(n, "card", ""):  # based on a ready-made person from the imported 好事者 deck
+            from .. import cards
+
+            cards.dress(m.npcs[-1], n.card)
     for item in plan.items:
         if item.id not in have:
             m.items.append(Item(**item.model_dump(), art=visual_key("item", item.id)))
