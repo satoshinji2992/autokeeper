@@ -162,6 +162,8 @@ def _written(holder: str, line: str, *, creature: bool) -> AttackProfile | None:
     wr = parse_attack(line)
     if wr is None:
         return None
+    if not wr.firearm and (wr.name in ("斗殴", "格斗") or weapon_in(wr.name) is UNARMED):  # "格斗(斗殴) 45%": the bare hands
+        return AttackProfile(name=UNARMED.name, skill=BRAWL, value=wr.value, damage=wr.damage, natural=True)
     known = weapon_in(wr.name) or (weapon_in(line) if wr.firearm else None)
     natural = not wr.firearm and (known is None or known is UNARMED) and (creature or any(x in wr.name for x in NATURAL))
     return AttackProfile(name=wr.name, skill=wr.skill, value=wr.value, damage=wr.damage, firearm=wr.firearm, impale=wr.impale,

@@ -47,6 +47,7 @@ class Wound(BaseModel):
     means: Means = "other"  # unarmed counts towards a knockout, firearm is halved for some creatures
     con: Level | None = None  # the CON roll a major wound called for, already thrown; None when none was
     injury: str  # stable id of this injury: no second wound with it lands; First Aid is once per injury
+    round: int | None = None  # the encounter round it was dealt in: dying from it starts rolling CON after the next
 
 
 class Heal(BaseModel):
@@ -126,8 +127,26 @@ class Mark(BaseModel):
     skill: str
 
 
+class Luck(BaseModel):
+    """An important NPC's Luck pool after it spent some on its own roll (Keeper Rulebook p. 168):
+    what is left, absolute. It does not come back."""
+
+    kind: Literal["luck"] = "luck"
+    who: str
+    left: int = Field(ge=0)
+
+
+class Fills(BaseModel):
+    """Numbers the keeper fixed for an NPC's or a creature's sheet that lacked them (Entity.fills):
+    the profile reads them from now on; a body already kept takes a new maximum HP."""
+
+    kind: Literal["fills"] = "fills"
+    who: str
+    values: dict[str, int]
+
+
 Effect = Annotated[
-    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Mark,
+    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Mark | Luck | Fills,
     Field(discriminator="kind"),
 ]
 
@@ -365,6 +384,9 @@ def problems(w: World, effects: list) -> list[str]:
         elif isinstance(e, Mark):
             if e.investigator not in investigators:
                 out.append(f"{e.investigator} 不是调查员")
+        elif isinstance(e, Luck | Fills):
+            if profiles.profile(w, e.who) is None:
+                out.append(f"{e.who} 不是 NPC 或怪物")
     return out
 
 
@@ -401,7 +423,7 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
             assert body is not None
             text = ""
             if isinstance(e, Wound):
-                hurt = wound(body, e, minutes=w.now)
+                hurt = wound(body, e, minutes=w.now, round=e.round)
                 body = hurt.body
                 out.hurts[e.injury] = hurt
                 text = hurt.describe() if _is_investigator(w, e.target) else _npc_words(hurt)
@@ -464,6 +486,21 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
             inv = w.st.find(e.investigator)
             if e.skill not in inv.marks:
                 inv.marks.append(e.skill)
+        elif isinstance(e, Luck):
+            ent = seed(w, e.who)
+            assert ent is not None
+            ent.luck = e.left
+            w.touch(ent)
+        elif isinstance(e, Fills):
+            ent = seed(w, e.who)
+            assert ent is not None and ent.life is not None
+            ent.fills.update(e.values)
+            hp = e.values.get("生命") or e.values.get("HP")
+            if hp and ent.life.hp_max != hp:
+                whole = ent.life.hp >= ent.life.hp_max
+                ent.life.hp_max = hp
+                ent.life.hp = hp if whole else min(ent.life.hp, hp)
+            w.touch(ent)
     return out
 
 

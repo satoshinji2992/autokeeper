@@ -90,6 +90,9 @@ class NpcArrangement(BaseModel):
     pursue: list[str] = Field(default_factory=list, description="有调查员逃跑时，他追谁（id）")
     let_go: list[str] = Field(default_factory=list, description="有调查员逃跑时，他放走谁、不追（id）")
     keep: bool = Field(True, description="情况没大变就沿用到下一轮")
+    # An important NPC's Luck pool (Keeper Rulebook p. 168, optional): the keeper may spend it on its
+    # own failed rolls this round, up to this many points; the engine settles it.
+    luck: int = Field(0, ge=0, le=99, description="简报写了幸运池时：这一轮他自己的检定失败，最多花多少点幸运改成成功；不花写 0")
 
 
 class EndProposal(BaseModel):
