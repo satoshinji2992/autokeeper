@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any
 
+from ..engine import effects
 from ..rules.catalog import CHARACTERISTICS, canonical
 from ..rules.coc import DIFFICULTY_ZH, max_of
 from .runtime import PluginError, dice_expression, execute, verify
@@ -35,6 +36,7 @@ class Prepared:
     timers: list[Effect] = field(default_factory=list)
     shows: list[Effect] = field(default_factory=list)
     prompts: list[tuple[str, Effect]] = field(default_factory=list)  # (who, prompt)
+    wounds: list[dict] = field(default_factory=list)  # engine/effects.Wound, rolled; landed in one world op at commit
 
     def dump(self) -> dict:
         return {
@@ -44,6 +46,7 @@ class Prepared:
             "timers": [effect.model_dump(mode="json") for effect in self.timers],
             "shows": [effect.model_dump(mode="json") for effect in self.shows],
             "prompts": [[who, effect.model_dump(mode="json")] for who, effect in self.prompts],
+            "wounds": self.wounds,
         }
 
     @classmethod
@@ -58,6 +61,7 @@ class Prepared:
             timers=[Effect.model_validate(effect) for effect in saved["timers"]],
             shows=[Effect.model_validate(effect) for effect in saved["shows"]],
             prompts=[(who, Effect.model_validate(effect)) for who, effect in saved["prompts"]],
+            wounds=list(saved.get("wounds", [])),
         )
 
 
@@ -242,7 +246,7 @@ class Manager:
         checks = executed["checks"]
 
         def prepare():
-            ready = self._prepare(plugin, result)
+            ready = self._prepare(plugin, result, scope=token)
             return {"ready": ready.dump(), "timers": self._timers(plugin, ready.timers)}
 
         prepared = await step("prepare", turn, prepare)
@@ -252,7 +256,21 @@ class Manager:
         def commit():
             # This phase and its receipt are checkpointed together before any notification.
             # All rule rolls and validation already happened in the persisted prepare phase.
+            # Its wounds land through engine/effects in one world op; a commit retried after that op
+            # keeps the bodies it left, since the party copies were taken before the wounds.
+            oid = f"plugin:{token}"
+            settled = ready.wounds and any(x.id == oid for x in game.world.rec.journal)
+            bodies = {i.id: (i.hp, list(i.conditions), i.injury.model_copy(deep=True)) for i in state.investigators}
             state.investigators = ready.party
+            if settled:
+                for inv in state.investigators:
+                    if inv.id in bodies:
+                        inv.hp, inv.conditions, inv.injury = bodies[inv.id]
+            elif ready.wounds:
+                done = effects.commit(game.world, effects.EFFECTS.validate_python(ready.wounds), op_id=oid,
+                                      source=f"plugin:{plugin.id}")
+                if not done.ok:
+                    raise PluginError("伤害没有结算：" + "；".join(done.problems))
             state.plugin_data[plugin.id] = result.state
             state.plugin_versions[plugin.id] = plugin.version
             state.plugin_marks[plugin.id]["_settlement"]["committed"] = True
@@ -306,7 +324,7 @@ class Manager:
         await step("clues", turn, lambda: game._gain(ready.clues, turn, None))
         return result.repeat
 
-    def _prepare(self, plugin: Plugin, output: Output) -> Prepared:
+    def _prepare(self, plugin: Plugin, output: Output, *, scope: str = "") -> Prepared:
         from ..engine.game import _sanity_view
         from ..engine.state import WorldFact
 
@@ -342,7 +360,9 @@ class Manager:
             raise PluginError("一次只能给守秘人一句 hint")
         if sum(effect.kind == "prompt" for effect in output.effects) > 1:
             raise PluginError("一次只能问一个 prompt")
-        for effect in output.effects:
+        hurt: set[tuple[str, str]] = set()
+        bodies: dict[str, effects.Body] = {}  # each investigator's as the wounds so far leave it
+        for index, effect in enumerate(output.effects):
             inv = people.get(effect.who)
             if effect.kind == "note":
                 out.notes.append(effect.text)
@@ -364,9 +384,22 @@ class Manager:
                     inv.conditions.remove(effect.key)
                 out.events.append({"type": "sheet"})
             elif effect.kind == "damage":
-                result = game.rules.damage(inv, effect.amount)
-                out.events.append({"type": "damage", "who": inv.name, "text": result.describe()})
-                out.notes.append(f"{inv.name}{result.describe()}")
+                # A wound through engine/effects: its injury id is the blow it is (key, when the plugin
+                # says which one: the engine's damage notices carry theirs), so a blow the engine
+                # already took off is never taken off again.
+                injury = effect.key.strip() or f"plugin:{plugin.id}:{scope}:{index}"
+                live = game.state.find(inv.id)
+                if injury in live.injury.injuries or (inv.id, injury) in hurt:
+                    out.notes.append(f"{inv.name}的这次伤害已经结算过，没有重复扣除")
+                    continue
+                hurt.add((inv.id, injury))
+                wound = effects.harm(game, inv.id, effect.amount, injury=injury)
+                body = bodies.setdefault(inv.id, effects.Body(live.hp, live.hp_max, list(live.conditions),
+                                                              live.injury.model_copy(deep=True)))
+                said = effects.wound(body, wound).describe()  # what it will do, for the words; the op lands it
+                out.wounds.append(wound.model_dump(mode="json"))
+                out.events.append({"type": "damage", "who": inv.name, "text": said, "injury": injury})
+                out.notes.append(f"{inv.name}{said}")
             elif effect.kind == "sanity":
                 result = game.rules.sanity(inv, effect.success, effect.failure)
                 out.events.append({"type": "sanity", "who": inv.name, **_sanity_view(result)})
