@@ -93,10 +93,11 @@ async def until(pilot, test, rounds: int = 80) -> None:
         await pilot.pause(0.1)
 
 
-async def in_game(name: str, mid: str, location: str, visited: list[str], met: tuple[str, ...] = (), then=None) -> Path:
+async def in_game(name: str, mid: str, location: str, visited: list[str], met: tuple[str, ...] = (), then=None,
+                  size: tuple[int, int] = SIZE) -> Path:
     m, st = game_state(mid, location, visited, met)
     app = AutoKeeperApp(theme="amber")
-    async with app.run_test(size=SIZE) as pilot:
+    async with app.run_test(size=size) as pilot:
         screen = GameScreen(m, st, resume=True)
         app.push_screen(screen)
         await until(pilot, lambda: screen.game is not None and not screen.busy)
@@ -239,6 +240,7 @@ SHOTS = {
     "host": host,
     "talk": lambda: in_game("talk", "dongxuezhixia", "ratger_house", DONG, met=("doreen_ratger",), then=_talk),
     "fight": lambda: in_game("fight", "zhuishuren", "shufang", ZHUI, then=_fight),
+    "fight-narrow": lambda: in_game("fight-narrow", "zhuishuren", "shufang", ZHUI, then=_fight, size=(120, 36)),
     "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, then=_chase),
 }
 

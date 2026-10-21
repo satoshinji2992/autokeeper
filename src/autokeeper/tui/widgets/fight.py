@@ -189,6 +189,8 @@ class FightStage(Vertical):
         """The fight as it stands (engine/combat.view)."""
         self.view, self.m, self.style = view, m, style
         self.display = True
+        if self.parent is not None and (room := self.parent.size.width):  # two fifths of the stage, the scene keeps the rest
+            self.styles.width = max(34, min(54, room * 2 // 5))
         foes = [f for f in view["fighters"] if f["side"] != "party"]
         box = self.query_one(".foes", Vertical)
         cards = {c.fid: c for c in box.query(FoeCard)}

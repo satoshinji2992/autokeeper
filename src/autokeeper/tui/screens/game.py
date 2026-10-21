@@ -277,6 +277,8 @@ class GameScreen(Screen):
             event.stop()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "complete_skill" and getattr(self, "_battle_picking", False):
+            return True  # Tab over a fight's choices: the other way of answering a blow
         if action == "complete_skill":
             box = self.query_one("#command", Input)
             return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
@@ -320,6 +322,9 @@ class GameScreen(Screen):
         self._unpick()
 
     def action_complete_skill(self, step: int = 1) -> None:
+        if getattr(self, "_battle_picking", False):
+            self._next_stance(step)
+            return
         box = self.query_one("#command", Input)
         if box.value != self._skill_value or not self._skill_choices:
             self._skill_choices = skill_completions(box.value, self._viewer())
@@ -982,6 +987,21 @@ class GameScreen(Screen):
 
         beat()
 
+    def _next_stance(self, step: int) -> None:
+        """Tab over a fight's choices: answer blows the other way this round (dodge, fight back, cover when
+        someone has a gun), every choice written again with it."""
+        st = self.state
+        me = st.fight.get(st.investigator.id) if st.fight is not None else None
+        if me is None:
+            return
+        armed = any(a.firearm for f in st.fight.foes_of(me) for a in f.attacks)  # type: ignore[union-attr]
+        ways = ["dodge", "fight", *(["cover"] if armed else [])]
+        me.stance = ways[(ways.index(me.stance) + step) % len(ways) if me.stance in ways else 0]
+        picker = self.query_one("#picker", OptionList)
+        at = picker.highlighted or 0
+        self._offer_orders()
+        picker.highlighted = min(at, picker.option_count - 1)
+
     def _offer_orders(self) -> None:
         """In a fight or a chase, the investigator's choices for the round over the input box."""
         st = self.state
@@ -993,7 +1013,7 @@ class GameScreen(Screen):
         if st.fight is not None:
             f = st.fight.get(me)
             choices = battle.choices(f, st.fight) if f is not None and f.standing else []
-            title = "战斗行动 · 回车选定 · Esc 自己输入"
+            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 自己输入"
         else:
             assert st.chase is not None
             f = st.chase.get(me)

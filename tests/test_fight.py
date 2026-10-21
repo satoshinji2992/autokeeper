@@ -145,6 +145,10 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         assert await until(pilot, lambda: picker.display)
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
         assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
+        await pilot.press("tab")  # the other way of answering a blow, every choice with it
+        await pilot.pause()
+        assert all("被攻击时反击" in picker.get_option_at_index(i).id for i in range(picker.option_count - 2))
+        words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
         sent = []
         screen.send_line = sent.append  # what picking sends, without playing it
         picker.highlighted = 0
