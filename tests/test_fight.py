@@ -117,15 +117,10 @@ async def test_a_chase_runs_leg_by_leg_and_hiding_ends_it(module, fake):
     assert game.state.chase is None and any(e["type"] == "chase_end" and e["end"] == "escaped" for e in out)
 
 
-@pytest.mark.usefixtures("canned")
-async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
+def fight_screen(module):
     from autokeeper.engine import combat as battle
     from autokeeper.engine.game import Game
-    from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens.game import GameScreen
-    from autokeeper.tui.widgets.fight import ChaseStage, FightStage
-
-    from .test_tui import until
 
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="fight-screen")
     state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
@@ -133,16 +128,38 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
     warden = battle.from_npc(module.npc("warden"))
     me = battle.from_investigator(state.investigators[0])
     state.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
+    return GameScreen(module, state, resume=True), me, warden
+
+
+HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": "老守钟人", "attacker_side": "foe",
+        "defender_side": "party", "hurt_side": "party", "kind": "melee", "attack": "徒手", "roll": None, "answer": None,
+        "reaction": "none", "winner": "attacker", "damage": 2, "damage_text": "1D3 = 2", "effect": "", "extreme": False,
+        "jammed": False, "empty": False, "notes": [], "line": "", "dice": None}
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena, BloodFlash
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
-        screen = GameScreen(module, state, resume=True)
+        screen, me, warden = fight_screen(module)
+        state = screen.state
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         await pilot.pause(0.3)
-        stage = screen.query_one(FightStage)
-        assert stage.display and screen.has_class("-fight")  # a save opened mid-fight comes back to it
+        arena = screen.query_one(Arena)
+        assert arena.display and screen.has_class("-fight")  # a save opened mid-fight comes back to it
+        assert not screen.query_one(SceneArt).display  # the stage is the fight's
+        assert await until(pilot, lambda: arena.canvas.looks)  # drawn, though asked twice while drawing
         picker = screen.query_one("#picker")
         assert await until(pilot, lambda: picker.display)
+        assert screen._clock is not None and "秒" in str(picker.border_title)  # the choice is on a clock
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
         assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
         await pilot.press("tab")  # the other way of answering a blow, every choice with it
@@ -154,21 +171,44 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         picker.highlighted = 0
         await pilot.press("enter")
         await pilot.pause()
-        assert sent == [words[0]] and not picker.display
-        await screen.handle({"type": "fight_act", "round": 1, "attacker": "warden", "defender": me.id,
-                             "attacker_name": "老守钟人", "defender_name": me.name, "attacker_side": "foe",
-                             "defender_side": "party", "hurt_side": "party", "kind": "melee", "attack": "徒手",
-                             "roll": None, "answer": None, "reaction": "none", "winner": "attacker", "hurt": me.id,
-                             "damage": 2, "damage_text": "1D3 = 2", "effect": "", "extreme": False, "jammed": False,
-                             "empty": False, "notes": [], "line": "", "dice": None})
+        assert sent == [words[0]] and not picker.display and screen._clock is None
+        await screen.handle({**HURT, "defender": me.id, "defender_name": me.name, "hurt": me.id})
         await pilot.pause(0.05)
-        assert screen.has_class("-hit")  # hurt: the stage shakes and flashes
+        assert isinstance(app.screen, BloodFlash)  # hurt: blood over the whole screen
+        await pilot.press("x")  # typing goes on under it
+        await pilot.pause(0.05)
+        assert app.screen is screen
         assert screen.query(".fightcard")
         state.fight = None
         await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
         await pilot.pause()
-        assert not stage.display and not screen.has_class("-fight")
+        assert not arena.display and not screen.has_class("-fight") and screen.query_one(SceneArt).display
         await screen.handle({"type": "chase_start", "chase": battle.chase_view(battle.Chase(
             runners=[me, warden], track=battle.default_track("street"), quarry="party")), "line": "【追逐开始】"})
         await pilot.pause()
-        assert screen.query_one(ChaseStage).display and screen.has_class("-chase")
+        assert arena.display and arena.mode == "chase" and screen.has_class("-chase")  # the place, and what is behind you in it
+        assert not screen.query_one(SceneArt).display and "追逐" in str(arena.query_one(".side").render())
+        await screen.handle({"type": "chase_end", "end": "escaped", "text": "甩掉了"})
+        await pilot.pause()
+        assert not arena.display and screen.query_one(SceneArt).display
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens import game as screens
+
+    from .test_tui import until
+
+    monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.6)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display)
+        sent = []
+        screen.send_line = sent.append
+        assert await until(pilot, lambda: sent, tries=20)
+        assert sent[0].startswith("防守") and not picker.display

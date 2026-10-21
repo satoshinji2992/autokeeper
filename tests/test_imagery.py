@@ -113,3 +113,23 @@ def test_outlines_are_drawn_into_every_weather_layer(tmp_path):
     rows, dim_rows = grid(lined, 48, 12), grid(dark, 48, 12)
     y, x = next((y, x) for y, row in enumerate(rows) for x, (ch, _) in enumerate(row) if ch == "|")
     assert sum(dim_rows[y][x][1].color.triplet) < sum(rows[y][x][1].color.triplet)  # only darker
+
+
+def test_a_creature_is_painted_with_its_silhouette_and_staged_bigger_the_nearer(tmp_path):
+    from autokeeper import scenery
+
+    beast = scenery.creature("食尸鬼", "带犬科特征、利爪代替手指", key="ghoul")
+    assert beast.mode == "RGBA"
+    alpha = np.asarray(beast.getchannel("A"))
+    assert alpha[5, 5] < 10 and alpha[beast.height // 3, beast.width // 2] > 200  # the dark round it is not part of it
+    path = tmp_path / "beast.png"
+    beast.save(path)
+    Image.new("RGB", (320, 180), (90, 120, 90)).save(tmp_path / "place.png")
+    arena = imagery.staged(str(path), 40, 12)
+    assert arena.size == (320, 192)  # the stage's own shape: cells half as wide as tall
+
+    def figure(near: float) -> int:  # columns where it stands out from the place
+        im = np.asarray(imagery.staged(str(path), 40, 12, str(tmp_path / "place.png"), near), float)
+        return int((np.abs(im - im[:, :8].mean(axis=(0, 1))).sum(axis=2).max(axis=0) > 90).sum())
+
+    assert figure(0.2) < figure(1.0)

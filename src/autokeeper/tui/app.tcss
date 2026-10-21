@@ -250,6 +250,9 @@ GameScreen.-chase #stage {
 GameScreen.-chase.-beat #stage {
     border-bottom: heavy #5a6478;
 }
+GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {
+    border: heavy #c1121f;
+}
 .battle-title {
     layer: speaker;
     dock: top;

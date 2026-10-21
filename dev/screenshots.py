@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "dev" / "output" / "screenshots"
 os.environ.setdefault("AUTOKEEPER_PRESET", "deepseek")
 os.environ.setdefault("DEEPSEEK_API_KEY", "sk-screenshots")  # never used: no turn is played
+os.environ.setdefault("COLORTERM", "truecolor")  # pictures in 24-bit colour, as most terminals show them
 
 from PIL import Image, ImageChops  # noqa: E402
 from rich.cells import cell_len  # noqa: E402
@@ -94,7 +95,7 @@ async def until(pilot, test, rounds: int = 80) -> None:
 
 
 async def in_game(name: str, mid: str, location: str, visited: list[str], met: tuple[str, ...] = (), then=None,
-                  size: tuple[int, int] = SIZE) -> Path:
+                  size: tuple[int, int] = SIZE, settle: float = 2.0) -> Path:
     m, st = game_state(mid, location, visited, met)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=size) as pilot:
@@ -104,7 +105,7 @@ async def in_game(name: str, mid: str, location: str, visited: list[str], met: t
         await pilot.pause(3.0)  # the picture drawn, in a thread
         if then is not None:
             await then(app, pilot, screen, m)
-            await pilot.pause(2.0)
+            await pilot.pause(settle)
         return Path(app.save_screenshot(f"{name}.svg", path=str(OUT)))
 
 
@@ -211,6 +212,30 @@ async def _fight(app, pilot, screen, m):
     await pilot.pause(2.5)
 
 
+async def _wounded(app, pilot, screen, m):
+    """The moment the ghoul's claws land: blood over the screen, the claws across the picture."""
+    events, _ = _fighting(app, pilot, screen, m)
+    for ev in events[:-1]:
+        await screen.handle(ev)
+        await pilot.pause(0.3)
+    await pilot.pause(2.5)
+    await screen.handle(events[-1])
+    await pilot.pause(0.12)
+
+
+async def _closing(app, pilot, screen, m):
+    """A chase with the ghoul one stretch behind."""
+    from autokeeper.engine import combat as battle
+
+    st = screen.state
+    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
+    me = battle.from_investigator(st.investigators[0])
+    me.pos, ghoul.pos, me.speed, ghoul.speed = 4, 3, 8, 9
+    st.chase = battle.Chase(runners=[me, ghoul], track=battle.default_track("graveyard"), quarry="party", place=st.location, round=3)
+    await screen.handle({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【追逐开始】"})
+    await pilot.pause(4.0)
+
+
 async def _horde(app, pilot, screen, m):
     """Every creature of the module in one fight: their portraits as the fight panel shows them."""
     from autokeeper.engine import combat as battle
@@ -255,6 +280,8 @@ SHOTS = {
     "fight-narrow": lambda: in_game("fight-narrow", "zhuishuren", "shufang", ZHUI, then=_fight, size=(120, 36)),
     "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, then=_chase),
     "creatures": lambda: in_game("creatures", "zhuishuren", "mudi", ZHUI, then=_horde),
+    "fight-hit": lambda: in_game("fight-hit", "zhuishuren", "shufang", ZHUI, then=_wounded, settle=0.0),
+    "chase-close": lambda: in_game("chase-close", "zhuishuren", "mudi", ZHUI, then=_closing),
 }
 
 

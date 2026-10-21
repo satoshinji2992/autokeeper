@@ -900,6 +900,58 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
     return back
 
 
+@lru_cache(maxsize=16)
+def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) -> Image.Image:
+    """A fight's or a chase's picture at the stage's own shape (tui/widgets/fight.py). Who they
+    face, as tall as the stage and more, against a dark lit red from behind; in a chase, the place
+    behind it, smeared with running, and it as large as it is near (`near`: 0 far off, 1 at your
+    heels, more is closer still). A picture with a silhouette in its alpha (a creature painted by
+    program) is set into the place by it; any other comes out of the dark in a soft oval."""
+    from . import scenery
+
+    w, h = max(64, cols * 8), max(64, rows * 16)  # cells half as wide as tall
+    scenery.ensure(path)
+    raw = Image.open(path)
+    cut = raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info)
+    figure = raw.convert("RGBA") if cut else Image.open(picture_source(path)).convert("RGB")
+    yy, xx = np.mgrid[0:h, 0:w].astype(float)
+    if scene:
+        scenery.ensure(scene)
+        place = ImageOps.fit(Image.open(picture_source(scene)).convert("RGB"), (w, h), Image.Resampling.BILINEAR)
+        place = _expose(place, *artkit.STAGES["追逐"])  # cold and dark whatever the hour: it is behind you
+        smear = place.resize((max(8, w // 10), h), Image.Resampling.BOX).resize((w, h), Image.Resampling.BILINEAR)
+        back = Image.blend(place, smear, 0.55)
+    elif not cut:  # a photo: the room round it is the photo itself, blown up, blurred, dark
+        back = ImageOps.fit(figure, (w, h), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(w, h) / 30))
+        back = ImageEnhance.Brightness(back).enhance(0.2)
+    else:
+        glow = np.exp(-(((xx - w / 2) / (w * 0.32)) ** 2 + ((yy - h * 0.35) / (h * 0.55)) ** 2))
+        back = Image.fromarray(np.stack([glow * 96 + 6, glow * 6 + 2, glow * 8 + 3], axis=-1).astype(np.uint8))
+    tall = h * (0.4 + 0.75 * near)
+    size = (max(1, round(figure.width * tall / figure.height)), max(1, round(tall)))
+    figure = figure.resize(size, Image.Resampling.LANCZOS)
+    x, y = (w - size[0]) // 2, round(h - tall * 0.86)  # its lower part always below the frame: no edge to it
+    if cut:
+        mask = figure.getchannel("A")
+    else:
+        oval = Image.new("L", size, 0)
+        ImageDraw.Draw(oval).ellipse((size[0] * 0.08, size[1] * 0.02, size[0] * 0.92, size[1] * 1.1), fill=255)
+        mask = oval.filter(ImageFilter.GaussianBlur(max(size) / 14)) if scene else None
+    back.paste(figure.convert("RGB"), (x, y), mask)
+    # the edges sink into the dark, redder the closer it is
+    edge = np.clip(((xx - w / 2) / (w / 2)) ** 2 * 0.7 + ((yy - h / 2) / (h / 2)) ** 2 * 0.5, 0, 1)
+    arr = np.asarray(back, float) * (1 - edge[..., None] * 0.75)
+    arr += edge[..., None] * np.array((110, 0, 0)) * min(1.0, max(0.0, near - 0.5) * 1.6)
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+
+
+@lru_cache(maxsize=96)
+def render_staged(path: str, cols: int, rows: int, style: str = "photo", graded: str = "", scene: str = "",
+                  near: float = 1.0) -> str:  # fmt: skip
+    """staged() as ANSI text, in a grade (a heartbeat's "half", a blow's "flash", "难过+dim" when down)."""
+    return _chafa(grade(staged(path, cols, rows, scene, near), graded), cols, rows, style)
+
+
 @lru_cache(maxsize=32)
 def _strokes(path: str, width: int, height: int, cols: int, rows: int, people: tuple[str, ...] = ()) -> np.ndarray:
     """A scene's strokes, found on the unlit picture: the same lines at every hour and in every

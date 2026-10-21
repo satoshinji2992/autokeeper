@@ -747,11 +747,17 @@ CLAWS = ("爪", "利爪", "钩")
 SLIMY = ("胶", "黏", "粘液", "苔藓", "腐", "尸")
 
 
+def _blur(im: Image.Image, r: float) -> np.ndarray:
+    return np.asarray(im.filter(ImageFilter.GaussianBlur(r)), float) / 255
+
+
 def creature(name: str, description: str = "", *, key: str = "") -> Image.Image:
     """A creature's portrait painted by program, 600x800: a shape in the dark lit from below by a
-    sick light, with what its description gives it (a dog's muzzle, claws, tentacles, no face at
-    all), eye sockets in shadow and eyes that catch the light. Mostly silhouette: what is not seen
-    frightens more, and a few dozen characters keep a silhouette and two eyes, not detail."""
+    sick light and from behind by blood, with what its description gives it (a long jaw, claws,
+    tentacles, no face at all): sockets in shadow with small eyes that catch the light, a mouth
+    that does not close, full of needles, blood running off the chin. Mostly silhouette: what is not
+    seen frightens more, and a few dozen characters keep a silhouette and two eyes, not detail. The
+    alpha channel is the silhouette, for setting it into a scene (a chase)."""
     text = f"{name} {description}"
     rng = np.random.default_rng(_seed(key or name, "creature"))
     canine = any(w in text for w in CANINE)
@@ -759,41 +765,78 @@ def creature(name: str, description: str = "", *, key: str = "") -> Image.Image:
     tentacled = any(w in text for w in TENTACLES)
     clawed = any(w in text for w in CLAWS)
     slimy = any(w in text for w in SLIMY)
-    skin = np.array((92, 104, 84) if slimy else (60, 52, 60) if faceless else (112, 96, 88), float)
-    glow = np.array((140, 200, 90) if slimy else (210, 50, 36), float)  # the light from below: bile green or blood
+    skin = np.array((84, 96, 74) if slimy else (56, 48, 58) if faceless else (106, 88, 80), float)
+    under = np.array((120, 190, 80) if slimy else (220, 70, 40), float)  # the light from below: bile or fire
+    behind = np.array((170, 14, 10), float)  # and from behind: blood
     yy, xx = np.mgrid[0:PH, 0:PW].astype(float)
-    cx, top = PW / 2 + rng.uniform(-16, 16), 120.0
+    cx, top = PW / 2 + rng.uniform(-12, 12), 96.0
+    chin = top + (340 if canine and not faceless else 280)
+    hunch = rng.uniform(50, 80)
 
-    head = Image.new("L", (PW, PH), 0)  # the head (and muzzle, ears): lit from below
-    torso = Image.new("L", (PW, PH), 0)  # the shoulders: mostly in the dark
-    dark = Image.new("L", (PW, PH), 0)  # sockets, mouth: holes the light does not reach
-    teeth = Image.new("L", (PW, PH), 0)
-    hd, bd, dd, td = ImageDraw.Draw(head), ImageDraw.Draw(torso), ImageDraw.Draw(dark), ImageDraw.Draw(teeth)
-    long = 1.18 if canine and not faceless else 1.0
-    chin = top + (330 if canine and not faceless else 250)
-    hunch = rng.uniform(30, 60)  # shoulders riding up round the head
-    bd.ellipse([cx - 300, chin - hunch, cx + 300, PH + 520], fill=255)
+    def layer() -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        im = Image.new("L", (PW, PH), 0)
+        return im, ImageDraw.Draw(im)
+
+    head, hd = layer()
+    torso, bd = layer()
+    dark, dd = layer()  # sockets, the mouth, hollows: where the light does not get
+    teeth, td = layer()
+    blood, gd = layer()
+    arms, ad = layer()
+
+    # shoulders sloping off a thick neck, one riding higher than the other
+    lift = rng.uniform(-30, 30)
+    bd.polygon([(cx - 70, chin - 70), (cx + 70, chin - 70), (cx + 150, chin - hunch + 40 + lift), (cx + 280, chin + 70 + lift),
+                (cx + 320, PH), (cx - 320, PH), (cx - 280, chin + 70 - lift), (cx - 150, chin - hunch + 40 - lift)], fill=255)
+    for side in (-1, 1):
+        y = chin - hunch + 40 + side * lift
+        bd.ellipse([cx + side * 200 - 90, y - 10, cx + side * 200 + 90, y + 170], fill=255)
     if faceless:
-        hd.ellipse([cx - 125, top - 10, cx + 125, top + 290], fill=255)
-        dd.ellipse([cx - 95, top + 30, cx + 95, top + 250], fill=255)  # where a face should be, nothing
+        for _ in range(4):  # a lump where a head should be, never quite round
+            w, h = rng.uniform(90, 130), rng.uniform(120, 160)
+            ox, oy = rng.uniform(-30, 30), rng.uniform(-20, 30)
+            hd.ellipse([cx + ox - w, top + 130 + oy - h, cx + ox + w, top + 130 + oy + h], fill=255)
+        dd.ellipse([cx - 80, top + 50, cx + 80, top + 240], fill=255)
     else:
-        hd.ellipse([cx - 108, top, cx + 108, top + 245 * long], fill=255)
-        if canine:  # a muzzle pushed forward and down, ears laid back
-            hd.polygon([(cx - 78, top + 150), (cx + 78, top + 150), (cx + 58, chin), (cx - 58, chin)], fill=255)
-            dd.ellipse([cx - 28, chin - 96, cx + 28, chin - 66], fill=200)  # the nose, at the end of the muzzle
-            for side in (-1, 1):
-                hd.polygon([(cx + side * 58, top + 50), (cx + side * 128, top - 70), (cx + side * 118, top + 80)], fill=255)
-        for side in (-1, 1):  # deep sockets
-            dd.ellipse([cx + side * 44 - 34, top + 82, cx + side * 44 + 34, top + 128], fill=230)
-        mouth = chin - (40 if canine else 64)
-        width = 52 if canine else 50
-        dd.chord([cx - width, mouth - 20, cx + width, mouth + 36], 0, 180, fill=255)  # a mouth that does not close
-        for i in range(11):
-            tx = cx - width + 6 + i * (2 * width - 12) / 10
-            td.polygon([(tx - 4, mouth + 2), (tx + 4, mouth + 2), (tx, mouth + 20 + rng.uniform(0, 9))], fill=255)
-    shape = Image.fromarray(np.maximum(np.asarray(head), np.asarray(torso)))
-    arms = Image.new("L", (PW, PH), 0)
-    ad = ImageDraw.Draw(arms)
+        jaw = 46 if canine else 64
+        hd.ellipse([cx - 98, top, cx + 98, top + 220], fill=255)  # the skull
+        hd.polygon([(cx - 94, top + 120), (cx + 94, top + 120), (cx + jaw, chin), (cx - jaw, chin)], fill=255)
+        hd.ellipse([cx - jaw, chin - 50, cx + jaw, chin + 12], fill=255)
+        for side in (-1, 1):
+            dd.ellipse([cx + side * 72 - 26, top + 150, cx + side * 72 + 26, top + 250], fill=150)  # hollow cheeks
+            dd.ellipse([cx + side * 40 - 30, top + 82, cx + side * 40 + 30, top + 122], fill=255)  # deep sockets
+        nose = chin - 150 if canine else top + 172
+        for side in (-1, 1):
+            dd.ellipse([cx + side * 11 - 6, nose - 9, cx + side * 11 + 6, nose + 9], fill=255)
+        mouth = chin - (96 if canine else 92)
+        wide = jaw + 34
+        gape = 58 if canine else 46
+        lips = [(cx - wide, mouth)]
+        for i in range(1, 12):  # the lower lip torn and uneven, hanging open
+            t = i / 12
+            lips.append((cx - wide + 2 * wide * t, mouth + gape * math.sin(t * math.pi) + rng.uniform(-8, 8)))
+        lips.append((cx + wide, mouth))
+        for i in range(10, 0, -1):
+            t = i / 11
+            lips.append((cx - wide + 2 * wide * t, mouth - 10 * math.sin(t * math.pi) + rng.uniform(-3, 3)))
+        dd.polygon(lips, fill=255)
+        for i in range(15):  # needles, none the same, from both jaws
+            t = (i + 0.5) / 15
+            x = cx - wide + 6 + (2 * wide - 12) * t
+            edge = mouth - 8 * math.sin(t * math.pi)
+            long = rng.uniform(14, 36) * (0.6 + 0.6 * math.sin(t * math.pi))
+            td.polygon([(x - 3.5, edge), (x + 3.5, edge), (x + rng.uniform(-3, 3), edge + long)], fill=255)
+            if i % 2:
+                low = mouth + gape * math.sin(t * math.pi) - 6
+                td.polygon([(x - 3, low), (x + 3, low), (x + rng.uniform(-2, 2), low - rng.uniform(10, 26))], fill=255)
+        for _ in range(int(rng.integers(5, 9))):  # it has been eating: blood running off the chin
+            x = cx + rng.uniform(-wide * 0.8, wide * 0.8)
+            y0 = mouth + gape * 0.6
+            length = rng.uniform(40, 220)
+            w = rng.uniform(3, 8)
+            gd.line([(x, y0), (x + rng.uniform(-6, 6), y0 + length)], fill=255, width=int(w))
+            gd.ellipse([x - w, y0 + length - w, x + w, y0 + length + w * 1.6], fill=255)
+        gd.ellipse([cx - wide * 0.9, mouth + gape * 0.3, cx + wide * 0.9, mouth + gape * 1.25], fill=200)
     if tentacled:  # thick arms out of the dark, curling up past the body
         for i in range(4):
             side = -1 if i % 2 else 1
@@ -803,61 +846,75 @@ def creature(name: str, description: str = "", *, key: str = "") -> Image.Image:
             for k, (px, py) in enumerate(pts):
                 r = 12 + 62 * (1 - k / 90)
                 ad.ellipse([px - r / 2, py - r / 2, px + r / 2, py + r / 2], fill=255)
-    if clawed:  # hands coming up at the bottom, fingers too long, nails catching the light
+    if clawed:  # hands coming up into the light: long fingers in three joints, hooked nails, wet
         for side in (-1, 1):
-            hx = cx + side * rng.uniform(175, 215)
-            ad.ellipse([hx - 70, PH - 250, hx + 70, PH - 110], fill=255)
+            hx, hy = cx + side * rng.uniform(150, 180), PH - 110
+            ad.ellipse([hx - 70, hy - 70, hx + 70, hy + 110], fill=255)
             for f in range(4):
-                fx = hx - 51 + f * 34
-                tip = PH - 430 - f * 18 * side
-                bend = side * (24 + f * 4)
-                ad.polygon([(fx - 11, PH - 220), (fx + 11, PH - 220), (fx + bend + 4, tip), (fx + bend - 4, tip)], fill=255)
-                td.polygon([(fx + bend - 4, tip + 4), (fx + bend + 4, tip + 4), (fx + bend + side * 16, tip - 48)], fill=255)
-
-    body = np.asarray(shape.filter(ImageFilter.GaussianBlur(2.5)), float) / 255
-    face = np.asarray(head.filter(ImageFilter.GaussianBlur(2.5)), float) / 255
-    limbs = np.asarray(arms.filter(ImageFilter.GaussianBlur(2)), float) / 255
-    holes = np.asarray(dark.filter(ImageFilter.GaussianBlur(5)), float) / 255
-    fangs = np.asarray(teeth.filter(ImageFilter.GaussianBlur(1)), float) / 255
-    # the head lit from under the chin, brightest low on it; the shoulders only caught along their top
-    up = np.clip((yy - top) / max(1.0, chin - top), 0, 1.15) ** 1.4
-    lit_head = 0.12 + 1.05 * up * (1 / (1 + ((xx - cx) / 170) ** 2))
-    lit_body = 0.1 + 0.45 * np.exp(-(((yy - (chin - hunch)) / 90) ** 2)) * (1 / (1 + ((xx - cx) / 240) ** 2))
+                x, y = hx - 52 + f * 35, hy - 40
+                angle = -math.pi / 2 + (f - 1.5) * 0.13 + side * 0.12 + rng.uniform(-0.05, 0.05)  # fanned, leaning out
+                width = 26.0
+                for length in (125, 105, 85):
+                    nx, ny = x + math.cos(angle) * length, y + math.sin(angle) * length
+                    ad.line([(x, y), (nx, ny)], fill=255, width=int(width))
+                    ad.ellipse([nx - width * 0.66, ny - width * 0.66, nx + width * 0.66, ny + width * 0.66], fill=255)
+                    x, y, width = nx, ny, width * 0.74
+                    angle -= side * 0.2  # curling in, towards you
+                tip = (x + math.cos(angle) * 52, y + math.sin(angle) * 52)
+                td.polygon([(x - 6, y + 4), (x + 6, y + 4), tip], fill=255)
+                gd.line([(x, y + 6), (x + rng.uniform(-4, 4), y + rng.uniform(40, 90))], fill=255, width=5)
+    shape = Image.fromarray(np.maximum(np.asarray(head), np.asarray(torso)))
+    body = _blur(shape, 2.5)
+    face = _blur(head, 3)
+    limbs = _blur(arms, 2)
+    holes = _blur(dark, 5)
+    fangs = _blur(teeth, 0.8)
+    gore = _blur(blood, 1.4)
+    rng2 = np.random.default_rng(_seed(key or name, "skin"))
+    grain = 1 + (_noise_at(rng2, PW, PH, 4) - 0.5) * 0.25 + (_noise_at(rng2, PW, PH, 18) - 0.5) * 0.35
+    blotch = np.clip((_noise_at(rng2, PW, PH, 30) - 0.55) * 3, 0, 1)
+    # lit from under the jaw, brightest low on the face; the shoulders only along their top
+    up = np.clip((yy - top) / max(1.0, chin - top), 0, 0.8) ** 1.3
+    lit_head = 0.1 + 0.85 * up * (1 / (1 + ((xx - cx) / 150) ** 2))
+    lit_body = 0.06 + 0.5 * np.exp(-(((yy - (chin - hunch)) / 80) ** 2)) * (1 / (1 + ((xx - cx) / 260) ** 2))
     lit = face * lit_head + (1 - face) * lit_body
-    grain = 1 + (_noise_at(rng, PW, PH, 5) - 0.5) * 0.16 + (_noise_at(rng, PW, PH, 24) - 0.5) * 0.22
-    flesh = skin * 0.16 + skin * 1.1 * lit[..., None] + glow * 0.5 * lit[..., None] ** 2
-    flesh = flesh * grain[..., None] * (1 - holes[..., None] * 0.92)
-    back = np.exp(-(((xx - cx) / 320) ** 2 + ((yy - PH * 0.6) / 420) ** 2)) * 22
-    arr = np.stack([back + 5, back * 0.4 + 3, back * 0.45 + 5], axis=-1)
-    limb_skin = skin * 0.25 + skin * 0.9 * lit[..., None] + glow * 0.4 * lit[..., None]
+    flesh = skin * 0.12 + skin * 1.05 * lit[..., None] + under * 0.4 * lit[..., None] ** 2
+    flesh = flesh * grain[..., None] * (1 - blotch[..., None] * 0.35) * (1 - holes[..., None] * 0.95)
+    reach = np.clip(1.25 - yy / PH, 0.15, 1)[..., None]  # the hands lit more the further they reach
+    limb_skin = (skin * 0.15 + skin * 0.9 * reach + under * 0.3 * reach ** 2) * grain[..., None]
+    fog = np.exp(-(((xx - cx) / 250) ** 2 + ((yy - top - 120) / 260) ** 2))  # blood-red light behind it
+    arr = np.stack([fog * 70 + 4, fog * 6 + 2, fog * 6 + 3], axis=-1)
     arr = arr * (1 - body[..., None]) + flesh * body[..., None]
-    arr = arr * (1 - limbs[..., None]) + limb_skin * (0.7 + 0.3 * grain[..., None]) * limbs[..., None]
-    arr += fangs[..., None] * np.array((205, 196, 160)) * np.clip(lit * 1.6, 0.35, 1)[..., None]
-    edges = Image.fromarray(np.maximum(np.asarray(shape), np.asarray(arms)))
-    rim = np.asarray(edges.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(5)), float) / 255
-    arr += rim[..., None] * glow * 1.7
+    arr = arr * (1 - limbs[..., None]) + limb_skin * limbs[..., None]
+    arr += fangs[..., None] * np.array((215, 200, 160)) * np.clip(lit * 1.4, 0.45, 1)[..., None]
+    wet = 0.6 + 0.8 * np.clip(_noise_at(rng2, PW, PH, 6) - 0.4, 0, 1)
+    arr = arr * (1 - gore[..., None] * 0.9) + gore[..., None] * np.array((128, 8, 10)) * wet[..., None]
+    outline = Image.fromarray(np.maximum(np.asarray(shape), np.asarray(arms)))
+    rim = np.clip(_blur(outline.filter(ImageFilter.FIND_EDGES), 4) * 3, 0, 1)
+    upper = np.clip(1.3 - yy / PH, 0, 1)  # the light behind catches the head and shoulders, not the hands
+    arr += rim[..., None] * behind * 1.6 * upper[..., None]
     if slimy:  # a wet shine where the light catches, fine and broken
-        wet = np.clip((_noise_at(rng, PW, PH, 9) - 0.74) * 4, 0, 1) * face * lit
-        arr += wet[..., None] * np.array((170, 190, 150)) * 0.3
-    # mist rolling at the bottom, the colour of the light
-    mist = np.clip((yy - PH * 0.62) / (PH * 0.38), 0, 1) * _noise_at(rng, PW, PH, 60)
-    arr = arr * (1 - mist[..., None] * 0.45) + glow * 0.35 * mist[..., None]
-    # eyes in the sockets: two that catch the light, or many where a face should be
-    eyes = Image.new("L", (PW, PH), 0)
-    ed = ImageDraw.Draw(eyes)
-    spots = ([(cx + rng.uniform(-80, 80), top + 140 + rng.uniform(-80, 80)) for _ in range(int(rng.integers(6, 10)))]
-             if faceless else [(cx - 44, top + 106), (cx + 44, top + 106)])
+        shine = np.clip((_noise_at(rng2, PW, PH, 7) - 0.72) * 4, 0, 1) * face * lit
+        arr += shine[..., None] * np.array((170, 200, 150)) * 0.35
+    mist = np.clip((yy - PH * 0.66) / (PH * 0.34), 0, 1) * _noise_at(rng2, PW, PH, 60)
+    arr = arr * (1 - mist[..., None] * 0.5) + under * 0.25 * mist[..., None]
+    eyes, ed = layer()  # small, set deep, and catching the light
+    spots = ([(cx + rng.uniform(-70, 70), top + 140 + rng.uniform(-70, 70)) for _ in range(int(rng.integers(6, 10)))]
+             if faceless else [(cx - 40, top + 104), (cx + 40, top + 104)])
     for ex, ey in spots:
-        r = rng.uniform(4, 8) if faceless else 9
-        ed.ellipse([ex - r * 1.5, ey - r * 0.8, ex + r * 1.5, ey + r * 0.8], fill=255)
-    halo = np.asarray(eyes.filter(ImageFilter.GaussianBlur(16)), float)[..., None] / 255
-    core = np.asarray(eyes.filter(ImageFilter.GaussianBlur(1.2)), float)[..., None] / 255
-    shine = np.array((215, 240, 130) if slimy else (255, 196, 110), float)
-    arr += halo * shine * 1.3 + core * shine
-    vignette = np.clip(1 - 0.85 * (((xx - PW / 2) / (PW / 2)) ** 2 * 0.55 + ((yy - PH * 0.45) / (PH / 2)) ** 2 * 0.45), 0.08, 1)
-    arr = arr * vignette[..., None] * (1 + rng.normal(0, 0.05, (PH, PW, 1)))
-    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.9))
-    return _finish(out, saturation=1.08, contrast=0.38)
+        r = rng.uniform(3, 6) if faceless else 6
+        ed.ellipse([ex - r, ey - r * 0.75, ex + r, ey + r * 0.75], fill=255)
+    halo, core = _blur(eyes, 14)[..., None], _blur(eyes, 1)[..., None]
+    shine = np.array((220, 250, 120) if slimy else (255, 210, 120), float)
+    arr += halo * np.array((255, 60, 20)) * 1.6 + core * shine * 1.2
+    vignette = np.clip(1 - 0.8 * (((xx - PW / 2) / (PW / 2)) ** 2 * 0.5 + ((yy - PH * 0.42) / (PH / 2)) ** 2 * 0.5), 0.05, 1)
+    arr = arr * vignette[..., None] * (1 + rng.normal(0, 0.06, (PH, PW, 1)))
+    out = _finish(Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)),
+                  saturation=1.1, contrast=0.42)
+    alpha = np.maximum(np.maximum(body, limbs), np.clip(halo[..., 0] * 2, 0, 1))
+    out.putalpha(Image.fromarray((np.clip(alpha * 1.1, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(3)))
+    return out
+
 
 
 def _noise_at(rng: np.random.Generator, w: int, h: int, scale: int) -> np.ndarray:

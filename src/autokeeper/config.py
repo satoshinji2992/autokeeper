@@ -254,6 +254,7 @@ class Config:
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/widgets/tips.py)
     animations: bool = True
+    battle_timer: bool = True  # a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
     dice: str = "bone"  # tui/drawing/dice.py SKINS
 
     @property
@@ -534,7 +535,7 @@ def ui_settings() -> dict:
     for key, values in choices.items():
         if isinstance(data.get(key), str) and data[key] in values:
             out[key] = data[key]
-    for key in ("tips", "animations", "plugins", "imagegen", "showcase"):
+    for key in ("tips", "animations", "plugins", "imagegen", "showcase", "battle_timer"):
         if type(data.get(key)) is bool:
             out[key] = data[key]
     for key in ("model", "fallback"):
@@ -619,6 +620,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.animations = data.get("animations", cfg.animations) is not False
     cfg.imagegen = data.get("imagegen", cfg.imagegen) is not False
     cfg.showcase = data.get("showcase", cfg.showcase) is not False
+    cfg.battle_timer = data.get("battle_timer", cfg.battle_timer) is not False
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None

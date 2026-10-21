@@ -284,6 +284,7 @@ class Fighting:
             if c.kind != "creature" or not c.sanity or c.id in st.seen or "/" not in c.sanity:
                 continue
             st.seen.append(c.id)
+            out.append({"type": "reveal", "id": c.id, "name": c.name, "portrait": c.portrait, "look": c.look[:120]})  # shown, then the cost
             ok, bad = c.sanity.split("/", 1)
             for x in [f for f in people if f.side == "party" and f.standing]:
                 inv = st.find(x.id)
@@ -968,8 +969,10 @@ class Fighting:
             await step("chase-outcome-flags", turn, lambda: self._flags(flags, turn))
 
         def close() -> list[dict]:
-            out = [{"type": "chase_end", "end": end, "text": text}]
             runners = {f.id: f for f in ch.runners}
+            hunter = runners.get(fight_ids[0]) if end == "caught" and fight_ids else None
+            out = [{"type": "chase_end", "end": end, "text": text, "hunter": hunter.id if hunter else "",
+                    "hunter_name": hunter.name if hunter else "", "portrait": hunter.portrait if hunter else ""}]
             st.chase = None
             if end == "caught" and fight_ids:
                 hunter, prey = runners[fight_ids[0]], runners[fight_ids[1]]

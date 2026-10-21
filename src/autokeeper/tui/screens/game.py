@@ -47,7 +47,15 @@ from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
 from ..widgets import tips
 from ..widgets.devpanel import DevPanel
-from ..widgets.fight import ChaseStage, FightStage, banner, chase_lines, fight_card, pulse_rate, title_frames
+from ..widgets.fight import (
+    Arena,
+    BloodFlash,
+    banner,
+    chase_lines,
+    fight_card,
+    pulse_rate,
+    title_frames,
+)
 from ..widgets.pages import Page, PagesHead, PagesModal, background_view, progress_view
 from ..widgets.panels import (
     LIGHT_MARK,
@@ -101,7 +109,8 @@ COMMANDS = (
 
 
 
-FIGHT_EVENTS = ("fight_start", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
+BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's round waits for the player (设置 turns it off)
+FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
 
@@ -168,8 +177,7 @@ class GameScreen(Screen):
                 with Container(id="stage"):  # the scene, and over its right side whoever is talking
                     yield SceneArt(id="scene")
                     yield Speaker()
-                    yield FightStage()  # a fight over the right of it, a chase along its bottom (widgets/fight.py)
-                    yield ChaseStage()
+                    yield Arena()  # a fight or a chase in place of it (widgets/fight.py)
                 yield StoryLog(id="story")
                 yield DevPanel(id="dev")
                 yield Static(id="status")
@@ -313,6 +321,7 @@ class GameScreen(Screen):
         box = self.query_one("#command", Input)
         if getattr(self, "_battle_picking", False):  # a fight's or a chase's order: sent as picked
             self._battle_picking = False
+            self._stop_clock()
             self._unpick()
             if not self.busy:
                 self.send_line(key)
@@ -850,15 +859,13 @@ class GameScreen(Screen):
     # -- a fight and a chase on the stage (widgets/fight.py) ----------------------------------
     def _battle_event(self, ev: dict) -> None:
         t = ev["type"]
-        story, scene = self.story, self.query_one(SceneArt)
-        fight, chase = self.query_one(FightStage), self.query_one(ChaseStage)
+        story, scene, arena = self.story, self.query_one(SceneArt), self.query_one(Arena)
         style = getattr(self.app, "art_style", "photo")
+        arena.canvas.moving = scene.effects
         if t == "fight_start":
             self.query_one(Speaker).leave()
-            chase.hide()
-            scene.glitch(18)  # the picture tears, then comes back dark and red (the glitch and a redraw share a worker)
-            self.set_timer(0.7, lambda: scene.set_mode("fight"))
-            fight.show(ev["fight"], self.m, style)
+            scene.display = False  # the stage is the fight's: whoever they face, as large as it holds
+            arena.show(ev["fight"], self.m, style, rows=self._arena_rows())
             self.add_class("-fight")
             self.remove_class("-chase")
             story.add("event", banner(ev.get("line", "").replace("【", "").replace("】", " · ") or "战斗开始"))
@@ -866,20 +873,20 @@ class GameScreen(Screen):
             self._heartbeat()
             if not self.busy:
                 self.call_after_refresh(self._offer_orders)
+        elif t == "reveal":  # a creature first seen: over the whole screen, before the sanity roll
+            self.run_worker(self._reveal(ev.get("portrait", ""), ev.get("name", ""), 3.5), group="reveal")
         elif t == "fight_round":
-            fight.round_begins(ev["order"], ev["fight"])
+            arena.round_begins(ev["order"], ev["fight"])
             story.add("system", Text(f"── 第 {ev['round']} 轮 ──", style="#7a0a0a", justify="center"))
         elif t == "fight_act":
             story.add("fightcard", fight_card(ev))
-            fight.act(ev)
+            arena.act(ev)
             if ev.get("dice"):
                 self.query_one(DiceTray).roll(ev["dice"])
-            if ev.get("damage") and ev.get("winner") != "none":
-                scene.splash()
-                if ev.get("hurt_side") == "party":
-                    self._hit()
+            if ev.get("damage") and ev.get("winner") != "none" and ev.get("hurt_side") == "party":
+                self._wound(ev.get("hurt", ""), ev["damage"])
         elif t == "fight_state":
-            fight.show(ev["fight"], self.m, style)
+            arena.show(ev["fight"], self.m, style)
             if ev.get("lines"):
                 story.add("system", Text("\n".join(f"· {line}" for line in ev["lines"]), style="#b39b8a"))
             self._panels()
@@ -889,17 +896,16 @@ class GameScreen(Screen):
             body.append(ev["text"])
             story.add("npc", body)
         elif t == "fight_end":
-            fight.hide()
             self.remove_class("-fight", "-beat")
             if self.state.chase is None:
-                scene.set_mode("")
+                arena.hide()
+                scene.display = True
             story.add("event", banner(ev.get("text", "战斗结束"), colour="#e8dec4"))
             self._panels()
         elif t == "chase_start":
-            fight.hide()
             self.query_one(Speaker).leave()
-            scene.set_mode("chase")
-            chase.show(ev["chase"], style, time_of_day(self.state.minutes))
+            scene.display = False  # the place is on the stage still, rushing, and what is behind you in it
+            arena.show_chase(ev["chase"], self.m, style, rows=self._arena_rows(), scene=scene.image or "")
             self.add_class("-chase")
             self.remove_class("-fight")
             story.add("event", banner((ev.get("line") or "追逐开始").replace("【", "").replace("】", " · "), colour="#9fb4c8"))
@@ -910,17 +916,70 @@ class GameScreen(Screen):
             if not self.busy:
                 self.call_after_refresh(self._offer_orders)
         elif t in ("chase_round", "chase_state"):
-            chase.show(ev["chase"], style, time_of_day(self.state.minutes))
-            if ev.get("lines"):
-                story.add("system", chase_lines(ev["lines"]))
+            arena.show_chase(ev["chase"], self.m, style, scene=scene.image or "")
+            lines = ev.get("lines") or []
+            if lines:
+                story.add("system", chase_lines(lines))
+            if any(w in line for line in lines for w in ("栽", "挡住", "受了")):
+                self._jolt(3)
+            elif t == "chase_round" or lines:
+                self._jolt(1)  # every stretch run: the picture jolts
             self._panels()
         elif t == "chase_end":
-            chase.hide()
             self.remove_class("-chase", "-beat")
             if self.state.fight is None:
-                scene.set_mode("")
+                arena.hide()
+                scene.display = True
+            if ev.get("end") == "caught":  # it is on you: its face over everything, and blood
+                self.run_worker(self._reveal(ev.get("portrait", ""), f"{ev.get('hunter_name', '')}追上来了", 2.2), group="reveal")
+                self._flash(0.8)
             story.add("event", banner(ev.get("text", "追逐结束"), colour="#e8dec4"))
         self._topbar()
+
+    def _arena_rows(self) -> int:
+        """The stage's height while a fight or a chase is on: half the screen, the story under it."""
+        return max(14, min(32, round(self.app.size.height * 0.5)))
+
+    async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
+        """A face over the whole screen: a creature first seen, the thing that caught you."""
+        from ... import scenery
+
+        path = self.m.pictures.get(portrait or "", "")
+        if not path:
+            return
+        await asyncio.to_thread(scenery.ensure, path)  # painted the first time it is shown
+        if not Path(path).is_file() or isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+            return
+        self.app.push_screen(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]
+
+    def _wound(self, who: str, damage: int) -> None:
+        """An investigator hurt: blood floods the screen, the screen lurches, harder the worse the blow."""
+        inv = next((i for i in self.state.investigators if i.id == who), None)
+        share = damage / max(1, inv.hp_max) if inv is not None else 0.3
+        self._flash(min(1.0, share * 2))
+        self._jolt(2 + int(share * 6))
+
+    def _flash(self, strength: float) -> None:
+        if self.app.screen is self and self.query_one(SceneArt).effects:
+            self.app.push_screen(BloodFlash(strength))
+        else:
+            self.add_class("-hit")
+            self.set_timer(0.25, lambda: self.remove_class("-hit"))
+
+    def _jolt(self, strength: int = 2) -> None:
+        """The screen lurches: the whole of it when a blow lands, the stage when a step goes wrong."""
+        main = self.query_one("#main")
+        amp = max(1, min(4, strength))
+        seq = iter([(amp, 0), (-amp, 1), (amp - 1, -1), (-(amp - 1), 0), (0, 0)])
+
+        def step() -> None:
+            try:
+                main.styles.offset = next(seq)
+                self.set_timer(0.04, step)
+            except StopIteration:
+                pass
+
+        step()
 
     def _battle_resumed(self) -> None:
         """A save opened in the middle of a fight or a chase: the stage as it stood."""
@@ -950,21 +1009,6 @@ class GameScreen(Screen):
                 title.styles.animate("opacity", 0.0, duration=0.9, on_complete=title.remove)
 
         play()
-
-    def _hit(self) -> None:
-        """An investigator was hurt: the stage shakes and flashes red."""
-        stage = self.query_one("#stage")
-        self.add_class("-hit")
-        steps = iter([(2, 0), (-2, 0), (1, 0), (-1, 0), (0, 0)])
-
-        def step() -> None:
-            try:
-                stage.styles.offset = next(steps)
-                self.set_timer(0.045, step)
-            except StopIteration:
-                self.remove_class("-hit")
-
-        step()
 
     def _heartbeat(self) -> None:
         """While a fight or a chase is on, a heartbeat on the top bar and the stage's edge, quicker
@@ -1029,6 +1073,45 @@ class GameScreen(Screen):
         picker.display = True
         picker.focus()
         self._battle_picking = True
+        self._battle_title = title
+        if config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
+            fallback = battle.order_text(battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run"),
+                                         {})
+            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, fallback)
+
+    def _stop_clock(self) -> None:
+        if (clock := getattr(self, "_clock", None)) is not None:
+            clock.stop()
+            self._clock = None
+
+    def _start_clock(self, seconds: float, fallback: str) -> None:
+        """The round's choice waits only so long: a draining bar on the list, then the investigator
+        hesitates and does only `fallback` (defends; in a chase, runs)."""
+        self._stop_clock()
+        until = time.monotonic() + seconds
+
+        def tick() -> None:
+            left = until - time.monotonic()
+            if self.busy or not self.is_attached or (self.state.fight is None and self.state.chase is None):
+                self._stop_clock()
+                return
+            picker = self.query_one("#picker", OptionList)
+            share = max(0.0, left / seconds)
+            bar = "█" * round(12 * share) + "░" * (12 - round(12 * share))
+            line = f"⏳ {bar} {max(0, int(left + 0.99))} 秒"
+            if picker.display:
+                picker.border_title = f"{self._battle_title} · {line}"
+                picker.set_class(left <= 5, "-urgent")
+            else:
+                self._status(f"{line} 后只来得及{'防守' if self.state.fight is not None else '逃跑'}")
+            if left <= 0:
+                self._stop_clock()
+                self._unpick()
+                self._status("")
+                self.app.notify("犹豫了一瞬……", severity="warning", timeout=3)
+                self.send_line(fallback)
+
+        self._clock = self.set_interval(0.25, tick)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         """Their face is on the stage while they talk (Speaker), so the story keeps to words."""

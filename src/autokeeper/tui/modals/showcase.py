@@ -28,9 +28,12 @@ class ShowcaseScreen(ModalScreen[None]):
     }
     """
 
-    def __init__(self, picture: str, caption: str, *, style: str = "photo", fade: bool = True):
+    def __init__(self, picture: str, caption: str, *, style: str = "photo", fade: bool = True, face: bool = False,
+                 seconds: float | None = None):
         super().__init__()
         self.picture, self.caption, self.style_name, self.fade = picture, caption, style, fade
+        self.face = face  # a portrait (a creature first seen): whole and centred, not cropped to the screen
+        self.seconds = seconds
         self._gone = False
 
     def compose(self) -> ComposeResult:
@@ -38,13 +41,16 @@ class ShowcaseScreen(ModalScreen[None]):
         yield Static(Text(self.caption), id="showcase-title")
 
     def on_mount(self) -> None:
-        self.set_timer(SHOWN, self.leave)
+        self.set_timer(self.seconds or SHOWN, self.leave)
         self.run_worker(self._draw(), exclusive=True)
 
     async def _draw(self) -> None:
         cols, rows = max(1, self.size.width), max(1, self.size.height - 1)
         try:
-            art = await asyncio.to_thread(imagery.render, self.picture, cols, rows, self.style_name, "", True)
+            if self.face:
+                art = await asyncio.to_thread(imagery.render, self.picture, cols, rows, self.style_name, "", False, "", True)
+            else:
+                art = await asyncio.to_thread(imagery.render, self.picture, cols, rows, self.style_name, "", True)
         except (OSError, ValueError, subprocess.TimeoutExpired):
             self.leave()  # an unreadable picture: no big scene, not a broken screen
             return
