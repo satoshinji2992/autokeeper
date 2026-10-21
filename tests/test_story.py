@@ -749,4 +749,4 @@ async def test_a_seat_deciding_its_roll_still_hears_the_table(writer):
             await pilot.pause(0.1)
             if sent:
                 break
-        assert sent and sent[0]["t"] == "choice"
+        assert sent and sent[0]["t"] == "respond"

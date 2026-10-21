@@ -242,7 +242,12 @@ class NetGameScreen(GameScreen):
             choice = await self.app.push_screen_wait(ChoiceModal(offer))
         else:
             choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
-        await self.link.send({"t": "choice", "mode": choice})
+        answer = {"t": "respond", "id": offer.get("respond_id", "")}  # the host takes it once, for this offer only
+        if isinstance(choice, dict) and offer.get("kind") in ("reaction", "redeclare"):
+            answer |= {"choice": choice.get("choice", ""), "text": choice.get("text", ""), "ask": choice.get("ask", "")}
+        else:
+            answer["choice"] = choice
+        await self.link.send(answer)
 
     def _viewer(self):
         """Your own investigator's sheet; when watching, whoever is acting."""
@@ -350,6 +355,8 @@ class NetGameScreen(GameScreen):
             self._offer(msg["offer"])
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
+        elif t == "notice":  # an answer that came too late, or twice: the host ignored it
+            self.app.notify(msg.get("text", ""), severity="warning", timeout=4)
         elif t == "ideas":  # for this screen alone
             if self.ideas_due is not None and not self.ideas_due.done():
                 self.ideas_due.set_result(msg.get("ideas", []))
@@ -375,6 +382,11 @@ class NetGameScreen(GameScreen):
             text = ev["text"]
             self.story.add("system" if text.startswith("/kp ") else "player",
                            Text(f"▶ {who} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {who}：{text}"))
+            return
+        if t == "encounter_wait":  # the table waits for one player's answer in a fight
+            what = {"reaction": "应对攻击", "redeclare": "改选行动", "roll": "掷骰"}.get(ev.get("kind", ""), "选择")
+            limit = f"，最多 {int(ev['closes_in'])} 秒" if ev.get("closes_in") else ""
+            self.app.notify(f"等待{ev.get('who') or '其他玩家'}{what}{limit}。", timeout=4)
             return
         if t == "retold":  # the keeper is about to tell the last narration again, for everyone
             self.app.notify(f"{ev.get('who') or '有人'}请守秘人重讲上一段" + ("" if ev.get("nudge") == "换个讲法" else f"：{ev.get('nudge')}"), timeout=4)
