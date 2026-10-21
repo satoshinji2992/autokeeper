@@ -410,7 +410,7 @@ class Game(Fighting):
         if idea.asked(text) and (why := self.idea_refused()):  # said why at once; no turn is spent
             await self.emit({"type": "command", "kind": "refused", "text": why, "who": self.state.investigator.name})
             return Action(kind="meta", summary="灵感检定", idea={"refused": why})
-        self.visuals.schedule()  # resumes unfinished illustration work after loading, including MCP play
+        self.visuals.schedule()  # resumes unfinished illustration work after loading
         self.showcases.settle()  # someone acts: the opening's big picture, if still on its way, is not shown now
         self.showcases.prepare()
         st = self.state
@@ -1778,7 +1778,7 @@ class Game(Fighting):
         self._keep(turn)
 
     def _keep(self, turn: Turn) -> None:
-        """The turn as it stands, saved where its caller keeps it (graph.build's keep, the MCP journal)."""
+        """The turn as it stands, saved where its caller keeps it (graph.build's keep)."""
         if self.turn_checkpoint:
             self.turn_checkpoint(turn)
 

@@ -55,7 +55,7 @@ uv run python dev/export_site_art.py
 
 玩家用 `uv tool install autokeeper` 或 `pipx install autokeeper` 装的是 PyPI 上的包。包里有游戏代码、三本自带模组（不含 `source/`）、共用 Skills 和掷骰脚本，打包规则在 `pyproject.toml` 的 `[tool.hatch.build.*]`。
 
-1. 改版本号，两处要一致（`tests/test_cli.py` 会核对）：`src/autokeeper/__init__.py` 的 `__version__`（`pyproject.toml` 从这里读），`.claude-plugin/plugin.json` 的 `version`。PyPI 上同一个版本号只能传一次。
+1. 改版本号：`src/autokeeper/__init__.py` 的 `__version__`（`pyproject.toml` 从这里读）。PyPI 上同一个版本号只能传一次。
 2. `CHANGELOG.md` 把「开发中」换成日期，然后检查：
 
    ```bash

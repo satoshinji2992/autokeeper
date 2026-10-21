@@ -69,7 +69,7 @@ uv run autokeeper setup
 uv run autokeeper doctor
 ```
 
-从源码目录运行时，模组、存档和掷骰组件都在仓库里（`modules/`、`data/`、`bridge/`），和以前一样。`setup` 会安装 BCDice 的 Node 桥接、编译模组、为 Claude Code / Codex 链接仓库里的 Skills，最后问用哪家模型。更新代码后运行 `uv sync`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
+从源码目录运行时，模组、存档和掷骰组件都在仓库里（`modules/`、`data/`、`bridge/`），和以前一样。`setup` 会安装 BCDice 的 Node 桥接、编译模组，最后问用哪家模型。更新代码后运行 `uv sync`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
 
 ## 模型与花费
 
@@ -252,28 +252,6 @@ autokeeper autoplay mymod --party 2
 
 **导入成品在 `modules/local/`，原文在对应模组的 `source/`。** 使用云端模型时，导入和游玩所需的正文、图片会发送给所选服务。Git 忽略规则只防止提交文件，不代表内容不会发送给模型。请只导入自己有权使用的材料，不要公开分享受版权保护的原文和图片。
 
-## 在 Claude Code / Codex 中主持
-
-仓库也是一个 Claude Code 插件：
-
-```text
-/plugin marketplace add satoshinji2992/autokeeper
-/plugin install autokeeper@autokeeper
-/autokeeper:play mymod
-```
-
-Codex 可在 `~/.codex/config.toml` 配置 MCP 服务，把路径换成实际仓库位置：
-
-```toml
-[mcp_servers.autokeeper]
-command = "uv"
-args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
-```
-
-孤注一掷用 `push_or_luck("push", how=...)`，`how` 写玩家回答的“如何孤注一掷”；灵感检定用 `idea_roll`。
-
-打起来或开始追逐时，守秘人用 `start_fight` 或 `start_chase` 开始，每一轮用 `battle_round` 下达调查员的行动；对手的行动、骰子与伤害由引擎按规则结算，和终端里一样，对手只显示伤势字样。详见[战斗与追逐](combat.md#在-claude-code--codex-里)。
-
 ## 常见问题
 
 **想严格按模组玩。** 标题页「设置」把自由度改成「严格按模组已有内容」，或启动时加 `--improv 严格`；配置文件也支持 `improv = "严格"`。
@@ -306,7 +284,6 @@ args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 | `migrate [源码目录]` | 把以前从源码目录玩的存档复制过来 |
 | `login [deepseek\|claude\|codex] [--key KEY]` | 选模型、存 API Key |
 | `trace` | 查看模型用量与花费 |
-| `eval context` / `eval rhetoric` / `eval lore` / `eval style` | 运行评测 |
-| `mcp` | 运行 MCP 服务 |
+| `eval rhetoric` / `eval lore` / `eval style` | 运行评测 |
 
 `--preset`、`--model`、`--fallback`、`--search`、`--budget`、`--improv` 等全局选项放在子命令前。例如 `autokeeper --preset deepseek import 模组.pdf`。导入子命令还可以用自己的 `--model` 覆盖本次导入的选择。

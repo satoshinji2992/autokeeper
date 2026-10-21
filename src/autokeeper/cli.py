@@ -19,7 +19,7 @@ from . import artkit, config, paths
 
 app = typer.Typer(help="AutoKeeper：自动化 CoC 7 版中文跑团", no_args_is_help=False, add_completion=False)
 console = Console()
-notices = Console(stderr=True)  # before a command runs: stdout may be an MCP connection
+notices = Console(stderr=True)  # before a command runs: stdout stays the command's own
 
 
 def _version(value: bool) -> None:
@@ -324,7 +324,7 @@ def setup(
     from .module.compiler import compile_module
     from .module.schema import Module
 
-    steps = 3 if paths.INSTALLED else 4
+    steps = 3
     console.print(f"[bold]1/{steps}[/] 安装掷骰组件（BCDice，npm）…")
     if _install_bridge():
         console.print(f"    {paths.BRIDGE}")
@@ -333,19 +333,6 @@ def setup(
     for path in paths.module_folders():
         root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
         console.print(f"    {root.relative_to(paths.ROOT) if root.is_relative_to(paths.ROOT) else root}")
-    if not paths.INSTALLED:  # Claude Code and Codex opened in the repository read the skills there
-        console.print(f"[bold]3/{steps}[/] 链接 .claude/skills 与 .agents/skills …")
-        for dot in (".claude", ".agents"):
-            target = paths.ROOT / dot / "skills"
-            target.parent.mkdir(exist_ok=True)
-            if target.is_symlink() or target.exists():
-                continue
-            try:
-                target.symlink_to(Path("..") / "skills", target_is_directory=True)
-                console.print(f"    {dot}/skills -> ../skills")
-            except OSError:  # Windows without developer mode: copy instead of linking
-                shutil.copytree(paths.SKILLS, target)
-                console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
     if login_now and sys.stdin.isatty():
         console.print(f"[bold]{steps}/{steps}[/] 选模型")
         login()
@@ -1226,15 +1213,6 @@ def eval_blind(
     console.print(f"明细：{out}")
 
 
-@eval_app.command("context")
-def eval_context(modules: list[Path]) -> None:
-    """渐进式披露的上下文账本：整本模组 vs 总览 + 当前地点文件。"""
-    from .eval.context import ledger
-
-    for m in modules:
-        console.print_json(data=ledger(m))
-
-
 @eval_app.command("experience")
 def eval_experience(
     module: Path = Path("modules/zhuishuren"),
@@ -1387,14 +1365,6 @@ def eval_rejudge(report: Annotated[Path, typer.Argument(help="eval session 写�
         if got := done["summary"].get(side):
             console.print(f"[bold]{label}[/] {got['turns']} 轮：{got['turns_with_problems']} 轮有矛盾（共 {got['problems']} 处 {got['by_kind']}）")
     console.print(f"报告：{done['out']}")
-
-
-@app.command()
-def mcp() -> None:
-    """以 MCP 服务运行（给 Claude Code / Codex 的嵌入模式用）。"""
-    from .mcp_server import server
-
-    server.run()
 
 
 if __name__ == "__main__":

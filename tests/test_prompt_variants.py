@@ -75,11 +75,12 @@ def test_eval_takes_a_variant_before_its_command(tmp_path, monkeypatch):
     path = _write(tmp_path, "note: 试一下\nreplace:\n  NPC_SYSTEM:\n    - old: 仅以该角色身份回应。\n      new: 只用这个角色说话。\n")
     seen = {}
 
-    def ledger(module):
+    def score(file):
         seen["npc"] = cast.NPC_SYSTEM
-        return {}
+        return {"narrations": 0, "voice": 0}
 
-    monkeypatch.setattr("autokeeper.eval.context.ledger", ledger)
-    result = CliRunner().invoke(app, ["eval", "--prompts", str(path), "context", str(paths.EXAMPLE)])
+    monkeypatch.setattr("autokeeper.eval.style.score", score)
+    monkeypatch.setattr("autokeeper.cli._style_table", lambda stats: "")
+    result = CliRunner().invoke(app, ["eval", "--prompts", str(path), "cliche", str(paths.EXAMPLE)])
     assert result.exit_code == 0, result.output
     assert "提示词变体：v" in result.output and "只用这个角色说话。" in seen["npc"]

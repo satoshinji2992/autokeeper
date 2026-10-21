@@ -165,8 +165,7 @@ class GameState(BaseModel):
     sightings: dict[str, list[str]] = Field(default_factory=dict)  # investigator -> horrors whose first sight they paid for
     identified: list[str] = Field(default_factory=list)  # creatures the players can name (their true name is shown)
     apart: dict[str, str] = Field(default_factory=dict)  # investigator -> place, left behind by a chase; rejoins on the next move
-    pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
-    pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
+    pending_resolution: dict = Field(default_factory=dict)  # direct resolution outside the turn graph
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
     # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.

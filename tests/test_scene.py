@@ -345,7 +345,7 @@ async def test_an_old_save_plays_on(fake):
     old["transcripts"] = {"keeper": [{"role": "user", "content": "【第 1 轮】"}, {"role": "assistant", "content": "旧的叙述。"}]}
     old["narrator_context_version"] = 1
     old["pending_turn"] = {"input": "我四处看看", "talk_done": True}  # cut short mid-narration, before any receipt
-    for key in ("pending_resolution", "pending_mcp", "progress", "plugin_panels"):
+    for key in ("pending_resolution", "progress", "plugin_panels"):
         old.pop(key, None)
     st = GameState.model_validate(old)
     loaded, _ = made(state=st)
@@ -354,6 +354,16 @@ async def test_an_old_save_plays_on(fake):
     assert st.ongoing == "布道者在整理册子" and st.pending_turn["keeper"]["landed"]
     assert [m["content"] for m in st.transcripts["keeper"] if m["role"] == "assistant"] == ["旧的叙述。", "广场上的雾散了一些。"]
     await loaded.cast.close()
+    await game.cast.close()
+
+
+async def test_a_save_from_the_mcp_days_loads_without_its_journal(fake):
+    game, _ = made("square")
+    old = json.loads(game.state.model_dump_json())
+    old["pending_mcp"] = {"request": {"tool": "skill_check", "args": {"skill": "侦查"}}, "turn": {"checks": []}}
+    st = GameState.model_validate_json(json.dumps(old, ensure_ascii=False))
+    assert "pending_mcp" not in st.model_dump() and "pending_mcp" not in st.model_dump_json()
+    assert st.model_dump() == game.state.model_dump()  # everything else as it was
     await game.cast.close()
 
 

@@ -23,20 +23,6 @@ uv run autokeeper --preset deepseek eval experience --actions actions.txt --out 
 
 真实即兴链路也已验证：DeepSeek 导演临场生成 `stove_fuel` 插件，5 项测试通过后安装到本局，执行添柴动作使库存 3→2、热度 0→1，源码与状态进入存档。测试没有修改原模组；报告为 `dev/output/eval/improv-plugin-ds.json`。本轮完整回归 294 项通过。
 
-## 渐进式披露的上下文账本
-
-```bash
-uv run autokeeper eval context modules/zhuishuren
-```
-
-比较外部 Agent（Claude Code、Codex 通过 skills/MCP 主持）从编译出的 Skill 包里常驻的上下文：整本模组（所有 reference 文件）与“SKILL.md 总览 + 当前地点文件”。内置引擎的守秘人两者都不读，只拿公开的场景描述；裁定员拿当前地点周边的线索切片，导演拿真相和地图概览。用 tiktoken 的 o200k_base 计数，只作为与模型无关的近似值。
-
-| 模组 | 整本 | 总览 | 渐进式（平均 / 最多） | 节省 |
-|---|---|---|---|---|
-| 追书人（含火车站开场，2026-10-18） | 15,254 | 3,893 | 4,386 / 5,024 | 71.2% |
-
-加火车站之前的版本是 14,067 / 3,371 / 3,871 / 4,502，节省 72.5%。
-
 ## 原文细节问答（LightRAG）
 
 ```bash

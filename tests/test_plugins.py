@@ -199,23 +199,6 @@ async def test_declared_plugin_actions_are_available_to_the_turn_engine(fake):
     assert game.state.plugin_data["counter"] == {"count": 1}
 
 
-async def test_mcp_keeper_can_invoke_a_plugin_twice_as_two_distinct_actions(monkeypatch, tmp_path, fake):
-    from autokeeper import mcp_server as server
-
-    module = Module.load(EXAMPLE)
-    plugin = counter(hooks=["action"], actions=[PluginAction(name="count", description="计数")])
-    module.extensions = {plugin.id: plugin}
-    game, _, _ = make(module, fake, {})
-    monkeypatch.setattr(server.S, "game", game)
-    monkeypatch.setattr(server.S, "module", module)
-    monkeypatch.setattr(paths, "DATA", tmp_path)
-    assert server.list_plugins()[0]["actions"][0]["name"] == "count"
-    for _ in range(2):
-        result = await server.plugin_action("counter", "count")
-        assert not result["error"]
-    assert game.state.plugin_data["counter"] == {"count": 2}
-
-
 async def test_updated_improvised_plugin_keeps_existing_state(fake):
     module = Module.load(EXAMPLE)
     module.extensions = {"counter": counter()}

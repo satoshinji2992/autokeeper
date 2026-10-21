@@ -514,7 +514,7 @@ def _engine_only(op: Base) -> list[str]:
 
 class Effects(Base):
     """What happened to people and things outside an encounter, already rolled (engine/effects.py):
-    a trap's or a fall's wound, an event's, a plugin's, the MCP keeper's. All land or none."""
+    a trap's or a fall's wound, an event's, a plugin's. All land or none."""
 
     kind: Literal["effects"] = "effects"
     effects: list[Effect] = Field(default_factory=list)
