@@ -150,7 +150,9 @@ GameScreen.-dev #topbar {
     width: 1fr;
 }
 #right {
-    width: 40;
+    width: 29%;  /* the story keeps the larger share on a narrow terminal */
+    min-width: 30;
+    max-width: 44;
     border-left: tall $primary-darken-2;
     background: $surface;
 }

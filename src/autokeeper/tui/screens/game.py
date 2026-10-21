@@ -488,7 +488,6 @@ class GameScreen(Screen):
         right = self.query_one("#right")
         width = event.size.width
         right.display = width >= 96
-        right.styles.width = 40 if width >= 130 else 34
         # The dice tray as tall as 0.0.2 had it (thirteen lines on a tall screen); shrunk to make room
         # for the history it came out too small to read (the user, 2026-10-21). The history and the
         # clues give way instead: both open in full (Ctrl+G, F2). Only a very short screen trims it.
