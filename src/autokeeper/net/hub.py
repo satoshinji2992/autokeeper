@@ -806,12 +806,11 @@ class Hub:
             await self._picture(key)
 
     async def _picture(self, key: str) -> None:
-        """A picture to every screen as an art event, unless they have it (painted first, if a program
-        paints it): never a path on the host."""
+        """A picture to every screen as an art event, unless they have it: never a path on the host. One
+        not on disk yet goes the next time it is shown."""
         path = self.m.pictures.get(key)
         if not path or self.sent.get(key) == path:
             return
-        await asyncio.to_thread(scenery.ensure, path)
         if data := media.pack(path):
             self.sent[key] = path
             art = self.m.art.get(key, "")

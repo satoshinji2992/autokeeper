@@ -390,8 +390,8 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
 
         screen.play = lambda text: screen.run_worker(turn(text), group="turn", exclusive=True)
         await pilot.press("我")  # typed straight in, as players do
-        await pilot.pause()
-        assert box.has_focus and box.value == "我" and not picker.display and not screen._battle_picking
+        assert await until(pilot, lambda: box.has_focus and box.value == "我")
+        assert not picker.display and not screen._battle_picking
         assert screen._clock is None  # an order of their own takes the time it takes
         await pilot.press("enter")
         await pilot.pause(0.1)
