@@ -18,8 +18,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+# The way a chase runs is module format now (module/schema.py); still importable from here.
+from ..module.schema import Leg as Leg
+from ..module.schema import Method as Method
+from ..module.schema import Obstacle as Obstacle
+from ..module.schema import Track as Track
 from .bcdice import Level
 from .coc import Check
 from .combat import Fighter, check
@@ -28,30 +33,6 @@ LOST = 3  # legs ahead of every pursuer at the end of a round: they have lost yo
 HEAD_START = 2  # legs the quarry starts ahead
 SIGHT = 2  # legs ahead at which the quarry is out of the pursuers' sight and may hide
 DIFFICULTY = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
-
-
-class Obstacle(BaseModel):
-    kind: Literal["hazard", "barrier"] = Field(description="hazard 险阻：边跑边掷，失败会耽搁或受伤；barrier 路障：必须过了检定才能通过")
-    what: str = Field(description="是什么，几个字：结冰的台阶、锁着的铁门、倒伏的墓碑")
-    skill: str = Field(description="通过它用的技能或属性：跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……")
-    difficulty: Literal["常规", "困难", "极难"] = "常规"
-    harm: str = Field("", description="失败时受的伤，骰子式如 1D3；只耽搁不受伤就留空")
-    # A barrier someone got through (broke it, unlocked it): open for those behind. The chase's own
-    # state, saved with it; a module or a drawn way never writes it.
-    open: bool = Field(False, description="追逐中已被打开的路障，由引擎记下；不用写")
-
-
-class Leg(BaseModel):
-    name: str = Field(description="这一段路的名字，四到八个字：墓碑间的窄道、结冰的主街")
-    look: str = Field("", description="一句话的样子，追逐的时候讲给玩家听")
-    obstacle: Obstacle | None = Field(None, description="这一段路上挡着的一处险阻或路障；畅通就留空")
-
-
-class Track(BaseModel):
-    legs: list[Leg] = Field(min_length=4, max_length=12)
-
-    def at(self, pos: int) -> Leg | None:
-        return self.legs[pos] if 0 <= pos < len(self.legs) else None
 
 
 def speed_roll(dice, f: Fighter) -> Check:

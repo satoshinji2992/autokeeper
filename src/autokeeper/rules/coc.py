@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from .bcdice import BCDice, Level, Roll
 from .catalog import CHARACTERISTICS, NO_IMPROVEMENT, UNPUSHABLE, base_value, canonical
@@ -18,6 +19,20 @@ from .physdice import PhysDice, physical
 
 DIFFICULTY_ZH = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
 DIFFICULTY_NAME = {v: k for k, v in DIFFICULTY_ZH.items()}
+
+
+class InjuryState(BaseModel):
+    """What a wound leaves that HP and the conditions do not say: since when someone has been dying,
+    stabilized or out, the unarmed damage towards a knockout, and which injuries have had First Aid
+    (once each). An investigator's is `Investigator.injury`, an NPC's or a creature's is in the world
+    record (world/record.Life). Every time is None until it happened: 0 is a real round or minute."""
+
+    dying_since: int | None = None  # the encounter round dying began in
+    stabilized_at: int | None = None  # game minutes
+    unconscious_at: int | None = None  # game minutes
+    knockout: int = 0  # unarmed damage taken towards a knockout (a creature's 打晕)
+    injuries: list[str] = Field(default_factory=list)  # ids of the wounds taken (engine/effects.Wound.injury)
+    aided: list[str] = Field(default_factory=list)  # those that have had First Aid
 
 
 class Investigator(BaseModel):
@@ -45,6 +60,8 @@ class Investigator(BaseModel):
 
     conditions: list[str] = Field(default_factory=list)  # 重伤 / 昏迷 / 濒死 / 死亡 / 临时疯狂 / 不定性疯狂 / 永久疯狂
     marks: list[str] = Field(default_factory=list)  # skills ticked for improvement
+    # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model.
+    injury: SkipJsonSchema[InjuryState] = Field(default_factory=InjuryState)
 
     def model_post_init(self, _context) -> None:
         """What a sheet leaves out is worked out from its characteristics; what it gives stands, a 0
