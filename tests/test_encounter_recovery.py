@@ -277,3 +277,18 @@ async def test_with_no_human_at_the_table_the_ai_players_declarations_settle_the
         fake.queue(90, 90)
         await game.resolve(action, ruling)
         assert game.state.encounter.round == n and not fake.values
+
+
+async def test_a_mishap_cards_hp_lands_through_effects_once_with_its_injury_id(module, fake, monkeypatch):
+    from autokeeper import cards
+    from autokeeper.engine.game import Turn
+
+    card = cards.MishapCard(id="falling_beam", deck="mishap", name="落梁", text="房梁砸了下来。", hp="1D3")
+    monkeypatch.setattr(cards, "find", lambda cid: card)
+    game, _, events = fight_game(module, fake)
+    inv = game.state.investigator
+    fake.queue_totals(2)
+    assert await game._mishap("falling_beam", Turn(), "rest-mishap") == "落梁"
+    assert inv.hp == inv.hp_max - 2 and any(i.startswith("mishap:") for i in inv.injury.injuries)
+    assert [e["type"] for e in events][:2] == ["card", "damage"]
+    assert any(op.kind == "effects" for op in game.world.rec.journal)  # one effects op, refused twice by its injury id

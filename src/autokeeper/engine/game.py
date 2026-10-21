@@ -2154,13 +2154,19 @@ class Game(Encounters, Fighting):
         def commit() -> dict:
             inv = st.investigator
             trial = inv.model_copy(deep=True)
-            dealt = cards.deal_mishap(st, trial, card_id, self.rules)
+            dealt = cards.deal_mishap(st, trial, card_id, self.rules, hp=False)
             if dealt is None:
                 return {"name": "", "events": []}
             inv.__dict__.update(trial.__dict__)
+            # Its HP loss lands as every wound does (engine/effects): once, by its injury id, with the
+            # CON a major wound calls for (the review: it went straight onto the sheet).
+            wounded = self._wound_event(inv.id, dealt.card.hp, f"mishap:{st.turn}:{self._resolution_key(key)}", turn) \
+                if dealt.card.hp else None
+            if wounded:
+                dealt.lines.insert(0, f"{inv.name}{wounded['text']}")
             st.add("event", f"惨事卡〔{dealt.card.name}〕", who=inv.name)
             turn.notes.append(cards.mishap_note(inv, dealt))
-            events = [{"type": "card", **cards.view(dealt.card, inv.name)}]
+            events = [{"type": "card", **cards.view(dealt.card, inv.name)}, *([wounded] if wounded else [])]
             if dealt.sanity is not None:
                 turn.sanity.append((inv.name, dealt.sanity))
                 st.add("sanity", dealt.sanity.describe(), who=inv.name)
