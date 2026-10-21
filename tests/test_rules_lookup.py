@@ -66,6 +66,20 @@ def test_a_paged_book_cites_its_printed_page_chapter_and_heading():
     assert len(long) > 2 and all(len(p.text) <= rules_lookup.LONGEST for p in long)
 
 
+def test_a_running_credit_is_stripped_and_a_translations_original_page_numbers_are_kept():
+    """克苏鲁神话魔法大典: every page opens with the translator's credit run into the text, chapters
+    carry it in place of their title, and the footer keeps the original's (larger) page numbers."""
+    def page(n: int, body: str) -> str:
+        return f"克苏鲁神话魔法大典\n七宫涟个人汉化 {body}\n{n + 20}\n{n + 19}..."
+
+    pages = ["第一章 关于魔法…………7\n第二章 关于法术…………11", *(page(i, "法术的消耗和作用范围相称。" * 8) for i in range(2, 5)),
+             "克苏鲁神话魔法大典\n第二章 七宫涟个人汉化\n关于法术\n施放法术要消耗魔法值和理智值。" * 1 + "\n" + "施法需要一轮。" * 10 + "\n25"]
+    found = rules_lookup.split_pages("克苏鲁神话魔法大典", pages)
+    assert all("七宫涟个人汉化" not in p.text and "七宫涟" not in p.chapter for p in found)
+    assert next(p.page for p in found if p.pdf_page == 2) == 22 and found[-1].page == 25
+    assert found[-1].chapter == "第二章 关于法术" and found[0].chapter == ""  # not the table of contents' line
+
+
 def test_the_index_is_built_from_the_books_and_answers_with_book_and_page(books, tmp_path):
     out = tmp_path / "index"
     meta = rules_lookup.build(books, out, embedder=None)

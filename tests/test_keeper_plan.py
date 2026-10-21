@@ -356,9 +356,9 @@ async def test_the_rhetoric_eval_goes_through_the_keepers_plan(tmp_path, monkeyp
 
 
 # -- an encounter announced by the everyday plan (Plan.encounter) -----------------------------------
-async def test_the_plan_may_announce_a_fight_and_the_old_engine_still_starts_it(module, fake):
-    """Plan.encounter is one small object on the everyday schema; until the encounter engine reads
-    it (WP-C), the arbiter's ruling carries it to engine/fighting.py as Ruling.combat."""
+async def test_the_plan_may_announce_an_encounter_and_the_arbiter_still_starts_the_old_one(module, fake):
+    """Plan.encounter is one small object on the everyday schema, for the encounter engine (WP-C);
+    until then the arbiter's Ruling.combat/chase start the old engine's fights, as before."""
     cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), module)
     game = make(module, fake, cast)
     SCRIPT.append({"action": {"kind": "attack", "summary": "周衡扑向守钟人", "npc": "warden"},
@@ -368,14 +368,12 @@ async def test_the_plan_may_announce_a_fight_and_the_old_engine_still_starts_it(
     hint = sent["schema"]["$defs"]["EncounterHint"]
     assert set(hint["properties"]) == {"mode", "with", "trigger"} and "encounter" in sent["schema"]["properties"]
     assert "【可能动手的】" in sent["messages"][-1]["content"] and "encounter：这一轮真的打起来" in sent["system"]
-    assert cast.hint is not None and cast.hint[1].with_ == ["warden"]
-    SCRIPT.append({"needs_roll": True, "skill": "格斗(斗殴)"})
+    SCRIPT.append({"needs_roll": True, "skill": "格斗(斗殴)", "combat": ["warden"], "surprise": "foe"})
     ruling = await cast.arbiter(game.state, action)
-    assert ruling.combat == ["warden"] and ruling.chase == []
-    assert "【可能动手的】" not in SEEN[-1]["messages"][-1]["content"]  # the arbiter no longer starts fights
-    game.state.turn += 1  # a later turn's ruling does not inherit it
-    SCRIPT.append({"needs_roll": False})
-    assert (await cast.arbiter(game.state, action)).combat == []
+    assert ruling.combat == ["warden"] and ruling.surprise == "foe"
+    sent = SEEN[-1]
+    assert {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} <= set(sent["schema"]["properties"])
+    assert "【可能动手的】" in sent["messages"][-1]["content"] and "chase_party 写调查员是逃还是追" in sent["system"]
     await game.close()
     await cast.close()
 

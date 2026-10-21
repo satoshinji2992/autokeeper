@@ -83,6 +83,7 @@ def books(folder: Path) -> list[Path]:
 
 
 # -- reading ------------------------------------------------------------------------------------
+_CONTENTS = re.compile(r"(…|\.{3,}|·{3,})\s*\d+$")  # a table of contents' line: 第一章 关于魔法…………7
 _CHAPTER = re.compile(r"^(第[一二三四五六七八九十百零〇\d]+章\s*\S.{0,20}|Chapter\s+\d+[:.]?\s*\S.{0,40}|CHAPTER\s+\w+.{0,40})$")
 _NUMBER = re.compile(r"^\d{1,4}$")
 _PUNCT = re.compile(r"[。，、；：！？,;:“”\"（）()《》·…—]")
@@ -127,13 +128,28 @@ def _headers(pages: list[list[str]]) -> set[str]:
     return {line for line, n in tops.items() if n >= 3}
 
 
-def _printed(lines: list[str], index: int) -> int | None:
-    """The page number printed on a page: a bare number among its first or last lines, close to
-    where the PDF page is (front matter shifts it a little)."""
+def _credits(pages: list[list[str]]) -> set[str]:
+    """A running credit that opens a page's first lines and runs into its text (魔法大典's
+    「七宫涟个人汉化 决定；但它……」): a short first word of many pages' opening lines."""
+    tops = Counter(line.split(" ", 1)[0] for lines in pages for line in lines[:3] if " " in line)
+    return {word for word, n in tops.items() if n >= max(3, len(pages) // 4) and len(word) <= 12
+            and not _NUMBER.match(word) and not re.match(r"^第.+章$|^Chapter$", word)}
+
+
+def _printed(lines: list[str], index: int, last: int | None) -> int | None:
+    """The page number printed on a page: a bare number among its first or last lines, near where
+    the PDF page is (front matter shifts it; a translation may keep the original's numbers, ahead
+    of its own pages) and never behind the page before it."""
     for line in [*lines[:3], *lines[-3:]]:
-        if _NUMBER.match(line) and index - 40 <= int(line) <= index + 5:
+        if _NUMBER.match(line) and index - 40 <= int(line) <= index + 60 and (last is None or int(line) >= last):
             return int(line)
     return None
+
+
+def _chapter(row: str, credits: set[str]) -> str:
+    for word in credits:
+        row = row.replace(word, " ")
+    return " ".join(row.split())
 
 
 def _heading(line: str, headers: set[str]) -> bool:
@@ -172,15 +188,24 @@ def _chunks(text: str) -> list[str]:
 def split_pages(book: str, pages: list[str], *, file: str = "") -> list[Passage]:
     """A paged book (a PDF) as passages, each within one page."""
     lines = [[line.strip() for line in page.split("\n") if line.strip()] for page in pages]
+    credits = _credits(lines)
+    lines = [[row.split(" ", 1)[1].strip() if i < 3 and row.split(" ", 1)[0] in credits and " " in row else row
+              for i, row in enumerate(rows)] for rows in lines]
+    lines = [[row for row in rows if row and row not in credits] for rows in lines]
     headers = _headers(lines)
     out: list[Passage] = []
     chapter = section = ""
+    last: int | None = None
     for index, rows in enumerate(lines, start=1):
-        printed = _printed(rows, index)
+        printed = _printed(rows, index, last)
+        last = printed if printed is not None else last
         body = []
         for row in rows:
-            if _CHAPTER.match(row):
-                chapter = row
+            if _CHAPTER.match(row) and not _CONTENTS.search(row) and not re.search(r"[：:，。「」]", row):
+                chapter = _chapter(row, credits)
+                continue  # a chapter's own line, not its text
+            if re.fullmatch(r"第.+章", chapter) and _heading(row, headers):
+                chapter += " " + row  # the credit stood where the title is: the title is the next heading
             if (_NUMBER.match(row) and printed is not None and int(row) == printed) or row in headers:
                 continue
             if _heading(row, headers):

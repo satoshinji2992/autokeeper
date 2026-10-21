@@ -257,8 +257,8 @@ async def test_the_arbiter_rules_an_other_action_with_effects_by_the_books_table
     prompt = sent["messages"][-1]["content"]
     assert ARBITER_ENCOUNTER.splitlines()[0] in prompt and "【遭遇 enc1】" in prompt
     assert "【上一次裁定的问题，请改正】\n- target 不在这场遭遇里：ghoul" in prompt
-    assert {"combat", "chase", "harm", "surprise", "lookup"}.isdisjoint(sent["schema"]["properties"])
-    assert ruling.harm == "1D6" and ruling.harm_to == "douglas"  # read by the old fight engine until WP-C
+    assert "lookup" not in sent["schema"]["properties"] and "【可能动手的】" not in prompt
+    assert ruling.harm == "" and ruling.combat == []  # the old engine's fields are its own (until WP-C)
 
 
 def test_old_journals_with_the_old_combat_fields_still_read_and_bad_dice_fail():
