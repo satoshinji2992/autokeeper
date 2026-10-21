@@ -467,3 +467,73 @@ async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, f
         screen._offer_orders()
         assert not picker.display
         assert await until(pilot, lambda: not screen._beating)
+
+
+# -- the stage on a small terminal ---------------------------------------------------------------------
+def _crowd(module):
+    """Two investigators against the warden and two of his helpers."""
+    from autokeeper.engine import combat as battle
+
+    screen, me, warden = fight_screen(module)
+    st = screen.state
+    friend = st.investigators[0].model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    st.investigators.append(friend)
+    helpers = [warden.model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}) for k in (1, 2)]
+    st.fight = battle.Fight(fighters=[me, battle.from_investigator(friend), warden, *helpers], place="tower", round=1)
+    return screen
+
+
+def _all_on_screen(screen, height: int) -> None:
+    """The input box above the footer, the round's list above the box, a few rows of story."""
+    box, picker, story = screen.query_one("#command"), screen.query_one("#picker"), screen.query_one("#story")
+    assert box.region.bottom <= height - 1, (box.region, height)
+    assert picker.display and picker.region.height >= 5 and picker.region.bottom <= box.region.y
+    assert story.region.height >= 3
+
+
+@pytest.mark.usefixtures("canned")
+@pytest.mark.parametrize("size", [(80, 24), (100, 30)])
+async def test_on_a_small_terminal_the_rounds_list_and_the_box_stay_on_screen(module, fake, size):
+    from autokeeper.tui.app import AutoKeeperApp
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=size) as pilot:
+        screen = _crowd(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        assert await until(pilot, lambda: screen.query_one("#picker").display)
+        await pilot.pause(0.3)
+        _all_on_screen(screen, size[1])
+        side = str(screen.query_one(".side").render())
+        assert side.count("11/11") == 2 and "调查员" in side and "你们" not in side  # every investigator's blood bar
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_keeps_its_picture(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, warden = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        assert await until(pilot, lambda: screen.query_one("#picker").display)
+        arena = screen.query_one(Arena)
+        assert await until(pilot, lambda: arena.region.height == 22)  # half the screen when it has room
+        await pilot.resize_terminal(100, 24)
+        await pilot.pause(0.5)
+        _all_on_screen(screen, 24)
+        assert arena.region.height < 22
+        screen.state.fight, me.pos = None, 2
+        await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
+        screen.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party")
+        await screen.handle({"type": "chase_start", "chase": battle.chase_view(screen.state.chase), "line": "【追逐开始】"})
+        await pilot.resize_terminal(96, 30)  # the right column is up: the route narrows, the picture keeps room
+        await pilot.pause(0.5)
+        assert arena.canvas.size.width >= 28 and arena.query_one(".side").size.width >= 26

@@ -113,6 +113,7 @@ BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's r
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
+STORY_MIN = 4  # rows the story keeps under a fight's or a chase's stage, the round's list open
 
 
 class GameScreen(Screen):
@@ -501,6 +502,7 @@ class GameScreen(Screen):
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
         self.query_one(Speaker).refit()
         self.call_after_refresh(self._panels)  # the sheet fits the new column; HP and SAN go up top without it
+        self._fit_stage()  # a fight's stage and list in what the new size leaves them
 
     def action_dice_skin(self) -> None:
         from ..drawing import dice
@@ -901,7 +903,7 @@ class GameScreen(Screen):
         if t == "fight_start":
             self.query_one(Speaker).leave()
             scene.display = False  # the stage is the fight's: whoever they face, as large as it holds
-            arena.show(ev["fight"], self.m, style, rows=self._arena_rows())
+            arena.show(ev["fight"], self.m, style, rows=self._stage_rows()[0])
             self.add_class("-fight")
             self.remove_class("-chase")
             story.add("event", banner(ev.get("line", "").replace("【", "").replace("】", " · ") or "战斗开始"))
@@ -942,7 +944,7 @@ class GameScreen(Screen):
         elif t == "chase_start":
             self.query_one(Speaker).leave()
             scene.display = False  # the place is on the stage still, rushing, and what is behind you in it
-            arena.show_chase(ev["chase"], self.m, style, rows=self._arena_rows(), scene=scene.image or "")
+            arena.show_chase(ev["chase"], self.m, style, rows=self._stage_rows()[0], scene=scene.image or "")
             self.add_class("-chase")
             self.remove_class("-fight")
             story.add("event", banner((ev.get("line") or "追逐开始").replace("【", "").replace("】", " · "), colour="#9fb4c8"))
@@ -974,9 +976,28 @@ class GameScreen(Screen):
             story.add("event", banner(ev.get("text", "追逐结束"), colour="#e8dec4"))
         self._topbar()
 
-    def _arena_rows(self) -> int:
-        """The stage's height while a fight or a chase is on: half the screen, the story under it."""
-        return max(14, min(32, round(self.app.size.height * 0.5)))
+    def _stage_rows(self) -> tuple[int, int]:
+        """A fight's or a chase's stage and the round's list over the box, in rows: what is left once the
+        top bar, the footer, the status line and the input box have theirs (at a LAN table its turn
+        line, with F12 the developer panel), the story keeping STORY_MIN under the stage. Half the
+        screen at most; on a short terminal the list scrolls instead of pushing the box off the screen
+        (80x24 left the story one row and the box below the bottom)."""
+        height = self.app.size.height
+        fixed = 2 + 1 + 3 + 1 + len(self.query("#turnline"))  # bars, status, box, the stage's edge; LAN's turn line
+        fixed += sum(9 for panel in self.query(DevPanel) if panel.display)
+        free = height - fixed
+        picker = max(5, min(10, free // 3))
+        return max(4, min(32, round(height * 0.5), free - picker - STORY_MIN)), picker
+
+    def _fit_stage(self) -> None:
+        """The stage and the list as tall as _stage_rows has them: on a resize, a fight or a chase
+        beginning, the developer panel opening."""
+        rows, picker = self._stage_rows()
+        for options in self.query("#picker").results(OptionList):
+            options.styles.max_height = picker
+        for arena in self.query(Arena).results(Arena):
+            if arena.display:
+                arena.styles.height = rows
 
     async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
         """A face over the whole screen: a creature first seen, the thing that caught you (after the
@@ -1299,6 +1320,7 @@ class GameScreen(Screen):
             return
         panel = self.query_one(DevPanel)
         panel.display = not panel.display
+        self._fit_stage()
         self.set_class(panel.display, "-dev")
         self._topbar()
         if panel.display:

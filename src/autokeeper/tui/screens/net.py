@@ -169,6 +169,7 @@ class NetGameScreen(GameScreen):
         self._start_history(self.backlog)
         await self.query_one("#left").mount(Static(id="turnline"), before=self.query_one("#command", Input))
         self._turnline()
+        self._fit_stage()  # the turn line takes a row from a fight's stage
         self.query_one(SceneArt).effects = config.load().animations
         self.engine_label = "局域网联机" + ("" if self.seat else " · 观战")
         self._scene(self.state.location)

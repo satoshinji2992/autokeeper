@@ -314,7 +314,9 @@ def big_number(n: int, style: str) -> list[Text]:
 # -- the stage: a fight, a chase ------------------------------------------------------------------
 class Arena(Horizontal):
     """A fight or a chase in place of the scene: the picture (Canvas) and, beside it, who acts in what
-    order and how hurt everyone is, or how far behind it is and what is in the way."""
+    order and how hurt everyone is, or how far behind it is and what is in the way. The screen sets
+    its height (GameScreen._stage_rows); the column takes a share of its width, so a narrow screen
+    keeps the picture some room, and writes itself again for every new size."""
 
     DEFAULT_CSS = """
     Arena { height: 20; display: none; background: #050303; }
@@ -344,6 +346,16 @@ class Arena(Horizontal):
     def on_mount(self) -> None:
         self.set_interval(0.35, self._flicker)
 
+    def on_resize(self) -> None:
+        self._fit_side()
+        if self.display and self.view is not None:
+            self.call_after_refresh(self._side)  # once the column has its new size
+
+    def _fit_side(self) -> None:
+        if width := self.size.width:
+            share, least, most = (0.45, 30, 46) if self.mode == "chase" else (0.42, 28, 38)
+            self.query_one(".side", Static).styles.width = max(least, min(most, round(width * share)))
+
     @property
     def canvas(self) -> Canvas:
         return self.query_one(Canvas)
@@ -355,6 +367,7 @@ class Arena(Horizontal):
             self.order, self.acting, self.facing, self.last_gap, self.was = [], "", "", 9, {}
         self.mode, self.view, self.m, self.style = mode, view, m, style
         self.set_class(mode == "chase", "-chase")
+        self._fit_side()
         if rows:
             self.styles.height = rows
         self.display = True
@@ -415,39 +428,9 @@ class Arena(Horizontal):
         side.update(self._chase_side() if self.mode == "chase" else self._fight_side())
 
     def _fight_side(self) -> Text:
-        view = self.view or {}
-        people = view.get("fighters", [])
-        names = {f["id"]: f["name"] for f in people}
-        out = Text()
-        out.append("⚔ 战斗", style=f"bold {GORE}")
-        out.append(f"  第 {max(1, view.get('round', 1))} 轮\n", style=f"bold {BONE}")
-        out.append("先后 ", style=ASH)
-        for i, fid in enumerate(self.order or [f["id"] for f in people]):
-            if i:
-                out.append(" ▸ ", style=DEEP)
-            side = next((f["side"] for f in people if f["id"] == fid), "foe")
-            colour = AMBER if side == "party" else BLOOD
-            out.append(names.get(fid, fid)[:6], style=f"bold reverse {colour}" if fid == self.acting else colour)
-        out.append("\n\n")
-        for f in people:
-            if f["side"] == "party":
-                continue
-            out.append("▶ " if f["id"] == self.facing else "  ", style=f"bold {GORE}")
-            out.append(f["name"][:12] + "\n", style=f"bold {BONE}" if f["id"] == self.facing else BONE)
-            out.append("  ")
-            out.append_text(wound_meter(f["wound"], f["status"]))
-            out.append(f"  {f['weapon']}\n", style=ASH)
-        out.append("━━ 你们 ━━\n", style=DEEP)
-        for f in people:
-            if f["side"] != "party":
-                continue
-            out.append(f["name"][:10] + "\n", style=f"bold reverse {AMBER}" if f["id"] == self.acting else f"bold {AMBER}")
-            if f["hp"] is not None:
-                out.append_text(hp_bar(f["hp"], f["hp_max"], 16))
-                out.append(f" {f['hp']}/{f['hp_max']}", style=f"bold {BONE}")
-            tag = f["status"] or STANCES.get(f["stance"], "")
-            out.append(f"  {tag}\n", style=f"bold {GORE}" if f["status"] else ASH)
-        return out
+        side = self.query_one(".side", Static)
+        width, height = side.content_size.width or 35, side.content_size.height or 20
+        return fight_column(self.view or {}, self.order, self.acting, self.facing, width, height)
 
     def _chase_side(self) -> Text:
         side = self.query_one(".side", Static)
@@ -483,6 +466,67 @@ class Arena(Horizontal):
         self.view, self.order, self.acting, self.facing, self.mode = None, [], "", "", ""
         self.canvas.clear()
         self.remove_class("-chase", "-close")
+
+
+def fight_column(view: dict, order: list[str], acting: str, facing: str, width: int, height: int) -> Text:
+    """A fight beside the picture: the round and who acts in what order (`acting` lit), how hurt every
+    foe looks (in words, never numbers; `facing` marked), the investigators' blood bars. Two lines a
+    fighter where the column is tall enough, one where it is not (a short terminal, a crowd); foes
+    past what it holds are counted, the investigators always shown."""
+    people = view.get("fighters", [])
+    names = {f["id"]: f["name"] for f in people}
+    foes = [f for f in people if f["side"] != "party"]
+    party = [f for f in people if f["side"] == "party"]
+    roomy = 3 + 2 * len(foes) + 1 + 2 * len(party) <= height
+    lines: list[Text] = []
+    head = Text(no_wrap=True, overflow="crop")
+    head.append("⚔ 战斗", style=f"bold {GORE}")
+    head.append(f"  第 {max(1, view.get('round', 1))} 轮", style=f"bold {BONE}")
+    turns = Text(no_wrap=True, overflow="crop")
+    turns.append("先后 ", style=ASH)
+    for i, fid in enumerate(order or [f["id"] for f in people]):
+        if i:
+            turns.append(" ▸ ", style=DEEP)
+        colour = AMBER if next((f["side"] for f in people if f["id"] == fid), "foe") == "party" else BLOOD
+        turns.append(names.get(fid, fid)[:6], style=f"bold reverse {colour}" if fid == acting else colour)
+    lines += [head, turns, Text()] if roomy else [head.append("  ").append_text(turns)]
+    per = 2 if roomy else 1
+    room = max(0, height - len(lines) - 1 - per * len(party))  # the investigators' lines first
+    shown = foes
+    if per * len(foes) > room:  # the one faced and those still standing first, the rest counted
+        ranked = sorted(foes, key=lambda f: (f["id"] != facing, f["status"] in DOWN or f["status"] in GONE))
+        shown = ranked[: max(0, (room - 1) // per)]
+    for f in shown:
+        row = Text(no_wrap=True, overflow="crop")
+        row.append("▶ " if f["id"] == facing else "  ", style=f"bold {GORE}")
+        style = f"bold {BONE}" if f["id"] == facing else BONE
+        if roomy:
+            row.append(f["name"][:12], style=style)
+            meter = Text("  ", no_wrap=True, overflow="crop")
+            meter.append_text(wound_meter(f["wound"], f["status"]))
+            meter.append(f"  {f['weapon']}", style=ASH)
+            lines += [row, meter]
+        else:
+            row.append_text(cell_text(f["name"], max(4, width - 12), style))  # the marker, a space, the meter: 12
+            row.append(" ")
+            row.append_text(wound_meter(f["wound"], f["status"]))
+            lines.append(row)
+    if len(shown) < len(foes):
+        lines.append(Text(f"  另有 {len(foes) - len(shown)} 名对手", style=ASH))
+    lines.append(Text("━━ 调查员 ━━", style=DEEP))
+    for f in party:
+        name_style = f"bold reverse {AMBER}" if f["id"] == acting else f"bold {AMBER}"
+        bars = Text(no_wrap=True, overflow="crop")
+        if f["hp"] is not None:
+            bars.append_text(hp_bar(f["hp"], f["hp_max"], max(4, min(16, width - (10 if roomy else 19)))))
+            bars.append(f" {f['hp']}/{f['hp_max']}", style=f"bold {BONE}")
+        tag = f["status"] or STANCES.get(f["stance"], "")
+        bars.append(f"  {tag}" if roomy else f" {tag}", style=f"bold {GORE}" if f["status"] else ASH)
+        if roomy:
+            lines += [Text(f["name"][:10], style=name_style), bars]
+        else:
+            lines.append(cell_text(f["name"], 8, name_style).append(" ").append_text(bars))
+    return Text("\n", no_wrap=True, overflow="crop").join(lines)  # a line a row: the count above holds
 
 
 def short_name(name: str) -> str:
