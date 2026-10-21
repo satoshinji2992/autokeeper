@@ -381,7 +381,7 @@ def wound(dice, f: Fighter, amount: int, *, unarmed: bool = False) -> list[str]:
         f.punched += amount
     else:
         f.struck = True
-    if f.human and amount >= f.hp_max:
+    if f.human and amount > f.hp_max:  # more than the maximum kills; exactly it is a major wound (Keeper Rulebook p. 100)
         f.hp, f.status = 0, "死亡"
         return ["当场毙命"]
     f.hp = max(0, f.hp - amount)

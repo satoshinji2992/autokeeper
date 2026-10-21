@@ -40,3 +40,5 @@ PLAN.md
 # Tool caches
 .pytest_cache/
 .ruff_cache/
+# The rulebooks the user keeps beside the code (51 MB of PDFs): read from here, not committed
+rule/

@@ -818,3 +818,36 @@ async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module
         assert text.count("受到 3 点伤害") == 1  # on the warden's card, not again as a line, nor as a ✚ line
         assert not any(act["line"] in text for act in acts)  # each exchange is its card
         assert "还吊着一口气" in text  # what the cards do not say still comes
+
+
+async def test_a_turn_cut_short_after_its_fight_closed_only_sends_what_it_owed(module, fake):
+    """The user's review, 2026-10-21: the ending notice failed, the retry opened the fight again and
+    the warden, knocked out, struck once more."""
+    from autokeeper.engine import combat as battle
+
+    module.events, module.endings = [], []
+    game, _, events = fighters(module, fake, {})
+    me = battle.from_investigator(game.state.investigator)
+    foe = battle.from_npc(module.npc("warden"))
+    foe.hp = 1
+    game.state.fight = battle.Fight(fighters=[me, foe], place="tower", started=1, orders={foe.id: battle.Order(do="hold")})
+    action = Action(kind="attack", summary="攻击老守钟人", npc=foe.id,
+                    order=battle.Order(do="attack", target=foe.id, weapon="徒手").model_dump())
+    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)")
+    original = game.emit
+
+    async def broken(ev):
+        if ev["type"] == "fight_end":
+            raise ConnectionError("the ending notice did not go out")
+        await original(ev)
+
+    game.emit = broken
+    fake.queue(10, 90).queue_totals(1)
+    with pytest.raises(ConnectionError):
+        await game.resolve(action, ruling)
+    assert game.state.fight is None
+    game.emit = original
+    hp = game.state.investigator.hp
+    resumed = await game.resolve(action, ruling)  # nothing queued: a die thrown again would fail here
+    assert game.state.fight is None and game.state.investigator.hp == hp and not resumed.checks
+    assert [e["type"] for e in events].count("fight_start") == 0 and any(e["type"] == "fight_end" for e in events)

@@ -89,7 +89,14 @@ class Fighting:
     async def _battle(self, action: Action, ruling: Ruling, turn: Turn) -> None:
         """This turn is a round of a fight or a chase, or starts one."""
         st, step = self.state, self._resolution_step
-        if st.chase is not None or (st.fight is None and ruling.chase):
+        # Decided once, with what was open when the turn began: resumed after the fight or the chase
+        # closed (a notice that did not go out), the turn finishes that one, never opens a new one.
+        mode, was_open = await step("battle-mode", turn, lambda: (
+            "chase" if st.chase is not None or (st.fight is None and ruling.chase) else "fight",
+            st.fight is not None or st.chase is not None))
+        if was_open and not self.battling() and await self._battle_closed(turn, mode):
+            pass
+        elif mode == "chase":
             await self._chase_turn(action, ruling, turn)
         else:
             await self._fight_turn(action, ruling, turn)
@@ -99,6 +106,23 @@ class Fighting:
 
     def battling(self) -> bool:
         return self.state.fight is not None or self.state.chase is not None
+
+    async def _battle_closed(self, turn: Turn, mode: str) -> bool:
+        """The fight or the chase this turn was a round of closed before the turn was cut short: only
+        what it still owed the screens goes out (the closing step's saved notices). True if that was so."""
+        step, steps = self._resolution_step, (self._resolution or {}).get("steps", {})
+        key = "fight-close" if mode == "fight" else "chase-close"
+        if not steps.get(self._resolution_key(key), {}).get("done"):
+            return False
+        if mode == "fight":
+            ev = await step("fight-close", turn, lambda: None)
+            await step("fight-close-notice", turn, lambda: self.emit(ev))
+            if self.state.chase is not None:
+                await step("chase-from-fight-notice", turn, lambda: self.emit({"type": "chase_start", "chase": battle.chase_view(self.state.chase)}))  # type: ignore[arg-type]
+        else:
+            for i, ev in enumerate(await step("chase-close", turn, lambda: [])):
+                await step(f"chase-close:{i}", turn, lambda ev=ev: self.emit(ev))
+        return True
 
     async def _battle_action(self, text: str) -> Action:
         """The player's words in a fight or a chase, as the action that carries their order."""
