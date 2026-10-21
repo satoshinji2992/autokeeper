@@ -4,6 +4,8 @@ fake corpus, no real books, no model calls, no embedding model."""
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -97,6 +99,11 @@ def test_the_index_is_built_from_the_books_and_answers_with_book_and_page(books,
     said: list[str] = []
     again = rules_lookup.build(books, out, embedder=None, say=said.append)
     assert any("未变" in line for line in said) and again["books"]["调查员手册.txt"]["passages"] >= 2
+    meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+    (out / "meta.json").write_text(json.dumps({**meta, "format": 1}), encoding="utf-8")  # read another way: read again
+    said.clear()
+    rules_lookup.build(books, out, embedder=None, say=said.append)
+    assert not any("未变" in line for line in said)
 
 
 def test_with_embeddings_the_vectors_rank_and_are_kept_beside_the_passages(books, tmp_path):

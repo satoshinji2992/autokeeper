@@ -48,6 +48,7 @@ QUERY_PREFIX = "为这个句子生成表示以用于检索相关文章："  # bg
 WORD_WEIGHT = 0.35  # of the word score beside the embedding's
 SCORE_FLOOR = 0.35  # below this, a passage is not about the question
 HITS = 3
+FORMAT = 2  # how books are read and cut: an index made another way is read again, not reused
 # Characters of a question's grammar (怎么办、是不是): a word with one of them is not a term.
 STOP = set("的了是在吗呢吧啊怎么办什如何样哪谁会能要就都也还和与及或被把给对这那个些我你他她它们有没请问")
 
@@ -298,10 +299,11 @@ def build(folder: Path | None = None, out: Path | None = None, *, embedder: Embe
     embed = local_embedder() if embedder == "auto" else embedder
     started = time.monotonic()
     old_meta = _meta(out)
-    old = load(out, embedder=None) if not force and old_meta and bool(old_meta.get("embed")) == bool(embed) else None
+    reuse = (not force and old_meta.get("format") == FORMAT and bool(old_meta.get("embed")) == bool(embed))
+    old = load(out, embedder=None) if reuse else None
     passages: list[Passage] = []
     vectors: list[Any] = []
-    meta: dict[str, Any] = {"books": {}, "skipped": {}, "embed": None}
+    meta: dict[str, Any] = {"format": FORMAT, "books": {}, "skipped": {}, "embed": None}
     for path in books(folder):
         stamp = _stamp(path)
         kept = old_meta.get("books", {}).get(path.name) if old is not None else None
