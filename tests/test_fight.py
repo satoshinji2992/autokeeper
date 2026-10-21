@@ -472,7 +472,7 @@ async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_ba
     module.pictures["face-warden"] = str(face)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
-        screen, me, warden = fight_screen(module)
+        screen, _me, _warden = fight_screen(module)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         screen.busy = True  # the round is being settled: the engine ends the chase and starts the fight

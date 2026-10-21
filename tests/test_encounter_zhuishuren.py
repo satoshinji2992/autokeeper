@@ -102,7 +102,7 @@ async def test_douglas_runs_with_the_books_thomas_helps_and_the_stake_fires_by_t
                       goal="带书逃回地下")
     thomas = arrange("thomas", DeclaredAction(do="help", target="brennan", summary="托马斯托着布伦南翻墙"), react="dodge",
                      goal="帮调查员抓贼")
-    game, cast, events = fight_game(module, fake, location="jinboer_jia", arrange=lambda *a: EncounterTurnPlan(npcs=[douglas, thomas]))
+    game, cast, _events = fight_game(module, fake, location="jinboer_jia", arrange=lambda *a: EncounterTurnPlan(npcs=[douglas, thomas]))
     fake.queue(10, 40, 40, 40)  # the first sight of him (no event here pays it), then CON for speed: 布伦南, 道格拉斯, 托马斯
     start = EncounterStart(mode="chase", foes=["douglas_ghoul"], allies=["thomas"], quarry="foe", npcs=[douglas, thomas], pace=15,
                            reason="人影抱着书跑向墓地",

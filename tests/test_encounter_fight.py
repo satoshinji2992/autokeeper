@@ -512,7 +512,7 @@ async def test_a_punch_after_aiming_does_not_spend_the_aim_but_the_round_after_i
 
 async def test_an_npc_the_plan_has_speak_says_it_through_his_own_reply(module, fake):
     talk = arrange("warden", DeclaredAction(do="defend", summary="守着"), speak=True, goal="劝他们离开钟楼")
-    game, cast, events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[talk]))
+    game, cast, _events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[talk]))
     await begin(game, ["warden"])
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(95, 95)

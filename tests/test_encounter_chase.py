@@ -8,7 +8,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from autokeeper.engine import graph as turn_graph
-from autokeeper.engine.encounter import choices, site, views
+from autokeeper.engine.encounter import choices, site
 from autokeeper.engine.encounter.plan import DeclaredAction, EncounterTurnPlan
 from autokeeper.engine.game import Turn
 from autokeeper.module.schema import Event, Module, Stake
@@ -140,7 +140,7 @@ async def test_a_broken_barrier_stays_broken_for_those_behind(module, fake):
 async def test_shooting_in_a_chase_shoots_and_costs_a_point_or_a_penalty_die_on_the_move(module, fake):
     """The review: in the old chase, choosing to shoot became running."""
     module.items[0:0] = []
-    game, cast, _ = await chased(module, fake)
+    game, _cast, _ = await chased(module, fake)
     open_door(game)
     inv = game.state.investigator
     inv.inventory.append(".38 左轮手枪")
@@ -180,7 +180,7 @@ async def test_firing_on_the_move_costs_no_point_but_a_penalty_die(module, fake)
 async def test_turning_to_fight_where_they_meet_makes_it_a_fight_in_the_same_encounter(module, fake):
     """The review: 「回身迎战」 in the old chase was dropped; now it is a fight, where they met, the same
     encounter with its stakes, the two face to face engaged."""
-    game, cast, events = await chased(module, fake)
+    game, cast, _events = await chased(module, fake)
     eid = game.state.encounter.id
     open_door(game)
     put(game, warden="office_door", zhouheng="office_door")
@@ -192,12 +192,12 @@ async def test_turning_to_fight_where_they_meet_makes_it_a_fight_in_the_same_enc
     kinds = [e["type"] for e in out]
     assert kinds.index("chase_end") < kinds.index("fight_start")
     assert "【追逐转为战斗】" in cast.reports[-1]
-    assert [o.label for o in choices.options(game, "zhouheng")][0].startswith("攻击")  # the fight's own choices now
+    assert next(o.label for o in choices.options(game, "zhouheng")).startswith("攻击")  # the fight's own choices now
 
 
 async def test_the_route_end_moves_the_world_the_party_where_the_player_ran_and_a_keeper_quarry_to_its_exit(module, fake):
     """The review: a chase that ran out of the office left everyone where it began."""
-    game, cast, _ = await chased(module, fake)
+    game, _cast, _ = await chased(module, fake)
     open_door(game)
     put(game, zhouheng="lamp_street", warden="office_door")
     app = turn_graph.build(game, InMemorySaver())
@@ -210,7 +210,7 @@ async def test_the_route_end_moves_the_world_the_party_where_the_player_ran_and_
 
 async def test_a_keeper_quarry_that_reaches_its_way_out_is_where_that_way_out_is(module, fake):
     flee = DeclaredAction(do="move", to="fog_square", summary="守钟人往广场跑")
-    game, cast, events = fight_game(module, fake, location="office", arrange=lambda *a: EncounterTurnPlan(
+    game, _cast, _events = fight_game(module, fake, location="office", arrange=lambda *a: EncounterTurnPlan(
         npcs=[arrange("warden", flee, react="dodge")]))
     module.flags["warden_gone"] = "守钟人跑了"
     run = RUN.model_copy(update={"chase_party": "追", "stakes": [Stake(when="escaped:warden", flags=["warden_gone"])]})
@@ -237,7 +237,7 @@ async def test_a_quarry_that_drops_is_not_counted_as_escaped(module, fake):
     cast.modes["arrange"] = lambda *a: EncounterTurnPlan(npcs=[arrange("warden", attack("zhouheng"), react="fight_back")])
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(30, 10, 90).queue_totals(3, 0)  # 周衡's crate; the warden's blow lands, the dodge fails
-    out, asked = await play(app, "设路障", answers=["dodge"])
+    _out, _asked = await play(app, "设路障", answers=["dodge"])
     st = game.state
     assert st.investigator.hp == 0 and "昏迷" in st.investigator.conditions
     enc = st.encounter
@@ -268,7 +268,7 @@ async def test_switches_keep_wounds_speeds_and_stakes_and_refresh_only_on_a_new_
     enc = game.state.encounter
     assert enc.mode == "fight" and enc.round == 2
     cast.modes["arrange"] = flee_plan
-    out, _ = await play(app, "逃跑｜被攻击时闪避")  # no speed roll queued: speeds are kept for the encounter
+    _out, _ = await play(app, "逃跑｜被攻击时闪避")  # no speed roll queued: speeds are kept for the encounter
     enc = game.state.encounter
     assert enc.id == eid and enc.mode == "chase" and enc.switches == ["r1:chase", "r2:fight", "r3:chase"]
     assert {p.id: p.speed for p in enc.participants} == {"zhouheng": 8, "warden": 8}
@@ -322,7 +322,7 @@ async def test_something_else_in_a_chase_is_ruled_and_lands_on_the_way(module, f
 
 
 async def test_hiding_far_ahead_gets_a_bonus_die_and_a_hidden_quarry_cannot_be_gone_after(module, fake):
-    game, cast, _ = await chased(module, fake)
+    game, _cast, _ = await chased(module, fake)
     open_door(game)
     put(game, zhouheng="lamp_street", warden="archive")
     app = turn_graph.build(game, InMemorySaver())
