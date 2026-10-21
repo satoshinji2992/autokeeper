@@ -1,0 +1,399 @@
+"""The Idea roll (灵感检定, Keeper Rulebook pp. 82, 167–169), the push made a stated way (p. 73) and
+the arbiter's difficulty with a basis (p. 72). Scripted agents and FakeDice, no model calls."""
+
+from __future__ import annotations
+
+import pytest
+from langgraph.checkpoint.memory import InMemorySaver
+
+from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, PushRuling, Ruling, opposing
+from autokeeper.agents.director import DIRECTOR_SYSTEM, Improv, NewEvent
+from autokeeper.engine import autoplay, idea
+from autokeeper.engine import graph as turn_graph
+from autokeeper.engine.game import STALL_TURNS, Game, Turn, push_choice
+from autokeeper.module.schema import Module
+from autokeeper.paths import EXAMPLE
+from autokeeper.rules.coc import Rules
+
+from .test_engine import FakeCast, Improvising, make, run_turn
+from .test_guide import canned  # noqa: F401  (a fixture)
+
+
+@pytest.fixture
+def module() -> Module:
+    return Module.load(EXAMPLE)
+
+
+def scholar(game: Game, intellect: int = 90) -> str:
+    """A second investigator, the party's best mind."""
+    st = game.state
+    other = st.investigators[0].model_copy(deep=True, update={"id": "li", "name": "李雁"})
+    other.characteristics = {**other.characteristics, "智力": intellect}
+    st.investigators.append(other)
+    return other.id
+
+
+# -- which clue ---------------------------------------------------------------------------------
+def test_the_most_crucial_missed_clue_is_core_first_then_for_the_nearest_conclusion(module, fake):
+    game, *_ = make(module, fake, {})
+    st = game.state
+    assert idea.pick(module, st).id == "c_gears"  # core; supports k_tower, first in the module
+    st.clues.append("c_gears")
+    assert idea.pick(module, st).id == "c_archive"  # the other core clue
+    module.clue("c_archive").requires = ["flag:archive_open"]  # not to be found yet
+    assert idea.pick(module, st).id == "c_diary"  # no core left: k_tower is nearest (1 of 3 held)
+    st.clues.append("c_diary")
+    assert idea.pick(module, st).id == "c_notice"
+    st.clues.append("c_notice")
+    assert idea.pick(module, st) is None and game.idea_refused() == idea.NOTHING
+
+
+def test_the_party_with_the_highest_intellect_rolls(module, fake):
+    game, *_ = make(module, fake, {})
+    assert idea.roller(game.state).id == game.state.investigator.id
+    best = scholar(game)
+    assert idea.roller(game.state).id == best != game.state.investigator.id
+
+
+# -- how present it was -------------------------------------------------------------------------
+def test_difficulty_follows_how_present_the_clue_already_was(module, fake):
+    game, *_ = make(module, fake, {})
+    st = game.state
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "常规"  # never mentioned
+    st.add("keeper", "钟楼顶上的齿轮间里传来咔哒声。")
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "困难"  # mentioned once
+    st.minutes += 2 * 1440
+    assert idea.difficulty(st, "c_gears") == "常规"  # mentioned long ago
+    for _ in range(idea.STRESSED):
+        st.add("keeper", "齿轮间又响了一声。")
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "极难"  # stressed
+    idea.note(module, st)
+    assert st.mentions["c_gears"].told == idea.STRESSED + 1  # counting again adds nothing
+    st.add("player", "我想看看报社里有什么旧报合订本")
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_archive") == "极难"  # the players discussed it themselves
+    st.visited.append("tower")
+    idea.note(module, st)
+    assert idea.presence(st, "c_diary").mentioned  # they were where the diary's keeper is
+
+
+# -- the roll -----------------------------------------------------------------------------------
+async def test_a_successful_idea_roll_gives_the_clue_as_the_investigators_own_thought(module, fake):
+    game, cast, _events = make(module, fake, {})
+    roller = scholar(game)
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(30, 10)  # INT 90, regular: success; the gears' sanity check passes
+    out, interrupts = await run_turn(app, "/灵感", {"configurable": {"thread_id": "i1"}})
+    st = game.state
+    assert not interrupts and st.clues == ["c_gears"]
+    dice = next(e for e in out if e["type"] == "dice")
+    assert dice["skill"] == "灵感" and dice["who"] == "李雁" and dice["target"] == 90 and dice["difficulty"] == "常规"
+    assert st.ideas[-1].passed and st.ideas[-1].clue == "c_gears" and st.ideas[-1].day == 0
+    report = cast.reports[-1]
+    assert "灵感检定成功" in report and "迂回地融入" in report and "获得线索〔齿轮间〕" in report
+    assert "此前没有出现过" in report  # never mentioned: the keeper needs a way in for it
+    assert st.investigators[1].id == roller and st.minutes == Game.new(module, [module.pregens[0]]).minutes  # no time lost
+    assert game.idea_refused() == idea.TODAY  # once a game day
+    st.minutes += 1440
+    assert game.idea_refused() == ""
+
+
+async def test_a_player_throws_the_idea_roll_for_the_best_mind(module, fake):
+    game, *_ = make(module, fake, {})
+    scholar(game)
+    app = turn_graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "i2"}}
+    out = []
+    async for _mode, chunk in app.astream({"input": "/灵感", "by_hand": True}, thread, stream_mode=["custom", "updates"]):
+        if "__interrupt__" in chunk:
+            out.append(chunk["__interrupt__"][0].value)
+    ask = out[0]
+    assert ask["kind"] == "roll" and ask["who"] == "李雁" and ask["skill"] == "灵感" and ask["target"] == 90
+    assert ask["why"] == idea.BASIS["常规"] and "齿轮" not in str(ask)  # nothing about the clue itself
+
+
+async def test_a_failed_idea_roll_still_gives_the_clue_and_cuts_to_the_worst_situation(module, fake):
+    cut = Improv(kind="千钧一发", reason="钟楼里正在出事", go="tower",
+                 events=[NewEvent(id="e_cut", title="齿轮间的动静", when="now", read_aloud="齿轮间的门在你们面前猛地关上。")],
+                 note="守钟人锁上了齿轮间的门")
+    game, cast, _ = make(module, fake, {})
+    game.cast = cast = Improvising({}, [cut])
+    start = game.state.minutes
+    fake.queue(99, 10)  # INT 75: a failure; the gears' sanity check passes
+    turn = await game.resolve(game.idea_action(), Ruling(needs_roll=True, skill="灵感"))
+    st = game.state
+    assert cast.asked[0][0] == "千钧一发" and st.location == "tower" and "e_cut" in st.fired
+    assert st.minutes - start >= idea.LOST and "c_gears" in st.clues and not st.ideas[-1].passed
+    notes = "\n".join(turn.notes)
+    assert "千钧一发" in notes and "导演的安排：守钟人锁上了齿轮间的门" in notes and "〔齿轮间〕" in notes
+
+
+async def test_nothing_overlooked_is_said_plainly_and_spends_no_turn(module, fake):
+    game, cast, _ = make(module, fake, {})
+    game.state.clues = [c.id for c in module.clues]
+    app = turn_graph.build(game, InMemorySaver())
+    out, _ = await run_turn(app, "/灵感", {"configurable": {"thread_id": "i3"}})
+    assert game.state.turn == 0 and not cast.reports and not game.state.ideas
+    assert any(e["type"] == "command" and e["text"] == idea.NOTHING for e in out)
+
+
+async def test_a_stall_offers_the_idea_roll_instead_of_a_silent_lead(module, fake):
+    wait = Action(kind="wait", summary="周衡在广场上发呆")
+    game, cast, events = make(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))})
+    game.cast = cast = Improvising({"x": (wait, Ruling(needs_roll=False, minutes=5))}, [])
+    st = game.state
+    st.turn = STALL_TURNS
+    await game.resolve(wait, Ruling(needs_roll=False, minutes=5))
+    assert cast.asked == [] and st.idea_offer == STALL_TURNS and st.progress_at == STALL_TURNS
+    assert any(e["type"] == "idea_offer" for e in events)
+    assert "/灵感" in autoplay.situation(module, st)  # an AI player decides for itself
+    st.ideas.append(idea.IdeaRoll(turn=1, day=0, clue="c_notice", difficulty="常规", passed=True))
+    assert game.idea_refused() == ""  # offered: not held back by today's roll
+    action = game.idea_action()
+    assert action.idea["offered"]
+    fake.queue(10, 10)
+    await game.resolve(action, Ruling(needs_roll=True, skill="灵感"))
+    assert st.idea_offer == 0 and st.ideas[-1].offered and game.idea_refused() == idea.TODAY
+
+
+# -- pushing a stated way ------------------------------------------------------------------------
+class Arbiter(FakeCast):
+    def __init__(self, script, ruling: PushRuling):
+        super().__init__(script)
+        self.pushes: list[tuple[dict, str]] = []
+        self.push_ruling = ruling
+
+    async def repush(self, state, pending, how):
+        self.pushes.append((pending, how))
+        return self.push_ruling
+
+
+LOOK = Action(kind="investigate", summary="周衡翻旧报", target="旧报合订本")
+ARCHIVE = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=30,
+                 on_push_fail=Failure(text="管理员来赶人"))
+
+
+def test_old_choices_and_stated_ways_both_read():
+    assert push_choice("luck") == ("luck", "") and push_choice({"choice": "push", "how": " 一页页 翻 "}) == ("push", "一页页 翻")
+    assert push_choice({"choice": "drop", "how": "随便"}) == ("drop", "")
+    with pytest.raises(ValueError):
+        push_choice("again")
+
+
+async def test_a_push_says_how_and_its_time_passes_before_the_roll(module, fake):
+    risk = Failure(text="翻得太狠，合订本散了架，管理员把你请出了报社", minutes=20)
+    game, *_ = make(module, fake, {}, location="office")
+    game.cast = cast = Arbiter({}, PushRuling(achievable=True, minutes=90, on_push_fail=risk))
+    app = turn_graph.build(game, InMemorySaver())
+    game.cast.script = {"look": (LOOK, ARCHIVE)}
+    fake.queue(90, 95)  # fails, then the pushed roll fails too
+    start = game.state.minutes
+    out, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "p1"}},
+                                     resume={"choice": "push", "how": "把三十年前那一年的合订本一页页全部翻完"})
+    st = game.state
+    assert interrupts[0]["action"] == "周衡翻旧报"
+    assert cast.pushes[0][1] == "把三十年前那一年的合订本一页页全部翻完"
+    assert st.minutes - start == 30 + 90 + 20  # the search, the push's own time, then its failure
+    assert "c_archive" not in st.clues and any("孤注一掷：把三十年前" in e.text for e in st.log if e.kind == "player")
+    outcome = [e for e in out if e["type"] == "outcome"][-1]
+    assert "合订本散了架" in outcome["lines"][0]  # the failure fitting this way, not the general one
+
+
+async def test_a_push_that_cannot_reach_the_goal_is_refused_and_nothing_is_rolled(module, fake):
+    game, *_ = make(module, fake, {}, location="office")
+    game.cast = cast = Arbiter({}, PushRuling(achievable=False, why="合订本已经被人借走了。", minutes=0))
+    fake.queue(90)
+    await game.resolve(LOOK, ARCHIVE)
+    turn = await game.push({"choice": "push", "how": "去隔壁街再找一份"})
+    st = game.state
+    assert not fake.values and len([e for e in st.log if e.kind == "dice"]) == 1  # no second roll
+    assert st.pending_push is None and "c_archive" not in st.clues and len(cast.pushes) == 1
+    assert any("孤注一掷不成立（去隔壁街再找一份）：合订本已经被人借走了" in n for n in turn.notes)
+
+
+async def test_a_push_without_a_way_goes_as_before(module, fake):
+    game, _cast, _ = make(module, fake, {}, location="office")
+    fake.queue(90, 3)
+    await game.resolve(LOOK, ARCHIVE)
+    before = game.state.minutes
+    await game.push("push")
+    assert "c_archive" in game.state.clues and game.state.minutes == before  # an old save's choice
+
+
+# -- the arbiter's basis --------------------------------------------------------------------------
+def test_the_arbiter_is_told_where_difficulty_comes_from_and_what_core_clues_mean():
+    assert "低于 50 常规，50 及以上困难，90 及以上极难" in ARBITER_SYSTEM
+    assert "不因为调查员自己的技能高就提高难度" in ARBITER_SYSTEM and "准备充分" in ARBITER_SYSTEM
+    assert "【关键】" in ARBITER_SYSTEM and "灵感检定" in ARBITER_SYSTEM
+    assert "不受伤、不掉理智，on_fail 多数时候留空" in ARBITER_SYSTEM
+    assert "千钧一发" in DIRECTOR_SYSTEM
+
+
+def test_the_opposing_values_come_from_the_sheet_or_an_ordinary_person(module):
+    warden = module.npc("warden")
+    assert "心理学 10（常规）" in opposing(warden) and "模组没写数值" in opposing(warden)
+    warden.stats = {"心理学": 65, "意志": 90}
+    shown = opposing(warden)
+    assert shown.startswith("老守钟人(warden)：心理学 65（困难）、意志 90（极难）") and "侦查 25（常规）" in shown
+
+
+async def test_the_arbiters_prompt_marks_core_clues_and_the_opponents_values(module, monkeypatch):
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.harness import Reply
+
+    cast = Cast(config.Config(), module)
+    seen: list[str] = []
+
+    async def send(key, session, state, prompt, **kw):
+        seen.append(prompt)
+        return Reply(text="", data=Ruling(needs_roll=False).model_dump())
+
+    monkeypatch.setattr(cast, "_send", send)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    state.location = "tower"
+    talk = Action(kind="talk", summary="周衡劝守钟人说实话", npc="warden", approach="说服")
+    await cast.arbiter(state, talk)
+    assert "c_gears「齿轮间」【关键】" in seen[0] and "【对方的相应数值】老守钟人(warden)：" in seen[0]
+    await cast.close()
+
+
+async def test_old_saves_load_with_the_new_fields(module, fake):
+    game, *_ = make(module, fake, {})
+    raw = game.state.model_dump(mode="json")
+    for key in ("mentions", "mentions_at", "ideas", "idea_offer"):
+        raw.pop(key)
+    state = type(game.state).model_validate(raw)
+    assert state.mentions == {} and state.ideas == [] and state.idea_offer == 0
+    Game(module, state, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
+    assert isinstance(Turn(), Turn)
+
+
+# -- at a shared table -------------------------------------------------------------------------
+async def test_a_seated_player_pushes_saying_how_and_asks_for_an_idea_roll(monkeypatch, tmp_path, skills_dir, fake):
+    import aiohttp
+
+    from autokeeper import paths
+    from autokeeper.net.hub import Hub
+
+    from .test_net import NoticeCast, closed, opened, pool_open, until
+
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=NoticeCast(), rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        ws = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await ws.send_json({"t": "hello", "name": "小明"})
+        await until(ws, lambda x: x["t"] == "welcome")
+        await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await ws.send_json({"t": "ready"})
+        await until(ws, pool_open)
+        fake.queue(90, 30)  # the notice is missed, then the push finds it
+        await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        await ws.send_json({"t": "done"})
+        await until(ws, lambda x: x["t"] == "offer")
+        await ws.send_json({"t": "choice", "mode": "roll"})
+        push = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
+        assert push["kind"] == "push" and push["can_push"]
+        before = hub.state.minutes
+        await ws.send_json({"t": "choice", "mode": {"choice": "push", "how": "搬来椅子站上去，凑近了一行行看"}})
+        await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "广场告示" in "".join(x["ev"]["lines"]))
+        assert "c_notice" in hub.state.clues and hub.state.minutes - before >= 10  # its time passed first
+        assert any("孤注一掷：搬来椅子" in e.text for e in hub.state.log)
+        sync = await until(ws, lambda x: x["t"] == "sync")
+        assert "mentions" not in sync["state"]  # the clues still to find stay on the host
+        await until(ws, pool_open)
+        hub.state.clues = [c.id for c in hub.m.clues]
+        await ws.send_json({"t": "act", "text": "/灵感"})
+        refused = await until(ws, lambda x: x["t"] == "error")
+        assert refused["text"] == idea.NOTHING
+        await ws.close()
+    await closed(task)
+
+
+async def test_the_push_dialog_asks_how_before_it_pushes():
+    from textual.app import App
+    from textual.widgets import Button, Input
+
+    from autokeeper.tui.modals.dialogs import PushModal
+
+    offer = {"kind": "push", "skill": "图书馆使用", "target": 60, "need": 60, "value": 63, "can_push": True, "luck": 3, "left": 52,
+             "risk": "管理员下班锁门"}
+    chosen: list = []
+
+    class Host(App):
+        def on_mount(self) -> None:
+            self.push_screen(PushModal(offer), chosen.append)
+
+    app = Host()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        modal = app.screen
+        assert "如何行动以孤注一掷" in "".join(str(w.render()) for w in modal.query("Static"))
+        modal.query_one("#push", Button).press()
+        await pilot.pause()
+        assert chosen == [] and app.screen is modal  # no way said: not yet
+        modal.query_one("#push-how", Input).value = "  把整排书架 逐本翻完 "
+        modal.query_one("#push", Button).press()
+        await pilot.pause()
+    assert chosen == [{"choice": "push", "how": "把整排书架 逐本翻完"}]
+
+
+async def test_ctrl_l_asks_for_an_idea_roll_on_the_game_screen(canned, fake):  # noqa: F811
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import RollModal
+
+    from .test_guide import open_game, until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = await open_game(app, pilot, resume=True)
+        screen.game.rules = Rules(dice=fake)
+        fake.queue(20, 10)  # INT 75: a success; the gears' sanity check passes
+        await pilot.press("ctrl+l")
+        assert await until(pilot, lambda: isinstance(app.screen, RollModal))
+        assert app.screen.ask["skill"] == "灵感" and app.screen.ask["who"] == "周衡"
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        assert await until(pilot, lambda: app.screen is screen and not screen.busy)
+        assert screen.state.clues == ["c_gears"] and screen.state.ideas
+        await pilot.press("ctrl+l")  # once a game day
+        await pilot.pause(0.2)
+        assert app.screen is screen and len(screen.state.ideas) == 1
+
+
+async def test_mcp_pushes_say_how_and_the_idea_roll_is_a_tool(monkeypatch, tmp_path, fake):
+    from autokeeper import mcp_server as srv
+    from autokeeper import paths
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(paths, "SKILLS", tmp_path / "skills")
+    monkeypatch.setattr(srv, "_dirs", lambda: {"example": EXAMPLE})
+    await srv.new_game("example", "zhouheng", slot="t")
+    g = srv.S.game
+    g.rules = Rules(dice=fake)
+    asked: list[str] = []
+
+    async def repush(state, pending, how):
+        asked.append(how)
+        return PushRuling(achievable=True, minutes=15)
+
+    monkeypatch.setattr(g.cast, "repush", repush)
+    fake.queue(90)
+    failed = await srv.skill_check("侦查", clues_on_success=["c_notice"], minutes=5)
+    assert failed["can_push_or_luck"]["can_push"]
+    with pytest.raises(ValueError, match="如何行动以孤注一掷"):
+        await srv.push_or_luck("push")
+    fake.queue(30)
+    pushed = await srv.push_or_luck("push", how="踮脚凑近告示，一个字一个字地辨认")
+    assert asked == ["踮脚凑近告示，一个字一个字地辨认"] and [c["id"] for c in pushed["clues"]] == ["c_notice"]
+    assert pushed["time"] == "D1 14:20"  # five minutes looking, fifteen for the push
+    fake.queue(20, 10)  # INT 75: a success; the gears' sanity check passes
+    rolled = await srv.idea_roll()
+    assert [c["id"] for c in rolled["clues"]] == ["c_gears"] and any("灵感检定成功" in n for n in rolled["notes"])
+    assert (await srv.idea_roll()) == {"refused": idea.TODAY}
+    await g.close()
+    await g.cast.close()

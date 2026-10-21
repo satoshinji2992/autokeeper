@@ -56,7 +56,7 @@ TIPS: dict[str, Tip] = {
     "npc": Tip("与 NPC 对话时，可直接输入问题或台词。需要说服对方时，守秘人才会要求检定。", "play"),
     "improv": Tip("模组未覆盖的行动可由守秘人按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
     "move": Tip("移动消耗游戏内时间，顶部显示当前时间。F3 查看已知地点。", "screen"),
-    "stuck": Tip("需要思路时按 F5。选中的建议只会填入输入框，确认后再发送。", "play"),
+    "stuck": Tip("需要思路时按 F5，选中的建议只会填入输入框。调查陷入僵局时，可按 Ctrl+L 做灵感检定，每个游戏日一次。", "push"),
     # Only places already mentioned in the opening or hook; no later discoveries.
     f"{TUTORIAL}:outside": Tip("输入目的地可前往其他地点，按 F3 查看已知地点。", "play"),
 }

@@ -24,6 +24,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, Static
 
 from ... import config
+from ...engine import idea
 from ...engine.game import RETELL
 from ...engine.state import GameState, LogEntry
 from ...module.schema import Module, PreludeFrame
@@ -418,6 +419,15 @@ class NetGameScreen(GameScreen):
             self.my_turn = False
             self._turnline()
             self.run_worker(partial(self.link.send, {"t": "done"}))
+
+    def action_idea(self) -> None:
+        """Ctrl+L, /灵感 or the menu at a shared table: asked for this seat; the Hub says if it cannot be made."""
+        if not self.seat:
+            self.app.notify("观战模式下无可操作的调查员。")
+        elif self.state.ending:
+            self.app.notify("本局已结束。")
+        else:
+            self.run_worker(partial(self.link.send, {"t": "act", "text": idea.WORDS[0]}))
 
     def action_retry(self) -> None:
         if self.seat and self.retry_due:
