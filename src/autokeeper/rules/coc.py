@@ -377,7 +377,7 @@ class Rules:
         amount = amount if isinstance(amount, int) else self.dice.total(amount)
         before = inv.hp
         result = Damage(amount, before, max(0, before - amount))
-        if amount >= inv.hp_max:
+        if amount > inv.hp_max:  # more than the maximum kills; exactly it is a major wound (Keeper Rulebook p. 100)
             inv.hp = 0
             result.after, result.dead = 0, True
             inv.add_condition("死亡")

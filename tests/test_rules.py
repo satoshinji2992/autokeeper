@@ -72,7 +72,7 @@ def test_damage(rules, fake, inv):
     fake.queue(10)
     d = rules.damage(inv, 5)
     assert d.dying and inv.hp == 0
-    assert rules.damage(inv, 11).dead
+    assert rules.damage(inv, 12).dead  # more than the maximum (11) kills; exactly the maximum is a major wound
 
 
 def test_opposed(rules, fake, inv):
@@ -122,3 +122,10 @@ def test_live_bcdice(bcdice, inv):
     stats = rules.roll_characteristics()
     assert all(15 <= v <= 90 for v in stats.values())
     assert "BMR" not in bcdice.table("BMR")
+
+
+def test_a_blow_of_exactly_the_maximum_is_a_major_wound_not_death(rules, fake, inv):
+    """Keeper Rulebook p. 100: a blow over the maximum kills; one equal to it is a major wound."""
+    fake.queue(10)
+    d = rules.damage(inv, inv.hp_max)
+    assert not d.dead and d.major_wound and d.dying and "死亡" not in inv.conditions
