@@ -1,22 +1,30 @@
 """Foreshadowing that changes across visits (Foreshadow.stages, engine/signs.py): one sign per
-arrival, timed and flagged stages, waking up where it shows, the picture that changes with it,
-`autokeeper check`, the compile step, and what the replay eval sees of the hints."""
+arrival, timed and flagged stages, waking up where it shows, the picture that changes with it
+(planned at compile time, drawn once the story gets near it, never ahead of play), `autokeeper
+check`, the compile step, and what the replay eval sees of the hints."""
 
 from __future__ import annotations
 
 import asyncio
+import shutil
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from autokeeper import config, credits
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.engine import check
-from autokeeper.engine.game import Turn
+from autokeeper.engine.game import Game, Turn
+from autokeeper.engine.state import GameState
+from autokeeper.module import adapt
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Foreshadow, Look, Module, Stage
 from autokeeper.paths import EXAMPLE
+from autokeeper.rules.coc import Rules
 
-from .test_engine import make
-from .test_imagegen import RED, picture
+from .test_engine import FakeCast, make
+from .test_imagegen import RED, codex, picture  # noqa: F401  (codex: a fixture, the codex process stood in for)
 
 PAINTING = Foreshadow(id="f_painting", hint="告示栏旁挂着一幅海边风景画，岸边空无一人", where="square", pays_off="k_tower",
                       stages=[Stage(hint="画里的海岸边多了一个背对着人的身影"),
@@ -172,3 +180,221 @@ def test_a_stage_the_review_flags_is_taken_out_and_its_sign_kept(tmp_path):
     kept = Module.load(folder)
     assert [f.id for f in kept.foreshadow] == ["f_mud", "f_hollow", "f_window"]
     assert [s.hint for s in kept.foreshadow[-1].stages] == ["窗框上多了指甲的划痕"]
+
+
+# -- a step's picture: planned at compile time, drawn once the story gets near it ----------------------
+FIGURE = "告示栏旁的画里，海岸边多了一个背对着人的小小人影"
+TURNED = "告示栏旁的画里，那个人影转过了没有五官的脸"
+
+
+def stage(n: int, where: str = "", picture: str = "") -> adapt.StageDraft:
+    return adapt.StageDraft(hint=f"画里的人影又近了一步，这是第 {n} 回看见", where=where, picture=picture)
+
+
+async def test_the_compile_step_hangs_a_picture_on_a_stage_whose_change_shows_and_draws_none(tmp_path, monkeypatch):
+    folder = tmp_path / "example"
+    shutil.copytree(EXAMPLE, folder)
+    leak = adapt.StageDraft(hint="画里的人影抬起手，指着钟楼的方向", picture="最大的那只齿轮背后缠着一圈不属于钟的东西")  # c_gears' words
+    answer = adapt.Signs(foreshadow=[adapt.SignDraft(
+        id="f_painting", hint="告示栏旁挂着一幅海边风景画，岸边空无一人", where="square", pays_off="k_tower",
+        stages=[adapt.StageDraft(hint="画里的海岸边多了一个背对着人的身影", picture=f" {FIGURE}\n"),
+                adapt.StageDraft(hint="报社墙上的挂钟停了，指针停在午夜前", where="office", picture="报社墙上的挂钟停了"),  # no picture there
+                leak])])
+    asked = []
+
+    async def ask(cfg, name, m, **_):
+        asked.append(adapt._material(m, name))
+        return answer
+
+    monkeypatch.setattr(adapt, "_ask", ask)
+    before = {p.name: p.read_text(encoding="utf-8") for p in folder.glob("*.yaml")}
+    await adapt.adapt(folder, passes=("foreshadow",), cfg=SimpleNamespace(), log=lambda _: None)
+    assert "【有场景图的地点】（全模组最多再写 6 处 picture）\n- square 广场" in asked[0]  # the tower and the office have none
+    m = Module.load(folder)
+    assert [s.flag for s in m.foreshadow[0].stages] == ["sign_f_painting_1", "", ""]
+    assert m.location("square").looks == [Look(when="flag:sign_f_painting_1", change=FIGURE)]  # no art: drawn in a game
+    assert m.flags["sign_f_painting_1"] == f"伏笔 f_painting 第 1 步露出了，场景图换成：{FIGURE}（露出时由引擎设置）"
+    assert not m.location("office").looks and m.stage_flags() == {"sign_f_painting_1"}
+    assert not [i for i in audit(m) if i.level == "error"]
+    for name, text in before.items():  # what was there is still there, line for line
+        assert all(line in (folder / name).read_text(encoding="utf-8").split("\n") for line in text.split("\n")), name
+    assert "场景图换成：" + FIGURE in "\n".join(adapt._rows(m, {"foreshadow:f_painting:1"}))  # the review reads it too
+    adapt.take_out(folder, ["foreshadow:f_painting:1"])  # the review takes the stage out: its picture goes with it
+    kept = Module.load(folder)
+    assert [s.hint for s in kept.foreshadow[0].stages] == ["报社墙上的挂钟停了，指针停在午夜前", "画里的人影抬起手，指着钟楼的方向"]
+    assert not kept.location("square").looks and "sign_f_painting_1" not in kept.flags
+    assert {p.name: p.read_text(encoding="utf-8") for p in folder.glob("*.yaml") if p.name in before} == before
+
+
+def test_picture_stages_keep_to_the_looks_a_module_and_a_place_may_have(module):
+    module.foreshadow = []
+    module.location("office").art = "office"  # a second place with a picture
+    module.location("square").looks = [Look(when="flag:bell_stopped", change="钟楼的影子里一片死寂")]
+    module.npc("warden").looks = [Look(when="flag:bell_stopped", change="守钟人瘫坐在楼梯口")]
+    module.npc("preacher").looks = [Look(when="flag:bell_stopped", change="布道者哑了嗓子"), Look(when="flag:bell_stopped", change="布道者跪在台阶上")]
+    out = adapt.Signs(foreshadow=[
+        adapt.SignDraft(id="f_a", hint="告示栏旁挂着一幅海边风景画", where="square", pays_off="k_tower",
+                        stages=[stage(1, picture="画里多了一个人影"), stage(2, picture="画里的人影转过了身"), stage(3, "office", "窗上多了一道裂纹")]),
+        adapt.SignDraft(id="f_b", hint="报社的窗玻璃上有一道细细的裂纹", where="office", pays_off="k_tower",
+                        stages=[stage(4, picture="裂纹爬满了半扇窗")])])
+    found = adapt.edits(module, "foreshadow", out)
+    signs = found[0][2]
+    # Four looks already: two more for the module, one more for the square (two a place)
+    assert [s.get("flag", "") for s in signs[0]["stages"]] == ["sign_f_a_1", "", "sign_f_a_3"]
+    assert "flag" not in signs[1]["stages"][0]  # none left for the module
+    assert found[1:] == [("key", "flags", "sign_f_a_1", "伏笔 f_a 第 1 步露出了，场景图换成：画里多了一个人影（露出时由引擎设置）"),
+                         ("key", "flags", "sign_f_a_3", "伏笔 f_a 第 3 步露出了，场景图换成：窗上多了一道裂纹（露出时由引擎设置）"),
+                         ("add", "locations", "square", "looks", [{"when": "flag:sign_f_a_1", "change": "画里多了一个人影"}]),
+                         ("add", "locations", "office", "looks", [{"when": "flag:sign_f_a_3", "change": "窗上多了一道裂纹"}])]
+    after = adapt.preview(module, found)
+    assert sum(len(x.looks) for x in [*after.locations, *after.npcs]) == adapt.LOOKS
+    assert not [i for i in audit(after) if i.level == "error"]
+    assert "（场景图：画里多了一个人影）" in next(p.text for p in adapt.conditions.pieces(after) if p.ref == "foreshadow:f_a:1")
+    # A stage held back takes its flag and its look along; the others keep theirs
+    kept = adapt.without(found, {"foreshadow:f_a:1"})
+    assert [e[:3] for e in kept[1:]] == [("key", "flags", "sign_f_a_3"), ("add", "locations", "office")]
+    assert adapt.without(found, {"foreshadow:f_a"}) == [("append", "foreshadow", [signs[1]])]
+    module.location("square").looks.append(Look(when="flag:bell_stopped", change="广场上空无一人"))
+    module.npc("warden").looks.append(Look(when="flag:bell_stopped", change="守钟人不见了"))  # six: no more anywhere
+    assert "不写 picture" in adapt._material(module, "foreshadow")
+    assert [e[0] for e in adapt.edits(module, "foreshadow", out)] == ["append"]
+
+
+async def drawn(game) -> None:
+    """Until the pictures drawn in the background are done (one done may start the next)."""
+    for _ in range(8):
+        if not (busy := [t for t in game.visuals.tasks.values() if not t.done()]):
+            return
+        await asyncio.gather(*busy)
+
+
+def pictured(module: Module, tmp_path) -> Path:
+    """Both steps of the painting change the square's picture, which is a picture of its own (blue)."""
+    module.flags["figure_shown"] = "广场那幅画里多了一个人影（伏笔露出时由引擎设置）"
+    stages = module.foreshadow[0].stages
+    stages[0].flag, stages[1].when = "figure_shown", ""
+    module.location("square").looks = [Look(when="flag:figure_shown", change=FIGURE), Look(when="flag:painting_turned", change=TURNED)]
+    original = picture(tmp_path / "art" / "square.jpg")
+    module.pictures["square"] = str(original)
+    return original
+
+
+def ahead_runs(game, key: str) -> int:
+    """How many times the debug journal saw the picture for `key` drawn ahead."""
+    rows, _ = game.debug_journal.read(kind="task")
+    return sum(1 for r in rows if r["data"]["name"] == f"redraw-ahead:{key}" and r["data"]["status"] == "running")
+
+
+async def test_the_next_steps_picture_is_drawn_once_meanwhile_and_shown_the_moment_it_comes(module, fake, codex, tmp_path):  # noqa: F811
+    original = pictured(module, tmp_path)
+    module.location("tower").art = "tower"  # a sign where the party never comes: nothing is drawn for it
+    module.flags["crack_grew"] = "钟楼的墙裂得更开了（伏笔露出时由引擎设置）"
+    module.foreshadow.append(Foreshadow(id="f_crack", hint="钟楼的墙上有一道裂缝", where="tower", pays_off="k_tower",
+                                        stages=[Stage(hint="裂缝又长了一截", flag="crack_grew")]))
+    module.location("tower").looks = [Look(when="flag:crack_grew", change="墙上的裂缝爬到了窗边")]
+    game, _, events = make(module, fake, {}, location="office")
+    game.visuals.cfg = config.Config()
+    st = game.state
+    await visit(game, "square")  # the first hint: the first step's picture drawn meanwhile, from the square's own
+    await drawn(game)
+    first = st.looks["square_figure_shown"]
+    assert first["status"] == "ready" and first["made"] == "1" and first["when"] == "flag:figure_shown"
+    assert len(codex.prompts) == 1 and FIGURE in codex.prompts[0] and codex.attached
+    assert module.pictures["square"] == str(original) and "square" not in st.looks  # kept, not shown before its step
+    assert not [e for e in events if e["type"] == "art"]
+    game.visuals.ahead(["figure_shown"])  # asked again, or the game scheduled again: drawn once
+    game.visuals.schedule()
+    await drawn(game)
+    assert len(codex.prompts) == 1 and game.visuals.made() == 1
+    await visit(game, "square")  # the first step shows: its picture at once, the second's drawn meanwhile from it
+    assert module.pictures["square"] == first["picture"] and st.looks["square"]["applied"] == "flag:figure_shown"
+    await drawn(game)
+    assert [e["picture"] for e in events if e["type"] == "art" and e["key"] == "square"] == [first["picture"]]
+    second = st.looks["square_painting_turned"]
+    assert second["status"] == "ready" and len(codex.prompts) == 2 and TURNED in codex.prompts[1]
+    assert FIGURE[:20] in credits.get(Path(second["picture"]))["based_on"]["title"]  # drawn from the first step's picture
+    assert module.pictures["square"] == first["picture"]  # still the first: the second waits for its step
+    saved = GameState.model_validate_json(st.model_dump_json())
+    await game.close()
+    # A loaded game shows the first step's picture, holds the second, and draws neither again
+    loaded = Module.load(EXAMPLE)
+    loaded.foreshadow = [f.model_copy(deep=True) for f in module.foreshadow]
+    loaded.flags, loaded.locations = dict(module.flags), [x.model_copy(deep=True) for x in module.locations]
+    loaded.pictures["square"] = str(original)
+    again = Game(loaded, saved, FakeCast({}), Rules(dice=fake))
+    again.visuals.cfg = config.Config()
+    again.visuals.schedule()
+    assert loaded.pictures["square"] == first["picture"] and loaded.pictures["square_painting_turned"] == second["picture"]
+    assert not again.visuals.tasks
+    await visit(again, "square")  # the second step: its picture, at once
+    await drawn(again)
+    assert loaded.pictures["square"] == second["picture"] and len(codex.prompts) == 2 and again.visuals.made() == 2
+    assert ahead_runs(again, "square_figure_shown") == ahead_runs(again, "square_painting_turned") == 1
+    assert "tower_crack_grew" not in saved.looks  # the sign they never met cost nothing
+    await again.close()
+
+
+async def test_a_step_that_comes_while_its_picture_is_drawn_shows_it_when_done(module, fake, codex, tmp_path):  # noqa: F811
+    pictured(module, tmp_path)
+    game, _, _ = make(module, fake, {}, location="office")
+    game.visuals.cfg = config.Config()
+    game.visuals.pause()  # a turn is being told: the drawing waits
+    await visit(game, "square")
+    await visit(game, "square")  # the first step shows before its picture is drawn
+    assert "figure_shown" in game.state.flags and "square" not in game.state.looks  # the old picture stays
+    game.visuals.resume()
+    await drawn(game)
+    first = game.state.looks["square_figure_shown"]
+    assert module.pictures["square"] == first["picture"] and game.state.looks["square"]["applied"] == "flag:figure_shown"
+    assert len([p for p in codex.prompts if FIGURE in p]) == 1  # drawn ahead, never again for its step
+    await game.close()
+
+
+async def test_a_picture_drawn_ahead_that_fails_keeps_play_going_and_is_drawn_when_its_step_comes(module, fake, codex, tmp_path):  # noqa: F811
+    original = pictured(module, tmp_path)
+    game, _, _ = make(module, fake, {}, location="office")
+    game.visuals.cfg = config.Config()
+    codex.fail = "usage limit reached"
+    first = await visit(game, "square")
+    await drawn(game)
+    assert game.state.looks["square_figure_shown"]["status"] == "failed" and signs(first)
+    assert module.pictures["square"] == str(original)
+    codex.fail = ""
+    second = await visit(game, "square")  # its step comes: drawn the usual way now
+    assert "多了一个背对着人的身影" in signs(second)[0]
+    await drawn(game)
+    assert near_red(module.pictures["square"]) and game.state.looks["square"]["status"] == "ready"
+    assert len([p for p in codex.prompts if FIGURE in p]) == 2  # the failed try, then the step's own drawing
+    await game.close()
+
+
+def near_red(path: str) -> bool:
+    from .test_imagegen import colour_of, near
+
+    return near(colour_of(path), RED)
+
+
+async def test_without_codex_nothing_is_drawn_ahead_and_the_keeper_still_tells_the_change(module, fake, tmp_path):
+    original = pictured(module, tmp_path)
+    game, _, _ = make(module, fake, {}, location="office")
+    game.visuals.cfg = config.Config()  # pictures on, but no Codex here (the conftest's)
+    st = game.state
+    await visit(game, "square")
+    assert not game.visuals.tasks and not st.looks
+    turn = await visit(game, "square")
+    assert "这次：画里的海岸边多了一个背对着人的身影" in signs(turn)[0] and "figure_shown" in st.flags
+    assert module.pictures["square"] == str(original) and st.looks["square"]["status"] == "pending"  # drawn once Codex is here
+    assert not any(k.startswith("ahead:") for k in game.visuals.tasks)
+    await game.close()
+
+
+def test_check_wants_a_steps_picture_on_a_place(module):
+    module.foreshadow[0].stages[0].flag = "figure_shown"  # not declared
+    module.npc("warden").looks = [Look(when="flag:painting_turned", change="守钟人回头看那幅画")]
+    errors = [i.text for i in audit(module) if i.level == "error"]
+    assert any("第 1 步设的标记 figure_shown 未声明" in e for e in errors)
+    assert any("NPC warden 的变样图挂在伏笔步骤的标记 painting_turned 上" in e for e in errors)
+    module.flags["figure_shown"] = "画里多了一个人影"
+    module.npc("warden").looks = []
+    module.location("square").looks = [Look(when="flag:painting_turned", change=TURNED)]
+    assert not [i for i in audit(module) if i.level == "error"]

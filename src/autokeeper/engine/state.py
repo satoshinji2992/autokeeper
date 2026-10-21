@@ -182,7 +182,9 @@ class GameState(BaseModel):
     improv: list[dict] = Field(default_factory=list)  # the director's plans, applied again on load (module/improv.py)
     expanded: dict[str, int] = Field(default_factory=dict)  # place -> latest requested expansion, for diagnostics
     visuals: dict[str, dict[str, str]] = Field(default_factory=dict)  # per-save illustrations, reused after loading
-    looks: dict[str, dict[str, str]] = Field(default_factory=dict)  # art key -> what it shows since the story changed it (engine/visuals.py)
+    # art key -> what it shows since the story changed it; with `when`, a look's key -> its picture drawn ahead of the
+    # foreshadowing step that brings it, shown once that flag is set (engine/visuals.py)
+    looks: dict[str, dict[str, str]] = Field(default_factory=dict)
     shown: list[str] = Field(default_factory=list)  # big scenes whose moment has come, shown or not (engine/showcase.py)
     plugin_data: dict[str, dict] = Field(default_factory=dict)
     plugin_versions: dict[str, str] = Field(default_factory=dict)

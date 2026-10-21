@@ -458,14 +458,17 @@ def filler(cfg: config.Config | None, module, art_dir: Path, *, cap: int = AT_IM
 async def looks(cfg: config.Config | None, module, art_dir: Path, *, log=print, cap: int = LOOKS) -> list[str]:
     """The pictures for the changed states a module gives its places and people
     (Location.looks, NPC.looks), each made from the picture the place or person has
-    otherwise, at most `cap` tries per import. Pictures already there stay."""
+    otherwise, at most `cap` tries per import. Pictures already there stay. Those on a flag a
+    foreshadowing stage sets are not drawn here: a game draws each once the story gets near it
+    (engine/visuals.Visuals.ahead), so a sign the party never meets costs nothing."""
     from . import imagery
 
     if not enabled(cfg) or not imagery.private(art_dir):
         return []
+    staged = module.stage_flags()
     wanted = [(x.art, look, "scene", f"{x.name}：{x.read_aloud.strip()[:160]}") for x in module.locations if x.art for look in x.looks]
     wanted += [(n.portrait, look, "portrait", f"{n.name}，{n.look or n.name}") for n in module.npcs if n.portrait for look in n.looks]
-    wanted = [w for w in wanted if find_picture(art_dir, w[1].key(w[0])) is None][:cap]
+    wanted = [w for w in wanted if w[1].when.removeprefix("flag:") not in staged and find_picture(art_dir, w[1].key(w[0])) is None][:cap]
     done: list[str] = []
     failed = 0
     for base, look, kind, subject in wanted:

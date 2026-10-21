@@ -311,6 +311,11 @@ def audit(m: Module) -> list[Issue]:
                 err(f"{who} 的变样图键 {look.key(base)} 只能用小写字母、数字和下划线")
         if len(looks) > 2:
             warn(f"{who} 写了 {len(looks)} 种变样，一般最多两种")
+    staged = m.stage_flags()  # a step of foreshadowing changes a place's picture, drawn as the story gets near (engine/visuals.py)
+    for n in m.npcs:
+        for look in n.looks:
+            if look.when.removeprefix("flag:") in staged:
+                err(f"NPC {n.id} 的变样图挂在伏笔步骤的标记 {look.when[5:]} 上：伏笔的变化换的是地点的场景图，写在那个地点的 looks 里")
     moments = {"visit": locs, "event": {e.id for e in m.events}, "creature": {c.id for c in m.creatures},
                "flag": set(m.flags), "ending": endings}
     if len(m.showcases) > 15:

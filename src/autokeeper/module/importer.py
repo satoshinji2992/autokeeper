@@ -592,7 +592,8 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
     """The scenes and faces as real photos (Wikimedia Commons, licensed), drawn in characters
     like 《追书人》's. Whatever finds nothing gets a picture Codex draws from its description
     (imagegen.py, when codex is here), else keeps its hand-drawn art; then the changed states
-    the module describes (Location.looks, NPC.looks) are drawn from those pictures. Offline
+    the module describes (Location.looks, NPC.looks) are drawn from those pictures, but for those
+    a foreshadowing stage brings, which a game draws once the story gets near them. Offline
     (search = none) or without chafa there is nothing to do; `autokeeper art fetch` does the
     same later."""
     wanted = imagery.targets(m)
@@ -607,7 +608,8 @@ async def find_photos(m: Module, work: Path, cfg: config.Config, console: Consol
         console.print(f"[yellow]照片没找成（{type(exc).__name__}），可以稍后用 autokeeper art fetch 补。[/]")
         return []
     console.print(f"[bold green]照片[/] 找到 {len(done)}/{len(wanted)} 张，来源和授权记在 art/credits.yaml")
-    if fill and any(x.looks for x in [*m.locations, *m.npcs]):
+    staged = m.stage_flags()  # drawn in a game, once the story gets near them (imagegen.looks)
+    if fill and any(look.when.removeprefix("flag:") not in staged for x in [*m.locations, *m.npcs] for look in x.looks):
         console.print("[bold]变样图[/] 照原图画出剧情里会变样的地点和人物…")
         drawn = await imagegen.looks(cfg, m, work / "art", log=console.print)
         console.print(f"[bold green]变样图[/] 画好 {len(drawn)} 张")

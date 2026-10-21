@@ -1,5 +1,6 @@
-"""Edit a module's YAML as text: a field into one entry (or one agenda step), items onto a list,
-a key into a map; and taking back one of them (an entry, a step, a field's whole value).
+"""Edit a module's YAML as text: a field into one entry (or one agenda step), items onto a list
+(or onto one entry's list), a key into a map; and taking back one of them (an entry, a step, a
+field, a field's whole value, items of an entry's list, a key).
 
 A hand-written module keeps its layout and comments; a new field goes in as new lines, in that
 file's own indentation, so the diff is the new lines alone (module/adapt.py writes through this).
@@ -8,6 +9,7 @@ file's own indentation, so the diff is the new lines alone (module/adapt.py writ
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -181,10 +183,9 @@ def drop_step(text: str, group: str, owner: str, ident: str) -> str:
     return "\n".join([*lines[:start], *lines[_entry_end(lines, start, stop):]])
 
 
-def replace(text: str, group: str, ident: str, key: str, value: Any) -> str:
-    """`text` with the whole of the field `key:` of the entry `- id: <ident>` under `group:`
-    (however many lines it has) given as `value`."""
-    lines = text.split("\n")
+def _field(lines: list[str], group: str, ident: str, key: str) -> tuple[int, int | None, int]:
+    """The field `key:` of the entry `- id: <ident>` under `group:`: the entry's own indentation,
+    and the lines the field takes (from, to); from is None when the entry has no such field."""
     top, bottom = _top(lines, group)
     start = next((i for i in range(top + 1, bottom) if re.match(rf"(\s*)- id: ['\"]?{re.escape(ident)}['\"]?\s*$", lines[i])), None)
     if start is None:
@@ -193,12 +194,96 @@ def replace(text: str, group: str, ident: str, key: str, value: Any) -> str:
     inner = len(lines[start]) - len(lines[start].lstrip(" ")) + 2
     own = next((i for i in range(start + 1, end) if re.match(rf" {{{inner}}}{re.escape(key)}:", lines[i])), None)
     if own is None:
-        return put(text, group, ident, key, value)
+        return inner, None, 0
     stop = own + 1
     while stop < end and (not lines[stop].strip() or len(lines[stop]) - len(lines[stop].lstrip(" ")) > inner
                           or lines[stop].startswith(" " * inner + "- ")):
         stop += 1
+    return inner, own, stop
+
+
+def replace(text: str, group: str, ident: str, key: str, value: Any) -> str:
+    """`text` with the whole of the field `key:` of the entry `- id: <ident>` under `group:`
+    (however many lines it has) given as `value`."""
+    lines = text.split("\n")
+    inner, own, stop = _field(lines, group, ident, key)
+    if own is None:
+        return put(text, group, ident, key, value)
     return "\n".join([*lines[:own], *_block({key: value}, inner), *lines[stop:]])
+
+
+def drop_field(text: str, group: str, ident: str, key: str) -> str:
+    """`text` without the field `key:` of the entry `- id: <ident>` under `group:`, however many
+    lines it has (unchanged when the entry has none)."""
+    lines = text.split("\n")
+    _, own, stop = _field(lines, group, ident, key)
+    return text if own is None else "\n".join([*lines[:own], *lines[stop:]])
+
+
+def drop_items(text: str, group: str, ident: str, key: str, gone: Callable[[Any], bool]) -> str:
+    """`text` without the items `gone` picks of the list field `key:` of the entry `- id: <ident>` under
+    `group:` (the looks on a flag): their own lines and no others; the field goes once nothing is left."""
+    lines = text.split("\n")
+    _, own, stop = _field(lines, group, ident, key)
+    if own is None:
+        return text
+    while stop > own + 1 and not lines[stop - 1].strip():
+        stop -= 1
+    first = next((i for i in range(own + 1, stop) if lines[i].lstrip().startswith("- ")), None)
+    if first is None:  # written on one line: written again whole
+        entries = (yaml.safe_load(text) or {}).get(group) or []
+        entry = next(x for x in entries if isinstance(x, dict) and x.get("id") == ident)
+        kept = [x for x in entry.get(key) or [] if not gone(x)]
+        return replace(text, group, ident, key, kept) if kept else drop_field(text, group, ident, key)
+    dash = len(lines[first]) - len(lines[first].lstrip(" "))
+    starts = [i for i in range(first, stop) if lines[i].startswith(" " * dash + "- ")]
+    spans = list(zip(starts, [*starts[1:], stop], strict=True))
+    out = [(a, b) for a, b in spans if gone((yaml.safe_load("\n".join(line[dash:] for line in lines[a:b])) or [None])[0])]
+    if len(out) == len(spans):
+        return drop_field(text, group, ident, key)
+    dropped = {i for a, b in out for i in range(a, b)}
+    return "\n".join(line for i, line in enumerate(lines) if i not in dropped)
+
+
+def extend(text: str, group: str, ident: str, key: str, items: list[Any]) -> str:
+    """`text` with `items` added at the end of the list field `key:` of the entry `- id: <ident>` under
+    `group:` (a place's looks), in that list's own indentation; the field put in when the entry has
+    none, written whole again when it is written on one line (`looks: []`)."""
+    lines = text.split("\n")
+    _, own, stop = _field(lines, group, ident, key)
+    if own is None:
+        return put(text, group, ident, key, items)
+    first = next((line for line in lines[own + 1 : stop] if line.lstrip().startswith("- ")), None)
+    if first is None:
+        entries = (yaml.safe_load(text) or {}).get(group) or []
+        entry = next(x for x in entries if isinstance(x, dict) and x.get("id") == ident)
+        return replace(text, group, ident, key, [*(entry.get(key) or []), *items])
+    while stop > own + 1 and not lines[stop - 1].strip():  # the blank lines after it stay after it
+        stop -= 1
+    dash = len(first) - len(first.lstrip(" "))
+    return "\n".join([*lines[:stop], *_block({key: items}, dash)[1:], *lines[stop:]])  # the items, not the key
+
+
+def drop_key(text: str, group: str, key: str) -> str:
+    """`text` without the key `key:` of the top-level mapping `group:` (a flag), however many lines it has."""
+    lines = text.split("\n")
+    top = next((i for i, line in enumerate(lines) if re.match(rf"{re.escape(group)}:\s*$", line)), None)
+    if top is None:
+        raise KeyError(f"没有 {group}")
+    bottom = next((i for i in range(top + 1, len(lines)) if lines[i].strip() and not lines[i].startswith(" ")), len(lines))
+    start = next((i for i in range(top + 1, bottom) if re.match(rf"\s+['\"]?{re.escape(key)}['\"]?:", lines[i])), None)
+    if start is None:
+        raise KeyError(f"{group} 里没有 {key}")
+    inner = len(lines[start]) - len(lines[start].lstrip(" "))
+    end = start + 1
+    while end < bottom and (not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip(" ")) > inner):
+        end += 1
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    out = [*lines[:start], *lines[end:]]
+    if not any(line.strip() and not line.lstrip().startswith("#") for line in out[top + 1 : bottom - (end - start)]):
+        out[top] = f"{group}: {{}}"  # nothing left in it
+    return "\n".join(out)
 
 
 def where(folder: Path, group: str) -> Path:
