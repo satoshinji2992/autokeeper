@@ -17,6 +17,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
+from ..rules.coc import InjuryState
+
 PLAYERS = "players"  # the table: what was told or shown to the investigators
 DIRECTOR = "director"
 KEEPER = "keeper"
@@ -31,9 +33,34 @@ class Versioned(BaseModel):
     changed: int = 0  # record seq of the op that last changed it
 
 
+class Life(BaseModel):
+    """An NPC's or a creature's body in this game (Entity.life): written once a fight seeds it from
+    the module's sheet, then kept, so whoever was hurt or killed stays so. An investigator's is on
+    the sheet itself (rules/coc.Investigator)."""
+
+    hp: int
+    hp_max: int
+    conditions: list[str] = Field(default_factory=list)  # 重伤 昏迷 濒死 死亡, the investigators' words
+    injury: InjuryState = Field(default_factory=InjuryState)
+    regenerating: bool = False  # down at 0 HP and coming back (a creature that heals each round)
+    source: Literal["module", "fill", "ordinary"] = "module"  # the sheet, a number the keeper fixed, an ordinary person's
+
+
+class WeaponState(BaseModel):
+    """A weapon item's own state (Entity.weapon): what it is, and what is in it. A gun keeps its
+    rounds and its jam from one fight to the next; no fight reloads it by itself."""
+
+    kind: str  # the weapon it is: a catalog name (rules/weapons.WEAPONS) or the sheet's attack name
+    loaded: int | None = None  # rounds in it; None: not known yet (filled when it is first used)
+    capacity: int = 0  # rounds a full load holds; 0 for a weapon that takes none
+    jammed: bool = False
+    spare: int | None = None  # rounds carried for it; None: unknown, the keeper fills it before a reload
+    malfunction: int = 100  # a roll of this or more jams it
+
+
 class Entity(Versioned):
     id: str
-    kind: Literal["npc", "location", "item", "investigator", "other"]
+    kind: Literal["npc", "location", "item", "investigator", "creature", "other"]
     name: str
     origin: Origin = "module"
     at: str = ""  # an NPC's or an item's place; an item's holder when someone has it
@@ -47,6 +74,9 @@ class Entity(Versioned):
     hidden: bool = False
     observed_by: list[str] = Field(default_factory=list)  # who confirmed this item's current ownership/equipment state
     look: str = ""  # an everyday thing's one line of how it looks (ops.Bring)
+    life: Life | None = None  # an NPC's or a creature's body, once a fight has seeded it; None before
+    weapon: WeaponState | None = None  # an item that is a weapon, once it was used in a fight
+    fills: dict[str, int] = Field(default_factory=dict)  # numbers the keeper fixed for a sheet that lacked them (生命, 闪避 ...)
 
 
 class Fact(Versioned):

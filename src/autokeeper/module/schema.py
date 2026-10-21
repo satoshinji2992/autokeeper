@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 from ..plugins.schema import Plugin
-from ..rules.chase import Leg
 from ..rules.coc import Investigator
+from ..rules.dice_expr import StoredDiceText
 
 
 class Check(BaseModel):
@@ -72,6 +72,51 @@ class View(BaseModel):
     prompt: str = Field("", description="画面里看得见什么，给找照片和画图用；不写人名，不剧透")
 
 
+# -- a chase's way (Location.chase) ------------------------------------------------------------
+# Read by the old chase engine (rules/chase.py, engine/fighting.py, which import them from here) and
+# compiled into an encounter's site graph (engine/encounter/plan.SiteNode) by the new one.
+class Method(BaseModel):
+    """One way past an obstacle the players are offered, with the roll it takes."""
+
+    id: str = Field(description="办法 id，英文小写加下划线：climb、force、pick_lock")
+    label: str = Field(description="给玩家的按钮，几个字：翻过去、撞开、撬锁")
+    skill: str = Field(description="用的技能或属性：攀爬、跳跃、力量、锁匠、闪避……")
+    difficulty: Literal["常规", "困难", "极难"] = "常规"
+    opens: bool = Field(False, description="成功后它就被打开或打破了，后面的人直接通过（撞开的门、撬开的锁）")
+
+
+class Obstacle(BaseModel):
+    kind: Literal["hazard", "barrier"] = Field(description="hazard 险阻：边跑边掷，失败会耽搁或受伤；barrier 路障：必须过了检定才能通过")
+    what: str = Field(description="是什么，几个字：结冰的台阶、锁着的铁门、倒伏的墓碑")
+    skill: str = Field(description="通过它用的技能或属性：跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……")
+    difficulty: Literal["常规", "困难", "极难"] = "常规"
+    harm: StoredDiceText = Field("", description="失败时受的伤，骰子式如 1D3；只耽搁不受伤就留空")
+    methods: list[Method] = Field(default_factory=list, max_length=4, description=(
+        "过这一处的几种办法，各用各的技能（翻墙用攀爬、撞门用力量）；不写就只有 skill 一种"))
+    # A barrier someone got through (broke it, unlocked it): open for those behind. The chase's own
+    # state, saved with it; a module or a drawn way never writes it.
+    open: bool = Field(False, description="追逐中已被打开的路障，由引擎记下；不用写")
+
+
+class Leg(BaseModel):
+    # The id, place and links make the way a graph (engine/encounter's site): a leg's branches, and
+    # which of the world's places it runs through, so a chase that crosses into one moves people there.
+    id: str = Field("", description="这一段的 id，英文小写加下划线；别的段的 links 用它")
+    name: str = Field(description="这一段路的名字，四到八个字：墓碑间的窄道、结冰的主街")
+    look: str = Field("", description="一句话的样子，追逐的时候讲给玩家听")
+    obstacle: Obstacle | None = Field(None, description="这一段路上挡着的一处险阻或路障；畅通就留空")
+    place: str = Field("", description="这一段在哪个地点里（地点 id）；跑进去就算到了那里；不在模组的地点里留空")
+    links: list[str] = Field(default_factory=list, description="从这一段还能岔到哪几段（段的 id 或名字）；只是接着下一段就留空")
+    exit: bool = Field(False, description="跑到这里就能脱身（出了墓园、钻进地道）时填 true")
+
+
+class Track(BaseModel):
+    legs: list[Leg] = Field(min_length=4, max_length=12)
+
+    def at(self, pos: int) -> Leg | None:
+        return self.legs[pos] if 0 <= pos < len(self.legs) else None
+
+
 class NPC(BaseModel):
     id: str
     name: str
@@ -96,6 +141,11 @@ class NPC(BaseModel):
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
     looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
     important: bool = Field(False, description="重要 NPC：有自己的目标和打算，调查员不在时也会行动；每个模组最多标 6 个，普通角色不标")
+    # What the players' screens call them before they know who it is, as Creature.called.
+    called: str = Field("", description="调查员还不认识他时怎么称呼：只写看得见的样子，如「穿雨衣的高个子」；认得就留空")
+    attacks: list[str] = Field(default_factory=list, description=(
+        "会用的攻击，写法同怪物的 attacks：“格斗(斗殴) 50%，伤害 1D3+DB”“射击(手枪) 40%，伤害 1D10”；"
+        "只写原文写明会动手的人；空着就只有徒手"))
     status: SkipJsonSchema[str] = Field("", exclude=True)  # this game's: 受伤, 失踪, 死亡 (world/knowledge.project)
 
 
@@ -163,6 +213,11 @@ class Creature(BaseModel):
 
     id: str
     name: str
+    # A creature sheet that is an NPC's fighting form (the ghoul the missing uncle has become): one
+    # person, one life and one place, under the NPC's id (engine/encounter's combatants).
+    npc: str = Field("", description="这张怪物卡是哪个 NPC 变成的样子（NPC id），比如变成食尸鬼的叔叔；不是就留空")
+    # What the creature does when the investigators run; None: the keeper decides then.
+    pursues: bool | None = Field(None, description="调查员逃跑时它会不会追：会追 true，不追 false；看情形就不写")
     # What the players' screens call it (a fight's panel and choices, the reveal), so `name` stays the
     # keeper's: the ghoul that was the missing uncle is a hunched figure to them, not 食尸鬼道格拉斯.
     called: str = Field("", description=(
@@ -182,6 +237,16 @@ class Creature(BaseModel):
         "规则用得着的特性，照这些写法写引擎才认得：护甲 2（每次受伤先减掉）、枪伤减半、每轮恢复 1 点、"
         "只被拳头打 6 点就会打晕、伤害加值 +1D4、体格 1、移动 10、成群（几十只，无法对抗）；"
         "它的打算也写在这里，调查员逃跑时它不追就写“不追”"))
+
+
+class Stake(BaseModel):
+    """What an encounter's outcome brings about: when its condition holds, its flags are set."""
+
+    when: str = Field(description=(
+        "什么时候算数：flag:标记、at:谁:地点、gone:谁 这些条件，加上遭遇里的 down:谁（倒下）、dead:谁、escaped:谁（脱身）、"
+        "caught:谁（被抓住）、surrendered:谁、ended:结局（won 赢、lost 输、fled 逃了、parley 谈和）；& 表示且，| 表示或"))
+    flags: list[str] = Field(default_factory=list, description="成立时设上的剧情标记")
+    note: str = Field("", max_length=80, description="这一条意味着什么，一句话，给守秘人看")
 
 
 class Event(BaseModel):
@@ -207,6 +272,11 @@ class Event(BaseModel):
     chase: list[str] = Field(default_factory=list, description=(
         "这件事发生时开始追逐：追或逃的 NPC 或怪物 id。写了 fight 就不写这个：打起来以后调查员逃跑，会追的对手自己会追"))
     chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃的一方还是追的一方；留空算逃")
+    # What the fight or the chase this event starts decides (engine/encounter's stakes).
+    stakes: list[Stake] = Field(default_factory=list, max_length=4, description=(
+        "这场打斗或追逐的胜负会带来什么：一条一个结果，条件成立时设上 flags；没有 fight 或 chase 就不写"))
+    # Horrors whose first sight this event's sanity roll already pays for: nobody is charged again.
+    sights: list[str] = Field(default_factory=list, description="这件事的 sanity 已经算了哪些怪物的第一次照面（怪物 id），照面时不再另扣理智")
 
 
 class SketchPrompt(BaseModel):

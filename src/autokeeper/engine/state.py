@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
 from .combat import Chase, Fight
+from .encounter.model import EncounterState, EncounterSummary
 
 LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
@@ -131,6 +132,14 @@ class GameState(BaseModel):
     fight: Fight | None = None
     chase: Chase | None = None
     seen: list[str] = Field(default_factory=list)
+    # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
+    # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.
+    # `fight`, `chase` and `seen` above are the old engine's, read until a save is converted.
+    encounter: EncounterState | None = None
+    encounter_log: list[EncounterSummary] = Field(default_factory=list)
+    sightings: dict[str, list[str]] = Field(default_factory=dict)  # investigator -> horrors whose first sight they paid for
+    identified: list[str] = Field(default_factory=list)  # creatures the players can name (their true name is shown)
+    apart: dict[str, str] = Field(default_factory=dict)  # investigator -> place, left behind by a chase; rejoins on the next move
     pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
     pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
     narrator_context_version: int = 0

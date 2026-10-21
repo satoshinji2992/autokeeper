@@ -10,7 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
+from pydantic.json_schema import SkipJsonSchema
 
 from .bcdice import BCDice, Level, Roll
 from .catalog import CHARACTERISTICS, NO_IMPROVEMENT, UNPUSHABLE, base_value, canonical
@@ -18,6 +19,20 @@ from .physdice import PhysDice, physical
 
 DIFFICULTY_ZH = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
 DIFFICULTY_NAME = {v: k for k, v in DIFFICULTY_ZH.items()}
+
+
+class InjuryState(BaseModel):
+    """What a wound leaves that HP and the conditions do not say: since when someone has been dying,
+    stabilized or out, the unarmed damage towards a knockout, and which injuries have had First Aid
+    (once each). An investigator's is `Investigator.injury`, an NPC's or a creature's is in the world
+    record (world/record.Life). Every time is None until it happened: 0 is a real round or minute."""
+
+    dying_since: int | None = None  # the encounter round dying began in
+    stabilized_at: int | None = None  # game minutes
+    unconscious_at: int | None = None  # game minutes
+    knockout: int = 0  # unarmed damage taken towards a knockout (a creature's 打晕)
+    injuries: list[str] = Field(default_factory=list)  # ids of the wounds taken (engine/effects.Wound.injury)
+    aided: list[str] = Field(default_factory=list)  # those that have had First Aid
 
 
 class Investigator(BaseModel):
@@ -45,6 +60,19 @@ class Investigator(BaseModel):
 
     conditions: list[str] = Field(default_factory=list)  # 重伤 / 昏迷 / 濒死 / 死亡 / 临时疯狂 / 不定性疯狂 / 永久疯狂
     marks: list[str] = Field(default_factory=list)  # skills ticked for improvement
+    # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model: out
+    # of the schema, and out of the dump while there is nothing in it (_without_empty_injury).
+    injury: SkipJsonSchema[InjuryState] = Field(default_factory=InjuryState)
+
+    @model_serializer(mode="wrap")
+    def _without_empty_injury(self, handler: SerializerFunctionWrapHandler) -> dict:
+        """A sheet nobody has hurt dumps as it did before 0.0.4: a module's pregens carry no field the
+        module format does not have (module/importer._unknown_fields), and an old save's world domain
+        (world/store.World.domain) hashes the same, so its ops can still be undone."""
+        out = handler(self)
+        if isinstance(out, dict) and out.get("injury") in ({}, InjuryState().model_dump()):
+            out.pop("injury")
+        return out
 
     def model_post_init(self, _context) -> None:
         """What a sheet leaves out is worked out from its characteristics; what it gives stands, a 0
