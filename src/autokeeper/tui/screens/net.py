@@ -8,7 +8,9 @@ is your turn, and anything that starts with a full-width bracket is table talk.
 from __future__ import annotations
 
 import asyncio
+import math
 import os
+import time
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -172,6 +174,7 @@ class NetGameScreen(GameScreen):
         self._scene(self.state.location)
         self._panels()
         self.set_interval(0.1, self._spin)
+        self.set_interval(0.5, self._countdown)
         for e in self.backlog:  # what happened before you sat down
             who = f"{e.who}：" if e.who else ""
             block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
@@ -187,11 +190,19 @@ class NetGameScreen(GameScreen):
     def _me(self) -> str | None:
         return self.seat or None
 
+    def _countdown(self) -> None:
+        """The round's window counting down on the turn line."""
+        if getattr(self, "closes", None) is not None and self.pool_open:
+            self._turnline()
+
     def _turnline(self) -> None:
         line = self.query_one("#turnline", Static)
         others = "、".join(self.waiting_on)
         room = f"行动 {self.pool.get('count', 0)}/{self.pool.get('capacity', 0)}"
         fresh = self.my_turn and not self.pooled
+        closes = getattr(self, "closes", None)
+        if closes is not None:  # the moment others can still act in, counting down
+            room += f" · {max(0, math.ceil(closes - time.monotonic()))} 秒后结算"
         if self.pool_open and self.seat and not self.pooled and self.my_turn:
             text = f" ▶ 新的一轮 · {room}"
         elif self.pool_open and self.seat and self.my_turn:
@@ -272,6 +283,8 @@ class NetGameScreen(GameScreen):
         elif t == "pool":
             was_open, held = self.pool_open, len(self.held)
             self.pool_open, self.pool = bool(msg["open"]), msg
+            left = msg.get("closes_in")  # the round's moment, once someone acted (net/hub.py WINDOW)
+            self.closes = time.monotonic() + left if self.pool_open and left is not None else None
             self.waiting_on = msg.get("waiting", [])
             mine = msg.get("mine") or {}  # the Hub's word on your own lines
             self.pooled = list(mine.get("now", [])) if self.pool_open else []

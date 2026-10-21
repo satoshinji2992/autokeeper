@@ -83,6 +83,10 @@ from .room import BLANKS
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
+# A round is a moment in real time (the user, 2026-10-21: 「时间同一轮应该是个现实 7s 的窗口」): from the
+# first action put in, the others have this many seconds to act at the same time; then it is settled,
+# and what comes later is the next round's. Nobody waits on a player who does not act.
+WINDOW = 7.0
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
@@ -235,6 +239,7 @@ class Hub:
         from ..rules.coc import Rules
 
         self.dir = Path(module_dir)
+        self.window = WINDOW  # seconds a round stays open once someone acted (a test shortens it)
         self.m = Module.load(self.dir)
         ensure_compiled(self.m, self.dir)  # the keeper reads the module's skill package
         self.fresh = state is None
@@ -289,6 +294,7 @@ class Hub:
         self.early: list[tuple[str, str]] = []  # (seat, action) for the next round: sent while the keeper told, or with no room
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
+        self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
         self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
@@ -374,6 +380,7 @@ class Hub:
             elif self.open and self._may_add(seat):
                 self.pool.append((seat, text))
                 self.done.discard(seat)
+                self._start_window()
                 self.wake.set()
                 await self._pool()
             elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
@@ -888,13 +895,25 @@ class Hub:
         """Players who may still put an action in: not done, and with room for it."""
         return [seat for seat in self._players() if seat not in self.done and self._may_add(seat)]
 
+    def _start_window(self) -> None:
+        """The first action of the round starts its window (WINDOW)."""
+        if self.open and self.closes_at is None and self.pool:
+            self.closes_at = asyncio.get_running_loop().time() + self.window
+
+    def _left(self) -> float | None:
+        """Seconds left in the round's window, while one runs."""
+        if not self.open or self.closes_at is None:
+            return None
+        return max(0.0, self.closes_at - asyncio.get_running_loop().time())
+
     async def _pool(self) -> None:
         """The round as everyone sees it, and each player's own lines: in it, and waiting for the next."""
         names = {inv.id: inv.name for inv in self.state.investigators}
         waiting = self._waiting_for() if self.open else []
         public = {"t": "pool", "open": self.open, "capacity": self.capacity(), "count": len(self.pool),
                   "by": {seat: self._count(seat) for seat in self._players()}, "done": sorted(self.done),
-                  "waiting": [names[i] for i in waiting], "open_to": waiting, "extra": names.get(self._extra() or "", "")}
+                  "waiting": [names[i] for i in waiting], "open_to": waiting, "extra": names.get(self._extra() or "", ""),
+                  "closes_in": self._left()}
         for cid in list(self.clients):
             seat = self._seat_of(cid)
             mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
@@ -905,7 +924,7 @@ class Hub:
         round while the keeper told the last goes in first. Meanwhile the table's requests
         (a retelling, the host's model switch, .r and .st) are done, and a finished plan of the
         director's plays out."""
-        self.pool, self.done, self.open = [], set(), True
+        self.pool, self.done, self.open, self.closes_at = [], set(), True, None
         for queue in self.inbox.values():
             while not queue.empty():
                 queue.get_nowait()
@@ -914,6 +933,7 @@ class Hub:
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
             if seat in players:
                 (self.pool if self._may_add(seat) else self.early).append((seat, text))
+        self._start_window()  # said while the keeper told: the moment starts as the round opens
         await self._event({"type": "status", "text": ""})
         await self._pool()
         try:
@@ -926,15 +946,17 @@ class Hub:
                     seat, text = self.instant.get_nowait()
                     await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
                     await self._pool()
-                if not self._waiting_for():
+                left = self._left()
+                if not self._waiting_for() or left == 0:  # everyone has acted, or the moment has passed
                     break
                 try:
-                    await asyncio.wait_for(self.wake.wait(), 1.0)
+                    await asyncio.wait_for(self.wake.wait(), min(1.0, left) if left is not None else 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
-                    await self._safely(self._interlude(), "幕间")
+                    if self._left() is None:
+                        await self._safely(self._interlude(), "幕间")
                 self.wake.clear()
         finally:
-            self.open = False
+            self.open, self.closes_at = False, None
         await self._pool()
 
     async def _settle(self) -> None:

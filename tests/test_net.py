@@ -634,3 +634,37 @@ async def test_a_rounds_actions_happen_at_once_and_are_told_together(monkeypatch
         await a.close()
         await b.close()
     await closed(task)
+
+
+async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not_act(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-window", human=[lead.id, "lin"])
+    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
+    hub.window = 0.6
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await a.send_json({"t": "hello", "name": "小明"})
+        await b.send_json({"t": "hello", "name": "小红"})
+        await until(a, lambda x: x["t"] == "welcome")
+        await until(b, lambda x: x["t"] == "welcome")
+        await a.send_json({"t": "sit", "investigator": "zhouheng"})
+        await b.send_json({"t": "sit", "investigator": "lin"})
+        assert (await until(a, pool_open))["closes_in"] is None  # nobody has acted: no clock yet
+        await a.send_json({"t": "act", "text": "我看看告示栏"})
+        counting = await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
+        assert 0 < counting["closes_in"] <= 0.6  # from the first action, the others have the window
+        closed_round = await until(a, lambda x: x["t"] == "pool" and not x["open"], limit=3)
+        assert closed_round["count"] == 1  # 小红 did not act in time: settled without her, nobody waited
+        said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
+        assert said["ev"]["who"] == "周衡"
+        await b.send_json({"t": "act", "text": "我也去看看"})  # too late for that moment: the next round's
+        nxt = await until(a, pool_open)
+        assert nxt["count"] == 1 and nxt["closes_in"] is not None  # it opens the next moment at once
+        await a.close()
+        await b.close()
+    await closed(task)
