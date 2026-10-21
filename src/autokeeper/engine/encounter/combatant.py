@@ -197,10 +197,10 @@ class EntityView:
         return body
 
     def can_act(self) -> bool:
-        return self.body().standing
+        return self.body().conscious
 
     def conscious(self) -> bool:
-        return self.body().standing
+        return self.body().conscious
 
     def held(self) -> list[str]:
         return [e.id for e in self.world.rec.entities.values() if e.kind == "item" and e.at == self.id]

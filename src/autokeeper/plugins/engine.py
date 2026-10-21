@@ -394,9 +394,9 @@ class Manager:
                     continue
                 hurt.add((inv.id, injury))
                 wound = effects.harm(game, inv.id, effect.amount, injury=injury)
-                body = bodies.setdefault(inv.id, effects.Body(live.hp, live.hp_max, list(live.conditions),
-                                                              live.injury.model_copy(deep=True)))
-                said = effects.wound(body, wound).describe()  # what it will do, for the words; the op lands it
+                done = effects.wound(bodies.get(inv.id) or effects.Body.of(live), wound)
+                bodies[inv.id] = done.body
+                said = done.describe()  # what it will do, for the words; the op lands it
                 out.wounds.append(wound.model_dump(mode="json"))
                 out.events.append({"type": "damage", "who": inv.name, "text": said, "injury": injury})
                 out.notes.append(f"{inv.name}{said}")

@@ -11,7 +11,8 @@ one), so they land together or not at all, and the op's id makes a retry land no
 Rolling them is `harm` (the damage and the CON roll a major wound calls for, through the game's
 current dice, so a journaled stage replays them); applying them is `settle`, which the two world
 ops call, and `commit` lands a list outside an encounter. `Body` and `wound` are the bookkeeping a
-wound does to a body, pure, so an engine can see what a blow will do before the op lands it.
+wound does to a body are rules/wounds.py's (`wound`, `heal`, `stabilize`, `die` wrap them), pure, so an
+engine can see what a blow will do before the op lands it.
 
 Every amount is absolute where it can be: `Ammo` says what is in the gun now, not how many were
 fired, so applying it again changes nothing. A `Wound` carries the id of the injury it is; a second
@@ -20,19 +21,21 @@ wound with the same id is refused, so a plugin and the engine cannot both deduct
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
+from ..rules import wounds
 from ..rules.bcdice import Level
-from ..rules.coc import Damage, InjuryState
+from ..rules.coc import Damage
+from ..rules.wounds import Body
 
 if TYPE_CHECKING:
     from ..world.record import Entity, Life
     from ..world.store import World
 
-Means = Literal["blow", "unarmed", "firearm", "fall", "fire", "asphyxia", "poison", "other"]
+Means = wounds.Means
 
 
 class Wound(BaseModel):
@@ -129,183 +132,73 @@ Effect = Annotated[
 ]
 
 EFFECTS: TypeAdapter[list[Effect]] = TypeAdapter(list[Effect])
-DOWN = ("昏迷", "濒死", "死亡")  # can do nothing now (Investigator.can_act's, without madness)
 
 
-# -- what a wound does to a body ------------------------------------------------------------------
-@dataclass
-class Body:
-    """Someone's body as the rules need it: an investigator's sheet, or an NPC's or a creature's
-    world life, with what its sheet says of how it takes a blow (engine/encounter/profiles.py)."""
-
-    hp: int
-    hp_max: int
-    conditions: list[str] = field(default_factory=list)
-    injury: InjuryState = field(default_factory=InjuryState)
-    human: bool = True  # a creature at 0 HP is dead (or down, healing itself), not dying
-    armor: int = 0
-    guns_halved: bool = False
-    knockout: int = 0  # unarmed damage that knocks it out (只被拳头打 6 点就会打晕)
-    regen: int = 0
-    regenerating: bool = False
-
-    @property
-    def standing(self) -> bool:
-        return not set(DOWN) & set(self.conditions) and not self.regenerating
-
-
+# -- what a wound does to a body: rules/wounds.py's, the same for everyone -------------------------
 @dataclass
 class Hurt:
-    """What one wound did: the investigators' words (rules/coc.Damage.describe) and an NPC's."""
+    """What one wound did (rules/wounds.WoundResult), in the investigators' words (rules/coc.Damage)
+    and the account's (`notes`)."""
 
-    amount: int  # after armour and halving
+    amount: int  # as rolled, before armour
     before: int
-    after: int
-    major: bool = False
-    con: Level | None = None
-    unconscious: bool = False
-    dying: bool = False
-    dead: bool = False
-    down: bool = False  # a creature that heals itself, down for now
-    knocked_out: bool = False
-    notes: list[str] = field(default_factory=list)
+    result: wounds.WoundResult
+
+    @property
+    def body(self) -> Body:
+        return self.result.body
+
+    @property
+    def notes(self) -> list[str]:
+        return list(self.result.notes)
 
     def describe(self) -> str:
         """As Rules.damage describes a wound, so the screens and the log read as they did."""
-        d = Damage(self.amount, self.before, self.after, major_wound=self.major, unconscious=self.unconscious,
-                   dying=self.dying, dead=self.dead)
-        return d.describe()
+        r = self.result
+        return Damage(self.amount, self.before, r.body.hp, major_wound=r.major, unconscious=r.unconscious,
+                      dying=r.dying, dead=r.dead).describe()
 
 
-def major(body: Body, amount: int) -> bool:
-    """Whether a blow of `amount` (after armour) calls for a CON roll: a major wound that does not kill."""
-    return body.human and amount > 0 and amount * 2 >= body.hp_max and amount <= body.hp_max
+def wound(body: Body, w: Wound, *, minutes: int | None = None, round: int | None = None) -> Hurt:
+    """`body` after the wound `w` (rules/wounds.apply_wound: armour, guns halved, major wounds, the CON
+    roll `w.con`, dying, death, a creature's knockout and healing); the new body is `.body`."""
+    return Hurt(w.amount, body.hp, wounds.apply_wound(body, w.amount, w.means, con=w.con, injury=w.injury,
+                                                       minutes=minutes, round=round))
 
 
-def landed(body: Body, w: Wound) -> int:
-    """The HP a wound takes once the body's armour and halving are through: armour does nothing
-    against poison and drowning (Keeper Rulebook p. 91); guns are halved for some creatures."""
-    amount = w.amount
-    if body.armor and w.means not in ("poison", "asphyxia"):
-        amount = max(0, amount - body.armor)
-    if body.guns_halved and w.means == "firearm":
-        amount //= 2
-    return amount
-
-
-def wound(body: Body, w: Wound) -> Hurt:
-    """Apply one wound to `body` (in place), as the Keeper Rulebook has it (pp. 100–101) and
-    rules/coc.Rules.damage does for investigators: a blow of half the maximum or more is a major
-    wound and needs the CON roll `w.con` (failed: unconscious); more than the maximum kills; at 0
-    HP someone with a major wound is dying, anyone else unconscious. A creature at 0 is dead, or
-    down for now when it heals itself. An NPC's notes in words are rules/combat.wound's.
-
-    TODO(WP-A): delegate to rules/wounds.apply_wound once it lands; this keeps Rules.damage's semantics."""
-    amount = landed(body, w)
-    if w.injury and w.injury not in body.injury.injuries:
-        body.injury.injuries.append(w.injury)
-    out = Hurt(amount, body.hp, body.hp, con=w.con)
-    if body.armor and amount == 0 and w.amount > 0:
-        out.notes.append("没能伤到它")
-        return out
-    if body.guns_halved and w.means == "firearm" and amount:
-        out.notes.append("枪伤减半")
-    if "死亡" in body.conditions:
-        return out
-    if body.human and amount > body.hp_max:  # more than the maximum kills; exactly it is a major wound (p. 100)
-        body.hp, out.after, out.dead = 0, 0, True
-        _add(body.conditions, "死亡")
-        out.notes = ["当场毙命"]
-        return out
-    body.hp = out.after = max(0, body.hp - amount)
-    if w.means == "unarmed":
-        body.injury.knockout += amount
-    if body.knockout and w.means == "unarmed" and body.injury.knockout >= body.knockout and body.hp > 0:
-        _add(body.conditions, "昏迷")
-        out.knocked_out = out.unconscious = True
-        out.notes.append("被打晕了")
-        return out
-    if major(body, amount):
-        out.major = True
-        _add(body.conditions, "重伤")
-        out.notes.append("重伤")
-        if w.con is not None and not w.con.ok:
-            out.unconscious = True
-            _add(body.conditions, "昏迷")
-            out.notes.append("昏死过去")
-    if body.hp == 0:
-        if body.human:
-            if "重伤" in body.conditions:
-                out.dying = True
-                _add(body.conditions, "濒死")
-                out.notes.append("濒临死亡")
-            else:
-                out.unconscious = True
-                _add(body.conditions, "昏迷")
-                out.notes.append("倒地不起")
-        elif body.regen:
-            body.regenerating = out.down = True
-            out.notes.append("倒下了")
-        else:
-            out.dead = True
-            _add(body.conditions, "死亡")
-            out.notes.append("死了")
+def heal(body: Body, h: Heal) -> Body:
+    """HP back (never over the maximum; nothing for the dead). First Aid is kept against its injury,
+    and a creature that heals itself is up again once it has any."""
+    if body.dead:
+        return body
+    aided = body.aided + ((h.injury,) if h.means == "first_aid" and h.injury and h.injury not in body.aided else ())
+    out = replace(body, hp=min(body.hp_max, body.hp + h.amount), aided=aided)
+    if out.regenerating and out.hp > 0:
+        out = replace(out, regenerating=False, conditions=tuple(c for c in out.conditions if c != wounds.UNCONSCIOUS))
     return out
 
 
-def heal(body: Body, h: Heal) -> int:
-    """HP back (never over the maximum); First Aid is kept against its injury, and a creature that
-    heals itself is up again once it has any."""
-    if "死亡" in body.conditions:
-        return 0
-    before = body.hp
-    body.hp = min(body.hp_max, body.hp + h.amount)
-    if h.means == "first_aid" and h.injury and h.injury not in body.injury.aided:
-        body.injury.aided.append(h.injury)
-    if body.regenerating and body.hp > 0:
-        body.regenerating = False
-        _drop(body.conditions, "昏迷")
-    return body.hp - before
+def stabilize(body: Body, now: int) -> Body:
+    """The dying, stabilized by First Aid: still dying (and out cold) until Medicine, no longer
+    rolling CON every round but every hour (rules/wounds.first_aid, p. 101)."""
+    if not body.dying or body.stabilized:
+        return body
+    return replace(body, hp=max(1, body.hp), stabilized_at=now)
 
 
-def stabilize(body: Body, now: int) -> bool:
-    """Dying no longer (First Aid): out cold, not getting worse (as the old engine's First Aid did)."""
-    if "濒死" not in body.conditions or "死亡" in body.conditions:
-        return False
-    _drop(body.conditions, "濒死")
-    _add(body.conditions, "昏迷")
-    body.injury.stabilized_at = now
-    return True
+def die(body: Body) -> Body:
+    if body.dead:
+        return body
+    return replace(body, hp=0, regenerating=False, conditions=(*body.conditions, wounds.DEAD))
 
 
-def wake(body: Body) -> bool:
-    if "昏迷" not in body.conditions or {"濒死", "死亡"} & set(body.conditions):
-        return False
-    _drop(body.conditions, "昏迷")
-    body.injury.unconscious_at = None
-    return True
-
-
-def die(body: Body) -> bool:
-    if "死亡" in body.conditions:
-        return False
-    body.hp = 0
-    _add(body.conditions, "死亡")
-    return True
-
-
-def _add(items: list[str], x: str) -> None:
-    if x not in items:
-        items.append(x)
-
-
-def _drop(items: list[str], x: str) -> None:
-    if x in items:
-        items.remove(x)
+def major(body: Body, w: Wound) -> bool:
+    """Whether the wound calls for a CON roll: a major wound that does not kill."""
+    return wounds.assess(body, w.amount, w.means).con
 
 
 # -- whose body ------------------------------------------------------------------------------------
-def status_of(conditions: list[str], hp: int, hp_max: int, regenerating: bool = False) -> str:
+def status_of(conditions, hp: int, hp_max: int, regenerating: bool = False) -> str:
     """An NPC's word for the scene (Entity.status, NPC.status): 死亡, 重伤, 受伤 or nothing."""
     if "死亡" in conditions:
         return "死亡"
@@ -317,20 +210,20 @@ def status_of(conditions: list[str], hp: int, hp_max: int, regenerating: bool = 
 
 
 def body_of(w: World, ident: str) -> Body | None:
-    """A copy of someone's body as it stands: an investigator's sheet, an NPC's or a creature's life
-    (seeded from its sheet when the world has not kept one yet). None for nobody."""
+    """Someone's body as it stands (rules/wounds.Body): an investigator's sheet, an NPC's or a
+    creature's world life with its sheet's traits (seeded from the sheet when the world has not kept
+    one yet). None for nobody."""
     from .encounter import profiles
 
     inv = next((i for i in w.st.investigators if i.id == ident), None)
     if inv is not None:
-        return Body(inv.hp, inv.hp_max, list(inv.conditions), inv.injury.model_copy(deep=True))
+        return Body.of(inv)
     p = profiles.profile(w, ident)
     if p is None:
         return None
     ent = w.rec.entities.get(p.id)
     life = ent.life if ent is not None and ent.life is not None else profiles.life(w, p)
-    return Body(life.hp, life.hp_max, list(life.conditions), life.injury.model_copy(deep=True), human=p.human, armor=p.armor,
-                guns_halved=p.guns_halved, knockout=p.knockout, regen=p.regen, regenerating=life.regenerating)
+    return Body.of(life, human=p.human, armor=p.armor, guns_halved=p.guns_halved, knockout=p.knockout, regen=p.regen)
 
 
 def seed(w: World, ident: str, life: Life | None = None) -> Entity | None:
@@ -354,15 +247,15 @@ def seed(w: World, ident: str, life: Life | None = None) -> Entity | None:
 
 
 def _put(w: World, ident: str, body: Body) -> str:
-    """Write a body back where it is kept; the name to tell it by."""
+    """Write a body back where it is kept (rules/wounds.onto); the name to tell it by."""
     inv = next((i for i in w.st.investigators if i.id == ident), None)
     if inv is not None:
-        inv.hp, inv.conditions, inv.injury = body.hp, list(body.conditions), body.injury
+        wounds.onto(inv, body)
         return inv.name
     ent = seed(w, ident)
     assert ent is not None and ent.life is not None  # check() found the body
     life = ent.life
-    life.hp, life.conditions, life.injury, life.regenerating = body.hp, list(body.conditions), body.injury, body.regenerating
+    wounds.onto(life, body)
     if ent.status != "失踪" or "死亡" in life.conditions:  # gone missing is not the body's to say
         ent.status = status_of(life.conditions, life.hp, life.hp_max, life.regenerating)
     for c in ("重伤", "昏迷", "濒死", "死亡"):  # the scene's own conditions follow the body
@@ -445,7 +338,7 @@ def problems(w: World, effects: list) -> list[str]:
                 who = profiles.combatant(w, e.target)
                 if not e.injury:
                     out.append(f"{e.target} 的伤害缺少 injury")
-                elif e.injury in body.injury.injuries or (who, e.injury) in seen:
+                elif e.injury in body.injuries or (who, e.injury) in seen:
                     out.append(f"伤害 {e.injury} 已经结算过，不再扣第二次")
                 seen.add((who, e.injury))
         elif isinstance(e, Ammo | Jam):
@@ -508,20 +401,26 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
             assert body is not None
             text = ""
             if isinstance(e, Wound):
-                hurt = wound(body, e)
+                hurt = wound(body, e, minutes=w.now)
+                body = hurt.body
                 out.hurts[e.injury] = hurt
                 text = hurt.describe() if _is_investigator(w, e.target) else _npc_words(hurt)
             elif isinstance(e, Heal):
-                got = heal(body, e)
+                after = heal(body, e)
+                got = after.hp - body.hp
                 text = f"恢复了 {got} 点生命" if got else ""
-                if e.means == "regen" and not body.regenerating and got:
-                    text = "伤口蠕动着合拢，又站了起来" if not body.standing else text
+                if e.means == "regen" and body.regenerating and not after.regenerating:
+                    text = "伤口蠕动着合拢，又站了起来"
+                body = after
             elif isinstance(e, Stabilize):
-                text = "伤势暂时稳住了" if stabilize(body, w.now) else ""
+                after = stabilize(body, w.now)
+                text, body = ("伤势暂时稳住了" if after is not body else ""), after
             elif isinstance(e, Wake):
-                text = "醒了过来" if wake(body) else ""
+                after = wounds.wake(body)
+                text, body = ("醒了过来" if after.conditions != body.conditions else ""), after
             else:
-                text = f"死了（{e.why}）" if die(body) else ""
+                after = die(body)
+                text, body = (f"死了（{e.why}）" if after is not body else ""), after
             name = _put(w, e.target, body)
             if text:
                 said = f"{name}{text}"
@@ -586,9 +485,9 @@ def _is_investigator(w: World, ident: str) -> bool:
 
 
 def _npc_words(h: Hurt) -> str:
-    if h.notes == ["没能伤到它"]:
-        return "没受伤：没能伤到它"
-    return f"受到 {h.amount} 点伤害" + (f"，{'、'.join(h.notes)}" if h.notes else "")
+    if h.result.taken == 0 and h.notes:
+        return "没受伤：" + "、".join(h.notes)
+    return f"受到 {h.result.taken} 点伤害" + (f"，{'、'.join(h.notes)}" if h.notes else "")
 
 
 # -- rolling and committing ------------------------------------------------------------------------
@@ -609,7 +508,7 @@ def harm(game, target: str, amount: int | str, *, means: Means = "other", injury
     body = body if body is not None else body_of(world, target)
     if body is None:
         raise ValueError(f"{target} 不是调查员、NPC 或怪物")
-    if "死亡" not in body.conditions and major(body, landed(body, w)):
+    if major(body, w):
         inv = next((i for i in world.st.investigators if i.id == target), None)
         if inv is not None:
             con = game.rules.check(inv, "体质", mark=False)

@@ -143,7 +143,7 @@ async def test_a_chase_hazard_with_unreadable_harm_still_delays_and_is_noted(mod
 async def test_an_act_cut_short_keeps_nothing_and_its_retry_lands_once(module, fake, monkeypatch):
     game, _, _ = make(module, fake, {}, location="tower")
     inv = game.state.investigator
-    f, _, (warden,) = fight(game, "warden", orders={inv.id: {"do": "attack", "target": "warden", "weapon": "徒手"}})
+    _, _, (warden,) = fight(game, "warden", orders={inv.id: {"do": "attack", "target": "warden", "weapon": "徒手"}})
     full = warden.hp
     real = battle.view
     calls = {"n": 0}

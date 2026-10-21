@@ -90,10 +90,17 @@ def test_heal_stabilize_wake_die_and_mark(module, fake):
     effects.commit(game.world, [effects.Heal(target=inv.id, amount=1, means="first_aid", injury="w"),
                                 effects.Stabilize(target=inv.id), effects.Mark(investigator=inv.id, skill="急救")],
                    op_id="aid", source="t")
-    assert inv.hp == 1 and "濒死" not in inv.conditions and "昏迷" in inv.conditions and inv.injury.aided == ["w"]
-    assert "急救" in inv.marks and inv.injury.stabilized_at == game.state.minutes
+    # Stabilized, not healed (p. 101): still dying and out cold until Medicine, no CON every round
+    assert inv.hp == 1 and "濒死" in inv.conditions and inv.injury.aided == ["w"] and inv.injury.stabilized_at == game.state.minutes
+    assert "急救" in inv.marks
     effects.commit(game.world, [effects.Wake(target=inv.id)], op_id="wake", source="t")
-    assert "昏迷" not in inv.conditions
+    assert "昏迷" in inv.conditions  # the dying do not wake
+    other, _, _ = make(module, fake, {}, location="tower")
+    me = other.state.investigator
+    me.hp = 3
+    effects.commit(other.world, [effects.Wound(target=me.id, amount=3, injury="k")], op_id="k", source="t")  # a minor wound to 0
+    effects.commit(other.world, [effects.Wake(target=me.id)], op_id="wake", source="t")
+    assert "昏迷" not in me.conditions
     effects.commit(game.world, [effects.Die(target="warden", why="测试")], op_id="die", source="t")
     assert game.world.rec.entities["warden"].status == "死亡" and game.m.npc("warden").status == "死亡"
 
@@ -149,7 +156,7 @@ def test_an_encounter_step_lands_its_changes_and_effects_together_and_is_undoabl
     begun = w.apply(EncounterStep(id="enc/enc1/begin", encounter="enc1", changes=[Begin(state=_encounter(game))]))
     assert begun.ok and st.encounter.id == "enc1" and w.rec.entities["ghoul"].life.hp == 12  # seeded on joining
     hit = EncounterStep(id="enc/enc1/r1/s0", encounter="enc1", changes=[SetCursor(cursor=1)],
-                        effects=[effects.Wound(target="ghoul", amount=4, injury="enc1:r1:a")])
+                        effects=[effects.Wound(target="ghoul", amount=4, means="blow", injury="enc1:r1:a")])
     assert w.apply(hit).ok and st.encounter.cursor == 1 and w.rec.entities["ghoul"].life.hp == 9
     assert w.apply(hit).repeat and w.rec.entities["ghoul"].life.hp == 9
     bad = EncounterStep(id="enc/enc1/r1/s1", encounter="enc1", changes=[SetCursor(cursor=2)],

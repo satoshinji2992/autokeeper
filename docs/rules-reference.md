@@ -9,7 +9,7 @@
 | 条目 | 页 | 原文要点 | 当前 | 状态 | 测试 |
 |---|---|---|---|---|---|
 | 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
-| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎不传 `firing` 时仍按手里有枪算 | 符合（规则层）；旧引擎待 WP-C | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
+| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
 | 推迟行动 | 86 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 无 | 未做 | 重构 |
 | 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 每人每轮只打一次，`per_round` 只用于寡不敌众 | 错误 | 重构 WP-C |
 | 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |

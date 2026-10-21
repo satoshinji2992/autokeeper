@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from ..rules import chase as chase_rules
 from ..rules import combat as rules
+from ..rules import wounds
 from ..rules.bcdice import Level
 from ..rules.catalog import canonical
 from ..rules.chase import Leg, Obstacle, Track
@@ -501,9 +502,10 @@ class Fighting:
             for f in fight.fighters:  # how each answers a blow this round, before anyone strikes
                 if (o := fight.orders.get(f.id)) is not None:
                     f.stance = self._stance(f, o, fight)
-            turn.fight.append(f"【战斗 · 第 {fight.round} 轮】先后：" + " → ".join(
-                fight.get(i).name for i in rules.order([f for f in fight.fighters if f.standing])))  # type: ignore[union-attr]
-            return rules.order([f for f in fight.fighters if f.standing])
+            firing = {fid for fid, o in fight.orders.items() if o.do == "shoot"}  # only they get a readied gun's +50 (p. 95)
+            sequence = rules.order([f for f in fight.fighters if f.standing], firing)
+            turn.fight.append(f"【战斗 · 第 {fight.round} 轮】先后：" + " → ".join(fight.get(i).name for i in sequence))  # type: ignore[union-attr]
+            return sequence
 
         sequence = await step("fight-round", turn, begin)
         await step("fight-round-notice", turn, lambda: self.emit({"type": "fight_round", "round": fight.round, "order": sequence,
@@ -675,12 +677,10 @@ class Fighting:
         else:
             from ..world.record import Life
 
-            conditions = [c for c in ("死亡", "濒死", "昏迷", "重伤") if f.status == c]
-            if f.status == "倒下":
-                conditions = []
-            body = effects.Body(f.hp, f.hp_max, conditions, human=f.human, armor=f.armor, guns_halved=f.guns_halved,
-                                knockout=f.knockout, regen=f.regen, regenerating=f.status == "倒下")
-            self._adopt[holder] = Life(hp=f.hp, hp_max=f.hp_max, conditions=list(conditions), regenerating=body.regenerating)
+            conditions = {"死亡": ["死亡"], "濒死": ["重伤", "濒死", "昏迷"], "昏迷": ["昏迷"], "重伤": ["重伤"]}.get(f.status, [])
+            life = Life(hp=f.hp, hp_max=f.hp_max, conditions=conditions, regenerating=f.status == "倒下")
+            body = effects.Body.of(life, human=f.human, armor=f.armor, guns_halved=f.guns_halved, knockout=f.knockout, regen=f.regen)
+            self._adopt[holder] = life
         self._bodies[holder] = body
         return body
 
@@ -709,11 +709,14 @@ class Fighting:
             return None
         body = self._body(f)
         if isinstance(e, effects.Heal):
-            effects.heal(body, e)
+            body = effects.heal(body, e)
         elif isinstance(e, effects.Stabilize):
-            effects.stabilize(body, self.state.minutes)
+            body = effects.stabilize(body, self.state.minutes)
+        elif isinstance(e, effects.Wake):
+            body = wounds.wake(body)
         elif isinstance(e, effects.Die):
-            effects.die(body)
+            body = effects.die(body)
+        self._bodies[battle.holder_of(self.world, f)] = body
         self._fx.append(e)
         self._shown(f, body)
         return body
@@ -753,12 +756,16 @@ class Fighting:
             lines.append(f"{who.name}给{target.name}急救，手忙脚乱没能止住血（急救 {roll.value} {roll.level.zh}）")
             return
         if self._fx is not None and self._known(target):
-            body = self._body(target)
-            dying = "濒死" in body.conditions
-            last = body.injury.injuries[-1] if body.injury.injuries else ""
-            self._effect(target, effects.Heal(target=target.id, amount=1, means="first_aid", injury=last))
-            if dying:
+            body = self._body(target)  # First Aid as rules/wounds.first_aid has it: the dying stabilized, else +1 and awake
+            last = body.injuries[-1] if body.injuries else ""
+            if body.dying:
                 self._effect(target, effects.Stabilize(target=target.id))
+                if body.hp < 1:
+                    self._effect(target, effects.Heal(target=target.id, amount=1, means="first_aid", injury=last))
+            else:
+                self._effect(target, effects.Heal(target=target.id, amount=1, means="first_aid", injury=last))
+                if wounds.UNCONSCIOUS in body.conditions:
+                    self._effect(target, effects.Wake(target=target.id))
         else:
             target.hp = min(target.hp_max, target.hp + 1)
             if target.status == "濒死":
@@ -839,7 +846,8 @@ class Fighting:
         self._wounds += 1
         injury = f"{self._act}:w{self._wounds}"
         wound = effects.harm(self, f.id, amount, means="unarmed" if unarmed else means, injury=injury, body=body)  # type: ignore[arg-type]
-        hurt = effects.wound(body, wound)
+        hurt = effects.wound(body, wound, minutes=st.minutes)
+        body = self._bodies[battle.holder_of(self.world, f)] = hurt.body
         self._fx.append(wound)
         self._shown(f, body)
         if f.kind == "investigator":
@@ -928,7 +936,8 @@ class Fighting:
             for f in work.fighters:
                 if f.kind == "investigator":
                     inv = st.find(f.id)
-                    if "濒死" in inv.conditions and "死亡" not in inv.conditions:
+                    body = wounds.Body.of(inv)
+                    if body.dying and not body.stabilized:  # First Aid stabilized them: no CON every round
                         roll = self.rules.check(inv, "体质", mark=False)
                         if not roll.passed:
                             self._die(f, f"濒死时体质检定失败（{roll.value}）")
@@ -937,7 +946,7 @@ class Fighting:
                             events.append({"type": "damage", "who": inv.name, "text": "伤重不治", "fighter": f.id})
                         else:
                             lines.append(f"{inv.name}还吊着一口气（体质 {roll.value}）")
-                elif f.status == "濒死":
+                elif f.status == "濒死" and not (self._known(f) and self._body(f).stabilized):
                     roll = rules.check(self.rules.dice, "体质", f.con)
                     if not roll.passed:
                         self._die(f, f"濒死时体质检定失败（{roll.value}）")
@@ -1161,7 +1170,7 @@ class Fighting:
                 if fid not in ch.orders:
                     ch.orders[fid] = Order.model_validate(o)
             turn.fight.append(f"【追逐 · 第 {ch.round} 轮】" + "；".join(f"{f.name}能移动 {f.actions} 次" for f in moving))
-            return rules.order(moving)
+            return rules.order(moving, set())  # the old chase has no shooting
 
         sequence = await step("chase-round", turn, begin)
         await step("chase-round-notice", turn, lambda: self.emit({"type": "chase_round", "round": ch.round,
