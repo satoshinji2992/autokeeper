@@ -401,10 +401,34 @@ async def skill_check(skill: str, difficulty: str = "常规", bonus: int = 0, cl
 
 
 @server.tool()
-async def push_or_luck(choice: str) -> dict:
-    """对上一次失败的检定选择：push（孤注一掷）、luck（花幸运）或 drop（放弃）。"""
+async def push_or_luck(choice: str, how: str = "") -> dict:
+    """对上一次失败的检定选择：push（孤注一掷）、luck（花幸运）或 drop（放弃）。
+    push 时 how 必填：先问玩家“你如何行动以孤注一掷？”，照玩家的回答写调查员怎样做（多花时间、加倍努力、冒更大的险）。
+    裁定员据此复核：这样做达不到目标时不掷骰，按放弃处理（notes 写明理由）；做法要花的时间先过去，再掷骰。"""
     g = _need()
-    turn = await g.push(choice)
+    if choice == "push" and not how.strip():
+        raise ValueError("孤注一掷须写明做法：先问玩家“你如何行动以孤注一掷？”，把回答填进 how。")
+    turn = await g.push({"choice": "push", "how": how} if choice == "push" else choice)
+    _save()
+    return _turn_report(turn)
+
+
+@server.tool()
+async def idea_roll() -> dict:
+    """灵感检定（规则书第 82、167–169 页）：调查陷入僵局、玩家提议或你认为他们失去方向时使用，每个游戏日限一次（调查停滞时引擎会另行提议，
+    提议的那次不受限）。引擎选出调查员遗漏的最关键线索，按它此前出现的程度定难度，由智力最高的调查员掷智力。
+    成功：线索到手，在 notes 里写明怎样把它写成调查员自己的领悟；失败：线索照样到手，但时间流逝，按 notes 直接切入他们能意识到的最糟局面。
+    不能做时返回 refused 和理由（包括没有遗漏的线索）。"""
+    g = _calm()
+    saved = _again("idea_roll", {})  # an interrupted roll goes on as saved, cooldown or not
+    if saved is None:
+        if why := g.idea_refused():
+            return {"refused": why}
+        action = g.idea_action()
+        ruling = await g.rule(action)
+        assert ruling is not None
+        saved = (action, ruling)
+    turn = await _resolved("idea_roll", {}, *saved)
     _save()
     return _turn_report(turn)
 

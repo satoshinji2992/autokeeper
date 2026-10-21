@@ -18,7 +18,7 @@ from textual.color import Color
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import MouseDown, MouseMove, MouseUp
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
+from textual.widgets import Button, Input, Static
 from textual_canvas import Canvas
 
 from ... import imagery
@@ -84,7 +84,10 @@ class RollModal(ModalScreen[str]):
         self.dismiss("roll")
 
 
-class PushModal(ModalScreen[str]):
+class PushModal(ModalScreen[str | dict]):
+    """A failed check's second chance: push (saying how, as the rulebook asks, p. 73), spend luck,
+    or accept the failure. A push answers {"choice": "push", "how": ...}; the others their word."""
+
     BINDINGS = [("escape", "dismiss('drop')", "放弃")]
 
     def __init__(self, offer: dict):
@@ -100,8 +103,8 @@ class PushModal(ModalScreen[str]):
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
                 risk = o.get("risk") or "会有更严重的后果"
-                body.append(f"采用更冒险的方式重试，目标仍为 ≤{need}。再次失败：{risk}。"
-                            "同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
+                body.append(f"写明调查员如何行动以孤注一掷（多花时间、加倍努力或冒更大的险），目标仍为 ≤{need}。再次失败：{risk}。"
+                            "所述做法无法实现目标时不掷骰，按放弃处理。同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
             if o.get("luck") is not None:
                 left = o.get("left")
                 body.append(f"花 {o['luck']} 点幸运：", style="bold")
@@ -111,6 +114,8 @@ class PushModal(ModalScreen[str]):
             body.append("放弃：", style="bold")
             body.append("接受这次失败。可以换个办法、换个人再试。")
             yield Static(body, classes="modal-body")
+            if o.get("can_push"):
+                yield Input(placeholder="孤注一掷的做法，例如：把整排书架逐本翻完", max_length=200, id="push-how")
             with Horizontal(classes="buttons"):
                 if o.get("can_push"):
                     yield Button("孤注一掷", id="push", variant="error")
@@ -120,7 +125,23 @@ class PushModal(ModalScreen[str]):
 
     @on(Button.Pressed)
     def choose(self, event: Button.Pressed) -> None:
-        self.dismiss(event.button.id or "drop")
+        if event.button.id == "push":
+            self._push()
+        else:
+            self.dismiss(event.button.id or "drop")
+
+    @on(Input.Submitted, "#push-how")
+    def submitted(self) -> None:
+        self._push()
+
+    def _push(self) -> None:
+        box = self.query_one("#push-how", Input)
+        how = " ".join(box.value.split())
+        if not how:
+            self.app.notify("请先写明如何孤注一掷。", severity="warning", timeout=3)
+            box.focus()
+            return
+        self.dismiss({"choice": "push", "how": how})
 
 
 class HandoutModal(ModalScreen[None]):
@@ -318,7 +339,8 @@ HELP = Text.from_markup(
   Ctrl+S 存档       Ctrl+O 叙事偏好    Ctrl+Q 离开
   Ctrl+A 画法       Ctrl+T 配色        Ctrl+B 用量
   Ctrl+K 规则插件   Ctrl+G 右栏翻页：经过、进展、背景
-  Ctrl+Y 整理进展   Esc 菜单（存档、读档、设置、回到标题）
+  Ctrl+Y 整理进展   Ctrl+L 灵感检定
+  Esc 菜单（存档、读档、设置、回到标题）
 
 F5 的建议只填入输入框，确认后再发送。
 F6 只改叙述，骰子、线索与 NPC 对话保留。
@@ -326,5 +348,6 @@ F6 只改叙述，骰子、线索与 NPC 对话保留。
 [b]输入框命令[/b]
   /draw /notes /map /sheet /suggest /recap /retell
   /debrief /save /prefs /usage /help /theme /quit
+  /灵感   灵感检定，每个游戏日一次
   /retry  接续模型中断的回合"""
 )

@@ -67,10 +67,10 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..engine import debrief, fog
+from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
-from ..engine.game import PLAY_WAIT, RETELL, Game, Told
+from ..engine.game import PLAY_WAIT, RETELL, Game, Told, push_choice
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
@@ -96,6 +96,7 @@ PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes cam
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
+PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll would pick from (engine/idea.py)
 # What a fight or a chase shows of someone who is not an investigator (engine/combat.view): no sheet behind it
 SHOWN = ("id", "name", "kind", "side", "status", "prone", "held_by", "stance", "weapon", "portrait", "build", "pos", "speed",
          "actions")
@@ -414,7 +415,9 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "本局已结束。"})
             elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
-            elif text.strip().startswith("/") and not text.strip().startswith("/kp "):
+            elif idea.asked(text) and (why := self.game.idea_refused()):  # said at once; nothing goes in the round
+                await self._send(cid, {"t": "error", "text": why})
+            elif text.strip().startswith("/") and not text.strip().startswith("/kp ") and not idea.asked(text):
                 await self._send(cid, {"t": "error", "text": "当前无中断回合。"})
             elif text.strip().startswith("/kp ") or commands.instant(text):  # questions do not occupy an action slot
                 self.instant.put_nowait((seat, text))
@@ -1303,7 +1306,7 @@ class Hub:
                 choice = await queue.get()
             if offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
                 choice = "roll"
-            elif choice not in ("push", "luck", "drop"):
+            elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice
                 choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
             inp = Command(resume=choice)
         self.game.emit = self._event
@@ -1349,3 +1352,15 @@ class Hub:
     async def _status(self, request: web.Request) -> web.Response:
         body = {"module": self.m.title, "seats": self._seats(), "started": self.started.is_set(), "clock": self.state.clock}
         return web.json_response(body, dumps=lambda o: json.dumps(o, ensure_ascii=False))
+
+
+def _choice_ok(choice: Any, offer: dict) -> bool:
+    """A seated player's answer to a push offer: "luck" or "drop", or a push with its way said
+    ({"choice": "push", "how": ...}, Keeper Rulebook p. 73); a bare "push" from an older client too."""
+    try:
+        mode, how = push_choice(choice)
+    except ValueError:
+        return False
+    if mode == "push":
+        return bool(offer.get("can_push")) and (bool(how) or choice == "push")
+    return mode != "luck" or offer.get("luck") is not None
