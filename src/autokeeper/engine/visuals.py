@@ -240,6 +240,36 @@ class Visuals:
             task.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
 
+    # -- the module's creatures, drawn once for all its games -----------------------------------
+    def creatures(self) -> None:
+        """The module's creatures with no picture of their own, drawn by Codex in the background
+        once for all its games (paths.creatures, imagegen's "creature"): what a fight and a chase
+        show of them. scenery's painted ones show until then, and wherever Codex is not."""
+        if "creatures" in self.tasks or not self.module.creatures or not imagegen.enabled(self.cfg):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.tasks["creatures"] = asyncio.create_task(self._creatures(), name="creatures")
+
+    async def _creatures(self) -> None:
+        world = {"era": self.module.era, "setting": self.module.setting}
+        for c in self.module.creatures:
+            key, target = f"creature-{c.id}", paths.creatures(self.module.id) / f"{c.id}.jpg"
+            if target.is_file() or not scenery.painted(self.module.pictures.get(key, "")):
+                continue  # drawn already, or the module has a picture of its own
+            async with self.limit:
+                await self.idle.wait()
+                try:
+                    await imagegen.make(imagegen.prompt(f"{c.name}：{c.description}", "creature", **world), target,
+                                        kind="creature", module=self.module.id, title=c.name, where="game", on_reply=self._usage)
+                except (imagegen.Unavailable, imagegen.OverBudget):
+                    return
+                except (imagegen.Failed, OSError, ValueError):
+                    continue
+            self.module.pictures[key] = str(target)
+
     # -- pictures from Codex: what no photo was found for, and what the story changed ----------
     def made(self) -> int:
         """Pictures this game has had from Codex (imagegen.PER_GAME is the most it gets)."""

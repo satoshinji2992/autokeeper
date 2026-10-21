@@ -212,3 +212,47 @@ async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch)
         screen.send_line = sent.append
         assert await until(pilot, lambda: sent, tries=20)
         assert sent[0].startswith("防守") and not picker.display
+
+
+async def test_the_modules_creatures_are_drawn_once_for_all_its_games(module, tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from PIL import Image
+
+    from autokeeper import config, imagegen, paths, scenery
+    from autokeeper.engine.game import Game
+    from autokeeper.engine.visuals import Visuals
+    from autokeeper.module.schema import Creature
+
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
+    asked = []
+
+    async def make(text, target, *, kind, module, **kwargs):
+        asked.append((kind, text))
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (300, 400)).save(target)
+        return Path(target)
+
+    async def quiet(event):
+        pass
+
+    monkeypatch.setattr(imagegen, "make", make)
+    module.creatures = [Creature(id="hound", name="廷达罗斯猎犬", description="从角落里渗出来的瘦长之物")]
+    scenery.fill_creatures(module)
+    assert scenery.painted(module.pictures["creature-hound"])  # painted by program until it is drawn
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="beasts")
+    visuals = Visuals(module, state, config.Config(), quiet)
+    visuals.creatures()
+    await visuals.tasks["creatures"]
+    drawn = paths.creatures(module.id) / "hound.jpg"
+    assert module.pictures["creature-hound"] == str(drawn)
+    assert asked[0][0] == "creature" and "pure black background" in asked[0][1] and "廷达罗斯猎犬" in asked[0][1]
+    again = Visuals(module, state, config.Config(), quiet)
+    again.creatures()
+    await again.tasks["creatures"]
+    assert len(asked) == 1  # once for the module, every game after shows it
+    other = Module.load(EXAMPLE)
+    other.creatures = module.creatures
+    scenery.fill_creatures(other)
+    assert other.pictures["creature-hound"] == str(drawn)

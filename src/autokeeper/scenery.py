@@ -923,14 +923,18 @@ def _noise_at(rng: np.random.Generator, w: int, h: int, scale: int) -> np.ndarra
 
 
 def fill_creatures(m: Module) -> list[str]:
-    """Every creature of the module with no picture gets one painted by program (creature),
-    under the key creature-<id>; painted when first shown (ensure)."""
+    """Every creature of the module with no picture gets one under the key creature-<id>: the one
+    an image model drew for the module (paths.creatures), else one painted by program (creature),
+    painted when first shown (ensure)."""
     from . import paths
 
     folder, made = paths.scenery() / m.id / "people", []
     for c in m.creatures:
         key = f"creature-{c.id}"
-        if key in m.pictures:
+        if key in m.pictures and not painted(m.pictures[key]):
+            continue
+        if (drawn := paths.creatures(m.id) / f"{c.id}.jpg").is_file():  # an image model drew it (engine/visuals.py)
+            m.pictures[key] = str(drawn)
             continue
         out = folder / f"{key}.png"
         _beasts[str(out)] = (key, c.name, c.description)

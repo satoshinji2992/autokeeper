@@ -133,3 +133,13 @@ def test_a_creature_is_painted_with_its_silhouette_and_staged_bigger_the_nearer(
         return int((np.abs(im - im[:, :8].mean(axis=(0, 1))).sum(axis=2).max(axis=0) > 90).sum())
 
     assert figure(0.2) < figure(1.0)
+
+
+def test_a_figure_drawn_on_black_is_cut_out_with_the_dark_inside_it():
+    im = Image.new("RGB", (200, 260), (2, 2, 2))
+    draw = ImageDraw.Draw(im)
+    draw.ellipse((40, 30, 160, 230), fill=(150, 160, 120))
+    draw.ellipse((80, 90, 120, 130), fill=(0, 0, 0))  # a socket: dark, but part of it
+    mask = np.asarray(imagery.silhouette(im))
+    assert mask[5, 5] < 20 and mask[110, 100] > 200 and mask[200, 100] > 200
+    assert imagery.silhouette(Image.new("RGB", (200, 260), (200, 190, 170))) is None  # a light wall: nothing to cut

@@ -262,6 +262,11 @@ def showcases(module_id: str) -> Path:
     return cache() / "showcases" / _safe(module_id)
 
 
+def creatures(module_id: str) -> Path:
+    """A module's creatures drawn by an image model (imagegen), for all its games; scenery paints the rest."""
+    return cache() / "creatures" / _safe(module_id)
+
+
 def prepared_pictures() -> Path:
     return cache() / "pictures"
 

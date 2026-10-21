@@ -51,7 +51,7 @@ TIMEOUT = 300.0  # seconds for one picture; measured, one takes about 45
 GIVE_UP = 2  # failures after which an import stops asking (a used-up image quota fails every time)
 LONG_SIDE = 1024
 LICENSE = "AI 生成（Codex image_gen）"
-KINDS = {"scene": "场景", "portrait": "人物头像", "item": "物件特写"}
+KINDS = {"scene": "场景", "portrait": "人物头像", "item": "物件特写", "creature": "怪物"}
 
 # Prompt sections Codex adds by default, and features whose tools it would otherwise get.
 # Features go through -c features.<name>, which an older Codex ignores; --disable would fail on
@@ -75,6 +75,11 @@ FRAMING = {
     "scene": "A wide landscape view of the place (about 3:2).",
     "portrait": "A head-and-shoulders portrait of this one person, the face clearly visible and lit, against a plain dark background.",
     "item": "A close-up of this one object on a plain dark background.",
+    # A fight sets it on its stage and a chase into the place behind you (imagery.staged): it is
+    # cut out of the black, so nothing else may be in the picture.
+    "creature": ("This one creature seen from the front, head and upper body filling the frame, facing the viewer as if "
+                 "about to lunge; lit from below by a dim sickly light, its eyes catching the light; the rest of it falls "
+                 "away into darkness against a pure black background, with nothing else in the picture (portrait, about 3:4)."),
 }
 
 
@@ -409,7 +414,8 @@ async def make(
         from .harness import Reply
 
         on_reply(Reply(usage=usage, seconds=seconds))
-    await asyncio.to_thread(imagery.preprocess, target, kind if kind in imagery.PIPELINES else "scene")
+    if kind != "creature":  # drawn on black for the stage: nothing to clean up
+        await asyncio.to_thread(imagery.preprocess, target, kind if kind in imagery.PIPELINES else "scene")
     progress("imagegen.complete", target=str(target), thread=thread, usage=usage, seconds=seconds)
     return target
 

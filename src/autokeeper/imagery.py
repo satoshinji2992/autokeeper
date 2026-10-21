@@ -613,6 +613,8 @@ def picture_source(path: str | Path) -> str:
         if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
             return str(prep)
         record = credits.get(p) or {}
+        if record.get("kind") == "creature":  # drawn on black for the stage (imagegen): nothing to clean up
+            return str(p)
         kind = record.get("kind") if record.get("kind") in PIPELINES else "portrait" if p.parent.name == "people" else "scene"
         return str(preprocess(p, kind))
     except (OSError, ValueError, Image.UnidentifiedImageError):
@@ -900,20 +902,46 @@ def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.I
     return back
 
 
+def silhouette(im: Image.Image) -> Image.Image | None:
+    """What stands out of a black background (a creature drawn on black, a portrait on plain dark):
+    everything not joined to the dark round the edges, so dark parts inside it stay. None when
+    the edges are not dark."""
+    grey = im.convert("L")
+    small = grey.resize((max(16, grey.width // 4), max(16, grey.height // 4)), Image.Resampling.BOX)
+    arr = np.asarray(small)
+    if np.median(np.concatenate([arr[0], arr[-1], arr[:, 0], arr[:, -1]])) > 24:
+        return None
+    marks = small.point(lambda v: 255 if v > 18 else 0)
+    w, h = marks.size
+    for xy in [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)] + [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]:
+        if marks.getpixel(xy) == 0:
+            ImageDraw.floodfill(marks, xy, 128)
+    if not (np.asarray(marks) != 128).any():
+        return None
+    figure = marks.point(lambda v: 0 if v == 128 else 255).filter(ImageFilter.MaxFilter(3))
+    return figure.resize(im.size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(im.size) / 160))
+
+
 @lru_cache(maxsize=16)
 def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) -> Image.Image:
     """A fight's or a chase's picture at the stage's own shape (tui/widgets/fight.py). Who they
     face, as tall as the stage and more, against a dark lit red from behind; in a chase, the place
     behind it, smeared with running, and it as large as it is near (`near`: 0 far off, 1 at your
-    heels, more is closer still). A picture with a silhouette in its alpha (a creature painted by
-    program) is set into the place by it; any other comes out of the dark in a soft oval."""
+    heels, more is closer still). It is cut out by its alpha (a creature painted by program) or out
+    of a black background (one drawn on black, imagegen); any other picture comes out of the dark
+    in a soft oval, or in a fight fills the stage with itself blurred round it."""
     from . import scenery
 
     w, h = max(64, cols * 8), max(64, rows * 16)  # cells half as wide as tall
     scenery.ensure(path)
     raw = Image.open(path)
-    cut = raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info)
-    figure = raw.convert("RGBA") if cut else Image.open(picture_source(path)).convert("RGB")
+    if raw.mode in ("RGBA", "LA") or (raw.mode == "P" and "transparency" in raw.info):
+        figure = raw.convert("RGBA")
+        cut = figure.getchannel("A")
+        figure = figure.convert("RGB")
+    else:
+        figure = Image.open(picture_source(path)).convert("RGB")
+        cut = silhouette(figure)
     yy, xx = np.mgrid[0:h, 0:w].astype(float)
     if scene:
         scenery.ensure(scene)
@@ -921,7 +949,7 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
         place = _expose(place, *artkit.STAGES["追逐"])  # cold and dark whatever the hour: it is behind you
         smear = place.resize((max(8, w // 10), h), Image.Resampling.BOX).resize((w, h), Image.Resampling.BILINEAR)
         back = Image.blend(place, smear, 0.55)
-    elif not cut:  # a photo: the room round it is the photo itself, blown up, blurred, dark
+    elif cut is None:  # a photo: the room round it is the photo itself, blown up, blurred, dark
         back = ImageOps.fit(figure, (w, h), Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(w, h) / 30))
         back = ImageEnhance.Brightness(back).enhance(0.2)
     else:
@@ -931,13 +959,15 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
     size = (max(1, round(figure.width * tall / figure.height)), max(1, round(tall)))
     figure = figure.resize(size, Image.Resampling.LANCZOS)
     x, y = (w - size[0]) // 2, round(h - tall * 0.86)  # its lower part always below the frame: no edge to it
-    if cut:
-        mask = figure.getchannel("A")
-    else:
+    if cut is not None:
+        mask = cut.resize(size, Image.Resampling.BILINEAR)
+    elif scene:
         oval = Image.new("L", size, 0)
         ImageDraw.Draw(oval).ellipse((size[0] * 0.08, size[1] * 0.02, size[0] * 0.92, size[1] * 1.1), fill=255)
-        mask = oval.filter(ImageFilter.GaussianBlur(max(size) / 14)) if scene else None
-    back.paste(figure.convert("RGB"), (x, y), mask)
+        mask = oval.filter(ImageFilter.GaussianBlur(max(size) / 14))
+    else:
+        mask = None
+    back.paste(figure, (x, y), mask)
     # the edges sink into the dark, redder the closer it is
     edge = np.clip(((xx - w / 2) / (w / 2)) ** 2 * 0.7 + ((yy - h / 2) / (h / 2)) ** 2 * 0.5, 0, 1)
     arr = np.asarray(back, float) * (1 - edge[..., None] * 0.75)

@@ -218,6 +218,7 @@ class Game(Fighting):
         diagnostics.attach(self)
         self.visuals.schedule()
         self.showcases.prepare()
+        self.visuals.creatures()
 
     async def close(self) -> None:
         """Stop work owned by this game before the model sessions and screen disappear."""
