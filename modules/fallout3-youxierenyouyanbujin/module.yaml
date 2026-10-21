@@ -59,6 +59,7 @@ flags:
   abandoned_town: 调查员抛弃镇民逃离
   viewed_telescope: 有调查员看了望远镜
   survived_day: 调查员熬过了有福者暴走的一天
+  sign_pole_tapping_1: 伏笔 pole_tapping 第 1 步露出了，场景图换成：电话线杆上多了一只悬挂的面包篮。（露出时由引擎设置）
 start: meeting_house
 start_time: D1 19:00
 opening: '2 月 28 日，星期二，傍晚。斯托威尔镇的街灯一盏盏亮起，看上去和往常没什么两样。

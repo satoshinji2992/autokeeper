@@ -3,8 +3,11 @@ places and people the story visibly changes (a fire, a flood, a wound, a death).
 
 A change comes from the director's plan (Improv.looks) or from the module itself, when the
 flag of one of its Location.looks / NPC.looks is set. The picture it shows now goes to Codex
-with the change (imagegen.py); until the new one is drawn the old one stays. GameState.looks
-remembers what each art key shows, so a loaded game shows it again; the module never changes.
+with the change (imagegen.py); until the new one is drawn the old one stays. A place's change
+that a foreshadowing stage brings (a look on its flag, Stage.flag) is drawn ahead instead, once
+the sign before it was handed (ahead): kept under the look's own key, shown the moment its flag
+is set. GameState.looks remembers what each art key shows, so a loaded game shows it again; the
+module never changes.
 """
 
 from __future__ import annotations
@@ -332,8 +335,10 @@ class Visuals:
         return found.key
 
     def _looks(self) -> None:
-        """The module's own changes once their flag is set (drawn at import when Codex could, so
-        shown at once), then the changes still to draw, while Codex and the budget allow."""
+        """The module's own changes once their flag is set (drawn at import when Codex could, or
+        ahead of the stage that brings them, so shown at once; one still being drawn ahead shows
+        when it is done), then the changes still to draw, while Codex and the budget allow, and
+        the pictures to draw ahead that a closed game left waiting."""
         try:
             asyncio.get_running_loop()
             running = True
@@ -347,6 +352,11 @@ class Visuals:
                     continue
                 if look.when in self.state.looks.get(base, {}).get("applied", "").split(","):
                     continue
+                if self._drawing_ahead(look.key(base)):
+                    continue  # the old picture stays: this one shows as soon as it is done (_ahead)
+                early = self.state.looks.get(look.key(base), {})
+                if early.get("when") and early.get("status") == "pending":
+                    del self.state.looks[look.key(base)]  # never drawn ahead (the game closed first): drawn as usual
                 drawn = self.module.pictures.get(look.key(base), "")
                 task = self.tasks.get(f"look:{base}")
                 if drawn and Path(drawn).is_file() and (task is None or task.done()):
@@ -359,13 +369,17 @@ class Visuals:
                     continue
                 record = self.state.looks[base]
                 record["applied"] = ",".join(x for x in (record.get("applied", ""), look.when) if x)
-        due = [key for key, record in self.state.looks.items()
-               if record.get("status") == "pending" or (record.get("status") == "failed" and int(record.get("attempts", "0")) < 2)]
+        due = [key for key, record in self.state.looks.items() if not record.get("when") and (
+               record.get("status") == "pending" or (record.get("status") == "failed" and int(record.get("attempts", "0")) < 2))]
         due = [key for key in due if (task := self.tasks.get(f"look:{key}")) is None or task.done()]
-        if not running or not due or not self._may_make():
+        if not running or not self._may_make():
             return
         for key in due:
             self.tasks[f"look:{key}"] = asyncio.create_task(self._vary(key), name=f"look:{key}")
+        for key, record in list(self.state.looks.items()):  # to draw ahead, and the game was closed before it was
+            if (record.get("when") and record.get("status") == "pending" and record["when"][5:] not in self.state.flags
+                    and not self._drawing_ahead(key)):
+                self.tasks[f"ahead:{key}"] = asyncio.create_task(self._ahead(key), name=f"ahead:{key}")
 
     async def _vary(self, key: str) -> None:
         journal = getattr(self, "debug_journal", None)
@@ -380,18 +394,9 @@ class Visuals:
                 await self.idle.wait()
                 if not self._may_make():
                     return  # still pending: drawn in a later session that has Codex and budget
-                found = self._target(record.get("target", ""))
-                subject = found.subject if found else record.get("target", "")
-                kind, change = record.get("kind", "scene"), record.get("change", "")
                 record["attempts"] = str(int(record.get("attempts", "0")) + 1)
-                shown = self.module.pictures.get(key, "")
-                original = Path(shown) if shown and Path(shown).is_file() else None
                 made = int(record.get("made", "0")) + 1
-                world = {"era": self.module.era, "setting": self.module.setting}
-                text = (imagegen.prompt(subject, kind, change=change, **world) if original is not None
-                        else imagegen.prompt(f"{subject}。现在：{change}", kind, **world))  # nothing to start from: from words
-                picture = await imagegen.make(text, self.folder / f"{key}.look{made}.jpg", kind=kind, module=self.module.id,
-                                              original=original, title=f"{subject[:40]}（{change[:40]}）", on_reply=self._usage)
+                picture = await self._redraw(record, self.module.pictures.get(key, ""), self.folder / f"{key}.look{made}.jpg")
                 record.update(picture=str(picture), made=str(made))
                 record.pop("error", None)
                 if record.get("later"):  # changed again while this one was drawn: that goes on top next
@@ -410,6 +415,90 @@ class Visuals:
             return
         if record.get("status") == "pending" and self._may_make():  # the change that came in meanwhile
             self.tasks[f"look:{key}"] = asyncio.create_task(self._vary(key), name=f"look:{key}")
+
+    async def _redraw(self, record: dict[str, str], shown: str, target: Path) -> Path:
+        """The picture `shown` (a place's or a person's; none: from words) after the record's change,
+        drawn by Codex into `target`."""
+        found = self._target(record.get("target", ""))
+        subject = found.subject if found else record.get("target", "")
+        kind, change = record.get("kind", "scene"), record.get("change", "")
+        original = Path(shown) if shown and Path(shown).is_file() else None
+        world = {"era": self.module.era, "setting": self.module.setting}
+        text = (imagegen.prompt(subject, kind, change=change, **world) if original is not None
+                else imagegen.prompt(f"{subject}。现在：{change}", kind, **world))  # nothing to start from: from words
+        return await imagegen.make(text, target, kind=kind, module=self.module.id, original=original,
+                                   title=f"{subject[:40]}（{change[:40]}）", on_reply=self._usage)
+
+    # -- drawn ahead: the picture foreshadowing's next step changes a place to -------------------
+    def ahead(self, flags: list[str]) -> None:
+        """The pictures the next steps of foreshadowing change a place to (a look on a stage's flag,
+        engine/signs.coming): each drawn now in the background, from the picture the place shows, so
+        it is there by the time its step shows; kept until then under the look's own key and never
+        shown before its flag is set (_looks). GameState.looks keeps each, so it is drawn once a game,
+        and only while Codex and the budget allow (_may_make): a sign the party never meets costs
+        nothing, one it never comes back to one picture."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        for flag in dict.fromkeys(flags):
+            if flag in self.state.flags:
+                continue  # come already: drawn the usual way (_looks)
+            for loc in self.module.locations:
+                for look in loc.looks:
+                    key = look.key(loc.art or "")
+                    if not loc.art or look.when != f"flag:{flag}" or key == loc.art or key in self.state.looks:
+                        continue
+                    if (drawn := self.module.pictures.get(key)) and Path(drawn).is_file():
+                        continue  # drawn already: the module's own, or one an import drew
+                    if not self._may_make():
+                        return
+                    self.state.looks[key] = {"target": f"location:{loc.id}", "kind": "scene", "change": look.change,
+                                             "when": look.when, "status": "pending", "picture": "", "turn": str(self.state.turn)}
+                    self.tasks[f"ahead:{key}"] = asyncio.create_task(self._ahead(key), name=f"ahead:{key}")
+
+    def _drawing_ahead(self, key: str) -> bool:
+        return (task := self.tasks.get(f"ahead:{key}")) is not None and not task.done()
+
+    async def _ahead(self, key: str) -> None:
+        journal = getattr(self, "debug_journal", None)
+        record = self.state.looks[key]
+        context = journal.task(f"redraw-ahead:{key}", turn=self.state.turn,
+                               details={"when": record.get("when", ""), "change": record.get("change", "")}) if journal else nullcontext()
+        with context:
+            await self._ahead_inner(key)
+
+    async def _ahead_inner(self, key: str) -> None:
+        record, name = self.state.looks[key], f"ahead:{key}"
+        found = self._target(record.get("target", ""))
+        base = found.key if found is not None else ""
+        # What the place will show first: a redraw of it under way, and its pictures drawn ahead before this one.
+        order = list(self.tasks)
+        first = [self.tasks[n] for n in order[: order.index(name) if name in order else len(order)]
+                 if n.startswith("ahead:") and self.state.looks.get(n[6:], {}).get("target") == record.get("target")]
+        first += [task for task in (self.tasks.get(f"look:{base}"),) if task is not None]
+        try:
+            if waiting := [task for task in first if not task.done()]:
+                await asyncio.wait(waiting)
+            async with self.limit:
+                await self.idle.wait()
+                if self._may_make():
+                    record["attempts"] = str(int(record.get("attempts", "0")) + 1)
+                    picture = await self._redraw(record, self.module.pictures.get(base, ""), self.folder / f"{key}.look1.jpg")
+                    record.update(picture=str(picture), made="1", status="ready")
+                    record.pop("error", None)
+                    self.module.pictures[key] = str(picture)  # kept under its own key: shown once its flag is set
+                    self._keep(key)
+                else:  # no picture to spare now: drawn the usual way if its step comes
+                    self.state.looks.pop(key, None)
+        except asyncio.CancelledError:
+            raise  # still pending: drawn ahead when the game is loaded, unless its step has come by then
+        except Exception as exc:  # nothing drawn ahead: the step's picture is drawn the usual way when it comes
+            record.update(status="failed", error=type(exc).__name__)
+            self._keep(key)
+        if record.get("when", "")[5:] in self.state.flags:  # its step came while it was drawn: shown, or drawn, now
+            self.tasks.pop(name, None)
+            self._looks()
 
     def _show(self, key: str) -> None:
         """Put a changed place's or person's latest picture in front of its first one."""

@@ -1986,7 +1986,8 @@ class Game(Encounters):
         hint, or the next stage of one seen before (engine/signs.py); waking there after a rest
         counts as coming to it. A roll that failed and found nothing keeps them back: a trace on
         the very thing they searched is what the failure did not find. They come out on a later
-        visit. A stage's flag is set as it shows, so the place's picture changes with it."""
+        visit. A stage's flag is set as it shows, so the place's picture changes with it; the
+        picture of the stage after it is drawn meanwhile, in the background."""
         st = self.state
         missed = not turn.clues and not turn.events and (
             any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
@@ -1994,10 +1995,11 @@ class Game(Encounters):
             turn.foreshadow += signs.at(self.m, st, st.location)
         handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
         turn.foreshadow = []
-        turn.notes += [note for note, _ in handed]
-        if flags := [s.flag for _, s in handed if s.flag]:
+        turn.notes += [note for _, note, _ in handed]
+        if flags := [s.flag for _, _, s in handed if s.flag]:
             await self._flags(flags, turn)
             self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
+        self.visuals.ahead(signs.coming(self.m, st, [fid for fid, _, _ in handed]))  # there by the next step
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state

@@ -8,7 +8,9 @@ lacks and leaves what it has:
     npcs        人物补全    empty personality, voice, goal and what each NPC knows
     relations   冲突图      how the people see each other (Module.relations)
     agendas     局面        what the important NPCs mean to do if nobody steps in (Module.agendas)
-    foreshadow  伏笔        early signs, and what each one leads to (Module.foreshadow)
+    foreshadow  伏笔        early signs, how they change on later visits, and what each one leads to
+                            (Module.foreshadow); a change that shows in the place's picture gets a flag
+                            and a look on it (Location.looks), drawn once the story gets near it
     clueweb     线索网      a conclusion with fewer than three clues gets more (the three-clue rule)
     ties        私人牵连    threads an investigator's background can be tied to (Module.ties)
     endings     额外结局    the ends a table is likely to reach that the module never wrote
@@ -44,12 +46,14 @@ never changed: everything here is added.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from .. import config
@@ -77,6 +81,8 @@ AFTER: dict[str, tuple[str, ...]] = {
 }
 BOOK_LIMIT = 40000  # characters of the keeper's book before its descriptions are shortened (conditions never are)
 SOURCE_LIMIT = 40000  # characters of the original text before only what bears on the call is kept
+LOOKS = 6  # changed pictures (looks) a whole module may have, foreshadowing's among them (the importer's brief: 全模组最多 6 处)
+PLACE_LOOKS = 2  # and one place (Location.looks: 最多两种)
 
 SYSTEM = """你是 AutoKeeper 的模组改编员，在编译期给一个 CoC 7 版模组补上跑团时用得着、原文却没写的东西。
 - 原作的真相、线索原文、检定、结局一个字都不改；补上的东西要和原作对得上，像本来就在里面。
@@ -127,12 +133,14 @@ class Meets(BaseModel):
 
 
 class StageDraft(BaseModel):
-    """A later look at a sign as the pass writes it (Stage, less the flag a picture would hang on:
-    a hand-written module's to add with its Location.looks)."""
+    """A later look at a sign as the pass writes it (Stage, less the flag): with `picture`, the change
+    its place's picture shows, from which _signs makes the flag and the place's look on it."""
 
     hint: str = Field(description="这一次看见、听见的变化，一句：和上一次比哪里不一样了；一步比一步近，仍不点破")
     when: str = Field("", description="最早什么时候露出：'D2 08:00' 这样的时间，或 flag:已声明的标记；不写就是下一次来到这里")
     where: str = Field("", description="在别的地点露出时写那个地点 id；不写就是伏笔原来的地点")
+    picture: str = Field("", description="这一步的变化在那个地点的场景图里看得出来时才写：画面上和上一步比哪里不一样了，一句，"
+                                         "比如画里多了一个人影、天花板上的水渍又大了一圈；不剧透，不说出线索；看不出来就留空")
 
 
 class SignDraft(Foreshadow):
@@ -283,7 +291,11 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                    "不然等于不用检定就把线索给了。"
                    "调查员会反复经过的地方，可以再写 stages：之后每次再来时这点端倪的变化，1–3 步，按先后排，"
                    "比如旅馆的画第二次看多了一个人影，第三次那人转过了头。变化要有世界里的原因（它指向的那件事正在推进），"
-                   "一步比一步近，仍不点破、不说出线索；when 写最早什么时候露出（'D2 08:00' 或 flag:已声明的标记），在别处露出的写 where。", Signs),
+                   "一步比一步近，仍不点破、不说出线索；when 写最早什么时候露出（'D2 08:00' 或 flag:已声明的标记），在别处露出的写 where。"
+                   "某一步的变化在那个地点的场景图里看得出来的（旅馆那幅画里多了一个人影，天花板上的水渍又大了一圈），再写 picture："
+                   "一句话，只写画面上和上一步比哪里不一样了，不剧透，不说出线索；只给【有场景图的地点】里列出的地点写，不超过那里说的处数；"
+                   "声音、气味、有人说起这些画面上看不出来的不写。"
+                   "【伏笔（已写）】里列着的不重写：已写的够 3 条就不再写新的；给其中值得的补 stages 时，沿用它的 id，hint、where、pays_off 照抄。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
                 "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。", NewClues),
     "ties": ("写 4–8 条私人牵连：调查员背景里的重要之人、意义非凡之地、思想与信念、宝贵之物、职业，可以怎样接上这个模组的人和地方。"
@@ -530,6 +542,8 @@ def wanted(m: Module, name: str) -> bool:
         return len(m.endings) < 3
     if name == "meet":
         return bool(_unmarked(m))
+    if name == "foreshadow":  # none yet, or none that changes: the pass then gives the written ones their stages
+        return not any(f.stages for f in m.foreshadow)
     return not getattr(m, name)
 
 
@@ -581,9 +595,27 @@ def _armoury(m: Module) -> str:
     return "\n".join(rows)
 
 
+def _pictured(m: Module) -> dict[str, int]:
+    """The places a sign's stage may change the picture of, with how many more looks each takes: those
+    with a picture of their own (art, a key a look's key can be made from), two looks a place."""
+    return {x.id: PLACE_LOOKS - len(x.looks) for x in m.locations if x.art and SLUG.fullmatch(x.art) and len(x.looks) < PLACE_LOOKS}
+
+
+def _spare(m: Module) -> int:
+    """How many more looks the module takes (LOOKS in all, the places' and the people's)."""
+    return max(0, LOOKS - sum(len(x.looks) for x in [*m.locations, *m.npcs]))
+
+
 def _material(m: Module, name: str) -> str:
     if name == "combat":
         return _armoury(m)
+    if name == "foreshadow":  # where a stage's change can show in a picture, and how many more the module takes
+        room, spare = _pictured(m), _spare(m)
+        if not room or not spare:
+            return "\n【有场景图的地点】没有还能换图的地点，不写 picture"
+        names = {x.id: x.name for x in m.locations}
+        return (f"\n【有场景图的地点】（全模组最多再写 {spare} 处 picture）\n"
+                + "\n".join(f"- {k} {names[k]}" + (f"（这里最多再写 {n} 处）" if n < PLACE_LOOKS else "") for k, n in room.items()))
     if name == "meet":
         rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") + ("（已标见面反应，只差 once）" if s.meet else "")
                 for npc, s in _unmarked(m)]
@@ -648,7 +680,8 @@ Edit = tuple[str, ...] | tuple[Any, ...]
 
 def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
     """What a pass's answer writes: ("put", group, id, field, value), ("replace", group, id, field, value) for a field
-    that has a value already, ("append", group, items), ("key", group, key, value)."""
+    that has a value already, ("add", group, id, field, items) onto an entry's list, ("append", group, items),
+    ("key", group, key, value)."""
     npcs, places = {n.id for n in m.npcs}, {x.id for x in m.locations}
     if name == "npcs":
         found = []
@@ -744,7 +777,13 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
 def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
     """What the foreshadowing pass writes: new signs with their stages (Foreshadow.stages). A sign or
     a stage that says a clue's words gives it away and is left out, as is a sign aimed at nothing the
-    module has and a stage whose place or condition it does not have."""
+    module has and a stage whose place or condition it does not have.
+
+    A stage whose change its place's picture shows (StageDraft.picture) gets a flag of its own
+    (sign_<id>_<n>, declared in flags), and the place a look on that flag with no art: never drawn at
+    import, but once the story gets near it (engine/visuals.Visuals.ahead). Only a place with a picture
+    gets one, at most two looks a place and LOOKS in the whole module; a change that says a clue's
+    words leaves its stage with no picture."""
     from ..agents import guard
     from ..engine.signs import TIMED
 
@@ -753,21 +792,45 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
     clues = {c.id: c.text for c in m.clues}
     names = " ".join([*(n.name for n in m.npcs), *(x.name for x in m.locations), m.setting, m.hook])
     taken = {f.id for f in m.foreshadow}
+    room, spare = _pictured(m), _spare(m)
+    flags: dict[str, str] = {}  # a picture stage's flag -> what it means
+    looks: dict[str, list[dict[str, str]]] = {}  # place -> the looks on those flags
+
+    def picture(f: SignDraft, n: int, place: str, change: str) -> str:
+        """The flag the n-th stage's picture hangs on, with its look put on the place; "" for none."""
+        nonlocal spare
+        change = " ".join(change.split())
+        flag = re.sub(r"[^a-z0-9_]", "_", f"sign_{f.id.removeprefix('sign_')}_{n}".lower())
+        if (not change or spare <= 0 or room.get(place, 0) <= 0 or flag in m.flags or flag in flags
+                or guard.leaks(change, clues, public=names)):
+            return ""
+        spare, room[place] = spare - 1, room[place] - 1
+        flags[flag] = f"伏笔 {f.id} 第 {n} 步露出了，场景图换成：{change}（露出时由引擎设置）"
+        looks.setdefault(place, []).append({"when": f"flag:{flag}", "change": change})
+        return flag
 
     def stages(f: SignDraft) -> list[dict[str, Any]]:
-        kept = []
+        kept: list[dict[str, Any]] = []
         for s in f.stages:
+            if len(kept) == 3:
+                break
             when, where = s.when.strip(), s.where.strip()
             if not s.hint.strip() or guard.leaks(s.hint, clues, public=names) or (where and where not in places):
                 continue
             if when and not (TIMED.fullmatch(when) or (when.startswith("flag:") and when[5:] in m.flags)):
                 continue
-            stage = Stage(hint=s.hint.strip(), when=when, where="" if where == f.where else where)
+            stage = Stage(hint=s.hint.strip(), when=when, where="" if where == f.where else where,
+                          flag=picture(f, len(kept) + 1, where or f.where, s.picture))
             kept.append(stage.model_dump(mode="json", exclude_defaults=True))
-        return kept[:3]
+        return kept
 
-    new = []
+    new, staged = [], []
+    written = {f.id: f for f in m.foreshadow}
     for f in out.foreshadow:
+        if (old := written.get(f.id)) is not None:  # a written sign: only stages, onto it as it is
+            if not old.stages and (more := stages(SignDraft(**{**old.model_dump(), "stages": f.stages}))):
+                staged.append(("replace", "foreshadow", old.id, "stages", more))
+            continue
         if f.id in taken or f.where not in places or f.pays_off not in targets or guard.leaks(f.hint, clues, public=names):
             continue
         taken.add(f.id)
@@ -775,7 +838,9 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
         if more := stages(f):
             item["stages"] = more
         new.append(item)
-    return [("append", "foreshadow", new)] if new else []
+    found: list[tuple[Any, ...]] = ([("append", "foreshadow", new)] if new else []) + staged
+    found += [("key", "flags", flag, meaning) for flag, meaning in flags.items()]
+    return found + [("add", "locations", place, "looks", items) for place, items in looks.items()]
 
 
 def _marks(notes: str) -> set[str]:
@@ -927,6 +992,8 @@ def land(folder: Path, found: list[tuple[Any, ...]]) -> None:
             text = yamledit.replace(text, group, edit[2], edit[3], edit[4])
         elif kind == "step":
             text = yamledit.put_step(text, group, edit[2], edit[3], edit[4], edit[5])
+        elif kind == "add":  # onto an entry's list (a place's looks)
+            text = yamledit.extend(text, group, edit[2], edit[3], edit[4])
         elif kind == "append":
             text = yamledit.append(text, group, edit[2])
         else:
@@ -945,6 +1012,9 @@ def preview(m: Module, found: list[tuple[Any, ...]]) -> Module:
         elif kind == "step":
             agenda = next(a for a in data[group] if a["npc"] == e[2])
             next(x for x in agenda["steps"] if x["id"] == e[3])[e[4]] = e[5]
+        elif kind == "add":
+            entry = next(x for x in data[group] if x["id"] == e[2])
+            entry[e[3]] = [*(entry.get(e[3]) or []), *e[4]]
         elif kind == "append":
             data.setdefault(group, []).extend(e[2])
         else:
@@ -995,12 +1065,26 @@ def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...
         elif e[0] == "append" and e[1] == "foreshadow":
             e = ("append", "foreshadow", [{**f, "stages": _kept(f["id"], f.get("stages", []), refs)} if f.get("stages") else f
                                           for f in e[2] if f"foreshadow:{f['id']}" not in refs])
+        elif e[0] == "replace" and e[1] == "foreshadow" and e[3] == "stages":
+            e = (*e[:4], [] if f"foreshadow:{e[2]}" in refs else _kept(e[2], e[4], refs))
         elif e[0] == "put" and e[3] == "knows":
             e = (*e[:4], [k for i, k in enumerate(e[4]) if f"knows:{e[2]}:{i}" not in refs])
-        if (e[0] == "append" and not e[2]) or (e[0] == "put" and e[3] == "knows" and not e[4]):
+        if (e[0] == "append" and not e[2]) or (e[0] in ("put", "replace") and e[3] in ("knows", "stages") and not e[4]):
             continue
         out.append(e)
+    if gone := _staged(found) - _staged(out):  # a stage left out takes its picture along: its flag and the look on it
+        out = [e for e in out if not (e[0] == "key" and e[1] == "flags" and e[2] in gone)]
+        out = [(*e[:4], [x for x in e[4] if x["when"].removeprefix("flag:") not in gone]) if e[0] == "add" and e[3] == "looks" else e
+               for e in out]
+        out = [e for e in out if not (e[0] == "add" and not e[4])]
     return out
+
+
+def _staged(found: list[tuple[Any, ...]]) -> set[str]:
+    """The flags the stages of a pass's signs set, new ones and written ones given stages."""
+    signs = [f for e in found if e[0] == "append" and e[1] == "foreshadow" for f in e[2]]
+    signs += [{"stages": e[4]} for e in found if e[0] == "replace" and e[1] == "foreshadow" and e[3] == "stages"]
+    return {s["flag"] for f in signs for s in f.get("stages", []) if s.get("flag")}
 
 
 def _kept(sign: str, stages: list[Any], refs: set[str]) -> list[Any]:
@@ -1050,6 +1134,45 @@ def take_out(folder: Path, refs: list[str]) -> None:
         path = _target(folder, "npcs")
         kept = [k for i, k in enumerate(m.npc(npc).knows) if i not in gone]
         path.write_text(yamledit.replace(path.read_text(encoding="utf-8"), "npcs", npc, "knows", kept), encoding="utf-8")
+    if lost := m.stage_flags() - (after := Module.load(folder)).stage_flags():
+        _unpicture(folder, after, lost)
+
+
+def _unpicture(folder: Path, m: Module, flags: set[str]) -> None:
+    """What the pictures of stages taken out leave behind: the looks hung on their flags, and the flags,
+    where nothing else in the module sets or waits on them (a look on a flag something else sets is an
+    ordinary one then, drawn at import like any other)."""
+    gone = {f for f in flags if not _used(m, f)}
+    if not gone:
+        return
+    for group, entries in (("locations", m.locations), ("npcs", m.npcs)):
+        changed = [x for x in entries if any(look.when.removeprefix("flag:") in gone for look in x.looks)]
+        if not changed:
+            continue
+        path = _target(folder, group)
+        text = path.read_text(encoding="utf-8")
+        for x in changed:
+            text = yamledit.drop_items(text, group, x.id, "looks", lambda look: str((look or {}).get("when", "")).removeprefix("flag:") in gone)
+        path.write_text(text, encoding="utf-8")
+    path = _target(folder, "flags")
+    text = path.read_text(encoding="utf-8")
+    declared = (yaml.safe_load(text) or {}).get("flags") or {}
+    for flag in sorted(gone & set(declared)):
+        try:
+            text = yamledit.drop_key(text, "flags", flag)
+        except KeyError:  # written some other way (a flow mapping): left declared, set by nothing
+            continue
+    path.write_text(text, encoding="utf-8")
+
+
+def _used(m: Module, flag: str) -> bool:
+    """Whether anything in the module names `flag` but its declaration and the looks on it: a stage, an
+    event, an agenda's step, a clue's prerequisite, a stake, a big scene, an ending, a plugin."""
+    data = m.model_dump(mode="json", exclude={"flags"})
+    for x in [*data["locations"], *data["npcs"]]:
+        x["looks"] = []
+    text = json.dumps(data, ensure_ascii=False) + "".join(p.model_dump_json() for p in m.extensions.values())
+    return re.search(rf"(?<![A-Za-z0-9_]){re.escape(flag)}(?![A-Za-z0-9_])", text) is not None
 
 
 @dataclass
@@ -1168,7 +1291,8 @@ def _rows(m: Module, refs: set[str]) -> list[str]:
         rows += [f"[agendas:{a.npc}:{s.id}] {a.npc} 的打算 {_when_row(s)}" for s in a.steps if f"agendas:{a.npc}:{s.id}" in refs]
     rows += [f"[foreshadow:{f.id}] 伏笔，在 {f.where}：{f.hint} → 指向 {f.pays_off}" for f in m.foreshadow if f"foreshadow:{f.id}" in refs]
     rows += [f"[foreshadow:{f.id}:{n}] 伏笔 {f.id} 之后第 {n} 次露出，在 {s.where or f.where}" + (f"（{s.when} 起）" if s.when else "")
-             + f"：{s.hint} → 指向 {f.pays_off}" for f in m.foreshadow for n, s in enumerate(f.stages, 1) if f"foreshadow:{f.id}:{n}" in refs]
+             + f"：{s.hint}" + (f"；场景图换成：{c}" if (c := conditions.picture(m, s.flag)) else "") + f" → 指向 {f.pays_off}"
+             for f in m.foreshadow for n, s in enumerate(f.stages, 1) if f"foreshadow:{f.id}:{n}" in refs]
     rows += [f"[history:{i}] 前史 {p.when}：{p.text}（牵涉 {'、'.join(p.who) or '无'}；另外知道的 {'、'.join(p.known_by) or '无'}）"
              for i, p in enumerate(m.history) if f"history:{i}" in refs]
     rows += [f"[knows:{n.id}:{i}] {n.name}知道：{k}" for n in m.npcs for i, k in enumerate(n.knows) if f"knows:{n.id}:{i}" in refs]
@@ -1222,7 +1346,7 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
         if not flagged:
             log(f"  [green]✓ {LABELS['verify']}[/]：没有绕过原作条件的")
         return Result("verify", problems=found or None)
-    files = {_target(folder, g) for g in ("agendas", "foreshadow", "history", "npcs")}
+    files = {_target(folder, g) for g in ("agendas", "foreshadow", "history", "npcs", "locations", "flags")}  # a stage's picture too
     before = {p: p.read_text(encoding="utf-8") for p in files if p.is_file()}
     errors_before = {str(i) for i in audit(m) if i.level == "error"}
     try:

@@ -55,6 +55,8 @@ locations:
   looks:
     - when: flag:chaos_dawn
       change: 大街上一片狼藉：橱窗破碎，门板被砸开，路上散落着翻倒的杂物
+    - when: flag:sign_pole_tapping_1
+      change: 电话线杆上多了一只悬挂的面包篮。
   chase:
   - id: poles
     name: 电话线杆下

@@ -144,6 +144,9 @@ locations:
       孤注一掷失败：仍然找到日记，但碰倒一摞书、摔碎了一只花瓶之类的精致物件，托马斯很不悦，警告要小心，并说会从报酬里扣 5 美元。
     features: [书架上的空档, 书房窗户, 旧书桌, 藏书, 花瓶]
     exits: [jinboer_jia]
+    looks:
+    - when: flag:sign_f_mud_on_sill_1
+      change: 窗台原有的浅色干土上多了几粒深色湿泥。
   - id: jiefang
     public: true
     travel_minutes: {zhenzhongxin: 15, jinboer_jia: 15}

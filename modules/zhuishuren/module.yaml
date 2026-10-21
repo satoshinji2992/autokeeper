@@ -77,6 +77,7 @@ flags:
   talked_douglas: 调查员与道格拉斯交谈过，听到了真相
   followed_douglas: 调查员跟随道格拉斯下到了地底
   told_thomas: 调查员把道格拉斯的真相告诉了托马斯
+  sign_f_mud_on_sill_1: 伏笔 f_mud_on_sill 第 1 步露出了，场景图换成：窗台原有的浅色干土上多了几粒深色湿泥。（露出时由引擎设置）
 start: huochezhan
 start_time: D1 08:15
 opening: |

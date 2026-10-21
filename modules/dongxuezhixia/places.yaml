@@ -45,6 +45,9 @@ locations:
   public: true
   weather:
   - snow
+  looks:
+  - when: flag:sign_porch_stain_1
+    change: 后廊天花板的水渍向墙角延伸，下面多了一只接水盆。
 - id: clinic
   name: 安特医生的诊所
   read_aloud: 诊所是一栋改过的宅子，候诊室里坐满了人，有人靠着墙睡，有人低声咳。诊室里有六张床， 都躺着人；床单洗得发白。杰里迈亚·安特医生把听诊器挂在脖子上，抬头看了你们一眼，说： “州里终于来人了。”两名护士在换水盆，其中一位年轻女子动作最利落。

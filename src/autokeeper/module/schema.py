@@ -55,7 +55,8 @@ class Look(BaseModel):
 
     when: str = Field(description="flag:标记；标记成立后，这个地点或人物改用这张图")
     change: str = Field(description="和平常相比画面上看得见的变化，比如“礼拜堂烧成焦黑的空壳，屋顶塌了一半”；不写剧透")
-    art: str = Field("", description="这张图的图片键（art/<键>.jpg）；留空就用 <原图键>_<标记>，导入时由 Codex 照原图生成")
+    art: str = Field("", description="这张图的图片键（art/<键>.jpg）；留空就用 <原图键>_<标记>，导入时由 Codex 照原图生成；"
+                                     "挂在伏笔步骤标记上的不在导入时画，故事走到前一步时才画")
 
     def key(self, base: str) -> str:
         return self.art or f"{base}_{self.when.removeprefix('flag:')}"
@@ -360,7 +361,8 @@ class Stage(BaseModel):
     hint: str = Field(description="这一次看见、听见的变化，一句：和上一次比哪里不一样了；一步比一步近，仍不点破，不说出线索的内容")
     when: str = Field("", description="最早什么时候露出：'D2 08:00' 这样的时间，或 flag:标记；不写就是下一次来到这里")
     where: str = Field("", description="在别的地点露出时写那个地点 id；不写就是伏笔原来的地点")
-    flag: str = Field("", description="露出这一步时设上的剧情标记（要在 flags 里声明）；地点的 looks 写 when: flag:这个标记，场景图就跟着换")
+    flag: str = Field("", description="露出这一步时设上的剧情标记（要在 flags 里声明）；地点的 looks 写 when: flag:这个标记，场景图就跟着换，"
+                                      "那张图等前一步露出时才在后台画")
 
 
 class Foreshadow(BaseModel):
@@ -483,6 +485,12 @@ class Module(BaseModel):
 
     def clues_at(self, location: str) -> list[Clue]:
         return [c for c in self.clues if c.where == location]
+
+    def stage_flags(self) -> set[str]:
+        """The flags foreshadowing sets as its stages show (Stage.flag). A picture hung on one (a
+        place's look) is drawn once the story gets near it (engine/visuals.Visuals.ahead), never
+        ahead of play (imagegen.looks)."""
+        return {s.flag for f in self.foreshadow for s in f.stages if s.flag}
 
     # -- io -------------------------------------------------------------------
     @classmethod

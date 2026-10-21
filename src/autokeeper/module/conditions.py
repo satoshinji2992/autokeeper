@@ -65,10 +65,17 @@ def pieces(m: Module) -> list[Piece]:
         for s in a.steps:
             kind = "meet" if s.meet else "backstage"
             out.append(Piece(f"agendas:{a.npc}:{s.id}", kind, s.text, a.npc, s.when, s.only_if, s.ruling, s.does))
-    for f in m.foreshadow:  # a sign, and each later look at it (Foreshadow.stages)
+    for f in m.foreshadow:  # a sign, and each later look at it (Foreshadow.stages), with the picture it changes
         out.append(Piece(f"foreshadow:{f.id}", "foreshadow", f.hint))
-        out += [Piece(f"foreshadow:{f.id}:{n}", "foreshadow", s.hint, when=s.when) for n, s in enumerate(f.stages, 1)]
+        out += [Piece(f"foreshadow:{f.id}:{n}", "foreshadow", s.hint + (f"（场景图：{c}）" if (c := picture(m, s.flag)) else ""), when=s.when)
+                for n, s in enumerate(f.stages, 1)]
     return out
+
+
+def picture(m: Module, flag: str) -> str:
+    """What the pictures hung on `flag` show changed (the looks on it): what a stage that sets it puts
+    in front of the players besides its hint."""
+    return "；".join(look.change for x in [*m.locations, *m.npcs] for look in x.looks if flag and look.when == f"flag:{flag}")
 
 
 def knows(m: Module, npc: str, start: int = 0) -> list[Piece]:
