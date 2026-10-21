@@ -1,16 +1,20 @@
 """Foreshadowing that changes across visits (Foreshadow.stages, engine/signs.py): one sign per
-arrival, timed and flagged stages, waking up where it shows, the picture that changes with it,
-`autokeeper check`, the compile step, and what the replay eval sees of the hints."""
+arrival, timed and flagged stages, waking up where it shows, the picture that changes with it
+(planned at compile time), `autokeeper check`, the compile step, and what the replay eval sees of
+the hints."""
 
 from __future__ import annotations
 
 import asyncio
+import shutil
+from types import SimpleNamespace
 
 import pytest
 
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.engine import check
 from autokeeper.engine.game import Turn
+from autokeeper.module import adapt
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Foreshadow, Look, Module, Stage
 from autokeeper.paths import EXAMPLE
@@ -172,3 +176,93 @@ def test_a_stage_the_review_flags_is_taken_out_and_its_sign_kept(tmp_path):
     kept = Module.load(folder)
     assert [f.id for f in kept.foreshadow] == ["f_mud", "f_hollow", "f_window"]
     assert [s.hint for s in kept.foreshadow[-1].stages] == ["窗框上多了指甲的划痕"]
+
+
+# -- a step's picture: planned at compile time ------------------------------------------------------
+FIGURE = "告示栏旁的画里，海岸边多了一个背对着人的小小人影"
+TURNED = "告示栏旁的画里，那个人影转过了没有五官的脸"
+
+
+def stage(n: int, where: str = "", picture: str = "") -> adapt.StageDraft:
+    return adapt.StageDraft(hint=f"画里的人影又近了一步，这是第 {n} 回看见", where=where, picture=picture)
+
+
+async def test_the_compile_step_hangs_a_picture_on_a_stage_whose_change_shows_and_draws_none(tmp_path, monkeypatch):
+    folder = tmp_path / "example"
+    shutil.copytree(EXAMPLE, folder)
+    leak = adapt.StageDraft(hint="画里的人影抬起手，指着钟楼的方向", picture="最大的那只齿轮背后缠着一圈不属于钟的东西")  # c_gears' words
+    answer = adapt.Signs(foreshadow=[adapt.SignDraft(
+        id="f_painting", hint="告示栏旁挂着一幅海边风景画，岸边空无一人", where="square", pays_off="k_tower",
+        stages=[adapt.StageDraft(hint="画里的海岸边多了一个背对着人的身影", picture=f" {FIGURE}\n"),
+                adapt.StageDraft(hint="报社墙上的挂钟停了，指针停在午夜前", where="office", picture="报社墙上的挂钟停了"),  # no picture there
+                leak])])
+    asked = []
+
+    async def ask(cfg, name, m, **_):
+        asked.append(adapt._material(m, name))
+        return answer
+
+    monkeypatch.setattr(adapt, "_ask", ask)
+    before = {p.name: p.read_text(encoding="utf-8") for p in folder.glob("*.yaml")}
+    await adapt.adapt(folder, passes=("foreshadow",), cfg=SimpleNamespace(), log=lambda _: None)
+    assert "【有场景图的地点】（全模组最多再写 6 处 picture）\n- square 广场" in asked[0]  # the tower and the office have none
+    m = Module.load(folder)
+    assert [s.flag for s in m.foreshadow[0].stages] == ["sign_f_painting_1", "", ""]
+    assert m.location("square").looks == [Look(when="flag:sign_f_painting_1", change=FIGURE)]  # no art: drawn in a game
+    assert m.flags["sign_f_painting_1"] == f"伏笔 f_painting 第 1 步露出了，场景图换成：{FIGURE}（露出时由引擎设置）"
+    assert not m.location("office").looks and m.stage_flags() == {"sign_f_painting_1"}
+    assert not [i for i in audit(m) if i.level == "error"]
+    for name, text in before.items():  # what was there is still there, line for line
+        assert all(line in (folder / name).read_text(encoding="utf-8").split("\n") for line in text.split("\n")), name
+    assert "场景图换成：" + FIGURE in "\n".join(adapt._rows(m, {"foreshadow:f_painting:1"}))  # the review reads it too
+    adapt.take_out(folder, ["foreshadow:f_painting:1"])  # the review takes the stage out: its picture goes with it
+    kept = Module.load(folder)
+    assert [s.hint for s in kept.foreshadow[0].stages] == ["报社墙上的挂钟停了，指针停在午夜前", "画里的人影抬起手，指着钟楼的方向"]
+    assert not kept.location("square").looks and "sign_f_painting_1" not in kept.flags
+    assert {p.name: p.read_text(encoding="utf-8") for p in folder.glob("*.yaml") if p.name in before} == before
+
+
+def test_picture_stages_keep_to_the_looks_a_module_and_a_place_may_have(module):
+    module.foreshadow = []
+    module.location("office").art = "office"  # a second place with a picture
+    module.location("square").looks = [Look(when="flag:bell_stopped", change="钟楼的影子里一片死寂")]
+    module.npc("warden").looks = [Look(when="flag:bell_stopped", change="守钟人瘫坐在楼梯口")]
+    module.npc("preacher").looks = [Look(when="flag:bell_stopped", change="布道者哑了嗓子"), Look(when="flag:bell_stopped", change="布道者跪在台阶上")]
+    out = adapt.Signs(foreshadow=[
+        adapt.SignDraft(id="f_a", hint="告示栏旁挂着一幅海边风景画", where="square", pays_off="k_tower",
+                        stages=[stage(1, picture="画里多了一个人影"), stage(2, picture="画里的人影转过了身"), stage(3, "office", "窗上多了一道裂纹")]),
+        adapt.SignDraft(id="f_b", hint="报社的窗玻璃上有一道细细的裂纹", where="office", pays_off="k_tower",
+                        stages=[stage(4, picture="裂纹爬满了半扇窗")])])
+    found = adapt.edits(module, "foreshadow", out)
+    signs = found[0][2]
+    # Four looks already: two more for the module, one more for the square (two a place)
+    assert [s.get("flag", "") for s in signs[0]["stages"]] == ["sign_f_a_1", "", "sign_f_a_3"]
+    assert "flag" not in signs[1]["stages"][0]  # none left for the module
+    assert found[1:] == [("key", "flags", "sign_f_a_1", "伏笔 f_a 第 1 步露出了，场景图换成：画里多了一个人影（露出时由引擎设置）"),
+                         ("key", "flags", "sign_f_a_3", "伏笔 f_a 第 3 步露出了，场景图换成：窗上多了一道裂纹（露出时由引擎设置）"),
+                         ("add", "locations", "square", "looks", [{"when": "flag:sign_f_a_1", "change": "画里多了一个人影"}]),
+                         ("add", "locations", "office", "looks", [{"when": "flag:sign_f_a_3", "change": "窗上多了一道裂纹"}])]
+    after = adapt.preview(module, found)
+    assert sum(len(x.looks) for x in [*after.locations, *after.npcs]) == adapt.LOOKS
+    assert not [i for i in audit(after) if i.level == "error"]
+    assert "（场景图：画里多了一个人影）" in next(p.text for p in adapt.conditions.pieces(after) if p.ref == "foreshadow:f_a:1")
+    # A stage held back takes its flag and its look along; the others keep theirs
+    kept = adapt.without(found, {"foreshadow:f_a:1"})
+    assert [e[:3] for e in kept[1:]] == [("key", "flags", "sign_f_a_3"), ("add", "locations", "office")]
+    assert adapt.without(found, {"foreshadow:f_a"}) == [("append", "foreshadow", [signs[1]])]
+    module.location("square").looks.append(Look(when="flag:bell_stopped", change="广场上空无一人"))
+    module.npc("warden").looks.append(Look(when="flag:bell_stopped", change="守钟人不见了"))  # six: no more anywhere
+    assert "不写 picture" in adapt._material(module, "foreshadow")
+    assert [e[0] for e in adapt.edits(module, "foreshadow", out)] == ["append"]
+
+
+def test_check_wants_a_steps_picture_on_a_place(module):
+    module.foreshadow[0].stages[0].flag = "figure_shown"  # not declared
+    module.npc("warden").looks = [Look(when="flag:painting_turned", change="守钟人回头看那幅画")]
+    errors = [i.text for i in audit(module) if i.level == "error"]
+    assert any("第 1 步设的标记 figure_shown 未声明" in e for e in errors)
+    assert any("NPC warden 的变样图挂在伏笔步骤的标记 painting_turned 上" in e for e in errors)
+    module.flags["figure_shown"] = "画里多了一个人影"
+    module.npc("warden").looks = []
+    module.location("square").looks = [Look(when="flag:painting_turned", change=TURNED)]
+    assert not [i for i in audit(module) if i.level == "error"]
