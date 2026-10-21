@@ -26,10 +26,11 @@ if TYPE_CHECKING:
     from .model import EncounterState, Participant
 
 ATTACKING = ("attack", "shoot", "maneuver")
-CHASE_ONLY = ("move", "cross", "hide", "barrier", "stand")
+CHASE_ONLY = ("move", "cross", "barrier", "stand")
+LIGHTS = ("手电", "火把", "火炬", "油灯", "提灯", "马灯", "煤油灯", "蜡烛", "灯笼")  # what lets the dark see you
 VERBS = {"attack": "攻击", "shoot": "射击", "maneuver": "战技", "aid": "急救", "reload": "装填", "unjam": "排除故障",
          "ready": "拿出武器", "defend": "防守", "flee": "逃跑", "pursue": "追赶", "move": "奔跑", "cross": "越过障碍",
-         "hide": "躲藏", "barrier": "设置障碍", "help": "协助", "speak": "喊话", "surrender": "投降", "stand": "回身迎战",
+         "hide": "躲藏", "aim": "瞄准", "barrier": "设置障碍", "help": "协助", "speak": "喊话", "surrender": "投降", "stand": "回身迎战",
          "use": "使用", "other": "其他"}
 REACT_WORDS = {"dodge": "闪避", "fight_back": "反击", "cover": "找掩护", "none": "不应对"}
 UNARMED_ID = "natural:徒手"
@@ -107,18 +108,56 @@ class Ctx:
         return pid in self.enc.scene.prone
 
     def hidden_from(self, watcher: str, pid: str) -> str:
-        """Why `watcher` cannot see `pid` now ("" when it can): full cover, lost sight in a chase,
-        gone from the scene."""
+        """Why `watcher` cannot perceive `pid` now ("" when it can). The keeper sees all; an NPC only
+        what is in front of it (guide #25): gone from the scene, hidden behind full cover (a hide that
+        worked, a position the keeper declared), out of sight in the old chase (hid, or ran out of
+        sight), lost in a chase, or the dark (a place lit only by torches, or fog) when they are not
+        close to it and carry no light."""
         p = self.p(pid)
         if p is None:
             return "不在这场遭遇里"
         if p.presence in ("escaped", "left"):
             return "已经不在现场"
+        if not self.opposed(watcher, pid) and self.side(watcher) == self.side(pid):
+            return ""  # one's own side is known where it is
         if any(c.who == pid and not c.partial for c in self.enc.scene.cover):
             return "藏在掩体后面，看不见"
+        ch = self.game.state.chase
+        if ch is not None and pid in ch.hidden:
+            return "躲起来了，看不见"
         if self.enc.chase is not None and f"{watcher}|{pid}" in self.enc.chase.lost_sight:
             return "已经跟丢了"
+        prof = getattr(self.view(watcher), "profile", None)
+        sees_dark = prof is not None and not prof.human  # a creature hunts by smell and in the dark
+        if not sees_dark and self.dark() and not self.engaged(watcher, pid) and not self.lit(pid):
+            return f"{self.dark()}，看不清他在哪"
         return ""
+
+    def dark(self) -> str:
+        """What keeps the place dark ("" when it is not): a place lit only by torches, or fog."""
+        st = self.game.state
+        loc = next((x for x in self.game.m.locations if x.id == self.enc.place), None)
+        weather = set(loc.weather if loc is not None else [])
+        if "torch" in weather:
+            return "四下漆黑"
+        if "fog" in weather or st.sky == "fog":
+            return "雾太大"
+        return ""
+
+    def lit(self, pid: str) -> bool:
+        """Whether `pid` carries a light the dark sees them by."""
+        inv = next((i for i in self.game.state.investigators if i.id == pid), None)
+        things = list(inv.inventory) if inv is not None else []
+        things += [e.name for e in self.world.rec.entities.values() if e.kind == "item" and e.at == pid]
+        return any(w in t for t in things for w in LIGHTS)
+
+    def told(self, watcher: str, pid: str) -> list[str]:
+        """What `watcher` was told or saw of `pid` (the world's facts it knows about them)."""
+        from ...world import knowledge
+
+        out = [f.text for f in self.world.rec.facts.values()
+               if pid in f.about and not f.retracted and knowledge.sees(f, watcher)]
+        return out[-3:]
 
     def name(self, pid: str, audience: str = "keeper") -> str:
         """What `audience` calls them; for the players, two who look alike are told apart by a number

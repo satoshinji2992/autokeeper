@@ -325,7 +325,7 @@ def test_a_change_needs_an_encounter():
 SIZES = {
     p.DeclaredAction: 2800,
     p.NpcArrangement: 4200,
-    p.EncounterTurnPlan: 7000,
+    p.EncounterTurnPlan: 8200,  # + cover and distances (2026-10-21): positions and ranges the book's shots read
     p.EncounterStart: 10500,
     p.SiteDraft: 3600,
 }

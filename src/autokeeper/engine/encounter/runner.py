@@ -36,6 +36,7 @@ from .model import (
     Archive,
     Begin,
     ChoiceOption,
+    Cover,
     EncounterState,
     EncounterSummary,
     EndRecord,
@@ -593,6 +594,11 @@ class Encounters:
                     e.stakes.append(StakeState(**s.model_dump(), source="keeper"))
             if landed.pace:
                 e.clock.pace = landed.pace
+            for c in landed.cover:  # where the keeper says they are: behind something, half or wholly
+                e.scene.cover = [x for x in e.scene.cover if x.who != c.who] + [
+                    Cover(who=c.who, what=c.what, partial=not c.full, since=e.round)]
+            for d in landed.distances:
+                e.scene.distance[f"{d.a}|{d.b}"] = d.yards
             if landed.end is not None:
                 e.history.append(f"end:{landed.end.how}:{','.join(landed.end.who)}")
             for x in unsettled:

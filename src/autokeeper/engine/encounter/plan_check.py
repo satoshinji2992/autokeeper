@@ -41,6 +41,8 @@ class Landed:
     stakes: list[Any] = field(default_factory=list)
     end: Any = None
     pace: int | None = None
+    cover: list[Any] = field(default_factory=list)
+    distances: list[Any] = field(default_factory=list)
     unsettled: list[str] = field(default_factory=list)  # 【未落实】 lines for the keeper
 
 
@@ -163,6 +165,17 @@ def land(game: Any, plan: EncounterTurnPlan, actor: str = "", *, act: bool = Tru
             out.unsettled.append("还在等玩家的选择，现在不能收场")
         else:
             out.end = plan.end
+    for c in plan.cover:
+        if ctx.p(c.who) is None:
+            out.unsettled.append(f"cover 里 {c.who} 不在这场遭遇里")
+        else:
+            out.cover.append(c)
+    for d in plan.distances:
+        wrong = [x for x in (d.a, d.b) if ctx.p(x) is None]
+        if wrong:
+            out.unsettled.append(f"distances 里 {'、'.join(wrong)} 不在这场遭遇里")
+        else:
+            out.distances.append(d)
     if plan.pace is None and ctx.enc.clock.pace is None:
         out.unsettled.append("pace 必填：一轮在故事里过几秒")
     out.pace = plan.pace

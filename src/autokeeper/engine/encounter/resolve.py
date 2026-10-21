@@ -33,6 +33,7 @@ from .model import (
     Change,
     Close,
     Compact,
+    Cover,
     Edge,
     EncounterState,
     Engagement,
@@ -327,6 +328,8 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
         return done(f"{an}手里没有能用的攻击，这一下落空了")
     kind = choices.attack_kind(opt)
     maneuver = do == "maneuver"
+    if any(c.who == a and not c.partial for c in enc.scene.cover):  # striking from hiding gives them away
+        enc.scene.cover = [c for c in enc.scene.cover if c.who != a]
     head = f"{an}用{opt.name}{'射击' if kind == 'firearm' else ('施展' + r.declared.maneuver) if maneuver else '攻击'}{dn}"
     bonus, reasons = 0, []
     # edges waiting for the attacker's next roll (a companion's help)
@@ -461,13 +464,34 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
         cover = firearms.dive_for_cover(dive.level, attacks_per_round=ctx.view(d).attacks_per_round())
         dived = cover.penalty < 0
         enc.budget.lost_next[d] = "扑向掩体"
+        if dived and not any(c.who == d for c in enc.scene.cover):  # behind something now: half hidden for later shots
+            enc.scene.cover.append(Cover(who=d, what="掩体", partial=True, since=enc.round))
         parts.append(f"{{{d}}}扑向掩体：{dive.value} {dive.level.zh}")
         w.mark(d, dive)
-    into = any(ctx.side(x) == ctx.side(a) and x != a and w.standing(x)
-               for e in enc.scene.engaged if d in (e.a, e.b) for x in (e.a, e.b) if x != d)
+    melee_with = [x for e in enc.scene.engaged if d in (e.a, e.b) for x in (e.a, e.b)
+                  if x != d and x != a and ctx.side(x) == ctx.side(a) and w.standing(x)]
+    into = bool(melee_with)
     shots = max(1, min(pick.shots, actions.volley(opt)))
-    mods = firearms.shot_modifiers(firearms.Shot(point_blank=ctx.engaged(a, d), dived=dived, into_melee=into, volley=shots,
+    av, dv = ctx.view(a), ctx.view(d)
+    # The circumstances the book counts (pp. 95–96): the range band from the distance the keeper set, point
+    # blank (engaged, or within DEX/5 feet), half hidden, running flat out, the target's size.
+    yards = enc.scene.distance.get(f"{a}|{d}", enc.scene.distance.get(f"{d}|{a}"))
+    shotgun = "/" in opt.damage_text
+    band = 0
+    if yards is not None and opt.range:
+        found = firearms.range_band(yards, opt.range, shotgun=shotgun)
+        if found is None:
+            return _done(w, receipt, k, ev, f"{head}：{yards} 码，超出{opt.name}射程的四倍，打不着")
+        band = found
+    point_blank = ctx.engaged(a, d) or (yards is not None and firearms.point_blank(yards * 3, av.char("敏捷")))
+    partial = any(c.who == d and c.partial for c in enc.scene.cover)
+    running = _running(ctx, d)
+    mods = firearms.shot_modifiers(firearms.Shot(band=band, shotgun=shotgun, point_blank=point_blank, dived=dived,
+                                                 partial_cover=partial and not dived, fast_target=running and dv.mov() >= 8,
+                                                 target_build=dv.build(), into_melee=into, volley=shots,
                                                  prone_target=d in enc.scene.prone, bonus=bonus))
+    if band:
+        reasons = [*reasons, f"{firearms.BAND_NAMES[band]}（{yards} 码）"]
     reasons = [*reasons, *(r.lstrip("+−") for r in mods.reasons)]
     known = weapon_in(opt.name)
     text, amount_total, results = "", 0, []
@@ -490,6 +514,12 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
             break
         if loaded is not None:
             loaded -= 1
+        if roll.level == Level.FUMBLE and into:  # a fumble into a melee hits a friend, the unluckiest (p. 96)
+            luck = {x: (w.investigator(x).luck if w.investigator(x) else ctx.view(x).char("幸运") or 50) for x in melee_with}
+            friend = firearms.fumble_hits(luck)
+            amount, text = _damage(w, "0", opt, "normal", band=band)
+            results.append("失手打中了自己人：" + _wound(w, friend, amount, "firearm", text, ev, firearm=True))
+            continue
         if what == "dud":
             results.append("哑弹，没打响")
             continue
@@ -499,7 +529,7 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
         w.mark(a, roll)
         if not w.body(d).dead:
             mode = "extreme" if roll.level >= mods.impale_needs else "normal"
-            amount, text = _damage(w, "0", opt, mode)
+            amount, text = _damage(w, "0", opt, mode, band=band)
             ev["extreme"] = ev["extreme"] or mode == "extreme"
             ev["winner"] = "attacker"
             amount_total += amount
@@ -509,6 +539,22 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
     if amount_total:
         ev["damage"] = amount_total
     _done(w, receipt, k, ev, f"{head}：" + "；".join(parts) + "。" + "；".join(results))
+
+
+RUNNING = ("flee", "move", "pursue")
+
+
+def _running(ctx: Ctx, who: str) -> bool:
+    """Moving flat out this round (p. 96): declared so, or a keeper's person whose first arranged action
+    it can do is running (its receipt comes only on its slot), or still running from last round."""
+    enc = ctx.enc
+    if any(r.actor == who and r.round in (enc.round, enc.round - 1) and r.declared.do in RUNNING for r in enc.receipts):
+        return True
+    p = ctx.p(who)
+    if p is None or p.controller != "keeper" or p.arrangement is None:
+        return False
+    able = [a for a in p.arrangement.actions if not actions.preconditions(ctx, who, a)]
+    return bool(able) and able[0].do in RUNNING
 
 
 def _done(w: Work, receipt: ActionReceipt, k: int, ev: dict, line: str) -> None:
@@ -567,6 +613,11 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
         lines.append(f"{an}帮着{{{d.target}}}" + (f"：{d.summary}" if d.summary else ""))
     elif d.do == "pursue":
         lines.append(f"{an}追向{{{d.target}}}")
+    elif d.do == "hide":
+        lines.append(_hide(w, receipt, a, d.summary))
+    elif d.do == "aim":
+        me.edges.append(Edge(dice=1, why="瞄准了一轮", source=d.target or a, until="next_roll"))
+        lines.append(f"{an}稳住手，瞄准了{{{d.target}}}" if d.target else f"{an}稳住手瞄准")
     elif d.do == "speak":
         said = d.speech.strip()
         lines.append(f"{an}喊：「{said}」" if said else f"{an}{d.summary}")
@@ -578,6 +629,29 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
         lines.append(f"{an}这一轮没能做成：{actions.VERBS.get(d.do, d.do)}只在追逐中用")
     receipt.lines += lines
     w.unit.lines += lines
+
+
+def hidden(w: Work, who: str, where: str) -> None:
+    """`who` is out of sight now: behind full cover, which their next attack gives away."""
+    sc = w.enc.scene
+    sc.cover = [c for c in sc.cover if c.who != who] + [Cover(who=who, what=where, partial=False, since=w.enc.round)]
+    sc.engaged = [e for e in sc.engaged if who not in (e.a, e.b)]
+
+
+def _hide(w: Work, receipt: ActionReceipt, a: str, summary: str) -> str:
+    """Hiding in a fight: Stealth at the difficulty the best Spot Hidden among those watching sets
+    (p. 72's opposed difficulty); a success and they lose sight of them."""
+    watchers = [f for f in w.ctx.foes(a) if w.standing(f)]
+    best = max((w.ctx.view(f).skill("侦查") for f in watchers), default=0)
+    roll = w.check(a, "潜行", None, melee.opposed_difficulty(best))
+    receipt.rolls.append(record("hide", a, roll))
+    w.mark(a, roll)
+    if w.investigator(a) is not None:
+        w.unit.notices.append({"type": "dice", "who": w.ctx.name(a, "players"), **check_view(roll)})
+    if roll.passed:
+        hidden(w, a, "藏身处")
+        return f"{{{a}}}躲了起来（潜行 {roll.value} {roll.level.zh}），对手看不见他了"
+    return f"{{{a}}}想躲起来，没藏住（潜行 {roll.value} {roll.level.zh}）"
 
 
 def _aid(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
@@ -662,6 +736,8 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
             w.unit.notices.append({"type": "dice", "who": w.ctx.name(a, "players"), **check_view(roll)})
         passed = roll.passed
         head += f"（{roll.describe()}）"
+        if passed and roll.name == "潜行":  # sneaking off, ruled: out of sight as a hide is
+            hidden(w, a, "暗处")
     out = [head]
     w.unit.rest = {"ruling": ruling, "passed": passed}
     if not passed:

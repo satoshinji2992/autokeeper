@@ -107,6 +107,12 @@ def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = Non
         if a.jammed:
             add(DeclaredAction(do="unjam", target=a.id, summary="-"), _label("排除故障", weapon=a.name, react=react), "这一轮不能射击")
             break
+    if any(a.firearm and a.usable for a in v.attacks()):
+        for f in foes:
+            add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, "players"), react=react),
+                "这一轮不开枪，下一枪得奖励骰")
+    if foes:
+        add(DeclaredAction(do="hide", summary="-"), _label("躲藏", react=react), f"潜行 {v.skill('潜行')} 对对手的侦查")
     add(DeclaredAction(do="defend", summary="-"), _label("防守", react=react), "不出手，只防守")
     if not ctx.held_by(who):
         add(DeclaredAction(do="flee", to="away", summary="-"), _label("逃跑", react=react), "离开战斗")

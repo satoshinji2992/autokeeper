@@ -274,6 +274,8 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
             if creature is not None and creature.pursues is not None:
                 traits.append("模组写明：调查员逃跑时它" + ("会追" if creature.pursues else "不追"))
         sees, unseen = perception(ctx, p.id) if p.controller == "keeper" else (None, [])
+        told = [f"{ctx.name(x, 'keeper')}：{t}" for x in (q.id for q in enc.participants if q.id != p.id)
+                for t in ctx.told(p.id, x)] if p.controller == "keeper" else []
         conditions = list(b.conditions) + (["倒地"] if p.id in enc.scene.prone else []) + (["被制住"] if ctx.held_by(p.id) else [])
         people.append(BriefPerson(
             id=p.id, name=v.true_name, public=v.public_name("players"), kind=p.kind, side=p.side, controller=p.controller,
@@ -283,7 +285,7 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
             needs_arrangement=p.controller == "keeper" and needs_arrangement(enc, p), speaks=prof is None or prof.human or p.kind == "npc",
             surprised=p.surprised, lost_next=enc.budget.lost_next.get(p.id, ""),
             actions=brief_actions(ctx, p.id) if p.controller != "human" and ctx.acting(p.id) else [] if p.controller != "human" else None,
-            traits=traits, missing=missing, sees=sees, unseen=unseen,
+            traits=traits, missing=missing, sees=sees, unseen=unseen, told=told,
             luck=luck_pool(ctx, p.id) if p.controller == "keeper" else None))
     fled = [p.id for p in enc.participants if p.presence == "fled"]
     held = [f"{h.by} 制住了 {h.held}" for h in enc.scene.holds]
