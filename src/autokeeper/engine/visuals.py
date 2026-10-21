@@ -43,6 +43,7 @@ class Visuals:
         self.tasks: dict[str, asyncio.Task] = {}
         self.fill_gaps = True  # the module's own gaps looked for in the background (off where nobody sees pictures: MCP)
         self.limit = asyncio.Semaphore(2)
+        self.gap_limit = asyncio.Semaphore(1)
         self.idle = asyncio.Event()
         self.idle.set()
         digest = hashlib.sha256(f"{module.id}/{state.slot}".encode()).hexdigest()[:24]
@@ -247,7 +248,9 @@ class Visuals:
         """What the module has no picture of its own for (pictures.gaps), looked for in the
         background once for all its games: a photo, else a drawing by Codex (pictures.fill). The
         painted ones show until then, and wherever neither is to be had."""
-        if not self.fill_gaps or self.cfg is None or "gaps" in self.tasks or not pictures.gaps(self.module):
+        cfg = self.cfg
+        if (not self.fill_gaps or cfg is None or "gaps" in self.tasks or cfg.visual_limit == 0 or cfg.visual_budget_usd == 0
+                or not pictures.gaps(self.module)):
             return
         try:
             asyncio.get_running_loop()
@@ -260,9 +263,17 @@ class Visuals:
             await self.emit({"type": "art", "key": key, "art": self.module.art.get(key, ""), "status": "ready",
                              "mask": self.module.art_colors.get(key, ""), "picture": str(path)})
 
-        assert self.cfg is not None
-        await pictures.fill(self.cfg, self.module, log=lambda _: None, where="game", limit=self.limit, ready=self.idle.wait,
-                            on_search=lambda role, reply: self.state.record_usage(f"visual:{role}", reply),
+        cfg = self.cfg
+        assert cfg is not None
+
+        def affordable() -> bool:
+            spent = sum(v.get("cost_usd", 0) for k, v in self.state.usage.items() if k.startswith("visual:"))
+            return spent < cfg.visual_budget_usd
+
+        # One at a time, in a slot of its own: a drawing takes up to five minutes, and the pictures a
+        # scene is waiting for (schedule) must not queue behind it.
+        await pictures.fill(cfg, self.module, log=lambda _: None, where="game", limit=self.gap_limit, ready=self.idle.wait,
+                            budget=affordable, on_search=lambda role, reply: self.state.record_usage(f"visual:{role}", reply),
                             on_draw=self._usage, done=landed)
 
     # -- pictures from Codex: what no photo was found for, and what the story changed ----------

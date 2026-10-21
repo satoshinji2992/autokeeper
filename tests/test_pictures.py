@@ -107,3 +107,41 @@ async def test_a_game_fills_them_in_the_background_and_the_screen_hears(module, 
     quiet.fill_gaps = False  # where nobody sees pictures (MCP)
     quiet.schedule()
     assert "gaps" not in quiet.tasks
+
+
+async def test_what_came_to_nothing_is_not_looked_for_again_for_a_while(module, monkeypatch):
+    monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
+    looked, drawn = [], []
+
+    async def none(cfg, client, subject, kind, *, on_reply=None, web=False):
+        looked.append(subject)
+
+    async def broken(text, target, *, kind, module, **kwargs):
+        drawn.append(kind)
+        raise imagegen.Failed("没画成")
+
+    monkeypatch.setattr(imagery, "find_picture", none)
+    monkeypatch.setattr(imagegen, "make", broken)
+    lines: list[str] = []
+    assert await real_fill(config.Config(), module, log=lines.append) == []
+    first, attempts = len(looked), len(drawn)
+    assert first and attempts
+    await real_fill(config.Config(), module, log=lines.append)
+    assert len(looked) == first and len(drawn) == 2 * attempts  # searched once; a drawing gets a second try
+    await real_fill(config.Config(), module, log=lines.append)
+    assert len(looked) == first and len(drawn) == 2 * attempts  # then rests for pictures.RETRY days
+    await real_fill(config.Config(), module, log=lines.append, force=True)
+    assert len(looked) == 2 * first  # unless asked to (art prepare --force)
+
+
+async def test_a_search_that_breaks_is_not_held_against_it(module, monkeypatch):
+    calls = []
+
+    async def offline(cfg, client, subject, kind, *, on_reply=None, web=False):
+        calls.append(subject)
+        raise OSError("no network")
+
+    monkeypatch.setattr(imagery, "find_picture", offline)
+    await real_fill(config.Config(), module, log=lambda _: None)
+    await real_fill(config.Config(), module, log=lambda _: None)
+    assert len(calls) == 2 * len([g for g in pictures.gaps(module) if g.kind != "creature"])

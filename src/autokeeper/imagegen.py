@@ -366,13 +366,16 @@ def _credit(picture: Path | None) -> dict[str, Any] | None:
 
 
 def _store(data: bytes, target: Path, credit: dict[str, Any]) -> Path:
-    """The picture at a sane size as <target>.jpg, and its credit."""
+    """The picture at a sane size as <target>.jpg, and its credit. Written whole or not at all: another
+    game, or a renderer, may read it meanwhile."""
     target.parent.mkdir(parents=True, exist_ok=True)
+    part = target.with_name(f"{target.stem}.{os.getpid()}-{threading.get_ident()}.part.jpg")
     with Image.open(io.BytesIO(data)) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
         im.thumbnail((LONG_SIDE, LONG_SIDE), Image.Resampling.LANCZOS)
-        im.save(target, "JPEG", quality=90)
+        im.save(part, "JPEG", quality=90)
         size = im.size
+    os.replace(part, target)
     record = credit | {"width": size[0], "height": size[1]}
     credits.put(target, record)
     return target

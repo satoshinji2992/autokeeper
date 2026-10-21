@@ -827,7 +827,10 @@ def upgrade(
 
 
 @art_app.command("prepare")
-def art_prepare(module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")]) -> None:
+def art_prepare(
+    module: Annotated[Path, typer.Argument(help="模组目录或 id，如 zhuishuren")],
+    force: Annotated[bool, typer.Option("--force", help="最近找过没找到、画过没画成的也再试一次")] = False,
+) -> None:
     """给模组里没有图的地点、人物（路人除外）、重要物件和怪物配图：先找照片并处理，找不到合适的再由 AI 画。
     图存在本机缓存里，每局都用，模组文件夹不变；两样都不行的，游戏里用程序画的图。"""
     from . import imagegen, pictures
@@ -841,7 +844,7 @@ def art_prepare(module: Annotated[Path, typer.Argument(help="模组目录或 id�
         return
     off = imagegen.why_off(cfg)
     console.print(f"[bold]配图[/] 《{m.title}》缺 {len(todo)} 张，" + ("找不到照片时由 AI 画" if not off else f"{off}，只找照片"))
-    done = asyncio.run(pictures.fill(cfg, m, log=console.print, where="import"))
+    done = asyncio.run(pictures.fill(cfg, m, log=console.print, where="import", force=force))
     console.print(f"配好 {len(done)}/{len(todo)} 张" + ("" if off else f"；这个模组还能用 AI 画 {imagegen.left(m.id)} 张"))
 
 

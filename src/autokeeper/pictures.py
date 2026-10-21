@@ -9,6 +9,8 @@ They are found or drawn once per module, for all its games, into paths.module_ar
 own folder is left alone: a bundled module's is the repository), ahead of play (`autokeeper art
 prepare`, and an import) or, for what is still missing, in the background of a game
 (engine/visuals.py). adopt() puts them in front of the painted ones when a game opens the module.
+What could not be had is noted beside it (<key>.tried.json): the search is not run again, nor a
+drawing that failed twice, for RETRY days.
 
     gaps(m)   what has no picture of its own (a painted one counts as none)
     fill(...) a photo for each, else a drawing; returns the keys that got one
@@ -18,6 +20,10 @@ prepare`, and an import) or, for what is still missing, in the background of a g
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import json
+import os
+import threading
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, nullcontext
 from dataclasses import asdict
@@ -29,6 +35,7 @@ from .module import package
 from .module.schema import NPC, Module
 
 FOLDERS = {"scene": "places", "portrait": "people", "item": "items", "creature": "people"}
+RETRY = 7  # days before what could not be found, or drawn twice over, is tried again
 
 
 class Gap(NamedTuple):
@@ -89,14 +96,16 @@ def adopt(m: Module) -> list[str]:
 
 
 async def fill(
-    cfg: config.Config, m: Module, *, log: Callable[[str], Any] = print, where: str = "import",
+    cfg: config.Config, m: Module, *, log: Callable[[str], Any] = print, where: str = "import", force: bool = False,
     limit: AbstractAsyncContextManager | None = None, ready: Callable[[], Awaitable[Any]] | None = None,
-    on_search: Callable[[str, Any], None] | None = None, on_draw: Callable[[Any], None] | None = None,
-    done: Callable[[str, Path], Awaitable[None]] | None = None,
+    budget: Callable[[], bool] | None = None, on_search: Callable[[str, Any], None] | None = None,
+    on_draw: Callable[[Any], None] | None = None, done: Callable[[str, Path], Awaitable[None]] | None = None,
 ) -> list[str]:
     """A picture for every gap, one at a time: a photo (the vision model writes the searches and
-    picks one), else a drawing by Codex; nothing is painted here. `limit` and `ready` hold a game's
-    turn (engine/visuals.py); `done(key, path)` hears of each one as it lands. Returns the keys."""
+    picks one), else a drawing by Codex; nothing is painted here. What was tried in vain lately is
+    not tried again (RETRY) unless `force`. `limit` and `ready` hold a game's turn, `budget` says
+    whether its pictures may cost more (engine/visuals.py); `done(key, path)` hears of each one as it
+    lands. Returns the keys."""
     import httpx
 
     era = "，".join(x for x in (m.era, m.setting) if x)
@@ -106,14 +115,24 @@ async def fill(
         return made
     async with httpx.AsyncClient() as client:
         for gap in gaps(m):
+            if budget is not None and not budget():
+                break
             target = folder(m) / FOLDERS[gap.kind] / f"{gap.key}.jpg"
+            tried = {} if force else _tried(target)
             path: Path | None = target if target.is_file() else None
+            searched, failed = bool(tried.get("searched")), int(tried.get("failed", 0))
             async with limit or nullcontext():
                 if ready is not None:
                     await ready()
-                if path is None and search and gap.kind != "creature":  # nobody has photographed a ghoul
-                    path = await _photo(cfg, client, gap, f"{gap.subject}（{era}）", target, on_search, log)
-                if path is None and draw and imagegen.left(m.id) > 0:
+                if path is None and search and gap.kind != "creature" and not searched:  # nobody has photographed a ghoul
+                    try:
+                        path = await _photo(cfg, client, gap, f"{gap.subject}（{era}）", target, on_search, log)
+                        searched = path is None
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:  # offline, a search that broke: not held against it, and on to the drawing
+                        log(f"  · {gap.key}：找照片出错（{type(exc).__name__}）")
+                if path is None and draw and imagegen.left(m.id) > 0 and failed < 2:
                     try:
                         path = await imagegen.make(imagegen.prompt(gap.subject, gap.kind, era=m.era, setting=m.setting), target,
                                                    kind=gap.kind, module=m.id, title=gap.subject[:80], where=where, on_reply=on_draw)
@@ -122,10 +141,13 @@ async def fill(
                         draw = False
                         log(f"  · AI 画图先停在这里：{exc}")
                     except (imagegen.Failed, OSError, ValueError) as exc:
+                        failed += 1
                         log(f"  · {gap.key}：AI 没画成（{type(exc).__name__}）")
             if path is None:
+                _note(target, searched, failed)
                 log(f"  · {gap.key}：没有找到照片，也没能画，暂用程序画的图")
                 continue
+            target.with_suffix(".tried.json").unlink(missing_ok=True)
             _register(m, gap.key, path)
             made.append(gap.key)
             if done is not None:
@@ -133,23 +155,38 @@ async def fill(
     return made
 
 
-async def _photo(cfg, client, gap: Gap, subject: str, target: Path, on_search, log) -> Path | None:
+def _tried(target: Path) -> dict[str, Any]:
+    """What was tried for this picture lately and came to nothing ({} once RETRY days have passed)."""
     try:
-        async with asyncio.timeout(120):
-            if on_search is None:
-                found = await imagery.find_picture(cfg, client, subject, gap.kind, web=True)
-            else:
-                found = await imagery.find_picture(cfg, client, subject, gap.kind, web=True, on_reply=on_search)
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:  # a search that fails leaves it to the drawing
-        log(f"  · {gap.key}：找照片出错（{type(exc).__name__}）")
-        return None
+        note = json.loads(target.with_suffix(".tried.json").read_text(encoding="utf-8"))
+        when = dt.datetime.fromisoformat(note["at"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+    return note if dt.datetime.now() - when < dt.timedelta(days=RETRY) else {}
+
+
+def _note(target: Path, searched: bool, failed: int) -> None:
+    if not (searched or failed):  # nothing was tried (offline, no Codex): try again next time
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    note = {"at": dt.datetime.now().isoformat(timespec="seconds"), "searched": searched, "failed": failed}
+    target.with_suffix(".tried.json").write_text(json.dumps(note), encoding="utf-8")
+
+
+async def _photo(cfg, client, gap: Gap, subject: str, target: Path, on_search, log) -> Path | None:
+    """A photo for it saved as `target`, credited and prepared; None when none fits."""
+    async with asyncio.timeout(120):
+        if on_search is None:
+            found = await imagery.find_picture(cfg, client, subject, gap.kind, web=True)
+        else:
+            found = await imagery.find_picture(cfg, client, subject, gap.kind, web=True, on_reply=on_search)
     if not found:
         return None
     im, c = found
     target.parent.mkdir(parents=True, exist_ok=True)
-    await asyncio.to_thread(im.save, target, quality=92)
+    part = target.with_name(f"{target.stem}.{os.getpid()}-{threading.get_ident()}.part.jpg")
+    await asyncio.to_thread(im.save, part, quality=92)
+    os.replace(part, target)  # whole or not at all: another game may be reading the folder
     credits.put(target, asdict(c) | {"kind": gap.kind})
     await asyncio.to_thread(imagery.preprocess, target, gap.kind if gap.kind in imagery.PIPELINES else "scene")
     log(f"  ✓ {gap.key}：{c.title}（{c.license}）")
