@@ -67,10 +67,11 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
+from ..agents.cast import Proposal
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
-from ..engine.game import PLAY_WAIT, RETELL, Game, Told, push_choice
+from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
@@ -1281,11 +1282,13 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        text = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id))  # in a fight: its choices
-        await self._event({"type": "said", "who": inv.name, "player": "", "text": text, "ai": True})
-        await self._run(text, inv.id, ai=True)
+        move = Proposal.of(await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id)))  # in a fight: its choices
+        await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
+        await self._run(move.text, inv.id, ai=True, push=move.push)
 
-    async def _run(self, text: str, inv_id: str, *, ai: bool) -> None:
+    async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
+        """One action through the turn graph. A push offer goes to its seated player; an AI seat's, or
+        one whose player left, is answered with the push the AI said it would make (`push`), if any."""
         inp: Any = {"input": text, "by_hand": not ai and self.sits.get(inv_id) is not None}  # a seated player throws their own dice
         while True:
             offer = None
@@ -1307,7 +1310,7 @@ class Hub:
             if offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
                 choice = "roll"
             elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice
-                choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
+                choice = ai_choice(offer, push)
             inp = Command(resume=choice)
         self.game.emit = self._event
         self._save()

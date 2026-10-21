@@ -3081,6 +3081,16 @@ def push_choice(value: Any) -> tuple[str, str]:
     return mode, how if mode == "push" else ""
 
 
+def ai_choice(offer: dict, how: str = "") -> str | dict:
+    """How an AI investigator answers a push offer: the push it said it would make with its action
+    (agents/cast.Proposal.push, Keeper Rulebook p. 73), reviewed like a player's, when it said one
+    and a push is allowed; otherwise luck when that is offered, else the failure stands."""
+    how = " ".join(how.split())
+    if how and offer.get("can_push"):
+        return {"choice": "push", "how": how}
+    return "luck" if offer.get("luck") is not None else "drop"
+
+
 def _refused(text: str) -> commands.CommandResult:
     return commands.CommandResult("refused", text)
 

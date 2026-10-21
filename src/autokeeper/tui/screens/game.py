@@ -24,10 +24,10 @@ from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
-from ...agents.cast import Cast
+from ...agents.cast import Cast, Proposal
 from ...engine import debrief, idea
 from ...engine import graph as turn_graph
-from ...engine.game import PLAY_WAIT, RETELL, Game, Told
+from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
 from ...engine.state import GameState, time_of_day
 from ...harness import models as channels
 from ...module.schema import Module
@@ -1622,7 +1622,9 @@ class GameScreen(Screen):
             else:
                 self.app.notify("当前无中断回合，可直接提交行动。")
 
-    async def _run_turn(self, inp, auto: bool = False) -> None:
+    async def _run_turn(self, inp, auto: bool = False, push: str = "") -> None:
+        """One action through the turn graph. With `auto` (an AI investigator's) a push offer is
+        answered with the push it said it would make (`push`, agents/cast.Proposal), if any."""
         assert self.graph
         ended = self.state.ending
         while True:
@@ -1639,8 +1641,9 @@ class GameScreen(Screen):
                 await self.make_way()
                 choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
             elif auto:
-                choice = "push" if offer.get("can_push") else "luck" if offer.get("luck") is not None else "drop"
-                self.story.add("system", Text(f"◇ AI 选择：{ {'push': '孤注一掷', 'luck': '花幸运', 'drop': '放弃'}[choice] }", style="dim"))
+                choice = ai_choice(offer, push)
+                said = f"孤注一掷：{choice['how']}" if isinstance(choice, dict) else {"luck": "花幸运", "drop": "放弃"}[choice]
+                self.story.add("system", Text(f"◇ AI 选择：{said}", style="dim"))
             else:
                 await self.make_way()
                 choice = await self.app.push_screen_wait(PushModal(offer))
@@ -1675,9 +1678,9 @@ class GameScreen(Screen):
         inv = st.investigators[idx]
         self._status(f"{inv.name} 正在决定行动…")
         situation = self._situation()
-        action = await self.cast.investigator(st, inv.id, situation)
-        self.story.add("player", Text(f"▶ {inv.name}（AI）：{action}"))
-        await self._run_turn({"input": action, "by_hand": False}, auto=True)
+        move = Proposal.of(await self.cast.investigator(st, inv.id, situation))
+        self.story.add("player", Text(f"▶ {inv.name}（AI）：{move.text}"))
+        await self._run_turn({"input": move.text, "by_hand": False}, auto=True, push=move.push)
 
     def _situation(self) -> str:
         from ...engine.autoplay import situation
@@ -1699,13 +1702,13 @@ class GameScreen(Screen):
                 break
             self._status("AI 调查员在商量…")
             result = await party.ainvoke({"situation": situation(self.m, st), "ids": alive, "proposals": []})
-            for inv_id, text in result["proposals"]:
+            for inv_id, text, push in result["proposals"]:
                 if st.ending or self._leave_when_ready is not None:  # 讲完再走: after this one
                     break
                 st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == inv_id)
                 self._panels()
                 self.story.add("player", Text(f"▶ {st.investigator.name}（AI）：{text}"))
-                await self._run_turn({"input": text, "by_hand": False}, auto=True)
+                await self._run_turn({"input": text, "by_hand": False}, auto=True, push=push)
         self._busy(False)
 
     def _ending_summary(self) -> None:

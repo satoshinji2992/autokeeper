@@ -366,6 +366,21 @@ class Ideas(BaseModel):
     dare: str = Field(description="大胆或谨慎的一步：冒个险，或者稳妥地退一步、等一等，看眼下哪个更合适")
 
 
+class Proposal(BaseModel):
+    """An AI investigator's turn (Cast.investigator): what it does, and how it would push this
+    action's roll if it failed (Keeper Rulebook p. 73), said with the action so that answering a
+    push offer takes no call of its own (engine/game.ai_choice). `text` is its one required field:
+    a reply in plain words (an older recording, a model that ignored the format) stands for it."""
+
+    text: str = Field(description="这一轮做的事：第一人称一句话")
+    push: str = Field("", description="这件事要检定而失败时，打算怎样孤注一掷：一句话说清多花的力气、时间或冒的险；不值得冒险就留空")
+
+    @classmethod
+    def of(cls, said: Proposal | str) -> Proposal:
+        """A proposal, or plain words (a stand-in cast's) as one with no push said."""
+        return said if isinstance(said, Proposal) else cls(text=str(said))
+
+
 def _storyteller(npc: NPC) -> bool:
     return any(w in npc.role for w in ("说书", "评书"))
 
@@ -652,7 +667,10 @@ INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员
 - 问一个人问不出来，就换个方法（劝、哄、吓、察言观色）或者换个人，别反复追问同一句话。
 - 用你擅长的技能解决问题，别硬碰你不会的。时间紧时先追关键线索。
 - 这一带查完了、能去的地方也去过了，或者在等什么事（天黑、约好的明天），就等待或休息，
-  让时间往前走，比如“我们等到天黑再来”“先回去睡一觉，明早再去报馆”。"""
+  让时间往前走，比如“我们等到天黑再来”“先回去睡一觉，明早再去报馆”。
+
+text 写这一轮的行动。push 写：这件事如果要检定而失败了，你打算怎样孤注一掷，一句话说清多花的力气、时间或冒的险，
+比如“我把整排书架一本本抽出来翻，花上一个钟头”；失败了不值得冒险就留空。"""
 
 SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家想想调查员「{name}」（{occupation}）下一步可以做什么。
 {sheet}
@@ -1664,14 +1682,17 @@ class Cast:
         reply = await self._send("progress", self.sessions["progress"], state, material, bind=False)
         return reply.text.strip()
 
-    async def investigator(self, state: GameState, inv_id: str, situation: str) -> str:
+    async def investigator(self, state: GameState, inv_id: str, situation: str) -> Proposal:
+        """An AI investigator's move, with how it would push it if its roll failed (Proposal.push)."""
         inv = state.find(inv_id)
         key = f"investigator:{inv_id}"
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
-        s = self._open(key, "investigator", system)
+        s = self._open(key, "investigator", system, schema=_schema(Proposal))
         # Remember where and when each move was made; the latest events come with every situation.
         reply = await self._send(key, s, state, situation, remember=situation.split("\n", 1)[0])
-        return reply.text.strip().splitlines()[0] if reply.text.strip() else "我四下看看。"
+        said = _parse(Proposal, reply.data, {"text": reply.text})
+        lines = said.text.strip().splitlines()
+        return Proposal(text=lines[0].strip() if lines else "我四下看看。", push=" ".join(said.push.split()))
 
     async def suggest(self, state: GameState, inv_id: str, situation: str) -> list[str]:
         """Ideas for a player's own investigator (F5, /suggest): three actions, written by the
