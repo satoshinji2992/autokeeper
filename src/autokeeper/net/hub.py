@@ -77,6 +77,7 @@ from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
 from ..rules.coc import Investigator
+from ..rules.combat import DOWN
 from . import cards, media
 from .room import BLANKS
 
@@ -95,6 +96,13 @@ PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes cam
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
+# What a fight or a chase shows of someone who is not an investigator (engine/combat.view): no sheet behind it
+SHOWN = ("id", "name", "kind", "side", "status", "prone", "held_by", "stance", "weapon", "portrait", "build", "pos", "speed",
+         "actions")
+LOOKS = {"轻伤": 90, "受伤": 60, "重伤": 20}  # hit points out of 100 that look as hurt as the word says (Fighter.wound_word)
+AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
+BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
+          "reveal"}
 
 
 def table(m: Module, st: GameState) -> dict[str, Any]:
@@ -173,6 +181,41 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     d["handouts"] = [h for h in d["handouts"] if h["id"] in st.handouts]
     d["sketches"] = [sk for sk in d["sketches"] if not sk["after"] or sk["after"] in st.clues]
     return d
+
+
+def public_fighter(f: dict[str, Any], word: str = "无伤") -> dict[str, Any]:
+    """Someone in a fight or a chase as a player's screen may hold them. An investigator whole; anyone
+    else as the table sees them (engine/combat.view): hit points only as many as say how hurt they
+    look (`word`), the weapons by name, never their numbers, skills, armour, healing, the keeper's
+    description and notes, or what seeing it costs. An ally's hit points are on the screens anyway."""
+    if f.get("kind") == "investigator":
+        return f
+    out = {k: f[k] for k in SHOWN if k in f}
+    out["attacks"] = [{"name": a["name"], "skill": "", "value": 0, "damage": "", "firearm": a.get("firearm", False)}
+                      for a in f.get("attacks", [])]
+    out["hp"], out["hp_max"] = (f["hp"], f["hp_max"]) if f.get("side") == "party" else (LOOKS.get(word, 100), 100)
+    return out
+
+
+def public_way(legs: list[dict[str, Any]], at: list[int]) -> list[dict[str, Any]]:
+    """A chase's way as the players' screens get it: the stretches run and the next ones in sight of the
+    frontmost runner (positions `at`); past them blank, so what is on it and where it ends stay the
+    host's (the screens say 「前方：尚未看清」)."""
+    front = max(at, default=0)
+    return [leg if i <= front + AHEAD else {"name": "", "look": "", "obstacle": None} for i, leg in enumerate(legs)]
+
+
+def public_battle(ev: dict[str, Any]) -> dict[str, Any]:
+    """A fight's or a chase's event as the screens get it: no keeper's description of a creature, nor a
+    foe's DEX, and the way ahead only as far as it can be seen."""
+    ev = {k: v for k, v in ev.items() if k != "look"}
+    if fight := ev.get("fight"):
+        ev["fight"] = {**fight, "fighters": [f if f.get("kind") == "investigator" else
+                                             {k: v for k, v in f.items() if k not in ("look", "dex")} for f in fight["fighters"]]}
+    if chase := ev.get("chase"):
+        at = [r["pos"] for r in chase.get("runners", []) if r.get("status") not in DOWN and not (r.get("hidden") and r["side"] != "party")]
+        ev["chase"] = {**chase, "legs": public_way(chase.get("legs", []), at)}
+    return ev
 
 
 def public_plugins(m: Module, st: GameState) -> list[dict[str, Any]]:
@@ -671,13 +714,20 @@ class Hub:
 
     # -- what clients see ------------------------------------------------------------------
     def _view(self) -> dict[str, Any]:
-        view = self.state.model_dump(mode="json", exclude=PRIVATE)
+        st = self.state
+        view = st.model_dump(mode="json", exclude=PRIVATE)
         view["flags"], view["fired"] = [], []
-        for key, people in (("fight", "fighters"), ("chase", "runners")):  # what the module says of a foe is the keeper's
-            if view.get(key):
-                for f in view[key][people]:
-                    f["notes"] = ""
-                view[key]["orders"] = {}
+        if st.fight is not None:  # a foe as the table sees it (public_fighter); the orders and the arbiter's reason stay here
+            words = {f.id: f.wound_word() for f in st.fight.fighters}
+            view["fight"]["fighters"] = [public_fighter(f, words.get(f["id"], "无伤")) for f in view["fight"]["fighters"]]
+            view["fight"]["orders"], view["fight"]["reason"] = {}, ""
+        if st.chase is not None:
+            ch = st.chase
+            words = {f.id: f.wound_word() for f in ch.runners}
+            view["chase"]["runners"] = [public_fighter(f, words.get(f["id"], "无伤")) for f in view["chase"]["runners"]]
+            at = [f.pos for f in ch.runners if f.standing and not (f.id in ch.hidden and f.side != "party")]
+            view["chase"]["track"]["legs"] = public_way(view["chase"]["track"]["legs"], at)
+            view["chase"]["orders"], view["chase"]["reason"] = {}, ""
         if view.get("pending_push"):
             view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
         return view
@@ -753,13 +803,30 @@ class Hub:
         # redrew while nobody could see it) arrive the way new pictures do: as an art event.
         handouts = {key for h in book["handouts"] for key in _handout_keys(h)}  # these travel with their handout
         for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
-            path = self.m.pictures.get(key)
-            if path and self.sent.get(key) != path and (data := media.pack(path)):
-                self.sent[key] = path
-                art = self.m.art.get(key, "")
-                await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
-                                                            "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
-                                                            "picture_data": data}})
+            await self._picture(key)
+
+    async def _picture(self, key: str) -> None:
+        """A picture to every screen as an art event, unless they have it (painted first, if a program
+        paints it): never a path on the host."""
+        path = self.m.pictures.get(key)
+        if not path or self.sent.get(key) == path:
+            return
+        await asyncio.to_thread(scenery.ensure, path)
+        if data := media.pack(path):
+            self.sent[key] = path
+            art = self.m.art.get(key, "")
+            await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
+                                                        "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
+                                                        "picture_data": data}})
+
+    async def _faces(self, ev: dict[str, Any]) -> None:
+        """The faces a fight or a chase shows, before the event that shows them: its foes', a creature
+        first seen, the one that caught them. Only theirs: the book's creatures stay off the table
+        (table())."""
+        people = [*(ev.get("fight") or {}).get("fighters", []), *(ev.get("chase") or {}).get("runners", [])]
+        keys = {ev.get("portrait") or "", *(f.get("portrait") or "" for f in people if f.get("side") != "party")}
+        for key in sorted(k for k in keys if k):
+            await self._picture(key)
 
     def _book(self) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
@@ -807,14 +874,10 @@ class Hub:
                 ev["picture_data"] = media.pack(path)
                 self.sent[ev["key"]] = path
         elif ev.get("type") == "view":  # another picture of the place: the picture first, if the screens lack it
-            key = ev.get("key", "")
-            path = self.m.pictures.get(key)
-            if path and self.sent.get(key) != path and (data := media.pack(path)):
-                self.sent[key] = path
-                art = self.m.art.get(key, "")
-                await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
-                                                            "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
-                                                            "picture_data": data}})
+            await self._picture(ev.get("key", ""))
+        elif ev.get("type") in BATTLE:  # a fight or a chase: its faces first, then what the table sees of it
+            await self._faces(ev)
+            ev = public_battle(ev)
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         elif ev.get("type") in ("plugin_effect", "plugin_show", "plugin_panel", "plugin_answered"):  # public; the id stays on the host
