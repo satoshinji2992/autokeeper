@@ -232,3 +232,115 @@ def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(m
     assert "┆" in row[legs[3]] and "┆" in row[legs[1]]  # run through this round
     assert "到这里就甩开" in row[legs[5]] and "▦攀爬" in row[legs[4]]  # three ahead of it; the fence in the way
     assert any("每轮跑 2 段" in line for line in lines)
+
+
+# -- windows over the fight: only the one in front ever goes (Textual's dismiss pops the top) ---------
+OFFER = {"kind": "roll", "who": "周衡", "skill": "闪避", "target": 32, "difficulty": "常规", "reason": "老守钟人扑了过来"}
+
+
+@pytest.mark.usefixtures("canned")
+async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_back(module, fake, tmp_path, monkeypatch):
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.widgets.fight import BloodFlash
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")  # the face, without chafa
+    face = tmp_path / "warden.png"
+    Image.new("RGB", (60, 80), (90, 40, 30)).save(face)
+    module.pictures["face-warden"] = str(face)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, warden = fight_screen(module)
+        st = screen.state
+        st.fight, me.pos = None, 2
+        st.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party", round=1)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        screen.busy = True  # the round is being settled: the engine ends the chase and starts the fight
+        st.chase, st.fight = None, battle.Fight(fighters=[me, warden], place="tower", reason="追逐中被追上")
+        await screen.handle({"type": "chase_end", "end": "caught", "text": "追逐结束：老守钟人追上了周衡", "hunter": "warden",
+                             "hunter_name": "老守钟人", "portrait": "face-warden"})
+        await screen.handle({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】周衡与老守钟人扭打在一起"})
+        await pilot.pause(0.05)
+        assert isinstance(app.screen, BloodFlash)  # the blood first
+        assert await until(pilot, lambda: isinstance(app.screen, ShowcaseScreen))  # then its face, over everything
+        assert not any(isinstance(s, BloodFlash) for s in app.screen_stack)  # the flash went before it came
+        await pilot.pause(1.0)
+        assert isinstance(app.screen, ShowcaseScreen)  # shown its time, not closed by the flash's going
+        assert await until(pilot, lambda: app.screen is screen)
+        screen.busy = False
+        screen.query_one("#command").focus()
+        await pilot.press("x")  # nothing left over the screen eating the keys
+        await pilot.pause(0.1)
+        assert app.screen is screen and screen.query_one("#command").value.endswith("x")
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_roll_asked_while_the_blood_drains_is_answered_and_the_turn_goes_on(module, fake):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import HandoutModal, RollModal
+    from autokeeper.tui.widgets.fight import BloodFlash
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        answered: list[str] = []
+
+        async def turn() -> None:  # as the turn asks: out of the way, then the prompt (GameScreen._run_turn)
+            await screen.make_way()
+            answered.append(await app.push_screen_wait(RollModal(OFFER)))
+
+        screen._flash(0.6)
+        assert isinstance(app.screen, BloodFlash)
+        screen.run_worker(turn(), group="turn")
+        assert await until(pilot, lambda: isinstance(app.screen, RollModal))
+        assert not any(isinstance(s, BloodFlash) for s in app.screen_stack)
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        assert await until(pilot, lambda: answered == ["roll"])  # the turn waiting on it goes on
+        # A window pushed straight over the flash: the flash drains under it, and waits to go.
+        screen._flash(0.6)
+        app.push_screen(HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件"))
+        await pilot.pause(0.8)  # the flash's time is up under the handout
+        assert [type(s) for s in app.screen_stack[-2:]] == [BloodFlash, HandoutModal]
+        await pilot.press("escape")  # the handout closed by the player, then the flash goes by itself
+        assert await until(pilot, lambda: app.screen is screen)
+        assert not any(isinstance(s, (BloodFlash, HandoutModal)) for s in app.screen_stack)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_handout_over_a_big_scene_stays_until_closed_and_the_scene_goes_after_it(module, fake, tmp_path, monkeypatch):
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import HandoutModal
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")
+    pic = tmp_path / "big.png"
+    Image.new("RGB", (40, 30), (40, 40, 60)).save(pic)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        app.push_screen(ShowcaseScreen(str(pic), "钟楼顶上", seconds=0.5))
+        await pilot.pause(0.2)
+        app.push_screen(HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件"))
+        await pilot.pause(0.8)  # the picture's time ran out under the handout
+        assert [type(s) for s in app.screen_stack[-2:]] == [ShowcaseScreen, HandoutModal]
+        await pilot.press("escape")
+        assert await until(pilot, lambda: app.screen is screen)  # the handout closed, the picture went after it

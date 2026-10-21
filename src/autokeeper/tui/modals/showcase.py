@@ -10,6 +10,7 @@ import subprocess
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.await_complete import AwaitComplete
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
@@ -35,14 +36,18 @@ class ShowcaseScreen(ModalScreen[None]):
         self.face = face  # a portrait (a creature first seen): whole and centred, not cropped to the screen
         self.seconds = seconds
         self._gone = False
+        self._due = False  # its time ran out under another window: it goes once it is in front again
 
     def compose(self) -> ComposeResult:
         yield Static("", id="showcase-picture")
         yield Static(Text(self.caption), id="showcase-title")
 
     def on_mount(self) -> None:
-        self.set_timer(self.seconds or SHOWN, self.leave)
+        self.set_timer(self.seconds or SHOWN, self._time_up)
         self.run_worker(self._draw(), exclusive=True)
+
+    def _time_up(self) -> None:
+        self.leave()  # not returned: a timer awaits what its callback returns, and the screen cannot await its own going
 
     async def _draw(self) -> None:
         cols, rows = max(1, self.size.width), max(1, self.size.height - 1)
@@ -72,11 +77,21 @@ class ShowcaseScreen(ModalScreen[None]):
         event.stop()
         self.leave()
 
-    def leave(self) -> None:
-        """Gone, if it is still the screen in front (the timer may outlive it), and only once: a
-        key pressed just as the timer ran dismissed it twice, and the second set the result of a
-        future already done (InvalidStateError, the user's Windows run, 2026-10-21). Not awaited:
-        its own timer and handlers must not wait for their screen to go."""
-        if self.is_current and not self._gone:
-            self._gone = True
-            self.dismiss()
+    def leave(self) -> AwaitComplete | None:
+        """Gone, and only once: a key pressed just as the timer ran dismissed it twice, and the second
+        set the result of a future already done (InvalidStateError, the user's Windows run, 2026-10-21).
+        Only from the front: `is_current` holds under another window too, and `dismiss()` pops
+        whatever is in front, so a timer that ran out under a handout closed the handout and left
+        the picture up for good. Under another window it goes once it is in front again. Its own
+        timer and handlers do not await the dismissal (GameScreen.make_way does)."""
+        if self._gone:
+            return None
+        if not self.is_active:
+            self._due = True
+            return None
+        self._gone = True
+        return self.dismiss()
+
+    def on_screen_resume(self) -> None:
+        if self._due:
+            self.leave()

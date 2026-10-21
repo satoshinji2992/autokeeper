@@ -28,6 +28,7 @@ from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.await_complete import AwaitComplete
 from textual.color import Color
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
@@ -610,35 +611,55 @@ def chase_gap(view: dict) -> int:
 
 
 class BloodFlash(ModalScreen[None]):
-    """The whole screen floods red and drains, when an investigator is hurt: `strength` 0 to 1."""
+    """The whole screen floods red and drains, when an investigator is hurt: `strength` 0 to 1.
+
+    It goes only from the front. Textual's `is_current` holds for a screen under another one too,
+    and `dismiss()` pops whatever is in front: a flash that drained under a roll prompt pushed
+    meanwhile closed the prompt (the turn waiting on it never went on), stayed behind, see-through,
+    eating the keys, and the next key dismissed it a second time (InvalidStateError, the app gone).
+    Under another window it drains all the same and goes once it is in front again."""
 
     DEFAULT_CSS = "BloodFlash { background: #8a0000 50%; }"
 
     def __init__(self, strength: float = 0.5):
         super().__init__()
         self.alphas = [min(0.8, 0.25 + 0.55 * strength) * k for k in (1.0, 0.8, 0.6, 0.42, 0.28, 0.15, 0.0)]
+        self._left = False  # dismissed: never twice
+        self._due = False  # drained under another window: it goes when it is in front again
 
     def on_mount(self) -> None:
         self._step()
 
     def _step(self) -> None:
         if not self.alphas:
-            self._gone()
+            self.finish()
             return
         self.styles.background = Color(150, 0, 0, self.alphas.pop(0))
         self.set_timer(0.06, self._step)
 
-    def _gone(self) -> None:
-        if self.is_current:
-            self.alphas = []
-            self.dismiss()
+    def finish(self) -> AwaitComplete | None:
+        """Drained at once and gone, if it is in front; else gone once it is (on_screen_resume). The
+        dismissal, to await from outside the flash's own handlers (None: nothing to wait for)."""
+        self.alphas = []
+        self.styles.background = Color(150, 0, 0, 0.0)
+        if self._left:
+            return None
+        if not self.is_active:
+            self._due = True
+            return None
+        self._left = True
+        return self.dismiss()
+
+    def on_screen_resume(self) -> None:
+        if self._due:
+            self.finish()
 
     def on_key(self, event: events.Key) -> None:
         """Typing goes on through the blood: the key reaches whatever had it under the flash."""
         event.stop()
         event.prevent_default()
         below = self.app.screen_stack[-2] if len(self.app.screen_stack) > 1 else None
-        self._gone()
+        self.finish()
         if below is not None:
             (below.focused or below).post_message(events.Key(event.key, event.character))
 

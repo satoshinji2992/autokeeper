@@ -433,14 +433,39 @@ class GameScreen(Screen):
         picture = ev.get("picture", "")
         if not cfg.showcase or not imagery.available() or not picture or not Path(picture).is_file():
             return
-        if isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
-            return
-        self.app.push_screen(ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations))  # type: ignore[attr-defined]
+        shown = ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations)  # type: ignore[attr-defined]
+        self.run_worker(self._over_all(shown), group="reveal")
+
+    async def _over_all(self, shown: ShowcaseScreen) -> None:
+        """A picture over the whole screen (a big scene, a face), once the blood flash has drained: one
+        pushed over the flash was closed by the flash's going. Never over a roll prompt or another one."""
+        await self._after_flash()
+        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+            self.app.push_screen(shown)
+
+    async def _after_flash(self) -> None:
+        """Wait for the blood flash in front to drain (under half a second); one still up after a second goes."""
+        for _ in range(20):
+            if not isinstance(self.app.screen, BloodFlash):
+                return
+            await asyncio.sleep(0.05)
+        if isinstance(flash := self.app.screen, BloodFlash) and (gone := flash.finish()) is not None:
+            await gone
+
+    def _flash_off(self) -> None:
+        """A window coming up over the screen (a handout) ends the blood flash first."""
+        if isinstance(flash := self.app.screen, BloodFlash):
+            flash.finish()
 
     async def make_way(self) -> None:
-        """A big scene steps aside for what asks the player something (a roll, a push)."""
-        if isinstance(self.app.screen, ShowcaseScreen):
-            await self.app.screen.dismiss()
+        """A big scene, a face, the blood flash step aside for what asks the player something (a roll, a
+        push), each through its own leaving: only the screen in front goes, and only once."""
+        for _ in range(4):
+            top = self.app.screen
+            gone = top.leave() if isinstance(top, ShowcaseScreen) else top.finish() if isinstance(top, BloodFlash) else None
+            if gone is None:
+                return
+            await gone
 
     def _sky(self, loc_id: str) -> str:
         """The narrated weather, if this place is under the open sky."""
@@ -797,6 +822,7 @@ class GameScreen(Screen):
             story.add("handout", Text(f"▤ 手稿：{ev['title']}（F2 可重看）", style="bold"))
             handout = next((h for h in self.m.handouts if h.id == ev.get("id")), None)
             pictures = self.m.handout_pictures(handout) if handout else []
+            self._flash_off()
             self.app.push_screen(HandoutModal(ev["title"], ev["text"], pictures, kind=ev.get("kind", "信件")))
         elif t == "sanity":
             body = Text()
@@ -941,16 +967,17 @@ class GameScreen(Screen):
         return max(14, min(32, round(self.app.size.height * 0.5)))
 
     async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
-        """A face over the whole screen: a creature first seen, the thing that caught you."""
+        """A face over the whole screen: a creature first seen, the thing that caught you (after the
+        blood it drew: _over_all)."""
         from ... import scenery
 
         path = self.m.pictures.get(portrait or "", "")
         if not path:
             return
         await asyncio.to_thread(scenery.ensure, path)  # painted the first time it is shown
-        if not Path(path).is_file() or isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+        if not Path(path).is_file():
             return
-        self.app.push_screen(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]
+        await self._over_all(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]
 
     def _wound(self, who: str, damage: int) -> None:
         """An investigator hurt: blood floods the screen, the screen lurches, harder the worse the blow."""

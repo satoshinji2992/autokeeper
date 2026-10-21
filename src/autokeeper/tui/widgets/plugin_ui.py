@@ -428,9 +428,10 @@ class Plays:
 
     # -- prompts
     def ready(self) -> None:
-        """Bring up the next prompt for this player, when nothing else is on."""
+        """Bring up the next prompt for this player, when nothing else is on (`is_active`: the game
+        screen in front; `is_current` holds under another window too)."""
         screen = self.screen
-        if self.asking is not None or not self.waiting or screen.busy or not screen.is_current:
+        if self.asking is not None or not self.waiting or screen.busy or not screen.is_active:
             return
         ev = self.waiting.pop(0)
         self.asking = PromptModal(ev)
