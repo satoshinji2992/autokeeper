@@ -37,7 +37,7 @@ from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import diagnostics, fog, progress, views, world
-from .fighting import CHASE_TELL, FIGHT_TELL, Fighting
+from .fighting import Fighting, tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -1217,7 +1217,7 @@ class Game(Fighting):
             if preparation.get("blocked"):
                 return False
             late, self._late = self._late, Turn()
-            for attr in ("events", "clues", "sanity", "notes", "hints", "world"):
+            for attr in ("events", "clues", "sanity", "notes", "hints", "world", "fight"):  # fight: one an event began meanwhile
                 getattr(turn, attr).extend(getattr(late, attr))
             turn.arrived, turn.first_visit = late.arrived, late.first_visit
             return ruling is not None
@@ -1231,7 +1231,9 @@ class Game(Fighting):
             return
         if ruling.missing:
             await step("missing", turn, lambda: self._lacking(ruling, turn))
-        if self.battling() or ruling.combat or ruling.chase:  # a round of a fight or a chase, or the start of one
+        # A round of a fight or a chase, or the start of one. Decided once: a fight an event of this very
+        # turn began (engine/fighting.Fighting._scripted) does not make it one when the turn is resumed.
+        if await step("battle", turn, lambda: self.battling() or bool(ruling.combat or ruling.chase)):
             await self._battle(action, ruling, turn)
             return
         inv = st.investigator
@@ -2220,7 +2222,7 @@ class Game(Fighting):
         except Exception as exc:  # the world's own life is a bonus: a failure costs nobody a turn
             self._debug("world", {"phase": "failed", "error": f"{type(exc).__name__}: {exc}"[:300]})
             return
-        for attr in ("events", "sanity", "notes", "hints", "world"):
+        for attr in ("events", "sanity", "notes", "hints", "world", "fight"):
             getattr(self._late, attr).extend(getattr(late, attr))
         if self.checkpoint:
             self.checkpoint()
@@ -2311,6 +2313,8 @@ class Game(Fighting):
             await step("sets", turn, sets)
             for flag in ev.sets:
                 await step(f"flag-showcase:{flag}", turn, lambda flag=flag: self.showcases.fire(f"flag:{flag}"))
+            if (ev.fight or ev.chase) and not ev.ending:  # a scripted attack or pursuit (engine/fighting.py)
+                await self._scripted(ev, turn)
             if ev.ending:
                 await step("check-ending", turn, lambda: self._check_ending(turn))
                 if not st.ending or self._resolution_pending(f"/ending:{ev.ending}"):
@@ -2489,8 +2493,7 @@ class Game(Fighting):
         elif turn.interlude:
             out.append("请用 60–150 字接着上一段写这些事，像“就在这时”一样自然地插进来，收在一个能行动的细节上。")
         elif turn.fight:
-            out.append(CHASE_TELL if any(line.startswith("【追逐") for line in turn.fight) and not any(
-                line.startswith("【战斗") for line in turn.fight) else FIGHT_TELL)
+            out.append(tell(turn.fight))
         else:
             out.append("请叙述。")
         return "\n".join(out)

@@ -1,10 +1,14 @@
 """Fights and chases in the game: a round at a time, in the turn's journaled stages.
 
-How one comes about: the arbiter rules that an action starts it (Ruling.combat, Ruling.chase), or a
+How one comes about: the arbiter rules that an action starts it (Ruling.combat, Ruling.chase); a
+module's event scripts it (Event.fight, Event.chase: an ambush, a pack on their heels), begun where
+the investigators are with the first round left to their next input (Fighting._scripted); or a
 fight ends with the investigators running and something going after them. From then on the game is
 in it (GameState.fight, GameState.chase) until it is over, and every player input is that
 investigator's order for the round (engine/combat.Order: the screen offers them as words, and any
-words work, read by the engine or by Cast.order).
+words work, read by the engine or by Cast.order). A chase runs along the module's way for the place
+(Location.chase, or that of the place it is in), else one the tactics agent draws (Cast.track), else
+the one for its kind of place (engine/combat.default_track).
 
 A round is settled whole, in DEX order. The NPCs', the creatures' and the AI investigators' orders
 come from one tactics call (Cast.tactics; engine/combat.rule_of_thumb when it fails or is slow). Every
@@ -30,13 +34,14 @@ from ..rules.catalog import canonical
 from ..rules.chase import Leg, Obstacle, Track
 from ..rules.coc import DIFFICULTY_ZH
 from ..rules.combat import STANCES, Attack, Fighter
-from ..world.ops import Condition, Occur
+from ..world.ops import Condition, Move, Occur
 from ..world.record import ENGINE
 from . import combat as battle
 from .combat import Chase, Fight, Order
 
 if TYPE_CHECKING:
     from ..agents.cast import Action, Ruling
+    from ..module.schema import Event
     from .game import Turn
 
 ATTACKING = ("attack", "shoot", "maneuver")
@@ -45,6 +50,17 @@ FIGHT_TELL = ("下面是这一轮按先后结算出来的经过。照它写一�
               "不替调查员决定下一轮做什么。120–220 字。")
 CHASE_TELL = ("下面是这一轮追逐按先后结算出来的经过。照它写一段急促的叙述：脚步、喘息、身后的动静、绊倒和翻越，"
               "前面还有什么路。数字已经显示过，不复述；只写结算出来的结果，不替调查员决定下一步。100–200 字。")
+BEGIN_TELL = ("打斗或追逐刚刚开始，这一轮还没有人出手。写对方怎样扑上来、追上来，此刻的局面、距离和声响，紧张，有画面；"
+              "不写谁打中了谁、谁受了伤，不替调查员决定怎么应对，显示过的数字不复述。80–160 字。")
+
+
+def tell(lines: list[str]) -> str:
+    """What the keeper is asked to write for a turn with a fight or a chase in it (Turn.fight): the
+    round as settled, or how it begins when nothing is settled yet (an event's scripted attack)."""
+    if not any(line.startswith(("【战斗 · 第", "【追逐 · 第", "【战斗结束", "【追逐结束")) for line in lines):
+        return BEGIN_TELL
+    chase = any(line.startswith("【追逐") for line in lines) and not any(line.startswith("【战斗") for line in lines)
+    return CHASE_TELL if chase else FIGHT_TELL
 
 
 class Fighting:
@@ -236,20 +252,104 @@ class Fighting:
             out["pursue"] = battle.pursuers(fight)
         return out
 
+    # -- what an event scripts ------------------------------------------------------------------
+    async def _scripted(self, ev: Event, turn: Turn) -> None:
+        """An event's attack or pursuit (Event.fight, Event.chase), where the investigators are: it
+        begins as a ruling begins one, with the same events for the screens, and the next input is
+        the first round's order. An attack while a fight goes on joins it. Nothing begins during a
+        chase, with no investigator left who can act, or by those dead or gone. Its stages run inside
+        the event's own (Game._fire), who comes decided in the first of them: a turn resumed after it
+        does not begin it again."""
+        from ..agents.cast import Action, Ruling
+
+        step = self._resolution_step
+        if ev.fight:
+            begun = await step("fight-begin", turn, lambda: self._ambush(ev))
+            for i, out in enumerate(begun):
+                await step(f"fight-begin:{i}", turn, lambda out=out: self.emit(out))
+            if begun:
+                await step("fight-told", turn, lambda: turn.fight.append(begun[0]["line"]))
+                seen = await step("fight-sight", turn, lambda: self._sights(turn, paid=bool(ev.sanity)))
+                for i, out in enumerate(seen):
+                    await step(f"fight-sight:{i}", turn, lambda out=out: self.emit(out))
+            return
+        who = await step("chase-who", turn, lambda: self._coming(ev.chase, fight_ok=False))
+        if who:
+            ruling = Ruling(needs_roll=False, chase=who, chase_party=ev.chase_party or "逃", reason=ev.title)
+            await self._chase_open(ruling, Action(kind="other", summary=ev.title), turn, paid=bool(ev.sanity))
+
+    def _coming(self, ids: list[str], *, fight_ok: bool) -> list[str]:
+        """Of those an event sends at the investigators, who can come: not dead, not gone, and only
+        while some investigator can still act and no chase (nor, for a chase, a fight) goes on. The
+        NPCs among them come to where the investigators are, in the record too."""
+        st = self.state
+        if st.chase is not None or (st.fight is not None and not fight_ok) or not any(i.can_act for i in st.investigators):
+            return []
+        npcs = {n.id: n for n in self.m.npcs}
+        who = [x for x in dict.fromkeys(ids) if (x in npcs and npcs[x].status not in ("死亡", "失踪"))
+               or any(c.id == x for c in self.m.creatures)]
+        for fid in who:
+            ent = self.world.rec.entities.get(fid) if self.world is not None and fid in npcs else None
+            if ent is not None and ent.at != st.location:
+                self.world.apply(Move(id=f"scripted:{st.turn}:{fid}", actor=ENGINE, entity=fid, to=st.location))
+        return who
+
+    def _ambush(self, ev: Event) -> list[dict]:
+        """The fight an event begins, or its attackers joining the one going on (Event.fight)."""
+        from ..agents.cast import Action, Ruling
+
+        st = self.state
+        who = self._coming(ev.fight, fight_ok=True)
+        if not who:
+            return []
+        if st.fight is None:
+            ruling = Ruling(needs_roll=False, combat=who, surprise=ev.surprise, reason=ev.title)
+            return self._fight_begin(ruling, Action(kind="other", summary=ev.title))
+        fresh = [f for f in self._others(who) if st.fight.get(f.id) is None]
+        if not fresh:
+            return []
+        for f in fresh:
+            f.surprised = ev.surprise == "foe"
+        st.fight.fighters += fresh
+        line = f"【战斗】{'、'.join(f.name for f in fresh)}也扑了上来"
+        st.add("event", line)
+        return [{"type": "fight_state", "fight": battle.view(st.fight), "lines": [line], "line": line}]
+
     # -- a fight ------------------------------------------------------------------------------
-    def _fight_begin(self, ruling: Ruling, action: Action) -> list[dict]:
-        """Who is in it: every investigator here who can still act, and those the ruling names
-        (or the one attacked). Surprise as ruled."""
-        st, m = self.state, self.m
-        ids = list(dict.fromkeys(ruling.combat or ([action.npc] if action.npc else [])))
-        foes: list[Fighter] = []
-        for fid in ids:
+    def _others(self, ids: list[str]) -> list[Fighter]:
+        """The module's NPCs and creatures named, as they fight (the dead left out)."""
+        m = self.m
+        out: list[Fighter] = []
+        for fid in dict.fromkeys(ids):
             npc = next((n for n in m.npcs if n.id == fid), None)
             creature = next((c for c in m.creatures if c.id == fid), None)
             if npc is not None and npc.status != "死亡":
-                foes.append(battle.from_npc(npc, self._carried_by(fid)))
+                out.append(battle.from_npc(npc, self._carried_by(fid)))
             elif creature is not None:
-                foes.append(battle.from_creature(creature, portrait=self._creature_face(creature.id)))
+                out.append(battle.from_creature(creature, portrait=self._creature_face(creature.id)))
+        return out
+
+    async def _fight_open(self, ruling: Ruling, action: Action, turn: Turn) -> bool:
+        """A fight begins: who is in it, a creature's first sight, what starting it achieves. False
+        when there is nobody there to fight after all."""
+        st, step = self.state, self._resolution_step
+        begun = await step("fight-begin", turn, lambda: self._fight_begin(ruling, action))
+        for i, ev in enumerate(begun):
+            await step(f"fight-begin:{i}", turn, lambda ev=ev: self.emit(ev))
+        if st.fight is None:
+            return False
+        seen = await step("fight-sight", turn, lambda: self._sights(turn))
+        for i, ev in enumerate(seen):
+            await step(f"fight-sight:{i}", turn, lambda ev=ev: self.emit(ev))
+        if ruling.set_flags:  # what starting it achieves (attacked someone)
+            await step("fight-flags", turn, lambda: self._flags(ruling.set_flags, turn))
+        return True
+
+    def _fight_begin(self, ruling: Ruling, action: Action) -> list[dict]:
+        """Who is in it: every investigator here who can still act, and those the ruling names
+        (or the one attacked). Surprise as ruled."""
+        st = self.state
+        foes = self._others(ruling.combat or ([action.npc] if action.npc else []))
         if not foes:
             return []
         party = [battle.from_investigator(inv, self._carried_by(inv.id)) for inv in st.investigators if inv.can_act]
@@ -273,8 +373,10 @@ class Fighting:
         key = f"creature-{cid}"
         return key if key in self.m.pictures else ""
 
-    def _sights(self, turn: Turn) -> list[dict]:
-        """A creature seen for the first time in a fight or a chase costs every investigator in it sanity."""
+    def _sights(self, turn: Turn, *, paid: bool = False) -> list[dict]:
+        """A creature seen for the first time in a fight or a chase costs every investigator in it
+        sanity. `paid`: the event that brought it on had its own sanity roll for that sight (the horde
+        coming out of the dark): it is shown, not paid for twice."""
         from .game import _sanity_view
 
         st = self.state
@@ -285,6 +387,8 @@ class Fighting:
                 continue
             st.seen.append(c.id)
             out.append({"type": "reveal", "id": c.id, "name": c.name, "portrait": c.portrait, "look": c.look[:120]})  # shown, then the cost
+            if paid:
+                continue
             ok, bad = c.sanity.split("/", 1)
             for x in [f for f in people if f.side == "party" and f.standing]:
                 inv = st.find(x.id)
@@ -297,18 +401,9 @@ class Fighting:
 
     async def _fight_turn(self, action: Action, ruling: Ruling, turn: Turn) -> None:
         st, step = self.state, self._resolution_step
-        if st.fight is None:
-            begun = await step("fight-begin", turn, lambda: self._fight_begin(ruling, action))
-            for i, ev in enumerate(begun):
-                await step(f"fight-begin:{i}", turn, lambda ev=ev: self.emit(ev))
-            if st.fight is None:  # nobody there to fight after all
-                turn.notes.append("没有可以动手的对象")
-                return
-            seen = await step("fight-sight", turn, lambda: self._sights(turn))
-            for i, ev in enumerate(seen):
-                await step(f"fight-sight:{i}", turn, lambda ev=ev: self.emit(ev))
-            if ruling.set_flags:  # what starting it achieves (attacked someone)
-                await step("fight-flags", turn, lambda: self._flags(ruling.set_flags, turn))
+        if st.fight is None and not await self._fight_open(ruling, action, turn):
+            turn.notes.append("没有可以动手的对象")
+            return
         fight = st.fight
         if fight is None:
             return
@@ -688,16 +783,36 @@ class Fighting:
         return list(found.flags)
 
     # -- a chase --------------------------------------------------------------------------------
+    def _chase_way(self) -> Track | None:
+        """The way the module has a chase from here run along (Location.chase): this place's, else
+        that of the place it is in (out of the study and through the house); None when there is none
+        the rules can run (4 to 12 legs). A fresh copy: what a chase does to its way (a barrier
+        broken open, crates pushed over) stays in that chase."""
+        m, here, seen = self.m, self.state.location, set()
+        while here and here not in seen:
+            seen.add(here)
+            loc = next((x for x in m.locations if x.id == here), None)
+            if loc is None:
+                return None
+            if 4 <= len(loc.chase) <= 12:
+                track = Track(legs=[leg.model_copy(deep=True) for leg in loc.chase])
+                for leg in track.legs:
+                    if leg.obstacle is not None:
+                        leg.obstacle.open = False
+                return track
+            here = loc.within or ""
+        return None
+
     def _chase_from_fight(self, fight: Fight, party: list[str], chasers: list[str]) -> None:
-        """The investigators ran from a fight and something goes after them: a chase on a way drawn
-        for this place (scenery's kind of place), the fighters as they were."""
+        """The investigators ran from a fight and something goes after them: a chase on the module's
+        way from here, else one for this kind of place (scenery's), the fighters as they were."""
         from .. import scenery
 
         st = self.state
         loc = self.m.location(st.location)
         runners = [f.model_copy(update={"status": ""}) for f in fight.fighters if f.id in party]
         runners += [f.model_copy() for f in fight.fighters if f.id in chasers]
-        track = battle.default_track(scenery.kind_of(loc.name, loc.read_aloud))
+        track = self._chase_way() or battle.default_track(scenery.kind_of(loc.name, loc.read_aloud))
         self._chase_setup(runners, track, "party", f"逃离{loc.name}的战斗", rolled=False)
 
     def _chase_setup(self, runners: list[Fighter], track: Track, quarry: str, reason: str, *, rolled: bool) -> list[str]:
@@ -715,11 +830,13 @@ class Fighting:
         return lines
 
     async def _chase_track(self) -> dict:
-        """The way the chase runs along: drawn by the tactics agent for this place and hour, or the
-        one for this kind of place."""
+        """The way the chase runs along: the module's for this place (Location.chase), else drawn by
+        the tactics agent for this place and hour, else the one for this kind of place."""
         from .. import scenery
 
         st, m = self.state, self.m
+        if (route := self._chase_way()) is not None:
+            return route.model_dump()
         loc = m.location(st.location)
         ask = getattr(self.cast, "track", None)
         if ask is not None:
@@ -736,16 +853,8 @@ class Fighting:
         return battle.default_track(scenery.kind_of(loc.name, loc.read_aloud)).model_dump()
 
     def _chase_begin(self, ruling: Ruling, action: Action, track: dict) -> list[dict]:
-        st, m = self.state, self.m
-        ids = list(dict.fromkeys(ruling.chase or ([action.npc] if action.npc else [])))
-        others: list[Fighter] = []
-        for fid in ids:
-            npc = next((n for n in m.npcs if n.id == fid), None)
-            creature = next((c for c in m.creatures if c.id == fid), None)
-            if npc is not None and npc.status != "死亡":
-                others.append(battle.from_npc(npc, self._carried_by(fid)))
-            elif creature is not None:
-                others.append(battle.from_creature(creature, portrait=self._creature_face(creature.id)))
+        st = self.state
+        others = self._others(ruling.chase or ([action.npc] if action.npc else []))
         if not others:
             return []
         party = [battle.from_investigator(inv, self._carried_by(inv.id)) for inv in st.investigators if inv.can_act]
@@ -757,28 +866,38 @@ class Fighting:
         st.add("event", head)
         return [{"type": "chase_start", "chase": battle.chase_view(ch), "line": head, "speeds": lines}]
 
+    async def _chase_open(self, ruling: Ruling, action: Action, turn: Turn, *, paid: bool = False) -> str:
+        """A chase begins: its way, who runs, their speeds, a creature's first sight (`paid` as in
+        _sights), what starting it achieves. "on" while it goes on; "none" with nobody in it; "over"
+        when it is over at once (every quarry far faster than everyone after them)."""
+        st, step = self.state, self._resolution_step
+        track = await step("chase-track", turn, self._chase_track)
+        begun = await step("chase-begin", turn, lambda: self._chase_begin(ruling, action, track))
+        for i, ev in enumerate(begun):
+            await step(f"chase-begin:{i}", turn, lambda ev=ev: self.emit(ev))
+        if not begun:
+            return "none"
+        await step("chase-told", turn, lambda: turn.fight.extend([begun[0]["line"], *begun[0].get("speeds", [])]))
+        seen = await step("chase-sight", turn, lambda: self._sights(turn, paid=paid))
+        for i, ev in enumerate(seen):
+            await step(f"chase-sight:{i}", turn, lambda ev=ev: self.emit(ev))
+        if ruling.set_flags:
+            await step("chase-flags", turn, lambda: self._flags(ruling.set_flags, turn))
+        ch = st.chase
+        if ch is None:  # over at once, and this is that turn resumed
+            return "over"
+        if chase_rules.gone_at_once(ch.running(ch.quarry), ch.running("foe" if ch.quarry == "party" else "party")):
+            await self._chase_end(turn, "escaped", "跑得比追的人快得多，转眼就没了影")
+            return "over"
+        return "on"
+
     async def _chase_turn(self, action: Action, ruling: Ruling, turn: Turn) -> None:
         st, step = self.state, self._resolution_step
         if st.chase is None:
-            track = await step("chase-track", turn, self._chase_track)
-            begun = await step("chase-begin", turn, lambda: self._chase_begin(ruling, action, track))
-            for i, ev in enumerate(begun):
-                await step(f"chase-begin:{i}", turn, lambda ev=ev: self.emit(ev))
-            if st.chase is None:
+            opened = await self._chase_open(ruling, action, turn)
+            if opened == "none":
                 turn.notes.append("没有可以追或者躲开的对象")
-                return
-            ch = st.chase
-            turn.fight.append(begun[0]["line"] if begun else "【追逐开始】")
-            turn.fight += begun[0].get("speeds", []) if begun else []
-            seen = await step("chase-sight", turn, lambda: self._sights(turn))
-            for i, ev in enumerate(seen):
-                await step(f"chase-sight:{i}", turn, lambda ev=ev: self.emit(ev))
-            if ruling.set_flags:
-                await step("chase-flags", turn, lambda: self._flags(ruling.set_flags, turn))
-            quarry = ch.running(ch.quarry)
-            hunters = ch.running("foe" if ch.quarry == "party" else "party")
-            if chase_rules.gone_at_once(quarry, hunters):
-                await self._chase_end(turn, "escaped", "跑得比追的人快得多，转眼就没了影")
+            if opened != "on":
                 return
         ch = st.chase
         assert ch is not None

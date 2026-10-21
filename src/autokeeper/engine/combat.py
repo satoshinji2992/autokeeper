@@ -43,6 +43,7 @@ VERBS = {"attack": "攻击", "shoot": "射击", "maneuver": "战技", "aid": "�
 HUMAN = {"力量": 50, "体质": 50, "体型": 60, "敏捷": 50, "意志": 50, "智力": 50}
 NATURAL = ("爪", "咬", "撕", "抓", "踢", "触手", "刺", "撞", "角", "獠牙", "拳")  # a sheet's own attacks
 SWARM = re.compile(r"数量多|成群|几十|一大群|无法对抗|蜂拥")
+LETS_GO = re.compile(r"不追|不会追|任其离开|放他们走")  # a creature's notes: it does not go after those who run
 
 
 class Order(BaseModel):
@@ -351,7 +352,7 @@ def rule_of_thumb(fight: Fight, who: Fighter) -> Order:
 def pursuers(fight: Fight) -> list[str]:
     """Who goes after investigators that ran, when nobody is asked: creatures do, unless their
     notes say they let them go; people do not."""
-    return [f.id for f in fight.standing("foe") if not f.human and not re.search(r"不追|不会追|任其离开|放他们走", f.notes)]
+    return [f.id for f in fight.standing("foe") if not f.human and not LETS_GO.search(f.notes)]
 
 
 # -- how it ends ---------------------------------------------------------------------------------

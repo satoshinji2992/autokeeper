@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 from ..plugins.schema import Plugin
+from ..rules.chase import Leg
 from ..rules.coc import Investigator
 
 
@@ -86,7 +87,12 @@ class NPC(BaseModel):
     gates: dict[str, Check] = Field(default_factory=dict, description="线索 id -> 需要的社交检定")
     location: str | None = None
     portrait: str | None = None
-    stats: dict[str, int] = Field(default_factory=dict)
+    # A fight reads it (engine/combat.from_npc): an empty sheet is an ordinary person's numbers.
+    stats: dict[str, int] = Field(default_factory=dict, description=(
+        "战斗数值，打起来时引擎照这些结算，键用中文：力量、体质、体型、敏捷、生命（HP）、移动、闪避、格斗(斗殴)，"
+        "会用的武器技能（射击(手枪)、射击(步枪/霰弹枪)、格斗(刀剑)、投掷），追逐里用得着的侦查、潜行、攀爬、跳跃；"
+        "爪击、撕咬这样以攻击为名的一项算他天生的攻击（伤害 1D6+DB）。原文写明会动手、或剧情里会被卷进打斗的人才写，"
+        "原文有数值照抄；空着就按普通人算（各项 50 上下，生命 11）。带着的武器写进 look，或在 items 里交给他"))
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
     looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
     important: bool = Field(False, description="重要 NPC：有自己的目标和打算，调查员不在时也会行动；每个模组最多标 6 个，普通角色不标")
@@ -114,6 +120,13 @@ class Location(BaseModel):
     )
     looks: list[Look] = Field(default_factory=list, description="剧情让这里明显变样之后的场景图（烧毁、被淹、被洗劫），最多两种；昼夜不用写")
     views: list[View] = Field(default_factory=list, max_length=4, description="同一个地点的另外几张图：室内、近景、夜景，最多 4 张")
+    # Where a chase from here runs (engine/fighting.Fighting._chase_way): read instead of a way drawn on
+    # the spot. Its length is checked by the validator, not here: a module with a short one still loads.
+    chase: list[Leg] = Field(default_factory=list, description=(
+        "追逐路线：从这里（和它里面的地方）跑出去的一场追逐沿着跑的路，4–12 段，按跑的先后排，最后一段是能脱身或被逼进绝路的地方。"
+        "每段写名字和一句样子；大约一半有一处 obstacle：hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
+        "skill 写跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳这类技能或属性。只写这里和周围真有的东西；"
+        "只给最可能发生追逐的地方写（怪物的巢穴、它够得着的户外、原文写到有人逃跑或追赶的地方），不写就由引擎临场画"))
 
 
 class Item(BaseModel):
@@ -144,13 +157,26 @@ class Handout(BaseModel):
 
 
 class Creature(BaseModel):
+    """A creature as a fight reads it (engine/combat.from_creature): its numbers from `stats`, each
+    line of `attacks` as rules/weapons.parse_attack reads it, what its `notes` say the rules can use
+    (rules/combat.traits). A swarm with no sheet fights as one, hard to put down."""
+
     id: str
     name: str
     description: str
-    sanity: str = "0/1D6"
-    stats: dict[str, int] = Field(default_factory=dict)
-    attacks: list[str] = Field(default_factory=list)
-    notes: str = ""
+    sanity: str = Field("0/1D6", description="看见它时的理智检定，如 0/1D6；战斗或追逐里第一次照面时结算")
+    stats: dict[str, int] = Field(default_factory=dict, description=(
+        "战斗数值，键用中文：力量、体质、体型、敏捷、意志、生命（HP）、移动、闪避，还有追逐里用得着的侦查、潜行、攀爬、跳跃、聆听；"
+        "生命和敏捷一定要写，没写的按力量 60、体质 60、体型 60、敏捷 50 算。原文有数值照抄。"
+        "成群出现、整群当一个对手打的（几十只食尸鬼）可以不写，在 notes 写明成群"))
+    attacks: list[str] = Field(default_factory=list, description=(
+        "攻击，一条一种，写成“名字 命中率%，伤害 骰子式”：“爪击 50%，伤害 1D6+DB”“格斗（剥皮爪击）60%，伤害 1D4+2+DB”"
+        "“射击（步枪）30%，射程 110，弹夹 5，伤害 2D6+4”；命中率要带 %，DB 是它的伤害加值，名字里有咬、刺、角的算贯穿。"
+        "每轮不止一次攻击时另写一条“每轮 3 次”。闪避写进 stats，不写在这里"))
+    notes: str = Field("", description=(
+        "规则用得着的特性，照这些写法写引擎才认得：护甲 2（每次受伤先减掉）、枪伤减半、每轮恢复 1 点、"
+        "只被拳头打 6 点就会打晕、伤害加值 +1D4、体格 1、移动 10、成群（几十只，无法对抗）；"
+        "它的打算也写在这里，调查员逃跑时它不追就写“不追”"))
 
 
 class Event(BaseModel):
@@ -167,6 +193,15 @@ class Event(BaseModel):
     performance: str = Field("", description="表演要求，NPC 会结合本局发生过的事现编")
     ending: str | None = Field(None, description="触发时若还没有结局，就进入这个结局")
     art: str = Field("", description="这件事发生那一刻的图片键（art/places/<键>.jpg）；有就在场景里放这一张，直到调查员下一次行动")
+    # A scripted attack or pursuit (engine/fighting.Fighting._scripted): it starts as a ruling starts
+    # one, where the investigators are, and the next input is the first round's order.
+    fight: list[str] = Field(default_factory=list, description=(
+        "这件事发生时当场动手的 NPC 或怪物 id：调查员在场、还能行动就打起来，下一次行动就是第一轮。"
+        "只写原文写明会扑上来、开枪、动手的；要看调查员怎么做才动手的不写，由裁定员临场判"))
+    surprise: Literal["", "party", "foe"] = Field("", description="打起来时一方毫无防备：party 调查员被偷袭，foe 对方被偷袭；都有防备留空")
+    chase: list[str] = Field(default_factory=list, description=(
+        "这件事发生时开始追逐：追或逃的 NPC 或怪物 id。写了 fight 就不写这个：打起来以后调查员逃跑，会追的对手自己会追"))
+    chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃的一方还是追的一方；留空算逃")
 
 
 class SketchPrompt(BaseModel):
@@ -285,7 +320,7 @@ class Mechanic(BaseModel):
     rules: str = Field(description="规则本身：什么时候、怎么算、有什么后果")
     why: str = Field("", description="模组里哪里用到")
     plugin: str = Field("", description="写好的插件 id；还没写就留空")
-    runs: Literal["", "核心规则", "插件", "守秘人"] = Field("", description="谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害）、"
+    runs: Literal["", "核心规则", "插件", "守秘人"] = Field("", description="谁来执行：核心规则（引擎自带的检定、孤注一掷、理智、伤害、战斗与追逐）、"
                                                                          "插件（填 plugin）、守秘人（临场裁定）；留空时有插件算插件，没有算守秘人")
 
     @property
