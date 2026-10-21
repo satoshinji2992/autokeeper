@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from rich.cells import cell_len
 
 from autokeeper.agents.cast import Action, Outcome, Ruling
 from autokeeper.engine import fighting
@@ -261,6 +262,7 @@ HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": 
 
 @pytest.mark.usefixtures("canned")
 async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
+    from autokeeper import config
     from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.widgets.fight import Arena, BloodFlash
@@ -268,6 +270,7 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
 
     from .test_tui import until
 
+    config.load().battle_timer = True  # 设置: 战斗与追逐限时选择 (off unless switched on)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
         screen, me, warden = fight_screen(module)
@@ -317,11 +320,13 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
 
 @pytest.mark.usefixtures("canned")
 async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch):
+    from autokeeper import config
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens import game as screens
 
     from .test_tui import until
 
+    config.load().battle_timer = True
     monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.6)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
@@ -336,7 +341,7 @@ async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch)
         assert sent[0].startswith("防守") and not picker.display
 
 
-def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(module):
+def test_a_chase_is_drawn_as_the_way_run_and_in_sight_with_who_is_where(module):
     from autokeeper.engine import combat as battle
     from autokeeper.engine.game import Game
     from autokeeper.tui.widgets.fight import chase_route
@@ -345,12 +350,471 @@ def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(m
     me, warden = battle.from_investigator(state.investigators[0]), battle.from_npc(module.npc("warden"))
     me.pos, warden.pos, me.speed, warden.speed, me.actions, warden.actions = 4, 2, 8, 9, 1, 2
     ch = battle.Chase(runners=[me, warden], track=battle.default_track("graveyard"), quarry="party", round=2)
-    lines = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain.splitlines()
+    text = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain
+    lines = text.splitlines()
     legs = [leg.name for leg in ch.track.legs]
-    row = {name: next(line for line in lines if name in line) for name in legs}
-    assert "在你身后 2 段" in lines[1] and "再拉开 1 段就甩掉了" in lines[2] and "可以躲藏" in lines[2]
-    assert lines.index(row[legs[-1]]) < lines.index(row[legs[0]])  # the way ahead at the top
+    row = {name: next(line for line in lines if name in line) for name in legs[:7]}
+    assert "在身后 2 段" in lines[1] and "再领先 1 段即可脱离" in lines[2] and "可躲藏" in lines[2]
+    assert lines.index(row[legs[6]]) < lines.index(row[legs[0]])  # the way ahead at the top
     assert "◆" in row[legs[4]] and "◉◉" in row[legs[2]] and "老守钟人" in row[legs[2]]
     assert "┆" in row[legs[3]] and "┆" in row[legs[1]]  # run through this round
-    assert "到这里就甩开" in row[legs[5]] and "▦攀爬" in row[legs[4]]  # three ahead of it; the fence in the way
+    assert "▦攀爬" in row[legs[4]] and "⚠敏捷" in row[legs[6]]  # the fence they are at; the next thing in the way
+    # Past the frozen field (the first thing in the way ahead) nothing is known yet: not its name, not
+    # where the way ends; and the stretch where they would lose it is a count, never a name.
+    assert legs[7] not in text and "前方：尚未看清" in lines[4] and "脱离" not in row[legs[5]]
     assert any("每轮跑 2 段" in line for line in lines)
+    me.pos = 6  # the end of the way in sight
+    assert "跑出此路线即可脱离" in chase_route(battle.chase_view(ch), 44, 24).plain
+    narrow = chase_route(battle.chase_view(ch), 28, 24).plain.splitlines()  # a narrow panel: shorter columns
+    assert all(cell_len(line) <= 28 for line in narrow) and any("周衡" in line for line in narrow)
+
+
+# -- windows over the fight: only the one in front ever goes (Textual's dismiss pops the top) ---------
+OFFER = {"kind": "roll", "who": "周衡", "skill": "闪避", "target": 32, "difficulty": "常规", "reason": "老守钟人扑了过来"}
+
+
+@pytest.mark.usefixtures("canned")
+async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_back(module, fake, tmp_path, monkeypatch):
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.widgets.fight import BloodFlash
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")  # the face, without chafa
+    face = tmp_path / "warden.png"
+    Image.new("RGB", (60, 80), (90, 40, 30)).save(face)
+    module.pictures["face-warden"] = str(face)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, warden = fight_screen(module)
+        st = screen.state
+        st.fight, me.pos = None, 2
+        st.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party", round=1)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        screen.busy = True  # the round is being settled: the engine ends the chase and starts the fight
+        st.chase, st.fight = None, battle.Fight(fighters=[me, warden], place="tower", reason="追逐中被追上")
+        await screen.handle({"type": "chase_end", "end": "caught", "text": "追逐结束：老守钟人追上了周衡", "hunter": "warden",
+                             "hunter_name": "老守钟人", "portrait": "face-warden"})
+        await screen.handle({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】周衡与老守钟人扭打在一起"})
+        await pilot.pause(0.05)
+        assert isinstance(app.screen, BloodFlash)  # the blood first
+        assert await until(pilot, lambda: isinstance(app.screen, ShowcaseScreen))  # then its face, over everything
+        assert not any(isinstance(s, BloodFlash) for s in app.screen_stack)  # the flash went before it came
+        await pilot.pause(1.0)
+        assert isinstance(app.screen, ShowcaseScreen)  # shown its time, not closed by the flash's going
+        assert await until(pilot, lambda: app.screen is screen)
+        screen.busy = False
+        screen.query_one("#command").focus()
+        await pilot.press("x")  # nothing left over the screen eating the keys
+        await pilot.pause(0.1)
+        assert app.screen is screen and screen.query_one("#command").value.endswith("x")
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_roll_asked_while_the_blood_drains_is_answered_and_the_turn_goes_on(module, fake):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import HandoutModal, RollModal
+    from autokeeper.tui.widgets.fight import BloodFlash
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        answered: list[str] = []
+
+        async def turn() -> None:  # as the turn asks: out of the way, then the prompt (GameScreen._run_turn)
+            await screen.make_way()
+            answered.append(await app.push_screen_wait(RollModal(OFFER)))
+
+        screen._flash(0.6)
+        assert isinstance(app.screen, BloodFlash)
+        screen.run_worker(turn(), group="turn")
+        assert await until(pilot, lambda: isinstance(app.screen, RollModal))
+        assert not any(isinstance(s, BloodFlash) for s in app.screen_stack)
+        await pilot.pause(0.5)
+        await pilot.press("enter")
+        assert await until(pilot, lambda: answered == ["roll"])  # the turn waiting on it goes on
+        # A window pushed straight over the flash: the flash drains under it, and waits to go.
+        screen._flash(0.6)
+        app.push_screen(HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件"))
+        await pilot.pause(0.8)  # the flash's time is up under the handout
+        assert [type(s) for s in app.screen_stack[-2:]] == [BloodFlash, HandoutModal]
+        await pilot.press("escape")  # the handout closed by the player, then the flash goes by itself
+        assert await until(pilot, lambda: app.screen is screen)
+        assert not any(isinstance(s, (BloodFlash, HandoutModal)) for s in app.screen_stack)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_handout_over_a_big_scene_stays_until_closed_and_the_scene_goes_after_it(module, fake, tmp_path, monkeypatch):
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import HandoutModal
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")
+    pic = tmp_path / "big.png"
+    Image.new("RGB", (40, 30), (40, 40, 60)).save(pic)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        app.push_screen(ShowcaseScreen(str(pic), "钟楼顶上", seconds=0.5))
+        await pilot.pause(0.2)
+        app.push_screen(HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件"))
+        await pilot.pause(0.8)  # the picture's time ran out under the handout
+        assert [type(s) for s in app.screen_stack[-2:]] == [ShowcaseScreen, HandoutModal]
+        await pilot.press("escape")
+        assert await until(pilot, lambda: app.screen is screen)  # the handout closed, the picture went after it
+
+
+# -- the round's list and its clock -------------------------------------------------------------------
+@pytest.mark.usefixtures("canned")
+async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_after_the_fight(module, fake):
+    import asyncio
+
+    from autokeeper import config
+    from autokeeper.tui.app import AutoKeeperApp
+
+    from .test_tui import until
+
+    config.load().battle_timer = True
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker, box = screen.query_one("#picker"), screen.query_one("#command")
+        assert await until(pilot, lambda: picker.display and screen._clock is not None)
+        sent, seen = [], []
+
+        async def turn(text: str) -> None:  # the round being settled, then the fight is over
+            sent.append(text)
+            screen._busy(True)
+            await asyncio.sleep(0.4)
+            seen.append(screen.state.fight.get(me.id).stance)
+            screen.state.fight = None
+            await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
+            screen._busy(False)
+
+        screen.play = lambda text: screen.run_worker(turn(text), group="turn", exclusive=True)
+        await pilot.press("我")  # typed straight in, as players do
+        assert await until(pilot, lambda: box.has_focus and box.value == "我")
+        assert not picker.display and not screen._battle_picking
+        assert screen._clock is None  # an order of their own takes the time it takes
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        await pilot.press("tab")  # mid-turn: no stance of the fight being settled changes
+        assert await until(pilot, lambda: not screen.busy and seen)
+        assert sent == ["我"] and seen == ["dodge"] and me.stance == "dodge"
+        await pilot.pause(0.2)
+        assert not picker.display and not screen._battle_picking  # nothing of the fight's list after it
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        assert sent == ["我"]
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_its_deadline(module, fake, monkeypatch):
+    from autokeeper import config
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens import game as screens
+
+    from .test_tui import until
+
+    config.load().battle_timer = True
+    monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.8)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display)
+        sent: list[str] = []
+        screen.send_line = sent.append
+        await pilot.press("f1")  # the help over the screen: the round waits
+        await pilot.pause(1.4)
+        assert sent == [] and picker.display
+        await pilot.press("escape")
+        assert await until(pilot, lambda: sent, tries=20)  # back: it runs out from where it stood
+        assert sent[0].startswith("防守") and not picker.display
+        screen._offer_orders()  # the next round
+        for _ in range(4):  # Tab does not start it over
+            await pilot.pause(0.3)
+            await pilot.press("tab")
+        assert len(sent) == 2 and me.stance == "dodge"  # the stance is in the words, not in the fight
+        screen._offer_orders()
+        await pilot.pause(0.2)
+        config.load().battle_timer = False  # 设置: 限时选择 off, with a clock running
+        screen._settings_saved(app.art_style)
+        await pilot.pause(1.2)
+        assert len(sent) == 2 and screen._clock is None and picker.display and "秒" not in str(picker.border_title)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, fake):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display and screen._beating)
+        assert screen._clock is None and "秒" not in str(picker.border_title)  # no clock unless switched on (设置)
+        screen.state.ending = "lost"  # every investigator down: the game is over, the fight still in the state
+        await screen.handle({"type": "ending", "title": "钟声", "text": "钟楼重归寂静。"})
+        await pilot.pause(0.2)
+        assert not picker.display and screen._clock is None and not screen.query_one(Arena).display
+        assert screen.query_one(SceneArt).display and not screen.has_class("-fight")
+        screen._offer_orders()
+        assert not picker.display
+        assert await until(pilot, lambda: not screen._beating)
+
+
+# -- the stage on a small terminal ---------------------------------------------------------------------
+def _crowd(module):
+    """Two investigators against the warden and two of his helpers."""
+    from autokeeper.engine import combat as battle
+
+    screen, me, warden = fight_screen(module)
+    st = screen.state
+    friend = st.investigators[0].model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    st.investigators.append(friend)
+    helpers = [warden.model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}) for k in (1, 2)]
+    st.fight = battle.Fight(fighters=[me, battle.from_investigator(friend), warden, *helpers], place="tower", round=1)
+    return screen
+
+
+def _all_on_screen(screen, height: int) -> None:
+    """The input box above the footer, the round's list above the box, a few rows of story."""
+    box, picker, story = screen.query_one("#command"), screen.query_one("#picker"), screen.query_one("#story")
+    assert box.region.bottom <= height - 1, (box.region, height)
+    assert picker.display and picker.region.height >= 5 and picker.region.bottom <= box.region.y
+    assert story.region.height >= 3
+
+
+@pytest.mark.usefixtures("canned")
+@pytest.mark.parametrize("size", [(80, 24), (100, 30)])
+async def test_on_a_small_terminal_the_rounds_list_and_the_box_stay_on_screen(module, fake, size):
+    from autokeeper.tui.app import AutoKeeperApp
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=size) as pilot:
+        screen = _crowd(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        assert await until(pilot, lambda: screen.query_one("#picker").display)
+        await pilot.pause(0.3)
+        _all_on_screen(screen, size[1])
+        side = str(screen.query_one(".side").render())
+        assert side.count("11/11") == 2 and "调查员" in side and "你们" not in side  # every investigator's blood bar
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_keeps_its_picture(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, warden = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        assert await until(pilot, lambda: screen.query_one("#picker").display)
+        arena = screen.query_one(Arena)
+        assert await until(pilot, lambda: arena.region.height == 22)  # half the screen when it has room
+        await pilot.resize_terminal(100, 24)
+        await pilot.pause(0.5)
+        _all_on_screen(screen, 24)
+        assert arena.region.height < 22
+        screen.state.fight, me.pos = None, 2
+        await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
+        screen.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party")
+        await screen.handle({"type": "chase_start", "chase": battle.chase_view(screen.state.chase), "line": "【追逐开始】"})
+        await pilot.resize_terminal(96, 30)  # the right column is up: the route narrows, the picture keeps room
+        await pilot.pause(0.5)
+        assert arena.canvas.size.width >= 28 and arena.query_one(".side").size.width >= 26
+
+
+# -- what a fight costs the screen, and what the settings stop -------------------------------------------
+@pytest.mark.usefixtures("canned")
+async def test_a_fight_paints_its_picture_without_layouts_and_holds_still_while_the_player_types(module, fake, monkeypatch):
+    from textual.css.stylesheet import Stylesheet
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena, Canvas
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    painted, restyled = [], []
+    real_update, real_restyle = Canvas.update, Stylesheet.update_nodes
+
+    def update(self, content="", *, layout=True):
+        painted.append(layout)
+        real_update(self, content, layout=layout)
+
+    def restyle(self, nodes, animate=False):
+        nodes = list(nodes)
+        restyled.append(len(nodes))
+        return real_restyle(self, nodes, animate=animate)
+
+    monkeypatch.setattr(Canvas, "update", update)
+    monkeypatch.setattr(Stylesheet, "update_nodes", restyle)
+    tower = module.location("tower")
+    tower.art, tower.weather = "square", ["rain"]  # a picture with weather behind the stage
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        canvas, scene = screen.query_one(Arena).canvas, screen.query_one(SceneArt)
+        assert await until(pilot, lambda: canvas.looks and len(painted) > 3 and scene._atmo is not None)
+        assert not any(painted[1:])  # frames painted, never a layout of the screen for one
+        weather = []
+        monkeypatch.setattr(SceneArt, "_paint", lambda self, *a, **k: weather.append(1))
+        restyled.clear()
+        await pilot.pause(1.5)
+        assert not weather  # the hidden scene composes nothing
+        assert restyled and max(restyled) < 40  # a heartbeat restyles the stage, not the whole screen's widgets
+        await pilot.press("我")  # the player types: the stage holds still
+        await pilot.pause(0.2)
+        painted.clear()
+        await pilot.pause(0.8)
+        assert not painted
+        canvas.hold, canvas.moving = 0.0, False  # 设置's animations off: a still picture is painted once
+        await pilot.pause(0.3)
+        painted.clear()
+        await pilot.pause(0.6)
+        assert not painted
+
+
+@pytest.mark.usefixtures("canned")
+async def test_with_animations_off_nothing_lurches_or_claws_and_without_big_scenes_no_face_comes_up(module, fake, tmp_path,
+                                                                                                    monkeypatch):
+    from PIL import Image
+
+    from autokeeper import config, imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.widgets.fight import Arena
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")
+    face = tmp_path / "face.png"
+    Image.new("RGB", (40, 60), (90, 40, 30)).save(face)
+    module.pictures["face-warden"] = str(face)
+    cfg = config.load()
+    cfg.animations = False
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        screen._settings_saved(app.art_style)  # 设置 saved with animations off
+        canvas = screen.query_one(Arena).canvas
+        assert not screen.query_one(SceneArt).effects and not canvas.moving  # at once, not at the next blow
+        await screen.handle({**HURT, "defender": me.id, "defender_name": me.name, "hurt": me.id})
+        await pilot.pause(0.05)
+        assert screen.query_one("#main").styles.offset.x.value == 0 and not canvas.claw_from and not canvas.lunge_until
+        assert app.screen is screen  # no flood of red either (the stage's own flash instead)
+        screen._title("战斗")
+        await pilot.pause(0.1)
+        assert screen.query(".battle-title")  # the word stands still for a moment, without the glitch
+        assert not screen.query_one("#stage").has_class("-beat")
+        await pilot.pause(1.5)
+        assert not screen.query(".battle-title") and not screen._beat_on  # no heartbeat
+        cfg.showcase = False  # 大场景 off: what is first seen does not come up over the whole screen
+        await screen._reveal("face-warden", "老守钟人", 1.0)
+        await pilot.pause(0.2)
+        assert not isinstance(app.screen, ShowcaseScreen)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the_app_gone(module, fake, tmp_path, monkeypatch):
+    import subprocess
+
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets import fight as stage
+
+    from .test_tui import until
+
+    def fails(*args, **kwargs):
+        raise subprocess.TimeoutExpired("chafa", 10)
+
+    monkeypatch.setattr(imagery, "available", lambda: True)
+    monkeypatch.setattr(stage, "variants", fails)
+    face = tmp_path / "warden.png"
+    Image.new("RGB", (40, 60), (90, 40, 30)).save(face)
+    module.pictures["warden"] = str(face)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        screen.state.fight.fighters[1].portrait = "warden"
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        canvas = screen.query_one(stage.Arena).canvas
+        assert await until(pilot, lambda: canvas.looks)
+        assert "●" in canvas.looks[""].plain and app.is_running  # two eyes in the dark
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+
+    from .test_tui import story_text, until
+
+    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)", combat=["warden"])
+    game, _, _ = fighters(module, fake, {"hit": (HIT, ruling)})
+    fake.queue(90, 60, 20, 50).queue_totals(3)  # 周衡 misses; the warden hits him for 3
+    events, _ = await run_turn(turn_graph.build(game, InMemorySaver()), "hit", THREAD)
+    acts = [e for e in events if e["type"] == "fight_act"]
+    assert len(acts) == 2 and any(e["type"] == "damage" for e in events)
+    state = game.state.model_copy(deep=True)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen = GameScreen(module, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        for ev in events:  # the round as the screen hears it
+            if ev["type"] in ("damage", "fight_round", "fight_act", "fight_state"):
+                await screen.handle(ev)
+        await screen.handle({"type": "fight_state", "fight": battle.view(state.fight),
+                             "lines": [acts[1]["line"], "周衡还吊着一口气（体质 30）"]})  # the round's end: something new
+        await pilot.pause(0.3)
+        text = story_text(screen)
+        assert text.count("受到 3 点伤害") == 1  # on the warden's card, not again as a line, nor as a ✚ line
+        assert not any(act["line"] in text for act in acts)  # each exchange is its card
+        assert "还吊着一口气" in text  # what the cards do not say still comes

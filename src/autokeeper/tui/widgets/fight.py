@@ -28,15 +28,18 @@ from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.await_complete import AwaitComplete
 from textual.color import Color
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
+from textual.timer import Timer
 from textual.widgets import Static
 
 from ... import atmosphere, imagery
 from ...module.schema import Module
 from ...rules.chase import LOST, SIGHT
 from ...rules.combat import STANCES
+from .panels import rich_content
 
 BLOOD, DEEP, EMBER, AMBER, BONE, ASH, BILE = "#c1121f", "#7a0a0a", "#ff6b35", "#ffb000", "#e8dec4", "#8a7f72", "#9bd770"
 GORE = "#ff1a1a"  # fresh blood: the claw marks, the numbers
@@ -152,7 +155,7 @@ def claws(width: int, height: int, progress: float) -> dict[tuple[int, int], Mar
 
 
 # -- a portrait that lives ------------------------------------------------------------------------
-@lru_cache(maxsize=24)
+@lru_cache(maxsize=4)  # a few faces at one size: each is megabytes of Text, and chafa's own output is cached under it
 def variants(path: str, cols: int, rows: int, style: str, scene: str = "", near: float = 1.0) -> dict[str, Text]:
     """Every way a canvas shows its picture (imagery.staged; chafa, so off the UI thread): as it is,
     darker on the heartbeat, white in a flash of being struck, grey when down, closer in a lunge."""
@@ -183,10 +186,16 @@ def faceless(cols: int, rows: int, creature: bool, tone: str = "") -> Text:
 
 class Canvas(Static):
     """The stage's picture, alive: blood running down it (in a chase, the place rushing past), a
-    heartbeat, and what the fight does to it."""
+    heartbeat, and what the fight does to it.
+
+    Cheap on the UI thread: a frame is painted without laying out the screen (the canvas's size is
+    the stage's), a frame that did not change (a still picture, the dead under their cross) is not
+    painted again, and each frame's styles are turned into Textual's once (panels.rich_content).
+    The picture stands still while the player types (quiet) and, with 设置's animations off, it
+    neither moves nor lunges, shakes or claws; the blows' numbers still come up."""
 
     DEFAULT_CSS = """
-    Canvas { width: 1fr; height: 100%; content-align: center middle; background: #050303; }
+    Canvas { width: 1fr; height: 100%; content-align: center middle; background: #050303; text-wrap: nowrap; text-overflow: clip; }
     """
 
     def __init__(self, **kw):
@@ -202,24 +211,43 @@ class Canvas(Static):
         self.dead = False
         self.lunge_until = self.flash_until = self.claw_from = self.stamp_until = 0.0
         self.stamped: dict[tuple[int, int], Mark] = {}
+        self.hold = 0.0  # the player is typing: the picture stands still until then
+        self._last: Text | None = None  # the frame last painted (kept, so a new one is never taken for it)
+        self._marks: tuple = ()  # and what was over it: the same again is not painted
+        self._styles: dict = {}  # rich style -> Textual's, for this picture's frames
+        self._settle: Timer | None = None  # a resize's redraw, once the size has stopped changing
 
     def on_mount(self) -> None:
         self.set_interval(TICK, self._tick)
 
     def on_resize(self) -> None:
+        """Drawn again at the new size once it has settled: dragging a window's edge used to start
+        five chafa renders for every size it passed through."""
+        if self.wanted is None:
+            return
+        if not self.key:  # nothing up yet: no reason to wait
+            self.want(*self.wanted)
+            return
+        if self._settle is not None:
+            self._settle.stop()
+        self._settle = self.set_timer(0.25, self._again)
+
+    def _again(self) -> None:
+        self._settle = None
         if self.wanted is not None:
             self.want(*self.wanted)
 
     def want(self, path: str, style: str, creature: bool, scene: str = "", near: float = 1.0) -> None:
         """Draw this now (from the picture, or a shape with eyes), unless it is already up or on its way;
-        drawn again at its new size when the stage is laid out or resized."""
+        drawn again at its new size when the stage is laid out or resized. One drawing at a time: a
+        newer one takes the place of one under way."""
         self.wanted = (path, style, creature, scene, near)
         cols, rows = self.size.width, self.size.height
         key = (path, scene, round(near, 2), cols, rows, style)
         if key in (self.key, self.loading) or cols < 8 or rows < 4:
             return
         self.loading = key
-        self.run_worker(self._load(key, creature), group="canvas")
+        self.run_worker(self._load(key, creature), group="canvas", exclusive=True, exit_on_error=False)
 
     async def _load(self, key: tuple, creature: bool) -> None:
         path, scene, near, cols, rows, style = key
@@ -227,7 +255,7 @@ class Canvas(Static):
         if path and imagery.available():
             try:
                 looks = await asyncio.to_thread(variants, path, cols, rows, style, scene, near)
-            except OSError:
+            except Exception:  # chafa timed out, a picture PIL cannot read: the shape with eyes, never the app gone
                 looks = None
         if looks is None:
             looks = {t: faceless(cols, rows, creature, t) for t in ("", "half", "flash", "dead")}
@@ -235,16 +263,20 @@ class Canvas(Static):
         if key != self.loading:  # something else came forward meanwhile
             return
         self.loading = None
-        self.key, self.cols, self.rows, self.looks = key, cols, rows, looks
+        self.key, self.cols, self.rows, self.looks, self._styles, self._last = key, cols, rows, looks, {}, None
         self.atmo = atmosphere.Atmosphere(self.kinds, {"": looks[""], "half": looks["half"]}, cols, rows)
         self._tick()
 
     def lunge(self) -> None:
+        if not self.moving:
+            return
         self.lunge_until = time.monotonic() + 0.45
         self._shake([(2, 0), (-1, 0), (1, 0), (0, 0)])
 
     def slashed(self) -> None:
         """It got you: claws rake across the picture, as across your eyes, and blood spatters it."""
+        if not self.moving:
+            return
         self.lunge_until = self.claw_from = time.monotonic()
         self.lunge_until += 0.3
         if self.atmo is not None:
@@ -252,17 +284,26 @@ class Canvas(Static):
         self._shake([(3, 1), (-3, 0), (2, -1), (-1, 0), (0, 0)])
 
     def struck(self, damage: int, word: str) -> None:
-        """A blow landed on it: a white flash, the damage in blood over it, its blood on the picture."""
+        """A blow landed on it: a white flash, the damage in blood over it, its blood on the picture
+        (without animations, the number alone)."""
         now = time.monotonic()
-        self.flash_until, self.stamp_until = now + 0.12, now + 1.6
+        self.stamp_until = now + 1.6
         self.stamped = stamp(f"-{damage}" if damage else "", word, self.cols, self.rows)
-        if self.atmo is not None:
-            self.atmo.splash(18)
-        self._shake([(-2, 0), (2, 0), (-1, 0), (0, 0)])
+        if self.moving:
+            self.flash_until = now + 0.12
+            if self.atmo is not None:
+                self.atmo.splash(18)
+            self._shake([(-2, 0), (2, 0), (-1, 0), (0, 0)])
+        self._tick()
 
     def fall(self, dead: bool) -> None:
         self.dead = dead
         self._tick()
+
+    def quiet(self, seconds: float) -> None:
+        """Hold the picture still for a while (the player is typing: every frame moves the terminal's
+        cursor, and the caret and the IME box jump with it). What a blow does still shows."""
+        self.hold = max(self.hold, time.monotonic() + seconds)
 
     def _shake(self, steps: list[tuple[int, int]]) -> None:
         seq = iter(steps)
@@ -277,30 +318,41 @@ class Canvas(Static):
         step()
 
     def _tick(self) -> None:
-        if not self.looks:
+        if not self.looks or not self.display:
             return
         now = time.monotonic()
+        clawing = bool(self.claw_from) and now - self.claw_from < 1.2
+        stamped = now < self.stamp_until
+        claw = round(min(1.0, (now - self.claw_from) / 0.25), 2) if clawing else -1.0
+        marked = (claw, stamped, self.dead)
         if self.dead:
             frame = self.looks["dead"]
         elif now < self.flash_until:
             frame = self.looks["flash"]
         elif now < self.lunge_until:
             frame = self.looks["zoom"]
-        elif self.atmo is not None and self.moving:
+        elif self.atmo is not None and self.moving and now >= self.hold:
             frame = self.atmo.frame()
+        elif self._last is not None and marked == self._marks == (-1.0, False, False):
+            return  # standing still (typing, animations off), nothing over it: what is up stays up
         else:
             frame = self.looks[""]
+        if frame is self._last and marked == self._marks:
+            return  # the same frame under the same marks: nothing to paint
+        self._last, self._marks = frame, marked
         marks: dict[tuple[int, int], Mark] = {}
-        if self.claw_from and now - self.claw_from < 1.2:
-            marks |= claws(self.cols, self.rows, (now - self.claw_from) / 0.25)
-        if now < self.stamp_until:
+        if clawing:
+            marks |= claws(self.cols, self.rows, claw)
+        if stamped:
             marks |= self.stamped
         if self.dead:
             marks |= stamp("", "✝", self.cols, self.rows)
-        self.update(paint_over(frame, self.cols, self.rows, marks) if marks else frame)
+        shown = paint_over(frame, self.cols, self.rows, marks) if marks else frame
+        self.update(rich_content(shown, self._styles, self.app.ansi_theme), layout=False)  # the stage's size, not the frame's
 
     def clear(self) -> None:
         self.key, self.loading, self.wanted, self.looks, self.atmo, self.dead = (), None, None, {}, None, False
+        self._last, self._marks, self._styles = None, (), {}
         self.update("")
 
 
@@ -313,7 +365,9 @@ def big_number(n: int, style: str) -> list[Text]:
 # -- the stage: a fight, a chase ------------------------------------------------------------------
 class Arena(Horizontal):
     """A fight or a chase in place of the scene: the picture (Canvas) and, beside it, who acts in what
-    order and how hurt everyone is, or how far behind it is and what is in the way."""
+    order and how hurt everyone is, or how far behind it is and what is in the way. The screen sets
+    its height (GameScreen._stage_rows); the column takes a share of its width, so a narrow screen
+    keeps the picture some room, and writes itself again for every new size."""
 
     DEFAULT_CSS = """
     Arena { height: 20; display: none; background: #050303; }
@@ -335,6 +389,7 @@ class Arena(Horizontal):
         self.last_gap = 9
         self.blink = 0
         self.was: dict[str, int] = {}  # a chase's runners where they were before the last round
+        self._column: Text | None = None  # what the column shows: the same again is not painted
 
     def compose(self) -> ComposeResult:
         yield Canvas()
@@ -342,6 +397,16 @@ class Arena(Horizontal):
 
     def on_mount(self) -> None:
         self.set_interval(0.35, self._flicker)
+
+    def on_resize(self) -> None:
+        self._fit_side()
+        if self.display and self.view is not None:
+            self.call_after_refresh(self._side)  # once the column has its new size
+
+    def _fit_side(self) -> None:
+        if width := self.size.width:
+            share, least, most = (0.45, 30, 46) if self.mode == "chase" else (0.42, 28, 38)
+            self.query_one(".side", Static).styles.width = max(least, min(most, round(width * share)))
 
     @property
     def canvas(self) -> Canvas:
@@ -354,6 +419,7 @@ class Arena(Horizontal):
             self.order, self.acting, self.facing, self.last_gap, self.was = [], "", "", 9, {}
         self.mode, self.view, self.m, self.style = mode, view, m, style
         self.set_class(mode == "chase", "-chase")
+        self._fit_side()
         if rows:
             self.styles.height = rows
         self.display = True
@@ -404,49 +470,27 @@ class Arena(Horizontal):
         self.canvas.want(path, self.style, creature)
         self.canvas.fall(f["status"] == "死亡" or (f["status"] in DOWN and creature))
 
+    def quiet(self, seconds: float) -> None:
+        """The stage holds still while the player types (Canvas.quiet; the route stops blinking)."""
+        self.canvas.quiet(seconds)
+
     def _flicker(self) -> None:
-        self.blink += 1
-        if self.display and self.mode == "chase" and self.view is not None:
-            self._side()
+        if not self.display or self.mode != "chase" or self.view is None or time.monotonic() < self.canvas.hold:
+            return
+        if self.canvas.moving:  # the pursuer's mark blinks; with animations off it stands
+            self.blink += 1
+        self._side()
 
     def _side(self) -> None:
-        side = self.query_one(".side", Static)
-        side.update(self._chase_side() if self.mode == "chase" else self._fight_side())
+        column = self._chase_side() if self.mode == "chase" else self._fight_side()
+        if column != self._column:  # a blink that changed nothing, a round's view that is the same: not painted
+            self._column = column
+            self.query_one(".side", Static).update(column, layout=False)  # the column's size is its own, not its text's
 
     def _fight_side(self) -> Text:
-        view = self.view or {}
-        people = view.get("fighters", [])
-        names = {f["id"]: f["name"] for f in people}
-        out = Text()
-        out.append("⚔ 战斗", style=f"bold {GORE}")
-        out.append(f"  第 {max(1, view.get('round', 1))} 轮\n", style=f"bold {BONE}")
-        out.append("先后 ", style=ASH)
-        for i, fid in enumerate(self.order or [f["id"] for f in people]):
-            if i:
-                out.append(" ▸ ", style=DEEP)
-            side = next((f["side"] for f in people if f["id"] == fid), "foe")
-            colour = AMBER if side == "party" else BLOOD
-            out.append(names.get(fid, fid)[:6], style=f"bold reverse {colour}" if fid == self.acting else colour)
-        out.append("\n\n")
-        for f in people:
-            if f["side"] == "party":
-                continue
-            out.append("▶ " if f["id"] == self.facing else "  ", style=f"bold {GORE}")
-            out.append(f["name"][:12] + "\n", style=f"bold {BONE}" if f["id"] == self.facing else BONE)
-            out.append("  ")
-            out.append_text(wound_meter(f["wound"], f["status"]))
-            out.append(f"  {f['weapon']}\n", style=ASH)
-        out.append("━━ 你们 ━━\n", style=DEEP)
-        for f in people:
-            if f["side"] != "party":
-                continue
-            out.append(f["name"][:10] + "\n", style=f"bold reverse {AMBER}" if f["id"] == self.acting else f"bold {AMBER}")
-            if f["hp"] is not None:
-                out.append_text(hp_bar(f["hp"], f["hp_max"], 16))
-                out.append(f" {f['hp']}/{f['hp_max']}", style=f"bold {BONE}")
-            tag = f["status"] or STANCES.get(f["stance"], "")
-            out.append(f"  {tag}\n", style=f"bold {GORE}" if f["status"] else ASH)
-        return out
+        side = self.query_one(".side", Static)
+        width, height = side.content_size.width or 35, side.content_size.height or 20
+        return fight_column(self.view or {}, self.order, self.acting, self.facing, width, height)
 
     def _chase_side(self) -> Text:
         side = self.query_one(".side", Static)
@@ -479,9 +523,70 @@ class Arena(Horizontal):
 
     def hide(self) -> None:
         self.display = False
-        self.view, self.order, self.acting, self.facing, self.mode = None, [], "", "", ""
+        self.view, self.order, self.acting, self.facing, self.mode, self._column = None, [], "", "", "", None
         self.canvas.clear()
         self.remove_class("-chase", "-close")
+
+
+def fight_column(view: dict, order: list[str], acting: str, facing: str, width: int, height: int) -> Text:
+    """A fight beside the picture: the round and who acts in what order (`acting` lit), how hurt every
+    foe looks (in words, never numbers; `facing` marked), the investigators' blood bars. Two lines a
+    fighter where the column is tall enough, one where it is not (a short terminal, a crowd); foes
+    past what it holds are counted, the investigators always shown."""
+    people = view.get("fighters", [])
+    names = {f["id"]: f["name"] for f in people}
+    foes = [f for f in people if f["side"] != "party"]
+    party = [f for f in people if f["side"] == "party"]
+    roomy = 3 + 2 * len(foes) + 1 + 2 * len(party) <= height
+    lines: list[Text] = []
+    head = Text(no_wrap=True, overflow="crop")
+    head.append("⚔ 战斗", style=f"bold {GORE}")
+    head.append(f"  第 {max(1, view.get('round', 1))} 轮", style=f"bold {BONE}")
+    turns = Text(no_wrap=True, overflow="crop")
+    turns.append("先后 ", style=ASH)
+    for i, fid in enumerate(order or [f["id"] for f in people]):
+        if i:
+            turns.append(" ▸ ", style=DEEP)
+        colour = AMBER if next((f["side"] for f in people if f["id"] == fid), "foe") == "party" else BLOOD
+        turns.append(names.get(fid, fid)[:6], style=f"bold reverse {colour}" if fid == acting else colour)
+    lines += [head, turns, Text()] if roomy else [head.append("  ").append_text(turns)]
+    per = 2 if roomy else 1
+    room = max(0, height - len(lines) - 1 - per * len(party))  # the investigators' lines first
+    shown = foes
+    if per * len(foes) > room:  # the one faced and those still standing first, the rest counted
+        ranked = sorted(foes, key=lambda f: (f["id"] != facing, f["status"] in DOWN or f["status"] in GONE))
+        shown = ranked[: max(0, (room - 1) // per)]
+    for f in shown:
+        row = Text(no_wrap=True, overflow="crop")
+        row.append("▶ " if f["id"] == facing else "  ", style=f"bold {GORE}")
+        style = f"bold {BONE}" if f["id"] == facing else BONE
+        if roomy:
+            row.append(f["name"][:12], style=style)
+            meter = Text("  ", no_wrap=True, overflow="crop")
+            meter.append_text(wound_meter(f["wound"], f["status"]))
+            meter.append(f"  {f['weapon']}", style=ASH)
+            lines += [row, meter]
+        else:
+            row.append_text(cell_text(f["name"], max(4, width - 12), style))  # the marker, a space, the meter: 12
+            row.append(" ")
+            row.append_text(wound_meter(f["wound"], f["status"]))
+            lines.append(row)
+    if len(shown) < len(foes):
+        lines.append(Text(f"  另有 {len(foes) - len(shown)} 名对手", style=ASH))
+    lines.append(Text("━━ 调查员 ━━", style=DEEP))
+    for f in party:
+        name_style = f"bold reverse {AMBER}" if f["id"] == acting else f"bold {AMBER}"
+        bars = Text(no_wrap=True, overflow="crop")
+        if f["hp"] is not None:
+            bars.append_text(hp_bar(f["hp"], f["hp_max"], max(4, min(16, width - (10 if roomy else 19)))))
+            bars.append(f" {f['hp']}/{f['hp_max']}", style=f"bold {BONE}")
+        tag = f["status"] or STANCES.get(f["stance"], "")
+        bars.append(f"  {tag}" if roomy else f" {tag}", style=f"bold {GORE}" if f["status"] else ASH)
+        if roomy:
+            lines += [Text(f["name"][:10], style=name_style), bars]
+        else:
+            lines.append(cell_text(f["name"], 8, name_style).append(" ").append_text(bars))
+    return Text("\n", no_wrap=True, overflow="crop").join(lines)  # a line a row: the count above holds
 
 
 def short_name(name: str) -> str:
@@ -489,12 +594,28 @@ def short_name(name: str) -> str:
     return name.replace("・", "·").split("·")[0] or name
 
 
+SEEN = 2  # stretches ahead of the frontmost runner anyone can make out, unless something is in the way first
+
+
+def in_sight(legs: list[dict], front: int) -> int:
+    """The farthest stretch of a chase anyone in it can make out: the next one or two ahead of the
+    frontmost runner, and no further than the first thing in the way (a fence hides what is behind
+    it). The rest of the way is not known yet: not its names, not what is on it, not where it ends."""
+    end = min(len(legs) - 1, front)
+    for i in range(front + 1, min(len(legs), front + 1 + SEEN)):
+        end = i
+        if legs[i].get("obstacle"):
+            break
+    return end
+
+
 def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[str, int] | None = None) -> Text:
-    """A chase as a way up the column: the way ahead at the top, where it began at the bottom. Every
-    stretch by name with what is in the way on it and who is on it, a trail over the stretches each
-    ran this round (`was`: where they were before it); the stretch where they lose you (or it gets
-    away from you); how far behind it is and what it takes to get away; everyone's speed and how
-    many stretches a round that makes."""
+    """A chase as a way up the column: the way ahead at the top, where it began at the bottom. The
+    stretches run and those in sight (in_sight) by name, with what is in the way on them and who is
+    on them, a trail over the stretches each ran this round (`was`: where they were before it); past
+    that one line, 「前方：尚未看清」. How far behind it is and how many more stretches it takes to
+    get away (a count: the stretch is not named); everyone's speed and how many stretches a round
+    that makes. The columns narrow with the panel."""
     quarry = view.get("quarry", "party")
     runners, legs = view.get("runners", []), view.get("legs", [])
     gap = chase_gap(view)
@@ -503,16 +624,17 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     behind = [r for r in runners if r["side"] != quarry and r["status"] not in DOWN]
     them = [r for r in runners if r["side"] != "party" and r["status"] not in DOWN]
     hot = GORE if close else AMBER
+    leg_w, tag_w = (14, 10) if width >= 40 else (10, 8) if width >= 32 else (8, 6)
     out = Text(no_wrap=True, overflow="crop")
     out.append("⟫ 追逐", style=f"bold {GORE if close else CHILL}")
     out.append(f"  第 {max(1, view.get('round', 1))} 轮\n", style=f"bold {BONE}")
     if gap >= 9:
-        status = "甩开了" if fleeing else "跟丢了"
+        status = "已脱离" if fleeing else "已跟丢"
     elif fleeing:
-        status = "就在你背后！" if gap <= 0 else f"在你身后 {gap} 段"
+        status = "已追至身后" if gap <= 0 else f"在身后 {gap} 段"
     else:
-        status = f"在前面 {gap} 段"
-    who = "、".join(r["name"] for r in them) or "它"
+        status = f"在前方 {gap} 段"
+    who = "、".join(r["name"] for r in them) or "对方"
     out.append_text(cell_text(who, max(4, width - cell_len(status) - 1), f"bold {BONE}"))
     out.append(" ")
     out.append(status, style=f"bold {'reverse ' if gap <= 0 and blink % 2 else ''}{hot}")
@@ -520,25 +642,29 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     if 0 <= gap < 9:
         need = LOST - gap
         if fleeing:
-            goal = f"再拉开 {need} 段就甩掉了" if need > 0 else "这一轮守住就甩掉了"
-            goal += "  ·  可以躲藏" if gap >= SIGHT else ""
+            goal = f"再领先 {need} 段即可脱离" if need > 0 else "本轮结束时即可脱离"
+            goal += " · 可躲藏" if gap >= SIGHT else ""
         else:
-            goal = "追上它就打起来" if gap <= 1 else f"它再拉开 {max(0, need)} 段就跑了"
+            goal = "追至同一段即进入战斗" if gap <= 1 else f"对方再领先 {max(0, need)} 段即脱离"
         out.append(goal + "\n", style=SAFE if fleeing and gap >= SIGHT else ASH)
     else:
         out.append("\n")
     out.append("─" * width + "\n", style=DEEP)
-    # the way: as many stretches as the column holds, round the runners
+    # the way: the stretches run and those in sight, as many as the column holds, round the runners
     room = max(3, height - 6 - len(runners))
-    marks = [r["pos"] for r in runners if r["status"] not in DOWN] or [0]
+    marks = [r["pos"] for r in runners if r["status"] not in DOWN and not (r.get("hidden") and r["side"] != "party")] or [0]
     front, hind = max(marks), min(marks)
-    lo = max(0, min(hind - 1, len(legs) - room))
-    hi = min(len(legs) - 1, lo + room - 1)
-    lost = max((r["pos"] for r in behind), default=-9) + LOST if fleeing else -1
-    if hi < len(legs) - 1:
-        out.append(f"   ⋮ 前面还有 {len(legs) - 1 - hi} 段\n", style=MIST)
-    elif fleeing:
-        out.append("   ⇡ 跑出这条路就甩开了\n", style=SAFE)
+    hi = in_sight(legs, front)
+    lo = max(0, min(hind - 1, hi - room + 1))  # as far back as the column holds, one behind the hindmost at least
+    while hi - lo + 1 > room and lo < hi:  # short of room: the stretch behind the hindmost goes first, then those ahead
+        if lo < hind or hi <= front:
+            lo += 1
+        else:
+            hi -= 1
+    if legs and hi == len(legs) - 1:  # the end of the way is in sight
+        out.append("   ⇡ 跑出此路线即可脱离\n" if fleeing else "   ⇡ 对方跑出此路线即脱离\n", style=SAFE if fleeing else MIST)
+    else:
+        out.append("   ⋯ 前方：尚未看清\n", style=MIST)
     for i in range(hi, lo - 1, -1):
         leg = legs[i]
         up = [r for r in ahead if r["pos"] == i and not r.get("hidden")]
@@ -562,7 +688,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                       else ASH if i < hind else BONE)
         row = Text(no_wrap=True)
         row.append_text(cell_text(f" {mark}", 4, mark_style))
-        row.append_text(cell_text(leg["name"], 14, name_style))
+        row.append_text(cell_text(leg["name"], leg_w, name_style))
         ob = leg.get("obstacle")
         if ob:
             if ob.get("open"):
@@ -573,14 +699,11 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                 tag_style = f"bold {BLOOD}" if ob["kind"] == "barrier" else AMBER
         else:
             tag, tag_style = "", ASH
-        row.append_text(cell_text(tag, 10, tag_style))
+        row.append_text(cell_text(tag, tag_w, tag_style))
         here = [*down, *up, *hid]
         names = "、".join(short_name(r["name"]) + ("（藏）" if r.get("hidden") else "") for r in here)
-        if i == lost and fleeing and not here:
-            names, who_style = "◁ 到这里就甩开", SAFE
-        else:
-            who_style = f"bold {GORE}" if down else f"bold {AMBER}" if up else ASH
-        row.append_text(cell_text(names, max(0, width - 28), who_style))
+        who_style = f"bold {GORE}" if down else f"bold {AMBER}" if up else ASH
+        row.append_text(cell_text(names, max(0, width - 4 - leg_w - tag_w), who_style))
         if hunter_row:
             row.stylize("on #2a0505")
         out.append_text(row)
@@ -589,8 +712,9 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     for r in [r for r in runners if r["side"] == "party"] + [r for r in runners if r["side"] != "party"]:
         mine = r["side"] == "party"
         out.append("\n")
-        out.append_text(cell_text(("◆ " if mine else "◉ ") + short_name(r["name"]), 18, f"bold {AMBER if mine else BLOOD}"))
-        out.append(f"速度 {r['speed']}", style=BONE)
+        out.append_text(cell_text(("◆ " if mine else "◉ ") + short_name(r["name"]), max(7, min(17, width - 21)),
+                                  f"bold {AMBER if mine else BLOOD}"))
+        out.append(f" 速度 {r['speed']}", style=BONE)
         if r.get("actions"):
             out.append(f" · 每轮跑 {r['actions']} 段", style=ASH)
         if r["status"] in DOWN:
@@ -610,35 +734,55 @@ def chase_gap(view: dict) -> int:
 
 
 class BloodFlash(ModalScreen[None]):
-    """The whole screen floods red and drains, when an investigator is hurt: `strength` 0 to 1."""
+    """The whole screen floods red and drains, when an investigator is hurt: `strength` 0 to 1.
+
+    It goes only from the front. Textual's `is_current` holds for a screen under another one too,
+    and `dismiss()` pops whatever is in front: a flash that drained under a roll prompt pushed
+    meanwhile closed the prompt (the turn waiting on it never went on), stayed behind, see-through,
+    eating the keys, and the next key dismissed it a second time (InvalidStateError, the app gone).
+    Under another window it drains all the same and goes once it is in front again."""
 
     DEFAULT_CSS = "BloodFlash { background: #8a0000 50%; }"
 
     def __init__(self, strength: float = 0.5):
         super().__init__()
         self.alphas = [min(0.8, 0.25 + 0.55 * strength) * k for k in (1.0, 0.8, 0.6, 0.42, 0.28, 0.15, 0.0)]
+        self._left = False  # dismissed: never twice
+        self._due = False  # drained under another window: it goes when it is in front again
 
     def on_mount(self) -> None:
         self._step()
 
     def _step(self) -> None:
         if not self.alphas:
-            self._gone()
+            self.finish()
             return
         self.styles.background = Color(150, 0, 0, self.alphas.pop(0))
         self.set_timer(0.06, self._step)
 
-    def _gone(self) -> None:
-        if self.is_current:
-            self.alphas = []
-            self.dismiss()
+    def finish(self) -> AwaitComplete | None:
+        """Drained at once and gone, if it is in front; else gone once it is (on_screen_resume). The
+        dismissal, to await from outside the flash's own handlers (None: nothing to wait for)."""
+        self.alphas = []
+        self.styles.background = Color(150, 0, 0, 0.0)
+        if self._left:
+            return None
+        if not self.is_active:
+            self._due = True
+            return None
+        self._left = True
+        return self.dismiss()
+
+    def on_screen_resume(self) -> None:
+        if self._due:
+            self.finish()
 
     def on_key(self, event: events.Key) -> None:
         """Typing goes on through the blood: the key reaches whatever had it under the flash."""
         event.stop()
         event.prevent_default()
         below = self.app.screen_stack[-2] if len(self.app.screen_stack) > 1 else None
-        self._gone()
+        self.finish()
         if below is not None:
             (below.focused or below).post_message(events.Key(event.key, event.character))
 

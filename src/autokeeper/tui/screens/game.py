@@ -113,6 +113,7 @@ BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's r
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
+STORY_MIN = 4  # rows the story keeps under a fight's or a chase's stage, the round's list open
 
 
 class GameScreen(Screen):
@@ -169,6 +170,13 @@ class GameScreen(Screen):
         self.plays = Plays(self)  # rule plugins' shows and prompts (tui/widgets/plugin_ui.py)
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
         self.view = (state.location, state.view)  # which picture of which place the scene shows (engine/views.py)
+        # A fight's or a chase's choices over the input box (_offer_orders) and the clock on them (_start_clock)
+        self._battle_picking, self._battle_title, self._stance = False, "", ""  # the list is up; its title; Tab's stance
+        self._clock = None  # the round's countdown while the list is up
+        self._beating, self._beat_on = False, False  # a fight's heartbeat is going; the beat is on the stage now
+        self._typing_until = 0.0  # the player is typing: the screen holds still until then (typing)
+        self._carded: set[str] = set()  # this round's exchanges, each on its card: not again as a line
+        self._clock_paused, self._clock_total, self._clock_left, self._clock_until, self._fallback = False, 0.0, 0.0, 0.0, ""
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -254,8 +262,10 @@ class GameScreen(Screen):
     # it; coming back, pick up the newest lines again unless the reader had scrolled away.
     def on_screen_suspend(self) -> None:
         self.following = all(s.is_vertical_scroll_end for s in self.query(StoryLog))
+        self._pause_clock()  # the round's choice does not run out behind help, the menu or a handout
 
     def on_screen_resume(self) -> None:
+        self._resume_clock()
         if getattr(self, "following", True):
             for s in self.query(StoryLog):
                 s.scroll_end(animate=False)
@@ -272,6 +282,7 @@ class GameScreen(Screen):
 
     def on_key(self, event: events.Key) -> None:
         if event.is_printable and event.character and (box := self._typing()):
+            self._close_orders()  # an order of their own, typed over the round's list
             box.focus()
             box.insert_text_at_cursor(event.character)
             event.prevent_default()
@@ -285,7 +296,7 @@ class GameScreen(Screen):
             event.stop()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if action == "complete_skill" and getattr(self, "_battle_picking", False):
+        if action == "complete_skill" and self._battle_picking:
             return True  # Tab over a fight's choices: the other way of answering a blow
         if action == "complete_skill":
             box = self.query_one("#command", Input)
@@ -310,7 +321,7 @@ class GameScreen(Screen):
         picker = self.query_one("#picker", OptionList)
         if not picker.display:
             return False
-        self._battle_picking = False
+        self._close_orders()
         picker.display = False
         self.query_one("#command", Input).focus()
         return True
@@ -319,19 +330,19 @@ class GameScreen(Screen):
     def _picked(self, event: OptionList.OptionSelected) -> None:
         key = event.option.id or ""
         box = self.query_one("#command", Input)
-        if getattr(self, "_battle_picking", False):  # a fight's or a chase's order: sent as picked
-            self._battle_picking = False
-            self._stop_clock()
+        if self._battle_picking:  # a fight's or a chase's order: sent as picked
             self._unpick()
             if not self.busy:
                 self.send_line(key)
+            elif self.queued is None:  # (the list closes as a turn starts) as a line typed ahead would go
+                self.queued = key
             return
         box.value = self._skill_value = key
         box.cursor_position = len(key)
         self._unpick()
 
     def action_complete_skill(self, step: int = 1) -> None:
-        if getattr(self, "_battle_picking", False):
+        if self._battle_picking:
             self._next_stance(step)
             return
         box = self.query_one("#command", Input)
@@ -363,7 +374,9 @@ class GameScreen(Screen):
         self.busy = busy
         if self.game is not None and (server := getattr(self.game, "debug_server", None)) is not None:
             server.busy = busy
-        if not busy:
+        if busy:
+            self._close_orders()  # the round is being settled: its list is done with
+        else:
             self.status_text = ""
             if not self.spectate:
                 for box in self.query(Input).results(Input):  # none once the screen is leaving
@@ -433,14 +446,39 @@ class GameScreen(Screen):
         picture = ev.get("picture", "")
         if not cfg.showcase or not imagery.available() or not picture or not Path(picture).is_file():
             return
-        if isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
-            return
-        self.app.push_screen(ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations))  # type: ignore[attr-defined]
+        shown = ShowcaseScreen(picture, ev.get("title", ""), style=self.app.art_style, fade=cfg.animations)  # type: ignore[attr-defined]
+        self.run_worker(self._over_all(shown), group="reveal")
+
+    async def _over_all(self, shown: ShowcaseScreen) -> None:
+        """A picture over the whole screen (a big scene, a face), once the blood flash has drained: one
+        pushed over the flash was closed by the flash's going. Never over a roll prompt or another one."""
+        await self._after_flash()
+        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+            self.app.push_screen(shown)
+
+    async def _after_flash(self) -> None:
+        """Wait for the blood flash in front to drain (under half a second); one still up after a second goes."""
+        for _ in range(20):
+            if not isinstance(self.app.screen, BloodFlash):
+                return
+            await asyncio.sleep(0.05)
+        if isinstance(flash := self.app.screen, BloodFlash) and (gone := flash.finish()) is not None:
+            await gone
+
+    def _flash_off(self) -> None:
+        """A window coming up over the screen (a handout) ends the blood flash first."""
+        if isinstance(flash := self.app.screen, BloodFlash):
+            flash.finish()
 
     async def make_way(self) -> None:
-        """A big scene steps aside for what asks the player something (a roll, a push)."""
-        if isinstance(self.app.screen, ShowcaseScreen):
-            await self.app.screen.dismiss()
+        """A big scene, a face, the blood flash step aside for what asks the player something (a roll, a
+        push), each through its own leaving: only the screen in front goes, and only once."""
+        for _ in range(4):
+            top = self.app.screen
+            gone = top.leave() if isinstance(top, ShowcaseScreen) else top.finish() if isinstance(top, BloodFlash) else None
+            if gone is None:
+                return
+            await gone
 
     def _sky(self, loc_id: str) -> str:
         """The narrated weather, if this place is under the open sky."""
@@ -467,6 +505,7 @@ class GameScreen(Screen):
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
         self.query_one(Speaker).refit()
         self.call_after_refresh(self._panels)  # the sheet fits the new column; HP and SAN go up top without it
+        self._fit_stage()  # a fight's stage and list in what the new size leaves them
 
     def action_dice_skin(self) -> None:
         from ..drawing import dice
@@ -541,8 +580,18 @@ class GameScreen(Screen):
 
     def action_weather(self) -> None:
         on = self.query_one(SceneArt).toggle_effects()
-        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
+        self._animations(on)
         self.app.notify(f"天气动画：{'开' if on else '关'}")
+
+    def _moving(self) -> bool:
+        """设置's 天气与场景动画: off, nothing on the screen moves of itself (the weather, the stage's
+        picture, the lurches, the heartbeat, the title's glitch)."""
+        return self.query_one(SceneArt).effects
+
+    def _animations(self, on: bool) -> None:
+        """Animations switched on or off (Ctrl+P's 天气动画, 设置): at once, not at the next blow."""
+        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
+        self.query_one(Arena).canvas.moving = on
 
     def _topbar(self) -> None:
         """Where and when on the left; the turn and what it cost on the right. Without the side
@@ -559,7 +608,7 @@ class GameScreen(Screen):
         if st.fight is not None:
             left.append(f"   ⚔ 战斗 · 第 {max(1, st.fight.round)} 轮 ", style="bold #ff4d4d")
             inv = self._viewer()
-            beat = "♥" if not self.has_class("-beat") else "♡"
+            beat = "♡" if self._beat_on else "♥"
             left.append(f"{beat} {inv.hp}/{inv.hp_max}", style="bold #c1121f" if inv.hp * 3 <= inv.hp_max else "bold #ffb000")
         elif st.chase is not None:
             left.append(f"   ⟫ 追逐 · 第 {max(1, st.chase.round)} 轮", style="bold #9fb4c8")
@@ -738,7 +787,8 @@ class GameScreen(Screen):
             else:
                 story.add("item", ItemCard(self.m, ev, self.app.art_style))
         elif t == "damage":
-            story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
+            if not ev.get("fighter"):  # a fight's or a chase's wound is on its card or in its line already
+                story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
             self._panels()
         elif t == "plugin_status":
             self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
@@ -797,6 +847,7 @@ class GameScreen(Screen):
             story.add("handout", Text(f"▤ 手稿：{ev['title']}（F2 可重看）", style="bold"))
             handout = next((h for h in self.m.handouts if h.id == ev.get("id")), None)
             pictures = self.m.handout_pictures(handout) if handout else []
+            self._flash_off()
             self.app.push_screen(HandoutModal(ev["title"], ev["text"], pictures, kind=ev.get("kind", "信件")))
         elif t == "sanity":
             body = Text()
@@ -825,6 +876,7 @@ class GameScreen(Screen):
             story.add("system", Text(f"◎ {ev['who']} 花掉 {ev['spent']} 点幸运（剩 {ev['left']}）"))
             self._panels()
         elif t == "ending":
+            self._battle_over()  # over in the middle of a fight or a chase: the stage goes back to the scene
             body = Text()
             body.append(f"【结局 · {ev['title']}】\n\n", style="bold")
             body.append(ev["text"] + "\n")
@@ -865,7 +917,7 @@ class GameScreen(Screen):
         if t == "fight_start":
             self.query_one(Speaker).leave()
             scene.display = False  # the stage is the fight's: whoever they face, as large as it holds
-            arena.show(ev["fight"], self.m, style, rows=self._arena_rows())
+            arena.show(ev["fight"], self.m, style, rows=self._stage_rows()[0])
             self.add_class("-fight")
             self.remove_class("-chase")
             story.add("event", banner(ev.get("line", "").replace("【", "").replace("】", " · ") or "战斗开始"))
@@ -876,10 +928,12 @@ class GameScreen(Screen):
         elif t == "reveal":  # a creature first seen: over the whole screen, before the sanity roll
             self.run_worker(self._reveal(ev.get("portrait", ""), ev.get("name", ""), 3.5), group="reveal")
         elif t == "fight_round":
+            self._carded.clear()
             arena.round_begins(ev["order"], ev["fight"])
             story.add("system", Text(f"── 第 {ev['round']} 轮 ──", style="#7a0a0a", justify="center"))
         elif t == "fight_act":
             story.add("fightcard", fight_card(ev))
+            self._carded.add(ev.get("line", ""))
             arena.act(ev)
             if ev.get("dice"):
                 self.query_one(DiceTray).roll(ev["dice"])
@@ -887,8 +941,8 @@ class GameScreen(Screen):
                 self._wound(ev.get("hurt", ""), ev["damage"])
         elif t == "fight_state":
             arena.show(ev["fight"], self.m, style)
-            if ev.get("lines"):
-                story.add("system", Text("\n".join(f"· {line}" for line in ev["lines"]), style="#b39b8a"))
+            if lines := [line for line in ev.get("lines") or [] if line not in self._carded]:  # not the exchange again
+                story.add("system", Text("\n".join(f"· {line}" for line in lines), style="#b39b8a"))
             self._panels()
         elif t == "fight_say":
             body = Text()
@@ -896,7 +950,9 @@ class GameScreen(Screen):
             body.append(ev["text"])
             story.add("npc", body)
         elif t == "fight_end":
-            self.remove_class("-fight", "-beat")
+            self._close_orders()
+            self.remove_class("-fight")
+            self._beat_off()
             if self.state.chase is None:
                 arena.hide()
                 scene.display = True
@@ -905,7 +961,7 @@ class GameScreen(Screen):
         elif t == "chase_start":
             self.query_one(Speaker).leave()
             scene.display = False  # the place is on the stage still, rushing, and what is behind you in it
-            arena.show_chase(ev["chase"], self.m, style, rows=self._arena_rows(), scene=scene.image or "")
+            arena.show_chase(ev["chase"], self.m, style, rows=self._stage_rows()[0], scene=scene.image or "")
             self.add_class("-chase")
             self.remove_class("-fight")
             story.add("event", banner((ev.get("line") or "追逐开始").replace("【", "").replace("】", " · "), colour="#9fb4c8"))
@@ -926,7 +982,9 @@ class GameScreen(Screen):
                 self._jolt(1)  # every stretch run: the picture jolts
             self._panels()
         elif t == "chase_end":
-            self.remove_class("-chase", "-beat")
+            self._close_orders()
+            self.remove_class("-chase")
+            self._beat_off()
             if self.state.fight is None:
                 arena.hide()
                 scene.display = True
@@ -936,18 +994,38 @@ class GameScreen(Screen):
             story.add("event", banner(ev.get("text", "追逐结束"), colour="#e8dec4"))
         self._topbar()
 
-    def _arena_rows(self) -> int:
-        """The stage's height while a fight or a chase is on: half the screen, the story under it."""
-        return max(14, min(32, round(self.app.size.height * 0.5)))
+    def _stage_rows(self) -> tuple[int, int]:
+        """A fight's or a chase's stage and the round's list over the box, in rows: what is left once the
+        top bar, the footer, the status line and the input box have theirs (at a LAN table its turn
+        line, with F12 the developer panel), the story keeping STORY_MIN under the stage. Half the
+        screen at most; on a short terminal the list scrolls instead of pushing the box off the screen
+        (80x24 left the story one row and the box below the bottom)."""
+        height = self.app.size.height
+        fixed = 2 + 1 + 3 + 1 + len(self.query("#turnline"))  # bars, status, box, the stage's edge; LAN's turn line
+        fixed += sum(9 for panel in self.query(DevPanel) if panel.display)
+        free = height - fixed
+        picker = max(5, min(10, free // 3))
+        return max(4, min(32, round(height * 0.5), free - picker - STORY_MIN)), picker
+
+    def _fit_stage(self) -> None:
+        """The stage and the list as tall as _stage_rows has them: on a resize, a fight or a chase
+        beginning, the developer panel opening."""
+        rows, picker = self._stage_rows()
+        for options in self.query("#picker").results(OptionList):
+            options.styles.max_height = picker
+        for arena in self.query(Arena).results(Arena):
+            if arena.display:
+                arena.styles.height = rows
 
     async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
-        """A face over the whole screen: a creature first seen, the thing that caught you."""
+        """A face over the whole screen: a creature first seen, the thing that caught you (after the
+        blood it drew: _over_all)."""
         path = self.m.pictures.get(portrait or "", "")
-        if not path:
+        if not path or not config.load().showcase:  # 设置's 大场景 off: no picture over the whole screen
             return
-        if not Path(path).is_file() or isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+        if not Path(path).is_file():
             return
-        self.app.push_screen(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]
+        await self._over_all(ShowcaseScreen(path, caption, style=self.app.art_style, fade=False, face=True, seconds=seconds))  # type: ignore[attr-defined]
 
     def _wound(self, who: str, damage: int) -> None:
         """An investigator hurt: blood floods the screen, the screen lurches, harder the worse the blow."""
@@ -964,7 +1042,10 @@ class GameScreen(Screen):
             self.set_timer(0.25, lambda: self.remove_class("-hit"))
 
     def _jolt(self, strength: int = 2) -> None:
-        """The screen lurches: the whole of it when a blow lands, the stage when a step goes wrong."""
+        """The screen lurches: the whole of it when a blow lands, the stage when a step goes wrong
+        (not with animations off)."""
+        if not self._moving():
+            return
         main = self.query_one("#main")
         amp = max(1, min(4, strength))
         seq = iter([(amp, 0), (-amp, 1), (amp - 1, -1), (-(amp - 1), 0), (0, 0)])
@@ -978,23 +1059,41 @@ class GameScreen(Screen):
 
         step()
 
+    def _battle_over(self) -> None:
+        """No fight or chase on the stage any more, whatever the state still holds (the game ended in
+        the middle of one): the list, the clock and the heartbeat stop, the scene comes back."""
+        self._close_orders()
+        self.remove_class("-fight", "-chase")
+        self._beat_off()
+        arena = self.query_one(Arena)
+        if arena.display:
+            arena.hide()
+            self.query_one(SceneArt).display = True
+
     def _battle_resumed(self) -> None:
-        """A save opened in the middle of a fight or a chase: the stage as it stood."""
+        """A save opened in the middle of a fight or a chase: the stage as it stood (not after the end)."""
         from ...engine import combat as battle
 
         st = self.state
+        if st.ending:
+            return
         if st.fight is not None:
             self._battle_event({"type": "fight_start", "fight": battle.view(st.fight), "line": "战斗继续"})
         elif st.chase is not None:
             self._battle_event({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "追逐继续"})
 
     def _title(self, word: str, colour: str = "#c1121f") -> None:
-        """The word across the stage as a fight or a chase begins, glitching in and fading."""
+        """The word across the stage as a fight or a chase begins, glitching in and fading (with
+        animations off, standing a moment and gone)."""
         stage = self.query_one("#stage")
         width = stage.size.width or 80
         title = Static(classes="battle-title")
         stage.mount(title)
         frames = title_frames(word, width)
+        if not self._moving():
+            title.update(frames[-1])
+            self.set_timer(1.2, title.remove)
+            return
 
         def play(k: int = 0) -> None:
             if not title.is_attached:
@@ -1008,59 +1107,84 @@ class GameScreen(Screen):
         play()
 
     def _heartbeat(self) -> None:
-        """While a fight or a chase is on, a heartbeat on the top bar and the stage's edge, quicker
-        the worse the investigator is hurt."""
-        if getattr(self, "_beating", False):
+        """While a fight or a chase is on, a heartbeat on the top bar's heart and the stage's edge,
+        quicker the worse the investigator is hurt. Only the stage's own class changes: on the whole
+        screen it restyled some three hundred widgets a beat. It stands still with animations off and
+        while the player types."""
+        if self._beating:
             return
         self._beating = True
 
         def beat(on: bool = True) -> None:
             st = self.state
-            if not self.is_attached or (st.fight is None and st.chase is None):
+            if not self.is_attached or st.ending or (st.fight is None and st.chase is None):
                 self._beating = False
-                self.remove_class("-beat")
+                self._beat_off()
                 return
-            self.set_class(on, "-beat")
-            self._topbar()
+            lit = on and self._moving() and time.monotonic() >= self._typing_until
+            if lit != self._beat_on:
+                self._beat_on = lit
+                for stage in self.query("#stage"):
+                    stage.set_class(lit, "-beat")
+                self._topbar()
             inv = self._viewer()
-            rate = pulse_rate(inv.hp, inv.hp_max)
-            self.set_timer(0.12 if on else rate, lambda: beat(not on))
+            self.set_timer(0.12 if on else pulse_rate(inv.hp, inv.hp_max), lambda: beat(not on))
 
         beat()
 
+    def _beat_off(self) -> None:
+        self._beat_on = False
+        for stage in self.query("#stage"):
+            stage.remove_class("-beat")
+
+    # -- the round's choices over the input box, on a clock -------------------------------------
+    def _may_order(self) -> bool:
+        """Whether the round's choices may come up now: between turns (at a LAN table, while the round
+        is open to this seat and nothing of theirs is in it yet: tui/screens/net.py)."""
+        return not self.busy
+
     def _next_stance(self, step: int) -> None:
         """Tab over a fight's choices: answer blows the other way this round (dodge, fight back, cover when
-        someone has a gun), every choice written again with it."""
+        someone has a gun), every choice written again with it. Only the words change, and the order
+        picked carries the stance: the fight is the engine's (Tab mid-turn used to change how the round
+        being settled was answered). The clock goes on as it was."""
         st = self.state
-        me = st.fight.get(st.investigator.id) if st.fight is not None else None
-        if me is None:
+        me = st.fight.get(self._viewer().id) if st.fight is not None else None
+        if me is None or self.busy or not self._battle_picking:
             return
         armed = any(a.firearm for f in st.fight.foes_of(me) for a in f.attacks)  # type: ignore[union-attr]
         ways = ["dodge", "fight", *(["cover"] if armed else [])]
-        me.stance = ways[(ways.index(me.stance) + step) % len(ways) if me.stance in ways else 0]
+        now = self._stance or me.stance
+        self._stance = ways[(ways.index(now) + step) % len(ways) if now in ways else 0]
         picker = self.query_one("#picker", OptionList)
         at = picker.highlighted or 0
         self._offer_orders()
         picker.highlighted = min(at, picker.option_count - 1)
 
     def _offer_orders(self) -> None:
-        """In a fight or a chase, the investigator's choices for the round over the input box."""
+        """In a fight or a chase, the investigator's choices for the round over the input box; not once
+        the game has ended in the middle of one."""
         st = self.state
-        if self.busy or self.spectate or (st.fight is None and st.chase is None) or not self.is_attached:
+        if st.ending or (st.fight is None and st.chase is None):
+            self._close_orders()
+            return
+        if self.spectate or not self.is_attached or not self._may_order():
             return
         from ...engine import combat as battle
 
-        me = st.investigator.id
+        me = self._viewer().id
         if st.fight is not None:
             f = st.fight.get(me)
+            if f is not None and self._stance:  # Tab: the words in the other way of answering a blow
+                f = f.model_copy(update={"stance": self._stance})
             choices = battle.choices(f, st.fight) if f is not None and f.standing else []
-            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 自己输入"
+            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 手动输入"
         else:
             assert st.chase is not None
             f = st.chase.get(me)
-            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing else []
-            title = "追逐行动 · 回车选定 · Esc 自己输入"
-        if not choices:
+            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing and f.id not in st.chase.hidden else []
+            title = "追逐行动 · 回车选定 · Esc 手动输入"
+        if not choices or f is None:
             return
         picker = self.query_one("#picker", OptionList)
         picker.clear_options()
@@ -1069,46 +1193,75 @@ class GameScreen(Screen):
         picker.border_title = title
         picker.display = True
         picker.focus()
-        self._battle_picking = True
-        self._battle_title = title
-        if config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
-            fallback = battle.order_text(battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run"),
-                                         {})
-            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, fallback)
+        self._battle_picking, self._battle_title = True, title
+        if self._clock is not None:  # Tab: the same round, the same deadline
+            self._clock_tick()
+        elif config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
+            hold = battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run")
+            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, battle.order_text(hold, {}))
+
+    def _close_orders(self) -> None:
+        """The round's list over the box goes, and its clock with it: the player writes their own order
+        (typing, Esc), the turn is under way, the fight or the chase is over. A list left up after a
+        fight sent its first line as the next action."""
+        self._stop_clock()
+        self._stance = ""
+        if self._battle_picking:
+            self._battle_picking = False
+            for picker in self.query("#picker").results(OptionList):
+                picker.display = False
+                picker.remove_class("-urgent")
 
     def _stop_clock(self) -> None:
-        if (clock := getattr(self, "_clock", None)) is not None:
-            clock.stop()
+        if self._clock is not None:
+            self._clock.stop()
             self._clock = None
+        self._clock_paused = False
 
     def _start_clock(self, seconds: float, fallback: str) -> None:
-        """The round's choice waits only so long: a draining bar on the list, then the investigator
-        hesitates and does only `fallback` (defends; in a chase, runs)."""
+        """The round's choice waits only so long: a draining bar on the list, then the investigator does
+        only `fallback` (defends; in a chase, runs flat out). It stands still while another window is
+        over the screen (help, the menu, a handout: on_screen_suspend) and goes on from where it was."""
         self._stop_clock()
-        until = time.monotonic() + seconds
+        self._clock_total, self._clock_left, self._fallback = seconds, seconds, fallback
+        self._clock_until = time.monotonic() + seconds
+        self._clock = self.set_interval(0.25, self._clock_tick)
+        if self.is_active:
+            self._clock_tick()
+        else:  # offered while a window was up: it waits for the screen
+            self._pause_clock()
 
-        def tick() -> None:
-            left = until - time.monotonic()
-            if self.busy or not self.is_attached or (self.state.fight is None and self.state.chase is None):
-                self._stop_clock()
-                return
-            picker = self.query_one("#picker", OptionList)
-            share = max(0.0, left / seconds)
-            bar = "█" * round(12 * share) + "░" * (12 - round(12 * share))
-            line = f"⏳ {bar} {max(0, int(left + 0.99))} 秒"
-            if picker.display:
-                picker.border_title = f"{self._battle_title} · {line}"
-                picker.set_class(left <= 5, "-urgent")
-            else:
-                self._status(f"{line} 后只来得及{'防守' if self.state.fight is not None else '逃跑'}")
-            if left <= 0:
-                self._stop_clock()
-                self._unpick()
-                self._status("")
-                self.app.notify("犹豫了一瞬……", severity="warning", timeout=3)
-                self.send_line(fallback)
+    def _pause_clock(self) -> None:
+        if self._clock is not None and not self._clock_paused:
+            self._clock_left = max(0.0, self._clock_until - time.monotonic())
+            self._clock.pause()
+            self._clock_paused = True
 
-        self._clock = self.set_interval(0.25, tick)
+    def _resume_clock(self) -> None:
+        if self._clock is not None and self._clock_paused:
+            self._clock_until = time.monotonic() + self._clock_left
+            self._clock_paused = False
+            self._clock.resume()
+
+    def _clock_tick(self) -> None:
+        st = self.state
+        if self.busy or not self.is_attached or not self._battle_picking or (st.fight is None and st.chase is None):
+            self._stop_clock()
+            return
+        if self._clock_paused:
+            return
+        left = self._clock_until - time.monotonic()
+        share = max(0.0, left / max(0.1, self._clock_total))
+        bar = "█" * round(12 * share) + "░" * (12 - round(12 * share))
+        picker = self.query_one("#picker", OptionList)
+        picker.border_title = f"{self._battle_title} · ⏳ {bar} {max(0, int(left + 0.99))} 秒"
+        picker.set_class(left <= 5, "-urgent")
+        if left <= 0:
+            fallback, fighting = self._fallback, st.fight is not None
+            self._close_orders()
+            self.query_one("#command", Input).focus()
+            self.app.notify(f"未在时限内选择，本轮改为{'防守' if fighting else '全力奔跑'}。", severity="warning", timeout=4)
+            self.send_line(fallback)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         """Their face is on the stage while they talk (Speaker), so the story keeps to words."""
@@ -1201,6 +1354,7 @@ class GameScreen(Screen):
             return
         panel = self.query_one(DevPanel)
         panel.display = not panel.display
+        self._fit_stage()
         self.set_class(panel.display, "-dev")
         self._topbar()
         if panel.display:
@@ -1262,9 +1416,16 @@ class GameScreen(Screen):
             self._scene(self.state.location)
             self._panels()
             self.query_one(Speaker).refit()
+        cfg = config.load()
         scene = self.query_one(SceneArt)
-        if scene.effects != config.load().animations:
+        if scene.effects != cfg.animations:
             scene.toggle_effects()
+            self._animations(cfg.animations)
+        if not cfg.battle_timer and self._clock is not None:  # 限时选择 off: the round's list waits as long as it takes
+            self._stop_clock()
+            picker = self.query_one("#picker", OptionList)
+            picker.border_title = self._battle_title
+            picker.remove_class("-urgent")
 
     def action_load(self) -> None:
         if self._turn_running():
@@ -1315,6 +1476,8 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
+        if text:
+            self._close_orders()  # their own order instead of the round's list
         if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
             if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
@@ -1332,10 +1495,14 @@ class GameScreen(Screen):
         """Enter on an empty box: nothing here; at a shared table, the end of your round."""
 
     @on(Input.Changed, "#command")
-    def typing(self) -> None:
+    def typing(self, event: Input.Changed) -> None:
         # Every weather frame moves the terminal cursor across the screen and back; on terminals
         # without synchronized output that makes the caret and the IME box jump while typing.
         self.query_one(SceneArt).quiet(4.0)
+        self.query_one(Arena).quiet(4.0)  # in a fight the stage is the picture that moves
+        self._typing_until = time.monotonic() + 4.0  # and the heartbeat
+        if event.value and self._battle_picking:  # writing their own order, in the box the list was over
+            self._close_orders()
 
     def send_line(self, text: str) -> None:
         """One line from the input box: a slash command, or the investigator's action."""
@@ -1486,7 +1653,7 @@ class GameScreen(Screen):
     def _situation(self) -> str:
         from ...engine.autoplay import situation
 
-        return situation(self.m, self.state)
+        return situation(self.m, self.state, self._viewer().id)
 
     @work(exclusive=True, group="turn")
     async def autoplay(self) -> None:

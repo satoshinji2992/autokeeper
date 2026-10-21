@@ -226,7 +226,7 @@ GameScreen.-fight #topbar {
 GameScreen.-fight #stage {
     border-bottom: heavy #5c0606;
 }
-GameScreen.-fight.-beat #stage {
+GameScreen.-fight #stage.-beat {  /* the heartbeat: on the stage alone (GameScreen._heartbeat) */
     border-bottom: heavy #c1121f;
 }
 GameScreen.-fight #command {
@@ -247,7 +247,7 @@ GameScreen.-chase #topbar {
 GameScreen.-chase #stage {
     border-bottom: heavy #2a3448;
 }
-GameScreen.-chase.-beat #stage {
+GameScreen.-chase #stage.-beat {
     border-bottom: heavy #5a6478;
 }
 GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {

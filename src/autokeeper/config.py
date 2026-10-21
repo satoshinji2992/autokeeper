@@ -25,6 +25,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     showcase = true            # 大场景: a big picture over the screen at the turning points of the story
     minds = 2                  # important NPCs' backstage decisions a turn (twice that on a long skip); 0: only their plans
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
+    battle_timer = true        # a fight's or a chase's round waits only so long for the choice (off by default)
 
     [prices]                   # USD per million tokens, for an API the built-in table does not know
     "openai:gpt-5" = [1.25, 0.125, 10.0]   # input, cached input, output
@@ -254,7 +255,7 @@ class Config:
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/widgets/tips.py)
     animations: bool = True
-    battle_timer: bool = True  # a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
+    battle_timer: bool = False  # opt-in: a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
     dice: str = "bone"  # tui/drawing/dice.py SKINS
 
     @property
@@ -620,7 +621,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.animations = data.get("animations", cfg.animations) is not False
     cfg.imagegen = data.get("imagegen", cfg.imagegen) is not False
     cfg.showcase = data.get("showcase", cfg.showcase) is not False
-    cfg.battle_timer = data.get("battle_timer", cfg.battle_timer) is not False
+    cfg.battle_timer = data.get("battle_timer", cfg.battle_timer) is True  # off unless switched on (设置)
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None
