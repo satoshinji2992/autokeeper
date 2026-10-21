@@ -14,10 +14,18 @@
 ## 怎么开始
 
 - 裁定员判定这次行动打起来了：`Ruling.combat` 写动手的一方，`Ruling.surprise` 写谁被偷袭。追逐写 `Ruling.chase` 和 `chase_party`（调查员是逃还是追）。裁定员的提示里有【可能动手的】，列出在场 NPC 和模组的怪物。
+- 模组的事件写定了当场的袭击或追逐（`Event.fight`、`Event.surprise`，或 `Event.chase`、`Event.chase_party`）：事件发生时（定时、到达或标记），调查员还有人能行动，就在他们所在的地方像裁定员判定的那样开打（`Fighting._scripted`），屏幕收到同样的 `fight_start` / `chase_start`，这一回合不结算任何一轮，守秘人只写对方怎样扑上来（`BEGIN_TELL`），下一次输入就是第一轮的行动。动手的 NPC 在世界记录里也来到这里；死了或不见了的不来；正在打的战斗里，新来的对手加入进去；追逐中不另开打斗。开打写在事件自己的回合日志步骤里，这一回合中断后续接，不会再开一次；这一回合是不是战斗回合也记在日志里，事件开了打，续接时照旧按普通回合走完。事件自己有理智检定的，第一次看见怪物不再另过一次（只全屏显示）。
 - 战斗中调查员全部逃走，对手里有会追的（战术分工的 `pursue`，没有就按怪物本性：会追，除非资料写了不追），就转成追逐。
 - 追逐中被追上（追兵到了同一段），或调查员回身迎战，就转成战斗。
 
 开打时 `GameState.fight`（追逐是 `GameState.chase`）有值，此后每次输入都是这一轮的行动，直到结束。
+
+## 路线和数值从哪来
+
+- **追逐路线**：模组给这个地点写了 `Location.chase`（4–12 段），就沿它跑；这个地点没有、它所在的外层地点（`within`）有，就沿外层的跑（从书房跑出去走的是整栋房子的路）；都没有，就请战术分工照地点、时间和天气临场画一条（`Cast.track`）；再不行用这类地点的通用路线（`combat.default_track`，按 `scenery.kind_of`）。战斗中逃跑转成的追逐同样先用模组的路线（`Fighting._chase_way`）。每场追逐用路线的一份副本：撞开的门、推倒的杂物只留在这一场。
+- **怪物**：`combat.from_creature` 读 `Creature.stats`（生命、敏捷、力量、体质、体型、闪避、移动），`attacks` 每一行由 `weapons.parse_attack` 读（要有带 % 的命中率；闪避不算攻击），每轮几次由 `weapons.attacks_per_round` 读（`每轮 3 次`、`每回合攻击次数：3`），`notes` 由 `combat.traits` 读出护甲、枪伤减半（也认“火器……伤害减半”）、每轮恢复、拳头打晕、伤害加值、体格、移动。没有表又写明成群的，整群当一个对手打。`called` 是调查员认出它以前给玩家看的叫法，`name` 只给守秘人。
+- **NPC**：`combat.from_npc` 读 `NPC.stats`，空表就是普通人；武器来自世界记录里他拿着的东西（模组的 `Item.owner`）和 `look` 里写到的。
+- 模组里这些写得对不对，`autokeeper check` 会提醒（`module/graph.fighting`）；已经导入的模组用 `autokeeper upgrade --only combat` 补上（`module/adapt.py` 的「战斗与追逐」一步）。编译出的 Skill 包把引擎读到的数值写进 `references/creatures.md` 和各 NPC 文件，路线写进地点文件，给外部 Agent 看：在 AutoKeeper 里打斗由引擎通过 MCP 工具结算。
 
 ## 一轮
 
@@ -57,6 +65,7 @@
 ## 测试
 
 - `tests/test_combat_rules.py`：规则逐条。
-- `tests/test_fight.py`：开打到打完、按敏捷的先后与应对、追逐的甩开与躲藏、舞台与选项、受伤时的泛红、限时选择。
+- `tests/test_fight.py`：开打到打完、按敏捷的先后与应对、追逐的甩开与躲藏、事件写定的袭击与续接、模组的追逐路线、舞台与选项、受伤时的泛红、限时选择。
+- `tests/test_fight_module.py`：模组里的写法（字段说明、校验、Skill 包、编译期改编的「战斗与追逐」、联机副本不带路线）。
 - `tests/test_imagery.py`：怪物的轮廓与舞台合成。
 - `tests/test_net.py`：联机一轮由所有人宣告、只结算一次。
