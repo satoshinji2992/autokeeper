@@ -6,9 +6,11 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from autokeeper.agents.cast import Action, Outcome, Ruling
+from autokeeper.engine import fighting
 from autokeeper.engine import graph as turn_graph
-from autokeeper.module.schema import Module
+from autokeeper.module.schema import Creature, Event, Module
 from autokeeper.paths import EXAMPLE
+from autokeeper.rules.chase import Leg, Obstacle
 
 from .test_engine import FakeCast, make, run_turn
 from .test_tui import canned  # noqa: F401  (a fixture, used by name)
@@ -115,6 +117,126 @@ async def test_a_chase_runs_leg_by_leg_and_hiding_ends_it(module, fake):
     fake.queue(10, 20)  # out of sight: 潜行 hard against 侦查 regular
     out, _ = await run_turn(app, "躲藏", THREAD)
     assert game.state.chase is None and any(e["type"] == "chase_end" and e["end"] == "escaped" for e in out)
+
+
+# -- what the module scripts: an event's attack, the way a chase from a place runs -------------------
+AMBUSH = Event(id="e_ambush", title="守钟人扑了上来", when="D1 14:05", text="守钟人从楼梯口扑了过来。",
+               read_aloud="楼梯口的人影一下子扑了过来。", fight=["warden"], surprise="party")
+WAIT = Action(kind="wait", summary="周衡在楼梯口等一会儿")
+STAIRS = [Leg(name="齿轮间门口", look="咔哒声就在头顶"),
+          Leg(name="又窄又陡的楼梯", obstacle=Obstacle(kind="hazard", what="陡窄的楼梯", skill="敏捷", harm="1D3")),
+          Leg(name="楼梯口", look="守钟人打盹的椅子翻倒在地"),
+          Leg(name="钟楼大门", obstacle=Obstacle(kind="barrier", what="沉重的木门", skill="力量")),
+          Leg(name="广场", look="告示栏在雾里只剩一个影子"),
+          Leg(name="去报社的街", look="路灯一盏接一盏")]
+
+
+async def test_an_event_that_scripts_an_attack_begins_the_fight_and_the_next_input_is_its_first_round(module, fake):
+    module.events.append(AMBUSH.model_copy())
+    game, cast, _ = fighters(module, fake, {"wait": (WAIT, Ruling(needs_roll=False, minutes=10))})
+    app = turn_graph.build(game, InMemorySaver())
+    out, _ = await run_turn(app, "wait", THREAD)  # 14:10: the attack at 14:05 has come
+    st = game.state
+    kinds = [e["type"] for e in out]
+    assert kinds.index("event") < kinds.index("fight_start") and "fight_act" not in kinds  # begun, nothing settled yet
+    assert st.fight is not None and st.fight.round == 0 and st.fight.get("zhouheng").surprised
+    assert "【战斗开始】" in cast.reports[-1] and fighting.BEGIN_TELL in cast.reports[-1]
+    ruled = len(cast.ruled)
+    fake.queue(90, 60, 10).queue_totals(2)  # 周衡 misses, the warden fights back for nothing, then strikes 周衡, who cannot answer
+    out, _ = await run_turn(app, "攻击 老守钟人（徒手）｜被攻击时闪避", THREAD)
+    assert len(cast.ruled) == ruled and st.fight.round == 1  # the first round's order, with no arbiter
+    blow = [e for e in out if e["type"] == "fight_act"][-1]
+    assert blow["attacker"] == "warden" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
+    assert not st.fight.get("zhouheng").surprised  # the first round only
+
+
+async def test_a_scripted_attack_waits_for_someone_to_meet_it_and_joins_a_fight_going_on(module, fake):
+    from autokeeper.engine.game import Turn
+
+    module.events.append(AMBUSH.model_copy())
+    game, _, events = fighters(module, fake, {})
+    game.state.investigator.add_condition("昏迷")  # nobody here who can still act: nothing begins
+    await game._fire(module.events[-1], Turn())
+    assert game.state.fight is None and "e_ambush" in game.state.fired
+    game.state.investigator.conditions.clear()
+    module.npc("warden").status = "死亡"
+    second = AMBUSH.model_copy(update={"id": "e_again"})
+    await game._fire(second, Turn())
+    assert game.state.fight is None  # the dead attack no one
+    module.npc("warden").status = ""
+    await game._fire(AMBUSH.model_copy(update={"id": "e_third"}), Turn())
+    assert [f.id for f in game.state.fight.fighters] == ["zhouheng", "warden"]
+    turn = Turn()
+    await game._fire(Event(id="e_more", title="布道者也冲了上来", when="flag:x", text="", fight=["preacher", "warden"]), turn)
+    assert [f.id for f in game.state.fight.fighters] == ["zhouheng", "warden", "preacher"]  # joined, nobody twice
+    assert any("布道者也扑了上来" in line for line in turn.fight) and events[-1]["type"] == "fight_state"
+    assert game.world.rec.entities["preacher"].at == game.state.location  # the record has him come where they are
+
+
+async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fake):
+    from .test_resolution_recovery import reload_game, snapshots
+
+    module.events.append(AMBUSH.model_copy())
+    game, _, _ = make(module, fake, {}, location="tower")
+    saved = snapshots(game)
+
+    async def broken(event: dict) -> None:
+        if event["type"] == "fight_start":
+            raise ConnectionError("disconnected as the fight began")
+
+    game.emit = broken
+    ruling = Ruling(needs_roll=False, minutes=10)
+    with pytest.raises(ConnectionError):
+        await game.resolve(WAIT, ruling)
+    resumed, events = reload_game(module, saved[-1], fake)
+    assert resumed.state.fight is not None  # it began before the line broke
+    turn = await resumed.resolve(WAIT, ruling)
+    assert [f.id for f in resumed.state.fight.fighters] == ["zhouheng", "warden"]
+    assert sum(e["type"] == "fight_start" for e in events) == 1 and turn.fight.count(turn.fight[0]) == 1
+    assert not resumed.state.pending_resolution
+    await game.close()
+    await resumed.close()
+
+
+async def test_a_creature_the_event_already_paid_for_is_shown_not_paid_for_twice(module, fake):
+    from autokeeper.engine.game import Turn
+
+    module.creatures.append(Creature(id="coil", name="齿轮背后的藤", description="缠在齿轮背后、还在动的东西", sanity="1/1D6",
+                                     stats={"生命": 9, "敏捷": 60}, attacks=["缠绕 45%，伤害 1D4"]))
+    seen = Event(id="e_coil", title="藤爬了出来", when="flag:x", text="", sanity="0/1D3", fight=["coil"])
+    game, _, events = fighters(module, fake, {})
+    fake.queue(10)  # the event's own sanity roll, passed: the only one
+    await game._fire(seen, Turn())
+    kinds = [e["type"] for e in events]
+    assert kinds.count("sanity") == 1 and "reveal" in kinds and game.state.seen == ["coil"]
+    assert game.state.fight.get("coil").attacks[0].name == "缠绕"
+
+
+async def test_a_chase_runs_the_modules_way_from_the_place_or_the_place_it_is_in(module, fake):
+    from autokeeper.engine.game import Turn
+
+    module.location("square").chase = STAIRS  # the tower is in the square: a chase from it runs this way too
+    hounds = Event(id="e_run", title="守钟人追了上来", when="flag:x", text="", chase=["warden"])
+    game, _, events = fighters(module, fake, {})
+    fake.queue(40, 40)  # both CON regular: speeds 8 and 8, no one gone at once
+    await game._fire(hounds, Turn())
+    ch = game.state.chase
+    assert ch is not None and ch.quarry == "party" and [leg.name for leg in ch.track.legs] == [leg.name for leg in STAIRS]
+    ch.track.legs[3].obstacle.open = True  # what a chase does to its way stays in that chase
+    assert not module.location("square").chase[3].obstacle.open
+    assert any(e["type"] == "chase_start" for e in events)
+    game.state.chase = None
+    from autokeeper.engine import combat as battle
+
+    fight = battle.Fight(fighters=[battle.from_investigator(game.state.investigator), battle.from_npc(module.npc("warden"))])
+    fake.queue(40, 40)  # the runners' CON for speed
+    game._chase_from_fight(fight, ["zhouheng"], ["warden"])
+    assert game.state.chase.track.legs[1].name == "又窄又陡的楼梯"  # fled from a fight: the same way
+    module.location("square").chase = STAIRS[:3]  # too short for the rules: the one for this kind of place
+    game.state.chase = None
+    fake.queue(40, 40)
+    game._chase_from_fight(fight, ["zhouheng"], ["warden"])
+    assert game.state.chase.track.legs[0].name != "齿轮间门口"
 
 
 def fight_screen(module):

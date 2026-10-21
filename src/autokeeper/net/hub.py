@@ -118,6 +118,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         here = loc["id"]
         loc["keeper"] = ""
         loc["looks"] = []  # what will become of a place is the keeper's to know
+        loc["chase"] = []  # and where a chase from it would run: the way comes with the chase (chase_view)
         loc["exits"] = [pid for pid in loc["exits"] if frozenset((here, pid)) in ways]
         loc["travel_minutes"] = {pid: value for pid, value in loc["travel_minutes"].items() if frozenset((here, pid)) in roads}
         loc["within"] = c.within.get(here)

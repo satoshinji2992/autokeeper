@@ -2,10 +2,14 @@
 
     skills/module-<id>/
       SKILL.md                      overview the keeper always carries: truth, clock, indexes
-      references/locations/<id>.md  one file per location: read-aloud text, clues, checks, NPCs present
-      references/npcs/<id>.md       one file per NPC: persona, secrets, lies, gated clues
+      references/locations/<id>.md  one file per location: read-aloud text, clues, checks, NPCs present,
+                                    the way a chase from it runs
+      references/npcs/<id>.md       one file per NPC: persona, secrets, lies, gated clues, the numbers a
+                                    fight reads of them
+      references/creatures.md       each creature as a fight reads it (engine/combat.from_creature):
+                                    hit points, armour, attacks, what else of its notes the rules use
       references/handouts/<id>.md   handout full text
-      references/events.md          timed and triggered events
+      references/events.md          timed and triggered events, and the fights and chases they begin
       references/endings.md         endings and rewards
       references/pregens.md         pre-generated investigators
       references/situation.md       the situation compile time prepared: relations, what each important
@@ -30,8 +34,15 @@ from typing import Any
 import yaml
 
 from .. import credits
+from ..engine import combat as battle
+from ..rules.combat import Fighter
+from ..rules.weapons import unread
 from .graph import supporting_clues
 from .schema import NPC, Clue, Location, Module
+
+FIGHTS = ("战斗与追逐在 AutoKeeper 里由引擎按 CoC 7 版规则结算：用 AutoKeeper MCP 服务器的战斗与追逐工具开打、宣告每一轮的行动，"
+          "命中、伤害、重伤、追逐的每一段都由引擎掷骰，结算过的不要口头再算一遍。这里的数值就是引擎读到的；"
+          "手动主持时照它们和 `coc7-combat` 结算。")
 
 
 def skill_name(m: Module) -> str:
@@ -92,6 +103,8 @@ def compile_module(m: Module, skills_root: Path, *, source: Path | None = None) 
         _write(root / "references" / "handouts" / f"{h.id}.md", f"# {h.title}（{h.kind}）\n\n```text\n{h.text.rstrip()}\n```\n{images}\n")
     _write(root / "references" / "events.md", _events_md(m))
     _write(root / "references" / "endings.md", _endings_md(m))
+    if m.creatures:
+        _write(root / "references" / "creatures.md", _creatures_md(m))
     if m.pregens:
         _write(root / "references" / "pregens.md", _pregens_md(m))
     if _has_situation(m):
@@ -203,6 +216,8 @@ def _skill_md(m: Module) -> str:
     ]
     if m.pregens:
         lines.append("- 预设调查员：[references/pregens.md](references/pregens.md)")
+    if m.creatures:
+        lines.append("- 怪物（引擎读到的战斗数值、攻击与特性）：[references/creatures.md](references/creatures.md)")
     if _has_situation(m):
         lines.append("- 局面（人物关系、各人的打算与依据、伏笔、前史、规则清单）：[references/situation.md](references/situation.md)")
     if m.mechanics:
@@ -220,8 +235,90 @@ def _skill_md(m: Module) -> str:
         lines += [f"- `{p.id}` v{p.version}：{p.description}" for p in m.extensions.values()]
         lines += ["", "源码与可执行测试见 `assets/plugins/<id>/`；接口见 [references/plugins.md](references/plugins.md)。",
                   "引擎已结算的插件效果不能再口头重复结算；手动主持时先读源码和原文核对。"]
-    lines += ["", "需要检定时配合 `coc7-core`，理智检定配合 `coc7-sanity`，叙事风格见 `keeper-craft`。", ""]
+    if _has_fights(m):
+        where = [f"`{x.id}` {x.name}" for x in m.locations if x.chase]
+        lines += ["", "## 战斗与追逐", "", FIGHTS, ""]
+        if m.creatures:
+            lines.append("- 怪物的生命、护甲、攻击和特性：[references/creatures.md](references/creatures.md)")
+        if any(n.stats for n in m.npcs):
+            lines.append("- 会动手的 NPC：各自文件的「打起来时」")
+        if where:
+            lines.append(f"- 写好的追逐路线（在地点文件里）：{'；'.join(where)}；别处起跑的由引擎临场画")
+        if any(e.fight or e.chase for e in m.events):
+            lines.append("- 事件里写定的打斗和追逐：[references/events.md](references/events.md)，到点由引擎开打")
+    lines += ["", "需要检定时配合 `coc7-core`，理智检定配合 `coc7-sanity`，打斗与追逐配合 `coc7-combat`，叙事风格见 `keeper-craft`。", ""]
     return "\n".join(lines)
+
+
+def _has_fights(m: Module) -> bool:
+    return bool(m.creatures or any(n.stats for n in m.npcs) or any(x.chase for x in m.locations)
+                or any(e.fight or e.chase for e in m.events))
+
+
+def _sheet(f: Fighter) -> list[str]:
+    """A fighter as the engine builds it from the module, in a few lines (engine/combat.py)."""
+    db = f.db if f.db.startswith(("+", "-")) or f.db == "0" else f"+{f.db}"
+    rows = [f"生命 {f.hp_max}，敏捷 {f.dex}，闪避 {f.dodge}，格斗 {f.fighting}，移动 {f.move}，体格 {f.build}，伤害加值 {db}"]
+    attacks = []
+    for a in f.attacks:
+        bits = [f"{a.skill}", f"伤害 {a.damage}"] + (["贯穿"] if a.impale and not a.firearm else [])
+        if a.firearm:
+            bits += [f"射程 {a.range} 码"] if a.range else []
+            bits += [f"还剩 {a.ammo} 发"] if a.ammo is not None else []
+        attacks.append(f"{a.name} {a.value}%（{'，'.join(bits)}）")
+    rows.append("攻击：" + ("；".join(attacks) or "徒手"))
+    if f.per_round > 1:
+        rows.append(f"每轮 {f.per_round} 次攻击")
+    marks = ([f"护甲 {f.armor}（每次受伤先减掉）"] if f.armor else []) + (["枪伤减半"] if f.guns_halved else [])
+    marks += ([f"每轮末恢复 {f.regen} 点，倒下了还会站起来"] if f.regen else [])
+    marks += ([f"只被拳头打 {f.knockout} 点就会被打晕"] if f.knockout else [])
+    if marks:
+        rows.append("特性：" + "；".join(marks))
+    return rows
+
+
+def _creatures_md(m: Module) -> str:
+    out = ["# 怪物", "", FIGHTS, ""]
+    for c in m.creatures:
+        out += [f"## {c.name}（`{c.id}`）", "", c.description.strip(), ""]
+        out.append(f"- 调查员认出它以前叫它「{c.called}」：叙述里用这个叫法，名字只给守秘人" if c.called.strip()
+                   else "- 没写调查员对它的叫法：叙述里别说出它的名字，只写看得见的样子")
+        out.append(f"- 理智：{c.sanity}（第一次照面时）")
+        f = battle.from_creature(c)
+        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+            out.append("- 成群：整群当一个对手打，很难打倒")
+        out += [f"- {row}" for row in _sheet(f)]
+        if c.notes.strip():
+            out.append(f"- 资料：{c.notes.strip()}")
+        unclear = [f"「{line.strip()}」{why}" for line in c.attacks if (why := unread(line))]
+        if unclear:
+            out.append("- 引擎没有照原样读的：" + "；".join(unclear))
+        out.append("")
+    return "\n".join(out)
+
+
+def _route_md(m: Module, loc: Location) -> list[str]:
+    """The way a chase from this place runs: its own, or that of the place it is in, as the engine
+    picks it (engine/fighting.Fighting._chase_way)."""
+    places = {x.id: x for x in m.locations}
+    at: Location | None = loc
+    seen: set[str] = set()
+    while at is not None and at.id not in seen and not 4 <= len(at.chase) <= 12:
+        seen.add(at.id)
+        at = places.get(at.within or "")
+    if at is None or not 4 <= len(at.chase) <= 12:
+        return []
+    if at is not loc:
+        return ["## 追逐路线", "", f"从这里起跑的追逐沿 `{at.id}` {at.name} 的路线跑，见那个地点的文件。", ""]
+    out = ["## 追逐路线", "", "从这里起跑的追逐沿这条路跑，一段一段按先后；⚠ 险阻边跑边过，失败耽搁、可能受伤；▦ 路障过了检定才过得去。", ""]
+    for i, leg in enumerate(loc.chase, 1):
+        row = f"{i}. **{leg.name}**" + (f"：{leg.look}" if leg.look else "")
+        if (ob := leg.obstacle) is not None:
+            mark = "⚠" if ob.kind == "hazard" else "▦"
+            row += f"（{mark} {ob.what}，{ob.skill}" + (f"·{ob.difficulty}" if ob.difficulty != "常规" else "") + (
+                f"，失败受 {ob.harm} 伤" if ob.harm else "") + "）"
+        out.append(row)
+    return [*out, ""]
 
 
 def _location_md(m: Module, loc: Location) -> str:
@@ -261,6 +358,7 @@ def _location_md(m: Module, loc: Location) -> str:
             out.append(f"- `{c.id}` **{c.title}**｜{where}｜{_check(c)}{tag}")
             out.append(f"  {c.text.strip()}")
         out.append("")
+    out += _route_md(m, loc)
     if loc.art:
         out += [f"插图：`assets/ascii/{loc.art}.txt`", ""]
     return "\n".join(out)
@@ -285,6 +383,8 @@ def _npc_md(m: Module, n: NPC) -> str:
             out.append(f"- `{cid}` {c.title}：{need}")
     if n.stats:
         out += ["", "## 数值", "", "，".join(f"{k} {v}" for k, v in n.stats.items())]
+        things = [i.name for i in m.items if i.owner == n.id]  # what the record has them hold at the start
+        out += ["", "## 打起来时（引擎读到的）", "", *[f"- {row}" for row in _sheet(battle.from_npc(n, things))]]
     if n.portrait:
         out += ["", f"头像：`assets/ascii/{n.portrait}.txt`"]
     return "\n".join(out) + "\n"
@@ -309,6 +409,11 @@ def _events_md(m: Module) -> str:
             meta.append(f"进入结局 `{e.ending}`")
         if e.sets:
             meta.append("设置标记 " + "、".join(f"`{f}`" for f in e.sets))
+        if e.fight:  # begun by the engine where the investigators are (engine/fighting.Fighting._scripted)
+            meta.append("当场打起来：" + "、".join(f"`{x}`" for x in e.fight)
+                        + {"party": "（调查员被偷袭）", "foe": "（对方毫无防备）"}.get(e.surprise, ""))
+        elif e.chase:
+            meta.append("开始追逐：" + "、".join(f"`{x}`" for x in e.chase) + f"（调查员{'追' if e.chase_party == '追' else '逃'}）")
         if meta:
             out += ["；".join(meta), ""]
     return "\n".join(out)

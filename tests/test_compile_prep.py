@@ -137,7 +137,7 @@ def test_the_waves_follow_what_each_pass_reads():
     at = {name: i for i, wave in enumerate(order) for name in wave}
     assert at["npcs"] < at["relations"] < at["agendas"] < at["meet"]
     assert at["clueweb"] < at["foreshadow"] and at["history"] < at["agendas"] and at["endings"] < at["agendas"]
-    assert len(order) == 4 and {"npcs", "clueweb", "endings", "mechanics", "prelude"} == set(order[0])
+    assert len(order) == 4 and {"npcs", "clueweb", "endings", "mechanics", "prelude", "combat"} == set(order[0])
 
 
 # -- 3. and 4. what it may not hand over --------------------------------------------------------

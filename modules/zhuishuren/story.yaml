@@ -115,6 +115,7 @@ events:
     read_aloud: 四周的灌木里响起细碎的脚步声，一下，又一下，越来越多。月光里，一张又一张犬一样的脸从墓碑后面探了出来。
     sanity: 0/6
     sets: [horde_arrived]
+    fight: [ghouls]  # 一群食尸鬼正扑向他：打起来，下一步由玩家选打还是逃（逃则它们不追）
 endings:
   - id: asylum
     title: 疗养院

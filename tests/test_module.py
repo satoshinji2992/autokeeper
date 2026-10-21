@@ -123,6 +123,8 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             if hasattr(old, "important"):
                 old.important = new.important
             old.looks = new.looks
+            if hasattr(old, "chase"):  # the way a chase from a place runs, drawn from the text (2026-10-21)
+                old.chase = new.chase
             if folder.name == "zhuishuren" and old.id == "thomas":
                 # The original temperament and investigation goal remain; the added
                 # guidance makes his existing commission an active cooperation motive.
@@ -163,6 +165,14 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             p.backstory = q.backstory
         for h, g in zip(then.handouts, now.handouts, strict=True):
             h.originals = g.originals
+        # The fights the story scripts (Event.fight), the gun the deputy fires in it, and what the players
+        # call a creature before they know what it is (Creature.called): written by hand from the modules'
+        # own text on 2026-10-21.
+        for e, f in zip(then.events, now.events, strict=True):
+            e.fight, e.surprise, e.chase, e.chase_party = f.fight, f.surprise, f.chase, f.chase_party
+        for c, d in zip(then.creatures, now.creatures, strict=True):
+            c.called = d.called
+        then.items += [i for i in now.items if i.id == "stanley_revolver"]
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 

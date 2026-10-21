@@ -14,7 +14,11 @@ from dataclasses import dataclass
 
 import networkx as nx
 
+from ..engine import combat as battle
 from ..engine.state import hours
+from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
+from ..rules.combat import stats_of
+from ..rules.weapons import carried, parse_attack, unread
 from .schema import Module
 
 
@@ -362,6 +366,7 @@ def audit(m: Module) -> list[Issue]:
     for mech in m.mechanics:
         if mech.plugin and mech.plugin not in m.plugins:
             err(f"规则「{mech.name}」的插件 {mech.plugin} 不在 plugins 里")
+    issues += fighting(m)
 
     reach = reachable_locations(m) if m.start in locs else set()
     for loc in m.locations:
@@ -384,3 +389,71 @@ def audit(m: Module) -> list[Issue]:
         if pid != m.start and pid not in told and not m.location(pid).public:
             warn(f"标题、副标题、缘起或地点说明提到了「{name}」，地点 {pid} 开局就会出现在地图上；要调查才找得到的地方，这几处别点名")
     return issues
+
+
+# -- what a fight and a chase read of it ---------------------------------------------------------
+HARM = re.compile(r"\d*[dD]\d+(?:[+\-]\d+)?|\d+")
+
+
+def known_skill(name: str) -> bool:
+    """A characteristic or a skill the rules know (rules/catalog), a specialty such as 外语(拉丁文) too."""
+    key = canonical(name)
+    return key in CHARACTERISTICS or key in SKILL_BASE or key.split("(")[0] in SKILL_BASE or key in ("幸运", "理智")
+
+
+def fighting(m: Module) -> list[Issue]:
+    """What a fight or a chase reads of the module and cannot use as written (engine/combat.py): a
+    creature with no word for the players (Creature.called) or one that names it, a sheet without hit
+    points or DEX, an attack line with no chance to hit, a gun skill with no gun, a chase route the
+    rules cannot run, an event sending someone the module does not have. Only the last is an error:
+    the rest still play, on the rules' defaults."""
+    out: list[Issue] = []
+
+    def warn(text: str) -> None:
+        out.append(Issue("warning", text))
+
+    for c in m.creatures:
+        if not c.called.strip():
+            warn(f"怪物 {c.id} 没写 called：调查员还不知道它是什么时，屏幕上就是它的名字「{c.name}」")
+        elif c.name in c.called:
+            warn(f"怪物 {c.id} 的 called「{c.called}」带着它的名字：只写看得见的样子，不写学名、真名和真相")
+        swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
+        s = stats_of(c.stats)
+        if not swarm and (lacking := [k for k in ("生命", "敏捷") if k not in s]):
+            warn(f"怪物 {c.id} 的 stats 缺{'、'.join(lacking)}：打起来生命按体质、体型算（没写的各 60），敏捷按 50")
+        for line in c.attacks:
+            if problem := unread(line):
+                warn(f"怪物 {c.id} 的攻击「{line.strip()[:40]}」{problem}")
+        natural = any(w in k for k in s for w in battle.NATURAL)
+        if not swarm and not natural and not any(parse_attack(x) for x in c.attacks):
+            warn(f"怪物 {c.id} 没有读得出的攻击：打起来按 45% 的“攻击”、伤害 1D6+DB 算")
+    for n in m.npcs:
+        guns = [k for k in stats_of(n.stats) if k.startswith("射击")]
+        if guns and not any(w.firearm for w in carried([n.look, *(i.name for i in m.items if i.owner == n.id)])):
+            warn(f"NPC {n.id} 会{'、'.join(guns)}，look 和 items 里却没有枪：打起来只用拳脚")
+    for loc in m.locations:
+        if loc.chase and not 4 <= len(loc.chase) <= 12:
+            warn(f"地点 {loc.id} 的追逐路线有 {len(loc.chase)} 段，要 4–12 段：引擎不用它，临场另画")
+        for i, leg in enumerate(loc.chase, 1):
+            if (ob := leg.obstacle) is None:
+                continue
+            if not known_skill(ob.skill):
+                warn(f"地点 {loc.id} 追逐路线第 {i} 段「{leg.name}」的{ob.what}用「{ob.skill}」，不是技能或属性名"
+                     "（跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……）")
+            if ob.harm and not HARM.fullmatch(ob.harm.replace(" ", "")):
+                warn(f"地点 {loc.id} 追逐路线第 {i} 段「{leg.name}」的伤害「{ob.harm}」要写成骰子式，如 1D3")
+    people = {n.id for n in m.npcs} | {c.id for c in m.creatures}
+    for e in m.events:
+        for key, ids in (("fight", e.fight), ("chase", e.chase)):
+            for x in ids:
+                if x not in people:
+                    out.append(Issue("error", f"事件 {e.id} 的 {key} 里的 {x} 不是 NPC 或怪物"))
+        if e.fight and e.chase:
+            warn(f"事件 {e.id} 同时写了 fight 和 chase：只按 fight 打起来，调查员逃跑时会追的对手自己会追")
+        if (e.fight or e.chase) and e.ending:
+            warn(f"事件 {e.id} 直接进入结局，fight 和 chase 不会开始")
+        if e.surprise and not e.fight:
+            warn(f"事件 {e.id} 的 surprise 只在写了 fight 时起作用")
+        if e.chase_party and not e.chase:
+            warn(f"事件 {e.id} 的 chase_party 只在写了 chase 时起作用")
+    return out
