@@ -115,14 +115,16 @@ DEFAULT_ROLES: dict[str, Role] = {
 
 # Optional roles inherit the effective route, including local/global overrides. Leaving
 # them out of presets keeps older configurations and custom arbiter routes compatible.
-ROLE_PARENTS = {"world": "arbiter", "plan": "keeper", "tactics": "arbiter"}
+ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
+# Roles that once were and are no more: a configuration naming one still loads, and the name is
+# ignored. tactics (gone in 0.0.4): a fight's NPCs are the keeper plan's now (agents/cast.Cast.plan).
+RETIRED_ROLES = ("tactics",)
 # What an inherited role changes of its parent's route. Important NPCs' own decisions think
 # low, not at the arbiter's high (the user's call, 2026-10-20): at high one took 6.4 s and they
 # were four tenths of a replayed session's spend. A configured effort still wins.
 # The keeper's plan (agents/cast.Cast.plan) is on the player's wait, before any roll: the keeper's
 # model, thinking low (DeepSeek's keeper thinks high, which the telling can afford, not this).
-# A fight's round waits on the tactics (engine/fighting.py): the arbiter's model, thinking low.
-ROLE_EFFORT = {"world": "low", "plan": "low", "tactics": "low"}
+ROLE_EFFORT = {"world": "low", "plan": "low"}
 
 # The roles as the model settings list them: name, what it does. Only 读图 is sent pictures.
 ROLES_SHOWN: dict[str, tuple[str, str]] = {
@@ -132,7 +134,6 @@ ROLES_SHOWN: dict[str, tuple[str, str]] = {
     "npc": ("NPC", "扮演 NPC"),
     "director": ("导演", "补充模组未写明的情节"),
     "world": ("世界推演", "重要 NPC 的幕后决定"),
-    "tactics": ("战术", "战斗与追逐中 NPC、怪物和 AI 队友的行动"),
     "investigator": ("AI 调查员", "AI 队友与观战"),
     "intent": ("解析行动", "守秘人安排失败时解析玩家输入"),
     "summarizer": ("摘要", "压缩较早的记录"),
@@ -257,6 +258,7 @@ class Config:
     animations: bool = True
     battle_timer: bool = False  # opt-in: a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
     dice: str = "bone"  # tui/drawing/dice.py SKINS
+    rulebooks: str = ""  # the rulebooks' folder for `autokeeper rules index`; "" is paths.rulebooks()
 
     @property
     def improvising(self) -> bool:
@@ -602,6 +604,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
         every.update(backend=backend, model=model)
     if fallback := given("fallback", "AUTOKEEPER_FALLBACK"):
         every.update(fallback=fallback)
+    roles = {name: spec for name, spec in roles.items() if name not in RETIRED_ROLES}
     for name in (set(DEFAULT_ROLES) | set(roles)) - {"all", *ROLE_PARENTS}:
         cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
     for name, parent in ROLE_PARENTS.items():
@@ -616,6 +619,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)
     cfg.dice = data.get("dice", cfg.dice)
+    cfg.rulebooks = str(data.get("rulebooks", cfg.rulebooks) or "")
     cfg.plugins = data.get("plugins", cfg.plugins)
     cfg.tips = data.get("tips", cfg.tips) is not False
     cfg.animations = data.get("animations", cfg.animations) is not False

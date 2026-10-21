@@ -16,7 +16,7 @@
 | 闪避 | 87 | 平手闪避者胜；都失败无人受伤 | 同上 | 符合 | 同上 |
 | 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害。旧引擎 `combat.melee` 已同步改正 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…`、`test_combat_rules::test_fighting_back_never…` |
 | 不可孤注一掷 | 87 | 战斗检定不能孤注一掷 | 战斗中不提供 | 符合 | — |
-| NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`：默认反击，准备撤退才闪避；由守秘人计划采用 | 简化（规则层已有，接入待 WP-G） | `test_rules_melee::test_keepers_fight_back…` |
+| NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`：默认反击，准备撤退才闪避；守秘人遭遇安排的提示写明这条（`agents/encounter.ENCOUNTER_PLAN_SYSTEM`），由守秘人按局面安排 `react` | 符合（规则层与提示）；引擎接入待 WP-C | `test_rules_melee::test_keepers_fight_back…`、`test_encounter_plan_agent` |
 | 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 按名称近似匹配，未登记的东西也能拿来用 | 简化 | 重构（先取用再使用） |
 | 武器技能基础值 | 87 | 剑 20% 等，见武器表 | `rules/catalog.SKILL_BASE`：斧 15、剑 20、连枷 10、矛 20、鞭 5、绞索 15、链锯 10、冲锋枪 15、弓 15、重武器 10、机枪 10、火焰喷射器 10；`格斗(刀剑)` 是 `格斗(剑)` 的别名 | 符合 | `test_combat_rules::test_weapon_skills_start_at_the_books_base…` |
 | 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible`；旧引擎 `combat.melee` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
@@ -52,7 +52,7 @@
 | 濒死 | 101 | 下一轮结束起每轮过体质，失败即死；只有急救能稳定，得 1 点临时生命；稳定后每小时过体质，之后须医学 | `rules/wounds.dying_roll_due`、`dying_roll`、`first_aid`、`stabilized_roll`：下一轮结束起每轮体质；急救稳定得 1 点临时生命，之后每小时体质，失败再次濒死；稳定后仍昏迷 | 符合（规则层）；轮末与追逐中的掷骰待 WP-C/D | `test_rules_wounds::test_dying_rolls_con…`、`test_first_aid_stabilizes…` |
 | 轻伤恢复 | 101 | 每天 1 点 | `rules/wounds.heal_day` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
 | 重伤恢复 | 101–102 | 每周体质检定回复 1D3，极难 2D3；静养、医疗加奖励骰；极难或回到一半以上时去掉重伤 | `rules/wounds.heal_week`、`week_dice`、`week_bonus` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
-| 其他伤害 | 102–103 | 表 III：轻度 1D3、中度 1D6、重度 1D10、致命 2D10、终结 4D10、血肉横飞 8D10；窒息与溺水每轮过体质；毒药极难成功减半 | `rules/wounds.OTHER_DAMAGE`（表 III）、`harm_dice`、`asphyxia_round`（困难若在剧烈活动，失败后每轮受伤，归零即死）、`poison_damage`（极难减半） | 符合（规则层）；提示里给表待 WP-G | `test_rules_wounds::test_suffocating_to_zero…` |
+| 其他伤害 | 102–103 | 表 III：轻度 1D3、中度 1D6、重度 1D10、致命 2D10、终结 4D10、血肉横飞 8D10；窒息与溺水每轮过体质；毒药极难成功减半 | `rules/wounds.OTHER_DAMAGE`（表 III）、`harm_dice`、`asphyxia_round`（困难若在剧烈活动，失败后每轮受伤，归零即死）、`poison_damage`（极难减半）；裁定员的提示附表 III（`agents/encounter.OTHER_DAMAGE`），遭遇里的伤害骰写成 `DiceText`（`Ruling.effects`）；建了规则书索引时可按需查原文（`rules_lookup`） | 符合 | `test_rules_wounds::test_suffocating_to_zero…`、`test_encounter_plan_agent`、`test_rules_lookup` |
 | 伤势的延续 | — | 同一个人物、怪物跨场景、跨战斗保持生命值与状态；同一次伤害只扣一次 | NPC 与怪物的身体记在世界（`Entity.life`），怪物入战即成为世界实体；所有伤害经 `engine/effects`（调用 `rules/wounds`），每次带 injury id，重复的被拒绝（插件与引擎不会重复扣） | 符合 | `test_world_life::test_a_dead_creature_stays_dead`、`test_a_hurt_npc_comes_back_hurt`，`test_effects::test_a_plugin_cannot_take_off…` |
 | 枪伤减半与护甲 | 256、258、274 | 食尸鬼“枪械和抛射武器造成掷出的伤害的一半”；飞水螅先取最低伤害再扣护甲 | `rules/wounds.apply_wound`：先把掷出的枪伤减半（向下取整），再扣护甲 | 符合（按怪物条目推定的顺序） | `test_rules_wounds::test_guns_halved_before_the_armour` |
 | 击晕（可选） | 105 | 钝器战技成功，目标昏迷并只受 1 点伤害 | `rules/wounds.knockout_blow`；模组写的“只被拳头打 X 点就击晕”另由 `Body.knockout` 处理 | 符合（规则层） | `test_rules_wounds::test_a_knockout_from_fists` |

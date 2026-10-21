@@ -22,7 +22,7 @@ from pydantic import TypeAdapter
 
 from .. import cards, pictures, weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Failure, Initiative, Ruling
+from ..agents.cast import Action, Cast, Failure, Initiative, Ruling, kp_line
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
@@ -2550,7 +2550,7 @@ class Game(Fighting):
         if turn.interlude:
             out.append("（插曲：调查员这回没有新的行动，下面这些事接着上一段叙述发生。）")
         if a and a.kind == "meta":
-            out.append(f"玩家在问游戏外的问题：{a.summary}\n请以守秘人身份用一两句话简短回答，不推进剧情。")
+            out.append(f"{kp_line(a.summary)}\n请以守秘人身份用一两句话简短回答，不推进剧情。")
             return "\n".join(out)
         if a:
             out.append(f"行动意图（是否达成以下列结算为准）：{a.summary}")

@@ -945,6 +945,45 @@ def index(module: Annotated[Path, typer.Argument(help="模组目录")]) -> None:
     console.print_json(data=asyncio.run(go()))
 
 
+rules_app = typer.Typer(help="规则书检索")
+app.add_typer(rules_app, name="rules")
+
+
+@rules_app.command("index")
+def rules_index(
+    books: Annotated[Path | None, typer.Option("--books", help="规则书所在的文件夹（默认 rule/）")] = None,
+    force: Annotated[bool, typer.Option("--force", help="全部重新读取")] = False,
+) -> None:
+    """读取规则书（PDF、Word、Markdown），建本地检索索引，裁定和 /kp 提问时按需查原文。"""
+    from . import rules_lookup
+
+    folder = books or Path(config.load().rulebooks or paths.rulebooks())
+    if not rules_lookup.books(folder):
+        console.print(f"[red]{escape(str(folder))} 里没有规则书（PDF、.doc、.docx、.md、.txt）[/red]")
+        raise typer.Exit(1)
+    meta = rules_lookup.build(folder, force=force, say=lambda line: console.print(escape(line), style="dim"))
+    for name, info in meta["books"].items():
+        console.print(escape(f"《{info['title']}》 {info['passages']} 段，{info['pages']} 页（{name}）"))
+    for name, why in meta["skipped"].items():
+        console.print(f"[yellow]{escape(f'跳过 {name}：{why}')}[/yellow]")
+    console.print(f"共 {meta['passages']} 段，用时 {meta['seconds']} 秒；"
+                  + ("本地向量检索" if meta["embed"] else "未安装 fastembed，按字词检索（uv sync --extra graphrag 可启用向量）")
+                  + f"\n索引：{escape(str(paths.rules_index()))}")
+
+
+@rules_app.command("search")
+def rules_search(query: Annotated[str, typer.Argument(help="要查的规则，如“溺水”")],
+                 k: Annotated[int, typer.Option("-k", help="几段")] = 3) -> None:
+    """在规则书索引里查一条规则，看裁定员会拿到哪些原文。"""
+    from . import rules_lookup
+
+    if not rules_lookup.ready():
+        console.print("[red]还没有规则书索引：先运行 autokeeper rules index[/red]")
+        raise typer.Exit(1)
+    for p in rules_lookup.lookup(query, k):
+        console.print(f"[bold]{escape(p.cite())}[/bold]\n{escape(p.text)}\n")
+
+
 @app.command()
 def ask(
     module: Annotated[Path, typer.Argument(help="模组目录")],

@@ -38,7 +38,7 @@ The data folder:
       角色卡导出/        where 导出 puts a card unless you pick another folder
       cache/            safe to delete; rebuilt when needed
         models/         local embedding models (about 90 MB)
-        kb/             LightRAG knowledge base per module
+        kb/             LightRAG knowledge base per module; kb/rules/ the rulebooks' index
         showcases/      big-scene pictures per module
         cards/          the keeper card decks read from their PDFs (cards.py)
         pictures/       the renderer's prepared copy of every photo
@@ -259,6 +259,11 @@ def kb(module_id: str) -> Path:
     return cache() / "kb" / module_id
 
 
+def rules_index() -> Path:
+    """The rules lookup's index of the rulebooks (rules_lookup.py, `autokeeper rules index`)."""
+    return cache() / "kb" / "rules"
+
+
 def showcases(module_id: str) -> Path:
     return cache() / "showcases" / _safe(module_id)
 
@@ -286,10 +291,13 @@ def sessions() -> Path:
 
 # -- the rulebooks ---------------------------------------------------------------------------
 def rulebooks() -> Path:
-    """The rulebooks and card decks the user keeps beside the code (rule/, not in git), or the folder
-    AUTOKEEPER_RULES names."""
-    env = os.environ.get("AUTOKEEPER_RULES")
-    return Path(env).expanduser() if env else ROOT / "rule"
+    """The rulebooks and card decks the user keeps beside the code (rule/, not in git; in the data
+    folder when installed), or the folder AUTOKEEPER_RULES names (AUTOKEEPER_RULEBOOKS too). Read by
+    `autokeeper cards import` (cards.py) and `autokeeper rules index` (rules_lookup.py, whose
+    `rulebooks` setting in config.toml comes first)."""
+    if env := os.environ.get("AUTOKEEPER_RULES") or os.environ.get("AUTOKEEPER_RULEBOOKS"):
+        return Path(env).expanduser()
+    return (DATA if INSTALLED else ROOT) / "rule"
 
 
 # -- logs ------------------------------------------------------------------------------------

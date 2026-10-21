@@ -353,3 +353,34 @@ async def test_the_rhetoric_eval_goes_through_the_keepers_plan(tmp_path, monkeyp
     summary = await rhetoric.run(paths.MODULES / "zhuishuren", tmp_path / "out.json", limit=1, adversarial=False,
                                  referees=("claude-haiku-5-5",), systems=("split",))
     assert len(planned) == 2 and summary["cases"] == 1  # the plain words and one rhetorical, both planned
+
+
+# -- an encounter announced by the everyday plan (Plan.encounter) -----------------------------------
+async def test_the_plan_may_announce_an_encounter_and_the_arbiter_still_starts_the_old_one(module, fake):
+    """Plan.encounter is one small object on the everyday schema, for the encounter engine (WP-C);
+    until then the arbiter's Ruling.combat/chase start the old engine's fights, as before."""
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), module)
+    game = make(module, fake, cast)
+    SCRIPT.append({"action": {"kind": "attack", "summary": "周衡扑向守钟人", "npc": "warden"},
+                   "encounter": {"mode": "fight", "with": ["warden"], "trigger": "now"}})
+    action = await game.parse("我扑向守钟人")
+    sent = SEEN[-1]
+    hint = sent["schema"]["$defs"]["EncounterHint"]
+    assert set(hint["properties"]) == {"mode", "with", "trigger"} and "encounter" in sent["schema"]["properties"]
+    assert "【可能动手的】" in sent["messages"][-1]["content"] and "encounter：这一轮真的打起来" in sent["system"]
+    SCRIPT.append({"needs_roll": True, "skill": "格斗(斗殴)", "combat": ["warden"], "surprise": "foe"})
+    ruling = await cast.arbiter(game.state, action)
+    assert ruling.combat == ["warden"] and ruling.surprise == "foe"
+    sent = SEEN[-1]
+    assert {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} <= set(sent["schema"]["properties"])
+    assert "【可能动手的】" in sent["messages"][-1]["content"] and "chase_party 写调查员是逃还是追" in sent["system"]
+    await game.close()
+    await cast.close()
+
+
+def test_an_old_configuration_naming_the_tactics_role_loads_and_ignores_it(tmp_path):
+    (paths.USER_DIR).mkdir(parents=True, exist_ok=True)
+    (paths.USER_DIR / "config.toml").write_text('[roles.tactics]\nmodel = "deepseek:deepseek-flash"\n', encoding="utf-8")
+    cfg = config.load()
+    assert "tactics" not in cfg.roles and "tactics" not in cfg.role_names and "tactics" not in config.ROLES_SHOWN
+    assert cfg.role("plan").model == cfg.role("keeper").model
