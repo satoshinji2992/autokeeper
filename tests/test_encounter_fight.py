@@ -405,3 +405,75 @@ async def test_an_old_save_in_the_middle_of_a_fight_comes_back_as_an_encounter(m
     assert game.world.rec.entities["warden"].life.hp == 4  # adopted as it stood
     assert not game.state.pending_turn and any(e.text == migrate.DROPPED for e in game.state.log)
     await game.close()
+
+
+# -- care, numbers, companions, the chase's end -----------------------------------------------------------
+async def test_first_aid_wakes_the_unconscious_and_ticks_the_skill(module, fake):
+    lead = module.pregens[0]
+    game, _cast, _events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(do="defend", summary="守"))]))
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    friend.hp, friend.conditions = 0, ["昏迷"]
+    friend.injury.injuries = ["old:w1"]
+    game.state.investigators.append(friend)
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(10)  # 急救 (base 30): a hard success
+    await play(app, "急救 林秋｜被攻击时闪避")
+    lin = game.state.find("lin")
+    assert lin.hp == 1 and "昏迷" not in lin.conditions and "old:w1" in lin.injury.aided  # once per injury
+    assert "急救" in game.state.investigator.marks
+
+
+async def test_outnumbered_a_defender_who_has_answered_gives_the_next_attacker_a_bonus_die(module, fake):
+    lead = module.pregens[0]
+    game, cast, _events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(do="defend", summary="守"))]))
+    game.state.investigators.append(lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True))
+    game.state.human = ["zhouheng"]
+    cast.choose = lambda options: next(o.id for o in options if o.value.get("do") == "attack")  # the AI companion attacks too
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90, 90, 90, 90)  # both miss; the warden answers both
+    out, _ = await play(app, HIT)
+    acts = [e for e in out if e["type"] == "fight_act"]
+    assert [a["attacker"] for a in acts] == ["zhouheng", "lin"]  # the AI companion picked from the same choices
+    assert acts[0]["roll"]["bonus"] == 0 and acts[1]["roll"]["bonus"] == 1 and "以多打少" in acts[1]["line"]
+
+
+async def test_caught_at_the_end_of_a_chase_it_is_a_fight_again_in_the_same_encounter(module, fake):
+    from autokeeper.engine.game import Turn
+
+    hounds = Event(id="e_run", title="守钟人追了上来", when="flag:x", text="", chase=["warden"])
+    game, _cast, events = fight_game(module, fake)
+    fake.queue(40, 40)
+    await game._fire(hounds, Turn())
+    eid = game.state.encounter.id
+    await game._chase_end(Turn(), "caught", "守钟人追上了周衡", fight_ids=["warden", "zhouheng"])
+    enc = game.state.encounter
+    assert game.state.chase is None and enc.id == eid and enc.mode == "fight" and enc.phase == "open"
+    assert enc.switches == ["r0:fight"] and [(e.a, e.b) for e in enc.scene.engaged] == [("warden", "zhouheng")]
+    assert [e["type"] for e in events][-2:] == ["chase_end", "fight_start"]
+
+
+async def test_the_push_offer_passes_its_answer_on_as_it_came(module, fake, monkeypatch):
+    """§9: the push offer's resume value is the player's word or {"choice": "push", "how": ...}; the
+    graph hands it to Game.push unchanged."""
+    from autokeeper.engine.game import Turn
+
+    from .test_engine import make
+
+    look = Action(kind="investigate", summary="周衡查看齿轮", target="齿轮")
+    ruling = Ruling(needs_roll=True, skill="侦查", clues_on_success=["c_diary"])
+    game, _, _ = make(module, fake, {"look": (look, ruling)}, location="tower")
+    module.clue("c_diary").where = "tower"
+    got = []
+
+    async def push(value):
+        got.append(value)
+        return Turn()
+
+    monkeypatch.setattr(game, "push", push)
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90)
+    answer = {"choice": "push", "how": "把齿轮一个个拆下来看"}
+    await play(app, "look", answers=[answer])
+    assert got == [answer]

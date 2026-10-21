@@ -847,3 +847,32 @@ async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module
         assert text.count("受到 3 点伤害") == 1  # on the warden's card, not again as a line, nor as a ✚ line
         assert not any(act["line"] in text for act in acts)  # each exchange is its card
         assert "还吊着一口气" in text  # what the cards do not say still comes
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_blow_aimed_at_the_player_is_asked_in_a_window_and_escape_keeps_their_answer(module, fake):
+    from textual.widgets import Button
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.reaction import ChoiceModal
+
+    from .test_tui import until
+
+    offer = {"kind": "reaction", "id": "e1:r1:warden:0:react:0", "who": "zhouheng", "name": "周衡",
+             "prompt": "楼梯口打盹的老人向你扑来，你怎么应对？", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}, {"id": "fight_back", "label": "反击", "note": ""}]}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        answers: list[str] = []
+        app.push_screen(ChoiceModal(offer), answers.append)
+        await pilot.pause(0.1)
+        assert [b.label.plain for b in app.screen.query(Button)] == ["闪避", "反击"]
+        await pilot.click("#o1")
+        assert await until(pilot, lambda: answers == ["fight_back"])
+        app.push_screen(ChoiceModal(offer), answers.append)
+        await pilot.pause(0.1)
+        await pilot.press("escape")
+        assert await until(pilot, lambda: answers == ["fight_back", "dodge"])  # what they set for the round

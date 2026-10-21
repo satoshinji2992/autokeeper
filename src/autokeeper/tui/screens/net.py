@@ -254,6 +254,9 @@ class NetGameScreen(GameScreen):
         """The fight or the chase as the host sent it (engine/encounter/views.table): this screen has no game."""
         return None if self.state.ending else self.state.encounter_public
 
+    def _in_battle(self) -> bool:
+        return self._battle_now() is not None
+
     def _sync(self, view: dict[str, Any]) -> None:
         self.state = GameState.model_validate(view)
         self._panels()

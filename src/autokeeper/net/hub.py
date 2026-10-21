@@ -323,7 +323,7 @@ class Hub:
         self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
-        self.thread = {"configurable": {"thread_id": state.slot}}
+        self.thread = {"configurable": {"thread_id": state.slot}, "recursion_limit": 100}  # a fight asks a few times a turn (graph offer)
         self.clients: dict[str, web.WebSocketResponse] = {}
         self.names: dict[str, str] = {}
         self.sits: dict[str, str | None] = {inv_id: None for inv_id in [*state.human, *self.blank]}  # human seat -> client

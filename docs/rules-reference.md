@@ -27,32 +27,32 @@
 | 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
 | 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
 | 推迟行动 | 86 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 无 | 未做 | 重构 |
-| 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 每人每轮只打一次，`per_round` 只用于寡不敌众 | 错误 | 重构 WP-C |
+| 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 引擎（`engine/encounter`）每人每轮在自己的敏捷位行动一次；多次攻击的怪物在自己的位上把每次攻击都打完（`actions.picks`：安排写得少的，余下几次打同一个目标） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
 | 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
 | 闪避 | 87 | 平手闪避者胜；都失败无人受伤 | 同上 | 符合 | 同上 |
 | 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害。旧引擎 `combat.melee` 已同步改正 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…`、`test_combat_rules::test_fighting_back_never…` |
 | 不可孤注一掷 | 87 | 战斗检定不能孤注一掷 | 战斗中不提供 | 符合 | — |
-| NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`：默认反击，准备撤退才闪避；守秘人遭遇安排的提示写明这条（`agents/encounter.ENCOUNTER_PLAN_SYSTEM`），由守秘人按局面安排 `react` | 符合（规则层与提示）；引擎接入待 WP-C | `test_rules_melee::test_keepers_fight_back…`、`test_encounter_plan_agent` |
-| 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 按名称近似匹配，未登记的东西也能拿来用 | 简化 | 重构（先取用再使用） |
+| NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`；引擎里守秘人的人按安排的 `react` 应对，没安排或不合用时反击（开枪时不应对，不替他扑向掩体） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
+| 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 只能用手里或身上真有的武器（攻击 id）；临时抄起的东西先经 `Bring` 登记进手里（`DeclaredAction.takes`），再按最像的武器结算；武器表里没有的东西交裁定员按 `other` 裁定伤害 | 符合 | test_encounter_fight::test_a_weapon_picked_up_is_registered_before_it_is_used |
 | 武器技能基础值 | 87 | 剑 20% 等，见武器表 | `rules/catalog.SKILL_BASE`：斧 15、剑 20、连枷 10、矛 20、鞭 5、绞索 15、链锯 10、冲锋枪 15、弓 15、重武器 10、机枪 10、火焰喷射器 10；`格斗(刀剑)` 是 `格斗(剑)` 的别名 | 符合 | `test_combat_rules::test_weapon_skills_start_at_the_books_base…` |
 | 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible`；旧引擎 `combat.melee` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
-| 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械让武器掉在原地，物件归属和背包随之改变（`effects.Drop`）；天生的爪牙夺不走；夺物、持续劣势未做 | 简化 | `test_world_life::test_a_disarmed_weapon_leaves_the_inventory…`、`test_claws_cannot_be_disarmed` |
-| 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | `rules/melee.opposed_difficulty`、`surprise_attack`、`surprise_bonus`：没准备好的目标除大失败外命中，或给奖励骰；远程总要掷骰。旧引擎被偷袭方除大失败外命中 | 符合（规则层）；谁被突袭由守秘人计划定（WP-C/G） | `test_rules_melee::test_surprise_and_disadvantage`、`test_combat_rules::test_a_surprised_defender…` |
-| 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`（含永不寡不敌众的神话存在）；旧引擎 `_outnumbered` | 符合 | `test_rules_melee::test_outnumbered…`、`test_combat_rules` |
-| 投掷武器 | 91 | 可闪避；不能反击，除非在敏捷五分之一英尺内；加一半伤害加值 | `rules/melee.reactions_against`：投掷可闪避，投射（弓）找掩体，敏捷五分之一英尺内才可反击；`半DB` 加一半伤害加值。旧引擎投掷不再可反击 | 符合 | `test_rules_melee::test_what_a_throw…`、`test_combat_rules::test_fighting_back_never…` |
-| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑 | 符合 | `test_fight` |
+| 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械让武器掉在原地、夺取落到攻击者手里（`effects.Drop`）；天生的爪牙夺不走；推倒：倒地并失去下一次行动；制住：被制住的人在自己的位上只能用力量挣脱，盟友打他得奖励骰（`melee.disadvantage_bonus`） | 简化（夺物以外的持续劣势只做了被制住） | test_encounter_fight::test_disarming_drops_the_real_weapon…、test_world_life::test_claws_cannot_be_disarmed |
+| 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | 规则层同前；引擎：被偷袭一方第一轮不能应对，近战除大失败外命中，远程照常掷；`EncounterStart.surprise_contest` 由引擎掷对抗 | 符合 | test_fight::test_an_event_that_scripts_an_attack… |
+| 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`；引擎按本轮已应对次数（多次攻击的按其攻击次数）给后来的近战攻击一颗奖励骰，远程不给 | 符合 | test_encounter_fight::test_outnumbered_a_defender_who_has_answered… |
+| 投掷武器 | 91 | 可闪避；不能反击，除非在敏捷五分之一英尺内；加一半伤害加值 | `rules/melee.reactions_against`；引擎按攻击种类给应对选项：投掷只能闪避，开枪只能扑向掩体或不应对 | 符合 | test_rules_melee::test_what_a_throw… |
+| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑在自己的位上脱离（被制住不行），轮末先问守秘人的人追不追（安排里写明的照办，明说不追就不追），再判胜负后果 | 符合 | test_encounter_fight::test_an_explicit_let_go_is_obeyed…、test_an_undecided_pursuer_is_asked… |
 | 护甲 | 91 | 从伤害中减去；对魔法、毒、溺水无效 | `rules/wounds.apply_wound`：先扣护甲；毒、溺水窒息、魔法不扣；摔落、火焰按表 III 由守秘人定，不扣 | 符合 | `test_rules_wounds::test_armour_first…` |
 | 射击难度 | 95 | 基础射程常规，两倍困难，四倍极难；超射程只有大成功贯穿 | `rules/firearms.range_band`、`shot_difficulty`、`ShotModifiers.impale_needs`：基础/两倍/四倍射程，超射程只有大成功贯穿；霰弹枪各档都是常规难度、按档降伤害（54 页） | 符合（规则层）；距离由守秘人填（WP-C） | `test_rules_firearms::test_range_bands…`、`test_a_shotgun_keeps…` |
-| 寻找掩体 | 95 | 闪避检定，成功则射手一颗惩罚骰；无论成败失去下一次攻击 | `rules/firearms.dive_for_cover`：成功射手一颗惩罚骰，无论成败失去下一次攻击，多次攻击的怪物失去全部 | 符合 | `test_rules_firearms::test_diving_for_cover` |
+| 寻找掩体 | 95 | 闪避检定，成功则射手一颗惩罚骰；无论成败失去下一次攻击 | `rules/firearms.dive_for_cover`；引擎：扑向掩体掷闪避，成功射手一颗惩罚骰，无论成败失去下一次行动（`RoundBudget.lost_next`） | 符合 | test_encounter_fight::test_an_opening_blow_keeps_the_weapon_it_named |
 | 部分遮蔽 | 95 | 一半以上被遮住，一颗惩罚骰 | `rules/firearms.shot_modifiers`（`partial_cover`） | 符合（规则层）；接入待 WP-C | `test_rules_firearms::test_the_dice_of_harveys_shots` |
-| 抵近射击 | 95 | 敏捷五分之一英尺内一颗奖励骰；目标不能闪避或反击 | `rules/firearms.point_blank`、`shot_modifiers`；目标不能闪避或反击（`melee.reactions_against`） | 符合（规则层）；接入待 WP-C | `test_rules_firearms::test_point_blank_and_volleys` |
+| 抵近射击 | 95 | 敏捷五分之一英尺内一颗奖励骰；目标不能闪避或反击 | `rules/firearms.point_blank`、`shot_modifiers`；引擎里射手与目标扭打在一起时算抵近（距离由守秘人填的版本留给后续） | 简化 | test_rules_firearms::test_point_blank_and_volleys |
 | 瞄准 | 95 | 花一回合瞄准，下回合射击一颗奖励骰 | `rules/firearms.shot_modifiers`（`aimed`） | 符合（规则层）；接入待 WP-C | `test_rules_firearms::test_the_dice_of_harveys_shots` |
 | 高速目标、目标体格 | 96 | MOV8 以上全速移动一颗惩罚骰；体格 −2 以下惩罚骰，4 以上奖励骰 | `rules/firearms.shot_modifiers`（`fast_target`、`target_build`） | 符合（规则层）；接入待 WP-C | 同上 |
-| 装填 | 96 | 一轮装两发；换弹夹一轮；装一发并开火有惩罚骰 | `rules/firearms.reload`、`load_one_and_fire`、`fire`：一轮两发、弹匣一轮、弹链两轮，不超过备用弹药；装一发并开火一颗惩罚骰 | 符合（规则层）；弹药延续由 WP-B | `test_rules_firearms::test_reloading_and_ammunition` |
-| 手枪连射 | 96 | 一轮 2–3 发，每发各掷一次，各一颗惩罚骰 | `rules/firearms.shots_allowed`、`shot_modifiers`（`volley`）；双管霰弹枪第二发同目标无惩罚（375 页） | 符合（规则层）；接入待 WP-C | `test_rules_firearms::test_point_blank_and_volleys` |
-| 射击近战中的目标 | 96 | 一颗惩罚骰；大失败打中队友 | `rules/firearms.shot_modifiers`（`into_melee`）、`fumble_hits`：大失败打中幸运最低的队友 | 符合（规则层）；扭打关系的延续待 WP-C | `test_rules_firearms::test_a_fumble_into_a_melee…` |
+| 装填 | 96 | 一轮装两发；换弹夹一轮；装一发并开火有惩罚骰 | `rules/firearms.reload`；引擎装填按两发一轮、弹匣一轮，不超过备弹（`WeaponState.spare`，未知时不限） | 符合 | test_rules_firearms::test_reloading_and_ammunition |
+| 手枪连射 | 96 | 一轮 2–3 发，每发各掷一次，各一颗惩罚骰 | `rules/firearms.shots_allowed`、`shot_modifiers`；引擎按 `AttackPick.shots` 逐发掷，每发都带惩罚骰 | 符合 | test_rules_firearms::test_point_blank_and_volleys |
+| 射击近战中的目标 | 96 | 一颗惩罚骰；大失败打中队友 | `rules/firearms.shot_modifiers`（`into_melee`）；引擎：扭打关系跨轮保留（`FightScene.engaged`），朝与己方扭打的目标开枪一颗惩罚骰；大失败打中队友未接入 | 简化 | test_encounter_fight::test_shooting_into_a_melee_takes_a_penalty_die |
 | 自动武器 | 96–98 | 弹幕、短点射、逐组惩罚骰 | 不在规则层：交守秘人按 `other` 裁定（`rules/firearms` 文档写明） | 未做 | — |
-| 故障 | 98 | 出目不低于故障值就没开火；转轮、中折、手动枪机只是哑弹；杠杆式卡壳，修理 1D6 轮并需机械维修或射击检定 | `rules/firearms.malfunction`、`jam_cleared`；武器表登记机构（`Weapon.mechanism`）。转轮、中折、手动枪机是哑弹；杠杆式卡壳，1D6 轮且机械维修或射击检定成功才排除；书上没写的自动、泵动按卡壳（项目设定） | 符合（规则层）；旧引擎仍一律卡壳 | `test_rules_firearms::test_malfunction…` |
+| 故障 | 98 | 出目不低于故障值就没开火；转轮、中折、手动枪机只是哑弹；杠杆式卡壳，修理 1D6 轮并需机械维修或射击检定 | `rules/firearms.malfunction`；引擎：转轮、中折、手动枪机只是哑弹（耗一发），杠杆式等卡壳（`effects.Jam`）；排除卡壳是一轮一次机械维修或射击检定（书上先要 1D6 轮，项目简化） | 简化（排除卡壳的轮数） | test_world_life::test_rounds_fired_and_a_jam…、test_a_revolver_that_misfires_only_had_a_dud |
 | 弹药与卡壳的延续 | — | 打空、卡壳要延续到下一场 | 枪是物件（`Entity.weapon`），每次开火、卡壳、装填都经 `engine/effects` 写进世界，下一场照旧 | 符合 | `test_world_life::test_rounds_fired_and_a_jam_carry_into_the_next_fight` |
 
 ## 伤害与治疗（第六章，100–103 页）
@@ -61,11 +61,11 @@
 |---|---|---|---|---|---|
 | 轻伤与重伤 | 100 | 单次伤害不到最大生命一半为轻伤，达到一半为重伤 | `rules/wounds.apply_wound`（`Rules.damage` 委托给它） | 符合 | `test_rules`、`test_rules_wounds::test_a_minor_wound_and_a_major_one` |
 | 当场死亡 | 100 | 单次伤害**大于**最大生命值才死；恰好等于是重伤 | `rules/wounds.apply_wound`：单次伤害大于最大生命必死，不论剩余生命 | 符合 | `test_rules_wounds::test_exactly_the_maximum…`、`test_rules::test_a_blow_of_exactly_the_maximum…` |
-| 重伤后 | 100 | 立刻倒地；过体质，失败昏迷 | `rules/wounds.apply_wound`：`prone` 立刻倒地，过体质否则昏迷；倒地由遭遇引擎记入场面（WP-C） | 符合（规则层） | `test_rules_wounds::test_a_minor_wound_and_a_major_one` |
+| 重伤后 | 100 | 立刻倒地；过体质，失败昏迷 | `rules/wounds.apply_wound`；引擎把重伤的人记为倒地（`FightScene.prone`） | 符合 | test_rules_wounds::test_a_minor_wound_and_a_major_one |
 | 生命归零 | 100 | 只受过轻伤：昏迷，会随时间恢复；有重伤：濒死 | `rules/wounds.apply_wound`：轻伤昏迷；有重伤濒死并昏迷；归零后的伤害忽略，蓄意了结则死亡 | 符合 | `test_rules_wounds::test_at_zero_hit_points…`、`test_damage_at_zero…` |
-| 急救 | 100 | 一小时内有效，回复 1 点；只能尝试一次，之后是孤注一掷；两人可一起做 | `rules/wounds.first_aid`、`first_aid_allowed`：一小时内、每处伤一次（失败也算用掉）、+1 并唤醒；濒死者每轮可再试直到稳定（54–55 页） | 符合（规则层）；战斗中接入待 WP-C | `test_rules_wounds::test_first_aid_once_per_injury…` |
+| 急救 | 100 | 一小时内有效，回复 1 点；只能尝试一次，之后是孤注一掷；两人可一起做 | `rules/wounds.first_aid`；引擎：急救在自己的位上掷，成功 +1 并唤醒、濒死者只稳定，每处伤只一次（失败也算） | 符合 | test_encounter_fight::test_first_aid_wakes_the_unconscious_and_ticks_the_skill |
 | 医学 | 101 | 至少一小时；不在当天要困难；回复 1D3；濒死者须先急救稳定 | `rules/wounds.medicine`、`medicine_difficulty`：+1D3，当天常规、之后困难；濒死者须先急救稳定；每处伤一次成功（`aided` 里记 `medicine:<id>`） | 符合（规则层） | `test_rules_wounds::test_medicine_takes…`、`test_first_aid_stabilizes…` |
-| 濒死 | 101 | 下一轮结束起每轮过体质，失败即死；只有急救能稳定，得 1 点临时生命；稳定后每小时过体质，之后须医学 | `rules/wounds.dying_roll_due`、`dying_roll`、`first_aid`、`stabilized_roll`：下一轮结束起每轮体质；急救稳定得 1 点临时生命，之后每小时体质，失败再次濒死；稳定后仍昏迷 | 符合（规则层）；轮末与追逐中的掷骰待 WP-C/D | `test_rules_wounds::test_dying_rolls_con…`、`test_first_aid_stabilizes…` |
+| 濒死 | 101 | 下一轮结束起每轮过体质，失败即死；只有急救能稳定，得 1 点临时生命；稳定后每小时过体质，之后须医学 | `rules/wounds.dying_roll_due` 等；引擎：濒死从开始濒死那一轮的下一轮末起每轮过体质，失败即死；倒下的调查员不冻结，按“继续”一轮一轮打下去 | 符合 | test_encounter_fight::test_a_dying_investigator_rolls_con_from_the_end_of_the_next_round… |
 | 轻伤恢复 | 101 | 每天 1 点 | `rules/wounds.heal_day` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
 | 重伤恢复 | 101–102 | 每周体质检定回复 1D3，极难 2D3；静养、医疗加奖励骰；极难或回到一半以上时去掉重伤 | `rules/wounds.heal_week`、`week_dice`、`week_bonus` | 符合（规则层）；时间推进接入待定 | `test_rules_wounds::test_natural_healing` |
 | 其他伤害 | 102–103 | 表 III：轻度 1D3、中度 1D6、重度 1D10、致命 2D10、终结 4D10、血肉横飞 8D10；窒息与溺水每轮过体质；毒药极难成功减半 | `rules/wounds.OTHER_DAMAGE`（表 III）、`harm_dice`、`asphyxia_round`（困难若在剧烈活动，失败后每轮受伤，归零即死）、`poison_damage`（极难减半）；裁定员的提示附表 III（`agents/encounter.OTHER_DAMAGE`），遭遇里的伤害骰写成 `DiceText`（`Ruling.effects`）；建了规则书索引时可按需查原文（`rules_lookup`） | 符合 | `test_rules_wounds::test_suffocating_to_zero…`、`test_encounter_plan_agent`、`test_rules_lookup` |

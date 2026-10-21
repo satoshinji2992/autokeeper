@@ -153,7 +153,7 @@ class GameScreen(Screen):
         self.cast: Cast | None = None
         self.game: Game | None = None
         self.graph = None
-        self.thread = {"configurable": {"thread_id": state.slot}}
+        self.thread = {"configurable": {"thread_id": state.slot}, "recursion_limit": 100}  # a fight asks a few times a turn (graph offer)
         self.met: set[str] = set()
         self.spinner = 0
         self.status_text = ""
@@ -1096,6 +1096,10 @@ class GameScreen(Screen):
             return None
         return views.table(self.game)
 
+    def _in_battle(self) -> bool:
+        """Cheaper than _battle_now for the heartbeat: whether a fight or a chase is going on."""
+        return self.game is not None and not self.state.ending and self.game.battling()
+
     def _battle_resumed(self) -> None:
         """A save opened in the middle of a fight or a chase: the stage as it stood (not after the end)."""
         now = self._battle_now()
@@ -1141,7 +1145,7 @@ class GameScreen(Screen):
 
         def beat(on: bool = True) -> None:
             st = self.state
-            if not self.is_attached or st.ending or self._battle_now() is None:
+            if not self.is_attached or st.ending or not self._in_battle():
                 self._beating = False
                 self._beat_off()
                 return
