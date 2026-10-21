@@ -57,6 +57,19 @@ def _lines(text: Text) -> int:
     return text.plain.count("\n") + 1
 
 
+def rich_content(frame: Text, styles: dict, theme) -> Content:
+    """An animation's frame as Textual content. Turning each run's style into Textual's took half a
+    frame's time; the frames of one picture reuse the same few hundred styles, so each is turned
+    once and kept in `styles` (the caller's, which goes with the picture)."""
+    spans = []
+    for start, end, style in frame.spans:
+        done = styles.get(style)
+        if done is None:
+            done = styles[style] = TextualStyle.from_rich_style(RichStyle.parse(style) if isinstance(style, str) else style, theme)
+        spans.append(Span(start, end, done))
+    return Content(frame.plain, spans)
+
+
 def _tall(art_text: Text, rows: int) -> Text:
     """A picture padded to the panel's height: chafa may come a row short, and the panel
     should not change height with the art style or a glitch frame."""
@@ -269,22 +282,14 @@ class SceneArt(Static):
         self._paint(art_text=self._content(atmo.compose()) if atmo else None)
 
     def _weather(self) -> None:
-        if self._atmo is None or self._burst or time.monotonic() < self._hold:
-            return
+        if self._atmo is None or self._burst or time.monotonic() < self._hold or not self.display:
+            return  # hidden (a fight's stage has the place): no frames composed for nobody
         self._paint(art_text=self._content(self._atmo.frame()))
 
     def _content(self, frame: Text) -> Content:
-        """A weather frame as Textual content. Turning each run's style into Textual's took half
-        a frame's time; a scene's frames reuse the same few hundred styles, so each is turned
-        once (the cache goes with the scene)."""
-        styles = self._styles
-        spans = []
-        for start, end, style in frame.spans:
-            done = styles.get(style)
-            if done is None:
-                done = styles[style] = TextualStyle.from_rich_style(RichStyle.parse(style) if isinstance(style, str) else style, self.app.ansi_theme)
-            spans.append(Span(start, end, done))
-        return Content(frame.plain, spans)
+        """A weather frame as Textual content, each style turned once (rich_content; the cache goes
+        with the scene)."""
+        return rich_content(frame, self._styles, self.app.ansi_theme)
 
     def set_mode(self, mode: str) -> None:
         """A fight ("fight") or a chase ("chase") begins or ends (""): the scene drawn again in its
@@ -335,7 +340,7 @@ class SceneArt(Static):
         self.set_timer(0.06, self._tick)
 
     def _idle_flicker(self) -> None:
-        if self._burst or self.madness <= 0 or random.random() > self.madness:
+        if self._burst or self.madness <= 0 or not self.display or random.random() > self.madness:
             return
         if self._uses_image():
             self.run_worker(partial(self._picture_glitch, 2), exclusive=True, group="art")

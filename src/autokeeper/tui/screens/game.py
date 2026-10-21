@@ -173,6 +173,8 @@ class GameScreen(Screen):
         # A fight's or a chase's choices over the input box (_offer_orders) and the clock on them (_start_clock)
         self._battle_picking, self._battle_title, self._stance = False, "", ""  # the list is up; its title; Tab's stance
         self._clock = None  # the round's countdown while the list is up
+        self._beating, self._beat_on = False, False  # a fight's heartbeat is going; the beat is on the stage now
+        self._typing_until = 0.0  # the player is typing: the screen holds still until then (typing)
         self._clock_paused, self._clock_total, self._clock_left, self._clock_until, self._fallback = False, 0.0, 0.0, 0.0, ""
 
     def compose(self) -> ComposeResult:
@@ -577,8 +579,18 @@ class GameScreen(Screen):
 
     def action_weather(self) -> None:
         on = self.query_one(SceneArt).toggle_effects()
-        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
+        self._animations(on)
         self.app.notify(f"天气动画：{'开' if on else '关'}")
+
+    def _moving(self) -> bool:
+        """设置's 天气与场景动画: off, nothing on the screen moves of itself (the weather, the stage's
+        picture, the lurches, the heartbeat, the title's glitch)."""
+        return self.query_one(SceneArt).effects
+
+    def _animations(self, on: bool) -> None:
+        """Animations switched on or off (Ctrl+P's 天气动画, 设置): at once, not at the next blow."""
+        self.query_one(DiceTray).tumbling = on  # the dice tumble or only come to rest
+        self.query_one(Arena).canvas.moving = on
 
     def _topbar(self) -> None:
         """Where and when on the left; the turn and what it cost on the right. Without the side
@@ -595,7 +607,7 @@ class GameScreen(Screen):
         if st.fight is not None:
             left.append(f"   ⚔ 战斗 · 第 {max(1, st.fight.round)} 轮 ", style="bold #ff4d4d")
             inv = self._viewer()
-            beat = "♥" if not self.has_class("-beat") else "♡"
+            beat = "♡" if self._beat_on else "♥"
             left.append(f"{beat} {inv.hp}/{inv.hp_max}", style="bold #c1121f" if inv.hp * 3 <= inv.hp_max else "bold #ffb000")
         elif st.chase is not None:
             left.append(f"   ⟫ 追逐 · 第 {max(1, st.chase.round)} 轮", style="bold #9fb4c8")
@@ -935,7 +947,8 @@ class GameScreen(Screen):
             story.add("npc", body)
         elif t == "fight_end":
             self._close_orders()
-            self.remove_class("-fight", "-beat")
+            self.remove_class("-fight")
+            self._beat_off()
             if self.state.chase is None:
                 arena.hide()
                 scene.display = True
@@ -966,7 +979,8 @@ class GameScreen(Screen):
             self._panels()
         elif t == "chase_end":
             self._close_orders()
-            self.remove_class("-chase", "-beat")
+            self.remove_class("-chase")
+            self._beat_off()
             if self.state.fight is None:
                 arena.hide()
                 scene.display = True
@@ -1005,7 +1019,7 @@ class GameScreen(Screen):
         from ... import scenery
 
         path = self.m.pictures.get(portrait or "", "")
-        if not path:
+        if not path or not config.load().showcase:  # 设置's 大场景 off: no picture over the whole screen
             return
         await asyncio.to_thread(scenery.ensure, path)  # painted the first time it is shown
         if not Path(path).is_file():
@@ -1027,7 +1041,10 @@ class GameScreen(Screen):
             self.set_timer(0.25, lambda: self.remove_class("-hit"))
 
     def _jolt(self, strength: int = 2) -> None:
-        """The screen lurches: the whole of it when a blow lands, the stage when a step goes wrong."""
+        """The screen lurches: the whole of it when a blow lands, the stage when a step goes wrong
+        (not with animations off)."""
+        if not self._moving():
+            return
         main = self.query_one("#main")
         amp = max(1, min(4, strength))
         seq = iter([(amp, 0), (-amp, 1), (amp - 1, -1), (-(amp - 1), 0), (0, 0)])
@@ -1045,7 +1062,8 @@ class GameScreen(Screen):
         """No fight or chase on the stage any more, whatever the state still holds (the game ended in
         the middle of one): the list, the clock and the heartbeat stop, the scene comes back."""
         self._close_orders()
-        self.remove_class("-fight", "-chase", "-beat")
+        self.remove_class("-fight", "-chase")
+        self._beat_off()
         arena = self.query_one(Arena)
         if arena.display:
             arena.hide()
@@ -1064,12 +1082,17 @@ class GameScreen(Screen):
             self._battle_event({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "追逐继续"})
 
     def _title(self, word: str, colour: str = "#c1121f") -> None:
-        """The word across the stage as a fight or a chase begins, glitching in and fading."""
+        """The word across the stage as a fight or a chase begins, glitching in and fading (with
+        animations off, standing a moment and gone)."""
         stage = self.query_one("#stage")
         width = stage.size.width or 80
         title = Static(classes="battle-title")
         stage.mount(title)
         frames = title_frames(word, width)
+        if not self._moving():
+            title.update(frames[-1])
+            self.set_timer(1.2, title.remove)
+            return
 
         def play(k: int = 0) -> None:
             if not title.is_attached:
@@ -1083,9 +1106,11 @@ class GameScreen(Screen):
         play()
 
     def _heartbeat(self) -> None:
-        """While a fight or a chase is on, a heartbeat on the top bar and the stage's edge, quicker
-        the worse the investigator is hurt."""
-        if getattr(self, "_beating", False):
+        """While a fight or a chase is on, a heartbeat on the top bar's heart and the stage's edge,
+        quicker the worse the investigator is hurt. Only the stage's own class changes: on the whole
+        screen it restyled some three hundred widgets a beat. It stands still with animations off and
+        while the player types."""
+        if self._beating:
             return
         self._beating = True
 
@@ -1093,15 +1118,23 @@ class GameScreen(Screen):
             st = self.state
             if not self.is_attached or st.ending or (st.fight is None and st.chase is None):
                 self._beating = False
-                self.remove_class("-beat")
+                self._beat_off()
                 return
-            self.set_class(on, "-beat")
-            self._topbar()
+            lit = on and self._moving() and time.monotonic() >= self._typing_until
+            if lit != self._beat_on:
+                self._beat_on = lit
+                for stage in self.query("#stage"):
+                    stage.set_class(lit, "-beat")
+                self._topbar()
             inv = self._viewer()
-            rate = pulse_rate(inv.hp, inv.hp_max)
-            self.set_timer(0.12 if on else rate, lambda: beat(not on))
+            self.set_timer(0.12 if on else pulse_rate(inv.hp, inv.hp_max), lambda: beat(not on))
 
         beat()
+
+    def _beat_off(self) -> None:
+        self._beat_on = False
+        for stage in self.query("#stage"):
+            stage.remove_class("-beat")
 
     # -- the round's choices over the input box, on a clock -------------------------------------
     def _may_order(self) -> bool:
@@ -1386,6 +1419,7 @@ class GameScreen(Screen):
         scene = self.query_one(SceneArt)
         if scene.effects != cfg.animations:
             scene.toggle_effects()
+            self._animations(cfg.animations)
         if not cfg.battle_timer and self._clock is not None:  # 限时选择 off: the round's list waits as long as it takes
             self._stop_clock()
             picker = self.query_one("#picker", OptionList)
@@ -1464,6 +1498,8 @@ class GameScreen(Screen):
         # Every weather frame moves the terminal cursor across the screen and back; on terminals
         # without synchronized output that makes the caret and the IME box jump while typing.
         self.query_one(SceneArt).quiet(4.0)
+        self.query_one(Arena).quiet(4.0)  # in a fight the stage is the picture that moves
+        self._typing_until = time.monotonic() + 4.0  # and the heartbeat
         if event.value and self._battle_picking:  # writing their own order, in the box the list was over
             self._close_orders()
 

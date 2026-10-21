@@ -32,12 +32,14 @@ from textual.await_complete import AwaitComplete
 from textual.color import Color
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
+from textual.timer import Timer
 from textual.widgets import Static
 
 from ... import atmosphere, imagery
 from ...module.schema import Module
 from ...rules.chase import LOST, SIGHT
 from ...rules.combat import STANCES
+from .panels import rich_content
 
 BLOOD, DEEP, EMBER, AMBER, BONE, ASH, BILE = "#c1121f", "#7a0a0a", "#ff6b35", "#ffb000", "#e8dec4", "#8a7f72", "#9bd770"
 GORE = "#ff1a1a"  # fresh blood: the claw marks, the numbers
@@ -153,7 +155,7 @@ def claws(width: int, height: int, progress: float) -> dict[tuple[int, int], Mar
 
 
 # -- a portrait that lives ------------------------------------------------------------------------
-@lru_cache(maxsize=24)
+@lru_cache(maxsize=4)  # a few faces at one size: each is megabytes of Text, and chafa's own output is cached under it
 def variants(path: str, cols: int, rows: int, style: str, scene: str = "", near: float = 1.0) -> dict[str, Text]:
     """Every way a canvas shows its picture (imagery.staged; chafa, so off the UI thread): as it is,
     darker on the heartbeat, white in a flash of being struck, grey when down, closer in a lunge."""
@@ -184,10 +186,16 @@ def faceless(cols: int, rows: int, creature: bool, tone: str = "") -> Text:
 
 class Canvas(Static):
     """The stage's picture, alive: blood running down it (in a chase, the place rushing past), a
-    heartbeat, and what the fight does to it."""
+    heartbeat, and what the fight does to it.
+
+    Cheap on the UI thread: a frame is painted without laying out the screen (the canvas's size is
+    the stage's), a frame that did not change (a still picture, the dead under their cross) is not
+    painted again, and each frame's styles are turned into Textual's once (panels.rich_content).
+    The picture stands still while the player types (quiet) and, with 设置's animations off, it
+    neither moves nor lunges, shakes or claws; the blows' numbers still come up."""
 
     DEFAULT_CSS = """
-    Canvas { width: 1fr; height: 100%; content-align: center middle; background: #050303; }
+    Canvas { width: 1fr; height: 100%; content-align: center middle; background: #050303; text-wrap: nowrap; text-overflow: clip; }
     """
 
     def __init__(self, **kw):
@@ -203,24 +211,43 @@ class Canvas(Static):
         self.dead = False
         self.lunge_until = self.flash_until = self.claw_from = self.stamp_until = 0.0
         self.stamped: dict[tuple[int, int], Mark] = {}
+        self.hold = 0.0  # the player is typing: the picture stands still until then
+        self._last: Text | None = None  # the frame last painted (kept, so a new one is never taken for it)
+        self._marks: tuple = ()  # and what was over it: the same again is not painted
+        self._styles: dict = {}  # rich style -> Textual's, for this picture's frames
+        self._settle: Timer | None = None  # a resize's redraw, once the size has stopped changing
 
     def on_mount(self) -> None:
         self.set_interval(TICK, self._tick)
 
     def on_resize(self) -> None:
+        """Drawn again at the new size once it has settled: dragging a window's edge used to start
+        five chafa renders for every size it passed through."""
+        if self.wanted is None:
+            return
+        if not self.key:  # nothing up yet: no reason to wait
+            self.want(*self.wanted)
+            return
+        if self._settle is not None:
+            self._settle.stop()
+        self._settle = self.set_timer(0.25, self._again)
+
+    def _again(self) -> None:
+        self._settle = None
         if self.wanted is not None:
             self.want(*self.wanted)
 
     def want(self, path: str, style: str, creature: bool, scene: str = "", near: float = 1.0) -> None:
         """Draw this now (from the picture, or a shape with eyes), unless it is already up or on its way;
-        drawn again at its new size when the stage is laid out or resized."""
+        drawn again at its new size when the stage is laid out or resized. One drawing at a time: a
+        newer one takes the place of one under way."""
         self.wanted = (path, style, creature, scene, near)
         cols, rows = self.size.width, self.size.height
         key = (path, scene, round(near, 2), cols, rows, style)
         if key in (self.key, self.loading) or cols < 8 or rows < 4:
             return
         self.loading = key
-        self.run_worker(self._load(key, creature), group="canvas")
+        self.run_worker(self._load(key, creature), group="canvas", exclusive=True, exit_on_error=False)
 
     async def _load(self, key: tuple, creature: bool) -> None:
         path, scene, near, cols, rows, style = key
@@ -228,7 +255,7 @@ class Canvas(Static):
         if path and imagery.available():
             try:
                 looks = await asyncio.to_thread(variants, path, cols, rows, style, scene, near)
-            except OSError:
+            except Exception:  # chafa timed out, a picture PIL cannot read: the shape with eyes, never the app gone
                 looks = None
         if looks is None:
             looks = {t: faceless(cols, rows, creature, t) for t in ("", "half", "flash", "dead")}
@@ -236,16 +263,20 @@ class Canvas(Static):
         if key != self.loading:  # something else came forward meanwhile
             return
         self.loading = None
-        self.key, self.cols, self.rows, self.looks = key, cols, rows, looks
+        self.key, self.cols, self.rows, self.looks, self._styles, self._last = key, cols, rows, looks, {}, None
         self.atmo = atmosphere.Atmosphere(self.kinds, {"": looks[""], "half": looks["half"]}, cols, rows)
         self._tick()
 
     def lunge(self) -> None:
+        if not self.moving:
+            return
         self.lunge_until = time.monotonic() + 0.45
         self._shake([(2, 0), (-1, 0), (1, 0), (0, 0)])
 
     def slashed(self) -> None:
         """It got you: claws rake across the picture, as across your eyes, and blood spatters it."""
+        if not self.moving:
+            return
         self.lunge_until = self.claw_from = time.monotonic()
         self.lunge_until += 0.3
         if self.atmo is not None:
@@ -253,17 +284,26 @@ class Canvas(Static):
         self._shake([(3, 1), (-3, 0), (2, -1), (-1, 0), (0, 0)])
 
     def struck(self, damage: int, word: str) -> None:
-        """A blow landed on it: a white flash, the damage in blood over it, its blood on the picture."""
+        """A blow landed on it: a white flash, the damage in blood over it, its blood on the picture
+        (without animations, the number alone)."""
         now = time.monotonic()
-        self.flash_until, self.stamp_until = now + 0.12, now + 1.6
+        self.stamp_until = now + 1.6
         self.stamped = stamp(f"-{damage}" if damage else "", word, self.cols, self.rows)
-        if self.atmo is not None:
-            self.atmo.splash(18)
-        self._shake([(-2, 0), (2, 0), (-1, 0), (0, 0)])
+        if self.moving:
+            self.flash_until = now + 0.12
+            if self.atmo is not None:
+                self.atmo.splash(18)
+            self._shake([(-2, 0), (2, 0), (-1, 0), (0, 0)])
+        self._tick()
 
     def fall(self, dead: bool) -> None:
         self.dead = dead
         self._tick()
+
+    def quiet(self, seconds: float) -> None:
+        """Hold the picture still for a while (the player is typing: every frame moves the terminal's
+        cursor, and the caret and the IME box jump with it). What a blow does still shows."""
+        self.hold = max(self.hold, time.monotonic() + seconds)
 
     def _shake(self, steps: list[tuple[int, int]]) -> None:
         seq = iter(steps)
@@ -278,30 +318,41 @@ class Canvas(Static):
         step()
 
     def _tick(self) -> None:
-        if not self.looks:
+        if not self.looks or not self.display:
             return
         now = time.monotonic()
+        clawing = bool(self.claw_from) and now - self.claw_from < 1.2
+        stamped = now < self.stamp_until
+        claw = round(min(1.0, (now - self.claw_from) / 0.25), 2) if clawing else -1.0
+        marked = (claw, stamped, self.dead)
         if self.dead:
             frame = self.looks["dead"]
         elif now < self.flash_until:
             frame = self.looks["flash"]
         elif now < self.lunge_until:
             frame = self.looks["zoom"]
-        elif self.atmo is not None and self.moving:
+        elif self.atmo is not None and self.moving and now >= self.hold:
             frame = self.atmo.frame()
+        elif self._last is not None and marked == self._marks == (-1.0, False, False):
+            return  # standing still (typing, animations off), nothing over it: what is up stays up
         else:
             frame = self.looks[""]
+        if frame is self._last and marked == self._marks:
+            return  # the same frame under the same marks: nothing to paint
+        self._last, self._marks = frame, marked
         marks: dict[tuple[int, int], Mark] = {}
-        if self.claw_from and now - self.claw_from < 1.2:
-            marks |= claws(self.cols, self.rows, (now - self.claw_from) / 0.25)
-        if now < self.stamp_until:
+        if clawing:
+            marks |= claws(self.cols, self.rows, claw)
+        if stamped:
             marks |= self.stamped
         if self.dead:
             marks |= stamp("", "✝", self.cols, self.rows)
-        self.update(paint_over(frame, self.cols, self.rows, marks) if marks else frame)
+        shown = paint_over(frame, self.cols, self.rows, marks) if marks else frame
+        self.update(rich_content(shown, self._styles, self.app.ansi_theme), layout=False)  # the stage's size, not the frame's
 
     def clear(self) -> None:
         self.key, self.loading, self.wanted, self.looks, self.atmo, self.dead = (), None, None, {}, None, False
+        self._last, self._marks, self._styles = None, (), {}
         self.update("")
 
 
@@ -338,6 +389,7 @@ class Arena(Horizontal):
         self.last_gap = 9
         self.blink = 0
         self.was: dict[str, int] = {}  # a chase's runners where they were before the last round
+        self._column: Text | None = None  # what the column shows: the same again is not painted
 
     def compose(self) -> ComposeResult:
         yield Canvas()
@@ -418,14 +470,22 @@ class Arena(Horizontal):
         self.canvas.want(path, self.style, creature)
         self.canvas.fall(f["status"] == "死亡" or (f["status"] in DOWN and creature))
 
+    def quiet(self, seconds: float) -> None:
+        """The stage holds still while the player types (Canvas.quiet; the route stops blinking)."""
+        self.canvas.quiet(seconds)
+
     def _flicker(self) -> None:
-        self.blink += 1
-        if self.display and self.mode == "chase" and self.view is not None:
-            self._side()
+        if not self.display or self.mode != "chase" or self.view is None or time.monotonic() < self.canvas.hold:
+            return
+        if self.canvas.moving:  # the pursuer's mark blinks; with animations off it stands
+            self.blink += 1
+        self._side()
 
     def _side(self) -> None:
-        side = self.query_one(".side", Static)
-        side.update(self._chase_side() if self.mode == "chase" else self._fight_side())
+        column = self._chase_side() if self.mode == "chase" else self._fight_side()
+        if column != self._column:  # a blink that changed nothing, a round's view that is the same: not painted
+            self._column = column
+            self.query_one(".side", Static).update(column, layout=False)  # the column's size is its own, not its text's
 
     def _fight_side(self) -> Text:
         side = self.query_one(".side", Static)
@@ -463,7 +523,7 @@ class Arena(Horizontal):
 
     def hide(self) -> None:
         self.display = False
-        self.view, self.order, self.acting, self.facing, self.mode = None, [], "", "", ""
+        self.view, self.order, self.acting, self.facing, self.mode, self._column = None, [], "", "", "", None
         self.canvas.clear()
         self.remove_class("-chase", "-close")
 

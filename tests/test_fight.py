@@ -537,3 +537,130 @@ async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_kee
         await pilot.resize_terminal(96, 30)  # the right column is up: the route narrows, the picture keeps room
         await pilot.pause(0.5)
         assert arena.canvas.size.width >= 28 and arena.query_one(".side").size.width >= 26
+
+
+# -- what a fight costs the screen, and what the settings stop -------------------------------------------
+@pytest.mark.usefixtures("canned")
+async def test_a_fight_paints_its_picture_without_layouts_and_holds_still_while_the_player_types(module, fake, monkeypatch):
+    from textual.css.stylesheet import Stylesheet
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena, Canvas
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    painted, restyled = [], []
+    real_update, real_restyle = Canvas.update, Stylesheet.update_nodes
+
+    def update(self, content="", *, layout=True):
+        painted.append(layout)
+        real_update(self, content, layout=layout)
+
+    def restyle(self, nodes, animate=False):
+        nodes = list(nodes)
+        restyled.append(len(nodes))
+        return real_restyle(self, nodes, animate=animate)
+
+    monkeypatch.setattr(Canvas, "update", update)
+    monkeypatch.setattr(Stylesheet, "update_nodes", restyle)
+    tower = module.location("tower")
+    tower.art, tower.weather = "square", ["rain"]  # a picture with weather behind the stage
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        canvas, scene = screen.query_one(Arena).canvas, screen.query_one(SceneArt)
+        assert await until(pilot, lambda: canvas.looks and len(painted) > 3 and scene._atmo is not None)
+        assert not any(painted[1:])  # frames painted, never a layout of the screen for one
+        weather = []
+        monkeypatch.setattr(SceneArt, "_paint", lambda self, *a, **k: weather.append(1))
+        restyled.clear()
+        await pilot.pause(1.5)
+        assert not weather  # the hidden scene composes nothing
+        assert restyled and max(restyled) < 40  # a heartbeat restyles the stage, not the whole screen's widgets
+        await pilot.press("我")  # the player types: the stage holds still
+        await pilot.pause(0.2)
+        painted.clear()
+        await pilot.pause(0.8)
+        assert not painted
+        canvas.hold, canvas.moving = 0.0, False  # 设置's animations off: a still picture is painted once
+        await pilot.pause(0.3)
+        painted.clear()
+        await pilot.pause(0.6)
+        assert not painted
+
+
+@pytest.mark.usefixtures("canned")
+async def test_with_animations_off_nothing_lurches_or_claws_and_without_big_scenes_no_face_comes_up(module, fake, tmp_path,
+                                                                                                    monkeypatch):
+    from PIL import Image
+
+    from autokeeper import config, imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.showcase import ShowcaseScreen
+    from autokeeper.tui.widgets.fight import Arena
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    monkeypatch.setattr(imagery, "render", lambda *a, **k: "◉")
+    face = tmp_path / "face.png"
+    Image.new("RGB", (40, 60), (90, 40, 30)).save(face)
+    module.pictures["face-warden"] = str(face)
+    cfg = config.load()
+    cfg.animations = False
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        screen._settings_saved(app.art_style)  # 设置 saved with animations off
+        canvas = screen.query_one(Arena).canvas
+        assert not screen.query_one(SceneArt).effects and not canvas.moving  # at once, not at the next blow
+        await screen.handle({**HURT, "defender": me.id, "defender_name": me.name, "hurt": me.id})
+        await pilot.pause(0.05)
+        assert screen.query_one("#main").styles.offset.x.value == 0 and not canvas.claw_from and not canvas.lunge_until
+        assert app.screen is screen  # no flood of red either (the stage's own flash instead)
+        screen._title("战斗")
+        await pilot.pause(0.1)
+        assert screen.query(".battle-title")  # the word stands still for a moment, without the glitch
+        assert not screen.query_one("#stage").has_class("-beat")
+        await pilot.pause(1.5)
+        assert not screen.query(".battle-title") and not screen._beat_on  # no heartbeat
+        cfg.showcase = False  # 大场景 off: what is first seen does not come up over the whole screen
+        await screen._reveal("face-warden", "老守钟人", 1.0)
+        await pilot.pause(0.2)
+        assert not isinstance(app.screen, ShowcaseScreen)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the_app_gone(module, fake, tmp_path, monkeypatch):
+    import subprocess
+
+    from PIL import Image
+
+    from autokeeper import imagery
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets import fight as stage
+
+    from .test_tui import until
+
+    def fails(*args, **kwargs):
+        raise subprocess.TimeoutExpired("chafa", 10)
+
+    monkeypatch.setattr(imagery, "available", lambda: True)
+    monkeypatch.setattr(stage, "variants", fails)
+    face = tmp_path / "warden.png"
+    Image.new("RGB", (40, 60), (90, 40, 30)).save(face)
+    module.pictures["warden"] = str(face)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        screen.state.fight.fighters[1].portrait = "warden"
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        canvas = screen.query_one(stage.Arena).canvas
+        assert await until(pilot, lambda: canvas.looks)
+        assert "●" in canvas.looks[""].plain and app.is_running  # two eyes in the dark
