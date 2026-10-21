@@ -60,6 +60,8 @@ async def test_saved_settings_apply_after_restarting_without_environment_overrid
         await pilot.press("f9")
         await pilot.pause()
         settings = app.screen
+        assert not config.load().battle_timer and not settings.query_one("#settings-battle_timer", Switch).value  # opt-in
+        settings.query_one("#settings-battle_timer", Switch).value = True
         settings.query_one("#settings-improv", Select).value = "严格"
         settings.query_one("#settings-art", Select).value = "ascii"
         settings.query_one("#settings-theme", Select).value = "phosphor"
@@ -76,7 +78,7 @@ async def test_saved_settings_apply_after_restarting_without_environment_overrid
     monkeypatch.delenv("AUTOKEEPER_SEARCH", raising=False)
     cfg = config.load()
     assert cfg.improv == "严格" and cfg.search == "none" and cfg.visual_limit == 0
-    assert not cfg.animations and not cfg.tips and not cfg.plugins
+    assert not cfg.animations and not cfg.tips and not cfg.plugins and cfg.battle_timer
     again = AutoKeeperApp()
     async with again.run_test() as pilot:
         assert again.theme == "phosphor" and again.art_style == "ascii"

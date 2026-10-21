@@ -139,6 +139,7 @@ HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": 
 
 @pytest.mark.usefixtures("canned")
 async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
+    from autokeeper import config
     from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.widgets.fight import Arena, BloodFlash
@@ -146,6 +147,7 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
 
     from .test_tui import until
 
+    config.load().battle_timer = True  # 设置: 战斗与追逐限时选择 (off unless switched on)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
         screen, me, warden = fight_screen(module)
@@ -195,11 +197,13 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
 
 @pytest.mark.usefixtures("canned")
 async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch):
+    from autokeeper import config
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.screens import game as screens
 
     from .test_tui import until
 
+    config.load().battle_timer = True
     monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.6)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
@@ -351,10 +355,12 @@ async def test_a_handout_over_a_big_scene_stays_until_closed_and_the_scene_goes_
 async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_after_the_fight(module, fake):
     import asyncio
 
+    from autokeeper import config
     from autokeeper.tui.app import AutoKeeperApp
 
     from .test_tui import until
 
+    config.load().battle_timer = True
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
         screen, me, _ = fight_screen(module)
@@ -398,6 +404,7 @@ async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_
 
     from .test_tui import until
 
+    config.load().battle_timer = True
     monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.8)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
@@ -442,6 +449,7 @@ async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, f
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         picker = screen.query_one("#picker")
         assert await until(pilot, lambda: picker.display and screen._beating)
+        assert screen._clock is None and "秒" not in str(picker.border_title)  # no clock unless switched on (设置)
         screen.state.ending = "lost"  # every investigator down: the game is over, the fight still in the state
         await screen.handle({"type": "ending", "title": "钟声", "text": "钟楼重归寂静。"})
         await pilot.pause(0.2)
