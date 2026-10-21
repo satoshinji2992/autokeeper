@@ -94,7 +94,9 @@ def carried(lines: list[str]) -> list[Weapon]:
 _PERCENT = re.compile(r"(\d{1,3})\s*[%％]")
 _DAMAGE = re.compile(r"(?:伤害|damage)\s*[:：]?\s*((?:\d+\s*[dD]\s*\d+|\d+)(?:\s*[+\-]\s*(?:\d+\s*[dD]\s*\d+|\d+|DB|伤害加值|db))*)")
 _BARE_DICE = re.compile(r"(\d+\s*[dD]\s*\d+(?:\s*[+\-]\s*(?:\d+\s*[dD]\s*\d+|\d+|DB))*)")
-_PER_ROUND = re.compile(r"每(?:回合|轮)\s*(\d+)\s*次")
+# "每回合 1 次", "每轮攻击 3 次", and the rulebook's own "每回合攻击次数：3" / "攻击次数：2"
+_PER_ROUND = re.compile(r"每(?:回合|轮)(?:攻击)?\s*(\d+)\s*次|(?:每(?:回合|轮))?攻击次数\s*[:：]?\s*(\d+)")
+_LEAD = re.compile(r"^(?:攻击方式|战斗方式|攻击)\s*[:：]\s*")  # "攻击：爪击 50%" names the 爪击
 
 
 @dataclass(frozen=True)
@@ -113,8 +115,8 @@ class Written:
 
 def parse_attack(line: str) -> Written | None:
     """One line of a creature's `attacks`, or None when it names no chance to hit (a note such as
-    "每回合 1 次")."""
-    text = line.strip()
+    "每回合 1 次") or is no attack at all (the dodge a stat block lists under its attacks)."""
+    text = _LEAD.sub("", line.strip())
     pct = _PERCENT.search(text)
     if pct is None:
         return None
@@ -123,6 +125,8 @@ def parse_attack(line: str) -> Written | None:
     inner = re.search(r"[（(]([^）)]+)[）)]", head)
     kind = head[: inner.start()].strip() if inner else head
     name = (inner.group(1) if inner else head).strip() or "攻击"
+    if canonical(kind) == "闪避" or canonical(name) == "闪避":
+        return None
     found = _DAMAGE.search(text) or _BARE_DICE.search(text[pct.end():])
     damage = re.sub(r"\s+", "", found.group(1)).replace("伤害加值", "DB").replace("db", "DB") if found else "1D3"
     firearm = "射击" in kind or any(w in text for w in ("枪", "射程", "弹夹", "子弹"))
@@ -147,5 +151,21 @@ def attacks_per_round(lines: list[str], notes: str = "") -> int:
     """How many attacks a creature makes in a round, as its sheet says (1 when it does not)."""
     for text in [*lines, notes]:
         if found := _PER_ROUND.search(text):
-            return max(1, int(found.group(1)))
+            return max(1, int(found.group(1) or found.group(2)))
     return 1
+
+
+def unread(line: str) -> str:
+    """What keeps a line of a sheet's `attacks` from reaching the rules as written, in words for the
+    module's author; "" when it reads whole, or is a note of how many attacks it makes in a round."""
+    text = _LEAD.sub("", line.strip())
+    if not text or (_PER_ROUND.search(text) and not _PERCENT.search(text)):
+        return ""
+    pct = _PERCENT.search(text)
+    if pct is None:
+        return "读不出命中率，要写成“爪击 50%，伤害 1D6+DB”这样"
+    if parse_attack(text) is None:
+        return "闪避不是攻击，写进 stats（闪避: 40）"
+    if not (_DAMAGE.search(text) or _BARE_DICE.search(text[pct.end():])):
+        return "没写伤害，按 1D3 算"
+    return ""

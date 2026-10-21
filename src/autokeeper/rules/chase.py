@@ -36,13 +36,15 @@ class Obstacle(BaseModel):
     skill: str = Field(description="通过它用的技能或属性：跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……")
     difficulty: Literal["常规", "困难", "极难"] = "常规"
     harm: str = Field("", description="失败时受的伤，骰子式如 1D3；只耽搁不受伤就留空")
-    open: bool = False  # a barrier someone got through (broke it, unlocked it): open for those behind
+    # A barrier someone got through (broke it, unlocked it): open for those behind. The chase's own
+    # state, saved with it; a module or a drawn way never writes it.
+    open: bool = Field(False, description="追逐中已被打开的路障，由引擎记下；不用写")
 
 
 class Leg(BaseModel):
     name: str = Field(description="这一段路的名字，四到八个字：墓碑间的窄道、结冰的主街")
     look: str = Field("", description="一句话的样子，追逐的时候讲给玩家听")
-    obstacle: Obstacle | None = None
+    obstacle: Obstacle | None = Field(None, description="这一段路上挡着的一处险阻或路障；畅通就留空")
 
 
 class Track(BaseModel):

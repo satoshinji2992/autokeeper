@@ -444,21 +444,22 @@ def damage_bonus(strength: int, size: int) -> tuple[str, int]:
 
 
 def traits(notes: str) -> dict:
-    """What a creature's notes say that the rules can use: armor, guns halved, healing every round,
-    fists that stun, its damage bonus and build when written out."""
+    """What a creature's notes say that the rules can use: armor ("护甲 2", "护甲：厚皮 4 点", "2 点
+    护甲"), guns halved (the rulebook's "火器和穿刺武器造成的伤害减半" too), healing every round,
+    fists that stun, its damage bonus, build and MOV when written out."""
     out: dict = {}
-    if found := re.search(r"护甲\s*[:：]?\s*(\d+)", notes):
-        out["armor"] = int(found.group(1))
-    if re.search(r"枪(?:械|击|弹)?伤害减半|子弹伤害减半|枪伤减半", notes):
+    if found := re.search(r"护甲\s*[:：]?\s*[^\d，。；,;\n]{0,6}?(\d+)|(\d+)\s*点护甲", notes):
+        out["armor"] = int(found.group(1) or found.group(2))
+    if re.search(r"(?:枪|火器|子弹|射击)[^，。；,;\n]{0,12}?减半", notes):
         out["guns_halved"] = True
-    if found := re.search(r"每(?:轮|回合)恢复\s*(\d+)\s*点", notes):
+    if found := re.search(r"每(?:轮|回合)(?:恢复|回复|再生|愈合)\s*(\d+)\s*点", notes):
         out["regen"] = int(found.group(1))
     if found := re.search(r"(?:只被|仅被|只用)拳头?打[^，。；]*?(\d+)\s*点[^，。；]*?(?:击晕|打晕|昏)", notes):
         out["knockout"] = int(found.group(1))
-    if found := re.search(r"伤害加[值成]\s*[:：]?\s*([+\-]?\d*D?\d+)", notes):
+    if found := re.search(r"(?:伤害加[值成]|DB)\s*[:：]?\s*([+\-]?\d*D?\d+)", notes):
         out["db"] = found.group(1) if found.group(1).startswith(("+", "-")) or found.group(1) == "0" else "+" + found.group(1)
     if found := re.search(r"体格\s*[:：]?\s*(-?\d+)", notes):
         out["build"] = int(found.group(1))
-    if found := re.search(r"移动\s*[:：]?\s*(\d+)", notes):
+    if found := re.search(r"(?:移动力?|MOV)\s*[:：]?\s*(\d+)", notes):
         out["move"] = int(found.group(1))
     return out

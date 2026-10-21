@@ -150,6 +150,24 @@ def test_a_creatures_notes_and_attacks_as_the_modules_write_them():
     assert combat.stats_of({"STR": 90, "HP": 18, "DEX": 80})["力量"] == 90
 
 
+def test_the_rulebooks_own_wording_of_a_stat_block_reads_too():
+    """As the Chinese 7th edition prints a monster, and as a model copies it: the attacks a round,
+    halved firearms, armour and healing put other ways round, a bonus written DB."""
+    from autokeeper.rules.weapons import attacks_per_round, unread
+
+    assert attacks_per_round(["每回合攻击次数：3"]) == 3 and attacks_per_round(["爪击 50%"], "攻击次数：2") == 2
+    assert attacks_per_round(["每轮攻击 2 次"]) == 2 and attacks_per_round(["每轮 2 点"]) == 1  # points are no attacks
+    named = parse_attack("攻击：爪击 50%，伤害 1D6+伤害加值")
+    assert (named.name, named.damage) == ("爪击", "1D6+DB")
+    assert parse_attack("闪避 40%（20/8）") is None  # listed under the attacks, but no attack
+    assert unread("闪避 40%（20/8）").startswith("闪避不是攻击") and unread("爪击 50，伤害 1D6").startswith("读不出命中率")
+    assert unread("触手 45%") == "没写伤害，按 1D3 算" and unread("每回合 1 次") == "" and unread("撕咬 40%(20/8)，1D4+DB") == ""
+    assert combat.traits("护甲：火器和穿刺武器造成的伤害减半，向下取整") == {"guns_halved": True}
+    assert combat.traits("护甲：厚皮 4 点")["armor"] == 4 and combat.traits("2 点护甲")["armor"] == 2
+    assert "armor" not in combat.traits("护甲：无，但每轮回复 2 点生命") and combat.traits("每轮回复 2 点生命")["regen"] == 2
+    assert combat.traits("DB +1D4，体格 1，移动力 8") == {"db": "+1D4", "build": 1, "move": 8}
+
+
 def test_the_damage_bonus_goes_with_a_melee_weapon_and_half_of_it_with_a_throw():
     assert combat.split_damage("1D3+DB", "+1D4") == ("1D3", "+1D4")
     assert combat.split_damage("1D4+半DB", "+1D6") == ("1D4", "+1D3")
