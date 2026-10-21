@@ -785,3 +785,63 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     assert all(legs[:5]) and not any(legs[5:]) and view["chase"]["reason"] == ""  # the way only as far as it is seen
     await hub.game.close()
 
+
+class FakeLink:
+    host = False
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    async def send(self, msg: dict) -> None:
+        self.sent.append(msg)
+
+    async def close(self) -> None:
+        pass
+
+
+async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbeat_in_a_fight(fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.net import NetGameScreen
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan", human=[m.pregens[0].id])
+    st.location, st.prologue, st.turn = "tower", "（开场已讲过）", 3
+    seat = st.investigators[0].id
+    link = FakeLink()
+
+    def pool(open_: bool, mine: list[str] | None = None) -> dict:
+        return {"t": "pool", "open": open_, "capacity": 2, "count": len(mine or []), "by": {}, "done": [], "waiting": [],
+                "open_to": [seat] if open_ and not mine else [], "extra": "", "closes_in": None,
+                "mine": {"now": mine or [], "next": []}}
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen = NetGameScreen(m, st.model_copy(deep=True), link, seat, [])
+        app.push_screen(screen)
+        await pilot.pause(0.3)
+        picker = screen.query_one("#picker")
+        me, warden = battle.from_investigator(st.investigators[0]), battle.from_npc(m.npc("warden"))
+        st.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
+        await screen.on_msg({"t": "event", "ev": {"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】"}})
+        await screen.on_msg({"t": "sync", "state": st.model_dump(mode="json")})  # the state with the fight, after the turn
+        await pilot.pause(0.3)
+        assert screen._beating and not picker.display  # the round is not open to this seat yet
+        await screen.on_msg(pool(True))
+        await pilot.pause(0.2)
+        words = [picker.get_option_at_index(i).id for i in range(picker.option_count)] if picker.display else []
+        assert any(w.startswith("攻击 老守钟人（徒手）") for w in words) and screen._clock is None  # the table's own window
+        picker.highlighted = 0
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert {"t": "act", "text": words[0]} in link.sent and not picker.display
+        await screen.on_msg(pool(True, mine=[words[0]]))  # theirs is in: no list again this round
+        await pilot.pause(0.1)
+        assert not picker.display
+        await screen.on_msg(pool(True))
+        await pilot.pause(0.1)
+        assert picker.display  # the next round's
+        await screen.on_msg(pool(False))
+        await pilot.pause(0.1)
+        assert not picker.display  # the round closed: settled by the host
+

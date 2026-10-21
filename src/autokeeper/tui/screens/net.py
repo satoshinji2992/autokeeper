@@ -247,6 +247,27 @@ class NetGameScreen(GameScreen):
     def _sync(self, view: dict[str, Any]) -> None:
         self.state = GameState.model_validate(view)
         self._panels()
+        self._battle_synced()
+
+    def _may_order(self) -> bool:
+        """The round's choices come up while the round is open to this seat and nothing of theirs is in it."""
+        return bool(self.seat) and self.pool_open and self.my_turn and not self.pooled
+
+    def _battle_synced(self) -> None:
+        """A fight or a chase as the Hub's state now has it. This screen hears of one from its events
+        before its state does (the Hub sends the state after the turn), so at fight_start the list had
+        nothing to offer and the heartbeat stopped at once: both come with the state, and the list with
+        every round that opens to this seat; it goes when the round closes."""
+        st = self.state
+        if st.ending or (st.fight is None and st.chase is None):
+            self._close_orders()
+            return
+        self._heartbeat()
+        self._topbar()
+        if not self._may_order():
+            self._close_orders()
+        elif not self._battle_picking:
+            self._offer_orders()
 
     async def on_msg(self, msg: dict[str, Any]) -> None:
         if not self.ready:
@@ -302,6 +323,7 @@ class NetGameScreen(GameScreen):
                     self.app.notify("新回合已开始，预先输入的行动已提交。" if self.pooled else "新的一轮", timeout=4)
                     self.query_one(Input).focus()
             self._turnline()
+            self._battle_synced()  # in a fight or a chase: this round's choices, or none once theirs is in
         elif t == "turn":  # the pool is closed: the keeper settles this seat's action
             self._sync(msg["state"])
             self.my_turn = False
