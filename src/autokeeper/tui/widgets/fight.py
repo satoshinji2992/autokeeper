@@ -490,12 +490,28 @@ def short_name(name: str) -> str:
     return name.replace("・", "·").split("·")[0] or name
 
 
+SEEN = 2  # stretches ahead of the frontmost runner anyone can make out, unless something is in the way first
+
+
+def in_sight(legs: list[dict], front: int) -> int:
+    """The farthest stretch of a chase anyone in it can make out: the next one or two ahead of the
+    frontmost runner, and no further than the first thing in the way (a fence hides what is behind
+    it). The rest of the way is not known yet: not its names, not what is on it, not where it ends."""
+    end = min(len(legs) - 1, front)
+    for i in range(front + 1, min(len(legs), front + 1 + SEEN)):
+        end = i
+        if legs[i].get("obstacle"):
+            break
+    return end
+
+
 def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[str, int] | None = None) -> Text:
-    """A chase as a way up the column: the way ahead at the top, where it began at the bottom. Every
-    stretch by name with what is in the way on it and who is on it, a trail over the stretches each
-    ran this round (`was`: where they were before it); the stretch where they lose you (or it gets
-    away from you); how far behind it is and what it takes to get away; everyone's speed and how
-    many stretches a round that makes."""
+    """A chase as a way up the column: the way ahead at the top, where it began at the bottom. The
+    stretches run and those in sight (in_sight) by name, with what is in the way on them and who is
+    on them, a trail over the stretches each ran this round (`was`: where they were before it); past
+    that one line, 「前方：尚未看清」. How far behind it is and how many more stretches it takes to
+    get away (a count: the stretch is not named); everyone's speed and how many stretches a round
+    that makes. The columns narrow with the panel."""
     quarry = view.get("quarry", "party")
     runners, legs = view.get("runners", []), view.get("legs", [])
     gap = chase_gap(view)
@@ -504,16 +520,17 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     behind = [r for r in runners if r["side"] != quarry and r["status"] not in DOWN]
     them = [r for r in runners if r["side"] != "party" and r["status"] not in DOWN]
     hot = GORE if close else AMBER
+    leg_w, tag_w = (14, 10) if width >= 40 else (10, 8) if width >= 32 else (8, 6)
     out = Text(no_wrap=True, overflow="crop")
     out.append("⟫ 追逐", style=f"bold {GORE if close else CHILL}")
     out.append(f"  第 {max(1, view.get('round', 1))} 轮\n", style=f"bold {BONE}")
     if gap >= 9:
-        status = "甩开了" if fleeing else "跟丢了"
+        status = "已脱离" if fleeing else "已跟丢"
     elif fleeing:
-        status = "就在你背后！" if gap <= 0 else f"在你身后 {gap} 段"
+        status = "已追至身后" if gap <= 0 else f"在身后 {gap} 段"
     else:
-        status = f"在前面 {gap} 段"
-    who = "、".join(r["name"] for r in them) or "它"
+        status = f"在前方 {gap} 段"
+    who = "、".join(r["name"] for r in them) or "对方"
     out.append_text(cell_text(who, max(4, width - cell_len(status) - 1), f"bold {BONE}"))
     out.append(" ")
     out.append(status, style=f"bold {'reverse ' if gap <= 0 and blink % 2 else ''}{hot}")
@@ -521,25 +538,29 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     if 0 <= gap < 9:
         need = LOST - gap
         if fleeing:
-            goal = f"再拉开 {need} 段就甩掉了" if need > 0 else "这一轮守住就甩掉了"
-            goal += "  ·  可以躲藏" if gap >= SIGHT else ""
+            goal = f"再领先 {need} 段即可脱离" if need > 0 else "本轮结束时即可脱离"
+            goal += " · 可躲藏" if gap >= SIGHT else ""
         else:
-            goal = "追上它就打起来" if gap <= 1 else f"它再拉开 {max(0, need)} 段就跑了"
+            goal = "追至同一段即进入战斗" if gap <= 1 else f"对方再领先 {max(0, need)} 段即脱离"
         out.append(goal + "\n", style=SAFE if fleeing and gap >= SIGHT else ASH)
     else:
         out.append("\n")
     out.append("─" * width + "\n", style=DEEP)
-    # the way: as many stretches as the column holds, round the runners
+    # the way: the stretches run and those in sight, as many as the column holds, round the runners
     room = max(3, height - 6 - len(runners))
-    marks = [r["pos"] for r in runners if r["status"] not in DOWN] or [0]
+    marks = [r["pos"] for r in runners if r["status"] not in DOWN and not (r.get("hidden") and r["side"] != "party")] or [0]
     front, hind = max(marks), min(marks)
-    lo = max(0, min(hind - 1, len(legs) - room))
-    hi = min(len(legs) - 1, lo + room - 1)
-    lost = max((r["pos"] for r in behind), default=-9) + LOST if fleeing else -1
-    if hi < len(legs) - 1:
-        out.append(f"   ⋮ 前面还有 {len(legs) - 1 - hi} 段\n", style=MIST)
-    elif fleeing:
-        out.append("   ⇡ 跑出这条路就甩开了\n", style=SAFE)
+    hi = in_sight(legs, front)
+    lo = max(0, min(hind - 1, hi - room + 1))  # as far back as the column holds, one behind the hindmost at least
+    while hi - lo + 1 > room and lo < hi:  # short of room: the stretch behind the hindmost goes first, then those ahead
+        if lo < hind or hi <= front:
+            lo += 1
+        else:
+            hi -= 1
+    if legs and hi == len(legs) - 1:  # the end of the way is in sight
+        out.append("   ⇡ 跑出此路线即可脱离\n" if fleeing else "   ⇡ 对方跑出此路线即脱离\n", style=SAFE if fleeing else MIST)
+    else:
+        out.append("   ⋯ 前方：尚未看清\n", style=MIST)
     for i in range(hi, lo - 1, -1):
         leg = legs[i]
         up = [r for r in ahead if r["pos"] == i and not r.get("hidden")]
@@ -563,7 +584,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                       else ASH if i < hind else BONE)
         row = Text(no_wrap=True)
         row.append_text(cell_text(f" {mark}", 4, mark_style))
-        row.append_text(cell_text(leg["name"], 14, name_style))
+        row.append_text(cell_text(leg["name"], leg_w, name_style))
         ob = leg.get("obstacle")
         if ob:
             if ob.get("open"):
@@ -574,14 +595,11 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                 tag_style = f"bold {BLOOD}" if ob["kind"] == "barrier" else AMBER
         else:
             tag, tag_style = "", ASH
-        row.append_text(cell_text(tag, 10, tag_style))
+        row.append_text(cell_text(tag, tag_w, tag_style))
         here = [*down, *up, *hid]
         names = "、".join(short_name(r["name"]) + ("（藏）" if r.get("hidden") else "") for r in here)
-        if i == lost and fleeing and not here:
-            names, who_style = "◁ 到这里就甩开", SAFE
-        else:
-            who_style = f"bold {GORE}" if down else f"bold {AMBER}" if up else ASH
-        row.append_text(cell_text(names, max(0, width - 28), who_style))
+        who_style = f"bold {GORE}" if down else f"bold {AMBER}" if up else ASH
+        row.append_text(cell_text(names, max(0, width - 4 - leg_w - tag_w), who_style))
         if hunter_row:
             row.stylize("on #2a0505")
         out.append_text(row)
@@ -590,8 +608,9 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     for r in [r for r in runners if r["side"] == "party"] + [r for r in runners if r["side"] != "party"]:
         mine = r["side"] == "party"
         out.append("\n")
-        out.append_text(cell_text(("◆ " if mine else "◉ ") + short_name(r["name"]), 18, f"bold {AMBER if mine else BLOOD}"))
-        out.append(f"速度 {r['speed']}", style=BONE)
+        out.append_text(cell_text(("◆ " if mine else "◉ ") + short_name(r["name"]), max(7, min(17, width - 21)),
+                                  f"bold {AMBER if mine else BLOOD}"))
+        out.append(f" 速度 {r['speed']}", style=BONE)
         if r.get("actions"):
             out.append(f" · 每轮跑 {r['actions']} 段", style=ASH)
         if r["status"] in DOWN:

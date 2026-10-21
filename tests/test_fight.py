@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from rich.cells import cell_len
 
 from autokeeper.agents.cast import Action, Outcome, Ruling
 from autokeeper.engine import graph as turn_graph
@@ -218,7 +219,7 @@ async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch)
         assert sent[0].startswith("防守") and not picker.display
 
 
-def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(module):
+def test_a_chase_is_drawn_as_the_way_run_and_in_sight_with_who_is_where(module):
     from autokeeper.engine import combat as battle
     from autokeeper.engine.game import Game
     from autokeeper.tui.widgets.fight import chase_route
@@ -227,15 +228,23 @@ def test_a_chase_is_drawn_as_the_way_with_who_is_where_and_where_they_lose_you(m
     me, warden = battle.from_investigator(state.investigators[0]), battle.from_npc(module.npc("warden"))
     me.pos, warden.pos, me.speed, warden.speed, me.actions, warden.actions = 4, 2, 8, 9, 1, 2
     ch = battle.Chase(runners=[me, warden], track=battle.default_track("graveyard"), quarry="party", round=2)
-    lines = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain.splitlines()
+    text = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain
+    lines = text.splitlines()
     legs = [leg.name for leg in ch.track.legs]
-    row = {name: next(line for line in lines if name in line) for name in legs}
-    assert "在你身后 2 段" in lines[1] and "再拉开 1 段就甩掉了" in lines[2] and "可以躲藏" in lines[2]
-    assert lines.index(row[legs[-1]]) < lines.index(row[legs[0]])  # the way ahead at the top
+    row = {name: next(line for line in lines if name in line) for name in legs[:7]}
+    assert "在身后 2 段" in lines[1] and "再领先 1 段即可脱离" in lines[2] and "可躲藏" in lines[2]
+    assert lines.index(row[legs[6]]) < lines.index(row[legs[0]])  # the way ahead at the top
     assert "◆" in row[legs[4]] and "◉◉" in row[legs[2]] and "老守钟人" in row[legs[2]]
     assert "┆" in row[legs[3]] and "┆" in row[legs[1]]  # run through this round
-    assert "到这里就甩开" in row[legs[5]] and "▦攀爬" in row[legs[4]]  # three ahead of it; the fence in the way
+    assert "▦攀爬" in row[legs[4]] and "⚠敏捷" in row[legs[6]]  # the fence they are at; the next thing in the way
+    # Past the frozen field (the first thing in the way ahead) nothing is known yet: not its name, not
+    # where the way ends; and the stretch where they would lose it is a count, never a name.
+    assert legs[7] not in text and "前方：尚未看清" in lines[4] and "脱离" not in row[legs[5]]
     assert any("每轮跑 2 段" in line for line in lines)
+    me.pos = 6  # the end of the way in sight
+    assert "跑出此路线即可脱离" in chase_route(battle.chase_view(ch), 44, 24).plain
+    narrow = chase_route(battle.chase_view(ch), 28, 24).plain.splitlines()  # a narrow panel: shorter columns
+    assert all(cell_len(line) <= 28 for line in narrow) and any("周衡" in line for line in narrow)
 
 
 # -- windows over the fight: only the one in front ever goes (Textual's dismiss pops the top) ---------
