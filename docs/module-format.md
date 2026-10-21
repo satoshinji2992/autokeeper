@@ -41,7 +41,7 @@ modules/<id>/
 | `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait`、变样头像 `looks`；`important: true` 标出重要 NPC（最多 6 个），他们有自己的目标和打算，调查员不在时也会行动（见 [持久世界](world.md)） |
 | `items` | 重要物品：`id`、`name`、外观 `description`、所在地点 `where`、初始人物持有者 `owner`（可空）、配图 `art`；支持后台携带状态 `equipment`、数量 `quantity`、状况 `status` 和隐藏标记 `hidden`，不替代线索或授予隐藏效果 |
 | `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出；`art` 是找到的那样东西的照片，配在线索卡上 |
-| `handouts` | 手稿完整 `text`；`images: [病历图片键, 地图图片键]` 关联原图，仅发现后显示，支持滚动阅读全文、ASCII 预览和查看原图 |
+| `handouts` | 手稿完整 `text`；`images: [病历图片键, 地图图片键]` 关联原图，仅发现后显示，支持滚动阅读全文、ASCII 预览和查看原图；`originals: [source/source/images/p14_image01.png]` 指向原书里这页手稿的图，相对模组文件夹，不随模组发布：本机有这个文件（模组自己的 `source/`，或安装版玩家模组目录下同名模组的 `source/`）时一并显示 |
 | `conclusions` | 玩家需要推出的结论，校验时要求每个结论至少两条线索 |
 | `flags` | 剧情标记及其含义；裁定员只会在行动真正达成含义时设置 |
 | `events` | 定时（`D1 21:00`）、到达（`visit:地点`）或标记（`flag:x`）触发；可以移动队伍、要求理智检定、让 NPC 登台表演（`performer` + `performance`）、直接进入结局；`art` 是这一刻的图，事件发生时场景换成它，到调查员下一次行动为止 |

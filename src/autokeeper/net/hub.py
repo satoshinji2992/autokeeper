@@ -822,13 +822,19 @@ class Hub:
         await self._broadcast({"t": "begin"})
         st = self.state
         if self.fresh and not st.log:
-            await self._prelude()
-            await self.game.start()
+            try:
+                await self._prelude()
+                await self.game.start()
+            except Exception as exc:  # no opening told: the table can still play, and is told why
+                self.game.visuals.resume()
+                await self._broadcast({"t": "say", "from": "系统", "text": f"开场没能讲完（{type(exc).__name__}），可以直接开始行动"})
             self._save()
             await self._broadcast({"t": "sync", "state": self._view()})
         while not st.ending:
             if not any(inv.can_act for inv in st.investigators):  # nobody left standing
                 break
+            while not self.clients:  # nobody at the table: the AI does not play on alone, spending
+                await asyncio.sleep(1.0)
             await self._collect()
             await self._settle()
         self.over = True
@@ -918,14 +924,14 @@ class Hub:
                 await self._asks()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
-                    await self._afterwards(seat, text)
+                    await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
                     await self._pool()
                 if not self._waiting_for():
                     break
                 try:
                     await asyncio.wait_for(self.wake.wait(), 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
-                    await self._interlude()
+                    await self._safely(self._interlude(), "幕间")
                 self.wake.clear()
         finally:
             self.open = False
@@ -952,7 +958,12 @@ class Hub:
                 "ai": text is None, "index": n, "total": len(order), "state": self._view(),
             })  # fmt: skip
             if text is None:
-                await self._ai_turn(inv)
+                try:
+                    await self._ai_turn(inv)
+                except Exception as exc:
+                    self.game.visuals.resume()
+                    await self._event({"type": "status", "text": ""})
+                    await self._unattended(inv, exc)
                 continue
             await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""), "text": text})
             while True:
@@ -963,17 +974,59 @@ class Hub:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})  # nobody's screen keeps spinning
                     who = self.sits.get(seat)
-                    if who is None:  # they left meanwhile: on without them
+                    if who is None:  # they left meanwhile: the table finishes it without them
+                        await self._unattended(inv, exc)
                         break
+                    queue = self.inbox[seat]
+                    while not queue.empty():  # a None left by an earlier disconnect is not an answer now
+                        queue.get_nowait()
                     await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
                     await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
                     self.retrying = seat
                     try:
-                        text = await self.inbox[seat].get()
+                        text = await queue.get()
                     finally:
                         self.retrying = None
-                    if text is None:
+                    if text is None:  # they left while asked
+                        await self._unattended(inv, exc)
                         break
+
+    async def _unattended(self, inv: Any, exc: BaseException) -> None:
+        """A turn that failed with nobody to /retry it (an AI seat, a player who left): the table
+        resumes it itself, twice, and then lets it go: what was settled stays, the journal is
+        cleared, the round goes on. Before, an AI's failure closed the room, and a turn left
+        unfinished refused every action after it (graph.route)."""
+        for _ in range(2):
+            if not self.state.pending_turn:
+                break
+            try:
+                await self._run("/retry", inv.id, ai=True)
+                return
+            except Exception as again:
+                self.game.visuals.resume()
+                exc = again
+        if self.state.pending_turn:
+            self.state.pending_turn.clear()
+            self._save()
+            note = f"{inv.name}这一回合没能讲完（{type(exc).__name__}），已结算的结果保留，接着往下"
+        else:
+            note = f"{inv.name}这一轮没有行动（{type(exc).__name__}）"
+        await self._broadcast({"t": "say", "from": "系统", "text": note})
+        await self._broadcast({"t": "sync", "state": self._view()})
+
+    async def _safely(self, work: Any, what: str, said: str = "") -> None:
+        """Table business between actions (.r, /kp, an interlude): a failure is told, not the end
+        of the room. A command `said` that failed half-way is not left as an unfinished turn that
+        would refuse every action after it: nobody /retries a question to the keeper."""
+        try:
+            await work
+        except Exception as exc:
+            self.game.visuals.resume()
+            await self._event({"type": "status", "text": ""})
+            if said and self.state.pending_turn.get("input") == said:
+                self.state.pending_turn.clear()
+                self._save()
+            await self._broadcast({"t": "say", "from": "系统", "text": f"{what}没能完成（{type(exc).__name__}）"})
 
     async def _afterwards(self, seat: str, text: str) -> None:
         """After the end a player can still read their sheet and make their growth rolls."""

@@ -532,3 +532,53 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
                 break
         assert not panel.display
     await closed(task)
+
+
+async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next_round(monkeypatch, tmp_path, skills_dir, fake):
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-fail", human=[lead.id, "lin"])
+
+    class Failing(TableCast):
+        fail_keeper = 0
+        fail_ai = 0
+
+        async def keeper(self, state, report, on_delta=None, lore=""):
+            if state.investigator.id == "lin" and self.fail_keeper:
+                self.fail_keeper -= 1
+                raise TimeoutError("模型超时")
+            return await super().keeper(state, report, on_delta, lore)
+
+        async def investigator(self, state, inv_id, situation):
+            if self.fail_ai:
+                self.fail_ai -= 1
+                raise ConnectionError("断网")
+            return await super().investigator(state, inv_id, situation)
+
+    cast = Failing()
+    cast.fail_keeper = 3  # the turn and both of the table's tries to finish it
+    hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await a.send_json({"t": "hello", "name": "小明"})
+        await until(a, lambda x: x["t"] == "welcome")
+        await a.send_json({"t": "sit", "investigator": "zhouheng"})
+        await a.send_json({"t": "start"})
+        await until(a, pool_open)
+        await a.send_json({"t": "act", "text": "我四下看看"})
+        await a.send_json({"t": "done"})
+        note = await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"])
+        assert "没能讲完" in note["text"] and not hub.state.pending_turn  # let go, what settled stays
+        await until(a, pool_open)  # the room goes on
+        cast.fail_ai = 1  # the AI cannot even think of a move this time
+        await a.send_json({"t": "act", "text": "我看看告示栏"})  # the next action is not refused
+        await a.send_json({"t": "done"})
+        assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said"))["ev"]["text"] == "我看看告示栏"
+        assert "没有行动" in (await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"]))["text"]
+        await until(a, pool_open)
+        assert "c_notice" in hub.state.clues
+        await a.close()
+    await closed(task)
