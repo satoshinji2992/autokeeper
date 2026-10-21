@@ -38,7 +38,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, effects, fog, progress, views, world
+from . import diagnostics, effects, fog, idea, progress, views, world
 from .fighting import Fighting, tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
@@ -407,6 +407,9 @@ class Game(Fighting):
             self.state.add("system", f"对守秘人：{question}", who=self.state.investigator.name)
             await self.emit({"type": "status", "text": "守秘人正在回应…"})
             return Action(kind="meta", summary=question)
+        if idea.asked(text) and (why := self.idea_refused()):  # said why at once; no turn is spent
+            await self.emit({"type": "command", "kind": "refused", "text": why, "who": self.state.investigator.name})
+            return Action(kind="meta", summary="灵感检定", idea={"refused": why})
         self.visuals.schedule()  # resumes unfinished illustration work after loading, including MCP play
         self.showcases.settle()  # someone acts: the opening's big picture, if still on its way, is not shown now
         self.showcases.prepare()
@@ -415,6 +418,8 @@ class Game(Fighting):
         await self._curtain(Action(kind="other", summary=text))
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
+        if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
+            return self.idea_action()
         await self.emit({"type": "status", "text": "解析行动…"})
         if self.battling():  # in a fight or a chase: the words are an order for the round (engine/fighting.py)
             return await self._battle_action(text)
@@ -477,6 +482,11 @@ class Game(Fighting):
         return await self.cast.intent(st, text)
 
     async def rule(self, action: Action) -> Ruling | None:
+        if action.idea is not None:  # the Idea roll: INT at the difficulty the engine set (engine/idea.py)
+            if action.idea.get("refused"):
+                return None
+            level = action.idea["difficulty"]
+            return Ruling(needs_roll=True, skill="灵感", difficulty=level, reason=idea.BASIS.get(level, ""))
         if action.kind in ("meta",):
             return None
         if action.order is not None and self.battling() and (ruled := self._battle_ruling(action)) is not None:
@@ -641,6 +651,8 @@ class Game(Fighting):
         anything the module keeps back."""
         inv = self.state.investigator
         skill = canonical(ruling.skill)
+        if action.idea:  # the Idea roll: the party's highest INT rolls it, whoever asked
+            inv, skill = self.state.find(action.idea["roller"]), "灵感"
         target = inv.value(skill)
         return {
             "who": inv.name,
@@ -652,7 +664,7 @@ class Game(Fighting):
             "extreme": target // 5,
             "need": _threshold(target, ruling.difficulty),
             "action": action.summary,
-            "why": self._why(ruling),
+            "why": ruling.reason if action.idea else self._why(ruling),
         }
 
     def _why(self, ruling: Ruling) -> str:
@@ -1136,7 +1148,10 @@ class Game(Fighting):
         return {"type": "damage", "who": inv.name, "text": text, "injury": injury}
 
     async def _nudge(self, turn: Turn) -> None:
-        """Stuck for a while: resume the same lead even after its cooldown was saved."""
+        """Stuck for a while (STALL_TURNS without a clue, a flag, an event or a new place): the keeper
+        offers the Idea roll (Keeper Rulebook p. 169) and the players decide; an AI player sees the
+        offer in its situation (engine/autoplay.py). The director no longer sends a lead on its own:
+        its push is what a failed Idea roll stages (Game._idea). Offered once a stall."""
         st = self.state
         step = self._resolution_step
         eligible = await step("eligible", turn, lambda: not (turn.action and turn.action.kind == "daily")
@@ -1144,19 +1159,86 @@ class Game(Fighting):
         if not eligible:
             return
 
-        async def plan() -> dict | None:
-            applied = await self._improvise("推进", patience=0.0)
-            return asdict(applied) if applied is not None else None
+        def offer() -> dict | None:
+            st.progress_at = st.turn  # the next offer only after another stall
+            if self.battling() or idea.pick(self.m, st) is None:
+                return None
+            st.idea_offer = st.turn
+            return {"type": "idea_offer", "text": idea.OFFER}
 
-        applied = await step("plan", turn, plan)
-        await step("cooldown", turn, lambda: setattr(st, "progress_at", st.turn))
-        if applied is None:
-            return
-        await step("flags", turn, lambda: self._flags(applied["now"], turn))
-        clues = await step("clues", turn, lambda: self._valid_clues(applied["give"], turn.action))
-        await step("give", turn, lambda: self._gain(clues, turn, turn.action))
-        if applied["note"]:
-            await step("note", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
+        notice = await step("offer", turn, offer)
+        if notice:
+            await step("offer-notice", turn, lambda: self.emit(notice))
+
+    # -- the Idea roll (engine/idea.py) -------------------------------------------------------------
+    def idea_refused(self) -> str:
+        """Why the party cannot make an Idea roll now (the game is over, a fight is on, nothing was
+        missed, one was made today and the keeper has not offered another); "" when it can."""
+        return idea.refused(self.m, self.state, battling=self.battling())
+
+    def idea_action(self) -> Action:
+        """The action an Idea roll asked for now is: the clue, difficulty and roller fixed (idea.plan)."""
+        plan = idea.plan(self.m, self.state)
+        who = self.state.find(plan["roller"]).name
+        return Action(kind="other", summary=f"调查员们重新梳理已知的线索，由{who}做灵感检定", idea=plan)
+
+    async def _idea(self, action: Action, turn: Turn) -> None:
+        """An Idea roll (pp. 167–169): the investigator with the highest INT rolls INT. Either way the
+        missed clue is gained. Success: the keeper weaves it in as their own realisation. Failure:
+        time passes, and the director cuts them into the worst situation they can recognise
+        (千钧一发), the clue showing in it; the keeper tells the cut, and the players act after it."""
+        st, m, step = self.state, self.m, self._resolution_step
+        plan = action.idea or {}
+        clue, roller = m.clue(plan["clue"]), st.find(plan["roller"])
+
+        def roll() -> dict:
+            rolled = self.rules.check(roller, "智力", DIFFICULTY_ZH.get(plan["difficulty"], Level.REGULAR), 0, mark=False)
+            turn.checks.append(rolled)
+            st.add("dice", f"灵感检定：{rolled.describe()}", who=roller.name)
+            idea.record(st, plan, rolled.passed)
+            view = _check_view(rolled)
+            return {"passed": rolled.passed,
+                    "event": {"type": "dice", "who": roller.name, **view, "skill": "灵感", "text": f"灵感检定：{view['text']}"}}
+
+        checked = await step("idea-check", turn, roll)
+        await step("idea-notice", turn, lambda: self.emit(checked["event"]))
+        passed, staged = checked["passed"], False
+        if not passed:
+            def lost() -> None:
+                st.minutes += idea.LOST
+
+            await step("idea-lost", turn, lost)
+            await step("idea-time", turn, lambda: self._time(turn))
+            applied = await step("idea-scene", turn, lambda: self._cut(clue.id)) if self.improvising else None
+            if applied:
+                staged = True
+                if applied["go"] and applied["go"] != st.location and any(x.id == applied["go"] for x in m.locations):
+                    await step("idea-go", turn, lambda: self._arrive(applied["go"], turn, party=True))
+                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))
+                given = await step("idea-give", turn, lambda: self._valid_clues(applied["give"], None))
+                await step("idea-given", turn, lambda: self._gain(given, turn, None))
+                if applied["note"]:
+                    await step("idea-staged", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
+        await step("idea-clue", turn, lambda: self._gain([clue.id], turn, None))
+        told = (idea.realised(clue.title, mentioned=bool(plan.get("mentioned", True))) if passed
+                else idea.cut(clue.title, idea.LOST, staged=staged))
+        await step("idea-note", turn, lambda: turn.notes.append(told))
+        lines = ([f"灵感检定成功：想到了〔{clue.title}〕"] if passed else
+                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", f"〔{clue.title}〕仍然得到"])
+        await step("idea-outcome", turn, lambda: self.emit({"type": "outcome", "who": roller.name, "lines": lines}))
+        await step("turn-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
+        await step("ending", turn, lambda: self._check_ending(turn))
+
+    async def _cut(self, clue_id: str) -> dict | None:
+        """The director's 千钧一发 after a failed Idea roll, prepared before the turn goes on."""
+        m = self.m
+        clue = m.clue(clue_id)
+        where = m.location(clue.where).name + (f"的{clue.feature}" if clue.feature else "")
+        said = Action(kind="other", target=clue.title,
+                      summary=f"灵感检定失败。调查员漏掉的线索〔{clue.title}〕：{clue.text.strip()}（在{where}）")
+        why = Ruling(needs_roll=False, reason="灵感检定失败，千钧一发：时间已经过去，直接切入调查员能意识到的最糟局面，让这条线索在局面里显露出来。")
+        applied = await self._improvise("千钧一发", action=said, ruling=why, required=True)
+        return asdict(applied) if applied is not None else None
 
     def _heading(self, action: Action) -> str | None:
         """Where an action happens when the investigator walks somewhere to do it ("I go up to
@@ -1294,6 +1376,9 @@ class Game(Fighting):
         if flagged:
             await step("beat-flags", turn, lambda: self._flags(flagged, self._late, landed=True))
         if not await step("initial", turn, initial) or ruling is None:
+            return
+        if action.idea:  # an Idea roll (engine/idea.py): settled on its own, never pushed
+            await self._idea(action, turn)
             return
         if ruling.missing:
             await step("missing", turn, lambda: self._lacking(ruling, turn))
@@ -1439,8 +1524,7 @@ class Game(Fighting):
         await step("time", turn, lambda: self._time(turn))
         if action.kind == "daily":
             await step("progress", turn, lambda: setattr(st, "progress_at", st.turn))
-        if self.improvising:
-            await step("nudge", turn, lambda: self._nudge(turn))
+        await step("nudge", turn, lambda: self._nudge(turn))
         await step("ending", turn, lambda: self._check_ending(turn))
         for item in self._items_for(action):
             await step(f"item:{item.id}", turn, lambda item=item: self.emit({"type": "item", "id": item.id, "name": item.name,
@@ -1805,6 +1889,10 @@ class Game(Fighting):
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
+        if turn.action is not None and turn.action.idea and turn.action.idea.get("refused"):  # said on the screen already
+            self.told = None
+            await self.emit({"type": "dialogue_end"})
+            return ""
         if turn.declared:  # a LAN round's order: told with the round, by the one who settles it
             self.told = None
             await self.emit({"type": "held"})
@@ -1877,6 +1965,7 @@ class Game(Fighting):
             self._world_owed = False
             self._world_task = asyncio.create_task(self._live_later(), name="world")
         self.world.sync()  # before the log is folded: what the players were told is out
+        idea.note(self.m, st)  # before the log is folded: how present each missed clue has been
         self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]

@@ -4,7 +4,8 @@ Called on four occasions: at the start of a game (weave the investigators' backs
 into the module and patch its weak spots), when an investigator with a sensible motive
 does something the module never wrote (open a new line that leads back to the story),
 when an investigator does something out of place (stage the consequence instead of
-saying no), and when the party has been stuck for a while (send them a lead). Its plan
+saying no), and when the party failed an Idea roll (千钧一发: cut them into the worst situation
+they can recognise, the clue they missed showing in it; engine/idea.py). Its plan
 is a small patch in the module's own format; module/improv.py validates it and writes
 it into this game only.
 """
@@ -27,7 +28,9 @@ from .writing import INTERFACE_COPY
 # have not met, make an NPC important and give it a plan, arrange what happens at an hour.
 WorldOp = Annotated[Rewrite | Enlist | SetPlan | Schedule | Relate | Learn | Occur | Move | Condition, Field(discriminator="kind")]
 
-Kind = Literal["开局改编", "展开", "后果", "推进"]
+# 推进 (a lead for a stuck party) is no longer asked for: a stall offers the Idea roll instead
+# (Game._nudge). It stays for the plans old saves keep (GameState.improv).
+Kind = Literal["开局改编", "展开", "后果", "推进", "千钧一发"]
 
 
 class NewFlag(BaseModel):
@@ -126,7 +129,7 @@ class NewArc(BaseModel):
 
 
 class Improv(BaseModel):
-    kind: Literal["开局改编", "展开", "后果", "推进", "不需要"]
+    kind: Literal["开局改编", "展开", "后果", "推进", "千钧一发", "不需要"]
     reason: str = Field(description="为什么这样安排，玩家看不到")
     flags: list[NewFlag] = Field(default_factory=list)
     locations: list[NewLocation] = Field(default_factory=list)
@@ -186,7 +189,10 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
   只有调查员真的在那里调查，才考虑新线索；需要引路时用人物反应轻轻带一下，不直接交出关键信息。玩家主动追寻别的故事时才考虑新结局。
 - 后果：只处理确实发生的风险。违背时代或能力的愿望平实地解释行不通，不虚构玩家的动作、伤害或理智损失。
   合理的捷径、求助、拒绝委托和离开都应允许；危险行为按已经说明的风险和人物利益产生相称后果，不因偏离主线而惩罚。
-- 推进：先结合最近行动判断缺少的是信息、可接触的入口还是可行的方法。玩家正在讨论、主动休息或追寻自己的目标时，不能仅因没有新线索就认定卡关。优先利用已有来源和联系，只补足实际缺少的部分；确需事件时才安排马上发生（when 填 now），不强制袭击、访客或新谜团，也不代替玩家下结论。
+- 千钧一发：调查员的灵感检定失败了（规则书第 169 页）。【调查员的行动】写着他们漏掉的那条线索，它这一轮无论如何都会到手；时间已经过去了几个小时。
+  把调查员（不论是否参与了检定）直接放进他们能意识到的最糟的局面，让这条线索在局面里显露出来：比如他们终于找到那个地方，却撞上了正在那里的危险。
+  go 填这个场面所在的地点（已有的或这次新建的），events 安排马上发生的事（when 填 now），由已有的人物、地点和因果引出，危险程度符合本模组的尺度。
+  场面停在调查员必须立刻应对的一刻：不替他们行动，不预先决定结果，伤害和理智损失只写进事件由规则结算。give 留空：那条线索由引擎交出。
 
 格式：
 - 方案要小。开局改编最多 2 个新 NPC、1 个新地点、3 条新线索、3 个事件；其他时候最多 1 个 NPC、1 个地点、2 条线索、1 个事件、1 个结局。用不着的留空；确实什么都不用加，kind 填“不需要”。

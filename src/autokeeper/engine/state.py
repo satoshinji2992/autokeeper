@@ -76,6 +76,30 @@ class WorldFact(BaseModel):
     source: str
 
 
+class Mention(BaseModel):
+    """How present a clue has been at the table, for the Idea roll's difficulty (engine/idea.py):
+    when it first and last came up (game minutes), whether the party was where it lies or met the
+    one who holds it, how many tellings named it (the keeper's, an NPC's, an event's) and how many of
+    the players' own inputs did."""
+
+    first: int = 0
+    last: int = 0
+    seen: bool = False  # its place visited, or its NPC met
+    told: int = 0
+    said: int = 0
+
+
+class IdeaRoll(BaseModel):
+    """One Idea roll of the party (灵感检定, Keeper Rulebook pp. 82, 167–169)."""
+
+    turn: int
+    day: int  # game day (minutes // 1440): one a day, unless the keeper offered it
+    clue: str
+    difficulty: str
+    passed: bool
+    offered: bool = False  # the keeper offered it when the game stalled (Game._nudge)
+
+
 class CheckRecord(BaseModel):
     """A skill check, kept for a few turns: the arbiter reads them, and the engine does not
     roll the same failed attempt again (Game._earlier). A repeat that was not rolled counts
@@ -180,6 +204,13 @@ class GameState(BaseModel):
     plugin_serial: int = 0
     missed: dict[str, int] = Field(default_factory=dict)  # core clue -> failed attempts, from older saves (a failure no longer hands a clue over)
     drawn: list[Drawn] = Field(default_factory=list)  # keeper cards dealt: phobias, manias, bouts, mishaps (cards.py)
+    # The Idea roll (engine/idea.py): how present each clue has been (counted after each turn from the
+    # log, up to `mentions_at` lines ever logged), the rolls made, and the turn of the keeper's open
+    # offer of one when the game stalled (0: none).
+    mentions: dict[str, Mention] = Field(default_factory=dict)
+    mentions_at: int = 0
+    ideas: list[IdeaRoll] = Field(default_factory=list)
+    idea_offer: int = 0
     progress_at: int = 0  # last turn that found a clue, set a flag, fired an event or reached a new place
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own

@@ -385,37 +385,31 @@ async def test_graph_restores_push_choice_and_merges_its_turn_once_after_json_re
     await resumed.close()
 
 
-async def test_director_lead_resumes_after_saved_cooldown_without_losing_awarded_clue(module, fake):
-    from autokeeper.module.improv import Applied
-
-    module.flags["lead"] = "已收到来信"
+async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once(module, fake):
     action = Action(kind="investigate", summary="查看告示栏", target="告示栏")
     ruling = Ruling(needs_roll=False, minutes=1)
     game, _, _ = make(module, fake, {})
-    game.cast.improvising = True
     game.state.turn, game.state.progress_at = 20, 0
+    game.state.clues = ["c_notice"]  # the notice gives nothing new: a stall
     saved = snapshots(game)
-    calls: list[str] = []
-
-    async def improvise(kind: str, **kwargs):
-        calls.append(kind)
-        return Applied(now=["lead"], give=["c_notice"], note="把来信放在告示旁。")
 
     async def broken(event: dict) -> None:
-        if event["type"] == "flag":
-            raise RuntimeError("failed after director cooldown")
+        if event["type"] == "idea_offer":
+            raise RuntimeError("failed after the offer was made")
 
-    game._improvise = improvise
     game.emit = broken
     with pytest.raises(RuntimeError):
         await game.resolve(action, ruling)
-    assert game.state.progress_at == game.state.turn
+    assert game.state.progress_at == game.state.turn == game.state.idea_offer
     resumed, _ = reload_game(module, saved[-1], fake)
-    resumed.cast.improvising = True
-    resumed._improvise = improvise
-    turn = await resumed.resolve(action, ruling)
-    assert calls == ["推进"]
-    assert resumed.state.clues == turn.clues == ["c_notice"]
-    assert turn.notes.count("导演的安排：把来信放在告示旁。") == 1
+    offers: list[dict] = []
+
+    async def heard(event: dict) -> None:
+        if event["type"] == "idea_offer":
+            offers.append(event)
+
+    resumed.emit = heard
+    await resumed.resolve(action, ruling)
+    assert len(offers) == 1 and resumed.state.idea_offer == 20
     await game.close()
     await resumed.close()

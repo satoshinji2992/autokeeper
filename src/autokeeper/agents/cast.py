@@ -108,6 +108,9 @@ class Action(BaseModel):
     # In a fight or a chase: the investigator's order for the round (engine/combat.Order), read off
     # the words by the engine or by Cast.order, never filled in by the plan.
     order: SkipJsonSchema[dict | None] = None
+    # An Idea roll (engine/idea.plan): the clue, difficulty and roller the engine fixed when the player
+    # asked for it; {"refused": why} when it could not be made. Never filled in by a model.
+    idea: SkipJsonSchema[dict | None] = None
 
     def ruled(self) -> str:
         """The action as the arbiter reads it: no first beat, and no request when there is none."""
