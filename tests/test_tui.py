@@ -283,6 +283,9 @@ def test_weather_is_read_off_the_place_and_the_hour():
     assert weather.infer("大街", "梧桐叶子在人行道上打着旋。", "下午") == ["leaves"]
     assert weather.infer("图书馆", "长桌上方吊着绿罩台灯。", "深夜") == ["flicker"]
     assert weather.infer("码头", "雨后的石板路。", "下午") == []
+    assert weather.infer("邮局", "窗外的雪下密了。", "下午") == []  # it snows outside, not in the room
+    assert weather.infer("主街", "雪犁推出来的雪墙比人还高。", "下午") == ["snow"]
+    assert weather.infer("埃斯内尔", "小城落着雪。", "下午") == ["snow"]  # no word for a room: the open sky
     assert [weather.outdoors(n) for n in ("公墓", "艾尔斯伯里大街", "广场", "道格拉斯的书房", "警察局", "地底隧道网", "钟楼")] == [
         True, True, True, False, False, False, False,
     ]
@@ -604,3 +607,17 @@ def test_a_sheet_s_photo_keeps_its_rows_in_a_narrow_pane(width):
     console.print(sheet_view(inv, face, width))
     rows = [line for line in console.export_text().splitlines() if "▓" in line]
     assert len(rows) == 14 and all("▓" * 30 in line for line in rows)
+
+
+def test_a_painted_room_has_no_snow_from_the_modules_photo():
+    from autokeeper import paths
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    art = SceneArt()
+    art.picture, art.place, art.weather = "#", "邮局", ["snow", "flicker"]
+    art.image = str(paths.scenery() / "dongxuezhixia" / "post_office.png")  # painted by program
+    assert art.kinds() == ["flicker"]
+    art.image = str(paths.MODULES / "dongxuezhixia" / "art" / "places" / "post_office.jpg")  # the module's own photo
+    assert art.kinds() == ["snow", "flicker"]
+    art.place, art.image = "主街", str(paths.scenery() / "dongxuezhixia" / "main_street.png")
+    assert art.kinds() == ["snow", "flicker"]  # painted, but out under the sky

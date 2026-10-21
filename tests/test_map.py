@@ -496,3 +496,13 @@ async def test_g_on_the_map_puts_going_there_in_the_command_box(canned):  # noqa
         await pilot.pause()
         box = app.screen.query_one("#command", Input)
         assert box.value == "我去钟楼" and box.has_focus and len(state.log) == said  # in the box, not sent
+
+
+def test_place_notes_fold_like_typeset_chinese():
+    from autokeeper.tui.modals.mapview import fold
+
+    text = "主街只有两个街区长。雪犁推出来的雪墙比人还高，杂货铺的窗玻璃上结着霜花。"
+    lines = fold(text, 9).split("\n")
+    assert "".join(lines) == text
+    assert not any(line[0] in "，。、" for line in lines)  # no line starts with a comma or a stop
+    assert fold("达维尔家 20 分钟", 9, 5).split("\n")[1].strip() == "20 分钟"  # the number stays with its unit

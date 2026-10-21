@@ -241,7 +241,7 @@ def compose(plan, painted: Painted, kinds: dict[str, str], tag: str, picked: str
 
     def write(x: int, y: int, words: str, style: str) -> int:
         for ch in words:
-            text[(x, y)] = (ch, style)
+            text[(x, y)] = (ch, f"{style} on {wash}")
             for k in range(1, cell_len(ch)):
                 text[(x + k, y)] = ("", "")  # covered by a wide character
             x += cell_len(ch)
@@ -253,6 +253,9 @@ def compose(plan, painted: Painted, kinds: dict[str, str], tag: str, picked: str
         style = f"bold #{ink[0]:02x}{ink[1]:02x}{ink[2]:02x}" if kind != "heard" else f"italic #{ink[0]:02x}{ink[1]:02x}{ink[2]:02x}"
         if place == picked:
             style += " underline"
+        end_x = x + 2 + cell_len(plan.labels[place]) + (cell_len(tag) if place == plan.tagged else 0)
+        cells = px[y * 2:y * 2 + 2, x:min(end_x, plan.width)].reshape(-1, 3)
+        wash = _hex(np.clip(cells.mean(axis=0) * 1.08 + 0.04, 0, 1))  # one paler wash under the whole name, to read
         write(x, y, marks[kind], style)
         end = write(x + 2, y, plan.labels[place], style)
         if place == plan.tagged:
@@ -264,10 +267,8 @@ def compose(plan, painted: Painted, kinds: dict[str, str], tag: str, picked: str
             top, bottom = px[y * 2, x], px[y * 2 + 1, x]
             if (x, y) in text:
                 ch, style = text[(x, y)]
-                if not ch:
-                    continue
-                under = np.clip((top + bottom) / 2 * 1.08 + 0.04, 0, 1)  # names on a paler wash, to read
-                parts.append((ch, f"{style} on {_hex(under)}"))
+                if ch:
+                    parts.append((ch, style))
             else:
                 parts.append(("▀", f"{_hex(top)} on {_hex(bottom)}"))
         runs = itertools.groupby(parts, key=lambda part: part[1])

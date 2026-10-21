@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import os
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
@@ -25,6 +26,7 @@ MODE_NOTES = {
     "标准": "使用各分工的预设强度",
     "高级剧情": "提高叙事相关分工的思考强度，可能增加等待和用量",
 }
+ROLE_WIDTH = 12  # the longest role name (守秘人安排, 10 cells) and two spaces
 EXAMPLES = "deepseek:deepseek-flash、claude-sonnet-5-5、codex:default、openai:gpt-5、ollama:qwen3:14b"
 
 
@@ -87,15 +89,20 @@ class EngineModal(ModalScreen[dict | None]):
         yield Static(Text(f"留空使用方案默认模型（灰色）。示例：{EXAMPLES}。「读图」需选择支持图像输入的模型。",
                           style="dim"), classes="engine-note")
         with Horizontal(classes="role-row"):
-            yield Static(Text.assemble(("全部分工", "bold"), ("  单项设置优先", "dim")), classes="role-name")
+            yield Static(self._role_line("全部分工", "单项设置优先"), classes="role-name")
             yield Input(self.model, placeholder="未指定", id="model", classes="role-model")
         for name, (label, what) in config.ROLES_SHOWN.items():
             with Horizontal(classes="role-row"):
-                yield Static(Text.assemble((label, "bold"), (f"  {what}", "dim")), classes="role-name")
+                yield Static(self._role_line(label, what), classes="role-name")
                 yield Input(self.role_models.get(name, ""), id=f"role-{name}", classes="role-model")
         with Horizontal(classes="role-row"):
-            yield Static(Text.assemble(("备用模型", "bold"), ("  主模型出错或超出预算时使用", "dim")), classes="role-name")
+            yield Static(self._role_line("备用模型", "主模型出错或超出预算时使用"), classes="role-name")
             yield Input(self.fallback, placeholder="未指定", id="fallback", classes="role-model")
+
+    @staticmethod
+    def _role_line(label: str, what: str) -> Text:
+        """The role's name padded to one column, so every description starts at the same cell."""
+        return Text.assemble((label + " " * (ROLE_WIDTH - cell_len(label)), "bold"), (what, "dim"))
 
     async def on_mount(self) -> None:
         ol = self.query_one(OptionList)

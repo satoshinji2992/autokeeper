@@ -135,7 +135,7 @@ class HandoutModal(ModalScreen[None]):
         self.pictures = pictures or []
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
+        with Vertical(classes="modal", id="handout-modal"):
             with VerticalScroll(classes="modal-body"):
                 for i, _ in enumerate(self.pictures):
                     yield Static("正在加载原图……", id=f"handout-image-{i}")

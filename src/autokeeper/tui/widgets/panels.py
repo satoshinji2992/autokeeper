@@ -21,7 +21,7 @@ from textual.style import Style as TextualStyle
 from textual.suggester import SuggestFromList
 from textual.widgets import Static
 
-from ... import artkit, atmosphere, imagery, weather
+from ... import artkit, atmosphere, imagery, scenery, weather
 from ...module.schema import Module
 from ...rules.catalog import CHARACTERISTICS, SKILL_BASE
 from ...rules.coc import Investigator
@@ -179,6 +179,8 @@ class SceneArt(Static):
         if not self.effects or not (self.picture or self._uses_image()):
             return []
         own = self.weather[:2] or weather.infer(self.place, self.description, self.when)
+        if self.image and scenery.painted(self.image) and scenery.kind_of(self.place, self.description) in scenery.INDOOR:
+            own = [k for k in own if k not in ("rain", "snow")]  # a painted room: the module's snow was for its photo of the outside
         if not self.sky:
             return own
         wet = {"rain", "storm"}

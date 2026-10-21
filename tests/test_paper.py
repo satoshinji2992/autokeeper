@@ -50,3 +50,13 @@ def test_the_ink_comes_in_order_and_a_blank_page_is_paper():
     sheet = paper.sheet("信件", "托马斯的信", LETTER)
     assert "亲" not in sheet.render(0).plain and "亲爱的" in sheet.render(3).plain
     assert sheet.render().plain == sheet.render(sheet.size).plain
+
+
+def test_a_hand_writes_in_italics_and_print_does_not():
+    def italic(sheet: paper.Sheet) -> bool:
+        return any(s.italic for line in sheet.lines for t, s in line if t.strip() and s.color is not None)
+
+    assert italic(paper.sheet("信件", "托马斯的信", LETTER))
+    assert italic(paper.sheet("日记", "日记", "1921 年 3 月 2 日：雪。"))
+    assert not italic(paper.sheet("报纸", "广告报", "【本报讯】镇上一切如常。"))
+    assert not italic(paper.sheet("电报", "电报", "速归。"))

@@ -607,6 +607,8 @@ def picture_source(path: str | Path) -> str:
     from . import scenery
 
     scenery.ensure(p)  # a scene painted by program, made the first time it is shown
+    if scenery.painted(p):  # already clean: the clean-up for faded photos turned its browns red
+        return str(p)
     try:
         if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
             return str(prep)

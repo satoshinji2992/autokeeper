@@ -25,8 +25,11 @@ DUSK_TO_DAWN = {"清晨", "傍晚", "夜里", "深夜"}
 
 
 def infer(name: str, text: str, when: str = "") -> list[str]:
-    """Weather read off a location's name and description, at most two kinds."""
+    """Weather read off a location's name and description, at most two kinds. Rain and snow
+    only fall under the open sky: a post office whose windows show the snow has none inside."""
     words = name + text
+    place = name.split("·")[-1]
+    inside = any(w in place for w in INDOOR) and not any(w in place for w in OPEN)  # clearly a room, not just unnamed
 
     def has(*ws: str) -> bool:
         return any(w in words for w in ws)
@@ -34,9 +37,9 @@ def infer(name: str, text: str, when: str = "") -> list[str]:
     kinds = []
     if has("雷", "闪电", "暴雨", "暴风雨"):
         kinds.append("storm")
-    elif has("雨") and not has("雨停", "雨后", "雨过", "雨伞", "雨衣"):
+    elif has("雨") and not has("雨停", "雨后", "雨过", "雨伞", "雨衣") and not inside:
         kinds.append("rain")
-    if has("雪") and not has("雪白", "雪亮", "雪茄"):
+    if has("雪") and not has("雪白", "雪亮", "雪茄") and not inside:
         kinds.append("snow")
     if has("哈哈镜") or (has("镜") and has("变形", "扭曲", "忽胖忽瘦")):
         kinds.append("warp")

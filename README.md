@@ -12,23 +12,26 @@
 
 **在终端里玩《克苏鲁的呼唤》第 7 版**
 
-中文跑团 · 彩色 ASCII 演出 · 终端 / 浏览器
+中文跑团 · 程序绘制的字符画 · 终端 / 浏览器
 
 [![Release](https://img.shields.io/github/v/release/satoshinji2992/autokeeper?label=version&color=B8860B)](https://github.com/satoshinji2992/autokeeper/releases/latest)
 [![CI](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml/badge.svg)](https://github.com/satoshinji2992/autokeeper/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-2EA44F)](LICENSE)
 
-[项目网页](https://satoshinji2992.github.io/autokeeper/) · [游玩体验](#从早班火车进站开始) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
+[项目网页](https://satoshinji2992.github.io/autokeeper/) · [游玩体验](#从早班火车进站开始) · [画面](#照片画字符没有照片就现场画) · [车卡与角色库](#ai-辅助车卡或者把你的老角色带进来) · [模组与插件](#自带三本模组也能导入剧本与规则插件) · [好友联机](#一个人随时开或者叫朋友凑一桌) · [开始玩](#开始玩) · [文档](#文档与开发)
 
 </div>
 
 AutoKeeper 把《克苏鲁的呼唤》第 7 版的跑团桌面搬进了终端。你扮演调查员，用中文说出想做的事；AI 担任守秘人，铺陈场景、扮演镇上的各色人物，并在需要检定时请你掷骰。
 
-- **七版规则与物理十面骰**：检定时亲手投掷 3D 物理十面骰，花幸运、孤注一掷、理智与不定性疯狂、重伤及幕间成长都按规则结算。
-- **AI 辅助车卡与多格式导卡**：给一句人设或人物名字即可按七版规则建卡并配好肖像；也支持导入骰娘 `.st`、表格、PDF、纸质卡照片与酒馆卡。
-- **彩色 ASCII 视觉演出**：老照片与插图转成真彩字符画，随叙事飘起雨雪浓雾；NPC 开口时立绘登场，开场、遇险与结局展开整屏大图。
-- **模组编译与沙箱规则插件**：内置三本模组，支持拖入 PDF、Word、ZIP 模组自动拆解编译；专属机制与解谜小游戏可用规则插件实现，开局后也能一句话加家规。
-- **独行、带 AI 队友，或叫朋友上桌**：一个人随时开局；想凑一桌时在标题页开好房间，朋友用浏览器打开链接就能车卡入座，不用装环境或配密钥。
+- **会自己运转的小镇**：守秘人看得到模组的全部底牌，每局有一份世界记录，记着谁在哪、知道什么、答应过谁；NPC 照自己的打算行事，你不去找他们，他们也在走自己的日程。
+- **七版规则与物理十面骰**：检定时亲手投掷 3D 物理十面骰；失败就是失败，花幸运、孤注一掷、理智与不定性疯狂、重伤和幕间成长都按规则结算。
+- **字符画演出**：老照片与插图转成真彩字符画，随时间和叙事飘起雨雪浓雾、摇曳灯影；没有照片的地点、人物和物件由程序现场画出，地图是一张彩绘的羊皮纸。
+- **按纸张排版的手稿**：信件、日记、剪报、电报、典籍各有纸色、墨色与版式，手写的信和日记用斜体，墨迹逐字渐显。
+- **AI 辅助车卡与多格式导卡**：一句人设或一个人名即可按七版规则建卡；也能导入骰娘 `.st`、表格、PDF、纸质卡照片与酒馆卡。
+- **模组编译与沙箱规则插件**：内置三本模组，支持拖入 PDF、Word、ZIP 自动拆解编译；专属机制与解谜小游戏用规则插件实现，开局后也能一句话加家规。
+- **独行、带 AI 队友，或叫朋友上桌**：一个人随时开局；想凑一桌时开好房间，朋友用浏览器打开链接就能入座，不用装环境或配密钥。
+- **不绑定模型**：DeepSeek、Claude、Codex、Ollama 与任意 OpenAI 兼容接口都能用，守秘人、NPC、裁定、读图等分工可以各配一个模型，并设预算上限。
 
 <p align="center">
   <a href="docs/img/game.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/game.png" width="100%" alt="追书人实机：图书馆调查、旧报手稿、物理十面骰，以及右侧的人物状态和调查记录"></a>
@@ -42,13 +45,32 @@ AutoKeeper 把《克苏鲁的呼唤》第 7 版的跑团桌面搬进了终端。
 行动撞上悬念时，桌面会弹出检定提示，请你亲手掷出物理模拟的十面骰。失败了要不要花幸运、要不要冒着大祸临头的风险「孤注一掷」，都由你当场拍板。一路上收集的剪报与信件可以随时展开阅读原文、查看原图；去过的地方、打过照面的人和查出的线索，会分别归档进地图、线索本与人物卡的「本局经历」里。每回合自动存档，随时合上终端，下次都能接着往下查。
 
 <p align="center">
-  <a href="docs/img/map.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/map.png" width="100%" alt="调查地图：火车站、镇中心、图书馆和金博尔家之间的路，以及各处已知的人物与线索"></a>
-  <br><sub>带战争迷雾的调查地图：只画已知地点与道路，标出各处见过的人、找到的线索与当前天气，按 G 即可动身前往。</sub>
+  <a href="docs/img/paper.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/paper.png" width="100%" alt="道格拉斯·金博尔的日记：米色纸张、红色页边、斜体手写正文"></a>
+  <br><sub>手稿按纸张排版：《追书人》里道格拉斯的日记，红色页边、手写斜体，墨迹逐字渐显。</sub>
 </p>
 
-随着调查推进，窗外的天色与天气会跟着叙事流转。老照片与插图转成的彩色字符画上，会实时飘起细雨、大雪、浓雾或摇曳的灯影（也可按 `Ctrl+A` 切换纯 ASCII 等画法）；NPC 说话时，人物立绘会站到画面一侧，随台词里的情绪变换色调甚至微微颤动。
+<p align="center">
+  <a href="docs/img/map.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/map.png" width="100%" alt="冬雪之下的彩绘地图：主街、诊所、教堂、邮局与农场之间的土路，右侧是主街的说明与去各处的路程"></a>
+  <br><sub>彩绘调查地图：只画走过和听说过的地方，地面、土路和雾都由程序生成；右侧是地点的所见、遇到的人、找到的线索和到各处的路程，按 G 即可动身。</sub>
+</p>
 
-到了开场、撞见异状或步入结局的关头，画面会展开成整屏「大场景」插图。本机装有 Codex 时，开启「AI 画图」还能让即兴人物与地点自动配图；若是剧情里老宅失火、NPC 负伤，场景和头像也会按原图重新绘制。
+## 照片画字符，没有照片就现场画
+
+模组自带的老照片与插图会转成彩色字符画，窗外的天色和天气跟着叙事流转：细雨、大雪、浓雾，夜里的台灯会摇曳（也可按 `Ctrl+A` 切换纯 ASCII 等画法）。NPC 开口时，人物立绘站到画面一侧，色调随台词里的情绪变化。
+
+模组没有配图的地点、人物和物件，以及守秘人即兴加出来的，都由程序当场画出：室内的光只从灯和窗户来，角落沉在暗处；肖像按身份配衣着，按描述添上白发、胡子、眼镜或帽子；物件摆在灯下的桌面上。程序绘制不调用模型、不花钱，同一个地点每次画出来都一样。
+
+<p align="center">
+  <a href="docs/img/painted.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/painted.png" width="100%" alt="冬雪之下的邮局：程序绘制的室内场景转成字符画，窗户、信格、柜台和角落的台灯"></a>
+  <br><sub>《冬雪之下》的邮局没有原图，场景由程序绘制：窗户的天光、柜台后的信格、左下角的台灯。</sub>
+</p>
+
+<p align="center">
+  <a href="docs/img/art.jpg"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/art.jpg" width="100%" alt="程序绘制的原画：室内与室外场景和六位人物肖像"></a>
+  <br><sub>程序绘制的原画（游戏中会转成字符画）：按地名分出的室内外场景，按身份和描述画出的肖像。</sub>
+</p>
+
+到了开场、撞见异状或步入结局的关头，画面会展开成整屏「大场景」插图。本机装有 Codex 时，开启「AI 画图」还能让即兴人物与地点改由图像模型配图；若是剧情里老宅失火、NPC 负伤，场景和头像也会按原图重新绘制。
 
 <p align="center">
   <a href="docs/img/showcase.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/showcase.png" width="100%" alt="追书人开场的大场景：阿诺兹堡早班车，车站照片转成整屏彩色字符画"></a>
@@ -106,20 +128,24 @@ CoC 模组常有标准规则之外的特殊机制——比如《冬雪之下》�
 
 一个人玩时，可以独自调查，也可以挑几位性格各异的 AI 调查员当队友；单纯想看故事的话，还有「观战」模式能让 AI 小队自己跑完整局。
 
-想约朋友一起跑，由房主在标题页选择「开房间」，排好真人与 AI 的座位，把生成的网址发给朋友就行。朋友用浏览器打开链接就能入座，不需要安装 Python、也不用配置任何模型密钥。每个人都可以用预设卡、导入自己的老角色，或者当场调用房主的模型协助车一张新卡。
+想约朋友一起跑，由房主在标题页选择「开房间」，排好真人与 AI 的座位，把生成的网址发给朋友就行。朋友用浏览器打开链接就能入座，不需要安装 Python、也不用配置任何模型密钥。座位只定是玩家还是 AI、谁来坐；调查员在座位下方另选，可以用模组预设、导入自己的老角色，或者当场调用房主的模型车一张新卡。
 
 <p align="center">
-  <a href="docs/img/lobby.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/lobby.png" width="100%" alt="冬雪之下开房间界面：安排真人与 AI 座位，查看调查员，开启浏览器加入"></a>
-  <br><sub>《冬雪之下》准备房间：分配真人与 AI 座位、查看队友人物卡，复制一行地址就能叫朋友进房。</sub>
+  <a href="docs/img/lobby.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/lobby.png" width="100%" alt="冬雪之下开房间界面：左侧是座位与调查员选择，右侧是选中调查员的肖像与人物卡"></a>
+  <br><sub>《冬雪之下》开房间：左上排座位（玩家或 AI），左下为座位选调查员，右侧预览人物卡。</sub>
 </p>
 
 开局后，同一轮里大家各自提交行动，先后不限，守秘人按顺序逐一裁定、往下推进故事；守秘人讲述时也能提前打字排进下一轮。中途掉线重连即可坐回原位，局域网与虚拟局域网（如 Radmin、ZeroTier）下的连接排查见[联机说明](docs/playing.md#联机)。
 
 <details>
-<summary><b>更多实机画面：人物卡详情、存档管理、场景与 NPC 肖像（点击展开）</b></summary>
+<summary><b>更多实机画面：电报、人物卡、存档管理、场景与 NPC 肖像（点击展开）</b></summary>
 <br>
 
 每张图均可点击查看高清原图。
+
+### 电报
+
+<a href="docs/img/telegram.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/telegram.png" width="100%" alt="冬雪之下的军队电报：黄色电报纸上贴着一条条打字纸条"></a>
 
 ### 人物卡与本局经历
 
@@ -181,7 +207,12 @@ uv tool upgrade autokeeper   # 更新
 
 掷骰要用 Node.js 18+，推荐再装 [chafa](https://hpjansson.org/chafa/) 显示照片字符画（各系统的装法、存档放在哪、以前从源码玩的存档怎么带过来，见[安装](docs/playing.md#安装)）。
 
-除了 Claude 和 DeepSeek，游戏还支持 Codex、Ollama 本地离线模型以及任意 OpenAI 兼容接口，可以在标题页「设置」或游戏中按 `F9` 随时切换，也能按职责混搭模型并设置预算上限。详细配法与花费说明见[游玩指南](docs/playing.md#模型与花费)。
+除了 Claude 和 DeepSeek，游戏还支持 Codex、Ollama 本地离线模型以及任意 OpenAI 兼容接口，可以在标题页「设置」或游戏中按 `F9` 随时切换。「各分工模型」页可以给守秘人、NPC、裁定、读图等分工各填一个模型，留空就用方案默认；「测试连接」会把用到的每个模型都测一遍。详细配法与花费说明见[游玩指南](docs/playing.md#模型与花费)。
+
+<p align="center">
+  <a href="docs/img/models.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/models.png" width="100%" alt="模型设置的各分工模型页：守秘人、守秘人安排、裁定、NPC、导演等分工与各自的模型"></a>
+  <br><sub>模型设置（F9）的「各分工模型」页：每个分工一行，写明它做什么；只有「读图」需要能看图的模型。</sub>
+</p>
 
 仓库本身也是一个 **Claude Code 插件**与 **MCP 服务端**——如果你想直接在 Claude Code 或 Codex 对话框里调用它的骰子、模组 Skills 与状态引擎来跑团，可参考[在 Claude Code / Codex 中主持](docs/playing.md#在-claude-code--codex-中主持)。
 
@@ -192,8 +223,10 @@ uv tool upgrade autokeeper   # 更新
 - **会自己运转的世界**：每局有一份世界记录，记着谁在哪、谁知道什么、谁答应过谁；重要 NPC 照自己的打算行事，说了就做。
 - **守秘人统一主持**：守秘人看得到全部底牌，每轮先安排玩家的行动和在场人物的主动参与，讲完的场面先记进世界再显示。
 - **检定更像真的跑团**：失败就是失败，孤注一掷先说后果；日常物件可以当场拿、当场借。
+- **程序绘制的美术**：彩绘地图，没有图片的地点、人物与物件由程序画出；手稿按信件、日记、报纸、电报、典籍排版。
+- **模型按分工配置**：每个分工可以单独选模型，Claude 方案的裁定改用 Sonnet；提示词缓存命中更高，等待更短。
 - **一条命令安装**：`uv tool install autokeeper`，在任意目录启动；以前的存档自动带过来。AutoKeeper 本体不绑定模型，Claude 是可选组件。
-- 详见[完整更新记录](CHANGELOG.md#0032026-10-20)。
+- 详见[完整更新记录](CHANGELOG.md)。
 
 </details>
 
@@ -215,8 +248,14 @@ uv tool upgrade autokeeper   # 更新
 - [模组格式](docs/module-format.md) / [规则插件](docs/plugins.md)：手工编写剧本、配置大场景与开发自定义机制。
 - [守秘人体验设计](docs/keeper-experience.md)：开场引入、导演即兴、线索节奏与配图设计。
 - [模型运行机制](docs/harness.md) / [评测记录](docs/eval.md) / [世界引擎设计](docs/world.md)：多智能体架构、修辞防注入评测与后续计划。
+- [开发者模式](docs/developer-mode.md)：游戏中按 `F12`，查看本轮每次调用的分工、模型、用时与缓存命中，所有人物的实际位置和接下来的日程。
 
-遇到不合理的裁定或报错，欢迎提交 [Issue](https://github.com/satoshinji2992/autokeeper/issues) 并附上模组名、当轮行动与日志。源码位于 [`src/autokeeper/`](src/autokeeper/)，测试位于 [`tests/`](tests/)；提交 PR 前请运行 `uv run ruff check src tests` 与 `uv run pytest -q`。开发约定详见 [AGENTS.md](AGENTS.md)。
+遇到不合理的裁定或报错，欢迎提交 [Issue](https://github.com/satoshinji2992/autokeeper/issues) 并附上模组名、当轮行动与日志。源码位于 [`src/autokeeper/`](src/autokeeper/)，测试位于 [`tests/`](tests/)；提交 PR 前请运行 `uv run ruff check src tests` 与 `uv run pytest -q`。开发约定详见 [AGENTS.md](AGENTS.md)。README 的截图由 [`dev/screenshots.py`](dev/screenshots.py) 生成。
+
+<p align="center">
+  <a href="docs/img/developer.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/developer.png" width="100%" alt="开发者模式：顶栏变色，叙述下方列出人物实际位置与接下来的日程"></a>
+  <br><sub>开发者模式（F12）：顶栏变色，叙述下方显示本轮的模型调用、所有人物的实际位置和接下来的日程。</sub>
+</p>
 
 ## 致谢与许可
 

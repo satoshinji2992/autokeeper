@@ -16,6 +16,7 @@ from __future__ import annotations
 import heapq
 import itertools
 import math
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -760,13 +761,44 @@ def _names(names: list[str]) -> list:
     return parts
 
 
-def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
+NO_START = set("，。、；：！？）」』”’》〉…—,.;:!?)")  # never the first character of a line
+NO_END = set("（「『“‘《〈(")  # never the last
+
+
+def fold(text: str, width: int, indent: int = 0) -> str:
+    """Chinese wrapped at `width` cells the way it is typeset: no line starts with a comma or a
+    full stop, none ends on an opening quote, and a number or a Latin word stays whole. Later
+    lines start `indent` cells in, under the text after a label."""
+    tokens = re.findall(r"[A-Za-z0-9.:/%]+|.", text)  # `width` excludes the indent
+    lines: list[list[str]] = [[]]
+    used = 0
+    for tok in tokens:
+        w = cell_len(tok)
+        if used + w > width and lines[-1]:
+            carry: list[str] = []
+            if tok in NO_START and len(lines[-1]) > 1:  # the character before it goes down too
+                carry.append(lines[-1].pop())
+            while len(lines[-1]) > 1 and lines[-1][-1] in NO_END:
+                carry.insert(0, lines[-1].pop())
+            if carry and carry[0] == " ":
+                carry.pop(0)
+            lines.append(carry)
+            used = sum(cell_len(t) for t in carry)
+            if tok == " " and not carry:
+                continue
+        lines[-1].append(tok)
+        used += w
+    return ("\n" + " " * indent).join("".join(line).rstrip() for line in lines)
+
+
+def about(m: Module, st: GameState, c: Chart, place: str, width: int = 0) -> Content:
     """What the investigators know of a place on the map: what they saw on arriving (only
     where they stopped), the places in it, the people met there, the things they know lie
     there, the clues found there, how far the neighbours are by the roads walked, and the sky
     if it is open to it. Nothing else: no keeper's notes, no list of what could be searched,
     no clue not found, no way or place they do not know. All of it is in a shared table's
-    copy of the module too (net/hub.py table), so every screen says the same."""
+    copy of the module too (net/hub.py table), so every screen says the same. With a `width`,
+    the text is folded to it (fold) and each way out gets its own line."""
     kind = c.kinds[place]
     stopped = place in st.visited or place == st.location
     status = "当前位置" if kind == "here" else "已到访" if stopped else "已途经" if kind == "been" else "已听闻，未到访"
@@ -780,7 +812,7 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
     rows = [Content.assemble((f"{MARK[kind]} {c.names[place]}", STYLE[kind]), (f"  {status}", STYLE["note"]))]
     seen = _unwrap(m.location(place).read_aloud) if stopped else ""
     if seen:
-        rows.append(Content(seen))
+        rows.append(Content(fold(seen, width) if width else seen))
     lying = fog.things(m, st)
     facts = [("内部区域", [c.names[q] for q in c.names if c.within.get(q) == place]),
              ("已遇见人物", fog.met(m, st).get(place, [])),
@@ -791,7 +823,15 @@ def about(m: Module, st: GameState, c: Chart, place: str) -> Content:
     facts.append(("通往", ways))
     if st.sky in SKY_MARK and kind != "heard" and weather.outdoors(c.names[place]):
         facts.append(("天气", [SKY_MARK[st.sky]]))
-    rows += [Content.assemble((f"{label} ", STYLE["note"]), "、".join(items)) for label, items in facts if items]
+    for label, items in facts:
+        if not items:
+            continue
+        lead = cell_len(label) + 1
+        if width and label == "通往":
+            body = ("\n" + " " * lead).join(fold(i, width - lead, lead) for i in items)
+        else:
+            body = fold("、".join(items), width - lead, lead) if width else "、".join(items)
+        rows.append(Content.assemble((f"{label} ", STYLE["note"]), body))
     return Content("\n").join(rows)
 
 
@@ -975,7 +1015,8 @@ class MapModal(ModalScreen[str | None]):
             long, short = self._keys()
             self.query_one("#map-keys", Static).update(long if cell_len(long) <= inside else short)
         self.query_one(MapCanvas).update(self._drawn())
-        self.query_one("#place", Static).update(about(self.m, self.st, self.c, self.picked) if self.picked else "")
+        place_width = (self.side if self.wide else self.query_one(PlaceView).styles.width.value) - 2  # its scrollbar
+        self.query_one("#place", Static).update(about(self.m, self.st, self.c, self.picked, int(place_width)) if self.picked else "")
         self.call_after_refresh(self._follow, center)
 
     def _drawn(self) -> Content:

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -69,6 +69,11 @@ class Brush:
     img: Image.Image
     d: ImageDraw.ImageDraw
     rng: np.random.Generator
+    lights: list[tuple[float, float, float, float, Rgb]] = field(default_factory=list)  # x, y, reach, strength, colour
+
+    def light(self, x: float, y: float, reach: float, strength: float, colour: Rgb = (255, 214, 150)) -> None:
+        """A source the room is lit by (see _lit): a lamp, a window, a lantern."""
+        self.lights.append((x, y, reach, strength, colour))
 
     def tone(self, rgb: Rgb, spread: float = 0.08) -> Rgb:
         k = 1 + self.rng.uniform(-spread, spread)
@@ -103,6 +108,8 @@ def _sky(rng: np.random.Generator) -> Brush:
         x, y = rng.uniform(-100, W), rng.uniform(20, H * 0.35)
         w, h = rng.uniform(160, 380), rng.uniform(18, 42)
         b.d.ellipse([x, y, x + w, y + h], fill=b.tone((222, 220, 212), 0.04))
+    b.img = b.img.filter(ImageFilter.GaussianBlur(9))  # clouds are soft; nothing else is drawn yet
+    b.d = ImageDraw.Draw(b.img)
     return b
 
 
@@ -312,6 +319,8 @@ def _window(b: Brush, x: float, y: float, w: float, h: float) -> None:
     b.img.paste(Image.fromarray(sky.astype(np.uint8)), (int(x), int(y)))
     b.d.line([(x + w / 2, y), (x + w / 2, y + h)], fill=(70, 56, 44), width=6)
     b.d.line([(x, y + h / 2), (x + w, y + h / 2)], fill=(70, 56, 44), width=6)
+    b.light(x + w / 2, y + h / 2, max(w, h) * 1.4, 0.5, (196, 212, 230))
+    b.light(x + w / 2 + w * 0.4, H * 0.92, w * 1.3, 0.35, (210, 220, 232))  # its daylight on the floor
 
 
 def _shelves(b: Brush, x: float, y: float, w: float, h: float) -> None:
@@ -332,10 +341,7 @@ def _desk(b: Brush, x: float, y: float, w: float, *, lamp: bool = True) -> None:
     for lx in (x + 10, x + w - 22):
         b.d.rectangle([lx, y + 18, lx + 12, y + 110], fill=b.tone((76, 52, 34)))
     if lamp:
-        glow = Image.new("L", (W, H), 0)
-        ImageDraw.Draw(glow).ellipse([x + w * 0.7 - 120, y - 140, x + w * 0.7 + 120, y + 60], fill=90)
-        warm = Image.new("RGB", (W, H), (255, 214, 140))
-        b.img.paste(warm, (0, 0), glow.filter(ImageFilter.GaussianBlur(50)))
+        b.light(x + w * 0.7, y - 30, 230, 1.1, (255, 196, 120))
         b.d.polygon([(x + w * 0.7 - 22, y - 40), (x + w * 0.7 + 22, y - 40), (x + w * 0.7 + 10, y - 62), (x + w * 0.7 - 10, y - 62)],
                     fill=(196, 160, 90))
         b.d.line([(x + w * 0.7, y - 40), (x + w * 0.7, y)], fill=(60, 52, 40), width=4)
@@ -349,7 +355,7 @@ def _study(rng: np.random.Generator) -> Image.Image:
     _shelves(b, x0 + 10, y0 + 20, (x1 - x0) * 0.42, y1 - y0 - 30)
     _window(b, x1 - (x1 - x0) * 0.38, y0 + 40, (x1 - x0) * 0.28, (y1 - y0) * 0.45)
     _desk(b, W * 0.3, H * 0.74, W * 0.4)
-    return b.img
+    return _lit(b)
 
 
 def _office(rng: np.random.Generator, name: str = "") -> Image.Image:
@@ -380,11 +386,21 @@ def _office(rng: np.random.Generator, name: str = "") -> Image.Image:
     for x in np.arange(W * 0.2, W * 0.8, 26):  # its rails
         b.d.line([(x, H * 0.5), (x, H * 0.66)], fill=(70, 60, 48), width=3)
     _desk(b, W * 0.04, H * 0.8, W * 0.22, lamp=True)
-    return b.img
+    return _lit(b)
+
+
+def _hanging(b: Brush, xs: list[float], y: float) -> None:
+    """Lamps on cords from the ceiling, each a pool of warm light."""
+    for x in xs:
+        b.d.line([(x, 0), (x, y - 14)], fill=(30, 26, 22), width=3)
+        b.d.polygon([(x - 26, y), (x + 26, y), (x + 12, y - 16), (x - 12, y - 16)], fill=(70, 80, 64))
+        b.d.ellipse([x - 8, y - 4, x + 8, y + 8], fill=(255, 232, 170))
+        b.light(x, y + 60, 200, 0.9)
 
 
 def _newsroom(rng: np.random.Generator) -> Image.Image:
     b, (x0, y0, x1, y1) = _room(rng, (136, 128, 110), (98, 86, 72))
+    _hanging(b, [W * 0.3, W * 0.62], H * 0.3)
     _window(b, x1 - (x1 - x0) * 0.34, y0 + 36, (x1 - x0) * 0.26, (y1 - y0) * 0.42)
     for row, (y, scale) in enumerate(((H * 0.72, 0.8), (H * 0.86, 1.1))):
         for i in range(3):
@@ -394,7 +410,7 @@ def _newsroom(rng: np.random.Generator) -> Image.Image:
             b.d.rectangle([x + 40, y - 52 * scale, x + 80 * scale, y - 34 * scale], fill=(226, 220, 200))  # its sheet
             for k in range(int(b.rng.integers(2, 5))):  # paper stacks
                 b.d.rectangle([x + 120 * scale, y - 6 - k * 6, x + 170 * scale, y - k * 6], fill=b.tone((214, 206, 182)))
-    return b.img
+    return _lit(b)
 
 
 def _cellar(rng: np.random.Generator) -> Image.Image:
@@ -407,20 +423,20 @@ def _cellar(rng: np.random.Generator) -> Image.Image:
         b.d.ellipse([cx - 40, cy - 70, cx + 40, cy + 40], fill=b.tone((92, 64, 40)))
         b.d.line([(cx - 40, cy - 30), (cx + 40, cy - 30)], fill=(52, 44, 38), width=4)
         b.d.line([(cx - 40, cy + 10), (cx + 40, cy + 10)], fill=(52, 44, 38), width=4)
-    glow = Image.new("L", (W, H), 0)  # a single lantern's light
-    ImageDraw.Draw(glow).ellipse([x1 - 260, y0 - 40, x1 + 40, y1 - 100], fill=110)
-    b.img.paste(Image.new("RGB", (W, H), (240, 190, 110)), (0, 0), glow.filter(ImageFilter.GaussianBlur(60)))
-    return b.img
+    b.light(x1 - 110, y0 + 90, 300, 1.2, (255, 180, 100))  # a single lantern
+    b.d.rectangle([x1 - 122, y0 + 70, x1 - 98, y0 + 104], fill=(255, 220, 150))
+    return _lit(b)
 
 
 def _shop(rng: np.random.Generator) -> Image.Image:
     b, (x0, y0, x1, y1) = _room(rng, (132, 104, 78), (100, 72, 50))
     _shelves(b, x0 + 10, y0 + 20, x1 - x0 - 20, (y1 - y0) * 0.55)
+    _hanging(b, [W * 0.36, W * 0.66], H * 0.22)
     b.d.rectangle([W * 0.1, H * 0.68, W * 0.9, H * 0.76], fill=b.tone((110, 76, 48)))  # the counter
     b.d.rectangle([W * 0.1, H * 0.76, W * 0.9, H], fill=b.tone((86, 58, 38)))
     for x in np.arange(W * 0.16, W * 0.86, 70):  # jars and bottles
         b.d.rounded_rectangle([x, H * 0.6, x + 26, H * 0.68], radius=6, fill=b.tone((120, 140, 120), 0.2))
-    return b.img
+    return _lit(b)
 
 
 def _bedroom(rng: np.random.Generator) -> Image.Image:
@@ -430,12 +446,50 @@ def _bedroom(rng: np.random.Generator) -> Image.Image:
     b.d.rectangle([W * 0.12, H * 0.56, W * 0.16, H * 0.9], fill=b.tone((90, 62, 42)))
     b.d.rectangle([W * 0.14, H * 0.6, W * 0.24, H * 0.66], fill=(222, 216, 204))
     b.d.rectangle([W * 0.66, H * 0.5, W * 0.84, H * 0.9], fill=b.tone((96, 66, 44)))  # a wardrobe
-    return b.img
+    b.d.rectangle([W * 0.54, H * 0.66, W * 0.62, H * 0.82], fill=b.tone((86, 60, 40)))  # a night table and its candle
+    b.d.rectangle([W * 0.574, H * 0.6, W * 0.586, H * 0.66], fill=(232, 222, 196))
+    b.light(W * 0.58, H * 0.58, 160, 0.8, (255, 190, 110))
+    return _lit(b)
 
 
 OUTDOORS = {"street": _street, "graveyard": _graveyard, "church": _church, "station": _station, "water": _water,
             "woods": _woods, "hills": _hills, "fields": _fields, "house": _house, "glasshouse": _glasshouse}
 INDOORS = {"study": _study, "office": _office, "cellar": _cellar, "shop": _shop, "bedroom": _bedroom}
+
+
+def _lit(b: Brush, ambient: float = 0.42) -> Image.Image:
+    """A room lit only by its sources: dark where no lamp or window reaches, warm or cool pools
+    where they do. Flat, evenly lit rooms came out grey once brought down to characters."""
+    gh, gw = H // 4, W // 4
+    yy, xx = np.mgrid[0:gh, 0:gw] * 4.0
+    light = np.full((gh, gw, 3), ambient) * np.array([0.92, 0.95, 1.08])  # shade is a little cool
+    for x, y, reach, strength, colour in b.lights:
+        fall = np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * reach**2))
+        light += fall[..., None] * strength * np.array(colour) / 255
+    full = np.asarray(Image.fromarray(np.clip(light * 100, 0, 255).astype(np.uint8)).resize((W, H), Image.Resampling.BILINEAR), float) / 100
+    return Image.fromarray(np.clip(np.asarray(b.img, float) * full, 0, 255).astype(np.uint8))
+
+
+def _daylight(b: Brush) -> Image.Image:
+    """Outdoors: a low sun somewhere along the horizon and the foreground in shadow, so a
+    flat field of colours gets a near and a far."""
+    yy, xx = np.mgrid[0:H, 0:W].astype(float)
+    sx = b.rng.uniform(0.15, 0.85) * W
+    sun = np.exp(-((xx - sx) ** 2 / (2 * (W * 0.22) ** 2) + (yy - H * 0.42) ** 2 / (2 * (H * 0.2) ** 2)))
+    shade = 1 - 0.38 * np.clip((yy - H * 0.55) / (H * 0.45), 0, 1) ** 1.4
+    arr = np.asarray(b.img, float) * shade[..., None] * np.array([0.94, 0.96, 1.02])
+    arr += sun[..., None] * np.array([70, 52, 26])
+    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
+
+
+def _finish(img: Image.Image, *, saturation: float = 1.25, contrast: float = 0.35) -> Image.Image:
+    """Colour and an S-curve: the darks deeper, the lights brighter, so the scene keeps its
+    shapes in a few dozen characters."""
+    arr = np.asarray(img, float) / 255
+    grey = arr.mean(axis=2, keepdims=True)
+    arr = grey + (arr - grey) * saturation
+    arr = arr + contrast * arr * (1 - arr) * (2 * arr - 1) * 2  # an S-curve around the middle
+    return Image.fromarray(np.clip(arr * 255, 0, 255).astype(np.uint8))
 
 
 def paint(name: str, description: str = "", *, key: str = "") -> Image.Image:
@@ -449,8 +503,8 @@ def paint(name: str, description: str = "", *, key: str = "") -> Image.Image:
     else:
         b = _sky(rng)
         OUTDOORS[kind](b)
-        img = b.img
-    img = img.filter(ImageFilter.GaussianBlur(1.6))  # paint, not diagram
+        img = _daylight(b)
+    img = _finish(img.filter(ImageFilter.GaussianBlur(1.2)))  # paint, not diagram
     grain = np.asarray(img, float) * (1 + rng.normal(0, 0.035, (H, W, 1)))
     yy, xx = np.mgrid[0:H, 0:W]
     vignette = 1 - 0.28 * (((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2) / 2
@@ -618,7 +672,8 @@ def portrait(name: str, look: str = "", role: str = "", *, key: str = "") -> Ima
     d.line([(cx - 28, mouth), (cx + 28, mouth + rng.uniform(-4, 4))], fill=(140, 74, 66), width=5)
     if not woman and ("胡" in look or "须" in look or (old and rng.random() < 0.5)):
         d.pieslice([cx - fw / 2 + 10, ey + 40, cx + fw / 2 - 10, top + fh * 1.75], 0, 180, fill=hair)  # a beard
-        d.ellipse([cx - 40, mouth - 16, cx + 40, mouth + 8], fill=hair)
+        d.polygon([(cx - 44, mouth + 4), (cx - 20, mouth - 14), (cx, mouth - 8), (cx + 20, mouth - 14), (cx + 44, mouth + 4),
+                   (cx + 16, mouth - 2), (cx, mouth + 2), (cx - 16, mouth - 2)], fill=hair)  # a moustache
     if "眼镜" in look or (old and rng.random() < 0.4):
         for side in (-1, 1):
             ex = cx + side * fw * 0.2
@@ -629,11 +684,26 @@ def portrait(name: str, look: str = "", role: str = "", *, key: str = "") -> Ima
             d.line([(cx + side * (fw * 0.2 + 26), ey + 4), (cx + side * (fw * 0.2 + 40), ey + 14)], fill=tuple(int(c * 0.8) for c in skin), width=3)
             d.line([(cx + side * 40, mouth - 20), (cx + side * 46, mouth + 14)], fill=tuple(int(c * 0.82) for c in skin), width=3)
 
-    # light from the left, shade to the right; then paint, not diagram
+    # light from the upper left: the far side of the face and body in shade, a warm key on the
+    # near side, a cool rim along the shaded edge; then paint, not diagram
+    body = Image.new("L", (PW, PH), 0)
+    bd = ImageDraw.Draw(body)
+    bd.ellipse([cx - fw / 2, top, cx + fw / 2, top + fh * 1.7], fill=255)
+    bd.rectangle([cx - 46, 470, cx + 46, 600], fill=255)
+    bd.rounded_rectangle([cx - 250, 560, cx + 250, PH + 80], radius=140, fill=255)
+    mask = np.asarray(body, float) / 255
+    xx, yy = np.meshgrid(np.arange(PW, dtype=float), np.arange(PH, dtype=float))
+    side = np.clip((xx - cx + fw * 0.1) / (fw * 0.9), 0, 1) ** 1.3  # 0 on the lit side, 1 in shade
+    shade = np.asarray(Image.fromarray((side * mask * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(10)), float) / 255
+    key = np.exp(-((xx - cx + fw * 0.6) ** 2 + (yy - top - 40) ** 2) / (2 * 260.0**2))
     arr = np.asarray(img, float)
-    xx = np.linspace(1.08, 0.78, PW)[None, :, None]
-    arr = arr * xx * (1 + rng.normal(0, 0.03, (PH, PW, 1)))
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.4))
+    arr = arr * (1 - 0.42 * shade[..., None]) * np.array([1.0, 0.98, 1.04]) ** shade[..., None]
+    arr = arr + key[..., None] * np.array([46, 32, 14]) * (0.5 + 0.5 * mask[..., None])
+    edge = np.asarray(body.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.GaussianBlur(3)), float) / 255
+    arr = arr + (edge * (xx > cx))[..., None] * np.array([40, 52, 70])  # the rim light behind
+    arr = arr * np.linspace(1.06, 0.82, PW)[None, :, None] * (1 + rng.normal(0, 0.03, (PH, PW, 1)))
+    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))
+    return _finish(out, saturation=1.12, contrast=0.3)
 
 
 def face(folder: Path, key: str, name: str, look: str = "", role: str = "") -> Path:
@@ -674,7 +744,8 @@ COLOURS: list[tuple[tuple[str, ...], Rgb]] = [
 THINGS: list[tuple[str, tuple[str, ...]]] = [
     ("skull", ("头骨", "骷髅", "骨")), ("key", ("钥匙",)), ("gun", ("枪",)), ("blade", ("刀", "匕首", "斧", "剑")),
     ("watch", ("怀表", "手表", "表", "钟")), ("light", ("灯", "手电", "蜡烛", "烛")), ("photo", ("照片", "相片", "合影", "相框", "肖像", "画")),
-    ("map", ("地图", "图纸")), ("book", ("书", "日记", "笔记", "账本", "信", "手稿", "典籍", "本")),
+    ("map", ("地图", "图纸")), ("letter", ("信", "电报", "便条", "纸条", "请柬", "遗书")),
+    ("book", ("书", "日记", "笔记", "账本", "手稿", "典籍", "本")),
     ("cup", ("杯", "碗", "茶")), ("vessel", ("瓶", "罐", "壶", "酒")), ("jewel", ("项链", "戒指", "珍珠", "首饰", "胸针", "坠")),
     ("shovel", ("铲", "锹")),
 ]
@@ -703,10 +774,22 @@ def still(name: str, description: str = "", *, key: str = "") -> Image.Image:
     cx, cy = W / 2, table + 40
     d.ellipse([cx - 230, cy - 20, cx + 230, cy + 50], fill=(60, 42, 28))  # its shadow
     dark = tuple(int(c * 0.6) for c in colour)
-    if kind == "book":
-        d.polygon([(cx - 200, cy), (cx + 170, cy - 30), (cx + 210, cy + 10), (cx - 160, cy + 40)], fill=colour)
-        d.polygon([(cx - 200, cy), (cx + 170, cy - 30), (cx + 170, cy - 46), (cx - 200, cy - 16)], fill=(226, 216, 190))  # pages
-        d.line([(cx - 190, cy - 8), (cx + 165, cy - 38)], fill=(190, 180, 156), width=2)
+    if kind == "book":  # a closed book seen from above and in front: cover, the block of pages, the spine
+        cover = colour if colour != (120, 88, 60) else (92, 44, 36)
+        d.polygon([(cx - 230, cy - 10), (cx + 140, cy - 60), (cx + 230, cy + 10), (cx - 140, cy + 64)], fill=(226, 216, 190))
+        d.polygon([(cx - 230, cy - 40), (cx + 140, cy - 90), (cx + 230, cy - 20), (cx - 140, cy + 34)], fill=cover)
+        d.polygon([(cx - 230, cy - 40), (cx - 140, cy + 34), (cx - 140, cy + 64), (cx - 230, cy - 10)], fill=tuple(int(c * 0.7) for c in cover))
+        for k in range(1, 6):  # the edges of the pages
+            d.line([(cx - 140, cy + 34 + k * 5), (cx + 230, cy - 20 + k * 5)], fill=(196, 186, 160), width=1)
+        d.line([(cx - 150, cy - 26), (cx + 150, cy - 66)], fill=(196, 160, 80), width=3)  # a gilt rule
+    elif kind == "letter":  # an envelope with a wax seal, the letter half out of it
+        d.polygon([(cx - 160, cy - 120), (cx + 150, cy - 136), (cx + 166, cy - 20), (cx - 150, cy - 4)], fill=(236, 228, 206))
+        for k in range(5):
+            y = cy - 106 + k * 18
+            d.line([(cx - 130, y), (cx + 40 + rng.uniform(0, 90), y - 6)], fill=(110, 96, 80), width=2)
+        d.polygon([(cx - 220, cy - 40), (cx + 200, cy - 60), (cx + 214, cy + 60), (cx - 206, cy + 80)], fill=(214, 198, 160))
+        d.line([(cx - 220, cy - 40), (cx, cy + 14), (cx + 200, cy - 60)], fill=(176, 160, 124), width=3)
+        d.ellipse([cx - 22, cy - 6, cx + 22, cy + 34], fill=(150, 34, 32))
     elif kind == "key":
         d.ellipse([cx - 190, cy - 50, cx - 100, cy + 40], outline=colour, width=18)
         d.rectangle([cx - 104, cy - 10, cx + 170, cy + 8], fill=colour)
@@ -774,9 +857,12 @@ def still(name: str, description: str = "", *, key: str = "") -> Image.Image:
         d.polygon([(cx - 150, cy - 120), (cx + 150, cy - 120), (cx + 150, cy + 20), (cx - 150, cy + 20)], fill=colour)
         d.polygon([(cx - 150, cy - 120), (cx - 100, cy - 170), (cx + 200, cy - 170), (cx + 150, cy - 120)], fill=tuple(int(c * 1.15) if c < 220 else c for c in colour))
         d.polygon([(cx + 150, cy - 120), (cx + 200, cy - 170), (cx + 200, cy - 30), (cx + 150, cy + 20)], fill=dark)
-    light = np.linspace(1.12, 0.8, W)[None, :, None]  # the lamp to the left
+    yy, xx = np.mgrid[0:H, 0:W].astype(float)  # a lamp up to the left: a pool on the thing, dark round it
+    pool = np.exp(-((xx - cx + 120) ** 2 / (2 * 340.0**2) + (yy - cy + 40) ** 2 / (2 * 220.0**2)))
+    light = 0.45 + 0.85 * pool[..., None] * np.array([1.0, 0.94, 0.82])
     arr = np.asarray(b.img, float) * light * (1 + rng.normal(0, 0.03, (H, W, 1)))
-    return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.4))
+    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))
+    return _finish(out, saturation=1.15, contrast=0.3)
 
 
 def thing(folder: Path, key: str, name: str, description: str = "") -> Path:

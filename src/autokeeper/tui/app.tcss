@@ -353,6 +353,13 @@ ModalScreen {
     width: 100%;
     margin: 1 0 0 0;
 }
+#handout-modal {
+    width: 70;  /* the sheet (paper.sheet, 60 and its shadow) with room for the scrollbar */
+    max-height: 94%;
+}
+#handout-modal .modal-body {
+    max-height: 40;
+}
 #sheet-modal {
     max-width: 124;
     height: 90%;

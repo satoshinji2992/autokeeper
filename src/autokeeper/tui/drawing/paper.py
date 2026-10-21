@@ -29,10 +29,11 @@ class Paper:
     faint: str  # rules, ornaments, stains
     accent: str  # dates, signatures, mastheads
     edge: str  # top and bottom edges of the sheet: torn, cut or plain
+    hand: bool = False  # written by hand: the words in italics, where the terminal has them
 
 
-LETTER = Paper("#eee3c6", "#2e2416", "#cdbf9e", "#6b4422", "▁")
-DIARY = Paper("#f2ecd9", "#22314f", "#c9c0a8", "#a8463f", "▔")
+LETTER = Paper("#eee3c6", "#2e2416", "#cdbf9e", "#6b4422", "▁", hand=True)
+DIARY = Paper("#f2ecd9", "#22314f", "#c9c0a8", "#a8463f", "▔", hand=True)
 NEWS = Paper("#e7e3d6", "#1d1d1d", "#a9a59a", "#1d1d1d", "▁")
 WIRE = Paper("#efe0a3", "#1f1f1f", "#c7b878", "#5c4a12", "▁")
 BOOK = Paper("#e4d3a8", "#3a2412", "#c9b47f", "#7a4f1f", "▁")
@@ -140,10 +141,11 @@ class _Page:
         self.inner = width - 2 * margin
         self.lines: list[Line] = []
         self.bg = Style(bgcolor=paper.paper)
-        self.ink = Style(color=paper.ink, bgcolor=paper.paper)
+        self.ink = Style(color=paper.ink, bgcolor=paper.paper, italic=paper.hand)
         self.shadow = Style(bgcolor="#14110d")
 
     def style(self, color: str | None = None, **kw) -> Style:
+        kw.setdefault("italic", self.p.hand)
         return Style(color=color or self.p.ink, bgcolor=self.p.paper, **kw)
 
     def row(self, pieces: list[Piece], *, align: str = "left", left: Piece | None = None) -> None:
@@ -242,7 +244,7 @@ def diary(title: str, lines: list[str], width: int) -> list[Line]:
             head, rest = s[: found.end()].strip(), s[found.end():].lstrip("：: ")
             page.text(head, page.style(DIARY.accent, bold=True), left=rule)
             if rest:
-                page.text(rest, page.style(italic=False), left=rule)
+                page.text(rest, left=rule)
         else:
             page.text(s, left=rule)
     page.row([], left=rule)
