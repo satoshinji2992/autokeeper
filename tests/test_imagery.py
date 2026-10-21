@@ -115,14 +115,10 @@ def test_outlines_are_drawn_into_every_weather_layer(tmp_path):
     assert sum(dim_rows[y][x][1].color.triplet) < sum(rows[y][x][1].color.triplet)  # only darker
 
 
-def test_a_creature_is_painted_with_its_silhouette_and_staged_bigger_the_nearer(tmp_path):
-    from autokeeper import scenery
-
-    beast = scenery.creature("食尸鬼", "带犬科特征、利爪代替手指", key="ghoul")
-    assert beast.mode == "RGBA"
-    alpha = np.asarray(beast.getchannel("A"))
-    assert alpha[5, 5] < 10 and alpha[beast.height // 3, beast.width // 2] > 200  # the dark round it is not part of it
-    path = tmp_path / "beast.png"
+def test_a_creature_drawn_on_black_is_staged_at_the_stages_shape_and_bigger_the_nearer(tmp_path):
+    beast = Image.new("RGB", (300, 400), (0, 0, 0))  # as imagegen draws a creature: alone on black
+    ImageDraw.Draw(beast).ellipse((60, 40, 240, 380), fill=(120, 140, 90))
+    path = tmp_path / "beast.jpg"
     beast.save(path)
     Image.new("RGB", (320, 180), (90, 120, 90)).save(tmp_path / "place.png")
     arena = imagery.staged(str(path), 40, 12)
@@ -143,3 +139,26 @@ def test_a_figure_drawn_on_black_is_cut_out_with_the_dark_inside_it():
     mask = np.asarray(imagery.silhouette(im))
     assert mask[5, 5] < 20 and mask[110, 100] > 200 and mask[200, 100] > 200
     assert imagery.silhouette(Image.new("RGB", (200, 260), (200, 190, 170))) is None  # a light wall: nothing to cut
+
+
+async def test_the_library_of_congress_offers_period_photographs_at_their_largest(monkeypatch):
+    class Reply:
+        def json(self):
+            return {"results": [
+                {"title": "New Post Office building, interior, 1919", "url": "https://www.loc.gov/item/93513371/",
+                 "image_url": ["https://tile.loc.gov/a_150px.jpg#h=150&w=109", "https://tile.loc.gov/at.gif#h=150&w=109",
+                               "https://tile.loc.gov/ar.jpg#h=640&w=466"]},
+                {"title": "No picture", "url": "https://www.loc.gov/item/1/", "image_url": []},
+            ]}
+
+    asked = {}
+
+    async def get(client, url, **params):
+        asked.update(params, url=url)
+        return Reply()
+
+    monkeypatch.setattr(imagery, "_get", get)
+    found = await imagery.loc_photos(None, "post office interior")
+    assert asked["url"] == imagery.LOC and asked["q"] == "post office interior" and asked["fo"] == "json"
+    assert [(c.thumb, c.width, c.height) for c in found] == [("https://tile.loc.gov/ar.jpg", 466, 640)]
+    assert found[0].license == imagery.LOC_LICENCE

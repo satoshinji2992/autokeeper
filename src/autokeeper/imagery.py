@@ -125,6 +125,28 @@ async def search(client: httpx.AsyncClient, query: str, limit: int = 8, width: i
 
 
 WEB_LICENCE = "网页图片，版权归原作者，只在本机使用"
+LOC = "https://www.loc.gov/photos/"
+LOC_LICENCE = "美国国会图书馆藏照片，授权各异，只在本机使用"
+
+
+async def loc_photos(client: httpx.AsyncClient, query: str, limit: int = 8) -> list[Candidate]:
+    """Photographs from the Library of Congress: a great many from the 1900s to the 1930s, the
+    game's own years (streets, shopfronts, rooms, people, things). Their rights vary, so they are
+    only for what stays on this machine, as web pictures are (see find_picture)."""
+    data = (await _get(client, LOC, q=query, fo="json", c=limit, at="results")).json()
+    out = []
+    for r in data.get("results", []):
+        sizes = []
+        for url in r.get("image_url") or []:
+            plain, _, frag = str(url).partition("#")
+            dims = dict(part.split("=", 1) for part in frag.split("&") if "=" in part)
+            if plain.lower().endswith((".jpg", ".jpeg", ".png")) and dims.get("w", "").isdigit():
+                sizes.append((int(dims["w"]), int(dims.get("h", "0") or 0), plain))
+        if not sizes:
+            continue
+        w, h, best = max(sizes)  # the largest the listing offers (about 640 px): enough for a few dozen cells
+        out.append(Candidate(str(r.get("title", ""))[:120], str(r.get("url", "")), best, LOC_LICENCE, "", w, h))
+    return out
 
 
 async def web_images(client: httpx.AsyncClient, query: str, limit: int = 8) -> list[Candidate]:
@@ -316,7 +338,8 @@ async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: 
 async def find_picture(
     cfg: Config, client: httpx.AsyncClient, subject: str, kind: str, *, on_reply=None, web: bool = False,
 ) -> tuple[Image.Image, Candidate] | None:
-    """Commons first (licensed); with `web`, a web image search when Commons has nothing that fits."""
+    """Commons first (licensed); with `web`, the Library of Congress's photographs of the period, then a
+    web image search, when Commons has nothing that fits."""
     label = {"portrait": "人物头像", "scene": "场景", "item": "物件特写"}.get(kind, "场景")
     q = await _structured(cfg, "vision", QUERY_SYSTEM, f"{label}：{subject}", Queries, on_reply=on_reply)  # art: Opus
     seen: dict[str, Candidate] = {}
@@ -329,6 +352,15 @@ async def find_picture(
             for c in await search(client, query):
                 seen.setdefault(c.title, c)
     found = await _pick(cfg, client, list(seen.values())[:6], subject, kind, label, on_reply)
+    if found is None and web:
+        period: dict[str, Candidate] = {}
+        for query in queries[:2]:
+            try:
+                for c in await loc_photos(client, query):
+                    period.setdefault(c.thumb, c)
+            except (httpx.HTTPError, ValueError):
+                continue
+        found = await _pick(cfg, client, list(period.values())[:6], subject, kind, label, on_reply) if period else None
     if found is None and web:
         pictures: dict[str, Candidate] = {}
         for query in queries[:2]:

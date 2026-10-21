@@ -17,7 +17,7 @@ import yaml
 from PIL import Image
 from rich.console import Console
 
-from autokeeper import config, credits, imagegen, imagery, paths, scenery
+from autokeeper import config, credits, imagegen, imagery, paths
 from autokeeper.agents.cast import Action, Ruling
 from autokeeper.agents.director import Improv, NewLook
 from autokeeper.engine.game import Game
@@ -109,8 +109,14 @@ def colour_of(path: str | Path) -> tuple[int, ...]:
         return im.convert("RGB").resize((1, 1)).getpixel((0, 0))
 
 
-def near(a, b, slack: int = 24) -> bool:
-    return all(abs(x - y) <= slack for x, y in zip(a, b, strict=True))
+def near(a, b, slack: float = 0.08) -> bool:
+    """The same colour by its hue and share of each channel: a picture drawn or found gets a light grade
+    (imagery.shared_look) that dims and drains it a little."""
+    def share(rgb):
+        total = max(1, sum(rgb))
+        return [x / total for x in rgb]
+
+    return all(abs(x - y) <= slack for x, y in zip(share(a), share(b), strict=True))
 
 
 # -- the codex run -------------------------------------------------------------------------
@@ -503,7 +509,7 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
 async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_they_get_there(codex, fake):
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
     hub.game.visuals.cfg = config.Config()
-    assert scenery.painted(hub.m.pictures[hub.m.location("tower").art])  # no picture of its own: one painted by program
+    assert hub.m.location("tower").art not in hub.m.pictures  # no picture of its own, and none painted for it
     sent = []
 
     async def collect(msg):

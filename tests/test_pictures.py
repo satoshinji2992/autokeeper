@@ -1,5 +1,5 @@
 """The module's own missing pictures: a photo found for each, else one Codex draws, kept for all its
-games; painted by program only when neither can be had (pictures.py)."""
+games; no picture at all when neither can be had (pictures.py)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from autokeeper import config, imagegen, imagery, paths, pictures, scenery
+from autokeeper import config, imagegen, imagery, paths, pictures
 from autokeeper.engine.visuals import Visuals
 from autokeeper.imagery import Candidate
 from autokeeper.module.schema import NPC, Creature, Item, Module
@@ -33,10 +33,7 @@ def test_what_has_no_picture_of_its_own_and_passers_by_get_none(module):
     assert keys["scene-tower"] == "scene" and keys["warden"] == "portrait" and keys["item-ledger"] == "item"
     assert keys["creature-hound"] == "creature"
     assert "face-paperboy" not in keys and "item-cup" not in keys  # a passer-by, a thing not worth registering
-    scenery.fill(module)
-    scenery.fill_people(module)
-    assert "scene-tower" in {g.key for g in pictures.gaps(module)}  # a painted picture is no picture of its own
-    assert not module.npc("paperboy").portrait  # and passers-by are not painted either
+    assert not module.npc("paperboy").portrait  # and passers-by get none
 
 
 async def test_a_photo_first_then_a_drawing_kept_for_every_game(module, monkeypatch):
@@ -67,19 +64,19 @@ async def test_a_photo_first_then_a_drawing_kept_for_every_game(module, monkeypa
     assert tower.is_file() and module.pictures["scene-tower"] == str(tower) and module.location("tower").art == "scene-tower"
     assert next(i for i in module.items if i.id == "ledger").art == "item-ledger"
     assert not pictures.gaps(module)
-    again = Module.load(EXAMPLE)  # another game of it: found and drawn before, in front of anything painted
+    again = Module.load(EXAMPLE)  # another game of it: what was found and drawn before
     assert set(pictures.adopt(again)) >= {"square", "scene-tower", "warden"}
-    assert scenery.fill(again) == [] and again.location("tower").art == "scene-tower"
+    assert again.location("tower").art == "scene-tower" and not pictures.gaps(again)
 
 
-async def test_nothing_to_be_had_leaves_the_painted_one(module, monkeypatch):
+async def test_nothing_to_be_had_leaves_it_without_a_picture(module, monkeypatch):
     async def none(*args, **kwargs):
         return None
 
     monkeypatch.setattr(imagery, "find_picture", none)
     lines: list[str] = []
     assert await real_fill(config.Config(), module, log=lines.append) == []  # Codex is off in tests
-    assert any("程序画的图" in line for line in lines)
+    assert any("暂时不配图" in line for line in lines)
     assert await real_fill(config.Config(search="none"), module, log=lines.append) == []  # nothing to look with
 
 
