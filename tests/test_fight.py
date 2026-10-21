@@ -664,3 +664,35 @@ async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the
         canvas = screen.query_one(stage.Arena).canvas
         assert await until(pilot, lambda: canvas.looks)
         assert "●" in canvas.looks[""].plain and app.is_running  # two eyes in the dark
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_story_tells_each_exchange_once_and_a_wound_on_its_card(module, fake):
+    from autokeeper.engine import combat as battle
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.game import GameScreen
+
+    from .test_tui import story_text, until
+
+    ruling = Ruling(needs_roll=True, skill="格斗(斗殴)", combat=["warden"])
+    game, _, _ = fighters(module, fake, {"hit": (HIT, ruling)})
+    fake.queue(90, 60, 20, 50).queue_totals(3)  # 周衡 misses; the warden hits him for 3
+    events, _ = await run_turn(turn_graph.build(game, InMemorySaver()), "hit", THREAD)
+    acts = [e for e in events if e["type"] == "fight_act"]
+    assert len(acts) == 2 and any(e["type"] == "damage" for e in events)
+    state = game.state.model_copy(deep=True)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen = GameScreen(module, state, resume=True)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        for ev in events:  # the round as the screen hears it
+            if ev["type"] in ("damage", "fight_round", "fight_act", "fight_state"):
+                await screen.handle(ev)
+        await screen.handle({"type": "fight_state", "fight": battle.view(state.fight),
+                             "lines": [acts[1]["line"], "周衡还吊着一口气（体质 30）"]})  # the round's end: something new
+        await pilot.pause(0.3)
+        text = story_text(screen)
+        assert text.count("受到 3 点伤害") == 1  # on the warden's card, not again as a line, nor as a ✚ line
+        assert not any(act["line"] in text for act in acts)  # each exchange is its card
+        assert "还吊着一口气" in text  # what the cards do not say still comes

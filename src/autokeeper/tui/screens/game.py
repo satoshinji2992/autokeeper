@@ -175,6 +175,7 @@ class GameScreen(Screen):
         self._clock = None  # the round's countdown while the list is up
         self._beating, self._beat_on = False, False  # a fight's heartbeat is going; the beat is on the stage now
         self._typing_until = 0.0  # the player is typing: the screen holds still until then (typing)
+        self._carded: set[str] = set()  # this round's exchanges, each on its card: not again as a line
         self._clock_paused, self._clock_total, self._clock_left, self._clock_until, self._fallback = False, 0.0, 0.0, 0.0, ""
 
     def compose(self) -> ComposeResult:
@@ -786,7 +787,8 @@ class GameScreen(Screen):
             else:
                 story.add("item", ItemCard(self.m, ev, self.app.art_style))
         elif t == "damage":
-            story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
+            if not ev.get("fighter"):  # a fight's or a chase's wound is on its card or in its line already
+                story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
             self._panels()
         elif t == "plugin_status":
             self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
@@ -926,10 +928,12 @@ class GameScreen(Screen):
         elif t == "reveal":  # a creature first seen: over the whole screen, before the sanity roll
             self.run_worker(self._reveal(ev.get("portrait", ""), ev.get("name", ""), 3.5), group="reveal")
         elif t == "fight_round":
+            self._carded.clear()
             arena.round_begins(ev["order"], ev["fight"])
             story.add("system", Text(f"── 第 {ev['round']} 轮 ──", style="#7a0a0a", justify="center"))
         elif t == "fight_act":
             story.add("fightcard", fight_card(ev))
+            self._carded.add(ev.get("line", ""))
             arena.act(ev)
             if ev.get("dice"):
                 self.query_one(DiceTray).roll(ev["dice"])
@@ -937,8 +941,8 @@ class GameScreen(Screen):
                 self._wound(ev.get("hurt", ""), ev["damage"])
         elif t == "fight_state":
             arena.show(ev["fight"], self.m, style)
-            if ev.get("lines"):
-                story.add("system", Text("\n".join(f"· {line}" for line in ev["lines"]), style="#b39b8a"))
+            if lines := [line for line in ev.get("lines") or [] if line not in self._carded]:  # not the exchange again
+                story.add("system", Text("\n".join(f"· {line}" for line in lines), style="#b39b8a"))
             self._panels()
         elif t == "fight_say":
             body = Text()
