@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from autokeeper import config, credits
 from autokeeper.agents.cast import Action, Ruling
@@ -258,6 +259,35 @@ def test_picture_stages_keep_to_the_looks_a_module_and_a_place_may_have(module):
     module.npc("warden").looks.append(Look(when="flag:bell_stopped", change="守钟人不见了"))  # six: no more anywhere
     assert "不写 picture" in adapt._material(module, "foreshadow")
     assert [e[0] for e in adapt.edits(module, "foreshadow", out)] == ["append"]
+
+
+async def test_the_compile_step_gives_written_signs_their_stages_and_leaves_their_words(tmp_path, monkeypatch):
+    """A module whose signs never change (the bundled ones, written before stages): the pass keeps
+    each sign as written and only adds the stages, under the sign's own id."""
+    folder = tmp_path / "example"
+    shutil.copytree(EXAMPLE, folder)
+    written = Foreshadow(id="sign_painting", hint="告示栏旁挂着一幅海边风景画，岸边空无一人", where="square", pays_off="k_tower")
+    (folder / "situation.yaml").write_text(yaml.safe_dump({"foreshadow": [written.model_dump(mode="json", exclude_defaults=True)]},
+                                                         allow_unicode=True, sort_keys=False), encoding="utf-8")
+    m = Module.load(folder)
+    assert adapt.wanted(m, "foreshadow")
+    answer = adapt.Signs(foreshadow=[adapt.SignDraft(
+        id="sign_painting", hint="改写过的端倪", where="office", pays_off="k_tower",  # its words and place are not taken
+        stages=[adapt.StageDraft(hint="画里的海岸边多了一个背对着人的身影", picture=FIGURE)])])
+
+    async def ask(cfg, name, m, **_):
+        return answer
+
+    monkeypatch.setattr(adapt, "_ask", ask)
+    await adapt.adapt(folder, passes=("foreshadow",), cfg=SimpleNamespace(), log=lambda _: None)
+    sign = Module.load(folder).foreshadow[0]
+    assert (sign.hint, sign.where) == ("告示栏旁挂着一幅海边风景画，岸边空无一人", "square")
+    assert [(s.hint, s.flag) for s in sign.stages] == [("画里的海岸边多了一个背对着人的身影", "sign_painting_1")]  # no sign_sign_
+    after = Module.load(folder)
+    assert after.location("square").looks == [Look(when="flag:sign_painting_1", change=FIGURE)]
+    assert not adapt.wanted(after, "foreshadow")  # a sign that changes: the pass is done
+    found = adapt.edits(m, "foreshadow", answer)
+    assert adapt.without(found, {"foreshadow:sign_painting:1"}) == []  # its only stage held back: nothing left to write
 
 
 async def drawn(game) -> None:

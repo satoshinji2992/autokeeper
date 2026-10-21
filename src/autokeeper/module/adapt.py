@@ -294,7 +294,8 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                    "一步比一步近，仍不点破、不说出线索；when 写最早什么时候露出（'D2 08:00' 或 flag:已声明的标记），在别处露出的写 where。"
                    "某一步的变化在那个地点的场景图里看得出来的（旅馆那幅画里多了一个人影，天花板上的水渍又大了一圈），再写 picture："
                    "一句话，只写画面上和上一步比哪里不一样了，不剧透，不说出线索；只给【有场景图的地点】里列出的地点写，不超过那里说的处数；"
-                   "声音、气味、有人说起这些画面上看不出来的不写。", Signs),
+                   "声音、气味、有人说起这些画面上看不出来的不写。"
+                   "【伏笔（已写）】里列着的不重写：已写的够 3 条就不再写新的；给其中值得的补 stages 时，沿用它的 id，hint、where、pays_off 照抄。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
                 "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。", NewClues),
     "ties": ("写 4–8 条私人牵连：调查员背景里的重要之人、意义非凡之地、思想与信念、宝贵之物、职业，可以怎样接上这个模组的人和地方。"
@@ -541,6 +542,8 @@ def wanted(m: Module, name: str) -> bool:
         return len(m.endings) < 3
     if name == "meet":
         return bool(_unmarked(m))
+    if name == "foreshadow":  # none yet, or none that changes: the pass then gives the written ones their stages
+        return not any(f.stages for f in m.foreshadow)
     return not getattr(m, name)
 
 
@@ -797,7 +800,7 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
         """The flag the n-th stage's picture hangs on, with its look put on the place; "" for none."""
         nonlocal spare
         change = " ".join(change.split())
-        flag = re.sub(r"[^a-z0-9_]", "_", f"sign_{f.id}_{n}".lower())
+        flag = re.sub(r"[^a-z0-9_]", "_", f"sign_{f.id.removeprefix('sign_')}_{n}".lower())
         if (not change or spare <= 0 or room.get(place, 0) <= 0 or flag in m.flags or flag in flags
                 or guard.leaks(change, clues, public=names)):
             return ""
@@ -821,8 +824,13 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
             kept.append(stage.model_dump(mode="json", exclude_defaults=True))
         return kept
 
-    new = []
+    new, staged = [], []
+    written = {f.id: f for f in m.foreshadow}
     for f in out.foreshadow:
+        if (old := written.get(f.id)) is not None:  # a written sign: only stages, onto it as it is
+            if not old.stages and (more := stages(SignDraft(**{**old.model_dump(), "stages": f.stages}))):
+                staged.append(("replace", "foreshadow", old.id, "stages", more))
+            continue
         if f.id in taken or f.where not in places or f.pays_off not in targets or guard.leaks(f.hint, clues, public=names):
             continue
         taken.add(f.id)
@@ -830,7 +838,7 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
         if more := stages(f):
             item["stages"] = more
         new.append(item)
-    found: list[tuple[Any, ...]] = [("append", "foreshadow", new)] if new else []
+    found: list[tuple[Any, ...]] = ([("append", "foreshadow", new)] if new else []) + staged
     found += [("key", "flags", flag, meaning) for flag, meaning in flags.items()]
     return found + [("add", "locations", place, "looks", items) for place, items in looks.items()]
 
@@ -1057,9 +1065,11 @@ def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...
         elif e[0] == "append" and e[1] == "foreshadow":
             e = ("append", "foreshadow", [{**f, "stages": _kept(f["id"], f.get("stages", []), refs)} if f.get("stages") else f
                                           for f in e[2] if f"foreshadow:{f['id']}" not in refs])
+        elif e[0] == "replace" and e[1] == "foreshadow" and e[3] == "stages":
+            e = (*e[:4], [] if f"foreshadow:{e[2]}" in refs else _kept(e[2], e[4], refs))
         elif e[0] == "put" and e[3] == "knows":
             e = (*e[:4], [k for i, k in enumerate(e[4]) if f"knows:{e[2]}:{i}" not in refs])
-        if (e[0] == "append" and not e[2]) or (e[0] == "put" and e[3] == "knows" and not e[4]):
+        if (e[0] == "append" and not e[2]) or (e[0] in ("put", "replace") and e[3] in ("knows", "stages") and not e[4]):
             continue
         out.append(e)
     if gone := _staged(found) - _staged(out):  # a stage left out takes its picture along: its flag and the look on it
@@ -1071,8 +1081,10 @@ def without(found: list[tuple[Any, ...]], refs: set[str]) -> list[tuple[Any, ...
 
 
 def _staged(found: list[tuple[Any, ...]]) -> set[str]:
-    """The flags the stages of a pass's new signs set."""
-    return {s["flag"] for e in found if e[0] == "append" and e[1] == "foreshadow" for f in e[2] for s in f.get("stages", []) if s.get("flag")}
+    """The flags the stages of a pass's signs set, new ones and written ones given stages."""
+    signs = [f for e in found if e[0] == "append" and e[1] == "foreshadow" for f in e[2]]
+    signs += [{"stages": e[4]} for e in found if e[0] == "replace" and e[1] == "foreshadow" and e[3] == "stages"]
+    return {s["flag"] for f in signs for s in f.get("stages", []) if s.get("flag")}
 
 
 def _kept(sign: str, stages: list[Any], refs: set[str]) -> list[Any]:
