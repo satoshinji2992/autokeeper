@@ -92,7 +92,7 @@ def test_the_skill_package_carries_the_sheets_the_routes_and_the_scripted_attack
     assert "## 齿轮背后的藤（`coil`）" in beasts and "生命 9，敏捷 60" in beasts and "缠绕 45%（格斗(斗殴)，伤害 1D4+DB）" in beasts
     assert "调查员认出它以前叫它「缠在齿轮上的东西」" in beasts
     assert "护甲 2（每次受伤先减掉）" in beasts and "枪伤减半" in beasts and "每轮 2 次攻击" in beasts and "理智：1/1D6" in beasts
-    assert "AutoKeeper MCP 服务器的战斗与追逐工具" in beasts
+    assert "追逐的每一段都由引擎掷骰" in beasts and "MCP" not in beasts
     tower = (root / "references" / "locations" / "tower.md").read_text(encoding="utf-8")
     assert "## 追逐路线" in tower and "2. **又窄又陡的楼梯**（⚠ 陡窄的楼梯，敏捷，失败受 1D3 伤）" in tower
     assert "4. **钟楼大门**（▦ 沉重的木门，力量，耐久 15）" in tower
@@ -101,7 +101,8 @@ def test_the_skill_package_carries_the_sheets_the_routes_and_the_scripted_attack
     assert "## 打起来时（引擎读到的）" in warden and "棍棒 45%" in warden  # the wrench he holds is a club, at his fighting
     assert "当场打起来：`coil`（调查员被偷袭）" in (root / "references" / "events.md").read_text(encoding="utf-8")
     skill = (root / "SKILL.md").read_text(encoding="utf-8")
-    assert "## 战斗与追逐" in skill and "references/creatures.md" in skill and "`coc7-combat`" in skill and "`tower` 钟楼" in skill
+    assert "## 战斗与追逐" in skill and "references/creatures.md" in skill and "`tower` 钟楼" in skill
+    assert "coc7-" not in skill and "MCP" not in skill  # no pointers to an outside host's skills
     assert skills_ref.validate(root) == []
     plain = compile_module(Module.load(EXAMPLE), tmp_path / "plain")  # the format example: a route and a warden who fights, no creature
     assert not (plain / "references" / "creatures.md").exists() and "## 战斗与追逐" in (plain / "SKILL.md").read_text(encoding="utf-8")

@@ -104,7 +104,7 @@ dev-mode-dirs = ["src"]  # `uv sync` puts src/ on the path; the checkout keeps i
 "bridge" = "autokeeper/bundle/bridge"
 
 [tool.hatch.build.targets.sdist]
-skip-excluded-dirs = true  # .agents/skills and .claude/skills link to skills/: walked first, they would hide it
+skip-excluded-dirs = true  # an old checkout's .agents/skills and .claude/skills link to skills/: walked first, they would hide it
 exclude = ["/docs", "/dev", "/.github", "/.agents", "/.claude", "/data", "/saves", "/modules/local", "/modules/inbox", "/modules/*/source", "/skills/module-*", "/bridge/node_modules"]
 
 [dependency-groups]

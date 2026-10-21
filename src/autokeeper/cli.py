@@ -324,7 +324,7 @@ def setup(
     from .module.compiler import compile_module
     from .module.schema import Module
 
-    steps = 3 if paths.INSTALLED else 4
+    steps = 3
     console.print(f"[bold]1/{steps}[/] 安装掷骰组件（BCDice，npm）…")
     if _install_bridge():
         console.print(f"    {paths.BRIDGE}")
@@ -333,19 +333,6 @@ def setup(
     for path in paths.module_folders():
         root = compile_module(Module.load(path), paths.SKILLS, source=path / "source")
         console.print(f"    {root.relative_to(paths.ROOT) if root.is_relative_to(paths.ROOT) else root}")
-    if not paths.INSTALLED:  # Claude Code and Codex opened in the repository read the skills there
-        console.print(f"[bold]3/{steps}[/] 链接 .claude/skills 与 .agents/skills …")
-        for dot in (".claude", ".agents"):
-            target = paths.ROOT / dot / "skills"
-            target.parent.mkdir(exist_ok=True)
-            if target.is_symlink() or target.exists():
-                continue
-            try:
-                target.symlink_to(Path("..") / "skills", target_is_directory=True)
-                console.print(f"    {dot}/skills -> ../skills")
-            except OSError:  # Windows without developer mode: copy instead of linking
-                shutil.copytree(paths.SKILLS, target)
-                console.print(f"    {dot}/skills 无法建软链接，已改为复制（skills/ 更新后重新运行 setup）")
     if login_now and sys.stdin.isatty():
         console.print(f"[bold]{steps}/{steps}[/] 选模型")
         login()
