@@ -19,3 +19,46 @@ locations:
     read_aloud: 报社档案室里堆满了旧报纸。
     features: [旧报合订本]
     exits: [square]
+    # 追逐路线：从报社（和它里面的地方）起跑的追逐沿这条路跑。一段接着下一段；links 是岔路；
+    # exit 是能脱身的地方，也是一条岔路的尽头，列在它后面的段要由 links 连过来。
+    chase:
+      - id: archive
+        name: 档案室
+        look: 旧报纸堆到天花板
+        place: office
+      - id: office_stairs
+        name: 报社的楼梯
+        look: 楼梯上也堆着一捆捆旧报
+        place: office
+        obstacle:                     # 险阻：边跑边过，失败耽搁、可能受伤，人还是下去了
+          kind: hazard
+          what: 堆着报纸的楼梯
+          skill: 敏捷
+          harm: 1D3
+          methods:
+            - {id: run, label: 冲下去, skill: 敏捷}
+            - {id: slide, label: 顺着扶手滑下去, skill: 攀爬}
+      - id: office_door
+        name: 报社大门
+        place: office
+        obstacle:                     # 路障：过了检定才过得去
+          kind: barrier
+          what: 锁上的大门
+          skill: 锁匠
+          hp: 15                      # 规则书：坚固的外门 15
+          methods:
+            - {id: pick, label: 撬锁, skill: 锁匠, opens: true}
+            - {id: shove, label: 撞开, skill: 力量, opens: true}
+      - id: lamp_street
+        name: 去广场的街
+        look: 路灯一盏接一盏
+        links: [back_alley]
+      - id: fog_square
+        name: 雾里的广场
+        look: 告示栏在雾里只剩一个影子
+        place: square
+        exit: true
+      - id: back_alley
+        name: 报社后巷
+        look: 垃圾桶挤在墙根，雾浓得看不见三步以外
+        exit: true

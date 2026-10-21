@@ -114,6 +114,8 @@ npcs:
       bonus: 0
   location: clinic
   portrait: caroline
+  attacks:
+  - 格斗(斗殴) 25%，伤害 1D3  # 原文：攻击方式均为基础值
   stats:
     STR: 50
     CON: 60
@@ -253,9 +255,10 @@ npcs:
 creatures:
 - id: erie_entity
   name: “埃里”（异界存在）
+  npc: erie  # 埃里·赫琴斯就是它：打起来是同一个人，同一条命（18 HP）
   called: 正在崩解的人形
   description: 卡洛琳召来的无定形存在，被固定成埃里·赫琴斯的外表与声音。以埃里外貌出现时没有理智损失， 但一旦攻击或造成伤害，会暂时显露异界形态（理智损失 1/1D4+1）。
-  sanity: 0/1D4+1
+  sanity: 1/1D4+1  # 原文：以埃里外表出现时无理智损失，攻击或造成伤害时显露异界形态，理智损失 1/1D4+1
   stats:
     STR: 90
     CON: 120

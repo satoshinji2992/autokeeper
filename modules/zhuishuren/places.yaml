@@ -30,32 +30,104 @@ locations:
     features: [托马斯·金博尔, 客厅, 调查员的空卧室, 屋后通往公墓的小路]
     exits: [shufang, jiefang, mudi]
     chase:
-    - name: 屋后的小路
+    - id: backyard_path
+      name: 屋后的小路
       look: 小路从屋后通向公墓，老树的影子压在上面
-    - name: 隔开公墓的矮墙
-      look: 一道矮墙，墙那边就是墓地
+      place: jinboer_jia
+      links: [back_door]
+    - id: low_wall
+      name: 隔开公墓的矮墙
+      look: 一道矮墙隔开后院和墓地
+      place: jinboer_jia
       obstacle:
-        kind: barrier
+        kind: hazard
         what: 矮墙
         skill: 攀爬
-    - name: 灌木和老树之间
+        harm: 1D3
+        methods:
+        - {id: climb, label: 翻过去, skill: 攀爬}
+        - {id: vault, label: 撑着跳过去, skill: 跳跃}
+    - id: shrubs
+      name: 灌木和老树之间
       look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+      place: mudi
       obstacle:
         kind: hazard
         what: 伸到路上的灌木
         skill: 敏捷
-    - name: 穿过墓碑的土路
+        methods:
+        - {id: push, label: 拨开冲过去, skill: 敏捷}
+        - {id: duck, label: 矮身钻过去, skill: 闪避}
+    - id: dirt_road
+      name: 穿过墓碑的土路
       look: 一条土路弯弯曲曲穿过墓碑
-    - name: 墓穴与墓碑之间
+      place: mudi
+      links: [street]
+    - id: graves
+      name: 墓穴与墓碑之间
       look: 墓穴和墓碑挨得很近，脚下高低不平
+      place: mudi
       obstacle:
         kind: hazard
         what: 挨在一起的墓穴和墓碑
         skill: 跳跃
-    - name: 墓地深处
+        harm: 1D3
+        methods:
+        - {id: leap, label: 跳过去, skill: 跳跃}
+        - {id: weave, label: 绕着墓碑跑, skill: 敏捷}
+    - id: old_trees
+      name: 古老的树下
+      look: 古老的树木把路遮得半明半暗
+      place: mudi
+    - id: deep_graves
+      name: 墓地深处
       look: 墓碑越往里越老，灌木越来越密
-    - name: 墓地最深处的树丛
-      look: 古老的树木挤在一起，看不清后面还有什么
+      place: mudi
+    - id: tomb_mud
+      name: 陵墓门前的泥地
+      look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
+        harm: 1D3
+        methods:
+        - {id: run, label: 冲过去, skill: 敏捷}
+        - {id: wade, label: 硬蹚过去, skill: 力量}
+    - id: tomb_door
+      name: 半埋的陵墓石门
+      look: 石门紧闭，门缝里塞满了泥
+      place: lingmu
+      obstacle:
+        kind: barrier
+        what: 紧闭的石门
+        skill: 力量
+        hp: 25
+        methods:
+        - {id: push, label: 推开石门, skill: 力量, opens: true}
+    - id: tunnel_mouth
+      name: 陵墓里的隧道口
+      look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 徒手挖出的窄洞
+        skill: 攀爬
+        harm: 1D3
+        methods:
+        - {id: climb, label: 攀着土壁下去, skill: 攀爬}
+        - {id: drop, label: 跳下去, skill: 跳跃}
+    - id: low_tunnel
+      name: 又低又窄的通道
+      look: 泥土通道又低又窄，手电只照得出前面几步
+      place: suidao
+      obstacle:
+        kind: hazard
+        what: 低矮的土顶
+        skill: 敏捷
+        methods:
+        - {id: stoop, label: 弯腰快跑, skill: 敏捷}
   - id: shufang
     name: 道格拉斯的书房
     within: jinboer_jia
@@ -101,26 +173,103 @@ locations:
     features: [梅洛迪亚斯·杰弗逊, 杰弗逊的外套口袋, 道格拉斯最喜欢的墓碑, 墓碑周围的地面, 陵墓群]
     exits: [jinboer_jia, jiefang, lingmu]
     chase:
-    - name: 公墓边的灌木
-      look: 高大的灌木和古老的树木点缀在墓碑之间
+    - id: dirt_road
+      name: 穿过墓碑的土路
+      look: 一条土路弯弯曲曲穿过墓碑
+      place: mudi
+      links: [graves, shrubs]
+    - id: street
+      name: 墓园外的大街
+      look: 艾尔斯伯里大街冷清，窗帘都拉得严严实实
+      place: jiefang
+      exit: true
+    - id: shrubs
+      name: 灌木和老树之间
+      look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+      place: mudi
       obstacle:
         kind: hazard
         what: 伸到路上的灌木
         skill: 敏捷
-    - name: 穿过墓碑的土路
-      look: 一条土路弯弯曲曲穿过墓碑
-    - name: 墓穴与墓碑之间
+        methods:
+        - {id: push, label: 拨开冲过去, skill: 敏捷}
+        - {id: duck, label: 矮身钻过去, skill: 闪避}
+    - id: low_wall
+      name: 隔开公墓的矮墙
+      look: 一道矮墙隔开后院和墓地
+      place: jinboer_jia
+      obstacle:
+        kind: hazard
+        what: 矮墙
+        skill: 攀爬
+        harm: 1D3
+        methods:
+        - {id: climb, label: 翻过去, skill: 攀爬}
+        - {id: vault, label: 撑着跳过去, skill: 跳跃}
+    - id: backyard_path
+      name: 屋后的小路
+      look: 小路从屋后通向公墓，老树的影子压在上面
+      place: jinboer_jia
+    - id: back_door
+      name: 金博尔家的后门
+      look: 小路通到金博尔家的后门，门里就是走廊
+      place: jinboer_jia
+      exit: true
+    - id: graves
+      name: 墓穴与墓碑之间
       look: 墓穴和墓碑挨得很近，脚下高低不平
+      place: mudi
       obstacle:
         kind: hazard
         what: 挨在一起的墓穴和墓碑
         skill: 跳跃
-    - name: 古老的树下
+        harm: 1D3
+        methods:
+        - {id: leap, label: 跳过去, skill: 跳跃}
+        - {id: weave, label: 绕着墓碑跑, skill: 敏捷}
+    - id: old_trees
+      name: 古老的树下
       look: 古老的树木把路遮得半明半暗
-    - name: 墓地深处
+      place: mudi
+    - id: deep_graves
+      name: 墓地深处
       look: 墓碑越往里越老，灌木越来越密
-    - name: 墓地最深处的树丛
-      look: 古老的树木挤在一起，看不清后面还有什么
+      place: mudi
+    - id: tomb_mud
+      name: 陵墓门前的泥地
+      look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 踩烂的泥地
+        skill: 敏捷
+        harm: 1D3
+        methods:
+        - {id: run, label: 冲过去, skill: 敏捷}
+        - {id: wade, label: 硬蹚过去, skill: 力量}
+    - id: tomb_door
+      name: 半埋的陵墓石门
+      look: 石门紧闭，门缝里塞满了泥
+      place: lingmu
+      obstacle:
+        kind: barrier
+        what: 紧闭的石门
+        skill: 力量
+        hp: 25
+        methods:
+        - {id: push, label: 推开石门, skill: 力量, opens: true}
+    - id: tunnel_mouth
+      name: 陵墓里的隧道口
+      look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 徒手挖出的窄洞
+        skill: 攀爬
+        harm: 1D3
+        methods:
+        - {id: climb, label: 攀着土壁下去, skill: 攀爬}
+        - {id: drop, label: 跳下去, skill: 跳跃}
   - id: lingmu
     name: 墓地深处的陵墓
     within: mudi
@@ -138,38 +287,109 @@ locations:
       - when: flag:tomb_opened
         change: 陵墓的石门被推开了，门缝里的泥掉了一地，门后是一片漆黑
     chase:
-    - name: 陵墓门前的泥地
-      look: 门前的泥地踩得乱七八糟
+    - id: tomb_mud
+      name: 陵墓门前的泥地
+      look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+      place: lingmu
+      links: [tomb_door]
       obstacle:
         kind: hazard
         what: 踩烂的泥地
         skill: 敏捷
-    - name: 几座陵墓之间
-      look: 几座陵墓的石门都关着
-    - name: 墓地深处
+        harm: 1D3
+        methods:
+        - {id: run, label: 冲过去, skill: 敏捷}
+        - {id: wade, label: 硬蹚过去, skill: 力量}
+    - id: deep_graves
+      name: 墓地深处
       look: 墓碑越往里越老，灌木越来越密
-    - name: 墓穴与墓碑之间
+      place: mudi
+    - id: old_trees
+      name: 古老的树下
+      look: 古老的树木把路遮得半明半暗
+      place: mudi
+    - id: graves
+      name: 墓穴与墓碑之间
       look: 墓穴和墓碑挨得很近，脚下高低不平
+      place: mudi
       obstacle:
         kind: hazard
         what: 挨在一起的墓穴和墓碑
         skill: 跳跃
-    - name: 穿过墓碑的土路
+        harm: 1D3
+        methods:
+        - {id: leap, label: 跳过去, skill: 跳跃}
+        - {id: weave, label: 绕着墓碑跑, skill: 敏捷}
+    - id: dirt_road
+      name: 穿过墓碑的土路
       look: 一条土路弯弯曲曲穿过墓碑
-    - name: 灌木和老树之间
+      place: mudi
+      links: [street]
+    - id: shrubs
+      name: 灌木和老树之间
       look: 高大的灌木和古老的树木把墓碑遮得影影绰绰
+      place: mudi
       obstacle:
         kind: hazard
         what: 伸到路上的灌木
         skill: 敏捷
-    - name: 隔开公墓的矮墙
-      look: 墙那边就是金博尔家的后院
+        methods:
+        - {id: push, label: 拨开冲过去, skill: 敏捷}
+        - {id: duck, label: 矮身钻过去, skill: 闪避}
+    - id: low_wall
+      name: 隔开公墓的矮墙
+      look: 一道矮墙隔开后院和墓地
+      place: jinboer_jia
       obstacle:
-        kind: barrier
+        kind: hazard
         what: 矮墙
         skill: 攀爬
-    - name: 屋后的小路
-      look: 小路通向金博尔家的后门
+        harm: 1D3
+        methods:
+        - {id: climb, label: 翻过去, skill: 攀爬}
+        - {id: vault, label: 撑着跳过去, skill: 跳跃}
+    - id: backyard_path
+      name: 屋后的小路
+      look: 小路从屋后通向公墓，老树的影子压在上面
+      place: jinboer_jia
+    - id: back_door
+      name: 金博尔家的后门
+      look: 小路通到金博尔家的后门，门里就是走廊
+      place: jinboer_jia
+      exit: true
+    - id: tomb_door
+      name: 半埋的陵墓石门
+      look: 石门紧闭，门缝里塞满了泥
+      place: lingmu
+      obstacle:
+        kind: barrier
+        what: 紧闭的石门
+        skill: 力量
+        hp: 25
+        methods:
+        - {id: push, label: 推开石门, skill: 力量, opens: true}
+    - id: tunnel_mouth
+      name: 陵墓里的隧道口
+      look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 徒手挖出的窄洞
+        skill: 攀爬
+        harm: 1D3
+        methods:
+        - {id: climb, label: 攀着土壁下去, skill: 攀爬}
+        - {id: drop, label: 跳下去, skill: 跳跃}
+    - id: low_tunnel
+      name: 又低又窄的通道
+      look: 泥土通道又低又窄，手电只照得出前面几步
+      place: suidao
+      obstacle:
+        kind: hazard
+        what: 低矮的土顶
+        skill: 敏捷
+        methods:
+        - {id: stoop, label: 弯腰快跑, skill: 敏捷}
   - id: suidao
     name: 地底隧道网
     within: mudi
@@ -184,36 +404,78 @@ locations:
     features: [爪痕累累的土壁, 岔路, 通往地面的出口]
     exits: [lingmu]
     chase:
-    - name: 又低又窄的通道
+    - id: low_tunnel
+      name: 又低又窄的通道
       look: 泥土通道又低又窄，手电只照得出前面几步
+      place: suidao
+      links: [tunnel_mouth]
       obstacle:
         kind: hazard
         what: 低矮的土顶
         skill: 敏捷
-    - name: 爪痕累累的土壁
+        methods:
+        - {id: stoop, label: 弯腰快跑, skill: 敏捷}
+    - id: claw_walls
+      name: 爪痕累累的土壁
       look: 四壁留着一道道爪痕，空气又湿又冷
-    - name: 一条接一条的岔路
+      place: suidao
+      links: [surface_exit]
+    - id: forks
+      name: 一条接一条的岔路
       look: 岔路一条接一条，似乎铺满了整个公墓的地下
+      place: suidao
+      exit: true
       obstacle:
         kind: hazard
         what: 认不清的岔路
         skill: 导航
-    - name: 通往地面的出口
+        methods:
+        - {id: navigate, label: 认路, skill: 导航}
+        - {id: track, label: 跟着爪痕走, skill: 追踪}
+    - id: surface_exit
+      name: 通往地面的出口
       look: 前面的土里透出一点冷风
-    - name: 陵墓里的隧道口
-      look: 徒手挖出来的洞口通进陵墓
+      place: suidao
+      exit: true
+    - id: tunnel_mouth
+      name: 陵墓里的隧道口
+      look: 徒手挖出来的洞口通向地底，积了多年的腐臭扑面而来
+      place: lingmu
+      obstacle:
+        kind: hazard
+        what: 徒手挖出的窄洞
+        skill: 攀爬
+        harm: 1D3
+        methods:
+        - {id: climb, label: 攀着土壁下去, skill: 攀爬}
+        - {id: drop, label: 跳下去, skill: 跳跃}
+    - id: tomb_door
+      name: 半埋的陵墓石门
+      look: 石门紧闭，门缝里塞满了泥
+      place: lingmu
       obstacle:
         kind: barrier
-        what: 窄小的隧道口
-        skill: 攀爬
-    - name: 陵墓内部
-      look: 积了多年的腐臭
-    - name: 半埋的陵墓门前
-      look: 门前的泥地踩得乱七八糟
+        what: 紧闭的石门
+        skill: 力量
+        hp: 25
+        methods:
+        - {id: push, label: 推开石门, skill: 力量, opens: true}
+    - id: tomb_mud
+      name: 陵墓门前的泥地
+      look: 半埋在土坡里的陵墓，门前的泥地踩得乱七八糟
+      place: lingmu
       obstacle:
         kind: hazard
         what: 踩烂的泥地
         skill: 敏捷
+        harm: 1D3
+        methods:
+        - {id: run, label: 冲过去, skill: 敏捷}
+        - {id: wade, label: 硬蹚过去, skill: 力量}
+    - id: deep_graves
+      name: 墓地深处
+      look: 墓碑越往里越老，灌木越来越密
+      place: mudi
   - id: zhenzhongxin
     public: true
     name: 阿诺兹堡镇中心

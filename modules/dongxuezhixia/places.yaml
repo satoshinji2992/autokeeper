@@ -150,28 +150,56 @@ locations:
   - snow
   - flicker
   chase:
-  - name: 堆满古怪物件的客厅
-    look: 地上散落着关于咒语、符文和药剂的笔记
-    obstacle:
-      kind: hazard
-      what: 满地的笔记和古怪物件
-      skill: 敏捷
-  - name: 没人扫雪的院子
+  - id: cellar
+    name: 达维尔家的地下室
+    look: 地下室里飘着辛辣的烟，香炉还没凉
+    place: darvill_house
+  - id: cellar_door
+    name: 屋后的地下室门
+    look: 门前的积雪被清理过，一道痕迹通向院子
+    place: darvill_house
+  - id: yard
+    name: 没人扫雪的院子
     look: 院子里的雪没人扫过
+    place: darvill_house
+    links: [parlor]
     obstacle:
       kind: hazard
       what: 院子里的积雪
       skill: 敏捷
-  - name: 院外的街
+      methods:
+      - {id: track, label: 踩着清理过的痕迹跑, skill: 敏捷}
+      - {id: wade, label: 硬蹚过去, skill: 力量}
+  - id: lane
+    name: 院外的街
     look: 身后那栋房子的窗口全是黑的
-  - name: 主街外的雪墙
+  - id: snow_wall
+    name: 主街外的雪墙
     look: 雪犁推出来的雪墙比人还高
+    place: main_street
     obstacle:
       kind: barrier
       what: 比人还高的雪墙
       skill: 攀爬
-  - name: 主街
+      methods:
+      - {id: climb, label: 翻过去, skill: 攀爬}
+      - {id: dig, label: 扒开一个口子, skill: 力量, opens: true}
+  - id: main_road
+    name: 主街
     look: 杂货铺的窗玻璃上结着霜花
+    place: main_street
+    exit: true
+  - id: parlor
+    name: 堆满古怪物件的客厅
+    look: 地上散落着关于咒语、符文和药剂的笔记
+    place: darvill_house
+    obstacle:
+      kind: hazard
+      what: 满地的笔记和古怪物件
+      skill: 敏捷
+      methods:
+      - {id: weave, label: 绕开杂物, skill: 敏捷}
+      - {id: leap, label: 跨过去, skill: 跳跃}
 - id: brucker_farm
   name: 布鲁彻农场
   read_aloud: 农场在镇外西北方向，雪把栅栏埋了半截。牛棚里传出断断续续的哀叫，几头牛躺在地上起不来， 肋骨一根根支出来。雷吉·布鲁彻拎着一只酒瓶走过来，问你们是不是也来看他倒霉的。
@@ -207,36 +235,63 @@ locations:
   weather:
   - snow
   chase:
-  - name: 风雪里的山坡
+  - id: slope
+    name: 风雪里的山坡
     look: 风把脚印抹平，往上看是一片白
+    place: satin_hill
     obstacle:
       kind: hazard
       what: 被风吹硬的雪坡
       skill: 敏捷
       harm: 1D3
-  - name: 一丛丛矮树
+      methods:
+      - {id: steady, label: 稳住脚步跑, skill: 敏捷}
+  - id: scrub
+    name: 一丛丛矮树
     look: 矮树在雪里露出黑色的枝条
+    place: satin_hill
     obstacle:
       kind: hazard
       what: 压着雪的矮树丛
       skill: 敏捷
-  - name: 山坡下的雪地
+      methods:
+      - {id: push, label: 拨开冲过去, skill: 敏捷}
+      - {id: duck, label: 矮身钻过去, skill: 闪避}
+  - id: below_slope
+    name: 山坡下的雪地
     look: 往下看是整个埃斯内尔，烟囱的细烟像插在雪里的针
-  - name: 埋了半截的栅栏
+    place: satin_hill
+  - id: fence
+    name: 埋了半截的栅栏
     look: 雪把农场的栅栏埋了半截
+    place: brucker_farm
     obstacle:
-      kind: barrier
+      kind: hazard
       what: 埋了半截的栅栏
       skill: 跳跃
-  - name: 布鲁彻农场的牛棚
+      methods:
+      - {id: leap, label: 跳过去, skill: 跳跃}
+      - {id: climb, label: 翻过去, skill: 攀爬}
+  - id: barn
+    name: 布鲁彻农场的牛棚
     look: 牛棚里传出断断续续的哀叫
-  - name: 回镇上的路
+    place: brucker_farm
+  - id: road
+    name: 回镇上的路
     look: 车辙刚碾出来就被风抹平
-  - name: 主街外的雪墙
+  - id: snow_wall
+    name: 主街外的雪墙
     look: 雪犁推出来的雪墙比人还高
+    place: main_street
     obstacle:
       kind: barrier
       what: 比人还高的雪墙
       skill: 攀爬
-  - name: 主街
+      methods:
+      - {id: climb, label: 翻过去, skill: 攀爬}
+      - {id: dig, label: 扒开一个口子, skill: 力量, opens: true}
+  - id: main_road
+    name: 主街
     look: 杂货铺的窗玻璃上结着霜花
+    place: main_street
+    exit: true

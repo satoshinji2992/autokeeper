@@ -28,6 +28,11 @@ events:
   fight:
   - mccurdy
   surprise: party
+  stakes:
+  - when: dead:mccurdy
+    flags:
+    - mccurdy_dead
+    note: 调查员自己打死了麦克迪：斯坦利赶到时只剩收尸
 - id: e_stanley_shoots
   title: 三声枪响
   when: D1 19:45

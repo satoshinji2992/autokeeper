@@ -361,6 +361,17 @@ def test_the_bundled_situations_hand_over_nothing_behind_a_roll(key):
     assert not [str(f) for f in conditions.findings(m) if f.level == "error"]
 
 
+@pytest.mark.parametrize("key", BUNDLED)
+def test_the_bundled_fights_and_chases_leave_the_combat_pass_nothing_to_do(key):
+    """Re-authored by hand from their own text (0.0.4): every route joined up with ids and places,
+    every NPC's fighting form named, no first sight charged twice. `upgrade` would only rewrite them."""
+    m = Module.load(paths.MODULES / key)
+    assert not adapt.wanted(m, "combat")
+    assert not adapt._unlinked(m) and not adapt._twice(m) and not adapt._forms(m)
+    material = adapt._material(m, "combat")
+    assert "没有 id" not in material and "还缺" not in material and "引擎读不出的" not in material
+
+
 def test_the_regenerated_paper_chase_says_the_grounds_of_every_step():
     """《追书人》的局面层按新的补写重做过（2026-10-20）：每个见面反应都标了只做一次还是一贯如此，
     没有一步拿调查员的进展当成 NPC 已经知道，规则清单写明谁执行。"""
