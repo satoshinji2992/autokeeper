@@ -2754,6 +2754,8 @@ class Game(Fighting):
         for ev in turn.events:
             if ev.read_aloud.strip():
                 out.append(f"眼前发生：{ev.read_aloud.strip()}")
+        if names := self._unknown(turn.events):  # a horror seen before it is known (Creature.called, NPC.called)
+            out.append("【称呼】" + "；".join(names) + "。调查员还不知道这是什么：只写看得见、听得见、闻得到的样子，不说出名字和来历")
         out += [f"眼前发生：{text}" for text in turn.world]
         out += [f"备注：{n}" for n in turn.notes]
         out += [f"规则提示（来自本局规则，这一轮的叙述要用一句话自然写到）：{h}" for h in turn.hints]
@@ -2767,6 +2769,20 @@ class Game(Fighting):
         else:
             out.append("请叙述。")
         return "\n".join(out)
+
+    def _unknown(self, events: list[Event]) -> list[str]:
+        """Who of those the turn's events show the players do not know yet, with what they would call
+        them: a creature not identified (GameState.identified), a person not met (Keeper Rulebook
+        p. 176: even seen close, it is a dark wet shape, not a deep one)."""
+        st, m = self.state, self.m
+        ids = dict.fromkeys(x for ev in events for x in (*ev.sights, *ev.fight, *ev.chase))
+        out = []
+        for x in ids:
+            if (c := next((c for c in m.creatures if c.id == x), None)) is not None and x not in st.identified:
+                out.append(f"{c.name}（玩家所见：{c.called or '只写看得见的样子'}）")
+            elif (n := next((n for n in m.npcs if n.id == x), None)) is not None and n.called and not st.npc(x).met:
+                out.append(f"{n.name}（玩家所见：{n.called}）")
+        return out
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:
         """The keeper tells it: first how things stand as the telling ends, then the words

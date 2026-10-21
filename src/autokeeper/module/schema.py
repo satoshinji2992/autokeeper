@@ -309,7 +309,7 @@ class Showcase(BaseModel):
         description="开场 开局的氛围；突发 突然发生的事；危机 生死关头；重要场景 关键地点；怪物 怪物现身；最终boss 最后的对手；结局 每个结局一张")
     when: str = Field(
         description="什么时候展示，每局最多一次：opening 开局；visit:地点id 第一次到达；event:事件id 事件发生；"
-        "creature:怪物id 怪物的名字第一次出现在事件或叙述里；flag:标记 标记成立；ending:结局id 进入这个结局")
+        "creature:怪物id 怪物第一次出现在叙述里（它的名字或玩家对它的叫法 called）；flag:标记 标记成立；ending:结局id 进入这个结局")
     title: str = Field(description="画面下方的短标题，不超过 12 个字；只说此刻玩家看得见的，不剧透")
     prompt: str = Field(description="画面描述，写给画师：画什么、构图、光线和气氛；只写看得见的，不写名字和幕后真相")
     art: str = Field("", description="模组自带的、正好合适的图片键（art/<键>.jpg），有就直接用这张")
