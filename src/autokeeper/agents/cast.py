@@ -45,8 +45,11 @@ from ..module.schema import NPC, Module
 from ..plugins.schema import Call as PluginCall
 from ..prefs import LINES, Prefs
 from ..rules import commands
-from ..rules.coc import Investigator
+from ..rules.catalog import CHARACTERISTICS, base_value
+from ..rules.coc import DIFFICULTY_NAME, Investigator
+from ..rules.combat import stats_of
 from ..rules.dice_expr import DiceText
+from ..rules.melee import opposed_difficulty
 from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
@@ -441,6 +444,12 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 
 - 线索只能从“本场景可得线索”里选 id。没有检定要求的线索，调查到对应的东西就放进 auto_clues。
 - 有检定要求的线索按要求掷；行动方法换了，可以换成合理的替代技能（用锁匠开锁、用力量撬开），难度不低于原要求。
+- 标【关键】的线索是推进调查必需的。模组没写检定要求、或就摆在明处的关键线索，调查员查对了地方就放进 auto_clues，不另设检定（规则书第 170 页：显明线索不用掷骰）。
+  要检定的关键线索失败了照旧是失败，不改判、不另给，补救靠玩家换办法或做灵感检定；不重掷的规矩照样适用。
+- 难度要有依据（规则书第 72 页）。针对人的行动（说服、话术、恐吓、魅惑、潜行、跟踪、撒谎、藏东西），难度由对方相应的技能或属性定：
+  低于 50 常规，50 及以上困难，90 及以上极难；【对方的相应数值】给了行动对象的数值，模组门槛另有规定的照门槛。
+  对物或环境，一般的挑战是常规，明显超出常规是困难，异常困难但仍在人力所及是极难。不因为调查员自己的技能高就提高难度。
+  准备充分（有合适的工具、时间充裕、没人打扰）的事可以不掷骰。
 - 对 NPC 的社交行动，按该 NPC 的门槛定技能和难度；方法不同就用方法对应的技能，难度不低于门槛。
 - 心理学用于判断可观察的态度或言行，不使 NPC 自动承认秘密、接受要求或知道自己正被观察；不能替代说服、话术等门槛来取得口供。模组明确设置心理学线索时按其要求处理。
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
@@ -1143,7 +1152,7 @@ class Cast:
                 continue
             need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
             src = "、".join(x for x in (c.feature, f"NPC {c.npc} 口中" if c.npc else "") if x)
-            lines.append(f"- {c.id}「{c.title}」在 {src}，{need}；内容：{c.text.strip()}")
+            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}在 {src}，{need}；内容：{c.text.strip()}")
         gates = []
         for n in near["npcs"]:
             for cid in n.clues:
@@ -1171,6 +1180,8 @@ class Cast:
             f"【本地物件】" + "；".join(local) + "\n"
             f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
+        if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
+            prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
         prompt += "\n【本地人物的处境】\n" + "\n".join(
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
         )
@@ -1876,6 +1887,27 @@ def _book(m: Module) -> str:
     if mine := [x for x in m.mechanics if x.executor == "守秘人"]:
         rows.append("要你临场执行的规则（没有插件替你算）：\n" + "\n".join(f"- {x.name}：{x.rules.strip()}" for x in mine))
     return "【守秘人的底牌（只给你看）】\n" + "\n".join(rows)
+
+
+# What a roll against someone is set by (Keeper Rulebook p. 72; the skill entries of chapter 4 say
+# which resists which): Persuade and Fast Talk against Psychology or the same skill, Stealth against
+# Spot Hidden or Listen, and so on. A characteristic (POW against a spell's pull) only when the sheet
+# gives it: an ordinary person's 50 would make every roll against them hard.
+OPPOSING = ("心理学", "侦查", "聆听", "说服", "话术", "魅惑", "恐吓")
+OPPOSING_CHARS = ("意志", "智力")
+
+
+def opposing(npc: NPC) -> str:
+    """The values a roll against this NPC is set by, with the difficulty each gives (regular under
+    50, hard from 50, extreme from 90): the sheet's own, else an ordinary person's skill bases."""
+    sheet = stats_of(npc.stats)
+    chars = {k: v for k, v in sheet.items() if k in CHARACTERISTICS}
+    given, ordinary = [], []
+    for key in (*OPPOSING, *(k for k in OPPOSING_CHARS if k in chars)):
+        value = sheet[key] if key in sheet else base_value(key, chars)
+        (given if key in sheet else ordinary).append(f"{key} {value}（{DIFFICULTY_NAME[opposed_difficulty(value)]}）")
+    out = f"{npc.name}({npc.id})：" + ("、".join(given) if given else "模组没写数值")
+    return out + (f"；按常人算：{'、'.join(ordinary)}" if ordinary else "")
 
 
 def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "npc", "keeper", "event", "clue", "handout")) -> str:
