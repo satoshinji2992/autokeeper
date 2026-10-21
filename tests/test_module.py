@@ -143,6 +143,7 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
         # clues for a conclusion short of three. Added, never changed: the original clues stay as they were.
         for name in ("relations", "agendas", "foreshadow", "ties", "mechanics", "history", "prelude"):
             setattr(then, name, getattr(now, name))
+        then.flags |= {f: now.flags[f] for f in now.stage_flags()}  # the flags a foreshadow's picture stage sets
         original = {c.id for c in then.clues}
         now = now.model_copy(update={"clues": [c for c in now.clues if c.id in original]})
         if folder.name == "zhuishuren":  # 未解之谜 had a sentence for a condition, which never fires
