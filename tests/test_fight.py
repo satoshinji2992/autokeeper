@@ -60,7 +60,8 @@ async def test_a_blow_starts_a_fight_and_a_knockout_ends_it_with_its_flags(modul
     assert act["winner"] == "attacker" and act["damage"] == 2 and act["reaction"] == "fight"
     assert act["dice"]["value"] == 10  # the investigator's own roll goes to the dice tray
     assert st.fight is None and "warden_down" in st.flags  # over: the flag the outcome brought about
-    assert game.world.rec.entities["warden"].status == "受伤"  # knocked out, written into the record
+    warden = game.world.rec.entities["warden"]  # knocked out by a major wound, written into the record as it is
+    assert warden.status == "重伤" and warden.life.hp == 2 and {"重伤", "昏迷"} <= set(warden.life.conditions)
     assert "老守钟人" in cast.results[0] and "昏迷" in cast.results[0]
     report = cast.reports[-1]
     assert "【战斗 · 第 1 轮】" in report and "【战斗结束】" in report and "不复述数字" in report.replace("不要复述数字", "不复述数字")
