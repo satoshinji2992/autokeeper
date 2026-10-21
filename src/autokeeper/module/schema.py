@@ -93,6 +93,9 @@ class Obstacle(BaseModel):
     harm: StoredDiceText = Field("", description="失败时受的伤，骰子式如 1D3；只耽搁不受伤就留空")
     methods: list[Method] = Field(default_factory=list, max_length=4, description=(
         "过这一处的几种办法，各用各的技能（翻墙用攀爬、撞门用力量）；不写就只有 skill 一种"))
+    # A barrier's hit points (the rulebook's table, p. 116): at 0 it is broken, open for everyone after.
+    hp: int | None = Field(None, ge=1, description=(
+        "路障挨几点伤害才破，照规则书：室内门或薄围栏 5，普通后门 10，坚固的外门 15，9 寸砖墙 25，大树 50；险阻和打不破的不写"))
     # A barrier someone got through (broke it, unlocked it): open for those behind. The chase's own
     # state, saved with it; a module or a drawn way never writes it.
     open: bool = Field(False, description="追逐中已被打开的路障，由引擎记下；不用写")
@@ -107,7 +110,8 @@ class Leg(BaseModel):
     obstacle: Obstacle | None = Field(None, description="这一段路上挡着的一处险阻或路障；畅通就留空")
     place: str = Field("", description="这一段在哪个地点里（地点 id）；跑进去就算到了那里；不在模组的地点里留空")
     links: list[str] = Field(default_factory=list, description="从这一段还能岔到哪几段（段的 id 或名字）；只是接着下一段就留空")
-    exit: bool = Field(False, description="跑到这里就能脱身（出了墓园、钻进地道）时填 true")
+    # An exit ends its branch: the leg listed after it starts another one, reached only by links.
+    exit: bool = Field(False, description="跑到这里就能脱身（出了墓园、钻进地道）时填 true；它是一条岔路的尽头，列在它后面的段不接着它")
 
 
 class Track(BaseModel):

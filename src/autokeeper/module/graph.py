@@ -11,15 +11,17 @@ from __future__ import annotations
 import re
 from collections import deque
 from dataclasses import dataclass
+from itertools import pairwise
 
 import networkx as nx
 
 from ..engine import combat as battle
 from ..engine.state import hours
+from ..rules import dice_expr
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
 from ..rules.combat import stats_of
 from ..rules.weapons import carried, parse_attack, unread
-from .schema import Module
+from .schema import Leg, Module, Obstacle
 
 
 def build(m: Module) -> nx.MultiDiGraph:
@@ -392,7 +394,14 @@ def audit(m: Module) -> list[Issue]:
 
 
 # -- what a fight and a chase read of it ---------------------------------------------------------
-HARM = re.compile(r"\d*[dD]\d+(?:[+\-]\d+)?|\d+")
+HARM = re.compile(r"\d*[dD]\d+(?:[+\-]\d+)?|\d+")  # kept for old callers; dice_expr is what reads a harm now
+SLUG = re.compile(r"[a-z0-9_]+")
+# A barrier the rulebook's table gives hit points for (p. 116): a door, a fence, a wall, a tree.
+BREAKABLE = re.compile(r"门|围栏|栅栏|篱|墙|木板|树|路障|街垒")
+# What an encounter's stake may say beyond the world's conditions (engine/encounter's stakes):
+# who went down, died, got away, was caught or gave up, and how the whole of it ended.
+OUTCOMES = ("down", "dead", "escaped", "caught", "surrendered")
+ENDS = ("won", "lost", "fled", "escaped", "caught", "parley", "surrender", "dispersed")
 
 
 def known_skill(name: str) -> bool:
@@ -401,17 +410,78 @@ def known_skill(name: str) -> bool:
     return key in CHARACTERISTICS or key in SKILL_BASE or key.split("(")[0] in SKILL_BASE or key in ("幸运", "理智")
 
 
+def leg_key(leg: Leg) -> str:
+    """What a leg is known by: its id, or its name when it has none (Leg.links names either)."""
+    return leg.id or leg.name
+
+
+def route_edges(legs: list[Leg], names: dict[str, str] | None = None) -> list[tuple[str, str]]:
+    """A route as the pairs of legs it joins, by leg_key: each leg to the one listed after it, unless it
+    is an exit (an exit ends its branch, the next leg starts another), and to each of its links. A link
+    names a leg of this route or of another place's (by id or name): the site merges them."""
+    out: list[tuple[str, str]] = []
+    names = {**(names or {}), **{leg.name: leg_key(leg) for leg in legs}}
+    for leg, after in pairwise(legs):
+        if not leg.exit:
+            out.append((leg_key(leg), leg_key(after)))
+    for leg in legs:
+        out += [(leg_key(leg), names.get(x, x)) for x in leg.links]
+    return out
+
+
+def ways(m: Module) -> dict[str, Leg]:
+    """Every leg of every route by its key and by its name: what a link may name."""
+    out: dict[str, Leg] = {}
+    for loc in m.locations:
+        for leg in loc.chase:
+            out.setdefault(leg_key(leg), leg)
+            out.setdefault(leg.name, leg)
+    return out
+
+
+def stake_problems(m: Module, when: str) -> list[str]:
+    """What is wrong with a stake's condition (Event.stakes): the world's conditions (flag, at, gone,
+    owner, knows) and the encounter's own: down/dead/escaped/caught/surrendered:谁 (an NPC, a
+    creature, a pregen, or players for the investigators' side) and ended:结局."""
+    if not when.strip():
+        return ["条件是空的"]
+    people = {x.id for x in m.npcs} | {c.id for c in m.creatures} | {p.id for p in m.pregens} | {"players"}
+    atoms = [x.strip().lstrip("!") for group in when.split("|") for x in group.split("&") if x.strip()]
+    out: list[str] = []
+    for atom in atoms:
+        kind, _, rest = atom.partition(":")
+        if kind in OUTCOMES:
+            if rest not in people:
+                out.append(f"{atom} 不对：{kind} 写这场遭遇里的 NPC、怪物、预设调查员的 id，或 players（调查员一方）")
+        elif kind == "ended":
+            if rest not in ENDS:
+                out.append(f"{atom} 不对：ended 只能是 {'、'.join(ENDS)}")
+        elif kind == "flag" and rest not in m.flags:
+            out.append(f"{atom} 不对：标记 {rest} 没有声明")
+        elif re.fullmatch(r"D\d+ \d{1,2}:\d{2}", atom):
+            out.append(f"{atom} 不对：胜负后果看遭遇怎么收场，不写时间")
+        else:
+            out += _waits(m, [atom])
+    return out
+
+
 def fighting(m: Module) -> list[Issue]:
-    """What a fight or a chase reads of the module and cannot use as written (engine/combat.py): a
-    creature with no word for the players (Creature.called) or one that names it, a sheet without hit
-    points or DEX, an attack line with no chance to hit, a gun skill with no gun, a chase route the
-    rules cannot run, an event sending someone the module does not have. Only the last is an error:
-    the rest still play, on the rules' defaults."""
+    """What a fight or a chase reads of the module and cannot use as written (engine/combat.py,
+    engine/encounter): a creature with no word for the players (Creature.called) or one that names it,
+    a sheet without hit points or DEX, an attack line with no chance to hit, a gun skill with no gun,
+    a chase route the rules cannot run, an event charging the first sight of a horror twice. What
+    names someone, somewhere or a flag the module does not have is an error (a creature's NPC, a leg's
+    place or link, an event's people, stakes and sights); the rest still plays, on the rules' defaults."""
     out: list[Issue] = []
 
     def warn(text: str) -> None:
         out.append(Issue("warning", text))
 
+    def err(text: str) -> None:
+        out.append(Issue("error", text))
+
+    npcs, locs = {n.id: n for n in m.npcs}, {x.id for x in m.locations}
+    forms: dict[str, str] = {}  # NPC -> the creature sheet that is its fighting form
     for c in m.creatures:
         if not c.called.strip():
             warn(f"怪物 {c.id} 没写 called：调查员还不知道它是什么时，屏幕上就是它的名字「{c.name}」")
@@ -427,27 +497,40 @@ def fighting(m: Module) -> list[Issue]:
         natural = any(w in k for k in s for w in battle.NATURAL)
         if not swarm and not natural and not any(parse_attack(x) for x in c.attacks):
             warn(f"怪物 {c.id} 没有读得出的攻击：打起来按 45% 的“攻击”、伤害 1D6+DB 算")
+        if c.npc:
+            if c.npc not in npcs:
+                err(f"怪物 {c.id} 的 npc {c.npc} 不是模组里的 NPC")
+            elif c.npc in forms:
+                err(f"NPC {c.npc} 有两张怪物卡（{forms[c.npc]}、{c.id}）：一个人只有一种打起来的样子")
+            else:
+                forms[c.npc] = c.id
+                own, its = stats_of(npcs[c.npc].stats).get("生命"), s.get("生命")
+                if own and its and own != its:
+                    warn(f"怪物 {c.id} 是 NPC {c.npc} 打起来的样子，两张卡的生命不一样（{its}、{own}）：同一个人只有一条命，打起来按怪物卡")
+        if c.pursues and re.search(r"不追", c.notes):
+            warn(f"怪物 {c.id} 写了 pursues: true，notes 里却写着不追")
     for n in m.npcs:
         guns = [k for k in stats_of(n.stats) if k.startswith("射击")]
-        if guns and not any(w.firearm for w in carried([n.look, *(i.name for i in m.items if i.owner == n.id)])):
-            warn(f"NPC {n.id} 会{'、'.join(guns)}，look 和 items 里却没有枪：打起来只用拳脚")
-    for loc in m.locations:
-        if loc.chase and not 4 <= len(loc.chase) <= 12:
-            warn(f"地点 {loc.id} 的追逐路线有 {len(loc.chase)} 段，要 4–12 段：引擎不用它，临场另画")
-        for i, leg in enumerate(loc.chase, 1):
-            if (ob := leg.obstacle) is None:
-                continue
-            if not known_skill(ob.skill):
-                warn(f"地点 {loc.id} 追逐路线第 {i} 段「{leg.name}」的{ob.what}用「{ob.skill}」，不是技能或属性名"
-                     "（跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……）")
-            if ob.harm and not HARM.fullmatch(ob.harm.replace(" ", "")):
-                warn(f"地点 {loc.id} 追逐路线第 {i} 段「{leg.name}」的伤害「{ob.harm}」要写成骰子式，如 1D3")
-    people = {n.id for n in m.npcs} | {c.id for c in m.creatures}
+        armed = any(w.firearm for w in carried([n.look, *(i.name for i in m.items if i.owner == n.id)]))
+        if guns and not armed and not any((w := parse_attack(x)) and w.firearm for x in n.attacks):
+            warn(f"NPC {n.id} 会{'、'.join(guns)}，look、items 和 attacks 里却没有枪：打起来只用拳脚")
+        for line in n.attacks:
+            if problem := unread(line):
+                warn(f"NPC {n.id} 的攻击「{line.strip()[:40]}」{problem}")
+        names = [n.name, *(x for x in re.split(r"[·・\s]", n.name) if len(x) >= 2)]
+        if n.called and (hit := next((x for x in names if x in n.called), None)):
+            warn(f"NPC {n.id} 的 called「{n.called}」带着他的名字「{hit}」：只写调查员看得见的样子")
+    out += _routes(m, locs)
+    people = {*npcs, *(c.id for c in m.creatures)}
+    creatures = {c.id: c for c in m.creatures}
     for e in m.events:
         for key, ids in (("fight", e.fight), ("chase", e.chase)):
             for x in ids:
                 if x not in people:
-                    out.append(Issue("error", f"事件 {e.id} 的 {key} 里的 {x} 不是 NPC 或怪物"))
+                    err(f"事件 {e.id} 的 {key} 里的 {x} 不是 NPC 或怪物")
+            for x in ids:
+                if (c := creatures.get(x)) is not None and c.npc in ids:
+                    warn(f"事件 {e.id} 的 {key} 同时写了 {c.npc} 和他打起来的样子 {c.id}：是同一个人，写一个就够")
         if e.fight and e.chase:
             warn(f"事件 {e.id} 同时写了 fight 和 chase：只按 fight 打起来，调查员逃跑时会追的对手自己会追")
         if (e.fight or e.chase) and e.ending:
@@ -456,4 +539,100 @@ def fighting(m: Module) -> list[Issue]:
             warn(f"事件 {e.id} 的 surprise 只在写了 fight 时起作用")
         if e.chase_party and not e.chase:
             warn(f"事件 {e.id} 的 chase_party 只在写了 chase 时起作用")
+        if e.stakes and not (e.fight or e.chase):
+            warn(f"事件 {e.id} 写了 stakes，却没有 fight 或 chase：没有遭遇，胜负后果不会算")
+        for i, stake in enumerate(e.stakes, 1):
+            for problem in stake_problems(m, stake.when):
+                err(f"事件 {e.id} 的第 {i} 条胜负后果 {problem}")
+            for flag in stake.flags:
+                if flag not in m.flags:
+                    err(f"事件 {e.id} 的第 {i} 条胜负后果设了未声明的标记 {flag}")
+            if not stake.flags:
+                warn(f"事件 {e.id} 的第 {i} 条胜负后果没有 flags：成立了也什么都不设")
+        for x in e.sights:
+            if x not in creatures:
+                err(f"事件 {e.id} 的 sights 里的 {x} 不是怪物")
+        if e.sights and not e.sanity:
+            warn(f"事件 {e.id} 写了 sights，自己却没有 sanity：照面的理智就谁也不扣了")
+        twice = [x for x in e.fight + e.chase if (c := creatures.get(x)) is not None and c.sanity and x not in e.sights]
+        if e.sanity and twice:
+            warn(f"事件 {e.id} 有自己的理智检定（{e.sanity}），打起来的 {'、'.join(twice)} 照面还要再扣一次："
+                 "这次检定就是照面的，把它们写进 sights")
+    return out
+
+
+def _routes(m: Module, locs: set[str]) -> list[Issue]:
+    """What is wrong with the chase routes (Location.chase): the rules' (4–12 legs, an obstacle's skill,
+    methods and harm, a barrier's hit points), and the graph's (a leg's place and links, an id written two
+    ways, a leg nothing reaches)."""
+    out: list[Issue] = []
+    known = ways(m)
+    seen: dict[str, tuple[str, Leg]] = {}  # leg id -> the first place's leg that wrote it
+    edges: list[tuple[str, str]] = []
+    for loc in m.locations:
+        if loc.chase and not 4 <= len(loc.chase) <= 12:
+            out.append(Issue("warning", f"地点 {loc.id} 的追逐路线有 {len(loc.chase)} 段，要 4–12 段：引擎不用它，临场另画"))
+        ids = [leg.id for leg in loc.chase if leg.id]
+        for x in sorted({x for x in ids if ids.count(x) > 1}):
+            out.append(Issue("error", f"地点 {loc.id} 的追逐路线里有两段都叫 {x}"))
+        edges += route_edges(loc.chase, {name: leg_key(leg) for name, leg in known.items()})
+        for i, leg in enumerate(loc.chase, 1):
+            where = f"地点 {loc.id} 追逐路线第 {i} 段「{leg.name}」"
+            if leg.id and not SLUG.fullmatch(leg.id):
+                out.append(Issue("warning", f"{where}的 id「{leg.id}」只用小写字母、数字和下划线"))
+            elif leg.id in locs:
+                out.append(Issue("warning", f"{where}的 id「{leg.id}」和一个地点的 id 一样：换一个，它在哪个地点写进 place"))
+            if leg.place and leg.place not in locs:
+                out.append(Issue("error", f"{where}的 place {leg.place} 不是模组里的地点"))
+            for x in leg.links:
+                if x not in known:
+                    out.append(Issue("error", f"{where}的 links 里的「{x}」不是哪条路线里的段（写段的 id 或名字）"))
+                elif x in (leg.id, leg.name):
+                    out.append(Issue("warning", f"{where}的 links 连到了它自己"))
+            if leg.id and (first := seen.get(leg.id)) is not None and first[1].model_dump(exclude={"links"}) != leg.model_dump(exclude={"links"}):
+                out.append(Issue("warning", f"{where}和地点 {first[0]} 的同一段 {leg.id} 写得不一样（名字、样子、地点、障碍或出口）："
+                                            "几条路线合在一起时它是同一处，写法要一致"))
+            elif leg.id:
+                seen.setdefault(leg.id, (loc.id, leg))
+            if leg.obstacle is not None:
+                out += _obstacle(where, leg.obstacle)
+    # A leg cut off from its route's start, when the routes are put together: an exit's next leg that no link names.
+    graph: nx.Graph = nx.Graph()
+    graph.add_edges_from(edges)
+    for loc in m.locations:
+        if not 4 <= len(loc.chase) <= 12:
+            continue
+        start = leg_key(loc.chase[0])
+        graph.add_node(start)
+        reach = nx.node_connected_component(graph, start)
+        for leg in loc.chase:
+            if leg_key(leg) not in reach:
+                out.append(Issue("warning", f"地点 {loc.id} 追逐路线的「{leg.name}」从起点跑不到：它前一段是出口，"
+                                            "出口后面的段要由别的段的 links 连过来"))
+    return out
+
+
+def _obstacle(where: str, ob: Obstacle) -> list[Issue]:
+    out = []
+
+    def warn(text: str) -> None:
+        out.append(Issue("warning", f"{where}的{ob.what}{text}"))
+
+    if not known_skill(ob.skill):
+        warn(f"用「{ob.skill}」，不是技能或属性名（跳跃、攀爬、敏捷、力量、闪避、锁匠、游泳……）")
+    if ob.harm and (why := dice_expr.problem(ob.harm)):
+        warn(f"的伤害「{ob.harm}」用不了：{why}")
+    ids = [x.id for x in ob.methods]
+    for x in ob.methods:
+        if not known_skill(x.skill):
+            warn(f"的办法「{x.label}」用「{x.skill}」，不是技能或属性名")
+        if not SLUG.fullmatch(x.id) or ids.count(x.id) > 1:
+            warn(f"的办法 id「{x.id}」要用小写字母、数字和下划线，一处障碍里不重复")
+        if x.opens and ob.kind == "hazard":
+            warn(f"是险阻，办法「{x.label}」的 opens 不起作用：险阻过了就过了，只有路障会被打开")
+    if ob.kind == "hazard" and ob.hp:
+        warn("是险阻，hp 不起作用：只有路障能被打破")
+    if ob.kind == "barrier" and ob.hp is None and BREAKABLE.search(ob.what) and not any(x.opens for x in ob.methods):
+        warn("是路障，没写 hp，也没有能把它打开的办法：照规则书写 hp（室内门或薄围栏 5，普通后门 10，坚固的外门 15，"
+             "9 寸砖墙 25，大树 50），或写一个 opens: true 的办法")
     return out

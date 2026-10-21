@@ -251,7 +251,7 @@ def _skill_md(m: Module) -> str:
 
 
 def _has_fights(m: Module) -> bool:
-    return bool(m.creatures or any(n.stats for n in m.npcs) or any(x.chase for x in m.locations)
+    return bool(m.creatures or any(n.stats or n.attacks for n in m.npcs) or any(x.chase for x in m.locations)
                 or any(e.fight or e.chase for e in m.events))
 
 
@@ -283,7 +283,13 @@ def _creatures_md(m: Module) -> str:
         out += [f"## {c.name}（`{c.id}`）", "", c.description.strip(), ""]
         out.append(f"- 调查员认出它以前叫它「{c.called}」：叙述里用这个叫法，名字只给守秘人" if c.called.strip()
                    else "- 没写调查员对它的叫法：叙述里别说出它的名字，只写看得见的样子")
-        out.append(f"- 理智：{c.sanity}（第一次照面时）")
+        if c.npc:
+            who = next((n.name for n in m.npcs if n.id == c.npc), c.npc)
+            out.append(f"- 这是 NPC `{c.npc}` {who}打起来的样子：同一个人，同一条命、同一个位置；事件和安排里写哪个 id 都指他")
+        out.append(f"- 理智：{c.sanity}（第一次照面时" + (f"；{'、'.join(f'`{e}`' for e in seen)} 的理智检定已经算了这一次" if (
+            seen := [e.id for e in m.events if c.id in e.sights]) else "") + "）")
+        if c.pursues is not None:
+            out.append("- 调查员逃跑时：" + ("会追" if c.pursues else "不追"))
         f = battle.from_creature(c)
         if battle.SWARM.search(c.notes + c.description) and not c.stats:
             out.append("- 成群：整群当一个对手打，很难打倒")
@@ -299,7 +305,8 @@ def _creatures_md(m: Module) -> str:
 
 def _route_md(m: Module, loc: Location) -> list[str]:
     """The way a chase from this place runs: its own, or that of the place it is in, as the engine
-    picks it (engine/fighting.Fighting._chase_way)."""
+    picks it (engine/encounter's site: the legs in order, an exit ending its branch, links joining the
+    routes of the places near)."""
     places = {x.id: x for x in m.locations}
     at: Location | None = loc
     seen: set[str] = set()
@@ -310,15 +317,37 @@ def _route_md(m: Module, loc: Location) -> list[str]:
         return []
     if at is not loc:
         return ["## 追逐路线", "", f"从这里起跑的追逐沿 `{at.id}` {at.name} 的路线跑，见那个地点的文件。", ""]
-    out = ["## 追逐路线", "", "从这里起跑的追逐沿这条路跑，一段一段按先后；⚠ 险阻边跑边过，失败耽搁、可能受伤；▦ 路障过了检定才过得去。", ""]
+    out = ["## 追逐路线", "", "从这里起跑的追逐沿这条路跑，一段接一段按先后；🚪 出口：跑到就脱身，也是一条岔路的尽头，后面的段不接着它；"
+           "「岔到」是从这一段还能去的段（可能在附近地点的路线里，同一个 id 是同一处）。"
+           "⚠ 险阻边跑边过，失败耽搁、可能受伤，人还是到了下一段；▦ 路障过了检定才过得去，打得破的写着耐久。", ""]
     for i, leg in enumerate(loc.chase, 1):
-        row = f"{i}. **{leg.name}**" + (f"：{leg.look}" if leg.look else "")
+        row = f"{i}. **{leg.name}**"
+        tags = ([f"`{leg.id}`"] if leg.id else []) + ([f"在 `{leg.place}`"] if leg.place else [])
+        if tags:
+            row += f"（{'，'.join(tags)}）"
+        if leg.look:
+            row += f"：{leg.look}"
         if (ob := leg.obstacle) is not None:
-            mark = "⚠" if ob.kind == "hazard" else "▦"
-            row += f"（{mark} {ob.what}，{ob.skill}" + (f"·{ob.difficulty}" if ob.difficulty != "常规" else "") + (
-                f"，失败受 {ob.harm} 伤" if ob.harm else "") + "）"
+            row += f"（{_obstacle_md(ob)}）"
+        if leg.links:
+            row += "；岔到 " + "、".join(f"`{x}`" for x in leg.links)
+        if leg.exit:
+            row += "；🚪 出口"
         out.append(row)
     return [*out, ""]
+
+
+def _obstacle_md(ob: Any) -> str:
+    """One obstacle in a line: what it is, the ways past it with their rolls, what failing costs."""
+    mark = "⚠" if ob.kind == "hazard" else "▦"
+    if ob.methods:
+        ways = "／".join(f"{x.label}〔{x.skill}" + (f"·{x.difficulty}" if x.difficulty != "常规" else "")
+                        + ("，成功后打开了，后面的人直接过" if x.opens else "") + "〕" for x in ob.methods)
+        text = f"{mark} {ob.what}：{ways}"
+    else:
+        text = f"{mark} {ob.what}，{ob.skill}" + (f"·{ob.difficulty}" if ob.difficulty != "常规" else "")
+    text += f"，失败受 {ob.harm} 伤" if ob.harm else ""
+    return text + (f"，耐久 {ob.hp}" if ob.hp else "")
 
 
 def _location_md(m: Module, loc: Location) -> str:
@@ -381,10 +410,19 @@ def _npc_md(m: Module, n: NPC) -> str:
             gate = n.gates.get(cid)
             need = f"需要 {gate.skill}（{gate.difficulty}）" if gate else "问到就说"
             out.append(f"- `{cid}` {c.title}：{need}")
+    if n.called:
+        out += ["", f"调查员认出他以前叫他「{n.called}」：叙述和屏幕在那之前用这个叫法。"]
     if n.stats:
         out += ["", "## 数值", "", "，".join(f"{k} {v}" for k, v in n.stats.items())]
+    form = next((c for c in m.creatures if c.npc == n.id), None)
+    if form is not None:
+        out += ["", "## 打起来时", "", f"他打起来就是怪物 `{form.id}` {form.name}：数值、攻击和特性见 [怪物](../creatures.md)；同一个人，同一条命。"]
+    elif n.stats or n.attacks:
         things = [i.name for i in m.items if i.owner == n.id]  # what the record has them hold at the start
-        out += ["", "## 打起来时（引擎读到的）", "", *[f"- {row}" for row in _sheet(battle.from_npc(n, things))]]
+        rows = _sheet(battle.from_npc(n, things))
+        if n.attacks:
+            rows.append("原文的攻击：" + "；".join(n.attacks))
+        out += ["", "## 打起来时（引擎读到的）", "", *[f"- {row}" for row in rows]]
     if n.portrait:
         out += ["", f"头像：`assets/ascii/{n.portrait}.txt`"]
     return "\n".join(out) + "\n"
@@ -414,8 +452,14 @@ def _events_md(m: Module) -> str:
                         + {"party": "（调查员被偷袭）", "foe": "（对方毫无防备）"}.get(e.surprise, ""))
         elif e.chase:
             meta.append("开始追逐：" + "、".join(f"`{x}`" for x in e.chase) + f"（调查员{'追' if e.chase_party == '追' else '逃'}）")
+        if e.sights:
+            meta.append("这次理智检定就是 " + "、".join(f"`{x}`" for x in e.sights) + " 的照面，不再另扣")
         if meta:
             out += ["；".join(meta), ""]
+        if e.stakes:
+            out += ["胜负后果（遭遇收场时条件成立就设上标记）：", ""]
+            out += [f"- `{x.when}` → " + ("、".join(f"`{f}`" for f in x.flags) or "（不设标记）") + (f"：{x.note}" if x.note else "")
+                    for x in e.stakes] + [""]
     return "\n".join(out)
 
 
