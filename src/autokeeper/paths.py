@@ -38,7 +38,7 @@ The data folder:
       角色卡导出/        where 导出 puts a card unless you pick another folder
       cache/            safe to delete; rebuilt when needed
         models/         local embedding models (about 90 MB)
-        kb/             LightRAG knowledge base per module
+        kb/             LightRAG knowledge base per module; kb/rules/ the rulebooks' index
         showcases/      big-scene pictures per module
         pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
@@ -256,6 +256,19 @@ def tools() -> Path:
 
 def kb(module_id: str) -> Path:
     return cache() / "kb" / module_id
+
+
+def rules_index() -> Path:
+    """The rules lookup's index of the rulebooks (rules_lookup.py, `autokeeper rules index`)."""
+    return cache() / "kb" / "rules"
+
+
+def rulebooks() -> Path:
+    """The official rulebooks the rules lookup reads: AUTOKEEPER_RULEBOOKS, else rule/ in the
+    checkout (in the data folder when installed). Copyrighted: never committed (.gitignore)."""
+    if given := os.environ.get("AUTOKEEPER_RULEBOOKS"):
+        return Path(given).expanduser()
+    return (DATA if INSTALLED else ROOT) / "rule"
 
 
 def showcases(module_id: str) -> Path:

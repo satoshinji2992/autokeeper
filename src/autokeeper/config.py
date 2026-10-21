@@ -257,6 +257,7 @@ class Config:
     animations: bool = True
     battle_timer: bool = False  # opt-in: a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
     dice: str = "bone"  # tui/drawing/dice.py SKINS
+    rulebooks: str = ""  # the rulebooks' folder for `autokeeper rules index`; "" is paths.rulebooks()
 
     @property
     def improvising(self) -> bool:
@@ -616,6 +617,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.theme = data.get("theme", cfg.theme)
     cfg.art_style = data.get("art_style", cfg.art_style)
     cfg.dice = data.get("dice", cfg.dice)
+    cfg.rulebooks = str(data.get("rulebooks", cfg.rulebooks) or "")
     cfg.plugins = data.get("plugins", cfg.plugins)
     cfg.tips = data.get("tips", cfg.tips) is not False
     cfg.animations = data.get("animations", cfg.animations) is not False
