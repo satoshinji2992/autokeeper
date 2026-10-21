@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from rich.cells import cell_len
 from rich.console import RenderableType
 from rich.text import Text
 from textual.app import ComposeResult
@@ -197,13 +198,16 @@ class PagesModal(ModalScreen[None]):
 
 
 class PagesHead(Static):
-    """The right column's head over 经过: clicked (or Ctrl+G), 经过, 进展 and 背景 open as a page
-    over the screen. The column keeps only 经过: tabs under the sheet and the dice were squeezed out
-    of sight (the user, 2026-10-21)."""
+    """The right column's head: 经过, 进展, 背景 (and a rule plugin's page) as tabs that turn the
+    column's page in place, and 展开 at the end, which opens the page over the screen (Ctrl+G
+    too). The user, 2026-10-21: a click on a tab reads it right there; only 展开 opens the menu."""
+
+    EXPAND = "展开 ▸"
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.new, self.extra = False, ""
+        self.new, self.extra, self.active = False, "", "history"
+        self._hits: list[tuple[int, int, str]] = []  # cells of each tab on the line, and 展开
         self._draw()
 
     def fresh(self, new: bool) -> None:
@@ -214,14 +218,44 @@ class PagesHead(Static):
     def plugins(self, label: str) -> None:
         """A rule plugin's page under `label` ("" while there is none)."""
         self.extra = label
+        if not label and self.active == PLUGINS:
+            self.active = "history"
         self._draw()
 
-    def _draw(self) -> None:
-        pages = [FRESH if self.new else PAGES["progress"], PAGES["background"], *([self.extra] if self.extra else [])]
-        self.update(Text.assemble(("经过", "bold"), "  ", (f"{' · '.join(pages)} ▸", "bold" if self.new else "dim"), ("  点击展开", "dim")))
+    def turn(self, name: str) -> None:
+        self.active = name
+        if name == "progress":
+            self.new = False
+        self._draw()
 
-    async def on_click(self) -> None:
-        await self.screen.run_action("page('progress')")
+    def tabs(self) -> list[tuple[str, str]]:
+        names = [("history", PAGES["history"]), ("progress", FRESH if self.new else PAGES["progress"]),
+                 ("background", PAGES["background"])]
+        return names + ([(PLUGINS, self.extra)] if self.extra else [])
+
+    def _draw(self) -> None:
+        out, at, self._hits = Text(), 0, []
+        for name, label in self.tabs():
+            style = "reverse bold" if name == self.active else "bold" if name == "progress" and self.new else "dim"
+            out.append(f" {label} ", style=style)
+            self._hits.append((at, at + cell_len(label) + 2, name))
+            at += cell_len(label) + 2
+        out.append("  ")
+        at += 2
+        out.append(self.EXPAND, style="dim underline")
+        self._hits.append((at, at + cell_len(self.EXPAND), "expand"))
+        self.update(out)
+
+    def hit(self, x: int) -> str:
+        """What is at cell `x` of the line: a tab's name, "expand", or ""."""
+        return next((name for a, b, name in self._hits if a <= x < b), "")
+
+    async def on_click(self, event) -> None:
+        what = self.hit(event.x - self.styles.padding.left)
+        if what == "expand":
+            await self.screen.run_action(f"page('{self.active}')")
+        elif what:
+            await self.screen.run_action(f"side_page('{what}')")
 
 
 def mark(tabs: TabbedContent, fresh: bool) -> None:

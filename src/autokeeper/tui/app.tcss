@@ -301,6 +301,9 @@ GameScreen.-dev #topbar {
 #pages-head:hover {
     background: $panel;
 }
+#pages .side-page {
+    display: none;  /* PagesHead turns to one in place */
+}
 #pages-modal #pages {
     border-top: none;
 }

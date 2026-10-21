@@ -1,6 +1,6 @@
 """The whole investigator sheet, as on paper: portrait, characteristics with their half and
 fifth, derived values, every skill (the raised ones stand out, improvement ticks shown),
-the backstory grouped as the paper sheet has it, and belongings. In a game, also 本局经历:
+what they carry (装备, always shown), the backstory grouped as the paper sheet has it. In a game, also 本局经历:
 what they did and rolled, what they found, what it cost them, and the promises and ties in
 the world ledger that are theirs, all of it what the table saw (GameState.deeds, which a LAN
 screen gets through the sync). ←/→ go through the party."""
@@ -133,7 +133,7 @@ def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | Non
         skills.add_row(*line)
 
     rule = Text("─" * 40, style="dim")
-    parts: list[RenderableType] = [head, rule, stats, rule, skills]
+    parts: list[RenderableType] = [head, rule, stats, rule, skills, rule, gear_view(inv, state)]
     if (story := backstory_view(inv)) is not None:
         parts += [rule, story]
     if state is not None:
@@ -141,26 +141,52 @@ def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | Non
     return Group(*parts)
 
 
+MODES = {"carried": "携带", "worn": "穿戴", "held": "手持", "concealed": "藏着"}
+PROVENANCE = re.compile(r"^[（(【]?\s*AutoKeeper\s*(补充|补写|依原文大意补写)[）)】]?\s*[：:]?\s*")
+
+
+def gear_view(inv: Investigator, state: GameState | None = None) -> Table:
+    """装备, always on the sheet: what the world record has them hold (weapons, keys, evidence,
+    with how they carry it and how many are left), then the rest of what they carry."""
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(no_wrap=True, style="dim")
+    grid.add_column(ratio=1)
+    rows: list[Text] = []
+    named: set[str] = set()
+    record = getattr(state, "record", None)
+    for item in (record.entities.values() if record is not None else ()):
+        if item.kind != "item" or item.at != inv.id:
+            continue
+        line = Text(item.name, style="bold" if item.important else "")
+        extra = [MODES[item.equipment]] if item.important else []
+        extra += [f"剩 {item.quantity}"] if item.quantity != 1 else []
+        if extra:
+            line.append(f"（{'，'.join(extra)}）", style="dim")
+        rows.append(line)
+        named.add(item.name)
+    rows += [Text(x) for x in inv.inventory if x not in named]
+    grid.add_row("装备", Text("、").join(rows) if rows else Text("无", style="dim"))
+    return grid
+
+
 def backstory_view(inv: Investigator) -> Table | None:
-    """Every backstory field, grouped (GROUPS), then what they carry; None for a bare card."""
+    """Every backstory field, grouped (GROUPS); None for a bare card. Where the card came from
+    (说明, an "AutoKeeper 补充" in front of a line) is not part of the investigator."""
     groups: dict[str, list[Text]] = {}
     for k, v in inv.backstory.items():
-        if k == "说明" or not str(v).strip():
+        words = PROVENANCE.sub("", str(v).strip())
+        if k == "说明" or not words:
             continue
         name = next((g for g, words in GROUPS if any(w in k for w in words)), "其他")
-        groups.setdefault(name, []).append(Text.assemble((f"{k}：", "bold"), str(v).strip()))
-    if inv.inventory:
-        groups["随身"] = [Text("、".join(inv.inventory))]
+        groups.setdefault(name, []).append(Text.assemble((f"{k}：", "bold"), words))
     if not groups:
         return None
     grid = Table.grid(padding=(0, 2))
     grid.add_column(no_wrap=True, style="dim")
     grid.add_column(ratio=1)
-    for name in [g for g, _ in GROUPS] + ["其他", "随身"]:
+    for name in [g for g, _ in GROUPS] + ["其他"]:
         for i, line in enumerate(groups.get(name, [])):
             grid.add_row(name if i == 0 else "", line)
-    if note := inv.backstory.get("说明", "").strip():  # where the card came from: AutoKeeper 补充, 玩家带来的人物卡
-        grid.add_row("", Text(f"（{note}）", style="dim"))
     return grid
 
 

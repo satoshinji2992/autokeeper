@@ -215,6 +215,11 @@ def room_key(url: str) -> str:
         return ""
 
 
+
+def _handout_keys(h: dict) -> list[str]:
+    """A handout's picture keys in a module dump: its art and the book's pages (Handout.original_keys)."""
+    return [*h.get("images", []), *(f"{h['id']}~original{i + 1}" for i in range(len(h.get("originals", []))))]
+
 class Hub:
     def __init__(
         self,
@@ -712,10 +717,10 @@ class Hub:
         return ({x.get("art") for x in book["locations"] + book["items"]} | {p.portrait for p in self.m.pregens}
                 | {v["key"] for x in book["locations"] for v in x.get("views", [])} | {c.get("art") for c in book["clues"]}
                 | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
-                | {key for h in book["handouts"] for key in h.get("images", [])})
+                | {key for h in book["handouts"] for key in _handout_keys(h)})
 
     def _pictures(self, book: dict, keys: set[str]) -> dict[str, str]:
-        handouts = {key for h in book["handouts"] for key in h.get("images", [])}
+        handouts = {key for h in book["handouts"] for key in _handout_keys(h)}
         for k in keys:  # a scene painted by program is made before it is sent
             if k in self.m.pictures:
                 scenery.ensure(self.m.pictures[k])
@@ -734,7 +739,7 @@ class Hub:
                                "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
         # Pictures that came into view (a place first visited, a face first met, one the story
         # redrew while nobody could see it) arrive the way new pictures do: as an art event.
-        handouts = {key for h in book["handouts"] for key in h.get("images", [])}  # these travel with their handout
+        handouts = {key for h in book["handouts"] for key in _handout_keys(h)}  # these travel with their handout
         for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
             path = self.m.pictures.get(key)
             if path and self.sent.get(key) != path and (data := media.pack(path)):
@@ -780,7 +785,7 @@ class Hub:
                 book = self._book()
                 handout = next((h for h in book["handouts"] if h["id"] == ev.get("id")), None)
                 if handout:
-                    ev["picture_data"] = self._pictures(book, set(handout.get("images", [])))
+                    ev["picture_data"] = self._pictures(book, set(_handout_keys(handout)))
         elif ev.get("type") == "art":
             if ev["key"] not in self._art_keys(self._book()):
                 return

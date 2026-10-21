@@ -156,6 +156,13 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             c.title = renamed.get(c.id, c.title)
         for p in then.pregens:
             p.occupation = {"thomas_reed": "县卫生部门调查员（前陆军军医）"}.get(p.id, p.occupation)
+        # Where a pregen's lines came from is not the investigator's (the user, 2026-10-21: no
+        # 「AutoKeeper 补充」 on the sheet); the book's pages a handout shows, where the player has the book.
+        for p, q in zip(then.pregens, now.pregens, strict=True):
+            assert {k: v.removeprefix("AutoKeeper 补充：") for k, v in p.backstory.items() if k != "说明"} == q.backstory
+            p.backstory = q.backstory
+        for h, g in zip(then.handouts, now.handouts, strict=True):
+            h.originals = g.originals
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 
@@ -185,3 +192,29 @@ def test_the_bundled_paper_chase_is_playable():
     assert not [i for i in graph.audit(m) if i.level == "error"]
     assert len(m.locations) >= 8 and m.endings and m.pregens
     assert all(m.art.get(loc.art) or m.pictures.get(loc.art) for loc in m.locations if loc.art)
+
+
+def test_a_handout_shows_the_books_page_where_this_copy_has_the_book(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "LOCAL_MODULES", tmp_path / "local")
+    folder = tmp_path / "example"
+    shutil.copytree(EXAMPLE, folder)
+    m = Module.load(folder)
+    h = m.handouts[0]
+    assert m.handout_pictures(h) == [m.pictures[k] for k in h.images if k in m.pictures]
+    m.handout(h.id).originals = ["source/p3.png"]
+    m.save(folder)
+    m = Module.load(folder)
+    assert m.handout_pictures(m.handout(h.id)) == [m.pictures[k] for k in h.images if k in m.pictures]  # no book here: words only
+    (folder / "source").mkdir()
+    Image.new("RGB", (8, 8)).save(folder / "source" / "p3.png")
+    m = Module.load(folder)
+    assert m.handout_pictures(m.handout(h.id))[-1] == str(folder / "source" / "p3.png")
+    assert "originals" in (folder / "clues.yaml").read_text(encoding="utf-8")
+    m.save(folder)
+    assert "~original" not in (folder / "clues.yaml").read_text(encoding="utf-8")  # the key is the game's, not the module's
+    shutil.rmtree(folder / "source")
+    mine = paths.LOCAL_MODULES / "example" / "source"  # an installed game: the player's own copy of the book
+    mine.mkdir(parents=True)
+    Image.new("RGB", (8, 8)).save(mine / "p3.png")
+    m = Module.load(folder)
+    assert m.handout_pictures(m.handout(h.id))[-1] == str(mine / "p3.png")

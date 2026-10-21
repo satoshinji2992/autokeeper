@@ -279,7 +279,7 @@ pregens:
   birthplace: 明尼苏达州德卢斯
   portrait: agnes
   backstory:
-    why: AutoKeeper 补充：1918 年流感时她在野战医院值过班，这次县里点名让她随队来埃斯内尔评估疫情。
+    why: 1918 年流感时她在野战医院值过班，这次县里点名让她随队来埃斯内尔评估疫情。
     tie: 她与安特医生通过两封信，对方在信里反复强调“这不像流感”。
   characteristics:
     力量: 45
@@ -322,7 +322,7 @@ pregens:
   birthplace: 俄亥俄州哥伦布
   portrait: thomas
   backstory:
-    why: AutoKeeper 补充：他在法国做过救护队的军医，习惯在雪天出勤，也习惯在报告里写下最坏的可能。
+    why: 他在法国做过救护队的军医，习惯在雪天出勤，也习惯在报告里写下最坏的可能。
     tie: 他追踪过从军营带回来的疫病，对“官方说法”一向不肯全信。
   characteristics:
     力量: 60

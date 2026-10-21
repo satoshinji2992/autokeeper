@@ -47,7 +47,7 @@ from ..modals.showcase import ShowcaseScreen
 from ..modals.suggest import Ideas
 from ..widgets import tips
 from ..widgets.devpanel import DevPanel
-from ..widgets.pages import PagesHead, PagesModal, background_view, progress_view
+from ..widgets.pages import Page, PagesHead, PagesModal, background_view, progress_view
 from ..widgets.panels import (
     LIGHT_MARK,
     PORTRAIT,
@@ -177,6 +177,8 @@ class GameScreen(Screen):
                 with Vertical(id="pages"):
                     yield PagesHead(id="pages-head")
                     yield HistoryPanel(id="history")
+                    for name in ("progress", "background", "plugins"):  # turned to in place (PagesHead)
+                        yield Page(id=f"side-{name}", classes="page side-page")
                 yield CluePanel(id="clues")
         yield Footer()
 
@@ -606,7 +608,33 @@ class GameScreen(Screen):
         """进展, 背景 and the plugins' page are read over the screen (action_page), made as it opens;
         the head over 经过 names a plugin's page while there is one."""
         shown = self.state.plugin_panels
-        self.query_one(PagesHead).plugins(tab_label(shown) if shown else "")
+        head = self.query_one(PagesHead)
+        head.plugins(tab_label(shown) if shown else "")
+        if head.active == "plugins" and not shown:
+            self.action_side_page("history")
+        self._side_fill()
+
+    def action_side_page(self, name: str) -> None:
+        """The right column turned to `name` (a tab of PagesHead): 经过, 进展, 背景 or a plugin's page."""
+        head = self.query_one(PagesHead)
+        head.turn(name)
+        self.query_one(HistoryPanel).display = name == "history"
+        for page in self.query(".side-page").results(Page):
+            page.display = page.id == f"side-{name}"
+        self._side_fill()
+
+    def _side_fill(self) -> None:
+        """The column's page, written again from the game as it is now (when one is showing)."""
+        name = self.query_one(PagesHead).active
+        if name == "history":
+            return
+        page = self.query_one(f"#side-{name}", Page)
+        if name == "progress":
+            page.show(progress_view(self.state))
+        elif name == "background":
+            page.show(background_view(self.m, self.state, self._viewer()))
+        elif shown := self.state.plugin_panels:
+            page.show(panel_view(shown, self.app.current_theme))
 
     def action_page(self, name: str) -> None:
         """经过, 进展 and 背景 (and a rule plugin's page) as a page over the screen, `name` first."""
@@ -728,7 +756,7 @@ class GameScreen(Screen):
         elif t == "handout":
             story.add("handout", Text(f"▤ 手稿：{ev['title']}（F2 可重看）", style="bold"))
             handout = next((h for h in self.m.handouts if h.id == ev.get("id")), None)
-            pictures = [self.m.pictures[k] for k in handout.images if k in self.m.pictures] if handout else []
+            pictures = self.m.handout_pictures(handout) if handout else []
             self.app.push_screen(HandoutModal(ev["title"], ev["text"], pictures, kind=ev.get("kind", "信件")))
         elif t == "sanity":
             body = Text()
@@ -768,7 +796,10 @@ class GameScreen(Screen):
         elif t == "sheet":
             self._panels()
         elif t == "progress":  # the story so far, written again in the background: a mark on its tab, no notice
-            self.query_one(PagesHead).fresh(True)
+            if self.query_one(PagesHead).active == "progress":
+                self._side_fill()  # being read: it changes in place
+            else:
+                self.query_one(PagesHead).fresh(True)
             if self.game and not self.busy:
                 write_save(self.state, self.m)
         elif t == "epilogue_start":
@@ -1214,7 +1245,7 @@ class GameScreen(Screen):
         chosen = await self.app.push_screen_wait(NotebookModal(clues, handouts, facts))
         if chosen:
             h = self.m.handout(chosen)
-            self.app.push_screen(HandoutModal(h.title, h.text, [self.m.pictures[k] for k in h.images if k in self.m.pictures], kind=h.kind))
+            self.app.push_screen(HandoutModal(h.title, h.text, self.m.handout_pictures(h), kind=h.kind))
 
     def action_sheet(self) -> None:
         from ..modals.sheet import SheetModal

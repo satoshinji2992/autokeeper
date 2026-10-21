@@ -297,11 +297,15 @@ handouts:
 - id: h_town_map
   title: 斯托威尔镇地图
   kind: 地图
+  originals:
+  - source/source/images/地图.gif
   images: []
   text: 斯托威尔镇地图。1 阿尔的顶级车行 2 美以美会堂 3 杰克发廊 4 法庭 5 火车站 6 埃尔默牛排馆 7 劳瑞小甜甜的店 8 警察局 9 贝克妈妈菜 10 斯托威尔商业信托储蓄银行；另有公园、医院、墓地、锯木厂、罐头厂。
 - id: h_relationship_map
   title: 人物关系图
   kind: 守秘人资料
+  originals:
+  - source/source/images/人物关系.gif
   images: []
   text: 镇民与调查员之间的关系图，标出了谁有福（▲）、谁崩溃（*）。
 - id: h_flyer

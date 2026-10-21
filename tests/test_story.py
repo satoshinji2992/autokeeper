@@ -560,10 +560,19 @@ async def test_the_right_column_keeps_the_history_and_opens_the_other_pages_over
         head = screen.query_one("#pages-head", PagesHead)
         assert "进展·新" in head.content.plain and len(said) == notices  # silent
         assert paths.save("pages").exists()  # idle: kept at once
-        await pilot.click("#pages-head")  # the head clicked: opened, read
+        def at(what: str) -> tuple[int, int]:
+            return next(a for a, _, name in head._hits if name == what) + 1 + 1, 0  # the head's padding, a cell in
+
+        await pilot.click("#pages-head", offset=at("progress"))  # a tab clicked: read right there in the column
+        await pilot.pause()
+        assert app.screen is screen and "第二段故事至今" in shown(screen, "#side-progress")
+        assert not screen.query_one("#history").display and "进展·新" not in head.content.plain
+        await pilot.click("#pages-head", offset=at("history"))
+        await pilot.pause()
+        assert screen.query_one("#history").display and not screen.query_one("#side-progress").display
+        await pilot.click("#pages-head", offset=at("expand"))  # only 展开 opens the page over the screen
         await pilot.pause()
         assert isinstance(app.screen, PagesModal) and "第二段故事至今" in shown(app.screen, "#progress")
-        assert "进展·新" not in head.content.plain
         await pilot.press("escape")
         await pilot.pause()
 

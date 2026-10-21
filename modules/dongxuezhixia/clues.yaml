@@ -498,6 +498,8 @@ handouts:
   text: '地图上补全了第一阶段、第二阶段、第三阶段的传播圈线。
 
     一圈套一圈，中心指向绸缎山。东边的伊斯特曼家落在圈外。'
+  originals:
+  - source/source/images/p09_image02.png
   images: []
 - id: h_notes
   title: 分发材料 2a、2b——安特医生的病历
@@ -507,6 +509,9 @@ handouts:
     \ 2:19 去世。\n\n病历 2b：\n01/15/21：患者女，54 岁，胸口发紧，有束缚感，呼吸困难，无淤血或炎症迹象。想留她过夜观察，\n          被坚持回家的病人拒绝。\n\
     01/16/21：丈夫打来电话，病人时常严重反胃、呕吐；她仍拒绝到诊所过夜。丈夫和此前就诊的两子没有症状。\n          指导如何避免感染。\n01/18/21：病人脸色苍白、浑身发冷，肌肉力量下降，咳嗽带血，难以集中注意力；丈夫说前两晚睡眠不佳。\n\
     01/21/21：病情明显恶化，睡眠不超过 30 分钟，害怕入睡，发现幻觉。开镇静剂帮助休息。\n          丈夫称自己的胸闷气短、偶尔咳嗽。\n01/22/21：患者昨晚去世。\n"
+  originals:
+  - source/source/images/p11_image01.png
+  - source/source/images/p12_image01.png
   images: []
 - id: h_nightmare
   title: 分发材料 3——萨缪尔的速写
@@ -516,6 +521,8 @@ handouts:
     圈线的中心隐约指向某个更高的地方。
 
     '
+  originals:
+  - source/source/images/p14_image01.png
   images: []
 - id: h_telegram
   title: 分发材料 4——军队电报
@@ -531,6 +538,8 @@ handouts:
     中尉马修·海德福斯，来自第 4 师指挥官 L.A.P. 普拉格少将与美国远征部队指挥官约翰·J·潘兴将军办公室。
 
     '
+  originals:
+  - source/source/images/p19_image01.png
   images: []
 - id: h_grimoire
   title: 卡德威尔家的典籍（关键部分摘抄）
@@ -542,11 +551,15 @@ handouts:
   title: 它本来的样子
   kind: 图画
   text: 原作插图：半边是人脸，半边是没有固定形态的东西。
+  originals:
+  - source/source/images/p06_image02.png
   images: []
 - id: h_flower_reference
   title: 绸缎花（原作外观参考）
   kind: 参考插图
   text: 绸缎山因春夏开放的黄色绸缎花得名。此图是原作提供的花卉外观参考；现在是冬季，眼前的山坡覆盖着积雪。
+  originals:
+  - source/source/images/p20_image03.png
   images: []
 sketches:
 - id: sk_map

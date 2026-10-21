@@ -136,6 +136,11 @@ class Handout(BaseModel):
     kind: str = "信件"
     text: str
     images: list[str] = Field(default_factory=list, description="原模组手稿/地图的图片键，对应 art/<键>.png 或 .jpg；只在该手稿解锁后展示")
+    originals: list[str] = Field(default_factory=list, description="原书里这份手稿的图片，相对模组文件夹的路径（source/ 下，不随模组发布）；本机有这个文件时一并展示")
+
+    def original_keys(self) -> list[str]:
+        """The picture keys its originals are registered under (Module.load), in order."""
+        return [f"{self.id}~original{i + 1}" for i in range(len(self.originals))]
 
 
 class Creature(BaseModel):
@@ -354,6 +359,10 @@ class Module(BaseModel):
     def handout(self, id: str) -> Handout:
         return _find(self.handouts, id, "手稿")
 
+    def handout_pictures(self, h: Handout) -> list[str]:
+        """The pictures a handout shows: its own art, then the book's pages this copy has."""
+        return [self.pictures[k] for k in [*h.images, *h.original_keys()] if k in self.pictures]
+
     def npcs_at(self, location: str) -> list[NPC]:
         return [n for n in self.npcs if n.location == location]
 
@@ -386,6 +395,16 @@ class Module(BaseModel):
                 module.extension_errors[identity] = f"{type(exc).__name__}: {str(exc)[:500]}"
         module.art, module.art_colors = package.ascii_art(folder / "art")
         module.pictures = package.pictures(folder / "art")
+        from .. import paths
+
+        # The book's own pages, where this copy has the book: the module's source/, or, for a
+        # module that came with the package, the same path under the player's modules folder
+        # (paths.LOCAL_MODULES/<id>/source/...). Never shipped: the player's own copy.
+        roots = list(dict.fromkeys([folder, paths.LOCAL_MODULES / folder.name]))
+        for h in module.handouts:
+            for key, rel in zip(h.original_keys(), h.originals, strict=True):
+                if found := next((root / rel for root in roots if (root / rel).is_file()), None):
+                    module.pictures[key] = str(found)
         return module
 
     def save(self, folder: Path) -> Path:

@@ -324,6 +324,14 @@ async def test_the_big_scene_fills_the_screen_and_goes_on_a_key_a_click_or_by_it
         assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(app.screen.query("#showcase-picture")))
         await pilot.click("#showcase-picture")
         assert await until(pilot, lambda: app.screen is screen)  # a click
+        await screen.handle(ev)
+        assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(app.screen.query("#showcase-picture")))
+        shown = app.screen
+        shown.leave()
+        shown.leave()  # a key just as the timer runs: gone once, the game screen stays
+        assert await until(pilot, lambda: app.screen is screen)
+        await pilot.pause(0.2)
+        assert app.screen is screen
         monkeypatch.setattr(screen_module, "SHOWN", 0.4)
         await screen.handle(ev)
         assert await until(pilot, lambda: isinstance(app.screen, screen_module.ShowcaseScreen) and bool(app.screen.query("#showcase-picture")))

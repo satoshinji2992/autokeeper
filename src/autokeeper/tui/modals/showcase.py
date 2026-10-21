@@ -31,6 +31,7 @@ class ShowcaseScreen(ModalScreen[None]):
     def __init__(self, picture: str, caption: str, *, style: str = "photo", fade: bool = True):
         super().__init__()
         self.picture, self.caption, self.style_name, self.fade = picture, caption, style, fade
+        self._gone = False
 
     def compose(self) -> ComposeResult:
         yield Static("", id="showcase-picture")
@@ -66,7 +67,10 @@ class ShowcaseScreen(ModalScreen[None]):
         self.leave()
 
     def leave(self) -> None:
-        """Gone, if it is still the screen in front (the timer may outlive it). Not awaited:
+        """Gone, if it is still the screen in front (the timer may outlive it), and only once: a
+        key pressed just as the timer ran dismissed it twice, and the second set the result of a
+        future already done (InvalidStateError, the user's Windows run, 2026-10-21). Not awaited:
         its own timer and handlers must not wait for their screen to go."""
-        if self.is_current:
+        if self.is_current and not self._gone:
+            self._gone = True
             self.dismiss()
