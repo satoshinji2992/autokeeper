@@ -178,7 +178,7 @@ async def test_a_narration_is_laid_out_once_a_line_not_once_a_tick(monkeypatch):
         await pilot.pause()
         # A layout (and a scroll) when it takes another line; the other ticks only repaint it.
         assert lines >= 3 and len(layouts) <= 2 * lines + 4
-        assert words in str(story.children[-1].render())
+        assert words in str(story.children[-1].render()).replace("\n", "")  # set in lines (panels.fold)
 
 
 @pytest.mark.skipif(shutil.which("chafa") is None, reason="chafa not installed")
