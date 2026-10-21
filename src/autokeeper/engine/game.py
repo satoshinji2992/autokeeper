@@ -237,10 +237,6 @@ class Game(Encounters, Fighting):
         self.showcases = Showcases(module, state, getattr(cast, "cfg", None), self.emit, self.visuals.folder,
                                    self.visuals.idle, self.visuals.limit)  # big scenes: prepared ahead, the opening first
         self.plugins = PluginManager(self)
-        if state.fight is not None or (state.chase is not None and state.encounter is None) or state.seen:
-            from .encounter import migrate
-
-            migrate.legacy(self)  # a save from before 0.0.4's encounters: its fight as one of them
         diagnostics.attach(self)
         self.visuals.schedule()
         self.showcases.prepare()

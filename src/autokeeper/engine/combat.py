@@ -3,8 +3,7 @@
 Building a runner from an investigator's sheet, a module NPC or a creature as the world keeps them
 (the encounter's people, when a fight turns into a chase), the old chase's orders and their words
 (engine/encounter/runner.chase_options offers them, matched exactly), its view for the screens, and
-the ways a chase runs along when the module draws none. `Fight` is only an old save's, read by
-engine/encounter/migrate."""
+the ways a chase runs along when the module draws none."""
 
 from __future__ import annotations
 
@@ -57,28 +56,6 @@ class Order(BaseModel):
     maneuver: Literal["", "缴械", "推倒", "制住"] = ""
     stance: Stance = Field("dodge", description="这一轮被攻击时：dodge 闪避；fight 反击；cover 扑向掩体（只对开枪有用，会失去下个行动）")
     text: str = Field("", description="other 时，玩家要做的事，原话")
-
-
-class Fight(BaseModel):
-    round: int = 0
-    fighters: list[Fighter]
-    place: str = ""
-    reason: str = ""
-    started: int = 0  # the turn it began on
-    orders: dict[str, Order] = Field(default_factory=dict)  # this round's, by fighter id
-    engaged: list[list[str]] = Field(default_factory=list)  # pairs who traded blows this round: shots into them are at a penalty
-
-    def get(self, fid: str) -> Fighter | None:
-        return next((f for f in self.fighters if f.id == fid), None)
-
-    def side(self, side: Side) -> list[Fighter]:
-        return [f for f in self.fighters if f.side == side]
-
-    def standing(self, side: Side) -> list[Fighter]:
-        return [f for f in self.fighters if f.side == side and f.standing]
-
-    def foes_of(self, f: Fighter) -> list[Fighter]:
-        return [x for x in self.fighters if x.side != f.side and x.standing]
 
 
 class Chase(BaseModel):
@@ -343,4 +320,4 @@ def default_track(kind: str) -> Track:
     return Track(legs=[Leg(name=n, look=look, obstacle=ob.model_copy() if ob else None) for n, look, ob in rows])
 
 
-__all__ = ["DOWN", "OUT", "UNARMED", "Chase", "Fight", "Order"]
+__all__ = ["DOWN", "OUT", "UNARMED", "Chase", "Order"]

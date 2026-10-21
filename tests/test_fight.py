@@ -278,10 +278,23 @@ def fight_screen(module):
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="fight-screen")
     state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
     state.add("keeper", "钟楼里只有齿轮的声音。")
-    warden = battle.from_npc(module.npc("warden"))
+    warden = battle.from_npc(module.npc("warden"))  # the old chase's runners, for the chase stage
     me = battle.from_investigator(state.investigators[0])
-    state.fight = battle.Fight(fighters=[me, warden], place="tower", round=1)
+    begun(module, state, ["warden"], round=1)
     return GameScreen(module, state, resume=True), me, warden
+
+
+def begun(module, state, foes, *, round: int = 0) -> None:
+    """A fight already going on in `state`, as a save holds one (engine/encounter)."""
+    from autokeeper.engine.encounter.plan import EncounterStart
+    from autokeeper.engine.game import Game, Turn
+    from autokeeper.rules.coc import Rules
+
+    from .test_engine import FakeCast
+
+    game = Game(module, state, FakeCast({}), Rules())  # type: ignore[arg-type]
+    game._begin("e1", EncounterStart(mode="fight", foes=foes, pace=6, reason="动起手来"), foes, Turn(), None)
+    state.encounter.round, state.encounter.cursor = round, 2 if round else 0
 
 
 HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": "老守钟人", "attacker_side": "foe",
@@ -550,7 +563,7 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
         await pilot.pause(0.1)
         await pilot.press("tab")  # mid-turn: no stance of the fight being settled changes
         assert await until(pilot, lambda: not screen.busy and seen)
-        assert sent == ["我"] and seen == ["dodge"] and me.stance == "dodge"
+        assert sent == ["我"] and seen == [None] and me.stance == "dodge"  # nothing set by the list's Tab
         await pilot.pause(0.2)
         assert not picker.display and not screen._battle_picking  # nothing of the fight's list after it
         await pilot.press("enter")
@@ -625,15 +638,17 @@ async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, f
 # -- the stage on a small terminal ---------------------------------------------------------------------
 def _crowd(module):
     """Two investigators against the warden and two of his helpers."""
-    from autokeeper.engine import combat as battle
+    from autokeeper.engine.game import Game
+    from autokeeper.tui.screens.game import GameScreen
 
-    screen, me, warden = fight_screen(module)
-    st = screen.state
-    friend = st.investigators[0].model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
-    st.investigators.append(friend)
-    helpers = [warden.model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}) for k in (1, 2)]
-    st.fight = battle.Fight(fighters=[me, battle.from_investigator(friend), warden, *helpers], place="tower", round=1)
-    return screen
+    for k in (1, 2):  # two more of the warden's kind
+        module.npcs.append(module.npc("warden").model_copy(update={"id": f"helper{k}", "name": f"守钟人的帮手{k}"}))
+    lead = module.pregens[0].model_copy(deep=True)
+    state = Game.new(module, [lead, lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)], slot="crowd")
+    state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
+    state.add("keeper", "钟楼里只有齿轮的声音。")
+    begun(module, state, ["warden", "helper1", "helper2"], round=1)
+    return GameScreen(module, state, resume=True)
 
 
 def _all_on_screen(screen, height: int) -> None:
@@ -683,7 +698,7 @@ async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_kee
         await pilot.pause(0.5)
         _all_on_screen(screen, 24)
         assert arena.region.height < 22
-        screen.state.fight, me.pos = None, 2
+        screen.state.encounter, me.pos = None, 2
         await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
         screen.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party")
         await screen.handle({"type": "chase_start", "chase": battle.chase_view(screen.state.chase), "line": "【追逐开始】"})
@@ -811,7 +826,6 @@ async def test_a_picture_the_canvas_cannot_draw_is_the_shape_in_the_dark_not_the
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
         screen, _, _ = fight_screen(module)
-        screen.state.fight.fighters[1].portrait = "warden"
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         canvas = screen.query_one(stage.Arena).canvas

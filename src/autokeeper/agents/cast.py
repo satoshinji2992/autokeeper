@@ -215,14 +215,6 @@ class Ruling(BaseModel):
     # The rule it wants looked up in the rulebooks first (rules_lookup.py); in the schema only
     # when there is an index of them (Cast._arbiter), answered and asked again once (Cast.arbiter).
     lookup: SkipJsonSchema[str] = ""
-    # Retired in 0.0.4 (the encounter engine starts fights from Plan.encounter and rules an `other`
-    # action's harm in `effects`): kept out of the schema, read from old journals and ignored.
-    combat: SkipJsonSchema[list[str]] = Field(default_factory=list)
-    surprise: SkipJsonSchema[Literal["", "party", "foe"]] = ""
-    chase: SkipJsonSchema[list[str]] = Field(default_factory=list)
-    chase_party: SkipJsonSchema[Literal["", "逃", "追"]] = ""
-    harm: SkipJsonSchema[str] = ""
-    harm_to: SkipJsonSchema[str] = ""
     # Filled in by the engine from the director's plan, never by the arbiter.
     now: SkipJsonSchema[list[str]] = Field(default_factory=list)
     go: SkipJsonSchema[str] = ""

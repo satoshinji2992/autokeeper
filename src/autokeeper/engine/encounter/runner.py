@@ -1423,11 +1423,8 @@ class Encounters:
     async def _chase_bridge_open(self, start: EncounterStart, turn: Turn, *, event: Event | None = None) -> None:
         """A chase begins (from the plan or an event): the old chase engine runs it, the encounter in
         chase mode keeps its stakes and its people."""
-        from ...agents.cast import Action, Ruling
-
         foes = [p.id for p in self.state.encounter.participants if p.side == "foe"]  # type: ignore[union-attr]
-        ruling = Ruling(needs_roll=False, chase=foes, chase_party="追" if start.quarry == "foe" else "逃", reason=start.reason)
-        opened = await self._chase_open(ruling, Action(kind="move", summary=start.reason or "追逐"), turn,  # type: ignore[attr-defined]
+        opened = await self._chase_open(foes, "foe" if start.quarry == "foe" else "party", start.reason, turn,  # type: ignore[attr-defined]
                                         paid=True)
         if opened == "none":
             await self._encounter_end("dispersed", turn)

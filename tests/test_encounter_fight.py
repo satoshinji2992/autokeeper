@@ -385,28 +385,6 @@ async def test_a_creature_that_heals_itself_gets_up_again(module, fake):
     assert "又撑着站了起来" in cast.reports[-1]
 
 
-async def test_an_old_save_in_the_middle_of_a_fight_comes_back_as_an_encounter(module, fake):
-    from autokeeper.engine import combat as battle
-    from autokeeper.engine.encounter import migrate
-    from autokeeper.engine.game import Game
-    from autokeeper.rules.coc import Rules
-
-    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
-    state.location = "tower"
-    me, warden = battle.from_investigator(state.investigators[0]), battle.from_npc(module.npc("warden"))
-    warden.hp = 4
-    state.fight = battle.Fight(fighters=[me, warden], place="tower", round=2, started=1)
-    state.pending_turn = {"input": "攻击", "resolution": {"steps": {"battle-mode": {"done": True}, "fight-round": {"done": True}}}}
-    from .test_engine import FakeCast
-
-    game = Game(module, state, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
-    enc = game.state.encounter
-    assert enc is not None and game.state.fight is None and enc.round == 2 and [p.id for p in enc.participants] == ["zhouheng", "warden"]
-    assert game.world.rec.entities["warden"].life.hp == 4  # adopted as it stood
-    assert not game.state.pending_turn and any(e.text == migrate.DROPPED for e in game.state.log)
-    await game.close()
-
-
 # -- care, numbers, companions, the chase's end -----------------------------------------------------------
 async def test_first_aid_wakes_the_unconscious_and_ticks_the_skill(module, fake):
     lead = module.pregens[0]

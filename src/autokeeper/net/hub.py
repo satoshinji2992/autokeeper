@@ -725,7 +725,6 @@ class Hub:
         st = self.state
         view = st.model_dump(mode="json", exclude=PRIVATE)
         view["flags"], view["fired"] = [], []
-        view["fight"] = None  # an old save's, converted on load (engine/encounter/migrate)
         from ..engine.encounter import views
 
         game = getattr(self, "game", None)

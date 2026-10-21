@@ -100,7 +100,7 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
         weapon = readiest(v)
         party = p.side == "party"
         look = v.profile.look[:60] if hasattr(v, "profile") else ""
-        out.append({"id": p.id, "name": v.public_name("players"), "kind": p.kind, "side": "party" if party else "foe",
+        out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
                     "status": status(ctx, p.id), "wound": wound_word(b), "hp": b.hp if party else None,
                     "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
                     "weapon": weapon.name if weapon is not None else "徒手", "stance": STANCES.get(p.react or "dodge", "dodge"),

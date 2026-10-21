@@ -671,7 +671,6 @@ async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not
 
 
 async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_once(monkeypatch, tmp_path, skills_dir, fake):
-    from autokeeper.engine import combat as battle
 
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
@@ -679,8 +678,9 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
     state = Game.new(m, [lead, friend], slot="lan-fight", human=[lead.id, "lin"])
     state.location = "tower"
-    state.fight = battle.Fight(fighters=[battle.from_investigator(lead), battle.from_investigator(friend),
-                                         battle.from_npc(m.npc("warden"))], place="tower")
+    from .test_fight import begun
+
+    begun(m, state, ["warden"])
 
     class Telling(TableCast):
         def __init__(self) -> None:

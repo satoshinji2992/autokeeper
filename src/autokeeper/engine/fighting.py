@@ -313,35 +313,32 @@ class Fighting:
         loc = m.location(st.location)
         return battle.default_track(scenery.kind_of(loc.name, loc.read_aloud)).model_dump()
 
-    def _chase_begin(self, ruling: Ruling, action: Action, track: dict) -> list[dict]:
+    def _chase_begin(self, foes: list[str], quarry: str, reason: str, track: dict) -> list[dict]:
         st = self.state
-        others = self._others(ruling.chase or ([action.npc] if action.npc else []))
+        others = self._others(foes)
         if not others:
             return []
         party = [battle.from_investigator(inv, self._carried_by(inv.id), world=self.world) for inv in st.investigators if inv.can_act]
-        quarry = "foe" if ruling.chase_party == "追" else "party"
-        lines = self._chase_setup([*party, *others], Track.model_validate(track), quarry, ruling.reason, rolled=False)
+        lines = self._chase_setup([*party, *others], Track.model_validate(track), quarry, reason, rolled=False)
         ch = st.chase
         assert ch is not None
         head = f"【追逐开始】{'调查员在逃，身后是' if quarry == 'party' else '调查员追赶'}" + "、".join(f.name for f in others)
         st.add("event", head)
         return [{"type": "chase_start", "chase": battle.chase_view(ch), "line": head, "speeds": lines}]
 
-    async def _chase_open(self, ruling: Ruling, action: Action, turn: Turn, *, paid: bool = False) -> str:
+    async def _chase_open(self, foes: list[str], quarry: str, reason: str, turn: Turn, *, paid: bool = False) -> str:
         """A chase begins: its way, who runs, their speeds, a creature's first sight (`paid` as in
         _sights), what starting it achieves. "on" while it goes on; "none" with nobody in it; "over"
         when it is over at once (every quarry far faster than everyone after them)."""
         st, step = self.state, self._resolution_step
         track = await step("chase-track", turn, self._chase_track)
-        begun = await step("chase-begin", turn, lambda: self._chase_begin(ruling, action, track))
+        begun = await step("chase-begin", turn, lambda: self._chase_begin(foes, quarry, reason, track))
         for i, ev in enumerate(begun):
             await step(f"chase-begin:{i}", turn, lambda ev=ev: self.emit(ev))
         if not begun:
             return "none"
         await step("chase-told", turn, lambda: turn.fight.extend([begun[0]["line"], *begun[0].get("speeds", [])]))
         await self._sights(turn, paid=paid)
-        if ruling.set_flags:
-            await step("chase-flags", turn, lambda: self._flags(ruling.set_flags, turn))
         ch = st.chase
         if ch is None:  # over at once, and this is that turn resumed
             return "over"

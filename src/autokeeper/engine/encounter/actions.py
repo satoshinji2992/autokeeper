@@ -42,6 +42,7 @@ class Ctx:
     game: Any
     enc: EncounterState
     views: dict[str, Any] = field(default_factory=dict)
+    _shown: dict[str, str] | None = None
 
     @classmethod
     def of(cls, game: Any, enc: EncounterState | None = None) -> Ctx:
@@ -120,8 +121,24 @@ class Ctx:
         return ""
 
     def name(self, pid: str, audience: str = "keeper") -> str:
+        """What `audience` calls them; for the players, two who look alike are told apart by a number
+        (两个「楼梯口打盹的老人」: the second is 楼梯口打盹的老人2), so every choice's words are its own."""
+        if audience != "keeper" and self.enc.get(pid) is not None:
+            return self.shown().get(pid, pid)
         v = self.view(pid)
         return v.public_name(audience) if v is not None else pid  # type: ignore[arg-type]
+
+    def shown(self) -> dict[str, str]:
+        if self._shown is None:
+            out: dict[str, str] = {}
+            counts: dict[str, int] = {}
+            for p in self.enc.participants:
+                v = self.view(p.id)
+                base = v.public_name("players") if v is not None else p.id
+                counts[base] = counts.get(base, 0) + 1
+                out[p.id] = base if counts[base] == 1 else f"{base}{counts[base]}"
+            self._shown = out
+        return self._shown
 
 
 # -- attacks ---------------------------------------------------------------------------------------

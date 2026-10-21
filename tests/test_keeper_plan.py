@@ -358,8 +358,7 @@ async def test_the_rhetoric_eval_goes_through_the_keepers_plan(tmp_path, monkeyp
 # -- an encounter announced by the everyday plan (Plan.encounter) -----------------------------------
 async def test_the_plan_announces_an_encounter_and_the_arbiter_no_longer_starts_one(module, fake):
     """Plan.encounter is one small object on the everyday schema: the encounter engine starts the fight
-    from it. The arbiter's old fields (combat, chase, harm) are out of its schema and its prompt; an old
-    journal's still reads."""
+    from it. The arbiter's old fields (combat, chase, harm) are gone from its schema and its prompt."""
     cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}), module)
     game = make(module, fake, cast)
     game.state.pending_turn = {"input": "我扑向守钟人"}
@@ -379,9 +378,6 @@ async def test_the_plan_announces_an_encounter_and_the_arbiter_no_longer_starts_
     sent = SEEN[-1]
     assert not {"combat", "surprise", "chase", "chase_party", "harm", "harm_to"} & set(sent["schema"]["properties"])
     assert "【可能动手的】" not in sent["messages"][-1]["content"] and "chase_party" not in sent["system"]
-    from autokeeper.agents.cast import Ruling
-
-    assert Ruling.model_validate({"needs_roll": False, "combat": ["warden"], "harm": "1D6"}).combat == ["warden"]  # an old journal
     await game.close()
     await cast.close()
 
