@@ -169,6 +169,10 @@ class GameScreen(Screen):
         self.plays = Plays(self)  # rule plugins' shows and prompts (tui/widgets/plugin_ui.py)
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
         self.view = (state.location, state.view)  # which picture of which place the scene shows (engine/views.py)
+        # A fight's or a chase's choices over the input box (_offer_orders) and the clock on them (_start_clock)
+        self._battle_picking, self._battle_title, self._stance = False, "", ""  # the list is up; its title; Tab's stance
+        self._clock = None  # the round's countdown while the list is up
+        self._clock_paused, self._clock_total, self._clock_left, self._clock_until, self._fallback = False, 0.0, 0.0, 0.0, ""
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
@@ -254,8 +258,10 @@ class GameScreen(Screen):
     # it; coming back, pick up the newest lines again unless the reader had scrolled away.
     def on_screen_suspend(self) -> None:
         self.following = all(s.is_vertical_scroll_end for s in self.query(StoryLog))
+        self._pause_clock()  # the round's choice does not run out behind help, the menu or a handout
 
     def on_screen_resume(self) -> None:
+        self._resume_clock()
         if getattr(self, "following", True):
             for s in self.query(StoryLog):
                 s.scroll_end(animate=False)
@@ -272,6 +278,7 @@ class GameScreen(Screen):
 
     def on_key(self, event: events.Key) -> None:
         if event.is_printable and event.character and (box := self._typing()):
+            self._close_orders()  # an order of their own, typed over the round's list
             box.focus()
             box.insert_text_at_cursor(event.character)
             event.prevent_default()
@@ -285,7 +292,7 @@ class GameScreen(Screen):
             event.stop()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if action == "complete_skill" and getattr(self, "_battle_picking", False):
+        if action == "complete_skill" and self._battle_picking:
             return True  # Tab over a fight's choices: the other way of answering a blow
         if action == "complete_skill":
             box = self.query_one("#command", Input)
@@ -310,7 +317,7 @@ class GameScreen(Screen):
         picker = self.query_one("#picker", OptionList)
         if not picker.display:
             return False
-        self._battle_picking = False
+        self._close_orders()
         picker.display = False
         self.query_one("#command", Input).focus()
         return True
@@ -319,19 +326,19 @@ class GameScreen(Screen):
     def _picked(self, event: OptionList.OptionSelected) -> None:
         key = event.option.id or ""
         box = self.query_one("#command", Input)
-        if getattr(self, "_battle_picking", False):  # a fight's or a chase's order: sent as picked
-            self._battle_picking = False
-            self._stop_clock()
+        if self._battle_picking:  # a fight's or a chase's order: sent as picked
             self._unpick()
             if not self.busy:
                 self.send_line(key)
+            elif self.queued is None:  # (the list closes as a turn starts) as a line typed ahead would go
+                self.queued = key
             return
         box.value = self._skill_value = key
         box.cursor_position = len(key)
         self._unpick()
 
     def action_complete_skill(self, step: int = 1) -> None:
-        if getattr(self, "_battle_picking", False):
+        if self._battle_picking:
             self._next_stance(step)
             return
         box = self.query_one("#command", Input)
@@ -363,7 +370,9 @@ class GameScreen(Screen):
         self.busy = busy
         if self.game is not None and (server := getattr(self.game, "debug_server", None)) is not None:
             server.busy = busy
-        if not busy:
+        if busy:
+            self._close_orders()  # the round is being settled: its list is done with
+        else:
             self.status_text = ""
             if not self.spectate:
                 for box in self.query(Input).results(Input):  # none once the screen is leaving
@@ -851,6 +860,7 @@ class GameScreen(Screen):
             story.add("system", Text(f"◎ {ev['who']} 花掉 {ev['spent']} 点幸运（剩 {ev['left']}）"))
             self._panels()
         elif t == "ending":
+            self._battle_over()  # over in the middle of a fight or a chase: the stage goes back to the scene
             body = Text()
             body.append(f"【结局 · {ev['title']}】\n\n", style="bold")
             body.append(ev["text"] + "\n")
@@ -922,6 +932,7 @@ class GameScreen(Screen):
             body.append(ev["text"])
             story.add("npc", body)
         elif t == "fight_end":
+            self._close_orders()
             self.remove_class("-fight", "-beat")
             if self.state.chase is None:
                 arena.hide()
@@ -952,6 +963,7 @@ class GameScreen(Screen):
                 self._jolt(1)  # every stretch run: the picture jolts
             self._panels()
         elif t == "chase_end":
+            self._close_orders()
             self.remove_class("-chase", "-beat")
             if self.state.fight is None:
                 arena.hide()
@@ -1008,11 +1020,23 @@ class GameScreen(Screen):
 
         step()
 
+    def _battle_over(self) -> None:
+        """No fight or chase on the stage any more, whatever the state still holds (the game ended in
+        the middle of one): the list, the clock and the heartbeat stop, the scene comes back."""
+        self._close_orders()
+        self.remove_class("-fight", "-chase", "-beat")
+        arena = self.query_one(Arena)
+        if arena.display:
+            arena.hide()
+            self.query_one(SceneArt).display = True
+
     def _battle_resumed(self) -> None:
-        """A save opened in the middle of a fight or a chase: the stage as it stood."""
+        """A save opened in the middle of a fight or a chase: the stage as it stood (not after the end)."""
         from ...engine import combat as battle
 
         st = self.state
+        if st.ending:
+            return
         if st.fight is not None:
             self._battle_event({"type": "fight_start", "fight": battle.view(st.fight), "line": "战斗继续"})
         elif st.chase is not None:
@@ -1046,7 +1070,7 @@ class GameScreen(Screen):
 
         def beat(on: bool = True) -> None:
             st = self.state
-            if not self.is_attached or (st.fight is None and st.chase is None):
+            if not self.is_attached or st.ending or (st.fight is None and st.chase is None):
                 self._beating = False
                 self.remove_class("-beat")
                 return
@@ -1058,39 +1082,54 @@ class GameScreen(Screen):
 
         beat()
 
+    # -- the round's choices over the input box, on a clock -------------------------------------
+    def _may_order(self) -> bool:
+        """Whether the round's choices may come up now: between turns (at a LAN table, while the round
+        is open to this seat and nothing of theirs is in it yet: tui/screens/net.py)."""
+        return not self.busy
+
     def _next_stance(self, step: int) -> None:
         """Tab over a fight's choices: answer blows the other way this round (dodge, fight back, cover when
-        someone has a gun), every choice written again with it."""
+        someone has a gun), every choice written again with it. Only the words change, and the order
+        picked carries the stance: the fight is the engine's (Tab mid-turn used to change how the round
+        being settled was answered). The clock goes on as it was."""
         st = self.state
-        me = st.fight.get(st.investigator.id) if st.fight is not None else None
-        if me is None:
+        me = st.fight.get(self._viewer().id) if st.fight is not None else None
+        if me is None or self.busy or not self._battle_picking:
             return
         armed = any(a.firearm for f in st.fight.foes_of(me) for a in f.attacks)  # type: ignore[union-attr]
         ways = ["dodge", "fight", *(["cover"] if armed else [])]
-        me.stance = ways[(ways.index(me.stance) + step) % len(ways) if me.stance in ways else 0]
+        now = self._stance or me.stance
+        self._stance = ways[(ways.index(now) + step) % len(ways) if now in ways else 0]
         picker = self.query_one("#picker", OptionList)
         at = picker.highlighted or 0
         self._offer_orders()
         picker.highlighted = min(at, picker.option_count - 1)
 
     def _offer_orders(self) -> None:
-        """In a fight or a chase, the investigator's choices for the round over the input box."""
+        """In a fight or a chase, the investigator's choices for the round over the input box; not once
+        the game has ended in the middle of one."""
         st = self.state
-        if self.busy or self.spectate or (st.fight is None and st.chase is None) or not self.is_attached:
+        if st.ending or (st.fight is None and st.chase is None):
+            self._close_orders()
+            return
+        if self.spectate or not self.is_attached or not self._may_order():
             return
         from ...engine import combat as battle
 
-        me = st.investigator.id
+        me = self._viewer().id
         if st.fight is not None:
             f = st.fight.get(me)
+            if f is not None and self._stance:  # Tab: the words in the other way of answering a blow
+                f = f.model_copy(update={"stance": self._stance})
             choices = battle.choices(f, st.fight) if f is not None and f.standing else []
-            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 自己输入"
+            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 手动输入"
         else:
             assert st.chase is not None
             f = st.chase.get(me)
-            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing else []
-            title = "追逐行动 · 回车选定 · Esc 自己输入"
-        if not choices:
+            choices = battle.chase_choices(f, st.chase) if f is not None and f.standing and f.id not in st.chase.hidden else []
+            title = "追逐行动 · 回车选定 · Esc 手动输入"
+        if not choices or f is None:
             return
         picker = self.query_one("#picker", OptionList)
         picker.clear_options()
@@ -1099,46 +1138,75 @@ class GameScreen(Screen):
         picker.border_title = title
         picker.display = True
         picker.focus()
-        self._battle_picking = True
-        self._battle_title = title
-        if config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
-            fallback = battle.order_text(battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run"),
-                                         {})
-            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, fallback)
+        self._battle_picking, self._battle_title = True, title
+        if self._clock is not None:  # Tab: the same round, the same deadline
+            self._clock_tick()
+        elif config.load().battle_timer and getattr(self, "link", None) is None:  # a LAN round has its own window
+            hold = battle.Order(do="hold", stance=f.stance) if st.fight is not None else battle.Order(do="run")
+            self._start_clock(BATTLE_SECONDS if st.fight is not None else CHASE_SECONDS, battle.order_text(hold, {}))
+
+    def _close_orders(self) -> None:
+        """The round's list over the box goes, and its clock with it: the player writes their own order
+        (typing, Esc), the turn is under way, the fight or the chase is over. A list left up after a
+        fight sent its first line as the next action."""
+        self._stop_clock()
+        self._stance = ""
+        if self._battle_picking:
+            self._battle_picking = False
+            for picker in self.query("#picker").results(OptionList):
+                picker.display = False
+                picker.remove_class("-urgent")
 
     def _stop_clock(self) -> None:
-        if (clock := getattr(self, "_clock", None)) is not None:
-            clock.stop()
+        if self._clock is not None:
+            self._clock.stop()
             self._clock = None
+        self._clock_paused = False
 
     def _start_clock(self, seconds: float, fallback: str) -> None:
-        """The round's choice waits only so long: a draining bar on the list, then the investigator
-        hesitates and does only `fallback` (defends; in a chase, runs)."""
+        """The round's choice waits only so long: a draining bar on the list, then the investigator does
+        only `fallback` (defends; in a chase, runs flat out). It stands still while another window is
+        over the screen (help, the menu, a handout: on_screen_suspend) and goes on from where it was."""
         self._stop_clock()
-        until = time.monotonic() + seconds
+        self._clock_total, self._clock_left, self._fallback = seconds, seconds, fallback
+        self._clock_until = time.monotonic() + seconds
+        self._clock = self.set_interval(0.25, self._clock_tick)
+        if self.is_active:
+            self._clock_tick()
+        else:  # offered while a window was up: it waits for the screen
+            self._pause_clock()
 
-        def tick() -> None:
-            left = until - time.monotonic()
-            if self.busy or not self.is_attached or (self.state.fight is None and self.state.chase is None):
-                self._stop_clock()
-                return
-            picker = self.query_one("#picker", OptionList)
-            share = max(0.0, left / seconds)
-            bar = "█" * round(12 * share) + "░" * (12 - round(12 * share))
-            line = f"⏳ {bar} {max(0, int(left + 0.99))} 秒"
-            if picker.display:
-                picker.border_title = f"{self._battle_title} · {line}"
-                picker.set_class(left <= 5, "-urgent")
-            else:
-                self._status(f"{line} 后只来得及{'防守' if self.state.fight is not None else '逃跑'}")
-            if left <= 0:
-                self._stop_clock()
-                self._unpick()
-                self._status("")
-                self.app.notify("犹豫了一瞬……", severity="warning", timeout=3)
-                self.send_line(fallback)
+    def _pause_clock(self) -> None:
+        if self._clock is not None and not self._clock_paused:
+            self._clock_left = max(0.0, self._clock_until - time.monotonic())
+            self._clock.pause()
+            self._clock_paused = True
 
-        self._clock = self.set_interval(0.25, tick)
+    def _resume_clock(self) -> None:
+        if self._clock is not None and self._clock_paused:
+            self._clock_until = time.monotonic() + self._clock_left
+            self._clock_paused = False
+            self._clock.resume()
+
+    def _clock_tick(self) -> None:
+        st = self.state
+        if self.busy or not self.is_attached or not self._battle_picking or (st.fight is None and st.chase is None):
+            self._stop_clock()
+            return
+        if self._clock_paused:
+            return
+        left = self._clock_until - time.monotonic()
+        share = max(0.0, left / max(0.1, self._clock_total))
+        bar = "█" * round(12 * share) + "░" * (12 - round(12 * share))
+        picker = self.query_one("#picker", OptionList)
+        picker.border_title = f"{self._battle_title} · ⏳ {bar} {max(0, int(left + 0.99))} 秒"
+        picker.set_class(left <= 5, "-urgent")
+        if left <= 0:
+            fallback, fighting = self._fallback, st.fight is not None
+            self._close_orders()
+            self.query_one("#command", Input).focus()
+            self.app.notify(f"未在时限内选择，本轮改为{'防守' if fighting else '全力奔跑'}。", severity="warning", timeout=4)
+            self.send_line(fallback)
 
     def _npc_line(self, ev: dict, kind: str) -> None:
         """Their face is on the stage while they talk (Speaker), so the story keeps to words."""
@@ -1292,9 +1360,15 @@ class GameScreen(Screen):
             self._scene(self.state.location)
             self._panels()
             self.query_one(Speaker).refit()
+        cfg = config.load()
         scene = self.query_one(SceneArt)
-        if scene.effects != config.load().animations:
+        if scene.effects != cfg.animations:
             scene.toggle_effects()
+        if not cfg.battle_timer and self._clock is not None:  # 限时选择 off: the round's list waits as long as it takes
+            self._stop_clock()
+            picker = self.query_one("#picker", OptionList)
+            picker.border_title = self._battle_title
+            picker.remove_class("-urgent")
 
     def action_load(self) -> None:
         if self._turn_running():
@@ -1345,6 +1419,8 @@ class GameScreen(Screen):
     @on(Input.Submitted, "#command")
     def submit(self, event: Input.Submitted) -> None:
         text = event.value.strip()
+        if text:
+            self._close_orders()  # their own order instead of the round's list
         if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
             if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
@@ -1362,10 +1438,12 @@ class GameScreen(Screen):
         """Enter on an empty box: nothing here; at a shared table, the end of your round."""
 
     @on(Input.Changed, "#command")
-    def typing(self) -> None:
+    def typing(self, event: Input.Changed) -> None:
         # Every weather frame moves the terminal cursor across the screen and back; on terminals
         # without synchronized output that makes the caret and the IME box jump while typing.
         self.query_one(SceneArt).quiet(4.0)
+        if event.value and self._battle_picking:  # writing their own order, in the box the list was over
+            self._close_orders()
 
     def send_line(self, text: str) -> None:
         """One line from the input box: a slash command, or the investigator's action."""

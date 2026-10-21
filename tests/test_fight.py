@@ -344,3 +344,109 @@ async def test_a_handout_over_a_big_scene_stays_until_closed_and_the_scene_goes_
         assert [type(s) for s in app.screen_stack[-2:]] == [ShowcaseScreen, HandoutModal]
         await pilot.press("escape")
         assert await until(pilot, lambda: app.screen is screen)  # the handout closed, the picture went after it
+
+
+# -- the round's list and its clock -------------------------------------------------------------------
+@pytest.mark.usefixtures("canned")
+async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_after_the_fight(module, fake):
+    import asyncio
+
+    from autokeeper.tui.app import AutoKeeperApp
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker, box = screen.query_one("#picker"), screen.query_one("#command")
+        assert await until(pilot, lambda: picker.display and screen._clock is not None)
+        sent, seen = [], []
+
+        async def turn(text: str) -> None:  # the round being settled, then the fight is over
+            sent.append(text)
+            screen._busy(True)
+            await asyncio.sleep(0.4)
+            seen.append(screen.state.fight.get(me.id).stance)
+            screen.state.fight = None
+            await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
+            screen._busy(False)
+
+        screen.play = lambda text: screen.run_worker(turn(text), group="turn", exclusive=True)
+        await pilot.press("我")  # typed straight in, as players do
+        await pilot.pause()
+        assert box.has_focus and box.value == "我" and not picker.display and not screen._battle_picking
+        assert screen._clock is None  # an order of their own takes the time it takes
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        await pilot.press("tab")  # mid-turn: no stance of the fight being settled changes
+        assert await until(pilot, lambda: not screen.busy and seen)
+        assert sent == ["我"] and seen == ["dodge"] and me.stance == "dodge"
+        await pilot.pause(0.2)
+        assert not picker.display and not screen._battle_picking  # nothing of the fight's list after it
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        assert sent == ["我"]
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_its_deadline(module, fake, monkeypatch):
+    from autokeeper import config
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens import game as screens
+
+    from .test_tui import until
+
+    monkeypatch.setattr(screens, "BATTLE_SECONDS", 0.8)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, me, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display)
+        sent: list[str] = []
+        screen.send_line = sent.append
+        await pilot.press("f1")  # the help over the screen: the round waits
+        await pilot.pause(1.4)
+        assert sent == [] and picker.display
+        await pilot.press("escape")
+        assert await until(pilot, lambda: sent, tries=20)  # back: it runs out from where it stood
+        assert sent[0].startswith("防守") and not picker.display
+        screen._offer_orders()  # the next round
+        for _ in range(4):  # Tab does not start it over
+            await pilot.pause(0.3)
+            await pilot.press("tab")
+        assert len(sent) == 2 and me.stance == "dodge"  # the stance is in the words, not in the fight
+        screen._offer_orders()
+        await pilot.pause(0.2)
+        config.load().battle_timer = False  # 设置: 限时选择 off, with a clock running
+        screen._settings_saved(app.art_style)
+        await pilot.pause(1.2)
+        assert len(sent) == 2 and screen._clock is None and picker.display and "秒" not in str(picker.border_title)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_an_ending_in_the_middle_of_a_fight_takes_the_stage_back(module, fake):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena
+    from autokeeper.tui.widgets.panels import SceneArt
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker = screen.query_one("#picker")
+        assert await until(pilot, lambda: picker.display and screen._beating)
+        screen.state.ending = "lost"  # every investigator down: the game is over, the fight still in the state
+        await screen.handle({"type": "ending", "title": "钟声", "text": "钟楼重归寂静。"})
+        await pilot.pause(0.2)
+        assert not picker.display and screen._clock is None and not screen.query_one(Arena).display
+        assert screen.query_one(SceneArt).display and not screen.has_class("-fight")
+        screen._offer_orders()
+        assert not picker.display
+        assert await until(pilot, lambda: not screen._beating)
