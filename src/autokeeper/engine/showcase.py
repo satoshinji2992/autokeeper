@@ -210,13 +210,14 @@ class Showcases:
                 await self._show(sc, path)
 
     async def named(self, text: str) -> None:
-        """A creature whose name first comes up in what the players read."""
+        """A creature that first comes up in what the players read: by its name, or by what they call
+        it before they know it (Creature.called), since the keeper tells a horror by what is seen of it."""
         for sc in self.module.showcases:
             side, _, ident = sc.when.partition(":")
             if side != "creature" or sc.id in self.state.shown:
                 continue
             creature = next((c for c in self.module.creatures if c.id == ident), None)
-            if creature is not None and creature.name and creature.name in text:
+            if creature is not None and any(word and word in text for word in (creature.name, creature.called.strip())):
                 await self.fire(sc.when)
 
     def settle(self) -> None:

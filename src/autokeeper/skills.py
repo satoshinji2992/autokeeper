@@ -1,9 +1,8 @@
 """Reading Agent Skills from disk.
 
-Claude Code, Codex and deepagents load these folders natively. In standalone play the
-engine itself decides what each agent needs (the keeper gets the module overview
-up front and a location file only when the party walks in), so it just reads the
-same files; metadata and the <available_skills> index come from skills-ref.
+The engine decides what each agent needs and reads the folders itself (the arbiter gets
+coc7-core, the keeper keeper-craft, a storyteller NPC pingshu-voice, the artist ascii-art);
+metadata and the <available_skills> index come from skills-ref.
 """
 
 from __future__ import annotations

@@ -18,9 +18,8 @@
       assets/ascii/<name>.txt       ASCII art
       .stamp                        what it was compiled from (see stamp())
 
-Claude Code reads it from .claude/skills, Codex from .agents/skills and deepagents from
-the path we pass; all three follow the Agent Skills spec, so nothing here is custom
-loading logic.
+The package follows the Agent Skills spec; the engine indexes it for the keeper's retrieval
+(knowledge.py), so nothing here is custom loading logic.
 """
 
 from __future__ import annotations
@@ -40,9 +39,8 @@ from ..rules.weapons import unread
 from .graph import supporting_clues
 from .schema import NPC, Clue, Location, Module
 
-FIGHTS = ("战斗与追逐在 AutoKeeper 里由引擎按 CoC 7 版规则结算：用 AutoKeeper MCP 服务器的战斗与追逐工具开打、宣告每一轮的行动，"
-          "命中、伤害、重伤、追逐的每一段都由引擎掷骰，结算过的不要口头再算一遍。这里的数值就是引擎读到的；"
-          "手动主持时照它们和 `coc7-combat` 结算。")
+FIGHTS = ("战斗与追逐在 AutoKeeper 里由引擎按 CoC 7 版规则结算：命中、伤害、重伤、追逐的每一段都由引擎掷骰，"
+          "结算过的不要口头再算一遍。这里的数值就是引擎读到的。")
 
 
 def skill_name(m: Module) -> str:
@@ -234,7 +232,7 @@ def _skill_md(m: Module) -> str:
         lines += ["", "## 自定义规则插件（由引擎执行）", ""]
         lines += [f"- `{p.id}` v{p.version}：{p.description}" for p in m.extensions.values()]
         lines += ["", "源码与可执行测试见 `assets/plugins/<id>/`；接口见 [references/plugins.md](references/plugins.md)。",
-                  "引擎已结算的插件效果不能再口头重复结算；手动主持时先读源码和原文核对。"]
+                  "引擎已结算的插件效果不能再口头重复结算。"]
     if _has_fights(m):
         where = [f"`{x.id}` {x.name}" for x in m.locations if x.chase]
         lines += ["", "## 战斗与追逐", "", FIGHTS, ""]
@@ -246,7 +244,7 @@ def _skill_md(m: Module) -> str:
             lines.append(f"- 写好的追逐路线（在地点文件里）：{'；'.join(where)}；别处起跑的由引擎临场画")
         if any(e.fight or e.chase for e in m.events):
             lines.append("- 事件里写定的打斗和追逐：[references/events.md](references/events.md)，到点由引擎开打")
-    lines += ["", "需要检定时配合 `coc7-core`，理智检定配合 `coc7-sanity`，打斗与追逐配合 `coc7-combat`，叙事风格见 `keeper-craft`。", ""]
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -502,7 +500,12 @@ def _situation_md(m: Module) -> str:
             out += [f"想要：{'；'.join(a.goals)}", ""]
         out += [_step_md(s) for s in a.steps] + [""]
     if m.foreshadow:
-        out += ["## 伏笔", ""] + [f"- `{f.id}` 在 `{f.where}`：{f.hint} → `{f.pays_off}`" for f in m.foreshadow] + [""]
+        out += ["## 伏笔", ""]
+        for f in m.foreshadow:
+            out.append(f"- `{f.id}` 在 `{f.where}`：{f.hint} → `{f.pays_off}`")
+            out += [f"  {n}. 之后再来" + (f"（`{s.where}`）" if s.where else "") + (f"（{s.when} 起）" if s.when else "") + f"：{s.hint}"
+                    for n, s in enumerate(f.stages, 1)]
+        out.append("")
     if m.history:
         out += ["## 前史", ""]
         for p in m.history:

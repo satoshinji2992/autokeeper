@@ -309,7 +309,7 @@ class Showcase(BaseModel):
         description="开场 开局的氛围；突发 突然发生的事；危机 生死关头；重要场景 关键地点；怪物 怪物现身；最终boss 最后的对手；结局 每个结局一张")
     when: str = Field(
         description="什么时候展示，每局最多一次：opening 开局；visit:地点id 第一次到达；event:事件id 事件发生；"
-        "creature:怪物id 怪物的名字第一次出现在事件或叙述里；flag:标记 标记成立；ending:结局id 进入这个结局")
+        "creature:怪物id 怪物第一次出现在叙述里（它的名字或玩家对它的叫法 called）；flag:标记 标记成立；ending:结局id 进入这个结局")
     title: str = Field(description="画面下方的短标题，不超过 12 个字；只说此刻玩家看得见的，不剧透")
     prompt: str = Field(description="画面描述，写给画师：画什么、构图、光线和气氛；只写看得见的，不写名字和幕后真相")
     art: str = Field("", description="模组自带的、正好合适的图片键（art/<键>.jpg），有就直接用这张")
@@ -364,11 +364,23 @@ class Agenda(BaseModel):
     steps: list[Move] = Field(default_factory=list, max_length=6, description="他会怎么做，按先后排")
 
 
+class Stage(BaseModel):
+    """A later look at the same sign (Foreshadow.stages): what is different on a later visit, or after
+    a while. Handed to the keeper as the first hint is (engine/signs.py), one step per arrival."""
+
+    hint: str = Field(description="这一次看见、听见的变化，一句：和上一次比哪里不一样了；一步比一步近，仍不点破，不说出线索的内容")
+    when: str = Field("", description="最早什么时候露出：'D2 08:00' 这样的时间，或 flag:标记；不写就是下一次来到这里")
+    where: str = Field("", description="在别的地点露出时写那个地点 id；不写就是伏笔原来的地点")
+    flag: str = Field("", description="露出这一步时设上的剧情标记（要在 flags 里声明）；地点的 looks 写 when: flag:这个标记，场景图就跟着换")
+
+
 class Foreshadow(BaseModel):
     id: str
     hint: str = Field(description="可以早早露出来的一点端倪，玩家看得见、听得见的一句：一个声音、一样摆错位的东西")
     where: str = Field(description="在哪个地点露出来（地点 id）")
     pays_off: str = Field(description="最后指向什么：结论、事件或结局 id")
+    stages: list[Stage] = Field(default_factory=list, max_length=4, description=(
+        "之后再来时这点端倪的变化，按先后排，一次来露一步：旅馆的画第二次看，画里的人转过了头；没有就不写"))
 
 
 class Tie(BaseModel):

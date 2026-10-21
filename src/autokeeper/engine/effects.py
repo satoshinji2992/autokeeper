@@ -4,7 +4,7 @@ A wound used to be applied wherever it was rolled: by a fight to its own copies 
 by an event to the sheet, by a plugin to whatever it was given. Some of them never reached the
 world (an NPC came back standing in the next fight), and some reached it twice. These models are
 the results instead. Whoever rolls the dice (an encounter's unit, an event, a failed check, a
-plugin, the MCP keeper) turns what they rolled into a list of `Effect`s; applying them is then
+plugin) turns what they rolled into a list of `Effect`s; applying them is then
 deterministic, in one op (world/ops.EncounterStep inside an encounter, world/ops.Effects outside
 one), so they land together or not at all, and the op's id makes a retry land nothing twice.
 

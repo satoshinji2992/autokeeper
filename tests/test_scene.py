@@ -345,7 +345,7 @@ async def test_an_old_save_plays_on(fake):
     old["transcripts"] = {"keeper": [{"role": "user", "content": "【第 1 轮】"}, {"role": "assistant", "content": "旧的叙述。"}]}
     old["narrator_context_version"] = 1
     old["pending_turn"] = {"input": "我四处看看", "talk_done": True}  # cut short mid-narration, before any receipt
-    for key in ("pending_resolution", "pending_mcp", "progress", "plugin_panels"):
+    for key in ("pending_resolution", "progress", "plugin_panels"):
         old.pop(key, None)
     st = GameState.model_validate(old)
     loaded, _ = made(state=st)

@@ -7,19 +7,15 @@ from collections import deque
 
 import pytest
 
-from autokeeper import config, mcp_server, paths
-from autokeeper.engine.game import Game
+from autokeeper import config
 from autokeeper.harness import Agent, Reply
 from autokeeper.harness import models as hm
 from autokeeper.harness.loop import step_schema
-from autokeeper.module.schema import Module
-from autokeeper.rules.coc import Rules
 from autokeeper.world import knowledge
 from autokeeper.world.ops import AddFact, Learn, Move
 from autokeeper.world.store import World
 from autokeeper.world.tools import Gateway, harness_tools
 
-from .test_engine import FakeCast
 from .test_world import staged
 
 
@@ -188,30 +184,6 @@ async def test_harness_typed_tool_arguments_execute_a_real_world_preview(world, 
         assert not script
     finally:
         await agent.close()
-
-
-async def test_mcp_exports_the_same_gateway_without_an_identity_argument(fake, monkeypatch):
-    m = Module.load(paths.EXAMPLE)
-    st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="mcp-world-gateway")
-    game = Game(m, st, FakeCast({}), Rules(dice=fake))
-    monkeypatch.setattr(mcp_server.S, "game", game)
-    saved = []
-    monkeypatch.setattr(mcp_server, "_save", lambda: saved.append(True))
-    try:
-        snapshot = await mcp_server.world_query("守钟人")
-        ops = [{"kind": "move", "entity": "warden", "to": "square"}]
-        preview = await mcp_server.world_preview(ops, snapshot["reads"])
-        assert preview["ok"] and game.world.place("warden") == "tower" and saved == []
-        result = await mcp_server.world_commit("mcp-move", ops, preview["reads"])
-        assert result["ok"] and saved == [True] and game.world.place("warden") == "square"
-        await mcp_server.world_commit("mcp-move", ops, preview["reads"])
-        assert saved == [True]
-        tools = {tool.name: tool for tool in await mcp_server.server.list_tools()}
-        assert {"world_query", "world_preview", "world_commit", "world_schema"} <= set(tools)
-        assert all("actor" not in tools[name].inputSchema["properties"] for name in ("world_query", "world_preview", "world_commit"))
-        assert not paths.save(st.slot).exists()
-    finally:
-        await game.close()
 
 
 def test_npc_inventory_is_private_and_only_important_known_items_are_returned(world):

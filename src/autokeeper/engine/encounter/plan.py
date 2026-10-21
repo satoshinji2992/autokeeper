@@ -4,7 +4,7 @@ The keeper plan (agents/cast.Cast.plan, the keeper model's `plan` role) is the o
 arranges an encounter. Outside one it may start one (`EncounterStart`); inside one, every free-text
 input is planned as an `EncounterTurnPlan`: what the speaking investigator does (a `DeclaredAction`),
 how each NPC and creature means to fight (`NpcArrangement`), who joins, numbers a sheet lacked, what
-the outcome brings about, and how long a round takes. The MCP keeper writes the same shapes.
+the outcome brings about, and how long a round takes.
 
 These are the types a model fills, so their field descriptions are the instructions it reads, in
 Chinese, and the schemas are kept small for cheap models (tests/test_encounter_models.py records

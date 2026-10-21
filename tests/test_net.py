@@ -891,3 +891,38 @@ async def test_an_ai_player_in_a_fight_sees_it_and_the_rounds_choices(fake):
     game.state.encounter = None
     assert "正在战斗" not in situation(m, st, game=game) and situation(m, st, game=game).endswith("你下一步做什么？")
     await game.close()
+
+
+async def test_an_ai_seat_pushes_the_way_it_said_it_would_and_the_arbiter_reviews_it(skills_dir, fake):
+    from autokeeper.agents.cast import Failure, Proposal, PushRuling
+
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="lan-ai-push", human=[])
+
+    class Pushing(TableCast):
+        def __init__(self) -> None:
+            super().__init__()
+            self.pushes: list[str] = []
+
+        async def arbiter(self, state, action, at=None):
+            return Ruling(needs_roll=True, skill="侦查", clues_on_success=["c_notice"], minutes=5,
+                          on_push_fail=Failure(text="纸被撕破了"))
+
+        async def investigator(self, state, inv_id, situation):
+            self.ai_turns.append(inv_id)
+            return Proposal(text="我细看告示栏", push="把每一层告示都揭起来对着光看，花上半个钟头")
+
+        async def repush(self, state, pending, how):
+            self.pushes.append(how)
+            return PushRuling(achievable=True, minutes=30)
+
+    cast = Pushing()
+    hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    fake.queue(90, 1)  # the look fails; the push it said it would make succeeds
+    start = hub.state.minutes
+    await hub._ai_turn(hub.state.investigators[0])
+    assert cast.pushes == ["把每一层告示都揭起来对着光看，花上半个钟头"]  # reviewed as a player's push is
+    assert "c_notice" in hub.state.clues and hub.state.minutes - start == 5 + 30
+    assert any(e.kind == "player" and e.text.startswith("孤注一掷：把每一层告示") for e in hub.state.log)
+    await hub.game.close()

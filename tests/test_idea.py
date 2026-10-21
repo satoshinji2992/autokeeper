@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
-from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, PushRuling, Ruling, opposing
+from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, Proposal, PushRuling, Ruling, opposing
 from autokeeper.agents.director import DIRECTOR_SYSTEM, Improv, NewEvent
 from autokeeper.engine import autoplay, idea
 from autokeeper.engine import graph as turn_graph
-from autokeeper.engine.game import STALL_TURNS, Game, Turn, push_choice
+from autokeeper.engine.game import STALL_TURNS, Game, Turn, ai_choice, push_choice
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
@@ -223,6 +224,53 @@ async def test_a_push_without_a_way_goes_as_before(module, fake):
     assert "c_archive" in game.state.clues and game.state.minutes == before  # an old save's choice
 
 
+def test_an_ai_player_answers_a_push_offer_the_way_it_said_it_would_push():
+    offer = {"can_push": True, "luck": 12}
+    assert ai_choice(offer, " 把合订本 一页页翻完 ") == {"choice": "push", "how": "把合订本 一页页翻完"}
+    assert ai_choice(offer, "") == "luck"  # it said no way: no bare push
+    assert ai_choice({"can_push": True, "luck": None}) == "drop"
+    assert ai_choice({"can_push": False, "luck": None}, "再翻一遍") == "drop"  # a push not allowed stays so
+    assert Proposal.of("我四下看看") == Proposal(text="我四下看看", push="")  # a stand-in's plain words
+
+
+async def test_the_ai_investigator_says_its_action_and_how_it_would_push_it(module, monkeypatch):
+    from autokeeper import config
+    from autokeeper.agents.cast import INVESTIGATOR_SYSTEM, Cast
+    from autokeeper.harness import Reply
+
+    cast = Cast(config.Config(), module)
+    replies = [Reply(text="", data={"text": "我翻旧报\n（多余的一行）", "push": " 把那一年的 合订本全翻完 "}),
+               Reply(text="我去钟楼"), Reply(text="", data={"text": ""})]
+
+    async def send(key, session, state, prompt, **kw):
+        assert session.schema == Proposal.model_json_schema()
+        return replies.pop(0)
+
+    monkeypatch.setattr(cast, "_send", send)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    inv = state.investigators[0].id
+    assert await cast.investigator(state, inv, "") == Proposal(text="我翻旧报", push="把那一年的 合订本全翻完")
+    assert await cast.investigator(state, inv, "") == Proposal(text="我去钟楼")  # plain words: no push said
+    assert (await cast.investigator(state, inv, "")).text == "我四下看看。"
+    assert "push 写：这件事如果要检定而失败了，你打算怎样孤注一掷" in INVESTIGATOR_SYSTEM
+
+
+async def test_an_ai_players_stated_push_is_ruled_again_and_takes_its_time(module, fake):
+    game, *_ = make(module, fake, {}, location="office")
+    game.cast = cast = Arbiter({"look": (LOOK, ARCHIVE)}, PushRuling(achievable=True, minutes=60))
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90, 3)
+    start = game.state.minutes
+    thread = {"configurable": {"thread_id": "ai-push"}}
+    _out, interrupts = await run_turn(app, "look", thread)
+    choice = ai_choice(interrupts[0], "把那一年的合订本一页页全部翻完")
+    async for _ in app.astream(Command(resume=choice), thread, stream_mode=["custom", "updates"]):
+        pass
+    st = game.state
+    assert cast.pushes[0][1] == "把那一年的合订本一页页全部翻完" and "c_archive" in st.clues
+    assert st.minutes - start == 30 + 60
+
+
 # -- the arbiter's basis --------------------------------------------------------------------------
 def test_the_arbiter_is_told_where_difficulty_comes_from_and_what_core_clues_mean():
     assert "低于 50 常规，50 及以上困难，90 及以上极难" in ARBITER_SYSTEM
@@ -363,37 +411,3 @@ async def test_ctrl_l_asks_for_an_idea_roll_on_the_game_screen(canned, fake):  #
         await pilot.press("ctrl+l")  # once a game day
         await pilot.pause(0.2)
         assert app.screen is screen and len(screen.state.ideas) == 1
-
-
-async def test_mcp_pushes_say_how_and_the_idea_roll_is_a_tool(monkeypatch, tmp_path, fake):
-    from autokeeper import mcp_server as srv
-    from autokeeper import paths
-
-    monkeypatch.setattr(paths, "DATA", tmp_path)
-    monkeypatch.setattr(paths, "SKILLS", tmp_path / "skills")
-    monkeypatch.setattr(srv, "_dirs", lambda: {"example": EXAMPLE})
-    await srv.new_game("example", "zhouheng", slot="t")
-    g = srv.S.game
-    g.rules = Rules(dice=fake)
-    asked: list[str] = []
-
-    async def repush(state, pending, how):
-        asked.append(how)
-        return PushRuling(achievable=True, minutes=15)
-
-    monkeypatch.setattr(g.cast, "repush", repush)
-    fake.queue(90)
-    failed = await srv.skill_check("侦查", clues_on_success=["c_notice"], minutes=5)
-    assert failed["can_push_or_luck"]["can_push"]
-    with pytest.raises(ValueError, match="如何行动以孤注一掷"):
-        await srv.push_or_luck("push")
-    fake.queue(30)
-    pushed = await srv.push_or_luck("push", how="踮脚凑近告示，一个字一个字地辨认")
-    assert asked == ["踮脚凑近告示，一个字一个字地辨认"] and [c["id"] for c in pushed["clues"]] == ["c_notice"]
-    assert pushed["time"] == "D1 14:20"  # five minutes looking, fifteen for the push
-    fake.queue(20, 10)  # INT 75: a success; the gears' sanity check passes
-    rolled = await srv.idea_roll()
-    assert [c["id"] for c in rolled["clues"]] == ["c_gears"] and any("灵感检定成功" in n for n in rolled["notes"])
-    assert (await srv.idea_roll()) == {"refused": idea.TODAY}
-    await g.close()
-    await g.cast.close()

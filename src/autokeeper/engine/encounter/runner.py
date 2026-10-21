@@ -73,7 +73,7 @@ def _between(enc: EncounterState) -> bool:
 class Encounters:
     """The fight engine, mixed into Game."""
 
-    asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (the MCP tools)
+    asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (a direct resolution)
 
     if TYPE_CHECKING:  # what the Game it is mixed into has
         from ...module.schema import Module
@@ -252,7 +252,7 @@ class Encounters:
 
     # -- starting one -----------------------------------------------------------------------------
     async def _start_from(self, action: Action, turn: Turn) -> str:
-        """The encounter this turn begins: one the MCP keeper or an event wrote out, or the one the
+        """The encounter this turn begins: one written out already (EncounterStart in the action), or the one the
         keeper plan announced (Plan.encounter), set up by one more keeper-plan call (plan_encounter)."""
         from ...agents.encounter import EncounterHint
 

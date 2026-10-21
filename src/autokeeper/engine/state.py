@@ -164,8 +164,7 @@ class GameState(BaseModel):
     # What a LAN client is sent of the encounter going on (engine/encounter/views.table): its public view and
     # each seat's choices. Only ever in a client's copy; the host's own is computed when it is needed.
     encounter_public: dict | None = None
-    pending_resolution: dict = Field(default_factory=dict)  # direct/MCP resolution outside the turn graph
-    pending_mcp: dict = Field(default_factory=dict)  # a tool request may resume resolution and NPC dialogue after loading
+    pending_resolution: dict = Field(default_factory=dict)  # direct resolution outside the turn graph
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
     # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.
@@ -214,7 +213,7 @@ class GameState(BaseModel):
     sky: str = ""  # outdoor weather from the keeper's narration: rain, storm, snow, fog
     view: str = ""  # the picture of this place the scene shows (engine/views.py); "" for its own
     view_kind: str = ""  # "" the place's picture for the hour, "focus" a view of what they look at, "moment" an event's
-    hinted: list[str] = Field(default_factory=list)  # foreshadowing the keeper has been given (Module.foreshadow)
+    signs: dict[str, int] = Field(default_factory=dict)  # foreshadow id -> signs of it the keeper was handed: its hint, then its stages (engine/signs.py)
     sky_at: int = 0  # game minute it was last spoken of; it passes after weather.LASTS
     ending: str | None = None
     epilogue: str = ""  # after the ending, what became of everyone: told once, on request (engine/debrief.py)

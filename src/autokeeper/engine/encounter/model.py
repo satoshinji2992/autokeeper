@@ -170,7 +170,7 @@ class ActionReceipt(BaseModel):
     id: str  # f"{enc.id}:r{round}:{actor}:{n}", the prefix of its units' op ids
     round: int
     actor: str
-    source: Literal["button", "words", "keeper", "ai", "event", "mcp", "table"]
+    source: Literal["button", "words", "keeper", "ai", "event", "table"]
     declared: DeclaredAction
     summary: str  # neutral, never the player's raw words
     ruling: dict | None = None  # the arbiter's Ruling (JSON) for an `other` action or an unlisted method

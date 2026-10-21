@@ -514,11 +514,11 @@ def _engine_only(op: Base) -> list[str]:
 
 class Effects(Base):
     """What happened to people and things outside an encounter, already rolled (engine/effects.py):
-    a trap's or a fall's wound, an event's, a plugin's, the MCP keeper's. All land or none."""
+    a trap's or a fall's wound, an event's, a plugin's. All land or none."""
 
     kind: Literal["effects"] = "effects"
     effects: list[Effect] = Field(default_factory=list)
-    source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, mcp, fight:<…>
+    source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, fight:<…>
     seed: list[str] = Field(default_factory=list)  # NPCs and creatures whose bodies the world starts keeping now
     # Bodies the engine already had numbers for (0.0.4 M1: the old fight engine's fighters), kept by
     # the world from now on when it keeps none yet for them.

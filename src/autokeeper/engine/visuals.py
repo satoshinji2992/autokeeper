@@ -41,7 +41,7 @@ class Visuals:
     def __init__(self, module: Module, state: GameState, cfg: config.Config | None, emit: Callable[[dict], Awaitable[None]]):
         self.module, self.state, self.cfg, self.emit = module, state, cfg, emit
         self.tasks: dict[str, asyncio.Task] = {}
-        self.fill_gaps = True  # the module's own gaps looked for in the background (off where nobody sees pictures: MCP)
+        self.fill_gaps = True  # the module's own gaps looked for in the background (off where nobody sees pictures)
         self.limit = asyncio.Semaphore(2)
         self.gap_limit = asyncio.Semaphore(1)
         self.idle = asyncio.Event()

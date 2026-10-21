@@ -44,12 +44,10 @@ def render(text: str, names: dict[str, str]) -> str:
     return _REF.sub(lambda m: names.get(m.group(1), m.group(1)), text)
 
 
-def name_map(keeper: dict[str, str], players: dict[str, str]) -> str:
-    """The report's line of who the players know by another name: 道格拉斯·金博尔（玩家所见：犬脸的佝偻身影）."""
-    rows = [f"{keeper[i]}（玩家所见：{players[i]}）" for i in keeper if players.get(i) and players[i] != keeper[i]]
-    if not rows:
-        return ""
-    return "【称呼】" + "；".join(rows) + "。叙述里只用玩家所见的叫法，真名和真相不说破"
+def name_rows(keeper: dict[str, str], players: dict[str, str]) -> list[str]:
+    """Who the players know by another name, as the report's 【称呼】 line lists them (engine/game._unknown):
+    道格拉斯·金博尔（玩家所见：犬脸的佝偻身影）."""
+    return [f"{keeper[i]}（玩家所见：{players[i]}）" for i in keeper if players.get(i) and players[i] != keeper[i]]
 
 
 # -- danger the players can judge ------------------------------------------------------------------
@@ -88,4 +86,4 @@ def cue(text: str) -> str:
     return f"【可观察】{text}（这是调查员看得到的样子，写进叙述，不说数字）"
 
 
-__all__ = ["BEGIN_TELL", "CHASE_TELL", "FIGHT_TELL", "cue", "name_map", "render", "tell"]
+__all__ = ["BEGIN_TELL", "CHASE_TELL", "FIGHT_TELL", "cue", "name_rows", "render", "tell"]

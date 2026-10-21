@@ -390,12 +390,12 @@ async def test_the_modules_situation_is_set_going_when_the_game_starts(module, f
     assert rec.threads["foreshadow:f_tick"].kind == "foreshadow"
     turn = Turn()
     await game._arrive("tower", turn)
-    game._foreshadow(turn)
+    await game._foreshadow(turn)
     assert any("比钟摆慢半拍" in n for n in turn.notes)
     again = Turn()
     await game._arrive("square", Turn())
     await game._arrive("tower", again)
-    game._foreshadow(again)
+    await game._foreshadow(again)
     assert not any("比钟摆慢半拍" in n for n in again.notes)  # given once
     assert "守钟人是他父亲的老战友" in director_context(module, game.state, "开局改编")
 
@@ -500,14 +500,14 @@ async def test_a_failed_search_keeps_the_places_foreshadowing_for_a_later_visit(
     missed = Turn()
     await game._arrive("tower", missed)
     missed.checks.append(game.rules.check(game.state.investigator, "侦查"))
-    game._foreshadow(missed)
+    await game._foreshadow(missed)
     assert not missed.checks[0].passed
-    assert not any("比钟摆慢半拍" in n for n in missed.notes) and "f_tick" not in game.state.hinted
+    assert not any("比钟摆慢半拍" in n for n in missed.notes) and "f_tick" not in game.state.signs
     later = Turn()
     await game._arrive("square", Turn())
     await game._arrive("tower", later)
-    game._foreshadow(later)
-    assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.hinted == ["f_tick"]
+    await game._foreshadow(later)
+    assert any("比钟摆慢半拍" in n for n in later.notes) and game.state.signs == {"f_tick": 1}
 
 
 async def test_what_an_npc_learns_in_the_game_goes_with_each_call_and_keeps_its_session(module, fake):

@@ -33,13 +33,11 @@ dependencies = [
     "langchain-core>=1.6.12",
     "langchain-deepseek>=1.1.1",
     "langchain-google-genai>=4.4.2",
-    "langchain-mcp-adapters>=0.3.2",
     "langchain-ollama>=1.1.0",
     "langchain-openai>=1.7.2",
     "langgraph>=1.2.16",
     "langgraph-checkpoint-sqlite>=3.1.2",
     "markitdown[docx,pdf,xlsx]>=0.1.8",
-    "mcp>=1.30.0",
     "networkx>=3.7",
     "pillow>=10.4",
     "platformdirs>=4.13.3",
@@ -104,7 +102,7 @@ dev-mode-dirs = ["src"]  # `uv sync` puts src/ on the path; the checkout keeps i
 "bridge" = "autokeeper/bundle/bridge"
 
 [tool.hatch.build.targets.sdist]
-skip-excluded-dirs = true  # .agents/skills and .claude/skills link to skills/: walked first, they would hide it
+skip-excluded-dirs = true  # an old checkout's .agents/skills and .claude/skills link to skills/: walked first, they would hide it
 exclude = ["/docs", "/dev", "/.github", "/.agents", "/.claude", "/data", "/saves", "/modules/local", "/modules/inbox", "/modules/*/source", "/skills/module-*", "/bridge/node_modules"]
 
 [dependency-groups]

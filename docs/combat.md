@@ -27,7 +27,7 @@
 - **追逐路线**：模组给这个地点写了 `Location.chase`（4–12 段），就沿它跑；这个地点没有、它所在的外层地点（`within`）有，就沿外层的跑（从书房跑出去走的是整栋房子的路）；都没有，就请战术分工照地点、时间和天气临场画一条（`Cast.track`）；再不行用这类地点的通用路线（`combat.default_track`，按 `scenery.kind_of`）。战斗中逃跑转成的追逐同样先用模组的路线（`Fighting._chase_way`）。每场追逐用路线的一份副本：撞开的门、推倒的杂物只留在这一场。
 - **怪物**：`combat.from_creature` 读 `Creature.stats`（生命、敏捷、力量、体质、体型、闪避、移动），`attacks` 每一行由 `weapons.parse_attack` 读（要有带 % 的命中率；闪避不算攻击），每轮几次由 `weapons.attacks_per_round` 读（`每轮 3 次`、`每回合攻击次数：3`），`notes` 由 `combat.traits` 读出护甲、枪伤减半（也认“火器……伤害减半”）、每轮恢复、拳头打晕、伤害加值、体格、移动。没有表又写明成群的，整群当一个对手打。`called` 是调查员认出它以前给玩家看的叫法，`name` 只给守秘人。
 - **NPC**：`combat.from_npc` 读 `NPC.stats`，空表就是普通人；武器来自世界记录里他拿着的东西（模组的 `Item.owner`）和 `look` 里写到的。
-- 模组里这些写得对不对，`autokeeper check` 会提醒（`module/graph.fighting`）；已经导入的模组用 `autokeeper upgrade --only combat` 补上（`module/adapt.py` 的「战斗与追逐」一步）。编译出的 Skill 包把引擎读到的数值写进 `references/creatures.md` 和各 NPC 文件，路线写进地点文件，给外部 Agent 看：在 AutoKeeper 里打斗由引擎通过 MCP 工具结算。
+- 模组里这些写得对不对，`autokeeper check` 会提醒（`module/graph.fighting`）；已经导入的模组用 `autokeeper upgrade --only combat` 补上（`module/adapt.py` 的「战斗与追逐」一步）。编译出的 Skill 包把引擎读到的数值写进 `references/creatures.md` 和各 NPC 文件，路线写进地点文件，供守秘人检索时查到。
 
 ## 一轮
 
@@ -50,15 +50,6 @@
 2. 时间往前走。
 3. `Cast.outcome` 从模组的剧情标记里选出因此成立的（比如道格拉斯被打倒），交给 `Game._flags` 设置，挂在这些标记上的事件随之发生。
 
-## 在 Claude Code / Codex 里
-
-MCP 服务（`mcp_server.py`）走同一套结算，宿主（担任守秘人的 Claude Code 或 Codex）只说明和谁打、把结果讲出来：
-
-- `start_fight(foes, surprise, reason)`、`start_chase(others, party, reason)`：代替裁定员的 `Ruling.combat`、`Ruling.surprise` 与 `Ruling.chase`、`Ruling.chase_party`，对象只能是在场 NPC 和模组怪物。这次行动只宣告、不结算（`Game.holding`，和联机时一样），所以第一轮也由调查员自己选。初次看见怪物的理智检定、追逐的速度检定在这里完成。
-- `battle_round(order, skill, difficulty, harm, target)`：调查员这一轮的行动，文字和屏幕上的选项相同，引擎读不出来的交给 `Cast.order`（`Game._battle_action`）。不是战斗动作的事（砸油灯、关门）由宿主给出检定和伤害，代替屏幕上的裁定员。对手和怪物的行动照常由战术分工安排。
-- 返回的 `battle`：`lines` 是 `Turn.fight`；`exchanges` 是每次交锋（来自 `fight_act`，即战斗卡片上的内容）；`seen` 是初次看见的怪物；`over` 是结束的结果（战斗 `won`、`fled`、`lost`，追逐 `escaped`、`caught`）；`now` 是 `combat.view` 或 `combat.chase_view`，加上出手先后和调查员的选项（`combat.choices`、`combat.chase_choices`）。对手的生命值不出现，只有伤势字样。`scene()` 的 `battle` 是同一个局面，`creatures` 列出模组的怪物。
-- 和其他工具一样记在 `GameState.pending_mcp`：交锋、开始与结束的事件随所在步骤的回执存下，中断后用原参数重试，从中断处接着结算、不重掷，报告照样完整。战斗与追逐进行中，`move`、`skill_check`、`reveal_clue`、`npc_say`、`advance_time`、`apply_damage` 和 `dice` 都会拒绝执行。
-
 ## 画面
 
 战斗和追逐都在舞台上取代场景（`Arena`）：左边一幅画（`Canvas`），右边一栏文字。画由 `imagery.staged` 合成，按舞台本身的宽高比，`render_staged` 转成字符，几种变体（原样、心跳时变暗、被打中时发白、倒下时变灰、扑近时放大）在线程里一次画好。
@@ -78,6 +69,5 @@ MCP 服务（`mcp_server.py`）走同一套结算，宿主（担任守秘人的 
 - `tests/test_combat_rules.py`：规则逐条。
 - `tests/test_fight.py`：开打到打完、按敏捷的先后与应对、追逐的甩开与躲藏、事件写定的袭击与续接、模组的追逐路线、舞台与选项、受伤时的泛红、限时选择；全屏画面与泛红只从最上层关闭、小终端排版、选单的收起、每帧的开销与设置开关、故事不重复。
 - `tests/test_fight_module.py`：模组里的写法（字段说明、校验、Skill 包、编译期改编的「战斗与追逐」、联机副本不带路线）。
-- `tests/test_mcp_battle.py`：通过 MCP 工具开打、按屏幕上的文字结算一轮、宿主裁定的其他行动、打完、逃跑转成追逐、追逐与躲藏，以及中断后重试不重掷。
 - `tests/test_imagery.py`：怪物的轮廓与舞台合成。
 - `tests/test_net.py`：联机一轮由所有人宣告、只结算一次；客户端拿到的公开部分与对手头像、每轮的选项、AI 座位的局面与选项。

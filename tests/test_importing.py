@@ -413,3 +413,8 @@ async def test_failures_are_shown_plainly_and_an_import_can_be_stopped(monkeypat
         await pilot.press("escape")
         await pilot.pause()
         assert isinstance(app.screen, TitleScreen)
+
+
+def test_import_validation_accepts_the_format_example():
+    assert importer.validate(EXAMPLE) == []
+    assert importer._pages("8-10,12", 19) == [8, 9, 10, 12]

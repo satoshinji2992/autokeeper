@@ -18,13 +18,19 @@ import asyncio
 import json
 from pathlib import Path
 
+import tiktoken
 from pydantic import BaseModel, Field
 
 from .. import config, knowledge, paths, skills
 from ..harness import Session
 from ..module.compiler import skill_name
 from ..module.schema import Module
-from .context import tokens
+
+_enc = tiktoken.get_encoding("o200k_base")
+
+
+def tokens(text: str) -> int:
+    return len(_enc.encode(text))
 
 
 class QA(BaseModel):

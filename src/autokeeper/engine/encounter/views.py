@@ -1,5 +1,5 @@
 """The encounter as each audience sees it: the screens' fight view (the same dict the TUI and the LAN
-table draw), the MCP host's "now", and the keeper plan's brief (agents/encounter.Brief).
+table draw), and the keeper plan's brief (agents/encounter.Brief).
 
 Every view that leaves the engine is made here (invariant I6): the players get public names (an
 NPC they have not met by what they see of it, a creature by what it looks like), a foe's wounds in
@@ -308,7 +308,7 @@ def keeper_text(game: Any, **kw) -> str:
 __all__ = ["brief", "fight_view", "initiative", "keeper_text", "names", "status", "wound_word"]
 
 
-# -- what the table sees: the players' screens, the LAN clients, the AI players, the MCP host -------------
+# -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------
 def table(game: Any) -> dict | None:
     """The fight or the chase going on as the players' screens hold it, with each investigator's
     choices for this round in the words the engine matches (one list per answer to blows), or None
