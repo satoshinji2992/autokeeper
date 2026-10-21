@@ -9,7 +9,7 @@ import time
 import weakref
 from functools import partial
 
-from rich.cells import set_cell_size
+from rich.cells import cell_len, set_cell_size
 from rich.console import Group
 from rich.style import Style as RichStyle
 from rich.table import Table
@@ -382,6 +382,65 @@ class Folded(Static):
             self.parent.unfold()
 
 
+# Chinese is set with no closing punctuation at the start of a line and no opening one at its end
+# (禁则): a 「。」 alone at the head of a line reads as a slip. The character before goes down with it.
+HEAD_BANNED = frozenset("。，、；：！？）」』》〉】〕…—”’．,.;:!?)%")
+TAIL_BANNED = frozenset("（「『《〈【〔“‘(")
+
+
+def fold(text: Text, width: int) -> Text:
+    """`text` broken into lines of at most `width` cells as Chinese is set (HEAD_BANNED, TAIL_BANNED);
+    a run of Latin letters or digits breaks at a space, as before. Styles go with their characters."""
+    lines: list[Text] = []
+    for line in text.split("\n", allow_blank=True):
+        plain, cuts, start, used, i = line.plain, [], 0, 0, 0
+        while i < len(plain):
+            w = cell_len(plain[i])
+            if used + w <= width or i == start:
+                used, i = used + w, i + 1
+                continue
+            cut = i
+            while cut - start > 1 and (plain[cut] in HEAD_BANNED or plain[cut - 1] in TAIL_BANNED):
+                cut -= 1
+            if plain[cut].isascii() and plain[cut].isalnum() and plain[cut - 1].isascii() and plain[cut - 1].isalnum():
+                space = plain.rfind(" ", start, cut)
+                if space > start:
+                    cut = space + 1
+            cuts.append(cut)
+            start, used, i = cut, 0, cut
+        parts = line.divide(cuts) if cuts else [line]
+        lines += [part.rstrip() or part for part in parts] if cuts else parts
+    out = Text("\n").join(lines)
+    out.justify, out.overflow, out.no_wrap = text.justify, text.overflow, True
+    return out
+
+
+class Prose(Static):
+    """A block of the story, set as Chinese is set (fold), at whatever width it has."""
+
+    _fold_key: tuple = ()
+    _fold: Text | None = None
+
+    def _folded(self, width: int) -> Text | None:
+        content = self.content
+        if not isinstance(content, Text) or width < 4:
+            return None
+        key = (id(content), hash(content.plain), width)
+        if self._fold_key != key:
+            self._fold_key, self._fold = key, fold(content, width)
+        return self._fold
+
+    def render(self):
+        folded = self._folded(self.content_size.width)
+        return folded if folded is not None else super().render()
+
+    def get_content_height(self, container, viewport, width: int) -> int:
+        folded = self._folded(width)
+        if folded is None:
+            return super().get_content_height(container, viewport, width)
+        return folded.plain.count("\n") + 1
+
+
 class StoryLog(VerticalScroll):
     """Entries mount as static blocks; the keeper's narration types itself out.
 
@@ -435,7 +494,7 @@ class StoryLog(VerticalScroll):
                 body = text
             if kind in self.MARKED and isinstance(body, Text):
                 body = self.lit(body.copy())
-            block = Static(body, classes=f"entry {kind}")
+            block = Prose(body, classes=f"entry {kind}")
         self.mount(block)
         self.scroll_end(animate=False)
         self._trim()
@@ -914,17 +973,25 @@ class SheetPanel(Static):
     """The acting investigator at a glance: a small portrait beside the name and the bars,
     the best skills, and the rest of the party. A click opens the whole card (F4)."""
 
+    shown: tuple | None = None  # what show() was last given: drawn again at the new width on a resize
+
     async def on_click(self) -> None:
         await self.screen.run_action("sheet")
 
+    def on_resize(self) -> None:
+        if self.shown is not None:
+            self.show(*self.shown)
+
     def show(self, inv: Investigator, portrait: Text | None = None, party: list[Investigator] | None = None) -> None:
+        self.shown = (inv, portrait, party)
         width = max(24, self.content_size.width or 32)
         pictured = portrait is not None and bool(portrait.plain.strip())
         beside = width - (PORTRAIT[0] + 1 if pictured else 0)
         head = Text()
         head.append(set_cell_size(inv.name, beside).rstrip() + "\n", style="bold")
         head.append(set_cell_size(f"{inv.occupation.split('（')[0]}  {inv.age}岁", beside).rstrip() + "\n", style="dim")
-        long = max(5, min(12, beside - 11))
+        tail = max(cell_len(f" {inv.hp}/{inv.hp_max}"), cell_len(f" {inv.san}"))
+        long = max(3, min(12, beside - 4 - tail))  # the bar gives way: the numbers stay on their line
         hp_style = "bold red" if inv.hp * 3 <= inv.hp_max else "bold"
         san_ratio = inv.san / max(1, inv.characteristics.get("意志", 50))
         san_style = "bold red" if san_ratio < 0.6 else "bold magenta" if san_ratio < 0.85 else "bold"
@@ -939,9 +1006,9 @@ class SheetPanel(Static):
             head.append("\n" + "、".join(inv.conditions), style="bold red")
         parts: list = []
         if pictured:
-            grid = Table.grid(padding=(0, 1))
-            grid.add_column(width=PORTRAIT[0], no_wrap=True)
-            grid.add_column(width=beside)
+            grid = Table.grid(padding=(0, 0))
+            grid.add_column(width=PORTRAIT[0] + 1, no_wrap=True)  # the portrait and a cell of air
+            grid.add_column(width=beside, no_wrap=True)
             grid.add_row(portrait, head)
             parts.append(grid)
         else:
@@ -989,11 +1056,14 @@ class HistoryPanel(VerticalScroll):
         super().__init__(**kw)
         self.round = -1
 
-    def compose(self):
-        yield Static(Text("点击记录可定位对应叙述", style="dim"), classes="history-head")
-
     def on_mount(self) -> None:
-        self.anchor()  # the newest line stays in sight, also when the clue list below grows; scrolling up lets go
+        self.tooltip = "点击一条记录，故事跳到那一段"
+
+    def _stick(self) -> None:
+        """The newest line stays in sight once there are more than fit (also when the clue list below
+        grows; scrolling up lets go). Not before: an anchored panel stands its few lines at the bottom."""
+        if self.max_scroll_y > 0:
+            self.anchor()
 
     def note(self, line: Text, block: Static | None = None, turn: int | None = None) -> None:
         """`turn`: the round the line belongs to (GameState.turn once it is played). Rounds only
@@ -1007,6 +1077,7 @@ class HistoryPanel(VerticalScroll):
         for old in lines[: max(0, len(lines) - self.KEEP)]:
             old.remove()
         self.scroll_end(animate=False)
+        self.call_after_refresh(self._stick)
 
 
 class HistoryLine(Static):

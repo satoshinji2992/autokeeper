@@ -14,7 +14,7 @@ LETTER = "亲爱的调查员：\n我叔叔失踪已经三个星期了。书架�
 
 def widths(sheet: paper.Sheet, reveal: int | None = None) -> set[int]:
     lines = sheet.render(reveal).split("\n")
-    skip = bool(sheet.caption) + bool(sheet.note)
+    skip = bool(sheet.caption)
     return {cell_len(line.plain) for line in lines[skip:]}
 
 
@@ -25,7 +25,7 @@ def test_every_bundled_handout_is_a_sheet_of_even_width_that_does_not_move_as_th
         sheet = paper.sheet(h.kind, h.title, h.text, width=60)
         assert widths(sheet) == {61}, (h.id, widths(sheet))  # the sheet and its shadow
         assert widths(sheet, sheet.size // 3) == {61}  # half inked: blank paper keeps the place
-        assert "AutoKeeper" not in "".join(t for line in sheet.lines for t, _ in line)  # the tool's remark is over it
+        assert "AutoKeeper" not in sheet.render().plain  # the tool's remark is not shown at all
 
 
 def test_each_kind_is_laid_out_as_the_thing_itself():

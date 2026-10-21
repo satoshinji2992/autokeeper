@@ -48,7 +48,7 @@ FAMILIES = {
 }
 PAPERS = {"letter": LETTER, "diary": DIARY, "news": NEWS, "wire": WIRE, "book": BOOK, "card": CARD}
 DATE = re.compile(r"^\s*(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}\s*年|[一二三四五六七八九十〇零\d]{1,3}\s*月\s*[一二三四五六七八九十\d]{1,3}\s*日)")
-NOTE = re.compile(r"^（AutoKeeper[^）]*）\s*$")  # the tool's own remark, not part of the paper
+NOTE = re.compile(r"^（AutoKeeper[^）]*）\s*$")  # the tool's own remark (依原文大意补写): not part of the paper, never shown
 SHEET = set(" 　▁▔┃┈═─◥")  # what the paper is made of, there before the ink
 
 
@@ -99,7 +99,6 @@ def wrap_pieces(pieces: list[Piece], width: int, *, indent: int = 0) -> list[Lin
 @dataclass
 class Sheet:
     lines: list[Line]
-    note: str = ""  # said over the sheet, small: "依原文大意补写"
     width: int = 60
     caption: str = ""  # the handout's title over a sheet that has no place for it (a letter)
 
@@ -113,8 +112,6 @@ class Sheet:
         out = Text()
         if self.caption:
             out.append(self.caption + "\n", style="bold")
-        if self.note:
-            out.append(self.note + "\n", style="dim italic")
         left = self.size if reveal is None else reveal
         for i, line in enumerate(self.lines):
             for text, style in line:
@@ -177,15 +174,15 @@ class _Page:
             self.row(line, align=align, left=left)
 
 
-def _parts(text: str) -> tuple[str, list[str]]:
-    """The tool's remark, if the text starts with one, and the lines of the handout itself."""
+def _parts(text: str) -> list[str]:
+    """The lines of the handout itself, without the tool's remark it may start with (the user,
+    2026-10-21: no 「AutoKeeper 补充」 where the players read)."""
     lines = text.strip("\n").split("\n")
-    note = ""
     if lines and NOTE.match(lines[0].strip()):
-        note = lines.pop(0).strip().strip("（）")
+        lines.pop(0)
         while lines and not lines[0].strip():
             lines.pop(0)
-    return note, lines
+    return lines
 
 
 def _signature(lines: list[str]) -> int:
@@ -336,6 +333,6 @@ LAYOUTS = {"letter": letter, "diary": diary, "news": news, "wire": wire, "book":
 
 def sheet(kind: str, title: str, text: str, width: int = 60) -> Sheet:
     """The handout as its kind of paper."""
-    note, lines = _parts(text)
+    lines = _parts(text)
     name = family(kind)
-    return Sheet(LAYOUTS[name](title, lines, width), note=note, width=width + 1, caption=title if name == "letter" else "")
+    return Sheet(LAYOUTS[name](title, lines, width), width=width + 1, caption=title if name == "letter" else "")

@@ -9,7 +9,9 @@ import shutil
 
 import pytest
 from PIL import Image
+from rich.cells import cell_len
 from rich.text import Text
+from textual.app import App
 from textual.widgets import Button, Input, RadioButton, Static
 
 from autokeeper import artkit, config, imagery, paths
@@ -655,3 +657,36 @@ async def test_the_keepers_passer_by_speaks_in_a_box_after_the_telling():
         story.end_keeper("换个讲法，没人开口。")
         await pilot.pause()
         assert [b for b in story.query(".entry") if b.display] == [first]
+
+
+def test_chinese_is_broken_into_lines_as_it_is_set():
+    from autokeeper.tui.widgets.panels import fold
+
+    text = Text("雪下了一夜。你在主街的诊所见过了安特医生，邮局的柜台后面也许有赫琴斯家没取走的电报。")
+    text.stylize("bold", 0, 5)
+    for width in range(8, 50):
+        lines = fold(text, width).plain.split("\n")
+        assert "".join(lines) == text.plain and all(cell_len(line) <= width for line in lines)
+        assert not any(line[0] in "。，、；：！？）」』…" for line in lines[1:])  # no closing mark heads a line
+    assert fold(text, 40).spans[0].end == 5  # its styles go with it
+    quoted = fold(Text("他说：「你好。」然后（很快）走了。"), 10).plain.split("\n")
+    assert not any(line.endswith(("「", "（")) for line in quoted)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_a_story_block_takes_the_lines_its_setting_needs():
+    from autokeeper.tui.widgets.panels import StoryLog
+
+    class Story(App):
+        def compose(self):
+            yield StoryLog(id="story")
+
+    app = Story()
+    async with app.run_test(size=(44, 20)) as pilot:
+        story = app.query_one(StoryLog)
+        block = story.add("keeper", "雪下了一夜。你在主街的诊所见过了安特医生，邮局的柜台后面也许有赫琴斯家没取走的电报。")
+        await pilot.pause()
+        width = block.content_size.width
+        assert block.content_size.height == len(fold_lines := block.render().plain.split("\n")) and all(
+            cell_len(line) <= width for line in fold_lines)
+        assert not any(line.startswith("。") or line.startswith("，") for line in fold_lines)
