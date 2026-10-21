@@ -15,6 +15,7 @@ from textual.widgets.option_list import Option
 # (id, label) in the order shown; GameScreen.menu_items picks those that apply.
 MENU = (
     ("continue", "继续"),
+    ("idea", "灵感检定"),
     ("save", "存档"),
     ("load", "读档"),
     ("settings", "设置"),

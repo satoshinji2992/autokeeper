@@ -38,7 +38,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, effects, fog, progress, views, world
+from . import diagnostics, effects, fog, idea, progress, views, world
 from .fighting import Fighting, tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
@@ -407,6 +407,9 @@ class Game(Fighting):
             self.state.add("system", f"对守秘人：{question}", who=self.state.investigator.name)
             await self.emit({"type": "status", "text": "守秘人正在回应…"})
             return Action(kind="meta", summary=question)
+        if idea.asked(text) and (why := self.idea_refused()):  # said why at once; no turn is spent
+            await self.emit({"type": "command", "kind": "refused", "text": why, "who": self.state.investigator.name})
+            return Action(kind="meta", summary="灵感检定", idea={"refused": why})
         self.visuals.schedule()  # resumes unfinished illustration work after loading, including MCP play
         self.showcases.settle()  # someone acts: the opening's big picture, if still on its way, is not shown now
         self.showcases.prepare()
@@ -415,6 +418,8 @@ class Game(Fighting):
         await self._curtain(Action(kind="other", summary=text))
         st.turn += 1
         st.add("player", text, who=st.investigator.name)
+        if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
+            return self.idea_action()
         await self.emit({"type": "status", "text": "解析行动…"})
         if self.battling():  # in a fight or a chase: the words are an order for the round (engine/fighting.py)
             return await self._battle_action(text)
@@ -477,6 +482,11 @@ class Game(Fighting):
         return await self.cast.intent(st, text)
 
     async def rule(self, action: Action) -> Ruling | None:
+        if action.idea is not None:  # the Idea roll: INT at the difficulty the engine set (engine/idea.py)
+            if action.idea.get("refused"):
+                return None
+            level = action.idea["difficulty"]
+            return Ruling(needs_roll=True, skill="灵感", difficulty=level, reason=idea.BASIS.get(level, ""))
         if action.kind in ("meta",):
             return None
         if action.order is not None and self.battling() and (ruled := self._battle_ruling(action)) is not None:
@@ -641,6 +651,8 @@ class Game(Fighting):
         anything the module keeps back."""
         inv = self.state.investigator
         skill = canonical(ruling.skill)
+        if action.idea:  # the Idea roll: the party's highest INT rolls it, whoever asked
+            inv, skill = self.state.find(action.idea["roller"]), "灵感"
         target = inv.value(skill)
         return {
             "who": inv.name,
@@ -652,7 +664,7 @@ class Game(Fighting):
             "extreme": target // 5,
             "need": _threshold(target, ruling.difficulty),
             "action": action.summary,
-            "why": self._why(ruling),
+            "why": ruling.reason if action.idea else self._why(ruling),
         }
 
     def _why(self, ruling: Ruling) -> str:
@@ -1136,7 +1148,10 @@ class Game(Fighting):
         return {"type": "damage", "who": inv.name, "text": text, "injury": injury}
 
     async def _nudge(self, turn: Turn) -> None:
-        """Stuck for a while: resume the same lead even after its cooldown was saved."""
+        """Stuck for a while (STALL_TURNS without a clue, a flag, an event or a new place): the keeper
+        offers the Idea roll (Keeper Rulebook p. 169) and the players decide; an AI player sees the
+        offer in its situation (engine/autoplay.py). The director no longer sends a lead on its own:
+        its push is what a failed Idea roll stages (Game._idea). Offered once a stall."""
         st = self.state
         step = self._resolution_step
         eligible = await step("eligible", turn, lambda: not (turn.action and turn.action.kind == "daily")
@@ -1144,19 +1159,86 @@ class Game(Fighting):
         if not eligible:
             return
 
-        async def plan() -> dict | None:
-            applied = await self._improvise("推进", patience=0.0)
-            return asdict(applied) if applied is not None else None
+        def offer() -> dict | None:
+            st.progress_at = st.turn  # the next offer only after another stall
+            if self.battling() or idea.pick(self.m, st) is None:
+                return None
+            st.idea_offer = st.turn
+            return {"type": "idea_offer", "text": idea.OFFER}
 
-        applied = await step("plan", turn, plan)
-        await step("cooldown", turn, lambda: setattr(st, "progress_at", st.turn))
-        if applied is None:
-            return
-        await step("flags", turn, lambda: self._flags(applied["now"], turn))
-        clues = await step("clues", turn, lambda: self._valid_clues(applied["give"], turn.action))
-        await step("give", turn, lambda: self._gain(clues, turn, turn.action))
-        if applied["note"]:
-            await step("note", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
+        notice = await step("offer", turn, offer)
+        if notice:
+            await step("offer-notice", turn, lambda: self.emit(notice))
+
+    # -- the Idea roll (engine/idea.py) -------------------------------------------------------------
+    def idea_refused(self) -> str:
+        """Why the party cannot make an Idea roll now (the game is over, a fight is on, nothing was
+        missed, one was made today and the keeper has not offered another); "" when it can."""
+        return idea.refused(self.m, self.state, battling=self.battling())
+
+    def idea_action(self) -> Action:
+        """The action an Idea roll asked for now is: the clue, difficulty and roller fixed (idea.plan)."""
+        plan = idea.plan(self.m, self.state)
+        who = self.state.find(plan["roller"]).name
+        return Action(kind="other", summary=f"调查员们重新梳理已知的线索，由{who}做灵感检定", idea=plan)
+
+    async def _idea(self, action: Action, turn: Turn) -> None:
+        """An Idea roll (pp. 167–169): the investigator with the highest INT rolls INT. Either way the
+        missed clue is gained. Success: the keeper weaves it in as their own realisation. Failure:
+        time passes, and the director cuts them into the worst situation they can recognise
+        (千钧一发), the clue showing in it; the keeper tells the cut, and the players act after it."""
+        st, m, step = self.state, self.m, self._resolution_step
+        plan = action.idea or {}
+        clue, roller = m.clue(plan["clue"]), st.find(plan["roller"])
+
+        def roll() -> dict:
+            rolled = self.rules.check(roller, "智力", DIFFICULTY_ZH.get(plan["difficulty"], Level.REGULAR), 0, mark=False)
+            turn.checks.append(rolled)
+            st.add("dice", f"灵感检定：{rolled.describe()}", who=roller.name)
+            idea.record(st, plan, rolled.passed)
+            view = _check_view(rolled)
+            return {"passed": rolled.passed,
+                    "event": {"type": "dice", "who": roller.name, **view, "skill": "灵感", "text": f"灵感检定：{view['text']}"}}
+
+        checked = await step("idea-check", turn, roll)
+        await step("idea-notice", turn, lambda: self.emit(checked["event"]))
+        passed, staged = checked["passed"], False
+        if not passed:
+            def lost() -> None:
+                st.minutes += idea.LOST
+
+            await step("idea-lost", turn, lost)
+            await step("idea-time", turn, lambda: self._time(turn))
+            applied = await step("idea-scene", turn, lambda: self._cut(clue.id)) if self.improvising else None
+            if applied:
+                staged = True
+                if applied["go"] and applied["go"] != st.location and any(x.id == applied["go"] for x in m.locations):
+                    await step("idea-go", turn, lambda: self._arrive(applied["go"], turn, party=True))
+                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))
+                given = await step("idea-give", turn, lambda: self._valid_clues(applied["give"], None))
+                await step("idea-given", turn, lambda: self._gain(given, turn, None))
+                if applied["note"]:
+                    await step("idea-staged", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
+        await step("idea-clue", turn, lambda: self._gain([clue.id], turn, None))
+        told = (idea.realised(clue.title, mentioned=bool(plan.get("mentioned", True))) if passed
+                else idea.cut(clue.title, idea.LOST, staged=staged))
+        await step("idea-note", turn, lambda: turn.notes.append(told))
+        lines = ([f"灵感检定成功：想到了〔{clue.title}〕"] if passed else
+                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", f"〔{clue.title}〕仍然得到"])
+        await step("idea-outcome", turn, lambda: self.emit({"type": "outcome", "who": roller.name, "lines": lines}))
+        await step("turn-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
+        await step("ending", turn, lambda: self._check_ending(turn))
+
+    async def _cut(self, clue_id: str) -> dict | None:
+        """The director's 千钧一发 after a failed Idea roll, prepared before the turn goes on."""
+        m = self.m
+        clue = m.clue(clue_id)
+        where = m.location(clue.where).name + (f"的{clue.feature}" if clue.feature else "")
+        said = Action(kind="other", target=clue.title,
+                      summary=f"灵感检定失败。调查员漏掉的线索〔{clue.title}〕：{clue.text.strip()}（在{where}）")
+        why = Ruling(needs_roll=False, reason="灵感检定失败，千钧一发：时间已经过去，直接切入调查员能意识到的最糟局面，让这条线索在局面里显露出来。")
+        applied = await self._improvise("千钧一发", action=said, ruling=why, required=True)
+        return asdict(applied) if applied is not None else None
 
     def _heading(self, action: Action) -> str | None:
         """Where an action happens when the investigator walks somewhere to do it ("I go up to
@@ -1295,6 +1377,9 @@ class Game(Fighting):
             await step("beat-flags", turn, lambda: self._flags(flagged, self._late, landed=True))
         if not await step("initial", turn, initial) or ruling is None:
             return
+        if action.idea:  # an Idea roll (engine/idea.py): settled on its own, never pushed
+            await self._idea(action, turn)
+            return
         if ruling.missing:
             await step("missing", turn, lambda: self._lacking(ruling, turn))
         # A round of a fight or a chase, or the start of one. Decided once: a fight an event of this very
@@ -1383,7 +1468,8 @@ class Game(Fighting):
                                      "can_push": rolled.can_push, "luck": luck, "left": inv.luck - (luck or 0),
                                      "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
                                      "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
-                                     "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value}
+                                     "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
+                                     "action": action.summary}
                         st.pending_push = turn.push
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
@@ -1439,8 +1525,7 @@ class Game(Fighting):
         await step("time", turn, lambda: self._time(turn))
         if action.kind == "daily":
             await step("progress", turn, lambda: setattr(st, "progress_at", st.turn))
-        if self.improvising:
-            await step("nudge", turn, lambda: self._nudge(turn))
+        await step("nudge", turn, lambda: self._nudge(turn))
         await step("ending", turn, lambda: self._check_ending(turn))
         for item in self._items_for(action):
             await step(f"item:{item.id}", turn, lambda item=item: self.emit({"type": "item", "id": item.id, "name": item.name,
@@ -1506,15 +1591,17 @@ class Game(Fighting):
                         turn.notes.append(f"调查员的重要装备已更新：{item.name}，{mode}，余量{item.quantity}"
                                           + (f"，{item.status}" if item.status else "") + "。只在与本次动作有关时叙述，不逐项播报装备栏。")
 
-    async def push(self, mode: str) -> Turn:
-        """Resume the saved choice without paying luck or rolling its push twice."""
-        if mode not in ("push", "luck", "drop"):
-            raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    async def push(self, choice: str | dict) -> Turn:
+        """Resume the saved choice without paying luck or rolling its push twice. `choice` is "push",
+        "luck" or "drop" (as old saves and journals have it), or {"choice": "push", "how": "..."}: a
+        push the player said how to make (Keeper Rulebook p. 73), ruled again once before it is
+        rolled (_method)."""
+        mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
             direct = not st.pending_turn
             saved = (st.pending_resolution or None) if direct else st.pending_turn.get("push_resolution")
-            identity = {"kind": "push", "at": st.turn, "mode": mode, "active": st.active}
+            identity = {"kind": "push", "at": st.turn, "mode": mode, "active": st.active} | ({"how": how} if how else {})
             if saved is not None and saved.get("identity") != identity:
                 raise ValueError("已有未完成的检定选择，请先继续原选择")
             if saved is None and not st.pending_push:
@@ -1528,7 +1615,7 @@ class Game(Fighting):
             turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn()
             try:
                 if not journal.get("complete"):
-                    await self._push_stages(mode, journal["pending"], turn)
+                    await self._push_stages(mode, journal["pending"], turn, how)
                     journal["complete"] = True
                     self._resolution_save(turn)
                 if direct:
@@ -1539,7 +1626,7 @@ class Game(Fighting):
             finally:
                 self._resolution, self._resolution_scope = None, []
 
-    async def _push_stages(self, mode: str, pending: dict, turn: Turn) -> None:
+    async def _push_stages(self, mode: str, pending: dict, turn: Turn, how: str = "") -> None:
         st = self.state
         step = self._resolution_step
         record = st.checks[-1] if st.checks and st.checks[-1].turn == st.turn else None
@@ -1558,7 +1645,7 @@ class Game(Fighting):
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
         else:
-            await self._pushed(mode, pending, turn, record, known)
+            await self._pushed(mode, pending, turn, record, known, how)
         # What the failure cost settles as any turn's does: the clock moved on, so what was due by
         # now happens (scheduled events, the rest of the world, rule timers), and an ending it
         # brought about ends the game.
@@ -1567,11 +1654,34 @@ class Game(Fighting):
         await step("ending", turn, lambda: self._check_ending(turn))
         await step("settle", turn, lambda: self._settle(record))
 
-    async def _pushed(self, mode: str, pending: dict, turn: Turn, record: CheckRecord | None, known: list[str]) -> None:
-        """The second chance: luck spent, or the pushed roll and what it brings."""
+    async def _pushed(self, mode: str, pending: dict, turn: Turn, record: CheckRecord | None, known: list[str],
+                      how: str = "") -> None:
+        """The second chance: luck spent, or the pushed roll and what it brings. A push made a stated
+        way is ruled again first (_method): a way that cannot reach the goal is refused and nothing is
+        rolled, the failure standing as when it is dropped; otherwise its time passes before the roll."""
         st, step = self.state, self._resolution_step
         inv, npc = st.investigator, pending.get("npc", "")
         lucky = mode == "luck" and pending.get("luck") is not None
+        if mode == "push" and how:
+            method = await step("method", turn, lambda: self._method(pending, how))
+
+            def told() -> None:
+                st.add("player", f"孤注一掷：{how}", who=inv.name)
+                if method["achievable"]:
+                    st.minutes += method["minutes"]
+                    turn.notes.append(f"孤注一掷的做法：{how}（约 {method['minutes']} 分钟）")
+                else:
+                    why = method["why"].rstrip("。") or "这样做达不到目标"
+                    turn.notes.append(f"孤注一掷不成立（{how}）：{why}。没有掷骰，原来的失败照旧。")
+
+            await step("method-told", turn, told)
+            if not method["achievable"]:
+                await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
+                await step("plugins", turn, lambda: self.plugins.settled(turn))
+                await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
+                           "lines": [f"孤注一掷不成立：{method['why'] or '这样做达不到目标'}", "没有掷骰，按放弃处理"]}))
+                return
+            pending = {**pending, **method["pending"]}
 
         def check() -> dict:
             if lucky:
@@ -1604,6 +1714,32 @@ class Game(Fighting):
         elif not passed:
             lines.insert(0, f"孤注一掷也没成：{pending['risk']}" if pending.get("risk") else "孤注一掷也没成")
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
+
+    async def _method(self, pending: dict, how: str) -> dict:
+        """The arbiter's word on how a push is made (Cast.repush, one call): can the goal still be
+        reached this way, the skill and difficulty for it (unchanged unless the situation changed),
+        the time it takes, and what failing it this way brings. Without an arbiter for it (a scripted
+        cast), the push goes as offered and takes PUSH_MINUTES."""
+        out = {"achievable": True, "why": "", "minutes": PUSH_MINUTES, "pending": {}}
+        ask = getattr(self.cast, "repush", None)
+        if ask is None:
+            return out
+        r = await ask(self.state, pending, how)
+        out.update(achievable=r.achievable, why=r.why.strip(), minutes=max(1, min(r.minutes, ACT_CAP)))
+        changed: dict = {}
+        skill = canonical(r.skill) if r.skill.strip() else pending["skill"]
+        if skill != pending["skill"]:
+            target = self.state.investigator.value(skill)
+            changed.update(skill=skill, target=target)
+        if r.difficulty and r.difficulty != pending["difficulty"]:
+            changed["difficulty"] = r.difficulty
+        if changed:
+            changed["need"] = _threshold(changed.get("target", pending["target"]), changed.get("difficulty", pending["difficulty"]))
+        risk = r.on_push_fail
+        if risk.model_dump() != Failure().model_dump():
+            changed.update(on_push_fail=risk.model_dump(), risk=risk.text.strip() or pending.get("risk", ""))
+        out["pending"] = changed
+        return out
 
     async def talk(self, turn: Turn) -> None:
         """NPC replies and stage performances, after the engine has resolved checks. Each settles
@@ -1805,6 +1941,10 @@ class Game(Fighting):
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
+        if turn.action is not None and turn.action.idea and turn.action.idea.get("refused"):  # said on the screen already
+            self.told = None
+            await self.emit({"type": "dialogue_end"})
+            return ""
         if turn.declared:  # a LAN round's order: told with the round, by the one who settles it
             self.told = None
             await self.emit({"type": "held"})
@@ -1877,6 +2017,7 @@ class Game(Fighting):
             self._world_owed = False
             self._world_task = asyncio.create_task(self._live_later(), name="world")
         self.world.sync()  # before the log is folded: what the players were told is out
+        idea.note(self.m, st)  # before the log is folded: how present each missed clue has been
         self._recount()  # before the log is folded: it reads the lines as they stand
         st.heard = fog.heard(self.m, st)  # the places named in the log outlive its folding into memory
         recent = [e for e in st.log if e.kind != "dice"]
@@ -2870,7 +3011,9 @@ NOWHERE = (
     "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"
     "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
 )
-STALL_TURNS = 12  # turns without a clue, flag, event or new place before the director sends a lead
+STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
+PUSH_MINUTES = 10  # what a push made a stated way takes when no arbiter rules it (time always passes, p. 73)
+PUSH_HOW = 200  # characters of a push's stated way that are kept
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
@@ -2925,6 +3068,17 @@ def _clip(text: str, n: int) -> str:
 
 def _threshold(target: int, difficulty: str) -> int:
     return {"困难": target // 2, "极难": target // 5}.get(difficulty, target)
+
+
+def push_choice(value: Any) -> tuple[str, str]:
+    """A push offer's answer as (mode, how): the old strings, or {"choice": ..., "how": ...}."""
+    if isinstance(value, dict):
+        mode, how = str(value.get("choice", "")), " ".join(str(value.get("how") or "").split())[:PUSH_HOW]
+    else:
+        mode, how = str(value), ""
+    if mode not in ("push", "luck", "drop"):
+        raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    return mode, how if mode == "push" else ""
 
 
 def _refused(text: str) -> commands.CommandResult:

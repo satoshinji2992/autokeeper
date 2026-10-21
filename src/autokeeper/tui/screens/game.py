@@ -25,7 +25,7 @@ from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
-from ...engine import debrief
+from ...engine import debrief, idea
 from ...engine import graph as turn_graph
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told
 from ...engine.state import GameState, time_of_day
@@ -141,6 +141,7 @@ class GameScreen(Screen):
         Binding("ctrl+k", "plugins", "规则插件", show=False, priority=True),
         Binding("ctrl+g", "page('progress')", "进展", show=False),  # 经过 / 进展 / 背景 as a page over the screen
         Binding("ctrl+y", "recount", "整理进展", show=False),
+        Binding("ctrl+l", "idea", "灵感检定", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
 
@@ -836,6 +837,8 @@ class GameScreen(Screen):
                 cards.last().settle(ev["lines"])
         elif t == "command":
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
+        elif t == "idea_offer":  # the game stalled: the keeper offers an Idea roll (engine/idea.py)
+            story.add("system", Text(f"◇ {ev['text']}", style="bold"))
         elif t == "clue":
             art = next((c.art for c in self.m.clues if c.id == ev["id"]), "")
             if ev.get("heard"):  # said in conversation, already on screen in their words: a line, not the module's text again
@@ -1355,7 +1358,7 @@ class GameScreen(Screen):
         """What the Esc menu offers on this screen (a LAN table leaves some out, tui/screens/net.py);
         规则插件 only when this game has any."""
         return [item for item in MENU if (item[0] != "plugins" or self.m.plugins)
-                and (item[0] != "developer" or self.game is not None)]
+                and (item[0] != "developer" or self.game is not None) and (item[0] != "idea" or not self.spectate)]
 
     def action_developer(self) -> None:
         """F12: 开发者模式 on or off. On, the top bar says so and the panel under the story shows this
@@ -1536,7 +1539,9 @@ class GameScreen(Screen):
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
         actions["/dev"] = self.action_developer
-        if cmd == "/kp":  # "/kp <话>" goes to the keeper (send_line); alone it has nothing to say
+        if cmd in idea.WORDS:
+            self.action_idea()
+        elif cmd == "/kp":  # "/kp <话>" goes to the keeper (send_line); alone it has nothing to say
             self.app.notify("在 /kp 后输入要对守秘人说的话。", timeout=4)
         elif cmd == "/retry":
             self.action_retry()
@@ -1565,8 +1570,9 @@ class GameScreen(Screen):
         self.ideas.drop()  # whatever F5 was still thinking of, this action came first
         self._busy(True)
         inv = self.state.investigator
+        said = "提出灵感检定" if idea.asked(text) else text
         self.story.add("system" if text.startswith("/kp ") else "player",
-                       Text(f"▶ {inv.name} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {inv.name}：{text}"))
+                       Text(f"▶ {inv.name} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {inv.name}：{said}"))
         turn = self.state.turn
         active = self.state.active
         try:
@@ -1597,6 +1603,17 @@ class GameScreen(Screen):
         self.story.add("system", Text(text))
         self.app.notify(text, severity="warning", timeout=12)
         write_save(self.state, self.m)
+
+    def action_idea(self) -> None:
+        """Ctrl+L, /灵感 or the menu: an Idea roll for the party, when one can be made now."""
+        if self.spectate or self.game is None:
+            return
+        if self.busy:
+            self.app.notify("本回合结束后可做灵感检定。", timeout=3)
+        elif why := self.game.idea_refused():
+            self.app.notify(why, timeout=5)
+        else:
+            self.play(idea.WORDS[0])
 
     def action_retry(self) -> None:
         if not self.busy:

@@ -21,7 +21,9 @@ metadata:
 ## 每一轮
 
 1. 玩家说要做什么。先用 `scene()` 看当前地点、在场 NPC、可调查的东西和时间。
-2. 需要检定就调用 `skill_check(skill, difficulty, bonus)`；不要自己编骰值。成功后用 `reveal_clue(clue_id)` 交出线索。
+2. 需要检定就调用 `skill_check(skill, difficulty, bonus)`；不要自己编骰值。成功后用 `reveal_clue(clue_id)` 交出线索。针对人的行动，难度按对方相应的技能定（低于 50 常规，50 以上困难，90 以上极难）。
+   失败后结果里有 `can_push_or_luck` 时，玩家可以孤注一掷：先问“你如何行动以孤注一掷？”，再调用 `push_or_luck("push", how=玩家的回答)`；也可以 `luck` 或 `drop`。
+   调查陷入僵局、玩家提议或明显失去方向时，用 `idea_roll()` 做灵感检定，照返回的 notes 叙述。
 3. 和 NPC 对话用 `npc_say(npc_id, line)`，它会按 NPC 的人设、秘密和记忆回答。不要替 NPC 说出他不知道的事。
 4. 恐怖场面用 `sanity_check(success_loss, failure_loss)`，战斗以外的受伤（摔下楼梯、踩中陷阱）用 `apply_damage(amount)`。
 5. 行动花时间用 `advance_time(minutes)`，它会返回触发的事件。玩家改变剧情时用 `set_flag`。

@@ -31,7 +31,7 @@ from ..rules import chase as chase_rules
 from ..rules.bcdice import shared
 from ..rules.coc import Investigator, Rules
 from . import combat as battle
-from . import fog
+from . import fog, idea
 from . import graph as turn_graph
 from .game import Game
 from .state import GameState, time_of_day
@@ -111,6 +111,9 @@ def situation(m: Module, st: GameState, who: str | None = None) -> str:
         out.append(f"最近发生的事：\n{lines or '（刚开场）'}")
         out.append(now)
         return "\n".join(out)
+    if idea.offered(st) and not st.ending:  # the keeper's offer on a stall (Game._nudge): theirs to take or not
+        out.append("守秘人提议做一次灵感检定：回答 /灵感，由智力最高的调查员检定，无论成败都会想起一条遗漏的线索，失败还会耽误时间、陷入险境。"
+                   "做不做由你决定。")
     out.append(f"最近发生的事：\n{lines or '（刚开场）'}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？")
     return "\n".join(out)
 

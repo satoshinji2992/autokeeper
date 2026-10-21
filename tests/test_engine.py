@@ -670,21 +670,13 @@ async def test_improvised_branches_survive_a_reload(module, fake):
     assert fresh.clue("c_rumor").where == "square"
 
 
-async def test_a_stuck_party_gets_a_lead(module, fake):
-    lead = Improv(
-        kind="推进",
-        reason="一直在广场打转，送来一封信指向报社",
-        events=[NewEvent(id="e_letter", title="门缝里的信", when="now", read_aloud="有人把一封信塞到你手里：去报社查三十年前的旧报。")],
-        note="一封没署名的信把人引向报社",
-    )
+async def test_a_stuck_party_is_offered_an_idea_roll_not_sent_a_lead(module, fake):
     wait = Action(kind="wait", summary="周衡在广场上发呆")
-    game, cast, _ = improvised(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))}, [lead])
+    game, cast, events = improvised(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))}, [])
     game.state.turn = 12  # nothing found since the start
-    turn = await game.resolve(wait, await game.rule(wait))
-    await game._curtain(wait)
-    turn.notes += game._late.notes
-    assert cast.asked[0][0] == "推进" and "e_letter" in game.state.fired
-    assert game.state.progress_at == 12 and any("没署名的信" in n for n in turn.notes)
+    await game.resolve(wait, await game.rule(wait))
+    assert cast.asked == [] and game.state.idea_offer == 12 and game.state.progress_at == 12
+    assert [e["type"] for e in events].count("idea_offer") == 1
 
 
 async def _asked_on(game, cast, plays):
@@ -720,8 +712,9 @@ async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
     assert await _asked_on(game, cast, [(1, ask), (2, away), (3, there), (4, ask)]) == [1, 2, 3, 4]
     assert game.state.expanded == {"square": 4, "tower": 3}
     game.state.turn = game.state.progress_at + 12  # and nothing found for a long while
+    asked = len(cast.asked)
     await game._nudge(Turn())
-    assert cast.asked[-1][0] == "推进"
+    assert len(cast.asked) == asked and game.state.idea_offer == game.state.turn  # an offer, not a lead
 
 
 async def test_a_failed_roll_stays_failed_and_the_keeper_hears_what_was_missed(module, fake):

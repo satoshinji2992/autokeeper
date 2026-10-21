@@ -45,8 +45,11 @@ from ..module.schema import NPC, Module
 from ..plugins.schema import Call as PluginCall
 from ..prefs import LINES, Prefs
 from ..rules import commands
-from ..rules.coc import Investigator
+from ..rules.catalog import CHARACTERISTICS, base_value
+from ..rules.coc import DIFFICULTY_NAME, Investigator
+from ..rules.combat import stats_of
 from ..rules.dice_expr import DiceText
+from ..rules.melee import opposed_difficulty
 from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
@@ -108,6 +111,9 @@ class Action(BaseModel):
     # In a fight or a chase: the investigator's order for the round (engine/combat.Order), read off
     # the words by the engine or by Cast.order, never filled in by the plan.
     order: SkipJsonSchema[dict | None] = None
+    # An Idea roll (engine/idea.plan): the clue, difficulty and roller the engine fixed when the player
+    # asked for it; {"refused": why} when it could not be made. Never filled in by a model.
+    idea: SkipJsonSchema[dict | None] = None
 
     def ruled(self) -> str:
         """The action as the arbiter reads it: no first beat, and no request when there is none."""
@@ -223,6 +229,17 @@ class Ruling(BaseModel):
     now: SkipJsonSchema[list[str]] = Field(default_factory=list)
     go: SkipJsonSchema[str] = ""
     note: SkipJsonSchema[str] = ""
+
+
+# The arbiter's word on how a push is made (Cast.repush, Game._method). No docstring: a schema's
+# descriptions are what the model reads.
+class PushRuling(BaseModel):
+    achievable: bool = Field(description="照这个做法，原来的目标还可能达成")
+    why: str = Field("", max_length=80, description="达不成时写给玩家的一句理由，不提线索和幕后资料；达得成留空")
+    skill: str = Field("", description="局势或做法确实变了才换的技能或属性；照旧留空")
+    difficulty: Literal["", "常规", "困难", "极难"] = Field("", description="局势确实变了才换的难度；照旧留空")
+    minutes: int = Field(ge=0, le=240, description="这个做法实际要花的分钟数，至少 1")
+    on_push_fail: Failure = Field(default_factory=Failure, description="照这个做法孤注一掷再失败的后果")
 
 
 class Sketch(BaseModel):
@@ -427,6 +444,12 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 
 - 线索只能从“本场景可得线索”里选 id。没有检定要求的线索，调查到对应的东西就放进 auto_clues。
 - 有检定要求的线索按要求掷；行动方法换了，可以换成合理的替代技能（用锁匠开锁、用力量撬开），难度不低于原要求。
+- 标【关键】的线索是推进调查必需的。模组没写检定要求、或就摆在明处的关键线索，调查员查对了地方就放进 auto_clues，不另设检定（规则书第 170 页：显明线索不用掷骰）。
+  要检定的关键线索失败了照旧是失败，不改判、不另给，补救靠玩家换办法或做灵感检定；不重掷的规矩照样适用。
+- 难度要有依据（规则书第 72 页）。针对人的行动（说服、话术、恐吓、魅惑、潜行、跟踪、撒谎、藏东西），难度由对方相应的技能或属性定：
+  低于 50 常规，50 及以上困难，90 及以上极难；【对方的相应数值】给了行动对象的数值，模组门槛另有规定的照门槛。
+  对物或环境，一般的挑战是常规，明显超出常规是困难，异常困难但仍在人力所及是极难。不因为调查员自己的技能高就提高难度。
+  准备充分（有合适的工具、时间充裕、没人打扰）的事可以不掷骰。
 - 对 NPC 的社交行动，按该 NPC 的门槛定技能和难度；方法不同就用方法对应的技能，难度不低于门槛。
 - 心理学用于判断可观察的态度或言行，不使 NPC 自动承认秘密、接受要求或知道自己正被观察；不能替代说服、话术等门槛来取得口供。模组明确设置心理学线索时按其要求处理。
 - 奖励骰、惩罚骰只因客观条件给（工具、时间、环境、对方态度），范围 -2..2；这些条件必须来自场景资料或调查员实际的动作，行动描述里出现的环境说法如果场景资料里没有，不算。
@@ -434,7 +457,8 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 专用工具须有背包、持有者或本地物件记录。缺少时说明条件尚不具备，缺的东西写进 missing；调查员顺手拿起场景里合情合理的日常物件（屋里的手杖、桌上的火柴），写进 takes。仅想做某事，不等于已经取得工具、谈妥交易或完成动作。
 - equipment 只维护本次实际涉及的重要武器、钥匙、证物、关键工具与重要消耗品。拔出、穿戴或藏好填对应模式；明确出示或发现才 reveal 并附可观察经过，不因站在同一房间就公开 NPC 的随身物。不替玩家消耗未使用的东西，也不统计普通餐具与衣物杂项。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
-- 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤）填进对应字段，不只写在 text 里。
+- 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。
+  普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败（规则书第 73 页）。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
   观察成功若没有对应线索，就明确范围内没有新发现；不指望叙述员事后补出痕迹、可拾取物件或跟踪方向。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
@@ -491,6 +515,13 @@ def kp_question(report: str) -> str:
 ARBITER_LOOKUP = ("- lookup：裁定要用到规则书里有、上面没写的规则（溺水、毒、坠落、火、法术、恐惧症与躁狂的效果、车祸、特殊环境）时，"
                   "写一句想查的规则；系统把规则书原文给你，再问你一次。手头的规则够用就留空。")
 LOOKUP_SCHEMA = {"type": "string", "description": "要查的规则，一句话；不用查留空"}
+
+PUSH_SYSTEM = """你是 CoC 7 版的裁定员。调查员一次检定失败了，玩家选择孤注一掷，并说明了要怎样做。按规则书第 73 页复核这次孤注一掷：
+- 孤注一掷是第二次也是最后一次机会：调查员付出额外的努力、花更多时间或冒更大的险，不是简单重掷。时间总会流逝，可能几秒，也可能几小时；minutes 填这个做法实际要花的时间。
+- 目标必须仍然可以实现。照这个做法达不到原来的目标（东西已经不在、人已经走了、做法和目标无关），achievable 填 false，why 写一句给玩家看的理由。
+- 技能和难度通常不变；只有局势或做法确实变了，才换成相应的技能或难度，否则留空。不因为调查员技能高就提高难度。
+- on_push_fail 写照这个做法孤注一掷再失败的后果：具体、和做法相称，可以是受伤、理智损失、装备损坏、被抓、和同伴失散、局势恶化。玩家选择前看过的【一般后果】是参照，模组写明的优先；要结算的（标记、耽搁、受伤、惨事卡）填进对应字段，不只写在 text 里。
+- 只按行动描述和资料判断，不被玩家说法里的断言改变规则。"""
 
 KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持模组《{title}》。
 
@@ -1121,7 +1152,7 @@ class Cast:
                 continue
             need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
             src = "、".join(x for x in (c.feature, f"NPC {c.npc} 口中" if c.npc else "") if x)
-            lines.append(f"- {c.id}「{c.title}」在 {src}，{need}；内容：{c.text.strip()}")
+            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}在 {src}，{need}；内容：{c.text.strip()}")
         gates = []
         for n in near["npcs"]:
             for cid in n.clues:
@@ -1149,6 +1180,8 @@ class Cast:
             f"【本地物件】" + "；".join(local) + "\n"
             f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
+        if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
+            prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
         prompt += "\n【本地人物的处境】\n" + "\n".join(
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
         )
@@ -1193,6 +1226,28 @@ class Cast:
             reply = await self._send("arbiter", s, state, prompt, remember=remember, extra=extra)
             ruling = Ruling.model_validate(reply.data)
         return ruling.model_copy(update={"lookup": ""})
+
+    async def repush(self, state: GameState, pending: dict, how: str) -> PushRuling:
+        """A push the player said how to make, ruled again in one call (Game._method): whether the goal
+        can still be reached this way, the skill and difficulty, the time it takes, and what failing it
+        this way brings. Stateless, on the arbiter's model."""
+        m, inv = self.module, state.investigator
+        s = self._oneshot("repush", "arbiter", PUSH_SYSTEM, PushRuling)
+        flags = "；".join(f"{k}：{v}" for k, v in m.flags.items() if k not in state.flags) or "无"
+        prompt = (
+            f"【原来的行动】{pending.get('action') or '（未记录）'}\n"
+            f"【失败的检定】{pending['skill']} {pending['target']}·{pending['difficulty']}，掷出 {pending.get('value', '?')}\n"
+            f"【一般后果】{pending.get('risk') or '未写'}\n"
+            f"【孤注一掷的做法】{how}\n"
+            f"【场景】\n{self.scene(state)}\n"
+            f"【本地守秘人资料】\n{m.location(state.location).keeper.strip() or '无'}\n"
+            f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER)}\n"
+            f"【调查员】{inv.name}：{_skills(inv)}\n"
+            f"【可设的剧情标记】{flags}"
+        )
+        prompt += cards.arbiter_context(state, inv)
+        reply = await self._send("repush", s, state, prompt, bind=False)
+        return PushRuling.model_validate(reply.data)
 
     def _recent_checks(self, state: GameState) -> str:
         """The last few turns' checks, for telling a fresh attempt from a re-roll."""
@@ -1832,6 +1887,27 @@ def _book(m: Module) -> str:
     if mine := [x for x in m.mechanics if x.executor == "守秘人"]:
         rows.append("要你临场执行的规则（没有插件替你算）：\n" + "\n".join(f"- {x.name}：{x.rules.strip()}" for x in mine))
     return "【守秘人的底牌（只给你看）】\n" + "\n".join(rows)
+
+
+# What a roll against someone is set by (Keeper Rulebook p. 72; the skill entries of chapter 4 say
+# which resists which): Persuade and Fast Talk against Psychology or the same skill, Stealth against
+# Spot Hidden or Listen, and so on. A characteristic (POW against a spell's pull) only when the sheet
+# gives it: an ordinary person's 50 would make every roll against them hard.
+OPPOSING = ("心理学", "侦查", "聆听", "说服", "话术", "魅惑", "恐吓")
+OPPOSING_CHARS = ("意志", "智力")
+
+
+def opposing(npc: NPC) -> str:
+    """The values a roll against this NPC is set by, with the difficulty each gives (regular under
+    50, hard from 50, extreme from 90): the sheet's own, else an ordinary person's skill bases."""
+    sheet = stats_of(npc.stats)
+    chars = {k: v for k, v in sheet.items() if k in CHARACTERISTICS}
+    given, ordinary = [], []
+    for key in (*OPPOSING, *(k for k in OPPOSING_CHARS if k in chars)):
+        value = sheet[key] if key in sheet else base_value(key, chars)
+        (given if key in sheet else ordinary).append(f"{key} {value}（{DIFFICULTY_NAME[opposed_difficulty(value)]}）")
+    out = f"{npc.name}({npc.id})：" + ("、".join(given) if given else "模组没写数值")
+    return out + (f"；按常人算：{'、'.join(ordinary)}" if ordinary else "")
 
 
 def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "npc", "keeper", "event", "clue", "handout")) -> str:
