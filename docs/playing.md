@@ -244,6 +244,8 @@ command = "uv"
 args = ["run", "--directory", "/path/to/autokeeper", "autokeeper", "mcp"]
 ```
 
+打起来或开始追逐时，守秘人用 `start_fight` 或 `start_chase` 开始，每一轮用 `battle_round` 下达调查员的行动；对手的行动、骰子与伤害由引擎按规则结算，和终端里一样，对手只显示伤势字样。详见[战斗与追逐](combat.md#在-claude-code--codex-里)。
+
 ## 常见问题
 
 **想严格按模组玩。** 标题页「设置」把自由度改成「严格按模组已有内容」，或启动时加 `--improv 严格`；配置文件也支持 `improv = "严格"`。

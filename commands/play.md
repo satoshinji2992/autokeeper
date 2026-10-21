@@ -8,3 +8,4 @@ argument-hint: "[模组 id] [调查员 id]"
 - 没指定模组就先调用 `list_modules`，让玩家选；没指定调查员就调用 `list_pregens`。
 - 开局后先把返回的插图原样放进代码块，再读开场。
 - 需要裁定检定时，把行动改写成一句中立描述交给 `coc-arbiter` 子 Agent，不要转述玩家的修辞。
+- 打起来或开始追逐时，按 `autokeeper-play` 的「战斗与追逐」调用 `start_fight` 或 `start_chase`，之后每一轮用 `battle_round`；不要自己掷战斗的骰子或扣生命值。

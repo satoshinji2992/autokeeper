@@ -233,7 +233,7 @@ uv tool upgrade autokeeper   # 更新
   <br><sub>模型设置（F9）的「各分工模型」页：每个分工一行，写明它做什么；只有「读图」需要能看图的模型。</sub>
 </p>
 
-仓库本身也是一个 **Claude Code 插件**与 **MCP 服务端**——如果你想直接在 Claude Code 或 Codex 对话框里调用它的骰子、模组 Skills 与状态引擎来跑团，可参考[在 Claude Code / Codex 中主持](docs/playing.md#在-claude-code--codex-中主持)。
+仓库本身也是一个 **Claude Code 插件**与 **MCP 服务端**——如果你想直接在 Claude Code 或 Codex 对话框里调用它的骰子、模组 Skills 与状态引擎来跑团（战斗与追逐同样由引擎逐轮结算），可参考[在 Claude Code / Codex 中主持](docs/playing.md#在-claude-code--codex-中主持)。
 
 <details>
 <summary><b>0.0.3 更新亮点</b></summary>
