@@ -592,7 +592,9 @@ class Cast:
         # 2026-10-20: the keeper sees everything); off only to compare with the blind keeper (eval session).
         self.backstage = True
         self.unsettled: dict[str, list[str]] = {}  # npc id -> what its last reply could not do (Game._unsettled)
-        self.told: dict[str, list[str]] = {}  # npc id -> the clues its last reply told (Game._heard)
+        # npc id -> the clues its last reply told (Dialogue.told), until the game takes them into that
+        # reply's receipt, kept with its turn (Game._reply), as soon as the reply comes back
+        self.told: dict[str, list[str]] = {}
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -1119,6 +1121,9 @@ class Cast:
     async def npc(self, state: GameState, npc_id: str, message: str, *, travel: bool = False, private: bool = False) -> str:
         npc = self.module.npc(npc_id)
         key = f"npc:{npc_id}"
+        # What an earlier reply handed over and nobody took is not this one's (Game._reply takes it at once).
+        self.unsettled.pop(npc_id, None)
+        self.told.pop(npc_id, None)
         s = await self._fresh_npc(npc_id)
         mood = (f"\n【先前人物走向】{npc.arc}\n这是此前的基线；最新心境及本轮亲历、可信消息优先，可自然改变反应，不须始终维持这一状态。"
                 if npc.arc else "")

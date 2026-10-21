@@ -7,7 +7,7 @@ from __future__ import annotations
 from autokeeper import config
 from autokeeper.agents.cast import Action, BeforeTravel, Cast, Ruling
 from autokeeper.engine import check
-from autokeeper.engine.game import Game, Turn
+from autokeeper.engine.game import TURN_RECORD, Game, Turn
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
@@ -128,7 +128,8 @@ async def test_a_companion_who_will_not_come_holds_the_party_back_once_asked(fak
     SCRIPT.append({"text": "我得守着钟，走不开。", "accompany": ""})
     await game.prepare(action)
     journal = game.state.pending_turn["preparation"]
-    assert len(SEEN) == 1 and journal["blocked"] and any("尚未同意同行" in n for n in journal["notes"])
+    notes = TURN_RECORD.validate_python(journal["turn"]).notes  # the preparation's own turn (Game._preparing)
+    assert len(SEEN) == 1 and journal["blocked"] and any("尚未同意同行" in n for n in notes)
     assert {"before:0", "companion:warden"} <= set(journal["done"])
     await game.close()
 

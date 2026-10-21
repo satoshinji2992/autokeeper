@@ -11,8 +11,10 @@ import asyncio
 import heapq
 import inspect
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
+from functools import partial
 from itertools import pairwise
 from typing import Any
 
@@ -60,6 +62,21 @@ async def _silent(_: dict[str, Any]) -> None:
 
 
 @dataclass
+class Said:
+    """One NPC reply of a turn as it landed (Game._reply), kept with the turn: its words, the
+    unlocked clues it told (Dialogue.told) and how far its settling got (shown on the screens,
+    those clues in the notebook, with the stages of that in `journal`). A turn resumed after a
+    crash goes on from it: the NPC is not asked again, and nothing it said or told is lost."""
+
+    npc: str
+    line: str
+    told: list[str] = field(default_factory=list)
+    shown: bool = False
+    heard: bool = False
+    journal: dict = field(default_factory=dict)
+
+
+@dataclass
 class Turn:
     action: Action | None = None
     ruling: Ruling | None = None
@@ -84,12 +101,16 @@ class Turn:
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
     fight: list[str] = field(default_factory=list)  # a fight's or a chase's round as settled, for the keeper (engine/fighting.py)
     declared: bool = False  # a LAN round's order, settled with the others' by the last of them
+    replies: dict[str, Said] = field(default_factory=dict)  # each NPC reply's receipt, by what asked for it (Game._reply)
 
     def absorb(self, later: Turn) -> None:
-        """What a later stage of the same turn settled (the push choice): its rolls, finds, events,
-        lines and notes join this turn's, so the NPCs on stage and the keeper's report have them."""
+        """What another stage of the same turn settled (the replies before the ruling, the push
+        choice): its rolls, finds, events, lines and notes join this turn's, so the NPCs on stage
+        and the keeper's report have them."""
         for name in ("checks", "sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
+        for key, said in later.replies.items():
+            self.replies.setdefault(key, said)
         self.clues += [c for c in later.clues if c not in self.clues]
         self.events += [e for e in later.events if all(e.id != x.id for x in self.events)]
         self.performed += [e for e in later.performed if e not in self.performed]
@@ -167,6 +188,7 @@ class Game(Fighting):
         self.turn_checkpoint: Callable[[Turn], None] | None = None
         self._resolution: dict | None = None
         self._resolution_scope: list[str] = []
+        self._resolution_keep: Callable[[Turn], None] | None = None  # a journal kept with its turn (Game._journal)
         self._resolution_lock = asyncio.Lock()
         if state.improv:  # a loaded game brings its own branches
             improv.restore(module, state.improv)
@@ -490,12 +512,14 @@ class Game(Fighting):
 
     async def prepare(self, action: Action) -> None:
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
-        and consent before travelling, checkpointed one at a time."""
+        and consent before travelling, checkpointed one at a time. Each reply settles as any does
+        (_reply), into the preparation's own turn (_preparing)."""
         await self._step_in(action)
         if not action.destination or action.kind == "meta" or not fog.findable(self.m, self.state, action.destination):
             return
-        journal = self.state.pending_turn.setdefault("preparation", {"done": [], "lines": [], "notes": [], "blocked": False})
-        present = {n.id for n in self.m.npcs_at(self.state.location)}
+        st = self.state
+        journal, turn, keep = self._preparing(action)
+        present = {n.id for n in self.m.npcs_at(st.location)}
         along = [] if action.alone else list(dict.fromkeys(action.companions))
         requests = [(f"before:{i}", step.npc, step.speech, step.private) for i, step in enumerate(action.before)]
         said = {step.npc for step in action.before}  # the one spoken to hears the words with the invitation
@@ -504,46 +528,57 @@ class Game(Fighting):
         for key, nid, speech, private in requests:
             if key in journal["done"]:
                 continue
-            if nid not in present:
+            if key not in turn.replies and nid not in present:
                 name = next((n.name for n in self.m.npcs if n.id == nid), nid)
-                journal["notes"].append(f"{name}不在当前地点，尚未完成出发前的交谈；不能替他回应或同行。")
+                turn.notes.append(f"{name}不在当前地点，尚未完成出发前的交谈；不能替他回应或同行。")
                 journal["blocked"] = True
             else:
                 ent = self.world.rec.entities[nid]
                 # Along already: to this very place, or wherever they go (the keeper's scene, world/scene.py).
-                agreed = ent.following == self.state.investigator.id and ent.follow_to in (action.destination, "")
-                if speech or not agreed:
+                agreed = ent.following == st.investigator.id and ent.follow_to in (action.destination, "")
+                if key in turn.replies or speech or not agreed:  # (one that answered goes on from its receipt)
                     # Asked along: its answer says whether it comes (TravelDialogue), whatever else is said to it
                     # ("我陪您去" and no accompany left the man behind, replay turn 82); asked once, not again after.
                     asked = nid in along and not agreed
                     request = speech or f"请与我一同前往{place}。"
                     invite = f"调查员想请你一同前往{place}。" if asked and speech else ""
                     privacy = "这是避开其他人的私下交谈，其他人没有听到。" if private else ""
-                    message = (f"（系统：出发前，调查员{self.state.investigator.name}对你说：「{request}」。{invite}{privacy}"
+                    message = (f"（系统：出发前，调查员{st.investigator.name}对你说：「{request}」。{invite}{privacy}"
                                "是否同意由你决定，不替其他人答应。）")
-                    line = await self.cast.npc(self.state, nid, message, travel=asked or not speech, private=private)
-                    journal["lines"].append([nid, line])
-                    journal["notes"] += self._unsettled(nid)
-                    self.state.npc(nid).met = True
-                    self.state.add("npc", line, who=self.m.npc(nid).name)
-                    self._exchanged(nid, Action(kind="talk", summary=request, speech=request), line, private=private)
-                    ent = self.world.rec.entities[nid]
-                    actual = ent.following == self.state.investigator.id and ent.follow_to == action.destination
-                    claimed = bool(getattr(self.cast, "claimed_accompany", lambda *_: False)(self.state, nid, action.destination))
-                    if asked and not actual and not claimed:
-                        journal["notes"].append(f"{self.m.npc(nid).name}尚未同意同行，调查员尚未出发；由玩家决定是否独行或另作安排。")
-                        journal["blocked"] = True
-                    if asked:
-                        journal["done"].append(f"companion:{nid}")  # answered here
-                    journal["done"].append(key)
-                    if self.checkpoint:
-                        self.checkpoint()
-                    await self.emit({"type": "npc", "npc": nid, "name": self.m.npc(nid).name, "text": line,
-                                     "portrait": self.m.art.get(self.m.npc(nid).portrait or "", "")})
-                    continue
+                    ask = partial(self.cast.npc, st, nid, message, travel=asked or not speech, private=private)
+                    await self._reply(turn, key, nid, ask, keep,
+                                      record=partial(self._before_journey, turn, journal, action, nid, request, asked, private))
             journal["done"].append(key)
+            keep(turn)
+
+    def _preparing(self, action: Action) -> tuple[dict, Turn, Callable[[Turn], None]]:
+        """What prepare settles before the ruling: its journal in the turn's (pending_turn), and a turn
+        of its own for the replies there (_reply), kept in that journal as each lands. The action's
+        turn takes it in at its first stage (_resolve_stages)."""
+        journal = self.state.pending_turn.setdefault("preparation", {"done": [], "blocked": False})
+        turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn(action=action)
+
+        def keep(kept: Turn) -> None:
+            journal["turn"] = TURN_RECORD.dump_python(kept, mode="json")
             if self.checkpoint:
                 self.checkpoint()
+
+        return journal, turn, keep
+
+    def _before_journey(self, turn: Turn, journal: dict, action: Action, nid: str, request: str, asked: bool,
+                        private: bool, line: str) -> None:
+        """A reply before the journey, landing with its receipt (_reply): the exchange goes into the
+        world record, and one asked along that neither came nor said it would holds the party back."""
+        st = self.state
+        self._exchanged(nid, Action(kind="talk", summary=request, speech=request), line, private=private)
+        ent = self.world.rec.entities[nid]
+        actual = ent.following == st.investigator.id and ent.follow_to == action.destination
+        claimed = bool(getattr(self.cast, "claimed_accompany", lambda *_: False)(st, nid, action.destination))
+        if asked and not actual and not claimed:
+            turn.notes.append(f"{self.m.npc(nid).name}尚未同意同行，调查员尚未出发；由玩家决定是否独行或另作安排。")
+            journal["blocked"] = True
+        if asked:
+            journal["done"].append(f"companion:{nid}")  # answered here
 
     # -- no re-rolls ------------------------------------------------------------------
     def _no_reroll(self, action: Action, ruling: Ruling, at: str) -> Ruling:
@@ -1125,10 +1160,26 @@ class Game(Fighting):
         return row is not None and not row.get("done")
 
     def _resolution_save(self, turn: Turn) -> None:
-        if self._resolution is not None:
-            self._resolution["turn"] = TURN_RECORD.dump_python(turn, mode="json")
-            if self.checkpoint:
-                self.checkpoint()
+        if self._resolution is None:
+            return
+        if self._resolution_keep is not None:  # the journal is the turn's own: kept with it (Game._journal)
+            self._resolution_keep(turn)
+            return
+        self._resolution["turn"] = TURN_RECORD.dump_python(turn, mode="json")
+        if self.checkpoint:
+            self.checkpoint()
+
+    @contextmanager
+    def _journal(self, journal: dict, keep: Callable[[Turn], None]) -> Iterator[None]:
+        """Stages settled in `journal` as a resolution's are (_resolution_step: each stage and its
+        dice once), for a journal that lives inside a turn (an NPC reply's receipt, Said.journal):
+        each stage is saved by keeping that turn (`keep`), not by copying the turn into it."""
+        outer = self._resolution, self._resolution_scope, self._resolution_keep
+        self._resolution, self._resolution_scope, self._resolution_keep = journal, [], keep
+        try:
+            yield
+        finally:
+            self._resolution, self._resolution_scope, self._resolution_keep = outer
 
     async def _resolution_step(self, key: str, turn: Turn, work: Callable[[], Any]) -> Any:
         """Resume one stage. Synchronous mutations and its receipt share one checkpoint.
@@ -1208,6 +1259,9 @@ class Game(Fighting):
 
         def initial() -> bool:
             preparation = st.pending_turn.get("preparation", {})
+            if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
+                turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
+            # A journal saved before the preparation kept a turn of its own: its lines and notes as they were.
             turn.npc_lines += [tuple(row) for row in preparation.get("lines", [])]
             turn.joined += [x for x in preparation.get("joined", []) if x not in turn.joined]  # stepped in (Game._step_in)
             turn.notes += preparation.get("notes", [])
@@ -1535,7 +1589,8 @@ class Game(Fighting):
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
 
     async def talk(self, turn: Turn) -> None:
-        """NPC replies and stage performances, after the engine has resolved checks."""
+        """NPC replies and stage performances, after the engine has resolved checks. Each settles
+        through _reply; a resumed turn goes on from the receipts it kept (Turn.replies)."""
         st, m = self.state, self.m
         action = turn.action
         speaking = (action and action.npc and (action.kind in ("talk", "perform")
@@ -1545,113 +1600,84 @@ class Game(Fighting):
         if action and action.approach == "心理学" and not action.speech:
             speaking = False  # watching someone's demeanour does not start a conversation
         if speaking:
-            if any(nid == action.npc for nid, _ in turn.npc_lines):
-                pass  # a resumed narration never asks an NPC to answer the same question twice
-            elif not any(n.id == action.npc for n in m.npcs_at(st.location)):
+            key = f"talk:{action.npc}"
+            if key not in turn.replies and any(nid == action.npc for nid, _ in turn.npc_lines):
+                pass  # answered already this turn (stepping in, before the journey): never asked the same thing twice
+            elif key not in turn.replies and not any(n.id == action.npc for n in m.npcs_at(st.location)):
                 turn.notes.append(f"{action.npc} 不在这里")
             else:
                 npc = m.npc(action.npc)
-                await self.emit({"type": "status", "text": f"等待 {npc.name} 回应…"})
-                line = await self.cast.npc(st, npc.id, self._npc_message(turn, npc.id))
-                turn.npc_lines.append((npc.id, line))
-                turn.notes += self._unsettled(npc.id)
-                if (gone := self.world.place(npc.id)) and gone != st.location:  # its reply's leave landed (Dialogue.leave)
-                    turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
-                st.npc(npc.id).met = True
-                st.add("npc", line, who=npc.name)
-                self._exchanged(npc.id, action, line)
-                if self.turn_checkpoint:
-                    self.turn_checkpoint(turn)
-                await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
-                await self._heard(npc.id, turn)
+                await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id)),
+                                  self._keep, record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…")
         await self._join_in(turn)
         for ev in turn.events:
             if ev.performer and ev.id not in turn.performed:
-                npc = m.npc(ev.performer)
-                await self.emit({"type": "status", "text": f"{npc.name}登台了…"})
-                text = await self.cast.perform(st, npc.id, ev.performance, self._deeds(npc.id))
-                turn.performance = (npc.id, text)
-                st.npc(npc.id).met = True
-                st.add("npc", text, who=npc.name)
+                name = m.npc(ev.performer).name
+                await self._reply(turn, f"perform:{ev.id}", ev.performer,
+                                  lambda ev=ev: self.cast.perform(st, ev.performer, ev.performance, self._deeds(ev.performer)),
+                                  self._keep, kind="performance", status=f"{name}登台了…")
                 turn.performed.append(ev.id)
-                if self.turn_checkpoint:
-                    self.turn_checkpoint(turn)
-                await self.emit({"type": "performance", "npc": npc.id, "name": npc.name, "text": text, "portrait": m.art.get(npc.portrait or "", "")})
+                self._keep(turn)
         # Important information heard in a zero-minute exchange can change a person's
         # next action now, using the same allowance as this turn's elapsed-time work.
         await self._world(turn)
         await self._people()
+        self._keep(turn)
+
+    def _keep(self, turn: Turn) -> None:
+        """The turn as it stands, saved where its caller keeps it (graph.build's keep, the MCP journal)."""
         if self.turn_checkpoint:
             self.turn_checkpoint(turn)
 
     async def _join_in(self, turn: Turn) -> None:
         """Those the keeper's plan has join in of their own accord (Plan.initiative), after the one
         addressed: each in its own voice, from its own file (Cast.npc), what it says and does on the
-        spot landing this turn as any reply's does. Whoever already spoke this turn (the one addressed,
-        a resumed turn's) is not asked again, nor one no longer here."""
+        spot landing this turn as any reply's does (_reply). Whoever already spoke this turn (the one
+        addressed, one who stepped in) is not asked again, nor one no longer here."""
         st, m = self.state, self.m
         saved = st.pending_turn.get("initiative") if st.pending_turn else None
         plans = [Initiative.model_validate(x) for x in saved] if saved is not None else self.initiative
         self.initiative = []  # this turn's: an interlude or a turn with no plan of its own does not play it again
         for x in plans:
-            if any(nid == x.npc for nid, _ in turn.npc_lines) or x.npc not in self._present():
+            key = f"join:{x.npc}"
+            if key not in turn.replies and (any(nid == x.npc for nid, _ in turn.npc_lines) or x.npc not in self._present()):
                 continue
-            npc = m.npc(x.npc)
-            await self.emit({"type": "status", "text": f"{npc.name}开口了…"})
-            line = await self.cast.npc(st, npc.id, self._joining(turn, x))
-            turn.npc_lines.append((npc.id, line))
-            turn.joined.append(npc.id)
-            turn.notes += self._unsettled(npc.id)
-            if (gone := self.world.place(npc.id)) and gone != st.location:
-                turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
-            st.npc(npc.id).met = True
-            st.add("npc", line, who=npc.name)
-            inv = st.investigator
-            self.world.apply(Occur(id=f"talk:{st.turn}:{npc.id}:initiative", actor=inv.id, participants=[npc.id],
-                                   place=st.location, text=f"{npc.name}主动对{inv.name}：「{line}」", visibility="public",
-                                   transcript=True))
-            if self.turn_checkpoint:
-                self.turn_checkpoint(turn)
-            await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line, "portrait": m.art.get(npc.portrait or "", "")})
-            await self._heard(npc.id, turn)
+            await self._reply(turn, key, x.npc, lambda x=x: self.cast.npc(st, x.npc, self._joining(turn, x)), self._keep,
+                              record=partial(self._initiated, x.npc), joined=True, status=f"{m.npc(x.npc).name}开口了…")
 
     async def _step_in(self, action: Action) -> None:
         """Those the keeper's plan has step in before the action is settled (Initiative.first: the
         warden's 「别碰！」 before the gears are touched, a lamp handed over before the cellar): played
-        now, before the arbiter rules, so the ruling and the roll go on what they said and did (the
-        review of 2026-10-20: the action was settled first, and the warden spoke too late). Their
-        lines join the turn's as the travel exchanges do (preparation), and _join_in passes them by."""
+        now, before the arbiter rules, so the ruling and the roll go on what they said, did and told
+        (the review of 2026-10-20: the action was settled first, and the warden spoke too late). Their
+        replies settle as the travel exchanges' do, into the preparation's turn (_preparing), which
+        joins the action's; _join_in passes them by. The review of 2026-10-21: what the warden told
+        here never reached the notebook."""
         st = self.state
         saved = st.pending_turn.get("initiative") if st.pending_turn else None
         plans = [Initiative.model_validate(x) for x in saved] if saved is not None else self.initiative
         first = [x for x in plans if x.first]
         if action.kind == "meta" or not first or not st.pending_turn:
             return
-        journal = st.pending_turn.setdefault("preparation", {"done": [], "lines": [], "notes": [], "blocked": False})
+        journal, turn, keep = self._preparing(action)
         for x in first:
             key = f"first:{x.npc}"
             if key in journal["done"]:
                 continue
-            if x.npc in self._present():
-                npc = self.m.npc(x.npc)
-                await self.emit({"type": "status", "text": f"{npc.name}开口了…"})
-                line = await self.cast.npc(st, npc.id, self._joining(Turn(action=action), x, before=True))
-                journal["lines"].append([npc.id, line])
-                journal.setdefault("joined", []).append(npc.id)
-                journal["notes"] += self._unsettled(npc.id)
-                if (gone := self.world.place(npc.id)) and gone != st.location:
-                    journal["notes"].append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
-                st.npc(npc.id).met = True
-                st.add("npc", line, who=npc.name)
-                inv = st.investigator
-                self.world.apply(Occur(id=f"talk:{st.turn}:{npc.id}:initiative", actor=inv.id, participants=[npc.id],
-                                       place=st.location, text=f"{npc.name}抢在{inv.name}动手之前：「{line}」",
-                                       visibility="public", transcript=True))
-                await self.emit({"type": "npc", "npc": npc.id, "name": npc.name, "text": line,
-                                 "portrait": self.m.art.get(npc.portrait or "", "")})
+            if key in turn.replies or x.npc in self._present():
+                await self._reply(turn, key, x.npc, lambda x=x: self.cast.npc(st, x.npc, self._joining(turn, x, before=True)),
+                                  keep, record=partial(self._initiated, x.npc, first=True), joined=True,
+                                  status=f"{self.m.npc(x.npc).name}开口了…")
             journal["done"].append(key)
-            if self.checkpoint:
-                self.checkpoint()
+            keep(turn)
+
+    def _initiated(self, npc_id: str, line: str, *, first: bool = False) -> None:
+        """What one joining in of its own accord said goes into the world record, before everyone
+        there: ahead of the action (Initiative.first, _step_in) or after it (_join_in)."""
+        st, inv, name = self.state, self.state.investigator, self.m.npc(npc_id).name
+        text = f"{name}抢在{inv.name}动手之前：「{line}」" if first else f"{name}主动对{inv.name}：「{line}」"
+        self.world.apply(Occur(id=f"talk:{st.turn}:{npc_id}:initiative", actor=inv.id, participants=[npc_id], place=st.location,
+                               text=text, visibility="public", transcript=True))
 
     def _held(self) -> set[str]:
         """Those the keeper's plan has join in this turn (also as a resumed turn's journal keeps them):
@@ -1696,6 +1722,54 @@ class Game(Fighting):
         name = self.m.npc(npc_id).name
         return [f"【未落实】{name}刚才的回应里有做不到的事：{'；'.join(failed)}。叙述里按实际情况交代（东西不在身上、去不了那里），"
                 "不写成已经做到，也不删改他说过的话。"]
+
+    async def _reply(self, turn: Turn, key: str, npc_id: str, ask: Callable[[], Awaitable[str]], keep: Callable[[Turn], None],
+                     *, record: Callable[[str], None] | None = None, joined: bool = False, kind: str = "npc",
+                     status: str = "") -> Said:
+        """One NPC reply settled, whatever asked for it (talk, _join_in, _step_in, prepare): its words,
+        and what it meant to do and could not, go into `turn`, the log and the world record (`record`),
+        with its receipt (Said: what it told, Dialogue.told), and are kept before anything is shown;
+        then the words are shown (`kind`: an npc line or a performance), and what it told goes in the
+        notebook, the card after the words. What it handed over or where it went landed with the
+        reply itself (Cast.npc). The receipt is the turn's, under `key`: a turn resumed after a crash
+        goes on from it, never asking the NPC again (the review of 2026-10-21: the line was kept and
+        what the warden told was lost)."""
+        st, m = self.state, self.m
+        npc = m.npc(npc_id)
+        said = turn.replies.get(key)
+        if said is None:
+            if status:
+                await self.emit({"type": "status", "text": status})
+            line = await ask()
+            # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
+            # and its receipt, kept below with the words.
+            told = getattr(self.cast, "told", {}).pop(npc_id, [])
+            said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told))
+            if kind == "performance":
+                turn.performance = (npc_id, line)
+            else:
+                turn.npc_lines.append((npc_id, line))
+            if joined:
+                turn.joined.append(npc_id)
+            turn.notes += self._unsettled(npc_id)
+            if (gone := self.world.place(npc_id)) and gone != st.location:  # its reply's leave landed (Dialogue.leave)
+                turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
+            st.npc(npc_id).met = True
+            st.add("npc", line, who=npc.name)
+            if record is not None:
+                record(line)
+            keep(turn)
+        if not said.shown:
+            await self.emit({"type": kind, "npc": npc_id, "name": npc.name, "text": said.line,
+                             "portrait": m.art.get(npc.portrait or "", "")})
+            said.shown = True
+            keep(turn)
+        if said.told and not said.heard:
+            with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
+                await self._gain(said.told, turn, None, heard=npc_id)
+            said.heard = True
+            keep(turn)
+        return said
 
     def _foreshadow(self, turn: Turn) -> None:
         """The hints of the place they came to, given to the keeper as this turn is told. A roll
@@ -1961,7 +2035,7 @@ class Game(Fighting):
     def _spoken(self, ids: list[str], action: Action | None, npc: str = "") -> list[str]:
         """Of the clues a ruling gives, those the person being talked to knows: not handed over
         as a card the moment the subject comes up, but left to them to tell, a piece at a time in
-        their own words (Cast.npc, Dialogue.told); the card comes when they have said it (_heard).
+        their own words (Cast.npc, Dialogue.told); the card comes when they have said it (_reply).
         The user, 2026-10-21: the gossip came as a card while the cook was still asking who died."""
         st, m = self.state, self.m
         npc = npc or (action.npc if action and action.kind in ("talk", "daily", "perform") else "")
@@ -1973,11 +2047,15 @@ class Game(Fighting):
         unlocked += [c for c in spoken if c not in unlocked]  # theirs to tell from now on
         return spoken
 
-    async def _heard(self, npc_id: str, turn: Turn) -> None:
-        """The clues a reply told (Dialogue.told), now in the notebook."""
-        told = self.cast.told.pop(npc_id, []) if hasattr(self.cast, "told") else []
-        if told:
-            await self._gain(self._valid_clues(told, None), turn, None, heard=npc_id)
+    def _told_clues(self, npc_id: str, ids: list[str]) -> list[str]:
+        """Of the clues a reply told (Dialogue.told), those for the notebook: ones it may tell (unlocked,
+        or on its sheet with no gate, as Cast.npc has them), there to be found now (Clue.requires), not
+        found before. Where it is now does not matter: one that walked off after saying it said it here."""
+        st, m = self.state, self.m
+        sheet, clues = m.npc(npc_id), {c.id: c for c in m.clues}
+        allowed = set(st.npc(npc_id).unlocked) | {c for c in sheet.clues if c not in sheet.gates}
+        return [cid for cid in dict.fromkeys(ids) if cid in allowed and cid in clues and cid not in st.clues
+                and clues[cid].available(st.flags, st.clues)]
 
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
         st, m = self.state, self.m
