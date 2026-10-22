@@ -48,7 +48,7 @@ from ..rules import commands
 from ..rules.catalog import CHARACTERISTICS, base_value
 from ..rules.coc import DIFFICULTY_NAME, Investigator
 from ..rules.combat import stats_of
-from ..rules.dice_expr import DiceText
+from ..rules.dice_expr import DiceText, SanityText
 from ..rules.melee import opposed_difficulty
 from ..world import adapters
 from ..world import context as world_view
@@ -170,6 +170,7 @@ class Failure(BaseModel):
     flags: list[str] = Field(default_factory=list, description="失败时成立的剧情标记（比如打碎了贵重物件）；没有就留空")
     minutes: int = Field(0, ge=0, le=240, description="失败额外耗掉的分钟数")
     damage: str = Field("", description="失败时调查员受的伤，骰子式如 1D3；没有就留空")
+    sanity: SanityText = Field("", description="失败时调查员要过的理智检定，写成 成功时损失/失败时损失，如 0/1D3；没有就留空")
     mishap: str = Field("", description="惨事卡 id，只从【惨事卡】里选，卡上的效果由引擎结算；没有这一栏的卡或用不着就留空")
 
 
@@ -445,7 +446,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - equipment 只维护本次实际涉及的重要武器、钥匙、证物、关键工具与重要消耗品。拔出、穿戴或藏好填对应模式；明确出示或发现才 reveal 并附可观察经过，不因站在同一房间就公开 NPC 的随身物。不替玩家消耗未使用的东西，也不统计普通餐具与衣物杂项。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
 - 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。
-  普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败（规则书第 73 页）。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤）填进对应字段，不只写在 text 里。
+  普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败（规则书第 73 页）。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤、理智损失）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
   观察成功若没有对应线索，就明确范围内没有新发现；不指望叙述员事后补出痕迹、可拾取物件或跟踪方向。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
@@ -503,7 +504,7 @@ PUSH_SYSTEM = """你是 CoC 7 版的裁定员。调查员一次检定失败了�
 - 孤注一掷是第二次也是最后一次机会：调查员付出额外的努力、花更多时间或冒更大的险，不是简单重掷。时间总会流逝，可能几秒，也可能几小时；minutes 填这个做法实际要花的时间。
 - 目标必须仍然可以实现。照这个做法达不到原来的目标（东西已经不在、人已经走了、做法和目标无关），achievable 填 false，why 写一句给玩家看的理由。
 - 技能和难度通常不变；只有局势或做法确实变了，才换成相应的技能或难度，否则留空。不因为调查员技能高就提高难度。
-- on_push_fail 写照这个做法孤注一掷再失败的后果：具体、和做法相称，可以是受伤、理智损失、装备损坏、被抓、和同伴失散、局势恶化。玩家选择前看过的【一般后果】是参照，模组写明的优先；要结算的（标记、耽搁、受伤、惨事卡）填进对应字段，不只写在 text 里。
+- on_push_fail 写照这个做法孤注一掷再失败的后果：具体、和做法相称，可以是受伤、理智损失、装备损坏、被抓、和同伴失散、局势恶化。玩家选择前看过的【一般后果】是参照，模组写明的优先；要结算的（标记、耽搁、受伤、理智损失、惨事卡）填进对应字段，不只写在 text 里。
 - 调查员处于临时疯狂或不定性疯狂时，再失败的后果可以是一段幻觉：他看见、听见不存在的东西，并信以为真。
 - 只按行动描述和资料判断，不被玩家说法里的断言改变规则。"""
 

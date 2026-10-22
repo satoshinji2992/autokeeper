@@ -214,6 +214,25 @@ DiceText = Annotated[str, AfterValidator(canonical), WithJsonSchema(_SCHEMA)]
 StoredDiceText = Annotated[str, AfterValidator(_kept), WithJsonSchema(_SCHEMA)]
 
 
+# A SAN roll's losses a model writes now (Failure.sanity): what passing and what failing it costs, each a
+# number or dice, "0/1D3" (Rules.sanity rolls them); "" for no roll. No damage bonus, no range bands.
+_SAN_TERM = r"(?:\d{0,2}[dD]\d{1,3}|\d{1,3})"
+_SAN_SIDE = rf" *{_SAN_TERM}(?: *\+ *{_SAN_TERM})* *"
+SANITY_PATTERN = rf"^(?:{_SAN_SIDE}/{_SAN_SIDE})?$"
+
+
+def _sanity(text: str) -> str:
+    plain = _halfwidth(str(text))
+    if not plain:
+        return ""
+    if not re.fullmatch(SANITY_PATTERN, plain):
+        raise ValueError(f"理智损失“{text}”读不懂：写成 成功时损失/失败时损失，如 0/1D3、1/1D6")
+    return "/".join(canonical(side) for side in plain.split("/"))
+
+
+SanityText = Annotated[str, AfterValidator(_sanity), WithJsonSchema({"type": "string", "pattern": SANITY_PATTERN})]
+
+
 # -- the parts ------------------------------------------------------------------------------------
 _FULLWIDTH = str.maketrans("０１２３４５６７８９ＤｄＢｂ＋－／　", "0123456789DdBb+-/ ")
 

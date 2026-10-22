@@ -413,3 +413,42 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
     assert len(offers) == 1 and resumed.state.idea_offer == 20
     await game.close()
     await resumed.close()
+
+
+async def test_a_push_that_fails_with_a_sanity_cost_takes_it_once_even_when_resumed(module, fake):
+    """PUSH_SYSTEM names 理智损失 among a failed push's consequences: Failure.sanity is that SAN roll,
+    settled as an event's (Game._lose_sanity), in its own stage: resumed after a broken connection,
+    it is neither rolled nor lost again."""
+    action = Action(kind="investigate", summary="查旧报", target="旧报合订本")
+    ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3,
+                    on_push_fail=Failure(text="翻到一张不该看的照片", sanity="1/1D4"))
+    fake.queue(65, 95, 99).queue_totals(3)  # the check fails, the push fails, the SAN roll fails: 1D4 = 3
+    game, _, _ = make(module, fake, {}, "office")
+    saved = snapshots(game)
+    await game.resolve(action, ruling)
+    san = game.state.investigator.san
+
+    async def broken(event: dict) -> None:
+        if event["type"] == "sanity":
+            raise ConnectionError("disconnected after the SAN roll")
+
+    game.emit = broken
+    with pytest.raises(ConnectionError):
+        await game.push("push")
+    assert game.state.investigator.san == san - 3
+    resumed, events = reload_game(module, saved[-1], fake)  # no dice left: a second roll would fail
+    turn = await resumed.push("push")
+    assert resumed.state.investigator.san == san - 3 and [s.loss for _, s in turn.sanity] == [3]
+    assert sum(entry.kind == "sanity" for entry in resumed.state.log) == 1
+    assert [e["type"] for e in events].count("sanity") == 1  # the notice the connection lost, shown now
+    assert any("理智受到冲击" in note for note in turn.notes)
+    assert not fake.values and not fake.totals and not resumed.state.pending_resolution
+    await game.close()
+    await resumed.close()
+
+
+def test_a_failures_sanity_cost_is_written_as_the_book_writes_it():
+    assert Failure(sanity="０/１Ｄ６").sanity == "0/1D6"
+    for bad in ("1D3", "0/1D6+DB", "掉一点理智"):
+        with pytest.raises(ValueError):
+            Failure(sanity=bad)

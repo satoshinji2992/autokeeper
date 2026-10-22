@@ -1148,9 +1148,13 @@ class Game(Encounters):
                                                                                turn))
             if notice:
                 await step("fail-damage-notice", turn, lambda: self.emit(notice))
+        if failure.sanity:  # the SAN roll the failure calls for, settled as an event's or a clue's
+            notice = await step("fail-sanity", turn, lambda: self._lose_sanity(st.investigator, failure.sanity, turn))
+            await step("fail-sanity-notice", turn, lambda: self.emit(notice))
         mishap = await self._mishap(failure.mishap, turn, "fail-mishap") if failure.mishap.strip() else ""
         happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
                                 f"{st.investigator.name}受了伤" if failure.damage.strip() else "",
+                                f"{st.investigator.name}的理智受到冲击" if failure.sanity else "",
                                 f"惨事卡〔{mishap}〕" if mishap else "") if x]
         if not missed and not happened:
             return  # the roll's card says it: nothing was within reach and nothing else came of it
@@ -2193,6 +2197,18 @@ class Game(Encounters):
             await step(f"{key}-notice:{index}", turn, lambda notice=notice: self.emit(notice))
         return done["name"]
 
+    def _lose_sanity(self, inv: Investigator, roll: str, turn: Turn) -> dict[str, Any]:
+        """A SAN roll (`roll`: "0/1D3", what passing and what failing it costs) settled for `inv`: the
+        loss, any madness and its card, in the log and the turn. The notice for the screens. Called in
+        a resolution stage, so a turn resumed after a crash does not roll or lose it again."""
+        ok, bad = roll.split("/")
+        trial = inv.model_copy(deep=True)
+        sanity = self.rules.sanity(trial, ok, bad)
+        inv.__dict__.update(trial.__dict__)
+        turn.sanity.append((inv.name, sanity))
+        self.state.add("sanity", sanity.describe(), who=inv.name)
+        return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+
     def _madness(self, inv: Investigator, s: Sanity, turn: Turn) -> dict[str, Any]:
         """The phobia deck's card for this madness (cards.for_sanity): on the sheet, in the keeper's
         notes, shown with the SAN result. Nothing without imported decks."""
@@ -2634,15 +2650,7 @@ class Game(Encounters):
             st.add("event", ev.read_aloud.strip() or ev.title)
 
         def sanity_for(inv: Investigator) -> dict | None:
-            if not inv.can_act:
-                return None
-            ok, bad = ev.sanity.split("/")
-            trial = inv.model_copy(deep=True)
-            sanity = self.rules.sanity(trial, ok, bad)
-            inv.__dict__.update(trial.__dict__)
-            turn.sanity.append((inv.name, sanity))
-            st.add("sanity", sanity.describe(), who=inv.name)
-            return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+            return self._lose_sanity(inv, ev.sanity, turn) if inv.can_act else None
 
         def damage() -> dict | None:
             notice = self._wound_event(st.investigator.id, ev.damage or "", f"event:{ev.id}:{st.turn}", turn)
