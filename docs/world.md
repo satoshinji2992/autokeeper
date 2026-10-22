@@ -12,7 +12,7 @@
 | 本局事实 | `GameState.record`：即兴内容、变化、改写，每条带版本号 | 只能通过世界操作 |
 | 知情 | 每条事实的 `known_by`：NPC id，或 `players`（已经到了玩家面前） | 操作和事件顺带更新 |
 
-开局时模组被“播种”进记录（`knowledge.seed`）：地点、NPC、物件成为实体，真相、结论、NPC 的目标 / 知道的事 / 秘密 / 谎言、线索、地点的守秘人须知、事件说明成为事实。模组事实的 id 就是它在模组里的位置（`truth`、`npc:warden:secrets:0`、`clue:c_diary`），所以改写后可以写回本局的模组副本（`knowledge.project`），现有的 NPC 提示词、泄密检查、裁定员读到的就是新版本，不会新旧混用。导演即兴加进模组的东西，下次播种时带 `origin="improv"` 进来。
+开局时模组被“播种”进记录（`knowledge.seed`）：地点、NPC、物件成为实体，真相、结论、NPC 的目标 / 知道的事 / 秘密 / 谎言、线索、地点的守秘人须知、事件说明成为事实。模组事实的 id 就是它在模组里的位置（`truth`、`npc:warden:secrets:0`、`clue:c_diary`），所以改写后可以写回本局的模组副本（`knowledge.project`），NPC 提示词、守秘人简报与裁定员据此读取当前版本。导演即兴加进模组的东西，下次播种时带 `origin="improv"` 进来。
 
 ## 存在哪
 
