@@ -43,7 +43,6 @@ from .model import (
     SetChase,
     SetClock,
     SetCursor,
-    SetFills,
     SetMode,
     SetParticipant,
     SetPending,
@@ -55,8 +54,6 @@ from .model import (
 )
 from .plan import DeclaredAction
 
-OLD_REACTION = {"dodge": "dodge", "fight_back": "fight", "cover": "cover", "none": "none"}
-
 
 @dataclass
 class Unit:
@@ -65,7 +62,6 @@ class Unit:
     notices: list[dict] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
     rest: dict | None = None  # an `other` ruling's remainder for the turn's investigator (clues, takes, changes)
-    stop: bool = False
     fired: list[str] = field(default_factory=list)  # flags of the stakes an encounter's end fired (set after it is archived)
     extra: dict = field(default_factory=dict)  # what the runner does after the op (an end's party arrival)
 
@@ -92,7 +88,6 @@ class Work:
         self.unit = Unit()
         self.wounds = 0
         self.luck_left: dict[str, int] = {}
-        self.after: list = []  # what happens outside the world once the unit's op has landed
 
     # -- who ------------------------------------------------------------------------------------
     def investigator(self, pid: str):
@@ -230,8 +225,6 @@ def diff(old: EncounterState, new: EncounterState) -> list:
     out += [SetStake(index=i, fired=s.fired) for i, s in enumerate(new.stakes) if i < len(old.stakes) and s.fired != old.stakes[i].fired]
     if new.clock != old.clock:
         out.append(SetClock(clock=new.clock))
-    if new.fills != old.fills:
-        out.append(SetFills(fills=new.fills))
     if len(new.changes) > len(old.changes):
         out.append(AddChanges(changes=new.changes[len(old.changes):]))
     if new.ended is not None and old.ended is None:
@@ -321,7 +314,7 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
     ev = {"type": "fight_act", "round": enc.round, "attacker": a, "defender": d, "attacker_name": ctx.name(a, "players"),
           "defender_name": ctx.name(d, "players"), "attacker_side": _side(ctx, a), "defender_side": _side(ctx, d),
           "hurt_side": "", "kind": "melee", "attack": opt.name if opt else "徒手", "verb": "", "roll": None, "answer": None,
-          "reaction": OLD_REACTION.get(reaction or "none", "none"), "winner": "none", "hurt": "", "damage": 0,
+          "reaction": reaction or "none", "winner": "none", "hurt": "", "damage": 0,
           "damage_text": "", "effect": "", "extreme": False, "jammed": False, "empty": False, "notes": [], "line": "",
           "dice": None, "dice_who": ""}
     done = lambda line: _done(w, receipt, k, ev, line)  # noqa: E731
@@ -521,7 +514,6 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
         receipt.rolls.append(record("shoot", a, roll))
         if n == 0:
             ev["roll"] = check_view(roll)
-        enc.budget.shots[a] = enc.budget.shots.get(a, 0) + 1
         parts.append(f"{roll.name} {roll.target} → {roll.value} {roll.level.zh}" + (f"（{'、'.join(reasons)}）" if reasons and n == 0 else ""))
         what = firearms.malfunction(roll.value, opt.malfunction, (known.mechanism if known else "") or "")  # type: ignore[arg-type]
         if what == "jam":

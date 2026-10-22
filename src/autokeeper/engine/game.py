@@ -1413,7 +1413,7 @@ class Game(Encounters):
         # an event of this very turn began, or one that closed before the turn was cut short, does not
         # change what this turn is when it is resumed.
         kind = await step("kind", turn, lambda: self._turn_kind(action))
-        if kind["kind"] in ("encounter", "chase"):
+        if kind["kind"] == "encounter":
             await self._encounter_stages(action, ruling, turn, kind)
             return
         inv = st.investigator

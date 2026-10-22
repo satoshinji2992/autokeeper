@@ -15,9 +15,8 @@ import skills_ref
 from autokeeper import paths
 from autokeeper.module import adapt, graph, yamledit
 from autokeeper.module.compiler import compile_module
-from autokeeper.module.schema import Creature, Event, Item, Method, Module, Stake
+from autokeeper.module.schema import Creature, Event, Item, Leg, Method, Module, Obstacle, Stake
 from autokeeper.paths import EXAMPLE
-from autokeeper.rules.chase import Leg, Obstacle
 from autokeeper.rules.combat import traits
 from autokeeper.rules.weapons import attacks_per_round, parse_attack
 

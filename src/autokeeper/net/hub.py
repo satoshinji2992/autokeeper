@@ -75,6 +75,7 @@ from ..agents.card import CardError
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
+from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
@@ -82,7 +83,6 @@ from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
 from ..rules.coc import Investigator
-from ..rules.combat import DOWN
 from . import cards, media
 from .room import BLANKS
 

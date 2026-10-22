@@ -21,7 +21,6 @@ from ...rules import chase as rules
 from ...rules.bcdice import Level
 from ...rules.coc import DIFFICULTY_ZH
 from ...rules.dice_expr import DamageExpr
-from ...rules.melee import opposed_difficulty
 from .. import effects
 from . import actions, site
 from .model import ChaseState, Engagement
@@ -93,8 +92,6 @@ def goal_of(ctx: Ctx, enc: EncounterState, pid: str) -> str:
     ch = enc.chase
     if ch is None:
         return ""
-    if ch.goals.get(pid):
-        return ch.goals[pid]
     p = enc.get(pid)
     wanted = [d.to for d in (p.arrangement.actions if p is not None and p.arrangement else []) if d.to]
     wanted += [r.declared.to for r in enc.receipts if r.actor == pid and r.declared.do == "flee" and r.declared.to]
@@ -138,7 +135,7 @@ def begin(w: Work, quarry: list[str], pursuers: list[str], chase_site: ChaseSite
     staying = [q for q in quarry if q in lineup.positions]
     hunting = [h for h in pursuers if h in lineup.positions]
     # The quarry stays the quarry, whoever is already away (presence "escaped"): how it ends reads it.
-    chase = ChaseState(site=chase_site.model_copy(deep=True), quarry=list(quarry), pursuers=hunting, started_round=enc.round)
+    chase = ChaseState(site=chase_site.model_copy(deep=True), quarry=list(quarry), pursuers=hunting)
     enc.chase = chase
     origin = chase.site.origin
     for p in enc.participants:
@@ -328,10 +325,11 @@ def _cross(w: Work, rr: ActionReceipt, a: str, ob: ObstacleState, where: str, co
     if roll.passed:
         lines.append(f"{{{a}}}{method.label}，过了{ob.what}（{said}）")
         return True
-    loss = w.game.rules.dice.total(RULES.hazard_loss)
+    crossed = rules.hazard(False, w.game.rules.dice.total(RULES.hazard_loss), harm=bool(ob.harm))  # still past it (p. 114)
+    loss = crossed.lost
     pay(w, a, loss)
     hurt = ""
-    if ob.harm:
+    if crossed.harmed:
         try:
             expr = DamageExpr.parse(ob.harm)
         except ValueError as exc:
@@ -383,7 +381,7 @@ def hide(w: Work, rr: ActionReceipt) -> None:
     spot = [value(w, h, "侦查") or w.ctx.view(h).skill("侦查") for h in hunters]
     lead = min((site.distance(ch.site, at(enc, h), at(enc, a)) or 0 for h in hunters), default=0)
     bonus = rules.hide_bonus(lead)
-    roll = w.check(a, "潜行", value(w, a, "潜行"), opposed_difficulty(max(spot, default=0)), bonus)
+    roll = w.check(a, "潜行", value(w, a, "潜行"), rules.hide_difficulty(spot), bonus)
     rr.rolls.append(record("hide", a, roll))
     w.mark(a, roll)
     if w.investigator(a) is not None:

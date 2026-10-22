@@ -26,10 +26,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from ...module.schema import Stake
-from ..effects import Effect
 from .plan import (
     DeclaredAction,
-    Fill,
     Mode,
     NpcArrangement,
     ObstacleState,
@@ -58,7 +56,6 @@ class Participant(BaseModel):
     kind: Literal["investigator", "npc", "creature"]
     side: Side
     controller: Literal["human", "ai", "keeper"]
-    joined_round: int = 0
     presence: Presence = "in"
     node: str = ""  # the site node they are at (a chase); in a fight, the node the fight is at
     speed: int | None = None  # this encounter's MOV after the speed roll; None until rolled; kept across mode switches
@@ -76,12 +73,9 @@ class RoundBudget(BaseModel):
     """What this round has used up, by participant id."""
 
     responses: dict[str, int] = Field(default_factory=dict)  # melee responses made (outnumbered past the allowance)
-    acted: list[str] = Field(default_factory=list)
     lost_next: dict[str, str] = Field(default_factory=dict)  # a forfeited next action and why: 扑向掩体, 爬起来
     movement: dict[str, int] = Field(default_factory=dict)  # a chase's movement actions left
     owed: dict[str, int] = Field(default_factory=dict)  # a chase's delay carried into the next round
-    attacks_made: dict[str, int] = Field(default_factory=dict)
-    shots: dict[str, int] = Field(default_factory=dict)
 
 
 # -- a fight's ground ---------------------------------------------------------------------------
@@ -142,9 +136,7 @@ class ChaseState(BaseModel):
     site: ChaseSite
     quarry: list[str]
     pursuers: list[str]
-    goals: dict[str, str] = Field(default_factory=dict)  # quarry -> the node they make for (the keeper's)
     lost_sight: list[str] = Field(default_factory=list)  # "pursuer|quarry"
-    started_round: int
 
 
 # -- what was declared and what came of it -------------------------------------------------------
@@ -188,7 +180,6 @@ class ActionReceipt(BaseModel):
     phase: Literal["declared", "awaiting_reaction", "committed", "lapsed", "cancelled"] = "declared"
     reactions: list[ReactionReceipt] = Field(default_factory=list)
     rolls: list[RollRecord] = Field(default_factory=list)
-    effects: list[Effect] = Field(default_factory=list)
     lapsed: str = ""  # why it could not land (the missing condition)
     lines: list[str] = Field(default_factory=list)  # keeper-form lines with {id} refs, rendered per audience
     settled: int = 0  # attacks of `declared` settled so far (a multi-attack creature makes them all on its slot)
@@ -235,7 +226,7 @@ class Change(BaseModel):
     """A material change: one is a reason to arrange the keeper's people again."""
 
     round: int
-    kind: Literal["down", "joined", "fled", "surrendered", "disarmed", "switched", "reached", "freed"]
+    kind: Literal["down", "joined", "fled", "surrendered", "disarmed", "switched", "freed"]
     who: str
 
 
@@ -267,7 +258,6 @@ class EncounterState(BaseModel):
     history: list[str] = Field(default_factory=list)  # older rounds, compact
     pending: PendingChoice | None = None
     stakes: list[StakeState] = Field(default_factory=list)
-    fills: list[Fill] = Field(default_factory=list)
     clock: EncounterClock = Field(default_factory=EncounterClock)
     changes: list[Change] = Field(default_factory=list)
     switches: list[str] = Field(default_factory=list)  # mode switches, "r3:chase"
@@ -375,11 +365,6 @@ class AddStakes(BaseModel):
     stakes: list[StakeState]
 
 
-class SetFills(BaseModel):
-    kind: Literal["fills"] = "fills"
-    fills: list[Fill]
-
-
 class AddChanges(BaseModel):
     """Material changes noted; one already noted is not noted twice."""
 
@@ -416,7 +401,7 @@ class Archive(BaseModel):
 
 EncounterChange = Annotated[
     Begin | SetParticipant | SetReceipt | SetRound | SetCursor | SetBudget | SetScene | SetChase | SetPending
-    | SetMode | SetPhase | SetStake | AddStakes | SetFills | AddChanges | Compact | SetClock | Close | Archive,
+    | SetMode | SetPhase | SetStake | AddStakes | AddChanges | Compact | SetClock | Close | Archive,
     Field(discriminator="kind"),
 ]
 
@@ -471,8 +456,6 @@ def _apply(enc: EncounterState, c) -> None:
             for s in c.stakes:
                 if not any(x.when == s.when and x.flags == s.flags for x in enc.stakes):
                     enc.stakes.append(s.model_copy(deep=True))
-        case SetFills():
-            enc.fills = [f.model_copy() for f in c.fills]
         case AddChanges():
             enc.changes += [x for x in c.changes if x not in enc.changes]
         case Compact():

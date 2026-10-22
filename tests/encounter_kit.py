@@ -88,7 +88,7 @@ def fight_game(module, fake, *, location: str = "tower", **modes):
 
 
 async def begin(game, foes: list[str], *, npcs=(), surprise: str = "", pace: int | None = 6, stakes=()) -> None:
-    """A fight begun as an event or the MCP keeper begins one: nobody has acted yet."""
+    """A fight begun as an event begins one: nobody has acted yet."""
     from autokeeper.engine.game import Turn
 
     start = EncounterStart(mode="fight", foes=foes, npcs=list(npcs), surprise=surprise, pace=pace, stakes=list(stakes), reason="动起手来")  # type: ignore[arg-type]

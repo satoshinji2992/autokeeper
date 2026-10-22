@@ -108,7 +108,7 @@ async def test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all(
     out, asked = await play(app, "攻击 食尸鬼（徒手，1D3）")
     acts = [e for e in out if e["type"] == "fight_act"]
     assert not asked and [a["attacker"] for a in acts] == ["f1", "f1", "f1", "zhouheng"]
-    assert acts[-1]["reaction"] == "fight"  # the keeper's people fight back unless arranged otherwise (p. 87)
+    assert acts[-1]["reaction"] == "fight_back"  # the keeper's people fight back unless arranged otherwise (p. 87)
     assert not fake.values
 
 
@@ -301,7 +301,7 @@ async def test_an_answer_still_wrong_after_its_resend_lands_nothing_in_its_place
     fake.queue(30, 20).queue_totals(1)  # 周衡's punch (regular), the warden fights back by its sheet (hard): 1 to 周衡
     out, _asked = await play(app, HIT)
     acts = [e for e in out if e["type"] == "fight_act"]
-    assert [a["attacker"] for a in acts] == ["zhouheng"] and acts[0]["reaction"] == "fight"  # no blow of its own
+    assert [a["attacker"] for a in acts] == ["zhouheng"] and acts[0]["reaction"] == "fight_back"  # no blow of its own
     report = cast.reports[-1]
     assert "【未落实】" in report and "nobody 不在这场遭遇里" in report
     assert any(kind == "encounter-plan" and "nobody" in str(data) for kind, data in Journal.rows)

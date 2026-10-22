@@ -16,8 +16,8 @@ encounter engine (engine/encounter/chase.py) throws the dice and keeps the posit
   failure is harm the keeper sets from Table III and 1D3 action points lost, and the runner still
   reaches the next location. Points owed beyond this round come off the next (the farmer, p. 114).
 - Barriers (pp. 115–116) block until passed or destroyed: a failure usually just means no progress.
-  Damage breaks them, no attack roll needed, against their hit points (`BARRIER_HP`); the wreck may
-  be a hazard for those after.
+  Damage breaks them, no attack roll needed, against their hit points (the module's, from the book's
+  table on p. 116); the wreck may be a hazard for those after.
 - Conflict (p. 116): an attack only on someone at the same location (a firearm excepted), one action
   point, no more attacks than one makes in a round, settled as a combat round; anyone attacked may
   always dodge or fight back, whatever points it has left. A manoeuvre's success makes the target
@@ -34,10 +34,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-# The way a chase runs is module format (module/schema.py); still importable from here.
-from ..module.schema import Leg as Leg
-from ..module.schema import Method as Method
-from ..module.schema import Obstacle as Obstacle
 from .bcdice import Level
 from .melee import opposed_difficulty
 
@@ -98,40 +94,12 @@ class ChaseRules:
 
 RULES = ChaseRules()
 
-# Barriers' hit points (p. 116).
-BARRIER_HP = {
-    "室内门": 5,
-    "薄围栏": 5,
-    "后门": 10,
-    "外门": 15,
-    "砖墙": 25,
-    "大树": 50,
-    "混凝土桥墩": 100,
-}
-
-# Hazards made on purpose (p. 121): what it costs (points; "round" a whole round) and the roll, if any.
-CREATED = {
-    "bolt": ("闩上门或用钥匙锁门", 1, ""),
-    "lock": ("用锁匠技能锁门", "round", "锁匠"),
-    "wardrobe": ("推重物挡门", 1, "力量"),
-    "stall": ("掀翻摊子", 1, ""),
-    "panic": ("开枪惊散人群", 1, "幸运"),
-    "thief": ("喊路人帮忙抓人", 1, "话术/恐吓"),
-}
-
-
 # -- setting up -----------------------------------------------------------------------------------
 def speed_after(mov: int, level: Level, rules: ChaseRules = RULES) -> int:
     """MOV for this chase after the speed roll (CON, or Drive Auto in a vehicle) at `level`:
     +1 at an extreme success, −1 at a failure (p. 112)."""
     delta = rules.speed_extreme if level >= Level.EXTREME else rules.speed_fail if not level.ok else 0
     return max(rules.speed_floor, mov + delta)
-
-
-def escapes_at_once(quarry: int, pursuers: list[int]) -> bool:
-    """A quarry of speed `quarry` faster than every pursuer gets away before the chase begins
-    (pp. 112, 124). With no pursuer at all it is away too."""
-    return not pursuers or quarry > max(pursuers)
 
 
 @dataclass(frozen=True)
@@ -242,27 +210,6 @@ def barrier_hit(hp: int, damage: int) -> tuple[int, bool]:
     return left, left == 0
 
 
-# -- conflict -------------------------------------------------------------------------------------
-def attack_problems(*, same_location: bool, firearm: bool, attacks_made: int, attacks_per_round: int,
-                    points: int, rules: ChaseRules = RULES) -> list[str]:
-    """Why an attack in a chase cannot be made now, in words; [] when it can (p. 116): only at the
-    same location unless with a firearm, one action point, no more than one's attacks in a round."""
-    out = []
-    if not same_location and not firearm:
-        out.append("不在同一个地点，够不着")
-    if attacks_made >= max(1, attacks_per_round):
-        out.append(f"这一轮已经攻击了 {attacks_made} 次")
-    if points < rules.attack_cost:
-        out.append("这一轮的行动点用完了")
-    return out
-
-
-def shot_cost(moving: bool, rules: ChaseRules = RULES) -> tuple[int, int]:
-    """(action points, penalty dice) of shooting in a chase: stopping to shoot costs a point and no
-    move; shooting on the move costs none and takes a penalty die (p. 120)."""
-    return (0, rules.shoot_moving_penalty) if moving else (rules.shoot_stopped_cost, 0)
-
-
 # -- hiding and losing track ------------------------------------------------------------------------
 def hide_difficulty(spot: list[int]) -> Level:
     """The difficulty of hiding from pursuers with Spot Hidden `spot`: as an opposed roll against the
@@ -276,11 +223,6 @@ def hide_bonus(lead: int, rules: ChaseRules = RULES) -> int:
     if lead < rules.hide_far:
         return 0
     return 1 if lead == rules.hide_far else 2
-
-
-def hidden(level: Level, difficulty: Level) -> bool:
-    """A hiding quarry's Stealth at `level` against `difficulty`: it got away when it passed (p. 119)."""
-    return level >= difficulty
 
 
 def out_of_sight(lead: int, *, blocked: bool = False, rules: ChaseRules = RULES) -> bool:
@@ -301,15 +243,6 @@ def monster_skill(dex: int, aptitude: Aptitude = "plain") -> int:
     when it has an aptitude for it, half when it is ordinary at it, a fifth when it is poor (p. 121).
     Spot Hidden goes the same way from INT."""
     return {"good": dex, "plain": dex // 2, "poor": dex // 5}[aptitude]
-
-
-def joins(side: Literal["quarry", "pursuer"], speed: int, quarry: list[int], pursuers: list[int]) -> bool:
-    """Whether someone joining mid-chase at `speed` (after its own speed roll) is in it: a pursuer
-    slower than the slowest quarry can be ignored (p. 120). A quarry always is; when it is slower than
-    every runner so far, everyone's action points are worked out again from it."""
-    if side == "pursuer":
-        return not quarry or speed >= min(quarry)
-    return True
 
 
 def other_movement(mov: int, rules: ChaseRules = RULES) -> int:

@@ -238,8 +238,8 @@ class Encounters:
 
     # -- the turn ---------------------------------------------------------------------------------
     def _turn_kind(self, action: Action) -> dict:
-        """What this turn is, decided once (I7): a round of the encounter going on, the start of one, a
-        round of the old chase, or an ordinary action."""
+        """What this turn is, decided once (I7): a round of the encounter going on, the start of one, or
+        an ordinary action."""
         st = self.state
         declared = action.declared or {}
         if (enc := self.encounter()) is not None:
@@ -564,8 +564,7 @@ class Encounters:
             for x in fresh:
                 p = profiles.profile(self.world, x)
                 w.enc.participants.append(Participant(id=x, kind="creature" if p and p.kind == "creature" else "npc", side="foe",
-                                                      controller="keeper", joined_round=w.enc.round,
-                                                      surprised=ev.surprise == "foe", node=w.enc.place))
+                                                      controller="keeper", surprised=ev.surprise == "foe", node=w.enc.place))
                 w.change("joined", x)
                 if self.world.place(x) not in ("", w.enc.place):
                     w.unit.effects.append(effects.Relocate(who=x, place=w.enc.place))
@@ -621,7 +620,7 @@ class Encounters:
             for x in landed.join:
                 prof = profiles.profile(self.world, x)
                 e.participants.append(Participant(id=x, kind="creature" if prof and prof.kind == "creature" else "npc",
-                                                  side="party", controller="keeper", joined_round=upcoming, node=e.place))
+                                                  side="party", controller="keeper", node=e.place))
                 w.change("joined", x)
             for a in landed.npcs:
                 p = e.get(a.who)
@@ -644,7 +643,6 @@ class Encounters:
                                                            spare=f.value))
                 elif profiles.profile(self.world, f.who) is not None:
                     w.unit.effects.append(effects.Fills(who=f.who, values={f.key: f.value}))
-            e.fills += list(landed.fills)
             for s in landed.stakes:
                 if not any(x.when == s.when and x.flags == s.flags for x in e.stakes):
                     e.stakes.append(StakeState(**s.model_dump(), source="keeper"))
@@ -751,8 +749,6 @@ class Encounters:
                                                         effects=w.unit.effects, changes=changes, actor=ENGINE))
                 if not result.ok:
                     raise RuntimeError("遭遇结算没有落地：" + "；".join(result.problems))
-            for fn_after in w.after:
-                fn_after()
             after = Ctx.of(self, self.state.encounter or w.enc)
             kn, pn = views.names(after, "keeper"), views.names(after, "players")
             turn.fight += [telling.render(x, kn) for x in w.unit.lines]

@@ -208,9 +208,9 @@ _SCHEMA = {"type": "string", "pattern": PATTERN}
 # reason) and kept in its canonical spelling. "" and "0" are no damage.
 DiceText = Annotated[str, AfterValidator(canonical), WithJsonSchema(_SCHEMA)]
 
-# One kept in a module or a save. A model writing it meets the same pattern; but a string that was
-# never an expression (an imported module's "1D3点", an old save's chase) still loads, so the game
-# never locks on it: it is refused where it is rolled (DamageExpr.parse), with its reason.
+# One kept in a module. A model writing it meets the same pattern; but a string that was never an
+# expression (an imported module's "1D3点") still loads, so the game never locks on it: it is
+# refused where it is rolled (DamageExpr.parse), with its reason.
 StoredDiceText = Annotated[str, AfterValidator(_kept), WithJsonSchema(_SCHEMA)]
 
 

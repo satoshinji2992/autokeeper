@@ -43,7 +43,6 @@ from .bcdice import Level
 Means = Literal["blow", "unarmed", "firearm", "fall", "fire", "asphyxia", "poison", "other"]
 
 MAJOR, UNCONSCIOUS, DYING, DEAD = "重伤", "昏迷", "濒死", "死亡"
-DOWN = (UNCONSCIOUS, DYING, DEAD)
 # Armour stops a blow, a bullet, the edge of an obstacle; not poison, drowning or suffocation, nor
 # magic (p. 91). A fall or a fire is the keeper's harm from Table III and is not reduced by it here.
 ARMOURED: tuple[Means, ...] = ("blow", "unarmed", "firearm")

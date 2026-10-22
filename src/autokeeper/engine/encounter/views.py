@@ -20,7 +20,7 @@ from .actions import ATTACKING, VERBS, Ctx
 if TYPE_CHECKING:
     from .model import EncounterState
 
-STANCES = {"dodge": "dodge", "fight_back": "fight", "cover": "cover", "none": "dodge"}  # the screens' old words
+DOWN = ("死亡", "濒死", "昏迷", "倒下")  # the status words of someone who can do nothing now (status)
 GONE = {"fled": "逃走", "escaped": "逃走", "left": "逃走", "surrendered": "投降", "captured": "被抓住"}
 
 
@@ -59,10 +59,6 @@ def status(ctx: Ctx, pid: str) -> str:
     if v is not None and v.body().major:
         return "重伤"
     return ""
-
-
-def down(ctx: Ctx, pid: str) -> bool:
-    return status(ctx, pid) in ("死亡", "濒死", "昏迷", "倒下")
 
 
 def masks(enc: EncounterState | None) -> dict[str, str]:
@@ -133,7 +129,7 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
         out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
                     "status": status(ctx, p.id), "wound": wound_word(b), "hp": b.hp if party else None,
                     "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
-                    "weapon": weapon.name if weapon is not None else "徒手", "stance": STANCES.get(p.react or "dodge", "dodge"),
+                    "weapon": weapon.name if weapon is not None else "徒手", "stance": p.react or "dodge",
                     "prone": p.id in ctx.enc.scene.prone, "held": bool(ctx.held_by(p.id)), "dex": v.char("敏捷")})
     m = masks(ctx.enc)
     for f in out:

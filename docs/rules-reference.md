@@ -57,18 +57,18 @@
 
 | 条目 | 页 | 原文要点 | 当前 | 状态 | 测试 |
 |---|---|---|---|---|---|
-| 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
-| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
+| 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`（`engine/encounter/resolve.round_order` 调用）：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_dex_tie_goes_to_the_better_fighter` |
+| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`engine/encounter/resolve.round_order`：只给这一轮宣告开枪、有子弹、没卡壳的枪 +50，打拳不 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules::test_a_dex_tie_goes_to_the_better_fighter` |
 | 推迟行动 | 86、113 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 行动写 `after`：轮到时挪到那人之后，只挪一次（两人互等时都会行动，与原文“这一轮可能都不行动”不同） | 简化（互等） | test_encounter_fight::test_a_delayed_action_waits_for_the_one_named_and_then_goes |
 | 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 引擎（`engine/encounter`）每人每轮在自己的敏捷位行动一次；多次攻击的怪物在自己的位上把每次攻击都打完（`actions.picks`：安排写得少的，余下几次打同一个目标） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
-| 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
+| 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
 | 闪避 | 87 | 平手闪避者胜；都失败无人受伤 | 同上 | 符合 | 同上 |
-| 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害。旧引擎 `combat.melee` 已同步改正 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…`、`test_combat_rules::test_fighting_back_never…` |
+| 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…` |
 | 不可孤注一掷 | 87 | 战斗检定不能孤注一掷 | 战斗中不提供 | 符合 | — |
 | NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`；引擎里守秘人的人按安排的 `react` 应对，没安排或不合用时反击（开枪时不应对，不替他扑向掩体） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
 | 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 只能用手里或身上真有的武器（攻击 id）；临时抄起的东西先经 `Bring` 登记进手里（`DeclaredAction.takes`），再按最像的武器结算；武器表里没有的东西交裁定员按 `other` 裁定伤害 | 符合 | test_encounter_fight::test_a_weapon_picked_up_is_registered_before_it_is_used |
 | 武器技能基础值 | 87 | 剑 20% 等，见武器表 | `rules/catalog.SKILL_BASE`：斧 15、剑 20、连枷 10、矛 20、鞭 5、绞索 15、链锯 10、冲锋枪 15、弓 15、重武器 10、机枪 10、火焰喷射器 10；`格斗(刀剑)` 是 `格斗(剑)` 的别名 | 符合 | `test_combat_rules::test_weapon_skills_start_at_the_books_base…` |
-| 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible`；旧引擎 `combat.melee` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
+| 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
 | 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械让武器掉在原地、夺取落到攻击者手里（`effects.Drop`）；天生的爪牙夺不走；推倒：倒地并失去下一次行动；制住：被制住的人在自己的位上只能用力量挣脱，盟友打他得奖励骰（`melee.disadvantage_bonus`） | 简化（夺物以外的持续劣势只做了被制住） | test_encounter_fight::test_disarming_drops_the_real_weapon…、test_world_life::test_claws_cannot_be_disarmed |
 | 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | 规则层同前；引擎：被偷袭一方第一轮不能应对，近战除大失败外命中，远程照常掷；`EncounterStart.surprise_contest` 由引擎掷对抗 | 符合 | test_fight::test_an_event_that_scripts_an_attack… |
 | 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`；引擎按本轮已应对次数（多次攻击的按其攻击次数）给后来的近战攻击一颗奖励骰，远程不给 | 符合 | test_encounter_fight::test_outnumbered_a_defender_who_has_answered… |

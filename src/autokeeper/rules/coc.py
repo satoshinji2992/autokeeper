@@ -66,9 +66,8 @@ class Investigator(BaseModel):
 
     @model_serializer(mode="wrap")
     def _without_empty_injury(self, handler: SerializerFunctionWrapHandler) -> dict:
-        """A sheet nobody has hurt dumps as it did before 0.0.4: a module's pregens carry no field the
-        module format does not have (module/importer._unknown_fields), and an old save's world domain
-        (world/store.World.domain) hashes the same, so its ops can still be undone."""
+        """A sheet nobody has hurt dumps without it: a module's pregens carry no field the module
+        format does not have (module/importer._unknown_fields)."""
         out = handler(self)
         if isinstance(out, dict) and out.get("injury") in ({}, InjuryState().model_dump()):
             out.pop("injury")
