@@ -183,11 +183,14 @@ async def test_settings_in_a_game_hold_models_preferences_and_the_developer_mode
         await pilot.pause()
         shown = [str(b.label) for b in settings.query(".settings-page").results(Button) if b.display]
         assert shown == ["换模型 >", "叙事偏好 >", "开启开发者模式"]  # 规则插件 hidden while the mode is off
+        switched: list[dict | None] = []
+        monkeypatch.setattr(screen, "_switch_engine", switched.append)  # F9's way: mid-turn it waits for the turn's end
         settings.query_one("#settings-models", Button).press()
         await pilot.pause()
         assert isinstance(app.screen, EngineModal)  # what F9 opens
-        await pilot.press("escape")
+        app.screen.dismiss({"preset": "canned"})
         await pilot.pause()
+        assert switched == [{"preset": "canned"}]
         assert app.screen is settings
         settings.query_one("#settings-prefs", Button).press()
         await pilot.pause()
