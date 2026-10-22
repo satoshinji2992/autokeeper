@@ -34,6 +34,8 @@ async def test_the_ghoul_sheet_is_douglas_and_its_sight_is_the_events_to_pay(mod
     fighters = views.fight_view(game)["fighters"]
     assert fighters[1]["name"] == "犬脸的佝偻身影"  # not met yet: what they see of him
     assert fighters[1]["portrait"] == "creature-douglas_ghoul" and fighters[1]["id"] != "douglas"  # the ghoul's face, no id of his
+    del module.pictures["creature-douglas_ghoul"]  # not drawn yet: no face at all, never Douglas's own
+    assert module.npc("douglas").portrait and views.fight_view(game)["fighters"][1]["portrait"] == ""
     text = views.keeper_text(game)
     assert "道格拉斯·金博尔（玩家所见：犬脸的佝偻身影）" in text and "枪伤减半" in text and "模组写明：调查员逃跑时它不追" in text
 

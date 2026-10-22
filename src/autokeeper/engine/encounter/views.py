@@ -98,9 +98,10 @@ def portrait(game: Any, pid: str) -> str:
     inv = next((i for i in game.state.investigators if i.id == pid), None)
     if inv is not None:
         return inv.portrait
-    form = profiles.form_of(game.world, pid)  # an NPC fighting as its creature sheet: that face (犬脸的佝偻身影)
-    if form is not None and f"creature-{form.id}" in game.m.pictures:
-        return f"creature-{form.id}"
+    form = profiles.form_of(game.world, pid)  # an NPC fighting as its creature sheet: that face (犬脸的佝偻身影),
+    if form is not None:  # never the NPC's own, which would say who it is; none until the creature's is drawn
+        key = f"creature-{form.id}"
+        return key if key in game.m.pictures else ""
     npc = next((n for n in game.m.npcs if n.id == pid), None)
     if npc is not None:
         return npc.portrait or ""
