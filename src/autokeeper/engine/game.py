@@ -1501,6 +1501,7 @@ class Game(Encounters):
                                      "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
                                      "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
                                      "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
+                                     "tells": self._asks(action, turn),  # who tells what the push wins (_spoken)
                                      "action": action.summary}
                         st.pending_push = turn.push
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
@@ -1520,7 +1521,7 @@ class Game(Encounters):
             gained = self._valid_clues(ruling.auto_clues, action)
             if passed:
                 gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
-            spoken = self._spoken(gained, action)  # the one talked to tells these, in their own time (talk)
+            spoken = self._spoken(gained, self._asks(action, turn))  # the one talked to tells these, in their own time (talk)
             gained = [c for c in gained if c not in spoken]
             return {"known": list(st.flags), "gained": gained[: MAX_FOUND if action.target else 1], "spoken": spoken}
 
@@ -1744,7 +1745,7 @@ class Game(Encounters):
         await step("check-notice", turn, lambda: self.emit(checked["notice"]))
         if passed:
             await step("flags", turn, lambda: self._flags(pending.get("flags", []), turn))
-            spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], turn.action, npc))
+            spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], pending.get("tells", "")))
             await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
         else:  # what was said before the choice now happens (Failure, Ruling.on_push_fail)
             await self._failed(Failure.model_validate(pending.get("on_push_fail") or {}), pending["clues"], turn, None, pushed=True)
@@ -1803,20 +1804,14 @@ class Game(Encounters):
             await self._people()
             self._keep(turn)
             return
-        speaking = (action and action.npc and (action.kind in ("talk", "perform")
-                    or (action.kind == "daily" and (action.speech or action.casual))))
-        if action and action.destination and not action.speech and action.npc in action.companions:
-            speaking = False  # the invitation was already resolved before departure
-        if action and action.approach == "心理学" and not action.speech:
-            speaking = False  # watching someone's demeanour does not start a conversation
-        if speaking:
-            key = f"talk:{action.npc}"
-            if key not in turn.replies and any(nid == action.npc for nid, _ in turn.npc_lines):
+        if addressed := self._addressed(action):
+            key = f"talk:{addressed}"
+            if key not in turn.replies and any(nid == addressed for nid, _ in turn.npc_lines):
                 pass  # answered already this turn (stepping in, before the journey): never asked the same thing twice
-            elif key not in turn.replies and not any(n.id == action.npc for n in m.npcs_at(st.location)):
-                turn.notes.append(f"{action.npc} 不在这里")
+            elif key not in turn.replies and not any(n.id == addressed for n in m.npcs_at(st.location)):
+                turn.notes.append(f"{addressed} 不在这里")
             else:
-                npc = m.npc(action.npc)
+                npc = m.npc(addressed)
                 await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id)),
                                   self._keep, record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…")
         await self._join_in(turn)
@@ -1833,6 +1828,22 @@ class Game(Encounters):
         await self._world(turn)
         await self._people()
         self._keep(turn)
+
+    @staticmethod
+    def _addressed(action: Action | None) -> str:
+        """The one talk() asks this turn: the NPC an action speaks to (a talk, a performance, a daily
+        word with them). Nobody when it only watches them (心理学 without a word), only invites them
+        along (settled before the journey) or is a daily action that says nothing: then what the
+        turn finds about them is found, not told (_spoken)."""
+        if action is None or not action.npc:
+            return ""
+        if not (action.kind in ("talk", "perform") or (action.kind == "daily" and (action.speech or action.casual))):
+            return ""
+        if action.destination and not action.speech and action.npc in action.companions:
+            return ""  # the invitation was already resolved before departure
+        if action.approach == "心理学" and not action.speech:
+            return ""  # watching someone's demeanour does not start a conversation
+        return action.npc
 
     def _keep(self, turn: Turn) -> None:
         """The turn as it stands, saved where its caller keeps it (graph.build's keep)."""
@@ -2296,20 +2307,40 @@ class Game(Encounters):
 
         await step(f"arrive:{loc_id}", turn, arrive)
 
-    def _spoken(self, ids: list[str], action: Action | None, npc: str = "") -> list[str]:
-        """Of the clues a ruling gives, those the person being talked to knows: not handed over
-        as a card the moment the subject comes up, but left to them to tell, a piece at a time in
-        their own words (Cast.npc, Dialogue.told); the card comes when they have said it (_reply).
-        The user, 2026-10-21: the gossip came as a card while the cook was still asking who died."""
+    def _spoken(self, ids: list[str], npc: str) -> list[str]:
+        """Of the clues a ruling gives, those the one talk() asks this turn (`npc`, _asks) knows: not
+        handed over as a card the moment the subject comes up, but left to them to tell, a piece at a
+        time in their own words (Cast.npc, Dialogue.told); the card comes when they have said it
+        (_reply). The user, 2026-10-21: the gossip came as a card while the cook was still asking who
+        died. Nobody asked, nothing is held back: a passed roll on someone talk() does not ask gives
+        its clue as found (the review of 2026-10-22: 有些人油盐不进's c_fitz_talk, a 心理学 roll that
+        passed, came to nothing). Nor what their manner gives away (a 心理学 gate): the investigator
+        sees it, nobody tells it, a paper is handed over."""
         st, m = self.state, self.m
-        npc = npc or (action.npc if action and action.kind in ("talk", "daily", "perform") else "")
-        if not npc or not any(n.id == npc for n in m.npcs_at(st.location)):
+        if not npc:
             return []
         sheet = m.npc(npc)
-        spoken = [c for c in ids if (m.clue(c).npc == npc or c in sheet.clues) and not m.clue(c).handout]  # a paper is handed over
+
+        def told(cid: str) -> bool:
+            clue = m.clue(cid)
+            gate = sheet.gates.get(cid) or clue.check
+            observed = gate is not None and canonical(gate.skill) == "心理学"
+            return (clue.npc == npc or cid in sheet.clues) and not clue.handout and not observed
+
+        spoken = [c for c in ids if told(c)]
         unlocked = st.npc(npc).unlocked
         unlocked += [c for c in spoken if c not in unlocked]  # theirs to tell from now on
         return spoken
+
+    def _asks(self, action: Action | None, turn: Turn) -> str:
+        """Whom talk() asks this turn, as the turn stands: the one addressed (_addressed), here, and
+        not already answered this turn (stepping in, before the journey); "" for nobody."""
+        npc = self._addressed(action)
+        if not npc or not any(n.id == npc for n in self.m.npcs_at(self.state.location)):
+            return ""
+        if f"talk:{npc}" not in turn.replies and any(nid == npc for nid, _ in turn.npc_lines):
+            return ""
+        return npc
 
     def _told_clues(self, npc_id: str, ids: list[str]) -> list[str]:
         """Of the clues a reply told (Dialogue.told), those for the notebook: ones it may tell (unlocked,
