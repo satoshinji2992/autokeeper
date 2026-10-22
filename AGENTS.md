@@ -38,6 +38,10 @@ Use pytest and pytest-asyncio (automatic async mode). Name files `test_<area>.py
 
 Use focused commits with concise Chinese messages, optionally prefixed by an area such as `地图：`. PRs must describe behavior changes, linked issues, and validation. Include screenshots for UI/artwork changes. Document changes to commands, configuration, and module formats.
 
+## Rapid Iteration
+
+Backward compatibility with older saves, configuration, network protocols, and internal interfaces is not required at this stage. Change formats directly and remove superseded adapters rather than maintaining parallel implementations. Verify current-format save/load, interrupted-action recovery, reconnection, and multiplayer consistency.
+
 ## Configuration & Local Data
 
 Keep API keys in environment variables or ignored `.env` files. User configuration lives in `~/.config/autokeeper/config.toml`. Keep game data, imported copyrighted material, and generated module skills in their ignored locations: `data/` (layout in `paths.py`), `modules/local/`, `modules/inbox/`, every module's `source/`, `dev/output/`, and `skills/module-*`.
