@@ -2,7 +2,7 @@
 
 The game screen is the ordinary one; what changes is where things come from. Events,
 state and whose turn it is arrive from the Hub; the input box sends the action when it
-is your turn, and anything that starts with a full-width bracket is table talk.
+is your turn, words to the party as speech, and out-of-character chat (engine/chat.py) to everyone.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, Static
 
 from ... import config
-from ...engine import idea
+from ...engine import chat, idea
 from ...engine.game import RETELL
 from ...engine.state import GameState, LogEntry
 from ...module.schema import Module, PreludeFrame
@@ -39,7 +39,6 @@ from ..widgets.panels import SceneArt
 from .game import GameScreen
 from .prelude import PreludeScreen
 
-TALK = ("（", "(")  # table talk, heard by everyone, never an action
 IDEAS_WAIT = 60.0  # seconds F5 waits for the host's ideas
 
 
@@ -229,7 +228,7 @@ class NetGameScreen(GameScreen):
         inp.placeholder = ("这一轮做什么" if fresh else
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
-                           "观战模式下可使用全角括号发送场外消息。")
+                           "观战模式下可用 // 开头发送场外消息")
 
     @work(group="offer")
     async def _offer(self, offer: dict[str, Any]) -> None:
@@ -412,7 +411,10 @@ class NetGameScreen(GameScreen):
 
     def send_line(self, text: str) -> None:
         word = text.split()[0] if text.split() else ""
-        if word == "/undo" and self.seat and not self.state.ending:
+        if (aside := chat.ooc(text)) is not None:  # out of character: to everyone, spectators too, never an action
+            if aside:
+                self.run_worker(partial(self.link.send, {"t": "say", "text": aside}))
+        elif word == "/undo" and self.seat and not self.state.ending:
             if self.pooled or self.held:  # the Hub takes back your latest: the next round's first
                 self.run_worker(partial(self.link.send, {"t": "undo"}))
             else:
@@ -426,12 +428,12 @@ class NetGameScreen(GameScreen):
                 self.app.notify("观战模式下无可操作的调查员。")
         elif text.startswith("/"):
             self._slash(text)
-        elif text.startswith(TALK):
-            self.run_worker(partial(self.link.send, {"t": "say", "text": text}))
         elif not self.seat:
-            self.app.notify("观战模式下可使用全角括号发送场外消息。")
+            self.app.notify("观战模式下可用 // 开头发送场外消息。")
         elif self.state.ending and not commands.instant(text):  # after the end: growth rolls (.en), the sheet
             self.app.notify("本局已结束。F10 查看复盘，.en 进行成长检定。")
+        elif chat.said(text, [i.name for i in self.state.investigators if i.id != self.seat]):  # to the party: no slot, no keeper
+            self.run_worker(partial(self.link.send, {"t": "speak", "text": text}))
         elif self.state.ending or commands.instant(text):  # .r, .st: not an action; while the keeper tells, right after
             if not self.pool_open and not self.state.ending:
                 self.app.notify("本轮叙述结束后可掷骰。", timeout=3)

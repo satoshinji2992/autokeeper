@@ -20,7 +20,7 @@ from .encounter.model import EncounterState, EncounterSummary
 # write it back without them. Old saves are not migrated; their files are left as they are.
 SAVE_FORMAT = 1
 
-LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
+LogKind = Literal["opening", "player", "speech", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
 
 class LogEntry(BaseModel):
