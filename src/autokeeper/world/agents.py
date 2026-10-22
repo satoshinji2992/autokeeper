@@ -55,7 +55,7 @@ NpcOp = Annotated[
 # in a reply to the investigators, taking out an everyday thing it has on it (agents/cast.Dialogue.items).
 ReplyOp = Annotated[
     Move | Follow | Relate | Transfer | Bring | Equip | Learn | MakePromise | Fulfil | Break | Occur | Remember | Condition | AdvancePlan
-    | SetPlan | Schedule,
+    | SetPlan | Schedule | Enlist,
     Field(discriminator="kind"),
 ]
 
@@ -419,6 +419,8 @@ def vet(w: World, npc: str, op: Any) -> list[str]:
         return [] if _beside(w, me, op.entity) else [f"{op.entity} 不在{name}身边"]
     if isinstance(op, Remember | AdvancePlan | SetPlan):
         return [] if op.npc == me else [f"{name}只能管自己的记忆和计划"]
+    if isinstance(op, Enlist):
+        return [] if op.npc == me and not op.resources and not op.places else [f"{name}只能登记自己的打算，不能借此获得资源或地点知识"]
     if isinstance(op, Schedule):
         return [] if op.participants == [] or me in op.participants else [f"{name}只能安排自己要做的事"]
     if isinstance(op, Fulfil | Break):

@@ -72,12 +72,22 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
     flags |= {key for plugin in plan.plugins for key in plugin.flags}
     endings = {x.id for x in m.endings} | {x.id for x in plan.endings}
     conclusions = {x.id for x in m.conclusions}
+    from .graph import stake_problems
+
+    references = m.model_copy(update={
+        "npcs": [*m.npcs, *(NPC(**n.model_dump(exclude={"card"})) for n in plan.npcs)],
+        "locations": [*m.locations, *(Location(**loc.model_dump()) for loc in plan.locations)],
+        "items": [*m.items, *(Item(**item.model_dump()) for item in plan.items)],
+        "flags": dict.fromkeys(flags, ""),
+    })
     for loc in plan.locations:
         if not loc.exits:
             problems.append(f"新地点 {loc.id} 没有和任何地点相连")
         problems += [f"新地点 {loc.id} 的出口 {e} 不存在" for e in loc.exits if e not in locs]
         if loc.within and (loc.within not in locs or loc.within == loc.id):
             problems.append(f"新地点 {loc.id} 所在的地点 {loc.within} 不存在")
+        problems += [f"新地点 {loc.id} 的路程 {pid} 必须对应出口且分钟数非负"
+                     for pid, minutes in loc.travel_minutes.items() if pid not in loc.exits or minutes < 0]
     for n in plan.npcs:
         if n.location not in locs:
             problems.append(f"新 NPC {n.id} 所在地点 {n.location} 不存在")
@@ -93,6 +103,15 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
             problems.append(f"新线索 {c.id} 的提供者 {c.npc} 不存在")
         problems += [f"新线索 {c.id} 指向的结论 {k} 不存在" for k in c.points_to if k not in conclusions]
     for e in plan.events:
+        problems += [f"事件 {e.id} 的出场人物 {npc} 不存在" for npc in e.present if npc not in npcs]
+        opponents = npcs | {creature.id for creature in m.creatures}
+        problems += [f"事件 {e.id} 的遭遇对象 {npc} 不存在" for npc in [*e.fight, *e.chase] if npc not in opponents]
+        if e.fight and e.chase:
+            problems.append(f"事件 {e.id} 不能同时开始战斗与追逐")
+        problems += [f"事件 {e.id} 的结果标记 {flag} 没有声明" for stake in e.stakes for flag in stake.flags if flag not in flags]
+        problems += [f"事件 {e.id} 的结果条件：{problem}" for stake in e.stakes
+                     for problem in stake_problems(references, stake.when, actors=actors)]
+        problems += [f"事件 {e.id} 的恐怖照面 {creature} 不存在" for creature in e.sights if creature not in {c.id for c in m.creatures}]
         when = e.when.strip()
         if when.startswith("flag:") and when[5:] not in flags:
             problems.append(f"事件 {e.id} 的触发标记 {when[5:]} 没有声明")
@@ -155,7 +174,8 @@ def apply(m: Module, plan: Any) -> Applied:
             continue
         m.locations.append(
             Location(id=loc.id, name=loc.name, read_aloud=loc.read_aloud, keeper=loc.keeper, features=loc.features,
-                     exits=list(loc.exits), art=visual_key("scene", loc.id), within=loc.within)
+                     exits=list(loc.exits), art=visual_key("scene", loc.id), within=loc.within,
+                     travel_minutes=dict(loc.travel_minutes), chase=[leg.model_copy(deep=True) for leg in loc.chase])
         )  # fmt: skip
         for e in loc.exits:
             other = next((x for x in m.locations if x.id == e), None)
@@ -172,6 +192,10 @@ def apply(m: Module, plan: Any) -> Applied:
             from .. import cards
 
             cards.dress(m.npcs[-1], n.card)
+        m.npcs[-1].stats.update(n.stats)
+        if n.attacks:
+            m.npcs[-1].attacks = list(n.attacks)
+        m.npcs[-1].called = n.called
     for item in plan.items:
         if item.id not in have:
             m.items.append(Item(**item.model_dump(), art=visual_key("item", item.id)))
@@ -206,7 +230,9 @@ def apply(m: Module, plan: Any) -> Applied:
         m.events.append(
             Event(id=e.id, title=e.title, when=when, text=e.text or e.read_aloud, read_aloud=e.read_aloud, sets=e.sets,
                   sanity=e.sanity or None, damage=e.damage or None, move_to=e.move_to or None, performer=e.performer or None,
-                  performance=e.performance, ending=e.ending or None)
+                  performance=e.performance, ending=e.ending or None, present=list(e.present), fight=list(e.fight),
+                  surprise=e.surprise, chase=list(e.chase), chase_party=e.chase_party,
+                  stakes=[stake.model_copy(deep=True) for stake in e.stakes], sights=list(e.sights))
         )  # fmt: skip
     for a in plan.arcs:
         if any(n.id == a.npc for n in m.npcs):

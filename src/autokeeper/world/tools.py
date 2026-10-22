@@ -20,6 +20,7 @@ from .ops import (
     OPS,
     STAFF,
     AdvancePlan,
+    Enlist,
     Follow,
     Improvise,
     MakePromise,
@@ -186,7 +187,7 @@ class Gateway:
         events = self._select(self._events(), query, limit)
         entities = self._select(self._entities(), query, limit)
         plans = {npc: agent.model_dump(mode="json") if self.staff else agent.model_dump(
-            mode="json", include={"npc", "goals", "plan", "mood", "resources", "wake", "version"})
+            mode="json", include={"npc", "goals", "goal_reason", "goal_source", "plan", "mood", "resources", "wake", "version"})
                  for npc, agent in w.rec.agents.items()
                  if self.staff or npc == self.actor}
         schedules = [s for s in w.rec.scheduled.values() if self.staff or s.actor == self.actor]
@@ -234,7 +235,7 @@ class Gateway:
             raise ValueError("场景即兴必须通过游戏引擎准备并提交，不能绕过插件、图像与场景校验")
         if not self.staff:
             TypeAdapter(agents.ReplyOp).validate_python(op.model_dump(mode="json"))
-            subject = (op.entity if isinstance(op, Move) else op.npc if isinstance(op, Follow | Remember | SetPlan | AdvancePlan)
+            subject = (op.entity if isinstance(op, Move) else op.npc if isinstance(op, Follow | Remember | SetPlan | AdvancePlan | Enlist)
                        else op.a if isinstance(op, Relate) else op.by if isinstance(op, MakePromise) else self.actor)
             if subject != self.actor:
                 raise ValueError("只能为自己安排或执行行动")
@@ -244,7 +245,7 @@ class Gateway:
             op.ops = [self._bind(child, ident=f"{ident}:later:{i}", depth=depth + 1).model_dump(mode="json")
                       for i, child in enumerate(op.ops)]
         if isinstance(op, SetPlan):
-            for step in op.steps:
+            for step in op.steps or []:
                 if len(step.ops) > MAX_OPS:
                     raise ValueError("计划步骤内的操作过多")
                 step.ops = [self._bind(child, ident=f"{ident}:step:{step.id}:{i}", depth=depth + 1).model_dump(mode="json")

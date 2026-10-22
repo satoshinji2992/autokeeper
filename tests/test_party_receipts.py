@@ -100,6 +100,8 @@ async def test_failure_and_pushed_time_belong_to_that_investigators_serial_work(
                                      on_fail=Failure(minutes=10 if extra == "failure" else 0)))
     if extra == "push":
         await game.push({"choice": "push", "how": "重新按日期排列报纸查阅"})  # FakeCast's method takes ten minutes
+    else:
+        await game.push("drop")  # no clue is required to offer the same choice
     assert st.round_elapsed["zhouheng"] == 40
     st.active, st.turn = 1, st.turn + 1
     await game.resolve(Action(kind="investigate", summary="林秋查旧报"), Ruling(needs_roll=False, minutes=60))

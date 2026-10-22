@@ -164,6 +164,7 @@ def settle(w: World, op: Rewrite, oid: str):
             hit = True
         if npc in op.goals:
             a.goals = list(op.goals[npc])
+            a.goal_reason, a.goal_source = op.reason, oid
             hit = True
         if hit:
             w.touch(a)

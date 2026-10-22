@@ -101,6 +101,8 @@ def _fact_line(npc: str, fact: Fact, sources: dict[str, Event], w: World, *, cov
         label = "这是你编的"
     elif fact.kind == "rumor":
         label = "传闻，尚未证实"
+    elif fact.kind == "goal" and fact.about and w.agent(fact.about[0]) is not None:
+        label = "模组初始动机，眼下目标以当前记录为准"
     elif (event := sources.get(fact.id)) is not None:
         label = (f"听说，来源：{w.name(event.actor)}" if event.kind == "learn" and event.actor not in {npc, "engine", "director", "keeper"}
                  else "来自亲历或当面获知的记录")
@@ -166,6 +168,8 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     lines.append(f"【你在】{w.name(here)}（{here}）；身边：{'、'.join(others) or '没有人'}")
     if a:
         lines.append("【你的目标】" + ("；".join(a.goals) or "无"))
+        if a.goal_reason:
+            lines.append("【目标变化依据】" + a.goal_reason)
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
         # What it does on meeting the investigators is its voice's (npc_brief), not a backstage step.
@@ -228,8 +232,9 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
     if ent.following:
         lines.append(f"【已同意同行】{_company(w, ent)}。")
     if a:
-        if a.goals:
-            lines.append("【你眼下想要的】" + "；".join(a.goals))
+        lines.append("【你眼下想要的，以此为准】" + ("；".join(a.goals) or "当前没有目标"))
+        if a.goal_reason:
+            lines.append("【目标变化依据】" + a.goal_reason)
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
         pending = [s for s in a.plan if s.status == "pending"]
@@ -411,10 +416,13 @@ def keeper_brief(w: World) -> str:
 
     def person(npc: str) -> str:
         own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]
-        goal = next((f.text for f in own if f.kind == "goal"), "")
+        a = rec.agents.get(npc)
+        goal = "；".join(a.goals) if a is not None else next((f.text for f in own if f.kind == "goal"), "")
         secrets = [_clip(f.text) for f in own if f.kind == "secret" and f.revealed is None]
         lies = [_clip(f.text) for f in own if f.kind == "lie"]
-        parts = [f"想要：{_clip(goal)}"] if goal else []
+        parts = [f"当前想要：{goal or '无'}"] if a is not None else ([f"想要：{_clip(goal)}"] if goal else [])
+        if a is not None and a.goal_reason:
+            parts.append(f"改变依据：{a.goal_reason}")
         parts += [f"秘密：{'；'.join(secrets)}"] if secrets else []
         parts += [f"会说的谎：{'；'.join(lies)}"] if lies else []
         things = [e.name for e in rec.entities.values() if e.kind == "item" and e.at == npc]  # what is on them, everyday or not
@@ -495,7 +503,7 @@ def director_view(w: World) -> View:
     for npc, a in rec.agents.items():
         steps = "；".join(f"{s.id} {s.text}（{_when(s.due)}，{s.status}）" for s in a.plan[-4:]) or "无"
         lines.append(f"【{w.name(npc)}（{npc}，v{a.version}）】在 {w.name(w.place(npc))}；目标：{'；'.join(a.goals) or '无'}；计划：{steps}"
-                     + (f"；心境：{a.mood}" if a.mood else ""))  # fmt: skip
+                     + (f"；心境：{a.mood}" if a.mood else "") + (f"；目标依据：{a.goal_reason}" if a.goal_reason else ""))  # fmt: skip
     rows = threads.ranked(w)
     lines.append("【线头】\n" + ("\n".join(f"- {th.id}（{th.kind}，热度 {th.heat}，{score}）{th.title}：{hint}" for th, score, hint in rows) or "- 无"))
     lines.append("【约定】\n" + ("\n".join(f"- {p.id}（v{p.version}）{w.name(p.by)}→{w.name(p.to)}：{p.text}（{_when(p.due)}，{p.status}）"

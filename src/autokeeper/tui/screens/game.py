@@ -26,7 +26,7 @@ from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
-from ...engine import audience, chat, debrief, idea
+from ...engine import audience, chat, debrief, idea, presentation
 from ...engine import graph as turn_graph
 from ...engine.encounter import views
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
@@ -189,6 +189,10 @@ class GameScreen(Screen):
         self.plays = Plays(self)  # rule plugins' shows and prompts (tui/widgets/plugin_ui.py)
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
         self.view = (state.location, state.view)  # which picture of which place the scene shows (engine/views.py)
+        self._media_slots: dict[str, dict] = {}
+        self._media_papers: dict[str, dict] = {}
+        self._media_overlay = None
+        self._media_seen: set[str] = set()
         # A fight's or a chase's choices over the input box (_offer_orders) and the clock on them (_start_clock)
         self._battle_picking, self._battle_title = False, ""  # the list is up; its title
         self._fold = 0  # Ctrl+N: 0 all shown, 1 the stage folded, 2 the round's list folded too
@@ -246,6 +250,7 @@ class GameScreen(Screen):
         self.game.ask_reactions = "always" if cfg.ask_every_blow else "major"  # 设置: 每次被攻击都询问应对
         self._scene(self.state.location)
         self._panels()
+        self._restore_presentations()
         self.call_after_refresh(self._battle_resumed)
         self.set_interval(0.1, self._spin)
         self.set_interval(1.0, self._backstage)
@@ -441,6 +446,12 @@ class GameScreen(Screen):
         scene = found.first()
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
+        if shown := self._media_slots.get("scene"):
+            payload = shown["payload"]
+            scene.show(shown.get("title") or loc.name, payload.get("art", ""), payload.get("colors"),
+                       payload.get("picture"), description="", sky=self._sky(loc_id), people=())
+            self._topbar()
+            return
         scene.show(
             loc.name,
             self.m.art.get(name, ""),
@@ -452,6 +463,47 @@ class GameScreen(Screen):
             people=self._faces(loc_id),
         )
         self._topbar()
+
+    def _restore_presentations(self) -> None:
+        viewer = self._me() or self._viewer().id
+        for p in presentation.papers(self.state, viewer).values():
+            self._present(presentation.event(p), display=False)
+        for p in presentation.current(self.state, viewer).values():
+            self._present(presentation.event(p))
+
+    def _present(self, ev: dict, *, display: bool = True) -> None:
+        slot = ev["slot"]
+        if ev["action"] == "clear":
+            self._media_slots.pop(slot, None)
+            if slot == "scene":
+                self._scene(self.state.location)
+            elif self._media_overlay is not None and self.app.screen is self._media_overlay:
+                self.app.pop_screen()
+            return
+        payload = ev["payload"]
+        if payload.get("kind") == "handout":
+            h = payload["handout"]
+            self._media_papers[h["id"]] = payload
+        if not display:
+            return
+        self._media_slots[slot] = ev
+        if slot == "scene":
+            self._scene(self.state.location)
+            return
+        if ev["id"] in self._media_seen:
+            return
+        self._media_seen.add(ev["id"])
+        if payload.get("kind") == "handout":
+            h = payload["handout"]
+            pictures = [payload.get("pictures", {})[key] for key in h["images"] if key in payload.get("pictures", {})]
+            modal = HandoutModal(h["title"], h["text"], pictures, kind=h["kind"])
+            self.story.add("handout", Text(f"▤ 材料：{h['title']}（F2 可重看）", style="bold"))
+        else:
+            pictures = [payload["picture"]] if payload.get("picture") else []
+            modal = HandoutModal(ev.get("title") or "插图", payload.get("art", ""), pictures, kind="插图")
+        self._media_overlay = modal
+        self._flash_off()
+        self.app.push_screen(modal)
 
     def _faces(self, loc_id: str) -> tuple[str, ...]:
         """The photos of the people here the investigators know (they have spoken with them), set
@@ -790,6 +842,10 @@ class GameScreen(Screen):
     async def handle(self, ev: dict) -> None:
         if not audience.visible(ev, self._me() or self._viewer().id):
             return
+        if self.game is not None:
+            from ...engine.perception import project_event
+
+            ev = project_event(self.game, self._me() or self._viewer().id, ev)
         t = ev.get("type")
         if self.has_class("-dev"):
             self.call_after_refresh(self._dev)
@@ -800,7 +856,11 @@ class GameScreen(Screen):
             if ev.get("picture") and Path(ev["picture"]).is_file():
                 self.m.pictures[key] = ev["picture"]
         self.query_one(Speaker).follow(ev, self.m)  # before the scene changes, so it can scan in
-        if t == "aside":
+        if t == "presentation":
+            self._present(ev)
+        elif t == "private_input":
+            story.add("system", Text(f"【私信守秘人】{ev['who']}：{ev['text']}"))
+        elif t == "aside":
             story.add("keeper", Text(f"【守秘人·私密】{ev['text']}"))
         elif t == "status":
             self._status(ev["text"])
@@ -1149,7 +1209,7 @@ class GameScreen(Screen):
         choices this round (engine/encounter/views.table); None outside one."""
         if self.game is None or self.state.ending:
             return None
-        return views.table(self.game)
+        return views.table(self.game, viewer=self._me() or self._viewer().id)
 
     def _in_battle(self) -> bool:
         """Cheaper than _battle_now for the heartbeat: whether a fight or a chase is going on."""
@@ -1309,7 +1369,7 @@ class GameScreen(Screen):
             else:
                 return
         else:
-            choices = [(words, words, note) for words, note in lists]
+            choices = [(row[2] if len(row) > 2 else row[0], row[0], row[1]) for row in lists]
             title = "战斗行动 · 回车选定 · Esc 手动输入" if fighting else "追逐行动 · 回车选定 · Esc 手动输入"
         if not choices or self._fold >= 2:  # Ctrl+N folded the list: it comes back with the next Ctrl+N
             return
@@ -1326,7 +1386,7 @@ class GameScreen(Screen):
         if self._clock is not None:  # Tab: the same round, the same deadline
             self._clock_tick()
         elif config.load().battle_timer and getattr(self, "link", None) is None and lists:  # a LAN round has its own window
-            hold = next((w for w, _, _ in choices if w.startswith("防守")), "") if fighting else choices[0][0]
+            hold = next((w for w, label, _ in choices if label.startswith("防守")), "") if fighting else choices[0][0]
             if hold:
                 self._start_clock(BATTLE_SECONDS if fighting else CHASE_SECONDS, hold)
 
@@ -1628,7 +1688,7 @@ class GameScreen(Screen):
             self._close_orders()  # their own order instead of the round's list
         talk = chat.ooc(text) is not None or self._said(text) is not None  # shown at once, never queued as an action
         if self.busy and text and not talk and text.split()[0] not in ANYTIME and not text.startswith(notes.JOT):
-            if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
+            if (not text.startswith("/") or text.startswith(("/kp ", "/私信kp "))) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
                 event.input.value = ""
             else:  # the line stays in the box
@@ -1661,6 +1721,13 @@ class GameScreen(Screen):
                 self.story.add("system", Text(f"【场外】{aside}", style="italic dim"))
             return
         if text.startswith("/"):
+            if text.split()[0].lower() == "/私信kp":
+                body = text.partition(" ")[2].strip()
+                if body:
+                    self.private_keeper(body)
+                else:
+                    self.app.notify("用法：/私信kp 正文。私信不直接结算秘密行动。", timeout=6)
+                return
             if text.startswith("/kp "):
                 self.play(text)
                 return
@@ -1673,6 +1740,19 @@ class GameScreen(Screen):
             self.speak(said)
             return
         self.play(text)
+
+    @work(exclusive=True, group="turn")
+    async def private_keeper(self, text: str) -> None:
+        if self.game is None or self.spectate:
+            return
+        self._busy(True)
+        try:
+            await self.game.private_message(self._speaker().id, text)
+        except Exception as exc:
+            self.app.notify(f"私信暂未完成：{config.plain(exc)}。已有记录保留。", severity="warning", timeout=8)
+        finally:
+            write_save(self.state, self.m)
+            self._busy(False)
 
     def _speaker(self):
         """Who says what is typed: the investigator you play, else whoever is acting."""
@@ -1895,7 +1975,8 @@ class GameScreen(Screen):
             if not alive:
                 break
             self._status("AI 调查员在商量…")
-            result = await party.ainvoke({"situation": situation(self.m, st, game=self.game), "ids": alive, "proposals": [],
+            result = await party.ainvoke({"situations": {x: situation(self.m, st, x, self.game) for x in alive},
+                                          "ids": alive, "proposals": [],
                                           "stances": {x: views.stances(self.game, x) for x in alive}})
             if not result["proposals"]:  # no AI investigator gave an action it could play: watching stops
                 self.story.add("system", Text("AI 调查员本轮均未给出有效行动，观战停止。", style="dim"))
@@ -1933,10 +2014,15 @@ class GameScreen(Screen):
     def action_notes(self) -> None:
         """F2, /notes: the notebook, its page the player's notes, then the papers handed to them."""
         papers = [(h.id, h.title) for hid in self.state.handouts for h in self.m.handouts if h.id == hid]
+        papers += [(hid, p["handout"]["title"]) for hid, p in self._media_papers.items() if hid not in dict(papers)]
         self.app.push_screen(NotebookModal(self.notes(), papers, keep=self.keep_notes, read=self._read_paper,
                                            notice=self._notes_notice()))
 
     def _read_paper(self, hid: str) -> None:
+        if payload := self._media_papers.get(hid):
+            h = payload["handout"]
+            self.app.push_screen(HandoutModal(h["title"], h["text"], list(payload.get("pictures", {}).values()), kind=h["kind"]))
+            return
         h = self.m.handout(hid)
         self.app.push_screen(HandoutModal(h.title, h.text, self.m.handout_pictures(h), kind=h.kind))
 

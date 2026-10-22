@@ -179,10 +179,12 @@ class Memory(BaseModel):
 
 
 class Agent(Versioned):
-    """An important NPC who acts on its own (3–6 a game)."""
+    """An NPC's persistent intentions and memory; storage is not a worker allocation."""
 
     npc: str
     goals: list[str] = Field(default_factory=list)
+    goal_reason: str = ""
+    goal_source: str = ""  # operation that established the current goals
     resources: list[str] = Field(default_factory=list)
     plan: list[Step] = Field(default_factory=list)
     reads: dict[str, int] = Field(default_factory=dict)  # versions the plan was made from

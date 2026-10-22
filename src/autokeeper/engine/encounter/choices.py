@@ -46,7 +46,8 @@ def damage_words(damage: str, db: str) -> str:
 def presets(ctx: Ctx, who: str) -> list[str]:
     """The answers to blows a player can set (Tab): dodge, fight back, and diving for cover when a foe
     has a gun."""
-    armed = any(a.firearm for f in ctx.foes(who) if (v := ctx.view(f)) is not None for a in v.attacks())
+    armed = any(a.firearm for f in ctx.perceived_foes(who) if not ctx.hidden_from(who, f)
+                and (v := ctx.view(f)) is not None for a in v.attacks())
     return ["dodge", "fight_back", *(["cover"] if armed else [])]
 
 
@@ -82,9 +83,9 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
         d = d.model_copy(update={"react": react, "summary": f"{name}：{label}"})
         out.append(ChoiceOption(id=f"o{len(out)}", label=label, note=note, value=d.model_dump(mode="json", by_alias=True)))
 
-    foes = [f for f in ctx.foes(who) if ctx.alive(f) and not ctx.hidden_from(who, f)]
+    foes = [f for f in ctx.perceived_foes(who) if ctx.alive(f) and not ctx.hidden_from(who, f)]
     for f in foes:
-        them = ctx.name(f, "players")
+        them = ctx.name(f, who)
         for a in v.attacks():
             if a.damage is None:
                 continue
@@ -101,9 +102,9 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
         for m in ("推倒", "缴械", "制住"):
             add(DeclaredAction(do="maneuver", maneuver=m, attacks=[AttackPick(target=f, with_=UNARMED_ID)], summary="-"),
                 _label(m, them), f"战技 · 体格 {v.build()} 对 {tv.build() if tv is not None else '?'}")
-    for f in ctx.allies(who):
+    for f in [x for x in ctx.allies(who) if x not in foes and not ctx.hidden_from(who, x)]:
         if not actions._aid(ctx, who, f):
-            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players")), f"急救 {v.skill('急救')}")
+            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, who)), f"急救 {v.skill('急救')}")
     for a in v.attacks():
         if a.firearm and a.capacity and a.loaded is not None and a.loaded < a.capacity:
             if not actions.preconditions(ctx, who, DeclaredAction(do="reload", target=a.id, summary="-")):
@@ -115,11 +116,11 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
             break
     if any(a.firearm and a.usable for a in v.attacks()):
         for f in foes:
-            add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, "players")), "下一枪得一颗奖励骰")
+            add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, who)), "下一枪得一颗奖励骰")
     if foes:
         add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对侦查")
     for f in [p.id for p in ctx.enc.participants if p.presence == "fled" and ctx.opposed(who, p.id) and not ctx.hidden_from(who, p.id)]:
-        add(DeclaredAction(do="pursue", target=f, summary="-"), _label("追赶", ctx.name(f, "players")), "对方逃跑了 · 转为追逐")
+        add(DeclaredAction(do="pursue", target=f, summary="-"), _label("追赶", ctx.name(f, who)), "对方逃跑了 · 转为追逐")
     add(DeclaredAction(do="defend", summary="-"), "防守", "本轮不出手")
     if not ctx.held_by(who):
         add(DeclaredAction(do="flee", to="away", summary="-"), "逃跑", "离开战斗")
@@ -155,7 +156,7 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
 
     points = enc.budget.movement.get(who)
     steps = f"这一轮 {points} 行动点" if points is not None and enc.round else f"速度 {me.speed or v.mov()}"
-    seen = [x for x in ctx.foes(who) if ctx.alive(x) and not ctx.hidden_from(who, x) and ctx.present(x)]
+    seen = [x for x in ctx.perceived_foes(who) if ctx.alive(x) and not ctx.hidden_from(who, x) and ctx.present(x)]
     if who in ch.quarry or (who not in ch.pursuers and ctx.side(who) == ctx.side((ch.quarry or [""])[0])):
         goal = chasing.goal_of(ctx, enc, who)
         if goal and goal != here:
@@ -163,7 +164,7 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
     else:
         for q in [x for x in ch.quarry if x in seen]:
             far = site.distance(ch.site, here, chasing.at(enc, q))
-            add(DeclaredAction(do="pursue", target=q, summary="-"), f"追赶 {ctx.name(q, 'players')}",
+            add(DeclaredAction(do="pursue", target=q, summary="-"), f"追赶 {ctx.name(q, who)}",
                 f"相隔 {far} 处 · {steps}" if far else f"就在这里 · {steps}")
     ways = [(nid, site.node(ch.site, nid)) for nid, _cost in site.neighbours(ch.site, here)]
     blocked = [ch.site.obstacles[n.obstacle].what for _, n in ways if n is not None and n.obstacle in ch.site.obstacles
@@ -188,7 +189,7 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
             add(DeclaredAction(do="move", to=nid, method=m.id, careful=1, summary="-"), f"小心通过：{what}",
                 f"{_method(v, m)} · 多花 1 行动点，奖励骰 1")
     for f in seen:
-        them = ctx.name(f, "players")
+        them = ctx.name(f, who)
         for a in v.attacks():
             if a.damage is None:
                 continue
@@ -209,9 +210,9 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
     if who in ch.quarry:
         add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对侦查 · 用掉本轮")
         add(DeclaredAction(do="barrier", summary="-"), "设路障", f"力量 {v.char('力量')} · 花 1 行动点")
-    for f in ctx.allies(who):
+    for f in [x for x in ctx.allies(who) if x not in seen and not ctx.hidden_from(who, x)]:
         if chasing.at(enc, f) == here and not actions._aid(ctx, who, f):
-            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players")), f"急救 {v.skill('急救')}")
+            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, who)), f"急救 {v.skill('急救')}")
     for a in v.attacks():
         if a.firearm and a.capacity and a.loaded is not None and a.loaded < a.capacity:
             if not actions.preconditions(ctx, who, DeclaredAction(do="reload", target=a.id, summary="-")):
@@ -228,11 +229,21 @@ def _method(v, m) -> str:
 def match(game: Any, who: str, text: str) -> DeclaredAction | None:
     """The option whose words are exactly `text`, as its declaration (with the preset answer to blows);
     None for anything else."""
+    from .. import perception
+
     words = text.strip()
     for o in options(game, who):
-        if o.label == words:
+        if o.label == words or (words.startswith("act-") and hmac_match(words, perception.choice_handle(game, who, o.value))):
             return DeclaredAction.model_validate(o.value)
+    if words.startswith("act-"):
+        raise ValueError("这项行动已失效，请按当前场面重新选择。")
     return None
+
+
+def hmac_match(left: str, right: str) -> bool:
+    from hmac import compare_digest
+
+    return compare_digest(left, right)
 
 
 # -- arranging and asking -------------------------------------------------------------------------

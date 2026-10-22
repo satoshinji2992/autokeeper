@@ -1,7 +1,7 @@
 """大场景: one big picture over the whole screen at a turning point of the story: the opening,
 something sudden, a crisis, an important place, a monster, the final boss, an ending.
 
-    Module.showcases, and up to IMPROV_MAX the director adds in a game
+    Module.showcases, and the turning points the director adds during a game
     ->  pictures prepared ahead in the background, one at a time, the opening first
     ->  at its moment, shown if its picture is ready: never waited for, never shown twice
 
@@ -26,7 +26,6 @@ from .. import config, credits, imagegen, imagery, paths
 from ..module.schema import Module, Showcase
 from .state import GameState
 
-IMPROV_MAX = 3  # big scenes the director may add in one game
 MOST = 15  # big scenes one module may have
 
 

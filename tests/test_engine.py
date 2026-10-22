@@ -866,7 +866,8 @@ async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fa
     game, cast, _ = make(module, fake, {".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5))}, location="tower")
     fake.queue(52)  # 恐吓 15: a failure
     app = turn_graph.build(game, InMemorySaver())
-    events, _ = await run_turn(app, ".ra 恐吓", {"configurable": {"thread_id": "t-dice"}})
+    events, interrupts = await run_turn(app, ".ra 恐吓", {"configurable": {"thread_id": "t-dice"}}, resume="drop")
+    assert interrupts  # ordinary social checks now offer a push even without a clue reward
     assert cast.heard == [".ra 恐吓"] and cast.ruled[0].asked == Asked(skill="恐吓")  # the request, not the words
     assert [e["text"] for e in events if e["type"] == "dice"] == ["恐吓 15 → 52 失败 ✗"]
     assert not [e for e in events if e["type"] == "command"]
@@ -895,7 +896,7 @@ async def test_a_failed_check_is_not_rolled_again(module, fake):
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": "t-again"}}
     fake.queue(52)  # one die for 恐吓; a second roll would find the fake dice empty
-    await run_turn(app, ".ra 恐吓", thread)
+    await run_turn(app, ".ra 恐吓", thread, resume="drop")
     for _ in range(2):  # the same attempt again, and again: the failure stands
         events, _ = await run_turn(app, ".ra 恐吓", thread)
         assert not [e for e in events if e["type"] == "dice"]
@@ -903,7 +904,7 @@ async def test_a_failed_check_is_not_rolled_again(module, fake):
         assert "同样的恐吓刚才已经试过，不重掷，结果照旧：本次请求仍未达成" in cast.npc_calls[-1][1]
         assert not cast.reports  # the repeat notice and NPC reply already convey the result
     fake.queue(30)  # another skill is another attempt
-    events, _ = await run_turn(app, ".ra 说服", thread)
+    events, _ = await run_turn(app, ".ra 说服", thread, resume="drop")
     assert [e["skill"] for e in events if e["type"] == "dice"] == ["说服"]
 
 
@@ -918,7 +919,7 @@ async def test_something_new_makes_it_a_fresh_attempt(module, fake):
     thread = {"configurable": {"thread_id": "t-fresh"}}
 
     async def rolls(text: str) -> int:
-        events, _ = await run_turn(app, text, thread)
+        events, _ = await run_turn(app, text, thread, resume="drop")
         return len([e for e in events if e["type"] == "dice"])
 
     fake.queue(99, 99, 99, 99)  # 侦查 55: failures
@@ -948,7 +949,7 @@ async def test_the_arbiter_can_call_a_repeat_itself(module, fake):
     thread = {"configurable": {"thread_id": "t-arbiter"}}
     fake.queue(52)
     for text in (".ra 恐吓", "点头"):
-        await run_turn(app, text, thread)
+        await run_turn(app, text, thread, resume="drop")
     events, _ = await run_turn(app, "再吓他", thread)
     assert [e["type"] for e in events if e["type"] in ("dice", "repeat")] == ["repeat"]
     assert "c_diary" not in game.state.clues and "本次请求仍未达成" in cast.npc_calls[-1][1]
@@ -1038,7 +1039,7 @@ async def test_ai_dice_do_not_wait(module, fake):
     assert [e["type"] for e in out].count("dice") == 1 and [a["kind"] for a in asks] == ["push"]  # rolled at once
     assert "clues" not in asks[0] and asks[0]["need"] == 20 and asks[0]["left"] == 55 and asks[0]["luck"] is None
     outcome = next(e for e in out if e["type"] == "outcome")["lines"]
-    assert outcome == ["还有一次机会：孤注一掷，或者花幸运"]  # ids stay home, the stakes travel
+    assert outcome == ["可以选择孤注一掷"]  # insufficient luck is not advertised as an available choice
 
 
 def test_the_roll_prompt_never_gives_the_module_away(module, fake):

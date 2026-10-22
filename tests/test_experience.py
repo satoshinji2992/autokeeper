@@ -19,7 +19,7 @@ from autokeeper.rules.coc import Rules
 from autokeeper.world import ops as O
 from autokeeper.world.ops import Follow
 
-from .test_engine import FakeCast, make
+from .test_engine import FakeCast, make, run_turn
 from .test_tui import canned, until  # noqa: F401
 
 
@@ -95,7 +95,7 @@ async def test_observing_an_npc_neither_starts_a_conversation_nor_unlocks_testim
     ruling = Ruling(needs_roll=True, skill="心理学", clues_on_success=["c_diary"], auto_clues=["c_diary"])
     game, cast, _ = make(module, fake, {"观察他": (action, ruling)}, location="tower")
     fake.queue(value)
-    await graph.build(game).ainvoke({"input": "观察他"})
+    await run_turn(graph.build(game, InMemorySaver()), "观察他", {"configurable": {"thread_id": "psychology"}}, resume="drop")
     assert not cast.npc_calls and not game.state.clues and not game.state.npc("warden").unlocked
     assert not game.state.pending_push and not game.state.handouts
     assert len(cast.reports) == 1 and "心理学" in cast.reports[0]

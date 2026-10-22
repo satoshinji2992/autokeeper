@@ -420,7 +420,7 @@ async def test_the_party_proposes_with_each_ones_answers_to_blows(module):
 
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     inv = state.investigators[0].id
-    out = await party_graph(Party(), state).ainvoke({"situation": "", "ids": [inv], "proposals": [],  # type: ignore[arg-type]
+    out = await party_graph(Party(), state).ainvoke({"situations": {inv: ""}, "ids": [inv], "proposals": [],  # type: ignore[arg-type]
                                                      "stances": {inv: ["dodge", "fight_back"]}})
     assert out["proposals"] == [(inv, "防守", "", "fight_back")] and asked == {inv: ["dodge", "fight_back"]}
 

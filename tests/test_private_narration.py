@@ -106,3 +106,50 @@ async def test_shared_memory_compaction_retains_private_originals_without_summar
     assert audience.personal(again, who)[0].text == st.private_history[0].text
     assert not any("字迹" in e.text for e in audience.log(again))
     await game.close()
+
+
+async def test_compaction_keeps_each_delivered_appearance_without_adding_a_summary_call():
+    game, _ = made()
+    st = game.state
+    who = st.investigator.id
+    st.investigators.append(st.investigator.model_copy(update={"id": "lin", "name": "林秋"}, deep=True))
+    st.memory = "昨夜你与林秋同行。"  # legitimate knowledge from before the hallucination
+    true = "林秋的真身从暗门走出。"
+    seen = "渗血的怪物从暗门走出。"
+    st.add("event", true, presented={who: {"text": seen}})
+    for n in range(48):
+        st.add("keeper", f"共同经过{n}。")
+    calls = []
+
+    async def chronicle(state, entries):
+        calls.append(entries)
+        return state.memory + "大家继续搜索。"
+
+    game.cast.chronicle = chronicle
+    await game.remember()
+    assert len(calls) == 1 and true not in calls[0] and seen not in calls[0]
+    assert st.memory.startswith("昨夜你与林秋同行。")
+    restored = GameState.model_validate_json(st.model_dump_json())
+    mine = audience.log(restored, who)
+    theirs = audience.log(restored, "lin")
+    assert any(e.text == seen for e in mine) and not any(e.text == true for e in mine)
+    assert any(e.text == true for e in theirs) and not any(e.text == seen for e in theirs)
+    assert any(e.text == seen for e in audience.personal(restored, who))
+    assert true not in "".join(e.text for e in audience.log(restored))
+    assert any(e.text == true and e.presented for e in audience.log(restored, keeper=True))
+    assert not any(e.presented for e in [*mine, *theirs])
+    await game.close()
+
+
+def test_shared_recap_omits_different_observations_but_keeps_identical_receipts():
+    from autokeeper.engine import progress
+
+    game, _ = made()
+    st, who = game.state, game.state.investigator.id
+    true = "实际走出来的是林秋。"
+    seen = "裹尸布中的怪物走了出来。"
+    st.add("event", true, presented={who: {"text": seen}})
+    identical = st.add("keeper", "街灯一盏盏熄灭。", presented={who: {"text": "街灯一盏盏熄灭。"}})
+    assert not audience.shared(st.log[-2]) and audience.shared(identical)
+    recap = progress.material(game.m, st)
+    assert true not in recap and seen not in recap and identical.text in recap

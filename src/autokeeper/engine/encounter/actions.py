@@ -119,6 +119,20 @@ class Ctx:
     def foes(self, pid: str) -> list[str]:
         return [p.id for p in self.enc.participants if p.presence == "in" and self.opposed(pid, p.id)]
 
+    def perceived_foes(self, pid: str) -> list[str]:
+        """Targets the investigator believes hostile; this does not change real sides."""
+        from .. import perception
+
+        out = []
+        for p in self.enc.participants:
+            if p.id == pid or p.presence != "in":
+                continue
+            appearance = perception.get(self.game.state, pid, p.id)
+            hostile = appearance.side == "foe" if appearance is not None and appearance.side else self.opposed(pid, p.id)
+            if hostile and (appearance is None or appearance.visible):
+                out.append(p.id)
+        return out
+
     def allies(self, pid: str) -> list[str]:
         return [p.id for p in self.enc.participants if p.id != pid and p.side == self.side(pid) and p.presence == "in"]
 
@@ -141,6 +155,11 @@ class Ctx:
         chase (it hid, or ran out of sight and its trail was lost), or what the keeper declared it
         cannot see (dark, smoke, a wall between: FightScene.unseen). The picture's weather and the
         names of what someone carries decide nothing."""
+        from .. import perception
+
+        appearance = perception.get(self.game.state, watcher, pid)
+        if appearance is not None and not appearance.visible:
+            return "没有感知到这个人"
         p = self.p(pid)
         if p is None:
             return "不在这场遭遇里"
@@ -167,6 +186,10 @@ class Ctx:
     def name(self, pid: str, audience: str = "keeper") -> str:
         """What `audience` calls them; for the players, two who look alike are told apart by a number
         (两个「楼梯口打盹的老人」: the second is 楼梯口打盹的老人2), so every choice's words are its own."""
+        from .. import perception
+
+        if appearance := perception.get(self.game.state, audience, pid):
+            return appearance.name or "未辨明的身影"
         if audience != "keeper" and self.enc.get(pid) is not None:
             return self.shown().get(pid, pid)
         v = self.view(pid)

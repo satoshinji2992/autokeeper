@@ -18,8 +18,9 @@ from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 from .. import cards
+from ..engine.presentation import MediaAction
 from ..engine.state import GameState
-from ..module.schema import Module
+from ..module.schema import Leg, Module, Stake
 from ..plugins.schema import Plugin
 from ..world.ops import Condition, Enlist, Learn, Move, Occur, Relate, Rewrite, Schedule, SetPlan
 from .writing import INTERFACE_COPY
@@ -41,10 +42,12 @@ class NewLocation(BaseModel):
     id: str
     name: str
     read_aloud: str = Field(description="调查员到达时看到的（玩家可见）")
-    keeper: str = Field("", description="守秘人须知")
+    keeper: str = Field("", description="守秘人须知：场景背景、隐藏情况、检定条件与后果；需要现场执行的规则写清，不只写氛围")
     features: list[str] = Field(default_factory=list, description="可以调查的东西")
     exits: list[str] = Field(description="和哪些已有地点相连（会自动双向连通）")
     within: str | None = Field(None, description="在哪个地点里面（已有的，或这次新建的），比如地窖在某户人家里；不在别处里面就留空")
+    travel_minutes: dict[str, int] = Field(default_factory=dict, description="到出口地点的实际分钟数；未填按普通路程，室内相邻房间可写 0")
+    chase: list[Leg] = Field(default_factory=list, description="确实可能追逐时的路线，沿用模组追逐段格式；不需要则留空")
 
 
 class NewNPC(BaseModel):
@@ -60,6 +63,9 @@ class NewNPC(BaseModel):
     secrets: list[str] = Field(default_factory=list, description="不公开的事；结合人物动机、关系和局势决定是否透露，不固定要逼问才说")
     lies: list[str] = Field(default_factory=list, description="会主动撒的谎")
     card: str = Field("", description="用【好事者卡】里的一张做底子时填卡 id：人物得到卡上的属性、技能与攻击；不用就留空")
+    stats: dict[str, int] = Field(default_factory=dict, description="确实需要时的属性、技能与生命等数值，键用中文；人物卡作基线，这里覆盖指定项，空着按普通人")
+    attacks: list[str] = Field(default_factory=list, description="会用的攻击及伤害，格式同模组人物卡；无特殊攻击留空")
+    called: str = Field("", description="身份尚未认出时玩家看到的称呼，只写外观，不泄露真实身份")
 
 
 class NewClue(BaseModel):
@@ -100,6 +106,13 @@ class NewEvent(BaseModel):
     performer: str = Field("", description="由哪个 NPC 当场表演，不需要就留空")
     performance: str = Field("", description="表演要求")
     ending: str = Field("", description="事件发生时直接进入的结局 id，不需要就留空")
+    present: list[str] = Field(default_factory=list, description="本次实际出现在调查员眼前的 NPC id；触发时登记到现场，电话或传闻不填")
+    fight: list[str] = Field(default_factory=list, description="事件当场动手的 NPC 或怪物 id；实际触发战斗，不只写在朗读文字里")
+    surprise: Literal["", "party", "foe"] = Field("", description="战斗中毫无防备的一方；双方都有准备留空")
+    chase: list[str] = Field(default_factory=list, description="事件直接开始追逐时的 NPC 或怪物 id；与 fight 二选一")
+    chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员的角色，留空按逃")
+    stakes: list[Stake] = Field(default_factory=list, max_length=4, description="战斗或追逐的结果条件与剧情标记；由引擎按实际结果结算")
+    sights: list[str] = Field(default_factory=list, description="本事件 sanity 已覆盖的已有怪物 id，避免首次照面重复结算")
 
 
 class NewEnding(BaseModel):
@@ -144,6 +157,7 @@ class Improv(BaseModel):
     go: str = Field("", description="这一轮调查员去到哪个地点（新建的或已有的 id），不移动就留空")
     give: list[str] = Field(default_factory=list, description="这一轮马上交给调查员的线索 id")
     note: str = Field("", description="本轮可公开描写的动作或氛围，不包含未解锁线索、真相、秘密或未来安排")
+    media: list[MediaAction] = Field(default_factory=list, description="方案落实后向指定调查员展示已有图或材料；普通准备留空，不提前给未到时刻的观众")
     backstage: list[WorldOp] = Field(default_factory=list, max_length=6,
                                      description="幕后的安排，玩家看不到：改写还没公开的设定、让 NPC 有自己的打算、安排到点发生的事；用不着就留空")
     reads: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict, exclude=True)  # world versions it was made from (desk.py)
@@ -213,7 +227,7 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 - 看到能让跑团更顺、冲突更有戏的地方，就主动改写：线索断在一个找不到的人身上，就让够得着的人也知道；两个人物的打算能撞到一起，就改他们的往事让它撞上。没有这样的地方就不改。
 - 玩家见过、听过的事，为了阴谋或剧情也可以改出另一个真相（有人撒谎、记错、伪造、设局、假扮），但要自圆其说：reason 写清玩家当初为什么会听到、看到那样，他们知道的其他事也都还说得通。玩家手里线索的原文不能改，要改的是它背后的事。改写只改真相，不挪人，也不改东西在谁手里。
 - 提交前由你结合完整世界记录核对时间、地点、人物动机、消息来源与已发生的后果，说明新真相怎样解释既有经历。保留调查员确实做过、见过、听过的事，不以改写暗中撤销他们的行动成果；需要移动或交物时另交相应操作。
-- 人物要有自己的打算：enlist 让一个 NPC 成为重要 NPC（每局最多 6 个），plan 给重要 NPC 定几步计划，写清什么时候、什么条件下做；调查员不在场时，他会在幕后照着做下去。schedule 安排一件到点才发生的事。
+- 人物要有自己的打算：enlist 登记 NPC 的持久目标，plan 写接下来几步及条件；记录人数不是后台调用并发数。调查员不在场时按计划或幕后触发继续，schedule 安排到点发生的事。事件里实际出场的人填 present；当场战斗、追逐与其结果填 fight/chase/stakes，不只写在朗读里。
 - 把敌意落实为这些人物能够执行的步骤、资源与时机，不只写一句“暗中筹划”。模型负责理解复杂动机、矛盾和临场变化，不预设固定的恐惧阈值、恶意频率或每轮冲突指标。后台校验检查的是依据、权限和执行结果，不因角色行事卑劣而撤销计划。
 - 时间写成游戏分钟数，【世界】里写着现在是第几分钟。引用的 id 只用【世界】和上面资料里有的，或者这次方案里新建的。用不着就留空，一次最多 6 条。""" + """
 

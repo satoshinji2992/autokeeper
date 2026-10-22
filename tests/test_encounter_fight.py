@@ -603,7 +603,7 @@ async def test_the_answer_given_in_the_window_is_the_one_kept_for_the_next_blows
     _out, asked = await play(app, HIT, answers=["fight_back"])
     me = game.state.encounter.get("zhouheng")
     assert [a["kind"] for a in asked] == ["reaction"] and me.react == "fight_back" and me.asked
-    assert views.table(game)["presets"]["zhouheng"] == "fight_back"
+    assert views.table(game, viewer="zhouheng")["presets"]["zhouheng"] == "fight_back"
 
 
 # -- the answer to blows: set once beside the list, never in an option's words ------------------------
@@ -614,14 +614,14 @@ async def test_options_name_the_action_and_the_answer_to_blows_is_the_preset_set
     labels = [o.label for o in choices.options(game, "zhouheng")]
     assert "攻击 楼梯口打盹的老人（徒手，1D3）" in labels and "射击 楼梯口打盹的老人（.38 左轮手枪，1D10）" in labels
     assert not any(w in label for label in labels for w in ("被攻击时", "｜", "闪避", "反击"))
-    now = views.table(game)
+    now = views.table(game, viewer="zhouheng")
     assert now["presets"]["zhouheng"] == "dodge" and now["answers"]["zhouheng"] == ["dodge", "fight_back"]
     journal, rnd, calls = len(game.world.rec.journal), game.state.encounter.round, len(cast.calls)
     assert game.set_react("zhouheng", "fight_back") == ""
     enc = game.state.encounter
     assert enc.get("zhouheng").react == "fight_back" and enc.round == rnd and not enc.receipts and len(cast.calls) == calls
     assert len(game.world.rec.journal) == journal + 1  # its own op: the encounter changes only through the world
-    assert views.table(game)["presets"]["zhouheng"] == "fight_back"
+    assert views.table(game, viewer="zhouheng")["presets"]["zhouheng"] == "fight_back"
     assert [o.label for o in choices.options(game, "zhouheng")] == labels  # the words stay; only the preset moved
     assert game.set_react("zhouheng", "cover") == "这场战斗中不能这样应对"  # nobody has a gun
     assert game.set_react("zhouheng", "dodge") == "" and game.set_react("zhouheng", "fight_back") == ""  # back and forth

@@ -202,6 +202,8 @@ class LobbyScreen(Screen):
             self.chosen = msg["investigator"]
         elif t == "history" and self.welcome is not None and msg.get("seat") == self.chosen:
             self.welcome["log"] = with_private_history(self.welcome.get("log", []), msg.get("log", []))
+        elif t == "media_sync" and self.welcome is not None and msg.get("seat") == self.chosen:
+            self.welcome["media"] = msg
         elif t == "face" and self.m is not None:  # the picture of a card someone brought
             if path := media.unpack(msg.get("picture_data", "")):
                 self.m.pictures[str(msg.get("key", ""))] = path
@@ -561,6 +563,8 @@ class LobbyScreen(Screen):
         screen = NetGameScreen(self.m or table_module(w), state, self.link, self.chosen or None,
                                [LogEntry.model_validate(e) for e in w.get("log", [])])
         screen.inbox.extend(first)
+        if w.get("media"):
+            screen.inbox.insert(0, {"t": "media_sync", "seat": self.chosen or None, **w["media"]})
         self.link.handler = self._game_handler = screen.on_msg
         self.gone = True
         self.app.switch_screen(screen)

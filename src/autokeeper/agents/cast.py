@@ -37,10 +37,11 @@ from pydantic_core import from_json
 
 from .. import cards, rules_lookup, skills
 from ..config import Config
-from ..engine import audience, fog, world
+from ..engine import audience, fog, perception, presentation, world
 from ..engine.encounter import site as chase_site
 from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
+from ..engine.perception import PerceptionChange
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
 from ..harness import OnDelta, Reply, Session, Summarizer, trace
 from ..module import graph as module_graph
@@ -56,7 +57,8 @@ from ..rules.melee import opposed_difficulty
 from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
-from ..world.ops import AddFact, Follow
+from ..world.ops import AddFact, Enlist, Follow, SetPlan
+from ..world.record import Step
 from ..world.scene import Person, Scene
 from . import guard
 from .aftermath import AFTERMATH, Aftermath
@@ -291,8 +293,15 @@ class Deception(BaseModel):
     accompany: str = Field("", description="只是假答应同行时填写公开说要去的地点 id；不真实建立同行，其他谎言留空")
 
 
+class IntentionChange(BaseModel):
+    goals: list[str] | None = Field(None, description="真实目标变了才写完整当前目标；空列表表示已无原目标，不填则保留")
+    steps: list[Step] | None = Field(None, max_length=6, description="真实待办变了才写接下来全部未完步骤，替换旧待办；空列表撤销旧待办，不填则保留；不是已执行的结果")
+    reason: str = Field(min_length=1, description="这次亲历、听到的话或获准交涉结果为何改变真实决定；私有，不把口头承诺或谎言自动当真")
+
+
 class Dialogue(BaseModel):
     text: str = Field(description="NPC 当场说的话和动作，玩家会看到")
+    media: list[presentation.MediaAction] = Field(default_factory=list, description="当场展示自己获准提供的已有材料；普通对话留空，不引用未知资源")
     mood: str = Field("", description="根据这次亲历或可信消息变化后的心境，供后续扮演使用；无变化留空，不能凭空获知秘密")
     changes: list[WorldChange] = Field(default_factory=list, description="只记自己本次回复里明确承诺或发生的生活事实；text 必须逐字摘自回复；不给线索或改规则")
     accompany: str = Field("", description="真正愿意与调查员同行时填目的地 id；假答应、含糊意向、拒绝或只约在那里碰面留空")
@@ -301,6 +310,7 @@ class Dialogue(BaseModel):
     played: list[str] = Field(default_factory=list, description="【见到调查员时，你会】里这次已经做了的几条，填括号里的编号；没做就留空")
     told: list[str] = Field(default_factory=list, description="这次台词里已经说出要点的已解锁线索 id；只是提了一句、绕开了或留着下回说的不填")
     deceptions: list[Deception] = Field(default_factory=list, max_length=3, description="本次有意欺骗的私有说明，玩家不可见；未故意说谎时留空，不固定比例撒谎")
+    intentions: IntentionChange | None = Field(None, description="这次交流后真正改变的目标与待办；可与公开台词不同，无变化不填")
 
 
 class TravelDialogue(Dialogue):
@@ -315,6 +325,11 @@ class Aside(BaseModel):
     text: str = Field(min_length=1, description="仅对这些调查员讲述的观察、感受或私下消息；不代替世界操作和检定结算")
 
 
+class PrivateTelling(BaseModel):
+    text: str = Field(description="只给来信玩家的回复，不向其他玩家复述")
+    media: list[presentation.MediaAction] = Field(default_factory=list, description="需要向此人展示已有图或材料时使用；不得执行物理行动")
+
+
 class Telling(BaseModel):
     scene: Scene = Field(description="先写：这段讲完时的场面")
     text: str = Field(description="再写：讲给玩家听的叙述")
@@ -322,6 +337,10 @@ class Telling(BaseModel):
         "只有你判断调查确实陷入僵局、并在本次叙述中提议玩家做灵感检定时填 true；"
         "持续交谈、日常、讨论和正常等待不算停滞，不因内部回合计数自动提议"))
     asides: list[Aside] = Field(default_factory=list, description="各人单独获知的信息；没有私人信息时留空，不在公共 text 中复述")
+    media: list[presentation.MediaAction] = Field(default_factory=list, description="何时向谁呈现已有图或材料；留空保持；不自动解锁全桌线索")
+    perceptions: list[PerceptionChange] = Field(default_factory=list, description=(
+        "设置或撤销个人误认、幻觉与可见性：只改变指定人的界面与可选目标，实际人物和伤害不变；"
+        "恢复时 clear=true；不要在公共 text 揭露真实对应，具体感受用 asides"))
 
 
 @dataclass
@@ -335,6 +354,8 @@ class Narration:
     first: bool = True
     offer_idea: bool = False
     asides: list[dict] = field(default_factory=list)
+    media: list[dict] = field(default_factory=list)
+    perceptions: list[dict] = field(default_factory=list)
 
 
 class IdeaFailure(BaseModel):
@@ -609,6 +630,7 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 11. 场景介绍是首次进入时的底稿。此刻的人物、时间、物品和事件优先于底稿，不让已经离开的人重现，也不把一个房间无人扩大成整栋房屋无人：同一处别的房间里的人听得见调查员喊人、敲门，照他的打算应声、出来或隔着门答话，不写成没人应。
     没有结算新发现时，不新增可追查的脚印、异物、藏物动作等案情。准备中的内容由系统等待，不用悬念或虚构的意外遮掩。
 12. 你统筹全部幕后信息，但玩家并不共享所有见闻。公共 text 只讲共同获知的内容；仅一人或几人听见、梦见或收到的消息，写进 asides，to 填实际收件人的调查员 id。不在公共叙述中复述私语或暴露其内容；点名交谈本身不等于私语。
+    存在个人知觉时，公共 text 只写各方都能观察的动作，不揭示真实身份与个人所见的对应关系；各人的具体所见分别写入 asides。图片与手稿可通过 media 指定实际受众，未指定展示时保持当前画面，不因私下发现就向全桌展示。
     私人描述只记录相应人物的见闻，不因此变成世界真相；伤害、移动、交物、取得线索和分发材料仍须通过相应操作结算。没有私人消息时 asides 留空。
 
 {craft}
@@ -623,7 +645,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 外貌：{look}
 性格：{personality}
 说话方式：{voice}
-目标：{goal}
+模组初始目标：{goal}
 
 你知道的事：
 {knows}
@@ -648,6 +670,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 已解锁的线索是你知道、也愿意说的事，不是必须逐条朗读的清单。根据话题把相关内容说清；对方问得具体、事情紧迫或你有主动求助的理由时，不故意分成几轮挤牙膏。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
+- 当前记录的目标与计划优先于模组初始目标。交谈、亲历或本次交涉结果确实改变了你的真实决定，在 intentions 写新目标、全部未完待办及依据；旧打算不再合适时撤回或替换。单纯说过一句承诺不等于真心改变；有意敷衍照 deceptions 记录，真实目标可以不变。计划是尚未做的事，不把它写成已经成功。
 - 角色可以有意说谎、敷衍或假答应，包括为了自保、保护他人、利益、羞耻或体面；不限定反派，也不要求每次坦白。根据具体处境决定，不按比例撒谎。新编的有意欺骗在 deceptions 私下说明逐字台词、真实意图与动机，不能仅凭一句话就获知角色未知的真相。
   资料里写好的说法（借口、谎话）照原意说，可以换个说法，不自己加重伤病和经历的程度，也不添新的细节。
 
@@ -742,6 +765,7 @@ class Cast:
         # npc id -> the clues its last reply told (Dialogue.told), until the game takes them into that
         # reply's receipt, kept with its turn (Game._reply), as soon as the reply comes back
         self.told: dict[str, list[str]] = {}
+        self.media: dict[str, list[dict]] = {}
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -943,6 +967,8 @@ class Cast:
         prompt = (f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
                   if shared else "")
         prompt += f"【调查员】{inv.name}\n【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}"
+        if shared and state.perceptions and self.world is not None:
+            prompt += "\n【主持专用：个人知觉与真实对象】\n" + perception.brief(state)
         if self.world is not None:
             if shared:
                 prompt += f"\n【已建立的关系与现场事实】\n{world_view.keeper_view(self.world)}"
@@ -1078,6 +1104,8 @@ class Cast:
         )
         if self.backstage and self.world is not None:
             prompt += "\n【本局幕后简报】\n" + world_view.keeper_brief(self.world)
+        if state.perceptions:
+            prompt += "\n【主持专用：个人知觉与真实对象】\n" + perception.brief(state)
         prompt += "\n【全局及各参与者近期记录，私密内容保留收件范围】\n" + _recent(
             state, viewers=tuple(dict.fromkeys(item.who for item in items)))
         places = list(dict.fromkeys(audience.location(state, item.who) for item in items))
@@ -1600,6 +1628,11 @@ class Cast:
         for op in self._deception_ops(state, npc_id, dialogue):
             result = trial.apply(op)
             problems.extend(result.problems)
+        if intention_ops := self._intention_ops(trial, npc_id, dialogue):
+            from ..world.tools import Gateway
+
+            receipt = Gateway(trial, npc_id).settle(intention_ops, request_id="reply-intention-preview")
+            problems += [] if receipt.get("ok") else receipt.get("problems") or ["新的目标或计划未通过校验"]
         groups, refused = self._acts(trial, npc_id, dialogue, private=private)
         problems += refused
         if groups and not refused:  # tried whole through its own gateway, as they will land
@@ -1608,6 +1641,19 @@ class Cast:
             receipt = Gateway(trial, npc_id).preview([op for group in groups for op in group])
             problems += [] if receipt.get("ok") else receipt.get("problems") or ["当场的动作没有通过校验"]
         return problems
+
+    @staticmethod
+    def _intention_ops(w: World, npc_id: str, dialogue: Dialogue) -> list[dict]:
+        change = dialogue.intentions
+        if change is None or (change.goals is None and change.steps is None):
+            return []
+        ops = []
+        if w.agent(npc_id) is None:
+            # A persistent notebook does not allocate an autonomous model worker.
+            ops.append(Enlist(npc=npc_id, passive=True, reason=change.reason).model_dump(mode="json"))
+        ops.append(SetPlan(npc=npc_id, steps=change.steps, goals=change.goals, reason=change.reason,
+                           visibility="private").model_dump(mode="json"))
+        return ops
 
     @staticmethod
     def _acts(w: World, npc_id: str, dialogue: Dialogue, *, private: bool) -> tuple[list[list[dict]], list[str]]:
@@ -1634,6 +1680,7 @@ class Cast:
         # What an earlier reply handed over and nobody took is not this one's (Game._reply takes it at once).
         self.unsettled.pop(npc_id, None)
         self.told.pop(npc_id, None)
+        self.media.pop(npc_id, None)
         s = await self._fresh_npc(npc_id)
         mood = (f"\n【先前人物走向】{npc.arc}\n这是此前的基线；最新心境及本轮亲历、可信消息优先，可自然改变反应，不须始终维持这一状态。"
                 if npc.arc else "")
@@ -1647,6 +1694,8 @@ class Cast:
                                                   if e.kind == "item" and not e.important and e.at == npc_id]):
             mood += f"你手边的日常物件：{'、'.join(things)}。\n"
         mood += world.context(state, npc=npc_id)
+        if refs := presentation.npc_refs(self.module, state, npc_id):
+            mood += "\n【可当场展示的材料引用】" + "、".join(sorted(refs)) + "。只有你这次确实展示时才填media，普通对话留空。"
         knows, secrets = self._learned(npc_id)
         if knows:
             mood += "\n【你在本局新知道的】" + "；".join(knows)
@@ -1699,6 +1748,13 @@ class Cast:
                 dialogue = dialogue.model_copy(update={"deceptions": [d for d in dialogue.deceptions if d.model_dump_json() in intentions]})
                 self.unsettled[npc_id] = problems
         if self.world is not None:  # no await between the final validation and the commit
+            if intention_ops := self._intention_ops(self.world, npc_id, dialogue):
+                from ..world.tools import Gateway
+
+                receipt = Gateway(self.world, npc_id).settle(
+                    intention_ops, request_id=f"reply-intention:{state.turn}:{npc_id}:{state.npc(npc_id).lines}")
+                if not receipt.get("ok"):
+                    self.unsettled[npc_id] = list(dict.fromkeys([*self.unsettled.get(npc_id, []), *receipt.get("problems", [])]))
             adapters.settle_changes(self.world, dialogue.changes, source=npc_id, spoken=text, private=private)
             if dialogue.accompany in destinations and text == dialogue.text.strip():
                 self.world.apply(Follow(id=f"follow:{state.turn}:{npc_id}", actor=npc_id, npc=npc_id,
@@ -1716,6 +1772,15 @@ class Cast:
         npc_sheet = self.module.npc(npc_id)
         allowed = set(state.npc(npc_id).unlocked) | {c for c in npc_sheet.clues if c not in npc_sheet.gates}
         self.told[npc_id] = [c for c in dict.fromkeys(dialogue.told) if c in allowed and c not in state.clues]
+        listeners = audience.listeners(state, state.investigator.id)
+        if private:
+            listeners = [state.investigator.id]
+        refs = presentation.npc_refs(self.module, state, npc_id)
+        self.media[npc_id] = [media.model_dump(mode="json") | {
+            "to": media.to if media.to is not None else (None if not private and len(listeners) == len(state.investigators) else listeners),
+            "slot": "overlay"}
+            for media in dialogue.media if media.action == "show" and media.ref in refs
+            and (media.to is None or (media.to and all(who in listeners for who in media.to)))]
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
         return text
@@ -1792,6 +1857,7 @@ class Cast:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
             return reply.text.strip()
         reader = _Telling(check, on_delta)
+        extra += presentation.index(self.module, state)
         reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader, schema=TELLING)
         data = reply.data if isinstance(reply.data, dict) else {}
         text, scene = data.get("text"), data.get("scene")
@@ -1799,13 +1865,33 @@ class Cast:
             text, scene = _words(reply.text), None
         told = Narration(text=text.strip(), scene=scene if isinstance(scene, dict) else None, shown=reader.shown,
                          first=reader.first, offer_idea=data.get("offer_idea") is True,
-                         asides=_asides(data.get("asides"), state))
+                         asides=_asides(data.get("asides"), state), media=data.get("media") or [],
+                         perceptions=data.get("perceptions") or [])
         holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
         if told.shown or holds:
             self._kept(s, report, told.text)
         else:
             self._unsaid(s, report)
         return told
+
+    async def private_keeper(self, state: GameState, who: str, text: str) -> dict:
+        """One private use of the keeper model; no shared transcript or world action channel."""
+        system = ("你是本局守秘人，正在回复一名玩家的私信。只向来信人回应，不把他人的私人见闻泄露给他。"
+                  "这是场外沟通，不执行秘密物理行动、检定、移动、交物、伤害或线索结算；玩家提出这类要求时，"
+                  "说明尚未结算，需要正式提交行动。可以澄清其本人经历、规则或约定，也可以按情境给其私人提示。"
+                  "已发生的事实与个人知情范围以记录为准。后台真相不因玩家询问就全部揭露。"
+                  "媒体只能引用索引中已经准备的资源，且只向来信人展示。\n【模组备课】\n" + _book(self.module))
+        key = f"private_keeper:{who}"
+        s = self._oneshot(key, "keeper", system, PrivateTelling)
+        recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in audience.log(state, who)[-12:])
+        brief = world_view.keeper_brief(self.world) if self.world else ""
+        prompt = (f"【来信调查员】{state.find(who).name}（{who}）\n【该玩家近期记录】\n{recent}\n"
+                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=audience.location(state, who))}\n{brief}"
+                  + presentation.personal_context(state, who)
+                  + presentation.index(self.module, state, at=audience.location(state, who)))
+        reply = await self._send(key, s, state, prompt, bind=False)
+        parsed = PrivateTelling.model_validate(reply.data) if isinstance(reply.data, dict) else PrivateTelling(text=reply.text)
+        return parsed.model_dump(mode="json")
 
     async def idea_failure(self, state: GameState, clue_id: str) -> IdeaFailure:
         """The keeper chooses the failed Idea roll's time and cut, on its usual session. This rare
@@ -1977,6 +2063,7 @@ class Cast:
         s = self._open("director", "director", DIRECTOR_SYSTEM + "\n\n" + api_text(), schema=_schema(Improv))
         backstage = world_view.director_view(self.world).text if self.world is not None else ""
         prompt = director_context(self.module, state, kind, action=action, reason=reason, at=at, world=backstage)  # type: ignore[arg-type]
+        prompt += presentation.index(self.module, state, at=at)
         if action:
             prompt += await self._private_lore(state, action, [self.module.location(at or state.location).name, action[:80]])
         extra = self.prefs.for_director()  # its new scenes stay out of the player's lines
@@ -2132,11 +2219,13 @@ def opposing(npc: NPC) -> str:
 def _personal_situation(state: GameState, viewer: str, situation: str) -> str:
     """Parallel proposals share a public situation; each seat adds only its own private record."""
     entries = [e for e in audience.personal(state, viewer) if e.text not in situation]
+    papers = presentation.personal_context(state, viewer)
     if not entries:
-        return situation
+        return situation + ("\n" + papers if papers else "")
     return (situation + "\n【你的私人观察与私语】\n"
             + "\n".join(f"- [{e.time}] {e.who or e.kind}：{e.text}" for e in entries)
-            + "\n这些是你亲历、收到的说法或主观感知，不表示其他调查员已经知道，也不自动证实其内容。")
+            + "\n这些是你亲历、收到的说法或主观感知，不表示其他调查员已经知道，也不自动证实其内容。"
+            + ("\n" + papers if papers else ""))
 
 
 def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "speech", "npc", "keeper", "event", "clue", "handout"),

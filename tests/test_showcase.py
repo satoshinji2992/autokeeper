@@ -254,7 +254,7 @@ async def test_big_scenes_are_counted_in_the_module_s_hundred_and_stop_there(tmp
 
 
 # -- the director --------------------------------------------------------------------------------
-async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp_path, fake, monkeypatch):
+async def test_the_director_keeps_later_big_scenes_instead_of_silently_truncating_them(tmp_path, fake, monkeypatch):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(imagegen, "status", lambda: imagegen.Status(True, "", "codex"))
     made = []
@@ -273,11 +273,11 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
     game = Game(m, state, Improvising(asks, plans), Rules(dice=fake))
     game.showcases.cfg = config.Config(search="none")
     for i in range(4):
-        state.turn = 3 * i  # rounds apart: one place opens a new line once in three (Game._may_expand)
+        state.turn = 3 * i
         await game.rule(Action(kind="other", summary=f"行动{i}"))
-    assert [sc.id for sc in m.showcases] == ["d0", "d1", "d2"] and all(sc.improvised for sc in m.showcases)
+    assert [sc.id for sc in m.showcases] == ["d0", "d1", "d2", "d3"] and all(sc.improvised for sc in m.showcases)
     await asyncio.wait_for(game.showcases.task, 2)
-    assert len(made) == 3 and all(p.is_relative_to(game.visuals.folder) for p in made)  # per save, not per module
+    assert len(made) == 4 and all(p.is_relative_to(game.visuals.folder) for p in made)
     assert table(m, state)["showcases"] == []
     await game.close()
 

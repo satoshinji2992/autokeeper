@@ -873,7 +873,7 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         synced = await until(b, lambda x: x["t"] == "sync"
                              and ((x["state"].get("encounter_public") or {}).get("presets") or {}).get("lin") == "fight_back")
         assert hub.state.encounter.get("lin").react == "fight_back" and not hub.pool and hub.open
-        assert synced["state"]["encounter_public"]["presets"]["zhouheng"] == "dodge"
+        assert synced["state"]["encounter_public"]["presets"] == {"lin": "fight_back"}
         await a.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手，1D3）"})
         await b.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手，1D3）"})
         await a.send_json({"t": "done"})
@@ -941,6 +941,13 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
         sent.append(msg)
 
     hub._broadcast = collect
+    hub.clients = {"viewer": object()}
+
+    async def send_picture(cid, msg):
+        assert cid == "viewer"
+        await collect(msg)
+
+    hub._send = send_picture
     for key in ("creature-ghoul", "creature-shade"):  # the shade is the module's too, but not in this fight
         Image.new("RGB", (40, 60), (80, 30, 30)).save(tmp_path / f"{key}.png")
         hub.m.pictures[key] = str(tmp_path / f"{key}.png")
@@ -962,7 +969,7 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     foe = next(f for f in start["fight"]["fighters"] if f["id"] == "f1")  # its seat, never its own id
     assert "look" not in foe and "dex" not in foe and foe["wound"] == "受伤" and foe["hp"] is None and foe["name"] == "腐臭的影子"
     assert "look" not in reveal and reveal["portrait"] == art[0]["key"] and foe["portrait"] == art[0]["key"]
-    view = hub._view()
+    view = hub._view(st.investigators[0].id)
     assert "encounter" not in view and "sightings" not in view  # the keeper's: every HP, the arrangements, true names
     now = view["encounter_public"]
     shown = next(f for f in now["fight"]["fighters"] if f["id"] == "f1")
@@ -972,7 +979,7 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     me = st.investigators[0]
     assert next(f for f in now["fight"]["fighters"] if f["id"] == me.id)["hp"] == me.hp  # an investigator whole
     client = GameState.model_validate(view)  # the screens read its choices from the table's view
-    assert client.encounter is None and client.encounter_public["choices"][me.id] == views.table(hub.game)["choices"][me.id]
+    assert client.encounter is None and client.encounter_public["choices"][me.id] == views.table(hub.game, viewer=me.id)["choices"][me.id]
     assert "ghoul" not in str(now)
     await hub.game.close()
 
@@ -1017,7 +1024,7 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         picker = screen.query_one("#picker")
         host = Game(m, st, FakeCast({}), Rules(dice=fake))  # type: ignore[arg-type]
         await begin(host, ["warden"])
-        view = {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host)}
+        view = {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host, viewer=seat)}
         await screen.on_msg({"t": "event", "ev": {"type": "fight_start", "fight": views.fight_view(host), "line": "【战斗开始】"}})
         await screen.on_msg({"t": "sync", "state": view})  # the state with the fight, after the turn
         await pilot.pause(0.3)
@@ -1032,7 +1039,7 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         assert {"t": "react", "react": "fight_back"} in link.sent and not any(x["t"] == "act" for x in link.sent) and picker.display
         st.pending_turn = {}
         assert host.set_react(seat, "fight_back") == ""  # as the Hub does with it
-        await screen.on_msg({"t": "sync", "state": {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host)}})
+        await screen.on_msg({"t": "sync", "state": {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host, viewer=seat)}})
         await pilot.pause(0.1)
         assert "反击" in str(picker.border_subtitle) and picker.display
         assert [picker.get_option_at_index(i).id for i in range(picker.option_count)] == words  # the same choices

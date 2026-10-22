@@ -76,6 +76,7 @@ async def test_the_entity_is_fought_as_the_man_they_met_with_a_question_mark(mod
     assert asked[0]["prompt"] == f"{SHOWN}向你扑来，你怎么应对？"
     shown = [e for e in out if e["type"] in ("fight_act", "fight_state", "fight_round")]
     assert shown and not any(leaked(json.dumps(e, ensure_ascii=False), ids=False) for e in shown)
+    assert all("_entity_line" not in e and "_entity_lines" not in e for e in out)
     assert {e["attacker_name"] for e in shown if e["type"] == "fight_act"} == {SHOWN, "托马斯·里德"}
     report = cast.reports[-1]
     assert f"【称呼】“埃里”（玩家所见：{SHOWN}）" in report and "异界存在" not in report  # the keeper's note never in it

@@ -128,7 +128,7 @@ async def test_a_chase_begins_on_the_map_and_hiding_ends_it(module, fake):
     enc = game.state.encounter
     assert enc.mode == "chase" and enc.chase.site.source == "location_graph"
     assert [n.id for n in enc.chase.site.nodes] == ["tower", "square", "office"] and enc.chase.site.nodes[-1].exit
-    assert any(label == "躲藏" for label, _note in views.table(game)["choices"]["zhouheng"])
+    assert any(label == "躲藏" for label, _note in views.table(game, viewer="zhouheng")["choices"]["zhouheng"])
     fake.queue(10)  # 潜行 against the warden's Spot Hidden (25: regular)
     out, _ = await play(app, "躲藏", thread={**THREAD, "configurable": {"thread_id": "c2"}})
     assert any(e["type"] == "chase_end" and e["end"] == "fled" for e in out)

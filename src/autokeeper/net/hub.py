@@ -83,7 +83,7 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..engine import audience, chat, debrief, fog, idea
+from ..engine import audience, chat, debrief, fog, idea, perception, presentation
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.encounter import views
@@ -112,9 +112,11 @@ CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per min
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
+PRIVATE |= {"presentations", "private_messages", "presentation_issues"}
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
+PRIVATE |= {"perceptions", "perception_key"}  # real targets and signed personal choices stay on the server
 # The encounter is the keeper's: true names, every HP, the arrangements (engine/encounter); the table gets
 # its public view instead (views.table, as encounter_public).
 PRIVATE |= {"encounter", "encounter_log", "sightings", "encounter_public"}
@@ -381,6 +383,10 @@ class Hub:
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
+        self.private_requests: asyncio.Queue = asyncio.Queue()  # (seat, text, request id); no public action slot
+        for ident, receipt in self.state.private_messages.items():
+            if not receipt.get("reply_shown"):
+                self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
         self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F5)
         self.port = 0
         self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
@@ -390,6 +396,7 @@ class Hub:
         self.plays: asyncio.Queue = asyncio.Queue()  # answers to plugins' questions and /commands, done between actions
         self.game.plugins.away = lambda seat: self.sits.get(seat) is None  # an empty seat's questions take the default
         self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
+        self.sent_to: dict[str, dict[str, str]] = {}  # only images this connection actually received
         self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
     # -- connections --------------------------------------------------------------------
@@ -467,6 +474,20 @@ class Hub:
             else:  # the keeper is telling, or this round has no room for it: first in the next round
                 self.early.append((seat, text))
                 await self._pool()
+        elif t == "kp_private":
+            seat = self._seat_of(cid)
+            text = str(msg.get("text", "")).strip()
+            if seat is None:
+                await self._send(cid, {"t": "error", "text": "观战模式下无法向守秘人私信。"})
+            elif not text or not self.started.is_set():
+                await self._send(cid, {"t": "error", "text": "游戏开始后，请输入私信正文。"})
+            elif self.over:
+                await self._send(cid, {"t": "error", "text": "本局已结束。"})
+            else:
+                request = str(msg.get("request") or uuid.uuid4().hex)
+                self.game.receive_private_message(seat, text, request=request)
+                self.private_requests.put_nowait((seat, text, request))
+                self.wake.set()
         elif t == "done":
             seat = self._seat_of(cid)
             if seat is not None and self.open:
@@ -604,6 +625,8 @@ class Hub:
         # An empty history also matters: switching to a character with no private knowledge
         # must clear the previous character's private backlog in the lobby.
         await self._send(cid, {"t": "history", "seat": inv_id, "log": private_log})
+        await self._send(cid, {"t": "media_sync", "seat": inv_id, **self._media_view(inv_id)})
+        await self._personal_faces(cid)
         if not self.bringing and all(self.sits.values()):  # a saved game: every human seat is taken, it goes on
             self.started.set()
         await self._maybe_begin()
@@ -811,7 +834,7 @@ class Hub:
         from ..engine.encounter import views
 
         game = getattr(self, "game", None)
-        now = views.table(game) if game is not None else None
+        now = views.table(game, viewer=viewer) if game is not None else None
         if now is not None:  # the fight as the table sees it, each seat's choices with it
             now = self._faced(public_battle(now))
         view["encounter_public"] = now
@@ -824,7 +847,9 @@ class Hub:
         if view["item_owners"]:  # where things are, only of the things the players know of
             shown = known_items(self.m, st)
             view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
-        return view
+        from ..engine import perception
+
+        return perception.project_state(game, viewer, view) if game is not None else view
 
     def _seats(self, cid: str | None = None) -> list[dict[str, Any]]:
         """Who sits where, as everyone sees it; the host (cid) also gets a word on brought cards."""
@@ -852,6 +877,7 @@ class Hub:
     def _welcome(self, cid: str) -> dict[str, Any]:
         book = self._book()
         keys = self._art_keys(book)
+        keys |= {p.portrait for p in perception.appearances(self.state, self._seat_of(cid)).values() if p.portrait}
         return {
             "t": "welcome",
             "you": cid,
@@ -867,6 +893,7 @@ class Hub:
             "seats": self._seats(cid),
             "bring": self.bringing,  # seats may still change their investigator
             "started": self.started.is_set(),
+            "media": self._media_view(self._seat_of(cid)),
             "room": self.room,
         }
 
@@ -897,20 +924,30 @@ class Hub:
         for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
             await self._picture(key)
 
-    async def _picture(self, key: str) -> None:
+    async def _picture(self, key: str, *, only: str | None = None) -> None:
         """A picture to every screen as an art event, unless they have it: never a path on the host, and a
         creature's under its opaque key (_face). One not on disk yet goes the next time it is shown."""
         real = self.faces.get(key, key)
         shown = self._face(real)
         path = self.m.pictures.get(real)
-        if not path or self.sent.get(shown) == path:
+        pending = [cid for cid in self.clients if (only is None or cid == only)
+                   and perception.picture_visible(self.game, self._seat_of(cid), real)
+                   and self.sent_to.get(cid, {}).get(shown) != path]
+        if not path or not pending:
             return
         if data := media.pack(path):
             self.sent[shown] = path
             art = self.m.art.get(real, "")
-            await self._broadcast({"t": "event", "ev": {"type": "art", "key": shown, "art": art, "status": "ready",
-                                                        "mask": self.m.art_colors.get(real) or artkit.auto_mask(art),
-                                                        "picture_data": data}})
+            for cid in pending:
+                await self._send(cid, {"t": "event", "ev": {"type": "art", "key": shown, "art": art, "status": "ready",
+                                                            "mask": self.m.art_colors.get(real) or artkit.auto_mask(art),
+                                                            "picture_data": data}})
+                self.sent_to.setdefault(cid, {})[shown] = path
+
+    async def _personal_faces(self, cid: str) -> None:
+        for p in perception.appearances(self.state, self._seat_of(cid)).values():
+            if p.visible and p.portrait:
+                await self._picture(p.portrait, only=cid)
 
     async def _faces(self, ev: dict[str, Any]) -> None:
         """The faces a fight or a chase shows, before the event that shows them: its foes', a creature
@@ -931,7 +968,21 @@ class Hub:
         ws = self.clients.get(cid)
         if ws is not None and not ws.closed:
             try:
+                viewer = self._seat_of(cid)
+                ev = msg.get("ev", {})
+                if ev.get("type") == "art" and not perception.picture_visible(self.game, viewer, self.faces.get(ev.get("key"), ev.get("key"))):
+                    return
+                msg = perception.project_payload(self.game, viewer, msg)
                 await ws.send_str(json.dumps(msg, ensure_ascii=False, default=str))
+                pictures = msg.get("picture_data")
+                delivered = list(pictures.items()) if isinstance(pictures, dict) else (
+                    [(msg["key"], pictures)] if isinstance(pictures, str) and msg.get("key") else [])
+                image_event = msg.get("ev", {})
+                if image_event.get("type") == "art" and isinstance(image_event.get("picture_data"), str):
+                    delivered.append((image_event["key"], image_event["picture_data"]))
+                for key, data in delivered:
+                    if data and (path := self.m.pictures.get(self.faces.get(key, key))):
+                        self.sent_to.setdefault(cid, {})[key] = path
             except ConnectionError:  # gone mid-send; the connection handler cleans up
                 pass
 
@@ -945,6 +996,10 @@ class Hub:
                 await self._send(cid, shown)
 
     async def _event(self, ev: dict[str, Any]) -> None:
+        if ev.get("type") == "presentation":
+            delivery = self._media_wire(ev)
+            await self._broadcast({"t": "event", "ev": delivery})
+            return
         if ev.get("type") in ("ruling", "plugin_status", "action"):
             # The arbiter's private explanation and unrevealed clue ids stay on the host, and so does the parsed
             # action: in a fight it carries the keeper's plan for every foe (declared.plan). No screen reads it.
@@ -991,6 +1046,9 @@ class Hub:
             if not data:
                 return
             ev = {"type": "showcase", "id": ev.get("id", ""), "kind": ev.get("kind", ""), "title": ev.get("title", ""), "picture_data": data}
+        if ev.get("type") in (*BATTLE, "npc", "people", "reveal"):
+            for cid in self.clients:
+                await self._personal_faces(cid)
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})
@@ -1174,6 +1232,7 @@ class Hub:
                 await self._house_rules()
                 await self._plays()
                 await self._asks()
+                await self._privates()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
                     await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
@@ -1258,7 +1317,10 @@ class Hub:
                     await self._event({"type": "status", "text": ""})
                     await self._unattended(inv, exc)
                 continue
-            await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""), "text": text})
+            from ..engine.perception import input_label
+
+            await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""),
+                               "text": input_label(self.game, inv.id, text)})
             while True:
                 try:
                     await self._run(text, seat, ai=False)
@@ -1428,6 +1490,43 @@ class Hub:
     async def _asks(self) -> None:
         while not self.asks.empty():
             await self._tell_again(*self.asks.get_nowait())
+
+    async def _privates(self) -> None:
+        while not self.private_requests.empty():
+            seat, text, request = self.private_requests.get_nowait()
+            self.game.emit = self._event
+            try:
+                await self.game.private_message(seat, text, request=request)
+            except Exception as exc:
+                self._failed("守秘人私信", exc)
+                if cid := self.sits.get(seat):
+                    await self._send(cid, {"t": "error", "text": "私信暂未完成，已有记录保留。"})
+            finally:
+                self._save()
+
+    def _media_wire(self, delivery: dict) -> dict:
+        """Only a selected asset snapshot travels; host paths and real image identities do not."""
+        ev = presentation.event(delivery)
+        ev["id"] = presentation.opaque(ev["id"], "delivery")
+        payload = dict(ev.get("payload", {}))
+        if payload.get("kind") == "handout":
+            h = dict(payload["handout"])
+            keys = {key: presentation.opaque(ev["id"], key) for key in h["images"]}
+            h["images"] = [keys[key] for key in h["images"]]
+            payload = {"kind": "handout", "handout": h,
+                       "art": {keys[k]: v for k, v in payload.get("art", {}).items() if k in keys},
+                       "colors": {keys[k]: v for k, v in payload.get("colors", {}).items() if k in keys},
+                       "picture_data": {keys[k]: media.pack(v, max_size=1600) for k, v in payload.get("pictures", {}).items()
+                                        if k in keys}}
+        elif payload.get("kind") == "image":
+            payload.pop("picture", None)
+            payload["picture_data"] = media.pack(ev["payload"].get("picture", ""), max_size=1600)
+        ev["payload"] = payload
+        return ev
+
+    def _media_view(self, viewer: str | None) -> dict:
+        return {"slots": {slot: self._media_wire(p) for slot, p in presentation.current(self.state, viewer).items()},
+                "papers": [self._media_wire(p) for p in presentation.papers(self.state, viewer).values()]}
 
     async def _tell_again(self, cid: str, nudge: str, told: Told | None) -> None:
         why = "叙述已更新，请重新请求重述。" if self.game.told is not told else self.game.retell_blocked()

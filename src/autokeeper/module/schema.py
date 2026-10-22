@@ -146,7 +146,7 @@ class NPC(BaseModel):
         "原文有数值照抄；空着就按普通人算（各项 50 上下，生命 11）。带着的武器写进 look，或在 items 里交给他"))
     arc: str = Field("", description="此刻的心境和正在发生的变化（角色弧光），会随剧情更新")
     looks: list[Look] = Field(default_factory=list, description="剧情让他明显变样之后的头像（受伤、变异、死去），最多两种")
-    important: bool = Field(False, description="重要 NPC：有自己的目标和打算，调查员不在时也会行动；每个模组最多标 6 个，普通角色不标")
+    important: bool = Field(False, description="重要 NPC：有自己的目标和打算，调查员不在时也会行动；普通背景角色不标，记录人数不等于后台工作并发")
     # What the players' screens call them before they know who it is, as Creature.called.
     called: str = Field("", description="调查员还不认识他时怎么称呼：只写看得见的样子，如「穿雨衣的高个子」；认得就留空")
     attacks: list[str] = Field(default_factory=list, description=(

@@ -90,7 +90,11 @@ def names(ctx: Ctx, audience: str = "players") -> dict[str, str]:
     return {p.id: ctx.name(p.id, audience) for p in ctx.enc.participants}
 
 
-def portrait(game: Any, pid: str) -> str:
+def portrait(game: Any, pid: str, *, viewer: str | None = None) -> str:
+    from .. import perception
+
+    if appearance := perception.get(game.state, viewer, pid):
+        return appearance.portrait if appearance.visible else ""
     inv = next((i for i in game.state.investigators if i.id == pid), None)
     if inv is not None:
         return inv.portrait
@@ -120,40 +124,59 @@ def readiest(v) -> Any:
     return actions.best_melee(v) or (v.attacks()[0] if v.attacks() else None)
 
 
-def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
+def fight_view(game: Any, enc: EncounterState | None = None, *, viewer: str | None = None) -> dict:
     """The fight as the screens draw it (the shape the screens have always drawn): public names, a foe's
     wounds in words, an investigator's and an ally's hit points."""
+    from .. import perception
+
     ctx = Ctx.of(game, enc)
     out = []
     for p in ctx.enc.participants:
+        appearance = perception.get(game.state, viewer, p.id)
+        if appearance is not None and not appearance.visible:
+            continue
         v = ctx.view(p.id)
         if v is None:
             continue
         b = v.body()
         weapon = readiest(v)
-        party = p.side == "party"
+        party = (appearance.side if appearance is not None and appearance.side else p.side) == "party"
         look = seen_look(v, 60)
-        out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
+        out.append({"id": p.id, "name": ctx.name(p.id, viewer or "players"),
+                    "kind": "creature" if appearance is not None and p.kind == "investigator" else p.kind,
+                    "side": "party" if party else "foe",
                     "status": status(ctx, p.id), "wound": wound_word(b), "hp": b.hp if party else None,
-                    "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
+                    "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id, viewer=viewer),
+                    "look": "" if appearance is not None else look,
                     "weapon": weapon.name if weapon is not None else "徒手", "stance": p.react or "dodge",
                     "prone": p.id in ctx.enc.scene.prone, "held": bool(ctx.held_by(p.id)), "dex": v.char("敏捷")})
     m = masks(ctx.enc)
     for f in out:
-        f["id"] = m.get(f["id"], f["id"])
+        appearance = perception.get(game.state, viewer, f["id"])
+        f["id"] = appearance.handle if appearance is not None else m.get(f["id"], f["id"])
     return {"round": ctx.enc.round, "place": ctx.enc.place, "fighters": out}
 
 
-def chase_view(game: Any, enc: EncounterState | None = None) -> dict:
+def chase_view(game: Any, enc: EncounterState | None = None, *, viewer: str | None = None) -> dict:
     """The chase as the screens draw it (engine/encounter/chase.view): the way run and ahead, everyone
     on it by public name, a foe's wounds in words; ids masked as in the fight's view."""
+    from .. import perception
     from . import chase as chasing
 
     ctx = Ctx.of(game, enc)
     out = chasing.view(ctx, game)
     m = masks(ctx.enc)
+    kept = []
     for r in out["runners"]:
-        r["id"] = m.get(r["id"], r["id"])
+        appearance = perception.get(game.state, viewer, r["id"])
+        if appearance is not None and not appearance.visible:
+            continue
+        if appearance is not None:
+            r.update(name=appearance.name or "未辨明的身影", portrait=appearance.portrait,
+                     side=appearance.side or r.get("side", "foe"), kind="creature", hp=None, hp_max=None)
+        r["id"] = appearance.handle if appearance is not None else m.get(r["id"], r["id"])
+        kept.append(r)
+    out["runners"] = kept
     return out
 
 
@@ -354,8 +377,11 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
 def keeper_text(game: Any, **kw) -> str:
     from ...agents.encounter import encounter_brief
     from ...world.context import apart
+    from .. import perception
 
     text = encounter_brief(brief(game, **kw))
+    if game.state.perceptions:
+        text += "\n【主持专用：个人知觉与真实对象，不公开对应关系】\n" + perception.brief(game.state)
     left = apart(game.state, game.world.name)  # not in it: elsewhere, as they were left (GameState.apart)
     return text + (f"\n【和大家分开的调查员】{left}（不在这场遭遇里）" if left else "")
 
@@ -364,12 +390,13 @@ __all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "na
 
 
 # -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------
-def table(game: Any) -> dict | None:
+def table(game: Any, *, viewer: str | None = None) -> dict | None:
     """The fight or the chase going on as the players' screens hold it, or None outside one: each
     acting investigator's choices for this round in the words the engine matches (`choices`), and in
     a fight the answer to blows each has set (`presets`), the ones they may set (`answers`, Tab) and
     how dangerous the foes they see could be to them (`risk`, choices.risk at its most). Nothing in it
     is the keeper's: public names, a foe's wounds in words."""
+    from .. import perception
     from . import choices
 
     st = game.state
@@ -380,12 +407,16 @@ def table(game: Any) -> dict | None:
     chase = enc.mode == "chase" and enc.chase is not None
     out = {"kind": "chase" if chase else "fight", "round": enc.round, "choices": {}, "presets": {}, "answers": {}, "risk": {},
            "acting": []}
-    out |= {"chase": chase_view(game, enc)} if chase else {"fight": fight_view(game, enc)}
+    out |= {"chase": chase_view(game, enc, viewer=viewer)} if chase else {"fight": fight_view(game, enc, viewer=viewer)}
     for p in enc.participants:
         if p.kind != "investigator" or not ctx.acting(p.id):
             continue
+        if viewer is None or p.id != viewer:
+            continue
         out["acting"].append(p.id)
-        out["choices"][p.id] = [[o.label, o.note] for o in choices.options(game, p.id, ctx=ctx)]
+        personal = bool(perception.appearances(game.state, p.id))
+        out["choices"][p.id] = [[o.label, o.note, perception.choice_handle(game, p.id, o.value)] if personal
+                               else [o.label, o.note] for o in choices.options(game, p.id, ctx=ctx)]
         if not chase:
             out["presets"][p.id] = choices.preset(ctx, p.id)
             out["answers"][p.id] = choices.presets(ctx, p.id)
@@ -396,7 +427,7 @@ def table(game: Any) -> dict | None:
 def stances(game: Any, pid: str) -> list[str] | None:
     """The answers to blows investigator `pid` may set now (choices.presets): in a fight they can act
     in; None otherwise. What an AI player may write in its answer (agents/cast.Proposal.react)."""
-    now = table(game)
+    now = table(game, viewer=pid)
     return now["answers"].get(pid) if now is not None and now["kind"] == "fight" else None
 
 
@@ -405,7 +436,7 @@ def danger(ctx: Ctx, pid: str) -> int:
     from . import choices
 
     worst = 0
-    for f in ctx.foes(pid):
+    for f in ctx.perceived_foes(pid):
         v = ctx.view(f)
         if v is None or not ctx.acting(f) or ctx.hidden_from(pid, f):
             continue
@@ -434,7 +465,7 @@ def situation(now: dict, who: str | None, names: dict[str, str]) -> str:
         if who not in (None, pid):
             continue
         out.append(f"{names.get(pid, pid)}这一轮可以做的（照原样写出其中一行“——”前面的文字；别的具体动作也可以，写清楚做什么）：")
-        out += [f"  {label} —— {note}" for label, note in rows]
+        out += [f"  {row[0]} —— {row[1]}" for row in rows]
         if answers := now.get("answers", {}).get(pid):
             word = actions.REACT_WORDS.get(now.get("presets", {}).get(pid, ""), "闪避")
             out.append(f"  被攻击时：{word}（react 可改为：" + "、".join(f"{x} {actions.REACT_WORDS[x]}" for x in answers) + "）")

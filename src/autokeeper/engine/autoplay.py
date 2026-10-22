@@ -39,6 +39,7 @@ from .state import GameState, time_of_day
 
 class PartyState(TypedDict, total=False):
     situation: str
+    situations: dict[str, str]  # each author's own scene, knowledge and perceived identities
     ids: list[str]
     stances: dict[str, list[str] | None]  # in a fight, the answers to blows each may set (views.stances)
     # (investigator, what it does, how it would push it, its answer to blows from now on in a fight)
@@ -49,7 +50,7 @@ def party_graph(cast: Cast, state: GameState):
     """Fan out: every AI investigator proposes an action at the same time."""
 
     def fan_out(ps: PartyState) -> list[Send]:
-        return [Send("propose", {"situation": ps["situation"], "ids": [inv_id], "stances": ps.get("stances", {})})
+        return [Send("propose", {"situation": ps["situations"][inv_id], "ids": [inv_id], "stances": ps.get("stances", {})})
                 for inv_id in ps["ids"]]
 
     async def propose(ps: PartyState) -> dict:
@@ -82,17 +83,20 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
     in the words the engine reads (battle_now): for `who`, or for every investigator in it.
 
     The first line is what the investigator's memory keeps of each turn (Cast.investigator)."""
+    from . import perception
+
+    masks = perception.appearances(st, who)
     loc = m.location(audience.location(st, who) if who else st.location)
     known, there = fog.known(m, st), set(fog.been(m, st))
     places = "、".join(f"{name}（{'去过' if pid in there else '听说过'}）" for pid, name in known.items() if pid != loc.id)
-    met = [n for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
+    met = [n for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met and n.id not in masks]
     people = "、".join(
         f"{n.name}（{n.role + '，' if n.role else ''}"
         f"{'就在这里' if n.location == loc.id else f'在{known[n.location]}' if n.location in known else '不知道在哪'}）"
         for n in met
     )  # fmt: skip
     handouts = "；".join(f"〔{m.handout(h).title}〕{_flat(m.handout(h).text, 160)}" for h in st.handouts)
-    party = "\n".join(f"- {_status(inv)}" for inv in st.investigators)
+    party = "\n".join(f"- {_status(inv)}" for inv in st.investigators if inv.id not in masks)
     visible = audience.log(st, who)
     recent = [e for e in visible if e.kind in TOLD][-10:]
     last = max((i for i, e in enumerate(recent) if e.kind == "keeper"), default=-1)  # where the keeper left the scene: in full
@@ -140,7 +144,7 @@ def battle_now(st: GameState, who: str | None = None, game: Game | None = None) 
     for `who`, or for every investigator still in it: an AI player picks a real choice instead of
     words the keeper has to read. "" outside one. `game`: the host's; a LAN client reads the table's
     view it was sent (GameState.encounter_public)."""
-    now = views.table(game) if game is not None else st.encounter_public
+    now = views.table(game, viewer=who) if game is not None else st.encounter_public
     if not now:
         return ""
     return views.situation(now, who, {i.id: i.name for i in st.investigators})
@@ -284,7 +288,8 @@ async def run(
             alive = [inv.id for inv in state.investigators if inv.can_act]
             if not alive:
                 break
-            result = await party_app.ainvoke({"situation": situation(m, state, game=game), "ids": alive, "proposals": [],
+            result = await party_app.ainvoke({"situations": {x: situation(m, state, x, game) for x in alive},
+                                              "ids": alive, "proposals": [],
                                               "stances": {x: views.stances(game, x) for x in alive}})
             if not result["proposals"]:  # nobody gave a move it could play (Cast.investigator): the run stops here
                 console.print("[yellow]AI 调查员本轮均未给出有效行动，自动游玩停止。[/]")

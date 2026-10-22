@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from .record import Event
     from .store import World
 
-MAX_AGENTS = 6
 MAX_BRING = 10  # everyday things registered in one turn, by everyone together: a scene's worth, not a shop's stock
 STAFF = (ENGINE, DIRECTOR, KEEPER, "arbiter")
 # Settled by the game engine alone, from dice it rolled: never by a model, the director, an NPC or
@@ -898,8 +897,6 @@ class Enlist(Base):
     def check(self, w: World) -> list[str]:
         if _npc(w, self.npc) is None:
             return [f"{self.npc} 不是 NPC"]
-        if self.npc not in w.rec.agents and len(w.rec.agents) >= MAX_AGENTS:
-            return [f"重要 NPC 最多 {MAX_AGENTS} 个"]
         return [f"地点 {p} 不存在" for p in self.places if p not in w.rec.entities]
 
     def settle(self, w: World, oid: str):
@@ -911,6 +908,8 @@ class Enlist(Base):
         else:
             w.touch(a)
             a.goals = self.goals or a.goals
+        if self.goals:
+            a.goal_reason, a.goal_source = self.reason, oid
         a.resources = self.resources or a.resources
         a.places = list(dict.fromkeys([*a.places, *self.places]))
         a.mood = self.mood or a.mood
@@ -921,7 +920,7 @@ class Enlist(Base):
 class SetPlan(Base):
     kind: Literal["plan"] = "plan"
     npc: str = Field(description="重要 NPC 的 id")
-    steps: list[Step] = Field(max_length=6, description="接下来几步，按先后排")
+    steps: list[Step] | None = Field(None, max_length=6, description="替换接下来未完成的几步，按先后排；空列表撤销旧待办，不填保留")
     goals: list[str] | None = Field(None, description="目标也变了才写")
     mood: str = Field("", description="此刻的心境")
     reads: SkipJsonSchema[dict[str, int]] = Field(default_factory=dict)  # versions the plan was made from (scheduler fills them)
@@ -931,9 +930,9 @@ class SetPlan(Base):
 
         if self.npc not in w.rec.agents:
             return [f"{self.npc} 不是重要 NPC"]
-        ids = [s.id for s in self.steps]
+        ids = [s.id for s in self.steps or []]
         problems = ["步骤 id 重复"] if len(set(ids)) != len(ids) else []
-        for s in self.steps:
+        for s in self.steps or []:
             if s.status != "pending":
                 problems.append(f"步骤 {s.id} 是新计划，不能预先标记为 {s.status}")
             problems += [f"步骤 {s.id}：{p}" for p in condition_problems(w, s.when)]
@@ -949,10 +948,11 @@ class SetPlan(Base):
 
     def settle(self, w: World, oid: str):
         a = w.rec.agents[self.npc]
-        incoming = {s.id for s in self.steps}
-        done = [s for s in a.plan if s.status != "pending" and s.id not in incoming]
+        incoming = {s.id for s in self.steps or []}
+        retired = [s.model_copy(deep=True, update={"status": "dropped", "note": self.reason or "已由新计划替换"})
+                   if s.status in {"pending", "blocked"} else s for s in a.plan if s.id not in incoming]
         steps = []
-        for s in self.steps:
+        for s in self.steps or []:
             s = s.model_copy(deep=True, update={"started": w.rec.seq})
             if not s.achieved:
                 final = {}
@@ -964,16 +964,19 @@ class SetPlan(Base):
                         final[f"owner:{op.item}"] = op.to
                 s.achieved = " & ".join(f"{key}:{value}" for key, value in final.items())
             steps.append(s)
-        a.plan = [*done[-6:], *steps]
+        if self.steps is not None:
+            a.plan = [*retired[-6:], *steps]
         # Its agent version validates the decision's input, but writing this very
         # plan (and its subsequent mood/seen bookkeeping) changes that version.
         # Keep actual external dependencies for future execution, not this self-write.
-        a.reads = {ref: version for ref, version in self.reads.items() if ref != f"agent:{self.npc}"}
+        if self.steps is not None:
+            a.reads = {ref: version for ref, version in self.reads.items() if ref != f"agent:{self.npc}"}
         if self.goals is not None:
             a.goals = list(self.goals)
+            a.goal_reason, a.goal_source = self.reason, oid
         a.mood = self.mood or a.mood
         w.touch(a)
-        text = f"{w.name(self.npc)}打算：" + "；".join(s.text for s in self.steps)
+        text = f"{w.name(self.npc)}打算：" + "；".join(s.text for s in (a.plan if self.steps is None else self.steps) if s.status == "pending")
         return w.emit("plan", text, actor=self.npc, participants=[self.npc], visibility="private", witnesses=[], op=oid), None
 
 

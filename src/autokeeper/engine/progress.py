@@ -90,14 +90,15 @@ def material(m: Module, st: GameState) -> str:
     p = st.progress
     fresh = st.logged - p.seen
     new = st.log[-fresh:] if fresh > 0 else []
-    rows = [_line(m, st, e) for e in new if e.kind in SHOWN and audience.public(e)][-LINES:]
+    rows = [_line(m, st, e) for e in new if e.kind in SHOWN and audience.shared(e)][-LINES:]
     parts = [f"【缘起：开场时调查员就知道的事】\n{_flat(m.hook)}"]
     if p.text:
         parts.append(f"【之前写的故事至今（第 {p.turn} 轮）】\n{p.text}")
     if st.memory and (not p.text or fresh > len(st.log)):  # what the log has folded away
         parts.append(f"【更早的经过（摘要）】\n{st.memory}")
     parts.append("【这之后发生的事】\n" + ("\n".join(rows) or "（没有新的事）"))
-    party = "、".join(f"{i.name}（{i.occupation}）" for i in st.investigators)
+    differing = {target for masks in st.perceptions.values() for target in masks}
+    party = "、".join(f"{i.name}（{i.occupation}）" for i in st.investigators if i.id not in differing) or "调查员们"
     parts.append(f"【现在】{st.clock}，{m.location(st.location).name}；调查员：{party}")
     parts.append(f"把新发生的事并进去，写一段完整的「故事至今」，不超过 {LIMIT} 字。")
     return "\n\n".join(parts)

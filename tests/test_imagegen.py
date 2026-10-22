@@ -577,7 +577,13 @@ async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_the
     async def collect(msg):
         sent.append(msg)
 
-    hub._broadcast = collect
+    class Receiver:
+        closed = False
+
+        async def send_str(self, message):
+            await collect(json.loads(message))
+
+    hub.clients = {"viewer": Receiver()}
     key = hub.game.visuals.look("tower", "钟楼的楼梯塌了一半，碎石堵着门")
     hub.game.visuals.schedule()
     await asyncio.gather(*(t for k, t in hub.game.visuals.tasks.items() if k.startswith("look:")))

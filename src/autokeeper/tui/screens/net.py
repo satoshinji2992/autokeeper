@@ -14,6 +14,7 @@ import math
 import os
 import re
 import time
+import uuid
 from collections import Counter
 from collections.abc import Callable
 from functools import partial
@@ -464,6 +465,14 @@ class NetGameScreen(GameScreen):
                     screen.settled()
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
+        elif t == "media_sync" and msg.get("seat") == self.seat:
+            self._media_slots.clear()
+            self._media_papers.clear()
+            for ev in msg.get("papers", []):
+                self._present(self._media_unpacked(ev), display=False)
+            for ev in msg.get("slots", {}).values():
+                self._present(self._media_unpacked(ev))
+            self._scene(self.state.location)
         elif t == "history" and msg.get("seat") == self.seat:
             # The public backlog arrived before this seat was chosen. Restore only the private
             # entries the Hub sent for it, without repeating them if the reply arrives twice.
@@ -500,6 +509,9 @@ class NetGameScreen(GameScreen):
 
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")
+        if t == "presentation":
+            self._present(self._media_unpacked(ev))
+            return
         if t == "aside":
             self.story.add("keeper", Text(f"【守秘人·私密】{ev['text']}"))
             return
@@ -527,10 +539,29 @@ class NetGameScreen(GameScreen):
                 found.title, found.text = ev["title"], ev["text"]
         await super().handle(ev)
 
+    @staticmethod
+    def _media_unpacked(event: dict) -> dict:
+        ev = copy.deepcopy(event)
+        payload = ev.get("payload", {})
+        if payload.get("kind") == "handout":
+            payload["pictures"] = {key: path for key, data in payload.pop("picture_data", {}).items()
+                                   if (path := media.unpack(data, max_size=1600))}
+        elif payload.get("kind") == "image":
+            payload["picture"] = media.unpack(payload.pop("picture_data", ""), max_size=1600)
+        return ev
+
     def send_line(self, text: str) -> None:
         word = text.split()[0].lower() if text.split() else ""
         if word in PRIVATE_COMMANDS:
             private_line(self, text)
+        elif word == "/私信kp":
+            body = text.partition(" ")[2].strip()
+            if not self.seat:
+                self.app.notify("观战模式下无法向守秘人私信。", severity="warning")
+            elif not body:
+                self.app.notify("用法：/私信kp 正文。私信不直接结算秘密行动。", timeout=6)
+            else:
+                self.run_worker(partial(self.link.send, {"t": "kp_private", "text": body, "request": uuid.uuid4().hex}))
         elif (aside := chat.ooc(text)) is not None:  # out of character: to everyone, spectators too, never an action
             if aside:
                 self.run_worker(partial(self.link.send, {"t": "say", "text": aside}))

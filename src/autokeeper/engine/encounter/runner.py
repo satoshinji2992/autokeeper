@@ -511,8 +511,11 @@ class Encounters:
                 turn.fight += [telling.cue(c) for c in telling.first_sight(prof)]
         if allies:
             turn.fight.append("站在调查员这边的：" + "、".join(kn.get(a, a) for a in allies if ctx.p(a)))
-        st.add("event", telling.render(line, pn))
-        return {"ok": True, "notices": [{"type": "fight_start", "fight": None, "line": telling.render(line, pn), "surprise": surprise}]}
+        personal = {viewer: {"text": telling.render(line, views.names(ctx, viewer)), "who": ""}
+                    for viewer, masks in st.perceptions.items() if masks}
+        st.add("event", telling.render(line, pn), presented=personal)
+        return {"ok": True, "notices": [{"type": "fight_start", "fight": None, "line": telling.render(line, pn),
+                                          **({"_entity_line": line} if personal else {}), "surprise": surprise}]}
 
     def _surprise_contest(self, start: EncounterStart, parts: list[Participant]) -> str:
         """The keeper's surprise contest (pp. 90–91): the first of those sneaking up rolls its skill at the
@@ -845,16 +848,25 @@ class Encounters:
             for ev in w.unit.notices:
                 ev = dict(ev)
                 if ev.get("line"):
+                    if any(self.state.perceptions.values()):
+                        ev["_entity_line"] = ev["line"]
                     ev["line"] = telling.render(ev["line"], pn)
                 notices.append(ev)
             now = self.state.encounter or w.enc
             if now.phase != "ended" and (shown or any(ev["type"] == "fight_act" for ev in notices)):
-                notices.append({"type": "chase_state", "chase": None, "lines": shown} if now.mode == "chase"
-                               else {"type": "fight_state", "fight": None, "lines": shown})
+                templates = [x for x in public if x and not x.startswith(KEEPER_ONLY)]
+                notice = ({"type": "chase_state", "chase": None, "lines": shown} if now.mode == "chase" else
+                          {"type": "fight_state", "fight": None, "lines": shown})
+                if any(self.state.perceptions.values()):
+                    notice["_entity_lines"] = templates
+                notices.append(notice)
             if w.unit.lines and (st := self.state):
-                for x in shown:
+                templates = [x for x in public if x and not x.startswith(KEEPER_ONLY)]
+                for template, x in zip(templates, shown, strict=True):
                     if not x.startswith("【"):
-                        st.add("dice", x)
+                        personal = {viewer: {"text": telling.render(template, views.names(after, viewer)), "who": ""}
+                                    for viewer, masks in st.perceptions.items() if masks}
+                        st.add("dice", x, presented=personal)
             return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired, "extra": w.unit.extra}
 
         value = await self._resolution_step("/" + key, turn, run)
@@ -1004,7 +1016,7 @@ class Encounters:
         await self._unit(f"enc/{enc.id}/r{rnd}/ai/{pid}/decl", turn, declare)
 
     def _public_situation(self, pid: str) -> str:
-        view = views.fight_view(self)
+        view = views.fight_view(self, viewer=pid)
         rows = [f"第 {view['round']} 轮战斗。"]
         for f in view["fighters"]:
             hp = f"生命 {f['hp']}/{f['hp_max']}" if f["hp"] is not None else f["wound"]
@@ -1365,7 +1377,7 @@ class Encounters:
                 weapon = f"抄起{opt.name}" if opt is not None and not opt.natural else ""
                 w.enc.pending = PendingChoice(
                     id=f"{r.id}:react:{k}", kind="reaction", who=pick.target, receipt=r.id,
-                    prompt=f"{ctx.name(r.actor, 'players')}{weapon}{'朝你开枪' if kind == 'firearm' else '向你扑来'}，你怎么应对？",
+                    prompt=f"{ctx.name(r.actor, pick.target)}{weapon}{'朝你开枪' if kind == 'firearm' else '向你扑来'}，你怎么应对？",
                     options=[ChoiceOption(id=x, label=choices.REACTION_LABELS[x], note=choices.reaction_note(ctx, pick.target, x))
                              for x in options], default=default)
                 return

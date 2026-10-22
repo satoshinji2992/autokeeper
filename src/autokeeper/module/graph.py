@@ -426,8 +426,6 @@ def audit(m: Module) -> list[Issue]:
             err(f"前史第 {i} 件里的人物 {'、'.join(missing)} 不存在")
         if past.where and past.where not in locs:
             err(f"前史第 {i} 件的地点 {past.where} 不存在")
-    if len(m.agendas) > 6:
-        warn(f"写了 {len(m.agendas)} 份打算；每局最多 6 个重要 NPC，多出的不会自己行动")
     targets = concl | {e.id for e in m.events} | endings
     for f in m.foreshadow:
         if f.where not in locs:
@@ -524,13 +522,13 @@ def ways(m: Module) -> dict[str, Leg]:
     return out
 
 
-def stake_problems(m: Module, when: str) -> list[str]:
+def stake_problems(m: Module, when: str, *, actors: set[str] | None = None) -> list[str]:
     """What is wrong with a stake's condition (Event.stakes): the world's conditions (flag, at, gone,
     owner, knows) and the encounter's own: down/dead/escaped/caught/surrendered:谁 (an NPC, a
     creature, a pregen, or players for the investigators' side) and ended:结局."""
     if not when.strip():
         return ["条件是空的"]
-    people = {x.id for x in m.npcs} | {c.id for c in m.creatures} | {p.id for p in m.pregens} | {"players"}
+    people = {x.id for x in m.npcs} | {c.id for c in m.creatures} | {p.id for p in m.pregens} | {"players"} | (actors or set())
     atoms = [x.strip().lstrip("!") for group in when.split("|") for x in group.split("&") if x.strip()]
     out: list[str] = []
     for atom in atoms:

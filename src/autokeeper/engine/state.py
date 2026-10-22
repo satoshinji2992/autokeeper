@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from ..cards import Drawn
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
 from .encounter.model import EncounterState, EncounterSummary
+from .perception import Appearance
 
 # The layout of a save file (GameState.save_format), raised when a save of the version before can no longer be
 # read as it is. A save without it (0.0.3 and before) or with another one is refused whole (read_save): loading it
@@ -30,6 +32,7 @@ class LogEntry(BaseModel):
     who: str = ""
     text: str
     audience: list[str] | None = None  # None: public; []: keeper only; otherwise these investigator ids
+    presented: dict[str, dict[str, str]] = Field(default_factory=dict)  # immutable delivery-time personal lines
 
 
 class Deed(BaseModel):
@@ -151,6 +154,9 @@ class GameState(BaseModel):
     day: int = 0  # the game day the investigators' daily SAN count belongs to (minutes // 1440)
     clues: list[str] = Field(default_factory=list)
     handouts: list[str] = Field(default_factory=list)
+    presentations: list[dict] = Field(default_factory=list)  # addressed media snapshots; never a shared discovery
+    private_messages: dict[str, dict] = Field(default_factory=dict)  # keeper correspondence receipts, keyed by seat/request
+    presentation_issues: dict[str, dict] = Field(default_factory=dict)  # attempted media not delivered; next keeper can finish it
     flags: list[str] = Field(default_factory=list)
     fired: list[str] = Field(default_factory=list)
     npcs: dict[str, NpcState] = Field(default_factory=dict)
@@ -172,6 +178,8 @@ class GameState(BaseModel):
     encounter_log: list[EncounterSummary] = Field(default_factory=list)
     sightings: dict[str, list[str]] = Field(default_factory=dict)  # investigator -> horrors whose first sight they paid for
     identified: list[str] = Field(default_factory=list)  # creatures the players can name (their true name is shown)
+    perceptions: dict[str, dict[str, Appearance]] = Field(default_factory=dict)  # observer -> real entity -> appearance
+    perception_key: str = Field(default_factory=lambda: uuid.uuid4().hex)  # private signing key for seat-bound choices
     # investigator -> place, left behind by a chase (or gone off alone from there); named to the keeper
     # (world/context.keeper_brief) and the plan (Cast.bearings) until the party comes to that place or a ruling
     # brings them back (Ruling.rejoin: carried, fetched, walked back while they can act)
@@ -185,7 +193,7 @@ class GameState(BaseModel):
     transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
     notes: dict[str, str] = Field(default_factory=dict)
     log: list[LogEntry] = Field(default_factory=list)
-    private_history: list[LogEntry] = Field(default_factory=list)  # private original observations folded out of log
+    private_history: list[LogEntry] = Field(default_factory=list)  # private or differently perceived originals folded out of log
     logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
     deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)
@@ -265,9 +273,14 @@ class GameState(BaseModel):
     def clock(self) -> str:
         return format_time(self.minutes)
 
-    def add(self, kind: LogKind, text: str, who: str = "", *, audience: list[str] | None = None) -> LogEntry:
+    def add(self, kind: LogKind, text: str, who: str = "", *, audience: list[str] | None = None,
+            presented: dict[str, dict[str, str]] | None = None) -> LogEntry:
+        shown = {viewer: {"who": appearance.name or "未辨明的身影", "text": "受了伤。" if kind == "damage" else text}
+                 for viewer, masks in self.perceptions.items() for target, appearance in masks.items()
+                 if who and appearance.original_name == who}
+        shown.update(presented or {})
         entry = LogEntry(turn=self.turn, time=self.clock, kind=kind, who=who, text=text,
-                         audience=list(dict.fromkeys(audience)) if audience is not None else None)
+                         audience=list(dict.fromkeys(audience)) if audience is not None else None, presented=shown)
         self.log.append(entry)
         self.logged += 1
         self._deed(entry, self.investigator.name if 0 <= self.active < len(self.investigators) else "")

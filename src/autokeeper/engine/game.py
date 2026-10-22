@@ -49,19 +49,19 @@ from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from ..world import adapters, desk, knowledge, scene, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
-from ..world.ops import Equip, Follow, Improvise, Move, Occur
+from ..world.ops import Equip, Follow, Improvise, Learn, Move, Occur
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import audience as recipients
-from . import diagnostics, effects, fog, idea, progress, signs, views, world
+from . import diagnostics, effects, fog, idea, perception, presentation, progress, signs, views, world
 from .encounter.runner import Encounters
 from .encounter.telling import tell
-from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
     KEEP_CHECKS,
     RECHECK_AFTER,
     CheckRecord,
+    Deed,
     GameState,
     LogEntry,
     Progress,
@@ -90,6 +90,8 @@ class Said:
     shown: bool = False
     heard: bool = False
     journal: dict = field(default_factory=dict)
+    media: list[dict] = field(default_factory=list)
+    audience: list[str] | None = None
 
 
 @dataclass
@@ -445,7 +447,9 @@ class Game(Encounters):
             await self._curtain(Action(kind="other", summary=text))
             st.turn += 1
         if text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
-            st.add("player", text, who=st.investigator.name)
+            from .perception import input_label
+
+            st.add("player", input_label(self, st.investigator.id, text), who=st.investigator.name)
         if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
             return self.idea_action()
         await self.emit({"type": "status", "text": "解析行动…"})
@@ -704,6 +708,7 @@ class Game(Encounters):
                                "是否同意由你决定，不替其他人答应。）")
                     ask = partial(self.cast.npc, st, nid, message, travel=asked or not speech, private=private)
                     await self._reply(turn, key, nid, ask, keep,
+                                      audience=[st.investigator.id] if private else None,
                                       record=partial(self._before_journey, turn, journal, action, nid, request, asked, private))
             journal["done"].append(key)
             keep(turn)
@@ -850,10 +855,14 @@ class Game(Encounters):
         if done:
             lines.append("行动奏效了")  # flag descriptions are private notes, not player-facing outcomes
         if offer is not None:
-            lines.append("还有一次机会：孤注一掷，或者花幸运")
+            if offer.get("can_push") and offer.get("luck") is not None:
+                lines.append("还有一次机会：孤注一掷，或者花幸运")
+            elif offer.get("can_push"):
+                lines.append("可以选择孤注一掷")
+            else:
+                lines.append("可以花费幸运改变结果")
         if not lines:
-            name = next((n.name for n in m.npcs if n.id == npc), "")
-            lines.append(f"{name}{'松动了' if passed else '不为所动'}" if name else "没有新的发现" if passed else "没有收获")
+            lines.append("检定成功" if passed else "检定失败")
         return lines
 
     def _settle(self, record: CheckRecord | None, passed: bool | None = None, text: str = "") -> None:
@@ -866,6 +875,81 @@ class Game(Encounters):
         record.minutes, record.seen = self.state.minutes, self._seen()
 
     # -- improvisation ----------------------------------------------------------------
+    async def present(self, actions: list[dict], *, key: str = "") -> list[str]:
+        """One addressed delivery path for keeper, NPC and director media. No clue acquisition."""
+        st, errors = self.state, []
+        prefix = key or f"present:{st.turn}:{len(st.presentations)}"
+        for n, raw in enumerate(actions):
+            ident = f"{prefix}:{n}"
+            scope = raw.get("to")
+            if isinstance(scope, list):
+                scope = sorted(str(who) for who in scope)
+            intent = "media:" + digest([scope, raw.get("slot", "overlay")])
+            saved = next((p for p in st.presentations if p["id"] == ident), None)
+            if saved is None:
+                try:
+                    saved = presentation.prepare(self.m, st, raw, ident)
+                except ValueError as exc:
+                    errors.append(str(exc))
+                    st.presentation_issues[intent] = {"action": raw, "problem": str(exc)}
+                    if self.checkpoint:
+                        self.checkpoint()
+                    continue
+                st.presentations.append(saved)
+                st.presentation_issues.pop(intent, None)
+                if saved["action"] == "show" and saved["payload"].get("kind") == "handout":
+                    h = saved["payload"]["handout"]
+                    entry = st.add("system", f"收到材料：{h['title']}", who="守秘人", audience=saved["audience"])
+                    for who in saved["audience"] if saved["audience"] is not None else [i.id for i in st.investigators]:
+                        st.deeds.append(Deed(turn=entry.turn, time=entry.time, who=who, kind="handout",
+                                             text=h["title"], audience=saved["audience"]))
+                if self.checkpoint:
+                    self.checkpoint()
+            await self.emit(presentation.event(saved))
+        if errors:
+            self._debug("presentation", {"phase": "unavailable", "problems": errors})
+        return errors
+
+    def receive_private_message(self, who: str, text: str, *, request: str = "") -> tuple[str, dict]:
+        """Save accepted correspondence before putting its model response in a queue."""
+        st = self.state
+        if not text.strip() or who not in {i.id for i in st.investigators}:
+            raise ValueError("私信需要本局调查员和正文")
+        ident = f"{who}:{request or len(st.private_messages)}"
+        receipt = st.private_messages.get(ident)
+        if receipt is None:
+            receipt = st.private_messages[ident] = {"who": who, "text": text.strip()}
+            st.add("system", f"对守秘人（私信）：{text.strip()}", who=st.find(who).name, audience=[who])
+            if self.checkpoint:
+                self.checkpoint()
+        elif receipt["text"] != text.strip():
+            raise ValueError("同一私信编号不能替换正文")
+        return ident, receipt
+
+    async def private_message(self, who: str, text: str, *, request: str = "") -> str:
+        """A PL message to the keeper, with a private reply; never a secret physical action."""
+        st = self.state
+        ident, receipt = self.receive_private_message(who, text, request=request)
+        if not receipt.get("input_shown"):
+            await self.emit({"type": "private_input", "audience": [who], "text": receipt["text"], "who": st.find(who).name})
+            receipt["input_shown"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        if "reply" not in receipt:
+            result = await self.cast.private_keeper(st, who, receipt["text"])
+            receipt["reply"] = result["text"]
+            receipt["media"] = [{**m, "to": [who]} for m in result.get("media", [])]
+            st.add("keeper", receipt["reply"], who="守秘人", audience=[who])
+            if self.checkpoint:
+                self.checkpoint()
+        if not receipt.get("reply_shown"):
+            await self.emit({"type": "aside", "audience": [who], "text": receipt["reply"], "who": "守秘人"})
+            receipt["reply_shown"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        await self.present(receipt.get("media", []), key=f"private:{ident}")
+        return receipt["reply"]
+
     async def _improvise(
         self, kind: str, *, action: Action | None = None, ruling: Ruling | None = None, at: str = "",
         patience: float | None = None, required: bool = False,
@@ -875,6 +959,8 @@ class Game(Encounters):
         saved = st.pending_turn.get("scene_package", {})
         if required and saved.get("kind") == kind and saved.get("at") == (at or st.location):
             if saved.get("applied"):
+                plan = saved.get("plan", {})
+                await self.present(plan.get("media", []), key=f"director:{digest(plan)}")
                 return improv.Applied(**saved["applied"])
             if saved.get("given_up"):
                 return None
@@ -1066,9 +1152,6 @@ class Game(Encounters):
                            self.state.location])
 
         stamp = version()
-        room = max(0, IMPROV_SHOWCASES - sum(len(p.get("plan", {}).get("showcases", [])) for p in self.state.improv))
-        if len(plan.showcases) > room:  # big scenes stay rare: a few a game
-            plan = plan.model_copy(update={"showcases": plan.showcases[:room]})
         staged = World(self.m.model_copy(deep=True), self.state.model_copy(deep=True))
         result = adapters.improvise(staged, plan.model_copy(update={"kind": kind}), at=where)
         if not result.ok or result.repeat:  # the story moved on since it was checked, or it is in already
@@ -1145,6 +1228,7 @@ class Game(Encounters):
         await self._people()  # someone it brings in stands here
         self.visuals.schedule()
         self.showcases.prepare()  # a big scene of the director's gets its picture ahead of its moment
+        await self.present([a.model_dump(mode="json") for a in plan.media], key=f"director:{digest(plan.model_dump(mode='json'))}")
         await self.emit({"type": "improv", "kind": kind, "summary": applied.summary, "reason": plan.reason})
         return applied
 
@@ -1618,20 +1702,24 @@ class Game(Encounters):
                 st.add("dice", rolled.describe(), who=inv.name)
                 event = {"type": "dice", "who": inv.name, **_check_view(rolled)}
                 need = rolled.luck_needed()
-                if not passed and (rolled.can_push or need is not None):
-                    wanted = self._valid_clues(ruling.clues_on_success, action)
-                    if wanted:
-                        luck = need if need is not None and need <= inv.luck else None
-                        turn.push = {"skill": rolled.name, "target": rolled.target,
-                                     "need": _threshold(rolled.target, ruling.difficulty), "difficulty": ruling.difficulty,
-                                     "bonus": ruling.bonus, "clues": wanted, "flags": ruling.set_flags,
-                                     "can_push": rolled.can_push, "luck": luck, "left": inv.luck - (luck or 0),
-                                     "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
-                                     "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
-                                     "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
-                                     "tells": self._asks(action, turn),  # who tells what the push wins (_spoken)
-                                     "action": action.summary}
-                        st.pending_push = turn.push
+                luck = need if need is not None and need <= inv.luck else None
+                if not passed and (rolled.can_push or luck is not None):
+                    # A second chance belongs to the attempted action, not only to clue searches.
+                    # Keep its whole success contract: a later success must also transfer the thing,
+                    # open the route, reunite the party, or run the action's declared plugin.
+                    turn.push = {"skill": rolled.name, "target": rolled.target,
+                                 "need": _threshold(rolled.target, ruling.difficulty), "difficulty": ruling.difficulty,
+                                 "bonus": ruling.bonus, "clues": self._valid_clues(ruling.clues_on_success, action),
+                                 "flags": ruling.set_flags, "can_push": rolled.can_push,
+                                 "luck": luck, "left": inv.luck - (luck or 0),
+                                 "risk": ruling.on_push_fail.text.strip(),
+                                 "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
+                                 "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
+                                 "tells": self._asks(action, turn), "action": action.summary,
+                                 "actor": inv.id, "place": st.location,
+                                 "action_record": action.model_dump(mode="json"),
+                                 "success": ruling.model_dump(mode="json")}
+                    st.pending_push = turn.push
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
         checked = await step("check", turn, check)
@@ -1655,18 +1743,7 @@ class Game(Encounters):
 
         found = await step("available", turn, available)
         if passed:
-            await step("flags", turn, lambda: self._flags(ruling.set_flags, turn))
-
-            def changes() -> None:
-                adapters.settle_changes(self.world, ruling.changes, source="arbiter")
-                self._equipment(ruling, turn)
-                self._takes(ruling, turn)
-
-            await step("changes", turn, changes)
-            if ruling.rejoin:
-                await step("rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
-            if any(e.kind == "obstacle" for e in ruling.effects):
-                await step("ways", turn, lambda: self._ways(ruling, turn))
+            await self._success(ruling, turn)
         await step("gain", turn, lambda: self._gain(found["gained"], turn, action))
         if turn.checks:
             won = [c for c in turn.clues if c in ruling.clues_on_success]
@@ -1702,6 +1779,26 @@ class Game(Encounters):
                        "text": item.description, "art": item.art}))
         if turn.checks or turn.earlier:
             await step("settle", turn, lambda: self._settle(st.checks[-1]))
+
+    async def _success(self, ruling: Ruling, turn: Turn) -> None:
+        """The same success operations for an immediate, lucky, or pushed success.
+
+        Each operation retains its own receipt, so a dropped connection cannot transfer a
+        possession twice. Time and automatic discoveries belong to the original attempt.
+        """
+        step = self._resolution_step
+        await step("flags", turn, lambda: self._flags(ruling.set_flags, turn))
+
+        def changes() -> None:
+            adapters.settle_changes(self.world, ruling.changes, source="arbiter")
+            self._equipment(ruling, turn)
+            self._takes(ruling, turn)
+
+        await step("changes", turn, changes)
+        if ruling.rejoin:
+            await step("rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
+        if any(e.kind == "obstacle" for e in ruling.effects):
+            await step("ways", turn, lambda: self._ways(ruling, turn))
 
     def _lacking(self, ruling: Ruling, turn: Turn) -> None:
         """What this action lacks and so cannot do (Ruling.missing) is kept for the turn: whoever
@@ -1853,6 +1950,16 @@ class Game(Encounters):
         inv, npc = st.investigator, pending.get("npc", "")
 
         def initial() -> dict:
+            if pending["actor"] != inv.id:
+                raise ValueError("这次检定属于另一名调查员")
+            if pending["place"] != st.location:
+                raise ValueError("检定现场已经改变，请先处理原行动")
+            if mode == "push" and not pending["can_push"]:
+                raise ValueError("这次检定不能孤注一掷")
+            if mode == "luck" and (pending.get("luck") is None or pending["luck"] > inv.luck):
+                raise ValueError("这次检定无法使用当前的幸运点数")
+            turn.action = Action.model_validate(pending["action_record"])
+            turn.ruling = Ruling.model_validate(pending["success"])
             st.pending_push = None
             return {"flags": list(st.flags), "minutes": st.minutes}
 
@@ -1927,9 +2034,13 @@ class Game(Encounters):
         passed = checked["passed"]
         await step("check-notice", turn, lambda: self.emit(checked["notice"]))
         if passed:
-            await step("flags", turn, lambda: self._flags(pending.get("flags", []), turn))
+            ruling = Ruling.model_validate(pending["success"])
+            await self._success(ruling, turn)
             spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], pending.get("tells", "")))
             await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
+            for index, call in enumerate(ruling.plugin_calls):
+                await step(f"action-plugin:{index}", turn,
+                           lambda call=call: self.plugins.run("action", turn, **call.model_dump(mode="json")))
         else:  # what was said before the choice now happens (Failure, Ruling.on_push_fail)
             await self._failed(Failure.model_validate(pending.get("on_push_fail") or {}), pending["clues"], turn, None, pushed=True)
         await step("plugins", turn, lambda: self.plugins.settled(turn))
@@ -2164,7 +2275,7 @@ class Game(Encounters):
 
     async def _reply(self, turn: Turn, key: str, npc_id: str, ask: Callable[[], Awaitable[str]], keep: Callable[[Turn], None],
                      *, record: Callable[[str], None] | None = None, joined: bool = False, kind: str = "npc",
-                     status: str = "") -> Said:
+                     status: str = "", audience: list[str] | None = None) -> Said:
         """One NPC reply settled, whatever asked for it (talk, _join_in, _step_in, prepare): its words,
         and what it meant to do and could not, go into `turn`, the log and the world record (`record`),
         with its receipt (Said: what it told, Dialogue.told), and are kept before anything is shown;
@@ -2177,13 +2288,19 @@ class Game(Encounters):
         npc = m.npc(npc_id)
         said = turn.replies.get(key)
         if said is None:
+            listeners = recipients.listeners(st, st.investigator.id)
+            if audience is None and len(listeners) != len(st.investigators):
+                audience = listeners
             if status:
-                await self.emit({"type": "status", "text": status})
+                await self.emit({"type": "status", "text": status, "audience": audience})
             line = await ask()
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
             # and its receipt, kept below with the words.
             told = self.cast.told.pop(npc_id, [])
-            said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told))
+            said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told),
+                                           media=getattr(self.cast, "media", {}).pop(npc_id, []), audience=audience)
+            if audience is not None:
+                said.media = [{**raw, "to": audience} for raw in said.media]
             if kind == "performance":
                 turn.performance = (npc_id, line)
             else:
@@ -2194,20 +2311,29 @@ class Game(Encounters):
             if (gone := self.world.place(npc_id)) and gone != st.location:  # its reply's leave landed (Dialogue.leave)
                 turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
             st.npc(npc_id).met = True
-            st.add("npc", line, who=npc.name)
+            st.add("npc", line, who=npc.name, audience=said.audience)
             if record is not None:
                 record(line)
             keep(turn)
         if not said.shown:
             await self.emit({"type": kind, "npc": npc_id, "name": npc.name, "text": said.line,
-                             "portrait": m.art.get(npc.portrait or "", "")})
+                             "portrait": m.art.get(npc.portrait or "", ""), "audience": said.audience})
             said.shown = True
             keep(turn)
         if said.told and not said.heard:
-            with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
-                await self._gain(said.told, turn, None, heard=npc_id)
+            if said.audience is not None:
+                # A private testimony updates its listeners, never the party's shared clue flags.
+                for cid in said.told:
+                    self.world.apply(Learn(id=f"private-told:{st.turn}:{npc_id}:{key}:{cid}", fact=f"clue:{cid}",
+                                           who=said.audience, actor=npc_id, visibility="private", how="私下告知"))
+                    if paper := m.clue(cid).handout:
+                        said.media.append({"ref": f"handout:{paper}", "to": said.audience})
+            else:
+                with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
+                    await self._gain(said.told, turn, None, heard=npc_id)
             said.heard = True
             keep(turn)
+        await self.present(said.media, key=f"npc:{st.turn}:{npc_id}:{key}")
         return said
 
     async def _foreshadow(self, turn: Turn) -> None:
@@ -2448,11 +2574,11 @@ class Game(Encounters):
         # What the table was told, not the module's own words for each clue: the memory feeds the
         # players' recap and 故事至今, and the telling that put each clue into the story is there.
         text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old
-                         if e.kind not in ("dice", "clue") and recipients.public(e))
+                         if e.kind not in ("dice", "clue") and recipients.shared(e))
         if text:
             await self.emit({"type": "status", "text": "记录员整理笔记…"})
             st.memory = await self.cast.chronicle(st, text)
-        st.private_history.extend(e for e in old if not recipients.public(e))
+        st.private_history.extend(e for e in old if not recipients.shared(e))
         st.log = keep
 
     def _recount(self) -> None:
@@ -3375,6 +3501,19 @@ class Game(Encounters):
             receipt["landed"] = True
             if self.checkpoint:
                 self.checkpoint()
+        if not receipt.get("perceptions_landed"):
+            changes = receipt.get("perceptions", [])
+            if problems := perception.check_changes(self, changes):
+                self._debug("perception", {"phase": "rejected", "problems": problems})
+                st.presentation_issues["perception"] = {"action": {"perceptions": changes}, "problem": "；".join(problems)}
+            else:
+                perception.apply(self, changes)
+                if changes:
+                    st.presentation_issues.pop("perception", None)
+            receipt["perception_problems"] = problems
+            receipt["perceptions_landed"] = True
+            if self.checkpoint:
+                self.checkpoint()
         if receipt.get("room") and not receipt.get("walked"):
             await self._walked(receipt["room"])
             receipt["walked"] = True
@@ -3394,6 +3533,10 @@ class Game(Encounters):
                 self.checkpoint()
         for aside in receipt.get("asides", []):
             await self.emit({"type": "aside", "audience": aside["to"], "text": aside["text"], "who": "守秘人"})
+        media_key = receipt.setdefault("media_key", f"keeper:{st.turn}:{st.logged}")
+        receipt["media_unshown"] = await self.present(receipt.get("media", []), key=media_key)
+        if self.checkpoint:
+            self.checkpoint()
         if receipt.get("offer_idea") and not receipt.get("idea_offered"):
             if st.turn > 0 and not st.ending and not self.battling() and idea.pick(self.m, st) is not None:
                 st.idea_offer = st.turn
@@ -3414,11 +3557,12 @@ class Game(Encounters):
         an old one's), or a turn told out of the story (a question to the KP, the ending) has no scene."""
         st = self.state
         keeper = self.cast.keeper
-        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": []}
+        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
+                 "media": [], "perceptions": []}
         if not _staged(turn) or not _takes(keeper, "check"):
             return words | {"text": await keeper(st, report, on_delta=delta, lore=lore)}
         ctx = self._scene_context(turn)
-        brief = self._scene_brief(ctx)
+        brief = self._scene_brief(ctx) + "\n【个人知觉】\n" + perception.brief(st)
         plans: list[scene.Plan] = []
 
         def check(raw: Any) -> bool:
@@ -3434,7 +3578,8 @@ class Game(Encounters):
                 return words | {"text": told}
             if told.scene is None or len(plans) == asked:  # no scene could be read
                 if told.shown:  # already before the players: its words stand, the record as it was
-                    return words | {"text": told.text, "offer_idea": told.offer_idea, "asides": told.asides}
+                    return words | {"text": told.text, "offer_idea": told.offer_idea, "asides": told.asides,
+                                    "media": told.media, "perceptions": told.perceptions}
                 # Its words would say what the record never got ("the warden goes with you", nobody
                 # following): asked again for the scene, and the second time held to the record as it is.
                 self._debug("scene", {"phase": "missing", "attempt": attempt})
@@ -3447,7 +3592,8 @@ class Game(Encounters):
                 if p.problems:  # shown on a scene that held, then came back otherwise: what holds of it lands
                     self._debug("scene", {"phase": "kept", "problems": p.problems, "scene": told.scene})
                 return self._staging(told.text, p, partial=bool(p.problems)) | {
-                    "offer_idea": told.offer_idea, "asides": told.asides}
+                    "offer_idea": told.offer_idea, "asides": told.asides,
+                    "media": told.media, "perceptions": told.perceptions}
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})
