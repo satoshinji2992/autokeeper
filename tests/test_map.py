@@ -506,3 +506,21 @@ def test_place_notes_fold_like_typeset_chinese():
     assert "".join(lines) == text
     assert not any(line[0] in "，。、" for line in lines)  # no line starts with a comma or a stop
     assert fold("达维尔家 20 分钟", 9, 5).split("\n")[1].strip() == "20 分钟"  # the number stays with its unit
+
+
+def test_a_map_in_hand_puts_its_places_and_the_ways_between_them_on_the_map():
+    """The user, 2026-10-22: the Ratgers' drawing of Esnel was in hand, and the map still showed the
+    boarding house and the clinic, the rest listed under 路线未知."""
+    m = Module.load(ROOT / "modules" / "dongxuezhixia")
+    st = opened(m)
+    st.location, st.visited = "ratger_house", ["ratger_house"]
+    before = fog.chart(m, st)
+    written = set(fog.mentions(m, [f"{h.title}\n{h.text}" for h in m.handouts if h.id == "h_map_plain"]))
+    assert written - set(before.names)  # off the map so far
+    st.handouts.append("h_map_plain")
+    st.add("handout", next(h.text for h in m.handouts if h.id == "h_map_plain"))
+    after = fog.chart(m, st)
+    assert written <= set(after.names) and not written & set(after.rumours)
+    drawn = {p for edge in after.trails for p in edge}
+    assert written - {"ratger_house"} <= drawn  # each with a way to it
+    assert all(after.kinds[p] == "heard" for p in written - {"ratger_house"})  # not been to

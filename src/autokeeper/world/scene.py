@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 
 from ..engine import world as legacy_world
 from .context import rooms
-from .ops import Follow, Move, Occur, Transfer
+from .ops import Follow, Move, Occur, Transfer, names
 from .record import ENGINE, KEEPER
 
 if TYPE_CHECKING:
@@ -251,8 +251,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     room = src
     if "room" in given and not _blank(scene.room):
         where = _place(w, scene.room)
-        if where is None:
-            problems.append(f"room 写的「{scene.room}」不是地点；调查员没走动就留空。")
+        if where is None:  # a room's own name (客厅) for where they already are: they stay, nothing to tell again
+            pass
         elif where != src and not ctx.walk:
             problems.append(f"这一段调查员自己没有行动，不能替他们走到{name(where)}：room 留空。")
         elif where != src and where not in rooms(w.m, src):
@@ -361,8 +361,11 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                 unit(f"npc:{n}").steps.append(op(Follow, npc=n, actor=KEEPER))
                 unit(f"npc:{n}").said.append(f"{e.name}不再跟着调查员")
 
-    # Things: what changed hands, then everyday things brought out, and handed on.
-    things = {_named(t.name): t for t in scene.things if not _blank(t.name)}
+    # Things: what changed hands, then everyday things brought out, and handed on. A clue or handout the
+    # party holds is in hand already (the Ratgers' map of Esnel, 2026-10-22: written in as a new thing,
+    # it was refused as one not had for the asking, and the whole telling was asked for again).
+    held = [c.title for c in w.m.clues if c.id in w.st.clues] + [h.title for h in w.m.handouts if h.id in w.st.handouts]
+    things = {_named(t.name): t for t in scene.things if not _blank(t.name) and not any(names(t.name, x) for x in held)}
     handed: dict[str, str] = {}
     for h in scene.holds:
         if _blank(h.item):

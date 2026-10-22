@@ -267,8 +267,9 @@ def chart(m: Module, st: GameState) -> Chart:
     """Only what the investigators know: places they have been to or heard of, never one they
     have not, not even as a blank (a door to nowhere gives a secret away). A road joins two
     places they have been to; a trail leads from where they stood to a place they saw or were
-    shown from there (its read-aloud, the clues found there). The rest of what they heard of
-    has no known way there yet, and stays off the map with whatever it lies in."""
+    shown from there (its read-aloud, the clues found there). A map they hold (a handout whose kind
+    says 地图) puts every place written on it on theirs, with the ways between them. The rest of
+    what they heard of has no known way there yet, and stays off the map with whatever it lies in."""
     places = {loc.id: loc for loc in m.locations}
     g = network(m)
     visited = [v for v in dict.fromkeys([*st.visited, st.location]) if v in places]
@@ -278,7 +279,19 @@ def chart(m: Module, st: GameState) -> Chart:
     for v in visited:  # they looked around where they stopped, not on the way through
         named = mentions(m, [places[v].read_aloud, *(f"{c.title}\n{c.text}" for c in m.clues if c.where == v and c.id in st.clues)])
         trails += [(v, p) for p in places if p in named and p in told and p not in there and g.has_edge(v, p)]
-    pointed = {p for _, p in trails}
+    # A map in hand (the user, 2026-10-22: the Ratgers' drawing of Esnel left the map as it was)
+    mapped = set(mentions(m, [f"{h.title}\n{h.text}" for h in m.handouts if h.id in st.handouts and "地图" in h.kind])) & set(places)
+    if mapped:
+        # the streets it draws between them: the public places a way from here passes (Esnel's 主街), never a secret one
+        open_ = g.subgraph(mapped | set(there) | {p for p, loc in places.items() if loc.public})
+        for p in sorted(mapped):
+            if st.location in open_ and p in open_ and nx.has_path(open_, st.location, p):
+                mapped |= set(nx.shortest_path(open_, st.location, p))
+        told = {p: told.get(p) or places[p].name for p in places if p in told or p in mapped}
+        shown = mapped | set(there)
+        trails += [(a, b) for a, b in g.edges if a in shown and b in shown and (a not in there or b not in there)
+                   and (a, b) not in trails and (b, a) not in trails]
+    pointed = {p for edge in trails for p in edge if p not in there}
     names = {p: places[p].name for p in places if p in there} | {p: told[p] for p in places if p in pointed}
     kinds = {p: "heard" if p in pointed else "been" for p in names}
     if st.location in kinds:

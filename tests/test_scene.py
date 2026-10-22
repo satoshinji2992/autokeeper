@@ -201,6 +201,18 @@ def test_everyday_things_are_registered_as_given_but_not_what_the_action_lacks(f
     assert any("老守钟人讲完时不在调查员身边" in x for x in away.problems)  # he is in the tower
 
 
+def test_a_clue_in_hand_and_a_rooms_own_name_send_no_telling_back(fake):
+    """2026-10-22: the map just found, written into things, was refused as a thing not had for the
+    asking, and 客厅 in room as no place: the whole telling was asked for again over neither."""
+    game, _ = made("square")
+    w, st = game.world, game.state
+    clue = game.m.clues[0]
+    st.clues.append(clue.id)
+    c = game._scene_context(Turn(action=Action(kind="investigate", summary="周衡看了看"), ruling=Ruling(needs_roll=False)))
+    held = scene.plan(w, {"here": ["preacher"], "things": [{"name": clue.title, "holder": "preacher"}], "room": "客厅"}, c)
+    assert not held.problems and not [u for u in held.held if u.key.startswith("thing:")]  # in hand already: nothing to register
+
+
 # -- told after it is settled -----------------------------------------------------------------
 async def test_a_scene_turned_back_once_is_written_again_and_only_that_one_is_shown(fake):
     game, events = made("square")

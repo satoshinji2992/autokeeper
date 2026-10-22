@@ -946,3 +946,12 @@ async def test_only_so_many_claude_code_processes_stay_open(monkeypatch):
     for agent in agents:
         await agent.close()
     assert not live
+
+
+def test_a_tool_calls_markup_in_a_fields_words_is_a_problem_to_send_back():
+    """An NPC under Claude, 2026-10-22: the told field went into the line as words and was shown."""
+    schema = {"type": "object", "properties": {"text": {"type": "string"}, "told": {"type": "array", "items": {"type": "string"}}},
+              "required": ["text"]}
+    leaked = {"text": "我可以给你指一指。</text>\n<parameter name=\"told\">[\"c_map\"]"}
+    assert any("工具调用的标记" in p and p.startswith("text") for p in hm.problems(leaked, schema))
+    assert not hm.problems({"text": "《阿诺兹堡广告报》的旧报，<人名>不是标记。", "told": ["c_map"]}, schema)

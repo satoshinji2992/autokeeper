@@ -182,13 +182,30 @@ def json_instruction(schema: dict) -> str:
     )
 
 
+# A tool call's own markup written into a field's words: the next fields went into the text as
+# `</text><parameter name="told">["c_map"]` (an NPC under Claude, 2026-10-22). Shown as said, the
+# clue it meant to tell was never told: the answer goes back once, as any malformed one.
+CALL_MARKUP = re.compile(r"</?(?:parameter|invoke|function_calls|antml:[a-z_]+)\b|</text>")
+
+
+def _markup(node: Any, path: str = "") -> list[str]:
+    if isinstance(node, str):
+        found = CALL_MARKUP.search(node)
+        return [f"{path or '(根)'}：文字里混进了工具调用的标记 {found.group(0)}；每个字段单独填写，不要把别的字段写进这段文字"] if found else []
+    if isinstance(node, dict):
+        return [p for k, v in node.items() for p in _markup(v, f"{path}/{k}".lstrip("/"))]
+    if isinstance(node, list):
+        return [p for i, v in enumerate(node) for p in _markup(v, f"{path}/{i}".lstrip("/"))]
+    return []
+
+
 def problems(data: Any, schema: dict) -> list[str]:
     if not isinstance(data, dict):
         return ["没有输出一个可解析的 JSON 对象"]
     from jsonschema import Draft202012Validator
 
     errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: list(e.path))
-    return [f"{'/'.join(map(str, e.path)) or '(根)'}：{e.message}" for e in errors[:8]]
+    return ([f"{'/'.join(map(str, e.path)) or '(根)'}：{e.message}" for e in errors[:8]] + _markup(data))[:8]
 
 
 def spoken(schema: dict) -> bool:
