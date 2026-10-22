@@ -20,6 +20,25 @@ from .screens.game import COMMANDS, GameScreen
 from .screens.title import TitleScreen
 
 
+def plain_timer_sleep() -> None:
+    """On Windows Textual's timers sleep in a thread of the default pool each (textual._win_sleep: a
+    waitable timer waited on in run_in_executor), for as long as they wait. A game screen keeps dozens
+    of timers going (weather, heartbeat, dice, animations, the waiting dots), so pictures, the opening's
+    preparation and everything else sent to a thread queued behind them: the picture stopped half
+    drawn and the opening took minutes (the user, 2026-10-22). Their sleep becomes asyncio's, on the
+    event loop: no thread, at the system timer's resolution (about 15 ms), which animations do not show."""
+    import textual.timer
+
+    async def sleep(secs: float) -> None:
+        await asyncio.sleep(max(0.0, secs))
+
+    textual.timer.sleep = sleep  # timer.py took `sleep` from textual._time by name at import
+
+
+if sys.platform == "win32":
+    plain_timer_sleep()
+
+
 class Menu(Provider):
     """The Ctrl+P menu, in the game's own words and in the order of COMMANDS (Textual's own
     English entries, sorted by name, are left out)."""
@@ -81,9 +100,8 @@ class AutoKeeperApp(App):
 
     def on_mount(self) -> None:
         if sys.platform == "win32":
-            # On Windows Textual's timers sleep in the default thread pool, a thread each: a game
-            # screen's timers could take every thread of it (cpu + 4), and the moods, portraits
-            # and pictures sent to a thread waited behind them.
+            # Room for the pictures, portraits and moods sent to threads at once; Textual's timers no
+            # longer take threads of it (plain_timer_sleep).
             asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=64))
         for th in THEMES:
             self.register_theme(th)

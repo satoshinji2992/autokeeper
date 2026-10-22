@@ -86,6 +86,7 @@ class Turn:
     clues: list[str] = field(default_factory=list)
     sanity: list[tuple[str, Sanity]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
+    told: bool = False  # the opening: its events are the keeper's to tell, woven into one telling, not shown first
     arrived: str | None = None
     first_visit: bool = False
     route: list[str] = field(default_factory=list)
@@ -330,7 +331,7 @@ class Game(Encounters):
         if self.checkpoint:
             self.checkpoint()
         adapted = await self.prepare_opening()
-        opening = Turn()
+        opening = Turn(told=True)
         await self.plugins.run("start", opening)
         await self._arrive(st.location, opening)
         loc = m.location(st.location)
@@ -351,7 +352,7 @@ class Game(Encounters):
             report += f"导演为这几位调查员改编了模组：{adapted.note}\n"
         happened = [e.read_aloud.strip() or e.title for e in opening.events]
         if happened:
-            report += "【开场时发生的事】\n" + "\n".join(happened) + "\n"
+            report += "【开场时发生的事（尚未展示给玩家，融入同一段叙事，按先后自然带出，不逐件罗列）】\n" + "\n".join(happened) + "\n"
         report += (
             "请用 180–320 字、两到四个自然段引入故事（有玩家篇幅偏好时以偏好为准）："
             "先用来信、旅途、职业或已写的关系自然交代为何而来，再让调查员看见眼前的生活和地方。"
@@ -2759,7 +2760,8 @@ class Game(Encounters):
 
         async def fire() -> None:
             await step("commit", turn, commit)
-            await step("notice", turn, lambda: self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()}))
+            if not turn.told:  # at the opening the keeper tells it, once (the user, 2026-10-22: shown, then told again)
+                await step("notice", turn, lambda: self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()}))
             if ev.art and views.shown(self.m, ev.art):
                 await step("view", turn, lambda: self._view(ev.art, "moment"))
             await step("showcase", turn, lambda: self.showcases.fire(f"event:{ev.id}"))
@@ -2966,8 +2968,8 @@ class Game(Encounters):
         if turn.performance:
             out.append(f"NPC 表演（已展示给玩家）：{m.npc(turn.performance[0]).name} 刚刚说完这一段书。")
         for ev in turn.events:
-            if ev.read_aloud.strip():
-                out.append(f"眼前发生：{ev.read_aloud.strip()}")
+            if ev.read_aloud.strip():  # the screen showed it word for word (the event notice): go on from it
+                out.append(f"眼前发生（原文已展示给玩家，不要复述，接着写之后的变化）：{ev.read_aloud.strip()}")
         if names := self._unknown(turn.events):  # a horror seen before it is known, or anyone in the fight (Creature.called, NPC.called)
             out.append("【称呼】" + "；".join(names) + "。调查员还不知道这是什么：只写看得见、听得见、闻得到的样子，不说出名字和来历")
         out += [f"眼前发生：{text}" for text in turn.world]

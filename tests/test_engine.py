@@ -110,8 +110,11 @@ async def test_start_fires_the_starting_locations_arrival_event_once(module, fak
     game, cast, events = make(module, fake, {})
     await game.start()
     assert "arrival" in game.state.fired and "两位访客" in cast.reports[0]
+    # The opening's events are the keeper's to tell, once, in its telling (the user, 2026-10-22: a menu read
+    # out, then told again): not shown before it, and not fired again on arriving there once more.
+    assert "尚未展示给玩家" in cast.reports[0] and not [e for e in events if e["type"] == "event"]
     await game._arrive(module.start, Turn())
-    assert sum(event["type"] == "event" and event.get("id") == "arrival" for event in events) == 1
+    assert not [e for e in events if e["type"] == "event"] and game.state.fired.count("arrival") == 1
 
 
 async def test_the_keeper_reads_the_backstage_of_where_the_party_stands(module, fake):
@@ -805,7 +808,7 @@ async def test_what_a_failed_push_sets_off_reaches_the_stage_and_the_keeper(modu
                                         resume={"choice": "push", "how": "用螺丝刀把柜门撬开"})
     assert interrupts and "e_warden" in game.state.fired
     assert [e["npc"] for e in events if e["type"] == "performance"] == ["warden"]
-    assert "眼前发生：守钟人提着灯冲上楼梯。" in cast.reports[-1]
+    assert "原文已展示给玩家，不要复述，接着写之后的变化）：守钟人提着灯冲上楼梯。" in cast.reports[-1]
 
 
 async def test_an_ending_a_failure_brings_about_ends_the_game_when_they_give_up(module, fake):
