@@ -134,7 +134,7 @@ def test_a_chase_brief_draws_its_site_or_asks_for_one():
 
 
 def test_the_system_prompt_states_the_books_defaults_and_every_action():
-    assert "默认反击" in ENCOUNTER_PLAN_SYSTEM and "第 87 页" in ENCOUNTER_PLAN_SYSTEM
+    assert "默认反击" in ENCOUNTER_PLAN_SYSTEM and "打算撤离时才闪避" in ENCOUNTER_PLAN_SYSTEM  # p. 87, in the code's comment
     assert all(f"- {do}：" in ENCOUNTER_PLAN_SYSTEM for do in ACTION_NEEDS)
 
 
