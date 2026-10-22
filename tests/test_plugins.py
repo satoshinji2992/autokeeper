@@ -598,3 +598,13 @@ async def test_a_lan_house_rule_is_drafted_and_installed_by_the_host(monkeypatch
     assert hub.state.plugin_sources["meals"]
     info = {i["name"] for i in hub._book()["plugin_info"]}
     assert "一日三餐" in info  # the new rule reaches the table's redacted book, by name
+
+
+def test_the_house_rule_author_leaves_fights_and_chases_to_the_engine():
+    """Chases are engine-native now (module/importer.FIGHTS): the author is not told a chase makes a
+    good plugin, and is told to keep out of fights and chases."""
+    from autokeeper.agents.cast import AUTHOR_SYSTEM
+
+    first = next(line for line in AUTHOR_SYSTEM.splitlines() if "需要程序持续记数值" in line)
+    assert "追逐" not in first
+    assert "战斗和追逐由引擎按规则一轮一轮结算，不写成插件" in AUTHOR_SYSTEM
