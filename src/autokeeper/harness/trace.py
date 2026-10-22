@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
-from .. import paths
+from .. import __version__, paths
 
 if TYPE_CHECKING:
     from .models import Model, Reply
@@ -100,6 +100,7 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
     row: dict[str, Any] = {
         "at": dt.datetime.now().isoformat(timespec="seconds"),
         "run": RUN,
+        "version": __version__,
         "agent": model.label,
         "backend": model.spec.backend,
         "model": model.spec.model,
@@ -186,6 +187,7 @@ def summarize(rows: list[dict[str, Any]], by: str | None = "agent") -> list[dict
             "calls": len(rs),
             "input": tokens,
             "cached": cached,
+            "fresh": sum(max(0, r.get("input_tokens", 0) - r.get("cache_read", 0)) for r in rs),
             "cache_rate": cached / tokens if tokens else 0.0,
             "output": sum(r.get("output_tokens", 0) for r in rs),
             "thinking": sum(r.get("thinking_chars", 0) for r in rs),

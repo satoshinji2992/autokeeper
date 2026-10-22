@@ -222,6 +222,7 @@ def test_trace_summary_per_agent_and_run(monkeypatch):
     ]
     keeper, npc = trace.summarize(rows)
     assert (keeper["key"], keeper["calls"], keeper["cache_rate"], keeper["repairs"]) == ("keeper", 2, 1800 / 2200, 1)
+    assert keeper["fresh"] == 400 and npc["fresh"] == 600
     assert (keeper["p50"], keeper["p95"]) == (2.0, 4.0) or (keeper["p50"], keeper["p95"]) == (4.0, 4.0)
     assert (npc["errors"], npc["fallbacks"], npc["cache_rate"]) == (1, 1, 0.0)
     assert [(r["run"], r["calls"], r["end"]) for r in trace.runs(rows)] == [("a", 3, "2026-10-18T05:00:05"), ("b", 1, "2026-10-18T06:00:00")]
@@ -241,7 +242,7 @@ def test_strict_schema_for_codex_closes_every_object():
 
 def test_prompted_json_carries_schema_and_example():
     text = hm.json_instruction(Action.model_json_schema())
-    assert "json" in text and '"kind": "investigate"' in text  # DeepSeek JSON mode wants the word and an example
+    assert "json" in text and '"kind":"investigate"' in text  # DeepSeek JSON mode wants the word and an example
 
 
 def test_claude_prompt_marks_the_end_of_history_for_the_prompt_cache():
@@ -899,6 +900,7 @@ async def test_claude_code_gets_the_backstage_schema_without_its_discriminator(m
     await model._client("scene", schema)  # type: ignore[attr-defined]
     sent = seen["options"]["output_format"]["schema"]
     assert "discriminator" not in json.dumps(sent) and json.dumps(sent).count('"const"') == json.dumps(schema).count('"const"')
+    assert sent["title"] == schema["title"] and all("title" not in field for field in sent["properties"].values())
 
 
 def test_claude_on_an_api_key_and_a_priced_api_count_against_the_budget(monkeypatch, tmp_path):

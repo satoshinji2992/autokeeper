@@ -52,14 +52,20 @@ def usage_view(st: GameState) -> Group:
         f"{total['seconds']:.0f}s", f"${total['cost_usd']:.4f}", style="bold",
     )  # fmt: skip
 
-    parts: list = [table]
+    fresh = sum(max(0, u.get("input", 0) - u.get("cache_read", 0)) for u in st.usage.values())
+    parts: list = [table, Text(
+        f"\n输入含缓存读取；未命中缓存 {tokens(fresh)} token，缓存读取 {tokens(total['cache_read'])} token。",
+        style="dim",
+    )]
     turns = st.turn_usage[-SHOWN_TURNS:]
     if turns:
-        line = Text("\n每回合的 token  ", style="dim")
+        line = Text("\n每回合的总 token（含缓存）  ", style="dim")
         line.append(spark([t["input"] + t["output"] for t in turns]), style="bold")
         avg = sum(t["input"] + t["output"] for t in turns) / len(turns)
         cost = sum(t["cost_usd"] for t in turns) / len(turns)
-        line.append(f"\n最近 {len(turns)} 回合，平均每回合 {tokens(avg)} token · ${cost:.4f}", style="dim")
+        fresh_avg = sum(max(0, t["input"] - t.get("cache_read", 0)) for t in turns) / len(turns)
+        line.append(f"\n最近 {len(turns)} 回合，平均总量 {tokens(avg)} token"
+                    f" · 未命中缓存输入 {tokens(fresh_avg)} token · ${cost:.4f}", style="dim")
         parts.append(line)
     book = spend.ledger()
     cap = spend.budget()

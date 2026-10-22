@@ -155,7 +155,7 @@ class Backstage:
 
 class PreparationError(RuntimeError):
     """A scene could not be prepared this time: no plan passed its checks, or its first picture
-    did not come. Game._ready tries again before any roll or time settles."""
+    did not come. Game._ready only retries recoverable service or picture failures."""
 
 
 @dataclass
@@ -626,7 +626,7 @@ class Game(Encounters):
             return Ruling(needs_roll=False, minutes=0, reason="移动")
         if self._stop_on_route(action):
             return Ruling(needs_roll=False, minutes=0, reason="先走到沿途地点，之后由玩家决定是否继续")
-        if (action.kind == "daily" and action.casual and action.npc and not action.asked
+        if (action.kind in ("daily", "talk") and action.casual and action.npc and not action.asked
                 and not action.destination and not action.approach
                 and any(n.id == action.npc for n in self.m.npcs_at(self.state.location))):
             return Ruling(needs_roll=False, minutes=0, reason="普通闲聊，不必另作裁定")
@@ -886,26 +886,24 @@ class Game(Encounters):
         where = at or st.location
         if kind == "展开":  # diagnostic history, never a veto on a player's new action
             st.expanded[where] = st.turn
-        task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where))
         receipt = st.pending_turn.setdefault("scene_package", {}) if required and st.pending_turn else None
         if receipt is not None:
             if receipt.get("kind") != kind or receipt.get("at") != where:
                 receipt.clear()
             if receipt.get("applied"):
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
                 return improv.Applied(**receipt["applied"])
             receipt.update(kind=kind, at=where)
-            if receipt.get("plan"):
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-                async def cached():
-                    restored = Improv.model_validate(receipt["plan"])
-                    restored.reads = dict(receipt.get("reads", {}))
-                    return restored
-                task = asyncio.create_task(cached())
+        draft = receipt.setdefault("draft", {}) if receipt is not None else {}
+        if receipt is not None and receipt.get("plan"):
+            async def cached():
+                restored = Improv.model_validate(receipt["plan"])
+                restored.reads = dict(receipt.get("reads", {}))
+                return restored
+            task = asyncio.create_task(cached())
+        else:
+            task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=where, draft=draft))
         if required:
-            return await self._ready(kind, task, action=action, ruling=ruling, at=where, receipt=receipt)
+            return await self._ready(kind, task, action=action, ruling=ruling, at=where, receipt=receipt, draft=draft)
         wait = self.director_wait if patience is None else patience
         try:
             if wait is None:
@@ -921,13 +919,16 @@ class Game(Encounters):
             return None
 
     async def _ready(self, kind: str, task: asyncio.Task, *, action: Action | None, ruling: Ruling | None,
-                     at: str, receipt: dict | None) -> improv.Applied | None:
-        """The scene a current action needs. A plan that fails its checks is written again, and a
-        first picture that failed is drawn once more, for up to PREPARE_LIMIT seconds; then the
-        scene goes on without its picture (drawn in the background), or, with no plan that fits,
-        the action settles as the module has it. The player is never left at /retry."""
+                     at: str, receipt: dict | None, draft: dict | None = None) -> improv.Applied | None:
+        """Prepare a needed scene with one repair per invalid draft. Temporary service failures,
+        stale world reads and first-picture recovery have a separate PREPARE_LIMIT deadline.
+        Then the scene proceeds without its picture (drawn in the background), or, with no plan
+        that fits, the action settles as the module has it. The player is never left at /retry."""
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + PREPARE_LIMIT
+        started = loop.time()
+        deadline = started + PREPARE_LIMIT
+        if draft is None:
+            draft = receipt.setdefault("draft", {}) if receipt is not None else {}
         plan: Improv | None = None
         failures = drawn = 0
         while True:
@@ -940,14 +941,17 @@ class Game(Encounters):
                 except PreparationError as exc:
                     self._debug("director", {"phase": "failed", "kind": kind, "error": str(exc),
                                              "cause": repr(exc.__cause__)[:500] if exc.__cause__ else ""})
-                    if refused(exc.__cause__):  # the model turned the request down (a 400): asking again changes nothing
+                    # _plan already gave an invalid draft one concrete repair. Starting it over
+                    # would discard that limit and spend repeatedly on the same rejected scene.
+                    # Service failures keep their separate, paced recovery below.
+                    if exc.__cause__ is None or refused(exc.__cause__):
                         break
                     failures += 1
-                    pause = min(PREPARE_PAUSE * failures, deadline - loop.time()) if exc.__cause__ else 0.0
-                    if pause < 0:
+                    pause = min(PREPARE_PAUSE * failures, deadline - loop.time())
+                    if pause <= 0:
                         break
                     await asyncio.sleep(pause)  # a service that failed outright gets a moment first
-                    task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=at))
+                    task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=at, draft=draft))
                     continue
                 if plan is None:
                     return None  # nothing to add here
@@ -972,10 +976,17 @@ class Game(Encounters):
             # Rebuild the complete package; never retain just the module half.
             await self.emit({"type": "status", "text": "KP 正在构思…"})
             plan = None
-            task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=at))
+            draft.clear()  # a changed world starts a new package, unlike a service retry
+            if receipt is not None:
+                receipt.pop("plan", None)
+                receipt.pop("reads", None)
+                if self.checkpoint:
+                    self.checkpoint()
+            task = asyncio.create_task(self._plan(kind, action=action, ruling=ruling, at=at, draft=draft))
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        self._debug("director", {"phase": "gave_up", "kind": kind, "seconds": PREPARE_LIMIT})
+        self._debug("director", {"phase": "gave_up", "kind": kind, "seconds": loop.time() - started,
+                                 "limit_seconds": PREPARE_LIMIT})
         if receipt is not None:  # a resumed turn settles the same way
             receipt.clear()
             receipt.update(kind=kind, at=at, given_up=True)
@@ -983,15 +994,17 @@ class Game(Encounters):
                 self.checkpoint()
         return None
 
-    async def _plan(self, kind: str, *, action: Action | None, ruling: Ruling | None, at: str) -> Improv | None:
+    async def _plan(self, kind: str, *, action: Action | None, ruling: Ruling | None, at: str,
+                    draft: dict | None = None) -> Improv | None:
         """Check package, plugins and world operations deterministically, with one repair.
 
         The director judges a rewrite's meaning against its full world context; another model
         does not approve it. The world still preserves observations, materials and revision history.
         """
         said = f"{action.summary}（{action.kind}，对象：{action.target or '无'}）" if action else ""
-        problems: list[str] = []
-        for _attempt in range(2):
+        draft = {} if draft is None else draft
+        problems: list[str] = draft.get("problems", [])
+        while draft.get("failed", 0) < 2:
             reads = world_view.director_view(self.world).reads  # what it is shown now, for the desk to check later
             try:
                 plan = await self.cast.director(self.state, kind, action=said, reason=ruling.reason if ruling else "", at=at, problems=problems)
@@ -1008,14 +1021,17 @@ class Game(Encounters):
 
                 for plugin in plan.plugins:
                     problems += [f"插件 {plugin.id}：{problem}" for problem in await verify(plugin)]
-            if problems:
-                continue
-            plan.reads = reads
-            backstage = self._trial(plan, at) if plan.backstage else []
-            if not backstage:
+            if not problems:
+                plan.reads = reads
+                problems = self._trial(plan, at) if plan.backstage else []
+            if not problems:
                 self._debug("director", {"phase": "validated", "kind": kind, "plan": plan.model_dump(mode="json")})
                 return plan
-            problems = backstage
+            # Failed service calls do not reach here: retry the same draft with its original
+            # problems. Persist rejected outputs so cancellation/readback cannot reset repair.
+            draft.update(failed=draft.get("failed", 0) + 1, problems=list(problems))
+            if self.checkpoint:
+                self.checkpoint()
         self._debug("director", {"phase": "rejected", "kind": kind, "problems": problems})
         raise PreparationError("场景方案两次都没有通过检查")
 
@@ -1119,6 +1135,7 @@ class Game(Encounters):
             if key in staged.st.visuals:
                 self.state.visuals[key] = staged.st.visuals[key]
         if receipt is not None:
+            receipt.pop("draft", None)
             receipt["applied"] = asdict(applied)
             if self.checkpoint:
                 self.checkpoint()
@@ -3578,9 +3595,9 @@ BACKSTAGE_LIMIT = 2  # plans being written at once
 # Optional future preparations do not block play. Current scene dependencies always wait.
 PLAY_WAIT = 0.0
 # How long a player may wait for the scene their action needs (the user's call, 2026-10-20: up to
-# five minutes is fine). Plans that fail are written again until then; a first picture gets
-# PREPARE_DRAWS tries before the scene goes on without it; PREPARE_PAUSE seconds (times the
-# failures so far) pass before asking a director whose call failed outright again.
+# five minutes is fine). Each invalid draft gets one repair. Stale reads rebase the package;
+# service recovery waits PREPARE_PAUSE seconds times failures so far before retrying. A first
+# picture gets PREPARE_DRAWS tries before the scene goes on without it.
 PREPARE_LIMIT = 300.0
 PREPARE_DRAWS = 2
 PREPARE_PAUSE = 5.0

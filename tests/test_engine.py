@@ -598,7 +598,7 @@ async def test_a_plan_that_does_not_fit_is_written_again_then_the_action_settles
     game, cast, _ = improvised(module, fake, {"x": (ask, ruling)}, [broken, broken])
     assert await game.rule(ask) is not None  # no usable scene: the action still settles, no /retry
     assert cast.asked[1][2] and "nowhere" in cast.asked[1][2][0]  # the second call saw what was wrong
-    assert len(cast.asked) == 3  # then a fresh plan was asked for (this director had nothing more)
+    assert len(cast.asked) == 2  # an invalid draft gets one repair, without restarting that budget
     assert not game.state.improv and not any(loc.id == "newsstand" for loc in module.locations)
 
 

@@ -96,7 +96,7 @@ def _npc_facts(w: World, npc: str, query: str, concerns: str) -> list[Fact]:
     return [fact for i, fact in enumerate(facts) if i in keep]
 
 
-def _fact_line(npc: str, fact: Fact, sources: dict[str, Event], w: World) -> str:
+def _fact_line(npc: str, fact: Fact, sources: dict[str, Event], w: World, *, covered: str = "") -> str:
     if fact.kind == "lie" and npc in fact.about:
         label = "这是你编的"
     elif fact.kind == "rumor":
@@ -106,10 +106,12 @@ def _fact_line(npc: str, fact: Fact, sources: dict[str, Event], w: World) -> str
                  else "来自亲历或当面获知的记录")
     else:
         label = "原有知识" if fact.origin == "module" else "已登记知识，来源未标注"
-    return f"- {knowledge.public_ref(fact, npc)}：{fact.text}（{label}）"
+    text = f"见{covered}中的原文" if covered else fact.text
+    return f"- {knowledge.public_ref(fact, npc)}：{text}（{label}）"
 
 
-def _npc_memories(w: World, npc: str, query: str, concerns: str, *, recent: int) -> tuple[list[str], dict[str, Event]]:
+def _npc_memories(w: World, npc: str, query: str, concerns: str, *, recent: int,
+                  included: set[str] | None = None) -> tuple[list[str], dict[str, Event]]:
     by_event = {e.id: e for e in w.rec.events}
     events = [e for e in w.rec.events if knowledge.saw(e, npc) and e.kind not in {"plan", "step", "remember"}]
     sources = {fid: event for event in events for fid in event.facts}
@@ -128,12 +130,17 @@ def _npc_memories(w: World, npc: str, query: str, concerns: str, *, recent: int)
     for index in selected:
         memory = memories[index]
         event = by_event.get(memory.event)
+        if included is not None and event is not None:
+            included.add(event.id)
         if event is not None:
             if event.kind == "relate":
                 label = "个人态度记录"
             else:
-                label = (f"听说，来源：{w.name(event.actor)}" if event.kind == "learn" and event.actor not in {npc, "engine", "director", "keeper"}
-                         else f"亲历或当面获知，记录者：{w.name(event.actor)}")
+                actor = w.name(event.actor)
+                if actor != event.actor:
+                    actor += f"（{event.actor}）"
+                label = (f"听说，来源：{actor}" if event.kind == "learn" and event.actor not in {npc, "engine", "director", "keeper"}
+                         else f"亲历或当面获知，记录者：{actor}")
         elif re.search(r"怀疑|猜测|推测|可能|似乎|认为|觉得", memory.text):
             label = "个人判断，尚未证实"
         else:
@@ -167,11 +174,13 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
         lines.append("【你的计划】\n" + ("\n".join(steps) or "- 还没有"))
     concerns = _concerns(w, npc)
     facts = _npc_facts(w, npc, query, concerns)
-    memories, sources = _npc_memories(w, npc, query, concerns, recent=12)
+    included: set[str] = set()
+    memories, sources = _npc_memories(w, npc, query, concerns, recent=12, included=included)
     lines.append("【你知道的事】\n" + ("\n".join(_fact_line(npc, f, sources, w) for f in facts) or "- 无"))
     lines.append("【你的记忆（近期与当前相关旧事）】\n" + ("\n".join(memories) or "- 无"))
     witnessed = [e for e in rec.events if (npc in e.participants or npc in e.witnesses)
                  and e.kind not in {"plan", "step", "remember"}][-6:]
+    witnessed = [event for event in witnessed if event.id not in included]
     if witnessed:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
             f"- {format_time(e.t)} {w.name(e.actor)}（{e.actor}）：{e.text}" for e in witnessed))
@@ -205,7 +214,7 @@ SHOWN = {"occur", "move", "transfer", "equip", "condition", "promise", "fulfil",
 ONCE = {True: "，只做一次，做过填进 played", False: "，一贯如此，碰上了才带出，不必每次都演"}
 
 
-def npc_brief(w: World, npc: str, query: str = "") -> str:
+def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, str] | None = None) -> str:
     """What an NPC brings to a conversation of its own life in this game: how it is, what it is
     after and up to, what it remembers, how it stands with people, what it promised. The rest of
     its sheet (what it knows, its secrets) is in its system prompt, projected from the record."""
@@ -231,12 +240,15 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
         if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
-    memories, sources = _npc_memories(w, npc, query, concerns, recent=6)
+    included: set[str] = set()
+    memories, sources = _npc_memories(w, npc, query, concerns, recent=6, included=included)
     if memories:
         lines.append("【你记得（近期与当前相关旧事）】\n" + "\n".join(memories))
     facts = [f for f in _npc_facts(w, npc, query, concerns) if not f.id.startswith(f"npc:{npc}:") or f.origin != "module"]
     if facts:
-        lines.append("【当前相关的已知资料】\n" + "\n".join(_fact_line(npc, fact, sources, w) for fact in facts))
+        covered = covered_facts or {}
+        lines.append("【当前相关的已知资料】\n" + "\n".join(
+            _fact_line(npc, fact, sources, w, covered=covered.get(fact.id, "")) for fact in facts))
     rels = sorted((r for r in rec.relations.values() if r.a == npc and npc in r.known_by), key=lambda r: -abs(r.value))[:5]
     if rels:
         lines.append("【你对别人（-100 到 100）】" + "；".join(f"{w.name(r.b)}：{r.kind} {r.value:+d}" + (f"（{r.note}）" if r.note else "")
@@ -248,10 +260,10 @@ def npc_brief(w: World, npc: str, query: str = "") -> str:
     # The conversation session may be compacted; the current record remains the source
     # for what the character actually witnessed, and what happened after its last reply.
     recent = [e for e in rec.events if npc in e.participants or npc in e.witnesses][-5:]
+    recent = [event for event in recent if event.id not in included and event.kind not in {"plan", "step", "remember"}]
     if recent:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
-            f"- {format_time(e.t)} {w.name(e.actor)}：{e.text}" for e in recent
-            if e.kind not in {"plan", "step", "remember"}))
+            f"- {format_time(e.t)} {w.name(e.actor)}：{e.text}" for e in recent))
     if ent.at == w.st.location:
         lines.append("【当前交流】调查员就在身边；按本轮实际听见的话回应，可以提出自己的帮助或请求，不能知道其未说出的打算。")
     return knowledge.public_text(w, npc, "\n".join(lines))

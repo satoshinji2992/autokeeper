@@ -576,7 +576,8 @@ def trace_cmd(
         scope = f"{rows[0]['at'][:10]} 至 {rows[-1]['at'][:10]}" if day == "all" else rows[0]["at"][:10]
     console.print(f"[bold]{scope}[/] · {total['calls']} 次调用 · 调用耗时合计 {total['seconds']:.0f}s · 花费 {_usd(total['cost'])}")
     console.print(
-        f"输入 {_count(total['input'])} token（缓存命中 {total['cache_rate']:.0%}）· 输出 {_count(total['output'])} token"
+        f"输入 {_count(total['input'])} token（未命中缓存 {_count(total['fresh'])}，命中 {total['cache_rate']:.0%}）"
+        f"· 输出 {_count(total['output'])} token"
         + (f" · 思考 {_count(total['thinking'])} 字" if total["thinking"] else "")
     )
     extra = [(k, h) for k, h in (("repairs", "修复"), ("retries", "重试"), ("fallbacks", "降级"), ("errors", "错误")) if total[k]]

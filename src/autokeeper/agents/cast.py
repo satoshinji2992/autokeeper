@@ -934,17 +934,18 @@ class Cast:
         sessions += [self._npc(state, n.id) for n in self.module.npcs_at(state.location)]
         await asyncio.gather(*(s.warm() for s in sessions), return_exceptions=True)
 
-    def _heard(self, state: GameState, text: str) -> str:
+    def _heard(self, state: GameState, text: str, *, shared: bool = True) -> str:
         """What the action is read from: the scene as the players know it, the recent exchange, what
-        the investigator really holds, and the player's words (with the skill a dice command asks for)."""
+        the investigator really holds, and the player's words (with the skill a dice command asks for).
+        A batch supplies the scene and recent world record once; each action then adds only its author."""
         inv = state.investigator
         asked = commands.asked(text)
-        prompt = (
-            f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n【调查员】{inv.name}\n"
-            f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}"
-        )
+        prompt = (f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
+                  if shared else "")
+        prompt += f"【调查员】{inv.name}\n【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}"
         if self.world is not None:
-            prompt += f"\n【已建立的关系与现场事实】\n{world_view.keeper_view(self.world)}"
+            if shared:
+                prompt += f"\n【已建立的关系与现场事实】\n{world_view.keeper_view(self.world)}"
             prompt += "\n【重要装备状态】" + "；".join(self._equipment(inv.id))
         if asked is not None:
             prompt += f"（骰子指令：{inv.name}想在这里用「{asked.skill}」）"
@@ -1065,6 +1066,7 @@ class Cast:
             "【同一收集窗口的整批安排】\n"
             "先读完所有原话，再理解配合、互相阻拦、争夺同一物件和独立行动，不把每人单独的愿望当成共同同意。"
             "这次改用 PartyPlan 格式：steps 的先后就是准备结算的顺序，每个 token 恰好一次，同一人提交两条也不能合并或漏掉。"
+            "本人明确先后进行的事保留其声明次序，不因别人的配合而反转。"
             "related 只引用本窗口的其他 token；coordination 写中立的尝试关系、先后理由或尚待前项成立的条件，"
             "仅供后台判断，不作为公共台词或已发生事实。不要把别人的私语、单独感知和幕后真相写进本人的 action.summary。\n"
             "互助只有实际实施后才改变条件；递灯、开门、牵制和抢夺仍按实际归属、位置和检定结果落实。"
@@ -1076,12 +1078,21 @@ class Cast:
         )
         if self.backstage and self.world is not None:
             prompt += "\n【本局幕后简报】\n" + world_view.keeper_brief(self.world)
-        prompt += "\n【全局近期记录，私密内容保留收件范围】\n" + _recent(state)
-        for item in items:
-            view = state.model_copy(update={"active": indexes[item.who], "location": audience.location(state, item.who)})
-            prompt += f"\n\n【原始行动 token={item.token}，调查员 id={item.who}】\n" + self._heard(view, item.text)
+        prompt += "\n【全局及各参与者近期记录，私密内容保留收件范围】\n" + _recent(
+            state, viewers=tuple(dict.fromkeys(item.who for item in items)))
+        places = list(dict.fromkeys(audience.location(state, item.who) for item in items))
+        for where in places:
+            view = state.model_copy(update={"active": -1, "location": where})
+            prompt += f"\n\n【共用场景 {where}】\n" + self.bearings(view)
+            if self.world is not None:
+                prompt += "\n【已建立的关系与现场事实】\n" + world_view.keeper_view(self.world, at=where)
             prompt += "\n【在场、可以主动的人】" + ("、".join(f"{npc.name}({npc.id})" for npc in self.able(view)) or "无")
             prompt += "\n【可能动手的】" + self._fighters(view)
+        for item in items:
+            view = state.model_copy(update={"active": indexes[item.who], "location": audience.location(state, item.who)})
+            loc = self.module.location(view.location)
+            prompt += (f"\n\n【原始行动 token={item.token}，调查员 id={item.who}】\n"
+                       f"地点：{loc.name}({loc.id})，使用【共用场景 {loc.id}】。\n" + self._heard(view, item.text, shared=False))
         session = self._plan(state)
         try:
             checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan")
@@ -1378,7 +1389,7 @@ class Cast:
         named = next((n.name for n in m.npcs if n.id == action.npc), "")
         prompt += await self._private_lore(state, action.summary, [m.location(where).name, action.target, named])
         if action.kind == "perform" and action.speech:
-            prompt += f"\n【表演内容】{action.speech}\n（表演内容只用来判断是否值得一个奖励骰，不改变难度。）"
+            prompt += "\n【表演内容】使用上面行动里的 speech 原文判断是否值得一个奖励骰，不改变难度。"
         later = {k: v for k, v in m.flags.items() if k not in self._arbiter_flags and not k.startswith("now_")}
         if later:
             prompt += "\n【本局新增的剧情标记】" + "；".join(f"{k}：{v}" for k, v in later.items())
@@ -1636,13 +1647,27 @@ class Cast:
                                                   if e.kind == "item" and not e.important and e.at == npc_id]):
             mood += f"你手边的日常物件：{'、'.join(things)}。\n"
         mood += world.context(state, npc=npc_id)
-        if self.world is not None and (brief := world_view.npc_brief(self.world, npc_id, query=message)):
-            mood += "\n" + brief
         knows, secrets = self._learned(npc_id)
         if knows:
             mood += "\n【你在本局新知道的】" + "；".join(knows)
         if secrets:
             mood += "\n【你在本局新有的秘密】结合当前动机、关系、处境及本轮裁定决定是否透露：" + "；".join(secrets)
+        if self.world is not None:
+            # These exact facts already have their full text in the role's own sheet or in
+            # the dynamic block above. Keep their scoped references and source labels in
+            # the world brief, without sending a second copy of the same paragraphs.
+            covered = {}
+            for cid in npc.clues:
+                fact = self.world.rec.facts.get(f"clue:{cid}")
+                if fact is not None and fact.text.strip() == self.module.clue(cid).text.strip():
+                    covered[fact.id] = f"角色资料的线索 {cid}"
+            for fact in world_knowledge.known(self.world.rec, npc_id):
+                if fact.kind == "secret" and fact.text in secrets:
+                    covered[fact.id] = "【你在本局新有的秘密】"
+                elif fact.text in knows:
+                    covered[fact.id] = "【你在本局新知道的】"
+            if brief := world_view.npc_brief(self.world, npc_id, query=message, covered_facts=covered):
+                mood += "\n" + brief
         mood += self.prefs.for_npc()
         destinations = {state.location: self.module.location(state.location).name, **fog.bearings(self.module, state)}
         mood += "\n【可提出同行的地点】" + "、".join(f"{name}（{pid}）" for pid, name in destinations.items())
@@ -2115,24 +2140,51 @@ def _personal_situation(state: GameState, viewer: str, situation: str) -> str:
 
 
 def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "speech", "npc", "keeper", "event", "clue", "handout"),
-            viewer: str | None = None, keeper: bool = True) -> str:
+            viewer: str | None = None, keeper: bool = True, viewers: tuple[str, ...] = ()) -> str:
     """Keep contiguous exchanges and their sources; do not reduce each reply to its last line."""
-    rows = [e for e in audience.log(state, viewer, keeper=keeper) if e.kind in kinds][-n:]
+    rows = [e for e in audience.log(state, viewer, keeper=keeper) if e.kind in kinds]
     names = {i.id: i.name for i in state.investigators}
-    kept, left = [], 10000
-    for e in reversed(rows):
-        if left <= 0:
-            break
-        text = e.text
-        if len(text) > left:
-            text = text[:left // 2] + "\n〔中段省略〕\n" + text[-left // 2:]
+
+    def fragments(window):
+        selected, left = [], 10000
+        for entry in reversed(window):
+            if left <= 0:
+                break
+            text = entry.text
+            width = min(len(text), left)
+            if len(text) > left:
+                text = text[:left // 2] + "\n〔中段省略〕\n" + text[-left // 2:]
+            selected.append((entry, text, width))
+            left -= len(text)
+        return list(reversed(selected))
+
+    selected = fragments(rows[-n:])
+    if viewers:
+        # Apply each old window's own budget before merging. A busy private exchange
+        # cannot consume another participant's allowance. Identity, not equal wording,
+        # distinguishes separate utterances; wider original coverage wins on overlaps.
+        merged = {id(entry): (text, width) for entry, text, width in selected}
+        for who in dict.fromkeys(viewers):
+            window = [entry for entry in rows if audience.visible(entry, who)][-n:]
+            for entry, text, width in fragments(window):
+                previous = merged.get(id(entry))
+                if previous is None or width > previous[1]:
+                    merged[id(entry)] = (text, width)
+        selected, seen = [], set()
+        for entry in rows:
+            key = id(entry)
+            if key in merged and key not in seen:
+                text, width = merged[key]
+                selected.append((entry, text, width))
+                seen.add(key)
+    kept = []
+    for e, text, _width in selected:
         scope = ""
         if e.audience is not None:
             recipients = "、".join(names.get(who, who) for who in e.audience) or "仅KP"
             scope = f"｜私密收件人：{recipients}" if keeper else "｜个人信息"
         kept.append(f"- [{e.time}｜第{e.turn}轮｜{e.kind}{scope}] {e.who or e.kind}：{text}")
-        left -= len(text)
-    return "\n".join(reversed(kept)) or "（刚开场）"
+    return "\n".join(kept) or "（刚开场）"
 
 
 def _skills(inv: Investigator) -> str:

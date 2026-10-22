@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from types import SimpleNamespace
 
@@ -44,7 +43,7 @@ def test_context_parts_count_system_schema_extra_and_wrappers_once(probe):
     parts = session.context_size("新问题", extra="仅限这次的资料")
     actual = "系统" + hm.json_instruction(schema) + "".join(m["content"] for m in session.window("新问题仅限这次的资料"))
     assert parts["total_chars"] == len(actual) and parts["utf8_bytes"] == len(actual.encode("utf-8"))
-    assert parts["extra_chars"] == len("仅限这次的资料") and parts["schema_chars"] == len(json.dumps(schema, ensure_ascii=False))
+    assert parts["extra_chars"] == len("仅限这次的资料") and parts["schema_chars"] == len(hm.schema_text(schema))
     additive = ("system_chars", "history_chars", "summary_chars", "pinned_chars", "prompt_chars", "extra_chars",
                 "wrapper_chars", "schema_chars", "format_chars")
     assert sum(parts[key] for key in additive) == parts["total_chars"]
@@ -164,7 +163,7 @@ async def test_native_and_prompted_schema_modes_enforce_the_same_counting_contra
     model = probe.model(_spec(), "系统")
     model.mode = mode
     parts = model.input_size(messages, schema)
-    contract = hm.json_instruction(schema) if mode == "json" else json.dumps(schema, ensure_ascii=False)
+    contract = hm.json_instruction(schema) if mode == "json" else hm.schema_text(schema)
     assert parts["total_chars"] == len("系统问题" + contract)
     model.spec = _spec(parts["total_chars"] - 1)
     with pytest.raises(ContextBudgetExceeded):

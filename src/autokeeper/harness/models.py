@@ -175,10 +175,47 @@ def example(root: dict, node: dict | None = None, depth: int = 0) -> Any:
     return {"string": "…", "integer": 0, "number": 0, "boolean": False}.get(kind or "")
 
 
+def compact_schema(schema: dict) -> dict:
+    """Drop generated field labels, preserving the contract and any literal payloads.
+
+    A property called title is a field, not an annotation. Likewise default, const
+    and examples can contain arbitrary dictionaries. Only walk schema nodes; retain
+    the root title because native tool adapters use it as the function name.
+    """
+    maps = {"properties", "$defs", "definitions", "patternProperties", "dependentSchemas"}
+    nodes = {"items", "additionalProperties", "contains", "propertyNames", "not", "if", "then", "else",
+             "unevaluatedProperties", "unevaluatedItems", "additionalItems", "contentSchema"}
+    arrays = {"allOf", "anyOf", "oneOf", "prefixItems"}
+
+    def walk(node: Any, *, root: bool = False) -> Any:
+        if not isinstance(node, dict):
+            return node
+        out = {}
+        for key, value in node.items():
+            if key == "title" and not root:
+                continue
+            if key in maps and isinstance(value, dict):
+                out[key] = {name: walk(child) for name, child in value.items()}
+            elif key in nodes:
+                out[key] = [walk(child) for child in value] if isinstance(value, list) else walk(value)
+            elif key in arrays and isinstance(value, list):
+                out[key] = [walk(child) for child in value]
+            else:
+                out[key] = value
+        return out
+
+    return walk(schema, root=True)
+
+
+def schema_text(schema: dict) -> str:
+    return json.dumps(compact_schema(schema), ensure_ascii=False, separators=(",", ":"))
+
+
 def json_instruction(schema: dict) -> str:
     return (
         "\n\n## 输出格式\n只输出一个 JSON 对象（json），不要代码块，不要其他文字。字段定义（JSON Schema）：\n"
-        f"{json.dumps(schema, ensure_ascii=False)}\n格式示例（只示意结构）：{json.dumps(example(schema), ensure_ascii=False)}"
+        f"{schema_text(schema)}\n格式示例（只示意结构）："
+        f"{json.dumps(example(schema), ensure_ascii=False, separators=(',', ':'))}"
     )
 
 
@@ -238,13 +275,14 @@ class Model:
 
     def input_size(self, messages: list[Msg], schema: dict | None = None) -> dict:
         """Count known text/schema once, without guessing a provider's token window."""
-        contract = json.dumps(schema, ensure_ascii=False) if schema is not None else ""
+        contract = schema_text(schema) if schema is not None else ""
         formatting = json_instruction(schema) if schema and self.mode == "json" else ""
         body = "".join(message["content"] for message in messages)
         payload = self.system + (formatting or contract) + body
         return {"system_chars": len(self.system), "messages_chars": len(body), "schema_chars": len(contract),
                 "format_chars": len(formatting) - len(contract) if formatting else 0,
                 "json_instruction_chars": len(formatting), "total_chars": len(payload),
+                "schema_format": "compact-v1" if schema is not None else "",
                 "utf8_bytes": len(payload.encode("utf-8")), "max_input_chars": self.spec.max_input_chars,
                 "notice": "字符预算，不是模型token窗口；schema仅计一次，不含图片token与提供方隐藏包装。"}
 
@@ -513,7 +551,7 @@ class ClaudeCodeModel(Model):
             if self.spec.effort:
                 opts["effort"] = self.spec.effort
             if schema:
-                opts["output_format"] = {"type": "json_schema", "schema": _portable(schema)}
+                opts["output_format"] = {"type": "json_schema", "schema": _portable(compact_schema(schema))}
             client = ClaudeSDKClient(options=ClaudeAgentOptions(**opts))
             await client.connect()
             self._clients[key] = client
@@ -722,7 +760,7 @@ class LangChainModel(Model):
                 reply.text, reply.thinking, reply.usage = msg.text, _thinking(msg), _usage(msg.usage_metadata)
             reply.data = parse_json(reply.text)
             return reply
-        out = await self.plain.with_structured_output(schema, include_raw=True).ainvoke(history)
+        out = await self.plain.with_structured_output(compact_schema(schema), include_raw=True).ainvoke(history)
         raw, parsed = out["raw"], out.get("parsed")
         if hasattr(parsed, "model_dump"):
             parsed = parsed.model_dump()
@@ -819,7 +857,7 @@ class CodexModel(Model):
             if schema is not None:
                 schema_file = os.path.join(folder, "schema.json")
                 with open(schema_file, "w", encoding="utf-8") as f:
-                    json.dump(strict_schema(schema), f, ensure_ascii=False)
+                    json.dump(strict_schema(compact_schema(schema)), f, ensure_ascii=False, separators=(",", ":"))
                 args += ["--output-schema", schema_file]
             for i, img in enumerate(images or []):
                 path = os.path.join(folder, f"image{i}.png")

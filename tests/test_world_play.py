@@ -314,7 +314,7 @@ async def test_a_plan_whose_backstage_still_fails_cannot_land_partially(module, 
     cast = Directing([plan_with(bad), plan_with(bad)])
     game = directed(module, fake, cast)
     assert await game._improvise("展开", at="square", required=True) is None
-    assert len(cast.asked) == 3  # written again after two refusals; this director had no more
+    assert len(cast.asked) == 2  # the same invalid draft gets its first attempt and one repair
     assert not any(n.id == "newsboy" for n in module.npcs)
     assert not game.state.improv and not game.world.rec.requests and not game.world.rec.revisions
 
