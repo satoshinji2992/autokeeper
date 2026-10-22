@@ -238,7 +238,8 @@ async def test_one_who_steps_in_is_played_before_the_ruling(module, fake):
     """The review of 2026-10-20: the keeper had the warden stop the investigator before he touched
     the gears, and the touch was settled first. Stepping in (Initiative.first) is played before the
     arbiter rules, so the ruling and the roll go on it; he is not asked again after."""
-    game, cast = joining(module, fake, [Initiative(npc="warden", does="喝住他：别碰齿轮", first=True)])
+    game, cast = joining(module, fake, [Initiative(npc="warden", does="喝住他：别碰齿轮", first=True)],
+                         action=LOOK.model_copy(update={"visible": "伸手靠近齿轮"}))
     order: list[str] = []
     npc, arbiter = cast.npc, cast.arbiter
 
@@ -258,7 +259,8 @@ async def test_one_who_steps_in_is_played_before_the_ruling(module, fake):
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
     assert order == ["npc:warden", "arbiter"]
-    assert "正要：" in cast.npc_calls[0][1] and "抢在前面主动：喝住他：别碰齿轮" in cast.npc_calls[0][1]
+    assert "正要：伸手靠近齿轮（还没做成）" in cast.npc_calls[0][1]
+    assert "抢在前面主动：喝住他：别碰齿轮" in cast.npc_calls[0][1]
     assert turn.npc_lines == [("warden", "warden 的回答")] and turn.joined == ["warden"]
     await game.close()
 

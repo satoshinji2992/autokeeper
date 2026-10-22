@@ -320,7 +320,7 @@ async def run(
                 inp: Any = {"input": text}
                 while True:
                     offer = None
-                    async for mode, chunk in app.astream(inp, thread, stream_mode=["custom", "updates"]):
+                    async for mode, chunk in turn_graph.stream(app, game, inp, thread, stream_mode=["custom", "updates"]):
                         if mode == "custom":
                             await emit(chunk)
                         elif isinstance(chunk, dict) and "__interrupt__" in chunk:

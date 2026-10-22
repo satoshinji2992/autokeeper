@@ -130,6 +130,7 @@ PRIVATE |= {"held", "signs", "expanded", "ongoing"}
 PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
+PRIVATE |= {"unfinished", "last_actions"}  # remaining private intent is for its player and the keeper only
 REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
@@ -1589,7 +1590,8 @@ class Hub:
         self.game.by_hand_seats = frozenset(x for x, cid in self.sits.items() if cid is not None)  # in a fight, every seated one
         while True:
             offer = None
-            async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
+            async for mode, chunk in turn_graph.stream(self.graph, self.game, inp, self.thread,
+                                                       stream_mode=["custom", "updates"]):
                 if mode == "custom":
                     await self._event(chunk)
                 elif isinstance(chunk, dict) and "__interrupt__" in chunk:

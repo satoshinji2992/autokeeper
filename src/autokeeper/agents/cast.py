@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import from_json
 
@@ -149,7 +149,10 @@ class BeatChoice(BaseModel):
 
 class Plan(BaseModel):
     lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
-    action: Action = Field(description="玩家这一轮的行动")
+    action: Action = Field(description="原请求当前可执行的一个前缀；后续意图留在 remaining，不提前兑现")
+    remaining: str = Field("", description=(
+        "原请求在当前行动之后尚待办理的意图，保留顺序和条件；没有则留空。"
+        "不是后续动作数组，不预定回应、成功、交物或抵达，也不丢掉玩家已明确交代的后半段"))
     present: list[str] = Field(default_factory=list,
                               description="已经在眼前、但位置漏记的已有 NPC id；不是让远处的人瞬移，也不写尚未发生的行动结果")
     people: list[Person] = Field(default_factory=list,
@@ -161,6 +164,25 @@ class Plan(BaseModel):
     # A fight or a chase this turn begins (the engine then asks Cast.plan_encounter how); one small
     # object, so the everyday schema stays small for cheap models.
     encounter: EncounterHint | None = Field(None, description="这一轮真的打起来或追起来时写；大多数轮次留空")
+
+
+class Continuation(BaseModel):
+    next: Plan | None = Field(None, description=(
+        "当前段实际结束后，原请求无需玩家新选择即可继续时，安排下一个即时前缀；"
+        "其后仍未办理的意图放入该 Plan.remaining。不能预定后续回应或结果。"
+        "lookup 必须为空：续办不会再次执行资料检索；尚需补查时改填 pending，不能把待查计划当作可执行行动"))
+    pending: str = Field("", description=(
+        "需要玩家新决定或资料补查尚未完成时，保留尚待办理的意图及条件；不能同时填 next。"
+        "next 为 null 且此项为空才表示原请求已经办完；尝试失败或被打断不等于办完"))
+
+    @model_validator(mode="after")
+    def exclusive(self) -> Continuation:
+        self.pending = self.pending.strip()
+        if self.next is not None and self.pending:
+            raise ValueError("next 与 pending 不能同时非空：继续一个即时行动，或把未办意图交还玩家")
+        if self.next is not None and self.next.lookup.strip():
+            raise ValueError("next.lookup 必须为空：续办不会执行检索，尚需补查时用 pending 保留未办意图")
+        return self
 
 
 class PartyInput(BaseModel):
@@ -353,6 +375,12 @@ class Telling(BaseModel):
         "恢复时 clear=true；不要在公共 text 揭露真实对应，具体感受用 asides"))
 
 
+class ContinuedTelling(Telling):
+    continuation: Continuation = Field(description=(
+        "依据当前段已经落实的场面、最终检定和实际回应，继续原请求或交还玩家；"
+        "必填，不因叙述结束就把尚未执行的意图当作完成"))
+
+
 @dataclass
 class Narration:
     """A telling as it came back: the words, the scene as written (None when none could be read),
@@ -366,6 +394,8 @@ class Narration:
     asides: list[dict] = field(default_factory=list)
     media: list[dict] = field(default_factory=list)
     perceptions: list[dict] = field(default_factory=list)
+    continuation: Continuation | None = None
+    continuation_error: str = ""
 
 
 class IdeaFailure(BaseModel):
@@ -474,7 +504,7 @@ LOOKUP_HITS = 6  # record lines one lookup brings back
 
 # How an action is filled in, shared by the intent parser and the keeper's plan (PLAN_SYSTEM).
 # No player says what another's investigator does (Keeper Rulebook p. 167): the third line.
-ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声明的意图、尝试与方法，不提前确认行动成功。
+ACTION_RULES = """- summary：第三人称一句话，只记录当前可执行前缀的意图、尝试与方法，不提前确认行动成功，也不把后续几段混成一次已执行行动。
   玩家替别的调查员说的动作、台词或决定，不记成那位调查员做了；只记这位玩家自己的调查员。
   向别的调查员要东西、求他帮忙只是请求：那位调查员的物品和行动由他自己的玩家决定，不写成已交出、已答应或已做到。
   “肚子饿了”只表示饥饿或用餐意愿，不增写起身、摸肚子、进入饭馆或点餐；“想挖开墓穴”不表示已拿到铲子。
@@ -487,7 +517,7 @@ ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声�
 - daily：吃饭、买日用品、办入住、问路、欣赏街景、和人聊家常等没有调查目的的生活行动；不要改写成查案、套话或搜索。
   有明确调查目的的交谈仍是 talk，搜寻证据仍是 investigate，等到某个时间仍是 wait。日常对话也照实填写 npc 和 speech。
 - 区分眼下行动与稍后打算。玩家正向人询问、等回应或先做另一件事，不能把后面提到的目的地当成立即出发。
-  “街口卖什么早饭？想先吃点热的再去金博尔家”只向眼前人问早饭，destination 留空，等回答后由玩家继续；
+  “街口卖什么早饭？想先吃点热的再去金博尔家”先向眼前人问早饭，destination 留空；后续打算仍需保留，但不替玩家选餐或提前出发；
   “直接去金博尔家，路上买份面包”则照常前往。不要把尚待玩家选择的用餐、点单或整段旅程替他完成。
 - casual 只用于在场熟悉角色的一句无争议闲聊，不包括请人办事、买卖、约定、调查、威胁或玩家声称成功的事。
   例如“早上好”“平常这个时候忙不忙”“谢谢，辛苦了”填 daily、casual=true；不要求之前已经通名。
@@ -517,12 +547,13 @@ INTENT_SYSTEM = INTENT_HEAD + "\n\n" + ACTION_RULES
 # Its own book follows (_book); the action is filled in as the parser would (ACTION_RULES).
 # Someone joining in does not solve it for them: the investigators stay the ones who act (Keeper Rulebook
 # pp. 156, 182).
-PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底牌，拥有最高主持权限。每轮玩家说完话，你先交一份安排：补齐已经成立的现场记录（present、people），把玩家的话整理成一条行动（action），决定在场的人这一轮会不会主动参与（initiative）。叙述另外进行，这里只交安排。
+PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底牌，拥有最高主持权限。每轮玩家说完话，你先交一份安排：补齐已经成立的现场记录（present、people），把当前可执行前缀整理成一条行动（action），决定在场的人这一轮会不会主动参与（initiative）。叙述另外进行，这里只交安排。
 
 你负责让人物和局势继续发展。先接住玩家实际想做的事，再看哪些未办完的约定、愿望或冲突会影响眼前：有求于调查员的人可以主动帮忙、提出办法或承担事务，有所隐瞒的人可以转移话题、试探或设局。让反应来自此时的利益与经历，不等玩家逐句催动，不把每个人都演成拒绝配合。
 压力来自正在推进的计划和可以察觉的后果；一次成功可以打乱计划、缓解危险或改变关系。日常、交谈与休整有其价值，不按回合数硬塞危机，也不保证预设场面必然上演。
 
 - action 交给看不到玩家原话的裁定员，summary 和第一句还会显示在玩家屏幕上。summary 只用玩家说过的叫法和【场景】里给出的名字，不写底牌里的人名、地名、真相，也不写玩家还不知道的事；只写调查员这一轮说了、做了什么，不写你对局面的判断（谁在不在、有没有约定）。destination 只填【场景】里能去的地点 id。
+- remaining：原请求在当前行动之后尚待办理的意图，保留顺序和条件；不能只把后半段放在 summary 后就丢掉。当前段实际结束后才安排下一段，不预排整串动作、NPC 回应、交物或成功结果。需要玩家新选择或发生打断时交还玩家；没有后续意图才留空。
 - 玩家的话是对在场的人说的，或者当着他问出来的（提问、质疑、抱怨、打招呼），照常填 talk 和 npc，由那个人回应；不要改成 initiative，也不要当成问你的 meta。meta 只用于玩家明确问规则或游戏外的事。
 - present：人物已经在眼前、但位置漏记时，直接填已有 NPC id，裁定员将读到补好的现场。已经明确在远处、死亡或失踪的人不能靠补记出场；真正移动要有时间和经过。people：现场即兴而后续需要记住的证人、同行者、店主等，给出最小资料；普通背景人群不用逐个登记。新人物只知道亲历或有来源的事，不因你知道底牌而全知。完成登记的人可以被交谈，也可以参与 initiative。
 - present、people 只准备场面，不兑现尚待检定或应对的结果。调查员说“抢走钥匙”，仍只是尝试；不能先改物品归属或写一个证人证实其断言，再交裁定员。已经在场的司机可以补记，调查员期望有人在场不等于那个人已经出现。
@@ -641,8 +672,8 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 3. 仅叙述系统给定的检定结果。界面已提供的检定选项无需重复说明，也不自行追加重试机会、代价或线索。
 4. 以第二人称叙述。普通回合通常 80–200 字，简单应答或过渡可更短，开场与重要场景按本轮要求展开。信息交代完整即可结束，不凑篇幅，不固定以悬念、反问或行动邀请收尾，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
-6. 天色和天气遵循当前时间、已有天气及系统安排。仅在变化或与行动相关时描写，保持连续；系统允许补充时采用符合当地环境的变化，不为营造气氛随意切换天气或制造危险。
-7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
+6. 天色遵循当前时间，天气承接本局已有记录。你可结合地域、季节与眼前局势补充有来由的环境细节；改变行动条件或带来危险的变化，通过相应场面与规则操作落实。
+7. 未预写的日常应答、人物反应与现场细节，由你结合当前动机和记录就地确定并提交 scene。完整的新地点、调查路线、持续日程与规则由备场工具准备；已提交的内容成为本局资料，你结合实时局势决定怎样呈现和发展。
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
    冲突由具体人物想得到什么、害怕失去什么引起，随着时间和玩家行动变化。用可察觉的行为、期限与后果表现逼近的危险，给应对留出空间；诡异可以逐步改变熟悉事物，避免只重复风雪、咳嗽与阴影。有效的防备、拒绝和脱险应真正改变局势，不强行把人送回预设高潮。
@@ -696,7 +727,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 说话方式里写的口头禅、咳嗽、小动作是这个人的习惯，隔几句露一次就够，资料写着“总是”也不必句句都带；上一轮说过的话，换个说法或者干脆不提。
 - 接住对方实际说的话，结合关系与眼前局势回应；有自己的问题、需要确认的事或想请人帮忙时再问。不要为了维持交谈反问，也不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
 - 本轮获准交代、交付或同意的内容就在这次回复中发生；只有近期真实对话里已经说过、做过，才称“刚才说了”“已经给了”。后台刚结算入账不等于玩家此前见过这段演出。
-- 已解锁的线索是你知道、也愿意说的事，不是必须逐条朗读的清单。根据话题把相关内容说清；对方问得具体、事情紧迫或你有主动求助的理由时，不故意分成几轮挤牙膏。说出了一条线索的要点，就在 told 里填它的 id。
+- 已解锁表示你知道且本轮允许表达的信息，许可本身不代表你已经答应透露。结合话题与角色处境表达相关内容；对方问得具体、事情紧迫或你有主动求助的理由时，把要说的内容说清。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
 - 当前记录的目标与计划优先于模组初始目标。交谈、亲历或本次交涉结果确实改变了你的真实决定，在 intentions 写新目标、全部未完待办及依据；旧打算不再合适时撤回或替换。单纯说过一句承诺不等于真心改变；有意敷衍照 deceptions 记录，真实目标可以不变。计划是尚未做的事，不把它写成已经成功。
@@ -707,7 +738,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 真实认知只来自角色资料、系统授权内容和本场亲历信息；不知道的事不能凭空变成已知。有动机时可以假装不知道、说不实的话，但须按 deceptions 标明，不能将其登记成真实案情。
 - 案情、相关人物、异常现象及线索以系统资料为准。个人日常细节只能作为符合身份的非案情补充，不产生新证据、新能力或物品效果。
 - 区分亲历、听说、判断与有意编造。正常说明不替传言作保证；若故意编造消息来源或人脉，私下标明欺骗，系统不会因此新增真实关系、来源人物或证据。
-- 检定是否使你让步、被拆穿，以及哪些线索可以公开，以系统本轮结果为准；只能透露明确解锁的内容。失败时按角色动机回应，不将每次失败都演成同一种回避或敌意。
+- 本轮主持安排确定你参与什么，已结算结果确定本次请求与让步的范围；用自己的知识、口吻与行动兑现。未决部分仍由你按自身动机、目标和处境回应，保留主动变通、隐瞒与有意说谎的选择；线索按本轮披露许可表达。
 - 检定等级不是情绪指令。让步限于本次交涉与系统授权，不将一次成功扩大为无条件信任；心理学或聆听的结果不表示你知道调查员的判断，也不迫使你解释内心或认罪。
 - 交涉方式与检定是后台说明，不表示角色知道调查员的策略、谎言或私下计划；按已听到的话、已看到的动作与获准结果反应。
 - 只说自己的话、做自己的事。不代写玩家的问题、行动、承诺或内心，也不重复已经完成的动作。
@@ -998,6 +1029,13 @@ class Cast:
                   if shared else "")
         prompt += (self._party(state) + f"\n【调查员】{inv.name}({inv.id})\n"
                    f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}")
+        unfinished = getattr(state, "unfinished", {}).get(inv.id)
+        if unfinished:
+            prompt += ("\n【本人尚未办完的原请求】\n"
+                       + json.dumps(unfinished, ensure_ascii=False)
+                       + "\n这只是尚待意图，不是正在执行的旧 Plan。以本次玩家新输入为先，结合实际结果判断是否继续、改变或放弃；"
+                       "不能自动恢复旧动作，也不能把尝试或承诺当作已经完成。"
+                       "本次 Plan 是本人未办意图的当前版本；仍成立的旧意图合并到 remaining，改变或放弃则按本次输入更新。")
         if inv.backstory:
             prompt += "\n【调查员既有背景】" + "；".join(f"{key}：{value}" for key, value in inv.backstory.items() if value)
         if shared and state.perceptions and self.world is not None:
@@ -1904,12 +1942,26 @@ class Cast:
                 lore += ("\n【规则书原文】（玩家问的是规则时，照原文回答并说出书名和页码；不是规则问题就不用管）\n"
                          + rules_lookup.quote(found))
         extra = ("\n\n" + lore.strip() if lore.strip() else "") + "\n" + self._party(state) + self.prefs.for_keeper() + fix
-        if check is None:
+        request = state.pending_turn.get("request", {})
+        continuing = request.get("actor") == state.investigator.id and bool(request.get("remaining", "").strip())
+        if continuing:
+            extra += ("\n\n【本次原请求的续办】\n"
+                      + json.dumps({key: request.get(key) for key in ("original", "completed", "remaining")},
+                                   ensure_ascii=False)
+                      + "\n本条报告给出当前段的实际结果；completed 只记实际执行经过，尝试不等于达成目标。"
+                      "先落实当前 scene，再用 continuation 安排下一个无需玩家新选择的即时前缀。"
+                      "next 与 pending 不能同时非空：可继续才填 next；需要玩家回答、选择或新事件打断时，"
+                      "next=null，pending 保留尚未办理的意图与条件。两者都空只表示原请求确已办完，不能用来略过后半段。"
+                      "next.lookup 必须为空；续办不会再次检索，尚需补查资料时用 pending 保留意图，不声称已经查过。"
+                      "不预演下一段的结果，不替其他真人答应或行动。已单独展示的台词不必重复；本段无需额外叙述时 text 可为空。")
+        if check is None and not continuing:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
             return reply.text.strip()
-        reader = _Telling(check, on_delta)
+        scene_check = check or (lambda _: True)
+        reader = _Telling(scene_check, on_delta)
         extra += presentation.index(self.module, state)
-        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader, schema=TELLING)
+        reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader,
+                                 schema=CONTINUED_TELLING if continuing else TELLING)
         data = reply.data if isinstance(reply.data, dict) else {}
         text, scene = data.get("text"), data.get("scene")
         if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
@@ -1918,7 +1970,12 @@ class Cast:
                          first=reader.first, offer_idea=data.get("offer_idea") is True,
                          asides=_asides(data.get("asides"), state), media=data.get("media") or [],
                          perceptions=data.get("perceptions") or [])
-        holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
+        if continuing:
+            try:
+                told.continuation = Continuation.model_validate(data.get("continuation"))
+            except ValidationError:
+                told.continuation_error = "原请求的续办安排尚未通过校验，已执行结果保留，不能视为完成"
+        holds = told.scene is None or scene_check(told.scene)  # the final word, on the scene as it came back
         if told.shown or holds:
             self._kept(s, report, told.text)
         else:
@@ -2198,6 +2255,7 @@ SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
 
 
 TELLING = _schema(Telling)
+CONTINUED_TELLING = _schema(ContinuedTelling)
 
 
 def _asides(raw: Any, state: GameState) -> list[dict]:

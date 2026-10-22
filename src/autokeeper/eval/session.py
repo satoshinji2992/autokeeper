@@ -446,7 +446,7 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
             inp: Any = {"input": text, "by_hand": False}
             while True:
                 offer = None
-                async for mode, chunk in app.astream(inp, thread, stream_mode=["custom", "updates"]):
+                async for mode, chunk in graph.stream(app, game, inp, thread, stream_mode=["custom", "updates"]):
                     if mode == "custom" and chunk.get("type") not in ("keeper_delta", "status"):
                         shown.append(chunk)
                     elif mode == "updates" and isinstance(chunk, dict) and "__interrupt__" in chunk:

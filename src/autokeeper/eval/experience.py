@@ -64,7 +64,7 @@ async def run(module: Path, actions: list[str], out: Path, *, timeout: float = 1
                 inp = {"input": text}
                 while True:
                     interrupted = False
-                    async for mode, chunk in app.astream(inp, thread, stream_mode=["custom", "updates"]):
+                    async for mode, chunk in graph.stream(app, game, inp, thread, stream_mode=["custom", "updates"]):
                         if mode == "custom":
                             await emit(chunk)
                         elif "__interrupt__" in chunk:

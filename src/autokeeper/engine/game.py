@@ -495,7 +495,8 @@ class Game(Encounters):
         else:
             await self._curtain(Action(kind="other", summary=text))
             st.turn += 1
-        if text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
+        continuing = st.pending_turn.get("request", {}).get("part", 0) > 0
+        if not continuing and text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
             from .perception import input_label
 
             st.add("player", input_label(self, st.investigator.id, text), who=st.investigator.name)
@@ -506,7 +507,7 @@ class Game(Encounters):
             return await self.encounter_input(text)
         action = await self._arrange(text)
         # What a dice command asks for is read off the command, never taken from the model.
-        action = action.model_copy(update={"asked": commands.asked(text), "echo": ""})
+        action = action.model_copy(update={"asked": None if continuing else commands.asked(text), "echo": ""})
         # Meaning, destination and pace belong to the keeper's reading of the whole input.
         # A place-name regex cannot distinguish a rejected destination from the next stop,
         # or a route description from a direct journey. Resolution still validates the route.
@@ -587,6 +588,15 @@ class Game(Encounters):
                 self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
                                      "kept": [x.npc for x in self.initiative], "registration": receipt})
                 self._hosted_turn = st.turn
+                if plan.remaining.strip() and st.pending_turn and "request" not in st.pending_turn:
+                    st.pending_turn["request"] = {
+                        "id": f"{st.investigator.id}:{st.turn}", "actor": st.investigator.id,
+                        "original": text, "origin_turn": st.turn, "part": 0, "started": st.minutes,
+                        "remaining": plan.remaining.strip(), "completed": [],
+                    }
+                # The keeper read this person's old note together with the new input. Its
+                # adopted plan replaces it; only an explicitly retained tail stays pending.
+                st.unfinished.pop(st.investigator.id, None)
                 return plan.action
         return await self.cast.intent(st, text)
 
@@ -914,7 +924,9 @@ class Game(Encounters):
         companions acting in between do not make a repeat any less immediate."""
         st = self.state
         name = st.investigator.name
-        return max((e.turn for e in st.log if e.kind == "player" and e.who == name and e.turn < st.turn), default=0)
+        logged = max((e.turn for e in st.log if e.kind == "player" and e.who == name and e.turn < st.turn), default=0)
+        actual = st.last_actions.get(st.investigator.id, 0)
+        return max(logged, actual if actual < st.turn else 0)
 
     def _seen(self) -> int:
         """Clues found, flags set and events fired so far. It only grows: a different count
@@ -2510,7 +2522,10 @@ class Game(Encounters):
         private = {step.npc for step in action.before if step.private} if action else set()
         heard += [f"{m.npc(nid).name}刚才说：「{line}」。" for nid, line in turn.npc_lines if nid not in private]
         if before and action is not None:  # stepping in: the action is not done yet
-            heard = [f"{inv.name}正要：{action.visible or action.summary}（还没做成）。"]
+            # Summary may contain concealed intentions and fallback plans; it is not perception.
+            heard = [f"{inv.name}正要：{action.visible}（还没做成）。"] if action.visible else []
+            if action.speech:
+                heard.append(f"{inv.name}说：「{action.speech}」。")
         return (f"（系统：{st.clock}，{m.location(st.location).name}。{''.join(heard)}"
                 f"这一轮你{'抢在前面' if before else ''}主动：{x.does}。这是守秘人的安排，不是你知道的事：只用你自己的知识、亲历和口吻演出来，不知道的不说。"
                 "当场拿出或递出东西、走开、同行，照常写在回复里；不替调查员说话或做决定。"
@@ -2693,7 +2708,8 @@ class Game(Encounters):
         told = self._told_by(turn)
         dialogue_only = (turn.action is not None and (turn.action.kind == "talk" or turn.action.casual)
                          and not (turn.ruling and turn.ruling.rest))
-        if (dialogue_only and any(nid not in turn.joined for nid, _ in turn.npc_lines)
+        continuing = bool(st.pending_turn.get("request", {}).get("remaining"))
+        if (not continuing and dialogue_only and any(nid not in turn.joined for nid, _ in turn.npc_lines)
                 and not turn.events and not turn.notes and not turn.ending
                 and not turn.arrived and not turn.world and not turn.sanity and not turn.hints and all(c in told for c in turn.clues)):
             self.told = None
@@ -2702,7 +2718,7 @@ class Game(Encounters):
                 return ""  # the reply, in its words what it told, and the roll outcomes have already been shown
             return await self.tell_held(turn=turn, on_delta=on_delta)  # the round's last: the others still want telling
         report = self._report(turn)
-        if self.holding and not turn.ending:  # others act in this round too: told together, by the last
+        if self.holding and not turn.ending and not continuing:  # a compound request needs its actual scene before continuing
             if not any(h["turn"] == st.turn for h in st.held):  # a resumed turn holds it once
                 st.held.append({"turn": st.turn, "who": st.investigator.name, "report": report, "rest": turn.rest})
             self.told = None
@@ -2813,8 +2829,72 @@ class Game(Encounters):
         receipt = self.state.round_plan
         if token is not None and token not in receipt.setdefault("done", []):
             receipt["done"].append(token)
-            checks = self.state.pending_turn.get("turn", {}).get("checks", [])
+            completed = self.state.pending_turn.get("request", {}).get("completed", [])
+            checks = ([check for part in completed for check in part.get("checks", [])] if completed else
+                      self.state.pending_turn.get("turn", {}).get("checks", []))
             receipt.setdefault("results", {})[token] = str(checks) if checks else "无需检定；其余结果以当前记录为准"
+
+    async def finish_request(self, turn: Turn | None) -> bool:
+        """Commit one actual segment and hand off the next plan from the same keeper reply.
+
+        A waiting intention is a private note, not a pending execution lock. Every next segment
+        gets its own turn and ordinary resolution journal; the player's original words are logged once.
+        The turn graph calls this after remember, before its final checkpoint.
+        """
+        st, journal = self.state, self.state.pending_turn
+        if turn is not None and turn.action is not None:
+            st.last_actions[st.investigator.id] = st.turn
+        request = journal.get("request")
+        if not request:
+            self.complete_party_action()
+            journal.clear()
+            return False
+        completed = request.setdefault("completed", [])
+        if turn is not None and not any(row["turn"] == st.turn for row in completed):
+            completed.append({"turn": st.turn, "action": turn.action.summary if turn.action else "",
+                              "start": request["started"], "end": st.minutes, "place": st.location,
+                              "checks": [check.describe() for check in turn.checks],
+                              "notes": turn.notes, "npc_lines": turn.npc_lines})
+        remaining = request.get("remaining", "").strip()
+        next_plan, pending, reason = None, "", ""
+        if remaining:
+            told = journal.get("keeper", {})
+            while told.get("following_keeper"):
+                told = told["following_keeper"]
+            control = told.get("continuation")
+            if not told.get("scene_complete") or not told.get("landed"):
+                pending, reason = remaining, "当前场面未完整落实，后续行动尚未执行"
+            elif told.get("continuation_error") or control is None:
+                pending, reason = remaining, told.get("continuation_error") or "后续行动尚未安排"
+            else:
+                next_plan = control.get("next")
+                pending = control.get("pending", "")
+        if next_plan and (st.ending or not st.investigator.can_act or self.battling()
+                          or self.pending_choice() is not None or st.pending_push):
+            next_plan, pending, reason = None, remaining, "当前局势需要先处理，后续行动尚未执行"
+        if next_plan:
+            plan = Plan.model_validate(next_plan)
+            request.update(part=request["part"] + 1, started=st.minutes, previous_turn=st.turn,
+                           remaining=plan.remaining.strip(), ready=True)
+            next_journal = {"input": request["original"], "by_hand": journal.get("by_hand", False),
+                            "active": journal.get("active", st.active), "request": request,
+                            "arrangement": {"at": st.turn + 1, "plan": plan.model_dump(mode="json")}}
+            if "party_token" in journal:
+                next_journal["party_token"] = journal["party_token"]
+            journal.clear()
+            journal.update(next_journal)
+            return True
+        if pending:
+            st.unfinished[request["actor"]] = {"original": request["original"], "remaining": pending,
+                                                "completed": completed, "reason": reason}
+        else:
+            st.unfinished.pop(request["actor"], None)
+        self.complete_party_action()
+        journal.clear()
+        if reason:
+            await self.emit({"type": "command", "kind": "pending", "text": reason,
+                             "audience": [request["actor"]], "who": st.find(request["actor"]).name})
+        return False
 
     def begin_round(self) -> None:
         """The actions about to be settled happen at once: the clock moves by the longest of
@@ -4013,6 +4093,7 @@ class Game(Encounters):
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
                 receipt["rested"] = {}
+                receipt["scene_complete"] = False
             else:
                 receipt["story_flags"] = []
                 for flag in receipt.get("flags", []):
@@ -4114,8 +4195,9 @@ class Game(Encounters):
         st = self.state
         keeper = self.cast.keeper
         words = {"units": [], "flags": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
-                 "media": [], "perceptions": []}
-        if not _staged(turn) or not _takes(keeper, "check"):
+                 "media": [], "perceptions": [], "scene_complete": False}
+        continuing = bool(st.pending_turn.get("request", {}).get("remaining"))
+        if (not _staged(turn) and not continuing) or not _takes(keeper, "check"):
             return words | {"text": await keeper(st, report, on_delta=delta, lore=lore)}
         ctx = self._scene_context(turn)
         brief = self._scene_brief(ctx) + "\n【个人知觉】\n" + perception.brief(st)
@@ -4132,10 +4214,13 @@ class Game(Encounters):
             told = await keeper(st, report, on_delta=delta, lore=lore + brief, check=check, fix=fix)
             if isinstance(told, str):
                 return words | {"text": told}
+            control = {"continuation": (told.continuation.model_dump(mode="json")
+                                         if getattr(told, "continuation", None) is not None else None),
+                       "continuation_error": getattr(told, "continuation_error", "")}
             if told.scene is None or len(plans) == asked:  # no scene could be read
                 if told.shown:  # already before the players: its words stand, the record as it was
                     return words | {"text": told.text, "offer_idea": told.offer_idea, "asides": told.asides,
-                                    "media": told.media, "perceptions": told.perceptions}
+                                    "media": told.media, "perceptions": told.perceptions} | control
                 # Its words would say what the record never got ("the warden goes with you", nobody
                 # following): asked again for the scene, and the second time held to the record as it is.
                 self._debug("scene", {"phase": "missing", "attempt": attempt})
@@ -4149,11 +4234,12 @@ class Game(Encounters):
                     self._debug("scene", {"phase": "kept", "problems": p.problems, "scene": told.scene})
                 return self._staging(told.text, p, partial=bool(p.problems)) | {
                     "offer_idea": told.offer_idea, "asides": told.asides,
-                    "media": told.media, "perceptions": told.perceptions}
+                    "media": told.media, "perceptions": told.perceptions} | control
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})
-        text = await keeper(st, report, on_delta=delta, lore=lore + scene.settled(p))
+        settled = await keeper(st, report, on_delta=delta, lore=lore + scene.settled(p))
+        text = settled if isinstance(settled, str) else settled.text
         return self._staging(text, p, partial=True)
 
     @staticmethod
@@ -4163,7 +4249,7 @@ class Game(Encounters):
         down: it may tell of what did not land), and the scene in words for telling it again."""
         return {"text": text, "units": [u.dump() for u in p.held], "flags": [] if partial else p.flags,
                 "room": p.room, "now": "" if partial else p.now,
-                "note": scene.kept(p), "rested": {} if partial else p.rested}
+                "note": scene.kept(p), "rested": {} if partial else p.rested, "scene_complete": not partial}
 
     def _scene_context(self, turn: Turn | None) -> scene.Context:
         """What the keeper's scene is checked with: this turn's minutes so far (from the player's
@@ -4177,6 +4263,9 @@ class Game(Encounters):
             start = parse_time(said.time) if said is not None else st.minutes
         except ValueError:
             start = st.minutes
+        request = st.pending_turn.get("request", {})
+        if request.get("actor") == st.investigator.id:
+            start = request.get("started", start)
         ids = f"keeper:{st.turn}"
         used = [int(n) for e in rec.journal if e.id.startswith(ids + ":") and (n := e.id.rsplit(":", 1)[1]).isdigit()]
         ruling = turn.ruling if turn is not None else None

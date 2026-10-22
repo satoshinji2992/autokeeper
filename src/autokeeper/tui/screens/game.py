@@ -1884,11 +1884,12 @@ class GameScreen(Screen):
     async def _run_turn(self, inp, auto: bool = False, push: str = "") -> None:
         """One action through the turn graph. With `auto` (an AI investigator's) a push offer is
         answered with the push it said it would make (`push`, agents/cast.Proposal), if any."""
-        assert self.graph
+        assert self.graph and self.game
         ended = self.state.ending
         while True:
             offer = None
-            async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
+            async for mode, chunk in turn_graph.stream(self.graph, self.game, inp, self.thread,
+                                                       stream_mode=["custom", "updates"]):
                 if mode == "custom":
                     await self.handle(chunk)
                 elif isinstance(chunk, dict) and "__interrupt__" in chunk:

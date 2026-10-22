@@ -171,6 +171,8 @@ class GameState(BaseModel):
     # threads, important NPCs and the event stream. Private at a LAN table (net/hub.py PRIVATE).
     record: WorldRecord = Field(default_factory=WorldRecord)
     pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
+    unfinished: dict[str, dict] = Field(default_factory=dict)  # private unexecuted intent, never an automatic action queue
+    last_actions: dict[str, int] = Field(default_factory=dict)  # last committed action segment, including a request's continuation
     # A LAN round's actions happen at once (net/hub.py _settle, Game.begin_round): the minutes the
     # longest of them took so far (None outside a round), and the reports held for the one telling.
     round_spent: int | None = None

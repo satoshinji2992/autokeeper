@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Mapping
 from typing import Any, TypedDict
 
 from langgraph.config import get_stream_writer
@@ -60,6 +61,39 @@ def _bind(game: Game) -> None:
     game.emit = emit
 
 
+def _interrupted(chunk: Any) -> bool:
+    if isinstance(chunk, Mapping):
+        return "__interrupt__" in chunk
+    return isinstance(chunk, tuple) and any(_interrupted(part) for part in chunk)
+
+
+async def stream(graph: Any, game: Game, input: Any, config: Any = None, **kwargs: Any) -> AsyncIterator[Any]:
+    """Forward graph events unchanged, continuing only a fully finished request segment.
+
+    Each segment is a separate invocation with the same config and actor, so the graph's
+    ordinary recursion bound and interruption protocol still apply. finish_request owns
+    completion/party receipts and replaces the journal atomically before setting ready.
+    """
+    current = input
+    original = dict(input) if isinstance(input, Mapping) else {}
+    while True:
+        interrupted = False
+        async for chunk in graph.astream(current, config, **kwargs):
+            interrupted = interrupted or _interrupted(chunk)
+            yield chunk
+        journal = game.state.pending_turn
+        if (interrupted or not journal.get("request", {}).get("ready") or game.state.ending
+                or game.battling() or game.pending_choice() is not None or game.state.pending_push):
+            return
+        # custom-only streams need not expose LangGraph's interrupt update. A saved next
+        # node is unfinished work, even if a caller accidentally retained a ready marker.
+        if getattr(graph, "checkpointer", None) is not None:
+            snapshot = await graph.aget_state(config)
+            if snapshot.next:
+                return
+        current = {**original, "input": "/retry", "by_hand": journal.get("by_hand", original.get("by_hand", False))}
+
+
 def build(game: Game, checkpointer=None):
     holder: dict[str, Turn] = {}
 
@@ -82,6 +116,8 @@ def build(game: Game, checkpointer=None):
         if journal:
             if state["input"] not in (journal["input"], "/retry", "继续这一回合"):
                 raise ValueError("上一回合尚未讲完，请输入 /retry 继续，避免重复结算")
+            if journal.get("request", {}).pop("ready", False):
+                keep()  # consuming a prepared next segment is durable before parse can run
         else:
             if state["input"] in ("/retry", "继续这一回合"):
                 raise ValueError("目前没有未完成的回合")
@@ -223,8 +259,9 @@ def build(game: Game, checkpointer=None):
     async def remember(state: TurnState) -> dict:
         _bind(game)
         await game.remember()
-        game.complete_party_action()
-        game.state.pending_turn.clear()
+        # finish_request alone settles the old party token and clears or replaces its
+        # journal. keep() must never write the preceding Turn into that new segment.
+        await game.finish_request(held() if "turn" in game.state.pending_turn else None)
         keep()
         game.visuals.resume()
         await game.emit({"type": "sheet"})
