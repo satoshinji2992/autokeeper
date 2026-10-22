@@ -166,12 +166,15 @@ async def _developer(app, pilot, screen, m):
 
 LIBRARY = ("阅览室比外面更冷，窗子开得很高，光从上头斜斜落下来。你顺着那排皮脊合订本摸过去，指尖沾了一层细细的书灰，"
            "只有靠里一册的书脊被摸得发亮，像常有人抽它。\n\n"
-           "你把它搬到长桌上翻开。纸页发黄发脆，铅字挤得很密。翻到十多年前的一期，一篇不起眼的短讯夹在农产品价格中间。")
+           "你把它搬到长桌上翻开。纸页发黄发脆，铅字挤得很密。翻到十多年前的一期，一篇不起眼的短讯夹在农产品价格中间："
+           "有人声称看见一群赤身裸体的人在金博尔家隔壁的墓地里狂欢。警察赶到后把公墓搜了个遍，没找到那群人，"
+           "只在地上发现一些形状怪异的脚印。")
+NOTES = "托马斯说叔叔常去图书馆查旧报\n旧报：墓地里有人狂欢，警察只找到怪脚印\n要查：那些脚印"
 
 
 async def _library(app, pilot, screen, m):
-    """A check in the library as a turn shows it: the action, the dice thrown for real, the clue they
-    found and the keeper's telling."""
+    """A check in the library as a turn shows it: the action, the dice thrown for real, what they led to
+    and the keeper's telling of what was found (no clue card: the player's own notes in the column)."""
     from rich.text import Text
 
     from autokeeper.engine.game import _check_view
@@ -185,12 +188,11 @@ async def _library(app, pilot, screen, m):
         seed += 1  # a throw that passes plainly: the same picture every time
     await screen.handle({"type": "dice", "who": inv.name, **_check_view(check)})
     await pilot.pause(4.0)  # the dice at rest
-    clue = next(c for c in m.clues if c.id == "c_library_article")
-    await screen.handle({"type": "outcome", "who": inv.name, "lines": [f"获得线索〔{clue.title}〕"]})
-    screen.state.clues.append(clue.id)  # found, as the turn would have it before the screen hears of it
-    await screen.handle({"type": "clue", "id": clue.id, "title": clue.title, "text": clue.text.strip()})
+    await screen.handle({"type": "outcome", "who": inv.name, "lines": ["有所发现"]})
+    screen.state.clues.append("c_library_article")  # found, as the turn would have it; the telling says what
     await screen.handle({"type": "keeper_start"})
     await screen.handle({"type": "keeper_end", "text": LIBRARY})
+    screen.keep_notes(NOTES)
 
 
 async def _talk(app, pilot, screen, m):
