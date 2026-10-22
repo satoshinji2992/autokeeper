@@ -14,7 +14,7 @@ from textual.widgets import Button
 from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
 from autokeeper.config import Config, Role
-from autokeeper.engine import diagnostics
+from autokeeper.engine import diagnostics, observability
 from autokeeper.engine.developer_web import open_dashboard
 from autokeeper.engine.game import Game
 from autokeeper.engine.observability import Journal
@@ -374,6 +374,71 @@ def test_journal_continues_after_a_truncated_line_and_pages_backwards():
     assert [r["data"]["n"] for r in recent] == [2, 3]
     earlier, _ = journal.recent(before=before, limit=2)
     assert [r["data"]["n"] for r in earlier] == [1]
+
+
+def test_journal_retains_every_segment_and_keeps_cursors_across_rotation_and_reload(monkeypatch):
+    monkeypatch.setattr(observability, "MAX_BYTES", 1)
+    journal = Journal("long-game")
+    for n in range(1, 5):
+        journal.append("call" if n % 2 == 0 else "world", {"n": n})
+    first, cursor = journal.read(limit=3)
+    original = journal.path.with_suffix(".1.jsonl").read_bytes()
+    assert [r["data"]["n"] for r in first] == [1, 2, 3] and cursor == 3
+
+    journal = Journal("long-game")  # a resumed game must continue, not overwrite archive .1
+    for n in range(5, 16):
+        journal.append("call" if n % 2 == 0 else "world", {"n": n})
+    assert journal.path.with_suffix(".1.jsonl").read_bytes() == original
+    later, final = journal.read(after=cursor)
+    assert [r["data"]["n"] for r in later] == list(range(4, 16)) and final == 15
+    assert [r["n"] for r in journal.calls()] == list(range(2, 16, 2))
+    recent, before = journal.recent(limit=3)
+    assert [r["data"]["n"] for r in recent] == [13, 14, 15] and before == 13
+    previous, _ = journal.recent(before=before, limit=3, kind="call")
+    assert [r["data"]["n"] for r in previous] == [8, 10, 12]
+
+
+def test_journal_pages_past_an_interrupted_line_in_an_archived_segment(monkeypatch):
+    journal = Journal("interrupted-archive")
+    journal.append("world", {"n": 1})
+    with journal.path.open("a") as stream:
+        stream.write('{"partial":')
+    monkeypatch.setattr(observability, "MAX_BYTES", 1)
+    journal.append("world", {"n": 2})
+    journal.append("world", {"n": 3})
+    rows, cursor = journal.read()
+    assert [r["data"]["n"] for r in rows] == [1, 2, 3] and cursor == 4
+    resumed, final = journal.read(after=1)
+    assert [r["data"]["n"] for r in resumed] == [2, 3] and final == cursor
+
+
+def test_journal_read_in_progress_keeps_its_cursor_when_the_open_segment_rotates(monkeypatch):
+    journal = Journal("reading-during-rotation")
+    journal.append("world", {"n": 1})
+    journal.append("world", {"n": 2})
+    original_lines = journal._lines
+    rotated = False
+
+    def rotating_lines():
+        nonlocal rotated
+        for number, line in original_lines():
+            yield number, line
+            if not rotated:
+                rotated = True
+                monkeypatch.setattr(observability, "MAX_BYTES", 1)
+                journal.append("world", {"n": 3})
+
+    monkeypatch.setattr(journal, "_lines", rotating_lines)
+    first, cursor = journal.read(limit=2)
+    assert [r["data"]["n"] for r in first] == [1, 2] and cursor == 2
+    assert journal.path.with_suffix(".1.jsonl").exists()
+
+    journal.append("world", {"n": 4})  # rotate again before requesting the next page
+    later, final = journal.read(after=cursor)
+    assert [r["data"]["n"] for r in later] == [3, 4] and final == 4
+    assert [r["cursor"] for r in first + later] == [1, 2, 3, 4]
+    empty, unchanged = journal.read(after=final)
+    assert empty == [] and unchanged == final
 
 
 async def test_stateless_helpers_are_archived_without_creating_actor_memory(diagnostic_model, monkeypatch):

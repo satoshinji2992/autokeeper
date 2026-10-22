@@ -224,6 +224,27 @@ async def test_a_new_request_to_the_same_npc_is_not_overruled_by_an_older_failed
     await game.close()
 
 
+async def test_a_no_roll_action_with_an_incomplete_repeat_does_not_inherit_an_unrelated_failure(module, fake):
+    game, _, events = make(module, fake, {}, location="tower")
+    state = game.state
+    old = Action(kind="talk", summary="请守钟人交代昨夜的去向", npc="warden", approach="说服")
+    state.turn = 1
+    fake.queue(90)
+    game._record(old, game.rules.check(state.investigator, "说服"))
+    state.turn = 2
+    observe = Action(kind="investigate", summary="记录守钟人刚同意演示的齿轮转动", npc="warden")
+    ruling = Ruling(needs_roll=False, repeat=True, reason="只是记录已经同意的演示，不必再掷骰")
+    try:
+        checked = game._no_reroll(observe, ruling, "tower")
+        assert not checked.repeat and not checked.needs_roll and not checked.skill
+        turn = await game.resolve(observe, checked)
+        assert turn.earlier is None and not turn.checks
+        assert all(event["type"] not in ("dice", "repeat") for event in events)
+        assert state.checks[-1].turn == 1 and state.checks[-1].action == old.summary
+    finally:
+        await game.close()
+
+
 def test_a_plan_for_two_passing_travellers_is_not_turned_away(module):
     from autokeeper.agents.director import Improv, NewNPC
     from autokeeper.module import improv

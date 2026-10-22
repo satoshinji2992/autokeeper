@@ -323,7 +323,7 @@ def item_known(w: World, item: Entity | str, viewer: str) -> bool:
     if viewer in item.observed_by or (viewer in investigators and PLAYERS in item.observed_by):
         return True
     place = w.rec.entities.get(item.at)
-    here = w.st.location if viewer == PLAYERS or viewer in investigators else w.place(viewer)
+    here = w.st.location if viewer == PLAYERS else w.place(viewer)
     return bool(place and place.kind == "location" and item.at == here
                 and not item.hidden and item.equipment != "concealed")
 

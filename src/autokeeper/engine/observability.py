@@ -7,8 +7,10 @@ import os
 import threading
 import uuid
 from collections import deque
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .. import paths
@@ -17,7 +19,7 @@ if TYPE_CHECKING:
     from .game import Game
 
 
-MAX_BYTES = 200 * 1024 * 1024  # a journal past this is set aside (<slot>.1.jsonl) and a new one begun
+MAX_BYTES = 200 * 1024 * 1024  # split into numbered segments; no older segment is overwritten
 # The state, the world and the sessions are written whole when they changed: on every event that
 # was nearly every event, 16 snapshots a turn and some 2 MB (a two-turn game came to 3.9 MB). The
 # events themselves are all kept; the whole picture is taken once a turn is over (its "sheet"),
@@ -47,7 +49,9 @@ class Journal:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 self.path.parent.chmod(0o700)
                 if self.path.exists() and self.path.stat().st_size > MAX_BYTES:
-                    os.replace(self.path, self.path.with_suffix(".1.jsonl"))
+                    segments = self._segments()
+                    number = int(segments[-1].stem.rsplit(".", 1)[1]) + 1 if segments else 1
+                    os.replace(self.path, self.path.with_suffix(f".{number}.jsonl"))
                     self._seen.clear()  # the new file starts with whole snapshots again
                 # A crash can leave half a JSON line. Preserve it for inspection while
                 # putting subsequent complete records on their own lines.
@@ -64,23 +68,45 @@ class Journal:
         except OSError as exc:
             self.error = f"完整记录写入失败：{type(exc).__name__}"
 
+    def _segments(self) -> list[Path]:
+        """Numbered archives in creation order, including the original .1 archive."""
+        prefix = self.path.stem + "."
+        archives = [p for p in self.path.parent.glob(prefix + "*.jsonl")
+                    if p.name[len(prefix):-len(".jsonl")].isdigit()]
+        return sorted(archives, key=lambda p: int(p.name[len(prefix):-len(".jsonl")]))
+
+    def _lines(self) -> Iterator[tuple[int, str]]:
+        """A stable view of all segments, using global line cursors across rotation.
+
+        Open under the writer's lock, then release it before scanning. Renaming a
+        live segment cannot lose or duplicate its already-open file in this read.
+        """
+        with ExitStack() as stack:
+            with self._lock:
+                files = self._segments() + ([self.path] if self.path.exists() else [])
+                streams = [stack.enter_context(p.open(encoding="utf-8")) for p in files]
+            number = 0
+            for stream in streams:
+                for line in stream:
+                    number += 1
+                    yield number, line
+
     def read(self, *, after: int = 0, limit: int | None = None, kind: str = "") -> tuple[list[dict], int]:
         """Line cursors permit complete history without loading it all into the webpage."""
         out, cursor = [], after
         try:
-            with self.path.open(encoding="utf-8") as stream:
-                for number, line in enumerate(stream, 1):
-                    if number <= after:
-                        continue
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue  # incomplete final line after an interrupted write
-                    cursor = number
-                    if not kind or row.get("kind") == kind:
-                        out.append({**row, "cursor": number})
-                    if limit is not None and len(out) >= limit:
-                        break
+            for number, line in self._lines():
+                if number <= after:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # incomplete final line after an interrupted write
+                cursor = number
+                if not kind or row.get("kind") == kind:
+                    out.append({**row, "cursor": number})
+                if limit is not None and len(out) >= limit:
+                    break
         except OSError:
             pass
         return out, cursor
@@ -92,16 +118,15 @@ class Journal:
     def recent(self, *, before: int = 0, limit: int = 100, kind: str = "") -> tuple[list[dict], int]:
         rows: deque[dict] = deque(maxlen=limit)
         try:
-            with self.path.open(encoding="utf-8") as stream:
-                for number, line in enumerate(stream, 1):
-                    if before and number >= before:
-                        break
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not kind or row.get("kind") == kind:
-                        rows.append({**row, "cursor": number})
+            for number, line in self._lines():
+                if before and number >= before:
+                    break
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not kind or row.get("kind") == kind:
+                    rows.append({**row, "cursor": number})
         except OSError:
             pass
         return list(rows), rows[0]["cursor"] if rows else 0

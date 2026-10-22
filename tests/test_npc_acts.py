@@ -130,7 +130,8 @@ async def test_a_companion_who_will_not_come_holds_the_party_back_once_asked(fak
     journal = game.state.pending_turn["preparation"]
     notes = TURN_RECORD.validate_python(journal["turn"]).notes  # the preparation's own turn (Game._preparing)
     assert len(SEEN) == 1 and journal["blocked"] and any("尚未同意同行" in n for n in notes)
-    assert {"before:0", "companion:warden"} <= set(journal["done"])
+    assert len([key for key in journal["done"] if key.startswith("before:")]) == 1
+    assert "companion:warden:square" in journal["done"]
     await game.close()
 
 
@@ -157,14 +158,19 @@ async def test_a_player_teammate_is_not_asked_for_npc_consent_before_departure(f
 
 async def test_the_arbiter_sees_everyday_things_here_and_on_the_people_here(fake):
     from autokeeper.world import ops as O
+    from autokeeper.world.record import Entity
 
     game, cast = setup(fake)
     poker = game.world.apply(O.Bring(name="拨火棍", place="tower", actor="keeper")).data
     can = game.world.apply(O.Bring(name="油壶", holder="warden", actor="keeper")).data
+    parcel = game.world.apply(O.Bring(name="封签纸包（两道绳）", holder=game.state.investigator.id, actor="keeper")).data
+    remote = "office_lamp"
+    game.world.rec.entities[remote] = Entity(id=remote, name="报社油灯", kind="item", at="office")
     SCRIPT.append({"needs_roll": False})
     await cast.arbiter(game.state, Action(kind="use", summary="周衡拿起拨火棍", target="拨火棍"))
     sent = SEEN[-1]["messages"][-1]["content"]
-    assert f"{poker} 拨火棍，持有者 tower" in sent and f"{can} 油壶，持有者 warden" in sent
+    assert f"{poker}：拨火棍；归属 tower" in sent and f"{can}：油壶；归属 warden" in sent
+    assert parcel in sent and "封签纸包（两道绳）" in sent and remote not in sent
     await game.close()
 
 

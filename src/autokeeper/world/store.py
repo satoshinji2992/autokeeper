@@ -123,9 +123,9 @@ class World:
         return e.name if e else ident
 
     def place(self, ident: str) -> str:
-        """Where an entity is: an investigator with the party, an item with its holder."""
+        """An investigator's actual place, or an item's holder's place."""
         if any(i.id == ident for i in self.st.investigators):
-            return self.st.location
+            return self.st.apart.get(ident, self.st.location)
         e = self.rec.entities.get(ident)
         if e is None:
             return ""

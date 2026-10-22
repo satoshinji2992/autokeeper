@@ -5,7 +5,7 @@ from __future__ import annotations
 from autokeeper.agents.director import Improv, NewItem
 from autokeeper.engine import world as legacy_world
 from autokeeper.engine.state import GameState, WorldChange
-from autokeeper.world import adapters, maintenance, scene
+from autokeeper.world import adapters, context, maintenance, scene
 from autokeeper.world import ops as O
 from autokeeper.world.store import World
 
@@ -91,6 +91,24 @@ def test_a_fact_about_returning_an_item_does_not_replace_its_transfer():
     assert w.entity(ident).at == w.st.investigator.id
     assert w.apply(O.Transfer(item="便携照明灯", to="warden", actor=w.st.investigator.id)).ok
     assert w.entity(ident).at == "warden"
+
+
+def test_object_handles_follow_ownership_and_do_not_include_another_holders_items():
+    w = fresh("tower")
+    me = w.st.investigator.id
+    ident = important_tool(w)
+    everyday = w.apply(O.Bring(name="封签纸包（红绳扎口）", holder=me, actor="keeper")).data
+    remote = Improv(kind="展开", reason="登记布道者自己持有的东西", items=[
+        NewItem(id="private_case", name="布道者的匣子", description="不应复制的匣内秘密", where="square", owner="preacher"),
+    ])
+    assert adapters.improvise(w, remote).ok
+    before = w.st.model_dump_json()
+    refs = context.item_refs(w, {me})
+    assert ident in refs and everyday in refs and "封签纸包（红绳扎口）" in refs
+    assert "private_case" not in refs and "不应复制的匣内秘密" not in refs
+    assert w.st.model_dump_json() == before
+    assert w.apply(O.Transfer(item=ident, to="warden", actor=me)).ok
+    assert ident not in context.item_refs(w, {me}) and ident in context.item_refs(w, {"warden"})
 
 
 def test_ambiguous_display_names_require_an_id_instead_of_creating_a_third_object():

@@ -553,14 +553,21 @@ class Encounters:
             sheet = prof.sheet.partition(":")[2]
             horror = p.id
             free = paid or horror in covered or sheet in covered or (event is not None and (horror in event.sights or sheet in event.sights))
+            present = set(self.world.observers(enc.place))
+            watching = [inv for inv in st.investigators if inv.id in present and inv.can_act
+                        and (participant := enc.get(inv.id)) is not None and participant.presence == "in"
+                        and not ctx.hidden_from(inv.id, horror)]
+            if not watching:
+                continue
             first = not any(horror in seen for seen in st.sightings.values())
             if first:
                 face = f"creature-{sheet}" if f"creature-{sheet}" in self.m.pictures else views.portrait(self, horror)
-                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda v=v, horror=horror, face=face: self.emit(self._filled({
+                audience = {} if len(watching) == len(st.investigators) else {"audience": [inv.id for inv in watching]}
+                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda v=v, horror=horror, face=face, audience=audience: self.emit(self._filled({
                     "type": "reveal", "id": horror, "name": ctx.name(horror, "players"), "portrait": face,
-                    "look": views.seen_look(v, 120)})))
-            for inv in st.investigators:
-                if horror in st.sightings.get(inv.id, []) or not inv.can_act:
+                    "look": views.seen_look(v, 120), **audience})))
+            for inv in watching:
+                if horror in st.sightings.get(inv.id, []):
                     continue
 
                 def pay(inv=inv, horror=horror, prof=prof, free=free) -> dict | None:

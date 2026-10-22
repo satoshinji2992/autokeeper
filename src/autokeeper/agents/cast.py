@@ -182,7 +182,7 @@ class PartyPlan(BaseModel):
 class EquipmentChange(BaseModel):
     item: str = Field(description="已登记的重要物品 id，或调查员实际背包中的完整名称；不能凭空增加物品")
     equipment: Literal["carried", "worn", "held", "concealed"] | None = None
-    quantity: int | None = Field(None, ge=0, description="真实消耗后的剩余重要物品数量，不逐件记录日常杂物")
+    quantity: int | None = Field(None, ge=0, description="实际消耗后的总剩余数量；交出、归还或放下不减少物件总量，应改持有归属；不逐件记录日常杂物")
     status: str | None = Field(None, max_length=100, description="已有物品实际发生的损坏、修复等状况")
     reveal: bool = Field(False, description="有实际发现、搜身或主动出示经过才公开装备")
     evidence: str = Field("", max_length=200, description="reveal时记录本次实际可观察经过，不重复或编造台词")
@@ -253,7 +253,9 @@ class Ruling(BaseModel):
     scope: Literal["模组内", "可即兴", "出格"] = Field(
         "模组内", description="模组内：已有资料或能当场处理的日常细节；可即兴：需准备可持续交互的新场景、人物或规则；出格：确实违背时代或能力，偏离主线不算"
     )
-    repeat: bool = Field(False, description="同一个调查员刚做过同样的检定，情况没变：不重掷，那次的结果照旧")
+    repeat: bool = Field(False, description=(
+        "复用【最近的检定】里同一调查员、对象和尝试的既有结果，须在skill指明该次检定技能；"
+        "普通记录、观察或已获同意的动作无需掷骰时，只填needs_roll=false，不把它标成重复另一件事"))
     on_fail: Failure = Field(default_factory=Failure, description="这次检定失败、不再孤注一掷时的后果；多数时候留空")
     on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的完整后台结算；玩家选择前只看到其中的 risk")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
@@ -1417,10 +1419,9 @@ class Cast:
         held = "、".join(m.clue(c).title for c in state.clues) or "无"
         moved = f"（调查员为此先走到了{m.location(at).name}，下面是那里的场景）\n" if at else ""
         local = [f"{i.id} {i.name}，持有者 {world.owner(m, state, i.id)}" for i in m.items if i.where == where]
-        if self.world is not None:  # everyday things registered as they came up (world/ops.Bring), here or on the people here
-            around = {where} | {e.id for e in self.world.rec.entities.values() if e.kind == "npc" and e.at == where}
-            local += [f"{e.id} {e.name}，持有者 {e.at}" for e in self.world.rec.entities.values()
-                      if e.kind == "item" and not e.important and e.at in around]
+        if self.world is not None:
+            around = {where, inv.id, *self.world.present(where)}
+            local = [world_view.item_refs(self.world, around)]
         prompt = (
             f"【行动】{action.ruled()}\n{moved}"
             + (coordination + "\n" if coordination else "") +
@@ -1728,7 +1729,7 @@ class Cast:
         held = [f"{item.id}（{item.name}，{equipment_names[item.equipment]}，数量{item.quantity}"
                 + (f"，{item.status}" if item.status else "") + "）" for item in items]
         mood += f"\n你实际持有的重要物品：{'、'.join(held) or '未登记'}。数量为0的物品已经耗尽，不能使用或交付。\n"
-        if self.world is not None and (things := [e.name for e in self.world.rec.entities.values()
+        if self.world is not None and (things := [f"{e.id}（{e.name}）" for e in self.world.rec.entities.values()
                                                   if e.kind == "item" and not e.important and e.at == npc_id]):
             mood += f"你手边的日常物件：{'、'.join(things)}。\n"
         mood += world.context(state, npc=npc_id)

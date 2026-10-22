@@ -85,6 +85,8 @@ def build(game: Game, checkpointer=None):
         else:
             if state["input"] in ("/retry", "继续这一回合"):
                 raise ValueError("目前没有未完成的回合")
+            if not instant(state["input"]) and (why := game._focus_blocked()):
+                raise ValueError(why)  # a refused remote seat must not acquire an unfinished turn
             journal.update(input=state["input"], by_hand=state.get("by_hand", False), active=game.state.active)
             keep()
         game.state.active = journal.get("active", game.state.active)
@@ -121,13 +123,15 @@ def build(game: Game, checkpointer=None):
         _bind(game)
         journal = game.state.pending_turn
         if "ruling" in journal:
-            return {"ruling": journal["ruling"]}
-        ruling = await game.rule(Action.model_validate(state["action"]))
+            return {"action": journal["action"], "ruling": journal["ruling"]}
+        action = Action.model_validate(state["action"])
+        ruling = await game.rule(action)
+        journal["action"] = action.model_dump(mode="json")
         journal["ruling"] = ruling.model_dump(mode="json") if ruling else None
         keep()
         if ruling:
             await game.emit({"type": "ruling", **ruling.model_dump()})
-        return {"ruling": ruling.model_dump() if ruling else None}
+        return {"action": journal["action"], "ruling": ruling.model_dump() if ruling else None}
 
     async def prepare(state: TurnState) -> dict:
         _bind(game)

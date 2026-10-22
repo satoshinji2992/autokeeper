@@ -664,8 +664,8 @@ async def test_a_ruling_brings_one_left_behind_back_the_way_it_says_and_never_on
 
 
 async def test_one_left_behind_who_wakes_walks_back_on_his_own_or_goes_off_alone_without_the_party(module, fake):
-    """An investigator apart who can act takes an ordinary turn: going to where the party is, he is with it
-    again; going anywhere else, he goes there alone and the party stays where it is (no split party)."""
+    """After the encounter, the recovered investigator can take an ordinary turn at his own place;
+    changing the scene's focus never brings the rest of the party there with him."""
     from autokeeper.agents.cast import Action, Ruling
 
     game, cast = await left_behind(module, fake)
@@ -676,10 +676,12 @@ async def test_one_left_behind_who_wakes_walks_back_on_his_own_or_goes_off_alone
     app = turn_graph.build(game, InMemorySaver())
     cast.script["去钟楼"] = (Action(kind="move", destination="tower", summary="李四去钟楼"), Ruling(needs_roll=False))
     await play(app, "去钟楼")
-    assert st.location == "square" and st.apart == {"li": "tower"}
+    assert st.location == "tower" and st.apart == {"zhouheng": "square"}
+    assert game.world.place("li") == "tower" and game.world.place("zhouheng") == "square"
+    assert li.hp == 5 and not li.conditions
     cast.script["回广场"] = (Action(kind="move", destination="square", summary="李四回广场找大家"), Ruling(needs_roll=False))
     await play(app, "回广场")
-    assert st.location == "square" and not st.apart and "李四从钟楼自己走了回来，和大家在一起了。" in cast.reports[-1]
+    assert st.location == "square" and not st.apart and "周衡就在广场，和大家会合了。" in cast.reports[-1]
 
 
 # -- the progress review of 2026-10-22: a chase come to blows in another place lands there -------------------

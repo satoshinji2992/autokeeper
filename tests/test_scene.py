@@ -99,6 +99,29 @@ def told(events: list[dict]) -> str:
     return "".join(e["text"] for e in events if e["type"] == "keeper_delta")
 
 
+async def test_the_keeper_gets_actual_object_handles_and_can_put_them_down_without_consuming_them(fake):
+    from autokeeper.world.ops import Bring
+
+    game, _ = made("tower", fake=fake)
+    me = game.state.investigator.id
+    parcel = game.world.apply(Bring(name="封签纸包（红绳扎口）", holder=me, actor="keeper")).data
+    copy = game.world.apply(Bring(name="抄录册（蓝布封皮）", holder=me, actor="keeper")).data
+    turn = acted(game, "把纸包和抄录册留在桌上", 0)
+    SCRIPT.append(telling("你将两件东西留在桌上。", here=["warden"],
+                          holds=[{"item": parcel, "holder": "tower"}, {"item": copy, "holder": "tower"}]))
+    try:
+        await game.narrate(turn)
+        prompt = "\n".join(m["content"] for m in SEEN[0]["messages"])
+        assert parcel in prompt and "封签纸包（红绳扎口）" in prompt and copy in prompt
+        assert all(game.world.entity(item).at == "tower" and game.world.entity(item).quantity == 1
+                   for item in (parcel, copy))
+        assert not {"封签纸包（红绳扎口）", "抄录册（蓝布封皮）"}.intersection(game.state.investigator.inventory)
+        assert len(SEEN) == 1  # usable handles do not require a second narrator or a text-extraction pass
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
 @pytest.mark.parametrize("offer", [False, True])
 async def test_only_the_keepers_explicit_choice_opens_an_idea_offer(offer):
     game, events = made()

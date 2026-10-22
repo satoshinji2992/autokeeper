@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -77,8 +77,7 @@ def _recall_indices(texts: list[str], query: str, concerns: str, *, recent: int,
 def _concerns(w: World, npc: str) -> str:
     a = w.agent(npc)
     parts = [w.name(x) for x in w.present(w.place(npc)) if x != npc]
-    if w.place(npc) == w.st.location:
-        parts += [i.name for i in w.st.investigators]
+    parts += [i.name for i in w.st.investigators if w.place(i.id) == w.place(npc)]
     if a:
         parts += [*a.goals, *(s.text for s in a.plan if s.status in {"pending", "blocked"})]
     parts += [p.text for p in w.rec.promises.values() if npc in {p.by, p.to} and p.status == "active"]
@@ -163,8 +162,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     if ent.following:
         lines.append(f"【已同意同行】{_company(w, ent)}；改变主意须明确结束同行，不忽略刚才的约定。")
     others = [f"{w.name(x)}（{x}）" for x in w.present(here) if x != npc]
-    if here == w.st.location:
-        others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators]
+    others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators if w.place(i.id) == here]
     lines.append(f"【你在】{w.name(here)}（{here}）；身边：{'、'.join(others) or '没有人'}")
     if a:
         lines.append("【你的目标】" + ("；".join(a.goals) or "无"))
@@ -188,7 +186,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     if witnessed:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
             f"- {format_time(e.t)} {w.name(e.actor)}（{e.actor}）：{e.text}" for e in witnessed))
-    if here == w.st.location:
+    if any(w.place(i.id) == here for i in w.st.investigators):
         lines.append("【眼前的交流】调查员在场。可回应刚听到的话、提出与自身目标有关的帮助或请求；其未说出的意图不在你的信息内。")
     rels = [r for r in rec.relations.values() if npc in (r.a, r.b) and npc in r.known_by]
     lines.append("【你和别人】\n" + ("\n".join(f"- {w.name(r.a)}对{w.name(r.b)}：{r.kind} {r.value}" + (f"（{r.note}）" if r.note else "")
@@ -242,7 +240,7 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
         meet = [f"{s.text}（{s.id}{ONCE.get(s.once, '')}）" for s in pending if agents.meets(w, npc, s)][:4]
-        if meet and ent.at == w.st.location:  # what it does on meeting them: its own to play now
+        if meet and any(w.place(i.id) == ent.at for i in w.st.investigators):
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
     included: set[str] = set()
@@ -269,7 +267,7 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
     if recent:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
             f"- {format_time(e.t)} {w.name(e.actor)}：{e.text}" for e in recent))
-    if ent.at == w.st.location:
+    if any(w.place(i.id) == ent.at for i in w.st.investigators):
         lines.append("【当前交流】调查员就在身边；按本轮实际听见的话回应，可以提出自己的帮助或请求，不能知道其未说出的打算。")
     return knowledge.public_text(w, npc, "\n".join(lines))
 
@@ -308,6 +306,12 @@ def arrival(w: World, at: str) -> list[str]:
     if left := traces(w, at):
         lines.append("这里看得出来的变化（他们不在时留下的）：" + "；".join(left))
     return lines
+
+
+def item_refs(w: World, holders: Collection[str]) -> str:
+    """Actual local object handles for state operations, without copying their hidden contents."""
+    return "\n".join(f"- {e.id}：{e.name}；归属 {e.at}（{w.name(e.at)}）；数量 {e.quantity}"
+                     for e in w.rec.entities.values() if e.kind == "item" and e.at in holders)
 
 
 def happened(w: World, since: int) -> list[str]:

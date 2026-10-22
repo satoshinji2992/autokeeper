@@ -55,7 +55,7 @@ class Holding(BaseModel):
 
 class Thing(BaseModel):
     name: str = Field(description="日常小物件，比如 火柴、一杯热茶")
-    holder: str = Field(description="谁拿出来的")
+    holder: str = Field(description="拿出它的人物id；不能填地点。交给别人或留在某处，再用holds填写最终归属")
 
 
 class Trace(BaseModel):
@@ -93,8 +93,8 @@ class Scene(BaseModel):
     here: list[str] = Field(default_factory=list, description="讲完时和调查员在一起的人；没变也照抄")
     follow: list[str] = Field(default_factory=list, description="here 里跟着调查员走的人")
     left: list[Left] = Field(default_factory=list, description="这段里离开的人和去向")
-    holds: list[Holding] = Field(default_factory=list, description="这段里换了手的物件")
-    things: list[Thing] = Field(default_factory=list, description="这段里拿出来的日常小物件；递给了别人就再写进 holds")
+    holds: list[Holding] = Field(default_factory=list, description="这段实际拿起、交出、归还或放回地点的物件；使用实际物件id和人物/地点id，细部位置不代替归属地点")
+    things: list[Thing] = Field(default_factory=list, description="本段首次拿出的日常小物件；交出或留下时再写进holds。已有物件使用实际id写holds，不改名另造一件")
     traces: list[Trace] = Field(default_factory=list, description="这段里留下的新痕迹")
     observations: list[Observation] = Field(default_factory=list,
                                            description="本段NPC实际看见或听见的重要事实与承诺，明确witnesses；只记影响后续应答的内容，不写逐句流水账")
