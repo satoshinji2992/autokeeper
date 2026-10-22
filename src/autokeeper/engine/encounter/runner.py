@@ -721,7 +721,9 @@ class Encounters:
             await self._round_end(enc, turn)
 
     async def _replay(self, turn: Turn) -> None:
-        """Notices of units this journal already landed that did not go out (a broken connection)."""
+        """What units this journal already landed still owe (a broken connection, a crash after the op):
+        their notices, the rest of a ruling, their flags (a stake's, at a round's end the retry does not
+        come back to)."""
         journal = self._resolution
         if journal is None:
             return
@@ -729,7 +731,7 @@ class Encounters:
         for key in list(journal.get("enc-units", [])):
             row = steps.get(key)
             if row and row.get("done") and isinstance(row.get("value"), dict):
-                await self._notify(key, row["value"].get("notices", []), turn)
+                await self._owed(key, row["value"], turn)
 
     async def _unit(self, key: str, turn: Turn, fn) -> dict:
         """One unit: `fn` works on a copy (resolve.Work) with the journal's dice, then one op lands it
@@ -770,12 +772,17 @@ class Encounters:
             return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired, "extra": w.unit.extra}
 
         value = await self._resolution_step("/" + key, turn, run)
+        await self._owed(key, value, turn)
+        return value
+
+    async def _owed(self, key: str, value: dict, turn: Turn) -> None:
+        """What a unit owes once its op has landed, each once: its notices, the rest of an `other`
+        ruling, its flags."""
         await self._notify(key, value.get("notices", []), turn)
         if value.get("rest"):
             await self._settle_rest(key, value["rest"], turn)
         if value.get("flags"):
             await self._resolution_step(f"/{key}/flags", turn, lambda: self._flags(value["flags"], turn))
-        return value
 
     async def _notify(self, key: str, notices: list[dict], turn: Turn) -> None:
         for k, ev in enumerate(notices):
@@ -1385,23 +1392,23 @@ class Encounters:
         if enc is not None and enc.mode == "chase":
             await self._chase_settled(turn)
 
-    async def _stakes(self, enc: EncounterState, turn: Turn, key: str, ended: str = "") -> list[str]:
-        """The stakes that hold now fire, once: their flags set, what hangs on them happens."""
-        due = stakes.due(self, enc, ended)
+    async def _stakes(self, enc: EncounterState, turn: Turn, key: str) -> list[str]:
+        """The stakes that hold now fire, once: their flags set, what hangs on them happens. The flags
+        are the unit's (Unit.flags, set once it lands): a turn cut short after it landed and before they
+        were set reads them from the journal and sets them on the retry (_replay), as an end's are."""
+        due = stakes.due(self, enc)
         if not due:
             return []
-        flags = [f for i in due for f in enc.stakes[i].flags]
 
         def fire(w: Work) -> None:
             for i in due:
                 w.enc.stakes[i].fired = True
                 s = w.enc.stakes[i]
                 w.unit.lines.append(f"【后果】{s.when} 成立" + (f"：{s.note}" if s.note else ""))
+            w.unit.flags = [f for i in due for f in w.enc.stakes[i].flags]
 
-        await self._unit(key, turn, fire)
-        if flags:
-            await self._resolution_step(f"/{key}/flags", turn, lambda: self._flags(flags, turn))
-        return flags
+        value = await self._unit(key, turn, fire)
+        return list(value.get("flags") or [])
 
     # -- how it ends ------------------------------------------------------------------------------
     def _outcome(self, ctx: Ctx) -> str:
