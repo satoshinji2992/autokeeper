@@ -788,12 +788,12 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
 @app.command()
 def upgrade(
     module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")],
-    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,prelude,combat,verify"
-                                           "（verify 单独跑时复核整个局面层）")] = "",
+    only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,present,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,"
+                                           "prelude,combat,verify（verify 单独跑时复核整个局面层和全部线索）")] = "",
     dry_run: Annotated[bool, typer.Option("--dry-run", help="不调用模型、不写文件：列出每一步要不要补及原因，以及现在的可玩度、推演和无人插手时的走向")] = False,
     review: Annotated[bool, typer.Option("--review", help="补完后请模型像守秘人那样审读一遍（一次调用），列出跑起来会出问题的地方")] = False,
 ) -> None:
-    """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单、怪物与 NPC 的战斗数值、追逐路线、事件里写定的打斗），最后对照原文复核这次补的。只补没有的，原作不改；中断了再跑一次就接着补。"""
+    """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、事件里出场的人、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单、怪物与 NPC 的战斗数值、追逐路线、事件里写定的打斗），最后对照原文复核这次补的，并核对线索有没有把原文的条件写成事实、出处对不对（只报告，不改）。只补没有的，原作不改；中断了再跑一次就接着补。"""
     from .module import adapt
     from .module.schema import Module
     from .module.simulate import playthrough
