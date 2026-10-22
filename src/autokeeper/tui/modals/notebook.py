@@ -33,7 +33,7 @@ class NotebookModal(ModalScreen[None]):
 
     CSS_PATH = "notebook.tcss"
     BINDINGS = [
-        Binding("escape", "close", "关闭"),
+        Binding("escape,f2", "close", "关闭"),  # F2 again closes it, as F1 the guide
         Binding("tab", "turn", "翻页", show=False),  # the page has no use for a tab character
     ]
 
