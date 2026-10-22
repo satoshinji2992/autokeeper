@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from ..engine import world as legacy_world
 from . import agents
 from .record import PLAYERS
 from .scheduler import fresh
@@ -41,10 +40,15 @@ def inspect(w: World) -> dict:
     actor_ids = set(rec.entities) | {i.id for i in st.investigators} | {PLAYERS}
     for item in (e for e in rec.entities.values() if e.kind == "item"):
         module_item = next((i for i in m.items if i.id == item.id), None)
-        recorded = legacy_world.owner(m, st, item.id)
-        if recorded and recorded != item.at:
+        # Compare the layers themselves. The canonical owner resolver intentionally
+        # reads the entity first, so using it here would hide a stale ledger/projection.
+        owners = [("物品台账持有者", st.item_owners[item.id])] if item.id in st.item_owners else []
+        if module_item is not None:
+            owners.append(("模组投影持有者", module_item.owner or module_item.where))
+        different = [f"{label}={holder}" for label, holder in owners if holder != item.at]
+        if different:
             add("item_owner", "error", f"entity:{item.id}", "物品持有记录不一致",
-                f"世界持有者={item.at}", f"物品台账持有者={recorded}")
+                f"世界持有者={item.at}", *different)
         if item.at and item.at not in actor_ids:
             add("item_holder_missing", "error", f"entity:{item.id}", "物品持有者不存在", f"持有者={item.at}")
         name = module_item.name if module_item else item.name

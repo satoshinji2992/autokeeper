@@ -98,6 +98,9 @@ class Scene(BaseModel):
     traces: list[Trace] = Field(default_factory=list, description="这段里留下的新痕迹")
     observations: list[Observation] = Field(default_factory=list,
                                            description="本段NPC实际看见或听见的重要事实与承诺，明确witnesses；只记影响后续应答的内容，不写逐句流水账")
+    flags: list[str] = Field(default_factory=list, description=(
+        "本段已经发生、满足完整含义的剧情标记 id；人物本次真正做成的事也在这里登记。"
+        "只从已声明标记中选，不将尝试、提议、口头谎言或尚未完成的计划当成事实，不改写骰点和取得条件"))
     now: str = Field("", description="讲完时眼前还在进行的事，一句话，只写调查员看得到的；没有就留空")
 
 
@@ -140,6 +143,7 @@ class Plan:
     problems: list[str] = field(default_factory=list)  # everything that does not hold, the units' and the scene's own
     now: str = ""
     end: str = ""  # how it stands once the units that hold have landed, in words
+    flags: list[str] = field(default_factory=list)  # completed story facts; only a whole accepted scene may commit these
 
     @property
     def held(self) -> list[Unit]:
@@ -202,17 +206,30 @@ def _person(w: World, text: str) -> str | None:
 def _item(w: World, text: str) -> tuple[str, str] | None:
     """An item the record knows of, and who or where has it: an important one, a module one, or a
     name in an investigator's things."""
-    for x in _bare(text):
+    candidates = _bare(text)
+    # An explicit id, including one in brackets, is stronger than an outer display
+    # name shared by multiple objects. Never pick the first same-named entity.
+    for x in candidates:
         e = w.rec.entities.get(x)
         if e is not None and e.kind == "item":
             return x, legacy_world.owner(w.m, w.st, x) or e.at
-        found = next((e.id for e in w.rec.entities.values() if e.kind == "item" and e.name == x), None)
-        found = found or next((i.id for i in w.m.items if x in (i.id, i.name)), None)
+        if any(item.id == x for item in w.m.items):
+            return x, legacy_world.owner(w.m, w.st, x)
+    unresolved = False
+    for x in candidates:
+        found = legacy_world.item_id(w.m, w.st, x)
+        if found is None:
+            unresolved = True
+            continue
+        if found not in w.rec.entities and not any(item.id == found for item in w.m.items):
+            found = None
         if found is not None:
             return found, legacy_world.owner(w.m, w.st, found)
         holder = next((i.id for i in w.st.investigators if x in i.inventory), None) or w.st.item_owners.get(x)
         if holder:
             return x, holder
+    if unresolved:
+        raise ValueError(f"「{text}」无法唯一定位已有物件，请使用实际物件的 id。")
     if source := _document(w, text):
         if (item := w.rec.entities.get(f"document:{source}")) is not None:
             return item.id, item.at
@@ -441,7 +458,12 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     for h in scene.holds:
         if _blank(h.item):
             continue
-        found = _item(w, h.item)
+        try:
+            found = _item(w, h.item)
+        except ValueError as exc:
+            problems.append(str(exc))
+            things.pop(_named(h.item), None)
+            continue
         if found is None and _document(w, h.item) and _named(h.item) not in things:
             things[_named(h.item)] = Thing(name=h.item, holder=lead)
         if found is None and _named(h.item) in things:
@@ -510,7 +532,10 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     for u in merged:
         problems += u.problems
     now = "" if _blank(scene.now) else _clip(scene.now)
-    return Plan(units=merged, problems=list(dict.fromkeys(problems)), now=now, end=end_words)
+    flags = list(dict.fromkeys(scene.flags))
+    problems += [f"剧情标记 {flag} 没有声明：只能从模组标记中选择。" for flag in flags if flag not in w.m.flags]
+    return Plan(units=merged, problems=list(dict.fromkeys(problems)), now=now, end=end_words,
+                flags=[] if problems else flags)
 
 
 def _meet(a: str, b: str, why: str) -> dict[str, Any]:

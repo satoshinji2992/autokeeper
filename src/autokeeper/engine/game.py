@@ -48,8 +48,8 @@ from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from ..world import adapters, desk, knowledge, scene, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, holds, marked, split_when
-from ..world.ops import Equip, Follow, Improvise, Learn, Move, Occur
-from ..world.record import DIRECTOR
+from ..world.ops import Equip, Follow, Improvise, Learn, Move, Occur, SetFlag
+from ..world.record import DIRECTOR, KEEPER
 from ..world.store import World, digest
 from . import audience as recipients
 from . import diagnostics, effects, fog, idea, perception, presentation, progress, signs, views, world
@@ -549,6 +549,7 @@ class Game(Encounters):
         """An explicit interruption changes the scene before the rules assistant reads it.
         Its operations, consequences and notices use the ordinary durable stage journal."""
         journal = receipt.setdefault("cues", {})
+        receipt.setdefault("cue_present", self._present())
         turn = TURN_RECORD.validate_python(receipt["cue_turn"]) if "cue_turn" in receipt else Turn()
 
         def keep(kept: Turn) -> None:
@@ -558,21 +559,28 @@ class Game(Encounters):
 
         with self._journal(journal, keep):
             for choice in plan.beats:
-                def cue(choice=choice) -> list[str]:
+                def cue(choice=choice) -> dict:
                     stage.cue(self.world, choice.id, choice.action, choice.reason)
                     beat = next((b for b in stage.waiting(self.world) if b.id == choice.id), None)
                     if choice.action != "play" or beat is None:
-                        return []
+                        return {"flags": [], "shown": []}
                     since, flags = self.world.rec.seq, set(self.state.flags)
                     problems = stage.play(self.world, beat)
                     if problems:
                         turn.notes.append(f"待演安排未落实：{choice.id}，{'；'.join(problems)}")
+                        shown = []
                     else:
-                        turn.world.extend(world_view.happened(self.world, since))
-                    return [flag for flag in self.state.flags if flag not in flags]
+                        shown = world_view.happened(self.world, since)
+                        turn.world.extend(shown)
+                    return {"flags": [flag for flag in self.state.flags if flag not in flags], "shown": shown}
 
-                flags = await self._resolution_step(f"cue:{choice.id}", turn, cue)
-                if flags:
+                result = await self._resolution_step(f"cue:{choice.id}", turn, cue)
+                if result["shown"] and choice.text.strip():
+                    await self._resolution_step(f"cue-notice:{choice.id}", turn, lambda choice=choice: self.emit({
+                        "type": "event", "id": f"cue:{choice.id}", "title": "", "text": choice.text.strip(),
+                        "audience": recipients.listeners(self.state, self.state.investigator.id),
+                    }))
+                if flags := result["flags"]:
                     await self._resolution_step(f"cue-flags:{choice.id}", turn,
                                                 lambda flags=flags: self._flags(flags, turn, landed=True))
 
@@ -637,8 +645,13 @@ class Game(Encounters):
                 and not action.destination and not action.approach
                 and any(n.id == action.npc for n in self.m.npcs_at(self.state.location))):
             return Ruling(needs_roll=False, minutes=0, reason="普通闲聊，不必另作裁定")
-        await self.emit({"type": "status", "text": "裁定中…"})
         heading = self._heading(action)
+        cued_present = self.state.pending_turn.get("arrangement", {}).get("cue_present", [])
+        if (self._addressed(action) and action.npc in cued_present
+                and action.npc not in self.world.present(heading or self.state.location)):
+            return Ruling(needs_roll=False, missing=[f"{self.world.name(action.npc)}不在当前交谈现场"],
+                          reason="交谈对象已不在现场，本次尚未完成的请求不能按原场面继续检定；已说过的话与实际变化仍成立")
+        await self.emit({"type": "status", "text": "裁定中…"})
         journal = self.state.pending_turn
         draft = journal.get("draft_ruling", {})
         arbiter = self.cast.arbiter
@@ -759,7 +772,10 @@ class Game(Encounters):
         actual = ent.following == st.investigator.id and ent.follow_to == action.destination
         claimed = bool(getattr(self.cast, "claimed_accompany", lambda *_: False)(st, nid, action.destination))
         if asked and not actual and not claimed:
-            turn.notes.append(f"{self.m.npc(nid).name}尚未同意同行，调查员尚未出发；由玩家决定是否独行或另作安排。")
+            consent = (f"只同意前往{self.world.name(ent.follow_to)}，还没同意继续到{self.world.name(action.destination)}"
+                       if ent.following == st.investigator.id and ent.follow_to else "尚未同意同行")
+            turn.notes.append(f"{self.m.npc(nid).name}{consent}；本轮只完成出发前交谈，调查员尚未出发，"
+                              "由玩家决定分段走、独行或另作安排。")
             journal["blocked"] = True
         if asked:
             journal["done"].append(f"companion:{nid}")  # answered here
@@ -1928,6 +1944,11 @@ class Game(Encounters):
         who = self.state.investigator.id
         ops = []
         for index, change in enumerate(ruling.equipment):
+            ident = world.item_id(trial.m, trial.st, change.item, holder=who)
+            if ident is None:
+                turn.notes.append("装备名称对应多个物件，尚未落实改动；需使用实际物件的记录编号。")
+                return
+            change = change.model_copy(update={"item": ident})
             ent = trial.rec.entities.get(change.item)
             holder = ent.at if ent else world.owner(trial.m, trial.st, change.item)
             # A search can reveal another person's property, but cannot manipulate it
@@ -2151,20 +2172,24 @@ class Game(Encounters):
                 await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id)),
                                   self._keep, record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…")
         await self._join_in(turn)
-        for ev in turn.events:
-            if ev.performer and ev.id not in turn.performed:
-                name = m.npc(ev.performer).name
-                await self._reply(turn, f"perform:{ev.id}", ev.performer,
-                                  lambda ev=ev: self.cast.perform(st, ev.performer, ev.performance, self._deeds(ev.performer)),
-                                  self._keep, kind="performance", status=f"{name}登台了…")
-                turn.performed.append(ev.id)
-                self._keep(turn)
+        await self._perform_events(turn, self._keep)
         # Important information heard in a zero-minute exchange can change a person's
         # next action now, using the same allowance as this turn's elapsed-time work.
         await self._world(turn)
         await self._people()
         await self._check_ending(turn)
         self._keep(turn)
+
+    async def _perform_events(self, turn: Turn, keep: Callable[[Turn], None]) -> None:
+        for ev in turn.events:
+            if ev.performer and ev.id not in turn.performed:
+                name = self.m.npc(ev.performer).name
+                await self._reply(turn, f"perform:{ev.id}", ev.performer,
+                                  lambda ev=ev: self.cast.perform(self.state, ev.performer, ev.performance,
+                                                                 self._deeds(ev.performer)),
+                                  keep, kind="performance", status=f"{name}登台了…")
+                turn.performed.append(ev.id)
+                keep(turn)
 
     @staticmethod
     def _addressed(action: Action | None) -> str:
@@ -2440,7 +2465,10 @@ class Game(Encounters):
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling, and so does a find no one said in their line.
         told = self._told_by(turn)
-        if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
+        dialogue_only = (turn.action is not None and (turn.action.kind == "talk" or turn.action.casual)
+                         and not (turn.ruling and turn.ruling.rest))
+        if (dialogue_only and any(nid not in turn.joined for nid, _ in turn.npc_lines)
+                and not turn.events and not turn.notes and not turn.ending
                 and not turn.arrived and not turn.world and not turn.sanity and not turn.hints and all(c in told for c in turn.clues)):
             self.told = None
             await self.emit({"type": "dialogue_end"})
@@ -3495,6 +3523,9 @@ class Game(Encounters):
             return "\n".join(out)
         if a:
             out.append(f"行动意图（是否达成以下列结算为准）：{a.summary}")
+            if st.pending_turn.get("preparation", {}).get("blocked"):
+                out.append("【本轮实际执行】仅完成出发前交谈，行程与目的地的后续行动没有执行。保留原来的目的，"
+                           "按人物实际回答交代当前待定之处，不在原地登记抵达后的交付、痕迹或见闻。")
             for item in self._items_for(a):
                 out.append(f"【眼前物件】{item.name}：{item.description}（配图卡已展示外观，接着动作讲，不另添隐藏标记或效果。）")
             if a.kind == "daily":
@@ -3562,7 +3593,13 @@ class Game(Encounters):
                 out.append(f"眼前发生（原文已展示给玩家，不要复述，接着写之后的变化）：{ev.read_aloud.strip()}")
         if names := self._unknown(turn.events):  # a horror seen before it is known, or anyone in the fight (Creature.called, NPC.called)
             out.append("【称呼】" + "；".join(names) + "。调查员还不知道这是什么：只写看得见、听得见、闻得到的样子，不说出名字和来历")
-        out += [f"眼前发生：{text}" for text in turn.world]
+        arranged = self.state.pending_turn.get("arrangement", {})
+        cued_world = set(arranged.get("cue_turn", {}).get("world", []))
+        for choice in arranged.get("plan", {}).get("beats", []):
+            if arranged.get("cues", {}).get("steps", {}).get(f"cue-notice:{choice['id']}", {}).get("done"):
+                out.append(f"【裁定前已展示，不复述】{choice.get('text', '')}")
+        out += [(f"【裁定前已实际发生】{text}。接着改变后的现场讲，不以本次尚未完成的请求推翻。"
+                 if text in cued_world else f"眼前发生：{text}") for text in turn.world]
         out += [f"备注：{n}" for n in turn.notes]
         out += [f"规则提示（来自本局规则，这一轮的叙述要用一句话自然写到）：{h}" for h in turn.hints]
         if turn.ending:
@@ -3625,7 +3662,8 @@ class Game(Encounters):
             players |= encounter_views.names(ctx, "players")
         return telling.name_rows(keeper, players)
 
-    async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:
+    async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None, *,
+                       _receipt: dict | None = None, _owner: Turn | None = None) -> str:
         """The keeper tells it: first how things stand as the telling ends, then the words
         (agents/cast.Telling). The scene is compared with the record and lands as world operations
         (world/scene.py); the words stream to the player once it holds (Game._tell). Nothing reads
@@ -3635,7 +3673,8 @@ class Game(Encounters):
         self.told = None  # while the keeper speaks there is nothing to tell again
         st = self.state
         sky = (st.sky, st.sky_at)
-        receipt: dict = st.pending_turn.setdefault("keeper", {}) if st.pending_turn else {}
+        receipt: dict = (_receipt if _receipt is not None else
+                         st.pending_turn.setdefault("keeper", {}) if st.pending_turn else {})
 
         async def delta(text: str) -> None:
             await self.emit({"type": "keeper_delta", "text": text})
@@ -3656,6 +3695,14 @@ class Game(Encounters):
                 self.visuals.schedule()
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
+            else:
+                receipt["story_flags"] = []
+                for flag in receipt.get("flags", []):
+                    if flag in st.flags:
+                        continue
+                    done = self.world.apply(SetFlag(id=f"keeper:{st.turn}:flag:{flag}", flag=flag, actor=KEEPER))
+                    if done.ok:
+                        receipt["story_flags"].append(flag)
             st.ongoing = receipt.get("now", "")
             st.add("keeper", text, who="守秘人")
             receipt["landed"] = True
@@ -3707,7 +3754,32 @@ class Game(Encounters):
         await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
         self.told = Told(report, lore + receipt.get("note", ""), entry, sky)
+        if turn is not None and receipt.get("story_flags"):
+            await self._scene_story(receipt, turn, on_delta, owner=_owner or turn)
         return text
+
+    async def _scene_story(self, receipt: dict, turn: Turn, on_delta=None, *, owner: Turn) -> None:
+        """Consequences of the keeper's completed facts, after its telling. Keep the new stage
+        with that telling: it must not lose an event performance, replay the original action,
+        or roll again when the connection breaks. This is an event continuation, not a review."""
+        extra = TURN_RECORD.validate_python(receipt["following"]) if "following" in receipt else Turn(interlude=True)
+
+        def keep(following: Turn) -> None:
+            receipt["following"] = TURN_RECORD.dump_python(following, mode="json")
+            self._keep(owner)
+
+        with self._journal(receipt.setdefault("story", {}), keep):
+            await self._flags(receipt["story_flags"], extra, landed=True)
+        await self._perform_events(extra, keep)
+        with self._journal(receipt["story"], keep):
+            await self._check_ending(extra)
+        # Event notices show read_aloud, not the event's background or performance.
+        # Let the normal keeper tell any new scene once, with its own saved receipt.
+        if extra.events or extra.sanity or extra.notes or extra.world:
+            await self._narrate(self._report(extra), on_delta, lore=self._brief(), turn=extra,
+                                _receipt=receipt.setdefault("following_keeper", {}), _owner=owner)
+        turn.ending = turn.ending or extra.ending
+        keep(extra)
 
     async def _tell(self, report: str, lore: str, delta: Callable[[str], Awaitable[None]], turn: Turn | None) -> dict:
         """The keeper's telling and what of its scene lands, as the turn's journal keeps it. A scene
@@ -3717,7 +3789,7 @@ class Game(Encounters):
         an old one's), or a turn told out of the story (a question to the KP, the ending) has no scene."""
         st = self.state
         keeper = self.cast.keeper
-        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
+        words = {"units": [], "flags": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
                  "media": [], "perceptions": []}
         if not _staged(turn) or not _takes(keeper, "check"):
             return words | {"text": await keeper(st, report, on_delta=delta, lore=lore)}
@@ -3765,7 +3837,8 @@ class Game(Encounters):
         """What the turn's journal keeps of a telling: its words, the units of its scene that land,
         where the investigators walked, what is going on as it ends (not when the scene was cut
         down: it may tell of what did not land), and the scene in words for telling it again."""
-        return {"text": text, "units": [u.dump() for u in p.held], "room": p.room, "now": "" if partial else p.now,
+        return {"text": text, "units": [u.dump() for u in p.held], "flags": [] if partial else p.flags,
+                "room": p.room, "now": "" if partial else p.now,
                 "note": scene.kept(p)}
 
     def _scene_context(self, turn: Turn | None) -> scene.Context:
@@ -3794,8 +3867,11 @@ class Game(Encounters):
         here = "、".join(f"{n}（{w.name(n)}{'，跟着调查员' if w.rec.entities[n].following in party else ''}）"
                         for n in w.present(st.location)) or "没有别人"
         # What the action lacks is said once, in the report's notes (Game._lacking); the scene's check holds it too.
+        flags = "；".join(f"{flag}：{meaning}" for flag, meaning in self.m.flags.items() if flag not in st.flags)
         return (f"\n\n【场面】先写 scene，是这段讲完时的样子，没变的照抄。现在：调查员在 {st.location}（{w.name(st.location)}），"
-                f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。")
+                f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。"
+                "本段真正做成的剧情事实写进 scene.flags，不等下一轮裁定员补记；未完成的决定和谎言不算事实。"
+                + (f"\n【尚未成立的剧情标记】{flags}" if flags else ""))
 
     async def _walked(self, room: str) -> None:
         """The investigators walked to another room of the place in the telling (world/scene.py

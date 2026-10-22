@@ -60,3 +60,49 @@ async def test_prepare_accepts_a_false_public_agreement_without_forcing_follow_o
     finally:
         await game.close()
         await cast.close()
+
+
+async def test_partial_travel_consent_keeps_its_destination_and_waits_for_the_player(fake, harness_sandbox):
+    module = Module.load(paths.EXAMPLE)
+    module.showcases = []
+    module.events = []
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    state.location = "tower"
+    state.turn = 1
+    state.heard.update({"square": "广场", "office": "报社"})
+    cfg = config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, minds=0, visual_limit=0)
+    cast = Cast(cfg, module)
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    game = Game(module, state, cast, Rules(dice=fake), emit=emit)
+    claim = "我陪你走到广场，报社那一段我不去。"
+    SCRIPT.append({"text": claim, "accompany": "square"})
+    action = Action(kind="move", summary="请守钟人与我一起去报社", npc="warden",
+                    companions=["warden"], destination="office")
+    before = state.minutes
+    try:
+        await game.prepare(action)
+        preparation = state.pending_turn["preparation"]
+        prepared_turn = TURN_RECORD.validate_python(preparation["turn"])
+        assert preparation["blocked"] and prepared_turn.npc_lines == [("warden", claim)]
+        warden = game.world.entity("warden")
+        assert (warden.following, warden.follow_to) == (state.investigator.id, "square")
+        assert state.location == game.world.place("warden") == "tower" and state.minutes == before
+        assert not any(event.kind == "move" for event in state.record.events)
+
+        ruling = await game.rule(action)
+        assert ruling is not None and not ruling.needs_roll
+        turn = await game.resolve(action, ruling)
+        report = game._report(turn)
+        assert "只同意前往广场" in report and "还没同意继续到报社" in report
+        assert "仅完成出发前交谈" in report and "行程与目的地的后续行动没有执行" in report
+        assert "尚未同意同行" not in report
+        assert state.location == game.world.place("warden") == "tower" and state.minutes == before
+        assert (warden.following, warden.follow_to) == (state.investigator.id, "square")
+        assert not turn.arrived and not any(event["type"] == "move" for event in events)
+    finally:
+        await game.close()
+        await cast.close()

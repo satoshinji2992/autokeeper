@@ -128,12 +128,6 @@ def holding(w: World, where: str, name: str) -> str:
     return next((line for line in inv.inventory if overlap(name, line)), "") if inv is not None else ""
 
 
-def _thing(w: World, name: str, holder: str) -> Entity | None:
-    """An everyday thing (Bring) by its name, with the one holding it."""
-    return next((e for e in w.rec.entities.values()
-                 if e.kind == "item" and not e.important and e.name == name and e.at == holder), None)
-
-
 def bring_count(w: World) -> int:
     """Everyday things registered this turn."""
     return sum(1 for e in w.rec.events if e.kind == "bring" and e.turn == w.st.turn)
@@ -273,26 +267,33 @@ class Transfer(Base):
     key: SkipJsonSchema[str] = Field("", exclude=True)
     tag: SkipJsonSchema[str] = Field("", exclude=True)
 
+    def _item_id(self, w: World) -> str | None:
+        return legacy_world.item_id(w.m, w.st, self.item,
+                                    holder=self.giver or (self.actor if self.actor not in STAFF else ""))
+
     def check(self, w: World) -> list[str]:
-        before = legacy_world.owner(w.m, w.st, self.item)
+        ident = self._item_id(w)
+        if ident is None:
+            return [f"物件名称 {self.item} 不能唯一确定，请使用物件 id"]
+        before = legacy_world.owner(w.m, w.st, ident)
         if not before:
             return [f"物件 {self.item} 不存在或不知道在谁手里"]
         if self.giver and self.giver != before:
             return [f"{self.item} 现在不在 {self.giver} 手里"]
         if not _who(w, self.to, players=False):
             return [f"{self.to} 不存在"]
-        if (item := w.rec.entities.get(self.item)) is not None and item.quantity <= 0:
+        if (item := w.rec.entities.get(ident)) is not None and item.quantity <= 0:
             return [f"物件 {self.item} 已耗尽，不能转交"]
         return [f"{self.item} 已经在 {self.to} 手里"] if before == self.to else []
 
     def settle(self, w: World, oid: str):
         st, m = w.st, w.m
-        before = legacy_world.owner(m, st, self.item)
-        item = next((x for x in m.items if x.id == self.item), None)
-        # An everyday thing (Bring) handed on by the name its holder's inventory shows goes with its record.
-        ent = w.rec.entities.get(self.item) or (_thing(w, self.item, before) if item is None else None)
-        key = ent.id if ent is not None else self.item
-        name = ent.name if ent is not None else item.name if item else self.item
+        key = self._item_id(w)
+        assert key is not None  # checked against the same record, with no intervening await
+        before = legacy_world.owner(m, st, key)
+        item = next((x for x in m.items if x.id == key), None)
+        ent = w.rec.entities.get(key)
+        name = ent.name if ent is not None else item.name if item else key
         for inv in st.investigators:  # the same bookkeeping as engine/world.apply
             if inv.id == before and name in inv.inventory:
                 inv.inventory.remove(name)
@@ -300,7 +301,7 @@ class Transfer(Base):
                 inv.inventory.append(name)
         st.item_owners[key] = self.to
         if ent is None and item is not None and item.important:
-            ent = w.rec.entities[self.item] = Entity(id=self.item, kind="item", name=name, origin="game", changed=w.rec.seq)
+            ent = w.rec.entities[key] = Entity(id=key, kind="item", name=name, origin="game", changed=w.rec.seq)
         elif ent is not None:
             w.touch(ent)
         if ent is not None:
@@ -402,14 +403,19 @@ class Equip(Base):
     evidence: str = Field("", max_length=200, description="公开时必须写实际可见的发现或出示经过")
 
     def _item(self, w: World) -> Entity | None:
-        if existing := w.rec.entities.get(self.item):
-            return existing
-        holder = w.st.item_owners.get(self.item) or next(
-            (inv.id for inv in w.st.investigators if self.item in inv.inventory), "")
+        ident = legacy_world.item_id(w.m, w.st, self.item, holder=self.actor if self.actor not in STAFF else "")
+        if ident is None:
+            return None
+        if existing := w.rec.entities.get(ident):
+            # Explicit equipment maintenance promotes the actual everyday object,
+            # never a second object under the inventory's display name.
+            return existing if existing.important else existing.model_copy(update={"important": True})
+        holder = legacy_world.owner(w.m, w.st, ident)
         if holder and _who(w, holder, players=False):
             # Explicit promotion adds metadata for an actual carried object, never a
             # new possession. Using its original name preserves old inventory keys.
-            return Entity(id=self.item, kind="item", name=self.item, origin="game", at=holder)
+            template = next((i for i in w.m.items if i.id == ident), None)
+            return Entity(id=ident, kind="item", name=template.name if template else ident, origin="game", at=holder)
         return None
 
     def check(self, w: World) -> list[str]:
@@ -432,12 +438,10 @@ class Equip(Base):
         return []
 
     def settle(self, w: World, oid: str):
-        item = w.rec.entities.get(self.item)
-        if item is None:
-            item = self._item(w)
-            assert item is not None  # check verified the original inventory or ownership record
-            w.rec.entities[self.item] = item
-            w.st.item_owners.setdefault(self.item, item.at)
+        item = self._item(w)
+        assert item is not None  # check verified the original inventory or ownership record
+        w.rec.entities[item.id] = item
+        w.st.item_owners.setdefault(item.id, item.at)
         changed = self.equipment is not None or self.quantity is not None or self.status is not None
         if self.equipment is not None:
             item.equipment = self.equipment

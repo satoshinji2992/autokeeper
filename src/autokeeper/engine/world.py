@@ -6,7 +6,34 @@ from ..module.schema import Module
 from .state import GameState, WorldChange, WorldFact
 
 
-def owner(m: Module, st: GameState, item: str) -> str:
+def item_id(m: Module, st: GameState, item: str, *, holder: str = "") -> str | None:
+    """Resolve an existing item id or its unique display name, without inventing an alias.
+
+    A holder can distinguish otherwise identical objects. An ambiguous name has no
+    identity; a name with no record remains usable for an old inventory-only object.
+    """
+    item = item.strip()
+    if ent := st.record.entities.get(item):
+        return item if ent.kind == "item" else None
+    if any(i.id == item for i in m.items):
+        return item
+    named = {e.id: e.at for e in st.record.entities.values() if e.kind == "item" and e.name == item}
+    for entry in m.items:
+        if entry.name == item and entry.id not in named:
+            named[entry.id] = st.item_owners.get(entry.id) or entry.owner or entry.where
+    if holder:
+        owned = [ident for ident, at in named.items() if at == holder]
+        if owned:
+            return owned[0] if len(owned) == 1 else None
+    return next(iter(named)) if len(named) == 1 else (None if named else item)
+
+
+def owner(m: Module, st: GameState, item: str, *, holder: str = "") -> str:
+    item = item_id(m, st, item, holder=holder)
+    if item is None:
+        return ""
+    if ent := st.record.entities.get(item):
+        return ent.at
     if item in st.item_owners:
         return st.item_owners[item]
     for inv in st.investigators:
@@ -33,7 +60,7 @@ def admissible(m: Module, st: GameState, c: WorldChange, *, source: str, spoken:
         fact = st.world.get(c.key)
         return bool(fact and fact.kind == "promise" and fact.who == st.investigator.id and fact.npc == c.npc)
     if c.kind == "transfer":
-        before = owner(m, st, c.item)
+        before = owner(m, st, c.item, holder=source if spoken else st.investigator.id)
         allowed = {source} if spoken else {st.investigator.id, st.location}
         return bool(before) and before in allowed and c.owner in present and before != c.owner
     return True
@@ -51,15 +78,20 @@ def apply(m: Module, st: GameState, changes: list[WorldChange], *, source: str, 
             fact.status, fact.turn = "fulfilled", st.turn
             continue
         if c.kind == "transfer":
-            before = owner(m, st, c.item)
-            item = next((x for x in m.items if x.id == c.item), None)
-            name = item.name if item else c.item
+            ident = item_id(m, st, c.item, holder=source if spoken else st.investigator.id)
+            assert ident is not None  # admissible checked an unambiguous existing possession
+            before = owner(m, st, ident)
+            item = next((x for x in m.items if x.id == ident), None)
+            entity = st.record.entities.get(ident)
+            name = entity.name if entity else item.name if item else ident
             for inv in st.investigators:
                 if inv.id == before and name in inv.inventory:
                     inv.inventory.remove(name)
                 if inv.id == c.owner and name not in inv.inventory:
                     inv.inventory.append(name)
-            st.item_owners[c.item] = c.owner
+            st.item_owners[ident] = c.owner
+            if entity is not None:
+                entity.at, entity.equipment = c.owner, "carried"
         st.world[c.key] = WorldFact(kind=c.kind, text=c.text, who=st.investigator.id, npc=c.npc,
                                    turn=st.turn, source=source)
 

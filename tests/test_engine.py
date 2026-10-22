@@ -575,12 +575,12 @@ async def test_daily_life_is_not_stuck_and_npcs_can_chat_without_giving_clues(mo
     assert len(cast.npc_calls) == 1 and cast.npc_calls[0][0] == "warden"
     assert "今天忙不忙？" in cast.npc_calls[0][1] and "尚无可公开的门槛线索" in cast.npc_calls[0][1]
     assert not game.state.clues and not turn.checks and not any(e["type"] == "dice" for e in events)
-    assert not cast.reports and "【日常】" in game._report(turn)  # the NPC's reply stands without a second retelling
+    assert len(cast.reports) == 1 and "【日常】" in game._report(turn)  # the tea break still needs its scene, beyond the reply
 
 
 @pytest.mark.parametrize("kind", ["talk", "daily"])
 async def test_a_conversation_does_not_get_a_second_narration(module, fake, kind):
-    action = Action(kind=kind, summary="询问守钟人", npc="warden", speech="钟楼几点关门？")
+    action = Action(kind=kind, summary="询问守钟人", npc="warden", speech="钟楼几点关门？", casual=True)
     game, cast, events = make(module, fake, {}, location="tower")
     turn = await game.resolve(action, Ruling(needs_roll=False, minutes=0))
     await game.talk(turn)

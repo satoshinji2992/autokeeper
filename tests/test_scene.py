@@ -18,7 +18,7 @@ from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.harness import Reply, spend
 from autokeeper.harness import models as hm
-from autokeeper.module.schema import Item, Module
+from autokeeper.module.schema import Ending, Event, Item, Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.world import scene
@@ -349,6 +349,155 @@ async def test_a_resumed_turn_lands_its_telling_without_asking_the_keeper_again(
     assert [e.text for e in again.log].count(text) == 1
     await game.cast.close()
     await resumed.cast.close()
+
+
+async def test_the_keeper_commits_completed_story_facts_after_the_scene_and_settles_the_ending(fake):
+    module = Module.load(EXAMPLE)
+    module.events = [Event(id="last_bell", title="最后一声", when="flag:bell_stopped", text="钟声停止。")]
+    module.endings = [Ending(id="stopped", title="钟停了", condition="flag:bell_stopped", text="平静的一夜。",
+                             sanity_gain="1D6")]
+    game, events = made("tower", module=module, fake=fake)
+    before = game.state.investigator.san
+    turn = acted(game, "我接受守钟人关停钟表，然后告别", 5, kind="talk", npc="warden")
+    fake.queue_totals(4)
+    SCRIPT.append(telling("守钟人拉下制动杆，和你一起离开钟楼。", here=[],
+                          left=[{"who": "warden", "to": "square"}], flags=["bell_stopped"]))
+    SCRIPT.append("钟楼里的最后一点余响也消失了。")
+    await game.narrate(turn)
+    assert game.world.place("warden") == "square"
+    assert game.state.flags == ["bell_stopped"] and game.state.ending == "stopped"
+    assert game.state.investigator.san == before + 4
+    assert game.state.fired == ["last_bell"]
+    assert [entry.actor for entry in game.world.rec.journal if entry.kind == "flag"] == ["keeper"]
+    kinds = [event["type"] for event in events]
+    assert kinds.index("keeper_end") < kinds.index("flag") < kinds.index("ending")
+    assert len(SEEN) == 2  # one telling, then the new event; no judge or repeated action
+    await game.close()
+
+
+async def test_an_unaccepted_scene_does_not_commit_its_story_facts(fake):
+    game, _ = made("office", fake=fake)
+    turn = acted(game, "等守钟人办完，再离开", 0)
+    # The actor is too far away. The usable parts of the scene may land, but the
+    # story claim cannot outlive the rejected action it was written with.
+    bad = telling("守钟人走了过来，钟已经停下。", here=["warden"], flags=["bell_stopped"])
+    SCRIPT.extend([bad, bad, "你仍在报社等待。"])
+    await game.narrate(turn)
+    assert "bell_stopped" not in game.state.flags and not game.state.ending
+    assert game.world.place("warden") == "tower"
+    await game.close()
+
+
+async def test_an_undeclared_story_fact_goes_back_to_the_same_keeper(fake):
+    game, _ = made("tower", fake=fake)
+    turn = acted(game, "与守钟人道别", 0)
+    SCRIPT.extend([telling("告别结束。", here=["warden"], flags=["unknown_story_fact"]),
+                   telling("守钟人目送你走到门口。", here=["warden"])])
+    await game.narrate(turn)
+    assert len(SEEN) == 2 and not game.state.flags
+    assert "unknown_story_fact" in str(SEEN[-1]["messages"])
+    await game.close()
+
+
+async def test_a_story_ending_resumed_after_its_notice_does_not_reward_or_ask_twice(fake):
+    module = Module.load(EXAMPLE)
+    module.events = []
+    module.endings = [Ending(id="stopped", title="钟停了", condition="flag:bell_stopped", text="安静下来。",
+                             sanity_gain="1D6")]
+    game, events = made("tower", module=module, fake=fake)
+    st = game.state
+    turn = acted(game, "让守钟人关停钟表", 0)
+    st.pending_turn.update(input="让守钟人关停钟表")
+    saved = []
+    game.checkpoint = lambda: saved.append(st.model_dump_json())
+    game.turn_checkpoint = lambda _: game.checkpoint()
+
+    async def cut(event):
+        if event["type"] == "ending":
+            raise ConnectionError("连接中断")
+        events.append(event)
+
+    game.emit = cut
+    fake.queue_totals(3)
+    SCRIPT.append(telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"]))
+    with pytest.raises(ConnectionError):
+        await game.narrate(turn)
+    again = GameState.model_validate_json(saved[-1])
+    san = again.investigator.san
+    calls = len(SEEN)
+    resumed, events = made(module=module, state=again, fake=fake)
+    resumed.turn_checkpoint = lambda _: None
+    await resumed.narrate(turn)
+    assert again.ending == "stopped" and again.investigator.san == san
+    assert len(SEEN) == calls and [event["type"] for event in events].count("ending") == 1
+    assert len([entry for entry in resumed.world.rec.journal if entry.kind == "flag"]) == 1
+    await game.close()
+    await resumed.close()
+
+
+async def test_a_story_event_resumes_its_performance_and_scene_without_replaying_the_action(fake):
+    module = Module.load(EXAMPLE)
+    module.endings = []
+    module.events = [Event(id="heard", title="钟声停了", when="flag:bell_stopped", text="布道者过来报告广场的变化。",
+                           present=["preacher"], performer="preacher", performance="说出广场突然安静的见闻。",
+                           sanity="1/1")]
+    game, events = made("tower", module=module, fake=fake)
+    st = game.state
+    turn = acted(game, "请守钟人关掉钟表", 0)
+    st.pending_turn.update(input="请守钟人关掉钟表")
+    saved = []
+    game.checkpoint = lambda: saved.append(st.model_dump_json())
+    game.turn_checkpoint = lambda _: game.checkpoint()
+
+    async def cut(event):
+        if event["type"] == "performance":
+            raise ConnectionError("表演投递中断")
+        events.append(event)
+
+    game.emit = cut
+    san = st.investigator.san
+    fake.queue(20)
+    SCRIPT.extend([telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"]),
+                   {"text": "广场上突然安静下来了，大家都在往钟楼这边看。"},
+                   telling("门外的人还在等待消息。", here=["warden", "preacher"])])
+    with pytest.raises(ConnectionError):
+        await game.narrate(turn)
+    again = GameState.model_validate_json(saved[-1])
+    assert again.investigator.san == san - 1 and again.fired == ["heard"]
+    assert len(SEEN) == 2
+    resumed, events = made(module=module, state=again, fake=fake)
+    await resumed.narrate(turn)
+    assert again.investigator.san == san - 1 and len(SEEN) == 3
+    assert [event["type"] for event in events].count("performance") == 1
+    assert "门外的人还在等待消息" in told(events)
+    assert [entry.text for entry in again.log].count("守钟人关掉了钟表。") == 1
+    assert [entry.text for entry in again.log].count("广场上突然安静下来了，大家都在往钟楼这边看。") == 1
+    await game.close()
+    await resumed.close()
+
+
+async def test_a_story_events_testimony_is_acquired_before_its_required_ending(fake):
+    module = Module.load(EXAMPLE)
+    module.clue("c_diary").handout = None
+    module.clue("c_diary").sanity = ""
+    module.events = [Event(id="explain", title="停钟之后", when="flag:bell_stopped", text="守钟人解释日记。",
+                           performer="warden", performance="说明日记里写下的事。")]
+    module.endings = [Ending(id="stopped", title="钟停了", condition="flag:bell_stopped", requires=["c_diary"],
+                             text="得知缘由后，调查员离开了。", sanity_gain="1D6")]
+    game, events = made("tower", module=module, fake=fake)
+    game.state.npc("warden").unlocked = ["c_diary"]
+    before = game.state.investigator.san
+    turn = acted(game, "请守钟人停下钟表，听他说明", 0)
+    fake.queue_totals(2)
+    SCRIPT.extend([telling("守钟人拉下制动杆。", here=["warden"], flags=["bell_stopped"]),
+                   {"text": module.clue("c_diary").text, "told": ["c_diary"]}, "钟楼终于安静了。"])
+    await game.narrate(turn)
+    assert game.state.ending == "stopped" and "c_diary" in game.state.clues
+    assert game.state.investigator.san == before + 2
+    kinds = [event["type"] for event in events]
+    assert kinds.index("performance") < kinds.index("clue") < kinds.index("ending")
+    assert len(SEEN) == 3  # the original scene, its real performance and the conclusion
+    await game.close()
 
 
 async def test_telling_it_again_writes_the_words_only(fake):

@@ -54,7 +54,8 @@ def change_ops(w: World, c: WorldChange, *, source: str, spoken: str = "") -> li
     oid = f"wc:{st.turn}:{c.kind}:{c.key}"
     common = {"id": oid, "actor": source, "key": c.key, "tag": c.npc, "visibility": "public"}
     if c.kind == "transfer":
-        return [Transfer(item=c.item, to=c.owner, text=c.text, **common)]
+        ident = legacy_world.item_id(w.m, st, c.item, holder=source if spoken else me)
+        return [Transfer(item=ident, to=c.owner, text=c.text, **common)] if ident is not None else []
     if c.kind == "fulfill":
         if c.key in w.rec.promises and w.rec.promises[c.key].status == "active":
             return [Fulfil(promise=c.key, text=c.text, id=oid, actor=source, visibility="public")]

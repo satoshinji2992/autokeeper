@@ -27,7 +27,8 @@ def queued(game):
 def planned(module, fake, choice):
     action = Action(kind="talk", summary="周衡继续问守钟人", npc="warden", speech="钟是什么时候坏的？")
     cast = PlanCast({"继续问": (action, Ruling(needs_roll=False))},
-                    {"继续问": Plan(action=action, beats=[BeatChoice(id="warden:leave", action=choice, reason="按眼前局势安排")])})
+                    {"继续问": Plan(action=action, beats=[BeatChoice(id="warden:leave", action=choice,
+                         reason="按眼前局势安排", text="守钟人走下台阶，离开了钟楼。" if choice == "play" else "")])})
     game = make(module, fake, cast)
     return game, queued(game), cast
 
@@ -42,22 +43,63 @@ async def test_the_keeper_can_interrupt_a_conversation_and_the_operation_is_stil
     await game.close()
 
 
-async def test_an_explicit_departure_is_visible_to_the_rules_assistant_before_it_requests_dice(module, fake):
+async def test_an_explicit_departure_is_shown_before_ruling_and_the_absent_person_is_not_rolled_against(module, fake):
     game, beat, cast = planned(module, fake, "play")
     seen = []
+    events = []
+
+    async def emit(event):
+        events.append(event)
+
+    game.emit = emit
 
     async def arbiter(state, action, at=None):
         seen.append(game.world.entity("warden").at)
-        return Ruling(needs_roll=False, missing=["守钟人已离开，无法继续当面交谈"])
+        return Ruling(needs_roll=True, skill="说服", difficulty="困难")  # a stale request must not reach this call
 
     cast.arbiter = arbiter
     game.state.pending_turn = {"input": "继续问"}
     action = await game.parse("继续问")
     assert beat.status == "played" and game.world.entity("warden").at == "square"
+    assert any(event["type"] == "event" and "离开了钟楼" in event["text"] for event in events)
     ruling = await game.rule(action)
     turn = await game.resolve(action, ruling)
-    assert seen == ["square"] and not turn.checks
+    assert seen == [] and not turn.checks and ruling.missing
     assert any("离开了钟楼" in text for text in turn.world)
+    await game.close()
+
+
+async def test_a_cue_only_displays_the_keepers_public_telling_not_world_labels_or_its_private_reason(module, fake):
+    game, _, cast = planned(module, fake, "play")
+    game.world.rec.entities["warden"].name = "后台真实身份"
+    choice = cast.plans["继续问"].beats[0]
+    choice.text = "门口的老人起身离开了。"
+    choice.reason = "尚未公开的私人动机"
+    shown = []
+
+    async def emit(event):
+        if event["type"] == "event":
+            shown.append(event["text"])
+
+    game.emit = emit
+    await game.parse("继续问")
+    assert shown == [choice.text]
+    assert "后台真实身份" not in shown[0] and choice.reason not in shown[0] and "warden" not in shown[0]
+    await game.close()
+
+
+async def test_a_private_cue_does_not_publish_a_planned_public_line(module, fake):
+    game, beat, _ = planned(module, fake, "play")
+    beat.ops = [{"kind": "occur", "text": "老人默默改变了打算", "place": "tower", "visibility": "private"}]
+    shown = []
+
+    async def emit(event):
+        shown.append(event)
+
+    game.emit = emit
+    await game.parse("继续问")
+    assert beat.status == "played"
+    assert not [event for event in shown if event["type"] == "event"]
     await game.close()
 
 
