@@ -421,10 +421,21 @@ def keeper_brief(w: World) -> str:
     near = nearby(w, here)
     if near:
         lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))
-    hidden = [c for c in m.clues if c.where == here and c.id not in st.clues]
+    from ..module.graph import at_hand, tellers
+
+    # What is to be had here: what lies here, and what comes from those who are here (graph.at_hand).
+    hidden = [c for c in at_hand(m, here, present) if c.id not in st.clues]
+
+    def source(c) -> str:
+        if c.npc in present:
+            return f"出自{w.name(c.npc)}"
+        if c.npc or c.where != here:  # someone here who can tell it
+            return "、".join(w.name(x) for x in tellers(m, c) if x in present) + "能说出"
+        return c.feature or "此处"
+
     if hidden:
         lines.append("这里还没被找到的东西（别先写出来，也别把它所在的地方写成空的）：" + "；".join(
-            f"{c.title}（{c.feature or '此处'}）" for c in hidden))
+            f"{c.title}（{source(c)}）" for c in hidden))
     soon = [(s.at, _clip(s.text)) for s in rec.scheduled.values() if s.status == "pending" and s.at >= w.now]
     soon += [(s.due, f"{w.name(npc)}：{_clip(s.text)}") for npc, a in rec.agents.items()
              for s in a.plan if s.status == "pending" and s.due is not None and s.due >= w.now]

@@ -35,7 +35,12 @@ def test_what_nothing_leads_to_is_found(m):
     assert run.unreachable["结局"] == ["nothing"]
     assert any("条件不是 flag:标记" in i for i in run.issues)
     m.clues.append(Clue(id="c_seen", title="街角的身影", text="……", where="square", npc="ghost"))
-    assert "c_seen" in playthrough(m).reach.clues  # seen where it lies, as the engine has it, though he is nowhere
+    # It comes from him: with him nowhere it is nowhere either, as the engine has it (graph.at_hand,
+    # 2026-10-22: the clue about the truck's driver was given at an empty cab).
+    assert "c_seen" not in playthrough(m).reach.clues
+    m.events.append(Event(id="e_corner", title="街角", when="visit:square", text="", read_aloud="街角站着一个人影。", present=["ghost"]))
+    assert {"c_seen", "c_ghost"} <= playthrough(m).reach.clues  # an event brings him before them: what he gives goes with him
+    assert "c_seen" not in reach(m, without_npcs=frozenset({"ghost"})).clues
 
 
 def test_an_event_opens_what_it_leads_to(m):
@@ -91,6 +96,27 @@ def test_an_agenda_outcome_names_what_the_module_has():
                                              Move(id="b", text="烧掉日记", does="flag:no_such_flag | gone:warden")])]
     errors = [str(i) for i in audit(m) if i.level == "error"]
     assert any("a 的结果" in e for e in errors) and any("b 的结果" in e for e in errors)
+
+
+def test_check_hints_who_an_event_shows_and_a_clue_from_someone_never_there():
+    """2026-10-22: the truck's driver stepped down in the read-aloud with no present, and the clue
+    about him lay at a corner he was never brought to."""
+    from autokeeper.module.graph import audit, shown
+
+    m = Module.load(EXAMPLE)
+    for e in m.events:  # as an import leaves them: nobody has said who comes
+        e.present = []
+    truck = Event(id="truck", title="卡车停下", when="visit:office", text="开车的人下车",
+                  read_aloud="驾驶座上的人下来，他开口前先咳了一声。")
+    m.events.append(truck)
+    m.clue("c_diary").where = "office"
+    hints = [str(i) for i in audit(m) if i.level == "warning"]
+    assert any("事件 truck 的朗读写到有人" in h for h in hints) and any("线索 c_diary 出自 warden，写在 office" in h for h in hints)
+    truck.present = ["warden"]  # the driver is the warden: the event brings him to the office
+    hints = [str(i) for i in audit(m) if i.level == "warning"]
+    assert not any("事件 truck" in h or "线索 c_diary" in h for h in hints)
+    assert not [i for i in audit(m) if i.level == "error"]
+    assert shown(m, Event(id="x", title="", when="D1 09:00", text="", read_aloud="“守钟人呢？”她问。")) == []  # only said aloud
 
 
 def test_an_hour_of_the_day_holds_across_midnight_in_play_and_in_the_drift():

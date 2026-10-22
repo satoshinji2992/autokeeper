@@ -264,6 +264,21 @@ async def test_what_ones_manner_gives_away_is_found_even_when_they_are_spoken_to
     await game.close()
 
 
+async def test_what_is_seen_of_someone_is_found_even_when_they_are_spoken_to(fake):
+    """A clue that comes from someone (Clue.npc) and is not theirs to tell (not in their NPC.clues: a
+    disguise seen through, a spell seen cast) is a card when it is ruled, never left to their reply."""
+    game, cast, events = table(fake)
+    warden = game.m.npc("warden")
+    warden.clues, warden.gates = [], {}
+    game.state.npc("warden").unlocked = []
+    cast.tells = {}
+    turn = await game.resolve(ASK, Ruling(needs_roll=False, auto_clues=["c_diary"]))
+    assert turn.clues == ["c_diary"] and game.state.npc("warden").unlocked == ["c_diary"]
+    await game.talk(turn)
+    assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["clue", "npc"]
+    await game.close()
+
+
 async def test_a_daily_action_that_says_nothing_finds_what_it_finds(fake):
     """A daily action with someone and not a word to them: talk() asks nobody, so the clue the arbiter
     gives is found, not held back for a reply that never comes."""

@@ -794,10 +794,18 @@ class Cast:
                 for item in world_knowledge.visible_items(self.world, who, holder=who)]
 
     # -- context builders -------------------------------------------------------
+    def present(self, place: str) -> list[str]:
+        """Who is at a place as the world record has them, alive and not gone; without a record (a
+        bare Cast), the module's people of that place."""
+        if self.world is not None:
+            return self.world.present(place)
+        return [n.id for n in self.module.npcs_at(place) if n.status not in ("死亡", "失踪")]
+
     def scene(self, state: GameState, at: str | None = None) -> str:
         m = self.module
         loc = m.location(at or state.location)
-        npcs = "、".join(f"{n.name}({n.id})" for n in m.npcs_at(loc.id)) or "无"
+        here = set(self.present(loc.id))
+        npcs = "、".join(f"{n.name}({n.id})" for n in m.npcs if n.id in here) or "无"
         exits = "、".join(f"{m.location(e).name}({e})" for e in loc.exits)
         known = "、".join(f"{x.name}({x.id})" for x in m.locations if x.id != loc.id and x.id not in loc.exits)
         return (
@@ -1157,14 +1165,23 @@ class Cast:
         s = self._arbiter(state)
         inv = state.investigator
         where = at or state.location
-        near = module_graph.neighbourhood(m, where)
+        # Who is there and what is to be had with them, as the world record has it (2026-10-22: the
+        # clue about the truck's driver was listed at an empty cab, and given).
+        near = module_graph.neighbourhood(m, where, self.present(where))
+        here = {n.id: f"{n.name}({n.id})" for n in near["npcs"]}
         lines = []
         for c in near["clues"]:
             if c.id in state.clues or not c.available(state.flags, state.clues):
                 continue
             need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
-            src = "、".join(x for x in (c.feature, f"NPC {c.npc} 口中" if c.npc else "") if x)
-            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}在 {src}，{need}；内容：{c.text.strip()}")
+            tell = "、".join(here[x] for x in module_graph.tellers(m, c) if x in here and x != c.npc)
+            if c.npc in here:  # what they say, or what is seen of them
+                src = f"出自 {here[c.npc]}" + (f"（{c.feature}）" if c.feature else "")
+            elif c.npc or c.where != where:  # its person or its place is elsewhere: someone here can tell it
+                src = f"{tell} 能说出"
+            else:
+                src = f"在 {c.feature or '此处'}" + (f"，{tell} 也能说出" if tell else "")
+            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}{src}，{need}；内容：{c.text.strip()}")
         gates = []
         for n in near["npcs"]:
             for cid in n.clues:
@@ -1194,9 +1211,9 @@ class Cast:
         )
         if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
             prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
-        prompt += "\n【本地人物的处境】\n" + "\n".join(
+        prompt += "\n【本地人物的处境】\n" + ("\n".join(
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
-        )
+        ) or "这里没有别人")
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
         if self.world is not None and not encounter and (ways := chase_site.ways_at(m, self.world.rec.obstacles, where)):
             prompt += ("\n【本局改变过的通路】" + "；".join(ways)
