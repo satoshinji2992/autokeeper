@@ -1360,11 +1360,12 @@ class Hub:
 
     async def _ask(self, seat: str, who: str, offer: dict, *, timed: bool) -> Any:
         """An offer to the seat it is for, with the id its answer must quote and, when the table cannot
-        wait long (a blow, a roll on another's turn), its deadline; the answer, or None when there is
-        none in time (the default then stands). The others are told who the table waits for."""
+        wait long (a blow, a roll on another's turn), the seconds it waits (`closes_in`: the clocks of
+        two machines need not agree); the answer, or None when there is none in time (the default then
+        stands, and the seat's window is told to close: "offer_closed"). The others are told who the
+        table waits for."""
         rid = str(offer.get("id") or uuid.uuid4().hex[:12])
-        deadline = time.time() + REACTION_WAIT if timed else None
-        offer = self._faced({**offer, "respond_id": rid, "deadline": deadline})
+        offer = self._faced({**offer, "respond_id": rid, "closes_in": REACTION_WAIT if timed else None})
         queue = self.choices[seat]
         while not queue.empty():
             queue.get_nowait()
@@ -1379,6 +1380,7 @@ class Hub:
         try:
             return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
         except TimeoutError:
+            await self._send(who, {"t": "offer_closed", "id": rid})  # the default stands: the window goes, nothing is sent back
             return None
         finally:
             if self.asking.get(seat) == rid:

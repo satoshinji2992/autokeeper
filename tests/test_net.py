@@ -755,7 +755,7 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         assert [o["kind"] for o in offers["b"]] == ["roll"] and offers["b"][0]["seat"] == "lin"
         assert [o["kind"] for o in offers["a"]] == ["roll", "reaction"] or [o["kind"] for o in offers["a"]] == ["reaction", "roll"]
         reaction = next(o for o in offers["a"] if o["kind"] == "reaction")
-        assert reaction["deadline"] and reaction["deadline"] > 0 and reaction["respond_id"] == reaction["id"]
+        assert reaction["closes_in"] and reaction["respond_id"] == reaction["id"]
         assert notices and all("没有生效" in n or "已忽略" in n for n in notices)
         kinds = [e["type"] for e in seen]
         assert kinds.count("fight_round") == 1 and kinds.count("fight_act") == 3  # two investigators and the warden
@@ -974,8 +974,46 @@ async def test_a_reaction_not_answered_in_time_takes_the_default_and_a_late_answ
              "options": [{"id": "dodge", "label": "闪避"}, {"id": "fight_back", "label": "反击"}]}
     answer = await hub._ask(lead.id, "c1", offer, timed=True)
     shown = next(msg["offer"] for cid, msg in sent if msg["t"] == "offer")
-    assert answer is None and shown["respond_id"] == offer["id"] and shown["deadline"] > 0  # the default stands
+    # the default stands; the wait is in seconds, never the host's clock time (another machine's clock may differ)
+    assert answer is None and shown["respond_id"] == offer["id"] and shown["closes_in"] == 0.2 and "deadline" not in shown
+    assert sent[-1][1] == {"t": "offer_closed", "id": offer["id"]}  # the seat's window closes, sending nothing
     await hub._on("c1", {"t": "respond", "id": offer["id"], "choice": "fight_back"})
     assert sent[-1][1] == {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。"}
     assert hub.choices[lead.id].empty()  # it never reaches the next offer
     await hub.game.close()
+
+
+@pytest.mark.parametrize("kind", ["roll", "reaction"])
+async def test_a_window_the_host_stopped_waiting_for_shows_its_countdown_closes_and_sends_nothing(kind):
+    """Review 2026-10-22: a roll prompt stayed up after the host rolled for the seat, and a dialog that ran
+    out of time sent its default back (「这个选择已经结算」)."""
+    from textual.widgets import Static
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.modals.reaction import ChoiceModal
+    from autokeeper.tui.screens.net import NetGameScreen
+
+    m = Module.load(EXAMPLE)
+    st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan", human=[m.pregens[0].id])
+    st.location, st.prologue, st.turn = "tower", "（开场已讲过）", 3
+    link = FakeLink()
+    offer = {"kind": kind, "id": "o1", "respond_id": "o1", "closes_in": 20, "who": "周衡", "skill": "闪避", "target": 32,
+             "hard": 16, "extreme": 6, "need": 32, "difficulty": "常规", "prompt": "扑来", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}]}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        screen = NetGameScreen(m, st, link, st.investigators[0].id, [])
+        app.push_screen(screen)
+        await pilot.pause(0.3)
+        await screen.on_msg({"t": "offer", "offer": offer})
+        await pilot.pause(0.5)
+        window = app.screen
+        assert isinstance(window, RollModal if kind == "roll" else ChoiceModal)
+        assert "剩余 20 秒" in "".join(str(w.render()) for w in window.query(Static))
+        await screen.on_msg({"t": "offer_closed", "id": "other"})  # another offer's: this one stays
+        await pilot.pause(0.1)
+        assert app.screen is window
+        await screen.on_msg({"t": "offer_closed", "id": "o1"})
+        await pilot.pause(0.3)
+        assert app.screen is screen and not any(x["t"] == "respond" for x in link.sent)

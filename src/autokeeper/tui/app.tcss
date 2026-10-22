@@ -406,6 +406,11 @@ ModalScreen {
     max-height: 30;
     overflow-y: auto;
 }
+.timed-clock {  /* a LAN host's countdown on a roll, a push, a fight's question (modals/dialogs.Timed) */
+    color: $warning;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
 #mode {
     width: 100%;
     margin: 1 0 0 0;

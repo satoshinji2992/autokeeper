@@ -459,9 +459,10 @@ class GameScreen(Screen):
 
     async def _over_all(self, shown: ShowcaseScreen) -> None:
         """A picture over the whole screen (a big scene, a face), once the blood flash has drained: one
-        pushed over the flash was closed by the flash's going. Never over a roll prompt or another one."""
+        pushed over the flash was closed by the flash's going. Never over a roll prompt, a fight's question
+        or another one."""
         await self._after_flash()
-        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ShowcaseScreen)):
+        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ChoiceModal, ShowcaseScreen)):
             self.app.push_screen(shown)
 
     async def _after_flash(self) -> None:
@@ -1724,7 +1725,7 @@ class GameScreen(Screen):
             if offer.get("kind") == "roll":  # the player throws their own dice
                 self._status("等你掷骰…")
                 await self.make_way()
-                choice = "roll" if auto else await self.app.push_screen_wait(RollModal(offer))
+                choice = "roll" if auto else (await self.app.push_screen_wait(RollModal(offer)) or "roll")
             elif offer.get("kind") in ("reaction", "redeclare"):  # a fight stops to ask (engine/encounter)
                 if auto:
                     choice = offer.get("default", "")
@@ -1732,13 +1733,14 @@ class GameScreen(Screen):
                     self._status("等待选择应对方式")
                     await self.make_way()
                     choice = await self.app.push_screen_wait(ChoiceModal(offer))
+                    choice = offer.get("default", "") if choice is None else choice
             elif auto:
                 choice = ai_choice(offer, push)
                 said = f"孤注一掷：{choice['how']}" if isinstance(choice, dict) else {"luck": "花幸运", "drop": "放弃"}[choice]
                 self.story.add("system", Text(f"◇ AI 选择：{said}", style="dim"))
             else:
                 await self.make_way()
-                choice = await self.app.push_screen_wait(PushModal(offer))
+                choice = await self.app.push_screen_wait(PushModal(offer)) or "drop"
             inp = Command(resume=choice)
         assert self.game
         self.game.emit = self.handle

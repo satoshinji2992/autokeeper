@@ -46,7 +46,63 @@ def roll_ask(a: dict) -> Text:
     return body
 
 
-class RollModal(ModalScreen[str]):
+class Timed:
+    """A window the host waits on only so long (a LAN table's `closes_in`, in seconds: the two machines'
+    clocks need not agree). The countdown runs while the window is in front and stands still under
+    another one; at its end, or when the host settles it (Hub "offer_closed"), the window closes with
+    nothing (None) and sends nothing. It only ever closes itself: Textual's `dismiss()` pops whatever
+    screen is in front, so a timeout under the command palette or a face closed that instead and left
+    the window up, answered and dead to keys. Under another screen it waits, and goes once in front."""
+
+    CLOCK = "剩余 {left} 秒"
+
+    def timed(self, offer: dict) -> None:
+        self.left: float | None = float(offer["closes_in"]) if offer.get("closes_in") else None
+        self.answered = False
+        self._due: tuple | None = None  # (answer,) waiting until this window is in front again
+        self._last = time.monotonic()
+
+    def start_clock(self) -> None:
+        if self.left is not None:
+            self._last = time.monotonic()
+            self._tick()
+            self.set_interval(0.25, self._tick)  # type: ignore[attr-defined]
+
+    def _tick(self) -> None:
+        now = time.monotonic()
+        if self.left is None or self.answered or not self.is_active:  # type: ignore[attr-defined]
+            self._last = now
+            return
+        self.left -= now - self._last
+        self._last = now
+        if self.left <= 0:
+            self.settled()
+            return
+        for clock in self.query(".timed-clock").results(Static):  # type: ignore[attr-defined]
+            clock.update(self.CLOCK.format(left=int(self.left + 0.99)))
+
+    def settled(self) -> None:
+        """Closed with nothing to send: the time ran out, or the host settled it."""
+        self._close(None)
+
+    def _close(self, answer) -> None:
+        """Only this window goes, and once: at once in front, else when it is in front again."""
+        if self.answered and (self._due is None or self._due[0] is not None):
+            return  # answered already: a later settling changes nothing
+        self.answered = True
+        if not self.is_active:  # type: ignore[attr-defined]
+            self._due = (answer,)
+            return
+        self._due = None
+        self.dismiss(answer)  # type: ignore[attr-defined]
+
+    def on_screen_resume(self) -> None:
+        if self._due is not None:
+            answer, self._due = self._due[0], None
+            self.dismiss(answer)  # type: ignore[attr-defined]
+
+
+class RollModal(Timed, ModalScreen[str | None]):
     """The keeper calls for a check and the player throws the dice. There is no backing out:
     Escape only says so, and a key already on its way when the prompt opens does not count."""
 
@@ -57,42 +113,56 @@ class RollModal(ModalScreen[str]):
     ]
     SETTLE = 0.4  # seconds before a key counts as a throw
 
+    CLOCK = "剩余 {left} 秒，超时由房主代掷"
+
     def __init__(self, ask: dict):
         super().__init__()
         self.ask = ask
         self.opened = time.monotonic()
+        self.timed(ask)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
             yield Static(f"等待掷骰 · {self.ask.get('who') or '当前调查员'}", classes="modal-title")
             yield Static(roll_ask(self.ask), classes="modal-body")
+            if self.left is not None:
+                yield Static("", classes="timed-clock")
             with Horizontal(classes="buttons"):
                 yield Button("掷骰（回车 / 空格）", id="throw", variant="primary")
 
     def on_mount(self) -> None:
         self.opened = time.monotonic()
+        self.start_clock()
 
     def action_throw(self) -> None:
         if time.monotonic() - self.opened >= self.SETTLE:
-            self.dismiss("roll")
+            self._close("roll")
 
     def action_stay(self) -> None:
         self.app.notify("按回车或空格完成这次检定。", timeout=3)
 
     @on(Button.Pressed, "#throw")
     def thrown(self) -> None:
-        self.dismiss("roll")
+        self._close("roll")
 
 
-class PushModal(ModalScreen[str | dict]):
+class PushModal(Timed, ModalScreen[str | dict | None]):
     """A failed check's second chance: push (saying how, as the rulebook asks, p. 73), spend luck,
-    or accept the failure. A push answers {"choice": "push", "how": ...}; the others their word."""
+    or accept the failure. A push answers {"choice": "push", "how": ...}; the others their word;
+    None when a LAN host stopped waiting (Timed)."""
 
-    BINDINGS = [("escape", "dismiss('drop')", "放弃")]
+    BINDINGS = [("escape", "drop", "放弃")]
 
     def __init__(self, offer: dict):
         super().__init__()
         self.offer = offer
+        self.timed(offer)
+
+    def on_mount(self) -> None:
+        self.start_clock()
+
+    def action_drop(self) -> None:
+        self._close("drop")
 
     def compose(self) -> ComposeResult:
         o = self.offer
@@ -114,6 +184,8 @@ class PushModal(ModalScreen[str | dict]):
             body.append("放弃：", style="bold")
             body.append("接受这次失败。可以换个办法、换个人再试。")
             yield Static(body, classes="modal-body")
+            if self.left is not None:
+                yield Static("", classes="timed-clock")
             if o.get("can_push"):
                 yield Input(placeholder="孤注一掷的做法，例如：把整排书架逐本翻完", max_length=200, id="push-how")
             with Horizontal(classes="buttons"):
@@ -128,7 +200,7 @@ class PushModal(ModalScreen[str | dict]):
         if event.button.id == "push":
             self._push()
         else:
-            self.dismiss(event.button.id or "drop")
+            self._close(event.button.id or "drop")
 
     @on(Input.Submitted, "#push-how")
     def submitted(self) -> None:
@@ -141,7 +213,7 @@ class PushModal(ModalScreen[str | dict]):
             self.app.notify("请先写明如何孤注一掷。", severity="warning", timeout=3)
             box.focus()
             return
-        self.dismiss({"choice": "push", "how": how})
+        self._close({"choice": "push", "how": how})
 
 
 class HandoutModal(ModalScreen[None]):

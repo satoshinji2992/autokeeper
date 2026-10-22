@@ -265,12 +265,12 @@ def reaction_note(ctx: Ctx, defender: str, reaction: str) -> str:
     if v is None:
         return ""
     if reaction == "dodge":
-        return f"闪避 {v.skill('闪避')}：成功等级不低于对方就躲开"
+        return f"闪避 {v.skill('闪避')} · 成功等级不低于对方即躲开"
     if reaction == "fight_back":
         best = actions.best_melee(v)
-        return f"{best.skill if best else '格斗(斗殴)'} {best.value if best else v.skill('格斗(斗殴)')}：成功等级高于对方就打中对方"
+        return f"{best.skill if best else '格斗(斗殴)'} {best.value if best else v.skill('格斗(斗殴)')} · 成功等级高于对方即打中对方"
     if reaction == "cover":
-        return f"闪避 {v.skill('闪避')}：成功则对方射击吃一颗惩罚骰；无论成败失去下一次行动"
+        return f"闪避 {v.skill('闪避')} · 成功则对方射击得一颗惩罚骰 · 失去下一次行动"
     return "不掷骰，攻击照常结算"
 
 

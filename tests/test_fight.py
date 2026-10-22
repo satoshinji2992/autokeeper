@@ -970,8 +970,6 @@ async def test_a_blow_aimed_at_the_player_is_asked_in_a_window_and_escape_keeps_
 
 @pytest.mark.usefixtures("canned")
 async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_when_told_and_counts_down(module, fake):
-    import time
-
     from textual.widgets import Checkbox, Static
 
     from autokeeper import config
@@ -982,8 +980,8 @@ async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_w
 
     offer = {"kind": "reaction", "id": "e1:r1:warden:0:react:0", "who": "zhouheng", "name": "周衡", "ask": "major",
              "prompt": "楼梯口打盹的老人向你扑来，你怎么应对？", "default": "dodge",
-             "options": [{"id": "dodge", "label": "闪避", "note": "闪避 32：成功等级不低于对方就躲开"},
-                         {"id": "fight_back", "label": "反击", "note": "格斗(斗殴) 25：成功等级高于对方就打中对方"}]}
+             "options": [{"id": "dodge", "label": "闪避", "note": "闪避 32 · 成功等级不低于对方即躲开"},
+                         {"id": "fight_back", "label": "反击", "note": "格斗(斗殴) 25 · 成功等级高于对方即打中对方"}]}
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(120, 40)) as pilot:
         answers: list = []
@@ -994,9 +992,75 @@ async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_w
         await pilot.click("#o1")
         assert await until(pilot, lambda: answers == [{"choice": "fight_back", "text": "", "ask": "always"}])
         assert config.ui_settings()["ask_every_blow"] is True  # kept in 设置 too
-        timed = {**offer, "ask": "always", "deadline": time.time() + 0.6}
+        timed = {**offer, "ask": "always", "closes_in": 0.6}
         app.push_screen(ChoiceModal(timed), answers.append)
         await pilot.pause(0.2)
         assert "超时按原定" in "".join(str(w.render()) for w in app.screen.query(Static))
         assert await until(pilot, lambda: len(answers) == 2, tries=30)
-        assert answers[1] == "dodge"  # nobody answered in time: what they set for the round
+        assert answers[1] is None  # nobody answered in time: nothing is sent, the host takes what they set
+
+
+@pytest.mark.usefixtures("canned")
+@pytest.mark.parametrize("kind", ["reaction", "roll"])
+async def test_a_timed_window_under_another_closes_only_itself_once_in_front(fake, kind):
+    """Review 2026-10-22: the dialog's timeout under Ctrl+P (or a face) popped that screen instead and
+    stayed up, answered and dead to Esc and clicks."""
+    from textual.screen import ModalScreen
+    from textual.widgets import Static
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.dialogs import RollModal
+    from autokeeper.tui.modals.reaction import ChoiceModal
+
+    from .test_tui import until
+
+    class Over(ModalScreen):
+        def compose(self):
+            yield Static("over")
+
+    offer = {"kind": "redeclare", "id": "x", "respond_id": "x", "who": "zhouheng", "prompt": "p", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}], "closes_in": 0.5, "free_text": False}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 40)) as pilot:
+        got: list = []
+        window = ChoiceModal(offer) if kind == "reaction" else RollModal({**OFFER, **offer, "kind": "roll"})
+        app.push_screen(window, got.append)
+        await pilot.pause(0.2)
+        over = Over()
+        app.push_screen(over)
+        await pilot.pause(1.0)
+        assert app.screen is over and not got  # its clock stood still underneath, and nothing else was closed
+        app.pop_screen()
+        assert await until(pilot, lambda: got == [None] and window not in app.screen_stack, tries=30)  # its own time ran out in front
+        window2 = ChoiceModal({**offer, "closes_in": 30}) if kind == "reaction" else RollModal({**OFFER, **offer, "closes_in": 30})
+        app.push_screen(window2, got.append)
+        await pilot.pause(0.2)
+        app.push_screen(over := Over())
+        window2.settled()  # the host settled it while something else was in front
+        await pilot.pause(0.2)
+        assert app.screen is over and len(got) == 1
+        app.pop_screen()
+        assert await until(pilot, lambda: got == [None, None] and window2 not in app.screen_stack)
+
+
+@pytest.mark.usefixtures("canned")
+async def test_no_face_comes_up_over_a_fights_question(module, fake):
+    from textual.screen import ModalScreen
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.reaction import ChoiceModal
+
+    from .test_tui import until
+
+    offer = {"kind": "reaction", "id": "r", "who": "zhouheng", "prompt": "p", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}]}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen, _, _ = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        app.push_screen(question := ChoiceModal(offer))
+        await pilot.pause(0.1)
+        await screen._over_all(ModalScreen())  # type: ignore[arg-type]  # a face coming up, as a reveal brings one
+        await pilot.pause(0.1)
+        assert app.screen is question
