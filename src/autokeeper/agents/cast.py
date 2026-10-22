@@ -28,6 +28,7 @@ from collections import deque
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -37,6 +38,7 @@ from pydantic_core import from_json
 from .. import cards, rules_lookup, skills
 from ..config import Config
 from ..engine import fog, world
+from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
 from ..harness import OnDelta, Reply, Session, Summarizer, trace
@@ -339,17 +341,23 @@ class Proposal(BaseModel):
 
     text: str = Field(description="这一轮做的事：第一人称一句话")
     push: str = Field("", description="这件事要检定而失败时，打算怎样孤注一掷：一句话说清多花的力气、时间或冒的险；不值得冒险就留空")
+    react: Literal["", "dodge", "fight_back", "cover"] = Field("", description=(
+        "战斗中被攻击时怎么应对（情况里列出了可选的才填）：dodge 闪避，fight_back 反击，cover 扑向掩体；不在战斗中或照旧留空"))
 
 
-def _proposal_problems(p: Proposal) -> list[str]:
+def _proposal_problems(p: Proposal, stances: list[str] | None = None) -> list[str]:
     """What makes an AI investigator's answer no action to play (Cast.investigator): no words, or more
-    than one line of them. Its words are not cut down to fit."""
+    than one line of them; in a fight, an answer to blows it cannot set (`stances`). Its words are not
+    cut down to fit."""
     text = p.text.strip()
+    out = []
     if not text:
-        return ["text 是空的：写这一轮要做的一件事，第一人称一句话"]
-    if len(text.splitlines()) > 1:
-        return ["text 写了不止一行：只写这一轮要做的一件事，一句话，不分行"]
-    return []
+        out.append("text 是空的：写这一轮要做的一件事，第一人称一句话")
+    elif len(text.splitlines()) > 1:
+        out.append("text 写了不止一行：只写这一轮要做的一件事，一句话，不分行")
+    if stances and p.react and p.react not in stances:
+        out.append(f"react 填的 {p.react} 在这场战斗中用不了；只能填：{'、'.join(stances)}，或留空")
+    return out
 
 
 def _storyteller(npc: NPC) -> bool:
@@ -624,7 +632,8 @@ INVESTIGATOR_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员
   让时间往前走，比如“我们等到天黑再来”“先回去睡一觉，明早再去报馆”。
 
 text 写这一轮的行动。push 写：这件事如果要检定而失败了，你打算怎样孤注一掷，一句话说清多花的力气、时间或冒的险，
-比如“我把整排书架一本本抽出来翻，花上一个钟头”；失败了不值得冒险就留空。"""
+比如“我把整排书架一本本抽出来翻，花上一个钟头”；失败了不值得冒险就留空。
+战斗中情况里列出了被攻击时可选的应对，react 可以改它（之后每次挨打都照它应对）：近身肉搏占上风时反击，对方有枪时扑向掩体，其余闪避；不改留空。"""
 
 SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家想想调查员「{name}」（{occupation}）下一步可以做什么。
 {sheet}
@@ -816,12 +825,14 @@ class Cast:
             place = next((loc.name for loc in m.locations if seen and loc.id == seen.place), "")
             label = f"，最后亲历记录：{place}，{format_time(seen.t)}" if seen and place else ""
             last_seen.append(f"{n.name}({n.id})不在当前房间{label}；当前位置未获确认")
+        left = world_view.apart(state, lambda pid: next((x.name for x in m.locations if x.id == pid), pid))
         return (
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
             f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
+            + (f"\n【和大家分开的调查员】{left}（追逐后落在那里，下次移动时归队）" if left else "")
         )
 
     # -- agents -------------------------------------------------------------------
@@ -1042,10 +1053,13 @@ class Cast:
                         + (f"｜{c.notes}" if c.notes else ""))
         return "\n".join(rows) + "\n（怪物只在本地资料或剧情写明它此刻在场时才算在场）"
 
-    async def encounter_choice(self, state: GameState, inv_id: str, situation: str, options: list[Any]) -> Checked:
+    async def encounter_choice(self, state: GameState, inv_id: str, situation: str, options: list[Any],
+                               stances: list[str] | None = None) -> Checked:
         """An AI investigator's pick in a fight or a chase, on the investigator role: `situation` is
         the public view only (engine/encounter/views), `options` the offered choices (anything with
-        `id` and `label`, or (id, label) pairs). The schema is an enum of their ids."""
+        `id` and `label`, or (id, label) pairs); in a fight `stances`, the answers to blows it may set
+        (choices.presets), in the same answer (Choice.react). The schema's enums are their ids. The
+        value is the Choice (its react "" outside a fight)."""
         pairs = [(o.id, o.label) if hasattr(o, "id") else (str(o[0]), str(o[1])) for o in options]
         ids = [i for i, _ in pairs]
         inv = state.find(inv_id)
@@ -1056,12 +1070,22 @@ class Cast:
         schema = _schema(Choice)
         schema["properties"]["choice"]["enum"] = ids
         prompt = f"{situation}\n【可选】\n" + "\n".join(f"- {i}：{label}" for i, label in pairs)
+        if stances:
+            schema["properties"]["react"]["enum"] = ["", *stances]
+            prompt += "\n【被攻击时的应对（react）】" + "、".join(f"{x}（{REACT_WORDS[x]}）" for x in stances)
+        else:
+            schema["properties"].pop("react", None)
+            schema["required"] = [x for x in schema.get("required", []) if x != "react"]
 
         def check(answer: Choice) -> list[str]:
-            return [] if answer.choice in ids else [f"{answer.choice} 不是列出的选项；只能填：{'、'.join(ids)}"]
+            out = [] if answer.choice in ids else [f"{answer.choice} 不是列出的选项；只能填：{'、'.join(ids)}"]
+            if stances and answer.react and answer.react not in stances:
+                out.append(f"react 填的 {answer.react} 在这场战斗中用不了；只能填：{'、'.join(stances)}，或留空")
+            return out
 
         out = await self._checked(key, self.sessions[key], state, prompt, Choice, check, schema=schema, what="choice")
-        return Checked(value=out.value.choice if out.value is not None else None, problems=out.problems, raw=out.raw)
+        value = out.value.model_copy(update={"react": ""}) if out.value is not None and not stances else out.value
+        return Checked(value=value, problems=out.problems, raw=out.raw)
 
     async def look_up(self, state: GameState, query: str) -> str:
         """What the keeper asks before it arranges the turn (Plan.lookup), never shown to the players:
@@ -1629,11 +1653,14 @@ class Cast:
         reply = await self._send("progress", self.sessions["progress"], state, material, bind=False)
         return reply.text.strip()
 
-    async def investigator(self, state: GameState, inv_id: str, situation: str) -> Proposal | None:
-        """An AI investigator's move, with how it would push it if its roll failed (Proposal.push). An
-        answer that is no action (_proposal_problems) goes back once with what is wrong; still none,
-        it goes to the debug journal whole and the seat makes no move this time (None): nothing is
-        made up in its place (the user's call, 2026-10-21)."""
+    async def investigator(self, state: GameState, inv_id: str, situation: str, *,
+                           stances: list[str] | None = None) -> Proposal | None:
+        """An AI investigator's move, with how it would push it if its roll failed (Proposal.push) and,
+        in a fight, how it answers blows from now on (Proposal.react, one of `stances`: the presets a
+        player's Tab may set; outside a fight it is dropped). An answer that is no action
+        (_proposal_problems) goes back once with what is wrong; still none, it goes to the debug
+        journal whole and the seat makes no move this time (None): nothing is made up in its place
+        (the user's call, 2026-10-21)."""
         inv = state.find(inv_id)
         key = f"investigator:{inv_id}"
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
@@ -1641,21 +1668,23 @@ class Cast:
         # Remember where and when each move was made; the latest events come with every situation.
         remember = situation.split("\n", 1)[0]
         reply = await self._send(key, s, state, situation, remember=remember)
-        said, problems = self._judge(Proposal, reply.data, _proposal_problems)
+        check = partial(_proposal_problems, stances=stances)
+        said, problems = self._judge(Proposal, reply.data, check)
         if problems:
             first = reply.data
             s.forget()  # an answer that is no move is not one it remembers making
             fix = ("\n\n【上一份回答的问题】\n" + "\n".join(f"- {p}" for p in problems)
                    + f"\n【上一份回答】{dumps(first)}\n改正这些问题，重交一份完整的回答。")
             reply = await self._send(key, s, state, situation, remember=remember, extra=fix)
-            said, problems = self._judge(Proposal, reply.data, _proposal_problems)
+            said, problems = self._judge(Proposal, reply.data, check)
             if problems:
                 s.forget()
                 self._journal("investigator", {"phase": "invalid", "session": key, "answer": reply.data, "problems": problems,
                                                "first": first}, state)
                 return None
         assert said is not None
-        return said.model_copy(update={"text": said.text.strip(), "push": " ".join(said.push.split())})
+        return said.model_copy(update={"text": said.text.strip(), "push": " ".join(said.push.split()),
+                                       "react": said.react if stances else ""})
 
     async def suggest(self, state: GameState, inv_id: str, situation: str) -> list[str]:
         """Ideas for a player's own investigator (F5, /suggest): three actions, written by the

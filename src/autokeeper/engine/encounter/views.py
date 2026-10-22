@@ -20,8 +20,8 @@ from .actions import ATTACKING, VERBS, Ctx
 if TYPE_CHECKING:
     from .model import EncounterState
 
-STANCES = {"dodge": "dodge", "fight_back": "fight", "cover": "cover", "none": "dodge"}  # the screens' old words
-GONE = {"fled": "逃走", "escaped": "逃走", "left": "逃走", "surrendered": "投降", "captured": "被抓住"}
+DOWN = ("死亡", "濒死", "昏迷", "倒下")  # the status words of someone who can do nothing now (status)
+GONE = {"fled": "逃走", "escaped": "逃走", "left": "离开", "surrendered": "投降", "captured": "被抓住"}
 
 
 def wound_word(body: Body) -> str:
@@ -43,7 +43,7 @@ def wound_word(body: Body) -> str:
 
 
 def status(ctx: Ctx, pid: str) -> str:
-    """The screens' status word: 死亡 濒死 昏迷 倒下 (coming back), 逃走 投降, 重伤, or nothing."""
+    """The screens' status word: 死亡 濒死 昏迷 倒下 (coming back), 逃走 离开 投降, 重伤, or nothing."""
     p, v = ctx.p(pid), ctx.view(pid)
     if v is not None:
         b = v.body()
@@ -59,10 +59,6 @@ def status(ctx: Ctx, pid: str) -> str:
     if v is not None and v.body().major:
         return "重伤"
     return ""
-
-
-def down(ctx: Ctx, pid: str) -> bool:
-    return status(ctx, pid) in ("死亡", "濒死", "昏迷", "倒下")
 
 
 def masks(enc: EncounterState | None) -> dict[str, str]:
@@ -133,7 +129,7 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
         out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
                     "status": status(ctx, p.id), "wound": wound_word(b), "hp": b.hp if party else None,
                     "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
-                    "weapon": weapon.name if weapon is not None else "徒手", "stance": STANCES.get(p.react or "dodge", "dodge"),
+                    "weapon": weapon.name if weapon is not None else "徒手", "stance": p.react or "dodge",
                     "prone": p.id in ctx.enc.scene.prone, "held": bool(ctx.held_by(p.id)), "dex": v.char("敏捷")})
     m = masks(ctx.enc)
     for f in out:
@@ -383,6 +379,13 @@ def table(game: Any) -> dict | None:
     return out
 
 
+def stances(game: Any, pid: str) -> list[str] | None:
+    """The answers to blows investigator `pid` may set now (choices.presets): in a fight they can act
+    in; None otherwise. What an AI player may write in its answer (agents/cast.Proposal.react)."""
+    now = table(game)
+    return now["answers"].get(pid) if now is not None and now["kind"] == "fight" else None
+
+
 def danger(ctx: Ctx, pid: str) -> int:
     """The worst blow a foe `pid` can see could deal them (choices.risk, 0–3)."""
     from . import choices
@@ -418,5 +421,8 @@ def situation(now: dict, who: str | None, names: dict[str, str]) -> str:
             continue
         out.append(f"{names.get(pid, pid)}这一轮可以做的（照原样写出其中一行“——”前面的文字；别的具体动作也可以，写清楚做什么）：")
         out += [f"  {label} —— {note}" for label, note in rows]
+        if answers := now.get("answers", {}).get(pid):
+            word = actions.REACT_WORDS.get(now.get("presets", {}).get(pid, ""), "闪避")
+            out.append(f"  被攻击时：{word}（react 可改为：" + "、".join(f"{x} {actions.REACT_WORDS[x]}" for x in answers) + "）")
     out.append("这一轮你做什么？")
     return "\n".join(out)

@@ -264,6 +264,8 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
         p = ctx.p(d.target)
         if p is None or p.presence != "fled":
             out.append(f"{d.target or '（没写对象）'} 没有在逃")
+        elif why := ctx.hidden_from(actor, d.target):
+            out.append(f"{actor} 追不了 {d.target}：{why}")
     elif d.do in ("move", "cross") and ctx.enc.chase is not None:
         out += _route(ctx, actor, d, held)
     elif d.do == "stand" and ctx.enc.chase is not None:

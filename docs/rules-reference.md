@@ -57,23 +57,23 @@
 
 | 条目 | 页 | 原文要点 | 当前 | 状态 | 测试 |
 |---|---|---|---|---|---|
-| 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
-| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
+| 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`（`engine/encounter/resolve.round_order` 调用）：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_dex_tie_goes_to_the_better_fighter` |
+| 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`engine/encounter/resolve.round_order`：只给这一轮宣告开枪、有子弹、没卡壳的枪 +50，打拳不 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules::test_a_dex_tie_goes_to_the_better_fighter` |
 | 推迟行动 | 86、113 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 行动写 `after`：轮到时挪到那人之后，只挪一次（两人互等时都会行动，与原文“这一轮可能都不行动”不同） | 简化（互等） | test_encounter_fight::test_a_delayed_action_waits_for_the_one_named_and_then_goes |
 | 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 引擎（`engine/encounter`）每人每轮在自己的敏捷位行动一次；多次攻击的怪物在自己的位上把每次攻击都打完（`actions.picks`：安排写得少的，余下几次打同一个目标） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
-| 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
+| 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
 | 闪避 | 87 | 平手闪避者胜；都失败无人受伤 | 同上 | 符合 | 同上 |
-| 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害。旧引擎 `combat.melee` 已同步改正 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…`、`test_combat_rules::test_fighting_back_never…` |
+| 极难伤害与贯穿 | 87 | 只在攻击者自己回合的攻击中；钝器取伤害与伤害加值最大，贯穿再加一份武器骰；反击不能 | `rules/melee.damage_mode`、`damage_plan`：只有攻击者自己回合；钝器取最大，贯穿再加一份武器骰（含武器常数，不含伤害加值）；反击胜出只造成普通伤害 | 符合 | `test_rules_melee::test_extreme_damage_only…`、`test_damage_of_a_blunt…` |
 | 不可孤注一掷 | 87 | 战斗检定不能孤注一掷 | 战斗中不提供 | 符合 | — |
 | NPC 的应对 | 87 | NPC 与怪物默认反击，只在准备撤退时闪避 | `rules/melee.keeper_default`；引擎里守秘人的人按安排的 `react` 应对，没安排或不合用时反击（开枪时不应对，不替他扑向掩体） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
 | 持械与临时武器 | 87–88 | 基础武器用斗殴；临时武器比照武器表定伤害与技能 | 只能用手里或身上真有的武器（攻击 id）；临时抄起的东西先经 `Bring` 登记进手里（`DeclaredAction.takes`），再按最像的武器结算；武器表里没有的东西交裁定员按 `other` 裁定伤害 | 符合 | test_encounter_fight::test_a_weapon_picked_up_is_registered_before_it_is_used |
 | 武器技能基础值 | 87 | 剑 20% 等，见武器表 | `rules/catalog.SKILL_BASE`：斧 15、剑 20、连枷 10、矛 20、鞭 5、绞索 15、链锯 10、冲锋枪 15、弓 15、重武器 10、机枪 10、火焰喷射器 10；`格斗(刀剑)` 是 `格斗(剑)` 的别名 | 符合 | `test_combat_rules::test_weapon_skills_start_at_the_books_base…` |
-| 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible`；旧引擎 `combat.melee` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
+| 战技与体格 | 89 | 对方体格每大 1 一颗惩罚骰，最多 2；大 3 以上无效；对方可闪避或反击 | `rules/melee.maneuver_feasible` | 符合 | `test_rules_melee::test_a_manoeuvre_against_a_bigger_target` |
 | 战技的效果 | 89 | 缴械或夺物；持续劣势（惩罚骰或盟友奖励骰）；挣脱压制；推倒、推下 | 缴械让武器掉在原地、夺取落到攻击者手里（`effects.Drop`）；天生的爪牙夺不走；推倒：倒地并失去下一次行动；制住：被制住的人在自己的位上只能用力量挣脱，盟友打他得奖励骰（`melee.disadvantage_bonus`） | 简化（夺物以外的持续劣势只做了被制住） | test_encounter_fight::test_disarming_drops_the_real_weapon…、test_world_life::test_claws_cannot_be_disarmed |
 | 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | 规则层同前；引擎：被偷袭一方第一轮不能应对，近战除大失败外命中，远程照常掷；`EncounterStart.surprise_contest` 由引擎掷对抗 | 符合 | test_fight::test_an_event_that_scripts_an_attack… |
 | 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`；引擎按本轮已应对次数（多次攻击的按其攻击次数）给后来的近战攻击一颗奖励骰，远程不给 | 符合 | test_encounter_fight::test_outnumbered_a_defender_who_has_answered… |
 | 投掷武器 | 91 | 可闪避；不能反击，除非在敏捷五分之一英尺内；加一半伤害加值 | `rules/melee.reactions_against`；引擎按攻击种类给应对选项：投掷只能闪避，开枪只能扑向掩体或不应对 | 符合 | test_rules_melee::test_what_a_throw… |
-| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑在自己的位上脱离（被制住不行），轮末先问守秘人的人追不追（安排里写明的照办，明说不追就不追），再判胜负后果 | 符合 | test_encounter_fight::test_an_explicit_let_go_is_obeyed…、test_an_undecided_pursuer_is_asked… |
+| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑在自己的位上脱离（被制住不行），轮末先定谁追（安排里写明的照办，明说不追就不追，没写的问一次；对手逃跑的下一轮调查员可选「追赶」；看不见的人不追），再判胜负后果；还有人在打时逃跑的人先离开战斗，打完再追 | 符合 | test_encounter_fight::test_an_explicit_let_go_is_obeyed…、test_an_undecided_pursuer_is_asked…、test_encounter_chase::test_a_foe_who_runs_may_be_chased…、test_a_flight_is_not_chased_while_the_others_still_fight… |
 | 护甲 | 91 | 从伤害中减去；对魔法、毒、溺水无效 | `rules/wounds.apply_wound`：先扣护甲；毒、溺水窒息、魔法不扣；摔落、火焰按表 III 由守秘人定，不扣 | 符合 | `test_rules_wounds::test_armour_first…` |
 | 射击难度 | 95 | 基础射程常规，两倍困难，四倍极难；超射程只有大成功贯穿 | `rules/firearms.range_band`、`shot_difficulty`、`ShotModifiers.impale_needs`：基础/两倍/四倍射程，超射程只有大成功贯穿；霰弹枪各档都是常规难度、按档降伤害（54 页）。引擎：守秘人在遭遇计划里填两人间的距离（`EncounterTurnPlan.distances`，记进 `FightScene.distance`），开枪按距离定档，超过四倍射程打不着；没填距离按基础射程 | 符合 | `test_rules_firearms::test_range_bands…`、`test_a_shotgun_keeps…`、`test_encounter_perception::test_the_range_band_follows…` |
 | 寻找掩体 | 95 | 闪避检定，成功则射手一颗惩罚骰；无论成败失去下一次攻击 | `rules/firearms.dive_for_cover`；引擎：扑向掩体掷闪避，成功射手一颗惩罚骰，无论成败失去下一次行动（`RoundBudget.lost_next`） | 符合 | test_encounter_fight::test_an_opening_blow_keeps_the_weapon_it_named |
@@ -121,7 +121,7 @@
 | 行动点 | 113 | 每人 1 点，MOV 每比全场最慢者高 1 多 1 点 | `rules/chase.action_points`，每轮开始算（`RoundBudget.movement`） | 符合 | `test_rules_chase::test_action_points…`、`test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 可做的事 | 113 | 前进、攻击、施法、撬锁等耗时动作；可推迟；多次攻击的怪物在自己回合全打完 | 奔跑（沿最短路，可指定去处）、追赶（追上后可接着攻击）、攻击、射击、战技、躲藏、设路障、回身迎战、急救、装填、喊话、别的事（交裁定员）；撬锁这类耗时的事花 1 行动点（项目设定 `act_cost`）；推迟同战斗 | 简化（耗时动作一律 1 行动点） | `test_something_else_in_a_chase_is_ruled…` |
 | 不可孤注一掷 | 113 | 追逐中不能，可下轮再试 | 同 | 符合 | — |
-| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `chase._cross`：选项里有「小心……」（多花 1 点）；失败失去 1D3、受模组写的伤害（读不了的伤害式只记一笔），仍然过去 | 符合 | `test_a_hazard_failed_costs_1d3_points…`、`test_world_life::test_a_chase_hazard_with_unreadable_harm…` |
+| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `chase._cross`：每个险阻有一项「小心通过」（按最拿手的办法，多花 1 点）；失败失去 1D3、受模组写的伤害（读不了的伤害式只记一笔），仍然过去 | 符合 | `test_a_hazard_failed_costs_1d3_points…`、`test_world_life::test_a_chase_hazard_with_unreadable_harm…` |
 | 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `RoundBudget.owed`，下一轮开始先扣 | 符合 | `test_a_hazard_failed_costs_1d3_points_and_what_this_round_cannot_pay…` |
 | 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | 每种办法一个选项；失败停在原处；可打开的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定） | 符合 | `test_a_broken_barrier_stays_broken_for_those_behind` |
 | 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | 有耐久的路障多一个「砸开」：不掷攻击骰，按手里最好的近战武器掷伤害抵耐久，砸开后通行；残骸不另成险境 | 简化（残骸） | `test_rules_chase` |
@@ -137,8 +137,8 @@
 | 中途加入 | 120 | 做速度检定后放到合适地点；比最慢逃离者还慢的追逐者可忽略；重算行动点 | 在场但不在追的人留在原处，跑起来就算加入，速度开始时已掷；行动点每轮按当时最慢的跑者重算 | 简化（加入者不另摆位置） | — |
 | 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`；引擎不换 | 未做（规则层有） | `test_rules_chase` |
 | 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | 「设路障」：力量检定加 1 行动点，成功在所在地点放一道路障（推开或翻过）；其他交裁定员 | 简化 | `test_a_hazard_failed_costs…` |
-| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…` |
-| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
+| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：还有人在打时不转为追逐，转为追逐时调查员一方全体在内；结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…`、`test_a_flight_is_not_chased_while_the_others_still_fight…` |
+| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值；NPC 变成的怪物卡（`Creature.npc`）没写的，用这个 NPC 自己的数值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…`、`test_douglas_as_the_ghoul_keeps_his_own_skills…` |
 | 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement`，在地图上沿逃离方向摆 | 符合 | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 追上与转为战斗 | 116 | 追上只是到了同一地点，按战斗处理冲突 | 到同一处是接触不是抓住；有人回身迎战、逃离者被制住或倒在追兵面前，且其余人都在一处之内，转为战斗，伤势、弹药、速度、后果都保留 | 符合 | `test_turning_to_fight_where_they_meet…`、`test_switches_keep_wounds_speeds…` |
 | 追逐的终点 | — | 跑到哪里就在哪里 | 守秘人的人移到跑到的地点（经效果接口），调查员一行到达玩家落脚的地点 | 符合 | `test_the_route_end_moves_the_world…`、`test_a_keeper_quarry_that_reaches_its_way_out…` |

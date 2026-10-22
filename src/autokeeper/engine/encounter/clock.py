@@ -30,7 +30,7 @@ def paid(clock: EncounterClock) -> EncounterClock:
 
 
 def settle_minutes(clock: EncounterClock) -> int:
-    """At the end: what is left of a started minute counts as one (the old engine's ceiling)."""
+    """At the end: what is left of a started minute counts as one."""
     rest = clock.elapsed - clock.committed * 60
     return owed(clock) + (1 if rest > 0 else 0)
 

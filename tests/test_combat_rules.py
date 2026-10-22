@@ -37,15 +37,6 @@ def test_the_rulebooks_own_wording_of_a_stat_block_reads_too():
     assert combat.traits("DB +1D4，体格 1，移动力 8") == {"db": "+1D4", "build": 1, "move": 8}
 
 
-def test_the_damage_bonus_goes_with_a_melee_weapon_and_half_of_it_with_a_throw():
-    assert combat.split_damage("1D3+DB", "+1D4") == ("1D3", "+1D4")
-    assert combat.split_damage("1D4+半DB", "+1D6") == ("1D4", "+1D3")
-    assert combat.split_damage("1D10", "+1D4") == ("1D10", "")
-    assert combat.split_damage("4D6/2D6/1D6", "0", band=1) == ("2D6", "")
-    assert combat.split_damage("1D6+灼烧", "0") == ("1D6", "")
-    assert combat.max_total("1D4+2+1D4") == 10
-
-
 def test_an_investigator_fights_with_what_they_carry():
     assert [w.name for w in carried(["手电筒", "一把 .38 左轮手枪", "折刀"])] == ["徒手", ".38 左轮手枪", "小刀"]
     assert weapon_in("一根拨火棍").name == "棍棒" and weapon_in("自动手枪").name == ".32 自动手枪"

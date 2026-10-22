@@ -60,12 +60,11 @@ from .. import config
 from ..engine.encounter import profiles
 from ..harness import Session
 from ..rules import dice_expr
-from ..rules.chase import Leg
 from ..rules.combat import stats_of, traits
 from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
 from .graph import SLUG, audit, fighting, known_skill, leg_key, stake_problems, supporting_clues, ways
-from .schema import Agenda, Bond, Foreshadow, Mechanic, Module, Past, PreludeFrame, Stage, Stake, Tie
+from .schema import Agenda, Bond, Foreshadow, Leg, Mechanic, Module, Past, PreludeFrame, Stage, Stake, Tie
 
 PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude",
           "combat", "verify")

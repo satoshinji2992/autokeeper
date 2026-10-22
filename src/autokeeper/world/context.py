@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,7 @@ from . import agents, knowledge, threads
 from .record import PLAYERS, Event, Fact, Memory, WorldRecord
 
 if TYPE_CHECKING:
+    from ..engine.state import GameState
     from ..module.schema import Module
     from .store import World
 
@@ -357,6 +359,19 @@ def _ready(w: World, when: str) -> bool:
     return agents.holds(w, when)
 
 
+def apart(st: GameState, name: Callable[[str], str]) -> str:
+    """The investigators a chase left elsewhere than the party (GameState.apart): who, where (`name` of
+    the place), and how they are when they cannot get up; "" for none."""
+    rows = []
+    for inv_id, place in st.apart.items():
+        inv = next((i for i in st.investigators if i.id == inv_id), None)
+        if inv is None:
+            continue
+        how = "、".join(c for c in inv.conditions if c in ("死亡", "濒死", "昏迷", "重伤"))
+        rows.append(f"{inv.name}在{name(place)}" + (f"（{how}）" if how else ""))
+    return "；".join(rows)
+
+
 def keeper_brief(w: World) -> str:
     """What the keeper keeps behind the screen for the telling it is about to give (the user's
     call, 2026-10-20: the keeper sees everything): what this place hides, what the people here and
@@ -394,6 +409,8 @@ def keeper_brief(w: World) -> str:
     present = w.present(here)
     if present:
         lines.append("在场的人：\n" + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
+    if left := apart(st, w.name):
+        lines.append(f"和大家分开的调查员（追逐后落在别处，不在这里；下次移动时归队）：{left}")
     near = nearby(w, here)
     if near:
         lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))

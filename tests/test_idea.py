@@ -285,6 +285,58 @@ async def test_an_ai_investigators_answer_that_is_no_action_goes_back_once_and_n
     assert not replies and journal[-1][0] == "investigator" and journal[-1][1]["phase"] == "invalid"
 
 
+async def test_in_a_fight_an_ai_players_answer_sets_how_it_answers_blows(module, fake, monkeypatch):
+    """The review: AI players only had the stored answer to blows (a dodge) since it left the option words.
+    The same answer may set it in a fight, one a player's Tab could set (views.stances); one it cannot
+    goes back once; outside a fight it is dropped. The table lands it as Tab does (set_react)."""
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.engine.encounter import views
+    from autokeeper.harness import Reply
+
+    from .encounter_kit import begin, fight_game
+
+    module.events, module.endings = [], []
+    game, _, _ = fight_game(module, fake)
+    await begin(game, ["warden"])
+    inv = game.state.investigator.id
+    stances = views.stances(game, inv)
+    assert stances == ["dodge", "fight_back"]  # no foe with a gun: no diving for cover
+    cast = Cast(config.Config(), module)
+    replies = [Reply(text="", data={"text": "防守", "react": "cover"}), Reply(text="", data={"text": "防守", "react": "fight_back"}),
+               Reply(text="", data={"text": "我去钟楼", "react": "fight_back"})]
+    fixes: list[str] = []
+
+    async def send(key, session, state, prompt, **kw):
+        fixes.append(kw.get("extra", ""))
+        return replies.pop(0)
+
+    monkeypatch.setattr(cast, "_send", send)
+    move = await cast.investigator(game.state, inv, "", stances=stances)
+    assert move == Proposal(text="防守", react="fight_back") and "react 填的 cover" in fixes[1]
+    assert game.set_react(inv, move.react) == "" and game.state.encounter.get(inv).react == "fight_back"
+    assert await cast.investigator(game.state, inv, "") == Proposal(text="我去钟楼")  # no fight: nothing to set
+
+
+async def test_the_party_proposes_with_each_ones_answers_to_blows(module):
+    """Autoplay's fan-out (engine/autoplay.party_graph) asks each with the answers to blows it may set,
+    and hands back what it set with its move."""
+    from autokeeper.engine.autoplay import party_graph
+
+    asked: dict = {}
+
+    class Party:
+        async def investigator(self, state, inv_id, situation, *, stances=None):
+            asked[inv_id] = stances
+            return Proposal(text="防守", react="fight_back" if stances else "")
+
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    inv = state.investigators[0].id
+    out = await party_graph(Party(), state).ainvoke({"situation": "", "ids": [inv], "proposals": [],  # type: ignore[arg-type]
+                                                     "stances": {inv: ["dodge", "fight_back"]}})
+    assert out["proposals"] == [(inv, "防守", "", "fight_back")] and asked == {inv: ["dodge", "fight_back"]}
+
+
 async def test_an_ai_players_stated_push_is_ruled_again_and_takes_its_time(module, fake):
     game, *_ = make(module, fake, {}, location="office")
     game.cast = cast = Arbiter({"look": (LOOK, ARCHIVE)}, PushRuling(achievable=True, minutes=60))

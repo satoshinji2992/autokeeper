@@ -12,9 +12,8 @@ from autokeeper.agents.encounter import EncounterHint
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.encounter import telling, views
 from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction, EncounterStart, EncounterTurnPlan
-from autokeeper.module.schema import Creature, Event, Module, Stake
+from autokeeper.module.schema import Creature, Event, Leg, Module, Obstacle, Stake
 from autokeeper.paths import EXAMPLE
-from autokeeper.rules.chase import Leg, Obstacle
 from autokeeper.tui.widgets.fight import chase_route
 
 from .encounter_kit import THREAD, Keeper, arrange, attack, play
@@ -61,7 +60,7 @@ async def test_a_blow_starts_a_fight_and_a_knockout_ends_it_with_its_stakes(modu
     kinds = [e["type"] for e in out]
     assert not asked and kinds.index("fight_start") < kinds.index("fight_act") < kinds.index("fight_end")
     act = next(e for e in out if e["type"] == "fight_act")
-    assert act["winner"] == "attacker" and act["damage"] == 2 and act["reaction"] == "fight"
+    assert act["winner"] == "attacker" and act["damage"] == 2 and act["reaction"] == "fight_back"
     assert act["dice"]["value"] == 10  # the investigator's own roll goes to the dice tray
     assert st.encounter is None and "warden_down" in st.flags  # over, archived: the flag its stake brought about
     warden = game.world.rec.entities["warden"]  # knocked out by a major wound, written into the record as it is
@@ -90,7 +89,7 @@ async def test_a_round_goes_in_dex_order_and_the_answer_meets_the_blow(module, f
     events, asked = await play(app, "攻击 楼梯口打盹的老人（徒手，1D3）", thread={**THREAD, "configurable": {"thread_id": "r2"}})
     assert len(cast.ruled) == ruled and not asked  # a button needs no arbiter; the answer set beside it stands
     acts = [e for e in events if e["type"] == "fight_act"][-2:]
-    assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "f1"
+    assert acts[1]["reaction"] == "fight_back" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "f1"
     # fighting back does normal damage however well it rolls (Keeper Rulebook p. 87): 1D3, not its most
     assert acts[1]["damage"] == 2 and "反击得手" in acts[1]["line"]
     assert inv.hp == inv.hp_max - 3 and game.world.rec.entities["warden"].life.hp == 11 - 1 - 2
@@ -211,6 +210,7 @@ async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fa
 
     module.events.append(AMBUSH.model_copy())
     game, _, _ = make(module, fake, {}, location="tower")
+    game.state.pending_turn = {"input": "等着"}  # the turn's journal: what the retry goes on from
     saved = snapshots(game)
 
     async def broken(event: dict) -> None:
@@ -226,7 +226,7 @@ async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fa
     turn = await resumed.resolve(WAIT, ruling)
     assert [p.id for p in resumed.state.encounter.participants] == ["zhouheng", "warden"]
     assert sum(e["type"] == "fight_start" for e in events) == 1 and turn.fight.count(turn.fight[0]) == 1
-    assert not resumed.state.pending_resolution
+    assert resumed.state.pending_turn["resolution"]["complete"]
     await game.close()
     await resumed.close()
 

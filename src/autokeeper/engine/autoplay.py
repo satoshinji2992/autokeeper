@@ -32,6 +32,7 @@ from ..rules.bcdice import shared
 from ..rules.coc import Investigator, Rules
 from . import fog, idea
 from . import graph as turn_graph
+from .encounter import views
 from .game import Game, ai_choice
 from .state import GameState, time_of_day
 
@@ -39,19 +40,22 @@ from .state import GameState, time_of_day
 class PartyState(TypedDict, total=False):
     situation: str
     ids: list[str]
-    proposals: Annotated[list[tuple[str, str, str]], operator.add]  # (investigator, what it does, how it would push it)
+    stances: dict[str, list[str] | None]  # in a fight, the answers to blows each may set (views.stances)
+    # (investigator, what it does, how it would push it, its answer to blows from now on in a fight)
+    proposals: Annotated[list[tuple[str, str, str, str]], operator.add]
 
 
 def party_graph(cast: Cast, state: GameState):
     """Fan out: every AI investigator proposes an action at the same time."""
 
     def fan_out(ps: PartyState) -> list[Send]:
-        return [Send("propose", {"situation": ps["situation"], "ids": [inv_id]}) for inv_id in ps["ids"]]
+        return [Send("propose", {"situation": ps["situation"], "ids": [inv_id], "stances": ps.get("stances", {})})
+                for inv_id in ps["ids"]]
 
     async def propose(ps: PartyState) -> dict:
         inv_id = ps["ids"][0]
-        move = await cast.investigator(state, inv_id, ps["situation"])
-        return {"proposals": [(inv_id, move.text, move.push)] if move is not None else []}  # none: no move this round
+        move = await cast.investigator(state, inv_id, ps["situation"], stances=ps.get("stances", {}).get(inv_id))
+        return {"proposals": [(inv_id, move.text, move.push, move.react)] if move is not None else []}  # none: no move this round
 
     g = StateGraph(PartyState)
     g.add_node("propose", propose)
@@ -123,8 +127,6 @@ def battle_now(st: GameState, who: str | None = None, game: Game | None = None) 
     for `who`, or for every investigator still in it: an AI player picks a real choice instead of
     words the keeper has to read. "" outside one. `game`: the host's; a LAN client reads the table's
     view it was sent (GameState.encounter_public)."""
-    from .encounter import views
-
     now = views.table(game) if game is not None else st.encounter_public
     if not now:
         return ""
@@ -269,13 +271,16 @@ async def run(
             alive = [inv.id for inv in state.investigators if inv.can_act]
             if not alive:
                 break
-            result = await party_app.ainvoke({"situation": situation(m, state), "ids": alive, "proposals": []})
+            result = await party_app.ainvoke({"situation": situation(m, state, game=game), "ids": alive, "proposals": [],
+                                              "stances": {x: views.stances(game, x) for x in alive}})
             if not result["proposals"]:  # nobody gave a move it could play (Cast.investigator): the run stops here
                 console.print("[yellow]AI 调查员本轮均未给出有效行动，自动游玩停止。[/]")
                 break
-            for inv_id, text, push in result["proposals"]:
+            for inv_id, text, push, react in result["proposals"]:
                 if state.ending or state.turn >= max_turns:
                     break
+                if react:  # between turns, as a player's Tab
+                    game.set_react(inv_id, react)
                 state.active = next(i for i, inv in enumerate(state.investigators) if inv.id == inv_id)
                 console.print(f"[dim]▶ {state.investigator.name}：{text}[/]", soft_wrap=True)
                 await emit({"type": "player", "who": state.investigator.name, "text": text})

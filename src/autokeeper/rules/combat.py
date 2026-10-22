@@ -1,7 +1,7 @@
 """Combat's shared numbers, without the story: who acts first (turn_order), a roll of anyone's
-(check), a damage expression's parts and its most (split_damage, max_total, roll_damage), a sheet's
-characteristics and the damage bonus and build they make (stats_of, damage_bonus), and what a
-creature's notes say the rules can use (traits).
+(check), a sheet's characteristics and the damage bonus and build they make (stats_of,
+damage_bonus), and what a creature's notes say the rules can use (traits). Damage expressions are
+rules/dice_expr.py's.
 
 An attack and its answer are rules/melee.py's, shots rules/firearms.py's, what a blow does
 rules/wounds.py's, a chase rules/chase.py's; the encounter engine (engine/encounter) runs them."""
@@ -10,17 +10,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
 
 from .bcdice import Level
 from .coc import Check, _build
-
-Side = Literal["party", "foe"]
-Stance = Literal["dodge", "fight", "cover"]
-DOWN = ("昏迷", "濒死", "死亡", "倒下")  # can do nothing now
-OUT = ("逃走", "投降")  # left the fight
-STANCES = {"dodge": "闪避", "fight": "反击", "cover": "找掩护"}
-MANEUVERS = {"缴械": "夺下或打掉对方手里的武器", "推倒": "把对方摔倒在地，对方失去下一个行动", "制住": "抓牢对方，对方只能设法挣脱"}
 
 
 @dataclass(frozen=True)
@@ -46,62 +38,6 @@ def check(dice, name: str, target: int, difficulty: Level = Level.REGULAR, bonus
     """A percentile roll of anyone's (an NPC's has no sheet to tick)."""
     bonus = max(-2, min(2, bonus))
     return Check(name, max(1, target), difficulty, bonus, dice.check(max(1, target), bonus))
-
-
-_TERM = re.compile(r"([+\-]?)\s*(\d*)\s*[dD]\s*(\d+)|([+\-]?)\s*(\d+)")
-
-
-def _terms(expr: str) -> list[tuple[int, int, int]]:
-    """(sign, count, sides) for every term of a sum; sides 0 is a constant `count`."""
-    out = []
-    for sign, n, sides, csign, const in _TERM.findall(expr.replace(" ", "")):
-        if sides:
-            out.append((-1 if sign == "-" else 1, int(n or 1), int(sides)))
-        elif const:
-            out.append((-1 if csign == "-" else 1, int(const), 0))
-    return out
-
-
-def max_total(expr: str) -> int:
-    """The most a sum of dice can come to: 1D4+2+1D4 is 10."""
-    return sum(sign * n * (sides or 1) for sign, n, sides in _terms(expr))
-
-
-def split_damage(damage: str, db: str, *, band: int = 0) -> tuple[str, str]:
-    """The weapon's own dice and the bonus that goes with them, apart: ("1D4+2", "+1D4").
-    A shotgun's damage is by range (band 0, 1, 2); DB in it is the damage bonus, 半DB half of it (a
-    throw); "灼烧" (a torch) is fire, said in the story, nothing to roll."""
-    parts = damage.split("/")
-    expr = parts[min(band, len(parts) - 1)].replace(" ", "")
-    half = "半DB" in expr
-    has_db = "DB" in expr
-    for word in ("+灼烧", "灼烧", "+半DB", "半DB", "+DB", "DB"):
-        expr = expr.replace(word, "")
-    expr = expr.strip("+") or "0"
-    bonus = db.strip()
-    if bonus in ("", "0", "+0") or not has_db:
-        return expr, ""
-    if half:  # half the bonus, as 7th edition throws: +1D4 becomes +1D2
-        found = re.fullmatch(r"([+\-]?)(\d*)[dD](\d+)", bonus)
-        bonus = (f"{found.group(1) or '+'}{found.group(2)}D{max(1, int(found.group(3)) // 2)}" if found
-                 else f"{'-' if bonus.startswith('-') else '+'}{abs(int(bonus)) // 2}")
-    return expr, bonus if bonus.startswith(("+", "-")) else "+" + bonus
-
-
-def roll_damage(dice, weapon: str, bonus: str = "", *, extreme: bool = False, impale: bool = False) -> tuple[int, str]:
-    """The damage and how it came. An extreme success does the most the weapon and the bonus can;
-    an impaling weapon then its own damage again: "贯穿：最大 10 + 1D6(4) = 14"."""
-    expr = weapon + bonus if bonus else weapon
-    if extreme:
-        top = max_total(expr)
-        if impale:
-            more = dice.total(weapon) if any(sides for _, _, sides in _terms(weapon)) else max_total(weapon)
-            return max(0, top + more), f"贯穿：最大 {top} + {weapon}（{more}）= {top + more}"
-        return max(0, top), f"极难成功：最大 {top}"
-    if not _terms(expr):
-        return 0, "0"
-    total = dice.total(expr) if any(sides for _, _, sides in _terms(expr)) else max_total(expr)
-    return max(0, total), f"{expr} = {max(0, total)}"
 
 
 def stats_of(raw: dict[str, int]) -> dict[str, int]:

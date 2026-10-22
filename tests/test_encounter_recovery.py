@@ -27,6 +27,9 @@ def warden_attacks(state, text, brief):
 
 
 async def turn_of(game, text):
+    """A turn begun with the player's words as the turn graph begins one (its journal, pending_turn,
+    is what a retry goes on from), read and ruled."""
+    game.state.pending_turn = {"input": text}
     action = await game.encounter_input(text)
     return action, await game.rule(action)
 
@@ -163,6 +166,40 @@ async def test_a_fight_its_end_sets_off_begins_cleanly_and_a_retry_goes_on_from_
     assert kinds.count("fight_end") == 1 and kinds.count("fight_start") == 2 and len(game.state.encounter_log) == 1  # the first one's and the hound's, once
 
 
+async def test_a_stake_that_fired_mid_fight_sets_its_flags_on_the_retry(module, fake):
+    """The pre-release review: a stake fired at a round's end landed, the notice of its flag broke, and
+    the retry found nothing due any more: the flag's event never came. Its flags are read from the
+    unit's journal row, as an end's are."""
+    from autokeeper.module.schema import Event, Stake
+
+    module.flags["pre"] = "前提"
+    module.flags["post"] = "后果"
+    module.events.append(Event(id="ev_post", title="钟声", when="flag:post", text="钟声响了"))
+    keep = arrange("warden", DeclaredAction(do="defend", summary="守"))
+    game, _cast, events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[keep]))
+    game.state.flags.append("pre")
+    await begin(game, ["warden"], npcs=[keep], stakes=[Stake(when="flag:pre", flags=["post"])])
+    original, broke = game.emit, []
+
+    async def broken(ev):
+        if ev["type"] == "flag" and not broke:
+            broke.append(ev)
+            raise ConnectionError("the flag's notice did not go out")
+        await original(ev)
+
+    game.emit = broken
+    game.state.turn += 1
+    action, ruling = await turn_of(game, HIT)
+    fake.queue(90, 90)  # the punch misses, the dodge fails: nothing else happens this round
+    with pytest.raises(ConnectionError):
+        await game.resolve(action, ruling)
+    assert game.state.encounter.stakes[0].fired and "ev_post" not in game.state.fired
+    game.emit = original
+    await game.resolve(action, ruling)
+    assert "post" in game.state.flags and game.state.fired.count("ev_post") == 1 and not fake.values
+    assert [e["type"] for e in events].count("event") == 1
+
+
 # -- the independent review's probes, turned into regression tests ---------------------------------------
 async def test_a_failed_die_of_a_first_sights_loss_is_rolled_again_and_the_loss_kept(module, fake):
     from autokeeper.agents.cast import Action, Ruling
@@ -177,6 +214,7 @@ async def test_a_failed_die_of_a_first_sights_loss_is_rolled_again_and_the_loss_
     action = Action(kind="other", summary="开打", declared={"start": start.model_dump(mode="json", by_alias=True)})
     ruling = Ruling(needs_roll=False, reason="x")
     san = game.state.investigator.san
+    game.state.pending_turn = {"input": "开打"}
     fake.queue(99)  # the SAN roll fails; the 1D6 loss has no die yet: the dice break there
     with pytest.raises(IndexError):
         await game.resolve(action, ruling)
@@ -256,6 +294,7 @@ async def test_an_opening_blow_that_killed_its_foe_still_ends_the_fight_on_a_ret
         await original(ev)
 
     game.emit = broken
+    game.state.pending_turn = {"input": "开打"}
     fake.queue(1, 99)  # a critical punch kills him; his answer fails
     with pytest.raises(ConnectionError):
         await game.resolve(action, ruling)

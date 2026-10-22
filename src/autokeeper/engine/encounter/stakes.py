@@ -14,7 +14,7 @@ world's grammar (world/agents.holds: flag, at, gone, owner, knows ...), `&` bind
 `谁` is an NPC's, a creature's (a creature form names its NPC) or an investigator's id, or
 `players` for the investigators' side: all of them for down, dead, escaped and surrendered; any of
 them for caught. The module or the keeper plan declares stakes; nobody is asked what the outcome
-means once it comes (this replaces the old Cast.outcome). A stake fires once.
+means once it comes. A stake fires once.
 """
 
 from __future__ import annotations

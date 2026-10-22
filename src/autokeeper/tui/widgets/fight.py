@@ -37,16 +37,16 @@ from textual.timer import Timer
 from textual.widgets import Static
 
 from ... import atmosphere, imagery
+from ...engine.encounter.choices import REACTION_LABELS, STANCE_WORDS
+from ...engine.encounter.views import DOWN
 from ...module.schema import Module
-from ...rules.combat import STANCES
 from .panels import rich_content
 
 BLOOD, DEEP, EMBER, AMBER, BONE, ASH, BILE = "#c1121f", "#7a0a0a", "#ff6b35", "#ffb000", "#e8dec4", "#8a7f72", "#9bd770"
 GORE = "#ff1a1a"  # fresh blood: the claw marks, the numbers
 CHILL, MIST, SAFE = "#9fb4c8", "#5a6478", "#7fd18b"  # a chase: the cold of it, the way behind, the way out
 WOUND = {"无伤": 4, "轻伤": 3, "受伤": 2, "重伤": 1}  # segments of a foe's meter, in words
-DOWN = ("昏迷", "濒死", "死亡", "倒下")
-GONE = ("逃走", "投降")
+GONE = ("逃走", "离开", "投降", "被抓住")
 TICK = 0.12  # seconds a frame of a canvas stays up
 
 
@@ -420,7 +420,7 @@ class Arena(Horizontal):
         """A chase: the place rushing past, and what is behind you in it, the bigger the nearer."""
         before = self.view if self.mode == "chase" else None
         if before is not None and before.get("round") != view.get("round"):  # a round run: the trail it left
-            self.was = {r["id"]: r["pos"] for r in before.get("runners", [])}
+            self.was = {r["id"]: r["pos"] for r in before.get("runners", []) if r["pos"] is not None}
         self._open("chase", view, m, style, rows)
         self.scene = scene
         gap = chase_gap(view)
@@ -428,7 +428,7 @@ class Arena(Horizontal):
             self.canvas.lunge()  # it gained on you
         self.last_gap = gap
         self.set_class(gap <= 1, "-close")
-        them = [r for r in view.get("runners", []) if r["side"] != "party" and r["status"] not in DOWN]
+        them = [r for r in view.get("runners", []) if r["side"] != "party" and r["status"] not in DOWN and r["pos"] is not None]
         if them:
             quarry = view.get("quarry", "party")
             self.facing = (max(them, key=lambda r: r["pos"]) if quarry == "party" else min(them, key=lambda r: r["pos"]))["id"]
@@ -572,7 +572,7 @@ def fight_column(view: dict, order: list[str], acting: str, facing: str, width: 
     for f in party:
         name_style = f"bold reverse {AMBER}" if f["id"] == acting else f"bold {AMBER}"
         bars = Text(no_wrap=True, overflow="crop")
-        tag = f["status"] or STANCES.get(f["stance"], "")
+        tag = f["status"] or STANCE_WORDS.get(f["stance"], "")
         tag = f"  {tag}" if roomy else f" {tag}"
         if f["hp"] is not None:
             hp = f" {f['hp']}/{f['hp_max']}"
@@ -618,8 +618,9 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     runners, legs = view.get("runners", []), view.get("legs", [])
     gap = chase_gap(view)
     close, fleeing = gap <= 1, quarry == "party"
-    ahead = [r for r in runners if r["side"] == quarry and r["status"] not in DOWN]
-    behind = [r for r in runners if r["side"] != quarry and r["status"] not in DOWN]
+    placed = [r for r in runners if r["pos"] is not None]  # one nobody of theirs sees has no place on the way
+    ahead = [r for r in placed if r["side"] == quarry and r["status"] not in DOWN]
+    behind = [r for r in placed if r["side"] != quarry and r["status"] not in DOWN]
     them = [r for r in runners if r["side"] != "party" and r["status"] not in DOWN]
     hot = GORE if close else AMBER
     leg_w, tag_w = (14, 10) if width >= 40 else (10, 8) if width >= 32 else (8, 6)
@@ -648,7 +649,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     out.append("─" * width + "\n", style=DEEP)
     # the way: the stretches run and those in sight, as many as the column holds, round the runners
     room = max(3, height - 6 - len(runners))
-    marks = [r["pos"] for r in runners if r["status"] not in DOWN and not (r.get("hidden") and r["side"] != "party")] or [0]
+    marks = [r["pos"] for r in placed if r["status"] not in DOWN and not (r.get("hidden") and r["side"] != "party")] or [0]
     front, hind = max(marks), min(marks)
     hi = in_sight(legs, front)
     lo = max(0, min(hind - 1, hi - room + 1))  # as far back as the column holds, one behind the hindmost at least
@@ -674,7 +675,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
             mark, mark_style = "◆", f"bold {AMBER if fleeing else BLOOD}"
         elif hid:
             mark, mark_style = "◌", ASH
-        elif ran := [r for r in runners if (was or {}).get(r["id"], r["pos"]) < i < r["pos"]]:
+        elif ran := [r for r in placed if (was or {}).get(r["id"], r["pos"]) < i < r["pos"]]:
             mark, mark_style = "┆", f"bold {AMBER if ran[0]['side'] == 'party' else GORE}"  # run through this round
         else:
             mark, mark_style = "│" if hind <= i <= front else "·", DEEP if hind <= i <= front else MIST
@@ -728,7 +729,7 @@ def chase_gap(view: dict) -> int:
     """Stretches between the nearest pursuer and the hindmost of those it chases (9: none)."""
     quarry = view.get("quarry", "party")
     ahead = [r["pos"] for r in view.get("runners", []) if r["side"] == quarry and r["status"] not in DOWN and not r.get("hidden")]
-    behind = [r["pos"] for r in view.get("runners", []) if r["side"] != quarry and r["status"] not in DOWN]
+    behind = [r["pos"] for r in view.get("runners", []) if r["side"] != quarry and r["status"] not in DOWN and r["pos"] is not None]
     return min(ahead) - max(behind) if ahead and behind else 9
 
 
@@ -799,7 +800,7 @@ def fight_card(ev: dict) -> Text:
         rolls.append((f"{r['skill']} {r['target']}：{r['value']} {r['level']}", BILE if r["passed"] else ASH))
     if ev.get("answer"):
         a = ev["answer"]
-        how = {"dodge": "闪避", "fight": "反击", "cover": "扑向掩体"}.get(ev["reaction"], "")
+        how = REACTION_LABELS.get(ev["reaction"], "") if ev["reaction"] != "none" else ""
         rolls.append((f"{how} {a['target']}：{a['value']} {a['level']}", BILE if a["passed"] else ASH))
     if rolls:
         out.append("\n  ")

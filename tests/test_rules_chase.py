@@ -21,10 +21,11 @@ def test_every_number_cites_its_page_and_the_unverified_ones_are_listed():
 
 
 def test_the_speed_roll_and_escaping_at_once():
-    """p. 112: Harvey's extreme CON takes him from 6 to 7, the farmer's failure from 7 to 6."""
+    """p. 112: Harvey's extreme CON takes him from 6 to 7, the farmer's failure from 7 to 6: Harvey is
+    away before the chase begins; a quarry no faster than its pursuer is not."""
     harvey, farmer = chase.speed_after(6, Level.EXTREME), chase.speed_after(7, Level.FAILURE)
-    assert (harvey, farmer) == (7, 6) and chase.escapes_at_once(harvey, [farmer])
-    assert not chase.escapes_at_once(5, [6]) and not chase.escapes_at_once(6, [6])
+    assert (harvey, farmer) == (7, 6) and chase.placement({"harvey": harvey}, {"farmer": farmer}).escaped == ["harvey"]
+    assert not chase.placement({"q": 5}, {"p": 6}).escaped and not chase.placement({"q": 6}, {"p": 6}).escaped
     assert chase.speed_after(8, Level.REGULAR) == 8 and chase.speed_after(1, Level.FAILURE) == 1
 
 
@@ -61,19 +62,8 @@ def test_hazards_and_barriers():
     assert chase.hazard(True) == chase.Crossed(True)
     assert not chase.hazard(False, 2, harm=False).harmed
     assert not chase.barrier(False).moved and chase.barrier(True, opens=True).broken
-    assert chase.barrier_hit(chase.BARRIER_HP["薄围栏"], 3) == (2, False)
+    assert chase.barrier_hit(5, 3) == (2, False)  # the thin fence (5) after Harvey's 3
     assert chase.barrier_hit(2, 4) == (0, True)
-    assert chase.BARRIER_HP["外门"] == 15 and chase.BARRIER_HP["大树"] == 50
-
-
-def test_attacks_and_shots_in_a_chase():
-    """p. 116: same location (a gun excepted), one point, no more than one's attacks a round; p. 120:
-    stopping to shoot costs a point, shooting on the move a penalty die."""
-    assert chase.attack_problems(same_location=True, firearm=False, attacks_made=0, attacks_per_round=1, points=1) == []
-    far = chase.attack_problems(same_location=False, firearm=False, attacks_made=1, attacks_per_round=1, points=0)
-    assert len(far) == 3
-    assert chase.attack_problems(same_location=False, firearm=True, attacks_made=0, attacks_per_round=1, points=1) == []
-    assert chase.shot_cost(moving=False) == (1, 0) and chase.shot_cost(moving=True) == (0, 1)
 
 
 def test_hiding_and_losing_track():
@@ -81,18 +71,14 @@ def test_hiding_and_losing_track():
     sight, a pursuer's failed Track loses the quarry."""
     assert chase.hide_difficulty([40]) == Level.REGULAR and chase.hide_difficulty([40, 60]) == Level.HARD
     assert chase.hide_bonus(1) == 0 and chase.hide_bonus(2) == 1 and chase.hide_bonus(4) == 2
-    assert chase.hidden(Level.REGULAR, Level.REGULAR) and not chase.hidden(Level.REGULAR, Level.HARD)
     assert chase.out_of_sight(3) and not chase.out_of_sight(2) and chase.out_of_sight(0, blocked=True)  # the start's two: in sight
     assert chase.lost_track(Level.FAILURE) and not chase.lost_track(Level.REGULAR)
 
 
-def test_monsters_joiners_and_the_rest():
-    """p. 121: a gnoph-keh swims at its DEX, a ghoul at a fifth; p. 120: a pursuer slower than every
-    quarry is ignored; swimming at half MOV; p. 117: random hazards."""
+def test_monsters_and_the_rest():
+    """p. 121: a gnoph-keh swims at its DEX, a ghoul at a fifth; p. 120: swimming at half MOV; p. 117:
+    random hazards."""
     assert chase.monster_skill(60, "good") == 60 and chase.monster_skill(60) == 30 and chase.monster_skill(60, "poor") == 12
-    assert not chase.joins("pursuer", 5, [6, 8], [7]) and chase.joins("pursuer", 6, [6, 8], [7])
-    assert chase.joins("quarry", 3, [6], [7])
     assert chase.other_movement(8) == 4
     assert [chase.random_hazard(r) for r in (59, 60, 85, 96)] == [None, Level.REGULAR, Level.HARD, Level.EXTREME]
     assert chase.chase_order({"a": 50, "b": 60, "c": 50}, {"c": 3, "a": 2}) == ["b", "c", "a"]
-    assert chase.CREATED["bolt"][1] == 1 and chase.CREATED["lock"][1] == "round"

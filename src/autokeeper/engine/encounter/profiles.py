@@ -10,7 +10,9 @@ cannot use (an attack line it cannot read, a damage it cannot roll, a power in t
 no rule for), so the keeper and the module checker see it instead of a silent default.
 
 Identity: a creature sheet that is an NPC's fighting form (Creature.npc: the ghoul the missing
-uncle has become) is that NPC's: one life, one place, under the NPC's id (`combatant`).
+uncle has become) is that NPC's: one life, one place, under the NPC's id (`combatant`), and the same
+person: the form's sheet over the NPC's, so what it leaves out (Jump, Climb, Spot Hidden for a chase,
+INT) is the NPC's, not an ordinary creature's.
 
 Read-only: nothing here changes the world. Bodies are seeded from a profile by engine/effects.seed.
 """
@@ -137,7 +139,7 @@ def profile(w: World, ident: str) -> CombatProfile | None:
     ent = w.rec.entities.get(who)
     fills = dict(ent.fills) if ent is not None else {}
     if creature is not None:
-        p = _from_creature(creature, fills)
+        p = _from_creature(creature, fills, under=stats_of(npc.stats) if npc is not None else None)
         if npc is not None:  # its form: the NPC's id, life and place; its name for the keeper
             p.id, p.kind, p.called = npc.id, "npc", creature.called or npc.called
             p.preset = npc.status
@@ -219,10 +221,11 @@ def _from_npc(npc: NPC, fills: dict[str, int], held: dict[str, str]) -> CombatPr
                          unread=unread_lines)
 
 
-def _from_creature(c: Creature, fills: dict[str, int]) -> CombatProfile:
-    """A creature as it fights: its sheet's numbers, its attacks as written, what its notes say the
-    rules can use (rules/combat.traits). A swarm (几十只, 无法对抗) fights as one, hard to put down."""
-    s = _apply_fills(stats_of(c.stats), fills)
+def _from_creature(c: Creature, fills: dict[str, int], under: dict[str, int] | None = None) -> CombatProfile:
+    """A creature as it fights: its sheet's numbers (over `under`, the NPC's when it is that NPC's
+    form), its attacks as written, what its notes say the rules can use (rules/combat.traits). A swarm
+    (几十只, 无法对抗) fights as one, hard to put down."""
+    s = _apply_fills({**(under or {}), **stats_of(c.stats)}, fills)
     t = traits(f"{c.notes} {' '.join(c.attacks)}")
     chars = {**BEAST, **{k: s[k] for k in CHARS if k in s}}
     db, build = damage_bonus(chars["力量"], chars["体型"])

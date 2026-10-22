@@ -137,3 +137,25 @@ async def test_douglas_runs_with_the_books_thomas_helps_and_the_stake_fires_by_t
     assert "douglas_down" in st.flags and "douglas_escaped" not in st.flags
     assert st.location == "mudi"  # the party is where it caught him
     assert st.encounter is None and st.encounter_log[-1].ended.how == "won"
+
+
+def test_douglas_as_the_ghoul_keeps_his_own_skills_for_a_chase(module):
+    """The review: the ghoul sheet that is Douglas has no 跳跃 or 攀爬, so in a chase he jumped and climbed
+    at DEX/2 (an ordinary creature's), not his own 75 and 85. The form's sheet stands over the NPC's: his
+    claws, HP and dodge are the ghoul's, what it leaves out is his."""
+    from autokeeper.engine.encounter import profiles
+    from autokeeper.engine.encounter.actions import Ctx
+    from autokeeper.engine.encounter.chase import value
+    from autokeeper.engine.encounter.resolve import Work
+
+    from .test_engine import make
+
+    game, _, _ = make(module, None, {}, location="mudi")
+    p = profiles.profile(game.world, "douglas_ghoul")
+    assert p is not None and p.id == "douglas" and (p.skill("跳跃"), p.skill("攀爬"), p.skill("侦查")) == (75, 85, 50)
+    assert p.skill("闪避") == 30 and p.hp_max == 12 and [a.name for a in p.attacks] == ["爪击", "撕咬"] and p.chars["智力"] == 80
+    game.state.encounter = None
+    start = EncounterStart(mode="fight", foes=["douglas_ghoul"], pace=6, reason="x")
+    game._begin("e1", start, ["douglas"], Turn(), None)
+    w = Work(game, Ctx.of(game), "t")
+    assert (value(w, "douglas", "跳跃"), value(w, "douglas", "攀爬")) == (75, 85)  # not 40 // 2

@@ -32,7 +32,7 @@ from ..rules.coc import Damage
 from ..rules.wounds import Body
 
 if TYPE_CHECKING:
-    from ..world.record import Entity, Life
+    from ..world.record import Entity
     from ..world.store import World
 
 Means = wounds.Means
@@ -111,8 +111,8 @@ class Drop(BaseModel):
 
 
 class Relocate(BaseModel):
-    """`who` (an NPC or a creature) is now at `place`; "players" moves the party, which the engine
-    does through its arrival, since arriving fires events."""
+    """`who` (an NPC or a creature) is now at `place`. Never the party: it moves only by arriving
+    (Game._arrive), since arriving fires events."""
 
     kind: Literal["relocate"] = "relocate"
     who: str
@@ -245,10 +245,10 @@ def body_of(w: World, ident: str) -> Body | None:
     return Body.of(life, human=p.human, armor=p.armor, guns_halved=p.guns_halved, knockout=p.knockout, regen=p.regen)
 
 
-def seed(w: World, ident: str, life: Life | None = None) -> Entity | None:
+def seed(w: World, ident: str) -> Entity | None:
     """The world entity that keeps an NPC's or a creature's body, its life seeded the first time from
-    its sheet, or from `life` (numbers the engine already had for it); a creature becomes an entity
-    then, where the investigators are. None for anyone else (an investigator's body is their sheet)."""
+    its sheet; a creature becomes an entity then, where the investigators are. None for anyone else
+    (an investigator's body is their sheet)."""
     from ..world.record import Entity
     from .encounter import profiles
 
@@ -260,7 +260,7 @@ def seed(w: World, ident: str, life: Life | None = None) -> Entity | None:
         ent = w.rec.entities[p.id] = Entity(id=p.id, kind="creature", name=p.name, origin="game", at=w.st.location,
                                             changed=w.rec.seq)
     if ent.life is None:
-        ent.life = life.model_copy(deep=True) if life is not None else profiles.life(w, p)
+        ent.life = profiles.life(w, p)
         w.touch(ent)
     return ent
 
@@ -379,7 +379,7 @@ def problems(w: World, effects: list) -> list[str]:
                 out.append("调查员一行的移动由引擎的到达处理（Game._arrive），不在效果里落地")
             elif dest is None or dest.kind != "location":
                 out.append(f"地点 {e.place} 不存在")
-            elif e.who != "players" and profiles.profile(w, e.who) is None:
+            elif profiles.profile(w, e.who) is None:
                 out.append(f"{e.who} 不是 NPC 或怪物")
         elif isinstance(e, Mark):
             if e.investigator not in investigators:
@@ -574,13 +574,12 @@ class Committed:
         return next((t.removeprefix(name) for t in self.texts if t.startswith(name)), "")
 
 
-def commit(w: World, effects: list, *, op_id: str, source: str, seed: list[str] | None = None,
-           adopt: dict[str, Life] | None = None) -> Committed:
+def commit(w: World, effects: list, *, op_id: str, source: str) -> Committed:
     """Land effects outside an encounter in one world op (world/ops.Effects): all or none, and the
     same op id again lands nothing twice. A retried commit tells what the first one did."""
     from ..world.ops import Effects
 
-    result = w.apply(Effects(id=op_id, effects=list(effects), source=source, seed=list(seed or []), adopt=dict(adopt or {})))
+    result = w.apply(Effects(id=op_id, effects=list(effects), source=source))
     if not result.ok:
         return Committed(False, result.op, result.problems)
     if result.repeat:

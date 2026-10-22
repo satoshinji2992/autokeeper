@@ -168,11 +168,6 @@ def test_an_encounter_step_lands_its_changes_and_effects_together_and_is_undoabl
     assert st.encounter is None and [x.id for x in st.encounter_log] == ["enc1"]
 
 
-def test_a_save_that_never_fought_hashes_as_before(module, fake):
-    game, _, _ = make(module, fake, {}, location="tower")
-    assert "encounter" not in game.world.domain()
-
-
 async def test_event_and_failure_damage_go_through_effects_and_bad_text_is_a_note(module, fake):
     game, _, events = make(module, fake, {}, location="tower")
     inv = game.state.investigator

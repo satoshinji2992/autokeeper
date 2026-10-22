@@ -75,6 +75,8 @@ from ..agents.card import CardError
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
+from ..engine.encounter import views
+from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
@@ -82,7 +84,6 @@ from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
 from ..rules.coc import Investigator
-from ..rules.combat import DOWN
 from . import cards, media
 from .room import BLANKS
 
@@ -99,7 +100,6 @@ WINDOW = 7.0
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
-PRIVATE |= {"pending_resolution"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
@@ -231,7 +231,8 @@ def public_battle(ev: dict[str, Any]) -> dict[str, Any]:
         ev["fight"] = {**fight, "fighters": [f if f.get("kind") == "investigator" else
                                              {k: v for k, v in f.items() if k not in ("look", "dex")} for f in fight["fighters"]]}
     if chase := ev.get("chase"):
-        at = [r["pos"] for r in chase.get("runners", []) if r.get("status") not in DOWN and not (r.get("hidden") and r["side"] != "party")]
+        at = [r["pos"] for r in chase.get("runners", []) if r.get("pos") is not None and r.get("status") not in DOWN
+              and not (r.get("hidden") and r["side"] != "party")]
         legs = [{k: v for k, v in leg.items() if k != "id"} for leg in chase.get("legs", [])]  # the module's own ids stay here
         runners = [{k: v for k, v in r.items() if k != "node"} for r in chase.get("runners", [])]
         ev["chase"] = {**chase, "legs": public_way(legs, at), "runners": runners}
@@ -1345,11 +1346,14 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game))  # in a fight: its choices
+        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game),  # in a fight: its choices
+                                            stances=views.stances(self.game, inv.id))
         if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
             await self._event({"type": "status", "text": ""})
             await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}本轮未行动。"})
             return
+        if move.react:  # its answer to blows from now on, as a seat's "react" sets it
+            self.game.set_react(inv.id, move.react)
         await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
         await self._run(move.text, inv.id, ai=True, push=move.push)
 

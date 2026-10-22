@@ -17,7 +17,6 @@ from autokeeper.engine.state import GameState
 from autokeeper.harness.models import problems, strict_schema
 from autokeeper.module import package
 from autokeeper.module.schema import Event, Leg, Location, Method, Module, Obstacle, Stake
-from autokeeper.rules import chase as chase_rules
 from autokeeper.rules.bcdice import Level
 from autokeeper.rules.coc import InjuryState, Investigator
 from autokeeper.rules.dice_expr import PATTERN
@@ -71,7 +70,7 @@ def _state() -> m.EncounterState:
                                      chosen="dodge", by="keeper")],
         rolls=[m.RollRecord(purpose="attack", who="chen", skill="格斗(斗殴)", target=0, value=0, level="失败", bonus=0),
                m.RollRecord(purpose="damage", who="chen", expr="1D8", total=0)],
-        effects=_every_effect(), lines=["{chen} 一棍落空"])
+        lines=["{chen} 一棍落空"])
     return m.EncounterState(
         id="enc1", mode="chase", place="cemetery", reason="道格拉斯抢了书就跑", started_turn=0,
         participants=[
@@ -81,19 +80,16 @@ def _state() -> m.EncounterState:
                           arrangement=arrangement, arranged_round=0, presence="fled"),
         ],
         round=0, order=["douglas", "chen"], cursor=0,
-        budget=m.RoundBudget(responses={"chen": 0}, acted=["douglas"], lost_next={"chen": "扑向掩体"}, movement={"chen": 0},
-                             owed={"chen": 0}, attacks_made={"douglas": 0}, shots={"chen": 0}),
+        budget=m.RoundBudget(responses={"chen": 0}, lost_next={"chen": "扑向掩体"}, movement={"chen": 0}, owed={"chen": 0}),
         scene=m.FightScene(engaged=[m.Engagement(a="chen", b="douglas", since=0)],
                            cover=[m.Cover(who="chen", what="墓碑", since=0)], holds=[m.Hold(held="chen", by="douglas", since=0)],
                            prone=["chen"], distance={"chen|douglas": 0}),
-        chase=m.ChaseState(site=site, quarry=["douglas"], pursuers=["chen"], goals={"douglas": "tunnel"},
-                           lost_sight=["chen|douglas"], started_round=0),
+        chase=m.ChaseState(site=site, quarry=["douglas"], pursuers=["chen"], lost_sight=["chen|douglas"]),
         receipts=[receipt], history=["第 0 轮：……"],
         pending=m.PendingChoice(id="enc1:r0:douglas:0:react:0", kind="reaction", who="chen", receipt="enc1:r0:douglas:0",
                                 prompt="道格拉斯扑过来了", default="dodge", deadline=None,
                                 options=[m.ChoiceOption(id="dodge", label="闪避", value={"react": "dodge"})]),
         stakes=[m.StakeState(when="escaped:douglas", flags=["douglas_escaped"], source="module")],
-        fills=[p.Fill(who="douglas", key="生命", value=0, why="原文没写")],
         clock=m.EncounterClock(pace=None, elapsed=0),
         changes=[m.Change(round=0, kind="fled", who="douglas")], switches=["r0:chase"],
         ended=m.EndRecord(round=0, how="escaped", per={"douglas": "escaped"}, places={"douglas": "suidao"}, minutes=0),
@@ -110,11 +106,10 @@ def test_encounter_state_round_trips_through_json_with_zeros_and_nones():
     assert back.participants[0].react == "none" and back.participants[1].react is None
     assert back.receipts[0].rolls[0].target == 0 and back.receipts[0].rolls[1].target is None
     assert back.receipts[0].rolls[1].total == 0
-    assert back.clock.pace is None and back.fills[0].value == 0 and back.budget.movement == {"chen": 0}
-    assert [type(e) for e in back.receipts[0].effects] == [type(e) for e in _every_effect()]
-    assert back.receipts[0].effects[6].loaded == 0 and back.receipts[0].effects[6].spare is None
-    assert back.receipts[0].effects[7].spare == 0
-    assert back.receipts[0].effects[0].con is Level.FAILURE
+    assert back.clock.pace is None and back.budget.movement == {"chen": 0}
+    every = EFFECTS.validate_json(EFFECTS.dump_json(_every_effect()))  # the effects a unit lands with it, as its op keeps them
+    assert [type(e) for e in every] == [type(e) for e in _every_effect()]
+    assert every[6].loaded == 0 and every[6].spare is None and every[7].spare == 0 and every[0].con is Level.FAILURE
     wall = back.chase.site.obstacles["wall"]
     assert wall.state == "broken" and wall.by == "chen" and back.chase.site.nodes[0].seen  # kept, though not in the schema
 
@@ -142,7 +137,7 @@ def test_life_weapon_and_injury_round_trip_zero_hp_and_none():
 def test_investigator_injury_defaults_empty_and_zero_values_stand():
     inv = _inv(hp=0, san=0)
     assert inv.injury == InjuryState() and inv.hp == 0 and inv.san == 0
-    assert "injury" not in inv.model_dump() and "injury" not in json.loads(inv.model_dump_json())  # dumps as before 0.0.4
+    assert "injury" not in inv.model_dump() and "injury" not in json.loads(inv.model_dump_json())  # a pregen dumps without it
     inv.injury.dying_since = 0
     assert inv.model_dump()["injury"]["dying_since"] == 0
     back = Investigator.model_validate_json(inv.model_dump_json())
@@ -204,9 +199,7 @@ def test_the_bundled_modules_and_the_example_load_unchanged(name):
     _given_comes_back(data, module.model_dump(mode="json"))  # what they write of the new fields: tests/test_fight_module.py
 
 
-def test_the_chase_way_moved_to_the_module_format_and_is_still_found_in_the_rules():
-    assert chase_rules.Leg is Leg and chase_rules.Obstacle is Obstacle
-    assert chase_rules.Method is Method
+def test_the_chase_way_is_module_format():
     ob = Obstacle(kind="hazard", what="结冰的台阶", skill="跳跃", harm="1d3")
     assert ob.harm == "1D3"  # its canonical spelling
     kept = Obstacle(kind="hazard", what="碎玻璃", skill="闪避", harm="1D3点")  # an imported module's: still loads
@@ -250,12 +243,12 @@ def _every_change() -> list:
     st = _state()
     return [
         m.Begin(state=st),
-        m.SetParticipant(participant=m.Participant(id="thomas", kind="npc", side="party", controller="keeper", joined_round=0)),
+        m.SetParticipant(participant=m.Participant(id="thomas", kind="npc", side="party", controller="keeper")),
         m.SetParticipant(participant=st.participants[0].model_copy(update={"presence": "escaped"})),
         m.SetReceipt(receipt=st.receipts[0].model_copy(update={"phase": "lapsed", "lapsed": "没有拿着拨火棍"})),
         m.SetRound(round=1, order=["chen", "douglas", "thomas"], cursor=0, budget=m.RoundBudget()),
         m.SetCursor(cursor=0),
-        m.SetBudget(budget=m.RoundBudget(acted=["chen"])),
+        m.SetBudget(budget=m.RoundBudget(responses={"chen": 1})),
         m.SetScene(scene=m.FightScene()),
         m.SetChase(chase=None),
         m.SetPending(pending=None),
@@ -263,7 +256,6 @@ def _every_change() -> list:
         m.SetPhase(phase="aftermath"),
         m.SetStake(index=0, fired=True),
         m.AddStakes(stakes=[m.StakeState(when="down:douglas", flags=["douglas_down"])]),
-        m.SetFills(fills=[p.Fill(who="douglas", key="闪避", value=0)]),
         m.AddChanges(changes=[m.Change(round=1, kind="joined", who="thomas")]),
         m.Compact(history=["第 0 轮：……", "第 1 轮：……"], receipts=[]),
         m.SetClock(clock=m.EncounterClock(pace=6, elapsed=6, committed=0, applied=0)),
@@ -274,7 +266,7 @@ def _every_change() -> list:
 
 def test_the_change_union_reads_each_kind_by_its_tag():
     every = _every_change()
-    assert len({c.kind for c in every}) == 19  # Begin … Archive, every kind (two SetParticipant)
+    assert len({c.kind for c in every}) == 18  # Begin … Archive, every kind (two SetParticipant)
     assert CHANGES.validate_json(CHANGES.dump_json(every)) == every
     with pytest.raises(ValidationError):
         CHANGES.validate_python([{"kind": "teleport"}])

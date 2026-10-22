@@ -21,7 +21,6 @@ from ...rules import chase as rules
 from ...rules.bcdice import Level
 from ...rules.coc import DIFFICULTY_ZH
 from ...rules.dice_expr import DamageExpr
-from ...rules.melee import opposed_difficulty
 from .. import effects
 from . import actions, site
 from .model import ChaseState, Engagement
@@ -48,6 +47,15 @@ def runners(enc: EncounterState) -> list[str]:
 
 def lost(enc: EncounterState, pursuer: str, quarry: str) -> bool:
     return enc.chase is not None and f"{pursuer}|{quarry}" in enc.chase.lost_sight
+
+
+def unseen(ctx: Ctx, pid: str) -> bool:
+    """No investigator who can act perceives `pid` (Ctx.hidden_from): a keeper's person that hid, was
+    lost, or got away. Where it is and what it does then is the keeper's alone."""
+    p = ctx.p(pid)
+    if p is None or p.kind == "investigator":
+        return False
+    return all(ctx.hidden_from(i.id, pid) for i in ctx.enc.participants if i.kind == "investigator" and ctx.acting(i.id))
 
 
 def at(enc: EncounterState, pid: str) -> str:
@@ -93,8 +101,6 @@ def goal_of(ctx: Ctx, enc: EncounterState, pid: str) -> str:
     ch = enc.chase
     if ch is None:
         return ""
-    if ch.goals.get(pid):
-        return ch.goals[pid]
     p = enc.get(pid)
     wanted = [d.to for d in (p.arrangement.actions if p is not None and p.arrangement else []) if d.to]
     wanted += [r.declared.to for r in enc.receipts if r.actor == pid and r.declared.do == "flee" and r.declared.to]
@@ -138,7 +144,7 @@ def begin(w: Work, quarry: list[str], pursuers: list[str], chase_site: ChaseSite
     staying = [q for q in quarry if q in lineup.positions]
     hunting = [h for h in pursuers if h in lineup.positions]
     # The quarry stays the quarry, whoever is already away (presence "escaped"): how it ends reads it.
-    chase = ChaseState(site=chase_site.model_copy(deep=True), quarry=list(quarry), pursuers=hunting, started_round=enc.round)
+    chase = ChaseState(site=chase_site.model_copy(deep=True), quarry=list(quarry), pursuers=hunting)
     enc.chase = chase
     origin = chase.site.origin
     for p in enc.participants:
@@ -269,7 +275,9 @@ def run(w: Work, r: ActionReceipt) -> None:
     if here != start and me.presence == "escaped":
         _relocate(w, a, start, here)
     rr.lines += lines
-    w.unit.lines += lines
+    secret = unseen(w.ctx, a)  # running where no investigator sees: the players get nothing of it
+    for x in lines:
+        w.tell(x, "" if secret else None)
 
 
 def _relocate(w: Work, who: str, before: str, now: str) -> None:
@@ -328,10 +336,11 @@ def _cross(w: Work, rr: ActionReceipt, a: str, ob: ObstacleState, where: str, co
     if roll.passed:
         lines.append(f"{{{a}}}{method.label}，过了{ob.what}（{said}）")
         return True
-    loss = w.game.rules.dice.total(RULES.hazard_loss)
+    crossed = rules.hazard(False, w.game.rules.dice.total(RULES.hazard_loss), harm=bool(ob.harm))  # still past it (p. 114)
+    loss = crossed.lost
     pay(w, a, loss)
     hurt = ""
-    if ob.harm:
+    if crossed.harmed:
         try:
             expr = DamageExpr.parse(ob.harm)
         except ValueError as exc:
@@ -383,7 +392,7 @@ def hide(w: Work, rr: ActionReceipt) -> None:
     spot = [value(w, h, "侦查") or w.ctx.view(h).skill("侦查") for h in hunters]
     lead = min((site.distance(ch.site, at(enc, h), at(enc, a)) or 0 for h in hunters), default=0)
     bonus = rules.hide_bonus(lead)
-    roll = w.check(a, "潜行", value(w, a, "潜行"), opposed_difficulty(max(spot, default=0)), bonus)
+    roll = w.check(a, "潜行", value(w, a, "潜行"), rules.hide_difficulty(spot), bonus)
     rr.rolls.append(record("hide", a, roll))
     w.mark(a, roll)
     if w.investigator(a) is not None:
@@ -399,8 +408,15 @@ def hide(w: Work, rr: ActionReceipt) -> None:
         line = f"{{{a}}}在{node_name(enc, at(enc, a))}躲了起来（潜行 {roll.value} {roll.level.zh}），追的人没看见"
     else:
         line = f"{{{a}}}想躲起来，没藏住（潜行 {roll.value} {roll.level.zh}）"
+    public = None  # what the players get of it: an investigator's own, all; a keeper's person, what they saw
+    if w.investigator(a) is None and unseen(w.ctx, a):
+        public = ""
+    elif w.investigator(a) is None and roll.passed and all(
+            i in hunters or w.ctx.hidden_from(i, a) for i in (p.id for p in enc.participants if p.kind == "investigator"
+                                                               and w.ctx.acting(p.id))):
+        public = f"{{{a}}}不见了踪影"  # the investigators lost it: not where, nor how
     rr.lines.append(line)
-    w.unit.lines.append(line)
+    w.tell(line, public)
 
 
 def barrier(w: Work, rr: ActionReceipt) -> None:
@@ -431,7 +447,7 @@ def barrier(w: Work, rr: ActionReceipt) -> None:
     else:
         line = f"{{{a}}}想挡住身后的路，没能弄成（力量 {roll.value} {roll.level.zh}）"
     rr.lines.append(line)
-    w.unit.lines.append(line)
+    w.tell(line, "" if unseen(w.ctx, a) else None)
 
 
 def stand(w: Work, rr: ActionReceipt) -> None:
@@ -462,26 +478,28 @@ def round_end(w: Work) -> str:
                 continue
             skill = max(TRACK, key=lambda s: value(w, h, s) or ctx.view(h).skill(s))
             roll = w.check(h, skill, value(w, h, skill))
+            mine = None if w.investigator(h) is not None else ""  # a keeper's pursuer out of their sight: its roll is its own
             if rules.lost_track(roll.level):
                 ch.lost_sight.append(f"{h}|{q}")
-                w.unit.lines.append(f"{{{q}}}跑出了{{{h}}}的视线，{{{h}}}没找到踪迹，跟丢了（{skill} {roll.value} {roll.level.zh}）")
+                w.tell(f"{{{q}}}跑出了{{{h}}}的视线，{{{h}}}没找到踪迹，跟丢了（{skill} {roll.value} {roll.level.zh}）", mine)
                 w.change("fled", q)
             else:
-                w.unit.lines.append(f"{{{q}}}跑出了{{{h}}}的视线，{{{h}}}循着踪迹追了上去（{skill} {roll.value} {roll.level.zh}）")
+                w.tell(f"{{{q}}}跑出了{{{h}}}的视线，{{{h}}}循着踪迹追了上去（{skill} {roll.value} {roll.level.zh}）", mine)
     for q in prey:
         if hunters and all(lost(enc, h, q) for h in hunters):
             enc.get(q).presence = "escaped"  # type: ignore[union-attr]
             w.unit.lines.append(f"{{{q}}}甩掉了追的人，脱身了")
-    if contact(w):
-        to_fight(w)
+    if where := contact(w):
+        to_fight(w, where)
         return "fight"
     return ""
 
 
-def contact(w: Work) -> bool:
-    """It comes to blows (p. 116; design §3.5): someone at the same location as an opponent turned to
-    fight this round, a quarry is held fast by a pursuer, or struck down where a pursuer stands; and
-    everyone still in it is within one location of them (no split party, the user's call)."""
+def contact(w: Work) -> str:
+    """Where it comes to blows (p. 116; design §3.5), "" while it does not: the location of someone at
+    the same location as an opponent who turned to fight this round, of a quarry held fast by a
+    pursuer, or struck down where a pursuer stands; when everyone still in it is within one location of
+    there (no split party, the user's call)."""
     enc, ctx = w.enc, w.ctx
     ch = enc.chase
     assert ch is not None
@@ -492,33 +510,28 @@ def contact(w: Work) -> bool:
               and any(at(enc, h) == at(enc, q) and w.standing(h) for h in ch.pursuers)]  # struck down where it was caught
     meet = (stood or held or downed or [""])[0]
     if not meet:
-        return False
+        return ""
     where = at(enc, meet)
     active = [p.id for p in enc.participants if p.presence == "in" and w.standing(p.id)]
-    return all((site.distance(ch.site, where, at(enc, x)) or 0) <= 1 for x in active)
+    return where if all((site.distance(ch.site, where, at(enc, x)) or 0) <= 1 for x in active) else ""
 
 
-def to_fight(w: Work) -> None:
-    """The chase becomes a fight where they met: everyone still in it there, those face to face
-    engaged; the world place is that location's."""
+def to_fight(w: Work, where: str) -> None:
+    """The chase becomes a fight at `where` (contact's): everyone still in it there, those face to
+    face engaged; the world place is that location's."""
     enc, ctx = w.enc, w.ctx
     ch = enc.chase
     assert ch is not None
-    stood = [r.actor for r in enc.receipts if r.round == enc.round and r.declared.do == "stand"]
-    held = [h.held for h in enc.scene.holds if h.held in ch.quarry]
-    downed = [q for q in ch.quarry if not w.standing(q)]
-    meet = next((x for x in [*stood, *held, *downed] if enc.get(x) and enc.get(x).presence == "in"), "")  # type: ignore[union-attr]
-    where = at(enc, meet) or ch.site.origin
+    met = [p.id for p in enc.participants if p.presence == "in" and p.node == where]  # face to face there
+    meet = met[0] if met else ""
     n = site.node(ch.site, where)
+    for a in met:
+        for b in met:
+            if ctx.opposed(a, b) and not any({e.a, e.b} == {a, b} for e in enc.scene.engaged):
+                enc.scene.engaged.append(Engagement(a=a, b=b, since=enc.round))
     for p in enc.participants:
-        if p.presence != "in":
-            continue
-        if p.node == where:
-            for q in enc.participants:
-                if q.node == where and q.presence == "in" and ctx.opposed(p.id, q.id) and not any(
-                        {e.a, e.b} == {p.id, q.id} for e in enc.scene.engaged):
-                    enc.scene.engaged.append(Engagement(a=p.id, b=q.id, since=enc.round))
-        p.node = where
+        if p.presence == "in":
+            p.node = where
     if n is not None and n.place and ctx.world.rec.entities.get(n.place) is not None:
         enc.place = n.place
     enc.mode = "fight"
@@ -537,17 +550,15 @@ def to_fight(w: Work) -> None:
 
 def verdict(ctx: Ctx) -> str:
     """How a chase that has run its course ends ("" while some pair is still running): the quarry got
-    away (fled, or escaped for the keeper's side), every quarry down (lost, or won)."""
+    away (fled, or escaped for the keeper's side), every quarry down (lost, or won). Never lost while
+    an investigator can still act: it goes on."""
     enc = ctx.enc
     ch = enc.chase
     if ch is None:
         return ""
-    def up(x: str) -> bool:
-        p = enc.get(x)
-        return p is not None and p.presence == "in" and ctx.acting(x)
 
-    prey = [q for q in ch.quarry if up(q)]
-    hunters = [h for h in ch.pursuers if up(h)]
+    prey = [q for q in ch.quarry if ctx.acting(q)]
+    hunters = [h for h in ch.pursuers if ctx.acting(h)]
     if prey and hunters and any(not lost(enc, h, q) for h in hunters for q in prey):
         return ""
     party = any(ctx.side(q) == "party" for q in ch.quarry)
@@ -555,6 +566,8 @@ def verdict(ctx: Ctx) -> str:
     if prey and not hunters:
         away = True
     if party:
+        if not (away or prey) and any(p.kind == "investigator" and ctx.acting(p.id) for p in enc.participants):
+            return ""
         return "fled" if away or prey else "lost"
     return "escaped" if away or prey else "won"
 
@@ -573,8 +586,9 @@ def places(ctx: Ctx, enc: EncounterState) -> dict[str, str]:
 
 def party_place(game, enc: EncounterState, where: dict[str, str]) -> tuple[str, dict[str, str]]:
     """Where the party goes when the chase ends (no split party, the user's call): the place most of
-    the human investigators ended at (on a tie, the speaking one's); the others are left there until
-    their next move (GameState.apart)."""
+    the human investigators ended at (on a tie, the speaking one's); the others, one out cold where it
+    began too, are left there until their next move (GameState.apart, which the keeper's brief and the
+    plan's bearings name)."""
     st = game.state
     humans = [i.id for i in st.investigators if i.id in st.human] or [st.investigator.id]
     counts: dict[str, int] = {}
@@ -594,7 +608,9 @@ def party_place(game, enc: EncounterState, where: dict[str, str]) -> tuple[str, 
 def view(ctx: Ctx, game) -> dict:
     """The chase as the screens draw it (tui/widgets/fight.chase_route): a straight way through the site
     from the hindmost pursuer to the frontmost quarry and on to the way out, everyone on it by the
-    location nearest them; public names, a foe's wounds in words, no obstacle's harm."""
+    location nearest them; public names, a foe's wounds in words, no obstacle's harm. Only what the
+    investigators perceive: a keeper's person none of them sees (`unseen`) has no place on it (no
+    `pos`, no `node`), and the way is drawn from those they see."""
     from .views import portrait, status, wound_word
 
     enc = ctx.enc
@@ -602,8 +618,11 @@ def view(ctx: Ctx, game) -> dict:
     if ch is None:
         return {"round": enc.round, "quarry": "party", "legs": [], "runners": []}
     quarry_side = "party" if any(ctx.side(q) == "party" for q in ch.quarry) else "foe"
-    prey = [q for q in ch.quarry if enc.get(q) is not None] or [p.id for p in enc.participants if ctx.side(p.id) == quarry_side]
-    hunters = [h for h in ch.pursuers if enc.get(h) is not None] or [p.id for p in enc.participants if ctx.side(p.id) != quarry_side]
+    hid = {p.id for p in enc.participants if unseen(ctx, p.id)}
+    prey = [q for q in ch.quarry if enc.get(q) is not None and q not in hid] or [
+        p.id for p in enc.participants if ctx.side(p.id) == quarry_side and p.id not in hid]
+    hunters = [h for h in ch.pursuers if enc.get(h) is not None and h not in hid] or [
+        p.id for p in enc.participants if ctx.side(p.id) != quarry_side and p.id not in hid]
     origin = ch.site.origin
     rear = max(hunters, key=lambda h: max((site.distance(ch.site, at(enc, h), at(enc, q)) or 0 for q in prey), default=0),
                default="")
@@ -635,13 +654,16 @@ def view(ctx: Ctx, game) -> dict:
         b = v.body()
         party = p.side == "party"
         gone = p.presence == "escaped"
-        hidden = p.id in ch.quarry and bool(hunters) and all(lost(enc, h, p.id) for h in hunters if ctx.acting(h))
+        # an investigator the pursuers lost is marked hidden where they are; a keeper's person none of them sees has no place
+        lost_by_all = p.id in ch.quarry and any(ctx.acting(h) for h in ch.pursuers) and all(
+            lost(enc, h, p.id) for h in ch.pursuers if ctx.acting(h))
         runners_out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
-                            "pos": len(way) - 1 if gone and p.id in ch.quarry else pos, "speed": p.speed if p.speed is not None else v.mov(),
+                            "pos": None if p.id in hid else len(way) - 1 if gone and p.id in ch.quarry else pos,
+                            "speed": p.speed if p.speed is not None else v.mov(),
                             "actions": points(enc, p.id), "status": status(ctx, p.id), "wound": wound_word(b),
-                            "hidden": hidden or gone, "hp": b.hp if party else None, "hp_max": b.hp_max if party else None,
-                            "portrait": portrait(game, p.id), "node": p.node})
+                            "hidden": p.id in hid or lost_by_all or gone, "hp": b.hp if party else None, "hp_max": b.hp_max if party else None,
+                            "portrait": portrait(game, p.id), "node": "" if p.id in hid else p.node})
     return {"round": enc.round, "quarry": quarry_side, "legs": legs, "runners": runners_out}
 
 
-__all__ = ["begin", "hide", "order", "round_end", "round_points", "run", "verdict", "view"]
+__all__ = ["begin", "hide", "order", "round_end", "round_points", "run", "unseen", "verdict", "view"]

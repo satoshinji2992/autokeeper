@@ -27,7 +27,6 @@ from .record import (
     Agent,
     Entity,
     Fact,
-    Life,
     Promise,
     Relation,
     Scheduled,
@@ -519,28 +518,17 @@ class Effects(Base):
     kind: Literal["effects"] = "effects"
     effects: list[Effect] = Field(default_factory=list)
     source: str = ""  # what rolled them: event:<id>, fail:<turn>, plugin:<id>, fight:<…>
-    seed: list[str] = Field(default_factory=list)  # NPCs and creatures whose bodies the world starts keeping now
-    # Bodies the engine already had numbers for (0.0.4 M1: the old fight engine's fighters), kept by
-    # the world from now on when it keeps none yet for them.
-    adopt: dict[str, Life] = Field(default_factory=dict)
 
     def check(self, w: World) -> list[str]:
         from ..engine import effects
 
         if problems := _engine_only(self):
             return problems
-        from ..engine.encounter import profiles
-
-        out = [f"{x} 不是 NPC 或怪物" for x in [*self.seed, *self.adopt] if profiles.profile(w, x) is None]
-        return out + effects.problems(w, self.effects)
+        return effects.problems(w, self.effects)
 
     def settle(self, w: World, oid: str):
         from ..engine import effects
 
-        for x, life in self.adopt.items():
-            effects.seed(w, x, life)
-        for x in self.seed:
-            effects.seed(w, x)
         done = effects.settle(w, self.effects, oid=oid)
         return _last(w, oid), done
 
