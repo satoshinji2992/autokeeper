@@ -187,6 +187,9 @@ async def test_only_the_host_adds_a_house_rule(monkeypatch, tmp_path, skills_dir
         await guest.send_json({"t": "sit", "investigator": "zhouheng"})
         await guest.send_json({"t": "house_rule", "text": "每过一夜要吃一顿饭"})  # its code would run on the host's machine
         assert "房主" in (await until(guest, lambda x: x["t"] == "error"))["text"] and hub.rules.empty()
+        hub.m.plugins.append("trap")
+        await guest.send_json({"t": "pause_plugin", "id": "trap", "paused": True})  # nor pauses one (开发者模式 is the host's)
+        assert "房主" in (await until(guest, lambda x: x["t"] == "error"))["text"] and not hub.state.plugin_errors
         host = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
         await host.send_json({"t": "hello", "name": "小明", "key": hub.key})
         await until(host, lambda x: x["t"] == "welcome")

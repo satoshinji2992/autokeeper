@@ -7,8 +7,9 @@ Private counters, source code and keeper-only state never reach this screen.
 
 The host (and a solo player) can pause or re-enable a rule and add a house rule in plain words;
 the author agent writes it, the sandbox runs its tests, and only a passing rule is installed
-into this save (never into the module files). A LAN client sees the same public information,
-and its house-rule request is drafted and installed by the host.
+into this save (never into the module files). At a LAN table only the host opens it, in 开发者模式
+(tui/screens/net.py): the window reads a copy of the Hub's game, and the pause, the start and the
+house rule go to the Hub, which drafts and installs the rule on its own loop.
 """
 
 from __future__ import annotations
@@ -69,10 +70,13 @@ class PluginsModal(ModalScreen[None]):
     BINDINGS = [("escape", "dismiss", "返回")]
 
     def __init__(self, module: Module, state: GameState, *, manage: bool = True,
-                 drafter: Drafter | None = None, send: Callable[[str], None] | None = None):
+                 drafter: Drafter | None = None, send: Callable[[str], None] | None = None,
+                 toggle: Callable[[str, bool], None] | None = None):
+        """`send`: a house rule goes to the LAN Hub; `toggle(identity, paused)`: so does a pause, `state`
+        being the window's own copy of the Hub's."""
         super().__init__()
         self.module, self.state, self.manage = module, state, manage
-        self.drafter, self.send = drafter, send
+        self.drafter, self.send, self.toggle = drafter, send, toggle
         self.working = False
 
     def compose(self) -> ComposeResult:
@@ -137,10 +141,11 @@ class PluginsModal(ModalScreen[None]):
         text = event.value.strip()
         if not text or self.working:
             return
-        if self.send is not None:  # LAN: the host drafts and installs, the result syncs back
+        if self.send is not None:  # LAN: the Hub drafts and installs, the result syncs back
             self.send(text)
             self.query_one("#house-rule", Input).value = ""
-            self._status("请求已发送至房主，安装完成后重新打开此页查看。")
+            self._status("已排队，当前叙述结束后生成并安装，进度见场外消息。" if self.manage else
+                         "请求已发送至房主，安装完成后重新打开此页查看。")
         elif self.drafter is not None:
             self._draft(text)
 
@@ -184,10 +189,13 @@ class PluginsModal(ModalScreen[None]):
         if not (event.button.id or "").startswith("plugin-"):
             return
         identity = self.module.plugins[int(event.button.id.removeprefix("plugin-"))]
-        if identity in self.state.plugin_errors:
-            del self.state.plugin_errors[identity]
-        else:
+        paused = identity not in self.state.plugin_errors
+        if paused:
             self.state.plugin_errors[identity] = "已手动暂停"
+        else:
+            del self.state.plugin_errors[identity]
+        if self.toggle is not None:  # LAN: the Hub's game changes on the Hub's loop
+            self.toggle(identity, paused)
         event.button.label = "启用 / 重试" if identity in self.state.plugin_errors else "暂停"
 
 

@@ -30,6 +30,8 @@ class Menu(Provider):
             for title, key, what, action in COMMANDS:
                 if action == "plugins" and not self.screen.developing:  # 规则插件: 开发者模式 only
                     continue
+                if action == "developer" and not self.screen.may_develop:  # the game runs elsewhere (a LAN guest)
+                    continue
                 yield f"{title}  {key}".rstrip(), what, partial(self.screen.run_action, action)
         elif isinstance(self.screen, TitleScreen):
             yield "设置  F9", "AI 模型、叙事偏好、画面和动画", self.screen.action_settings

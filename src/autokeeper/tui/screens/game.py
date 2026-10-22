@@ -320,6 +320,8 @@ class GameScreen(Screen):
             return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
         if action == "plugins":  # 规则插件 only in 开发者模式; otherwise Ctrl+K is the input box's own
             return self.developing
+        if action == "developer":  # F12 where the game runs on this machine (a LAN table: the host's own screen)
+            return self.may_develop or self.developing  # on, it can always be turned off
         return super().check_action(action, parameters)
 
     # -- the list over the input box: the skills a check command can take -----------------------
@@ -1470,7 +1472,13 @@ class GameScreen(Screen):
     def settings_items(self) -> list[tuple[str, str]]:
         """What 设置 opens on this screen besides its switches (SETTINGS): 开发者模式 needs the
         game on this machine."""
-        return [item for item in SETTINGS if item[0] != "developer" or self.game is not None]
+        return [item for item in SETTINGS if item[0] != "developer" or self.may_develop]
+
+    @property
+    def may_develop(self) -> bool:
+        """开发者模式 can be opened here: the game runs on this machine (at a LAN table, only the host's
+        own screen, tui/screens/net.py)."""
+        return self.game is not None
 
     @property
     def developing(self) -> bool:
@@ -1481,8 +1489,7 @@ class GameScreen(Screen):
         """F12: 开发者模式 on or off. On, the top bar says so and the panel under the story shows this
         turn's calls, the roll, where everyone really is and what is due; the first time, the web
         page with the full records opens too."""
-        if self.game is None:
-            self.app.notify("完整排查资料位于运行游戏的本机，联机客户端无法读取。", timeout=5)
+        if not (self.may_develop or self.developing):
             return
         panel = self.query_one(DevPanel)
         panel.display = not panel.display
@@ -1501,14 +1508,18 @@ class GameScreen(Screen):
     def action_open_dev_web(self) -> None:
         self.open_developer()
 
-    @work(exclusive=True, group="developer-web")
-    async def open_developer(self) -> None:
+    async def _dashboard(self) -> str:
+        """The developer web page on this game, started once; its URL."""
         from ...engine.developer_web import open_dashboard
 
         assert self.game is not None
+        return await open_dashboard(self.game, errors=self.dev_errors, busy=self.busy)
+
+    @work(exclusive=True, group="developer-web")
+    async def open_developer(self) -> None:
         try:
-            url = await open_dashboard(self.game, errors=self.dev_errors, busy=self.busy)
-        except OSError as exc:
+            url = await self._dashboard()
+        except (OSError, RuntimeError) as exc:  # RuntimeError: a LAN room that closed meanwhile
             self.app.notify(f"开发者网页启动失败：{type(exc).__name__}", severity="error", timeout=8)
             return
         self.dev_url = url
@@ -1693,7 +1704,8 @@ class GameScreen(Screen):
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
-        actions["/dev"] = self.action_developer
+        if self.may_develop:
+            actions["/dev"] = self.action_developer
         if cmd in idea.WORDS:
             self.action_idea()
         elif cmd == "/kp":  # "/kp <话>" goes to the keeper (send_line); alone it has nothing to say

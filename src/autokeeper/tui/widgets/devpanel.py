@@ -111,4 +111,9 @@ class DevPanel(VerticalScroll):
 
     def show(self, game: Game | None, url: str = "", errors: list[str] | None = None) -> None:
         if game is not None and self.display:
-            self.body.update(view(game, url, errors))
+            self.put(view(game, url, errors))
+
+    def put(self, text: Text) -> None:
+        """What view() made, where it was made elsewhere (a LAN host's panel, made on the Hub's loop)."""
+        if self.display:
+            self.body.update(text)
