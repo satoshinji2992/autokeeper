@@ -152,8 +152,8 @@ class Signs(BaseModel):
 
 class NewClue(BaseModel):
     id: str
-    title: str = Field(description="线索本里的短标题")
-    text: str = Field(description="调查员得到的信息（玩家可见），不比原作的关键线索说得多，不直接说出真相")
+    title: str = Field(description="线索的短标题，只给守秘人看")
+    text: str = Field(description="调查员得到的信息，守秘人照它在叙述里讲出；不比原作的关键线索说得多，不直接说出真相")
     where: str = Field(description="所在地点 id")
     feature: str = Field(description="具体在哪样东西上、哪里")
     skill: str = Field("", description="需要什么检定，如 侦查、图书馆使用；找到就有就留空")

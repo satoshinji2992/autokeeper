@@ -64,8 +64,8 @@ class NewNPC(BaseModel):
 
 class NewClue(BaseModel):
     id: str
-    title: str = Field(description="线索本里的短标题")
-    text: str = Field(description="调查员得到的信息（玩家可见）")
+    title: str = Field(description="线索的短标题，只给守秘人看")
+    text: str = Field(description="调查员得到的信息，守秘人照它在叙述里讲出")
     where: str = Field(description="所在地点 id")
     feature: str = Field("", description="具体在哪：某件东西，或某个 NPC 口中")
     npc: str = Field("", description="由哪个 NPC 说出来，不是 NPC 给的就留空")

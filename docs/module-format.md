@@ -41,7 +41,7 @@ modules/<id>/
 | `npcs` | NPC：人设、`knows` / `secrets` / `lies`、能给的 `clues` 和对应的社交门槛 `gates`、`portrait`、变样头像 `looks`；`important: true` 标出重要 NPC（最多 6 个），他们有自己的目标和打算，调查员不在时也会行动（见 [持久世界](world.md)）；会动手的人在 `stats` 写战斗数值、`attacks` 写攻击；`called` 是调查员还不知道他是谁时的叫法 |
 | `creatures` | 怪物：`called`（调查员还不知道它是什么时的叫法，只写看得见的样子）、外观 `description`、照面时的理智检定 `sanity`、战斗数值 `stats`、攻击 `attacks`、规则用得着的特性 `notes`、逃跑时追不追 `pursues`；是某个 NPC 打起来的样子就写 `npc`，写法见[战斗与追逐](#战斗与追逐) |
 | `items` | 重要物品：`id`、`name`、外观 `description`、所在地点 `where`、初始人物持有者 `owner`（可空）、配图 `art`；支持后台携带状态 `equipment`、数量 `quantity`、状况 `status` 和隐藏标记 `hidden`，不替代线索或授予隐藏效果 |
-| `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出；`art` 是找到的那样东西的照片，配在线索卡上 |
+| `clues` | 线索：在哪（`where` / `feature` / `npc`）、检定（`check`）、支持结论（`points_to`）、关键性（`core`）、理智损失、附带手稿；`requires` 列出必须全部满足的前置线索 id 或 `flag:标记`，引擎会阻止提前发出；`art` 是找到的那样东西的照片，随模组保存，游戏中不单独展示。线索的 `title` 与 `text` 只给守秘人：玩家看不到线索卡，内容由守秘人照 `text` 在叙述里讲出，或由 NPC 在台词里说出 |
 | `handouts` | 手稿完整 `text`；`images: [病历图片键, 地图图片键]` 关联原图，仅发现后显示，支持滚动阅读全文、ASCII 预览和查看原图；`originals: [source/source/images/p14_image01.png]` 指向原书里这页手稿的图，相对模组文件夹，不随模组发布：本机有这个文件（模组自己的 `source/`，或安装版玩家模组目录下同名模组的 `source/`）时一并显示 |
 | `conclusions` | 玩家需要推出的结论，校验时要求每个结论至少两条线索 |
 | `flags` | 剧情标记及其含义；裁定员只会在行动真正达成含义时设置 |

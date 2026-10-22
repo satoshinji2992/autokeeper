@@ -28,8 +28,8 @@ class Check(BaseModel):
 
 class Clue(BaseModel):
     id: str
-    title: str = Field(description="线索本里显示的短标题")
-    text: str = Field(description="调查员得到的信息（玩家可见）")
+    title: str = Field(description="线索的短标题，守秘人和复盘用；游戏中不给玩家看")
+    text: str = Field(description="调查员得到的信息；守秘人照它在叙述里讲出，原文不直接给玩家看")
     where: str = Field(description="所在地点 id")
     feature: str = Field("", description="具体在哪：书桌、木匣、某个 NPC 口中")
     check: Check | None = Field(None, description="需要的检定；为空表示搜到即得")
@@ -39,7 +39,7 @@ class Clue(BaseModel):
     requires: list[str] = Field(default_factory=list, description="全部前置条件：线索 id，或 flag:标记；未满足时不能发出线索或附图")
     points_to: list[str] = Field(default_factory=list, description="支持哪些结论 id")
     sanity: str | None = Field(None, description="发现时的理智检定，如 0/1D3")
-    art: str = Field("", description="找到的那样东西的照片的图片键（art/items/<键>.jpg）；线索卡上配这张图，不剧透")
+    art: str = Field("", description="找到的那样东西的照片的图片键（art/items/<键>.jpg），随模组保存；游戏中不单独展示")
 
     def available(self, flags: list[str], clues: list[str]) -> bool:
         return all(key[5:] in flags if key.startswith("flag:") else key in clues for key in self.requires)
