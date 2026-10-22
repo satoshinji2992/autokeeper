@@ -38,7 +38,7 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import diagnostics, effects, fog, idea, progress, signs, views, world
+from . import chat, diagnostics, effects, fog, idea, progress, signs, views, world
 from .encounter.runner import Encounters
 from .encounter.telling import tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
@@ -1916,6 +1916,26 @@ class Game(Encounters):
         self.world.apply(Occur(id=f"talk:{st.turn}:{inv.id}:{npc_id}", actor=inv.id, participants=[npc_id], place=st.location,
                                text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
 
+    def speak(self, inv_id: str, line: str, to: str = "") -> LogEntry:
+        """Words an investigator says to the party (engine/chat.py): no keeper, no action, no time.
+        The log keeps who said it, to whom and where, for the keeper's next report, the chronicler and
+        the AI companions' situation; the world record keeps it at the place, so the NPCs there heard
+        it (World.emit), and what they make of it waits until the party moves on (scheduler.TALK)."""
+        st = self.state
+        inv = st.find(inv_id)
+        entry = st.add("speech", f"在{self.world.name(st.location)}对{to or '同伴'}说：{line}", who=inv.name)
+        heard = [i.id for i in st.investigators if i.id != inv.id and (not to or to == chat.EVERYONE or i.name == to)]
+        self.world.apply(Occur(id=f"{scheduler.TALK}{st.turn}:{inv.id}:party:{st.logged}", actor=inv.id, participants=heard,
+                               place=st.location if st.location in self.world.rec.entities else "",
+                               text=f"{inv.name}{entry.text}", visibility="public", transcript=True))  # fmt: skip
+        return entry
+
+    def _party_talk(self) -> list[str]:
+        """What the investigators said to each other since the keeper last told: for its report."""
+        st = self.state
+        last = max((i for i, e in enumerate(st.log) if e.kind == "keeper"), default=-1)
+        return [f"{e.who}{e.text}" for e in st.log[last + 1:] if e.kind == "speech"][-6:]
+
     def _unsettled(self, npc_id: str) -> list[str]:
         """What an NPC's last reply meant to do and could not (agents/cast.Cast.unsettled): the
         words stand, the deed did not land, and the keeper tells how it really went."""
@@ -2802,6 +2822,8 @@ class Game(Encounters):
         out.append("【当前在场人物，以记录为准】" + ("、".join(people) or "没有其他人")
                    + "。人物未出现在当前地点不代表失踪，不推断未观察到的去向；先前台词和旁白不能替代位置记录。")
         out.append(f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}（专用工具与新取得物品以持有记录为准。）")
+        if talk := self._party_talk():
+            out.append("【调查员之间的交谈】（玩家都已看到；不复述，不替被问到的调查员回答、交出东西或行动）\n" + "\n".join(talk))
         if st.sky and st.minutes - st.sky_at < weather.LASTS:
             out.append(f"天气：{weather.KINDS[st.sky]}（你之前写到的）")
         a = turn.action

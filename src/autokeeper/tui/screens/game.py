@@ -26,7 +26,7 @@ from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
-from ...engine import debrief, idea
+from ...engine import chat, debrief, idea
 from ...engine import graph as turn_graph
 from ...engine.encounter import views
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
@@ -121,6 +121,11 @@ STORY_SHARE, STORY_MIN = 0.38, 8  # what the story keeps under a fight's or a ch
 RISK_WORDS = {2: "可能被击倒", 3: "可能致命"}  # beside the answer to blows: how bad the worst blow in sight could be
 
 
+def speech_line(who: str, to: str, text: str) -> Text:
+    """An investigator's words to the party (engine/chat.py) in the story: the name, then the line."""
+    return Text(f"▷ {who}{f' → {to}' if to else ''}：{text}")
+
+
 class GameScreen(Screen):
     BINDINGS = [
         # Esc and F1–F5 on the footer, the rest in order of use; everything common is in the Esc menu
@@ -170,6 +175,7 @@ class GameScreen(Screen):
         self._skill_at = -1
         self._skill_value = ""
         self.queued: str | None = None  # an action typed while the keeper told, to go in once they are done
+        self.spoken: list[tuple[str, chat.Said]] = []  # words to the party, recorded once no turn runs (_heard)
         self._leave_when_ready: Callable[[], None] | None = None  # 讲完再走: where to go once the turn is over
         self.told: Static | None = None  # the story block of the latest narration, rewritten when it is told again
         self.afterword, self.writing = state.epilogue, False  # the epilogue as it comes in (engine/debrief.py)
@@ -387,6 +393,7 @@ class GameScreen(Screen):
             self._close_orders()  # the round is being settled: its list is done with
         else:
             self.status_text = ""
+            self._heard()
             if not self.spectate:
                 for box in self.query(Input).results(Input):  # none once the screen is leaving
                     box.focus()
@@ -664,7 +671,8 @@ class GameScreen(Screen):
 
     def _history(self, kind: str, body, block) -> None:
         if (line := history_line(kind, body, block)) is not None:
-            turn = self.state.turn + (kind == "player")  # an action is shown before its turn is counted
+            said = isinstance(body, Text) and body.plain.startswith("▷")  # words to the party take no turn
+            turn = self.state.turn + (kind == "player" and not said)  # an action is shown before its turn is counted
             self.query_one(HistoryPanel).note(line, block, turn)
 
     def _panels(self) -> None:
@@ -767,6 +775,9 @@ class GameScreen(Screen):
         self.query_one(Speaker).follow(ev, self.m)  # before the scene changes, so it can scan in
         if t == "status":
             self._status(ev["text"])
+        elif t == "speech":  # a teammate's words to the party, at a shared table (net/hub.Hub._speak)
+            who = f"{ev['who']}（{ev['player']}）" if ev.get("player") else ev["who"]
+            story.add("player", speech_line(who, ev.get("to", ""), ev["text"]))
         elif t == "move":
             self.view = (ev["location"], ev.get("view", ""))
             self._scene(ev["location"])
@@ -1578,7 +1589,8 @@ class GameScreen(Screen):
         text = event.value.strip()
         if text:
             self._close_orders()  # their own order instead of the round's list
-        if self.busy and text and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
+        talk = chat.ooc(text) is not None or self._said(text) is not None  # shown at once, never queued as an action
+        if self.busy and text and not talk and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
             if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
                 event.input.value = ""
@@ -1605,7 +1617,12 @@ class GameScreen(Screen):
             self._close_orders()
 
     def send_line(self, text: str) -> None:
-        """One line from the input box: a slash command, or the investigator's action."""
+        """One line from the input box: out-of-character chat, words to the party, a slash command,
+        or the investigator's action (engine/chat.py)."""
+        if (aside := chat.ooc(text)) is not None:  # nobody else at this table: shown, never recorded
+            if aside:
+                self.story.add("system", Text(f"【场外】{aside}", style="italic dim"))
+            return
         if text.startswith("/"):
             if text.startswith("/kp "):
                 self.play(text)
@@ -1615,7 +1632,40 @@ class GameScreen(Screen):
         if self.state.ending and not commands.instant(text):  # growth rolls (.en) and the like still work
             self.app.notify("本局已结束。F10 查看复盘，.en 进行成长检定，F7 查看前情回顾，Esc 打开菜单。")
             return
+        if (said := self._said(text)) is not None:
+            self.speak(said)
+            return
         self.play(text)
+
+    def _speaker(self):
+        """Who says what is typed: the investigator you play, else whoever is acting."""
+        me = self._me()
+        return next((i for i in self.state.investigators if i.id == me), self.state.investigator)
+
+    def _said(self, text: str) -> chat.Said | None:
+        """The words, if the line is said to the party and someone of it is here to hear them."""
+        if self.spectate or self.game is None or self.state.ending:
+            return None
+        me = self._speaker()
+        return chat.said(text, [i.name for i in self.state.investigators if i.id != me.id])
+
+    def speak(self, said: chat.Said) -> None:
+        """Words to the party: shown at once, recorded when no turn runs. No keeper, no action;
+        the AI companions read them in their next situation (engine/autoplay.situation)."""
+        inv = self._speaker()
+        self.story.add("player", speech_line(inv.name, said.to, said.line))
+        self.spoken.append((inv.id, said))
+        if not self.busy:
+            self._heard()
+
+    def _heard(self) -> None:
+        spoken, self.spoken = self.spoken, []
+        if self.game is None:
+            return
+        for who, said in spoken:
+            self.game.speak(who, said.line, said.to)
+        if spoken:
+            write_save(self.state, self.m)
 
     def _slash(self, text: str) -> None:
         cmd, *args = text.split()

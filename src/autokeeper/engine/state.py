@@ -12,7 +12,7 @@ from ..rules.coc import Investigator
 from ..world.record import WorldRecord
 from .encounter.model import EncounterState, EncounterSummary
 
-LogKind = Literal["opening", "player", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
+LogKind = Literal["opening", "player", "speech", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
 
 class LogEntry(BaseModel):
