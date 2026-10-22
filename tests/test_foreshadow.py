@@ -428,3 +428,51 @@ def test_check_wants_a_steps_picture_on_a_place(module):
     module.npc("warden").looks = []
     module.location("square").looks = [Look(when="flag:painting_turned", change=TURNED)]
     assert not [i for i in audit(module) if i.level == "error"]
+
+
+async def test_a_hint_whose_telling_failed_is_told_again_on_retry_and_moves_on_once(module, fake):
+    """The review of 2026-10-22: the hint was handed out in memory before the keeper was asked; the
+    telling failed, /retry reloaded the turn from its journal without the hint, and the sign had
+    already moved on: the next try told the next stage, or nothing."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from autokeeper.engine import graph
+
+    go = Action(kind="move", summary="周衡去广场", destination="square")
+    game, cast, _ = make(module, fake, {"去广场": (go, Ruling(needs_roll=False))}, location="tower")
+    told: list[str] = []
+
+    async def keeper(state, report, on_delta=None, lore=""):
+        told.append(report)
+        if len(told) == 1:
+            raise TimeoutError("模型超时")
+        return "叙事"
+
+    cast.keeper = keeper
+    app = graph.build(game, InMemorySaver())
+    thread = {"configurable": {"thread_id": "sign"}}
+    with pytest.raises(TimeoutError):
+        await app.ainvoke({"input": "去广场"}, thread)
+    assert game.state.signs == {"f_painting": 1} and game.state.pending_turn
+    await app.ainvoke({"input": "/retry"}, thread)
+    hints = [[line for line in report.splitlines() if "端倪" in line] for report in told]
+    assert len(told) == 2 and hints[0] == hints[1] and "岸边空无一人" in hints[1][0]
+    assert game.state.signs == {"f_painting": 1} and not game.state.pending_turn
+    await game.close()
+
+
+async def test_an_interludes_hint_leaves_no_turn_behind(module, fake):
+    """Told between turns (an interlude, a sketch), the hint is handed out as before, and no turn is
+    left pending for the next input to trip over."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from autokeeper.engine import graph
+
+    game, *_ = make(module, fake, {}, location="tower")
+    graph.build(game, InMemorySaver())  # the graph's keep is the game's turn checkpoint
+    turn = Turn()
+    await game._arrive("square", turn)
+    turn.interlude = True
+    await game.narrate(turn)
+    assert signs(turn) and game.state.signs == {"f_painting": 1} and not game.state.pending_turn
+    await game.close()

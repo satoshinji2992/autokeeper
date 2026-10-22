@@ -104,6 +104,7 @@ class Turn:
     declared: bool = False  # a LAN round's order, settled with the others' by the last of them
     replies: dict[str, Said] = field(default_factory=dict)  # each NPC reply's receipt, by what asked for it (Game._reply)
     voices: list[str] = field(default_factory=list)  # NPCs the keeper plan has speak in this round of an encounter (Game.talk)
+    narrating: dict = field(default_factory=dict)  # the stages narrate settles before the keeper speaks (Game._foreshadow)
 
     def absorb(self, later: Turn) -> None:
         """What another stage of the same turn settled (the replies before the ruling, the push
@@ -1998,19 +1999,33 @@ class Game(Encounters):
         counts as coming to it. A roll that failed and found nothing keeps them back: a trace on
         the very thing they searched is what the failure did not find. They come out on a later
         visit. A stage's flag is set as it shows, so the place's picture changes with it; the
-        picture of the stage after it is drawn meanwhile, in the background."""
-        st = self.state
-        missed = not turn.clues and not turn.events and (
-            any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
-        if turn.ruling is not None and turn.ruling.rest:
-            turn.foreshadow += signs.at(self.m, st, st.location)
-        handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
-        turn.foreshadow = []
-        turn.notes += [note for _, note, _ in handed]
-        if flags := [s.flag for _, _, s in handed if s.flag]:
-            await self._flags(flags, turn)
-            self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
-        self.visuals.ahead(signs.coming(self.m, st, [fid for fid, _, _ in handed]))  # there by the next step
+        picture of the stage after it is drawn meanwhile, in the background. Handed out in a stage
+        of the turn's own journal (Turn.narrating), kept with the turn before the keeper is asked:
+        a telling that failed and is tried again (/retry) tells the same hint, and the sign does
+        not move on twice (the review of 2026-10-22)."""
+        st, step = self.state, self._resolution_step
+
+        def hand() -> list[list[str]]:
+            missed = not turn.clues and not turn.events and (
+                any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
+            if turn.ruling is not None and turn.ruling.rest:
+                turn.foreshadow += signs.at(self.m, st, st.location)
+            handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
+            turn.foreshadow = []
+            turn.notes += [note for _, note, _ in handed]
+            return [[fid, s.flag] for fid, _, s in handed]
+
+        async def foreshadow() -> None:
+            handed = await step("hand", turn, hand)
+            if flags := [flag for _, flag in handed if flag]:
+                await self._flags(flags, turn)
+                self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
+            self.visuals.ahead(signs.coming(self.m, st, [fid for fid, _ in handed]))  # there by the next step
+
+        # Kept with the turn the graph is telling; an interlude's or a sketch's telling is no turn of the graph's.
+        keep = self._keep if self.state.pending_turn else (lambda _turn: None)
+        with self._journal(turn.narrating, keep):
+            await step("foreshadow", turn, foreshadow)
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
