@@ -813,7 +813,10 @@ async def test_a_failure_the_module_lets_find_something_finds_it(module, fake):
     fake.queue(10)  # the gears' sanity check
     dropped = await game.push("drop")
     assert "c_gears" in game.state.clues and "gear_jammed" in game.state.flags
-    assert any("实际发生：手指被齿轮夹了一下" in n for n in dropped.notes) and not any("没有取得" in n for n in dropped.notes)
+    note = next(n for n in dropped.notes if "【已结算的失败结果】" in n)
+    assert "已取得线索：齿轮间" in note and "已设置标记：gear_jammed" in note
+    assert "【须在本轮场面演出落实的失败后果】手指被齿轮夹了一下，还是看清了" in note
+    assert "实际发生：手指被齿轮夹了一下" not in note and not any("没有取得" in n for n in dropped.notes)
 
 
 async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake):
@@ -830,7 +833,10 @@ async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake
     pushed = await game.push({"choice": "push", "how": "把手伸进齿轮缝里摸"})
     assert "c_gears" not in game.state.clues and "warden_woken" in game.state.flags
     assert game.state.minutes - before == 10 + 15 and game.state.investigator.hp == hp - 2  # the push's own time, then the failure's
-    assert any(e["type"] == "outcome" and e["lines"][0] == f"孤注一掷也没成：{risk.risk}" for e in events)
+    assert any(e["type"] == "outcome" and e["lines"][0] == "孤注一掷也没成" for e in events)
+    assert all(risk.risk not in line for e in events if e["type"] == "outcome" for line in e["lines"])
+    assert any("【须在本轮场面演出落实的失败后果】" + risk.text in n
+               and "【已结算的失败结果】" in n for n in pushed.notes)
     assert any("孤注一掷也没有成功" in n for n in pushed.notes)
 
 

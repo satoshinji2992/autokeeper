@@ -401,7 +401,7 @@ class Manager:
                 out.events.append({"type": "damage", "who": inv.name, "text": said, "injury": injury})
                 out.notes.append(f"{inv.name}{said}")
             elif effect.kind == "sanity":
-                result = game.rules.sanity(inv, effect.success, effect.failure)
+                result = game._sanity(inv, effect.success, effect.failure)
                 out.events.append({"type": "sanity", "who": inv.name, **_sanity_view(result)})
                 out.notes.append(f"{inv.name}{result.describe()}")
             elif effect.kind == "item":

@@ -681,7 +681,7 @@ def deal_mishap(state: GameState, inv: Investigator, card_id: str, rules: Rules,
     sanity = None
     if card.sanity:
         ok, bad = card.sanity.split("/")
-        sanity = rules.sanity(inv, ok, bad)
+        sanity = rules.sanity(inv, ok, bad, now=state.minutes)
         lines.append(f"{inv.name}{sanity.describe()}")
     _deal(state, "mishap", card.id, inv.id)
     return Mishap(card, lines, sanity)

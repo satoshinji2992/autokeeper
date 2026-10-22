@@ -289,11 +289,13 @@ async def test_sanity_tool_receipts_keep_completed_rolls_if_the_madness_table_fa
     receipt = game.state.pending_turn["resolution"]["steps"]["clue:c_diary/commit"]
     assert not receipt["done"] and len(receipt["tools"]) == 3
     fake.table = table
+    fake.queue_totals(4)  # the temporary-insanity hours, after the restored table roll
     resumed, _ = reload_game(module, saved[-1], fake)
     turn = await resumed.resolve(action, ruling)
     assert resumed.state.investigator.san == san - 5
     assert "临时疯狂" in resumed.state.investigator.conditions
     assert turn.sanity[0][1].temporary
+    assert resumed.state.investigator.madness.temporary_until == resumed.state.minutes + 240
     assert resumed.state.clues == ["c_diary"] and resumed.state.handouts == ["h_diary"]
     assert len(fake.tables) == 1
     await game.close()

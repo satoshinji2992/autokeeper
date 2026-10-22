@@ -1449,9 +1449,10 @@ class Cast:
                        "尚未抵达或搜索目的地，不提前给予那里的发现或替同行者答应。")
         if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
             prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
-        prompt += "\n【本地人物的处境】\n" + ("\n".join(
-            f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
-        ) or "这里没有别人")
+        situations = [f"- {n.name}({n.id})：{n.personality}；"
+                      + (world_view.npc_stance(self.world, n.id) if self.world is not None else f"原有目标：{n.goal}")
+                      for n in near["npcs"]]
+        prompt += "\n【本地人物的处境】\n" + ("\n".join(situations) or "这里没有别人")
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
         if self.world is not None and not encounter and (ways := chase_site.ways_at(m, self.world.rec.obstacles, where)):
             prompt += ("\n【本局改变过的通路】" + "；".join(ways)

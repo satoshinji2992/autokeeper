@@ -35,6 +35,14 @@ class InjuryState(BaseModel):
     aided: list[str] = Field(default_factory=list)  # those that have had First Aid
 
 
+class MadnessState(BaseModel):
+    """The rule-owned temporary-insanity clock, in game minutes. The bout table is an immediate
+    event, not this whole latent period. None never infers a start from an old condition tag."""
+
+    temporary_since: int | None = None
+    temporary_until: int | None = None
+
+
 class Investigator(BaseModel):
     id: str
     name: str
@@ -63,6 +71,7 @@ class Investigator(BaseModel):
     # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model: out
     # of the schema, and out of the dump while there is nothing in it (_without_empty_injury).
     injury: SkipJsonSchema[InjuryState] = Field(default_factory=InjuryState)
+    madness: SkipJsonSchema[MadnessState] = Field(default_factory=MadnessState)
 
     @field_validator("skills")
     @classmethod
@@ -83,6 +92,8 @@ class Investigator(BaseModel):
         out = handler(self)
         if isinstance(out, dict) and out.get("injury") in ({}, InjuryState().model_dump()):
             out.pop("injury")
+        if isinstance(out, dict) and out.get("madness") in ({}, MadnessState().model_dump()):
+            out.pop("madness")
         return out
 
     def model_post_init(self, _context) -> None:
@@ -180,6 +191,19 @@ class Investigator(BaseModel):
         self.san_start_of_day = self.san
         self.san_lost_today = 0
 
+    def recover_madness(self, now: int, *, rested_since: int | None = None) -> list[str]:
+        """Expire only the state whose clock ran out. A completed safe night's rest may end
+        temporary insanity sooner, but cannot erase a new trauma during that rest, indefinite
+        insanity, SAN loss, phobias, disease or wounds (Keeper Rulebook p. 164 / local p. 139)."""
+        m, recovered = self.madness, []
+        rested = (rested_since is not None and now > rested_since
+                  and (m.temporary_since is None or m.temporary_since <= rested_since))
+        if ((m.temporary_until is not None and now >= m.temporary_until) or rested) and "临时疯狂" in self.conditions:
+            self.conditions.remove("临时疯狂")
+            m.temporary_since = m.temporary_until = None
+            recovered.append("临时疯狂已恢复（安全过夜休息）" if rested else "临时疯狂已到期恢复")
+        return recovered
+
 
 def _build(total: int) -> tuple[str, int]:
     if total <= 64:
@@ -266,6 +290,7 @@ class Sanity:
     indefinite: bool = False
     permanent: bool = False
     bout: str | None = None
+    duration_hours: int | None = None
 
     def describe(self) -> str:
         parts = [f"理智检定 {self.check.target} → {self.check.value} {self.check.level.zh}",
@@ -278,6 +303,8 @@ class Sanity:
             parts.append("不定性疯狂")
         elif self.temporary:
             parts.append("临时疯狂")
+        if self.duration_hours is not None:
+            parts.append(f"临时疯狂持续 {self.duration_hours} 小时")
         return "，".join(parts)
 
 
@@ -386,7 +413,7 @@ class Rules:
             return Opposed(a, b, "a" if a.target > b.target else "b")
         return Opposed(a, b, "tie")
 
-    def sanity(self, inv: Investigator, on_success: str, on_failure: str) -> Sanity:
+    def sanity(self, inv: Investigator, on_success: str, on_failure: str, *, now: int = 0) -> Sanity:
         check = self.check(inv, "理智", mark=False)
         expr = on_success if check.passed else on_failure
         if check.level == Level.FUMBLE:
@@ -394,23 +421,33 @@ class Rules:
         else:
             loss = int(expr) if expr.strip().isdigit() else self.dice.total(expr)
         before = inv.san
-        inv.san = max(0, inv.san - loss)
-        inv.san_lost_today += loss
-        result = Sanity(check, expr, loss, before, inv.san)
-        if inv.san == 0:
+        result = Sanity(check, expr, loss, before, max(0, before - loss))
+        if result.after == 0:
+            inv.san = 0
+            inv.san_lost_today += loss
             result.permanent = True
             inv.add_condition("永久疯狂")
             return result
-        if inv.san_start_of_day and inv.san_lost_today >= max(1, inv.san_start_of_day // 5):
+        if inv.san_start_of_day and inv.san_lost_today + loss >= max(1, inv.san_start_of_day // 5):
             result.indefinite = True
-            inv.add_condition("不定性疯狂")
         if loss >= 5:
             result.int_check = self.check(inv, "智力", mark=False)
             if result.int_check.passed:
                 result.temporary = True
-                inv.add_condition("临时疯狂")
         if result.temporary or result.indefinite:
             result.bout = self.dice.table("BMR")
+            if result.temporary:
+                result.duration_hours = self.dice.total("1D10")
+        # All dice, including the duration, have returned: a failed bridge cannot leave SAN
+        # deducted and a temporary condition without its clock (also outside Game's trial copies).
+        inv.san = result.after
+        inv.san_lost_today += loss
+        if result.indefinite:
+            inv.add_condition("不定性疯狂")
+        if result.temporary:
+            inv.add_condition("临时疯狂")
+            inv.madness.temporary_since = now
+            inv.madness.temporary_until = now + result.duration_hours * 60
         return result
 
     def damage(self, inv: Investigator, amount: int | str, *, means: str = "other", injury: str = "") -> Damage:

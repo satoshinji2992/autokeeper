@@ -235,6 +235,19 @@ def test_a_mishap_settles_what_it_does_at_once(deck, inv, rules, fake):
     assert "- ill_luck〔噩运〕命运和你作对。" in menu and "red_rain" in menu
 
 
+def test_a_mishaps_temporary_insanity_uses_the_current_game_clock(deck, inv, rules, fake, monkeypatch):
+    from autokeeper.engine.state import GameState
+
+    state = GameState(module="m", investigators=[inv], location="x", minutes=630)
+    rain = next(c for c in deck.mishap if c.id == "red_rain")
+    rain.sanity = "0/6"
+    monkeypatch.setattr(cards, "load", lambda: deck)
+    fake.queue(99, 30).queue_totals(8)
+    dealt = cards.deal_mishap(state, inv, "red_rain", rules)
+    assert dealt.sanity.temporary and dealt.sanity.duration_hours == 8
+    assert inv.madness.temporary_since == 630 and inv.madness.temporary_until == 1110
+
+
 def test_the_director_may_base_a_new_person_on_a_ready_made_card(deck):
     menu = cards.npc_menu("调查员去警察局找警官")
     assert menu.index("npc02 基兰·奥哈拉，警官") < menu.index("npc01")  # the one the action names comes first
@@ -254,7 +267,7 @@ async def test_a_bout_in_play_draws_a_card_the_screen_and_the_keeper_get(deck, f
     m.flags["seen"] = "看见了"
     game, _, events = make(m, fake, {})
     monkeypatch.setattr(cards, "for_sanity", lambda state, inv, s, rng=None: deck.madness[3])
-    fake.queue(99, 50).queue_totals(6)  # the SAN roll fails, 6 lost; INT 50 passes: temporary insanity
+    fake.queue(99, 50).queue_totals(6, 4)  # SAN loses 6; INT passes; temporary insanity lasts four hours
     turn = Turn()
     await game._flags(["seen"], turn)
     sanity = next(e for e in events if e["type"] == "sanity")

@@ -74,11 +74,12 @@ def test_push_and_luck(rules, fake, inv):
 
 
 def test_sanity_temporary_insanity(rules, fake, inv):
-    fake.queue(80, 30).queue_totals(6)
+    fake.queue(80, 30).queue_totals(6, 4)
     s = rules.sanity(inv, "1", "1D6")
     assert s.loss == 6 and inv.san == 54
     assert s.temporary and s.int_check and s.int_check.passed
     assert "临时疯狂" in inv.conditions and fake.tables == ["BMR"]
+    assert s.duration_hours == 4 and inv.madness.temporary_until == 240
 
 
 def test_sanity_fumble_takes_maximum_and_daily_limit(rules, fake, inv):

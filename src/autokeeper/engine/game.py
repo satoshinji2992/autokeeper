@@ -1430,32 +1430,49 @@ class Game(Encounters):
         missed = [self.m.clue(c).title for c in wanted if c not in st.clues and c not in clues]
         flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
-        def time() -> None:
-            st.minutes += self._overlap(max(0, min(failure.minutes, 240)))
+        def time() -> int:
+            elapsed = self._overlap(max(0, min(failure.minutes, 240)))
+            st.minutes += elapsed
+            return elapsed
 
-        await step("fail-time", turn, time)
+        elapsed = await step("fail-time", turn, time)
         if flags:
             await step("fail-flags", turn, lambda: self._flags(flags, turn))
         if clues:
             await step("fail-clues", turn, lambda: self._gain(clues, turn, action))
+        damage_notice = None
         if failure.damage.strip():
             injury = f"fail:{st.turn}:{self._resolution_key('fail-damage')}"
-            notice = await step("fail-damage", turn, lambda: self._wound_event(st.investigator.id, failure.damage.strip(), injury,
-                                                                               turn))
-            if notice:
-                await step("fail-damage-notice", turn, lambda: self.emit(notice))
+            damage_notice = await step("fail-damage", turn, lambda: self._wound_event(
+                st.investigator.id, failure.damage.strip(), injury, turn))
+            if damage_notice:
+                await step("fail-damage-notice", turn, lambda: self.emit(damage_notice))
+        sanity_notice = None
         if failure.sanity:  # the SAN roll the failure calls for, settled as an event's or a clue's
-            notice = await step("fail-sanity", turn, lambda: self._lose_sanity(st.investigator, failure.sanity, turn))
-            await step("fail-sanity-notice", turn, lambda: self.emit(notice))
+            sanity_notice = await step("fail-sanity", turn, lambda: self._lose_sanity(st.investigator, failure.sanity, turn))
+            await step("fail-sanity-notice", turn, lambda: self.emit(sanity_notice))
         mishap = await self._mishap(failure.mishap, turn, "fail-mishap") if failure.mishap.strip() else ""
-        happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
-                                f"{st.investigator.name}受了伤" if failure.damage.strip() else "",
-                                f"{st.investigator.name}的理智受到冲击" if failure.sanity else "",
-                                f"惨事卡〔{mishap}〕" if mishap else "") if x]
-        if not missed and not happened:
+        gained = [self.m.clue(cid).title for cid in failure.clues if cid in turn.clues]
+        set_flags = [f for f in failure.flags if f in st.flags]
+        sanity_text = sanity_notice["text"] if sanity_notice else ""
+        if sanity_notice and sanity_notice["loss"] > 0:
+            sanity_text = f"{st.investigator.name}的理智受到冲击：{sanity_text}"
+        settled = [x for x in (f"耽搁了 {elapsed} 分钟" if elapsed else "",
+                               damage_notice["text"] if damage_notice else "",
+                               sanity_text,
+                               f"已取得线索：{'、'.join(gained)}" if gained else "",
+                               f"已设置标记：{'、'.join(set_flags)}" if set_flags else "",
+                               f"惨事卡〔{mishap}〕" if mishap else "") if x]
+        narrative = failure.text.strip()
+        if not missed and not settled and not narrative:
             return  # the roll's card says it: nothing was within reach and nothing else came of it
         note = ("孤注一掷也没有成功" if pushed else "这次检定失败") + (f"，没有取得：{'、'.join(missed)}" if missed else "")
-        note += f"。实际发生：{'；'.join(happened)}" if happened else "。没有别的后果"
+        if settled:
+            note += f"。【已结算的失败结果】{'；'.join(settled)}。这些结果已入账，只描写，不再次结算。"
+        if narrative:
+            note += (f"。【须在本轮场面演出落实的失败后果】{narrative}。"
+                     "这是须承担的失败代价，不因尚未演完而取消；其中未演出的回应、行程或交付不代表已经完成。"
+                     "按实际演出提交场面，不替调查员作出尚待回应的选择；与已结算项目重合的内容只描写一次，不再扣除或发放。")
         await step("fail-note", turn, lambda: turn.notes.append(
             note + "。照实讲失败，不在叙述里补出没拿到的东西；之后可以有新的机会，这一轮不补偿。"))
 
@@ -2262,7 +2279,7 @@ class Game(Encounters):
         if lucky:
             lines.insert(0, f"花了 {pending['luck']} 点幸运，算作成功")
         elif not passed:
-            lines.insert(0, f"孤注一掷也没成：{pending['risk']}" if pending.get("risk") else "孤注一掷也没成")
+            lines.insert(0, "孤注一掷也没成")
         await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
 
     async def _method(self, pending: dict, how: str) -> dict:
@@ -2883,7 +2900,7 @@ class Game(Encounters):
                 for inv in st.investigators:
                     if inv.id not in watching or not inv.can_act:
                         continue
-                    s = self.rules.sanity(inv, ok, bad)
+                    s = self._sanity(inv, ok, bad)
                     turn.sanity.append((inv.name, s))
                     st.add("sanity", s.describe(), who=inv.name)
                     await self.emit({"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)})
@@ -2932,11 +2949,37 @@ class Game(Encounters):
         a resolution stage, so a turn resumed after a crash does not roll or lose it again."""
         ok, bad = roll.split("/")
         trial = inv.model_copy(deep=True)
-        sanity = self.rules.sanity(trial, ok, bad)
+        sanity = self._sanity(trial, ok, bad)
         inv.__dict__.update(trial.__dict__)
         turn.sanity.append((inv.name, sanity))
         self.state.add("sanity", sanity.describe(), who=inv.name)
         return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+
+    def _sanity(self, inv: Investigator, ok: str, bad: str) -> Sanity:
+        """A SAN check at the actual game clock; the bout table remains its own immediate event."""
+        return self.rules.sanity(inv, ok, bad, now=self.state.minutes)
+
+    async def _recover_madness(self, turn: Turn, *, rested: list[str] | None = None, since: int | None = None) -> None:
+        """Rule-owned expiry or an accepted telling's completed safe rest, with one saved receipt
+        for the state, log and notices. This never interprets narrative text or a player's wish."""
+        st = self.state
+
+        def commit() -> list[dict]:
+            notices = []
+            for inv in st.investigators:
+                for recovered in inv.recover_madness(st.minutes, rested_since=since if inv.id in (rested or ()) else None):
+                    text = f"{inv.name}：{recovered}；已损失的理智不返还。"
+                    st.add("system", text, audience=[inv.id])
+                    turn.notes.append(text)
+                    notices.append({"text": text, "audience": [inv.id]})
+            return notices
+
+        notices = await self._resolution_step("madness-rest" if rested else "madness-expiry", turn, commit)
+        for index, notice in enumerate(notices):
+            await self._resolution_step(f"madness-notice:{index}", turn,
+                                        lambda notice=notice: self.emit({"type": "status", **notice}))
+        if notices:
+            await self._resolution_step("madness-sheet", turn, lambda: self.emit({"type": "sheet"}))
 
     def _madness(self, inv: Investigator, s: Sanity, turn: Turn) -> dict[str, Any]:
         """The phobia deck's card for this madness (cards.for_sanity): on the sheet, in the keeper's
@@ -3134,7 +3177,7 @@ class Game(Encounters):
                 if clue.sanity:
                     ok, bad = clue.sanity.split("/")
                     trial = inv.model_copy(deep=True)
-                    sanity = self.rules.sanity(trial, ok, bad)
+                    sanity = self._sanity(trial, ok, bad)
                     inv.__dict__.update(trial.__dict__)
                 if clue.mythos:
                     inv.skills["克苏鲁神话"] = inv.value("克苏鲁神话") + clue.mythos
@@ -3193,6 +3236,7 @@ class Game(Encounters):
     async def _time(self, turn: Turn | None = None) -> None:
         st, m = self.state, self.m
         turn = turn or Turn()
+        await self._recover_madness(turn)
         if st.minutes // 1440 != st.day:  # a new day: each investigator's daily SAN loss starts again
             st.day = st.minutes // 1440
             for inv in st.investigators:
@@ -3909,6 +3953,7 @@ class Game(Encounters):
                 self.visuals.schedule()
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
+                receipt["rested"] = []
             else:
                 receipt["story_flags"] = []
                 for flag in receipt.get("flags", []):
@@ -3933,6 +3978,12 @@ class Game(Encounters):
                     st.presentation_issues.pop("perception", None)
             receipt["perception_problems"] = problems
             receipt["perceptions_landed"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        if receipt.get("rested") and not receipt.get("rested_landed"):
+            with self._journal(receipt.setdefault("rest_journal", {}), self._keep):
+                await self._recover_madness(turn or Turn(), rested=receipt["rested"], since=receipt["rest_since"])
+            receipt["rested_landed"] = True
             if self.checkpoint:
                 self.checkpoint()
         if receipt.get("room") and not receipt.get("walked"):
@@ -4053,7 +4104,7 @@ class Game(Encounters):
         down: it may tell of what did not land), and the scene in words for telling it again."""
         return {"text": text, "units": [u.dump() for u in p.held], "flags": [] if partial else p.flags,
                 "room": p.room, "now": "" if partial else p.now,
-                "note": scene.kept(p)}
+                "note": scene.kept(p), "rested": [] if partial else p.rested, "rest_since": p.rest_since}
 
     def _scene_context(self, turn: Turn | None) -> scene.Context:
         """What the keeper's scene is checked with: this turn's minutes so far (from the player's
@@ -4071,7 +4122,9 @@ class Game(Encounters):
         ruling = turn.ruling if turn is not None else None
         lacks = (getattr(ruling, "missing", None) or []) if ruling is not None else []
         return scene.Context(travel=self._travel, elapsed=max(0, st.minutes - start) if acted else 0,
-                             missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1)
+                             missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1,
+                             resting=bool(acted and ruling and (ruling.rest or turn.action.kind == "wait")
+                                          and not ruling.mishap and st.encounter is None), rest_since=start)
 
     def _scene_brief(self, ctx: scene.Context) -> str:
         """The scene as the record has it, for the keeper's to start from: where they are, who is
@@ -4083,9 +4136,15 @@ class Game(Encounters):
         # What the action lacks is said once, in the report's notes (Game._lacking); the scene's check holds it too.
         flags = "；".join(f"{flag}：{meaning}" for flag, meaning in self.m.flags.items() if flag not in st.flags)
         items = world_view.item_refs(w, {st.location, st.investigator.id, *w.present(st.location)})
+        madness = ""
+        if any({"临时疯狂", "不定性疯狂"}.intersection(i.conditions) for i in st.investigators):
+            madness = "临时疯狂是持续数小时的潜在状态，不能当作整个期间都在即时发作；不定性疯狂不因过夜自动治愈。"
+            if ctx.resting:
+                madness += "scene.rested 只写实际在安全处良好过夜、已经完成休息的调查员；想睡、等待、守夜、途中惊醒或紧张防袭不能算。"
         return (f"\n\n【场面】先写 scene，是这段讲完时的样子，没变的照抄。现在：调查员在 {st.location}（{w.name(st.location)}），"
                 f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。"
                 "本段真正做成的剧情事实写进 scene.flags，不等下一轮裁定员补记；未完成的决定和谎言不算事实。"
+                + madness +
                 "物件的拿起、交出、归还或放回地点都写进 holds；已有 item 用下表实际 id，不能用合称另造物件。"
                 "新日常物件先在 things 写拿出者，交出或留下时再以同名写 holds。"
                 f"放在本处的桌上、抽屉或门边时 holder 填 {st.location}，细部位置在事实或痕迹中交代；"
@@ -4335,5 +4394,6 @@ def _sanity_view(s: Sanity) -> dict[str, Any]:
         "indefinite": s.indefinite,
         "permanent": s.permanent,
         "bout": s.bout,
+        "duration_hours": s.duration_hours,
         "check": _check_view(s.check),
     }

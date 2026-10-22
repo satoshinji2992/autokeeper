@@ -17,7 +17,8 @@ A scene does not move the clock: someone comes or goes only as far as the minute
 took (Context.elapsed, measured with Game._travel). The investigators go somewhere else only on their
 own action, ruled and timed by the engine. Someone gone from the scene has left, and went somewhere.
 What the scene cannot say: anyone's state or wounds (rules settle those), and nothing for the record
-that is not in it.
+that is not in it. `rested` confirms an actual safe night's rest after its time passed; the rules
+alone apply its temporary-insanity recovery, not a general permission to change anyone's state.
 
 plan() tries every unit on a copy, people first, then things on a copy that already holds the
 people's moves, and says in words the keeper can act on what does not hold. land() lands the units
@@ -102,6 +103,9 @@ class Scene(BaseModel):
         "本段已经发生、满足完整含义的剧情标记 id；人物本次真正做成的事也在这里登记。"
         "只从已声明标记中选，不将尝试、提议、口头谎言或尚未完成的计划当成事实，不改写骰点和取得条件"))
     now: str = Field("", description="讲完时眼前还在进行的事，一句话，只写调查员看得到的；没有就留空")
+    rested: list[str] = Field(default_factory=list, description=(
+        "实际在安全处良好过夜、已经充分休息完的调查员id；想睡、守夜、等待或中断未睡够不能填。"
+        "仅确认本段已完成的休息，恢复由规则结算，不恢复理智值、疾病、伤势或不定性疯狂"))
 
 
 @dataclass
@@ -114,6 +118,8 @@ class Context:
     walk: bool = True  # the investigators acted this turn, so they may walk between the rooms of the place
     ids: str = "keeper:0"  # op ids are f"{ids}:{i}"
     start: int = 0  # the first i
+    resting: bool = False  # the timed action was rest, without a ruled interruption
+    rest_since: int = 0  # the actual timed action's start, never the planned wake-up time
 
 
 @dataclass
@@ -144,6 +150,8 @@ class Plan:
     now: str = ""
     end: str = ""  # how it stands once the units that hold have landed, in words
     flags: list[str] = field(default_factory=list)  # completed story facts; only a whole accepted scene may commit these
+    rested: list[str] = field(default_factory=list)
+    rest_since: int = 0
 
     @property
     def held(self) -> list[Unit]:
@@ -534,8 +542,12 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     now = "" if _blank(scene.now) else _clip(scene.now)
     flags = list(dict.fromkeys(scene.flags))
     problems += [f"剧情标记 {flag} 没有声明：只能从模组标记中选择。" for flag in flags if flag not in w.m.flags]
+    rested = list(dict.fromkeys(scene.rested))
+    if rested and (not ctx.resting or ctx.elapsed <= 0):
+        problems.append("本轮没有实际完成休息时间，或休息已中断；不能把想睡、等待或守夜写成安全过夜恢复。")
+    problems += [f"休息者 {who} 不是本局调查员。" for who in rested if who not in party]
     return Plan(units=merged, problems=list(dict.fromkeys(problems)), now=now, end=end_words,
-                flags=[] if problems else flags)
+                flags=[] if problems else flags, rested=[] if problems else rested, rest_since=ctx.rest_since)
 
 
 def _meet(a: str, b: str, why: str) -> dict[str, Any]:

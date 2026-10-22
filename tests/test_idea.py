@@ -303,8 +303,10 @@ async def test_a_push_says_how_and_its_time_passes_before_the_roll(module, fake)
     assert st.minutes - start == 30 + 90 + 20  # the search, the push's own time, then its failure
     assert "c_archive" not in st.clues and any("孤注一掷：把三十年前" in e.text for e in st.log if e.kind == "player")
     outcome = [e for e in out if e["type"] == "outcome"][-1]
-    assert outcome["lines"][0] == f"孤注一掷也没成：{risk.risk}"
-    assert any(risk.text in report for report in cast.reports)  # the complete result still reaches the keeper
+    assert outcome["lines"][0] == "孤注一掷也没成" and "检定失败" in outcome["lines"]
+    assert all(risk.risk not in line and risk.text not in line for line in outcome["lines"])
+    assert any("【须在本轮场面演出落实的失败后果】" + risk.text in report
+               and "耽搁了 20 分钟" in report for report in cast.reports)
 
 
 async def test_a_push_that_cannot_reach_the_goal_is_refused_and_nothing_is_rolled(module, fake):

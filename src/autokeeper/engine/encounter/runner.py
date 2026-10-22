@@ -579,7 +579,7 @@ class Encounters:
                         return None
                     ok, bad = prof.sanity.split("/", 1)
                     trial = inv.model_copy(deep=True)
-                    s = self.rules.sanity(trial, ok.strip(), bad.strip())
+                    s = self._sanity(trial, ok.strip(), bad.strip())
                     inv.__dict__.update(trial.__dict__)
                     st.sightings.setdefault(inv.id, []).append(horror)
                     turn.sanity.append((inv.name, s))

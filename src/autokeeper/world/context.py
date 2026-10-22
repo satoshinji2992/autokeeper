@@ -216,6 +216,31 @@ SHOWN = {"occur", "move", "transfer", "equip", "condition", "promise", "fulfil",
 ONCE = {True: "，只做一次，做过填进 played", False: "，一贯如此，碰上了才带出，不必每次都演"}
 
 
+def npc_stance(w: World, npc: str) -> str:
+    """Current willingness for a ruling, without replaying the character's whole memory."""
+    ent, agent = w.rec.entities.get(npc), w.rec.agents.get(npc)
+    lines = []
+    if agent is not None:
+        lines.append("当前目标（以此为准）：" + ("；".join(agent.goals) or "无"))
+        if agent.goal_reason:
+            lines.append("目标变化依据：" + agent.goal_reason)
+        if agent.mood:
+            lines.append("当前心境：" + agent.mood)
+    else:
+        original = next((n.goal for n in w.m.npcs if n.id == npc), "")
+        lines.append("原有目标：" + (original or "无"))
+    if ent is not None:
+        if ent.status or ent.conditions:
+            lines.append("当前状况：" + "、".join(x for x in [ent.status, *ent.conditions] if x))
+        if ent.following:
+            lines.append("已同意同行：" + _company(w, ent))
+    promises = [p for p in w.rec.promises.values() if npc in (p.by, p.to) and p.status == "active"]
+    if promises:
+        lines.append("已记录且未结算的约定（不代表真实意图或已履行）：" + "；".join(
+            f"{w.name(p.by)}答应{w.name(p.to)}：{p.text}（{_when(p.due)}）" for p in promises))
+    return "；".join(lines)
+
+
 def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, str] | None = None) -> str:
     """What an NPC brings to a conversation of its own life in this game: how it is, what it is
     after and up to, what it remembers, how it stands with people, what it promised. The rest of
