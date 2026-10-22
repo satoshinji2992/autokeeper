@@ -315,6 +315,20 @@ async def test_a_find_nobody_said_is_the_keepers_to_tell_even_in_a_conversation(
     await game.narrate(turn)
     report = cast.reports[-1]
     assert f"获得线索〔齿轮间〕：{gears.text.strip()}" in report and "亲口说出" in report  # the diary was his line
-    assert "【讲出发现】玩家看不到线索卡，只能从你的叙述里得知上面的线索" in report
+    assert "【讲出发现】玩家看不到线索卡，〔齿轮间〕的内容只能从你的叙述里得知" in report  # the diary was said
     assert all(words in report for words in ("看到、读到、听到或想到", "不概括成结论", "不点明这是线索", "不添原文没有的内容"))
+    await game.close()
+
+
+async def test_a_paper_handed_over_speaks_for_itself(fake):
+    """A clue that comes with a paper: the players hold its words (the handout window, F2's 资料), so the
+    keeper tells how they came by it, not the whole of it again."""
+    m = Module.load(EXAMPLE)
+    game, _, events = table(fake, module=m)
+    m.clue("c_diary").handout = "h_diary"  # the warden's diary, handed over this time
+    turn = Turn(action=LOOK)
+    await game._gain(["c_diary"], turn, None)
+    assert "handout" in [e["type"] for e in events]
+    report = game._report(turn)
+    assert "手稿〔守钟人的日记〕的原文在玩家手里" in report and "不复述全文" in report and "【讲出发现】" not in report
     await game.close()

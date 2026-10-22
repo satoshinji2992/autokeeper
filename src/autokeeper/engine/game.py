@@ -2994,13 +2994,24 @@ class Game(Encounters):
     def _found(self, turn: Turn) -> list[str]:
         """What the investigators came to know this turn, for the keeper: each clue in its own words.
         The players see no clue card (the user's call, 2026-10-22: no summaries handed to them): what
-        no NPC said in the line already shown, the telling has to put into the story."""
+        no NPC said in the line already shown, and no paper they now hold says, the telling has to put
+        into the story."""
         told, m = self._told_by(turn), self.m
-        out = [f"获得线索〔{m.clue(cid).title}〕：{m.clue(cid).text.strip()}"
-               + (f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）" if cid in told else "") for cid in turn.clues]
-        if any(cid not in told for cid in turn.clues):
-            out.append("【讲出发现】玩家看不到线索卡，只能从你的叙述里得知上面的线索。这一轮就把它讲出来：写调查员实际看到、读到、听到或想到的东西，"
-                       "原文里的人名、地点、时间和细节照实写具体，用故事里的说法；不概括成结论，不点明这是线索，不添原文没有的内容。")
+        out, untold = [], []
+        for cid in turn.clues:
+            c = m.clue(cid)
+            line = f"获得线索〔{c.title}〕：{c.text.strip()}"
+            if cid in told:
+                line += f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）"
+            elif c.handout and any(h.id == c.handout for h in m.handouts):
+                line += f"（手稿〔{m.handout(c.handout).title}〕的原文在玩家手里：交代怎么拿到、看到它，不复述全文）"
+            else:
+                untold.append(cid)
+            out.append(line)
+        if untold:
+            out.append(f"【讲出发现】玩家看不到线索卡，{''.join(f'〔{m.clue(c).title}〕' for c in untold)}的内容只能从你的叙述里得知，"
+                       "这一轮就讲出来：写调查员实际看到、读到、听到或想到的东西，原文里的人名、地点、时间和细节照实写具体，用故事里的说法；"
+                       "不概括成结论，不点明这是线索，不添原文没有的内容。")
         return out
 
     def _unknown(self, events: list[Event]) -> list[str]:
