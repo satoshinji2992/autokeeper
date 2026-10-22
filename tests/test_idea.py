@@ -191,11 +191,12 @@ ARCHIVE = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_
                  on_push_fail=Failure(text="管理员来赶人"))
 
 
-def test_old_choices_and_stated_ways_both_read():
+def test_a_push_always_says_how():
     assert push_choice("luck") == ("luck", "") and push_choice({"choice": "push", "how": " 一页页 翻 "}) == ("push", "一页页 翻")
     assert push_choice({"choice": "drop", "how": "随便"}) == ("drop", "")
-    with pytest.raises(ValueError):
-        push_choice("again")
+    for bad in ("again", "push", {"choice": "push", "how": "  "}):  # a bare push came only from old tapes
+        with pytest.raises(ValueError):
+            push_choice(bad)
 
 
 async def test_a_push_says_how_and_its_time_passes_before_the_roll(module, fake):
@@ -229,22 +230,12 @@ async def test_a_push_that_cannot_reach_the_goal_is_refused_and_nothing_is_rolle
     assert any("孤注一掷不成立（去隔壁街再找一份）：合订本已经被人借走了" in n for n in turn.notes)
 
 
-async def test_a_push_without_a_way_goes_as_before(module, fake):
-    game, _cast, _ = make(module, fake, {}, location="office")
-    fake.queue(90, 3)
-    await game.resolve(LOOK, ARCHIVE)
-    before = game.state.minutes
-    await game.push("push")
-    assert "c_archive" in game.state.clues and game.state.minutes == before  # an old save's choice
-
-
 def test_an_ai_player_answers_a_push_offer_the_way_it_said_it_would_push():
     offer = {"can_push": True, "luck": 12}
     assert ai_choice(offer, " 把合订本 一页页翻完 ") == {"choice": "push", "how": "把合订本 一页页翻完"}
     assert ai_choice(offer, "") == "luck"  # it said no way: no bare push
     assert ai_choice({"can_push": True, "luck": None}) == "drop"
     assert ai_choice({"can_push": False, "luck": None}, "再翻一遍") == "drop"  # a push not allowed stays so
-    assert Proposal.of("我四下看看") == Proposal(text="我四下看看", push="")  # a stand-in's plain words
 
 
 async def test_the_ai_investigator_says_its_action_and_how_it_would_push_it(module, monkeypatch):
@@ -253,8 +244,7 @@ async def test_the_ai_investigator_says_its_action_and_how_it_would_push_it(modu
     from autokeeper.harness import Reply
 
     cast = Cast(config.Config(), module)
-    replies = [Reply(text="", data={"text": "我翻旧报\n（多余的一行）", "push": " 把那一年的 合订本全翻完 "}),
-               Reply(text="我去钟楼"), Reply(text="", data={"text": ""})]
+    replies = [Reply(text="", data={"text": " 我翻旧报 ", "push": " 把那一年的 合订本全翻完 "})]
 
     async def send(key, session, state, prompt, **kw):
         assert session.schema == Proposal.model_json_schema()
@@ -264,9 +254,35 @@ async def test_the_ai_investigator_says_its_action_and_how_it_would_push_it(modu
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     inv = state.investigators[0].id
     assert await cast.investigator(state, inv, "") == Proposal(text="我翻旧报", push="把那一年的 合订本全翻完")
-    assert await cast.investigator(state, inv, "") == Proposal(text="我去钟楼")  # plain words: no push said
-    assert (await cast.investigator(state, inv, "")).text == "我四下看看。"
     assert "push 写：这件事如果要检定而失败了，你打算怎样孤注一掷" in INVESTIGATOR_SYSTEM
+
+
+async def test_an_ai_investigators_answer_that_is_no_action_goes_back_once_and_nothing_is_made_up(module, monkeypatch):
+    """The review of 2026-10-22: an empty answer became 「我四下看看。」 and a second line was cut off.
+    Now an answer that is no action goes back once with what is wrong; still none, it goes to the debug
+    journal and the seat makes no move (None)."""
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.harness import Reply
+
+    cast = Cast(config.Config(), module)
+    journal: list[tuple[str, dict]] = []
+    cast.debug_journal = type("Journal", (), {"append": lambda self, kind, data, turn=0: journal.append((kind, data))})()
+    replies = [Reply(text="", data={"text": "我翻旧报\n然后去钟楼"}), Reply(text="", data={"text": "我去钟楼"}),
+               Reply(text="", data={"text": ""}), Reply(text="", data={"text": "  "})]
+    fixes: list[str] = []
+
+    async def send(key, session, state, prompt, **kw):
+        fixes.append(kw.get("extra", ""))
+        return replies.pop(0)
+
+    monkeypatch.setattr(cast, "_send", send)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    inv = state.investigators[0].id
+    assert await cast.investigator(state, inv, "") == Proposal(text="我去钟楼")  # the whole answer, sent back once
+    assert fixes[0] == "" and "不分行" in fixes[1] and "我翻旧报\\n然后去钟楼" in fixes[1]
+    assert await cast.investigator(state, inv, "") is None  # no action after one resend: none made up
+    assert not replies and journal[-1][0] == "investigator" and journal[-1][1]["phase"] == "invalid"
 
 
 async def test_an_ai_players_stated_push_is_ruled_again_and_takes_its_time(module, fake):

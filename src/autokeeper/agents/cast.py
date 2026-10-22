@@ -335,16 +335,21 @@ class Ideas(BaseModel):
 class Proposal(BaseModel):
     """An AI investigator's turn (Cast.investigator): what it does, and how it would push this
     action's roll if it failed (Keeper Rulebook p. 73), said with the action so that answering a
-    push offer takes no call of its own (engine/game.ai_choice). `text` is its one required field:
-    a reply in plain words (an older recording, a model that ignored the format) stands for it."""
+    push offer takes no call of its own (engine/game.ai_choice)."""
 
     text: str = Field(description="这一轮做的事：第一人称一句话")
     push: str = Field("", description="这件事要检定而失败时，打算怎样孤注一掷：一句话说清多花的力气、时间或冒的险；不值得冒险就留空")
 
-    @classmethod
-    def of(cls, said: Proposal | str) -> Proposal:
-        """A proposal, or plain words (a stand-in cast's) as one with no push said."""
-        return said if isinstance(said, Proposal) else cls(text=str(said))
+
+def _proposal_problems(p: Proposal) -> list[str]:
+    """What makes an AI investigator's answer no action to play (Cast.investigator): no words, or more
+    than one line of them. Its words are not cut down to fit."""
+    text = p.text.strip()
+    if not text:
+        return ["text 是空的：写这一轮要做的一件事，第一人称一句话"]
+    if len(text.splitlines()) > 1:
+        return ["text 写了不止一行：只写这一轮要做的一件事，一句话，不分行"]
+    return []
 
 
 def _storyteller(npc: NPC) -> bool:
@@ -1624,17 +1629,33 @@ class Cast:
         reply = await self._send("progress", self.sessions["progress"], state, material, bind=False)
         return reply.text.strip()
 
-    async def investigator(self, state: GameState, inv_id: str, situation: str) -> Proposal:
-        """An AI investigator's move, with how it would push it if its roll failed (Proposal.push)."""
+    async def investigator(self, state: GameState, inv_id: str, situation: str) -> Proposal | None:
+        """An AI investigator's move, with how it would push it if its roll failed (Proposal.push). An
+        answer that is no action (_proposal_problems) goes back once with what is wrong; still none,
+        it goes to the debug journal whole and the seat makes no move this time (None): nothing is
+        made up in its place (the user's call, 2026-10-21)."""
         inv = state.find(inv_id)
         key = f"investigator:{inv_id}"
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
         s = self._open(key, "investigator", system, schema=_schema(Proposal))
         # Remember where and when each move was made; the latest events come with every situation.
-        reply = await self._send(key, s, state, situation, remember=situation.split("\n", 1)[0])
-        said = _parse(Proposal, reply.data, {"text": reply.text})
-        lines = said.text.strip().splitlines()
-        return Proposal(text=lines[0].strip() if lines else "我四下看看。", push=" ".join(said.push.split()))
+        remember = situation.split("\n", 1)[0]
+        reply = await self._send(key, s, state, situation, remember=remember)
+        said, problems = self._judge(Proposal, reply.data, _proposal_problems)
+        if problems:
+            first = reply.data
+            s.forget()  # an answer that is no move is not one it remembers making
+            fix = ("\n\n【上一份回答的问题】\n" + "\n".join(f"- {p}" for p in problems)
+                   + f"\n【上一份回答】{dumps(first)}\n改正这些问题，重交一份完整的回答。")
+            reply = await self._send(key, s, state, situation, remember=remember, extra=fix)
+            said, problems = self._judge(Proposal, reply.data, _proposal_problems)
+            if problems:
+                s.forget()
+                self._journal("investigator", {"phase": "invalid", "session": key, "answer": reply.data, "problems": problems,
+                                               "first": first}, state)
+                return None
+        assert said is not None
+        return said.model_copy(update={"text": said.text.strip(), "push": " ".join(said.push.split())})
 
     async def suggest(self, state: GameState, inv_id: str, situation: str) -> list[str]:
         """Ideas for a player's own investigator (F5, /suggest): three actions, written by the

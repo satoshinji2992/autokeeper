@@ -271,7 +271,7 @@ async def test_a_failed_push_can_deal_a_mishap(deck, fake):
     fake.queue(99)
     await game.resolve(look, ruling)
     fake.queue(99)
-    pushed = await game.push("push")
+    pushed = await game.push({"choice": "push", "how": "硬掰卡住的齿轮"})
     assert game.state.investigator.luck == luck // 2
     card = next(e for e in events if e["type"] == "card")
     assert card["name"] == "噩运" and card["who"] == game.state.investigator.name

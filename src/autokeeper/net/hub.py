@@ -72,7 +72,6 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..agents.cast import Proposal
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -1335,7 +1334,11 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        move = Proposal.of(await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game)))  # in a fight: its choices
+        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game))  # in a fight: its choices
+        if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
+            await self._event({"type": "status", "text": ""})
+            await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}本轮未行动。"})
+            return
         await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
         await self._run(move.text, inv.id, ai=True, push=move.push)
 

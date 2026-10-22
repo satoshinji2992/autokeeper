@@ -12,7 +12,7 @@ import pytest
 
 import autokeeper
 from autokeeper import paths
-from autokeeper.agents.cast import Action, Ruling
+from autokeeper.agents.cast import Action, Proposal, PushRuling, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
@@ -29,13 +29,18 @@ class TableCast:
 
     def __init__(self) -> None:
         self.ai_turns: list[str] = []
+        self.told: dict[str, list[str]] = {}  # as Cast.told and Cast.unsettled: nothing told, nothing left undone
+        self.unsettled: dict[str, list[str]] = {}
 
     async def intent(self, state, text):
         return Action(kind="investigate", summary=f"{state.investigator.name}：{text}")
 
-    async def arbiter(self, state, action, at=None):
+    async def arbiter(self, state, action, at=None, *, encounter="", problems=None):
         board = "告示栏" in action.summary and "c_notice" not in state.clues
         return Ruling(needs_roll=False, minutes=5, auto_clues=["c_notice"] if board else [])
+
+    async def repush(self, state, pending, how):
+        return PushRuling(achievable=True, minutes=10)
 
     async def keeper(self, state, report, on_delta=None, lore=""):
         if on_delta:
@@ -47,7 +52,7 @@ class TableCast:
 
     async def investigator(self, state, inv_id, situation):
         self.ai_turns.append(inv_id)
-        return "我四下看看"
+        return Proposal(text="我四下看看")
 
     async def chronicle(self, state, entries):
         return "摘要"
@@ -504,6 +509,31 @@ async def test_sitting_down_elsewhere_while_asked_does_not_hang_the_table(fake):
     await hub._sit("c1", "lin")
     assert await asyncio.wait_for(asked, 1) is None
     assert hub.sits == {lead.id: None, "lin": "c1"} and lead.id not in hub.asking
+    await hub.game.close()
+
+
+async def test_an_ai_seat_with_no_action_to_play_makes_no_move(fake):
+    """Cast.investigator answers None when, sent back once, the model still gave no action: the seat
+    makes no move this round and the table is told so; nothing is made up for it (the review of
+    2026-10-22: 「我四下看看。」 was played in its place)."""
+
+    class Blank(TableCast):
+        async def investigator(self, state, inv_id, situation):
+            self.ai_turns.append(inv_id)
+            return None
+
+    hub = Hub(EXAMPLE, seats=["AI"], cast=Blank(), rules=Rules(dice=fake))
+    sent: list[dict] = []
+
+    async def collect(msg):
+        sent.append(msg)
+
+    hub._broadcast = collect
+    turn = hub.state.turn
+    await hub._ai_turn(hub.state.investigators[0])
+    said = [m["text"] for m in sent if m["t"] == "say"]
+    assert said == [f"{hub.state.investigators[0].name}本轮未行动。"] and hub.state.turn == turn
+    assert not any(m["t"] == "event" and m["ev"]["type"] == "said" for m in sent)
     await hub.game.close()
 
 

@@ -24,7 +24,7 @@ from textual.widgets import Footer, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
-from ...agents.cast import Cast, Proposal
+from ...agents.cast import Cast
 from ...engine import debrief, idea
 from ...engine import graph as turn_graph
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
@@ -1699,7 +1699,10 @@ class GameScreen(Screen):
         inv = st.investigators[idx]
         self._status(f"{inv.name} 正在决定行动…")
         situation = self._situation()
-        move = Proposal.of(await self.cast.investigator(st, inv.id, situation))
+        move = await self.cast.investigator(st, inv.id, situation)
+        if move is None:  # no action it could play (Cast.investigator): none is made up
+            self.story.add("system", Text(f"{inv.name}（AI）本轮未行动。", style="dim"))
+            return
         self.story.add("player", Text(f"▶ {inv.name}（AI）：{move.text}"))
         await self._run_turn({"input": move.text, "by_hand": False}, auto=True, push=move.push)
 
@@ -1723,6 +1726,9 @@ class GameScreen(Screen):
                 break
             self._status("AI 调查员在商量…")
             result = await party.ainvoke({"situation": situation(self.m, st, game=self.game), "ids": alive, "proposals": []})
+            if not result["proposals"]:  # no AI investigator gave an action it could play: watching stops
+                self.story.add("system", Text("AI 调查员本轮均未给出有效行动，观战停止。", style="dim"))
+                break
             for inv_id, text, push in result["proposals"]:
                 if st.ending or self._leave_when_ready is not None:  # 讲完再走: after this one
                     break

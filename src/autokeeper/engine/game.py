@@ -543,8 +543,6 @@ class Game(Encounters):
         brief = views.keeper_text(self)
         asked = Action(kind="other", summary=action.summary)
         arbiter = self.cast.arbiter
-        if not _takes(arbiter, "encounter"):
-            return await arbiter(self.state, asked)
         ruling = await arbiter(self.state, asked, encounter=brief)
         enc = self.encounter()
         known = {p.id for p in enc.participants} if enc is not None else set()
@@ -1630,8 +1628,7 @@ class Game(Encounters):
     async def push(self, choice: str | dict) -> Turn:
         """Resume the saved choice without paying luck or rolling its push twice. `choice` is "luck" or
         "drop", or {"choice": "push", "how": "..."}: a push the player said how to make (Keeper
-        Rulebook p. 73), ruled again once before it is rolled (_method); a bare "push" (push_choice) is
-        rolled as offered."""
+        Rulebook p. 73), ruled again once before it is rolled (_method)."""
         mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
@@ -1705,7 +1702,7 @@ class Game(Encounters):
         st, step = self.state, self._resolution_step
         inv, npc = st.investigator, pending.get("npc", "")
         lucky = mode == "luck" and pending.get("luck") is not None
-        if mode == "push" and how:
+        if mode == "push":  # a push says how it is made (push_choice), ruled again first
             method = await step("method", turn, lambda: self._method(pending, how))
 
             def told() -> None:
@@ -1761,14 +1758,9 @@ class Game(Encounters):
     async def _method(self, pending: dict, how: str) -> dict:
         """The arbiter's word on how a push is made (Cast.repush, one call): can the goal still be
         reached this way, the skill and difficulty for it (unchanged unless the situation changed),
-        the time it takes, and what failing it this way brings. Without an arbiter for it (a scripted
-        cast), the push goes as offered and takes PUSH_MINUTES."""
-        out = {"achievable": True, "why": "", "minutes": PUSH_MINUTES, "pending": {}}
-        ask = getattr(self.cast, "repush", None)
-        if ask is None:
-            return out
-        r = await ask(self.state, pending, how)
-        out.update(achievable=r.achievable, why=r.why.strip(), minutes=max(1, min(r.minutes, ACT_CAP)))
+        the time it takes (time always passes, Keeper Rulebook p. 73), and what failing it this way brings."""
+        r = await self.cast.repush(self.state, pending, how)
+        out: dict = {"achievable": r.achievable, "why": r.why.strip(), "minutes": max(1, min(r.minutes, ACT_CAP)), "pending": {}}
         changed: dict = {}
         skill = canonical(r.skill) if r.skill.strip() else pending["skill"]
         if skill != pending["skill"]:
@@ -1936,7 +1928,7 @@ class Game(Encounters):
     def _unsettled(self, npc_id: str) -> list[str]:
         """What an NPC's last reply meant to do and could not (agents/cast.Cast.unsettled): the
         words stand, the deed did not land, and the keeper tells how it really went."""
-        failed = getattr(self.cast, "unsettled", {}).pop(npc_id, [])
+        failed = self.cast.unsettled.pop(npc_id, [])
         if not failed:
             return []
         name = self.m.npc(npc_id).name
@@ -1963,7 +1955,7 @@ class Game(Encounters):
             line = await ask()
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
             # and its receipt, kept below with the words.
-            told = getattr(self.cast, "told", {}).pop(npc_id, [])
+            told = self.cast.told.pop(npc_id, [])
             said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told))
             if kind == "performance":
                 turn.performance = (npc_id, line)
@@ -3170,7 +3162,6 @@ NOWHERE = (
     "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
 )
 STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
-PUSH_MINUTES = 10  # what a push made a stated way takes when no arbiter rules it (time always passes, p. 73)
 PUSH_HOW = 200  # characters of a push's stated way that are kept
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take
@@ -3230,14 +3221,15 @@ def _threshold(target: int, difficulty: str) -> int:
 
 def push_choice(value: Any) -> tuple[str, str]:
     """A push offer's answer as (mode, how): "luck" or "drop", or {"choice": "push", "how": ...} (Keeper
-    Rulebook p. 73). A bare "push" comes only from replaying a game recorded before pushes were said
-    (engine/autoplay, an unstated tape): the screens and the LAN table always say how."""
+    Rulebook p. 73): a push always says how it is made."""
     if isinstance(value, dict):
         mode, how = str(value.get("choice", "")), " ".join(str(value.get("how") or "").split())[:PUSH_HOW]
     else:
         mode, how = str(value), ""
     if mode not in ("push", "luck", "drop"):
         raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    if mode == "push" and not how:
+        raise ValueError("孤注一掷要写明怎样做")
     return mode, how if mode == "push" else ""
 
 
