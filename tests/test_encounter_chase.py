@@ -582,17 +582,13 @@ async def test_the_ways_past_an_obstacle_read_short_and_care_is_one_choice(modul
     assert careful is not None and (careful.method, careful.careful, careful.to) == ("run", 1, "office_stairs")  # 敏捷 65 over 攀爬 20
 
 
-async def test_who_the_chase_left_behind_is_known_to_the_keeper_and_the_plan_until_the_party_moves(module, fake):
-    """The review: GameState.apart was written and never read. The keeper's brief and the plan's
-    bearings name who was left where, an investigator out cold at the start too."""
-    from autokeeper import config
-    from autokeeper.agents.cast import Cast
+async def left_behind(module, fake):
+    """A chase from the office over: 周衡 got away to the square, 李四 lies out cold where it began."""
     from autokeeper.engine.encounter.model import ChaseState
-    from autokeeper.world import context as world_view
 
     from .encounter_kit import begin
 
-    game, _cast, _ = with_li(module, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
+    game, cast, _ = with_li(module, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
     await begin(game, ["warden"])
     built = site.build(module, "office")
 
@@ -606,13 +602,80 @@ async def test_who_the_chase_left_behind_is_known_to_the_keeper_and_the_plan_unt
     li = game.state.investigators[1]
     li.hp, li.conditions = 0, ["昏迷"]
     await game._encounter_end("fled", Turn())
+    return game, cast
+
+
+async def test_who_the_chase_left_behind_is_known_to_the_keeper_and_stays_there_when_the_party_moves_on(module, fake):
+    """The review: GameState.apart was written and never read. The keeper's brief and the plan's
+    bearings name who was left where, an investigator out cold at the start too. The review of 10-22:
+    the party's next move used to bring him along, out cold in another place; now he stays where he lies,
+    out of the fight that begins where the party is."""
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.world import context as world_view
+
+    from .encounter_kit import begin
+
+    game, _cast = await left_behind(module, fake)
     st = game.state
     assert st.location == "square" and st.apart == {"li": "office"}
     assert "和大家分开的调查员" in world_view.keeper_brief(game.world) and "李四在报社（昏迷）" in world_view.keeper_brief(game.world)
     cast = Cast(config.Config(), module)
     assert "【和大家分开的调查员】李四在报社（昏迷）" in cast.bearings(st)
     await game._arrive("tower", Turn())
-    assert not st.apart and "李四" not in world_view.keeper_brief(game.world)  # the party moved: together again
+    assert st.location == "tower" and st.apart == {"li": "office"}  # the party moved on: he did not
+    assert "李四在报社（昏迷）" in world_view.keeper_brief(game.world) and "李四在报社（昏迷）" in cast.bearings(st)
+    await begin(game, ["warden"])
+    assert [p.id for p in st.encounter.participants if p.kind == "investigator"] == ["zhouheng"]  # not in a fight here
+    assert "李四在报社（昏迷）" in __import__("autokeeper.engine.encounter.views", fromlist=["x"]).keeper_text(game)
+
+
+async def test_one_left_behind_is_with_the_party_again_when_it_comes_to_where_he_lies(module, fake):
+    from autokeeper.agents.cast import Action, Ruling
+
+    game, cast = await left_behind(module, fake)
+    cast.script["回报社"] = (Action(kind="move", destination="office", summary="周衡回报社"), Ruling(needs_roll=False))
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "回报社")
+    st = game.state
+    assert st.location == "office" and not st.apart
+    assert "李四就在报社，和大家会合了。" in cast.reports[-1]
+
+
+async def test_a_ruling_brings_one_left_behind_back_the_way_it_says_and_never_on_feet_he_cannot_use(module, fake):
+    from autokeeper.agents.cast import Action, Rejoin, Ruling
+
+    game, cast = await left_behind(module, fake)
+    st = game.state
+    app = turn_graph.build(game, InMemorySaver())
+    walk = Action(kind="other", summary="周衡喊李四自己走过来")
+    cast.script["喊李四"] = (walk, Ruling(needs_roll=False, rejoin=[Rejoin(who="li", how="walked")]))
+    await play(app, "喊李四")
+    assert st.apart == {"li": "office"} and "李四现在没法自己走回来，还在报社。" in cast.reports[-1]  # out cold
+    carry = Action(kind="other", summary="周衡请布道者帮忙把李四抬回广场")
+    cast.script["抬回来"] = (carry, Ruling(needs_roll=False, rejoin=[Rejoin(who="li", how="carried")]))
+    await play(app, "抬回来")
+    assert not st.apart and st.location == "square" and "李四从报社被背了回来，和大家在一起了。" in cast.reports[-1]
+    assert any(e.kind == "occur" and "李四从报社被背了回来" in e.text for e in game.world.rec.events)
+
+
+async def test_one_left_behind_who_wakes_walks_back_on_his_own_or_goes_off_alone_without_the_party(module, fake):
+    """An investigator apart who can act takes an ordinary turn: going to where the party is, he is with it
+    again; going anywhere else, he goes there alone and the party stays where it is (no split party)."""
+    from autokeeper.agents.cast import Action, Ruling
+
+    game, cast = await left_behind(module, fake)
+    st = game.state
+    li = st.investigators[1]
+    li.hp, li.conditions = 5, []
+    st.active = 1
+    app = turn_graph.build(game, InMemorySaver())
+    cast.script["去钟楼"] = (Action(kind="move", destination="tower", summary="李四去钟楼"), Ruling(needs_roll=False))
+    await play(app, "去钟楼")
+    assert st.location == "square" and st.apart == {"li": "tower"}
+    cast.script["回广场"] = (Action(kind="move", destination="square", summary="李四回广场找大家"), Ruling(needs_roll=False))
+    await play(app, "回广场")
+    assert st.location == "square" and not st.apart and "李四从钟楼自己走了回来，和大家在一起了。" in cast.reports[-1]
 
 
 # -- the progress review of 2026-10-22: a chase come to blows in another place lands there -------------------
@@ -681,3 +744,41 @@ async def test_a_chase_that_comes_to_blows_in_another_place_is_there_in_the_save
     cast.npc_calls.clear()
     await play(turn_graph.build(game2, InMemorySaver()), "问守钟人")
     assert [n for n, _ in cast.npc_calls] == ["warden"]
+
+
+async def test_one_who_got_away_before_it_came_to_blows_elsewhere_is_left_where_he_ran(fake):
+    """The party goes with the fight to the square; 周衡, away through the back alley already, is not with
+    it: he is apart, where he got away from, and stays so when the fight ends."""
+    from autokeeper.engine.encounter import chase as chasing
+    from autokeeper.engine.encounter.model import ActionReceipt, ChaseState, SetMode, SetRound
+    from autokeeper.world.ops import EncounterStep
+    from autokeeper.world.record import ENGINE
+
+    from .encounter_kit import begin
+
+    m = through_the_square()
+    game, _cast, _ = with_li(m, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden"])
+    built = site.build(m, "office")
+
+    def edit(e):
+        e.chase = ChaseState(site=built, quarry=["zhouheng", "li"], pursuers=["warden"])
+        for p in e.participants:
+            p.node = "back_alley" if p.id == "zhouheng" else "fog_square"
+        e.get("zhouheng").presence = "escaped"
+    change(game, edit)
+    enc = game.state.encounter
+    assert game.world.apply(EncounterStep(id="test/round", encounter=enc.id, unit="t", actor=ENGINE, changes=[
+        SetMode(mode="chase"), SetRound(round=1, order=list(enc.order))])).ok
+
+    def meet(w):
+        w.enc.receipts.append(ActionReceipt(id="x", round=1, actor="li", source="ai", summary="-", phase="committed",
+                                            declared=DeclaredAction(do="stand", summary="-")))
+        assert chasing.round_end(w) == "fight"
+
+    await game._unit("test/meet", Turn(), meet)
+    st = game.state
+    assert st.encounter.place == "square" and st.location == "square" and st.apart == {"zhouheng": "office"}
+    await game._encounter_end("parley", Turn())
+    assert st.apart == {"zhouheng": "office"} and st.encounter_log[-1].ended.places["zhouheng"] == "office"
+    assert st.encounter_log[-1].ended.places["li"] == "square" and game.world.place("warden") == "square"

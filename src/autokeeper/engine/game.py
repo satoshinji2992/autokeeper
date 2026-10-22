@@ -22,7 +22,7 @@ from pydantic import TypeAdapter
 
 from .. import cards, pictures, weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Failure, Initiative, Ruling, kp_line
+from ..agents.cast import Action, Cast, Failure, Initiative, Rejoin, Ruling, kp_line
 from ..agents.director import Improv
 from ..harness.replay import CassetteError
 from ..module import improv
@@ -509,6 +509,10 @@ class Game(Encounters):
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
         if action.kind == "move" and action.destination:
+            me = self.state.investigator
+            if me.id in self.state.apart and action.destination == self.state.location:  # back to the others on foot
+                way = self._travel(self.state.apart[me.id], action.destination) or 0
+                return Ruling(needs_roll=False, minutes=way, rejoin=[Rejoin(who=me.id, how="walked")], reason="走回大家身边")
             return Ruling(needs_roll=False, minutes=0, reason="移动")
         if self._stop_on_route(action):
             return Ruling(needs_roll=False, minutes=0, reason="先走到沿途地点，之后由玩家决定是否继续")
@@ -1421,6 +1425,8 @@ class Game(Encounters):
         inv = st.investigator
 
         def travel() -> dict:
+            if inv.id in st.apart:
+                return self._straggle(inv, ruling.go or action.destination, turn)
             heading = ruling.go or (action.destination if action.kind == "move" else self._heading(action))
             heading = None if heading == st.location else heading
             if heading and heading != ruling.go and not fog.findable(self.m, st, heading):
@@ -1534,6 +1540,8 @@ class Game(Encounters):
                 self._takes(ruling, turn)
 
             await step("changes", turn, changes)
+            if ruling.rejoin:
+                await step("rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
         await step("gain", turn, lambda: self._gain(found["gained"], turn, action))
         if turn.checks:
             won = [c for c in turn.clues if c in ruling.clues_on_success]
@@ -1576,6 +1584,44 @@ class Game(Encounters):
         rec.missing, rec.missing_turn = [x.strip() for x in ruling.missing if x.strip()], self.state.turn
         if rec.missing:
             turn.notes.append(f"这次行动缺{'、'.join(rec.missing)}，做不成；叙述和场面里都不能把它变出来。")
+
+    def _straggle(self, inv, dest: str, turn: Turn) -> dict:
+        """Where someone apart from the party (GameState.apart) goes: there alone, the party staying where
+        it is (no split party in this version: no scene or event of their own there); back to the party is
+        a rejoin (rule), not this. {}: the party does not move."""
+        st = self.state
+        here = st.apart[inv.id]
+        if not dest or dest in (here, st.location) or not fog.findable(self.m, st, dest):
+            return {}
+        minutes = self._travel(here, dest)
+        if minutes is None:
+            turn.notes.append(f"{inv.name}从{self.world.name(here)}去不了“{dest}”")
+            return {}
+        st.apart[inv.id] = dest
+        st.minutes += minutes
+        turn.notes.append(f"{inv.name}独自从{self.world.name(here)}去了{self.world.name(dest)}，没有和大家在一起；大家还在"
+                          f"{self.world.name(st.location)}。")
+        return {}
+
+    def _rejoin(self, rejoins: list, turn: Turn) -> None:
+        """Those of the investigators apart from the party (GameState.apart) whom a ruling brings back
+        (Ruling.rejoin): with the party again, as the ruling says they came; never someone who is not
+        apart, nor someone walking back who cannot act. What does not hold, the keeper hears of."""
+        st = self.state
+        words = {"carried": "被背了回来", "fetched": "被找到领了回来", "walked": "自己走了回来"}
+        for r in rejoins:
+            inv = next((i for i in st.investigators if i.id == r.who), None)
+            if inv is None or r.who not in st.apart:
+                turn.notes.append(f"{inv.name if inv else r.who}本来就和大家在一起，不用会合。")
+                continue
+            if r.how == "walked" and not inv.can_act:
+                turn.notes.append(f"{inv.name}现在没法自己走回来，还在{self.world.name(st.apart[r.who])}。")
+                continue
+            was = st.apart.pop(r.who)
+            text = f"{inv.name}从{self.world.name(was)}{words[r.how]}，和大家在一起了"
+            self.world.apply(Occur(id=f"rejoin:{st.turn}:{r.who}", actor=inv.id, participants=[inv.id], place=st.location,
+                                   text=text, visibility="public"))
+            turn.notes.append(text + "。")
 
     def _takes(self, ruling: Ruling, turn: Turn) -> None:
         """Everyday things the investigator takes up in this action (Ruling.takes), registered in
@@ -2272,7 +2318,9 @@ class Game(Encounters):
             if src != loc_id:
                 self.world.rec.left[src] = self.world.rec.seq
             st.location = loc_id
-            st.apart.clear()  # those a chase left elsewhere rejoin the party as it moves
+            for inv_id in [x for x, at in st.apart.items() if at == loc_id]:  # the party came to where they are
+                del st.apart[inv_id]
+                turn.notes.append(f"{st.find(inv_id).name}就在{m.location(loc_id).name}，和大家会合了。")
             came: set[str] = set()
             for ent in list(self.world.rec.entities.values()):
                 if ent.kind != "npc" or ent.at != src or ent.following != st.investigator.id:

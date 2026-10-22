@@ -140,6 +140,7 @@ class Encounters:
         _takes: Any
         _equipment: Any
         _arrive: Any
+        _rejoin: Any
 
     # -- whether there is one -------------------------------------------------------------------
     def encounter(self) -> EncounterState | None:
@@ -418,6 +419,8 @@ class Encounters:
         allies = [profiles.combatant(self.world, x) for x in start.allies if x not in foes]
         parts: list[Participant] = []
         for inv in st.investigators:
+            if inv.id in st.apart and inv.id != st.investigator.id:  # elsewhere (GameState.apart): not in it
+                continue
             parts.append(Participant(id=inv.id, kind="investigator", side="party", controller="human" if inv.id in humans else "ai",
                                      surprised=start.surprise == "party", node=st.location,
                                      ask="always" if inv.id in humans and self.ask_reactions == "always" else "major"))
@@ -847,6 +850,8 @@ class Encounters:
             self._takes(ruling, turn)
 
         await step(f"/{key}/rest-changes", turn, changes)
+        if ruling.rejoin:
+            await step(f"/{key}/rest-rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
         clues = await step(f"/{key}/rest-clues", turn, lambda: self._valid_clues(ruling.clues_on_success + ruling.auto_clues, None))
         if clues:
             await step(f"/{key}/rest-gain", turn, lambda: self._gain(clues, turn, None))
@@ -1584,12 +1589,13 @@ class Encounters:
             await step(f"/{key}/apart", turn, lambda: self._left_apart(extra["apart"], turn))
 
     def _left_apart(self, apart: dict[str, str], turn: Turn) -> None:
-        """Investigators the chase left somewhere else than the party: noted, until their next move."""
+        """Investigators the chase left somewhere else than the party: kept there, with whoever was apart
+        before, until the party comes there or someone brings them back (Game._arrive, Game._rejoin)."""
         st = self.state
-        st.apart = dict(apart)
+        st.apart = {**st.apart, **apart}
         for inv, place in apart.items():
             who = next((i.name for i in st.investigators if i.id == inv), inv)
-            turn.notes.append(f"{who}落在了{self.world.name(place)}，和大家分开了；下次移动时归队。")
+            turn.notes.append(f"{who}落在了{self.world.name(place)}，和大家分开了；要大家去那里、或有人把他带回来才会合。")
 
     def _fight_places(self, enc: EncounterState) -> dict[str, str]:
         """Where everyone is in the world as a fight ends: the keeper's people still in it where it is
