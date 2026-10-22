@@ -6,7 +6,8 @@ World binds one game's module copy and GameState. Every change goes through appl
               the same id with a different payload is refused
     check     the op says what is wrong, in words the director can fix
     settle    the op changes the record (and the GameState fields the game still reads:
-              flags, item owners, inventories, GameState.world), emits its event
+              flags, item owners, inventories, GameState.world, the encounter and where
+              the party is when an encounter moves it), emits its event
     journal   the entry keeps a digest, a summary and an inverse JSON patch (jsonpatch)
               over that domain, so the latest ops can be undone in order
     project   the record's truth is written back into this game's module copy
@@ -292,6 +293,8 @@ class World:
             "investigators": [i.model_dump(mode="json") for i in st.investigators],
             "encounter": {"state": st.encounter.model_dump(mode="json") if st.encounter is not None else None,
                           "log": [x.model_dump(mode="json") for x in st.encounter_log]},
+            # where the party is and who of it is elsewhere: an encounter's unit may move them (effects.Party)
+            "party": {"location": st.location, "apart": dict(st.apart)},
         }
         return out
 
@@ -308,3 +311,4 @@ class World:
         enc = d["encounter"]
         st.encounter = EncounterState.model_validate(enc["state"]) if enc["state"] is not None else None
         st.encounter_log = [EncounterSummary.model_validate(x) for x in enc["log"]]
+        st.location, st.apart = d["party"]["location"], dict(d["party"]["apart"])

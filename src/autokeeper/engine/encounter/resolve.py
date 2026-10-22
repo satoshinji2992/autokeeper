@@ -226,8 +226,9 @@ def diff(old: EncounterState, new: EncounterState) -> list:
         out.append(SetScene(scene=new.scene))
     if new.chase != old.chase:
         out.append(SetChase(chase=new.chase))
-    if new.mode != old.mode or new.switches != old.switches:
-        out.append(SetMode(mode=new.mode, switch=new.switches[-1] if len(new.switches) > len(old.switches) else ""))
+    if new.mode != old.mode or new.switches != old.switches or new.place != old.place:
+        out.append(SetMode(mode=new.mode, switch=new.switches[-1] if len(new.switches) > len(old.switches) else "",
+                           place=new.place if new.place != old.place else ""))
     if len(new.stakes) > len(old.stakes):
         out.append(AddStakes(stakes=new.stakes[len(old.stakes):]))
     out += [SetStake(index=i, fired=s.fired) for i, s in enumerate(new.stakes) if i < len(old.stakes) and s.fired != old.stakes[i].fired]
@@ -793,30 +794,30 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
 
 
 def _obstacle(w: Work, a: str, target: str, what: str) -> str:
-    """An obstacle the arbiter ruled changed in a chase: opened or broken for everyone after, or the way
+    """An obstacle the arbiter ruled changed in a chase: opened or broken for everyone after, the way
     blocked (a door slammed and wedged: a barrier where there was none, at the place named or where
-    the actor stands)."""
+    the actor stands), or mended as the module has it. What lasts is kept for the game with the unit
+    (site.kept)."""
     import re
 
     from ...module.schema import Method
     from .plan import ObstacleState
-    from .site import node
+    from .site import MEND, node, pristine, ruled, way_key
 
     ch = w.enc.chase
     assert ch is not None
     here = node(ch.site, target) or next((n for n in ch.site.nodes if n.obstacle == target), None) \
         or node(ch.site, w.enc.get(a).node if w.enc.get(a) else "")
     ob = ch.site.obstacles.get(target) or (ch.site.obstacles.get(here.obstacle) if here is not None else None)
-    if ob is not None and re.search(r"破|毁|砸|塌", what):
-        ob.state, ob.by = "broken", a
-        return f"{ob.what}被毁掉了，后面的人可以直接过去：{what}"
-    if ob is not None and re.search(r"开|移|推倒|搬走|清", what):
-        ob.state, ob.by = "open", a
-        return f"{ob.what}打开了，后面的人可以直接过去：{what}"
+    if ob is not None and here is not None and re.search(MEND, what):
+        fresh = pristine(w.game.m, way_key(ch.site, here.id))
+        here.obstacle = fresh.id if fresh is not None else ""
+        if fresh is not None:
+            ch.site.obstacles[fresh.id] = fresh
+        return f"{ob.what}修好了：{what}" if fresh is not None else f"{ob.what}清走了：{what}"
+    if ob is not None and (line := ruled(ob, what, a)):
+        return line
     if re.search(r"堵|挡|锁|闩|封|关", what) and here is not None:
-        if ob is not None:
-            ob.state, ob.by = "blocked", a
-            return f"{ob.what}被堵上了：{what}"
         oid = f"made_{here.id}_{w.enc.round}"
         ch.site.obstacles[oid] = ObstacleState(id=oid, kind="barrier", what=what[:20] or "挡住的路", hp=10, state="blocked", by=a,
                                                methods=[Method(id="force", label="推开", skill="力量", opens=True),

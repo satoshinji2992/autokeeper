@@ -285,12 +285,36 @@ def _relocate(w: Work, who: str, before: str, now: str) -> None:
     goes with the party, when the chase ends)."""
     ch = w.enc.chase
     b = site.node(ch.site, now)  # type: ignore[union-attr]
-    if w.investigator(who) is not None or b is None or not b.place:
+    if b is not None and b.place:
+        _move(w, who, b.place)
+
+
+def _move(w: Work, who: str, place: str) -> None:
+    """A keeper's person is at world place `place` now: moved there with the rest of the unit."""
+    ent = w.ctx.world.rec.entities.get(place)
+    if w.investigator(who) is not None or ent is None or ent.kind != "location" or w.ctx.world.place(who) in ("", place):
         return
-    ent = w.ctx.world.rec.entities.get(b.place)
-    if ent is not None and ent.kind == "location" and w.ctx.world.place(who) != b.place:
-        w.unit.effects = [e for e in w.unit.effects if not (isinstance(e, effects.Relocate) and e.who == who)]
-        w.unit.effects.append(effects.Relocate(who=who, place=b.place))
+    w.unit.effects = [e for e in w.unit.effects if not (isinstance(e, effects.Relocate) and e.who == who)]
+    w.unit.effects.append(effects.Relocate(who=who, place=place))
+
+
+def _gather(w: Work, place: str, ran_to: dict[str, str]) -> None:
+    """Everyone still in it is at world place `place` now (a chase come to blows there), in this unit's
+    op: the party too, while an investigator is in it, and those of the investigators who are not
+    stay where they ran to (effects.Party); the keeper's people in it moved (Relocate). What arriving
+    there brings about follows the op (Unit.extra "arrive": runner._round_end)."""
+    enc = w.enc
+    st = w.game.state
+    party = [p for p in enc.participants if p.kind == "investigator"]
+    if any(p.presence == "in" for p in party):
+        apart = {p.id: ran_to[p.id] for p in party if p.presence != "in" and ran_to.get(p.id) not in (None, "", place)}
+        if place != st.location or apart:
+            w.unit.effects.append(effects.Party(place=place, apart=apart))
+        if place != st.location:
+            w.unit.extra["arrive"] = place
+    for p in enc.participants:
+        if p.presence == "in":
+            _move(w, p.id, place)
 
 
 def _cross(w: Work, rr: ActionReceipt, a: str, ob: ObstacleState, where: str, cost: int, lines: list[str]) -> bool:
@@ -369,7 +393,7 @@ def _break(w: Work, rr: ActionReceipt, a: str, ob: ObstacleState, lines: list[st
         return False
     amount, text = _damage(w, v.db(), blow, "normal")
     left, broken = rules.barrier_hit(ob.hp or 0, amount)
-    ob.hp = left
+    ob.hp = left or None  # broken: nothing of it left to break (and hit points kept are 1 or more)
     if broken:
         ob.state, ob.by = "broken", a
         lines.append(f"{{{a}}}用{blow.name}砸{ob.what}：{text}，砸开了，后面的人可以直接过去")
@@ -518,10 +542,14 @@ def contact(w: Work) -> str:
 
 def to_fight(w: Work, where: str) -> None:
     """The chase becomes a fight at `where` (contact's): everyone still in it there, those face to
-    face engaged; the world place is that location's."""
+    face engaged. The world place is that location's, and the same unit moves the world there: the
+    encounter's place (SetMode.place), the keeper's people in it (Relocate), the party with the
+    investigators in it (effects.Party), and those of them who got away elsewhere are left apart
+    where they ran to (GameState.apart)."""
     enc, ctx = w.enc, w.ctx
     ch = enc.chase
     assert ch is not None
+    ran_to = places(ctx, enc)  # where each one is, while the site still says it
     met = [p.id for p in enc.participants if p.presence == "in" and p.node == where]  # face to face there
     meet = met[0] if met else ""
     n = site.node(ch.site, where)
@@ -534,6 +562,7 @@ def to_fight(w: Work, where: str) -> None:
             p.node = where
     if n is not None and n.place and ctx.world.rec.entities.get(n.place) is not None:
         enc.place = n.place
+    _gather(w, enc.place, ran_to)
     enc.mode = "fight"
     enc.chase = None
     enc.switches.append(f"r{enc.round}:fight")
@@ -587,8 +616,8 @@ def places(ctx: Ctx, enc: EncounterState) -> dict[str, str]:
 def party_place(game, enc: EncounterState, where: dict[str, str]) -> tuple[str, dict[str, str]]:
     """Where the party goes when the chase ends (no split party, the user's call): the place most of
     the human investigators ended at (on a tie, the speaking one's); the others, one out cold where it
-    began too, are left there until their next move (GameState.apart, which the keeper's brief and the
-    plan's bearings name)."""
+    began too, are left there (GameState.apart, which the keeper's brief and the plan's bearings name)
+    until the party comes there or someone brings them back (Game._arrive, Game._rejoin)."""
     st = game.state
     humans = [i.id for i in st.investigators if i.id in st.human] or [st.investigator.id]
     counts: dict[str, int] = {}

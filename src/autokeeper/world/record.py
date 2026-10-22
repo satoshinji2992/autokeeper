@@ -17,6 +17,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
+from ..engine.encounter.plan import ObstacleState
 from ..rules.coc import InjuryState
 
 PLAYERS = "players"  # the table: what was told or shown to the investigators
@@ -325,6 +326,10 @@ class WorldRecord(BaseModel):
     # out that turn (ops.Bring).
     missing: list[str] = Field(default_factory=list)
     missing_turn: int = -1
+    # The obstacles on the world's ways that this game changed (a door forced or unlocked, a way
+    # barricaded or cleared), by the stable id of the way (engine/encounter/site.way_key): a chase
+    # there finds them so (site.build) until something changes them again. Only those that changed.
+    obstacles: dict[str, ObstacleState] = Field(default_factory=dict)
 
     def event(self, event_id: str) -> Event | None:
         return next((e for e in reversed(self.events) if e.id == event_id), None)

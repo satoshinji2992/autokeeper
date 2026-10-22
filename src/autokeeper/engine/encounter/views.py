@@ -342,8 +342,11 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
 
 def keeper_text(game: Any, **kw) -> str:
     from ...agents.encounter import encounter_brief
+    from ...world.context import apart
 
-    return encounter_brief(brief(game, **kw))
+    text = encounter_brief(brief(game, **kw))
+    left = apart(game.state, game.world.name)  # not in it: elsewhere, as they were left (GameState.apart)
+    return text + (f"\n【和大家分开的调查员】{left}（不在这场遭遇里）" if left else "")
 
 
 __all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "names", "status", "wound_word"]

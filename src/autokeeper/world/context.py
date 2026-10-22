@@ -360,15 +360,18 @@ def _ready(w: World, when: str) -> bool:
 
 
 def apart(st: GameState, name: Callable[[str], str]) -> str:
-    """The investigators a chase left elsewhere than the party (GameState.apart): who, where (`name` of
-    the place), and how they are when they cannot get up; "" for none."""
+    """The investigators who are not with the party (GameState.apart): who, where (`name` of the
+    place), how they are when they cannot get up, and whether it is they who act this turn; "" for
+    none. They stay there until the party comes there or someone brings them back (Ruling.rejoin)."""
     rows = []
+    acting = st.investigator.id if 0 <= st.active < len(st.investigators) else ""
     for inv_id, place in st.apart.items():
         inv = next((i for i in st.investigators if i.id == inv_id), None)
         if inv is None:
             continue
         how = "、".join(c for c in inv.conditions if c in ("死亡", "濒死", "昏迷", "重伤"))
-        rows.append(f"{inv.name}在{name(place)}" + (f"（{how}）" if how else ""))
+        rows.append(f"{inv.name}在{name(place)}" + (f"（{how}）" if how else "")
+                    + ("，这一轮行动的就是他：他在那里，不在大家身边" if inv_id == acting else ""))
     return "；".join(rows)
 
 
@@ -410,7 +413,11 @@ def keeper_brief(w: World) -> str:
     if present:
         lines.append("在场的人：\n" + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
     if left := apart(st, w.name):
-        lines.append(f"和大家分开的调查员（追逐后落在别处，不在这里；下次移动时归队）：{left}")
+        lines.append(f"和大家分开的调查员（不在这里；大家去到那里、或有人把他带回来才会合）：{left}")
+    from ..engine.encounter.site import ways_at
+
+    if ways := ways_at(m, rec.obstacles, here):  # a door forced in an earlier chase is still forced
+        lines.append("这里本局改变过的通路（之后的追逐照此）：" + "；".join(ways))
     near = nearby(w, here)
     if near:
         lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))

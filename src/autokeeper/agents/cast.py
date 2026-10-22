@@ -38,6 +38,7 @@ from pydantic_core import from_json
 from .. import cards, rules_lookup, skills
 from ..config import Config
 from ..engine import fog, world
+from ..engine.encounter import site as chase_site
 from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
@@ -176,6 +177,15 @@ class Failure(BaseModel):
     mishap: str = Field("", description="惨事卡 id，只从【惨事卡】里选，卡上的效果由引擎结算；没有这一栏的卡或用不着就留空")
 
 
+class Rejoin(BaseModel):
+    """An investigator who was apart from the party (GameState.apart) back with it, and how: the
+    engine lands it only for someone who is apart, and on their own feet only while they can act."""
+
+    who: str = Field(description="回到大家身边的调查员 id，只填【和大家分开的调查员】里的人")
+    how: Literal["carried", "fetched", "walked"] = Field(
+        description="怎么回来的：carried 被人背回或抬回来，fetched 被人找到领回来，walked 自己走回来（只有清醒能行动时）")
+
+
 class RuledEffect(BaseModel):
     """What an action the arbiter ruled brings about in a fight or a chase (engine/encounter rolls
     and applies it): harm by the book's dice, a condition, an obstacle opened or blocked, a bonus
@@ -213,7 +223,10 @@ class Ruling(BaseModel):
     on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
     effects: list[RuledEffect] = Field(default_factory=list, max_length=4, description=(
-        "只在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里留空"))
+        "在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里只用 obstacle，"
+        "修好、关上、堵上或清走【本局改变过的通路】里的障碍，没有就留空"))
+    rejoin: list[Rejoin] = Field(default_factory=list, max_length=3, description=(
+        "这次行动成功后，【和大家分开的调查员】里的人回到了大家身边时写：谁、怎么回来的；大家走到他那里不用写；多数时候留空"))
     reason: str = Field("", description="一句话理由（玩家看不到）")
     # The rule it wants looked up in the rulebooks first (rules_lookup.py); in the schema only
     # when there is an index of them (Cast._arbiter), answered and asked again once (Cast.arbiter).
@@ -833,7 +846,7 @@ class Cast:
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
             f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
-            + (f"\n【和大家分开的调查员】{left}（追逐后落在那里，下次移动时归队）" if left else "")
+            + (f"\n【和大家分开的调查员】{left}（不在这里；大家去到那里、或有人把他带回来，才和大家在一起）" if left else "")
         )
 
     # -- agents -------------------------------------------------------------------
@@ -1184,6 +1197,11 @@ class Cast:
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
         )
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
+        if self.world is not None and not encounter and (ways := chase_site.ways_at(m, self.world.rec.obstacles, where)):
+            prompt += ("\n【本局改变过的通路】" + "；".join(ways)
+                       + "（这次行动修好、关上、堵上或清走了它，成功后在 effects 里写一条 obstacle，target 填括号里的 id）")
+        if left := world_view.apart(state, lambda pid: next((x.name for x in m.locations if x.id == pid), pid)):
+            prompt += f"\n【和大家分开的调查员】{left}（不在大家身边；这次行动把谁带回来了，写进 rejoin）"
         prompt += cards.arbiter_context(state, inv)  # the imported keeper decks: what holds on them, mishaps to deal
         named = next((n.name for n in m.npcs if n.id == action.npc), "")
         prompt += await self._private_lore(state, action.summary, [m.location(where).name, action.target, named])

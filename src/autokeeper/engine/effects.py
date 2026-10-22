@@ -30,6 +30,7 @@ from ..rules import wounds
 from ..rules.bcdice import Level
 from ..rules.coc import Damage
 from ..rules.wounds import Body
+from .encounter.plan import ObstacleState
 
 if TYPE_CHECKING:
     from ..world.record import Entity
@@ -111,12 +112,33 @@ class Drop(BaseModel):
 
 
 class Relocate(BaseModel):
-    """`who` (an NPC or a creature) is now at `place`. Never the party: it moves only by arriving
-    (Game._arrive), since arriving fires events."""
+    """`who` (an NPC or a creature) is now at `place`. Never the party: that is `Party`'s."""
 
     kind: Literal["relocate"] = "relocate"
     who: str
     place: str
+
+
+class Party(BaseModel):
+    """The party is at `place` now, gone there with the encounter it is in (a chase that came to blows
+    in another place: engine/encounter/chase.to_fight), in the op of that unit; `apart`, those of the
+    investigators who are not with it, and where they are (GameState.apart). Travel is Game._arrive's
+    alone; what arriving brings about (the scene, its events) follows this as it does any arrival."""
+
+    kind: Literal["party"] = "party"
+    place: str
+    apart: dict[str, str] = Field(default_factory=dict)
+
+
+class Obstacle(BaseModel):
+    """An obstacle on a way of the world as this game has left it (WorldRecord.obstacles), under the
+    stable id of the way it is on (engine/encounter/site.way_key): a door forced or unlocked, a way
+    barricaded or cleared. The next chase there reads it (site.build); None, as the module has it."""
+
+    kind: Literal["obstacle"] = "obstacle"
+    way: str
+    obstacle: ObstacleState | None = None
+
 
 
 class Mark(BaseModel):
@@ -146,7 +168,7 @@ class Fills(BaseModel):
 
 
 Effect = Annotated[
-    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Mark | Luck | Fills,
+    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Party | Obstacle | Mark | Luck | Fills,
     Field(discriminator="kind"),
 ]
 
@@ -381,6 +403,15 @@ def problems(w: World, effects: list) -> list[str]:
                 out.append(f"地点 {e.place} 不存在")
             elif profiles.profile(w, e.who) is None:
                 out.append(f"{e.who} 不是 NPC 或怪物")
+        elif isinstance(e, Party):
+            for place in (e.place, *e.apart.values()):
+                dest = w.rec.entities.get(place)
+                if dest is None or dest.kind != "location":
+                    out.append(f"地点 {place} 不存在")
+            out += [f"{x} 不是调查员" for x in e.apart if x not in investigators]
+        elif isinstance(e, Obstacle):
+            if not e.way:
+                out.append("障碍缺少所在路段的 id")
         elif isinstance(e, Mark):
             if e.investigator not in investigators:
                 out.append(f"{e.investigator} 不是调查员")
@@ -482,6 +513,17 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
                 w.touch(ent)
                 w.emit("move", f"{ent.name}从{w.name(src)}去了{w.name(e.place)}", actor=ident, participants=[ident], place=e.place,
                        witnesses=[*w.present(src), *w.present(e.place)], op=oid)
+        elif isinstance(e, Party):
+            st = w.st
+            if st.location != e.place:
+                w.rec.left[st.location] = w.rec.seq
+                st.location = e.place
+            st.apart = {**st.apart, **e.apart}
+        elif isinstance(e, Obstacle):
+            if e.obstacle is None:
+                w.rec.obstacles.pop(e.way, None)
+            else:
+                w.rec.obstacles[e.way] = e.obstacle.model_copy(deep=True)
         elif isinstance(e, Mark):
             inv = w.st.find(e.investigator)
             if e.skill not in inv.marks:

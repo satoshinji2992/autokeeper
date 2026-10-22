@@ -102,6 +102,8 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
         f"你们到这里时看到：{_flat(loc.read_aloud)}",
         f"知道的地方：{places or '只知道这里'}。",
     ]
+    if who and who in st.apart:  # left elsewhere by a chase: where they are, not where the party is
+        out.append(f"你和大家分开了：你在{m.location(st.apart[who]).name}，大家在{loc.name}。")
     if people:  # talking to someone who is not here wastes a turn
         out.append(f"见过的人：{people}。不在这里的人，要先过去才说得上话。")
     out.append(f"已有线索：\n{clues}" if clues else "已有线索：无")
