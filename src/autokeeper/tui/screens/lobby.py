@@ -36,7 +36,7 @@ from ...rules.coc import Investigator
 from ..library import art_text, face_text
 from ..modals.sheet import SheetModal, sheet_view
 from ..widgets.waiting import wait_on
-from .net import NetGameScreen, leave, table_module
+from .net import NetGameScreen, leave, table_module, with_private_history
 
 NARROW = 96  # fewer columns than this: no sheet beside the seats (人物卡 opens it)
 CONNECT_SECONDS = 10  # joining a room gives up after this
@@ -200,6 +200,8 @@ class LobbyScreen(Screen):
             self._card()
         elif t == "seated":  # your seat's investigator changed: the seat goes by its id
             self.chosen = msg["investigator"]
+        elif t == "history" and self.welcome is not None and msg.get("seat") == self.chosen:
+            self.welcome["log"] = with_private_history(self.welcome.get("log", []), msg.get("log", []))
         elif t == "face" and self.m is not None:  # the picture of a card someone brought
             if path := media.unpack(msg.get("picture_data", "")):
                 self.m.pictures[str(msg.get("key", ""))] = path

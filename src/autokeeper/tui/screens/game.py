@@ -26,7 +26,7 @@ from textual.widgets.option_list import Option
 
 from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
-from ...engine import chat, debrief, idea
+from ...engine import audience, chat, debrief, idea
 from ...engine import graph as turn_graph
 from ...engine.encounter import views
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
@@ -224,7 +224,7 @@ class GameScreen(Screen):
         yield Footer()
 
     async def on_mount(self) -> None:
-        self._start_history([e for e in self.state.log])
+        self._start_history(audience.log(self.state, self._me() or self._viewer().id))
         cfg = config.load()
         self.engine_label = self._engine_label(cfg)
         # Off the screen's thread: the model clients' first import and the world record's replay
@@ -683,7 +683,14 @@ class GameScreen(Screen):
         """What happened before this screen came up, then every block the story adds."""
         panel = self.query_one(HistoryPanel)
         for e in entries:
-            if (line := log_line(e)) is not None:
+            if not audience.visible(e, self._me() or self._viewer().id):
+                continue
+            if not audience.public(e):
+                label = "守秘人·私密" if e.kind == "keeper" else f"私语·{e.who}"
+                line = Text(f"【{label}】{e.text.splitlines()[0]}")
+            else:
+                line = log_line(e)
+            if line is not None:
                 panel.note(line, None, e.turn)
         self.story.on_entry = self._history
 
@@ -781,6 +788,8 @@ class GameScreen(Screen):
 
     # -- event handling ----------------------------------------------------------------------
     async def handle(self, ev: dict) -> None:
+        if not audience.visible(ev, self._me() or self._viewer().id):
+            return
         t = ev.get("type")
         if self.has_class("-dev"):
             self.call_after_refresh(self._dev)
@@ -791,7 +800,9 @@ class GameScreen(Screen):
             if ev.get("picture") and Path(ev["picture"]).is_file():
                 self.m.pictures[key] = ev["picture"]
         self.query_one(Speaker).follow(ev, self.m)  # before the scene changes, so it can scan in
-        if t == "status":
+        if t == "aside":
+            story.add("keeper", Text(f"【守秘人·私密】{ev['text']}"))
+        elif t == "status":
             self._status(ev["text"])
         elif t == "speech":  # a teammate's words to the party, at a shared table (net/hub.Hub._speak)
             who = f"{ev['who']}（{ev['player']}）" if ev.get("player") else ev["who"]
@@ -1428,6 +1439,9 @@ class GameScreen(Screen):
                 self.story.begin_keeper()
                 text = await self.cast.recap(self.state, on_delta=self._feed)
                 self.story.end_keeper(text)
+                for entry in audience.personal(self.state, self._me() or self._viewer().id):
+                    label = "守秘人·私密" if entry.kind == "keeper" else f"私语·{entry.who}"
+                    self.story.add("system", Text(f"【{label}】{entry.text}", style="dim"))
                 self._scene(self.state.location)
             else:
                 await self._prelude()
@@ -1846,12 +1860,14 @@ class GameScreen(Screen):
         self._panels()
 
     async def _ai_act(self, idx: int) -> None:
+        from ...engine.autoplay import situation
+
         assert self.cast
         st = self.state
         inv = st.investigators[idx]
         self._status(f"{inv.name} 正在决定行动…")
-        situation = self._situation()
-        move = await self.cast.investigator(st, inv.id, situation, stances=views.stances(self.game, inv.id))
+        context = situation(self.m, st, inv.id, self.game)
+        move = await self.cast.investigator(st, inv.id, context, stances=views.stances(self.game, inv.id))
         if move is None:  # no action it could play (Cast.investigator): none is made up
             self.story.add("system", Text(f"{inv.name}（AI）本轮未行动。", style="dim"))
             return

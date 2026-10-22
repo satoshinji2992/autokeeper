@@ -40,7 +40,8 @@ from ..world.agents import CastBrain, marked
 from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
-from . import chat, diagnostics, effects, fog, idea, progress, signs, views, world
+from . import audience as recipients
+from . import diagnostics, effects, fog, idea, progress, signs, views, world
 from .encounter.runner import Encounters
 from .encounter.telling import tell
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
@@ -2060,25 +2061,45 @@ class Game(Encounters):
         self.world.apply(Occur(id=f"talk:{st.turn}:{inv.id}:{npc_id}", actor=inv.id, participants=[npc_id], place=st.location,
                                text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
 
-    def speak(self, inv_id: str, line: str, to: str = "") -> LogEntry:
+    def speak(self, inv_id: str, line: str, to: str = "", *, audience: list[str] | None = None,
+              private: bool = False) -> LogEntry:
         """Words an investigator says to the party (engine/chat.py): no keeper, no action, no time.
         The log keeps who said it, to whom and where, for the keeper's next report, the chronicler and
         the AI companions' situation; the world record keeps it at the place, so the NPCs there heard
         it (World.emit), and what they make of it waits until the party moves on (scheduler.TALK)."""
         st = self.state
         inv = st.find(inv_id)
-        entry = st.add("speech", f"在{self.world.name(st.location)}对{to or '同伴'}说：{line}", who=inv.name)
-        heard = [i.id for i in st.investigators if i.id != inv.id and (not to or to == chat.EVERYONE or i.name == to)]
+        nearby = recipients.listeners(st, inv_id)
+        if inv_id not in nearby:
+            raise ValueError("调查员当前无法交谈。")
+        where = recipients.location(st, inv_id)
+        if audience is not None:
+            audience = list(dict.fromkeys([inv_id, *audience]))
+            if any(who not in nearby for who in audience):
+                raise ValueError("私语收件人不在身边，或当前无法听见。")
+        elif private:
+            raise ValueError("私语需要指定收件人。")
+        elif len(nearby) != len(st.investigators):
+            audience = nearby  # ordinary speech is not heard across separate places
+        entry = st.add("speech", f"在{self.world.name(where)}{'私下' if private else ''}对{to or '同伴'}说：{line}",
+                       who=inv.name, audience=audience)
+        heard = [who for who in (audience if audience is not None else nearby) if who != inv_id]
         self.world.apply(Occur(id=f"{scheduler.TALK}{st.turn}:{inv.id}:party:{st.logged}", actor=inv.id, participants=heard,
-                               place=st.location if st.location in self.world.rec.entities else "",
-                               text=f"{inv.name}{entry.text}", visibility="public", transcript=True))  # fmt: skip
+                               place=where if where in self.world.rec.entities else "",
+                               text=f"{inv.name}{entry.text}", visibility="private" if private else "public", transcript=True))  # fmt: skip
         return entry
 
     def _party_talk(self) -> list[str]:
         """What the investigators said to each other since the keeper last told: for its report."""
         st = self.state
         last = max((i for i, e in enumerate(st.log) if e.kind == "keeper"), default=-1)
-        return [f"{e.who}{e.text}" for e in st.log[last + 1:] if e.kind == "speech"][-6:]
+        names = {i.id: i.name for i in st.investigators}
+
+        def line(e: LogEntry) -> str:
+            scope = ("【仅" + "、".join(names.get(who, who) for who in e.audience) + "知晓，勿公开复述】") if e.audience is not None else ""
+            return f"{scope}{e.who}{e.text}"
+
+        return [line(e) for e in st.log[last + 1:] if e.kind == "speech"][-6:]
 
     def _unsettled(self, npc_id: str) -> list[str]:
         """What an NPC's last reply meant to do and could not (agents/cast.Cast.unsettled): the
@@ -2261,9 +2282,12 @@ class Game(Encounters):
         old, keep = st.log[:-24], st.log[-24:]
         # What the table was told, not the module's own words for each clue: the memory feeds the
         # players' recap and 故事至今, and the telling that put each clue into the story is there.
-        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old if e.kind not in ("dice", "clue"))
-        await self.emit({"type": "status", "text": "记录员整理笔记…"})
-        st.memory = await self.cast.chronicle(st, text)
+        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old
+                         if e.kind not in ("dice", "clue") and recipients.public(e))
+        if text:
+            await self.emit({"type": "status", "text": "记录员整理笔记…"})
+            st.memory = await self.cast.chronicle(st, text)
+        st.private_history.extend(e for e in old if not recipients.public(e))
         st.log = keep
 
     def _recount(self) -> None:
@@ -3194,8 +3218,19 @@ class Game(Encounters):
             if self.checkpoint:
                 self.checkpoint()
         await self._people()
-        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and e.text == text), None) or st.add("keeper", text, who="守秘人")
+        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and recipients.public(e) and e.text == text), None)
+        entry = entry or st.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
+        if not receipt.get("asides_landed"):
+            # The accepted telling and its recipients are saved together before delivery. A
+            # resumed turn never registers a private observation a second time.
+            for aside in receipt.get("asides", []):
+                st.add("keeper", aside["text"], who="守秘人", audience=aside["to"])
+            receipt["asides_landed"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        for aside in receipt.get("asides", []):
+            await self.emit({"type": "aside", "audience": aside["to"], "text": aside["text"], "who": "守秘人"})
         if receipt.get("offer_idea") and not receipt.get("idea_offered"):
             if st.turn > 0 and not st.ending and not self.battling() and idea.pick(self.m, st) is not None:
                 st.idea_offer = st.turn
@@ -3216,7 +3251,7 @@ class Game(Encounters):
         an old one's), or a turn told out of the story (a question to the KP, the ending) has no scene."""
         st = self.state
         keeper = self.cast.keeper
-        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False}
+        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": []}
         if not _staged(turn) or not _takes(keeper, "check"):
             return words | {"text": await keeper(st, report, on_delta=delta, lore=lore)}
         ctx = self._scene_context(turn)
@@ -3236,7 +3271,7 @@ class Game(Encounters):
                 return words | {"text": told}
             if told.scene is None or len(plans) == asked:  # no scene could be read
                 if told.shown:  # already before the players: its words stand, the record as it was
-                    return words | {"text": told.text, "offer_idea": told.offer_idea}
+                    return words | {"text": told.text, "offer_idea": told.offer_idea, "asides": told.asides}
                 # Its words would say what the record never got ("the warden goes with you", nobody
                 # following): asked again for the scene, and the second time held to the record as it is.
                 self._debug("scene", {"phase": "missing", "attempt": attempt})
@@ -3248,7 +3283,8 @@ class Game(Encounters):
                     await delta(told.text)
                 if p.problems:  # shown on a scene that held, then came back otherwise: what holds of it lands
                     self._debug("scene", {"phase": "kept", "problems": p.problems, "scene": told.scene})
-                return self._staging(told.text, p, partial=bool(p.problems)) | {"offer_idea": told.offer_idea}
+                return self._staging(told.text, p, partial=bool(p.problems)) | {
+                    "offer_idea": told.offer_idea, "asides": told.asides}
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})

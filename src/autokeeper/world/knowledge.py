@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..engine import fog
+from ..engine import audience, fog
 from ..engine.state import GameState
 from ..module.schema import Module
 from .record import DIRECTOR, PLAYERS, Entity, Event, Fact, Relation, WorldRecord, relation_key
@@ -117,7 +117,7 @@ def evidence(m: Module, st: GameState, rec: WorldRecord) -> list[PublicEvidence]
     out = [PublicEvidence(f"module:{key}", getattr(m, key), 0) for key in ("title", "subtitle", "hook", "setting")]
     out += [PublicEvidence(f"arrival:{loc.id}", loc.read_aloud) for loc in m.locations if loc.id in st.visited]
     out += [PublicEvidence(f"log:{e.turn}:{e.kind}:{st.logged - len(st.log) + i}", e.text, e.turn)
-            for i, e in enumerate(st.log) if e.kind in fog.SHOWN]
+            for i, e in enumerate(st.log) if e.kind in fog.SHOWN and audience.public(e)]
     out += [PublicEvidence(f"clue:{c.id}", c.text) for c in m.clues if c.id in st.clues]
     out += [PublicEvidence(f"handout:{h.id}", h.text) for h in m.handouts if h.id in st.handouts]
     out += [PublicEvidence(f"look:{n.id}", n.look) for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]

@@ -30,7 +30,7 @@ from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..rules.bcdice import shared
 from ..rules.coc import Investigator, Rules
-from . import fog, idea
+from . import audience, fog, idea
 from . import graph as turn_graph
 from .encounter import views
 from .game import Game, ai_choice
@@ -82,7 +82,7 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
     in the words the engine reads (battle_now): for `who`, or for every investigator in it.
 
     The first line is what the investigator's memory keeps of each turn (Cast.investigator)."""
-    loc = m.location(st.location)
+    loc = m.location(audience.location(st, who) if who else st.location)
     known, there = fog.known(m, st), set(fog.been(m, st))
     places = "、".join(f"{name}（{'去过' if pid in there else '听说过'}）" for pid, name in known.items() if pid != loc.id)
     met = [n for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
@@ -93,17 +93,26 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
     )  # fmt: skip
     handouts = "；".join(f"〔{m.handout(h).title}〕{_flat(m.handout(h).text, 160)}" for h in st.handouts)
     party = "\n".join(f"- {_status(inv)}" for inv in st.investigators)
-    recent = [e for e in st.log if e.kind in TOLD][-10:]
+    visible = audience.log(st, who)
+    recent = [e for e in visible if e.kind in TOLD][-10:]
     last = max((i for i, e in enumerate(recent) if e.kind == "keeper"), default=-1)  # where the keeper left the scene: in full
-    lines = "\n".join(f"- {e.who or TELLER.get(e.kind, e.kind)}：{_flat(e.text) if i == last else _tail(e.text, 160)}" for i, e in enumerate(recent))
-    stay = sum(1 for e in st.log[-12:] if e.kind == "player")
+    names = {inv.id: inv.name for inv in st.investigators}
+    rows = []
+    for i, entry in enumerate(recent):
+        recipients = "、".join(names.get(pid, pid) for pid in entry.audience or [])
+        scope = f"〔私密，收件人：{recipients}〕" if entry.audience is not None else ""
+        text = _flat(entry.text) if i == last else _tail(entry.text, 160)
+        rows.append(f"- {entry.who or TELLER.get(entry.kind, entry.kind)}{scope}：{text}")
+    lines = "\n".join(rows)
+    stay = sum(1 for e in visible[-12:] if e.kind == "player")
+    here = "你在" if who and who in st.apart else "你们在"
     out = [
-        f"现在 {st.clock}（{time_of_day(st.minutes)}），你们在{loc.name}。",
+        f"现在 {st.clock}（{time_of_day(st.minutes)}），{here}{loc.name}。",
         f"你们到这里时看到：{_flat(loc.read_aloud)}",
         f"知道的地方：{places or '只知道这里'}。",
     ]
     if who and who in st.apart:  # left elsewhere by a chase: where they are, not where the party is
-        out.append(f"你和大家分开了：你在{m.location(st.apart[who]).name}，大家在{loc.name}。")
+        out.append(f"你和大家分开了：你在{loc.name}，大家在{m.location(st.location).name}。")
     if people:  # talking to someone who is not here wastes a turn
         out.append(f"见过的人：{people}。不在这里的人，要先过去才说得上话。")
     if handouts:
@@ -111,6 +120,9 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
     out.append(f"队伍：\n{party}")
     if st.memory:
         out.append(f"更早的经过：{st.memory}")
+    if who and (personal := [e for e in audience.personal(st, who) if e.text not in lines]):
+        out.append("你的私人观察与私语（含更早记录，不自动成为大家共同知道的事实）：\n"
+                   + "\n".join(f"- [{e.time}] {e.who or TELLER.get(e.kind, e.kind)}：{e.text}" for e in personal))
     if now := battle_now(st, who, game):
         out.append(f"最近发生的事：\n{lines or '（刚开场）'}")
         out.append(now)

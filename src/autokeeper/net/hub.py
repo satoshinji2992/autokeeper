@@ -29,6 +29,7 @@ screen with the state; a seated player may ask for it between rounds, once a rou
 Messages are JSON objects with a "t" field:
 
     client -> hub   hello {name} · sit {investigator} · start · act {text} · respond {id, choice | text, ask} · say {text}
+                    · speak {text, to?: investigator[], channel?: whisper | note}
                     · retell {nudge} · epilogue · suggest · recount
     client -> hub   (before the start) bring {investigator, portrait} or {pregen} · ready {on} · card {op ...}
     client -> hub   (in a round) done · undo
@@ -36,7 +37,7 @@ Messages are JSON objects with a "t" field:
     client -> hub   (the host only) engine {choice} · house_rule {text} · pause_plugin {id, paused}
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
-                    · event {ev} · module · sync {state} · offer {offer: … respond_id, closes_in} · offer_closed {id} · say · ideas {ideas}
+                    · event {ev} · module · sync {state} · history {seat, log} · offer {offer: … respond_id, closes_in} · offer_closed {id} · say · ideas {ideas}
                     · notice {text} (an answer that came too late, or twice)
                     · prelude {frames, art, colors, picture_data} · prelude_ready (the opening performance)
                     · over · error
@@ -57,6 +58,10 @@ What was found the story tells, in the narration and the NPCs' lines, and each p
 their own notes on their own machine (tui/notes.py; the user, 2026-10-22).
 Once it has ended the whole module goes out, so every screen can open the debrief (复盘); the
 epilogue is told on the host and reaches everyone.
+
+Private speech and keeper asides are sent only to their named investigator seats, including
+when replayed after reconnecting. Taking a free seat means taking that character's knowledge;
+the room does not provide separate accounts or permanently bind a seat to a human identity.
 """
 
 from __future__ import annotations
@@ -77,7 +82,7 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..engine import chat, debrief, fog, idea
+from ..engine import audience, chat, debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.encounter import views
@@ -119,6 +124,7 @@ PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll wou
 PRIVATE |= {"held", "signs", "expanded", "ongoing"}
 # A player's notes are theirs alone (tui/notes.py): the host's own, kept in a save played on this machine, too.
 PRIVATE |= {"notebook"}
+PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
 # What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
 # failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
 PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")
@@ -367,7 +373,6 @@ class Hub:
         self.done: set[str] = set()  # seats that said they have nothing more this round
         self.early: list[tuple[str, str]] = []  # (seat, action) for the next round: sent while the keeper told, or with no room
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
-        self.spoken: list[tuple[str, chat.Said]] = []  # (seat, words to the party) shown, recorded between actions
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
         self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
@@ -508,10 +513,15 @@ class Hub:
             else:
                 self._save()
                 await self._broadcast({"t": "sync", "state": self._view()})
-        elif t == "say":  # out of character (engine/chat.ooc): shown to everyone, spectators too, never recorded
-            await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
+        elif t == "say":  # unaddressed table talk remains out of character; an addressed line is private RP
+            if "to" in msg:
+                await self._speak(cid, str(msg.get("text", ""))[:500], to=msg["to"], private=True,
+                                  channel=str(msg.get("channel") or "whisper"))
+            else:
+                await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
         elif t == "speak":
-            await self._speak(cid, str(msg.get("text", ""))[:500])
+            await self._speak(cid, str(msg.get("text", ""))[:500], to=msg.get("to"), private="to" in msg,
+                              channel=str(msg.get("channel") or "whisper"))
         elif t == "retell":
             await self._ask_retell(cid, str(msg.get("nudge") or "换个讲法"))
         elif t == "epilogue":
@@ -587,6 +597,11 @@ class Hub:
                 self._free(seat)  # sat down elsewhere: a question waiting on the old seat is not left hanging
         self.sits[inv_id] = cid
         await self._share_seats()
+        private_log = [e.model_dump(mode="json") for e in audience.log(self.state, inv_id)
+                       if e.audience is not None and e.kind != "clue"][-40:]
+        # An empty history also matters: switching to a character with no private knowledge
+        # must clear the previous character's private backlog in the lobby.
+        await self._send(cid, {"t": "history", "seat": inv_id, "log": private_log})
         if not self.bringing and all(self.sits.values()):  # a saved game: every human seat is taken, it goes on
             self.started.set()
         await self._maybe_begin()
@@ -787,7 +802,7 @@ class Hub:
             shutil.rmtree(self._card_dir(builder), ignore_errors=True)
 
     # -- what clients see ------------------------------------------------------------------
-    def _view(self) -> dict[str, Any]:
+    def _view(self, viewer: str | None = None) -> dict[str, Any]:
         st = self.state
         view = st.model_dump(mode="json", exclude=PRIVATE)
         view["flags"], view["fired"] = [], []
@@ -803,7 +818,7 @@ class Hub:
         here = {n.id for n in self.m.npcs if n.location == st.location}  # as the book has them (table())
         view["npcs"] = {k: {**v, "unlocked": [c for c in v["unlocked"] if c in st.clues]}  # what each may tell: only what was found
                         for k, v in view["npcs"].items() if v["met"] or k in here}
-        view["deeds"] = [d for d in view["deeds"] if d["kind"] != "clue"]  # a 0.0.4 save's lines with clue titles (state.Deed)
+        view["deeds"] = [d for d in view["deeds"] if d["kind"] != "clue" and audience.visible(d, viewer)]
         if view["item_owners"]:  # where things are, only of the things the players know of
             shown = known_items(self.m, st)
             view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
@@ -844,8 +859,9 @@ class Hub:
             "art": {k: v for k, v in self.m.art.items() if k in keys},
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
             "picture_data": self._shared(self._pictures(book, keys)),
-            "state": self._view(),
-            "log": [e.model_dump(mode="json") for e in self.state.log[-40:] if e.kind != "clue"],  # the module's words: the keeper's
+            "state": self._view(self._seat_of(cid)),
+            "log": [e.model_dump(mode="json") for e in audience.log(self.state, self._seat_of(cid))
+                    if e.kind != "clue"][-40:],  # an unseated connection never receives someone else's private history
             "seats": self._seats(cid),
             "bring": self.bringing,  # seats may still change their investigator
             "started": self.started.is_set(),
@@ -918,8 +934,13 @@ class Hub:
                 pass
 
     async def _broadcast(self, msg: dict[str, Any]) -> None:
+        scope = msg.get("ev", {}).get("audience") if msg.get("t") == "event" else msg.get("audience")
         for cid in list(self.clients):
-            await self._send(cid, msg)
+            if scope is None or self._seat_of(cid) in scope:
+                # Sync/turn/over all carry state. An addressed deed must never enter a shared
+                # payload first and rely on the other screens to hide it.
+                shown = {**msg, "state": self._view(self._seat_of(cid))} if "state" in msg else msg
+                await self._send(cid, shown)
 
     async def _event(self, ev: dict[str, Any]) -> None:
         if ev.get("type") in ("ruling", "plugin_status", "action"):
@@ -1069,31 +1090,63 @@ class Hub:
             mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
             await self._send(cid, {**public, "mine": mine if seat else {}})
 
-    async def _speak(self, cid: str, text: str) -> None:
-        """Words to the party (engine/chat.said): on every screen at once, as the investigator saying
-        them; into the log and the world record between actions (_heard), never in the middle of one.
-        The keeper is not asked and no action is spent."""
+    async def _speak(self, cid: str, text: str, *, to: Any = None, private: bool = False,
+                     channel: str = "whisper") -> None:
+        """Speech takes no model or action slot. Its recipients come from the sender's seat and
+        actual presence, never a client-supplied identity. A note or whisper reaches only its
+        named recipients; ordinary speech can be heard by everyone at that place."""
         seat = self._seat_of(cid)
         inv = next((i for i in self.state.investigators if i.id == seat), None)
-        said = chat.said(text, [i.name for i in self.state.investigators if i.id != seat]) if inv else None
         if inv is None:
             await self._send(cid, {"t": "error", "text": "观战模式下只能发送场外消息。"})
-        elif self.over:
+            return
+        if not self.started.is_set():
+            await self._send(cid, {"t": "error", "text": "游戏尚未开始。"})
+            return
+        if self.over:
             await self._send(cid, {"t": "error", "text": "本局已结束。"})
-        elif said is None:
-            await self._send(cid, {"t": "error", "text": "未识别为对同伴说的话，请作为行动提交。"})
+            return
+        hearers = audience.listeners(self.state, inv.id)
+        if inv.id not in hearers:
+            await self._send(cid, {"t": "error", "text": "当前调查员无法交谈。"})
+            return
+        if private:
+            party = {i.id: i for i in self.state.investigators}
+            if not isinstance(to, list) or not to or any(not isinstance(who, str) or who not in party for who in to):
+                await self._send(cid, {"t": "error", "text": "私语收件人必须是本局调查员。"})
+                return
+            targets = list(dict.fromkeys(who for who in to if who != inv.id))
+            if not targets or any(who not in hearers for who in targets):
+                await self._send(cid, {"t": "error", "text": "私语和纸条只能交给同处一地且能够接收的调查员。"})
+                return
+            if channel not in ("whisper", "note") or not text.strip():
+                await self._send(cid, {"t": "error", "text": "私语内容或方式无效。"})
+                return
+            scope = [inv.id, *targets]
+            said = chat.Said(text.strip(), "、".join(party[who].name for who in targets))
         else:
-            await self._event({"type": "speech", "who": inv.name, "player": self.names.get(cid, ""), "to": said.to, "text": said.line})
-            self.spoken.append((inv.id, said))
-            self.wake.set()
-
-    def _heard(self) -> None:
-        """What was said to the party meanwhile goes on record: before the next action is settled."""
-        spoken, self.spoken = self.spoken, []
-        for seat, said in spoken:
-            self.game.speak(seat, said.line, said.to)
-        if spoken:
-            self._save()
+            said = chat.said(text, [i.name for i in self.state.investigators if i.id != seat])
+            scope = None if set(hearers) == {i.id for i in self.state.investigators} else hearers
+        if said is None:
+            await self._send(cid, {"t": "error", "text": "未识别为对同伴说的话，请作为行动提交。"})
+            return
+        if not private and said.to not in ("", chat.EVERYONE) and not any(
+            i.name == said.to and i.id in hearers for i in self.state.investigators
+        ):
+            await self._send(cid, {"t": "error", "text": "对方不在可以交谈的现场。"})
+            return
+        ev = {"type": "speech", "who": inv.name, "player": self.names.get(cid, ""), "to": said.to, "text": said.line}
+        if scope is not None:
+            ev["audience"] = scope
+        if private:
+            ev["channel"] = channel
+        recorded = chat.Said(f"（递交纸条）{said.line}", said.to) if private and channel == "note" else said
+        # Settle against the place and listeners just validated, before any await or display.
+        # A later action may move or incapacitate someone; that cannot undo words already heard.
+        self.game.speak(inv.id, recorded.line, recorded.to, audience=scope, private=private)
+        self._save()
+        await self._event(ev)
+        self.wake.set()
 
     async def _collect(self) -> None:
         """Open the pool and wait until it is full or everyone is done. What was said for this
@@ -1105,7 +1158,6 @@ class Hub:
             while not queue.empty():
                 queue.get_nowait()
         early, self.early = self.early, []
-        self._heard()  # said while the keeper told
         players = self._players()
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
             if seat in players:
@@ -1119,7 +1171,6 @@ class Hub:
                 await self._house_rules()
                 await self._plays()
                 await self._asks()
-                self._heard()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
                     await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
@@ -1135,7 +1186,6 @@ class Hub:
                 self.wake.clear()
         finally:
             self.open, self.closes_at = False, None
-        self._heard()  # said as the round closed: on record before it is settled
         await self._pool()
 
     async def _settle(self) -> None:

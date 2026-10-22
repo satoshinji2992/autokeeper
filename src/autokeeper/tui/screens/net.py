@@ -12,7 +12,9 @@ import copy
 import inspect
 import math
 import os
+import re
 import time
+from collections import Counter
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -40,7 +42,7 @@ from .. import notes
 from ..modals.dialogs import PushModal, RollModal, Timed
 from ..modals.engine import EngineModal
 from ..modals.retell import RetellModal
-from ..widgets.panels import SceneArt
+from ..widgets.panels import HistoryPanel, SceneArt, log_line
 from .game import GameScreen
 from .prelude import PreludeScreen
 
@@ -49,6 +51,57 @@ if TYPE_CHECKING:
 
 IDEAS_WAIT = 60.0  # seconds F5 waits for the host's ideas
 HUB_WAIT = 10.0  # seconds the host's screen waits for the Hub's loop to read its game (开发者模式)
+PRIVATE_COMMANDS = ("/私聊", "/w")
+PRIVATE_LINE = re.compile(r'''(?P<name>"[^"]+"|'[^']+'|“[^”]+”|\S+)\s+(?P<text>.+)''', re.S)
+
+
+def private_line(screen: NetGameScreen, text: str) -> None:
+    """Resolve the one named recipient locally; the Hub authorizes delivery and echoes it."""
+    if not screen.seat:
+        screen.app.notify("观战模式下无法发送私语。", severity="warning")
+        return
+    if screen.state.ending:
+        screen.app.notify("本局已结束，无法发送角色私语。", severity="warning")
+        return
+    parts = text.split(maxsplit=1)
+    found = PRIVATE_LINE.fullmatch(parts[1].strip()) if len(parts) == 2 else None
+    if found is None:
+        screen.app.notify('用法：/私聊 调查员姓名 内容；姓名含空格时用双引号。', timeout=6)
+        return
+    name, body = found.group("name"), found.group("text").strip()
+    if name.startswith(('"', "'", "“")):
+        name = name[1:-1]
+    roster = screen.state.investigators
+    matches = [i for i in roster if i.id == name] or [i for i in roster if i.name == name]
+    if len(matches) != 1:
+        screen.app.notify("有多名调查员使用这个名字，请使用角色编号。" if matches else f"未找到该调查员：{name}",
+                          severity="warning")
+        return
+    target = matches[0]
+    if target.id == screen.seat:
+        screen.app.notify("请选择其他调查员作为收件人。", severity="warning")
+        return
+    apart, place = getattr(screen.state, "apart", {}), getattr(screen.state, "location", "")
+    if apart.get(target.id, place) != apart.get(screen.seat, place):
+        screen.app.notify("对方不在同一地点，无法直接私语。", severity="warning")
+        return
+    screen.run_worker(partial(screen.link.send, {"t": "speak", "text": body, "to": [target.id], "channel": "whisper"}))
+
+
+def with_private_history(public: list[dict[str, Any]], private: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Replace the previous seat's private backlog when choosing a seat in the lobby."""
+    entries = [e for e in public if e.get("audience") is None] + private
+    return sorted(entries, key=lambda e: e.get("turn", 0))
+
+
+def history_text(entry: LogEntry) -> Text:
+    """The restored line keeps its privacy label, without exposing internal audience ids."""
+    private = getattr(entry, "audience", None) is not None
+    if private and entry.kind == "keeper":
+        return Text(f"【守秘人·私密】{entry.text}", style="dim")
+    label = "【私语】" if private and entry.kind == "speech" else ""
+    who = f"{entry.who}：" if entry.who else ""
+    return Text(f"{label}{who}{entry.text}", style="dim")
 
 
 def table_module(welcome: dict[str, Any]) -> Module:
@@ -187,9 +240,8 @@ class NetGameScreen(GameScreen):
         self.set_interval(0.1, self._spin)
         self.set_interval(0.5, self._countdown)
         for e in self.backlog:  # what happened before you sat down
-            who = f"{e.who}：" if e.who else ""
-            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, Text(f"{who}{e.text}", style="dim"))
-            if e.kind == "keeper":  # told again, it is rewritten in place
+            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, history_text(e))
+            if e.kind == "keeper" and getattr(e, "audience", None) is None:  # public narration alone can be retold
                 self.told = block
         self.ready = True
         while self.inbox:
@@ -412,6 +464,20 @@ class NetGameScreen(GameScreen):
                     screen.settled()
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
+        elif t == "history" and msg.get("seat") == self.seat:
+            # The public backlog arrived before this seat was chosen. Restore only the private
+            # entries the Hub sent for it, without repeating them if the reply arrives twice.
+            restored = [LogEntry.model_validate(e) for e in msg.get("log", [])]
+            known = Counter(e.model_dump_json() for e in self.backlog)
+            for entry in restored:
+                key = entry.model_dump_json()
+                if known[key]:
+                    known[key] -= 1
+                    continue
+                self.backlog.append(entry)
+                block = self.story.add("keeper" if entry.kind == "keeper" else "system", history_text(entry))
+                if (line := log_line(entry)) is not None:
+                    self.query_one(HistoryPanel).note(line, block, entry.turn)
         elif t == "notice":  # an answer that came too late, or twice: the host ignored it
             self.app.notify(msg.get("text", ""), severity="warning", timeout=4)
         elif t == "ideas":  # for this screen alone
@@ -434,6 +500,14 @@ class NetGameScreen(GameScreen):
 
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")
+        if t == "aside":
+            self.story.add("keeper", Text(f"【守秘人·私密】{ev['text']}"))
+            return
+        if t == "speech" and ev.get("channel") in ("whisper", "note"):
+            who = f"{ev['who']}（{ev['player']}）" if ev.get("player") else ev["who"]
+            label = "私语" if ev["channel"] == "whisper" else "纸条"
+            self.story.add("player", Text(f"▷ 【{label}】{who} → {ev.get('to') or '收件人'}：{ev['text']}"))
+            return
         if t == "said":
             who = f"{ev['who']}（{ev.get('player') or 'AI'}）"
             text = ev["text"]
@@ -454,8 +528,10 @@ class NetGameScreen(GameScreen):
         await super().handle(ev)
 
     def send_line(self, text: str) -> None:
-        word = text.split()[0] if text.split() else ""
-        if (aside := chat.ooc(text)) is not None:  # out of character: to everyone, spectators too, never an action
+        word = text.split()[0].lower() if text.split() else ""
+        if word in PRIVATE_COMMANDS:
+            private_line(self, text)
+        elif (aside := chat.ooc(text)) is not None:  # out of character: to everyone, spectators too, never an action
             if aside:
                 self.run_worker(partial(self.link.send, {"t": "say", "text": aside}))
         elif word == "/undo" and self.seat and not self.state.ending:

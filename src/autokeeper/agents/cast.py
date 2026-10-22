@@ -27,7 +27,7 @@ import json
 from collections import deque
 from collections.abc import Callable
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -37,7 +37,7 @@ from pydantic_core import from_json
 
 from .. import cards, rules_lookup, skills
 from ..config import Config
-from ..engine import fog, world
+from ..engine import audience, fog, world
 from ..engine.encounter import site as chase_site
 from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
@@ -284,12 +284,18 @@ class TravelDialogue(Dialogue):
 # The keeper's telling: how things stand as it ends, then the words (engine/game.Game._narrate). The
 # scene goes into the record, checked first (world/scene.py); the words are shown once it holds. No
 # docstring: a schema's descriptions are what the model reads.
+class Aside(BaseModel):
+    to: list[str] = Field(min_length=1, description="能够获知这段信息的调查员 id；只投递给这些人")
+    text: str = Field(min_length=1, description="仅对这些调查员讲述的观察、感受或私下消息；不代替世界操作和检定结算")
+
+
 class Telling(BaseModel):
     scene: Scene = Field(description="先写：这段讲完时的场面")
     text: str = Field(description="再写：讲给玩家听的叙述")
     offer_idea: bool = Field(False, description=(
         "只有你判断调查确实陷入僵局、并在本次叙述中提议玩家做灵感检定时填 true；"
         "持续交谈、日常、讨论和正常等待不算停滞，不因内部回合计数自动提议"))
+    asides: list[Aside] = Field(default_factory=list, description="各人单独获知的信息；没有私人信息时留空，不在公共 text 中复述")
 
 
 @dataclass
@@ -302,6 +308,7 @@ class Narration:
     shown: bool = False
     first: bool = True
     offer_idea: bool = False
+    asides: list[dict] = field(default_factory=list)
 
 
 class IdeaFailure(BaseModel):
@@ -579,6 +586,8 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
     心理学、侦查等成功只说明系统允许观察到的内容，不读出未解锁的思想；失败的代价以本轮结算为准，已结算的敌意、伤害或物品损失照实呈现，不自行追加。
 11. 场景介绍是首次进入时的底稿。此刻的人物、时间、物品和事件优先于底稿，不让已经离开的人重现，也不把一个房间无人扩大成整栋房屋无人：同一处别的房间里的人听得见调查员喊人、敲门，照他的打算应声、出来或隔着门答话，不写成没人应。
     没有结算新发现时，不新增可追查的脚印、异物、藏物动作等案情。准备中的内容由系统等待，不用悬念或虚构的意外遮掩。
+12. 你统筹全部幕后信息，但玩家并不共享所有见闻。公共 text 只讲共同获知的内容；仅一人或几人听见、梦见或收到的消息，写进 asides，to 填实际收件人的调查员 id。不在公共叙述中复述私语或暴露其内容；点名交谈本身不等于私语。
+    私人描述只记录相应人物的见闻，不因此变成世界真相；伤害、移动、交物、取得线索和分发材料仍须通过相应操作结算。没有私人消息时 asides 留空。
 
 {craft}
 
@@ -913,7 +922,7 @@ class Cast:
         inv = state.investigator
         asked = commands.asked(text)
         prompt = (
-            f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state)}\n【调查员】{inv.name}\n"
+            f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n【调查员】{inv.name}\n"
             f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}"
         )
         if self.world is not None:
@@ -1238,7 +1247,7 @@ class Cast:
                       if e.kind == "item" and not e.important and e.at in around]
         prompt = (
             f"【行动】{action.ruled()}\n{moved}"
-            f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER)}\n"
+            f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER, viewer=inv.id, keeper=False)}\n"
             f"【场景】\n{self.scene(state, at)}\n"
             f"【本地守秘人资料】\n{m.location(where).keeper.strip() or '无'}\n"
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
@@ -1305,7 +1314,7 @@ class Cast:
             f"【孤注一掷的做法】{how}\n"
             f"【场景】\n{self.scene(state)}\n"
             f"【本地守秘人资料】\n{m.location(state.location).keeper.strip() or '无'}\n"
-            f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER)}\n"
+            f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER, viewer=inv.id, keeper=False)}\n"
             f"【调查员】{inv.name}：{_skills(inv)}" + (f"；状态：{'、'.join(inv.conditions)}" if inv.conditions else "") + "\n"
             f"【可设的剧情标记】{flags}"
         )
@@ -1657,7 +1666,8 @@ class Cast:
         if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
             text, scene = _words(reply.text), None
         told = Narration(text=text.strip(), scene=scene if isinstance(scene, dict) else None, shown=reader.shown,
-                         first=reader.first, offer_idea=data.get("offer_idea") is True)
+                         first=reader.first, offer_idea=data.get("offer_idea") is True,
+                         asides=_asides(data.get("asides"), state))
         holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
         if told.shown or holds:
             self._kept(s, report, told.text)
@@ -1745,7 +1755,7 @@ class Cast:
     async def recap(self, state: GameState, on_delta: OnDelta = None) -> str:
         s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)
         # What the table was told: the telling that put each clue into the story, not the module's words for it.
-        recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:] if e.kind != "clue")
+        recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in audience.log(state)[-30:] if e.kind != "clue")
         prompt = f"写一段前情回顾，150–250 字，只讲调查员已经知道的事，最后落在他们现在的处境上。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
         return reply.text.strip()
@@ -1770,6 +1780,7 @@ class Cast:
         key = f"investigator:{inv_id}"
         system = INVESTIGATOR_SYSTEM.format(name=inv.name, occupation=inv.occupation, sheet=_skills(inv), hook=self.module.hook.strip())
         s = self._open(key, "investigator", system, schema=_schema(Proposal))
+        situation = _personal_situation(state, inv_id, situation)
         # Remember where and when each move was made; the latest events come with every situation.
         remember = situation.split("\n", 1)[0]
         reply = await self._send(key, s, state, situation, remember=remember)
@@ -1808,6 +1819,7 @@ class Cast:
                    if p.id not in state.plugin_errors for a in p.actions]
         if actions:
             extra += "\n（本局还有这些可以尝试的额外玩法，合适时可以提其中一个：\n" + "\n".join(f"- {a}" for a in actions) + "）"
+        situation = _personal_situation(state, inv_id, situation)
         reply = await self._send(key, self.sessions[key], state, situation, extra=extra, bind=False)
         ideas = _parse(Ideas, reply.data, {"look": "", "ask": "", "dare": ""})
         said = (" ".join(t.split()).strip("“”\"「」") for t in (ideas.look, ideas.ask, ideas.dare))
@@ -1931,6 +1943,22 @@ SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
 TELLING = _schema(Telling)
 
 
+def _asides(raw: Any, state: GameState) -> list[dict]:
+    """Only an addressed personal observation can leave the keeper's private reply."""
+    if not isinstance(raw, list):
+        return []
+    ids = {i.id for i in state.investigators}
+    out = []
+    for item in raw:
+        try:
+            aside = Aside.model_validate(item)
+        except ValidationError:
+            continue
+        if set(aside.to) <= ids and aside.text.strip():
+            out.append({"to": list(dict.fromkeys(aside.to)), "text": aside.text.strip()})
+    return out
+
+
 def _words(raw: str) -> str:
     """A reply that should have been a telling, as words: its text field if any of it can be read,
     else the reply itself when it is not JSON at all."""
@@ -1943,7 +1971,7 @@ def _words(raw: str) -> str:
             data = None
         if isinstance(data, dict) and isinstance(data.get("text"), str):
             return data["text"]
-        if start == 0:
+        if isinstance(data, dict) or start == 0:
             raise ValueError("守秘人的回复读不出叙述")
     return raw
 
@@ -1987,9 +2015,21 @@ def opposing(npc: NPC) -> str:
     return out + (f"；按常人算：{'、'.join(ordinary)}" if ordinary else "")
 
 
-def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "speech", "npc", "keeper", "event", "clue", "handout")) -> str:
+def _personal_situation(state: GameState, viewer: str, situation: str) -> str:
+    """Parallel proposals share a public situation; each seat adds only its own private record."""
+    entries = [e for e in audience.personal(state, viewer) if e.text not in situation]
+    if not entries:
+        return situation
+    return (situation + "\n【你的私人观察与私语】\n"
+            + "\n".join(f"- [{e.time}] {e.who or e.kind}：{e.text}" for e in entries)
+            + "\n这些是你亲历、收到的说法或主观感知，不表示其他调查员已经知道，也不自动证实其内容。")
+
+
+def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "speech", "npc", "keeper", "event", "clue", "handout"),
+            viewer: str | None = None, keeper: bool = True) -> str:
     """Keep contiguous exchanges and their sources; do not reduce each reply to its last line."""
-    rows = [e for e in state.log if e.kind in kinds][-n:]
+    rows = [e for e in audience.log(state, viewer, keeper=keeper) if e.kind in kinds][-n:]
+    names = {i.id: i.name for i in state.investigators}
     kept, left = [], 10000
     for e in reversed(rows):
         if left <= 0:
@@ -1997,7 +2037,11 @@ def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player"
         text = e.text
         if len(text) > left:
             text = text[:left // 2] + "\n〔中段省略〕\n" + text[-left // 2:]
-        kept.append(f"- [{e.time}｜第{e.turn}轮｜{e.kind}] {e.who or e.kind}：{text}")
+        scope = ""
+        if e.audience is not None:
+            recipients = "、".join(names.get(who, who) for who in e.audience) or "仅KP"
+            scope = f"｜私密收件人：{recipients}" if keeper else "｜个人信息"
+        kept.append(f"- [{e.time}｜第{e.turn}轮｜{e.kind}{scope}] {e.who or e.kind}：{text}")
         left -= len(text)
     return "\n".join(reversed(kept)) or "（刚开场）"
 

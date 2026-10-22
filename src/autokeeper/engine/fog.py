@@ -37,7 +37,7 @@ from functools import lru_cache
 import networkx as nx
 
 from ..module.schema import Module
-from . import world
+from . import audience, world
 from .state import GameState
 
 with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
@@ -120,7 +120,7 @@ def shown(m: Module, st: GameState) -> list[str]:
     clues, handouts = {c.id: c for c in m.clues}, {h.id: h for h in m.handouts}
     texts = [m.title, m.subtitle, m.hook, m.setting]
     texts += [places[v].read_aloud for v in st.visited if v in places]  # what they saw on arriving
-    texts += [e.text for e in st.log if e.kind in SHOWN]
+    texts += [e.text for e in st.log if e.kind in SHOWN and audience.public(e)]
     texts += [f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues]
     texts += [f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts]
     texts += [n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]

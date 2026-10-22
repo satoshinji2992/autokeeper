@@ -29,6 +29,7 @@ class LogEntry(BaseModel):
     kind: LogKind
     who: str = ""
     text: str
+    audience: list[str] | None = None  # None: public; []: keeper only; otherwise these investigator ids
 
 
 class Deed(BaseModel):
@@ -43,6 +44,7 @@ class Deed(BaseModel):
     who: str  # investigator id
     kind: Literal["act", "check", "clue", "handout", "sanity", "damage"]
     text: str
+    audience: list[str] | None = None
 
 
 DEEDS = {"player": "act", "dice": "check", "handout": "handout", "sanity": "sanity", "damage": "damage"}
@@ -181,6 +183,7 @@ class GameState(BaseModel):
     transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
     notes: dict[str, str] = Field(default_factory=dict)
     log: list[LogEntry] = Field(default_factory=list)
+    private_history: list[LogEntry] = Field(default_factory=list)  # private original observations folded out of log
     logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
     deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)
@@ -260,8 +263,9 @@ class GameState(BaseModel):
     def clock(self) -> str:
         return format_time(self.minutes)
 
-    def add(self, kind: LogKind, text: str, who: str = "") -> LogEntry:
-        entry = LogEntry(turn=self.turn, time=self.clock, kind=kind, who=who, text=text)
+    def add(self, kind: LogKind, text: str, who: str = "", *, audience: list[str] | None = None) -> LogEntry:
+        entry = LogEntry(turn=self.turn, time=self.clock, kind=kind, who=who, text=text,
+                         audience=list(dict.fromkeys(audience)) if audience is not None else None)
         self.log.append(entry)
         self.logged += 1
         self._deed(entry, self.investigator.name if 0 <= self.active < len(self.investigators) else "")
@@ -275,7 +279,8 @@ class GameState(BaseModel):
         who = next((i.id for i in self.investigators if i.name == name), "") if kind else ""
         if not who:
             return
-        self.deeds.append(Deed(turn=e.turn, time=e.time, who=who, kind=kind, text=e.text[:120]))  # type: ignore[arg-type]
+        self.deeds.append(Deed(turn=e.turn, time=e.time, who=who, kind=kind, text=e.text[:120],
+                               audience=e.audience))  # type: ignore[arg-type]
         del self.deeds[:-KEEP_DEEDS]
 
     def npc(self, npc_id: str) -> NpcState:

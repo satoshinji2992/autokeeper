@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from ..module import graph as module_graph
 from ..module.schema import Clue, Module
 from ..rules.coc import Investigator
+from . import audience
 from .state import GameState, IdeaRoll, Mention, parse_time
 
 WORDS = ("/灵感", "/idea")  # what asks for it in the input box, at a LAN table, from an AI player
@@ -112,7 +113,7 @@ def note(m: Module, st: GameState) -> None:
     counting twice adds nothing."""
     fresh = st.logged - st.mentions_at
     lines = st.log[-fresh:] if 0 < fresh <= len(st.log) else (list(st.log) if fresh > 0 else [])
-    lines = [(e, _runs(e.text)) for e in lines if e.kind in TOLD + SAID]
+    lines = [(e, _runs(e.text)) for e in lines if e.kind in TOLD + SAID and audience.public(e)]
     st.mentions_at = st.logged
     if not lines:
         return

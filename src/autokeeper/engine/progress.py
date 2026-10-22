@@ -20,6 +20,7 @@ old text stands."""
 from __future__ import annotations
 
 from ..module.schema import Module
+from . import audience
 from .state import GameState, LogEntry
 
 APART = 6  # turns at least between two calls, milestones or not; the ending excepted
@@ -89,7 +90,7 @@ def material(m: Module, st: GameState) -> str:
     p = st.progress
     fresh = st.logged - p.seen
     new = st.log[-fresh:] if fresh > 0 else []
-    rows = [_line(m, st, e) for e in new if e.kind in SHOWN][-LINES:]
+    rows = [_line(m, st, e) for e in new if e.kind in SHOWN and audience.public(e)][-LINES:]
     parts = [f"【缘起：开场时调查员就知道的事】\n{_flat(m.hook)}"]
     if p.text:
         parts.append(f"【之前写的故事至今（第 {p.turn} 轮）】\n{p.text}")
