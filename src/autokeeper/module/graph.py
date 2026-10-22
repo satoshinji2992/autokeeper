@@ -286,6 +286,9 @@ def audit(m: Module) -> list[Issue]:
             err(f"事件 {e.id} 的地点 {e.move_to} 不存在")
         if e.performer and e.performer not in npcs:
             err(f"事件 {e.id} 的表演者 {e.performer} 不存在")
+        for who in e.present:
+            if who not in npcs:
+                err(f"事件 {e.id} 里出现的 {who} 不是 NPC")
         if e.ending and e.ending not in endings:
             err(f"事件 {e.id} 的结局 {e.ending} 不存在")
         for f in e.sets:

@@ -2758,8 +2758,19 @@ class Game(Encounters):
                 if flag not in st.flags:
                     st.flags.append(flag)
 
+        def appear() -> None:
+            """Who the read-aloud puts before the investigators is there in the record too (2026-10-22:
+            the truck's driver stepped down in the event, the record had him nowhere, and the keeper
+            then told an empty cab)."""
+            for nid in ev.present:
+                ent = self.world.rec.entities.get(nid)
+                if ent is not None and ent.kind == "npc" and ent.at != st.location and ent.status not in ("死亡", "失踪"):
+                    self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=st.location))
+
         async def fire() -> None:
             await step("commit", turn, commit)
+            if ev.present and self.world is not None:
+                await step("present", turn, appear)
             if not turn.told:  # at the opening the keeper tells it, once (the user, 2026-10-22: shown, then told again)
                 await step("notice", turn, lambda: self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()}))
             if ev.art and views.shown(self.m, ev.art):

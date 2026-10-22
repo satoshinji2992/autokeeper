@@ -251,6 +251,7 @@ class Event(BaseModel):
     read_aloud: str = ""
     sets: list[str] = Field(default_factory=list)
     sanity: str | None = None
+    present: list[str] = Field(default_factory=list, description="这件事里出现在调查员眼前的 NPC id；触发时他们来到调查员所在之处")
     damage: str | None = Field(None, description="当场受到的伤害，如 1D3（由行动的调查员承受）")
     move_to: str | None = None
     performer: str | None = Field(None, description="由哪个 NPC 当场表演（例如说书）")

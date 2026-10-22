@@ -1075,3 +1075,15 @@ async def test_an_early_rewrite_stays_over_the_source_however_many_follow(module
 
     text = await Cast._private_lore(Source(), game.state, "去报社查旧刊", ["报社"])  # type: ignore[arg-type]
     assert truth in text and "他在钟里藏了第 7 样东西" in text and "第 6 样" not in text  # each once, as it is now
+
+
+async def test_who_an_event_puts_before_the_investigators_is_there_in_the_record(module, fake):
+    """2026-10-22: the truck's driver stepped down in the read-aloud, the record had him nowhere, the
+    arbiter gave what he would say and the keeper then told an empty cab."""
+    module.events.append(Event(id="driver", title="卡车停下", when="visit:office", text="开车的人下来",
+                               read_aloud="驾驶座上的人下来。", present=["warden"]))
+    game, _, _ = make(module, fake, {}, location="square")
+    assert game.world.rec.entities["warden"].at != "office"
+    await game._arrive("office", Turn())
+    assert "driver" in game.state.fired and game.world.rec.entities["warden"].at == "office"
+    assert "warden" in game.world.present("office")
