@@ -23,8 +23,10 @@ A chase is the same encounter in mode "chase" (engine/encounter/chase.py, site.p
 the same declarations and arrangements, the round's action points spent running across the site, the
 obstacles crossed, attacks where the book allows them. It turns into a fight where they meet and
 someone turns to fight, and back into a chase when someone flees and is chased; wounds, guns, speeds
-and stakes carry over. There is no split party: the party is in a chase whole. When it ends the
-keeper's people are where they ran to, and the party where its players ended up (GameState.apart for
+and stakes carry over. A chase that comes to blows in another of the world's places moves the
+encounter, the party and the keeper's people in it there in the switch's own op (chase.to_fight), and
+the arrival follows. There is no split party: the party is in a chase whole. When it ends the keeper's
+people are where they ran to or fought, and the party where its players ended up (GameState.apart for
 those left elsewhere).
 """
 
@@ -1319,6 +1321,7 @@ class Encounters:
         step = self._resolution_step
         n = enc.round
         base = f"enc/{enc.id}/r{n}/end"
+        value = self._landed(base)  # resumed after it landed: what it owes is in the journal
         if enc.cursor == _end_slot(enc):
             def end(w: Work) -> None:
                 round_end(w)
@@ -1334,15 +1337,16 @@ class Encounters:
                         w.unit.lines.append("对手已经倒下，还有人要救、要收拾：接下来一轮一轮善后")
                 w.enc.cursor = _end_slot(w.enc) + 1
 
-            await self._unit(base, turn, end)
+            value = await self._unit(base, turn, end)
         await step(f"/{base}/time", turn, lambda: self._clock_minutes())
         await step(f"/{base}/clock", turn, lambda: self._time(turn))
+        if there := (value.get("extra") or {}).get("arrive"):
+            # Caught up in another place: the op moved the fight and the party there (chase.to_fight); what
+            # arriving brings about (the scene, its events) as any arrival.
+            await self._arrive(there, turn)
         enc = self.encounter()
         if enc is None:
             return
-        if enc.mode == "fight" and enc.place != self.state.location and any(
-                p.kind == "investigator" and p.presence == "in" for p in enc.participants):
-            await self._arrive(enc.place, turn)  # caught up somewhere else: the party is where the fight is now
         if enc.cursor == _end_slot(enc) + 1:
             await self._switch(enc, turn)
         enc = self.encounter()
@@ -1529,7 +1533,7 @@ class Encounters:
             text = self._summary(ctx, how)
             ran = enc.mode == "chase" and enc.chase is not None
             word = "追逐" if ran else "战斗"
-            where = chasing.places(ctx, enc) if ran else {p.id: enc.place for p in enc.participants}
+            where = chasing.places(ctx, enc) if ran else self._fight_places(enc)
             party_at, apart = chasing.party_place(self, enc, where) if ran else (st.location, {})
 
             def close(w: Work) -> None:
@@ -1542,8 +1546,8 @@ class Encounters:
                 e.ended = EndRecord(round=e.round, how=how, per=per, places=where,  # type: ignore[arg-type]
                                     minutes=minutes, text=text)
                 e.phase, e.pending = "ended", None
-                for p in e.participants:  # the route's end moves the world: the keeper's people are where they ran to
-                    if ran and p.kind != "investigator" and where.get(p.id) and self.world.place(p.id) not in ("", where[p.id]):
+                for p in e.participants:  # the keeper's people end where they are: where they ran to, where it was fought
+                    if p.kind != "investigator" and where.get(p.id) and self.world.place(p.id) not in ("", where[p.id]):
                         w.unit.effects.append(effects.Relocate(who=p.id, place=where[p.id]))
                 w.unit.extra = {"arrive": party_at if party_at != st.location else "", "apart": apart}
                 w.unit.lines.append(f"【{word}结束】{text}")
@@ -1586,6 +1590,25 @@ class Encounters:
         for inv, place in apart.items():
             who = next((i.name for i in st.investigators if i.id == inv), inv)
             turn.notes.append(f"{who}落在了{self.world.name(place)}，和大家分开了；下次移动时归队。")
+
+    def _fight_places(self, enc: EncounterState) -> dict[str, str]:
+        """Where everyone is in the world as a fight ends: the keeper's people still in it where it is
+        (a chase that came to blows in another place moved it there, and them with it), the others
+        where the world has them; an investigator with the party, or where they were left
+        (GameState.apart)."""
+        st = self.state
+        out = {}
+        for p in enc.participants:
+            if p.kind == "investigator":
+                out[p.id] = st.apart.get(p.id) or st.location
+            else:
+                out[p.id] = enc.place if p.presence == "in" else (self.world.place(p.id) or enc.place)
+        return out
+
+    def _landed(self, key: str) -> dict:
+        """What unit `key` came to, as this turn's journal kept it ({} when it has not landed)."""
+        row = ((self._resolution or {}).get("steps") or {}).get(key) or {}
+        return (row.get("value") or {}) if row.get("done") else {}
 
     def _ending_owed(self, eid: str) -> bool:
         """This turn's journal began ending encounter `eid`: what is left of that is still owed."""

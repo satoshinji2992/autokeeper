@@ -226,8 +226,9 @@ def diff(old: EncounterState, new: EncounterState) -> list:
         out.append(SetScene(scene=new.scene))
     if new.chase != old.chase:
         out.append(SetChase(chase=new.chase))
-    if new.mode != old.mode or new.switches != old.switches:
-        out.append(SetMode(mode=new.mode, switch=new.switches[-1] if len(new.switches) > len(old.switches) else ""))
+    if new.mode != old.mode or new.switches != old.switches or new.place != old.place:
+        out.append(SetMode(mode=new.mode, switch=new.switches[-1] if len(new.switches) > len(old.switches) else "",
+                           place=new.place if new.place != old.place else ""))
     if len(new.stakes) > len(old.stakes):
         out.append(AddStakes(stakes=new.stakes[len(old.stakes):]))
     out += [SetStake(index=i, fired=s.fired) for i, s in enumerate(new.stakes) if i < len(old.stakes) and s.fired != old.stakes[i].fired]

@@ -244,7 +244,7 @@ class EncounterState(BaseModel):
     rules: str = "coc7e/0.0.4"
     mode: Mode
     phase: Phase = "open"
-    place: str  # the world location it began at
+    place: str  # the world location it is at: where it began, or where a chase came to blows (SetMode.place)
     reason: str = ""
     started_turn: int
     participants: list[Participant]
@@ -338,11 +338,14 @@ class SetPending(BaseModel):
 
 
 class SetMode(BaseModel):
-    """Fight to chase or back; `switch` ("r3:chase") is noted once in `switches`."""
+    """Fight to chase or back; `switch` ("r3:chase") is noted once in `switches`. `place`, when given,
+    is the world place it goes on at: a chase that came to blows in another place (chase.to_fight).
+    The same op moves the people in it there (effects.Relocate, effects.Party)."""
 
     kind: Literal["mode"] = "mode"
     mode: Mode
     switch: str = ""
+    place: str = ""
 
 
 class SetPhase(BaseModel):
@@ -446,6 +449,8 @@ def _apply(enc: EncounterState, c) -> None:
             enc.mode = c.mode
             if c.switch and c.switch not in enc.switches:
                 enc.switches.append(c.switch)
+            if c.place:
+                enc.place = c.place
         case SetPhase():
             enc.phase = c.phase
         case SetStake():
