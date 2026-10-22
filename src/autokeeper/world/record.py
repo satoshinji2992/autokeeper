@@ -297,6 +297,7 @@ class Beat(BaseModel):
     t: int = 0  # game minutes it was decided at
     turn: int = 0
     status: Literal["waiting", "played", "dropped"] = "waiting"
+    cue: Literal["auto", "play", "hold"] = "auto"  # keeper's scene timing, not a number of player inputs
     note: str = ""  # why it was dropped
 
 

@@ -380,17 +380,16 @@ async def test_stateless_helpers_are_archived_without_creating_actor_memory(diag
     game = game_with(diagnostic_model)
 
     async def helper(self, messages, *, schema, images, on_delta):
-        data = {"problems": []} if self.label == "consistency" else {"look": "查看桌面", "ask": "询问近况", "dare": "敲门"}
+        data = {"look": "查看桌面", "ask": "询问近况", "dare": "敲门"}
         return Reply(text="进展摘要", data=data, usage={"input_tokens": 10, "output_tokens": 5})
 
     monkeypatch.setattr(DiagnosticModel, "_call", helper)
     before = dict(game.state.transcripts)
     await game.cast.progress(game.state, "玩家公开进展")
     await game.cast.suggest(game.state, game.state.investigator.id, "当前处境")
-    await game.cast.consistent(game.state, "核对未公开设定")
     assert game.state.transcripts == before
-    assert {r["session"].split(":")[0] for r in game.debug_journal.calls()} == {"progress", "suggest", "consistency"}
-    assert all(game.state.usage[key]["calls"] == 1 for key in ("progress", "suggest", "consistency"))
+    assert {r["session"].split(":")[0] for r in game.debug_journal.calls()} == {"progress", "suggest"}
+    assert all(game.state.usage[key]["calls"] == 1 for key in ("progress", "suggest"))
     await asyncio.gather(game.close(), game.cast.close())
 
 

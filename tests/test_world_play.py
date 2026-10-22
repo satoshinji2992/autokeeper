@@ -327,23 +327,23 @@ class Unchecked(Directing):
         return None
 
 
-async def test_what_the_players_met_is_not_rewritten_when_the_check_fails(module, fake):
-    told = O.Rewrite(target="fact:npc:warden:knows:1", text="守钟人从来不碰那口钟", reason="他一直在骗人")
-    hidden = O.Rewrite(target="fact:npc:warden:secrets:0", text="他在钟里藏了亡子的怀表", reason="更有人情味")
+async def test_what_the_players_met_can_be_reinterpreted_without_a_separate_approval(module, fake):
+    told = O.Rewrite(target="fact:npc:warden:knows:1", text="守钟人从来不碰那口钟", reason="布道者把别人上弦的身影误认成了守钟人")
     module.npc("warden").knows.append("守钟人每天黄昏给钟上一次弦")
-    cast = Unchecked([plan_with(told), plan_with(hidden)])
+    cast = Unchecked([plan_with(told)])
     game = directed(module, fake, cast)
     game.state.add("npc", "我每天黄昏都去，守钟人每天黄昏给钟上一次弦。", who="布道者")
     game.world.sync()
     assert await game._improvise("展开", at="square") is not None
-    assert any("没能核对" in p for p in cast.asked[1])  # the first plan went back
-    assert game.world.rec.facts["npc:warden:knows:1"].text == "守钟人每天黄昏给钟上一次弦"
-    assert game.world.rec.facts["npc:warden:secrets:0"].text == "他在钟里藏了亡子的怀表"  # nothing they met: no check needed
+    assert cast.asked == [[]] and cast.checked == []
+    assert game.world.rec.facts["npc:warden:knows:1"].text == "守钟人从来不碰那口钟"
+    assert game.world.rec.facts["told:npc:warden:knows:1:1"].text == "守钟人每天黄昏给钟上一次弦"
+    assert "守钟人每天黄昏给钟上一次弦" in game.state.log[-1].text
 
 
-async def test_a_rewrite_that_does_not_hold_together_is_sent_back(module, fake):
+async def test_a_directors_rewrite_does_not_request_another_models_verdict(module, fake):
     module.npc("warden").knows.append("守钟人每天黄昏给钟上一次弦")
-    rewrite = O.Rewrite(target="fact:npc:warden:secrets:0", text="他早就不管这口钟了，钟是布道者在上弦")
+    rewrite = O.Rewrite(target="fact:npc:warden:secrets:0", text="他每天上弦，是为了让藏在钟里的亡子安静下来")
     cast = Directing([plan_with(rewrite), plan_with()], objections=[["玩家知道守钟人每天给钟上弦"]])
     game = directed(module, fake, cast)
     game.state.add("keeper", "老守钟人说，他每天黄昏都要给钟上一次弦。")
@@ -351,9 +351,8 @@ async def test_a_rewrite_that_does_not_hold_together_is_sent_back(module, fake):
                                     visibility="public")).ok
     game.world.sync()
     assert await game._improvise("展开", at="square") is not None
-    assert "每天黄昏给钟上一次弦" in cast.checked[0] and "钟是布道者在上弦" in cast.checked[0]
-    assert any("说不通" in p for p in cast.asked[1])
-    assert game.world.rec.facts["npc:warden:secrets:0"].text == "他在钟里藏了东西"
+    assert cast.checked == [] and cast.asked == [[]]
+    assert game.world.rec.facts["npc:warden:secrets:0"].text == rewrite.text
 
 
 async def test_backstage_ops_made_on_a_world_that_has_moved_since_do_not_land(module, fake):

@@ -89,7 +89,7 @@ def digest(data: Any) -> str:
 class World:
     def __init__(self, m: Module, st: GameState, *, checker=None, initialize: bool = True):
         self.m, self.st = m, st
-        self.checker = checker  # rewrite consistency hook (world/rewrite.py), an LLM check in phase 2
+        self.checker = checker  # optional synchronous extension hook; ordinary play has no model approval
         self.reviewing = False  # a screen has the director look backstage after a long stretch of time (Game._look)
         self.clock: int | None = None  # game minutes ops happen at, while the scheduler runs a time skip
         if initialize:

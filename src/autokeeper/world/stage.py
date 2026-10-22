@@ -7,7 +7,7 @@ leaves, a companion turns away, someone acts on them or on what they carry, some
 where they stand. It waits as a beat, an arrangement left unfinished for the keeper, until the
 keeper plays it in the next telling (engine/game.py), and lands whole then, told in the same
 breath: a reaction in place at once, but someone the investigators are dealing with does not walk
-out mid-exchange (leaves; HOLD_TURNS turns at most). A beat whose basis moved meanwhile (what its
+out mid-exchange unless the keeper explicitly cues it. A beat whose basis moved meanwhile (what its
 decision rested on, its plan step's condition), or that the world no longer allows, is dropped,
 and its author woken to think again.
 
@@ -29,7 +29,6 @@ from .record import PLAYERS, Beat
 if TYPE_CHECKING:
     from .store import World
 
-HOLD_TURNS = 2  # turns a beat waits for the exchange with its person to end before it plays anyway
 KEPT = 30  # played and dropped beats kept for the developer record
 
 
@@ -143,6 +142,21 @@ def waiting(w: World, actor: str | None = None) -> list[Beat]:
     return [b for b in w.rec.beats if b.status == "waiting" and (actor is None or b.actor == actor)]
 
 
+def cue(w: World, ident: str, action: str, reason: str) -> None:
+    """The keeper decides the timing in its ordinary plan; no new call or approval queue.
+    A played/dropped receipt stays final when a saved plan is replayed."""
+    beat = next((b for b in waiting(w) if b.id == ident), None)
+    if beat is None:
+        return
+    beat.note = reason
+    if action == "drop":
+        beat.status = "dropped"
+        if (agent := w.rec.agents.get(beat.actor)) is not None:
+            agent.wake, agent.refused = w.now, f"守秘人撤回安排：{reason}"
+    elif action in ("play", "hold"):
+        beat.cue = action
+
+
 def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
     """Land work whole, now: tried on a copy first (the actor's own permissions, the world's
     checks); what stops it when it no longer fits."""
@@ -182,7 +196,8 @@ def play(w: World, beat: Beat) -> list[str]:
     or the world refuses it."""
     problems = gone_by(w, beat.reads, beat.when) or commit(w, beat.actor, beat.ops)
     beat.status = "dropped" if problems else "played"
-    beat.note = "；".join(problems)[:200]
+    if problems:
+        beat.note = "；".join(problems)[:200]
     if problems and (a := w.rec.agents.get(beat.actor)) is not None:
         # What it meant to do no longer fits: it thinks again, knowing why.
         a.wake, a.refused = w.now, f"{beat.text or '原先的安排'}没做成：{'；'.join(problems)}"[:200]

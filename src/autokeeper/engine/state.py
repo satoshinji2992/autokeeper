@@ -163,6 +163,8 @@ class GameState(BaseModel):
     # A LAN round's actions happen at once (net/hub.py _settle, Game.begin_round): the minutes the
     # longest of them took so far (None outside a round), and the reports held for the one telling.
     round_spent: int | None = None
+    round_elapsed: dict[str, int] = Field(default_factory=dict)  # serial work per investigator inside the shared window
+    round_plan: dict = Field(default_factory=dict)  # private batch plans and consumption receipts, not player-visible
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.

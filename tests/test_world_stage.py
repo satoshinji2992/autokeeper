@@ -88,7 +88,7 @@ def test_only_the_partys_own_travel_takes_a_companion_along():
     assert w.apply(O.Move(entity="warden", to="square", actor="warden")).ok
 
 
-async def test_someone_being_talked_to_leaves_after_a_while_even_if_the_talk_goes_on(module, fake):
+async def test_player_input_count_never_forces_someone_out_of_an_active_conversation(module, fake):
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
     w = game.world
@@ -98,13 +98,14 @@ async def test_someone_being_talked_to_leaves_after_a_while_even_if_the_talk_goe
     game.minds = scheduler.Budget(turn=2, skip=4)
     w.agent("warden").wake = game.state.minutes  # it means to think: it decides to go down
     talk = Action(kind="talk", summary="周衡问守钟人钟的事", npc="warden", speech="这钟怎么了？")
-    for _ in range(stage.HOLD_TURNS):
+    for _ in range(6):
         game.state.turn += 1
         turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=1))
         await game.talk(turn)
         assert w.entity("warden").at == "tower"  # still being talked to
     game.state.turn += 1
-    turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=1))
+    turn = await game.resolve(Action(kind="investigate", summary="周衡转去查看齿轮"),
+                              Ruling(needs_roll=False, minutes=1))
     assert w.entity("warden").at == "square" and any("离开了钟楼" in t for t in turn.world)
     await game.close()
 

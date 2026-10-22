@@ -22,7 +22,19 @@ from pydantic import TypeAdapter
 
 from .. import cards, pictures, weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Failure, IdeaFailure, Initiative, Plan, Rejoin, Ruling, kp_line
+from ..agents.cast import (
+    Action,
+    Cast,
+    Failure,
+    IdeaFailure,
+    Initiative,
+    PartyInput,
+    PartyPlan,
+    Plan,
+    Rejoin,
+    Ruling,
+    kp_line,
+)
 from ..agents.director import Improv
 from ..harness.models import refused
 from ..harness.replay import CassetteError
@@ -34,10 +46,10 @@ from ..rules import commands, wounds
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
-from ..world import adapters, desk, knowledge, rewrite, scene, scheduler, stage
+from ..world import adapters, desk, knowledge, scene, scheduler, stage
 from ..world import context as world_view
 from ..world.agents import CastBrain, marked
-from ..world.ops import Equip, Follow, Improvise, Move, Occur, Rewrite
+from ..world.ops import Equip, Follow, Improvise, Move, Occur
 from ..world.record import DIRECTOR
 from ..world.store import World, digest
 from . import audience as recipients
@@ -218,8 +230,10 @@ class Game(Encounters):
         self.debug_world: list[scheduler.Report] = []  # recent scheduling decisions, including refused operations
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
         self.holding = False  # a round's action that is not its last: its telling waits for the others (narrate)
-        if not state.pending_turn:  # a round cut short by a crash is over: no overlap for the next turn
+        if not state.pending_turn and not self.pending_party():  # unfinished batches retain their shared time ledger
             state.round_spent = None
+            state.round_elapsed.clear()
+            state.round_plan.clear()
         # The players' 故事至今 (engine/progress.py), written in the background when the story
         # has moved. Off in autoplay and replays, where nobody reads it; a screen and the Hub
         # turn it on.
@@ -475,10 +489,15 @@ class Game(Encounters):
         st = self.state
         receipt = st.pending_turn.setdefault("arrangement", {}) if st.pending_turn else {}
         planner = getattr(self.cast, "plan", None)
-        if planner is not None:
+        batched = self._party_step(text) if not receipt.get("plan") else None
+        if planner is not None or batched is not None or receipt.get("plan"):
             try:
                 if receipt.get("plan"):
                     plan = Plan.model_validate(receipt["plan"])
+                elif batched is not None:
+                    plan = Plan.model_validate(batched["plan"])
+                    if st.pending_turn:
+                        st.pending_turn["party_token"] = batched["token"]
                 elif _takes(planner, "check"):
                     plan = await planner(st, text, check=lambda p: self._planned_scene(p).problems)
                 else:
@@ -492,6 +511,8 @@ class Game(Encounters):
                     prepared = self._planned_scene(plan)
                     receipt.update(at=st.turn, plan=plan.model_dump(mode="json"), units=[u.dump() for u in prepared.held],
                                    problems=prepared.problems)
+                    if batched is not None and batched["token"] not in st.round_plan.setdefault("used", []):
+                        st.round_plan["used"].append(batched["token"])
                     if receipt["units"] and self.checkpoint:
                         self.checkpoint()
                 if not receipt.get("landed"):
@@ -504,6 +525,10 @@ class Game(Encounters):
                         self.visuals.schedule()
                     if units and self.checkpoint:
                         self.checkpoint()
+                if plan.beats and plan.action.kind != "meta":
+                    await self._cue_scene(plan, receipt)
+                    if not st.pending_turn and "cue_turn" in receipt:
+                        self._late.absorb(TURN_RECORD.validate_python(receipt["cue_turn"]))
                 if not st.pending_turn:
                     self._late.notes.extend(f"现场登记未落实：{p}" for p in receipt["problems"])
                 here, kept = set(self._present()), {}
@@ -522,19 +547,56 @@ class Game(Encounters):
                 return plan.action
         return await self.cast.intent(st, text)
 
+    async def _cue_scene(self, plan: Plan, receipt: dict) -> None:
+        """An explicit interruption changes the scene before the rules assistant reads it.
+        Its operations, consequences and notices use the ordinary durable stage journal."""
+        journal = receipt.setdefault("cues", {})
+        turn = TURN_RECORD.validate_python(receipt["cue_turn"]) if "cue_turn" in receipt else Turn()
+
+        def keep(kept: Turn) -> None:
+            receipt["cue_turn"] = TURN_RECORD.dump_python(kept, mode="json")
+            if self.checkpoint:
+                self.checkpoint()
+
+        with self._journal(journal, keep):
+            for choice in plan.beats:
+                def cue(choice=choice) -> list[str]:
+                    stage.cue(self.world, choice.id, choice.action, choice.reason)
+                    beat = next((b for b in stage.waiting(self.world) if b.id == choice.id), None)
+                    if choice.action != "play" or beat is None:
+                        return []
+                    since, flags = self.world.rec.seq, set(self.state.flags)
+                    problems = stage.play(self.world, beat)
+                    if problems:
+                        turn.notes.append(f"待演安排未落实：{choice.id}，{'；'.join(problems)}")
+                    else:
+                        turn.world.extend(world_view.happened(self.world, since))
+                    return [flag for flag in self.state.flags if flag not in flags]
+
+                flags = await self._resolution_step(f"cue:{choice.id}", turn, cue)
+                if flags:
+                    await self._resolution_step(f"cue-flags:{choice.id}", turn,
+                                                lambda flags=flags: self._flags(flags, turn, landed=True))
+
     def _planned_scene(self, plan: Plan) -> scene.Plan:
         """Register the established cast before ruling, without handing over things or resolving
         anybody's attempted action. Real moves still use the scene's route and time checks."""
-        if plan.action.kind == "meta" or not (plan.present or plan.people):
+        if plan.action.kind == "meta":
             return scene.Plan()
-        here = list(dict.fromkeys([*self._present(), *plan.present, *(p.id for p in plan.people)]))
-        raw = scene.Scene(people=plan.people, here=here)
-        prepared = scene.plan(self.world, raw, scene.Context(travel=self._travel, walk=False,
-                                                           ids=f"plan:{self.state.turn}"))
+        prepared = scene.Plan()
+        if plan.present or plan.people:
+            here = list(dict.fromkeys([*self._present(), *plan.present, *(p.id for p in plan.people)]))
+            raw = scene.Scene(people=plan.people, here=here)
+            prepared = scene.plan(self.world, raw, scene.Context(travel=self._travel, walk=False,
+                                                               ids=f"plan:{self.state.turn}"))
         introduced = {p.id for p in plan.people}
         for ident in plan.present:
             if ident not in introduced and (not (e := self.world.entity(ident)) or e.kind != "npc"):
                 prepared.problems.append(f"{ident} 不是已登记的 NPC；需要持续记住的新人物写进 people。")
+        pending = {b.id for b in stage.waiting(self.world)}
+        for choice in plan.beats:
+            if choice.id not in pending:
+                prepared.problems.append(f"{choice.id} 不是当前待演安排，不能重新执行或改动已完成的安排。")
         return prepared
 
     async def rule(self, action: Action) -> Ruling | None:
@@ -572,8 +634,10 @@ class Game(Encounters):
         heading = self._heading(action)
         journal = self.state.pending_turn
         draft = journal.get("draft_ruling", {})
+        arbiter = self.cast.arbiter
+        kwargs = {"coordination": self._party_context()} if _takes(arbiter, "coordination") else {}
         ruling = (Ruling.model_validate(draft["ruling"]) if draft.get("action") == action.ruled()
-                  else await self.cast.arbiter(self.state, action, at=heading))
+                  else await arbiter(self.state, action, at=heading, **kwargs))
         if ruling.scope != "模组内":  # the module is silent here: the director fills the gap
             if journal:
                 journal["draft_ruling"] = {"action": action.ruled(), "ruling": ruling.model_dump(mode="json")}
@@ -920,7 +984,11 @@ class Game(Encounters):
         return None
 
     async def _plan(self, kind: str, *, action: Action | None, ruling: Ruling | None, at: str) -> Improv | None:
-        """Validate the whole package, including plugins and world actions, with one repair."""
+        """Check package, plugins and world operations deterministically, with one repair.
+
+        The director judges a rewrite's meaning against its full world context; another model
+        does not approve it. The world still preserves observations, materials and revision history.
+        """
         said = f"{action.summary}（{action.kind}，对象：{action.target or '无'}）" if action else ""
         problems: list[str] = []
         for _attempt in range(2):
@@ -944,8 +1012,6 @@ class Game(Encounters):
                 continue
             plan.reads = reads
             backstage = self._trial(plan, at) if plan.backstage else []
-            if not backstage and plan.backstage:
-                backstage = await self._consistent(plan)
             if not backstage:
                 self._debug("director", {"phase": "validated", "kind": kind, "plan": plan.model_dump(mode="json")})
                 return plan
@@ -965,42 +1031,6 @@ class Game(Encounters):
             done = w.apply(op.model_copy(update={"actor": DIRECTOR, "id": f"trial:{i}"}))
             problems += [f"幕后第 {i + 1} 条（{op.kind}）：{p}" for p in done.problems]
         return problems
-
-    async def _consistent(self, plan: Improv) -> list[str]:
-        """A rewrite has to hold together with what the players met about the same people and
-        places: what they heard or saw may turn out staged, never impossible. The record checks
-        the words (world/rewrite.py); a model reads the meaning, and a rewrite of something the
-        players met does not go in unchecked."""
-        w = self.world
-        at = knowledge.table(w.m, w.st, w.rec)
-        rows, met = [], False
-        for op in plan.backstage:
-            if not isinstance(op, Rewrite):
-                continue
-            kind, _, ident = op.target.partition(":")
-            fact = w.rec.facts.get(ident) if kind == "fact" else None
-            event = w.rec.event(ident) if kind == "event" else None
-            if fact is not None:
-                old, about = fact.text, fact.about
-                how = knowledge.how_known(w, fact, at) if fact.revealed is not None or knowledge.exposed(old, at) else ""
-            elif event is not None:
-                old, about = event.text, [*event.participants, event.place]
-                how = "亲眼见到" if event.visibility == "public" or knowledge.exposed(old, at) else ""
-            else:
-                continue
-            known = [f"- {f.text}（{knowledge.how_known(w, f, at) or '见过'}）" for f in rewrite.pins(w, about) if f.id != ident][-12:]
-            if not old or not (known or how):
-                continue
-            met = met or bool(how)
-            rows.append(f"【改写】原来：{old}" + (f"（玩家{how}）" if how else "")
-                        + f"\n改成：{'（并无此事）' if op.retract else op.text}\n理由：{op.reason or '无'}"
-                        + ("\n【玩家已经知道的】\n" + "\n".join(known) if known else ""))
-        if not rows or not hasattr(self.cast, "consistent"):
-            return []
-        problems = await self.cast.consistent(self.state, "\n\n".join(rows))
-        if problems is None:  # the check could not be made
-            return ["这次没能核对改写；玩家见过、听过的事先不要改"] if met else []
-        return [f"改写说不通：{p}" for p in problems]
 
     async def _land(self, kind: str, plan: Improv, at: str = "", *, receipt: dict | None = None,
                     draw: float | None = None) -> improv.Applied | None:
@@ -1188,7 +1218,7 @@ class Game(Encounters):
         flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
         def time() -> None:
-            st.minutes += max(0, min(failure.minutes, 240))
+            st.minutes += self._overlap(max(0, min(failure.minutes, 240)))
 
         await step("fail-time", turn, time)
         if flags:
@@ -1463,7 +1493,10 @@ class Game(Encounters):
             return
 
         def initial() -> bool:
-            turn.notes.extend(f"现场登记未落实：{p}" for p in st.pending_turn.get("arrangement", {}).get("problems", []))
+            arranged = st.pending_turn.get("arrangement", {})
+            turn.notes.extend(f"现场登记未落实：{p}" for p in arranged.get("problems", []))
+            if "cue_turn" in arranged:
+                turn.absorb(TURN_RECORD.validate_python(arranged["cue_turn"]))
             preparation = st.pending_turn.get("preparation", {})
             if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
                 turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
@@ -1520,6 +1553,7 @@ class Game(Encounters):
             st.minutes += minutes
             if st.round_spent is not None:  # the round goes on from the arrival
                 st.round_spent = 0
+                st.round_elapsed.clear()
             return {"heading": heading, "intended": intended, "stopping": stopping}
 
         moving = await step("travel", turn, travel)
@@ -1697,7 +1731,7 @@ class Game(Encounters):
             turn.notes.append(f"{inv.name}从{self.world.name(here)}去不了“{dest}”")
             return {}
         st.apart[inv.id] = dest
-        st.minutes += minutes
+        st.minutes += self._overlap(minutes)
         turn.notes.append(f"{inv.name}独自从{self.world.name(here)}去了{self.world.name(dest)}，没有和大家在一起；大家还在"
                           f"{self.world.name(st.location)}。")
         return {}
@@ -1844,7 +1878,7 @@ class Game(Encounters):
             def told() -> None:
                 st.add("player", f"孤注一掷：{how}", who=inv.name)
                 if method["achievable"]:
-                    st.minutes += method["minutes"]
+                    st.minutes += self._overlap(method["minutes"])
                     turn.notes.append(f"孤注一掷的做法：{how}（约 {method['minutes']} 分钟）")
                 else:
                     why = method["why"].rstrip("。") or "这样做达不到目标"
@@ -2226,13 +2260,124 @@ class Game(Encounters):
         return await self._narrate(report, on_delta, lore=self._brief(), turn=turn)
 
     # -- a round of simultaneous actions (a LAN table: net/hub.py _settle) -------------------
+    def pending_party(self) -> list[tuple[str, str | None]] | None:
+        receipt = self.state.round_plan
+        if any(step["token"] not in receipt.get("done", []) for step in receipt.get("steps", [])):
+            return [tuple(pair) for pair in receipt["input"]]
+        return None
+
+    async def arrange_party(self, order: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+        """Read the declared window together before ruling any of it. Stable tokens preserve
+        duplicate declarations; the selected Plan is consumed by the ordinary turn pipeline.
+        Unannounced AI moves keep their existing path and do not hold this window open."""
+        st = self.state
+        if (saved := self.pending_party()) is not None:
+            tokens = {step["token"] for step in st.round_plan["steps"]}
+            return ([saved[int(step["token"])] for step in st.round_plan["steps"]
+                     if step["token"] not in st.round_plan.get("done", [])]
+                    + [pair for n, pair in enumerate(saved) if str(n) not in tokens])
+        planner = getattr(self.cast, "party_plan", None)
+        if planner is None or st.ending or self.battling():
+            return order
+        able = {i.id for i in st.investigators if i.can_act}
+        inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(order)
+                  if who in able and text and not text.startswith("/kp ") and not commands.instant(text)
+                  and not idea.asked(text)]
+        if len(inputs) < 2 or len({row.who for row in inputs}) < 2:
+            return order
+        source = [list(pair) for pair in order]
+        receipt = st.round_plan
+        if receipt.get("input") != source or not receipt.get("steps"):
+            if st.pending_turn:  # an interrupted action owns its saved plan until it finishes
+                return order
+            await self._world_settled()
+            try:
+                planned = await planner(st, inputs)
+                if planned is None:
+                    raise ValueError("这一批行动尚未取得完整场面安排")
+                planned = PartyPlan.model_validate(planned)
+                tokens = [step.token for step in planned.steps]
+                wanted = {row.token for row in inputs}
+                if len(tokens) != len(wanted) or set(tokens) != wanted:
+                    raise ValueError("整批安排没有逐一保留原始行动编号")
+                for who in {row.who for row in inputs}:
+                    declared_order = [row.token for row in inputs if row.who == who]
+                    if [token for token in tokens if token in declared_order] != declared_order:
+                        raise ValueError("同一调查员的连续行动须保留声明顺序")
+                if any(set(step.related) - wanted or step.token in step.related for step in planned.steps):
+                    raise ValueError("整批安排引用了不存在或自身的关联行动")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                st.round_plan.clear()
+                self._late.notes.append("本批尚未完成整体安排，按原行动继续；配合、争抢与相互影响仍须裁定，不按输入先后预定结果。")
+                self._debug("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
+                return order
+            receipt.clear()
+            receipt.update(input=source, steps=[step.model_dump(mode="json") for step in planned.steps], used=[], done=[],
+                           at=st.clock)
+            if self.checkpoint:
+                self.checkpoint()
+        ordered = [order[int(step["token"])] for step in receipt["steps"] if step["token"] not in receipt.get("done", [])]
+        declared = {step["token"] for step in receipt["steps"]}
+        return ordered + [pair for n, pair in enumerate(order) if str(n) not in declared]
+
+    def _party_step(self, text: str) -> dict | None:
+        st = self.state
+        receipt = st.round_plan
+        if self.battling():
+            return None
+        for step in receipt.get("steps", []):
+            token = step["token"]
+            if token in receipt.get("used", []) and token != st.pending_turn.get("party_token"):
+                continue
+            who, original = receipt["input"][int(token)]
+            if who == st.investigator.id and original == text:
+                return step
+        return None
+
+    def _party_context(self) -> str:
+        """Neutral coordination for the rules assistant; original player wording stays out."""
+        st = self.state
+        token = st.pending_turn.get("party_token")
+        step = next((row for row in st.round_plan.get("steps", []) if row["token"] == token), None)
+        if step is None or not (step.get("coordination") or step.get("related")):
+            return ""
+        names = {i.id: i.name for i in st.investigators}
+        lines = ["【这批行动的关系】" + step.get("coordination", "")]
+        for other in st.round_plan["steps"]:
+            if other["token"] in step.get("related", []):
+                who = st.round_plan["input"][int(other["token"])][0]
+                progress_ = "已结算，实际结果以当前记录为准" if other["token"] in st.round_plan.get("done", []) else "尚待结算的尝试"
+                action = Plan.model_validate(other["plan"]).action
+                neutral = f"{action.kind}；{action.summary}" + (f"；对象={action.target or action.npc}" if action.target or action.npc else "")
+                actual = st.round_plan.get("results", {}).get(other["token"], "")
+                lines.append(f"- {names.get(who, who)}（{progress_}）：{neutral}" + (f"；实际检定={actual}" if actual else ""))
+        return "\n".join(lines) + "\n配合须确实成立才影响条件；争抢不因结算次序预定胜者，不替另一位玩家同意或决定行动。"
+
+    def complete_party_action(self) -> None:
+        token = self.state.pending_turn.get("party_token")
+        receipt = self.state.round_plan
+        if token is not None and token not in receipt.setdefault("done", []):
+            receipt["done"].append(token)
+            checks = self.state.pending_turn.get("turn", {}).get("checks", [])
+            receipt.setdefault("results", {})[token] = str(checks) if checks else "无需检定；其余结果以当前记录为准"
+
     def begin_round(self) -> None:
         """The actions about to be settled happen at once: the clock moves by the longest of
         them (_overlap), not their sum, and the keeper tells them together (narrate, holding)."""
-        self.state.round_spent = 0
+        if self.state.round_spent is None or (not self.state.pending_turn and not self.pending_party()):
+            self.state.round_spent = 0
+            self.state.round_elapsed.clear()
 
-    def end_round(self) -> None:
-        self.state.round_spent = None
+    def end_round(self, *, interrupted: bool = False) -> None:
+        if not interrupted and not self.state.pending_turn:
+            self.state.round_spent = None
+            self.state.round_elapsed.clear()
+            self.state.round_plan.clear()
+        elif not self.state.pending_turn and not self.pending_party():
+            self.state.round_spent = None
+            self.state.round_elapsed.clear()
         self.holding = False
 
     def _overlap(self, minutes: int) -> int:
@@ -2241,8 +2386,11 @@ class Game(Encounters):
         st = self.state
         if st.round_spent is None:
             return minutes
-        extra = max(0, minutes - st.round_spent)
-        st.round_spent = max(st.round_spent, minutes)
+        who = st.investigator.id
+        st.round_elapsed[who] = st.round_elapsed.get(who, 0) + minutes
+        longest = max(st.round_elapsed.values(), default=0)
+        extra = max(0, longest - st.round_spent)
+        st.round_spent = max(st.round_spent, longest)
         return extra
 
     async def tell_held(self, report: str = "", *, turn: Turn | None = None, on_delta=None) -> str:
@@ -2730,8 +2878,6 @@ class Game(Encounters):
         for i, op in enumerate(ops):
             done = w.apply(op.model_copy(update={"actor": DIRECTOR, "id": f"review-trial:{i}"}))
             problems += [f"幕后第 {i + 1} 条（{op.kind}）：{p}" for p in done.problems]
-        if not problems and any(isinstance(op, Rewrite) for op in ops):
-            problems = await self._consistent(Improv(kind="后果", reason=reason or "幕后调整", backstage=ops))
         if problems:
             return problems
         raw = [op.model_dump(mode="json", exclude={"id"}) | {"actor": DIRECTOR} for op in ops]
@@ -2754,12 +2900,12 @@ class Game(Encounters):
     def _play(self, turn: Turn, engaged: set[str]) -> list[str]:
         """Backstage work waiting for the stage plays now, and is told in this turn's narration
         (or the interlude). A beat that would take someone the investigators are dealing with out
-        of the scene waits for that exchange to end, HOLD_TURNS turns at most. Returns the story
+        of the scene waits for that exchange to end unless the keeper cues it. Returns the story
         flags the beats set, whose consequences are left to _flags."""
         w = self.world
         before = set(self.state.flags)
         for beat in stage.waiting(w):
-            if engaged & set(beat.leaving) and self.state.turn - beat.turn < stage.HOLD_TURNS:
+            if beat.cue == "hold" or (beat.cue == "auto" and engaged & set(beat.leaving)):
                 continue
             since = w.rec.seq
             problems = stage.play(w, beat)

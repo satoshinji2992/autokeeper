@@ -218,6 +218,7 @@ def build(game: Game, checkpointer=None):
     async def remember(state: TurnState) -> dict:
         _bind(game)
         await game.remember()
+        game.complete_party_action()
         game.state.pending_turn.clear()
         keep()
         game.visuals.resume()

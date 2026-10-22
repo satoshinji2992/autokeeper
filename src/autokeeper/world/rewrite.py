@@ -14,8 +14,8 @@ stays what they met; only the truth behind it moves:
     3. every found clue the old version explained is still explained, by the new version
        (op.explains) or by another standing fact;
     4. the knowledge stays sound: who knows it are real NPCs, PLAYERS cannot be added backstage;
-    5. the consistency hook (World.checker; in play, the model check in engine/game._consistent)
-       gets the revealed facts about the same people and places as pins, and may add problems.
+    5. an explicitly supplied synchronous extension hook (World.checker) may inspect the revealed
+       facts about the same people and places. Ordinary play has no separate model approval.
 
 A rewrite never moves anyone, never changes who is with whom or holds what: those are ops of
 their own, so where people are stays exactly as play left it.

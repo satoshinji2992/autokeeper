@@ -384,6 +384,15 @@ def keeper_brief(w: World) -> str:
     rec, st, m = w.rec, w.st, w.m
     here = st.location
     lines: list[str] = []
+    pending = [b for b in rec.beats if b.status == "waiting"]
+    if pending:
+        import json
+
+        lines.append("待演安排（不是已发生的事；正在交谈的人不会因玩家输入次数而自动离场。需要打断、继续延后或撤回时，"
+                     "在本轮计划 beats 中填 id、action=play/hold/drop 与 reason；hold 持续到你再次处理）：\n"
+                     + "\n".join(f"- {b.id}：{w.name(b.actor)}；{b.text or '原定动作'}；时机={b.cue}"
+                                 f"；操作={json.dumps(b.ops, ensure_ascii=False)}"
+                                 + (f"；理由={b.note}" if b.note else "") for b in pending))
     note = rec.facts.get(f"location:{here}:keeper")
     if note is not None and not note.retracted and note.text.strip():
         lines.append(f"此地（{w.name(here)}）的守秘人须知：{' '.join(note.text.split())}")  # whole: what it says last counts too

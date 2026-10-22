@@ -134,6 +134,12 @@ class Initiative(BaseModel):
 # The keeper's arrangement of one turn (Cast.plan): the player's action, as the arbiter and the rest
 # of the turn take it, and who of those here joins in of their own accord (Game.talk). No docstring:
 # a schema's descriptions are what the model reads.
+class BeatChoice(BaseModel):
+    id: str = Field(description="待演安排的 id，只用当前待演清单中的项")
+    action: Literal["play", "hold", "drop"] = Field(description="play 现在落实；hold 留待稍后；drop 撤回，不按输入次数强制离场")
+    reason: str = Field(min_length=1, description="结合当前场面说明时机或撤回原因，只给后台看")
+
+
 class Plan(BaseModel):
     lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
     action: Action = Field(description="玩家这一轮的行动")
@@ -143,9 +149,29 @@ class Plan(BaseModel):
                                 description="现场即兴且后续需要记住的新人物；只登记人物，不替调查员完成交涉或取得物品，普通背景人群不必逐人写")
     initiative: list[Initiative] = Field(default_factory=list,
                                          description="在场的人这一轮主动开口、帮忙或阻拦；通常只需一两人，有必要时可多人，没人参与就留空")
+    beats: list[BeatChoice] = Field(default_factory=list,
+                                  description="待演安排确有时机需要判断时填写；无人正在交谈的普通到场安排按日程执行，不必逐条批准")
     # A fight or a chase this turn begins (the engine then asks Cast.plan_encounter how); one small
     # object, so the everyday schema stays small for cheap models.
     encounter: EncounterHint | None = Field(None, description="这一轮真的打起来或追起来时写；大多数轮次留空")
+
+
+class PartyInput(BaseModel):
+    token: str = Field(min_length=1, description="本次收集窗口内稳定且唯一的原始行动编号")
+    who: str = Field(min_length=1, description="提出这条行动的调查员 id；同一调查员可以有多条行动")
+    text: str = Field(min_length=1, description="玩家原话，仅供守秘人理解，不转交裁定员")
+
+
+class PartyStep(BaseModel):
+    token: str = Field(description="对应的原始行动编号；逐条保留，不能只按调查员 id 合并")
+    plan: Plan = Field(description="这一条原始行动的安排；保留本人意图，不替另一人同意配合或接受结果")
+    related: list[str] = Field(default_factory=list, description="与本条互相配合、争夺或影响的其他原始行动编号；无关联留空")
+    coordination: str = Field("", description="仅供后台：中立说明这些尝试的关系与先后依据，规则和成败仍待裁定；不授予奖励骰、不预定胜者，也不写公共叙述")
+
+
+class PartyPlan(BaseModel):
+    lookup: str = Field("", description="统筹这批行动前要查询的一件事；资料足够就留空")
+    steps: list[PartyStep] = Field(description="按准备结算的先后列出所有原始行动，每个编号恰好一次；独立现场可并行安排，列表顺序不表示游戏时间依次相加")
 
 
 class EquipmentChange(BaseModel):
@@ -353,10 +379,6 @@ class _Telling:
         if len(text) > start:
             self.sent, self.shown = len(text), True
             await self.on_delta(text[start:])
-
-
-class Consistency(BaseModel):
-    problems: list[str] = Field(default_factory=list, description="说不通的地方，一条一句；没有就留空")
 
 
 class Ideas(BaseModel):
@@ -683,10 +705,6 @@ SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家�
 比如“我蹲下看看门槛上的泥印”“我问掌柜：昨晚谁来过？”“我先回客栈睡一觉，明早再来”。
 只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
 
-CONSISTENCY_SYSTEM = """你核对跑团幕后的改写能不能自圆其说。给你改写前后的文字、改写的理由，以及玩家已经知道的、和同一批人和地点有关的事，每条标着玩家是亲眼见到的、叙述里说过的，还是听谁说的。
-玩家见过、听过的事可以改出另一个真相：有人撒谎、记错、伪造、设局、假扮。理由说得清玩家当时为什么会看到、听到那样，又和玩家知道的其他事不冲突，就不算矛盾。
-只指出说不通的地方（时间、地点、谁做了什么、东西在谁手里、谁是死是活），以及推翻了玩家见过、听过的事却没有说得通的理由的；说法不同但不冲突的、玩家知道的事里没提到的，都不算矛盾。没有矛盾就留空。"""
-
 VISION_SYSTEM = "你是跑团里的读图员，负责看玩家画的草图或模组里的图片，用中文客观描述，并按要求判断相似度。"
 
 AUTHOR_SYSTEM = """你是这场 CoC 7 版跑团的规则工程师。玩家用一句话提出想要的“家规”，你把它写成一个经过测试的纯 Python 插件，装进本局。
@@ -1002,6 +1020,94 @@ class Cast:
                 self._journal("plan", {"status": "repair-failed", "error": type(exc).__name__}, state)
         return plan.model_copy(update={"lookup": "", "action": plan.action.model_copy(update={"echo": ""})})
 
+    async def party_plan(self, state: GameState, inputs: list[PartyInput], *,
+                         check: Callable[[PartyPlan], list[str]] | None = None) -> PartyPlan | None:
+        """Read a collection window together, replacing its separate everyday plan calls.
+
+        A step is tied to its original action token, including when one investigator submitted
+        twice. This is an arrangement, not a ruling or public narration. Independent scenes
+        retain their own contexts; their processing order does not advance world time twice.
+        The caller keeps single-person and encounter windows on their existing paths.
+        """
+        items = [PartyInput.model_validate(item) for item in inputs]
+        if len(items) < 2 or len({item.who for item in items}) < 2 or state.encounter is not None or state.ending:
+            return None
+        tokens = [item.token for item in items]
+        if len(set(tokens)) != len(tokens):
+            raise ValueError("同一批行动的编号不能重复")
+        indexes = {inv.id: index for index, inv in enumerate(state.investigators)}
+        if any(item.who not in indexes or not item.text.strip() or not item.token.strip() for item in items):
+            raise ValueError("批行动必须对应已有调查员，并有非空的编号和原话")
+        expected = set(tokens)
+
+        def complete(plan: PartyPlan) -> list[str]:
+            ordered = [step.token for step in plan.steps]
+            problems = []
+            if len(ordered) != len(set(ordered)):
+                problems.append("steps 中同一个行动编号出现了多次；每条原始行动只能有一份安排。")
+            missing, extra = expected - set(ordered), set(ordered) - expected
+            if missing:
+                problems.append("漏掉原始行动编号：" + "、".join(token for token in tokens if token in missing))
+            if extra:
+                problems.append("出现未提交的行动编号：" + "、".join(sorted(extra)))
+            for who in {item.who for item in items}:
+                declared = [item.token for item in items if item.who == who]
+                if [token for token in ordered if token in declared] != declared:
+                    problems.append(f"{who} 的连续行动必须保留本人声明的先后顺序。")
+            for step in plan.steps:
+                if any(token not in expected or token == step.token for token in step.related):
+                    problems.append(f"{step.token} 的 related 只能引用其他已提交的行动编号。")
+            if not problems and check is not None:
+                problems.extend(check(plan))
+            return problems
+
+        prompt = (
+            "【同一收集窗口的整批安排】\n"
+            "先读完所有原话，再理解配合、互相阻拦、争夺同一物件和独立行动，不把每人单独的愿望当成共同同意。"
+            "这次改用 PartyPlan 格式：steps 的先后就是准备结算的顺序，每个 token 恰好一次，同一人提交两条也不能合并或漏掉。"
+            "related 只引用本窗口的其他 token；coordination 写中立的尝试关系、先后理由或尚待前项成立的条件，"
+            "仅供后台判断，不作为公共台词或已发生事实。不要把别人的私语、单独感知和幕后真相写进本人的 action.summary。\n"
+            "互助只有实际实施后才改变条件；递灯、开门、牵制和抢夺仍按实际归属、位置和检定结果落实。"
+            "不能在这里替裁定员给奖励骰、免检、判定输赢，也不能把需要检定的事写成已完成。"
+            "各 plan 遵守原有 action、present、people、initiative、encounter、beats 的规则；"
+            "同一次现场补记或同一个 NPC 的同一次主动行为只安排一次，不在多条 plan 里重复执行。\n"
+            "不同现场保留各自人物、位置、知情与未办完的事。独立现场允许并行主持，列表结算顺序不意味着赶路、搜索等时长相加，"
+            "也不让一个现场的人凭空听见另一处的谈话。需补资料时优先用顶层 lookup，仍提交这批行动的完整草案。\n"
+        )
+        if self.backstage and self.world is not None:
+            prompt += "\n【本局幕后简报】\n" + world_view.keeper_brief(self.world)
+        prompt += "\n【全局近期记录，私密内容保留收件范围】\n" + _recent(state)
+        for item in items:
+            view = state.model_copy(update={"active": indexes[item.who], "location": audience.location(state, item.who)})
+            prompt += f"\n\n【原始行动 token={item.token}，调查员 id={item.who}】\n" + self._heard(view, item.text)
+            prompt += "\n【在场、可以主动的人】" + ("、".join(f"{npc.name}({npc.id})" for npc in self.able(view)) or "无")
+            prompt += "\n【可能动手的】" + self._fighters(view)
+        session = self._plan(state)
+        try:
+            checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan")
+            if not checked.ok or checked.value is None:
+                return None
+            planned = checked.value
+            for _asked in range(LOOKUPS):
+                query = planned.lookup.strip() or next((step.plan.lookup.strip() for step in planned.steps if step.plan.lookup.strip()), "")
+                if not query:
+                    break
+                found = await self.look_up(state, query)
+                self._journal("lookup", {"query": query, "found": found, "scope": "party"}, state)
+                prompt += f"\n\n【查询结果】（{query}）\n{found}\n现在给出完整整批安排，lookup 留空。"
+                checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan")
+                if not checked.ok or checked.value is None:
+                    return None
+                planned = checked.value
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._journal("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]}, state)
+            return None
+        return planned.model_copy(update={"lookup": "", "steps": [step.model_copy(update={
+            "plan": step.plan.model_copy(update={"lookup": "", "action": step.plan.action.model_copy(update={"echo": ""})})
+        }) for step in planned.steps]})
+
     def _fighters(self, state: GameState) -> str:
         """Who may fight or be chased here, by id (Plan.encounter)."""
         able = [f"{n.name}({n.id})" for n in self.able(state)]
@@ -1200,7 +1306,7 @@ class Cast:
         return found
 
     async def arbiter(self, state: GameState, action: Action, at: str | None = None, *, encounter: str = "",
-                      problems: list[str] | None = None) -> Ruling:
+                      problems: list[str] | None = None, coordination: str = "") -> Ruling:
         """`at`: the place the investigator walks to for this action; it is ruled there.
 
         In a fight or a chase, `encounter` is its brief (agents/encounter.encounter_brief): the
@@ -1247,6 +1353,7 @@ class Cast:
                       if e.kind == "item" and not e.important and e.at in around]
         prompt = (
             f"【行动】{action.ruled()}\n{moved}"
+            + (coordination + "\n" if coordination else "") +
             f"【近期实际经过】\n{_recent(state, kinds=SEEN_BY_ARBITER, viewer=inv.id, keeper=False)}\n"
             f"【场景】\n{self.scene(state, at)}\n"
             f"【本地守秘人资料】\n{m.location(where).keeper.strip() or '无'}\n"
@@ -1876,24 +1983,6 @@ class Cast:
             return Review.model_validate(reply.data)
         except ValueError:
             return None
-
-    async def consistent(self, state: GameState, material: str) -> list[str] | None:
-        """Where a backstage rewrite does not hold together with what the players met
-        (engine/game._consistent). Stateless, on the arbiter's model; None when no check was made."""
-        if "consistency" not in self.sessions:
-            self.sessions["consistency"] = Session("consistency", self.cfg.role("arbiter"), CONSISTENCY_SYSTEM,
-                                                   schema=_schema(Consistency), key="consistency")  # fmt: skip
-        from ..harness.replay import CassetteError
-
-        try:
-            reply = await self._send("consistency", self.sessions["consistency"], state, material, bind=False)
-        except CassetteError:  # a replay that drifted must fail loudly
-            raise
-        except Exception:
-            return None
-        if not isinstance(reply.data, dict):
-            return None
-        return _parse(Consistency, reply.data, {"problems": []}).problems[:4]
 
     async def author_plugin(self, state: GameState, request: str, problems: list[str] | None = None):
         """Turn a player's one-sentence house rule into one tested plugin (tui/modals/plugins.py, the

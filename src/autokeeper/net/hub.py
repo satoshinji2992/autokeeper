@@ -5,8 +5,9 @@ it in rounds. A round opens an action pool with one slot more than there are pla
 table (one player: two, two players: three): everyone has a slot of their own, and one of
 them may take the extra one for a second action. Players send actions when they like, in any
 order; an empty Enter says "that's all from me this round", /undo takes back your last one.
-When the pool is full, or everyone is done, it closes and the keeper settles it in the order
-the actions came in, then lets each AI seat act; then the next round opens. Nothing said
+When the pool is full, or everyone is done, it closes and the keeper considers the collected
+declarations together, settles them as their relationships call for, then lets each AI seat act;
+then the next round opens. Nothing said
 meanwhile is lost: an action sent while the keeper tells, or that the round has no room
 for, waits for the next round and goes in first. Every player's screen connects over a
 websocket and receives the engine's events as they happen. Seats are humans or AI; a human
@@ -125,6 +126,7 @@ PRIVATE |= {"held", "signs", "expanded", "ongoing"}
 # A player's notes are theirs alone (tui/notes.py): the host's own, kept in a save played on this machine, too.
 PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
+PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
 # What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
 # failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
 PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")
@@ -1013,7 +1015,8 @@ class Hub:
                 break
             while not self.clients:  # nobody at the table: the AI does not play on alone, spending
                 await asyncio.sleep(1.0)
-            await self._collect()
+            if self.game.pending_party() is None:
+                await self._collect()
             await self._settle()
         self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
@@ -1189,24 +1192,35 @@ class Hub:
         await self._pool()
 
     async def _settle(self) -> None:
-        """The pooled actions in the order they came in, then one for each seat nobody is
-        playing (the AI's, and a player's who left without putting anything in). They happen
+        """The keeper first considers the collected declarations together, then settles each
+        original action in the order their relationship calls for. Seats without a declaration
+        (the AI's, and a player's who left) still use their existing path afterwards. Actions happen
         at once: each is ruled and rolled in that order, the clock moves by the longest of them,
         and the keeper tells the round in one go after the last (the user, 2026-10-21: 「可以行动
         不排着吗，因为可能是多人同时行动」)."""
         st = self.state
+        saved = self.game.pending_party()
+        if saved is not None:
+            # A saved collection window keeps its original declarations and time ledger.
+            # New input belongs to the next window, rather than replacing unplayed work.
+            if self.pool != saved:
+                self.early = [*self.pool, *self.early]
+            self.pool = saved
         acted = {seat for seat, _ in self.pool}
         order = [*self.pool, *[(inv.id, None) for inv in st.investigators
                                if inv.id not in acted and inv.id not in self.done and self.sits.get(inv.id) is None]]
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
+        settled = False
         try:
+            order = await self.game.arrange_party(order)
             await self._settle_round(order)
             if self.game.fighting() and not any(self._acts(seat) for seat, _ in order) and not st.ending:
                 # Nobody at the table can act (all down): the fight goes on without them, a round at a time.
                 lead = next((i.id for i in st.investigators), "")
                 await self._safely(self._run("/encounter", lead, ai=True), "这一轮战斗", "/encounter")
+            settled = True
         finally:
-            self.game.end_round()
+            self.game.end_round(interrupted=not settled)
         if st.held and not st.ending:  # the round's last action was not told (it failed, or was let go): told now
             await self._safely(self._tell_held(), "这一轮的叙述")
 
