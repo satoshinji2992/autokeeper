@@ -267,7 +267,7 @@
                 hit(3, y, sidebar - 5, 1, () => screen(pages[i]), labels[i]);
             }
             if (rows > 31) {
-                text("网页展示 / 0.0.2", 3, rows - 14, p.dim, sidebar - 5);
+                text("网页展示 / 0.0.4", 3, rows - 14, p.dim, sidebar - 5);
                 text(`T 配色  ${p.name}`, 3, rows - 11, p.key, sidebar - 5);
                 hit(3, rows - 11, sidebar - 5, 1, changeTheme, "切换配色");
                 text(`M 声景  ${state.muted ? "关闭" : "开启"}`, 3, rows - 9, p.key, sidebar - 5);
@@ -383,7 +383,7 @@
         const p = palette();
         fill(0, 0, cols, 1, "#0a0705");
         fill(0, 0, 15, 1, p.key); text(" AUTOKEEPER ", 1, 0, p.bg, 13, true);
-        text(cols > 80 ? " CoC 7 / 项目展示 / 0.0.2" : " 项目展示 0.0.2", 16, 0, p.dim, cols - 16);
+        text(cols > 80 ? " CoC 7 / 项目展示 / 0.0.4" : " 项目展示 0.0.4", 16, 0, p.dim, cols - 16);
         if (cols > 72) button("G GitHub", cols - 15, 0, () => openLink("https://github.com/satoshinji2992/autokeeper"), false, 15);
         fill(0, rows - 2, cols, 2, "#0a0705");
         if (now < state.noticeUntil) text(state.notice, 1, rows - 2, p.key, cols - 2);
