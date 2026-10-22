@@ -15,15 +15,17 @@ the keeper plan, which also arranges the keeper's people); AI companions pick fr
 (Cast.encounter_choice); the round begins in DEX order and each slot runs its units. An attack on a
 player stops, before any of its dice, to ask how they answer it (choices.should_ask): the turn
 graph's `offer` node shows the question and `respond` goes on from it. At the round's end the
-dying roll CON, healing creatures heal, the clock moves, whoever fled is chased or gets away, and the
-stakes that now hold set their flags.
+dying roll CON, healing creatures heal, the clock moves, whoever fled is chased or gets away (a foe the
+round after it ran, when the investigators let it go; the chase once nobody else is still fighting),
+and the stakes that now hold set their flags.
 
 A chase is the same encounter in mode "chase" (engine/encounter/chase.py, site.py): the same units,
 the same declarations and arrangements, the round's action points spent running across the site, the
 obstacles crossed, attacks where the book allows them. It turns into a fight where they meet and
 someone turns to fight, and back into a chase when someone flees and is chased; wounds, guns, speeds
-and stakes carry over. When it ends the keeper's people are where they ran to, and the party where
-its players ended up (GameState.apart for those left elsewhere).
+and stakes carry over. There is no split party: the party is in a chase whole. When it ends the
+keeper's people are where they ran to, and the party where its players ended up (GameState.apart for
+those left elsewhere).
 """
 
 from __future__ import annotations
@@ -926,7 +928,7 @@ class Encounters:
             chosen = next((o for o in offered if answer is not None and o.id == answer.choice), None)
             if chosen is None:
                 return None
-            return {**chosen.value, "react": answer.react or chosen.value.get("react", "")}
+            return {**chosen.value, "react": answer.react if answer.react in (stances or []) else chosen.value.get("react", "")}
 
         value = await self._resolution_step(f"/enc/{enc.id}/r{rnd}/ai/{pid}", turn, pick)
         d = DeclaredAction.model_validate(value) if value else DeclaredAction(do="defend", summary="只防守")

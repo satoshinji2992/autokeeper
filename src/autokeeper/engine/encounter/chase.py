@@ -400,18 +400,21 @@ def hide(w: Work, rr: ActionReceipt) -> None:
 
         w.unit.notices.append({"type": "dice", "who": w.ctx.name(a, "players"), **check_view(roll)})
     enc.budget.movement[a] = 0
-    public = None
     if roll.passed:
         for h in hunters:
             pair = f"{h}|{a}"
             if pair not in ch.lost_sight:
                 ch.lost_sight.append(pair)
         line = f"{{{a}}}在{node_name(enc, at(enc, a))}躲了起来（潜行 {roll.value} {roll.level.zh}），追的人没看见"
-        watching = [p.id for p in enc.participants if p.kind == "investigator" and w.ctx.acting(p.id)]
-        if w.investigator(a) is None and all(i in hunters or w.ctx.hidden_from(i, a) for i in watching):
-            public = f"{{{a}}}不见了踪影"  # the investigators lost it: not where, nor how
     else:
         line = f"{{{a}}}想躲起来，没藏住（潜行 {roll.value} {roll.level.zh}）"
+    public = None  # what the players get of it: an investigator's own, all; a keeper's person, what they saw
+    if w.investigator(a) is None and unseen(w.ctx, a):
+        public = ""
+    elif w.investigator(a) is None and roll.passed and all(
+            i in hunters or w.ctx.hidden_from(i, a) for i in (p.id for p in enc.participants if p.kind == "investigator"
+                                                               and w.ctx.acting(p.id))):
+        public = f"{{{a}}}不见了踪影"  # the investigators lost it: not where, nor how
     rr.lines.append(line)
     w.tell(line, public)
 

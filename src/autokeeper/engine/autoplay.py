@@ -271,7 +271,7 @@ async def run(
             alive = [inv.id for inv in state.investigators if inv.can_act]
             if not alive:
                 break
-            result = await party_app.ainvoke({"situation": situation(m, state), "ids": alive, "proposals": [],
+            result = await party_app.ainvoke({"situation": situation(m, state, game=game), "ids": alive, "proposals": [],
                                               "stances": {x: views.stances(game, x) for x in alive}})
             if not result["proposals"]:  # nobody gave a move it could play (Cast.investigator): the run stops here
                 console.print("[yellow]AI 调查员本轮均未给出有效行动，自动游玩停止。[/]")
