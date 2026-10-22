@@ -396,7 +396,7 @@ class Encounters:
         party = [p.id for p in enc.participants if p.side == "party" and ctx.acting(p.id)]
         foes = [p.id for p in enc.participants if p.side == "foe" and ctx.acting(p.id)]
         quarry, pursuers = (foes, party) if start.quarry == "foe" else (party, foes)
-        built = site.build(self.m, enc.place, start.site)
+        built = site.build(self.m, enc.place, start.site, self.world.rec.obstacles)
         await self._unit(f"enc/{enc.id}/chase/r{enc.round}", turn,
                          lambda w: chasing.begin(w, quarry, pursuers, built, why=start.reason))
         return await self._chase_settled(turn)
@@ -777,6 +777,9 @@ class Encounters:
             w = Work(self, ctx, key)
             fn(w)
             changes = w.changes()
+            # what the unit did to an obstacle for good stays in this game's world, for the next chase there
+            w.unit.effects += [effects.Obstacle(way=k, obstacle=ob) for k, ob in site.kept(
+                self.m, ctx.enc.chase.site if ctx.enc.chase else None, w.enc.chase.site if w.enc.chase else None)]
             if changes or w.unit.effects:
                 result = self.world.apply(EncounterStep(id=key, encounter=ctx.enc.id, unit=key.rsplit("/", 1)[-1],
                                                         effects=w.unit.effects, changes=changes, actor=ENGINE))
@@ -1462,7 +1465,7 @@ class Encounters:
             e.mode = "chase"
             e.switches.append(f"r{e.round}:chase")
             e.scene.engaged = [g for g in e.scene.engaged if not ({g.a, g.b} & set(quarry))]
-            chasing.begin(w, quarry, hunters, site.build(self.m, e.place))
+            chasing.begin(w, quarry, hunters, site.build(self.m, e.place, kept=self.world.rec.obstacles))
 
         await self._unit(base, turn, switch)
         enc = self.encounter()

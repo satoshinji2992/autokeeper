@@ -393,7 +393,7 @@ def _break(w: Work, rr: ActionReceipt, a: str, ob: ObstacleState, lines: list[st
         return False
     amount, text = _damage(w, v.db(), blow, "normal")
     left, broken = rules.barrier_hit(ob.hp or 0, amount)
-    ob.hp = left
+    ob.hp = left or None  # broken: nothing of it left to break (and hit points kept are 1 or more)
     if broken:
         ob.state, ob.by = "broken", a
         lines.append(f"{{{a}}}用{blow.name}砸{ob.what}：{text}，砸开了，后面的人可以直接过去")

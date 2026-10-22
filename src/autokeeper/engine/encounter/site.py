@@ -11,9 +11,12 @@ Built once when a chase begins, from what the module and the world give, in this
 3. The keeper's own draft (EncounterStart.site), checked by plan_check.
 4. Nothing at all: the place and a short way out of it.
 
-Each chase works on its own copy: a door broken in it stays broken for those behind, and for nobody
-in the next chase. Paths and distances are the graph's (`path`, `distance`); a node's obstacle is
-crossed on entering it.
+Each chase works on its own copy; what changes an obstacle for good (a door forced or unlocked, a
+way barricaded, a barricade cleared, a door mended) lands with its unit in this game's world record
+(WorldRecord.obstacles, effects.Obstacle) under the stable id of the way it is on (`way_key`: a
+module route's leg, a place of the map), and the next chase there is built with it (`build`'s
+`kept`), until something changes it again. The module's files are never written. Paths and distances
+are the graph's (`path`, `distance`); a node's obstacle is crossed on entering it.
 """
 
 from __future__ import annotations
@@ -35,9 +38,107 @@ BREAK = "break"  # the method id of breaking a barrier by damage (Keeper Ruleboo
 
 
 # -- building ---------------------------------------------------------------------------------------
-def build(m: Module, place: str, draft: SiteDraft | None = None) -> ChaseSite:
-    """The site of a chase that starts at world location `place` (see the module docstring)."""
-    return from_routes(m, place) or from_map(m, place) or (from_draft(draft, place) if draft else None) or bare(m, place)
+def build(m: Module, place: str, draft: SiteDraft | None = None, kept: dict[str, ObstacleState] | None = None) -> ChaseSite:
+    """The site of a chase that starts at world location `place` (see the module docstring), its ways'
+    obstacles as this game left them (`kept`: WorldRecord.obstacles)."""
+    site = from_routes(m, place) or from_map(m, place) or (from_draft(draft, place) if draft else None) or bare(m, place)
+    for n in site.nodes:
+        ob = (kept or {}).get(way_key(site, n.id))
+        if ob is not None:
+            n.obstacle = ob.id
+            site.obstacles[ob.id] = ob.model_copy(deep=True)
+    return site
+
+
+# -- what a game keeps of them --------------------------------------------------------------------------
+def way_key(site: ChaseSite, nid: str) -> str:
+    """The stable id of node `nid` as a way of this game's world, under which what is done to its
+    obstacle is kept (WorldRecord.obstacles): "leg:<id>" for a leg of the module's routes, "place:<id>"
+    for a place of the map; "" for a node drawn for one chase alone (the keeper's, the last resort's)."""
+    n = node(site, nid)
+    if n is None:
+        return ""
+    if site.source == "module":
+        return f"leg:{n.id}"
+    if site.source == "location_graph" and n.place == n.id:
+        return f"place:{n.id}"
+    return ""
+
+
+def pristine(m: Module, key: str) -> ObstacleState | None:
+    """The obstacle the module puts on way `key` (as a chase builds it), None where it puts none."""
+    kind, _, ident = key.partition(":")
+    leg = _leg(m, ident) if kind == "leg" else None
+    return obstacle_of(ident, leg) if leg is not None else None
+
+
+def _leg(m: Module, ident: str) -> Leg | None:
+    return next((x for loc in m.locations for x in loc.chase if module_graph.leg_key(x) == ident), None)
+
+
+def way_place(m: Module, key: str) -> str:
+    """The world place way `key` lies in ("" when the module does not say)."""
+    kind, _, ident = key.partition(":")
+    if kind == "place":
+        return ident
+    leg = _leg(m, ident)
+    return leg.place if leg is not None else ""
+
+
+def ways_at(m: Module, kept: dict[str, ObstacleState], place: str) -> list[str]:
+    """The ways in world place `place` whose obstacle this game changed, a line each with its id, as
+    the keeper and the arbiter read them (outside a chase a ruling may mend, shut or clear them)."""
+    out = []
+    for key, ob in kept.items():
+        if way_place(m, key) != place:
+            continue
+        kind, _, ident = key.partition(":")
+        leg = _leg(m, ident) if kind == "leg" else None
+        out.append(f"{leg.name if leg else ident}（{key}）：{ob.what}，{STATE_WORDS.get(ob.state, ob.state)}")
+    return out
+
+
+STATE_WORDS = {"intact": "完好", "open": "开着", "broken": "毁了", "blocked": "堵上了"}
+MEND = r"修|补|复原|装回"
+
+
+def ruled(ob: ObstacleState, what: str, by: str) -> str:
+    """An obstacle a ruling changed, by its words (`what`): broken, opened or cleared, or shut and
+    blocked; the line it comes to, "" when the words change nothing of it. Mending is the caller's
+    (`pristine`)."""
+    import re
+
+    if re.search(r"破|毁|砸|塌", what):
+        ob.state, ob.by = "broken", by
+        return f"{ob.what}被毁掉了，后面的人可以直接过去：{what}"
+    if re.search(r"开|移|推倒|搬走|清", what):
+        ob.state, ob.by = "open", by
+        return f"{ob.what}打开了，后面的人可以直接过去：{what}"
+    if re.search(r"堵|挡|锁|闩|封|关", what):
+        ob.state, ob.by = "blocked", by
+        return f"{ob.what}被堵上了：{what}"
+    return ""
+
+
+def _solid(ob: ObstacleState | None) -> dict | None:
+    """What an obstacle is, without whether the players have seen it."""
+    return ob.model_dump(mode="json", exclude={"revealed"}) if ob is not None else None
+
+
+def kept(m: Module, before: ChaseSite | None, after: ChaseSite | None) -> list[tuple[str, ObstacleState | None]]:
+    """The obstacles a unit changed on the ways a game keeps (`way_key`), as they now are: each (way,
+    obstacle), None when it is as the module has it again (mended, cleared away)."""
+    if before is None or after is None:
+        return []
+    out = []
+    for n in after.nodes:
+        key = way_key(after, n.id)
+        was = node(before, n.id)
+        now = after.obstacles.get(n.obstacle)
+        if not key or was is None or _solid(now) == _solid(before.obstacles.get(was.obstacle)):
+            continue
+        out.append((key, None if _solid(now) == _solid(pristine(m, key)) else now))
+    return out
 
 
 def _near(m: Module, place: str, depth: int = DEPTH) -> list[str]:

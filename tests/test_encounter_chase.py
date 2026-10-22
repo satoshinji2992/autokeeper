@@ -782,3 +782,72 @@ async def test_one_who_got_away_before_it_came_to_blows_elsewhere_is_left_where_
     await game._encounter_end("parley", Turn())
     assert st.apart == {"zhouheng": "office"} and st.encounter_log[-1].ended.places["zhouheng"] == "office"
     assert st.encounter_log[-1].ended.places["li"] == "square" and game.world.place("warden") == "square"
+
+
+# -- the rules and keeper review of 2026-10-22: what is done to an obstacle lasts past its chase -------------
+async def test_a_door_forced_in_one_chase_is_still_open_in_the_next_until_someone_mends_it(module, fake):
+    """The review (P2): 周衡 shoved the office door open; the encounter ended with nobody shutting or mending
+    it, and the next chase on the same route found it locked again. Now it is kept in this game's world,
+    by the way it is on, through a save and its reload, until a ruling mends it."""
+    from autokeeper.agents.cast import Action, RuledEffect, Ruling
+    from autokeeper.engine.game import Game
+    from autokeeper.engine.state import GameState
+    from autokeeper.rules.coc import Rules
+    from autokeeper.world import context as world_view
+
+    waiting = EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(do="defend", summary="守着"))])
+    game, cast, _ = await chased(module, fake, arrange=lambda *a: waiting)
+    put(game, zhouheng="office_stairs", warden="archive")
+    emit = game.emit
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(20)  # 周衡's STR 45: the door gives
+    await play(app, "撞开：锁上的大门")
+    game.emit = emit  # the turn graph's, outside a turn
+    assert game.encounter().chase.site.obstacles["ob_office_door"].state == "open"
+    kept = game.world.rec.obstacles["leg:office_door"]
+    assert (kept.state, kept.by) == ("open", "zhouheng") and set(game.world.rec.obstacles) == {"leg:office_door"}
+    await game._encounter_end("parley", Turn())
+    assert "报社大门（leg:office_door）：锁上的大门，开着" in world_view.keeper_brief(game.world)
+
+    st = GameState.model_validate_json(game.state.model_dump_json())  # saved and loaded
+    m2 = Module.load(EXAMPLE)
+    m2.events, m2.endings = [], []
+    game = Game(m2, st, cast, Rules(dice=fake))
+    assert game.world.rec.obstacles["leg:office_door"].state == "open"
+    fake.queue(40, 40)
+    await game._fire(RUN.model_copy(update={"id": "e_again"}), Turn())
+    assert game.encounter().chase.site.obstacles["ob_office_door"].state == "open"  # nobody shut it
+    assert game.encounter().chase.site.obstacles["ob_office_stairs"].state == "intact"  # the rest as the module has it
+    await game._encounter_end("parley", Turn())
+
+    mend = Action(kind="use", summary="周衡把报社的大门修好锁上")
+    cast.script["修门"] = (mend, Ruling(needs_roll=False, effects=[RuledEffect(kind="obstacle", target="leg:office_door",
+                                                                               what="门修好了，重新锁上")]))
+    emit = game.emit
+    await play(turn_graph.build(game, InMemorySaver()), "修门")
+    game.emit = emit
+    assert not game.world.rec.obstacles and "本局改变过的通路" not in world_view.keeper_brief(game.world)
+    fake.queue(40, 40)
+    await game._fire(RUN.model_copy(update={"id": "e_third"}), Turn())
+    assert game.encounter().chase.site.obstacles["ob_office_door"].state == "intact"
+
+
+async def test_a_door_battered_down_or_a_way_barricaded_is_kept_and_survives_a_save(module, fake):
+    """Broken by damage (p. 115), nothing left of its hit points: kept so, and a save of it loads (hit points
+    of 0 used to make the encounter, and now the record, unreadable). A barricade put up is kept as well."""
+    from autokeeper.engine.state import GameState
+
+    batter = DeclaredAction(do="move", to="lamp_street", method="break", summary="守钟人砸门")
+    game, _cast, _ = await chased(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", batter)]))
+    put(game, zhouheng="lamp_street", warden="office_stairs")
+    w = game.world
+    door = game.encounter().chase.site.obstacles["ob_office_door"]
+    assert door.hp == 15
+    fake.queue(20)  # 周衡's STR for the crate he pushes across the street
+    fake.queue_totals(16)  # the warden's blow on the door: all 15 of it
+    await play(turn_graph.build(game, InMemorySaver()), "设路障")
+    kept = w.rec.obstacles
+    assert kept["leg:office_door"].state == "broken" and kept["leg:office_door"].hp is None
+    assert any(k == "leg:lamp_street" and ob.state == "blocked" and ob.by == "zhouheng" for k, ob in kept.items())
+    back = GameState.model_validate_json(game.state.model_dump_json())
+    assert back.record.obstacles == kept and back.encounter == game.state.encounter

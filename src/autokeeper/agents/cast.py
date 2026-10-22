@@ -38,6 +38,7 @@ from pydantic_core import from_json
 from .. import cards, rules_lookup, skills
 from ..config import Config
 from ..engine import fog, world
+from ..engine.encounter import site as chase_site
 from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
@@ -222,7 +223,8 @@ class Ruling(BaseModel):
     on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
     effects: list[RuledEffect] = Field(default_factory=list, max_length=4, description=(
-        "只在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里留空"))
+        "在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里只用 obstacle，"
+        "修好、关上、堵上或清走【本局改变过的通路】里的障碍，没有就留空"))
     rejoin: list[Rejoin] = Field(default_factory=list, max_length=3, description=(
         "这次行动成功后，【和大家分开的调查员】里的人回到了大家身边时写：谁、怎么回来的；大家走到他那里不用写；多数时候留空"))
     reason: str = Field("", description="一句话理由（玩家看不到）")
@@ -1194,6 +1196,9 @@ class Cast:
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
         )
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
+        if self.world is not None and not encounter and (ways := chase_site.ways_at(m, self.world.rec.obstacles, where)):
+            prompt += ("\n【本局改变过的通路】" + "；".join(ways)
+                       + "（这次行动修好、关上、堵上或清走了它，成功后在 effects 里写一条 obstacle，target 填括号里的 id）")
         if left := world_view.apart(state, lambda pid: next((x.name for x in m.locations if x.id == pid), pid)):
             prompt += f"\n【和大家分开的调查员】{left}（不在大家身边；这次行动把谁带回来了，写进 rejoin）"
         prompt += cards.arbiter_context(state, inv)  # the imported keeper decks: what holds on them, mishaps to deal

@@ -414,6 +414,10 @@ def keeper_brief(w: World) -> str:
         lines.append("在场的人：\n" + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
     if left := apart(st, w.name):
         lines.append(f"和大家分开的调查员（不在这里；大家去到那里、或有人把他带回来才会合）：{left}")
+    from ..engine.encounter.site import ways_at
+
+    if ways := ways_at(m, rec.obstacles, here):  # a door forced in an earlier chase is still forced
+        lines.append("这里本局改变过的通路（之后的追逐照此）：" + "；".join(ways))
     near = nearby(w, here)
     if near:
         lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))

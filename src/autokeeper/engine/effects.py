@@ -30,6 +30,7 @@ from ..rules import wounds
 from ..rules.bcdice import Level
 from ..rules.coc import Damage
 from ..rules.wounds import Body
+from .encounter.plan import ObstacleState
 
 if TYPE_CHECKING:
     from ..world.record import Entity
@@ -129,6 +130,16 @@ class Party(BaseModel):
     apart: dict[str, str] = Field(default_factory=dict)
 
 
+class Obstacle(BaseModel):
+    """An obstacle on a way of the world as this game has left it (WorldRecord.obstacles), under the
+    stable id of the way it is on (engine/encounter/site.way_key): a door forced or unlocked, a way
+    barricaded or cleared. The next chase there reads it (site.build); None, as the module has it."""
+
+    kind: Literal["obstacle"] = "obstacle"
+    way: str
+    obstacle: ObstacleState | None = None
+
+
 
 class Mark(BaseModel):
     """A skill an investigator used successfully ticked for improvement."""
@@ -157,7 +168,7 @@ class Fills(BaseModel):
 
 
 Effect = Annotated[
-    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Party | Mark | Luck | Fills,
+    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Party | Obstacle | Mark | Luck | Fills,
     Field(discriminator="kind"),
 ]
 
@@ -398,6 +409,9 @@ def problems(w: World, effects: list) -> list[str]:
                 if dest is None or dest.kind != "location":
                     out.append(f"地点 {place} 不存在")
             out += [f"{x} 不是调查员" for x in e.apart if x not in investigators]
+        elif isinstance(e, Obstacle):
+            if not e.way:
+                out.append("障碍缺少所在路段的 id")
         elif isinstance(e, Mark):
             if e.investigator not in investigators:
                 out.append(f"{e.investigator} 不是调查员")
@@ -505,6 +519,11 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
                 w.rec.left[st.location] = w.rec.seq
                 st.location = e.place
             st.apart = {**st.apart, **e.apart}
+        elif isinstance(e, Obstacle):
+            if e.obstacle is None:
+                w.rec.obstacles.pop(e.way, None)
+            else:
+                w.rec.obstacles[e.way] = e.obstacle.model_copy(deep=True)
         elif isinstance(e, Mark):
             inv = w.st.find(e.investigator)
             if e.skill not in inv.marks:

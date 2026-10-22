@@ -1542,6 +1542,8 @@ class Game(Encounters):
             await step("changes", turn, changes)
             if ruling.rejoin:
                 await step("rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
+            if any(e.kind == "obstacle" for e in ruling.effects):
+                await step("ways", turn, lambda: self._ways(ruling, turn))
         await step("gain", turn, lambda: self._gain(found["gained"], turn, action))
         if turn.checks:
             won = [c for c in turn.clues if c in ruling.clues_on_success]
@@ -1584,6 +1586,30 @@ class Game(Encounters):
         rec.missing, rec.missing_turn = [x.strip() for x in ruling.missing if x.strip()], self.state.turn
         if rec.missing:
             turn.notes.append(f"这次行动缺{'、'.join(rec.missing)}，做不成；叙述和场面里都不能把它变出来。")
+
+    def _ways(self, ruling: Ruling, turn: Turn) -> None:
+        """Ways here whose obstacle this game changed (WorldRecord.obstacles), as an ordinary ruling
+        changes them again (Ruling.effects, kind obstacle): mended as the module has it, opened or
+        cleared, broken, shut or blocked; the next chase there finds them so. In one op."""
+        from .encounter.site import MEND, ruled, way_place
+
+        st, rec = self.state, self.world.rec
+        found = []
+        for e in ruling.effects:
+            if e.kind != "obstacle":
+                continue
+            if e.target not in rec.obstacles or way_place(self.m, e.target) != st.location:
+                turn.notes.append(f"{e.target} 不是这里本局改变过的通路，没有改变。")
+                continue
+            ob = rec.obstacles[e.target].model_copy(deep=True)
+            if re.search(MEND, e.what):
+                found.append(effects.Obstacle(way=e.target, obstacle=None))
+            elif ruled(ob, e.what, st.investigator.id):
+                found.append(effects.Obstacle(way=e.target, obstacle=ob))
+        if found:
+            done = effects.commit(self.world, found, op_id=f"ways:{st.turn}:{st.investigator.id}", source="arbiter")
+            if not done.ok:
+                turn.notes.append("通路的变化没有落实：" + "；".join(done.problems))
 
     def _straggle(self, inv, dest: str, turn: Turn) -> dict:
         """Where someone apart from the party (GameState.apart) goes: there alone, the party staying where
