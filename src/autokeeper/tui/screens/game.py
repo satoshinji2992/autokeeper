@@ -117,7 +117,8 @@ BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's r
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
-STORY_SHARE, STORY_MIN = 0.38, 8  # what the story keeps under a fight's or a chase's stage, the round's list open
+STORY_SHARE, STORY_MIN = 0.28, 8  # what the story keeps under a fight's or a chase's stage, the round's list open
+PICKER_ROWS = (5, 8)  # the round's list, scrolling past that: the stage keeps the rest (13 rows of 36)
 RISK_WORDS = {2: "可能被击倒", 3: "可能致命"}  # beside the answer to blows: how bad the worst blow in sight could be
 
 
@@ -169,6 +170,7 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self._engine_after: dict | None = None  # a model switch asked for mid-turn, made once it ends
         self.dev_errors: list[str] = []
         self.dev_url = ""  # the developer web page, once started
         self._skill_choices: list[str] = []
@@ -396,6 +398,9 @@ class GameScreen(Screen):
         else:
             self.status_text = ""
             self._heard()
+            if (choice := self._engine_after) is not None:  # the switch asked for while the turn ran
+                self._engine_after = None
+                self._apply_engine(choice)
             if not self.spectate:
                 for box in self.query(Input).results(Input):  # none once the screen is leaving
                     box.focus()
@@ -575,10 +580,15 @@ class GameScreen(Screen):
         self.app.push_screen(EngineModal(presets, cfg.preset, model, fallback, cfg.mode), self._switch_engine)
 
     def _switch_engine(self, choice: dict | None) -> None:
-        if choice:
-            self._apply_engine(choice)
+        if not choice:
+            return
+        if self.busy:  # a turn began while the window was open: never cut it short, switch once it is told
+            self._engine_after = choice
+            self.app.notify("模型将在本回合结束后切换。", timeout=4)
+            return
+        self._apply_engine(choice)
 
-    @work(exclusive=True, group="turn")
+    @work(exclusive=True, group="engine")  # never the turn's group: an exclusive worker there cancels the turn
     async def _apply_engine(self, choice: dict) -> None:
         """New channels for every agent; the transcripts stay in the state, so nobody forgets."""
         assert self.game
@@ -1035,15 +1045,16 @@ class GameScreen(Screen):
         """A fight's or a chase's stage and the round's list over the box, in rows: what is left once the
         top bar, the footer, the status line and the input box have theirs (at a LAN table its turn
         line, with F12 the developer panel) and the story its share to read in (STORY_SHARE of the
-        screen, STORY_MIN rows at least: 14 of 36, 11 of 30). The list takes half the rest, 5 to 10
-        rows, and scrolls past that; the stage the remainder, 4 rows at least, so on a short terminal
-        the box stays on the screen (80x24 left the story one row and the box below the bottom)."""
+        screen, STORY_MIN rows at least: 10 of 36, 8 of 30). The list takes a third of the rest, PICKER_ROWS,
+        and scrolls past that; the stage the remainder, 4 rows at least, so on a short terminal the box
+        stays on the screen (80x24 left the story one row and the box below the bottom). The user, 2026-10-22:
+        the stage of a fight or a chase wants more room than the review's first share gave it (8 rows of 36)."""
         height = self.app.size.height
         fixed = 2 + 1 + 3 + 1 + len(self.query("#turnline"))  # bars, status, box, the stage's edge; LAN's turn line
         fixed += sum(9 for panel in self.query(DevPanel) if panel.display)
         rest = height - fixed
         story = max(0, min(max(STORY_MIN, round(height * STORY_SHARE)), rest - 9))
-        picker = max(5, min(10, (rest - story) // 2))
+        picker = max(PICKER_ROWS[0], min(PICKER_ROWS[1], (rest - story) // 3))
         return max(4, min(32, rest - story - picker)), picker
 
     def _fit_stage(self) -> None:

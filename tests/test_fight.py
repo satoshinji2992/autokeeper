@@ -781,7 +781,9 @@ async def test_the_story_keeps_room_to_read_and_ctrl_n_folds_the_stage_then_the_
         assert await until(pilot, lambda: picker.display)
         await pilot.pause(0.3)
         _all_on_screen(screen, size[1])
-        assert story.region.height >= max(8, round(size[1] * 0.36)), (story.region, size)
+        assert story.region.height >= max(8, round(size[1] * 0.28)), (story.region, size)
+        # the user, 2026-10-22: the fight's stage wants room too, more than the story's share
+        assert screen.query_one(Arena).region.height >= {30: 10, 36: 13}[size[1]], (screen.query_one(Arena).region, size)
         assert screen.query_one(Arena).region.height >= 4 and picker.region.height >= 5
         rows = [picker.get_option_at_index(i).prompt for i in range(picker.option_count)]
         assert all(r.no_wrap and r.overflow == "ellipsis" for r in rows)  # one row each, never wrapped
