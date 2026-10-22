@@ -169,6 +169,7 @@ class GameScreen(Screen):
         self._spun = ""
         self.engine_label = ""
         self.busy = False
+        self._engine_after: dict | None = None  # a model switch asked for mid-turn, made once it ends
         self.dev_errors: list[str] = []
         self.dev_url = ""  # the developer web page, once started
         self._skill_choices: list[str] = []
@@ -394,6 +395,9 @@ class GameScreen(Screen):
         else:
             self.status_text = ""
             self._heard()
+            if (choice := self._engine_after) is not None:  # the switch asked for while the turn ran
+                self._engine_after = None
+                self._apply_engine(choice)
             if not self.spectate:
                 for box in self.query(Input).results(Input):  # none once the screen is leaving
                     box.focus()
@@ -573,10 +577,15 @@ class GameScreen(Screen):
         self.app.push_screen(EngineModal(presets, cfg.preset, model, fallback, cfg.mode), self._switch_engine)
 
     def _switch_engine(self, choice: dict | None) -> None:
-        if choice:
-            self._apply_engine(choice)
+        if not choice:
+            return
+        if self.busy:  # a turn began while the window was open: never cut it short, switch once it is told
+            self._engine_after = choice
+            self.app.notify("模型将在本回合结束后切换。", timeout=4)
+            return
+        self._apply_engine(choice)
 
-    @work(exclusive=True, group="turn")
+    @work(exclusive=True, group="engine")  # never the turn's group: an exclusive worker there cancels the turn
     async def _apply_engine(self, choice: dict) -> None:
         """New channels for every agent; the transcripts stay in the state, so nobody forgets."""
         assert self.game

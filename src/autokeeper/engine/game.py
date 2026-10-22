@@ -24,6 +24,7 @@ from .. import cards, pictures, weather
 from ..agents import guard
 from ..agents.cast import Action, Cast, Failure, Initiative, Rejoin, Ruling, kp_line
 from ..agents.director import Improv
+from ..harness.models import refused
 from ..harness.replay import CassetteError
 from ..module import improv
 from ..module.schema import Event, Item, Module
@@ -827,7 +828,10 @@ class Game(Encounters):
                 except TimeoutError:
                     break
                 except PreparationError as exc:
-                    self._debug("director", {"phase": "failed", "kind": kind, "error": str(exc)})
+                    self._debug("director", {"phase": "failed", "kind": kind, "error": str(exc),
+                                             "cause": repr(exc.__cause__)[:500] if exc.__cause__ else ""})
+                    if refused(exc.__cause__):  # the model turned the request down (a 400): asking again changes nothing
+                        break
                     failures += 1
                     pause = min(PREPARE_PAUSE * failures, deadline - loop.time()) if exc.__cause__ else 0.0
                     if pause < 0:

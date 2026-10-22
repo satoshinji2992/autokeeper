@@ -115,6 +115,13 @@ def unavailable(exc: BaseException) -> bool:
                                                     "BudgetExceeded")
 
 
+def refused(exc: BaseException | None) -> bool:
+    """The model turned this request down (a schema or a prompt it will not take: 4xx, not a rate
+    limit): the same request fails the same way however often it is sent."""
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    return isinstance(status, int) and 400 <= status < 500 and status not in TRANSIENT_STATUS
+
+
 def transient(exc: BaseException) -> bool:
     """Worth another try: rate limits, overload, time-outs, dropped connections, 5xx.
     Not: budget, auth, bad requests, missing keys, our own bugs."""
@@ -746,12 +753,13 @@ async def _communicate(proc: asyncio.subprocess.Process, prompt: bytes) -> tuple
 def strict_schema(node: Any) -> Any:
     """OpenAI's strict structured output: every object closed and every field required,
     no defaults. Fields that had defaults simply get filled in by the model; the original
-    schema still validates the result."""
+    schema still validates the result. A tagged union (the director's and the NPCs' backstage ops)
+    goes as anyOf without its discriminator: strict mode refuses oneOf outright (HTTP 400)."""
     if isinstance(node, list):
         return [strict_schema(n) for n in node]
     if not isinstance(node, dict):
         return node
-    out = {k: strict_schema(v) for k, v in node.items() if k != "default"}
+    out = {("anyOf" if k == "oneOf" else k): strict_schema(v) for k, v in node.items() if k not in ("default", "discriminator")}
     if "properties" in out:
         out["additionalProperties"] = False
         out["required"] = list(out["properties"])
