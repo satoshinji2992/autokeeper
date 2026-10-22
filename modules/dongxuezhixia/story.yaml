@@ -26,6 +26,8 @@ events:
   performer: null
   performance: ''
   ending: null
+  present:
+  - doreen_ratger
 - id: e_market_erie
   title: 街上遇见的拉尸人
   when: visit:main_street
@@ -39,6 +41,8 @@ events:
   performer: null
   performance: ''
   ending: null
+  present:
+  - erie
 - id: e_milk
   title: 早饭时的牛奶
   when: flag:breakfast_phase2
@@ -51,6 +55,8 @@ events:
   performer: null
   performance: ''
   ending: null
+  present:
+  - doreen_ratger
 - id: e_porch
   title: 后廊塌了
   when: flag:meal_phase3
@@ -63,6 +69,8 @@ events:
   performer: null
   performance: ''
   ending: null
+  present:
+  - francis_ratger
 - id: e_theft
   title: 当晚，尸体被盗
   when: flag:theft_discovered
@@ -101,6 +109,9 @@ events:
   performer: null
   performance: ''
   ending: null
+  present:
+  - caroline
+  - erie
 endings:
 - id: too_late
   title: 太迟了

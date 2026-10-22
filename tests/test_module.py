@@ -107,6 +107,56 @@ def test_a_draft_is_filed_into_the_package_layout(tmp_path):
     assert (draft / "source" / "notes.md").read_text(encoding="utf-8") == "要点"
 
 
+# Read against the original by the clue review (module/adapt.verify, 2026-10-22), applied where it held:
+# words that made plain fact of what is said only when asked or comes only on a condition, an npc who
+# was not the person a clue comes from, someone listing what he cannot tell. (group, id, field, how, what)
+REREAD = {
+    "dongxuezhixia": [
+        ("clues", "c_hauling", "text", "cut", "说是有片弹片卡在胸腔里取不出来"),  # 如果问及此事，他会说……
+        ("clues", "c_anna_tale", "text", "cut", "关系就变得有些紧张"),  # 如果调查员询问的话，她会低声承认……
+        ("clues", "c_theft_suspect", "text", "cut", "她的要求会越来越多"),  # 从此开始：only once they help her
+        ("clues", "c_theft_suspect", "points_to", "drop", "k_buried"),
+        ("clues", "c_seance", "requires", "add", "flag:body_stolen"),  # the spirit of the body stolen that night
+        ("clues", "c_samuel_diary", "npc", "unset", "anna"),  # she gives a key; the diary is at the house
+        ("clues", "c_nightmares", "npc", "unset", "caroline"),  # the patients and their families tell it
+        ("clues", "c_theft", "npc", "unset", "ante"),  # the night nurse heard the cough
+        ("npcs", "erie", "lies", "when", "被问起咳嗽时："),
+        ("npcs", "anna", "knows", "when", "（被问起才低声承认）"),
+        ("npcs", "anna", "clues", "drop", "c_samuel_diary"),
+        ("npcs", "caroline", "clues", "drop", "c_shadow"),  # seen, never told: she owns to a method of her own
+        ("npcs", "reggie", "clues", "drop", "c_cattle"),  # looked at with his leave
+    ],
+    "fallout3-youxierenyouyanbujin": [
+        ("clues", "c_jensen_pickup", "text", "cut", "他把尸体卷进床单"),  # 如无人干预
+        ("npcs", "herman", "clues", "drop", "c_herman_disguise"),  # seen through by 侦查, never told
+    ],
+    "zhuishuren": [
+        ("clues", "c_shelf_gap", "text", "cut", "托马斯说不清"),  # 如果被问及……托马斯耸了耸肩
+        ("clues", "c_shelf_gap", "npc", "unset", "thomas"),  # the gap is seen in the study
+    ],
+}
+
+
+def _reread(then: Module, now: Module, changes: list[tuple[str, str, str, str, str]]) -> None:
+    """Each reviewed change, held to what it may be (only cut, unset, dropped, added or told when), onto the old."""
+    import re
+
+    for group, ident, field, how, what in changes:
+        a = next(x for x in getattr(then, group) if x.id == ident)
+        old, new = getattr(a, field), getattr(next(x for x in getattr(now, group) if x.id == ident), field)
+        if how == "cut":
+            assert what in old and what not in new and all(p in old for p in re.split(r"[。，“”\s]+", new) if p), (ident, field)
+        elif how == "unset":
+            assert old == what and new is None, ident
+        elif how == "drop":
+            assert new == [x for x in old if x != what] != old, (ident, field)
+        elif how == "add":
+            assert new == [*old, what], (ident, field)
+        else:  # "when": an item now says when it is said
+            assert [x.replace(what, "") for x in new] == old != new, (ident, field)
+        setattr(a, field, new)
+
+
 def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
     """Against the single-file modules of 0.0.1 (commit 9589c4d), where git history is here; the
     important NPCs and the looks were added by hand after the split."""
@@ -184,12 +234,14 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
         for e, f in zip(then.events, now.events, strict=True):
             e.fight, e.surprise, e.chase, e.chase_party = f.fight, f.surprise, f.chase, f.chase_party
             e.stakes, e.sights = f.stakes, f.sights  # what a fight decides, which first sights its sanity roll is
+            e.present = f.present  # who it puts before the investigators (upgrade --only present, 2026-10-22)
         for c, d in zip(then.creatures, now.creatures, strict=True):
             c.called = d.called
             # The NPC a sheet is the fighting form of, whether it pursues, and the sheets held to the books
             # (2026-10-21): the horde's attacks from the rulebook's ghoul, Erie's sanity from the module's page.
             c.npc, c.pursues, c.attacks, c.notes, c.sanity = d.npc, d.pursues, d.attacks, d.notes, d.sanity
         then.items += [i for i in now.items if i.id == "stanley_revolver"]
+        _reread(then, now, REREAD.get(folder.name, []))
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 

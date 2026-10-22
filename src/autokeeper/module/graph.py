@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -21,7 +22,7 @@ from ..rules import dice_expr
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
 from ..rules.combat import stats_of
 from ..rules.weapons import carried, parse_attack, unread
-from .schema import Leg, Module, Obstacle
+from .schema import Clue, Event, Leg, Module, Obstacle
 
 
 def build(m: Module) -> nx.MultiDiGraph:
@@ -83,15 +84,72 @@ def supporting_clues(m: Module) -> dict[str, list[str]]:
     return support
 
 
-def neighbourhood(m: Module, location: str) -> dict:
-    """What the keeper needs at a location: exits, NPCs present, clues and their checks."""
+def tellers(m: Module, c: Clue) -> list[str]:
+    """Whom a clue is to be had from: the one it comes from (Clue.npc), then anyone else whose
+    clues have it (NPC.clues: they can tell it or hand it over)."""
+    return list(dict.fromkeys([*([c.npc] if c.npc else []), *(n.id for n in m.npcs if c.id in n.clues)]))
+
+
+def at_hand(m: Module, place: str, present: Iterable[str]) -> list[Clue]:
+    """The clues to be had at a place with these people there. One that comes from someone (Clue.npc:
+    what they say, or what is seen of them) needs them there, or another who can tell it, wherever
+    that is: its `where` is where they are met. One that comes from no one lies where it is found,
+    and whoever is there and can tell it may (Game._valid_clues, the arbiter, the keeper's brief)."""
+    here = set(present)
+    return [c for c in m.clues if (not c.npc and c.where == place) or here.intersection(tellers(m, c))]
+
+
+def neighbourhood(m: Module, location: str, present: Iterable[str] | None = None) -> dict:
+    """What the keeper needs at a location: exits, who is there (`present`, as the world record has
+    them; without it, the module's people of that place who are alive and not gone) and the clues
+    to be had with them (at_hand)."""
     loc = m.location(location)
+    if present is None:
+        people = [n for n in m.npcs_at(location) if n.status not in ("死亡", "失踪")]
+    else:
+        ids = set(present)
+        people = [n for n in m.npcs if n.id in ids]
     return {
         "location": loc,
         "exits": [m.location(e) for e in loc.exits if any(x.id == e for x in m.locations)],
-        "npcs": m.npcs_at(location),
-        "clues": m.clues_at(location),
+        "npcs": people,
+        "clues": at_hand(m, location, [n.id for n in people]),
     }
+
+
+# Someone on the scene in a read-aloud, with no name: a figure, the one who steps down from the
+# truck or sits on the tombstone, a man or a girl, a he or she who speaks.
+FIGURE = re.compile(r"人影|身影|黑影|人形|[上下里外旁边]的(?:男|女|年轻|老)?人(?![家们群])|(?:坐|站|蹲|躺)着(?:一|个)[^，。]{0,6}?人"
+                    r"|一个[^，。“”]{0,12}?(?:男人|女人|年轻人|老人|姑娘|女孩|男孩)|[他她](?:开口|说[话道：:“])")
+SPEECH = re.compile(r"“[^”]*”|「[^」]*」")
+
+
+def shown(m: Module, e: Event) -> list[str]:
+    """Whom an event's read-aloud shows on the scene, by its words alone: the NPCs it names outside
+    what is said aloud (full name, the given name before the ·, what unmet players call them), else
+    有人 for a figure in it. A cheap guess for check and upgrade (Event.present says who it is)."""
+    text = SPEECH.sub("", e.read_aloud)
+    named = [n.name for n in m.npcs if any(len(k) >= 2 and k in text for k in (n.name, n.name.split("·")[0], n.called))]
+    return named or (["有人"] if FIGURE.search(text) else [])
+
+
+def brought(m: Module) -> dict[str, set[str]]:
+    """Where an NPC is met besides their own place: where an event puts them before the investigators
+    at a place it names (Event.present, with its move_to or the place a visit: waits for), where an
+    agenda step takes them (does at:him:place)."""
+    out: dict[str, set[str]] = {}
+    for e in m.events:
+        place = e.move_to or (e.when[6:] if e.when.startswith("visit:") else "")
+        for who in e.present if place else ():
+            out.setdefault(who, set()).add(place)
+    for a in m.agendas:
+        for s in a.steps:
+            for part in s.does.split("&"):
+                kind, _, rest = part.strip().partition(":")
+                who, _, place = rest.partition(":")
+                if kind == "at" and who == a.npc and place:
+                    out.setdefault(who, set()).add(place)
+    return out
 
 
 def search(m: Module, query: str, *, hops: int = 1, limit: int = 12) -> list[dict]:
@@ -214,6 +272,8 @@ def audit(m: Module) -> list[Issue]:
     handouts = {x.id for x in m.handouts}
     concl = {x.id for x in m.conclusions}
     endings = {x.id for x in m.endings}
+    met = brought(m)  # where an event or an agenda brings each NPC, besides their own place
+    judged = any(e.present for e in m.events)  # someone has said who the events bring: no guessing from the words
 
     if m.start not in locs:
         err(f"起始地点 {m.start} 不存在")
@@ -276,6 +336,9 @@ def audit(m: Module) -> list[Issue]:
             err(f"线索 {c.id} 所在地点 {c.where} 不存在")
         if c.npc and c.npc not in npcs:
             err(f"线索 {c.id} 的提供者 {c.npc} 不存在")
+        elif c.npc and c.where in locs and c.where != m.npc(c.npc).location and c.where not in met.get(c.npc, set()):
+            warn(f"线索 {c.id} 出自 {c.npc}，写在 {c.where}；{c.npc} 平时不在那里，也没有事件的 present 或打算的 does 带去，"
+                 "只有本人在场才拿得到。若东西就在那里、本人只是指路或转述，清空 npc")
         if c.handout and c.handout not in handouts:
             err(f"线索 {c.id} 的手稿 {c.handout} 不存在")
         for k in c.points_to:
@@ -289,6 +352,9 @@ def audit(m: Module) -> list[Issue]:
         for who in e.present:
             if who not in npcs:
                 err(f"事件 {e.id} 里出现的 {who} 不是 NPC")
+        if not judged and (who := shown(m, e)):
+            warn(f"事件 {e.id} 的朗读写到{'、'.join(who)}在调查员眼前，present 是空的：触发时记录里没人到场，"
+                 "裁定和叙述都会当作不在。写上在场的 NPC id（upgrade --only present）")
         if e.ending and e.ending not in endings:
             err(f"事件 {e.id} 的结局 {e.ending} 不存在")
         for f in e.sets:

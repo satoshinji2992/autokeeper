@@ -26,6 +26,8 @@ events:
       万一窃贼再来书房偷书，就能抓个现行。（时间点为 AutoKeeper 补充，可视进度提前或推后）
     read_aloud: 晚饭后，托马斯给你倒了杯咖啡：“说实在的，查到哪一步了？要不……今晚咱们守着书房，看那贼还来不来？”
     sets: []
+    present:
+    - thomas
   - id: e_jailed
     title: 牢房里的一夜
     when: flag:jailed
@@ -51,6 +53,8 @@ events:
     sanity: 0/1D4
     sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
+    present:
+    - douglas
   - id: e_tunnel_maze
     title: 迷宫中的相遇
     when: visit:suidao
@@ -61,6 +65,8 @@ events:
     sanity: 0/1D4
     sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
+    present:
+    - douglas
   - id: e_night_visit
     title: 深夜来客
     when: flag:tunnel_ignored
@@ -72,6 +78,8 @@ events:
     sanity: 0/1D4
     sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: []
+    present:
+    - douglas
   - id: e_figure
     title: 离开公墓的人影
     when: flag:watching
@@ -82,6 +90,8 @@ events:
       只是大声呼喊，它最多回头瞥一眼；喊出“道格拉斯·金博尔”，它会停顿一下，再缓缓走向墓地，像是希望调查员跟上。
     read_aloud: 午夜过后，墓地那边的树影动了一下。一个佝偻的身影翻过矮墙，径直朝书房的窗户走来。
     sets: [figure_seen]
+    present:
+    - douglas
   - id: e_hello
     title: “你好。”
     when: flag:called_name
@@ -94,6 +104,8 @@ events:
     sanity: 0/1D4
     sights: [douglas_ghoul]  # 认出这个食尸鬼般的人形就是道格拉斯：照面的理智就是这一次
     sets: [talked_douglas]
+    present:
+    - douglas
   - id: e_unmasked
     title: 熟悉的脸
     when: flag:douglas_down
@@ -103,12 +115,16 @@ events:
     sanity: 0/1D6
     sights: [douglas_ghoul]  # 原文：第一次检定就是遭遇食尸鬼的震惊，打斗中不另扣
     sets: [unmasked]
+    present:
+    - douglas
   - id: e_recognized
     title: 是他
     when: flag:unmasked
     text: 第二次理智检定（意识到这头食尸鬼正是失踪的道格拉斯）：成功损失 1 点，失败损失 1D4 并做强制动作（如尖叫）。
     sanity: 1/1D4
     sets: [recognized]
+    present:
+    - douglas
   - id: e_horde
     title: 细碎的脚步声
     when: flag:recognized
@@ -129,6 +145,8 @@ events:
       - when: ended:fled | ended:escaped | escaped:players
         flags: [fled_ghouls]
         note: 逃跑则它们不追，带走道格拉斯回墓地（空墓）
+    present:
+    - douglas
 endings:
   - id: asylum
     title: 疗养院
