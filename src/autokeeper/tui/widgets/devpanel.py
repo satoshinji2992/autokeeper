@@ -56,7 +56,7 @@ def view(game: Game, url: str = "", errors: list[str] | None = None) -> Text:
     st, m, w = game.state, game.m, game.world
     t = Text()
     t.append(" 开发者模式 ", style="bold reverse")
-    t.append("  F12 关闭", style="dim")
+    t.append("  F12 关闭 · Ctrl+K 规则插件", style="dim")
     if url:
         t.append("  ")
         t.append("打开完整记录网页", style=f"underline link {url}")

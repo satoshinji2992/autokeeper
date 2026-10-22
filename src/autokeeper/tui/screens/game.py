@@ -43,7 +43,7 @@ from ..modals.dialogs import HandoutModal, NotebookModal, PushModal, RollModal, 
 from ..modals.engine import EngineModal
 from ..modals.guide import GuideScreen
 from ..modals.mapview import MapModal
-from ..modals.menu import MENU, Confirm, GameMenu
+from ..modals.menu import MENU, SETTINGS, Confirm, GameMenu
 from ..modals.plugins import plugin_commands
 from ..modals.reaction import ChoiceModal
 from ..modals.retell import RetellModal
@@ -106,7 +106,7 @@ COMMANDS = (
     ("骰子皮肤", "", "骨白、黑曜石、血珀、黄铜、青石、磷光", "dice_skin"),
     ("天气动画", "", "画面闪烁或卡顿时可关闭", "weather"),
     ("用量", "Ctrl+B", "模型用量与估算花费", "usage"),
-    ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),
+    ("规则插件", "Ctrl+K", "查看、暂停或启用本局额外规则", "plugins"),  # 开发者模式 only (check_action)
     ("回到标题", "", "保存进度并返回标题页", "leave_game"),
 )
 
@@ -318,6 +318,8 @@ class GameScreen(Screen):
         if action == "complete_skill":
             box = self.query_one("#command", Input)
             return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
+        if action == "plugins":  # 规则插件 only in 开发者模式; otherwise Ctrl+K is the input box's own
+            return self.developing
         return super().check_action(action, parameters)
 
     # -- the list over the input box: the skills a check command can take -----------------------
@@ -829,7 +831,7 @@ class GameScreen(Screen):
                 story.add("system", Text(f"✚ {ev['who']} {ev['text']}", style="bold red"))
             self._panels()
         elif t == "plugin_status":
-            self.app.notify("一项扩展规则已暂停，可按 Ctrl+K 查看。", severity="warning")
+            self.app.notify("一项扩展规则已暂停。" + ("可按 Ctrl+K 查看。" if self.developing else ""), severity="warning")
         elif t == "plugin_effect":  # a rule did something public: a compact, recognisable line
             body = Text()
             body.append(f"⚙ 〔{ev['name']}〕", style="bold #8ec7d6")
@@ -1462,10 +1464,18 @@ class GameScreen(Screen):
 
     # -- the Esc menu --------------------------------------------------------------------------
     def menu_items(self) -> list[tuple[str, str]]:
-        """What the Esc menu offers on this screen (a LAN table leaves some out, tui/screens/net.py);
-        规则插件 only when this game has any."""
-        return [item for item in MENU if (item[0] != "plugins" or self.m.plugins)
-                and (item[0] != "developer" or self.game is not None) and (item[0] != "idea" or not self.spectate)]
+        """What the Esc menu offers on this screen (a LAN table leaves some out, tui/screens/net.py)."""
+        return list(MENU)
+
+    def settings_items(self) -> list[tuple[str, str]]:
+        """What 设置 opens on this screen besides its switches (SETTINGS): 开发者模式 needs the
+        game on this machine."""
+        return [item for item in SETTINGS if item[0] != "developer" or self.game is not None]
+
+    @property
+    def developing(self) -> bool:
+        """开发者模式 is on: the panel under the story shows, and the rule plugins can be opened."""
+        return any(panel.display for panel in self.query(DevPanel))
 
     def action_developer(self) -> None:
         """F12: 开发者模式 on or off. On, the top bar says so and the panel under the story shows this
@@ -1479,6 +1489,7 @@ class GameScreen(Screen):
         self._fit_stage()
         self.set_class(panel.display, "-dev")
         self._topbar()
+        self.refresh_bindings()  # Ctrl+K comes and goes with it
         if panel.display:
             self._dev()
             if not self.dev_url:
@@ -1517,20 +1528,18 @@ class GameScreen(Screen):
                 self.query_one("#command", Input).focus()
             return
         run = {"save": self.action_save, "load": self.action_load, "settings": self.action_settings,
-               "prefs": self.action_prefs, "engine": self.action_engine,
                "guide": lambda: self.app.push_screen(GuideScreen("play")),
-               "keys": lambda: self.app.push_screen(GuideScreen("keys")),
                "title": self.action_leave_game, "quit": self.action_quit_game}  # fmt: skip
         if choice in run:
             run[choice]()
-        else:  # an action of this screen (开发者模式, 规则插件, the LAN screen's own): run_action is a coroutine
+        else:  # an action of this screen (the LAN screen's 关闭房间): run_action is a coroutine
             self.call_later(self.run_action, choice)
 
     def action_settings(self) -> None:
         from ..modals.settings import SettingsModal
 
         style = self.app.art_style  # type: ignore[attr-defined]
-        self.app.push_screen(SettingsModal(), lambda _: self._settings_saved(style))
+        self.app.push_screen(SettingsModal(self), lambda _: self._settings_saved(style))
 
     def _settings_saved(self, style: str) -> None:
         """What the settings change on this screen shows at once: the pictures, the weather."""
@@ -1751,7 +1760,7 @@ class GameScreen(Screen):
         write_save(self.state, self.m)
 
     def action_idea(self) -> None:
-        """Ctrl+L, /灵感 or the menu: an Idea roll for the party, when one can be made now."""
+        """Ctrl+L or /灵感: an Idea roll for the party, when one can be made now."""
         if self.spectate or self.game is None:
             return
         if self.busy:
@@ -1965,7 +1974,12 @@ class GameScreen(Screen):
             box.suggester = self._suggester()
 
     def action_plugins(self) -> None:
+        """Ctrl+K or 设置 → 规则插件, in 开发者模式 only (check_action): the rules of this game,
+        paused or started again, and a house rule added in a sentence."""
         from ..modals.plugins import PluginsModal
+
+        if not self.developing:
+            return
 
         self.app.push_screen(PluginsModal(self.m, self.state, manage=True, drafter=self._house_rule), self._plugins_changed)
 

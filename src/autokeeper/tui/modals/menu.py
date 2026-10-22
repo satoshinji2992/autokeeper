@@ -12,21 +12,23 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-# (id, label) in the order shown; GameScreen.menu_items picks those that apply.
+# The Esc menu in a game: (id, label) in the order shown, 设置 last; GameScreen.menu_items picks
+# those that apply (a LAN table leaves some out, tui/screens/net.py).
 MENU = (
     ("continue", "继续"),
-    ("idea", "灵感检定"),
     ("save", "存档"),
     ("load", "读档"),
-    ("settings", "设置"),
-    ("prefs", "叙事偏好"),
-    ("plugins", "规则插件"),
-    ("engine", "换模型"),
-    ("developer", "开发者模式"),
-    ("guide", "新手指南"),
-    ("keys", "按键说明"),
+    ("guide", "玩法说明"),
     ("title", "回到标题"),
     ("quit", "退出游戏"),
+    ("settings", "设置"),
+)
+# What 设置 opens in a game, above its switches, in this order; GameScreen.settings_items picks
+# those that apply. Before a game it offers the first two, for the next one.
+SETTINGS = (
+    ("engine", "换模型"),
+    ("prefs", "叙事偏好"),
+    ("developer", "开发者模式"),
 )
 
 

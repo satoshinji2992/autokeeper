@@ -1,8 +1,11 @@
-"""The pre-game settings hub, available without opening a model session."""
+"""设置: before a game, available without opening a model session; in a game (F9 is 换模型
+there), also what the Esc menu used to list by itself: 换模型, 叙事偏好 and 开发者模式, the
+last with the rule plugins behind it."""
 
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from rich.text import Text
 from textual import on
@@ -14,7 +17,14 @@ from textual.widgets import Button, Select, Static, Switch
 from ... import config, imagegen, imagery
 from ..drawing import dice
 from .engine import EngineModal
+from .menu import SETTINGS
 from .prefs import PrefsModal
+
+if TYPE_CHECKING:
+    from ..screens.game import GameScreen
+
+# The buttons for SETTINGS, by id (settings-models is the one the title's tests and docs know).
+BUTTONS = {"engine": "settings-models", "prefs": "settings-prefs", "developer": "settings-developer"}
 
 
 def model_choices() -> dict[str, str]:
@@ -24,25 +34,30 @@ def model_choices() -> dict[str, str]:
 
 
 class SettingsModal(ModalScreen[None]):
+    """`game`: the screen it was opened over, whose own actions 换模型, 叙事偏好 and 开发者模式
+    run (only those it offers, GameScreen.settings_items); without one, the models and the
+    preferences saved for the next game."""
+
+    CSS_PATH = "settings.tcss"
     BINDINGS = [("escape", "dismiss", "返回")]
-    DEFAULT_CSS = """
-    #settings-panel { width: 76; max-width: 96%; height: auto; max-height: 90%; }
-    #settings-panel Select { margin-bottom: 1; }
-    #settings-panel .settings-row { height: 3; align: left middle; }
-    #settings-panel .settings-row Static { width: 1fr; }
-    #settings-panel .settings-row Switch { width: auto; }
-    #settings-models, #settings-prefs {
-        width: 100%; height: 1; margin-top: 1; border: none; content-align: left middle; text-align: left;
-    }
-    """
+
+    def __init__(self, game: GameScreen | None = None):
+        super().__init__()
+        self.game = game
 
     def compose(self) -> ComposeResult:
         cfg = config.load()
+        entries = self.game.settings_items() if self.game is not None else [e for e in SETTINGS if e[0] != "developer"]
         with VerticalScroll(id="settings-panel", classes="modal"):
             yield Static("设置", classes="modal-title")
-            yield Button("模型设置 >", id="settings-models")
-            yield Static(self._model_summary(), id="settings-model-summary")
-            yield Button("叙事偏好 >", id="settings-prefs")
+            for key, label in entries:
+                if key == "developer":
+                    yield Button(self._developer_label(), id=BUTTONS[key], classes="settings-page")
+                    yield Button("规则插件 >", id="settings-plugins", classes="settings-page")
+                else:
+                    yield Button(f"{label} >", id=BUTTONS[key], classes="settings-page")
+                if key == "engine":
+                    yield Static(self._model_summary(), id="settings-model-summary")
             yield Static("自由度", classes="modal-title")
             yield Select([("允许合理即兴，展开日常与支线", "即兴"), ("严格按模组已有内容", "严格")],
                          value=cfg.improv, allow_blank=False, id="settings-improv")
@@ -77,6 +92,23 @@ class SettingsModal(ModalScreen[None]):
                 yield Button("保存", id="settings-save", variant="primary")
                 yield Button("返回", id="settings-back")
 
+    def on_mount(self) -> None:
+        self._developer_shown()
+
+    def on_screen_resume(self) -> None:  # back from 换模型: what is chosen now
+        for summary in self.query("#settings-model-summary").results(Static):
+            summary.update(self._model_summary())
+
+    def _developer_label(self) -> str:
+        return "关闭开发者模式" if self.game is not None and self.game.developing else "开启开发者模式"
+
+    def _developer_shown(self) -> None:
+        """The developer's button says what it will do; 规则插件 is there only while the mode is on."""
+        for button in self.query("#settings-developer").results(Button):
+            button.label = self._developer_label()
+        for button in self.query("#settings-plugins").results(Button):
+            button.display = self.game is not None and self.game.developing
+
     def _model_summary(self) -> Text:
         cfg = config.load()
         world = cfg.role("world")
@@ -88,6 +120,9 @@ class SettingsModal(ModalScreen[None]):
 
     @on(Button.Pressed, "#settings-models")
     def models(self) -> None:
+        if self.game is not None:  # switched for this game, as F9 does
+            self.game.action_engine()
+            return
         cfg, saved = config.load(), config.ui_settings()
         self.app.push_screen(EngineModal(model_choices(), cfg.preset,
                                         os.environ.get("AUTOKEEPER_MODEL", saved.get("model", "")),
@@ -109,7 +144,22 @@ class SettingsModal(ModalScreen[None]):
 
     @on(Button.Pressed, "#settings-prefs")
     def preferences(self) -> None:
-        self.app.push_screen(PrefsModal())
+        if self.game is not None:  # for this game, as Ctrl+O does
+            self.game.action_prefs()
+        else:
+            self.app.push_screen(PrefsModal())
+
+    @on(Button.Pressed, "#settings-developer")
+    def developer(self) -> None:
+        """On or off at once, as F12 does: the panel under the story shows when 设置 is closed."""
+        if self.game is not None:
+            self.game.action_developer()
+            self._developer_shown()
+
+    @on(Button.Pressed, "#settings-plugins")
+    def plugins(self) -> None:
+        if self.game is not None:
+            self.game.action_plugins()
 
     @on(Button.Pressed, "#settings-save")
     def keep(self) -> None:

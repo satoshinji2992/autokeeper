@@ -633,7 +633,7 @@ class Manager:
         if plugin is None:
             return f"不认识的命令：/{name}"
         if plugin.id in st.plugin_errors:
-            return f"「{plugin.name}」暂停了，Ctrl+K 里可以重新启用"
+            return f"「{plugin.name}」已暂停"
         st.plugin_serial += 1
         await self.run("command", game._late, plugin=plugin.id, command=name, text=text[:200],
                        who=who or st.investigator.id, serial=f"c{st.plugin_serial}")

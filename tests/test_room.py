@@ -226,6 +226,21 @@ async def _seated(lobby, seat: str) -> dict[str, Any]:
         await asyncio.sleep(0.05)
 
 
+async def multiplayer(pilot, app) -> list[str]:
+    """The title's 多人游戏, open: what it offers, the first ready for Enter."""
+    from autokeeper.tui.modals.menu import GameMenu
+
+    menu = app.screen.query_one("#menu", OptionList)
+    assert "host" not in [menu.get_option_at_index(i).id for i in range(menu.option_count)]  # one entry for both
+    menu.highlighted = menu.get_option_index("lan")
+    await pilot.press("enter")
+    await pilot.pause(0.1)
+    assert isinstance(app.screen, GameMenu) and app.screen.title_ == "多人游戏"
+    ol = app.screen.query_one(OptionList)
+    assert ol.highlighted == 0
+    return [str(ol.get_option_at_index(i).prompt) for i in range(ol.option_count)]
+
+
 async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch, stand_ins):
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.modals.trouble import TroubleModal
@@ -238,9 +253,8 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         await pilot.pause(0.3)
-        menu = app.screen.query_one("#menu", OptionList)
-        menu.highlighted = menu.get_option_index("host")
-        await pilot.press("enter")
+        assert await multiplayer(pilot, app) == ["开房间", "加入房间"]
+        await pilot.press("enter")  # 开房间, first
         await pilot.pause(0.2)
         screen = app.screen
         assert isinstance(screen, HostScreen)
@@ -298,6 +312,7 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert isinstance(game, NetGameScreen) and game.seat == "zhouheng" and game.link.host
         hub = app.room.hub
         assert hub is not None and hub.names[next(iter(hub.hosts))] == "小明·房主"
+        assert [key for key, _ in game.menu_items()] == ["continue", "guide", "close_room", "title", "quit", "settings"]
         game.action_close_room()  # Ctrl+P → 关闭房间, for the host
         await pilot.pause(0.2)
         assert isinstance(app.screen, CloseRoomModal)
@@ -308,7 +323,7 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
                 break
         assert isinstance(app.screen, TitleScreen) and app.room is None
         assert not room_key_file(port).exists()
-        assert str(app.screen.query_one("#menu", OptionList).get_option("host").prompt) == "开房间"
+        assert app.screen.lan_items() == [("host", "开房间"), ("join", "加入房间")]
 
 
 async def test_the_title_goes_back_to_an_open_room_and_quitting_closes_it(monkeypatch, stand_ins):
@@ -352,9 +367,7 @@ async def test_the_title_goes_back_to_an_open_room_and_quitting_closes_it(monkey
         await pilot.press("escape")  # the host leaves the lobby: the room stays open
         await pilot.pause(0.3)
         assert isinstance(app.screen, TitleScreen) and room.is_open
-        menu = app.screen.query_one("#menu", OptionList)
-        assert str(menu.get_option("host").prompt) == "回到房间"
-        menu.highlighted = menu.get_option_index("host")
+        assert await multiplayer(pilot, app) == ["回到房间", "加入房间"]
         await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)
@@ -394,6 +407,25 @@ def test_autokeeper_host_opens_the_same_room(monkeypatch, stand_ins):
     assert not seen["room"].is_open  # closed when the command ends
     bad = CliRunner().invoke(cli, ["host", str(EXAMPLE), "--no-web", "--hub-port", str(port), "--seats", "随便"])
     assert bad.exit_code == 1 and "座位类型仅支持" in bad.output
+
+
+async def test_the_title_s_multiplayer_entry_leads_to_joining_too(monkeypatch):
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.screens.net import JoinScreen
+    from autokeeper.tui.screens.title import TitleScreen
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause(0.3)
+        title = app.screen
+        assert await multiplayer(pilot, app) == ["开房间", "加入房间"]
+        await pilot.press("escape")  # back to the title, nothing opened
+        await pilot.pause(0.1)
+        assert app.screen is title and isinstance(title, TitleScreen)
+        await multiplayer(pilot, app)
+        await pilot.press("down", "enter")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, JoinScreen)
 
 
 async def test_joining_a_room_that_does_not_answer_gives_up_and_says_so(monkeypatch):
