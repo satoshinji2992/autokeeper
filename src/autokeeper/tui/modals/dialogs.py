@@ -173,7 +173,8 @@ class PushModal(Timed, ModalScreen[str | dict | None]):
             if o.get("can_push"):
                 body.append("孤注一掷：", style="bold")
                 risk = o.get("risk") or "会有更严重的后果"
-                body.append(f"写明调查员如何行动以孤注一掷（多花时间、加倍努力或冒更大的险），目标仍为 ≤{need}。再次失败：{risk}。"
+                body.append(f"写明调查员如何行动以孤注一掷（多花时间、加倍努力或冒更大的险）。通常仍按 ≤{need} 检定，"
+                            f"所述做法改变了局势时，技能、难度与失败后果可能随之调整。再次失败：{risk}。"
                             "所述做法无法实现目标时不掷骰，按放弃处理。同一次检定只能孤注一掷一次，之后不能花幸运。\n")  # fmt: skip
             if o.get("luck") is not None:
                 left = o.get("left")

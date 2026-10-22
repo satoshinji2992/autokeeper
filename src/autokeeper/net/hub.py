@@ -35,7 +35,7 @@ Messages are JSON objects with a "t" field:
     client -> hub   answer {prompt, value, skip} · command {name, text}   (a rule plugin's question, a /command)
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
-                    · event {ev} · module · sync {state} · offer {offer: … respond_id, deadline} · say · ideas {ideas}
+                    · event {ev} · module · sync {state} · offer {offer: … respond_id, closes_in} · offer_closed {id} · say · ideas {ideas}
                     · notice {text} (an answer that came too late, or twice)
                     · prelude {frames, art, colors, picture_data} · prelude_ready (the opening performance)
                     · over · error
@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 import time
@@ -71,7 +72,6 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..agents.cast import Proposal
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
@@ -85,6 +85,9 @@ from ..rules.coc import Investigator
 from ..rules.combat import DOWN
 from . import cards, media
 from .room import BLANKS
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())  # recorded if logging is set up, never printed over the game
 
 SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
@@ -105,10 +108,13 @@ PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, w
 # its public view instead (views.table, as encounter_public).
 PRIVATE |= {"encounter", "encounter_log", "sightings", "encounter_public"}
 PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll would pick from (engine/idea.py)
-# What a fight or a chase shows of someone who is not an investigator (engine/encounter/views): no sheet behind it
-SHOWN = ("id", "name", "kind", "side", "status", "prone", "held_by", "stance", "weapon", "portrait", "build", "pos", "speed",
-         "actions")
-LOOKS = {"轻伤": 90, "受伤": 60, "重伤": 20}  # hit points out of 100 that look as hurt as the word says (Fighter.wound_word)
+# The keeper's: a LAN round's reports held for its one telling (Game.narrate: the whole keeper report, true names
+# and all), the foreshadowing handed out (a sign's id names what it points to), the director's expansions
+# (diagnostics) and the keeper's own word on what was going on as the last telling stopped (Telling.scene).
+PRIVATE |= {"held", "signs", "expanded", "ongoing"}
+# What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
+# failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
+PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")
 REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
@@ -160,20 +166,9 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
-    from ..world import knowledge
-    from ..world.record import PLAYERS
-    from ..world.store import World
-
-    seen = fog.things(m, st)
-    view = World(m, st, initialize=False)
     party = {inv.id for inv in st.investigators}
-    def visible(item: dict) -> bool:
-        if item["id"] in st.record.entities:
-            return knowledge.item_known(view, item["id"], PLAYERS)
-        return (item["owner"] in party or (not item["owner"] and not item["hidden"] and item["equipment"] != "concealed"
-                and (item["where"] in visited or item["id"] in seen)))
-
-    d["items"] = [item for item in d["items"] if visible(item)]
+    shown = known_items(m, st)
+    d["items"] = [item for item in d["items"] if item["id"] in shown]
     for item in d["items"]:
         ent = st.record.entities.get(item["id"])
         if ent is not None and ent.at in party:
@@ -194,18 +189,30 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     return d
 
 
-def public_fighter(f: dict[str, Any], word: str = "无伤") -> dict[str, Any]:
-    """Someone in a fight or a chase as a player's screen may hold them. An investigator whole; anyone
-    else as the table sees them (engine/encounter/views): hit points only as many as say how hurt they
-    look (`word`), the weapons by name, never their numbers, skills, armour, healing, the keeper's
-    description and notes, or what seeing it costs. An ally's hit points are on the screens anyway."""
-    if f.get("kind") == "investigator":
-        return f
-    out = {k: f[k] for k in SHOWN if k in f}
-    out["attacks"] = [{"name": a["name"], "skill": "", "value": 0, "damage": "", "firearm": a.get("firearm", False)}
-                      for a in f.get("attacks", [])]
-    out["hp"], out["hp_max"] = (f["hp"], f["hp_max"]) if f.get("side") == "party" else (LOOKS.get(word, 100), 100)
-    return out
+def known_items(m: Module, st: GameState) -> set[str]:
+    """The ids of the module's things the players know of: theirs, ones the record says they know, ones
+    lying in the open where they have been or that they saw."""
+    from ..world import knowledge
+    from ..world.record import PLAYERS
+    from ..world.store import World
+
+    seen = fog.things(m, st)
+    view = World(m, st, initialize=False)
+    party = {inv.id for inv in st.investigators}
+    visited = set(st.visited) | {st.location}
+
+    def visible(item: Any) -> bool:
+        if item.id in st.record.entities:
+            return knowledge.item_known(view, item.id, PLAYERS)
+        return (item.owner in party or (not item.owner and not item.hidden and item.equipment != "concealed"
+                and (item.where in visited or item.id in seen)))
+
+    return {item.id for item in m.items if visible(item)}
+
+
+def public_push(pending: dict[str, Any]) -> dict[str, Any]:
+    """A push offer, or the pending push in the state, as a player's screen gets it (PUSH_SHOWN)."""
+    return {k: v for k, v in pending.items() if k in PUSH_SHOWN}
 
 
 def public_way(legs: list[dict[str, Any]], at: list[int]) -> list[dict[str, Any]]:
@@ -385,14 +392,9 @@ class Hub:
         finally:
             self.clients.pop(cid, None)
             self._drop_card(cid)
-            for inv_id, who in self.sits.items():
-                if who == cid:  # whoever waits for them gets an empty answer: the AI plays on
-                    self.sits[inv_id] = None
-                    self.ready.discard(inv_id)
-                    self.early = [(seat, text) for seat, text in self.early if seat != inv_id]
-                    self.inbox[inv_id].put_nowait(None)
-                    self.choices[inv_id].put_nowait(None)
-                    self.wake.set()
+            for inv_id, who in list(self.sits.items()):
+                if who == cid:
+                    self._free(inv_id)
             await self._share_seats()
         return ws
 
@@ -558,15 +560,24 @@ class Hub:
         if self.sits[inv_id] not in (None, cid):
             await self._send(cid, {"t": "error", "text": "此座位已被占用。"})
             return
-        for seat, who in self.sits.items():
+        for seat, who in list(self.sits.items()):
             if who == cid and seat != inv_id:
-                self.sits[seat] = None
-                self.ready.discard(seat)
+                self._free(seat)  # sat down elsewhere: a question waiting on the old seat is not left hanging
         self.sits[inv_id] = cid
         await self._share_seats()
         if not self.bringing and all(self.sits.values()):  # a saved game: every human seat is taken, it goes on
             self.started.set()
         await self._maybe_begin()
+
+    def _free(self, seat: str) -> None:
+        """A seat its player left (gone, or sat down in another): whoever waits for them gets an empty
+        answer and the AI plays on; what they said for the next round goes with them."""
+        self.sits[seat] = None
+        self.ready.discard(seat)
+        self.early = [(s, text) for s, text in self.early if s != seat]
+        self.inbox[seat].put_nowait(None)
+        self.choices[seat].put_nowait(None)
+        self.wake.set()
 
     def _seat_of(self, cid: str) -> str | None:
         return next((seat for seat, who in self.sits.items() if who == cid), None)
@@ -766,7 +777,13 @@ class Hub:
             now = self._faced(public_battle(now))
         view["encounter_public"] = now
         if view.get("pending_push"):
-            view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
+            view["pending_push"] = public_push(view["pending_push"])
+        here = {n.id for n in self.m.npcs if n.location == st.location}  # as the book has them (table())
+        view["npcs"] = {k: {**v, "unlocked": [c for c in v["unlocked"] if c in st.clues]}  # what each may tell: only what was found
+                        for k, v in view["npcs"].items() if v["met"] or k in here}
+        if view["item_owners"]:  # where things are, only of the things the players know of
+            shown = known_items(self.m, st)
+            view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
         return view
 
     def _seats(self, cid: str | None = None) -> list[dict[str, Any]]:
@@ -882,8 +899,10 @@ class Hub:
             await self._send(cid, msg)
 
     async def _event(self, ev: dict[str, Any]) -> None:
-        if ev.get("type") in ("ruling", "plugin_status"):
-            return  # the arbiter's private explanation and unrevealed clue ids stay on the host
+        if ev.get("type") in ("ruling", "plugin_status", "action"):
+            # The arbiter's private explanation and unrevealed clue ids stay on the host, and so does the parsed
+            # action: in a fight it carries the keeper's plan for every foe (declared.plan). No screen reads it.
+            return
         if ev.get("type") in ("plugin_prompt", "plugin_closed"):  # to the player asked, and nobody else
             who = self.sits.get(ev.get("who", ""))
             if who is not None:
@@ -935,9 +954,10 @@ class Hub:
             try:
                 await self._prelude()
                 await self.game.start()
-            except Exception as exc:  # no opening told: the table can still play, and is told why
+            except Exception as exc:  # no opening told: the table can still play, and is told so
                 self.game.visuals.resume()
-                await self._broadcast({"t": "say", "from": "系统", "text": f"开场没能讲完（{type(exc).__name__}），可以直接开始行动"})
+                self._failed("开场", exc)
+                await self._broadcast({"t": "say", "from": "系统", "text": "开场叙述未能完成，可直接开始行动。"})
             self._save()
             await self._broadcast({"t": "sync", "state": self._view()})
         while not st.ending:
@@ -1056,7 +1076,7 @@ class Hub:
                     await asyncio.wait_for(self.wake.wait(), min(1.0, left) if left is not None else 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
                     if self._left() is None:
-                        await self._safely(self._interlude(), "幕间")
+                        await self._safely(self._interlude(), "剧情推进")
                 self.wake.clear()
         finally:
             self.open, self.closes_at = False, None
@@ -1133,8 +1153,9 @@ class Hub:
                     queue = self.inbox[seat]
                     while not queue.empty():  # a None left by an earlier disconnect is not an answer now
                         queue.get_nowait()
-                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动中断了（{type(exc).__name__}），等{self.names.get(who, '他')}输入 /retry 接着讲"})
-                    await self._send(who, {"t": "error", "retry": True, "text": f"这一回合暂未完成（{type(exc).__name__}），输入 /retry 接着讲，已结算的结果会保留"})
+                    self._failed(f"{inv.name}的回合", exc)
+                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动未能完成，等待{self.names.get(who, '该玩家')}输入 /retry 继续。"})
+                    await self._send(who, {"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续；已结算的结果保留。"})
                     self.retrying = seat
                     try:
                         text = await queue.get()
@@ -1158,12 +1179,13 @@ class Hub:
             except Exception as again:
                 self.game.visuals.resume()
                 exc = again
+        self._failed(f"{inv.name}的回合", exc)
         if self.state.pending_turn:
             self.state.pending_turn.clear()
             self._save()
-            note = f"{inv.name}这一回合没能讲完（{type(exc).__name__}），已结算的结果保留，接着往下"
+            note = f"{inv.name}的回合未能完成，已结算的结果保留，游戏继续。"
         else:
-            note = f"{inv.name}这一轮没有行动（{type(exc).__name__}）"
+            note = f"{inv.name}本轮未行动。"
         await self._broadcast({"t": "say", "from": "系统", "text": note})
         await self._broadcast({"t": "sync", "state": self._view()})
 
@@ -1179,7 +1201,8 @@ class Hub:
             if said and self.state.pending_turn.get("input") == said:
                 self.state.pending_turn.clear()
                 self._save()
-            await self._broadcast({"t": "say", "from": "系统", "text": f"{what}没能完成（{type(exc).__name__}）"})
+            self._failed(what, exc)
+            await self._broadcast({"t": "say", "from": "系统", "text": f"{what}未能完成。"})
 
     async def _afterwards(self, seat: str, text: str) -> None:
         """After the end a player can still read their sheet and make their growth rolls."""
@@ -1251,7 +1274,8 @@ class Hub:
             try:
                 ok, message = await house_rule(self.cast, self.m, self.state, text, on_step=step)
             except Exception as exc:  # the table plays on; the rule just did not land
-                ok, message = False, f"没能添加（{exc.__class__.__name__}）"
+                self._failed("家规", exc)
+                ok, message = False, "规则未能添加。"
             await self._broadcast({"t": "say", "from": "系统", "text": message})
             if ok:
                 self._save()
@@ -1295,7 +1319,8 @@ class Hub:
         try:
             await self.game.retell(nudge)
         except Exception as exc:  # the old telling is back on every screen
-            await self._send(cid, {"t": "error", "text": f"守秘人没能重讲（{exc.__class__.__name__}），原来那段还在"})
+            self._failed("重述", exc)
+            await self._send(cid, {"t": "error", "text": "重述未能完成，原叙述保留。"})
             return
         self._save()
         await self._broadcast({"t": "sync", "state": self._view()})
@@ -1320,7 +1345,11 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        move = Proposal.of(await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game)))  # in a fight: its choices
+        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game))  # in a fight: its choices
+        if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
+            await self._event({"type": "status", "text": ""})
+            await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}本轮未行动。"})
+            return
         await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
         await self._run(move.text, inv.id, ai=True, push=move.push)
 
@@ -1364,8 +1393,12 @@ class Hub:
         two machines need not agree); the answer, or None when there is none in time (the default then
         stands, and the seat's window is told to close: "offer_closed"). The others are told who the
         table waits for."""
-        rid = str(offer.get("id") or uuid.uuid4().hex[:12])
-        offer = self._faced({**offer, "respond_id": rid, "closes_in": REACTION_WAIT if timed else None})
+        # The hub's own id, never the engine's (e1:r1:warden:0:react:0 names who is in the fight, an encounter's
+        # may name the module's event): the host knows the offer by the seat asked (asking), the engine by its own.
+        rid = uuid.uuid4().hex[:12]
+        shown = public_push(offer) | {"kind": "push"} if offer.get("kind") == "push" else \
+            {k: v for k, v in offer.items() if k not in ("id", "receipt", "encounter")}
+        offer = self._faced({**shown, "respond_id": rid, "closes_in": REACTION_WAIT if timed else None})
         queue = self.choices[seat]
         while not queue.empty():
             queue.get_nowait()
@@ -1405,6 +1438,12 @@ class Hub:
             if isinstance(ev.get(key), dict) and isinstance(ev[key].get(people), list):
                 ev[key] = {**ev[key], people: [{**f, "portrait": self._face(f.get("portrait") or "")} for f in ev[key][people]]}
         return ev
+
+    def _failed(self, what: str, exc: BaseException) -> None:
+        """A failure the table is told of in plain words: what it was goes to the host's log and the
+        debug journal, never to the players' screens."""
+        log.warning("%s未能完成：%s: %s", what, type(exc).__name__, exc)
+        self.game._debug("lan", {"phase": "failed", "what": what, "error": f"{type(exc).__name__}: {exc}"[:300]})
 
     def _save(self) -> None:
         from ..tui.library import write_save

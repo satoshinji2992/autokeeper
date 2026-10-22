@@ -19,7 +19,7 @@ In play every deck is optional: without imported decks nothing changes.
 
     madness   a bout or an indefinite insanity draws a card (Game._madness)
     mishap    the arbiter may pick one for a failed check or a bad night (Failure.mishap, Ruling.mishap)
-    weapon    weapon_in(text): the card that names a weapon, for the rules' catalog (rules/weapons.py)
+    weapon    read and kept with the others; play does not deal it (rules/weapons.py has its own catalog)
     npc       the director may base a person it improvises on one (NewNPC.card, dress())
 """
 
@@ -134,13 +134,12 @@ class Decks(BaseModel):
 
 
 class Drawn(BaseModel):
-    """A card dealt in a game (GameState.drawn): to whom, at which turn, and whether it still holds."""
+    """A card dealt in a game (GameState.drawn): to whom, and at which turn."""
 
     deck: Deck
     card: str
     who: str  # investigator id
     turn: int = 0
-    over: bool = False
 
 
 # -- reading the PDFs ----------------------------------------------------------------------------
@@ -690,13 +689,15 @@ def deal_mishap(state: GameState, inv: Investigator, card_id: str, rules: Rules,
 
 def mishap_note(inv: Investigator, dealt: Mishap) -> str:
     done = f"已结算：{'；'.join(dealt.lines)}。" if dealt.lines else ""
-    return (f"惨事卡〔{dealt.card.name}〕落在{inv.name}身上。{done}卡面全文（其余效果由守秘人照此演出，"
-            f"持续的效果之后仍然有效）：{dealt.card.text}")
+    return f"惨事卡〔{dealt.card.name}〕落在{inv.name}身上。{done}卡面全文（其余效果由守秘人照此演出）：{dealt.card.text}"
 
 
 # -- what holds on an investigator, for the arbiter ----------------------------------------------
 def standing(state: GameState, inv: Investigator) -> str:
-    """The phobias, manias and lasting mishaps on this investigator, with what they do to checks."""
+    """The phobias and manias on this investigator's sheet, with what they do to checks. A mishap is
+    not among them: what it does at once the engine settles (deal_mishap), the rest of its card the
+    keeper plays out when it is dealt (mishap_note). Nothing marks when a card's 「直到……」 is over,
+    so the arbiter is not handed it every turn for the rest of the game (the review of 2026-10-22)."""
     decks = load()
     if decks is None:
         return ""
@@ -704,45 +705,7 @@ def standing(state: GameState, inv: Investigator) -> str:
     for name in held(inv):
         card = next((c for c in decks.madness if c.name == name), None)
         rows.append(f"- {name}：{card.effect if card else '（无卡面）'}")
-    for d in getattr(state, "drawn", []):
-        if d.who == inv.id and d.deck == "mishap" and not d.over and isinstance(card := decks.find(d.card), MishapCard):
-            if re.search(r"一直持续|每天|每次|直到|从现在起|从此以后", card.text):
-                rows.append(f"- 惨事〔{card.name}〕（第 {d.turn} 轮起）：{card.text}")
-    return f"【{inv.name}身上的恐惧症、躁狂症与惨事】按卡面裁定（惩罚骰、难度）：\n" + "\n".join(rows) if rows else ""
-
-
-# -- weapons -----------------------------------------------------------------------------------
-_NAME_NOISE = re.compile(r"[（(][^）)]*[）)]|\s|-")
-
-
-def _key(text: str) -> str:
-    return _NAME_NOISE.sub("", text.replace("（", "(").replace("）", ")"))
-
-
-def weapon_in(text: str) -> WeaponCard | None:
-    """The weapon card a line names ("一把.45 自动手枪" is the .45 自动手枪 card), the longest name
-    first; None without decks or a match. For the rules' weapon catalog (rules/weapons.py) to
-    consult where a weapon is missing from it or differs; artifacts are not weapons."""
-    decks = load()
-    if decks is None or not text:
-        return None
-    plain = _key(text)
-    best: WeaponCard | None = None
-    for card in decks.weapon:
-        if card.used_by or not card.skill:
-            continue
-        key = _key(card.name)
-        if key and key in plain and (best is None or len(key) > len(_key(best.name))):
-            best = card
-    return best
-
-
-def weapon(name: str) -> WeaponCard | None:
-    """A weapon card by its exact name or id."""
-    decks = load()
-    if decks is None:
-        return None
-    return next((c for c in decks.weapon if name in (c.id, c.name) or _key(name) == _key(c.name)), None)
+    return f"【{inv.name}身上的恐惧症与躁狂症】按卡面裁定（惩罚骰、难度）：\n" + "\n".join(rows) if rows else ""
 
 
 # -- ready-made people --------------------------------------------------------------------------

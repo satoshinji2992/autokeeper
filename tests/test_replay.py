@@ -11,6 +11,13 @@ Re-record after a deliberate change to the game's flow:
 The fixture's three redundant keeper replies after dialogue-only turns were removed
 offline when those calls were eliminated; the remaining replies, dice and final state
 are unchanged. This is a migrated recording, not a fresh model playtest.
+
+Migrated again by hand on 2026-10-22, when the old-tape fallbacks went (no plain-text AI
+investigator, no bare "push", no default improvisation level): a meta line (严格, as it was
+played), each investigator reply in the Proposal shape (text and push), the one push it
+made said as a way of pushing, and the arbiter's review of that push (agent "repush": it can
+be done, in one minute, the failure as ruled before). The minute is the only change to the
+final state (890 → 891); the dice and every other reply are as recorded.
 """
 
 from __future__ import annotations

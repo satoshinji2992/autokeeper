@@ -104,6 +104,7 @@ class Turn:
     declared: bool = False  # a LAN round's order, settled with the others' by the last of them
     replies: dict[str, Said] = field(default_factory=dict)  # each NPC reply's receipt, by what asked for it (Game._reply)
     voices: list[str] = field(default_factory=list)  # NPCs the keeper plan has speak in this round of an encounter (Game.talk)
+    narrating: dict = field(default_factory=dict)  # the stages narrate settles before the keeper speaks (Game._foreshadow)
 
     def absorb(self, later: Turn) -> None:
         """What another stage of the same turn settled (the replies before the ruling, the push
@@ -542,8 +543,6 @@ class Game(Encounters):
         brief = views.keeper_text(self)
         asked = Action(kind="other", summary=action.summary)
         arbiter = self.cast.arbiter
-        if not _takes(arbiter, "encounter"):
-            return await arbiter(self.state, asked)
         ruling = await arbiter(self.state, asked, encounter=brief)
         enc = self.encounter()
         known = {p.id for p in enc.participants} if enc is not None else set()
@@ -1148,9 +1147,13 @@ class Game(Encounters):
                                                                                turn))
             if notice:
                 await step("fail-damage-notice", turn, lambda: self.emit(notice))
+        if failure.sanity:  # the SAN roll the failure calls for, settled as an event's or a clue's
+            notice = await step("fail-sanity", turn, lambda: self._lose_sanity(st.investigator, failure.sanity, turn))
+            await step("fail-sanity-notice", turn, lambda: self.emit(notice))
         mishap = await self._mishap(failure.mishap, turn, "fail-mishap") if failure.mishap.strip() else ""
         happened = [x for x in (failure.text.strip(), f"耽搁了 {failure.minutes} 分钟" if failure.minutes else "",
                                 f"{st.investigator.name}受了伤" if failure.damage.strip() else "",
+                                f"{st.investigator.name}的理智受到冲击" if failure.sanity else "",
                                 f"惨事卡〔{mishap}〕" if mishap else "") if x]
         if not missed and not happened:
             return  # the roll's card says it: nothing was within reach and nothing else came of it
@@ -1244,9 +1247,7 @@ class Game(Encounters):
                 staged = True
                 if applied["go"] and applied["go"] != st.location and any(x.id == applied["go"] for x in m.locations):
                     await step("idea-go", turn, lambda: self._arrive(applied["go"], turn, party=True))
-                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))
-                given = await step("idea-give", turn, lambda: self._valid_clues(applied["give"], None))
-                await step("idea-given", turn, lambda: self._gain(given, turn, None))
+                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))  # the clue is the engine's (idea-clue)
                 if applied["note"]:
                     await step("idea-staged", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
         await step("idea-clue", turn, lambda: self._gain([clue.id], turn, None))
@@ -1388,10 +1389,6 @@ class Game(Encounters):
             preparation = st.pending_turn.get("preparation", {})
             if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
                 turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
-            # A journal saved before the preparation kept a turn of its own: its lines and notes as they were.
-            turn.npc_lines += [tuple(row) for row in preparation.get("lines", [])]
-            turn.joined += [x for x in preparation.get("joined", []) if x not in turn.joined]  # stepped in (Game._step_in)
-            turn.notes += preparation.get("notes", [])
             if preparation.get("blocked"):
                 return False
             late, self._late = self._late, Turn()
@@ -1501,6 +1498,7 @@ class Game(Encounters):
                                      "risk": ruling.on_push_fail.text.strip(),  # said before the choice (7e)
                                      "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
                                      "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
+                                     "tells": self._asks(action, turn),  # who tells what the push wins (_spoken)
                                      "action": action.summary}
                         st.pending_push = turn.push
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
@@ -1520,7 +1518,7 @@ class Game(Encounters):
             gained = self._valid_clues(ruling.auto_clues, action)
             if passed:
                 gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
-            spoken = self._spoken(gained, action)  # the one talked to tells these, in their own time (talk)
+            spoken = self._spoken(gained, self._asks(action, turn))  # the one talked to tells these, in their own time (talk)
             gained = [c for c in gained if c not in spoken]
             return {"known": list(st.flags), "gained": gained[: MAX_FOUND if action.target else 1], "spoken": spoken}
 
@@ -1630,8 +1628,7 @@ class Game(Encounters):
     async def push(self, choice: str | dict) -> Turn:
         """Resume the saved choice without paying luck or rolling its push twice. `choice` is "luck" or
         "drop", or {"choice": "push", "how": "..."}: a push the player said how to make (Keeper
-        Rulebook p. 73), ruled again once before it is rolled (_method); a bare "push" (push_choice) is
-        rolled as offered."""
+        Rulebook p. 73), ruled again once before it is rolled (_method)."""
         mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
@@ -1705,7 +1702,7 @@ class Game(Encounters):
         st, step = self.state, self._resolution_step
         inv, npc = st.investigator, pending.get("npc", "")
         lucky = mode == "luck" and pending.get("luck") is not None
-        if mode == "push" and how:
+        if mode == "push":  # a push says how it is made (push_choice), ruled again first
             method = await step("method", turn, lambda: self._method(pending, how))
 
             def told() -> None:
@@ -1744,7 +1741,7 @@ class Game(Encounters):
         await step("check-notice", turn, lambda: self.emit(checked["notice"]))
         if passed:
             await step("flags", turn, lambda: self._flags(pending.get("flags", []), turn))
-            spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], turn.action, npc))
+            spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], pending.get("tells", "")))
             await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
         else:  # what was said before the choice now happens (Failure, Ruling.on_push_fail)
             await self._failed(Failure.model_validate(pending.get("on_push_fail") or {}), pending["clues"], turn, None, pushed=True)
@@ -1761,14 +1758,9 @@ class Game(Encounters):
     async def _method(self, pending: dict, how: str) -> dict:
         """The arbiter's word on how a push is made (Cast.repush, one call): can the goal still be
         reached this way, the skill and difficulty for it (unchanged unless the situation changed),
-        the time it takes, and what failing it this way brings. Without an arbiter for it (a scripted
-        cast), the push goes as offered and takes PUSH_MINUTES."""
-        out = {"achievable": True, "why": "", "minutes": PUSH_MINUTES, "pending": {}}
-        ask = getattr(self.cast, "repush", None)
-        if ask is None:
-            return out
-        r = await ask(self.state, pending, how)
-        out.update(achievable=r.achievable, why=r.why.strip(), minutes=max(1, min(r.minutes, ACT_CAP)))
+        the time it takes (time always passes, Keeper Rulebook p. 73), and what failing it this way brings."""
+        r = await self.cast.repush(self.state, pending, how)
+        out: dict = {"achievable": r.achievable, "why": r.why.strip(), "minutes": max(1, min(r.minutes, ACT_CAP)), "pending": {}}
         changed: dict = {}
         skill = canonical(r.skill) if r.skill.strip() else pending["skill"]
         if skill != pending["skill"]:
@@ -1803,20 +1795,14 @@ class Game(Encounters):
             await self._people()
             self._keep(turn)
             return
-        speaking = (action and action.npc and (action.kind in ("talk", "perform")
-                    or (action.kind == "daily" and (action.speech or action.casual))))
-        if action and action.destination and not action.speech and action.npc in action.companions:
-            speaking = False  # the invitation was already resolved before departure
-        if action and action.approach == "心理学" and not action.speech:
-            speaking = False  # watching someone's demeanour does not start a conversation
-        if speaking:
-            key = f"talk:{action.npc}"
-            if key not in turn.replies and any(nid == action.npc for nid, _ in turn.npc_lines):
+        if addressed := self._addressed(action):
+            key = f"talk:{addressed}"
+            if key not in turn.replies and any(nid == addressed for nid, _ in turn.npc_lines):
                 pass  # answered already this turn (stepping in, before the journey): never asked the same thing twice
-            elif key not in turn.replies and not any(n.id == action.npc for n in m.npcs_at(st.location)):
-                turn.notes.append(f"{action.npc} 不在这里")
+            elif key not in turn.replies and not any(n.id == addressed for n in m.npcs_at(st.location)):
+                turn.notes.append(f"{addressed} 不在这里")
             else:
-                npc = m.npc(action.npc)
+                npc = m.npc(addressed)
                 await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id)),
                                   self._keep, record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…")
         await self._join_in(turn)
@@ -1833,6 +1819,22 @@ class Game(Encounters):
         await self._world(turn)
         await self._people()
         self._keep(turn)
+
+    @staticmethod
+    def _addressed(action: Action | None) -> str:
+        """The one talk() asks this turn: the NPC an action speaks to (a talk, a performance, a daily
+        word with them). Nobody when it only watches them (心理学 without a word), only invites them
+        along (settled before the journey) or is a daily action that says nothing: then what the
+        turn finds about them is found, not told (_spoken)."""
+        if action is None or not action.npc:
+            return ""
+        if not (action.kind in ("talk", "perform") or (action.kind == "daily" and (action.speech or action.casual))):
+            return ""
+        if action.destination and not action.speech and action.npc in action.companions:
+            return ""  # the invitation was already resolved before departure
+        if action.approach == "心理学" and not action.speech:
+            return ""  # watching someone's demeanour does not start a conversation
+        return action.npc
 
     def _keep(self, turn: Turn) -> None:
         """The turn as it stands, saved where its caller keeps it (graph.build's keep)."""
@@ -1926,7 +1928,7 @@ class Game(Encounters):
     def _unsettled(self, npc_id: str) -> list[str]:
         """What an NPC's last reply meant to do and could not (agents/cast.Cast.unsettled): the
         words stand, the deed did not land, and the keeper tells how it really went."""
-        failed = getattr(self.cast, "unsettled", {}).pop(npc_id, [])
+        failed = self.cast.unsettled.pop(npc_id, [])
         if not failed:
             return []
         name = self.m.npc(npc_id).name
@@ -1953,7 +1955,7 @@ class Game(Encounters):
             line = await ask()
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
             # and its receipt, kept below with the words.
-            told = getattr(self.cast, "told", {}).pop(npc_id, [])
+            told = self.cast.told.pop(npc_id, [])
             said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told))
             if kind == "performance":
                 turn.performance = (npc_id, line)
@@ -1987,19 +1989,33 @@ class Game(Encounters):
         counts as coming to it. A roll that failed and found nothing keeps them back: a trace on
         the very thing they searched is what the failure did not find. They come out on a later
         visit. A stage's flag is set as it shows, so the place's picture changes with it; the
-        picture of the stage after it is drawn meanwhile, in the background."""
-        st = self.state
-        missed = not turn.clues and not turn.events and (
-            any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
-        if turn.ruling is not None and turn.ruling.rest:
-            turn.foreshadow += signs.at(self.m, st, st.location)
-        handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
-        turn.foreshadow = []
-        turn.notes += [note for _, note, _ in handed]
-        if flags := [s.flag for _, _, s in handed if s.flag]:
-            await self._flags(flags, turn)
-            self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
-        self.visuals.ahead(signs.coming(self.m, st, [fid for fid, _, _ in handed]))  # there by the next step
+        picture of the stage after it is drawn meanwhile, in the background. Handed out in a stage
+        of the turn's own journal (Turn.narrating), kept with the turn before the keeper is asked:
+        a telling that failed and is tried again (/retry) tells the same hint, and the sign does
+        not move on twice (the review of 2026-10-22)."""
+        st, step = self.state, self._resolution_step
+
+        def hand() -> list[list[str]]:
+            missed = not turn.clues and not turn.events and (
+                any(not c.passed for c in turn.checks) or (turn.earlier is not None and not turn.earlier.passed))
+            if turn.ruling is not None and turn.ruling.rest:
+                turn.foreshadow += signs.at(self.m, st, st.location)
+            handed = [] if missed else signs.hand(self.m, st, turn.foreshadow)
+            turn.foreshadow = []
+            turn.notes += [note for _, note, _ in handed]
+            return [[fid, s.flag] for fid, _, s in handed]
+
+        async def foreshadow() -> None:
+            handed = await step("hand", turn, hand)
+            if flags := [flag for _, flag in handed if flag]:
+                await self._flags(flags, turn)
+                self.visuals.schedule()  # a picture drawn for the change (Location.looks) shows with this telling
+            self.visuals.ahead(signs.coming(self.m, st, [fid for fid, _ in handed]))  # there by the next step
+
+        # Kept with the turn the graph is telling; an interlude's or a sketch's telling is no turn of the graph's.
+        keep = self._keep if self.state.pending_turn else (lambda _turn: None)
+        with self._journal(turn.narrating, keep):
+            await step("foreshadow", turn, foreshadow)
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
@@ -2186,6 +2202,18 @@ class Game(Encounters):
             await step(f"{key}-notice:{index}", turn, lambda notice=notice: self.emit(notice))
         return done["name"]
 
+    def _lose_sanity(self, inv: Investigator, roll: str, turn: Turn) -> dict[str, Any]:
+        """A SAN roll (`roll`: "0/1D3", what passing and what failing it costs) settled for `inv`: the
+        loss, any madness and its card, in the log and the turn. The notice for the screens. Called in
+        a resolution stage, so a turn resumed after a crash does not roll or lose it again."""
+        ok, bad = roll.split("/")
+        trial = inv.model_copy(deep=True)
+        sanity = self.rules.sanity(trial, ok, bad)
+        inv.__dict__.update(trial.__dict__)
+        turn.sanity.append((inv.name, sanity))
+        self.state.add("sanity", sanity.describe(), who=inv.name)
+        return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+
     def _madness(self, inv: Investigator, s: Sanity, turn: Turn) -> dict[str, Any]:
         """The phobia deck's card for this madness (cards.for_sanity): on the sheet, in the keeper's
         notes, shown with the SAN result. Nothing without imported decks."""
@@ -2296,20 +2324,40 @@ class Game(Encounters):
 
         await step(f"arrive:{loc_id}", turn, arrive)
 
-    def _spoken(self, ids: list[str], action: Action | None, npc: str = "") -> list[str]:
-        """Of the clues a ruling gives, those the person being talked to knows: not handed over
-        as a card the moment the subject comes up, but left to them to tell, a piece at a time in
-        their own words (Cast.npc, Dialogue.told); the card comes when they have said it (_reply).
-        The user, 2026-10-21: the gossip came as a card while the cook was still asking who died."""
+    def _spoken(self, ids: list[str], npc: str) -> list[str]:
+        """Of the clues a ruling gives, those the one talk() asks this turn (`npc`, _asks) knows: not
+        handed over as a card the moment the subject comes up, but left to them to tell, a piece at a
+        time in their own words (Cast.npc, Dialogue.told); the card comes when they have said it
+        (_reply). The user, 2026-10-21: the gossip came as a card while the cook was still asking who
+        died. Nobody asked, nothing is held back: a passed roll on someone talk() does not ask gives
+        its clue as found (the review of 2026-10-22: 有些人油盐不进's c_fitz_talk, a 心理学 roll that
+        passed, came to nothing). Nor what their manner gives away (a 心理学 gate): the investigator
+        sees it, nobody tells it, a paper is handed over."""
         st, m = self.state, self.m
-        npc = npc or (action.npc if action and action.kind in ("talk", "daily", "perform") else "")
-        if not npc or not any(n.id == npc for n in m.npcs_at(st.location)):
+        if not npc:
             return []
         sheet = m.npc(npc)
-        spoken = [c for c in ids if (m.clue(c).npc == npc or c in sheet.clues) and not m.clue(c).handout]  # a paper is handed over
+
+        def told(cid: str) -> bool:
+            clue = m.clue(cid)
+            gate = sheet.gates.get(cid) or clue.check
+            observed = gate is not None and canonical(gate.skill) == "心理学"
+            return (clue.npc == npc or cid in sheet.clues) and not clue.handout and not observed
+
+        spoken = [c for c in ids if told(c)]
         unlocked = st.npc(npc).unlocked
         unlocked += [c for c in spoken if c not in unlocked]  # theirs to tell from now on
         return spoken
+
+    def _asks(self, action: Action | None, turn: Turn) -> str:
+        """Whom talk() asks this turn, as the turn stands: the one addressed (_addressed), here, and
+        not already answered this turn (stepping in, before the journey); "" for nobody."""
+        npc = self._addressed(action)
+        if not npc or not any(n.id == npc for n in self.m.npcs_at(self.state.location)):
+            return ""
+        if f"talk:{npc}" not in turn.replies and any(nid == npc for nid, _ in turn.npc_lines):
+            return ""
+        return npc
 
     def _told_clues(self, npc_id: str, ids: list[str]) -> list[str]:
         """Of the clues a reply told (Dialogue.told), those for the notebook: ones it may tell (unlocked,
@@ -2607,15 +2655,7 @@ class Game(Encounters):
             st.add("event", ev.read_aloud.strip() or ev.title)
 
         def sanity_for(inv: Investigator) -> dict | None:
-            if not inv.can_act:
-                return None
-            ok, bad = ev.sanity.split("/")
-            trial = inv.model_copy(deep=True)
-            sanity = self.rules.sanity(trial, ok, bad)
-            inv.__dict__.update(trial.__dict__)
-            turn.sanity.append((inv.name, sanity))
-            st.add("sanity", sanity.describe(), who=inv.name)
-            return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+            return self._lose_sanity(inv, ev.sanity, turn) if inv.can_act else None
 
         def damage() -> dict | None:
             notice = self._wound_event(st.investigator.id, ev.damage or "", f"event:{ev.id}:{st.turn}", turn)
@@ -3122,7 +3162,6 @@ NOWHERE = (
     "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
 )
 STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
-PUSH_MINUTES = 10  # what a push made a stated way takes when no arbiter rules it (time always passes, p. 73)
 PUSH_HOW = 200  # characters of a push's stated way that are kept
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
 ACT_CAP = 180  # minutes one action may take
@@ -3182,14 +3221,15 @@ def _threshold(target: int, difficulty: str) -> int:
 
 def push_choice(value: Any) -> tuple[str, str]:
     """A push offer's answer as (mode, how): "luck" or "drop", or {"choice": "push", "how": ...} (Keeper
-    Rulebook p. 73). A bare "push" comes only from replaying a game recorded before pushes were said
-    (engine/autoplay, an unstated tape): the screens and the LAN table always say how."""
+    Rulebook p. 73): a push always says how it is made."""
     if isinstance(value, dict):
         mode, how = str(value.get("choice", "")), " ".join(str(value.get("how") or "").split())[:PUSH_HOW]
     else:
         mode, how = str(value), ""
     if mode not in ("push", "luck", "drop"):
         raise ValueError("请选择孤注一掷、花费幸运或放弃")
+    if mode == "push" and not how:
+        raise ValueError("孤注一掷要写明怎样做")
     return mode, how if mode == "push" else ""
 
 

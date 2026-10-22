@@ -188,7 +188,7 @@ def test_without_imported_decks_nothing_changes(inv, rules, fake):
     fake.queue(99)
     s = madness(rules, inv, fake, indefinite=True)
     assert cards.load() is None and cards.for_sanity(state, inv, s) is None
-    assert cards.arbiter_context(state, inv) == "" and cards.npc_menu("警察") == "" and cards.weapon_in(".32 左轮手枪") is None
+    assert cards.arbiter_context(state, inv) == "" and cards.npc_menu("警察") == ""
 
 
 def test_an_indefinite_insanity_puts_a_phobia_or_mania_on_the_sheet(deck, inv, rules, fake):
@@ -224,20 +224,15 @@ def test_a_mishap_settles_what_it_does_at_once(deck, inv, rules, fake):
     dealt = cards.deal_mishap(state, inv, "ill_luck", rules)
     assert inv.luck == 27 and dealt.lines == ["陈墨幸运 55 → 27"]
     assert "噩运" in cards.mishap_note(inv, dealt) and "当前幸运减半" in cards.mishap_note(inv, dealt)
-    assert "惨事〔噩运〕" in cards.standing(state, inv)  # it lasts: the arbiter keeps seeing it
+    # Settled at once; the rest of the card is the keeper's to play out. Nothing says when 「一直持续」 is
+    # over, so it does not sit in the arbiter's context for the rest of the game (the review of 2026-10-22).
+    assert "噩运" not in cards.standing(state, inv) and "持续的效果" not in cards.mishap_note(inv, dealt)
     fake.queue(99).queue_totals(3)
     rain = cards.deal_mishap(state, inv, "red_rain", rules)
     assert rain.sanity is not None and rain.sanity.loss == 3
     assert cards.deal_mishap(state, inv, "no_such_card", rules) is None
     menu = cards.mishap_menu()
     assert "- ill_luck〔噩运〕命运和你作对。" in menu and "red_rain" in menu
-
-
-def test_a_weapon_card_is_found_by_the_name_a_line_gives(deck):
-    assert cards.weapon_in("一把 .32 左轮手枪，上了膛").id == "weapon01"  # the longest name first
-    assert cards.weapon_in("一把旧左轮").id == "weapon02"
-    assert cards.weapon_in("米-戈网状装甲") is None  # an artifact is not a weapon
-    assert cards.weapon(".32 左轮手枪").damage == "1D8"
 
 
 def test_the_director_may_base_a_new_person_on_a_ready_made_card(deck):
@@ -276,7 +271,7 @@ async def test_a_failed_push_can_deal_a_mishap(deck, fake):
     fake.queue(99)
     await game.resolve(look, ruling)
     fake.queue(99)
-    pushed = await game.push("push")
+    pushed = await game.push({"choice": "push", "how": "硬掰卡住的齿轮"})
     assert game.state.investigator.luck == luck // 2
     card = next(e for e in events if e["type"] == "card")
     assert card["name"] == "噩运" and card["who"] == game.state.investigator.name

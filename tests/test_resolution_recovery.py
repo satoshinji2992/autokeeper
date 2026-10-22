@@ -307,14 +307,17 @@ async def test_damage_tool_receipt_does_not_reroll_damage_if_constitution_check_
     await resumed.close()
 
 
-@pytest.mark.parametrize("choice", ["push", "luck", "drop"])
+PUSH = {"choice": "push", "how": "把那一年的合订本一页页翻完"}  # FakeCast.repush: it can be done, in ten minutes
+
+
+@pytest.mark.parametrize("choice", [PUSH, "luck", "drop"])
 async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regaining(module, fake, choice):
     action = Action(kind="investigate", summary="查旧报", target="旧报合订本")
     # A failure the module lets find the paper at a price: what giving up settles, and resumes.
     ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3,
                     on_fail=Failure(text="翻到天黑才找着", clues=["c_archive"], minutes=20))
     fake.queue(65)
-    if choice == "push":
+    if choice == PUSH:
         fake.queue(5)
     game, _, _ = make(module, fake, {}, "office")
     saved = snapshots(game)
@@ -341,19 +344,19 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     assert resumed.state.clues == turn.clues == ["c_archive"]
     assert sum(entry.kind == "clue" for entry in resumed.state.log) == 1
     assert resumed.state.investigator.luck == luck - (5 if choice == "luck" else 0)
-    assert resumed.state.minutes == start + (20 if choice == "drop" else 0)
-    assert len(turn.checks) == (1 if choice == "push" else 0)
+    assert resumed.state.minutes == start + (10 if choice == PUSH else 20 if choice == "drop" else 0)  # a push takes its own time
+    assert len(turn.checks) == (1 if choice == PUSH else 0)
     assert not fake.values and not resumed.state.pending_resolution
     await game.close()
     await resumed.close()
 
 
-@pytest.mark.parametrize("choice", ["push", "luck"])
+@pytest.mark.parametrize("choice", [PUSH, "luck"])
 async def test_graph_restores_push_choice_and_merges_its_turn_once_after_json_reload(module, fake, choice):
     action = Action(kind="investigate", summary="查旧报", target="旧报合订本")
     ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3)
     fake.queue(65)
-    if choice == "push":
+    if choice == PUSH:
         fake.queue(5)
     game, _, _ = make(module, fake, {"查旧报": (action, ruling)}, "office")
     saved = snapshots(game)
@@ -413,3 +416,42 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
     assert len(offers) == 1 and resumed.state.idea_offer == 20
     await game.close()
     await resumed.close()
+
+
+async def test_a_push_that_fails_with_a_sanity_cost_takes_it_once_even_when_resumed(module, fake):
+    """PUSH_SYSTEM names 理智损失 among a failed push's consequences: Failure.sanity is that SAN roll,
+    settled as an event's (Game._lose_sanity), in its own stage: resumed after a broken connection,
+    it is neither rolled nor lost again."""
+    action = Action(kind="investigate", summary="查旧报", target="旧报合订本")
+    ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=3,
+                    on_push_fail=Failure(text="翻到一张不该看的照片", sanity="1/1D4"))
+    fake.queue(65, 95, 99).queue_totals(3)  # the check fails, the push fails, the SAN roll fails: 1D4 = 3
+    game, _, _ = make(module, fake, {}, "office")
+    saved = snapshots(game)
+    await game.resolve(action, ruling)
+    san = game.state.investigator.san
+
+    async def broken(event: dict) -> None:
+        if event["type"] == "sanity":
+            raise ConnectionError("disconnected after the SAN roll")
+
+    game.emit = broken
+    with pytest.raises(ConnectionError):
+        await game.push(PUSH)
+    assert game.state.investigator.san == san - 3
+    resumed, events = reload_game(module, saved[-1], fake)  # no dice left: a second roll would fail
+    turn = await resumed.push(PUSH)
+    assert resumed.state.investigator.san == san - 3 and [s.loss for _, s in turn.sanity] == [3]
+    assert sum(entry.kind == "sanity" for entry in resumed.state.log) == 1
+    assert [e["type"] for e in events].count("sanity") == 1  # the notice the connection lost, shown now
+    assert any("理智受到冲击" in note for note in turn.notes)
+    assert not fake.values and not fake.totals and not resumed.state.pending_resolution
+    await game.close()
+    await resumed.close()
+
+
+def test_a_failures_sanity_cost_is_written_as_the_book_writes_it():
+    assert Failure(sanity="０/１Ｄ６").sanity == "0/1D6"
+    for bad in ("1D3", "0/1D6+DB", "掉一点理智"):
+        with pytest.raises(ValueError):
+            Failure(sanity=bad)

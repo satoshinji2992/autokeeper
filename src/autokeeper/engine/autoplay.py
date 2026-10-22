@@ -21,7 +21,7 @@ from langgraph.types import Command, Send
 from rich.console import Console
 
 from .. import config, paths, weather
-from ..agents.cast import Cast, Proposal
+from ..agents.cast import Cast
 from ..config import Role
 from ..harness import models as channels
 from ..harness import replay as tapes
@@ -50,8 +50,8 @@ def party_graph(cast: Cast, state: GameState):
 
     async def propose(ps: PartyState) -> dict:
         inv_id = ps["ids"][0]
-        move = Proposal.of(await cast.investigator(state, inv_id, ps["situation"]))
-        return {"proposals": [(inv_id, move.text, move.push)]}
+        move = await cast.investigator(state, inv_id, ps["situation"])
+        return {"proposals": [(inv_id, move.text, move.push)] if move is not None else []}  # none: no move this round
 
     g = StateGraph(PartyState)
     g.add_node("propose", propose)
@@ -206,17 +206,16 @@ async def run(
     slot = slot or f"auto-{m.id}-{time.strftime('%m%d-%H%M%S')}"
     trace.label_run(slot)
     state = Game.new(m, investigators, slot=slot, human=[])
-    recorder, stated = None, True
+    recorder = None
     if replay is not None:
         tape = tapes.cassette(replay)
         cfg = config.Config(roles={r: Role("replay", str(replay), None) for r in config.DEFAULT_ROLES}, preset="replay")
-        cfg.improv = tape.meta.get("improv", "严格")  # tapes from before improvisation were strict
-        stated = tape.meta.get("pushes") == "stated"  # tapes from before stated pushes pushed whenever allowed
+        cfg.improv = tape.meta["improv"]  # as it was recorded (Recorder meta)
         dice: Any = tapes.ReplayDice(tape)
     else:
         cfg, dice = config.load(), shared()
         if record is not None:
-            recorder = tapes.Recorder(record, meta={"improv": cfg.improv, "pushes": "stated"})
+            recorder = tapes.Recorder(record, meta={"improv": cfg.improv})
             dice = tapes.RecordingDice(dice, recorder)
     cfg.imagegen = cfg.showcase = False  # no screen to show a picture on, and a replay calls nothing at all
     cast = Cast(cfg, m)
@@ -271,6 +270,9 @@ async def run(
             if not alive:
                 break
             result = await party_app.ainvoke({"situation": situation(m, state), "ids": alive, "proposals": []})
+            if not result["proposals"]:  # nobody gave a move it could play (Cast.investigator): the run stops here
+                console.print("[yellow]AI 调查员本轮均未给出有效行动，自动游玩停止。[/]")
+                break
             for inv_id, text, push in result["proposals"]:
                 if state.ending or state.turn >= max_turns:
                     break
@@ -287,8 +289,7 @@ async def run(
                             offer = chunk["__interrupt__"][0].value
                     if offer is None:
                         break
-                    inp = Command(resume=ai_choice(offer, push) if stated else "push" if offer.get("can_push")
-                                  else "luck" if offer.get("luck") is not None else "drop")
+                    inp = Command(resume=ai_choice(offer, push))
                 game.emit = emit
     finally:
         channels.listeners.remove(fell_back)

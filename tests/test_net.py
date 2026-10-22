@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from typing import Any
 
 import aiohttp
@@ -10,7 +12,7 @@ import pytest
 
 import autokeeper
 from autokeeper import paths
-from autokeeper.agents.cast import Action, Ruling
+from autokeeper.agents.cast import Action, Proposal, PushRuling, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
@@ -27,13 +29,18 @@ class TableCast:
 
     def __init__(self) -> None:
         self.ai_turns: list[str] = []
+        self.told: dict[str, list[str]] = {}  # as Cast.told and Cast.unsettled: nothing told, nothing left undone
+        self.unsettled: dict[str, list[str]] = {}
 
     async def intent(self, state, text):
         return Action(kind="investigate", summary=f"{state.investigator.name}：{text}")
 
-    async def arbiter(self, state, action, at=None):
+    async def arbiter(self, state, action, at=None, *, encounter="", problems=None):
         board = "告示栏" in action.summary and "c_notice" not in state.clues
         return Ruling(needs_roll=False, minutes=5, auto_clues=["c_notice"] if board else [])
+
+    async def repush(self, state, pending, how):
+        return PushRuling(achievable=True, minutes=10)
 
     async def keeper(self, state, report, on_delta=None, lore=""):
         if on_delta:
@@ -45,7 +52,7 @@ class TableCast:
 
     async def investigator(self, state, inv_id, situation):
         self.ai_turns.append(inv_id)
-        return "我四下看看"
+        return Proposal(text="我四下看看")
 
     async def chronicle(self, state, entries):
         return "摘要"
@@ -439,6 +446,97 @@ async def test_private_rulings_flags_and_pending_clues_never_reach_a_client(fake
     await hub.game.close()
 
 
+async def test_a_lan_view_holds_no_keeper_report_true_name_or_unfound_ids(fake):
+    """The review of 2026-10-22: a round's held reports (the keeper's whole report, 【称呼】 and all), the
+    foreshadowing handed out, the failures' clue, flag and mishap ids inside a pending push, what an
+    NPC may tell before it is found, and NPCs and things the players do not know reached every seat."""
+    from autokeeper.agents.cast import Failure
+
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    st = hub.state
+    st.held = [{"turn": 1, "who": "周衡", "report": "【称呼】守钟人（玩家所见：楼梯口打盹的老人）。真相：钟里的东西"}]
+    st.signs = {"f_bell_secret": 1}
+    st.ongoing = "守钟人悄悄把日记塞回柜底"
+    st.expanded = {"tower": 1}
+    fail = Failure(text="弄出了响动", clues=["c_hidden_fail"], flags=["f_hidden"], mishap="mishap07").model_dump()
+    st.pending_push = {"skill": "侦查", "target": 50, "need": 50, "difficulty": "常规", "bonus": 0, "can_push": True,
+                       "luck": None, "left": 40, "risk": "弄出了响动", "value": 77, "action": "周衡翻柜子",
+                       "clues": ["c_hidden_win"], "flags": ["f_win"], "on_fail": fail, "on_push_fail": fail,
+                       "npc": "warden", "tells": "warden"}
+    st.npc("warden").unlocked = ["c_diary"]  # his to tell, not yet told
+    st.npc("warden").met = True
+    st.npc("hidden_cultist").met = False
+    st.item_owners = {"i_secret_key": "warden"}
+    view = hub._view()
+    text = json.dumps(view, ensure_ascii=False)
+    for secret in ("【称呼】", "钟里的东西", "f_bell_secret", "柜底", "c_hidden_fail", "f_hidden", "mishap07",
+                   "c_hidden_win", "c_diary", "hidden_cultist", "i_secret_key"):
+        assert secret not in text, secret
+    assert view["pending_push"] == {k: v for k, v in st.pending_push.items() if k in
+                                    ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")}
+    assert "held" not in view and "signs" not in view and view["npcs"]["warden"]["unlocked"] == []
+    st.clues.append("c_diary")
+    assert hub._view()["npcs"]["warden"]["unlocked"] == ["c_diary"]  # found: the table knows it
+    await hub.game.close()
+
+
+async def test_the_parsed_action_stays_on_the_host(fake):
+    """In a fight the parsed action carries the keeper's plan for every foe (declared.plan): no screen reads it."""
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    sent: list[dict] = []
+
+    async def collect(msg):
+        sent.append(msg)
+
+    hub._broadcast = collect
+    await hub._event({"type": "action", "kind": "other", "declared": {"plan": {"npcs": [{"who": "warden", "goal": "逃走"}]}}})
+    assert not sent
+    await hub.game.close()
+
+
+async def test_sitting_down_elsewhere_while_asked_does_not_hang_the_table(fake):
+    """The review of 2026-10-22: a seat left for another was freed without a word to whoever waited on it,
+    as a dropped connection gives one (an empty answer: the default stands)."""
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, friend], slot="lan-switch", human=[lead.id, "lin"])
+    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
+    hub.sits[lead.id] = "c1"
+    asked = asyncio.create_task(hub._ask(lead.id, "c1", {"kind": "push", "can_push": True}, timed=False))
+    await asyncio.sleep(0.05)
+    assert hub.asking[lead.id] and not asked.done()
+    await hub._sit("c1", "lin")
+    assert await asyncio.wait_for(asked, 1) is None
+    assert hub.sits == {lead.id: None, "lin": "c1"} and lead.id not in hub.asking
+    await hub.game.close()
+
+
+async def test_an_ai_seat_with_no_action_to_play_makes_no_move(fake):
+    """Cast.investigator answers None when, sent back once, the model still gave no action: the seat
+    makes no move this round and the table is told so; nothing is made up for it (the review of
+    2026-10-22: 「我四下看看。」 was played in its place)."""
+
+    class Blank(TableCast):
+        async def investigator(self, state, inv_id, situation):
+            self.ai_turns.append(inv_id)
+            return None
+
+    hub = Hub(EXAMPLE, seats=["AI"], cast=Blank(), rules=Rules(dice=fake))
+    sent: list[dict] = []
+
+    async def collect(msg):
+        sent.append(msg)
+
+    hub._broadcast = collect
+    turn = hub.state.turn
+    await hub._ai_turn(hub.state.investigators[0])
+    said = [m["text"] for m in sent if m["t"] == "say"]
+    assert said == [f"{hub.state.investigators[0].name}本轮未行动。"] and hub.state.turn == turn
+    assert not any(m["t"] == "event" and m["ev"]["type"] == "said" for m in sent)
+    await hub.game.close()
+
+
 async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
 
@@ -465,6 +563,7 @@ async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_pa
         await ws.send_json({"t": "done"})
         error = await until(ws, lambda x: x["t"] == "error")
         assert error["retry"] and st.pending_turn and st.turn == 1
+        assert error["text"] == "本回合未能完成，输入 /retry 继续；已结算的结果保留。"  # the error's class stays in the host's log
         minute = st.minutes
         await ws.send_json({"t": "act", "text": "/retry"})
         await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
@@ -571,13 +670,13 @@ async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next
         await a.send_json({"t": "act", "text": "我四下看看"})
         await a.send_json({"t": "done"})
         note = await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"])
-        assert "没能讲完" in note["text"] and not hub.state.pending_turn  # let go, what settled stays
+        assert note["text"] == "林秋的回合未能完成，已结算的结果保留，游戏继续。" and not hub.state.pending_turn  # let go, what settled stays
         await until(a, pool_open)  # the room goes on
         cast.fail_ai = 1  # the AI cannot even think of a move this time
         await a.send_json({"t": "act", "text": "我看看告示栏"})  # the next action is not refused
         await a.send_json({"t": "done"})
         assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said"))["ev"]["text"] == "我看看告示栏"
-        assert "没有行动" in (await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"]))["text"]
+        assert (await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"]))["text"] == "林秋本轮未行动。"  # no ConnectionError on screen
         await until(a, pool_open)
         assert "c_notice" in hub.state.clues
         await a.close()
@@ -755,7 +854,11 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         assert [o["kind"] for o in offers["b"]] == ["roll"] and offers["b"][0]["seat"] == "lin"
         assert [o["kind"] for o in offers["a"]] == ["roll", "reaction"] or [o["kind"] for o in offers["a"]] == ["reaction", "roll"]
         reaction = next(o for o in offers["a"] if o["kind"] == "reaction")
-        assert reaction["closes_in"] and reaction["respond_id"] == reaction["id"]
+        assert reaction["closes_in"] and reaction["respond_id"]
+        # The engine's ids name who is in the fight (e1:r1:warden:0:react:0): the screens get the hub's own.
+        for offer in offers["a"] + offers["b"]:
+            assert not {"id", "receipt", "encounter"} & set(offer) and re.fullmatch(r"[0-9a-f]{12}", offer["respond_id"])
+        assert "action" not in [e["type"] for e in seen]  # the parsed action carries the keeper's plan for the warden
         assert notices and all("没有生效" in n or "已忽略" in n for n in notices)
         kinds = [e["type"] for e in seen]
         assert kinds.count("fight_round") == 1 and kinds.count("fight_act") == 3  # two investigators and the warden
@@ -975,9 +1078,10 @@ async def test_a_reaction_not_answered_in_time_takes_the_default_and_a_late_answ
     answer = await hub._ask(lead.id, "c1", offer, timed=True)
     shown = next(msg["offer"] for cid, msg in sent if msg["t"] == "offer")
     # the default stands; the wait is in seconds, never the host's clock time (another machine's clock may differ)
-    assert answer is None and shown["respond_id"] == offer["id"] and shown["closes_in"] == 0.2 and "deadline" not in shown
-    assert sent[-1][1] == {"t": "offer_closed", "id": offer["id"]}  # the seat's window closes, sending nothing
-    await hub._on("c1", {"t": "respond", "id": offer["id"], "choice": "fight_back"})
+    assert answer is None and shown["closes_in"] == 0.2 and "deadline" not in shown
+    assert "id" not in shown and "warden" not in shown["respond_id"]  # the hub's own id, not the engine's
+    assert sent[-1][1] == {"t": "offer_closed", "id": shown["respond_id"]}  # the seat's window closes, sending nothing
+    await hub._on("c1", {"t": "respond", "id": shown["respond_id"], "choice": "fight_back"})
     assert sent[-1][1] == {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。"}
     assert hub.choices[lead.id].empty()  # it never reaches the next offer
     await hub.game.close()

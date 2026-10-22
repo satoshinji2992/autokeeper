@@ -67,6 +67,21 @@ def test_the_chapter_ten_lines_reach_the_prompts_that_obey_them():
         assert "规则书第" not in text  # the pages stay in the code's comments and docs/rules-reference.md
 
 
+def test_no_runtime_prompt_names_a_page():
+    """Page numbers belong in the code's comments and docs/rules-reference.md, not in what a model reads
+    every turn (the review of 2026-10-22). The rulebook passages a lookup quotes carry theirs (rules_lookup)."""
+    import re
+
+    from autokeeper.agents import cast, director, encounter
+
+    prompts = {"ARBITER_SYSTEM": cast.ARBITER_SYSTEM, "PUSH_SYSTEM": cast.PUSH_SYSTEM, "KEEPER_SYSTEM": cast.KEEPER_SYSTEM,
+               "PLAN_SYSTEM": cast.PLAN_SYSTEM, "AUTHOR_SYSTEM": cast.AUTHOR_SYSTEM, "DIRECTOR_SYSTEM": director.DIRECTOR_SYSTEM,
+               "ENCOUNTER_PLAN_SYSTEM": encounter.ENCOUNTER_PLAN_SYSTEM, "ENCOUNTER_START_SYSTEM": encounter.ENCOUNTER_START_SYSTEM,
+               "OTHER_DAMAGE": encounter.OTHER_DAMAGE, "ARBITER_ENCOUNTER": encounter.ARBITER_ENCOUNTER}
+    for name, text in prompts.items():
+        assert not re.search(r"第 ?\d+(?:[–-]\d+)? ?页|p\. ?\d", text), name
+
+
 async def test_the_push_review_sees_whether_the_investigator_is_mad(module, monkeypatch):
     from autokeeper import config
     from autokeeper.agents.cast import Cast, PushRuling
@@ -88,3 +103,14 @@ async def test_the_push_review_sees_whether_the_investigator_is_mad(module, monk
     state.investigators[0].conditions.append("临时疯狂")
     await cast.repush(state, pending, "把每个齿轮都拆下来看")
     assert "状态：临时疯狂" in seen[1]
+
+
+def test_the_arbiter_leaves_the_idea_roll_to_the_engine():
+    """The Idea roll is the engine's (engine/idea.py, /灵感): coc7-core, read by the arbiter every turn,
+    says so in two lines instead of the whole procedure, and asked for it in words the arbiter rolls
+    nothing and gives nothing."""
+    body = skills.body("coc7-core")
+    section = body.split("## 灵感检定", 1)[1].split("\n## ", 1)[0].strip()
+    assert "/灵感" in section and "裁定员不裁定灵感检定" in section and "不掷骰、不给线索" in section
+    assert len(section.splitlines()) == 2 and "智力最高" not in section and "千钧一发" not in body
+    assert "智力（灵感）" not in body  # no INT roll ruled for a flash of insight either

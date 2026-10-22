@@ -12,7 +12,7 @@ from PIL import Image
 
 from autokeeper import paths
 from autokeeper.agents import guard
-from autokeeper.agents.cast import Action, Failure, Ruling, Sketch
+from autokeeper.agents.cast import Action, Failure, PushRuling, Ruling, Sketch
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
@@ -31,15 +31,21 @@ class FakeCast:
         self.performances: list[str] = []
         self.reports: list[str] = []
         self.lores: list[str] = []  # the backstage each telling was given
+        self.told: dict[str, list[str]] = {}  # as Cast.told: what an NPC's last reply told
+        self.unsettled: dict[str, list[str]] = {}  # as Cast.unsettled: what it could not do
 
     async def intent(self, state, text):
         self.heard.append(text)
         return self.script[text][0]
 
-    async def arbiter(self, state, action, at=None):
+    async def arbiter(self, state, action, at=None, *, encounter="", problems=None):
         self.ruled_at = at
         self.ruled.append(action)
         return next(r for a, r in self.script.values() if a.summary == action.summary)
+
+    async def repush(self, state, pending, how):
+        """A push made the way it is said: it can reach the goal and takes ten minutes."""
+        return PushRuling(achievable=True, minutes=10)
 
     async def npc(self, state, npc_id, message):
         self.npc_calls.append((npc_id, message))
@@ -256,7 +262,8 @@ async def test_failed_core_clue_offers_push_through_interrupt(module, fake):
     game, _, _ = make(module, fake, {"look": (look, ruling)}, location="office")
     fake.queue(90, 3)  # fail, then the pushed roll succeeds
     app = turn_graph.build(game, InMemorySaver())
-    events, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "t2"}}, resume="push")
+    events, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "t2"}},
+                                        resume={"choice": "push", "how": "把那一年的合订本一页页翻完"})
     assert interrupts and interrupts[0]["skill"] == "图书馆使用" and interrupts[0]["can_push"]
     assert game.state.clues == ["c_archive"]
     dice = [e for e in events if e["type"] == "dice"]
@@ -756,17 +763,17 @@ async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake
     assert turn.push["risk"] == risk.text  # said before the choice
     hp, before = game.state.investigator.hp, game.state.minutes
     fake.queue(99).queue_totals(2)  # the pushed roll fails; the wound is 2
-    pushed = await game.push("push")
+    pushed = await game.push({"choice": "push", "how": "把手伸进齿轮缝里摸"})
     assert "c_gears" not in game.state.clues and "warden_woken" in game.state.flags
-    assert game.state.minutes - before == 15 and game.state.investigator.hp == hp - 2
+    assert game.state.minutes - before == 10 + 15 and game.state.investigator.hp == hp - 2  # the push's own time, then the failure's
     assert any(e["type"] == "outcome" and e["lines"][0] == f"孤注一掷也没成：{risk.text}" for e in events)
     assert any("孤注一掷也没有成功" in n for n in pushed.notes)
 
 
-@pytest.mark.parametrize("mode", ["drop", "push"])
-async def test_the_time_a_failure_costs_brings_what_was_due(module, fake, mode):
-    """17:50, the check fails, and giving up (or the failed push) costs 20 minutes: dusk at 18:00
-    comes this turn, not the next."""
+@pytest.mark.parametrize(("mode", "clock"), [("drop", "18:10"), ({"choice": "push", "how": "一个齿轮一个齿轮地看"}, "18:20")])
+async def test_the_time_a_failure_costs_brings_what_was_due(module, fake, mode, clock):
+    """17:50, the check fails, and giving up (or the failed push, after its own ten minutes) costs 20
+    minutes: dusk at 18:00 comes this turn, not the next."""
     look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
     lost = Failure(text="在齿轮间里耽搁了", minutes=20)
     ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=0,
@@ -778,7 +785,7 @@ async def test_the_time_a_failure_costs_brings_what_was_due(module, fake, mode):
     assert "e_dusk" not in game.state.fired
     fake.queue(99)  # the pushed roll fails too
     later = await game.push(mode)
-    assert game.state.clock.endswith("18:10") and "e_dusk" in game.state.fired
+    assert game.state.clock.endswith(clock) and "e_dusk" in game.state.fired
     assert [e.id for e in later.events] == ["e_dusk"]
 
 
@@ -794,7 +801,8 @@ async def test_what_a_failed_push_sets_off_reaches_the_stage_and_the_keeper(modu
     game, cast, _ = make(module, fake, {"look": (look, ruling)}, location="tower")
     fake.queue(99, 99)  # fails, and the push fails
     app = turn_graph.build(game, InMemorySaver())
-    events, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "t-warden"}}, resume="push")
+    events, interrupts = await run_turn(app, "look", {"configurable": {"thread_id": "t-warden"}},
+                                        resume={"choice": "push", "how": "用螺丝刀把柜门撬开"})
     assert interrupts and "e_warden" in game.state.fired
     assert [e["npc"] for e in events if e["type"] == "performance"] == ["warden"]
     assert "眼前发生：守钟人提着灯冲上楼梯。" in cast.reports[-1]

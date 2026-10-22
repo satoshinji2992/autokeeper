@@ -228,18 +228,60 @@ async def test_a_performance_cut_off_after_it_was_kept_is_shown_and_not_staged_a
     await resumed.close()
 
 
-async def test_a_turn_journal_from_before_the_receipts_still_resumes(fake):
-    """A save cut off mid-turn by an older version: its preparation kept lines and notes of its own,
-    its turn no receipts. They still join the turn, and no one who spoke is asked again."""
-    game, cast, _ = table(fake)
-    game.state.pending_turn = {"input": "问日记", "preparation": {
-        "done": ["first:warden"], "lines": [["warden", "别碰！"]], "notes": ["旧的备注"], "joined": ["warden"], "blocked": False}}
-    turn = await game.resolve(ASK, Ruling(needs_roll=False))
-    assert turn.npc_lines == [("warden", "别碰！")] and turn.joined == ["warden"] and "旧的备注" in turn.notes
+# -- a passed roll on someone nobody asks (the review of 2026-10-22) ---------------------------------------
+async def test_a_passed_psychology_roll_gives_its_clue_without_asking_anyone(fake):
+    """有些人油盐不进's c_fitz_talk: a 心理学 gate, watched and not spoken to. The roll passed; the clue
+    was held back for the priest to tell, and nobody asked him: passed, and nothing gained."""
+    from autokeeper.module.schema import Check
+
+    game, cast, events = table(fake)
+    game.state.npc("warden").unlocked = []
+    game.m.npc("warden").gates["c_diary"] = Check(skill="心理学", difficulty="常规")
+    fake.queue(5)
+    watch = Action(kind="talk", summary="周衡观察守钟人的神色", npc="warden", approach="心理学")
+    turn = await game.resolve(watch, Ruling(needs_roll=True, skill="心理学", clues_on_success=["c_diary"]))
     await game.talk(turn)
-    assert cast.npc_calls == []  # he spoke already this turn
-    old = TURN_RECORD.validate_python({**TURN_RECORD.dump_python(Turn(action=ASK), mode="json"),
-                                       "npc_lines": [["warden", DIARY]]} | {"replies": {}})
-    await game.talk(old)
-    assert cast.npc_calls == []
+    assert turn.checks[0].passed and game.state.clues == ["c_diary"] and turn.clues == ["c_diary"]
+    assert cast.npc_calls == [] and kinds(events) == ["clue"]
+    await game.close()
+
+
+async def test_what_ones_manner_gives_away_is_found_even_when_they_are_spoken_to(fake):
+    """A 心理学 gate is the investigator's own observation: asked something as well, the one watched
+    answers, but the clue is a card at once, never left to the reply to tell (Dialogue.told)."""
+    from autokeeper.module.schema import Check
+
+    game, cast, events = table(fake)
+    game.state.npc("warden").unlocked = []
+    cast.tells = {}
+    game.m.npc("warden").gates["c_diary"] = Check(skill="心理学", difficulty="常规")
+    fake.queue(5)
+    ask = ASK.model_copy(update={"approach": "心理学"})
+    turn = await game.resolve(ask, Ruling(needs_roll=True, skill="心理学", clues_on_success=["c_diary"]))
+    assert turn.clues == ["c_diary"] and game.state.npc("warden").unlocked == ["c_diary"]
+    await game.talk(turn)
+    assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["clue", "npc"]
+    await game.close()
+
+
+async def test_a_daily_action_that_says_nothing_finds_what_it_finds(fake):
+    """A daily action with someone and not a word to them: talk() asks nobody, so the clue the arbiter
+    gives is found, not held back for a reply that never comes."""
+    game, cast, events = table(fake)
+    help_out = Action(kind="daily", summary="周衡默默帮守钟人把木柴搬上楼", npc="warden")
+    turn = await game.resolve(help_out, Ruling(needs_roll=False, auto_clues=["c_diary"]))
+    await game.talk(turn)
+    assert game.state.clues == ["c_diary"] and cast.npc_calls == [] and kinds(events) == ["clue"]
+    await game.close()
+
+
+async def test_a_clue_is_left_to_the_one_asked_when_they_are_asked(fake):
+    """The rule the review kept: spoken to and asked, the warden tells what he knows in his own words,
+    and the card comes after them."""
+    game, cast, events = table(fake)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False, auto_clues=["c_diary"]))
+    assert turn.clues == [] and game.state.clues == []
+    await game.talk(turn)
+    assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["npc", "clue"]
+    assert game.state.clues == ["c_diary"]
     await game.close()
