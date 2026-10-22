@@ -93,6 +93,17 @@ def test_roles_pinned_in_the_config_file_are_named():
     assert "[roles.keeper]" in flat(out) and "以后默认用" not in flat(out)
 
 
+def test_a_role_the_game_does_not_call_loads_as_a_route_of_its_own():
+    """Any [roles.<name>] is a route (the importer's and the evaluations' roles have none in the
+    presets): one the game no longer calls, such as tactics, loads and leaves the others alone."""
+    paths.USER_DIR.mkdir(parents=True, exist_ok=True)
+    (paths.USER_DIR / "config.toml").write_text('preset = "deepseek"\n[roles.tactics]\nmodel = "deepseek:deepseek-flash"\n',
+                                                encoding="utf-8")
+    cfg = config.load()
+    assert cfg.role("tactics").model == "deepseek:deepseek-flash"
+    assert all(cfg.role(name) == role for name, role in config.PRESETS["deepseek"].items())
+
+
 def test_the_game_needs_no_claude_and_says_how_to_add_it(monkeypatch):
     """The game is model-agnostic (the user, 2026-10-20): the Claude backend is an extra, and
     choosing it without the extra says how to add it."""

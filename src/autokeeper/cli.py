@@ -46,12 +46,10 @@ def main(
     for name, value in (("PRESET", preset), ("MODEL", model), ("SEARCH", search), ("BUDGET_USD", budget), ("FALLBACK", fallback), ("IMPROV", improv), ("MODE", mode)):
         if value is not None:
             os.environ[f"AUTOKEEPER_{name}"] = str(value)
-    for line in paths.prepare():
-        notices.print(f"[dim]{line}[/]")
+    paths.prepare()
     if ctx.invoked_subcommand != "migrate":
         for root, counts in paths.adopt_known().items():
             notices.print(f"从 {root} 找到以前的存档，复制了过来：{_counts(counts)}（原处没动）")
-    paths.adopt_old()
     if ctx.invoked_subcommand is None:
         play()
 

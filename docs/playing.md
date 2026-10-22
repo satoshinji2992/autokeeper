@@ -57,8 +57,6 @@ Linux 和 macOS 上设置了 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_CACHE_HO
 autokeeper migrate ~/autokeeper    # 换成你的源码目录
 ```
 
-用过 0.0.3 测试版一键脚本的，旧的安装目录会被移到 `~/.local/share/autokeeper-old-install`（Windows 在 `%LOCALAPPDATA%` 里），里面的存档同样会复制过来，确认没问题后可以删掉它。
-
 ### 从源码开发
 
 ```bash
@@ -69,7 +67,7 @@ uv run autokeeper setup
 uv run autokeeper doctor
 ```
 
-从源码目录运行时，模组、存档和掷骰组件都在仓库里（`modules/`、`data/`、`bridge/`），和以前一样。`setup` 会安装 BCDice 的 Node 桥接、编译模组，最后问用哪家模型。更新代码后运行 `uv sync`，再运行 `setup` 和 `doctor`。从 0.0.1 升级前请备份 `saves/`：0.0.2 不再读取旧存档，自己的角色卡、本地模型和知识库会自动迁移到 `data/`。
+从源码目录运行时，模组、存档和掷骰组件都在仓库里（`modules/`、`data/`、`bridge/`），和以前一样。`setup` 会安装 BCDice 的 Node 桥接、编译模组，最后问用哪家模型。更新代码后运行 `uv sync`，再运行 `setup` 和 `doctor`。
 
 ## 模型与花费
 

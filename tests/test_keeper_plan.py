@@ -380,11 +380,3 @@ async def test_the_plan_announces_an_encounter_and_the_arbiter_no_longer_starts_
     assert "【可能动手的】" not in sent["messages"][-1]["content"] and "chase_party" not in sent["system"]
     await game.close()
     await cast.close()
-
-
-def test_an_old_configuration_naming_the_tactics_role_loads_and_ignores_it(tmp_path):
-    (paths.USER_DIR).mkdir(parents=True, exist_ok=True)
-    (paths.USER_DIR / "config.toml").write_text('[roles.tactics]\nmodel = "deepseek:deepseek-flash"\n', encoding="utf-8")
-    cfg = config.load()
-    assert "tactics" not in cfg.roles and "tactics" not in cfg.role_names and "tactics" not in config.ROLES_SHOWN
-    assert cfg.role("plan").model == cfg.role("keeper").model
