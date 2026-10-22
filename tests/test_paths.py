@@ -193,3 +193,20 @@ def test_check_takes_a_module_id():
     assert out.exit_code == 0, out.output
     out = CliRunner().invoke(app, ["check", "nosuch"])
     assert out.exit_code == 1 and "找不到模组" in out.output.replace("\n", "")
+
+
+def test_upgrade_and_showcase_find_modules_as_check_does(monkeypatch):
+    """They looked in the modules folder only, so `upgrade example` missed the format sample."""
+    from autokeeper.engine import showcase
+
+    async def no_pictures(*args, **kwargs):
+        raise AssertionError("the example has no big scenes to prepare")
+
+    monkeypatch.setattr(showcase, "prepare_module", no_pictures)
+    out = CliRunner().invoke(app, ["showcase", "example"])
+    assert out.exit_code == 0 and "没有大场景" in out.output.replace("\n", ""), out.output
+    out = CliRunner().invoke(app, ["upgrade", "example", "--dry-run", "--only", "endings"])
+    assert out.exit_code == 0 and "额外结局：要补" in out.output.replace("\n", ""), out.output
+    for command in ("showcase", "upgrade"):
+        out = CliRunner().invoke(app, [command, "nosuch"])
+        assert out.exit_code == 1 and "找不到模组：nosuch" in out.output.replace("\n", ""), command

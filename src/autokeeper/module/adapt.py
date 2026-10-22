@@ -524,27 +524,58 @@ def _forms(m: Module) -> list[tuple[str, str]]:
     return [(c.id, n.id) for c in m.creatures if not c.npc for n in m.npcs if n.id not in taken and len(n.name) >= 2 and n.name in c.name]
 
 
-def wanted(m: Module, name: str) -> bool:
-    """Whether the module lacks what a pass fills."""
+def _few(names: list[str]) -> str:
+    return "、".join(names[:5]) + (f" 等 {len(names)} 个" if len(names) > 5 else "")
+
+
+def need(m: Module, name: str) -> str:
+    """What the module lacks that a pass fills, in words (`autokeeper upgrade --dry-run` shows it);
+    empty when it lacks nothing. No model is asked."""
     if name == "npcs":
-        return any(not (n.personality and n.voice and n.goal and n.knows) for n in m.npcs)
+        thin = [n.name for n in m.npcs if not (n.personality and n.voice and n.goal and n.knows)]
+        return f"缺性格、口吻、目标或所知的人物：{_few(thin)}" if thin else ""
     if name == "combat":  # a sheet the rules cannot read or a creature with no word for the players, or nowhere to run,
         # a route written the old way, a first sight charged twice, an NPC's fighting form as a second life
-        return (bool(_unfit(m)) or any(not c.called.strip() for c in m.creatures)
-                or (bool(m.creatures or _violent(m)) and not any(x.chase for x in m.locations))
-                or bool(_unlinked(m) or _twice(m) or _forms(m)))
+        why = []
+        if unfit := _unfit(m):
+            why.append(f"规则读不全数值的怪物：{_few(unfit)}")
+        if unnamed := [c.id for c in m.creatures if not c.called.strip()]:
+            why.append(f"没有调查员口中称呼的怪物：{_few(unnamed)}")
+        if (m.creatures or _violent(m)) and not any(x.chase for x in m.locations):
+            why.append("有怪物或打斗，没有追逐路线")
+        if unlinked := _unlinked(m):
+            why.append(f"旧写法的追逐路线：{_few(unlinked)}")
+        if twice := _twice(m):
+            why.append(f"首次目击的理智检定会算两次的事件：{_few(twice)}")
+        if forms := _forms(m):
+            why.append(f"没写明是哪个 NPC 战斗形态的怪物：{_few([c for c, _ in forms])}")
+        return "；".join(why)
     if name == "clueweb":
         from .simulate import playthrough
 
         run = playthrough(m)
-        return bool(run.lean) or any(run.fragile.values()) or bool(run.drift.lost)
+        why = []
+        if run.lean:
+            why.append(f"线索不到三条的结论：{_few(list(run.lean))}")
+        if fragile := [k for k, v in run.fragile.items() if v]:
+            why.append(f"离不开某处或某人的结论：{_few(fragile)}")
+        if run.drift.lost:
+            why.append(f"没人插手时会断线的结论：{_few(list(run.drift.lost))}")
+        return "；".join(why)
     if name == "endings":
-        return len(m.endings) < 3
+        return f"结局只有 {len(m.endings)} 个" if len(m.endings) < 3 else ""
     if name == "meet":
-        return bool(_unmarked(m))
+        return f"{n} 步打算没标明是不是见面反应，或只演一次还是每次都演" if (n := len(_unmarked(m))) else ""
     if name == "foreshadow":  # none yet, or none that changes: the pass then gives the written ones their stages
-        return not any(f.stages for f in m.foreshadow)
-    return not getattr(m, name)
+        if any(f.stages for f in m.foreshadow):
+            return ""
+        return "伏笔都没有后来的变化" if m.foreshadow else "没有伏笔"
+    return "" if getattr(m, name) else f"没有{LABELS[name]}"
+
+
+def wanted(m: Module, name: str) -> bool:
+    """Whether the module lacks what a pass fills."""
+    return bool(need(m, name))
 
 
 def _unmarked(m: Module) -> list[tuple[str, Any]]:
@@ -1181,14 +1212,18 @@ class Result:
     written: int = 0
     problems: list[str] | None = None
     left_out: list[str] = field(default_factory=list)  # what got round a condition and was not written, or taken out by the review
+    need: str = ""  # a dry run's: what the module lacks that the pass would fill (need()); empty when it would not run
 
 
 async def adapt(folder: Path, *, passes: tuple[str, ...] = PASSES, cfg: config.Config | None = None,
                 log: Callable[[str], None] = print, dry: bool = False) -> list[Result]:  # fmt: skip
     """Run the passes the module still needs, in waves (AFTER): a wave's calls at once, its edits one
     pass at a time, each held to the module's conditions first and taken back whole if the module
-    no longer passes its checks; then the review of what this run added (verify)."""
+    no longer passes its checks; then the review of what this run added (verify). `dry`: only
+    which passes would run and why (plan()); no model is asked and nothing is written."""
     folder = Path(folder)
+    if dry:
+        return await plan(folder, passes, log=log)
     cfg = cfg or config.load()
     results: list[Result] = []
     added: list[str] = []
@@ -1207,13 +1242,37 @@ async def adapt(folder: Path, *, passes: tuple[str, ...] = PASSES, cfg: config.C
         answers = await asyncio.gather(*(_ask(cfg, name, m, source=original(folder, _focus(m, name))) for name in todo),
                                        return_exceptions=True)
         for name, out in zip(todo, answers, strict=True):
-            results.append(await _settle(folder, cfg, name, out, log=log, dry=dry, added=added))
+            results.append(await _settle(folder, cfg, name, out, log=log, added=added))
     if "verify" in passes:
-        results.append(await verify(folder, cfg, refs=added if len(passes) > 1 else None, log=log, dry=dry))
+        results.append(await verify(folder, cfg, refs=added if len(passes) > 1 else None, log=log))
     return results
 
 
-async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log: Callable[[str], None], dry: bool,
+async def plan(folder: Path, passes: tuple[str, ...] = PASSES, *, log: Callable[[str], None] = print) -> list[Result]:
+    """`autokeeper upgrade --dry-run`: each pass the module as it is now would run, and why (need());
+    the review of the whole situation layer by rule alone (verify(dry=True)). No model is asked and
+    nothing is written. A pass that waits for another (AFTER) is judged before that one adds anything."""
+    folder = Path(folder)
+    m = Module.load(folder)
+    log("[bold]编译期改编[/]（只看不写，不调用模型）")
+    results: list[Result] = []
+    for name in passes:
+        if name != "verify":
+            why = need(m, name)
+            log(f"  {LABELS[name]}：要补（{why}）" if why else f"[dim]  {LABELS[name]}：已经有了[/]")
+            results.append(Result(name, need=why))
+    if waits := [LABELS[x] for x in passes if set(AFTER.get(x, ())) & set(passes)]:
+        log(f"[dim]  {'、'.join(waits)}要等前面的步骤补完；以上按模组现在的内容判断[/]")
+    if "verify" in passes:
+        if len(passes) > 1:
+            log(f"  {LABELS['verify']}：补完以后对照原文核对这次补的")
+            results.append(Result("verify", need="对照原文核对这次补的"))
+        else:
+            results.append(await verify(folder, log=log, dry=True))
+    return results
+
+
+async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log: Callable[[str], None],
                   added: list[str]) -> Result:  # fmt: skip
     """Write one pass's answer: what gets round a condition asked again once with the reasons and
     then left out; the whole pass taken back if the module no longer passes its checks."""
@@ -1223,7 +1282,7 @@ async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log:
     m = Module.load(folder)
     found = edits(m, name, out)
     wrong = held(m, name, found)
-    if wrong and not dry:
+    if wrong:
         log(f"  [yellow]{LABELS[name]}：{len(wrong)} 条要再看一遍，带着原因重问一次[/]")
         try:
             again = await _ask(cfg, name, m, source=original(folder, _focus(m, name)),
@@ -1242,8 +1301,8 @@ async def _settle(folder: Path, cfg: config.Config, name: str, out: Any, *, log:
         for f in wrong:
             log(f"  [yellow]  没有写入 {f.ref}：{f.text[:90]}[/]")
     count = sum(len(e[2]) if e[0] == "append" else 1 for e in found)
-    if dry or not found:
-        log(f"  {LABELS[name]}：{count} 处" + ("（只看不写）" if dry else ""))
+    if not found:
+        log(f"  {LABELS[name]}：{count} 处")
         return Result(name, count, left_out=left_out)
     before = {p: p.read_text(encoding="utf-8") if p.is_file() else None for p in {_target(folder, e[1]) for e in found}}
     errors_before = {str(i) for i in audit(m) if i.level == "error"}
@@ -1315,9 +1374,9 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
     """复核: what was added (this run's `refs`, or the whole situation layer when none are given:
     its steps, signs, past and rules, never the NPCs' sheets)
     held to the module's conditions by rule (module/conditions.py), then read against the original
-    text by one call; what gets round one is taken out of the files."""
+    text by one call; what gets round one is taken out of the files. `dry`: the rules' findings
+    alone, with no call and nothing taken out."""
     folder = Path(folder)
-    cfg = cfg or config.load()
     m = Module.load(folder)
     # The whole layer, when no run's refs are given: what the NPCs know is the module's own sheet then, not this.
     chosen = {r for r in _refs(m) if not r.startswith("knows:")} if refs is None else set(refs) & _refs(m)
@@ -1329,6 +1388,15 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
     found_by_rule = conditions.findings(m, pieces)
     flagged = {f.ref: f.text for f in found_by_rule if f.level == "error"}  # surely wrong: out whatever the call says
     hints = [f"[{f.ref}] {f.text}" for f in found_by_rule if f.level != "error"]  # matched by words: the call decides
+    if dry:
+        found = [f"{ref}：{why}" for ref, why in flagged.items()]
+        log(f"[bold]{LABELS['verify']}[/] {len(chosen)} 条补写，只按规则核对（对照原文要调用模型，这次不调用）")
+        for line in found:
+            log(f"  [yellow]（只看不改）{line[:120]}[/]")
+        if hints:
+            log(f"  按关键词可疑的 {len(hints)} 处，要调用模型对照原文判断")
+        return Result("verify", problems=found or None, need=f"对照原文核对 {len(chosen)} 条")
+    cfg = cfg or config.load()
     log(f"[bold]{LABELS['verify']}[/] {len(chosen)} 条补写对照原文…")
     try:
         verdict = await _judge(cfg, f"{book(m)}{_source(original(folder, _focus(m, 'verify')))}\n\n【补写的条目】\n" + "\n".join(_rows(m, chosen))
@@ -1341,11 +1409,10 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
             flagged.setdefault(f.ref, f.problem.strip())
     found = [f"{ref}：{why}" for ref, why in flagged.items()]
     for line in found:
-        log(f"  [yellow]{'（只看不改）' if dry else '拿掉'} {line[:120]}[/]")
-    if dry or not flagged:
-        if not flagged:
-            log(f"  [green]✓ {LABELS['verify']}[/]：没有绕过原作条件的")
-        return Result("verify", problems=found or None)
+        log(f"  [yellow]拿掉 {line[:120]}[/]")
+    if not flagged:
+        log(f"  [green]✓ {LABELS['verify']}[/]：没有绕过原作条件的")
+        return Result("verify")
     files = {_target(folder, g) for g in ("agendas", "foreshadow", "history", "npcs", "locations", "flags")}  # a stage's picture too
     before = {p: p.read_text(encoding="utf-8") for p in files if p.is_file()}
     errors_before = {str(i) for i in audit(m) if i.level == "error"}

@@ -60,7 +60,7 @@ def _counts(counts: dict[str, int]) -> str:
     return f"{'、'.join(counts)}，共 {sum(counts.values())} 个文件"
 
 
-def _module(module: Path) -> Path:
+def _module(module: str | Path) -> Path:
     """A module folder from a path or an id (zhuishuren, or example for the format sample)."""
     found = paths.find_module(module)
     if found is None:
@@ -772,13 +772,7 @@ def showcase(module: Annotated[str, typer.Argument(help="模组目录或 id，�
     from .engine.showcase import prepare_module
     from .module.schema import Module
 
-    path = Path(module)
-    if not (path / "module.yaml").is_file():
-        path = next((p for p in paths.module_folders() if p.name == module), path)
-    if not (path / "module.yaml").is_file():
-        console.print(f"[red]找不到模组：{module}[/]")
-        raise typer.Exit(1)
-    m, cfg = Module.load(path), config.load()
+    m, cfg = Module.load(_module(module)), config.load()
     if not m.showcases:
         console.print(f"《{m.title}》没有大场景")
         return
@@ -794,7 +788,7 @@ def upgrade(
     module: Annotated[str, typer.Argument(help="模组目录或 id，如 zhuishuren")],
     only: Annotated[str, typer.Option(help="只跑这几步，逗号分开：npcs,relations,agendas,meet,foreshadow,clueweb,ties,endings,mechanics,history,prelude,combat,verify"
                                            "（verify 单独跑时复核整个局面层）")] = "",
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="只看打算补多少，不写文件")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="不调用模型、不写文件：列出每一步要不要补及原因，以及现在的可玩度、推演和无人插手时的走向")] = False,
     review: Annotated[bool, typer.Option("--review", help="补完后请模型像守秘人那样审读一遍（一次调用），列出跑起来会出问题的地方")] = False,
 ) -> None:
     """编译期改编：给模组补上跑团用得着、原文没写的东西（人物、冲突图、各人的打算、伏笔、线索网、私人牵连、额外结局、插件清单、怪物与 NPC 的战斗数值、追逐路线、事件里写定的打斗），最后对照原文复核这次补的。只补没有的，原作不改；中断了再跑一次就接着补。"""
@@ -802,12 +796,10 @@ def upgrade(
     from .module.schema import Module
     from .module.simulate import playthrough
 
-    path = Path(module)
-    if not (path / "module.yaml").is_file():
-        path = next((p for p in paths.module_folders() if p.name == module), path)
-    if not (path / "module.yaml").is_file():
-        console.print(f"[red]找不到模组：{module}[/]")
+    if dry_run and review:
+        console.print("[red]--dry-run 不调用模型，不能和 --review 一起用[/]")
         raise typer.Exit(1)
+    path = _module(module)
     chosen = tuple(x.strip() for x in only.split(",") if x.strip()) or adapt.PASSES
     if unknown := [x for x in chosen if x not in adapt.PASSES]:
         console.print(f"[red]没有这一步：{'、'.join(unknown)}（可选：{','.join(adapt.PASSES)}）[/]")
@@ -815,7 +807,7 @@ def upgrade(
     before = adapt.score(Module.load(path))
     asyncio.run(adapt.adapt(path, passes=chosen, log=console.print, dry=dry_run))
     after = adapt.score(Module.load(path))
-    console.print(f"[bold]可玩度[/] {before.total} → {after.total} / 100")
+    console.print(f"[bold]可玩度[/] {after.total if dry_run else f'{before.total} → {after.total}'} / 100")
     for name, (got, out_of, why) in after.parts.items():
         console.print(f"  {name} {got}/{out_of}  [dim]{why}[/]")
     run = playthrough(Module.load(path))
