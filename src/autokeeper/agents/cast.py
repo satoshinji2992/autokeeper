@@ -1050,11 +1050,19 @@ class Cast:
         return await self._checked("plan:start", s, state, prompt, EncounterStart, check)
 
     def _candidates(self, state: GameState, hint: EncounterHint) -> str:
-        """Who may be in it, from the module's sheets: the investigators, the people here and those
-        named, the creatures; numbers and attacks as the sheets write them."""
+        """Who may be in it, from the module's sheets: the investigators with the attacks an opening
+        may name by id (engine/encounter/combatant), the people here and those named, the creatures;
+        numbers and attacks as the sheets write them."""
+        from ..engine.encounter import combatant
+
         m = self.module
+
+        def arms(inv: Investigator) -> str:
+            v = combatant.view(self.world, inv.id) if self.world is not None else None
+            return "；".join(f"{a.id}＝{a.name}（{a.skill}，{a.damage_text}）" for a in v.attacks()) if v is not None else "徒手"
+
         rows = [f"- `{inv.id}` {inv.name}｜调查员｜生命 {inv.hp}/{inv.hp_max}｜{_skills(inv)}｜身上：{'、'.join(inv.inventory) or '无'}"
-                for inv in state.investigators]
+                f"｜攻击（with 只能填这些 id）：{arms(inv)}" for inv in state.investigators]
         npcs = {n.id: n for n in self.able(state)} | {n.id: n for n in m.npcs if n.id in hint.with_}
         for n in npcs.values():
             stats = "，".join(f"{k}{v}" for k, v in n.stats.items()) or "普通人的数值"

@@ -64,8 +64,9 @@ def test_an_npc_fights_with_what_he_holds_and_what_his_look_says(module, fake):
     w = game.world
     w.rec.entities["poker"] = Entity(id="poker", kind="item", name="拨火棍", at="warden")
     p = profiles.profile(w, "warden")
-    items = {a.name: a.item for a in p.attacks}
-    assert items["棍棒"] == "poker" and items[".38 左轮手枪"] == "warden:.38 左轮手枪" and items["徒手"] is None
+    items = {a.name: a.item for a in p.attacks}  # a thing under its own name; one his look tells of under the table's
+    assert items["拨火棍"] == "poker" and items[".38 左轮手枪"] == "warden:.38 左轮手枪" and items["徒手"] is None
+    assert next(a for a in p.attacks if a.item == "poker").weapon == "棍棒"
     gun = next(a for a in p.attacks if a.firearm)
     assert gun.capacity == 6 and gun.loaded is None  # nobody counted its rounds yet: a full load
     effects.commit(w, [effects.Ammo(item="warden:.38 左轮手枪", loaded=1)], op_id="shot", source="t")

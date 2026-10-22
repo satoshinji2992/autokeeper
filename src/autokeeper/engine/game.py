@@ -27,9 +27,9 @@ from ..agents.director import Improv
 from ..harness.models import refused
 from ..harness.replay import CassetteError
 from ..module import improv
-from ..module.schema import Event, Item, Module
+from ..module.schema import PARTY_DEAD, PARTY_UNFIT, Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
-from ..rules import commands
+from ..rules import commands, wounds
 from ..rules.bcdice import Level, Roll
 from ..rules.catalog import canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
@@ -51,6 +51,7 @@ from .state import (
     GameState,
     LogEntry,
     Progress,
+    format_time,
     parse_time,
     time_of_day,
 )
@@ -1578,6 +1579,7 @@ class Game(Encounters):
             await step("progress", turn, lambda: setattr(st, "progress_at", st.turn))
         await step("nudge", turn, lambda: self._nudge(turn))
         await step("ending", turn, lambda: self._check_ending(turn))
+        await step("party-down", turn, lambda: self._party_down(turn))
         for item in self._items_for(action):
             await step(f"item:{item.id}", turn, lambda item=item: self.emit({"type": "item", "id": item.id, "name": item.name,
                        "text": item.description, "art": item.art}))
@@ -2570,6 +2572,7 @@ class Game(Encounters):
         if not st.view_kind and (hour := views.default(m, m.location(st.location), st.minutes)) != st.view:
             await self._view(hour)  # night has fallen on the place: its picture for the night
         await self.plugins.due(turn)  # rule plugins' timers
+        await self._wake_due(turn)
         await self.emit({"type": "time", "clock": st.clock, "phase": time_of_day(st.minutes)})
 
     def _present(self) -> tuple[str, ...]:
@@ -2817,7 +2820,8 @@ class Game(Encounters):
 
     async def _end(self, ending_id: str, turn: Turn) -> None:
         st, m = self.state, self.m
-        end = next(e for e in m.endings if e.id == ending_id)
+        end = m.ending(ending_id)  # the module's, or the engine's own (module/schema.PARTY_DEAD)
+        assert end is not None, ending_id
         step = self._resolution_step
 
         def reward(inv: Investigator) -> str:
@@ -2845,6 +2849,97 @@ class Game(Encounters):
             await step("showcase", turn, lambda: self.showcases.fire(f"ending:{end.id}"))
 
         await step(f"/ending:{end.id}", turn, settle)
+
+    # -- nobody of them can act ----------------------------------------------------------------------
+    async def _party_down(self, turn: Turn) -> None:
+        """Nobody of the party can act and no fight goes on (the user's solo game of 2026-10-22: 托马斯
+        down, the game sat at an empty input box). The dying nobody can tend roll CON every round until
+        it fails (Keeper Rulebook p. 101); every investigator dead, the game ends as the module's endings
+        say, else with the engine's own (module/schema.PARTY_DEAD); otherwise time passes until the first
+        of them comes to (rules/wounds.waking), the world going on meanwhile, and play resumes. The
+        keeper tells what they wake to from the record."""
+        st, step = self.state, self._resolution_step
+        if st.ending or self.encounter() is not None or any(i.can_act for i in st.investigators):
+            return
+        for notice in await step("down-dying", turn, lambda: self._untended(turn)):
+            await step(f"down-dying/{notice['fighter']}", turn, lambda notice=notice: self.emit(notice))
+        if all("死亡" in i.conditions for i in st.investigators):
+            await step("down-ending", turn, lambda: self._check_ending(turn))
+            if not st.ending:
+                await step("down-end", turn, lambda: self._end(PARTY_DEAD.id, turn))
+            return
+        since = await step("down-wait", turn, lambda: self._sleep(turn))
+        if since is None:
+            await step("down-unfit", turn, lambda: self._end(PARTY_UNFIT.id, turn))
+            return
+        await step("down-time", turn, lambda: self._time(turn))
+        await step("down-wake", turn, lambda: self._wake_due(turn, since=since))
+        await step("down-ending-after", turn, lambda: self._check_ending(turn))
+        if not st.ending and self.encounter() is None and not any(i.can_act for i in st.investigators):
+            await step("down-unfit-after", turn, lambda: self._end(PARTY_UNFIT.id, turn))
+
+    def _untended(self, turn: Turn) -> list[dict]:
+        """The dying nobody can tend: CON at every round's end until one fails, and they die (p. 101:
+        only First Aid holds it, and no one is there to give it). Their notices."""
+        st, out = self.state, []
+        for inv in st.investigators:
+            body = effects.body_of(self.world, inv.id)
+            if body is None or not body.dying or body.stabilized:
+                continue
+            rounds, con = 0, None
+            while rounds < UNTENDED_ROUNDS and (con is None or con.passed):
+                rounds += 1
+                con = self.rules.check(inv, "体质", mark=False)
+            if con is None or con.passed:
+                turn.notes.append(f"{inv.name}还在濒死，没有人能救他。")
+                continue
+            done = effects.commit(self.world, [effects.Die(target=inv.id, why=f"濒死无人救治，体质检定失败（{con.value}）")],
+                                  op_id=f"untended:{inv.id}:{st.turn}", source="engine")
+            if done.ok:
+                st.add("damage", "伤重不治", who=inv.name)
+                turn.notes.append(f"{inv.name}倒在那里，没有人能救他：撑了 {rounds} 轮，体质检定失败（{con.value}），伤重不治。")
+                out.append({"type": "damage", "who": inv.name, "text": "伤重不治", "fighter": inv.id})
+        return out
+
+    def _sleep(self, turn: Turn) -> int | None:
+        """Time passes until the first of the party out cold comes to (rules/wounds.waking: from when they
+        fell, or from now when that is not known): the clock moved there and the keeper told how long
+        they lay; the clock as it was ("since"), or None when none of them comes to by themselves."""
+        st = self.state
+        now = st.minutes
+        due = []
+        for inv in st.investigators:
+            body = effects.body_of(self.world, inv.id)
+            if body is not None and (after := wounds.waking(body)) is not None:
+                due.append((body.unconscious_at if body.unconscious_at is not None else now) + after)
+        if not due:
+            turn.notes.append("调查员均无法继续行动，也没有能够自行苏醒的人。按各人的实际状态收束，不把失去行动能力写成死亡。")
+            return None
+        st.minutes = max(now, min(due))
+        names = "、".join(i.name for i in st.investigators if "死亡" not in i.conditions)
+        turn.notes.append(f"【昏迷】{names}失去了知觉，从 {format_time(now)} 到 {st.clock}。这段时间里发生的事见本轮的记录；"
+                          "叙述从他们醒来时的所见所感写起，只写记录里有的事和留下的痕迹，不替他们决定接下来做什么。")
+        return now
+
+    async def _wake_due(self, turn: Turn, *, since: int | None = None) -> None:
+        """Investigators out cold whose time has come (rules/wounds.waking, from when they fell, or from
+        `since` when that is not known) come to: at 0 HP with the day's first point of natural healing
+        (p. 101). Each once, in its own op."""
+        st = self.state
+        for inv in st.investigators:
+            body = effects.body_of(self.world, inv.id)
+            after = wounds.waking(body) if body is not None else None
+            start = body.unconscious_at if body is not None and body.unconscious_at is not None else since
+            if after is None or start is None or st.minutes < start + after:
+                continue
+            woke = [effects.Heal(target=inv.id, amount=1, means="natural")] if body.hp <= 0 else []
+            done = effects.commit(self.world, [*woke, effects.Wake(target=inv.id)], op_id=f"wake:{inv.id}:{start + after}",
+                                  source="engine")
+            if done.ok and not done.repeat:
+                text = f"醒了过来（昏迷了 {_span(st.minutes - start)}）"
+                st.add("damage", text, who=inv.name)
+                turn.notes.append(f"{inv.name}{text}，生命 {inv.hp}/{inv.hp_max}。")
+                await self.emit({"type": "damage", "who": inv.name, "text": text})
 
     def _npc_message(self, turn: Turn, npc_id: str) -> str:
         st, m = self.state, self.m
@@ -2987,7 +3082,8 @@ class Game(Encounters):
         out += [f"备注：{n}" for n in turn.notes]
         out += [f"规则提示（来自本局规则，这一轮的叙述要用一句话自然写到）：{h}" for h in turn.hints]
         if turn.ending:
-            end = next(e for e in m.endings if e.id == turn.ending)
+            end = m.ending(turn.ending)
+            assert end is not None
             out.append(f"【结局：{end.title}】{end.text.strip()}\n请用 150–250 字为这个结局收尾，不再留行动钩子。")
         elif turn.interlude:
             out.append("请用 60–150 字接着上一段写这些事，像“就在这时”一样自然地插进来，收在一个能行动的细节上。")
@@ -2998,26 +3094,25 @@ class Game(Encounters):
         return "\n".join(out)
 
     def _unknown(self, events: list[Event]) -> list[str]:
-        """Who of those the turn's events show the players do not know yet, with what they would call
-        them: a creature not identified (GameState.identified), a person not met (Keeper Rulebook
-        p. 176: even seen close, it is a dark wet shape, not a deep one)."""
-        st, m = self.state, self.m
-        ids = dict.fromkeys(x for ev in events for x in (*ev.sights, *ev.fight, *ev.chase))
-        out = []
-        for x in ids:
-            if (c := next((c for c in m.creatures if c.id == x), None)) is not None and x not in st.identified:
-                out.append(f"{c.name}（玩家所见：{c.called or '只写看得见的样子'}）")
-            elif (n := next((n for n in m.npcs if n.id == x), None)) is not None and n.called and not st.npc(x).met:
-                out.append(f"{n.name}（玩家所见：{n.called}）")
-        if (enc := st.encounter) is not None:  # those in the fight going on (engine/encounter/telling.name_rows)
-            from .encounter import telling
-            from .encounter import views as encounter_views
-            from .encounter.actions import Ctx
+        """Who of those the turn's events show, and of those in the fight going on, the players call
+        otherwise than the keeper does, with what they call them (encounter/profiles.shown_name: a
+        creature not identified, a person not met, someone who is not what they know him as), the
+        keeper's notes in brackets left out (Keeper Rulebook p. 176: even seen close, it is a dark wet
+        shape, not a deep one)."""
+        from .encounter import profiles, telling
+        from .encounter import views as encounter_views
+        from .encounter.actions import Ctx
 
+        keeper: dict[str, str] = {}
+        players: dict[str, str] = {}
+        for x in dict.fromkeys(x for ev in events for x in (*ev.sights, *ev.fight, *ev.chase)):
+            if (p := profiles.profile(self.world, x)) is not None:
+                keeper[p.id], players[p.id] = profiles.bare(p.name), profiles.shown_name(self.world, x)
+        if (enc := self.state.encounter) is not None:  # those in the fight going on, as its screens name them
             ctx = Ctx.of(self, enc)
-            rows = telling.name_rows(encounter_views.names(ctx, "keeper"), encounter_views.names(ctx, "players"))
-            out += [r for r in rows if r.split("（")[0] not in {o.split("（")[0] for o in out}]
-        return out
+            keeper |= encounter_views.names(ctx, "keeper")
+            players |= encounter_views.names(ctx, "players")
+        return telling.name_rows(keeper, players)
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None) -> str:
         """The keeper tells it: first how things stand as the telling ends, then the words
@@ -3268,6 +3363,7 @@ NOWHERE = (
 STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
 PUSH_HOW = 200  # characters of a push's stated way that are kept
 MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
+UNTENDED_ROUNDS = 600  # the dying nobody can tend roll CON this many rounds at most (an hour of 6-second rounds)
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 
@@ -3312,6 +3408,13 @@ def _lack(gap: Any) -> str:
     if isinstance(gap, str):
         return gap
     return str(getattr(gap, "name", "") or getattr(gap, "item", "") or getattr(gap, "text", "") or gap)
+
+
+def _span(minutes: int) -> str:
+    """A stretch of game time in words: 1 天, 约 3 小时, 40 分钟."""
+    if minutes >= 1440 and minutes % 1440 == 0:
+        return f"{minutes // 1440} 天"
+    return f"约 {round(minutes / 60)} 小时" if minutes >= 60 else f"{max(0, minutes)} 分钟"
 
 
 def _clip(text: str, n: int) -> str:

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ...module import graph as module_graph
-from . import actions
+from . import actions, profiles
 from .actions import Ctx
 from .choices import needs_arrangement
 from .plan import DeclaredAction, EncounterStart, EncounterTurnPlan, NpcArrangement
@@ -210,11 +210,45 @@ def turn(game: Any, actor: str = "", *, act: bool = True) -> Callable[[Encounter
     return check
 
 
+def opening(game: Any, s: EncounterStart, actor: str = "") -> list[str]:
+    """What the investigator's first action as a start writes it (EncounterStart.opening) lacks: the
+    preconditions of a declaration in the fight it begins (actions.preconditions), against those it
+    names; a weapon the investigator does not hold among them (the review of 2026-10-22: an opening
+    with `colt_revolver`, an id nobody had, went through and stopped the first round)."""
+    from .model import EncounterState, Participant
+
+    d = combatants(game, s.opening)
+    if d is None:
+        return []
+    st = game.state
+    actor = actor or st.investigator.id
+    parts = [Participant(id=i.id, kind="investigator", side="party", controller="human", node=st.location)
+             for i in st.investigators if i.id not in st.apart or i.id == actor]
+    for x, side in [*((f, "foe") for f in s.foes), *((a, "party") for a in s.allies)]:
+        prof = profiles.profile(game.world, x)
+        if prof is not None and all(q.id != prof.id for q in parts):
+            parts.append(Participant(id=prof.id, kind="creature" if prof.kind == "creature" else "npc", side=side,  # type: ignore[arg-type]
+                                     controller="keeper", node=st.location))
+    ctx = Ctx.of(game, EncounterState(id="opening", mode=s.mode, place=st.location, started_turn=st.turn, participants=parts))
+    return [f"opening：{x}" for x in actions.preconditions(ctx, actor, d, takes=[t.name for t in d.takes])]
+
+
+def combatants(game: Any, d: DeclaredAction | None) -> DeclaredAction | None:
+    """A declaration with whoever it names by a creature form's id named as who fights in it
+    (profiles.combatant: erie_entity is erie)."""
+    if d is None:
+        return None
+    w = game.world
+    picks = [p.model_copy(update={"target": profiles.combatant(w, p.target)}) for p in d.attacks]
+    return d.model_copy(update={"attacks": picks, "target": profiles.combatant(w, d.target) if d.target else ""})
+
+
 def start(game: Any, candidates: set[str]) -> Callable[[EncounterStart], list[str]]:
-    """The check of how an encounter begins: who is in it, its stakes, its pace."""
+    """The check of how an encounter begins: who is in it, its stakes, its pace, the investigator's
+    first action."""
 
     def check(s: EncounterStart) -> list[str]:
-        out = []
+        out = opening(game, s)
         for x in [*s.foes, *s.allies]:
             if x not in candidates:
                 out.append(f"{x} 不在【可能卷入的人】里")

@@ -229,7 +229,7 @@ def details(save: Save, m: Module | None) -> Text:
     place = m.location(st.location).name if m and any(loc.id == st.location for loc in m.locations) else save.meta.get("location", "")
     out.append(" · ".join(x for x in (f"{game_time(st.minutes)} {time_of_day(st.minutes)}", place, f"第 {st.turn} 轮") if x) + "\n")
     if st.ending:
-        end = next((e.title for e in m.endings if e.id == st.ending), "") if m else ""
+        end = (e.title if (e := m.ending(st.ending)) else "") if m else ""
         out.append(f"已结束{'：' + end if end else ''}\n", style="bold")
     out.append("\n")
     for inv in st.investigators:

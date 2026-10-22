@@ -22,7 +22,7 @@ from ...rules import firearms, melee, wounds
 from ...rules.bcdice import Level
 from ...rules.coc import DIFFICULTY_ZH, Check
 from ...rules.dice_expr import DamageExpr
-from ...rules.weapons import BRAWL, weapon_in
+from ...rules.weapons import BRAWL, named, weapon_in
 from .. import effects
 from . import actions, choices, telling
 from .actions import UNARMED_ID, Ctx
@@ -143,12 +143,13 @@ class Work:
         return c
 
     # -- harm -----------------------------------------------------------------------------------
-    def hurt(self, pid: str, amount: int, means: wounds.Means) -> effects.Hurt:
-        """A wound, rolled (the CON a major wound calls for) and applied to the working body."""
+    def hurt(self, pid: str, amount: int, means: wounds.Means, *, finish: bool = False) -> effects.Hurt:
+        """A wound, rolled (the CON a major wound calls for) and applied to the working body. `finish`:
+        a blow meant to kill someone lying out cold at 0 HP, which does (p. 100)."""
         self.wounds += 1
         injury = f"{self.key}:w{self.wounds}"
         w = effects.harm(self.game, pid, amount, means=means, injury=injury, body=self.body(pid))
-        w.round = self.enc.round
+        w.round, w.finish = self.enc.round, finish
         hurt = effects.wound(self.body(pid), w, minutes=self.game.state.minutes, round=self.enc.round)
         self.bodies[pid] = hurt.body
         self.unit.effects.append(w)
@@ -411,12 +412,20 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
         amount, text = _damage(w, dv.db(), best, "normal") if best is not None else (0, "0")
         hurt, hit, by = a, best, "反击得手，"
     ev["extreme"] = out.mode == "extreme"
-    result = _wound(w, hurt, amount, _means(hit, "melee") if hit is not None else "blow", text, ev, firearm=False)
+    result = _wound(w, hurt, amount, _means(hit, "melee") if hit is not None else "blow", text, ev, firearm=False,
+                    finish=hurt == d and helpless(w, d))
     return done(acc + f"。{by}{result}")
 
 
-def _wound(w: Work, pid: str, amount: int, means, text: str, ev: dict, *, firearm: bool) -> str:
-    hurt = w.hurt(pid, amount, means)
+def helpless(w: Work, pid: str) -> bool:
+    """Lying out cold at 0 HP: a blow struck at them on purpose kills them ("杀死昏迷角色的尝试应当成
+    功", Keeper Rulebook p. 100); any other harm at 0 HP is ignored."""
+    b = w.body(pid)
+    return b.hp <= 0 and not b.conscious and not b.dead
+
+
+def _wound(w: Work, pid: str, amount: int, means, text: str, ev: dict, *, firearm: bool, finish: bool = False) -> str:
+    hurt = w.hurt(pid, amount, means, finish=finish)
     notes = [hurt.describe()] if w.investigator(pid) is not None else list(hurt.notes)
     ev.update(hurt=pid, hurt_side=_side(w.ctx, pid), damage=amount, damage_text=text, notes=notes)
     v = w.ctx.view(pid)
@@ -462,7 +471,8 @@ def _maneuver(w: Work, a: str, d: str, which: str, ev: dict, *, attacker_won: bo
             enc.scene.prone.append(d)
         enc.budget.lost_next[d] = "爬起来"
         return f"把{{{d}}}摔倒在地，他下一次行动得先爬起来"
-    enc.scene.holds = [h for h in enc.scene.holds if h.held != d] + [Hold(held=d, by=a, since=enc.round)]
+    if not any(h.held == d and h.by == a for h in enc.scene.holds):  # held already by the same: held since then
+        enc.scene.holds = [h for h in enc.scene.holds if h.held != d] + [Hold(held=d, by=a, since=enc.round)]
     return f"死死制住了{{{d}}}"
 
 
@@ -512,7 +522,7 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
     if band:
         reasons = [*reasons, f"{firearms.BAND_NAMES[band]}（{yards} 码）"]
     reasons = [*reasons, *(r.lstrip("+−") for r in mods.reasons)]
-    known = weapon_in(opt.name)
+    known = named(opt.weapon) or weapon_in(opt.name)  # its action decides what a malfunction is (a revolver's is a dud)
     text, amount_total, results = "", 0, []
     for n in range(shots):
         if opt.jammed or (loaded is not None and loaded <= 0):
@@ -551,7 +561,7 @@ def _shot(w: Work, receipt: ActionReceipt, k: int, pick, opt, reaction, head: st
             ev["extreme"] = ev["extreme"] or mode == "extreme"
             ev["winner"] = "attacker"
             amount_total += amount
-            results.append(_wound(w, d, amount, "firearm", text, ev, firearm=True))
+            results.append(_wound(w, d, amount, "firearm", text, ev, firearm=True, finish=helpless(w, d)))
     if opt.item and loaded is not None and loaded != opt.loaded:
         w.unit.effects.append(effects.Ammo(item=opt.item, loaded=max(0, loaded)))
     if amount_total:
@@ -618,7 +628,7 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
         lines.append(_unjam(w, receipt, a, d.target))
     elif d.do == "ready":
         v = ctx.view(a)
-        opt = next((x for x in v.attacks() if d.target in (x.id, x.name) and x.item), None)
+        opt = next((x for x in v.attacks() if actions.refers(x, d.target) and x.item), None)
         if opt is not None:
             w.unit.effects.append(effects.Ready(who=a, item=opt.item))
             lines.append(f"{an}把{opt.name}拿在手里")
@@ -627,7 +637,7 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
     elif d.do == "help":
         t = enc.get(d.target)
         if t is not None:
-            t.edges.append(Edge(dice=1, why=f"{ctx.name(a)}帮忙", source=a, until="next_roll"))
+            t.edges.append(Edge(dice=1, why=f"{an}帮忙", source=a, until="next_roll"))  # in keeper form: each audience's name
         lines.append(f"{an}帮着{{{d.target}}}" + (f"：{d.summary}" if d.summary else ""))
     elif d.do == "pursue":
         lines.append(f"{an}追向{{{d.target}}}")
@@ -709,12 +719,12 @@ def _aid(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
 def _reload(w: Work, a: str, target: str) -> str:
     v = w.ctx.view(a)
     gun = next((x for x in v.attacks() if x.firearm and x.capacity and (x.loaded or 0) < x.capacity
-                and (not target or target in (x.id, x.name))), None)
+                and (not target or actions.refers(x, target))), None)
     if gun is None:
         return f"{{{a}}}摸了摸枪，子弹是满的"
     ent = w.ctx.world.rec.entities.get(gun.item or "")
     spare = ent.weapon.spare if ent is not None and ent.weapon is not None else None
-    known = weapon_in(gun.name)
+    known = named(gun.weapon) or weapon_in(gun.name)
     done = firearms.reload(gun.loaded or 0, gun.capacity, spare, loading=(known.loading if known else "rounds"))  # type: ignore[arg-type]
     if gun.item:
         w.unit.effects.append(effects.Ammo(item=gun.item, loaded=done.loaded, spare=done.spare))
@@ -725,7 +735,7 @@ def _unjam(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
     """Clearing a jam: a Mechanical Repair or Firearms roll this round (the book's 1D6 rounds of work
     before it are the project's simplification: one round)."""
     v = w.ctx.view(a)
-    gun = next((x for x in v.attacks() if x.jammed and (not target or target in (x.id, x.name))), None)
+    gun = next((x for x in v.attacks() if x.jammed and (not target or actions.refers(x, target))), None)
     if gun is None:
         return f"{{{a}}}检查了一下枪，没有卡住"
     skill = max(firearms.UNJAM_SKILLS, key=lambda s: v.skill(s) if s != "射击" else gun.value)

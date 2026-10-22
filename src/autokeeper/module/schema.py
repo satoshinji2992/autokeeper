@@ -292,6 +292,15 @@ class Ending(BaseModel):
     reward: str = ""
 
 
+# The engine's own end, for what any game can come to whatever its module writes: every investigator
+# dead (engine/game.Game._party_down). It is reached only when none of the module's endings was by then;
+# the ending screen, the debrief and the epilogue read it as any other (Module.ending).
+PARTY_DEAD = Ending(id="party_dead", title="全员殒命", condition="调查员全部死亡",
+                    text="调查员全部死亡，他们的调查就此终止。")
+PARTY_UNFIT = Ending(id="party_unfit", title="调查中断", condition="调查员均无法继续行动",
+                     text="调查员已经无法继续行动，本次调查就此中断。")
+
+
 class Showcase(BaseModel):
     """大场景: one big picture over the whole screen at a turning point (engine/showcase.py)."""
 
@@ -473,6 +482,10 @@ class Module(BaseModel):
 
     def clue(self, id: str) -> Clue:
         return _find(self.clues, id, "线索")
+
+    def ending(self, id: str) -> Ending | None:
+        """The module's own ending, or a built-in end for a party unable to continue."""
+        return next((e for e in (*self.endings, PARTY_DEAD, PARTY_UNFIT) if e.id == id), None)
 
     def handout(self, id: str) -> Handout:
         return _find(self.handouts, id, "手稿")

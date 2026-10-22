@@ -97,7 +97,7 @@ def test_the_skill_package_carries_the_sheets_the_routes_and_the_scripted_attack
     assert "4. **钟楼大门**（▦ 沉重的木门，力量，耐久 15）" in tower
     assert "## 追逐路线" not in (root / "references" / "locations" / "square.md").read_text(encoding="utf-8")
     warden = (root / "references" / "npcs" / "warden.md").read_text(encoding="utf-8")
-    assert "## 打起来时（引擎读到的）" in warden and "棍棒 45%" in warden  # the wrench he holds is a club, at his fighting
+    assert "## 打起来时（引擎读到的）" in warden and "大扳手 45%" in warden  # the wrench he holds: a club, at his fighting
     assert "当场打起来：`coil`（调查员被偷袭）" in (root / "references" / "events.md").read_text(encoding="utf-8")
     skill = (root / "SKILL.md").read_text(encoding="utf-8")
     assert "## 战斗与追逐" in skill and "references/creatures.md" in skill and "`tower` 钟楼" in skill

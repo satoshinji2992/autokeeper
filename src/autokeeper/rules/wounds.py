@@ -375,6 +375,21 @@ def wake(body: Body) -> Body:
     return body._with(drop=(UNCONSCIOUS,), unconscious_at=None)
 
 
+# How long someone out cold stays so is the keeper's call (p. 358, the glossary's 昏迷); the project sets it:
+WAKE_AT_ZERO = 1440  # at 0 HP with only minor wounds they "recover in time" (p. 100): a day, the first point of
+#                      natural healing (p. 101), as the one beaten senseless who may wake the next day (p. 100)
+WAKE_HURT = 60  # out cold with hit points left (a major wound's failed CON, p. 100; a knockout, p. 105): an hour
+
+
+def waking(body: Body) -> int | None:
+    """Game minutes from falling out cold until they come to by themselves (WAKE_AT_ZERO, WAKE_HURT);
+    None for whoever does not: awake, dying (out cold until Medicine, p. 101) or dead. First Aid or
+    Medicine wakes them sooner (p. 358)."""
+    if not body.has(UNCONSCIOUS) or body.dying or body.dead:
+        return None
+    return WAKE_AT_ZERO if body.hp <= 0 else WAKE_HURT
+
+
 # -- healing over time ----------------------------------------------------------------------------
 def heal_day(body: Body) -> Body:
     """A day's natural healing without a major wound: 1 HP (p. 101). With one marked, nothing: the

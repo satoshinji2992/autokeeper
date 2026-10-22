@@ -387,6 +387,7 @@ def audit(m: Module) -> list[Issue]:
         if mech.plugin and mech.plugin not in m.plugins:
             err(f"规则「{mech.name}」的插件 {mech.plugin} 不在 plugins 里")
     issues += fighting(m)
+    issues += annotated(m)
 
     reach = reachable_locations(m) if m.start in locs else set()
     for loc in m.locations:
@@ -480,6 +481,20 @@ def stake_problems(m: Module, when: str) -> list[str]:
             out.append(f"{atom} 不对：胜负后果看遭遇怎么收场，不写时间")
         else:
             out += _waits(m, [atom])
+    return out
+
+
+def annotated(m: Module) -> list[Issue]:
+    """Names of people and creatures with a note in brackets, as “埃里”（异界存在）: the note is the
+    keeper's, never shown to the players (engine/encounter/profiles.shown_name leaves it out), and a
+    name the keeper reads with it is easily told aloud; it belongs in the description or the role."""
+    out = []
+    for c in m.creatures:
+        if profiles.ANNOTATION.search(c.name):
+            out.append(Issue("warning", f"怪物 {c.id} 的名字「{c.name}」带括号注释：注释不会显示给玩家，写进 description"))
+    for n in m.npcs:
+        if profiles.ANNOTATION.search(n.name):
+            out.append(Issue("warning", f"NPC {n.id} 的名字「{n.name}」带括号注释：注释不会显示给玩家，写进 role"))
     return out
 
 

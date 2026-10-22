@@ -2,7 +2,10 @@
 
 An investigator fights with what they carry: inventory lines and the world record's held items
 are matched against WEAPONS by name ("一把 .38 左轮" is the .38 revolver), and the bare hands
-are always there. A creature or an NPC fights with what its sheet says: "爪击 50% (25/10)，伤害
+are always there. What the words say the weapon is decides; a maker's name only picks among weapons
+of that kind ("柯尔特左轮手枪" is a revolver, "柯尔特" alone the M1911), and a box of cartridges or a
+holster is no weapon (`weapon_in`). The item keeps its own name; the table's entry is only its numbers
+and its action. A creature or an NPC fights with what its sheet says: "爪击 50% (25/10)，伤害
 1D6", "格斗（剥皮爪击）60%，伤害 1D4+2+DB", "射击（步枪）30%，……2D6+4" (parse_attack). Damage
 expressions are kept as written, with "DB" standing for the attacker's damage bonus; the engine
 puts the bonus in when it rolls (rules/combat.py)."""
@@ -38,6 +41,7 @@ class Weapon:
     ammo: int = 0  # rounds a full load holds; 0 for no ammunition
     malfunction: int = 100  # a roll of this or more and it does not fire
     aliases: tuple[str, ...] = field(default_factory=tuple)
+    makers: tuple[str, ...] = field(default_factory=tuple)  # a maker's name, meaning this one only when the words name no other kind
     natural: bool = False  # the body's own (fists, claws, a bite): never disarmed, never dropped
     volley: int = 1  # a handgun's "1(3)": up to 3 shots a round, each at a penalty die (p. 96)
     mechanism: str = ""  # revolver, break, bolt, lever, pump, auto: what a malfunction is (rules/firearms)
@@ -88,7 +92,7 @@ WEAPONS: tuple[Weapon, ...] = (
     Weapon(".32 左轮手枪", HANDGUN, "1D8", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
            mechanism="revolver", aliases=(".32 左轮", "7.65mm 左轮")),
     Weapon(".32 自动手枪", HANDGUN, "1D8", impale=True, firearm=True, range=15, ammo=8, malfunction=99, volley=3,
-           mechanism="auto", loading="magazine", aliases=(".32", "7.65", "自动手枪", "勃朗宁")),
+           mechanism="auto", loading="magazine", aliases=(".32", "7.65", "自动手枪"), makers=("勃朗宁",)),
     Weapon(".38 左轮手枪", HANDGUN, "1D10", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
            mechanism="revolver", aliases=(".38", "左轮", "转轮手枪", "手枪", "警用左轮")),
     Weapon(".38 自动手枪", HANDGUN, "1D10", impale=True, firearm=True, range=15, ammo=8, malfunction=99, volley=3,
@@ -96,11 +100,11 @@ WEAPONS: tuple[Weapon, ...] = (
     Weapon(".45 左轮手枪", HANDGUN, "1D10+2", impale=True, firearm=True, range=15, ammo=6, malfunction=100, volley=3,
            mechanism="revolver", aliases=(".45 左轮",)),
     Weapon(".45 自动手枪", HANDGUN, "1D10+2", impale=True, firearm=True, range=15, ammo=7, malfunction=100, volley=3,
-           mechanism="auto", loading="magazine", aliases=(".45", "柯尔特", "M1911")),
+           mechanism="auto", loading="magazine", aliases=(".45", "M1911"), makers=("柯尔特",)),
     Weapon("猎枪", RIFLE, "1D6+1", impale=True, firearm=True, range=30, ammo=6, malfunction=99, mechanism="bolt",
            aliases=(".22 步枪", "小口径步枪", ".22 栓动步枪")),
     Weapon("杠杆步枪", RIFLE, "2D6", impale=True, firearm=True, range=50, ammo=6, malfunction=98, mechanism="lever",
-           aliases=(".30 杠杆步枪", "温彻斯特", "杠杆式步枪")),
+           aliases=(".30 杠杆步枪", "杠杆式步枪"), makers=("温彻斯特",)),
     Weapon("步枪", RIFLE, "2D6+4", impale=True, firearm=True, range=110, ammo=5, malfunction=100, mechanism="bolt",
            aliases=("春田", "栓动步枪", ".30-06", "M1903", "来复枪")),
     Weapon("李-恩菲尔德步枪", RIFLE, "2D6+4", impale=True, firearm=True, range=110, ammo=10, malfunction=100,
@@ -111,18 +115,49 @@ WEAPONS: tuple[Weapon, ...] = (
            mechanism="auto", loading="magazine", aliases=("汤普森", "冲锋枪", "芝加哥打字机")),
 )
 
-_KEYS: list[tuple[str, Weapon]] = sorted(((key, w) for w in WEAPONS for key in (w.name, *w.aliases)),
+
+def _plain(text: str) -> str:
+    return text.replace("（", "(").replace("）", ")").replace(" ", "")
+
+
+_KEYS: list[tuple[str, Weapon]] = sorted(((_plain(key), w) for w in WEAPONS for key in (w.name, *w.aliases)),
                                          key=lambda kv: -len(kv[0]))
+_MAKERS: list[tuple[str, Weapon]] = sorted(((_plain(key), w) for w in WEAPONS for key in w.makers), key=lambda kv: -len(kv[0]))
+_NAMED = {w.name: w for w in WEAPONS}
+# Words that say only the class of a weapon (a handgun, a rifle), not which one: a maker named with them
+# says which (柯尔特手枪 is the M1911, 温彻斯特步枪 the lever-action).
+CLASS_WORDS = frozenset({"手枪", "步枪", "来复枪"})
+# What goes with a weapon and is none, when a thing's name ends with it (一盒 .38 子弹, 左轮手枪的枪套).
+_GEAR = re.compile(r"(?:子弹|弹药|弹匣|弹夹|弹壳|枪套|枪油|枪袋|枪盒)$")
 
 
 def weapon_in(text: str) -> Weapon | None:
-    """The weapon a line of the inventory or an order names, the longest name first ("左轮手枪"
-    before "手枪"), or None."""
-    plain = text.replace("（", "(").replace("）", ")").replace(" ", "")
-    for key, w in _KEYS:
-        if key.replace(" ", "") in plain:
-            return w
-    return None
+    """The weapon some words name (an order, a look, a sheet's attack), or None. What the words say
+    it is decides, the longest name first ("左轮手枪" before "手枪"); a maker's name only picks among
+    weapons of that kind, or names its best-known one when the words say no more: 柯尔特左轮手枪 is
+    a revolver, 柯尔特 and 柯尔特手枪 the M1911, 温彻斯特霰弹枪 a shotgun."""
+    plain = _plain(text)
+    found = [(key, w) for key, w in _KEYS if key in plain]
+    said = next(((key, w) for key, w in found if key not in CLASS_WORDS), None) or (found[0] if found else None)
+    maker = next((w for key, w in _MAKERS if key in plain), None)
+    if maker is None or said is None:
+        return maker or (said[1] if said else None)
+    key, w = said
+    same = maker.skill == w.skill and (key in CLASS_WORDS or maker.mechanism == w.mechanism)
+    return maker if same else w
+
+
+def weapon_of(thing: str) -> Weapon | None:
+    """The weapon a thing someone holds is, by its own name (an inventory line, an item's name), or
+    None: as `weapon_in`, but a box of cartridges or a holster is none."""
+    if _GEAR.search(re.sub(r"\([^()]*\)$", "", _plain(thing))):
+        return None
+    return weapon_in(thing)
+
+
+def named(name: str) -> Weapon | None:
+    """The weapon table's entry of that very name (an attack's `weapon`), or None."""
+    return _NAMED.get(name)
 
 
 def carried(lines: list[str]) -> list[Weapon]:

@@ -14,6 +14,10 @@ uncle has become) is that NPC's: one life, one place, under the NPC's id (`comba
 person: the form's sheet over the NPC's, so what it leaves out (Jump, Climb, Spot Hidden for a chase,
 INT) is the NPC's, not an ordinary creature's.
 
+Names: a sheet's `name` is the keeper's and may carry a note in brackets: “埃里”（异界存在）. What the
+players call someone is `shown_name`'s alone, from what they know (an NPC met, a creature identified,
+the module's `called`, a look); every player surface takes its name from it.
+
 Read-only: nothing here changes the world. Bodies are seeded from a profile by engine/effects.seed.
 """
 
@@ -27,7 +31,17 @@ from pydantic import BaseModel, Field
 from ...rules.catalog import base_value, canonical
 from ...rules.combat import damage_bonus, stats_of, traits
 from ...rules.dice_expr import problem as damage_problem
-from ...rules.weapons import BRAWL, UNARMED, Weapon, attacks_per_round, carried, parse_attack, unread, weapon_in
+from ...rules.weapons import (
+    BRAWL,
+    UNARMED,
+    Weapon,
+    attacks_per_round,
+    carried,
+    parse_attack,
+    unread,
+    weapon_in,
+    weapon_of,
+)
 
 if TYPE_CHECKING:
     from ...module.schema import NPC, Creature
@@ -63,6 +77,7 @@ class AttackProfile(BaseModel):
     loaded: int | None = None  # rounds in it now, from the item's WeaponState; None: not counted yet (a full load)
     jammed: bool = False
     problem: str = ""
+    weapon: str = ""  # the weapon table's entry it is (rules/weapons.named), when it is one
 
 
 class CombatProfile(BaseModel):
@@ -128,6 +143,60 @@ def form_of(w: World, npc: str) -> Creature | None:
     return next((c for c in w.m.creatures if getattr(c, "npc", "") == npc), None)
 
 
+# -- what the players call them -------------------------------------------------------------------
+ANNOTATION = re.compile(r"\s*[（(][^（）()]*[）)]")  # a keeper's note in a name: “埃里”（异界存在）
+UNKNOWN = "不明生物"  # a creature they cannot name, when the module gives no word for what it looks like
+STRANGER = "陌生人"  # someone never met whose look names no figure
+DOUBT = "(?)"  # the name they know, on someone who is not what they know
+_FIGURE = re.compile(r"(?:人|者|汉|汉子|男子|女子|妇人|老妇|老头|老太|少年|少女|孩子|姑娘|小伙子?|先生|太太|绅士|身影|人影|青年|影子)$")
+
+
+def bare(name: str) -> str:
+    """A name without the keeper's notes in brackets: “埃里”（异界存在） is “埃里”."""
+    return ANNOTATION.sub("", name).strip() or name.strip()
+
+
+def _seen(look: str) -> str:
+    """Someone never met, by their look: its first phrase when it names a figure (一个瘦高的年轻人，…
+    is 瘦高的年轻人), else 陌生人."""
+    head = re.split(r"[，,；;。、]", look.strip(), maxsplit=1)[0].strip()
+    head = re.sub(r"^(?:一个|一位|一名)", "", head)
+    return head if 0 < len(head) <= 12 and _FIGURE.search(head) else STRANGER
+
+
+def shown_name(w: World, ident: str) -> str:
+    """What the players call someone (an investigator, an NPC, a creature, by either id of a creature
+    form), from what they know; "" for nobody. The one name every player surface uses: the fight's
+    column, choices and cards, the windows that ask them, the story's lines, a LAN table's view, the
+    keeper's 【称呼】. Never a name they have not learned, never the keeper's note in brackets:
+
+    - an NPC they met: his name; one they never met: the module's `called`, else his look (`_seen`);
+    - a creature they identified (GameState.identified): its name; else its `called`, else 不明生物;
+    - an NPC fighting as his creature form (Creature.npc), who is not what they know him as: the
+      form's name once they identified it; met, the name they know him by with (?) (埃里·赫琴斯(?));
+      neither, what they see of it (the form's `called`, his, his look)."""
+    st = w.st
+    inv = next((i for i in st.investigators if i.id == ident), None)
+    if inv is not None:
+        return inv.name
+    npc = _npc(w, combatant(w, ident))
+    if npc is None:
+        c = _creature(w, ident)
+        if c is None:
+            return ""
+        return bare(c.name) if c.id in st.identified else (c.called.strip() or UNKNOWN)
+    own = _creature(w, ident)
+    form = own if own is not None and own.npc == npc.id else form_of(w, npc.id)
+    met = (n := st.npcs.get(npc.id)) is not None and n.met
+    if form is None:
+        return bare(npc.name) if met or npc.id in st.identified else (npc.called.strip() or _seen(npc.look))
+    if form.id in st.identified or npc.id in st.identified:
+        return bare(form.name)
+    if met:
+        return bare(npc.name) + DOUBT
+    return form.called.strip() or npc.called.strip() or _seen(npc.look)
+
+
 # -- reading a sheet ----------------------------------------------------------------------------
 def profile(w: World, ident: str) -> CombatProfile | None:
     """The profile of an NPC or a creature (by either id of a creature form); None for anyone else."""
@@ -177,19 +246,22 @@ def _written(holder: str, line: str, *, creature: bool) -> AttackProfile | None:
     if wr is None:
         return None
     if not wr.firearm and (wr.name in ("斗殴", "格斗") or weapon_in(wr.name) is UNARMED):  # "格斗(斗殴) 45%": the bare hands
-        return AttackProfile(name=UNARMED.name, skill=BRAWL, value=wr.value, damage=wr.damage, natural=True)
+        return AttackProfile(name=UNARMED.name, skill=BRAWL, value=wr.value, damage=wr.damage, natural=True, weapon=UNARMED.name)
     known = weapon_in(wr.name) or (weapon_in(line) if wr.firearm else None)
     natural = not wr.firearm and (known is None or known is UNARMED) and (creature or any(x in wr.name for x in NATURAL))
     return AttackProfile(name=wr.name, skill=wr.skill, value=wr.value, damage=wr.damage, firearm=wr.firearm, impale=wr.impale,
                          natural=natural, thrown=wr.skill == "投掷", item=None if natural else f"{holder}:{wr.name}",
                          range=wr.range, capacity=wr.ammo if wr.firearm else 0,
-                         malfunction=known.malfunction if known and wr.firearm else 100)
+                         malfunction=known.malfunction if known and wr.firearm else 100,
+                         weapon=known.name if known is not None else "")
 
 
-def _weapon(w: Weapon, value: int, item: str | None) -> AttackProfile:
-    return AttackProfile(name=w.name, skill=w.skill, value=value, damage=w.damage, firearm=w.firearm, impale=w.impale,
+def _weapon(w: Weapon, value: int, item: str | None, name: str = "") -> AttackProfile:
+    """An attack with a weapon of the table, under the name of the thing it is (`name`; the table's
+    own when the thing has none of its own, as a weapon only his look tells of)."""
+    return AttackProfile(name=name or w.name, skill=w.skill, value=value, damage=w.damage, firearm=w.firearm, impale=w.impale,
                          natural=w is UNARMED, thrown=w.skill == "投掷", item=None if w is UNARMED else item, range=w.range,
-                         capacity=w.ammo if w.firearm else 0, malfunction=w.malfunction)
+                         capacity=w.ammo if w.firearm else 0, malfunction=w.malfunction, weapon=w.name)
 
 
 def _from_npc(npc: NPC, fills: dict[str, int], held: dict[str, str]) -> CombatProfile:
@@ -205,12 +277,16 @@ def _from_npc(npc: NPC, fills: dict[str, int], held: dict[str, str]) -> CombatPr
             unread_lines.append(f"攻击“{line}”：{why}")
         if (a := _written(npc.id, line, creature=False)) is not None:
             attacks.append(a)
-    for weapon in carried([*held.values(), npc.look]):
-        if any(a.name == weapon.name for a in attacks):
+    found: list[tuple[Weapon, str]] = [(UNARMED, "")]  # each weapon once: the thing he holds that is it, if one
+    for i, name in held.items():
+        if (w := weapon_of(name)) is not None and all(w is not x for x, _ in found):
+            found.append((w, i))
+    found += [(w, "") for w in carried([npc.look]) if all(w is not x for x, _ in found)]  # what his look says he carries
+    for weapon, item in found:
+        if any(a.name == weapon.name or (a.weapon and a.weapon == weapon.name) for a in attacks):  # written on his sheet
             continue
-        item = next((i for i, name in held.items() if weapon_in(name) is weapon), f"{npc.id}:{weapon.name}")
         value = s.get(weapon.skill) or (fighting if weapon.melee else s.get(canonical(weapon.skill)) or base_value(weapon.skill, s))
-        attacks.append(_weapon(weapon, value, item))
+        attacks.append(_weapon(weapon, value, item or f"{npc.id}:{weapon.name}", bare(held[item]) if item else ""))
     return CombatProfile(id=npc.id, kind="npc", name=npc.name, called=getattr(npc, "called", ""), sheet=f"npc:{npc.id}",
                          chars={k: s[k] for k in CHARS if k in s}, hp_max=s.get("生命") or max(1, (s["体质"] + s["体型"]) // 10),
                          mov=s.get("移动", 8), db=db, build=build, dodge=s.get("闪避", s["敏捷"] // 2),

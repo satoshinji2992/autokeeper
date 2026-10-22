@@ -105,6 +105,13 @@ def portrait(game: Any, pid: str) -> str:
     return key if key in game.m.pictures else ""
 
 
+def seen_look(v, n: int) -> str:
+    """What the players can see of someone, in at most `n` characters: a person's look; nothing of a
+    creature's sheet (its description is the keeper's, and says what it is)."""
+    prof = getattr(v, "profile", None)
+    return prof.look[:n] if prof is not None and prof.sheet.startswith("npc:") else ""
+
+
 def readiest(v) -> Any:
     """The attack someone holds ready: a gun that can fire, else their best melee attack."""
     guns = [a for a in v.attacks() if a.firearm and a.usable]
@@ -125,7 +132,7 @@ def fight_view(game: Any, enc: EncounterState | None = None) -> dict:
         b = v.body()
         weapon = readiest(v)
         party = p.side == "party"
-        look = v.profile.look[:60] if hasattr(v, "profile") else ""
+        look = seen_look(v, 60)
         out.append({"id": p.id, "name": ctx.name(p.id, "players"), "kind": p.kind, "side": "party" if party else "foe",
                     "status": status(ctx, p.id), "wound": wound_word(b), "hp": b.hp if party else None,
                     "hp_max": b.hp_max if party else None, "portrait": portrait(game, p.id), "look": look,
@@ -319,6 +326,10 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
             traits=traits, missing=missing, sees=sees, unseen=unseen, told=told,
             luck=luck_pool(ctx, p.id) if p.controller == "keeper" else None))
     fled = [p.id for p in enc.participants if p.presence == "fled"]
+    party = [p.id for p in enc.participants if p.side == "party" and p.presence == "in"]
+    down = [] if any(ctx.acting(x) for x in party) else [
+        f"{x}（{'、'.join(c for c in ctx.view(x).body().conditions if c in DOWN or c == '重伤') or '倒下'}）"
+        for x in party if ctx.view(x) is not None]
     held = [f"{h.by} 制住了 {h.held}" for h in enc.scene.holds]
     cover = [f"{c.who} 躲在{c.what}后（{'部分掩体' if c.partial else '完全遮住'}）" for c in enc.scene.cover]
     unseen = [f"{u.watcher} 看不见 {u.who}" + (f"（{u.why}）" if u.why else "") for u in enc.scene.unseen]
@@ -336,7 +347,7 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
                  nodes=list(ch.site.nodes) if ch else [], edges=list(ch.site.edges) if ch else [],
                  obstacles=list(ch.site.obstacles.values()) if ch else [], quarry=list(ch.quarry) if ch else [],
                  pursuers=list(ch.pursuers) if ch else [], lost_sight=list(ch.lost_sight) if ch else [],
-                 stakes=[BriefStake(when=s.when, flags=list(s.flags), note=s.note, fired=s.fired) for s in enc.stakes],
+                 down=down, stakes=[BriefStake(when=s.when, flags=list(s.flags), note=s.note, fired=s.fired) for s in enc.stakes],
                  lines=recent, history=list(enc.history), unsettled=list(unsettled or []), waiting=waiting)
 
 

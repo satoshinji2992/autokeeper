@@ -30,8 +30,8 @@ def module() -> Module:
 
 
 def ghoul(module: Module, hp: int = 12) -> None:
-    module.creatures.append(Creature(id="ghoul", name="食尸鬼", description="墓园中的食尸鬼", sanity="0/1", stats={"HP": hp},
-                                     attacks=["爪击 50%，伤害 1D6"]))
+    module.creatures.append(Creature(id="ghoul", name="食尸鬼", called="食尸鬼", description="墓园中的食尸鬼", sanity="0/1",
+                                     stats={"HP": hp}, attacks=["爪击 50%，伤害 1D6"]))
 
 
 def table(*npcs):

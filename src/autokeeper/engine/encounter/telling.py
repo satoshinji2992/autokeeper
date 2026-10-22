@@ -32,11 +32,14 @@ _REF = re.compile(r"\{([^{}\s]+)\}")
 
 def tell(lines: list[str]) -> str:
     """What the keeper is asked to write for a turn with a fight or a chase in it (Turn.fight): the
-    round as settled, or how it begins when nothing is settled yet (an event's scripted attack)."""
+    round as settled (the rounds, when it went on by itself with nobody at the table able to act), or
+    how it begins when nothing is settled yet (an event's scripted attack)."""
     if not any(line.startswith(ROUND_HEADS) for line in lines):
         return BEGIN_TELL
     chase = any(line.startswith("【追逐") for line in lines) and not any(line.startswith("【战斗") for line in lines)
-    return CHASE_TELL if chase else FIGHT_TELL
+    text = CHASE_TELL if chase else FIGHT_TELL
+    rounds = sum(line.startswith(("【战斗 · 第", "【追逐 · 第")) for line in lines)
+    return text.replace("这一轮", "这几轮", 1) if rounds > 1 else text
 
 
 def render(text: str, names: dict[str, str]) -> str:
@@ -46,7 +49,8 @@ def render(text: str, names: dict[str, str]) -> str:
 
 def name_rows(keeper: dict[str, str], players: dict[str, str]) -> list[str]:
     """Who the players know by another name, as the report's 【称呼】 line lists them (engine/game._unknown):
-    道格拉斯·金博尔（玩家所见：犬脸的佝偻身影）."""
+    道格拉斯·金博尔（玩家所见：犬脸的佝偻身影）. Both names come without the keeper's notes in brackets
+    (profiles.bare, profiles.shown_name), so the line never hands the narration one."""
     return [f"{keeper[i]}（玩家所见：{players[i]}）" for i in keeper if players.get(i) and players[i] != keeper[i]]
 
 

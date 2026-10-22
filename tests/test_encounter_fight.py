@@ -79,14 +79,20 @@ async def test_words_are_the_keeper_plans_never_parsed_by_their_first_word(modul
     assert "打开门逃跑" not in report and "周衡想拉开门逃出去" in report  # never the player's raw words
 
 
-async def test_a_bracketed_name_is_a_choice_like_any_other(module, fake):
+async def test_a_keepers_note_in_a_name_never_reaches_the_players(module, fake):
+    """The user's game of 冬雪之下 (2026-10-22): the fight showed 「“埃里”（异界存在）」, a creature's name
+    with the keeper's note in it. They see what they know (profiles.shown_name), never the note."""
     module.creatures.append(Creature(id="eli", name="“埃里”（异界存在）", description="门框里的影子", sanity="0/1",
                                      stats={"生命": 8, "敏捷": 40}, attacks=["触手 30%，伤害 1D4"]))
     game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("eli", attack("zhouheng"))]))
     fake.queue(99)  # the first sight's sanity roll fails: 1
     await begin(game, ["eli"])
     words = [o.label for o in choices.options(game, "zhouheng")]
-    label = next(w for w in words if w.startswith("攻击 “埃里”（异界存在）（徒手，1D3）"))
+    assert words[0] == "攻击 不明生物（徒手，1D3）"  # no `called`, not identified: nothing of its name
+    assert not any("埃里" in w or "异界" in w for w in words)
+    game.state.identified.append("eli")  # once they know what it is: its name, never the note
+    label = next(o.label for o in choices.options(game, "zhouheng") if o.label.startswith("攻击 "))
+    assert label == "攻击 “埃里”（徒手，1D3）" and views.fight_view(game)["fighters"][1]["name"] == "“埃里”"
     found = choices.match(game, "zhouheng", label)
     assert found is not None and found.do == "attack" and found.attacks[0].target == "eli"
     assert choices.match(game, "zhouheng", "攻击 “埃里”") is None  # only the whole words
@@ -99,6 +105,7 @@ async def test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all(
         npcs=[arrange("ghoul", attack("zhouheng", n=1, summary="食尸鬼扑咬"))]))
     fake.queue(99)
     await begin(game, ["ghoul"])
+    game.state.identified.append("ghoul")  # they know what it is: 食尸鬼 on their screens
     game.state.encounter.participants[0].asked = True  # asked before: its preset stands for an ordinary blow
     game.state.encounter.participants[0].react = "dodge"
     game.state.investigator.hp = game.state.investigator.hp_max = 30  # no blow can put him down: nothing to ask
@@ -157,25 +164,23 @@ async def test_disarming_drops_the_real_weapon_and_claws_cannot_be_taken(module,
 
 
 async def test_a_dying_investigator_rolls_con_from_the_end_of_the_next_round_and_the_fight_goes_on(module, fake):
-    """p. 101; the review: downed investigators were frozen."""
+    """p. 101; the review: downed investigators were frozen. With nobody else at the table able to act,
+    the rounds go on by themselves: no roll at the end of the round he began dying in, one at every
+    round's end after it; a failure, and with every investigator dead the game reaches its end."""
     game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(do="defend", summary="守着"))]))
     await begin(game, ["warden"])
     inv = game.state.investigator
     inv.hp, inv.conditions = 0, ["重伤", "濒死", "昏迷"]
-    inv.injury.dying_since = None
+    inv.injury.dying_since = 1  # dying since round 1 (the first round): no roll at its end, one at the end of round 2
     game.state.encounter.participants[0].react = "dodge"
-    from autokeeper.engine import effects
-
-    # dying since round 1 (the first round): no roll at its end, one at the end of round 2
-    inv.injury.dying_since = 1
     app = turn_graph.build(game, InMemorySaver())
-    out, _ = await play(app, "/encounter")
-    assert game.state.encounter.round == 1 and "死亡" not in inv.conditions and not fake.values
     fake.queue(80)  # round 2's end: CON 55 fails
-    out, _ = await play(app, "/encounter", thread={**THREAD, "configurable": {"thread_id": "enc2"}})
-    assert "死亡" in inv.conditions
+    out, _ = await play(app, "/encounter")
+    st = game.state
+    assert "死亡" in inv.conditions and not fake.values and st.encounter_log[-1].rounds == 2
+    assert [e["round"] for e in out if e["type"] == "fight_round"] == [1, 2]
     assert any(e["type"] == "damage" and e["text"] == "伤重不治" for e in out)
-    del effects
+    assert st.encounter_log[-1].ended.how == "lost" and st.ending == "party_dead"  # no ending of the module's: the engine's
 
 
 # -- running away, and what the outcome brings about --------------------------------------------------
@@ -348,7 +353,7 @@ async def test_a_weapon_picked_up_is_registered_before_it_is_used(module, fake):
     fake.queue(10, 90, 30).queue_totals(6)  # 1D8 = 6, a major wound: the warden's CON holds
     out, _ = await play(app, "我抄起壁炉边的拨火棍砸他")
     act = next(e for e in out if e["type"] == "fight_act")
-    assert act["attack"] == "棍棒" and "拨火棍" in game.state.investigator.inventory
+    assert act["attack"] == "拨火棍" and "拨火棍" in game.state.investigator.inventory  # its own name; a club by the table
     from autokeeper.engine.encounter import plan_check
 
     unheld = DeclaredAction(do="attack", attacks=[AttackPick(target="warden", with_="斧头")], summary="周衡挥斧")
@@ -380,6 +385,7 @@ async def test_a_creature_that_heals_itself_gets_up_again(module, fake):
     game, cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("husk", DeclaredAction(do="defend", summary="守"))]))
     fake.queue(30)
     await begin(game, ["husk"])
+    game.state.identified.append("husk")
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(10, 90).queue_totals(3)  # a hard punch: 3, it is down, and comes back at the round's end
     _out, _ = await play(app, "攻击 空壳（徒手，1D3）")

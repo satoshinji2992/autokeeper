@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 from ...rules.catalog import canonical
 from ...rules.dice_expr import DamageExpr
-from ...rules.weapons import BRAWL, UNARMED, Weapon, weapon_in
+from ...rules.weapons import BRAWL, UNARMED, Weapon, weapon_of
 from ..effects import Body, body_of
 from . import profiles
 
@@ -39,7 +39,7 @@ class AttackOption:
     """An attack someone can make now: natural, or a weapon they hold or carry (its item id)."""
 
     id: str  # the item id, or "natural:<name>"
-    name: str
+    name: str  # what it is called: the item's own name (柯尔特左轮手枪), the sheet's attack (剥皮爪击)
     skill: str
     value: int
     damage: DamageExpr | None  # None when the sheet's damage cannot be rolled (`problem` says why)
@@ -54,6 +54,7 @@ class AttackOption:
     jammed: bool = False
     malfunction: int = 100
     problem: str = ""
+    weapon: str = ""  # the weapon table's entry it is (rules/weapons.named): its action, how it loads; "" for none
 
     @property
     def usable(self) -> bool:
@@ -89,11 +90,11 @@ def _expr(text: str) -> tuple[DamageExpr | None, str]:
 
 def _option(*, ident: str, name: str, skill: str, value: int, damage: str, firearm: bool = False, impale: bool = False,
             natural: bool = False, item: str | None = None, range_: int = 0, loaded: int | None = None, capacity: int = 0,
-            jammed: bool = False, malfunction: int = 100, problem: str = "") -> AttackOption:
+            jammed: bool = False, malfunction: int = 100, problem: str = "", weapon: str = "") -> AttackOption:
     expr, why = _expr(damage)
     return AttackOption(id=ident, name=name, skill=skill, value=value, damage=expr, damage_text=damage, firearm=firearm,
                         impale=impale, natural=natural, item=item, range=range_, loaded=loaded, capacity=capacity,
-                        jammed=jammed, malfunction=malfunction, problem=problem or why)
+                        jammed=jammed, malfunction=malfunction, problem=problem or why, weapon=weapon)
 
 
 class InvestigatorView:
@@ -130,23 +131,26 @@ class InvestigatorView:
         return [*own, *(line for line in self.inv.inventory if line not in names and line not in own)]
 
     def attacks(self) -> list[AttackOption]:
-        """The bare hands, and every weapon they carry: an item entity's state when it has one, a
-        full load when nobody has counted its rounds yet."""
+        """The bare hands, and every weapon they carry, each under its own name and id (the item
+        entity, or the inventory line): the weapon table's entry it is gives its numbers and its
+        action (rules/weapons.weapon_of: a Colt revolver is a revolver); an item entity's state when it
+        has one, a full load when nobody has counted its rounds yet."""
         out = [_option(ident=f"natural:{UNARMED.name}", name=UNARMED.name, skill=BRAWL, value=self.inv.value(BRAWL),
-                       damage=UNARMED.damage, natural=True)]
+                       damage=UNARMED.damage, natural=True, weapon=UNARMED.name)]
         seen: set[str] = set()
         for item in self.held():
             ent = self.world.rec.entities.get(item)
-            weapon: Weapon | None = weapon_in(ent.name if ent is not None else item)
-            if weapon is None or weapon is UNARMED or weapon.name in seen or (ent is not None and ent.quantity <= 0):
+            own = ent.name if ent is not None else item
+            weapon: Weapon | None = weapon_of(own)
+            if weapon is None or weapon is UNARMED or item in seen or (ent is not None and ent.quantity <= 0):
                 continue
-            seen.add(weapon.name)
+            seen.add(item)
             state = ent.weapon if ent is not None else None
             loaded = (state.loaded if state is not None and state.loaded is not None else weapon.ammo) if weapon.firearm else None
-            out.append(_option(ident=item, name=weapon.name, skill=weapon.skill, value=self.inv.value(weapon.skill),
+            out.append(_option(ident=item, name=profiles.bare(own), skill=weapon.skill, value=self.inv.value(weapon.skill),
                                damage=weapon.damage, firearm=weapon.firearm, impale=weapon.impale, item=item, range_=weapon.range,
                                loaded=loaded, capacity=weapon.ammo, jammed=bool(state and state.jammed),
-                               malfunction=weapon.malfunction))
+                               malfunction=weapon.malfunction, weapon=weapon.name))
         return out
 
     def db(self) -> str:
@@ -179,11 +183,11 @@ class EntityView:
         return None if p is None else cls(world.rec.entities.get(p.id), p, world)
 
     def public_name(self, audience: Audience) -> str:
+        """The keeper's name without the notes in brackets (the narration's account), or what the
+        players call them (profiles.shown_name: never a name they have not learned)."""
         if audience == "keeper":
-            return self.profile.name
-        st = self.world.st
-        known = self.id in st.identified or (self.kind == "npc" and (n := st.npcs.get(self.id)) is not None and n.met)
-        return self.profile.name if known or not self.profile.called else self.profile.called
+            return profiles.bare(self.profile.name)
+        return profiles.shown_name(self.world, self.id)
 
     def char(self, key: str) -> int:
         return self.profile.chars.get(canonical(key), 0)
@@ -211,7 +215,7 @@ class EntityView:
             loaded = (a.loaded if a.loaded is not None else a.capacity) if a.firearm else None
             out.append(_option(ident=a.item or f"natural:{a.name}", name=a.name, skill=a.skill, value=a.value, damage=a.damage,
                                firearm=a.firearm, impale=a.impale, natural=a.natural, item=a.item, range_=a.range, loaded=loaded,
-                               capacity=a.capacity, jammed=a.jammed, malfunction=a.malfunction, problem=a.problem))
+                               capacity=a.capacity, jammed=a.jammed, malfunction=a.malfunction, problem=a.problem, weapon=a.weapon))
         return out
 
     def db(self) -> str:

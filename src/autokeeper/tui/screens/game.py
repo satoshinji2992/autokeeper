@@ -1712,6 +1712,8 @@ class GameScreen(Screen):
             self.app.notify("在 /kp 后输入要对守秘人说的话。", timeout=4)
         elif cmd == "/retry":
             self.action_retry()
+        elif cmd == "/encounter" and self._in_battle():  # 继续: the round goes on without this investigator
+            self.play(cmd)
         elif cmd == "/undo":  # the action typed ahead goes back in the box, to change or drop
             if self.queued is None:
                 self.app.notify("暂无可撤回的行动。")
@@ -1737,7 +1739,7 @@ class GameScreen(Screen):
         self.ideas.drop()  # whatever F5 was still thinking of, this action came first
         self._busy(True)
         inv = self.state.investigator
-        said = "提出灵感检定" if idea.asked(text) else text
+        said = "提出灵感检定" if idea.asked(text) else "继续" if text == "/encounter" else text
         self.story.add("system" if text.startswith("/kp ") else "player",
                        Text(f"▶ {inv.name} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {inv.name}：{said}"))
         turn = self.state.turn

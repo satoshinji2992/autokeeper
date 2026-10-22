@@ -5,7 +5,10 @@
 ("douglas 没有拿着 revolver", "brennan 已经倒下了"): the keeper plan's check sends them back to the
 model (plan_check), an NPC's arrangement falls through to its next preferred action when its first
 lacks something, and a player's declaration that went stale at their slot is asked again. The same
-words go into the brief, so a plan is shown up front what each action needs.
+words go into the brief, so a plan is shown up front what each action needs. Each is a `Lack`: those
+words are the model's, and `Lack.shown` says the same to the players (`said`), with the names they
+know and the things' own names, never an id: the window asking a player to choose again and the
+account of a declaration that lapsed use that.
 
 `Ctx` is the encounter as one unit reads it: the state, everyone's view (engine/encounter/combatant,
 rebuilt per unit), the world. Nothing here changes anything.
@@ -17,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from ...rules.melee import maneuver_feasible
-from ...rules.weapons import BRAWL, HANDGUN
+from ...rules.weapons import BRAWL, HANDGUN, weapon_in
 from . import combatant
 from .combatant import AttackOption
 from .plan import AttackPick, DeclaredAction
@@ -33,6 +36,31 @@ VERBS = {"attack": "攻击", "shoot": "射击", "maneuver": "战技", "aid": "�
          "use": "使用", "other": "其他", "delay": "推迟"}
 REACT_WORDS = {"dodge": "闪避", "fight_back": "反击", "cover": "找掩护", "none": "不应对"}
 UNARMED_ID = "natural:徒手"
+
+
+class Lack(str):
+    """Something an action lacks: the string itself is the keeper plan's wording (ids, as the plan
+    writes them), `shown` the players' (keeper form: `{id}` for a person, read out per audience by
+    telling.render; things by their own names; no id of a thing, no natural: prefix)."""
+
+    shown: str
+
+    def __new__(cls, model: str, shown: str) -> Lack:
+        out = super().__new__(cls, model)
+        out.shown = shown
+        return out
+
+
+def said(problem: str) -> str:
+    """A problem in the players' words, in keeper form: a Lack's own; any other string is the
+    model's alone and is not shown."""
+    return getattr(problem, "shown", "") or "这一下做不成了"
+
+
+def _who(ctx: Ctx, pid: str) -> str:
+    """Someone in a player's words, in keeper form: `{id}` when they are in the encounter (read out
+    as the players call them), else nothing of the id the model wrote."""
+    return f"{{{pid}}}" if pid and ctx.p(pid) is not None else "对方"
 
 
 @dataclass
@@ -177,11 +205,18 @@ def best_melee(v) -> AttackOption | None:
 
 
 def option(v, with_: str, do: str) -> AttackOption | None:
-    """The attack `with_` names (an attack id or its name; "" the obvious one for `do`): fists or
-    the creature's own first attack for a blow, the best loaded gun for a shot."""
+    """The attack `with_` names ("" the obvious one for `do`: fists or the creature's own first attack
+    for a blow, the best loaded gun for a shot): an attack's id, its own name, the weapon table's
+    name of what it is, or words naming a weapon that just one of their attacks is (左轮手枪 for the
+    柯尔特左轮手枪 they hold, rules/weapons.weapon_in)."""
     attacks = v.attacks()
     if with_:
-        return next((a for a in attacks if a.id == with_), None) or next((a for a in attacks if a.name == with_), None)
+        for key in ("id", "name"):
+            if (found := next((a for a in attacks if getattr(a, key) == with_), None)) is not None:
+                return found
+        kind = weapon_in(with_)
+        same = [a for a in attacks if kind is not None and a.weapon == kind.name]
+        return same[0] if len(same) == 1 else None
     if do == "shoot":
         guns = [a for a in ranged_options(v) if a.usable]
         return max(guns, key=lambda a: a.value) if guns else None
@@ -206,66 +241,80 @@ def picks(d: DeclaredAction, per_round: int) -> list[AttackPick]:
 
 
 # -- what an action needs -------------------------------------------------------------------------
-def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] | None = None) -> list[str]:
-    """What `actor` lacks to do `d` now, in words naming ids; [] when it can. `takes`: names of
-    things this action picks up first (DeclaredAction.takes), which it may then fight with."""
-    out: list[str] = []
+def refers(a: AttackOption, ref: str) -> bool:
+    """Whether `ref` (a declaration's target) names attack `a`: its id, its own name, or the weapon
+    table's name of what it is."""
+    return bool(ref) and ref in (a.id, a.name, a.weapon)
+
+
+def _things(v) -> str:
+    """What someone can fight with, by the things' own names (徒手、柯尔特左轮手枪)."""
+    return "、".join(dict.fromkeys(a.name for a in v.attacks())) or "徒手"
+
+
+def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] | None = None) -> list[Lack]:
+    """What `actor` lacks to do `d` now, each a `Lack`: in words naming ids (the model's), and as the
+    players would read it (`Lack.shown`); [] when it can. `takes`: names of things this action picks
+    up first (DeclaredAction.takes), which it may then fight with."""
+    out: list[Lack] = []
+    me = f"{{{actor}}}"
     v = ctx.view(actor)
     if v is None or ctx.p(actor) is None:
-        return [f"{actor} 不在这场遭遇里"]
+        return [Lack(f"{actor} 不在这场遭遇里", "这个人不在这里")]
     if not ctx.present(actor):
-        return [f"{actor} 已经不在现场"]
+        return [Lack(f"{actor} 已经不在现场", f"{me}已经不在现场")]
     if not ctx.acting(actor):
-        return [f"{actor} 倒下了，不能行动"]
+        return [Lack(f"{actor} 倒下了，不能行动", f"{me}倒下了，动不了")]
     held = ctx.held_by(actor)
     if ctx.enc.mode == "fight" and d.do in CHASE_ONLY:
-        return [f"{d.do} 只在追逐中用"]
+        return [Lack(f"{d.do} 只在追逐中用", "这只能在追逐中做")]
     if d.after and (d.after == actor or ctx.p(d.after) is None):
-        out.append(f"after 里的 {d.after} 不是这场遭遇里的另一个人")
+        out.append(Lack(f"after 里的 {d.after} 不是这场遭遇里的另一个人", "要等的人不在这里"))
     if d.do in ATTACKING:
         if not d.attacks:
-            return [f"{actor} 的 {d.do} 没写 attacks（打谁）"]
+            return [Lack(f"{actor} 的 {d.do} 没写 attacks（打谁）", "没说打谁")]
         if d.do == "maneuver" and not d.maneuver:
-            out.append(f"{actor} 的战技没写是哪一种（maneuver）")
+            out.append(Lack(f"{actor} 的战技没写是哪一种（maneuver）", "没说用哪一种战技"))
         if len(d.attacks) > max(1, v.attacks_per_round()):
-            out.append(f"{actor} 每轮只有 {v.attacks_per_round()} 次攻击")
+            out.append(Lack(f"{actor} 每轮只有 {v.attacks_per_round()} 次攻击", f"{me}一轮只能攻击 {v.attacks_per_round()} 次"))
         for pick in d.attacks:
             out += _pick(ctx, actor, v, pick, d, takes or [])
     elif d.do == "aid":
         out += _aid(ctx, actor, d.target)
     elif d.do == "reload":
         guns = [a for a in v.attacks() if a.firearm and a.capacity and (a.loaded or 0) < a.capacity
-                and (not d.target or d.target in (a.id, a.name))]
+                and (not d.target or refers(a, d.target))]
         if not guns:
-            out.append(f"{actor} 没有要装填的枪" + (f"（{d.target}）" if d.target else ""))
+            out.append(Lack(f"{actor} 没有要装填的枪" + (f"（{d.target}）" if d.target else ""), "没有要装填的枪"))
         elif all(_spare(ctx, a) == 0 for a in guns):
-            out.append(f"{actor} 没有备弹了")
+            out.append(Lack(f"{actor} 没有备弹了", f"{me}没有备弹了"))
     elif d.do == "unjam":
-        if not any(a.jammed and (not d.target or d.target in (a.id, a.name)) for a in v.attacks()):
-            out.append(f"{actor} 没有卡壳的枪")
+        if not any(a.jammed and (not d.target or refers(a, d.target)) for a in v.attacks()):
+            out.append(Lack(f"{actor} 没有卡壳的枪", "没有卡壳的枪"))
     elif d.do == "ready":
-        if d.target and not any(d.target in (a.id, a.name) for a in v.attacks()):
-            out.append(f"{actor} 身上没有 {d.target}")
+        if d.target and not any(refers(a, d.target) for a in v.attacks()):
+            out.append(Lack(f"{actor} 身上没有 {d.target}", f"{me}身上没有这件武器（能用的：{_things(v)}）"))
     elif d.do == "flee":
         if held:
-            out.append(f"{actor} 被 {held} 制住了，逃不掉")
+            out.append(Lack(f"{actor} 被 {held} 制住了，逃不掉", f"{me}被{{{held}}}制住了，逃不掉"))
     elif d.do == "pursue" and ctx.enc.chase is not None:
         ch = ctx.enc.chase
         p = ctx.p(d.target)
         if held:
-            out.append(f"{actor} 被 {held} 制住了，跑不了")
+            out.append(Lack(f"{actor} 被 {held} 制住了，跑不了", f"{me}被{{{held}}}制住了，跑不了"))
         if p is None or d.target not in ch.quarry or p.presence != "in":
-            out.append(f"{d.target or '（没写对象）'} 不是还在跑的人（在逃的：{'、'.join(ch.quarry) or '无'}）")
+            out.append(Lack(f"{d.target or '（没写对象）'} 不是还在跑的人（在逃的：{'、'.join(ch.quarry) or '无'}）",
+                            f"{_who(ctx, d.target)}没有在跑"))
         elif why := ctx.hidden_from(actor, d.target):
-            out.append(f"{actor} 追不了 {d.target}：{why}")
+            out.append(Lack(f"{actor} 追不了 {d.target}：{why}", f"{me}追不了{{{d.target}}}：{why}"))
         for pick in d.attacks:
             out += _pick(ctx, actor, v, pick, d.model_copy(update={"do": "attack"}), takes or [])
     elif d.do == "pursue":
         p = ctx.p(d.target)
         if p is None or p.presence != "fled":
-            out.append(f"{d.target or '（没写对象）'} 没有在逃")
+            out.append(Lack(f"{d.target or '（没写对象）'} 没有在逃", f"{_who(ctx, d.target)}没有在逃"))
         elif why := ctx.hidden_from(actor, d.target):
-            out.append(f"{actor} 追不了 {d.target}：{why}")
+            out.append(Lack(f"{actor} 追不了 {d.target}：{why}", f"{me}追不了{{{d.target}}}：{why}"))
     elif d.do in ("move", "cross") and ctx.enc.chase is not None:
         out += _route(ctx, actor, d, held)
     elif d.do == "stand" and ctx.enc.chase is not None:
@@ -275,44 +324,45 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
         near = [x for x in ctx.foes(actor) if (n := distance(ctx.enc.chase.site, at(ctx.enc, actor), at(ctx.enc, x))) is not None
                 and n <= 1]
         if not near:
-            out.append(f"{actor} 附近没有对手，站住迎战没有对象")
+            out.append(Lack(f"{actor} 附近没有对手，站住迎战没有对象", "附近没有对手"))
     elif d.do in ("help", "speak", "surrender"):
         if d.target and ctx.p(d.target) is None:
-            out.append(f"{d.target} 不在这场遭遇里")
-        if d.do == "help" and d.target and not ctx.present(d.target):
-            out.append(f"{d.target} 已经不在现场")
+            out.append(Lack(f"{d.target} 不在这场遭遇里", "对方不在这里"))
+        if d.do == "help" and d.target and ctx.p(d.target) is not None and not ctx.present(d.target):
+            out.append(Lack(f"{d.target} 已经不在现场", f"{{{d.target}}}已经不在现场"))
     elif d.do == "use":
         if not d.target:
-            out.append(f"{actor} 的 use 没写用什么（target）")
+            out.append(Lack(f"{actor} 的 use 没写用什么（target）", "没说用什么"))
     return out
 
 
-def _route(ctx: Ctx, actor: str, d: DeclaredAction, held: str) -> list[str]:
+def _route(ctx: Ctx, actor: str, d: DeclaredAction, held: str) -> list[Lack]:
     """What a run in a chase lacks: somewhere on the site to run to, a way there, not held fast."""
     from . import site
 
     ch = ctx.enc.chase
     assert ch is not None
-    out = [f"{actor} 被 {held} 制住了，跑不了"] if held else []
+    out = [Lack(f"{actor} 被 {held} 制住了，跑不了", f"{{{actor}}}被{{{held}}}制住了，跑不了")] if held else []
     if d.do == "cross":
         if not any(d.target in (n.obstacle, n.id) and n.obstacle for n in ch.site.nodes):
-            out.append(f"{d.target or '（没写对象）'} 不是路线上的障碍（障碍：{'、'.join(ch.site.obstacles) or '无'}）")
+            out.append(Lack(f"{d.target or '（没写对象）'} 不是路线上的障碍（障碍：{'、'.join(ch.site.obstacles) or '无'}）",
+                            "路上没有这道障碍"))
         return out
     if d.to in ("", "away"):
         return out
     nodes = [n.id for n in ch.site.nodes if d.to in (n.id, n.place)]
     if not nodes:
-        out.append(f"{d.to} 不是追逐路线上的节点（节点：{'、'.join(n.id for n in ch.site.nodes)}）")
+        out.append(Lack(f"{d.to} 不是追逐路线上的节点（节点：{'、'.join(n.id for n in ch.site.nodes)}）", "路上没有那个去处"))
     elif not any(site.path(ch.site, ctx.p(actor).node, x) for x in nodes):  # type: ignore[union-attr]
-        out.append(f"从 {actor} 那里到不了 {d.to}")
+        out.append(Lack(f"从 {actor} 那里到不了 {d.to}", "从那里过不去"))
     if d.method and not any(d.method == m.id for o in ch.site.obstacles.values() for m in o.methods):
-        out.append(f"{d.method} 不是路线上哪个障碍的办法")
+        out.append(Lack(f"{d.method} 不是路线上哪个障碍的办法", "没有这种过法"))
     return out
 
 
 def out_of_reach(ctx: Ctx, actor: str, d: DeclaredAction) -> list[str]:
     """In a chase, what keeps an attack from being made at the slot now (p. 116): a blow only at the
-    same location; and an action point it costs. [] outside a chase."""
+    same location; and an action point it costs. [] outside a chase. In keeper form, for everyone."""
     if ctx.enc.mode != "chase" or ctx.enc.chase is None or not (d.do in ATTACKING or (d.do == "pursue" and d.attacks)):
         return []
     from .chase import at, points
@@ -334,56 +384,59 @@ def _spare(ctx: Ctx, a: AttackOption) -> int | None:
     return ent.weapon.spare if ent is not None and ent.weapon is not None else None
 
 
-def _pick(ctx: Ctx, actor: str, v, pick: AttackPick, d: DeclaredAction, takes: list[str]) -> list[str]:
-    out = []
+def _pick(ctx: Ctx, actor: str, v, pick: AttackPick, d: DeclaredAction, takes: list[str]) -> list[Lack]:
+    out: list[Lack] = []
     target = pick.target
+    me, them = f"{{{actor}}}", f"{{{target}}}"
     if ctx.p(target) is None:
-        return [f"{target or '（没写对象）'} 不在这场遭遇里"]
+        return [Lack(f"{target or '（没写对象）'} 不在这场遭遇里", "要打的人不在这里")]
     if target == actor:
-        return [f"{actor} 不能攻击自己"]
+        return [Lack(f"{actor} 不能攻击自己", "不能攻击自己")]
     if not ctx.present(target):
-        return [f"{target} 已经不在现场"]
+        return [Lack(f"{target} 已经不在现场", f"{them}已经不在现场")]
     if not ctx.alive(target):
-        return [f"{target} 已经死了"]
+        return [Lack(f"{target} 已经死了", f"{them}已经死了")]
     if why := ctx.hidden_from(actor, target):
-        return [f"{actor} 看不见 {target}：{why}"]
+        return [Lack(f"{actor} 看不见 {target}：{why}", f"{me}看不见{them}：{why}")]
     if pick.with_ and pick.with_ in takes:
         return []  # picked up first (DeclaredAction.takes), then used
     opt = option(v, pick.with_, d.do)
     if opt is None:
-        held = "、".join(a.id for a in v.attacks()) or "徒手"
-        return [f"{actor} 没有拿着 {pick.with_}（能用的：{held}）" if pick.with_ else f"{actor} 没有能这样用的攻击"]
+        ids = "、".join(a.id for a in v.attacks()) or "徒手"
+        if pick.with_:
+            return [Lack(f"{actor} 没有拿着 {pick.with_}（能用的：{ids}）", f"{me}手里没有这件武器（能用的：{_things(v)}）")]
+        return [Lack(f"{actor} 没有能这样用的攻击", f"{me}没有能这样用的武器")]
     if d.do == "shoot":
         if not (opt.firearm or opt.skill == "投掷"):
-            out.append(f"{opt.id} 不是枪或投掷物，用 attack")
+            out.append(Lack(f"{opt.id} 不是枪或投掷物，用 attack", f"{opt.name}不是枪，也不能投掷"))
         elif opt.jammed:
-            out.append(f"{opt.id} 卡壳了")
+            out.append(Lack(f"{opt.id} 卡壳了", f"{opt.name}卡壳了"))
         elif opt.firearm and opt.loaded is not None and opt.loaded <= 0:
-            out.append(f"{opt.id} 没有子弹了")
+            out.append(Lack(f"{opt.id} 没有子弹了", f"{opt.name}没有子弹了"))
         if pick.shots > volley(opt):
-            out.append(f"{opt.id} 一轮最多开 {volley(opt)} 枪")
+            out.append(Lack(f"{opt.id} 一轮最多开 {volley(opt)} 枪", f"{opt.name}一轮最多开 {volley(opt)} 枪"))
     elif d.do == "attack" and opt.firearm:
-        out.append(f"{opt.id} 是枪，开枪用 shoot")
+        out.append(Lack(f"{opt.id} 是枪，开枪用 shoot", f"{opt.name}是枪，要用射击"))
     elif d.do == "maneuver":
         tv = ctx.view(target)
         ok, _ = maneuver_feasible(v.build(), tv.build() if tv is not None else 0)
         if not ok:
-            out.append(f"{target} 体格比 {actor} 大得多，战技做不到")
+            out.append(Lack(f"{target} 体格比 {actor} 大得多，战技做不到", f"{them}的体格比{me}大得多，战技做不到"))
     if opt.damage is None and d.do != "maneuver":
-        out.append(f"{opt.id} 的伤害式无法使用：{opt.problem}")
+        out.append(Lack(f"{opt.id} 的伤害式无法使用：{opt.problem}", f"{opt.name}的伤害没法结算"))
     return out
 
 
-def _aid(ctx: Ctx, actor: str, target: str) -> list[str]:
+def _aid(ctx: Ctx, actor: str, target: str) -> list[Lack]:
     from ...rules.wounds import first_aid_allowed
 
     if not target or ctx.p(target) is None:
-        return [f"{target or '（没写对象）'} 不在这场遭遇里"]
+        return [Lack(f"{target or '（没写对象）'} 不在这场遭遇里", "要救的人不在这里")]
     v = ctx.view(target)
     if v is None:
-        return [f"{target} 不在这场遭遇里"]
+        return [Lack(f"{target} 不在这场遭遇里", "要救的人不在这里")]
     ok, why = first_aid_allowed(v.body())
-    return [] if ok else [f"{target}：{why}"]
+    return [] if ok else [Lack(f"{target}：{why}", f"{{{target}}}：{why}")]
 
 
 def skill_of(opt: AttackOption, do: str) -> str:
@@ -391,4 +444,5 @@ def skill_of(opt: AttackOption, do: str) -> str:
     return BRAWL if do == "maneuver" else opt.skill
 
 
-__all__ = ["ATTACKING", "REACT_WORDS", "VERBS", "Ctx", "best_melee", "option", "out_of_reach", "picks", "preconditions"]
+__all__ = ["ATTACKING", "REACT_WORDS", "VERBS", "Ctx", "Lack", "best_melee", "option", "out_of_reach", "picks", "preconditions",
+           "refers", "said"]

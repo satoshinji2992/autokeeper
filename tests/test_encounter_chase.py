@@ -229,20 +229,26 @@ async def test_a_keeper_quarry_that_reaches_its_way_out_is_where_that_way_out_is
 
 
 async def test_a_quarry_that_drops_is_not_counted_as_escaped(module, fake):
-    """The review: a downed quarry ended the old chase as escaped."""
+    """The review: a downed quarry ended the old chase as escaped. Caught and knocked out, nobody left to
+    act: the fight goes on by itself, the warden leaves him be, and it ends as lost; he comes to later."""
     game, cast, _ = await chased(module, fake)
     module.flags["got_away"] = "x"
     put(game, warden="office_door", zhouheng="office_door")
     game.state.investigator.hp = 1
-    cast.modes["arrange"] = lambda *a: EncounterTurnPlan(npcs=[arrange("warden", attack("zhouheng"), react="fight_back")])
+
+    def warden(state, *a):  # strikes while 周衡 stands; once he is down, lets him lie
+        return EncounterTurnPlan(npcs=[arrange("warden", attack("zhouheng") if state.investigator.can_act
+                                               else DeclaredAction(do="defend", summary="守着"), react="fight_back")])
+
+    cast.modes["arrange"] = warden
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(30, 10, 90).queue_totals(3, 0)  # 周衡's crate; the warden's blow lands, the dodge fails
     _out, _asked = await play(app, "设路障", answers=["dodge"])
     st = game.state
-    assert st.investigator.hp == 0 and "昏迷" in st.investigator.conditions
-    enc = st.encounter
-    assert enc is not None and enc.mode == "fight" and enc.get("zhouheng").presence == "in"  # caught, not away
+    assert st.encounter is None and st.encounter_log[-1].ended.how == "lost"  # caught, not away
+    assert "got_away" not in st.flags and not fake.values
     assert "【追逐转为战斗】" in cast.reports[-1] and "脱身" not in cast.reports[-1]
+    assert st.investigator.can_act and st.investigator.hp == 1  # out cold at 0 HP, he came to a day later
 
 
 async def test_switches_keep_wounds_speeds_and_stakes_and_refresh_only_on_a_new_round(module, fake):
@@ -367,8 +373,6 @@ async def test_a_flight_is_not_chased_while_the_others_still_fight_and_the_chase
     """The review's blocker: one investigator fled and was chased while the other still fought the preacher
     at the start; the chase ended the whole encounter as lost with him on his feet. Now the chase waits
     until nobody outside it is still fighting; whoever fled is out of the fight meanwhile."""
-    from autokeeper.engine.encounter.actions import Ctx
-
     from .encounter_kit import begin
 
     warden = arrange("warden", GUARD, react="dodge", pursue=["zhouheng", "li"])
@@ -376,17 +380,17 @@ async def test_a_flight_is_not_chased_while_the_others_still_fight_and_the_chase
     game, cast, _ = with_li(module, fake, ["防守", "逃跑"], arrange=lambda *a: EncounterTurnPlan())
     await begin(game, ["warden", "preacher"], npcs=[warden, preacher])
     app = turn_graph.build(game, InMemorySaver())
-    await play(app, "逃跑")  # 周衡 runs; 李四 stays and guards, the preacher in front of him
+    fake.queue(40, 40, 40)  # 李四 runs in the next round: the speed rolls of 周衡, 李四 and the warden
+    # 周衡 runs; 李四 stays and guards, the preacher in front of him. 周衡 is out of the fight while it waits, the
+    # only player at the table: the rounds go on without him, and in the next 李四 runs too.
+    out, _ = await play(app, "逃跑")
     enc = game.state.encounter
-    assert enc.mode == "fight" and enc.get("zhouheng").presence == "fled" and Ctx.of(game).acting("li")
-    assert game._outcome(Ctx.of(game)) == "" and "这里还在打，暂时没人追上去" in cast.reports[-1]
-    assert choices.options(game, "zhouheng") == []  # out of the fight while it waits
-    fake.queue(40, 40, 40)  # 李四 runs too: the speed rolls of 周衡, 李四 and the warden
-    await play(app, "/encounter")
-    enc = game.state.encounter
+    assert [e["round"] for e in out if e["type"] == "fight_round"] == [1, 2]
+    report = cast.reports[-1]
+    assert report.index("这里还在打，暂时没人追上去") < report.index("【战斗 · 第 2 轮】") < report.index("【战斗转为追逐】")
     assert enc.mode == "chase" and sorted(enc.chase.quarry) == ["li", "zhouheng"] and enc.chase.pursuers == ["warden"]
     assert enc.get("preacher").presence == "left"  # he let them go: out of it, where he stood
-    assert not fake.values
+    assert choices.options(game, "zhouheng") and not fake.values  # in the chase he runs again: his choice
 
 
 async def test_a_chase_is_never_lost_while_an_investigator_can_still_act(module, fake):

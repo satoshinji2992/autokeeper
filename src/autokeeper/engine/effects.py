@@ -49,6 +49,7 @@ class Wound(BaseModel):
     con: Level | None = None  # the CON roll a major wound called for, already thrown; None when none was
     injury: str  # stable id of this injury: no second wound with it lands; First Aid is once per injury
     round: int | None = None  # the encounter round it was dealt in: dying from it starts rolling CON after the next
+    finish: bool = False  # a blow meant to kill someone out cold at 0 HP: it does (rules/wounds.apply_wound, p. 100)
 
 
 class Heal(BaseModel):
@@ -204,7 +205,7 @@ def wound(body: Body, w: Wound, *, minutes: int | None = None, round: int | None
     """`body` after the wound `w` (rules/wounds.apply_wound: armour, guns halved, major wounds, the CON
     roll `w.con`, dying, death, a creature's knockout and healing); the new body is `.body`."""
     return Hurt(w.amount, body.hp, wounds.apply_wound(body, w.amount, w.means, con=w.con, injury=w.injury,
-                                                       minutes=minutes, round=round))
+                                                       minutes=minutes, round=round, finish=w.finish))
 
 
 def heal(body: Body, h: Heal) -> Body:

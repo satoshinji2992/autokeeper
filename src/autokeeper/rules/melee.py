@@ -83,6 +83,8 @@ def melee_outcome(att: Level, dfn: Level | None, reaction: Reaction, *, maneuver
     if winner == "attacker":
         if maneuver:
             return MeleeOutcome("attacker", effect=True)
+        if not att.ok:  # unanswered, it lands on anything but a fumble (p. 91): its ordinary damage
+            return MeleeOutcome("attacker", "normal")
         return MeleeOutcome("attacker", damage_mode(att, own_turn=own_turn))
     if reaction == "maneuver":
         return MeleeOutcome("defender", effect=True)

@@ -76,8 +76,47 @@ OUTCOME_WORDS = {"won": "调查员一方占了上风", "fled": "调查员逃离�
                  "aftermath_done": "战斗结束"}
 
 
+END_HOW = {"gave_up": "escaped", "surrender": "surrender", "parley": "parley", "dispersed": "dispersed"}  # an end proposal's outcome
+
+
 def _end_slot(enc: EncounterState) -> int:
     return len(enc.order)
+
+
+def unattended(ctx: Ctx) -> bool:
+    """Nobody at this table can act: of the investigators in it its players play (all of them, at a
+    table only watching), none present and able to act. The rounds then go on by themselves."""
+    invs = [p for p in ctx.enc.participants if p.kind == "investigator"]
+    players = [p for p in invs if p.controller == "human"] or invs
+    return bool(players) and not any(ctx.acting(p.id) for p in players)
+
+
+def _lingering(ctx: Ctx) -> list[str]:
+    """Those still in it who are dying with nothing holding it (p. 101), or down and coming back."""
+    return [p.id for p in ctx.enc.participants if p.presence == "in" and (v := ctx.view(p.id)) is not None
+            and ((v.body().dying and not v.body().stabilized) or v.body().regenerating)]
+
+
+def _pressed(ctx: Ctx) -> bool:
+    """In the round just over, something was still done to the investigators' side: one of them went
+    down or was hurt lying there (a "down" change), was disarmed or newly held, or a foe struck or shot
+    at one of them. A round of none of it, with them all down, is the end of it (_outcome): whatever the
+    foes go on doing changes nothing, so the rounds cannot go on for ever."""
+    enc = ctx.enc
+    party = {p.id for p in enc.participants if p.side == "party"}
+    if any(c.round == enc.round and c.kind in ("down", "disarmed") and c.who in party for c in enc.changes):
+        return True
+    if any(h.since == enc.round and h.held in party for h in enc.scene.holds):
+        return True
+    return any(r.round == enc.round and r.declared.do in ("attack", "shoot") and ctx.side(r.actor) != "party"
+               and any(k.target in party for k in r.declared.attacks) for r in enc.receipts)
+
+
+def _proposed(enc: EncounterState) -> str:
+    """The end the keeper's people proposed while someone was still dying (_propose_end): how it ends
+    now that nobody is; "" when there was none."""
+    how = next((h.split(":")[1] for h in reversed(enc.history) if h.startswith("end:")), "")
+    return END_HOW.get(how, "")
 
 
 def _stance_problem(ctx: Ctx, who: str, react: str) -> str:
@@ -134,6 +173,7 @@ class Encounters:
         _flags: Any
         _time: Any
         _check_ending: Any
+        _party_down: Any
         _debug: Any
         _gain: Any
         _valid_clues: Any
@@ -305,6 +345,7 @@ class Encounters:
             return
         await self._beat(turn, settle=bool(declared.get("beat")) or st.round_spent is not None)
         await step("ending", turn, lambda: self._check_ending(turn))
+        await step("party-down", turn, lambda: self._party_down(turn))  # over, and none of them can act: Game._party_down
 
     # -- starting one -----------------------------------------------------------------------------
     async def _start_from(self, action: Action, turn: Turn) -> str:
@@ -354,8 +395,10 @@ class Encounters:
                 "allies": [x for x in start.allies if x in candidates and x not in start.foes],
                 "stakes": [s for s in start.stakes if not plan_check.start(self, candidates)(
                     EncounterStart(mode=start.mode, foes=start.foes or ["x"], stakes=[s], pace=6, reason="",
-                                   quarry=start.quarry or "party"))],
-                "opening": start.opening})
+                                   quarry=start.quarry or "party"))]})
+            # A first action that still lacks something (a weapon nobody holds) does not land: the first
+            # round is the player's to choose, as when there is none.
+            start = start.model_copy(update={"opening": None if plan_check.opening(self, start) else start.opening})
         return start
 
     async def _encounter_open(self, start: EncounterStart, turn: Turn, *, event: Event | None = None,
@@ -381,7 +424,7 @@ class Encounters:
         if start.mode == "chase":
             if not await self._chase_open(start, turn):
                 return eid
-        opening = start.opening
+        opening = plan_check.combatants(self, start.opening)  # a creature form's id named as who fights in it
         if opening is not None and actor and not event:
             await self._declare(turn, actor, opening, "words", None)
         return eid
@@ -510,9 +553,9 @@ class Encounters:
             first = not any(horror in seen for seen in st.sightings.values())
             if first:
                 face = f"creature-{sheet}" if f"creature-{sheet}" in self.m.pictures else views.portrait(self, horror)
-                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda prof=prof, horror=horror, face=face: self.emit(self._filled({
+                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda v=v, horror=horror, face=face: self.emit(self._filled({
                     "type": "reveal", "id": horror, "name": ctx.name(horror, "players"), "portrait": face,
-                    "look": prof.look[:120]})))
+                    "look": views.seen_look(v, 120)})))
             for inv in st.investigators:
                 if horror in st.sightings.get(inv.id, []) or not inv.can_act:
                     continue
@@ -714,8 +757,12 @@ class Encounters:
             w.unit.lines.append(f"{'、'.join('{' + x + '}' for x in end.who)}：{end.terms or OUTCOME_WORDS.get(end.how, end.how)}")
 
         await self._unit(f"enc/{enc.id}/r{enc.round}/proposal", turn, stop)
-        how = {"gave_up": "escaped", "surrender": "surrender", "parley": "parley", "dispersed": "dispersed"}[end.how]
-        await self._encounter_end(how, turn)
+        ctx = Ctx.of(self)
+        if any(ctx.side(x) == "party" for x in _lingering(ctx)):
+            # Someone of theirs is dying (p. 101: CON at every round's end until First Aid holds it or they
+            # die): the rounds go on, and it ends as proposed once nobody is (_outcome, _proposed).
+            return
+        await self._encounter_end(END_HOW[end.how], turn)
 
     # -- the beat ---------------------------------------------------------------------------------
     async def _beat(self, turn: Turn, *, settle: bool = False) -> None:
@@ -736,14 +783,18 @@ class Encounters:
                 nxt = enc.round + 1
                 humans = [p.id for p in enc.participants if p.controller == "human" and ctx.acting(p.id)]
                 waiting = [x for x in humans if self._declared(enc, x, nxt) is None]
-                # With a human who can act, the round waits for them; with none (autoplay, watching, everyone
-                # down), the declaration of whoever's input this was settles it (the review: it never began).
+                # With a human who can act, the round waits for them; with none (autoplay, watching), the
+                # declaration of whoever's input this was settles it (the review: it never began).
                 declared = any(self._declared(enc, p.id, nxt) is not None for p in enc.participants
                                if p.kind == "investigator" and (p.controller == "human" or not humans))
-                if (waiting and not settle) or (not declared and not settle) or started:
+                # Nobody at this table can act (the investigators its players play are all down): the rounds go
+                # on by themselves, each shown as it settles, until it ends or one of them can act again (the
+                # user's solo game of 2026-10-22 sat at an empty input box with 托马斯 dying).
+                alone = unattended(ctx)
+                if not alone and ((waiting and not settle) or (not declared and not settle) or started):
                     return
                 started += 1
-                await self._round_start(enc, nxt, turn, settle)
+                await self._round_start(enc, nxt, turn, settle or alone)
                 continue
             if enc.cursor < len(enc.order):
                 if not await self._slot(enc, turn):
@@ -1020,8 +1071,8 @@ class Encounters:
                     and self.state.round_spent is None):
                 await self._unit(f"{base}/redeclare/{r.id}", turn, lambda w: self._ask_again(w, r, problems))
                 return False
-            await self._unit(f"{base}/lapse", turn, lambda w: (
-                w.unit.lines.append(f"{{{actor}}}没能{actions.VERBS.get(d.do, d.do)}：{problems[0]}"), advance(w, r, "lapsed", problems[0])))
+            line = f"{{{actor}}}没能{actions.VERBS.get(d.do, d.do)}：{actions.said(problems[0])}"  # in the names each one knows, no ids
+            await self._unit(f"{base}/lapse", turn, lambda w: (w.unit.lines.append(line), advance(w, r, "lapsed", problems[0])))
             return True
         if d.after and (wait := self._delay(enc, r)) is not None:  # waiting for someone to act first (pp. 86, 113)
             await self._unit(f"{base}/delay/{r.id}", turn, wait)
@@ -1253,12 +1304,14 @@ class Encounters:
         await self._unit(f"{base}/takes/use", turn, use)
 
     def _ask_again(self, w: Work, r: ActionReceipt, problems: list[str]) -> None:
-        """A player's declaration went stale before their slot (the target fell): they choose again."""
+        """A player's declaration went stale before their slot (the target fell): they choose again,
+        told why in their own words (actions.said: the names they know, the things' own names)."""
         offered = choices.options(self, r.actor, w.ctx)
         rr = next(x for x in w.enc.receipts if x.id == r.id)
         rr.phase = "awaiting_reaction"
+        why = telling.render(actions.said(problems[0]), views.names(w.ctx, "players"))
         w.enc.pending = PendingChoice(id=f"{r.id}:redeclare", kind="redeclare", who=r.actor, receipt=r.id,
-                                      prompt=f"原来的行动做不成了：{problems[0]}。这一下改做什么？",
+                                      prompt=f"原来的行动做不成了：{why}。这一下改做什么？",
                                       options=offered, default=next((o.id for o in offered if o.value.get("do") == "defend"), offered[0].id if offered else ""))
 
     def _prompt(self, w: Work, r: ActionReceipt) -> None:
@@ -1494,15 +1547,15 @@ class Encounters:
     def _outcome(self, ctx: Ctx) -> str:
         """"" while it goes on; else how it ended: won (no foe can fight on, nobody left dying or coming
         back), escaped (none can, and one of them ran off), fled (the investigators got away), lost
-        (nobody of theirs is left standing). Not while whether someone who ran is chased is still open
-        (_switch)."""
+        (nobody of theirs is left standing, or all of them down and their foes done with them), or the
+        end the keeper's people proposed while someone was still dying (_propose_end). Not while
+        whether someone who ran is chased is still open (_switch)."""
         enc = ctx.enc
         if enc.mode == "chase":
             return chasing.verdict(ctx)
         foes = [p.id for p in enc.participants if p.side == "foe" and p.presence == "in"]
         invs = [p for p in enc.participants if p.kind == "investigator"]
-        lingering = [p.id for p in enc.participants if p.presence == "in" and (v := ctx.view(p.id)) is not None
-                     and ((v.body().dying and not v.body().stabilized) or v.body().regenerating)]
+        lingering = _lingering(ctx)
         if not any(p.presence == "in" and ctx.alive(p.id) for p in invs):
             return "fled" if any(p.presence in ("fled", "escaped") for p in invs) else "lost"
         if any(p.presence == "fled" for p in enc.participants):
@@ -1510,9 +1563,15 @@ class Encounters:
         if not any(ctx.acting(x) for x in foes):
             if lingering:
                 return ""
-            return "escaped" if any(p.side == "foe" and p.presence == "escaped" for p in enc.participants) else "won"
-        # The investigators down but alive: it is not over, the foes and anyone still standing go on (继续,
-        # /encounter), and the dying roll on (the review: downed investigators were frozen).
+            return _proposed(enc) or ("escaped" if any(p.side == "foe" and p.presence == "escaped" for p in enc.participants)
+                                      else "won")
+        # The investigators down but alive: it is not over. Their foes do with them what their goals say
+        # (finish them, take them, leave, stop: the keeper plan, told so in its brief), the dying roll on
+        # (p. 101), round by round (the review: downed investigators were frozen). A round in which nobody
+        # of theirs went down and no foe laid a hand on them, with nobody left dying, ends it: lost.
+        party = [p.id for p in enc.participants if p.side == "party" and p.presence == "in"]
+        if not any(ctx.acting(x) for x in party) and not lingering and enc.round and not _pressed(ctx):
+            return "lost"
         return ""
 
     def _summary(self, ctx: Ctx, how: str) -> str:
@@ -1523,7 +1582,7 @@ class Encounters:
                 continue
             word = views.status(ctx, p.id) or (views.wound_word(v.body()) if p.kind != "investigator"
                                                else ("受伤" if v.body().hp < v.body().hp_max else "无伤"))
-            rows.append(f"{v.public_name('players')}{word}")
+            rows.append(f"{ctx.name(p.id, 'players')}{word}")
         return f"{OUTCOME_WORDS.get(how, how)}：" + "，".join(rows)
 
     async def _encounter_end(self, how: str, turn: Turn, *, eid: str = "") -> None:
@@ -1721,6 +1780,7 @@ class Encounters:
         await self._unit(key, turn, apply)
         await self._beat(turn)
         await self._resolution_step("ending", turn, lambda: self._check_ending(turn))
+        await self._resolution_step("party-down", turn, lambda: self._party_down(turn))
 
     async def _read_answer(self, pend: PendingChoice | None, value: Any) -> dict:
         """The answer as a choice id: a button's id, or the player's own words read by the keeper plan

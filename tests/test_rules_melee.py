@@ -73,6 +73,7 @@ def test_extreme_damage_only_for_the_attacker_on_its_own_turn():
 def test_an_attack_nobody_answers_lands_unless_it_fumbles():
     """p. 91: against a target that cannot dodge or fight back the attack fails only on a fumble."""
     assert melee_outcome(Level.FAILURE, None, "none").winner == "attacker"
+    assert melee_outcome(Level.FAILURE, None, "none").mode == "normal"  # it lands, and hurts as a blow does
     assert melee_outcome(Level.FUMBLE, None, "none").winner == "none"
     assert melee_outcome(Level.EXTREME, None, "none").mode == "extreme"
     with pytest.raises(ValueError):

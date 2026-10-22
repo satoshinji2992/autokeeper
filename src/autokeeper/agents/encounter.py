@@ -181,6 +181,7 @@ class Brief(BaseModel):
     lost_sight: list[str] = Field(default_factory=list)
     site_missing: bool = False  # a chase with no route yet: the plan draws one (EncounterStart.site)
     fled: list[str] = Field(default_factory=list)  # who fled this round: keeper opponents must decide pursuit
+    down: list[str] = Field(default_factory=list)  # the investigators' side, every one of them down: "thomas（昏迷、濒死）"
     stakes: list[BriefStake] = Field(default_factory=list)
     lines: list[str] = Field(default_factory=list)  # the last round's account, keeper form
     history: list[str] = Field(default_factory=list)  # older rounds, compact
@@ -368,6 +369,10 @@ def encounter_brief(b: Brief) -> str:
     if b.fled:
         keepers = [p.id for p in b.people if p.controller == "keeper" and p.side == "foe" and p.presence == "in"]
         out.append(f"【有人逃跑】{'、'.join(b.fled)}：{'、'.join(keepers) or '对手'} 每人都要在 pursue 或 let_go 里写明追不追")
+    if b.down:
+        out.append(f"【调查员一方全部倒下】{'、'.join(b.down)}：对手照各自的本性和目标决定怎么收场，写进安排："
+                   "了结倒下的人（attack，打昏迷的人必中，生命为 0 的一下毙命）、带走（maneuver 制住）、"
+                   "离开（flee，或 end gave_up）、停手（defend，或 end dispersed）。哪一轮对他们什么也没做、又没人濒死，打斗就此结束")
     if b.stakes:
         out.append("【胜负后果】" + "；".join(f"{s.when} → {'、'.join(s.flags) or '无标记'}" + (f"（{s.note}）" if s.note else "")
                                          + ("（已成立）" if s.fired else "") for s in b.stakes))

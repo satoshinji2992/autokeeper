@@ -72,7 +72,7 @@ def build(m: Module, st: GameState) -> Debrief:
     """What the debrief shows, for a game that has ended (ValueError before that)."""
     if not st.ending:
         raise ValueError("复盘要等这一局结束")
-    end = next((e for e in m.endings if e.id == st.ending), None)
+    end = m.ending(st.ending)
     clues = {c.id: c for c in m.clues}
     found = [clues[c] for c in st.clues if c in clues]  # in the order they turned up
     support = supporting_clues(m)
@@ -138,7 +138,7 @@ def _when(m: Module, when: str) -> str:
 def epilogue_prompt(m: Module, st: GameState) -> str:
     """What the keeper is given to write the epilogue: the ending, everyone it is about, and
     what the investigators found. The keeper's own memory of the game does the rest."""
-    end = next((e for e in m.endings if e.id == st.ending), None)
+    end = m.ending(st.ending)
     met = [n for n in m.npcs if st.npcs.get(n.id) and st.npcs[n.id].met]
     people = "\n".join(
         f"- {n.name}（{n.role}）" + "".join(f"；{label}：{v}" for label, v in (("想要", n.goal), ("秘密", "；".join(n.secrets)), ("此刻", n.arc)) if v)

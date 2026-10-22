@@ -318,7 +318,9 @@ async def test_damage_tool_receipt_does_not_reroll_damage_if_constitution_check_
     await resumed.resolve(action, ruling)
     assert resumed.state.investigator.hp == hp - amount
     assert "重伤" in resumed.state.investigator.conditions
-    assert sum(entry.kind == "damage" for entry in resumed.state.log) == 1
+    assert sum(entry.kind == "damage" and "受到" in entry.text for entry in resumed.state.log) == 1
+    assert "昏迷" not in resumed.state.investigator.conditions  # the solo game advances until they wake
+    assert sum(entry.kind == "damage" and "醒了过来" in entry.text for entry in resumed.state.log) == 1
     await game.close()
     await resumed.close()
 
