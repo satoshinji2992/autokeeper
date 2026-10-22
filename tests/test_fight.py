@@ -1035,7 +1035,7 @@ async def test_a_timed_window_under_another_closes_only_itself_once_in_front(fak
             yield Static("over")
 
     offer = {"kind": "redeclare", "id": "x", "respond_id": "x", "who": "zhouheng", "prompt": "p", "default": "dodge",
-             "options": [{"id": "dodge", "label": "闪避", "note": ""}], "closes_in": 0.5, "free_text": False}
+             "options": [{"id": "dodge", "label": "闪避", "note": ""}], "closes_in": 2.0, "free_text": False}
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(100, 40)) as pilot:
         got: list = []
@@ -1044,10 +1044,10 @@ async def test_a_timed_window_under_another_closes_only_itself_once_in_front(fak
         await pilot.pause(0.2)
         over = Over()
         app.push_screen(over)
-        await pilot.pause(1.0)
+        await pilot.pause(2.5)  # longer than its whole time (2 s, enough to cover it first on a loaded machine)
         assert app.screen is over and not got  # its clock stood still underneath, and nothing else was closed
         app.pop_screen()
-        assert await until(pilot, lambda: got == [None] and window not in app.screen_stack, tries=30)  # its own time ran out in front
+        assert await until(pilot, lambda: got == [None] and window not in app.screen_stack, tries=40)  # its own time ran out in front
         window2 = ChoiceModal({**offer, "closes_in": 30}) if kind == "reaction" else RollModal({**OFFER, **offer, "closes_in": 30})
         app.push_screen(window2, got.append)
         await pilot.pause(0.2)
