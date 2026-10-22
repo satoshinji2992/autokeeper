@@ -407,7 +407,7 @@ def _fixed(w: World, npc: str, a: Agent, c: int, report: Report) -> None:
         if agents.condition_problems(w, s.when) or agents.condition_problems(w, s.achieved) or fresh(w, a.reads):
             continue
         if agents.holds(w, s.when):
-            ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+            ops = [*_outstanding(w, s.ops), {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
             _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text, reads=a.reads, when=s.when)
 
 
@@ -428,7 +428,7 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
             continue
         if agents.holds(w, s.when):
             if s.ops and not fresh(w, a.reads):
-                ops = [*s.ops, {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+                ops = [*_outstanding(w, s.ops), {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
                 mark = len(report.refused)
                 if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text,
                              reads=a.reads, when=s.when):
@@ -443,6 +443,13 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
             w.apply(AdvancePlan(id=f"{npc}:{s.id}:{s.started}:blocked", npc=npc, step=s.id, status="blocked", note=f"条件没满足：{s.when}", actor=npc))
             report.blocked.append(f"{npc}:{s.id}")
             wake(npc, "blocked", f"计划受阻：{s.text}")
+
+
+def _outstanding(w: World, ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A step's prepared outcome less what already holds: going where one already is, is no move to
+    make (the minister holds the night's mass in the church he is in), and no reason to refuse the step."""
+    return [op for op in ops if not (op.get("kind") == "move" and op.get("entity") in w.rec.entities
+                                     and w.place(op["entity"]) == op.get("to"))]
 
 
 def _together(where: dict[str, str], accepted: set[str]) -> tuple[str, list[str]] | None:
