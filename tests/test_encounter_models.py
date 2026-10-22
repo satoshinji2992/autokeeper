@@ -311,7 +311,7 @@ def test_a_change_needs_an_encounter():
 SIZES = {
     p.DeclaredAction: 3000,  # + careful and after (WP-D): a hazard crossed with care, a delayed action
     p.NpcArrangement: 4500,
-    p.EncounterTurnPlan: 8600,  # + cover and distances (2026-10-21): positions and ranges the book's shots read
+    p.EncounterTurnPlan: 8800,  # + cover and distances (2026-10-21): positions and ranges the book's shots read; + sight (10-22)
     p.EncounterStart: 10800,
     p.SiteDraft: 3600,
 }

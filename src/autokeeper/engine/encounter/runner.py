@@ -51,7 +51,9 @@ from .model import (
     PendingChoice,
     ReactionReceipt,
     RoundBudget,
+    SetParticipant,
     StakeState,
+    Unseen,
 )
 from .plan import DeclaredAction, EncounterStart, EncounterTurnPlan, NpcArrangement
 from .resolve import Work, act, round_end, round_order, strike
@@ -136,6 +138,28 @@ class Encounters:
     def pending_choice(self) -> PendingChoice | None:
         enc = self.encounter()
         return enc.pending if enc is not None else None
+
+    def set_react(self, who: str, react: str) -> str:
+        """How `who` answers blows from now on (Tab beside the round's choices, a LAN seat's "react"):
+        between turns, in a fight they can act in, one of choices.presets. No action is spent and no
+        model is asked; it lands as its own op. "" once set, else why not."""
+        enc = self.encounter()
+        if enc is None or enc.mode != "fight":
+            return "现在不在战斗中"
+        if self.state.pending_turn:
+            return "本轮正在结算"
+        ctx = Ctx.of(self)
+        p = ctx.p(who)
+        if p is None or p.kind != "investigator" or not ctx.acting(who):
+            return "这名调查员现在无法行动"
+        if react not in choices.presets(ctx, who):
+            return "这场战斗中不能这样应对"
+        if p.react == react:
+            return ""
+        step = EncounterStep(id=f"enc/{enc.id}/preset/{who}/{self.world.rec.seq}", encounter=enc.id, unit="preset",
+                             changes=[SetParticipant(participant=p.model_copy(update={"react": react}))], actor=ENGINE)
+        result = self.world.apply(step)
+        return "" if result.ok else "；".join(result.problems)
 
     # -- the player's words ---------------------------------------------------------------------
     async def encounter_input(self, text: str) -> Action:
@@ -629,6 +653,10 @@ class Encounters:
             for c in landed.cover:  # where the keeper says they are: behind something, half or wholly
                 e.scene.cover = [x for x in e.scene.cover if x.who != c.who] + [
                     Cover(who=c.who, what=c.what, partial=not c.full, since=e.round)]
+            for x in landed.sight:  # who cannot see whom, as the keeper declares it (the dark, smoke, a wall)
+                e.scene.unseen = [u for u in e.scene.unseen if (u.watcher, u.who) != (x.watcher, x.who)]
+                if not x.sees:
+                    e.scene.unseen.append(Unseen(watcher=x.watcher, who=x.who, why=x.why, since=e.round))
             for d in landed.distances:
                 e.scene.distance[f"{d.a}|{d.b}"] = d.yards
             if landed.end is not None:
@@ -1180,7 +1208,7 @@ class Encounters:
 
     def _ask_again(self, w: Work, r: ActionReceipt, problems: list[str]) -> None:
         """A player's declaration went stale before their slot (the target fell): they choose again."""
-        offered = choices.options(self, r.actor, None, w.ctx)
+        offered = choices.options(self, r.actor, w.ctx)
         rr = next(x for x in w.enc.receipts if x.id == r.id)
         rr.phase = "awaiting_reaction"
         w.enc.pending = PendingChoice(id=f"{r.id}:redeclare", kind="redeclare", who=r.actor, receipt=r.id,
@@ -1230,6 +1258,7 @@ class Encounters:
                 dp = w.enc.get(pick.target)
                 assert dp is not None
                 dp.asked = True
+                dp.risk = max(dp.risk, choices.risk(ctx, pick.target, r.actor, opt, kind))  # asked at this danger: not again for it
                 rr.phase = "awaiting_reaction"
                 rr.reactions.append(ReactionReceipt(attack=k, attacker=r.actor, defender=pick.target, options=options,  # type: ignore[arg-type]
                                                     asked=True))
@@ -1582,6 +1611,8 @@ class Encounters:
             if p.kind == "reaction":
                 k = len(r.reactions) - 1
                 r.reactions[k].chosen, r.reactions[k].by = answer["choice"], "player"
+                if me is not None and answer["choice"] in choices.STANCE_WORDS:  # their answer stands for the next blows
+                    me.react = answer["choice"]
                 r.phase = "declared"
                 if answer.get("summary"):
                     r.lines.append(f"{{{p.who}}}的应对：{answer['summary']}")

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ... import weather
 from ...rules.wounds import Body
 from . import actions, profiles
 from .actions import ATTACKING, VERBS, Ctx
@@ -323,6 +324,10 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
     fled = [p.id for p in enc.participants if p.presence == "fled"]
     held = [f"{h.by} 制住了 {h.held}" for h in enc.scene.holds]
     cover = [f"{c.who} 躲在{c.what}后（{'部分掩体' if c.partial else '完全遮住'}）" for c in enc.scene.cover]
+    unseen = [f"{u.watcher} 看不见 {u.who}" + (f"（{u.why}）" if u.why else "") for u in enc.scene.unseen]
+    loc = next((x for x in game.m.locations if x.id == enc.place), None)
+    sky = [weather.KINDS.get(k, k) for k in (loc.weather if loc is not None else [])]
+    sky += [weather.KINDS[game.state.sky]] if game.state.sky in weather.KINDS and weather.KINDS[game.state.sky] not in sky else []
     recent = list(lines or [])
     if not recent:
         last = [r for r in enc.receipts if r.round == enc.round and r.phase in ("committed", "lapsed")]
@@ -330,7 +335,7 @@ def brief(game: Any, *, waiting: str = "", unsettled: list[str] | None = None, l
     ch = enc.chase
     return Brief(id=enc.id, mode=enc.mode, round=enc.round, phase=enc.phase, place=game.world.name(enc.place), reason=enc.reason,
                  pace=enc.clock.pace, people=people, engaged=[(e.a, e.b) for e in enc.scene.engaged], cover=cover,
-                 prone=list(enc.scene.prone), holds=held, distances=dict(enc.scene.distance), fled=fled,
+                 prone=list(enc.scene.prone), holds=held, unseen=unseen, weather="、".join(sky), distances=dict(enc.scene.distance), fled=fled,
                  nodes=list(ch.site.nodes) if ch else [], edges=list(ch.site.edges) if ch else [],
                  obstacles=list(ch.site.obstacles.values()) if ch else [], quarry=list(ch.quarry) if ch else [],
                  pursuers=list(ch.pursuers) if ch else [], lost_sight=list(ch.lost_sight) if ch else [],
@@ -349,9 +354,11 @@ __all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "na
 
 # -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------
 def table(game: Any) -> dict | None:
-    """The fight or the chase going on as the players' screens hold it, with each investigator's
-    choices for this round in the words the engine matches (one list per answer to blows), or None
-    outside one. Nothing in it is the keeper's: public names, a foe's wounds in words."""
+    """The fight or the chase going on as the players' screens hold it, or None outside one: each
+    acting investigator's choices for this round in the words the engine matches (`choices`), and in
+    a fight the answer to blows each has set (`presets`), the ones they may set (`answers`, Tab) and
+    how dangerous the foes they see could be to them (`risk`, choices.risk at its most). Nothing in it
+    is the keeper's: public names, a foe's wounds in words."""
     from . import choices
 
     st = game.state
@@ -359,24 +366,35 @@ def table(game: Any) -> dict | None:
     if enc is None or enc.phase == "ended":
         return None
     ctx = Ctx.of(game, enc)
-    if enc.mode == "chase" and enc.chase is not None:
-        out = {"kind": "chase", "round": enc.round, "chase": chase_view(game, enc), "choices": {}, "presets": {}, "acting": []}
-        for p in enc.participants:
-            if p.kind == "investigator" and ctx.acting(p.id):
-                out["acting"].append(p.id)
-                out["choices"][p.id] = {"run": [[o.label, o.note] for o in choices.options(game, p.id, ctx=ctx)]}
-                out["presets"][p.id] = "run"
-        return out
-    out = {"kind": "fight", "round": enc.round, "fight": fight_view(game, enc), "choices": {}, "presets": {}, "acting": []}
+    chase = enc.mode == "chase" and enc.chase is not None
+    out = {"kind": "chase" if chase else "fight", "round": enc.round, "choices": {}, "presets": {}, "answers": {}, "risk": {},
+           "acting": []}
+    out |= {"chase": chase_view(game, enc)} if chase else {"fight": fight_view(game, enc)}
     for p in enc.participants:
-        if p.kind != "investigator":
+        if p.kind != "investigator" or not ctx.acting(p.id):
             continue
-        if ctx.acting(p.id):
-            out["acting"].append(p.id)
-            out["choices"][p.id] = {r: [[o.label, o.note] for o in choices.options(game, p.id, r, ctx)]
-                                    for r in choices.presets(ctx, p.id)}
-            out["presets"][p.id] = p.react if p.react in out["choices"][p.id] else "dodge"
+        out["acting"].append(p.id)
+        out["choices"][p.id] = [[o.label, o.note] for o in choices.options(game, p.id, ctx=ctx)]
+        if not chase:
+            out["presets"][p.id] = choices.preset(ctx, p.id)
+            out["answers"][p.id] = choices.presets(ctx, p.id)
+            out["risk"][p.id] = danger(ctx, p.id)
     return out
+
+
+def danger(ctx: Ctx, pid: str) -> int:
+    """The worst blow a foe `pid` can see could deal them (choices.risk, 0–3)."""
+    from . import choices
+
+    worst = 0
+    for f in ctx.foes(pid):
+        v = ctx.view(f)
+        if v is None or not ctx.acting(f) or ctx.hidden_from(pid, f):
+            continue
+        for a in v.attacks():
+            if a.damage is not None and a.usable:
+                worst = max(worst, choices.risk(ctx, pid, f, a, choices.attack_kind(a)))
+    return worst
 
 
 def situation(now: dict, who: str | None, names: dict[str, str]) -> str:
@@ -394,11 +412,10 @@ def situation(now: dict, who: str | None, names: dict[str, str]) -> str:
         others = "、".join(r["name"] for r in runners if r["side"] != "party")
         head = f"正在追逐（第 {max(1, now['round'])} 轮）：{'你们在逃' if ch['quarry'] == 'party' else '你们在追'}，{others}。"
     out = [head]
-    for pid, lists in now.get("choices", {}).items():
+    for pid, rows in now.get("choices", {}).items():
         if who not in (None, pid):
             continue
-        preset = now.get("presets", {}).get(pid) or next(iter(lists), "")
         out.append(f"{names.get(pid, pid)}这一轮可以做的（照原样写出其中一行“——”前面的文字；别的具体动作也可以，写清楚做什么）：")
-        out += [f"  {label} —— {note}" for label, note in lists.get(preset, [])]
+        out += [f"  {label} —— {note}" for label, note in rows]
     out.append("这一轮你做什么？")
     return "\n".join(out)

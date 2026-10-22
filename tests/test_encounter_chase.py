@@ -258,7 +258,7 @@ async def test_switches_keep_wounds_speeds_and_stakes_and_refresh_only_on_a_new_
     eid = game.state.encounter.id
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(40, 40)  # the chase's speed rolls: 8 each
-    await play(app, "逃跑｜被攻击时闪避")
+    await play(app, "逃跑")
     enc = game.state.encounter
     assert enc.id == eid and enc.mode == "chase" and {p.id: p.speed for p in enc.participants} == {"zhouheng": 8, "warden": 8}
     put(game, warden="office_door", zhouheng="office_door")
@@ -268,7 +268,7 @@ async def test_switches_keep_wounds_speeds_and_stakes_and_refresh_only_on_a_new_
     enc = game.state.encounter
     assert enc.mode == "fight" and enc.round == 2
     cast.modes["arrange"] = flee_plan
-    _out, _ = await play(app, "逃跑｜被攻击时闪避")  # no speed roll queued: speeds are kept for the encounter
+    _out, _ = await play(app, "逃跑")  # no speed roll queued: speeds are kept for the encounter
     enc = game.state.encounter
     assert enc.id == eid and enc.mode == "chase" and enc.switches == ["r1:chase", "r2:fight", "r3:chase"]
     assert {p.id: p.speed for p in enc.participants} == {"zhouheng": 8, "warden": 8}

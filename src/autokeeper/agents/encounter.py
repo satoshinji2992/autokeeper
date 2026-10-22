@@ -165,6 +165,8 @@ class Brief(BaseModel):
     people: list[BriefPerson] = Field(default_factory=list)
     engaged: list[tuple[str, str]] = Field(default_factory=list)
     cover: list[str] = Field(default_factory=list)  # "brennan 躲在翻倒的桌子后（部分掩体）"
+    unseen: list[str] = Field(default_factory=list)  # "warden 看不见 brennan（四下漆黑）": declared, until revoked
+    weather: str = ""  # the place's picture: its weather and light, for the keeper to judge sight by
     prone: list[str] = Field(default_factory=list)
     holds: list[str] = Field(default_factory=list)  # "douglas 制住了 brennan"
     distances: dict[str, int] = Field(default_factory=dict)  # "a|b" -> yards
@@ -335,12 +337,16 @@ def encounter_brief(b: Brief) -> str:
         scene.append("压制：" + "；".join(b.holds))
     if b.cover:
         scene.append("掩体：" + "；".join(b.cover))
+    if b.unseen:
+        scene.append("看不见：" + "；".join(b.unseen))
     if b.prone:
         scene.append("倒在地上：" + "、".join(b.prone))
     if b.distances:
         scene.append("距离：" + "；".join(f"{k.replace('|', '—')} {v} 码" for k, v in b.distances.items()))
     if scene:
         out.append("【局面】" + "｜".join(scene))
+    if b.weather:
+        out.append(f"【现场的天气与光】{b.weather}（只是背景：谁确实看不见谁，由你判断后写进 sight）")
     if b.mode == "chase" or b.nodes:
         if b.site_missing:
             out.append("【追逐路线】没有现成的路线：在 site 里画一条（3–14 个节点，起点在前，连通）")
@@ -387,6 +393,7 @@ ENCOUNTER_PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到�
 - 所有 id 只用【这场遭遇里的 id】、各人【攻击】里的攻击 id、追逐路线的节点和障碍 id；不写名字代替 id。
 - action（要你填时）：只写玩家这一轮说要做的事，不替他加动作。说的不在下表里，do 填 other；拿起手边没登记的日常物件当武器（拨火棍、油灯），先写进 takes，再用 other 交裁定。summary 是中立的一句话，只用玩家知道的叫法（【这场遭遇里的 id】括号里的称呼），不照抄玩家原话。
 - npcs：给标着【需要安排】的、和局面明显变了的守秘人控制的人各写一条；照旧的不写。actions 按优先排 1–3 条，只从他【现在能做】里选，第一条做不到才轮到下一条。照他的本性、目标和处境：模组写了打算就照办；野兽和怪物凭本能扑向最近或最弱的；普通人重伤会想逃、投降或求饶，狂热的、被控制的不会；不追打已经倒下的人，除非它的本性如此。
+- sight：谁确实看不见谁就写明原因（四下漆黑又没点灯、浓烟、隔着墙），又看得见了写 sees true。天气、雾和光线只是背景，看不看得见由你按距离和现场判断；近身扭打的人一般看得见彼此。
 - react 是他这一轮挨打时怎么应对；say 是动手时喊的一句（会说话的人才写，24 字内，多数留空）；speak 只在这一轮要他本人开口说一段话时填 true。
 - 简报里有【有人逃跑】时，每个守秘人控制的对手都要在 pursue 或 let_go 里写明每个逃跑者，二者必选其一；模组写了它追不追就照办。
 - join：这一轮主动加入的在场 NPC。fills：只填简报里【缺少的数值】。stakes：新出现的胜负后果。end：有人投降、谈和或放弃，就此收场时写。pace：一轮在故事里过几秒，简报写着未定时必填（扭打 3–6，枪战 6–10，追逐 10–30）。

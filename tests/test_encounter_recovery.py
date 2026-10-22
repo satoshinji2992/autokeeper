@@ -12,7 +12,7 @@ from autokeeper.world.store import World
 
 from .encounter_kit import arrange, attack, begin, fight_game
 
-HIT = "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避"
+HIT = "攻击 楼梯口打盹的老人（徒手，1D3）"
 
 
 @pytest.fixture

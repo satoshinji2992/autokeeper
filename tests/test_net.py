@@ -714,8 +714,13 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         await b.send_json({"t": "sit", "investigator": "lin"})
         await until(a, pool_open)
         told = len(cast.reports)
-        await a.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避"})
-        await b.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手）｜被攻击时反击"})
+        await b.send_json({"t": "react", "react": "fight_back"})  # Tab at a seat: set at the host, no action spent
+        synced = await until(b, lambda x: x["t"] == "sync"
+                             and ((x["state"].get("encounter_public") or {}).get("presets") or {}).get("lin") == "fight_back")
+        assert hub.state.encounter.get("lin").react == "fight_back" and not hub.pool and hub.open
+        assert synced["state"]["encounter_public"]["presets"]["zhouheng"] == "dodge"
+        await a.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手，1D3）"})
+        await b.send_json({"t": "act", "text": "攻击 楼梯口打盹的老人（徒手，1D3）"})
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
         seen: list[dict] = []
@@ -861,7 +866,17 @@ async def test_a_seated_players_screen_gets_each_rounds_choices_and_the_heartbea
         await screen.on_msg(pool(True))
         await pilot.pause(0.2)
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)] if picker.display else []
-        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手）") for w in words) and screen._clock is None  # the table's own window
+        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手，1D3）") for w in words) and screen._clock is None  # the table's own window
+        assert not any("被攻击时" in w for w in words) and str(picker.border_subtitle).startswith("被攻击时：[b]闪避[/b]")
+        await pilot.press("tab")  # the answer to blows: the host sets it; no action goes in
+        await pilot.pause(0.2)
+        assert {"t": "react", "react": "fight_back"} in link.sent and not any(x["t"] == "act" for x in link.sent) and picker.display
+        st.pending_turn = {}
+        assert host.set_react(seat, "fight_back") == ""  # as the Hub does with it
+        await screen.on_msg({"t": "sync", "state": {**st.model_dump(mode="json", exclude={"encounter"}), "encounter_public": views.table(host)}})
+        await pilot.pause(0.1)
+        assert "反击" in str(picker.border_subtitle) and picker.display
+        assert [picker.get_option_at_index(i).id for i in range(picker.option_count)] == words  # the same choices
         picker.highlighted = 0
         await pilot.press("enter")
         await pilot.pause(0.2)

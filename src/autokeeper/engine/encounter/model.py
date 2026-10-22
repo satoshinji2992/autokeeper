@@ -63,9 +63,10 @@ class Participant(BaseModel):
     node: str = ""  # the site node they are at (a chase); in a fight, the node the fight is at
     speed: int | None = None  # this encounter's MOV after the speed roll; None until rolled; kept across mode switches
     surprised: bool = False
-    react: Reaction | None = None  # this round's preset answer to an attack; None: not chosen
+    react: Reaction | None = None  # the answer to an attack they set (Tab, or their last answer); None: not chosen
     ask: Literal["always", "major", "never"] = "major"  # a human's: when to stop and ask for a reaction
     asked: bool = False  # a reaction prompt was shown to them in this encounter
+    risk: int = 0  # the danger of the blow they were last asked about (choices.risk): asked again only above it
     arrangement: NpcArrangement | None = None  # a keeper participant's, from the keeper plan
     arranged_round: int | None = None  # the round that arrangement was made in
     edges: list[Edge] = Field(default_factory=list)
@@ -107,9 +108,19 @@ class Hold(BaseModel):
     since: int
 
 
+class Unseen(BaseModel):
+    """`watcher` cannot see `who`, as the keeper declared (plan.SightNote): the dark, smoke, a wall."""
+
+    watcher: str
+    who: str
+    why: str = ""
+    since: int
+
+
 class FightScene(BaseModel):
     engaged: list[Engagement] = Field(default_factory=list)
     cover: list[Cover] = Field(default_factory=list)
+    unseen: list[Unseen] = Field(default_factory=list)
     holds: list[Hold] = Field(default_factory=list)
     prone: list[str] = Field(default_factory=list)
     distance: dict[str, int] = Field(default_factory=dict)  # "a|b" -> yards, filled by the keeper when shooting at range

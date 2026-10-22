@@ -22,7 +22,7 @@ from autokeeper.paths import EXAMPLE
 
 from .encounter_kit import THREAD, arrange, attack, begin, fight_game, play
 
-HIT = "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避"
+HIT = "攻击 楼梯口打盹的老人（徒手，1D3）"
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ async def test_a_bracketed_name_is_a_choice_like_any_other(module, fake):
     fake.queue(99)  # the first sight's sanity roll fails: 1
     await begin(game, ["eli"])
     words = [o.label for o in choices.options(game, "zhouheng")]
-    label = next(w for w in words if w.startswith("攻击 “埃里”（异界存在）（徒手）"))
+    label = next(w for w in words if w.startswith("攻击 “埃里”（异界存在）（徒手，1D3）"))
     found = choices.match(game, "zhouheng", label)
     assert found is not None and found.do == "attack" and found.attacks[0].target == "eli"
     assert choices.match(game, "zhouheng", "攻击 “埃里”") is None  # only the whole words
@@ -105,7 +105,7 @@ async def test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all(
     app = turn_graph.build(game, InMemorySaver())
     # the ghoul (DEX 70) first: three claws, each answered by a dodge; then 周衡's punch, which it fights back
     fake.queue(90, 90, 90, 90, 90, 90, 90, 90)
-    out, asked = await play(app, "攻击 食尸鬼（徒手）｜被攻击时闪避")
+    out, asked = await play(app, "攻击 食尸鬼（徒手，1D3）")
     acts = [e for e in out if e["type"] == "fight_act"]
     assert not asked and [a["attacker"] for a in acts] == ["f1", "f1", "f1", "zhouheng"]
     assert acts[-1]["reaction"] == "fight"  # the keeper's people fight back unless arranged otherwise (p. 87)
@@ -149,7 +149,7 @@ async def test_disarming_drops_the_real_weapon_and_claws_cannot_be_taken(module,
     await begin(game, ["warden"])
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(5, 90)  # 周衡's disarm: extreme against a failed answer
-    _out, _ = await play(app, "缴械 楼梯口打盹的老人｜被攻击时闪避")
+    _out, _ = await play(app, "缴械 楼梯口打盹的老人")
     wrench = game.world.rec.entities["warden:棍棒"]
     assert wrench.at == "tower"  # on the floor where they fight, no longer his
     assert all(not a.item for a in views.Ctx.of(game).view("warden").attacks() if a.name == "棍棒") or \
@@ -179,7 +179,7 @@ async def test_a_dying_investigator_rolls_con_from_the_end_of_the_next_round_and
 
 
 # -- running away, and what the outcome brings about --------------------------------------------------
-FLEE = "逃跑｜被攻击时闪避"
+FLEE = "逃跑"
 
 
 async def test_an_explicit_let_go_is_obeyed_and_the_stakes_wait_for_it(module, fake):
@@ -369,7 +369,7 @@ async def test_shooting_into_a_melee_takes_a_penalty_die(module, fake):
     game.state.encounter.scene.engaged.append(Engagement(a="preacher", b="warden", since=0))
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(90, 10).queue_totals(3)
-    out, _ = await play(app, "射击 楼梯口打盹的老人（.38 左轮手枪）｜被攻击时闪避")
+    out, _ = await play(app, "射击 楼梯口打盹的老人（.38 左轮手枪，1D10）")
     act = next(e for e in out if e["type"] == "fight_act")
     assert "朝扭打中的人开枪" in act["line"] and act["roll"]["bonus"] == -1
 
@@ -382,7 +382,7 @@ async def test_a_creature_that_heals_itself_gets_up_again(module, fake):
     await begin(game, ["husk"])
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(10, 90).queue_totals(3)  # a hard punch: 3, it is down, and comes back at the round's end
-    _out, _ = await play(app, "攻击 空壳（徒手）｜被攻击时闪避")
+    _out, _ = await play(app, "攻击 空壳（徒手，1D3）")
     life = game.world.rec.entities["husk"].life
     assert life.hp == 2 and not life.regenerating and game.state.encounter.phase == "open"
     assert "又撑着站了起来" in cast.reports[-1]
@@ -399,7 +399,7 @@ async def test_first_aid_wakes_the_unconscious_and_ticks_the_skill(module, fake)
     await begin(game, ["warden"])
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(10)  # 急救 (base 30): a hard success
-    await play(app, "急救 林秋｜被攻击时闪避")
+    await play(app, "急救 林秋")
     lin = game.state.find("lin")
     assert lin.hp == 1 and "昏迷" not in lin.conditions and "old:w1" in lin.injury.aided  # once per injury
     assert "急救" in game.state.investigator.marks
@@ -542,3 +542,85 @@ async def test_asked_every_time_when_the_player_says_so(module, fake):
     fake.queue(95, 95, 95, 95)
     _out, asked = await play(app, HIT, answers=["dodge"], thread={**THREAD, "configurable": {"thread_id": "again"}})
     assert [a["kind"] for a in asked] == ["reaction"] and asked[0]["ask"] == "always"  # a blow that could not put him down
+
+
+# -- when the game stops to ask how a blow is answered (review 2026-10-22) -----------------------------
+CLAW = Creature(id="ghoul", name="食尸鬼", description="犬脸的东西", sanity="0/1", stats={"生命": 13, "敏捷": 10},
+                attacks=["爪击 40%，伤害 1D6"])
+
+
+async def asking(module, fake, hp: int = 11):
+    from autokeeper.engine.encounter.actions import Ctx
+
+    module.creatures.append(CLAW.model_copy(deep=True))
+    game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("ghoul", attack("zhouheng"))]))
+    fake.queue(99)
+    await begin(game, ["ghoul"])
+    inv = game.state.investigator
+    inv.hp = inv.hp_max = hp
+    claw = next(a for a in Ctx.of(game).view("ghoul").attacks() if a.name == "爪击")
+
+    def ask() -> bool:
+        return choices.should_ask(Ctx.of(game), "zhouheng", "ghoul", claw, "melee", ["dodge", "fight_back"])
+
+    return game, ask
+
+
+async def test_after_the_first_ask_the_answer_set_stands_for_blows_no_more_dangerous(module, fake):
+    """11 HP against a 1D6 claw: asked the first time, then the answer stands, claw after claw."""
+    game, ask = await asking(module, fake)
+    me = game.state.encounter.get("zhouheng")
+    assert ask()  # the first blow at them
+    me.asked, me.react, me.risk = True, "dodge", 1  # asked about a blow that could wound them badly (6 of 11)
+    assert [ask() for _ in range(3)] == [False, False, False]
+
+
+async def test_asked_again_once_each_time_the_danger_rises_and_when_the_answer_does_not_fit(module, fake):
+    game, ask = await asking(module, fake)
+    me = game.state.encounter.get("zhouheng")
+    me.asked, me.react, me.risk = True, "dodge", 1
+    game.state.investigator.hp = 5  # a claw could now put him down
+    assert ask()
+    me.risk = 2  # asked about it: not again for the same danger
+    assert not ask() and not ask()
+    me.react = "cover"  # an answer that does not fit a claw
+    assert ask()
+    me.react, me.ask = "dodge", "always"  # 每次被攻击都询问
+    assert ask()
+
+
+async def test_the_answer_given_in_the_window_is_the_one_kept_for_the_next_blows(module, fake):
+    game, _cast, _ = fight_game(module, fake, arrange=warden_attacks)
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(10, 60, 20, 50).queue_totals(2, 3)  # 周衡 lands one; the warden swings; 周衡 fights back and fails
+    _out, asked = await play(app, HIT, answers=["fight_back"])
+    me = game.state.encounter.get("zhouheng")
+    assert [a["kind"] for a in asked] == ["reaction"] and me.react == "fight_back" and me.asked
+    assert views.table(game)["presets"]["zhouheng"] == "fight_back"
+
+
+# -- the answer to blows: set once beside the list, never in an option's words ------------------------
+async def test_options_name_the_action_and_the_answer_to_blows_is_the_preset_set_beside_them(module, fake):
+    game, cast, _ = fight_game(module, fake, arrange=warden_attacks)
+    game.state.investigator.inventory.append(".38 左轮手枪")
+    await begin(game, ["warden"])
+    labels = [o.label for o in choices.options(game, "zhouheng")]
+    assert "攻击 楼梯口打盹的老人（徒手，1D3）" in labels and "射击 楼梯口打盹的老人（.38 左轮手枪，1D10）" in labels
+    assert not any(w in label for label in labels for w in ("被攻击时", "｜", "闪避", "反击"))
+    now = views.table(game)
+    assert now["presets"]["zhouheng"] == "dodge" and now["answers"]["zhouheng"] == ["dodge", "fight_back"]
+    journal, rnd, calls = len(game.world.rec.journal), game.state.encounter.round, len(cast.calls)
+    assert game.set_react("zhouheng", "fight_back") == ""
+    enc = game.state.encounter
+    assert enc.get("zhouheng").react == "fight_back" and enc.round == rnd and not enc.receipts and len(cast.calls) == calls
+    assert len(game.world.rec.journal) == journal + 1  # its own op: the encounter changes only through the world
+    assert views.table(game)["presets"]["zhouheng"] == "fight_back"
+    assert [o.label for o in choices.options(game, "zhouheng")] == labels  # the words stay; only the preset moved
+    assert game.set_react("zhouheng", "cover") == "这场战斗中不能这样应对"  # nobody has a gun
+    assert game.set_react("zhouheng", "dodge") == "" and game.set_react("zhouheng", "fight_back") == ""  # back and forth
+    found = choices.match(game, "zhouheng", "攻击 楼梯口打盹的老人（徒手，1D3）")
+    assert found is not None and found.do == "attack" and found.react == "fight_back"
+    assert choices.match(game, "zhouheng", "攻击 楼梯口打盹的老人（徒手，1D3）｜被攻击时闪避") is None
+    game.state.pending_turn = {"input": "x"}
+    assert game.set_react("zhouheng", "dodge") == "本轮正在结算"

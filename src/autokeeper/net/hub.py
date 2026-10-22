@@ -486,6 +486,17 @@ class Hub:
             if msg.get("text") or msg.get("ask"):  # their own words, or "ask me every time" (engine/encounter respond)
                 answer = {"choice": msg.get("choice") or "", "text": str(msg.get("text") or "")[:200], "ask": msg.get("ask") or ""}
             self.choices[seat].put_nowait(answer)
+        elif t == "react":  # Tab beside a fight's choices: the seat's answer to blows from now on, no action spent
+            seat = self._seat_of(cid)
+            if seat is None:
+                await self._send(cid, {"t": "error", "text": "观战模式下无可操作的调查员。"})
+            elif not self.open:
+                await self._send(cid, {"t": "error", "text": "本轮正在结算，结束后可切换应对。"})
+            elif why := self.game.set_react(seat, str(msg.get("react") or "")):
+                await self._send(cid, {"t": "error", "text": f"{why}。"})
+            else:
+                self._save()
+                await self._broadcast({"t": "sync", "state": self._view()})
         elif t == "say":
             await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
         elif t == "retell":

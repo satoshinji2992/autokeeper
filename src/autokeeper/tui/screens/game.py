@@ -13,6 +13,7 @@ from pathlib import Path
 import aiosqlite
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
+from rich.cells import cell_len
 from rich.table import Table
 from rich.text import Text
 from textual import events, on, work
@@ -115,7 +116,8 @@ BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's r
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
 PAGES_MIN = 4  # the history's head and three lines; it opens in full with Ctrl+G
-STORY_MIN = 4  # rows the story keeps under a fight's or a chase's stage, the round's list open
+STORY_SHARE, STORY_MIN = 0.38, 8  # what the story keeps under a fight's or a chase's stage, the round's list open
+RISK_WORDS = {2: "可能被击倒", 3: "可能致命"}  # beside the answer to blows: how bad the worst blow in sight could be
 
 
 class GameScreen(Screen):
@@ -143,6 +145,7 @@ class GameScreen(Screen):
         Binding("ctrl+g", "page('progress')", "进展", show=False),  # 经过 / 进展 / 背景 as a page over the screen
         Binding("ctrl+y", "recount", "整理进展", show=False),
         Binding("ctrl+l", "idea", "灵感检定", show=False),
+        Binding("ctrl+n", "fold", "收起画面", show=False),
     ]
     SHOW_ENGINE = False  # the model is in Ctrl+B and F9; a LAN table says whose turn it is up there
 
@@ -174,7 +177,8 @@ class GameScreen(Screen):
         self._thumbs: dict[tuple, Text | None] = {}  # side-column faces by (portrait, picture, style); None: being drawn
         self.view = (state.location, state.view)  # which picture of which place the scene shows (engine/views.py)
         # A fight's or a chase's choices over the input box (_offer_orders) and the clock on them (_start_clock)
-        self._battle_picking, self._battle_title, self._stance = False, "", ""  # the list is up; its title; Tab's stance
+        self._battle_picking, self._battle_title = False, ""  # the list is up; its title
+        self._fold = 0  # Ctrl+N: 0 all shown, 1 the stage folded, 2 the round's list folded too
         self._clock = None  # the round's countdown while the list is up
         self._beating, self._beat_on = False, False  # a fight's heartbeat is going; the beat is on the stage now
         self._typing_until = 0.0  # the player is typing: the screen holds still until then (typing)
@@ -301,7 +305,7 @@ class GameScreen(Screen):
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "complete_skill" and self._battle_picking:
-            return True  # Tab over a fight's choices: the other way of answering a blow
+            return True  # Tab over a fight's choices: the next answer to blows
         if action == "complete_skill":
             box = self.query_one("#command", Input)
             return box.has_focus and box.cursor_position == len(box.value) and bool(skill_completions(box.value, self._viewer()))
@@ -1015,25 +1019,29 @@ class GameScreen(Screen):
     def _stage_rows(self) -> tuple[int, int]:
         """A fight's or a chase's stage and the round's list over the box, in rows: what is left once the
         top bar, the footer, the status line and the input box have theirs (at a LAN table its turn
-        line, with F12 the developer panel), the story keeping STORY_MIN under the stage. Half the
-        screen at most; on a short terminal the list scrolls instead of pushing the box off the screen
-        (80x24 left the story one row and the box below the bottom)."""
+        line, with F12 the developer panel) and the story its share to read in (STORY_SHARE of the
+        screen, STORY_MIN rows at least: 14 of 36, 11 of 30). The list takes half the rest, 5 to 10
+        rows, and scrolls past that; the stage the remainder, 4 rows at least, so on a short terminal
+        the box stays on the screen (80x24 left the story one row and the box below the bottom)."""
         height = self.app.size.height
         fixed = 2 + 1 + 3 + 1 + len(self.query("#turnline"))  # bars, status, box, the stage's edge; LAN's turn line
         fixed += sum(9 for panel in self.query(DevPanel) if panel.display)
-        free = height - fixed
-        picker = max(5, min(10, free // 3))
-        return max(4, min(32, round(height * 0.5), free - picker - STORY_MIN)), picker
+        rest = height - fixed
+        story = max(0, min(max(STORY_MIN, round(height * STORY_SHARE)), rest - 9))
+        picker = max(5, min(10, (rest - story) // 2))
+        return max(4, min(32, rest - story - picker)), picker
 
     def _fit_stage(self) -> None:
         """The stage and the list as tall as _stage_rows has them: on a resize, a fight or a chase
-        beginning, the developer panel opening."""
+        beginning, the developer panel opening. The round's list is written again for the new width."""
         rows, picker = self._stage_rows()
         for options in self.query("#picker").results(OptionList):
             options.styles.max_height = picker
         for arena in self.query(Arena).results(Arena):
             if arena.display:
                 arena.styles.height = rows
+        if self._battle_picking:
+            self.call_after_refresh(self._offer_orders)
 
     async def _reveal(self, portrait: str, caption: str, seconds: float) -> None:
         """A face over the whole screen: a creature first seen, the thing that caught you (after the
@@ -1077,9 +1085,26 @@ class GameScreen(Screen):
 
         step()
 
+    def action_fold(self) -> None:
+        """Ctrl+N, for room to read: the stage folds away (the scene, a fight's or a chase's stage); in a
+        fight or a chase, pressed again, the round's list too (orders can still be typed); again, both
+        come back."""
+        if self._fold == 0:
+            self._fold = 1
+        elif self._fold == 1 and self._battle_picking:
+            self._fold = 2
+            self._unpick()
+        else:
+            self._fold = 0
+        self.set_class(self._fold >= 1, "-folded")
+        self.app.notify({0: "画面已展开。", 1: "画面已收起，Ctrl+N 展开。", 2: "画面与选项已收起，Ctrl+N 展开。"}[self._fold], timeout=2)
+        if self._fold == 0:
+            self.call_after_refresh(self._offer_orders)
+
     def _battle_over(self) -> None:
         """No fight or chase on the stage any more, whatever the state still holds (the game ended in
         the middle of one): the list, the clock and the heartbeat stop, the scene comes back."""
+        self._fold = min(self._fold, 1)  # the next fight's list comes up
         self._close_orders()
         self.remove_class("-fight", "-chase")
         self._beat_off()
@@ -1173,21 +1198,67 @@ class GameScreen(Screen):
         return not self.busy
 
     def _next_stance(self, step: int) -> None:
-        """Tab over a fight's choices: answer blows the other way this round (dodge, fight back, cover when
-        someone has a gun), every choice written again with it. Only the words change, and the choice
-        picked carries the answer: the fight is the engine's (Tab mid-turn used to change how the round
-        being settled was answered). The clock goes on as it was."""
+        """Tab over a fight's choices: the next way of answering blows (dodge, fight back, cover when
+        someone has a gun), set in the engine at once (Encounters.set_react: no action spent, no model
+        asked) and shown once under the list. The choices stay as they are; the clock goes on."""
         now = self._battle_now()
         me = self._viewer().id
         if now is None or now["kind"] != "fight" or me not in now["choices"] or self.busy or not self._battle_picking:
             return
-        ways = list(now["choices"][me])
-        current = self._stance or now["presets"].get(me, "dodge")
-        self._stance = ways[(ways.index(current) + step) % len(ways) if current in ways else 0]
-        picker = self.query_one("#picker", OptionList)
-        at = picker.highlighted or 0
-        self._offer_orders()
-        picker.highlighted = min(at, picker.option_count - 1)
+        ways = list(now.get("answers", {}).get(me) or [])
+        if not ways:
+            return
+        current = now["presets"].get(me, "dodge")
+        self._set_react(ways[(ways.index(current) + step) % len(ways) if current in ways else 0])
+
+    def _set_react(self, react: str) -> None:
+        """The answer to blows set for this investigator (a LAN table asks the host: tui/screens/net.py)."""
+        if self.game is None:
+            return
+        if why := self.game.set_react(self._viewer().id, react):
+            self.app.notify(f"{why}。", severity="warning", timeout=3)
+            return
+        write_save(self.state, self.m)
+        self._react_shown()
+
+    def _react_shown(self) -> None:
+        """The answer to blows under the round's list, and on the stage's column, as the fight now has it."""
+        now = self._battle_now()
+        if now is None or now["kind"] != "fight":
+            return
+        for picker in self.query("#picker").results(OptionList):
+            if self._battle_picking:
+                picker.border_subtitle = self._stance_line(now)
+        arena = self.query_one(Arena)
+        if arena.display and arena.mode == "fight":
+            arena.show(now["fight"], self.m, self.app.art_style)  # type: ignore[attr-defined]
+
+    def _stance_line(self, now: dict) -> str:
+        """「被攻击时：闪避 · Tab 切换」, once, under a fight's list; with how bad the worst blow could be."""
+        me = self._viewer().id
+        if now["kind"] != "fight" or me not in now.get("presets", {}):
+            return ""
+        from ...engine.encounter.choices import STANCE_WORDS
+
+        word = STANCE_WORDS.get(now["presets"][me], "闪避")
+        line = f"被攻击时：[b]{word}[/b]" + (" · Tab 切换" if len(now.get("answers", {}).get(me) or []) > 1 else "")
+        risk = RISK_WORDS.get(now.get("risk", {}).get(me, 0), "")
+        return line + (f" · [b $error]⚠ {risk}[/]" if risk else "")
+
+    def _order_rows(self, rows: list[tuple[str, str, str]]) -> list[Option]:
+        """The round's choices as one row each, the actions in a column and their rolls after them in
+        grey, cut short with an ellipsis where the list is too narrow, never wrapped."""
+        width = max(16, (self.query_one("#left").size.width or self.app.size.width) - 4)  # the border and the padding
+        column = min(max((cell_len(label) for _, label, _ in rows), default=0), max(8, width - 10))
+        out = []
+        for words, label, note in rows:
+            line = Text(no_wrap=True, overflow="ellipsis", end="")
+            line.append(label, style="bold")
+            if note:
+                line.append(" " * max(2, column - cell_len(label) + 2))
+                line.append(note, style="dim")
+            out.append(Option(line, id=words))
+        return out
 
     def _offer_orders(self) -> None:
         """In a fight or a chase, the investigator's choices for the round over the input box; not once
@@ -1204,21 +1275,22 @@ class GameScreen(Screen):
         fighting = now["kind"] == "fight"
         if not lists:
             if fighting and self.game is not None and getattr(self, "link", None) is None:
-                choices = [("/encounter", "继续", "你现在无法行动：这一轮由其他人接着打")]
+                choices = [("/encounter", "继续", "本轮无法行动，由其他人继续")]
                 title = "战斗 · 回车继续"
             else:
                 return
         else:
-            preset = self._stance if self._stance in lists else now["presets"].get(me) or next(iter(lists))
-            choices = [(words, words, note) for words, note in lists.get(preset, [])]
-            title = "战斗行动 · 回车选定 · Tab 换防守方式 · Esc 手动输入" if fighting else "追逐行动 · 回车选定 · Esc 手动输入"
-        if not choices:
+            choices = [(words, words, note) for words, note in lists]
+            title = "战斗行动 · 回车选定 · Esc 手动输入" if fighting else "追逐行动 · 回车选定 · Esc 手动输入"
+        if not choices or self._fold >= 2:  # Ctrl+N folded the list: it comes back with the next Ctrl+N
             return
         picker = self.query_one("#picker", OptionList)
+        at = picker.highlighted if self._battle_picking else None  # the same round written again (a resize, Tab): the same row
         picker.clear_options()
-        picker.add_options([Option(Text.assemble((label, "bold"), ("  " + note, "dim")), id=words) for words, label, note in choices])
-        picker.highlighted = 0
+        picker.add_options(self._order_rows(choices))
+        picker.highlighted = min(at or 0, picker.option_count - 1)
         picker.border_title = title
+        picker.border_subtitle = self._stance_line(now) if lists else ""
         picker.display = True
         picker.focus()
         self._battle_picking, self._battle_title = True, title
@@ -1234,7 +1306,6 @@ class GameScreen(Screen):
         (typing, Esc), the turn is under way, the fight or the chase is over. A list left up after a
         fight sent its first line as the next action."""
         self._stop_clock()
-        self._stance = ""
         if self._battle_picking:
             self._battle_picking = False
             for picker in self.query("#picker").results(OptionList):
@@ -1658,7 +1729,7 @@ class GameScreen(Screen):
                 if auto:
                     choice = offer.get("default", "")
                 else:
-                    self._status("等你决定怎么应对…")
+                    self._status("等待选择应对方式")
                     await self.make_way()
                     choice = await self.app.push_screen_wait(ChoiceModal(offer))
             elif auto:

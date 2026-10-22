@@ -262,6 +262,10 @@ class NetGameScreen(GameScreen):
     def _in_battle(self) -> bool:
         return self._battle_now() is not None
 
+    def _set_react(self, react: str) -> None:
+        """Tab at a shared table: the host sets it (Hub "react"); its state comes back with the answer."""
+        self.run_worker(self.link.send({"t": "react", "react": react}), group="react")
+
     def _sync(self, view: dict[str, Any]) -> None:
         self.state = GameState.model_validate(view)
         self._panels()
@@ -286,6 +290,8 @@ class NetGameScreen(GameScreen):
             self._close_orders()
         elif not self._battle_picking:
             self._offer_orders()
+        else:
+            self._react_shown()  # the answer to blows as the host now has it (Tab)
 
     async def on_msg(self, msg: dict[str, Any]) -> None:
         if not self.ready:

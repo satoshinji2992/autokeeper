@@ -85,8 +85,10 @@ async def test_a_round_goes_in_dex_order_and_the_answer_meets_the_blow(module, f
     assert order == ["zhouheng", "f1"]  # DEX 65 before 50; the warden by his seat, never his own id
     ruled = len(cast.ruled)
     fake.queue(10, 60, 20, 5).queue_totals(1, 2)  # 周衡 hard: 1; the warden hits, 周衡 fights back with an extreme success
-    events, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时反击", thread={**THREAD, "configurable": {"thread_id": "r2"}})
-    assert len(cast.ruled) == ruled and not asked  # a button needs no arbiter; the answer set with it stands
+    assert game.set_react("zhouheng", "fight_back") == ""  # Tab beside the list: no action spent, no model asked
+    assert len(cast.ruled) == ruled and game.state.encounter.round == 1
+    events, asked = await play(app, "攻击 楼梯口打盹的老人（徒手，1D3）", thread={**THREAD, "configurable": {"thread_id": "r2"}})
+    assert len(cast.ruled) == ruled and not asked  # a button needs no arbiter; the answer set beside it stands
     acts = [e for e in events if e["type"] == "fight_act"][-2:]
     assert acts[1]["reaction"] == "fight" and acts[1]["winner"] == "defender" and acts[1]["hurt"] == "f1"
     # fighting back does normal damage however well it rolls (Keeper Rulebook p. 87): 1D3, not its most
@@ -127,7 +129,7 @@ async def test_a_chase_begins_on_the_map_and_hiding_ends_it(module, fake):
     enc = game.state.encounter
     assert enc.mode == "chase" and enc.chase.site.source == "location_graph"
     assert [n.id for n in enc.chase.site.nodes] == ["tower", "square", "office"] and enc.chase.site.nodes[-1].exit
-    assert any(label == "躲藏" for label, _note in views.table(game)["choices"]["zhouheng"]["run"])
+    assert any(label == "躲藏" for label, _note in views.table(game)["choices"]["zhouheng"])
     fake.queue(10)  # 潜行 against the warden's Spot Hidden (25: regular)
     out, _ = await play(app, "躲藏", thread={**THREAD, "configurable": {"thread_id": "c2"}})
     assert any(e["type"] == "chase_end" and e["end"] == "fled" for e in out)
@@ -174,7 +176,7 @@ async def test_an_event_that_scripts_an_attack_begins_the_fight_and_the_next_inp
     assert "【战斗开始】" in cast.reports[-1] and telling.BEGIN_TELL in cast.reports[-1]
     ruled = len(cast.ruled)
     fake.queue(90, 60, 10).queue_totals(2)  # 周衡 misses, the warden fights back for nothing, then strikes 周衡, who cannot answer
-    out, asked = await play(app, "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "e2"}})
+    out, asked = await play(app, "攻击 楼梯口打盹的老人（徒手，1D3）", thread={**THREAD, "configurable": {"thread_id": "e2"}})
     assert len(cast.ruled) == ruled and enc is not None and st.encounter.round == 1 and not asked  # surprised: nothing to ask
     blow = [e for e in out if e["type"] == "fight_act"][-1]
     assert blow["attacker"] == "f1" and blow["reaction"] == "none" and st.investigator.hp == st.investigator.hp_max - 2
@@ -268,7 +270,7 @@ async def test_running_from_a_fight_with_someone_after_you_is_the_same_way(modul
     app = turn_graph.build(game, InMemorySaver())
     await play(app, "hit")
     fake.queue(40, 40)  # the speeds
-    _out, _ = await play(app, "逃跑｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "f2"}})
+    _out, _ = await play(app, "逃跑", thread={**THREAD, "configurable": {"thread_id": "f2"}})
     enc = game.state.encounter
     assert enc.mode == "chase" and enc.switches == ["r1:chase"] and "又窄又陡的楼梯" in [n.name for n in enc.chase.site.nodes]
 
@@ -355,12 +357,20 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         assert await until(pilot, lambda: picker.display)
         assert screen._clock is not None and "秒" in str(picker.border_title)  # the choice is on a clock
         words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
-        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手）") for w in words) and any(w.startswith("逃跑") for w in words)
+        assert any(w.startswith("攻击 楼梯口打盹的老人（徒手，1D3）") for w in words) and any(w.startswith("逃跑") for w in words)
         assert not any("老守钟人" in w for w in words)  # the name the players know, never the keeper's
-        await pilot.press("tab")  # the other way of answering a blow, every choice with it
+        assert not any("被攻击时" in w for w in words) and str(picker.border_subtitle).startswith("被攻击时：[b]闪避[/b]")
+        rnd, clock = state.encounter.round, screen._clock
+        await pilot.press("tab")  # the answer to blows, set at once: the same choices, the same round, the same clock
         await pilot.pause()
-        assert all("被攻击时反击" in picker.get_option_at_index(i).id for i in range(picker.option_count - 2))
-        words = [picker.get_option_at_index(i).id for i in range(picker.option_count)]
+        assert state.encounter.get(me.id).react == "fight_back" and state.encounter.round == rnd and not state.encounter.receipts
+        assert "反击" in str(picker.border_subtitle) and screen._clock is clock and picker.display
+        assert [picker.get_option_at_index(i).id for i in range(picker.option_count)] == words
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert state.encounter.get(me.id).react == "dodge"
+        await pilot.press("tab")
+        await pilot.pause()
         sent = []
         screen.send_line = sent.append  # what picking sends, without playing it
         picker.highlighted = 0
@@ -725,17 +735,52 @@ async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_kee
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         assert await until(pilot, lambda: screen.query_one("#picker").display)
         arena = screen.query_one(Arena)
-        assert await until(pilot, lambda: arena.region.height == 22)  # half the screen when it has room
+        tall = screen._stage_rows()[0]
+        assert await until(pilot, lambda: arena.region.height == tall)
         await pilot.resize_terminal(100, 24)
         await pilot.pause(0.5)
         _all_on_screen(screen, 24)
-        assert arena.region.height < 22
+        assert arena.region.height < tall
         screen.state.encounter, me.pos = None, 2
         await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
         await screen.handle({"type": "chase_start", "chase": chase_of(me, warden), "line": "【追逐开始】"})
         await pilot.resize_terminal(96, 30)  # the right column is up: the route narrows, the picture keeps room
         await pilot.pause(0.5)
         assert arena.canvas.size.width >= 28 and arena.query_one(".side").size.width >= 26
+
+
+@pytest.mark.usefixtures("canned")
+@pytest.mark.parametrize("size", [(100, 30), (120, 36)])
+async def test_the_story_keeps_room_to_read_and_ctrl_n_folds_the_stage_then_the_list(module, fake, size):
+    """Review 2026-10-22: the stage took half the screen and the list ten rows, leaving the story four."""
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.widgets.fight import Arena
+
+    from .test_tui import until
+
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=size) as pilot:
+        screen = _crowd(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy)
+        picker, story, stage = screen.query_one("#picker"), screen.query_one("#story"), screen.query_one("#stage")
+        assert await until(pilot, lambda: picker.display)
+        await pilot.pause(0.3)
+        _all_on_screen(screen, size[1])
+        assert story.region.height >= max(8, round(size[1] * 0.36)), (story.region, size)
+        assert screen.query_one(Arena).region.height >= 4 and picker.region.height >= 5
+        rows = [picker.get_option_at_index(i).prompt for i in range(picker.option_count)]
+        assert all(r.no_wrap and r.overflow == "ellipsis" for r in rows)  # one row each, never wrapped
+        before = story.region.height
+        await pilot.press("ctrl+n")  # the stage folds away: the story has its rows
+        await pilot.pause(0.2)
+        assert not stage.display and story.region.height > before and picker.display
+        await pilot.press("ctrl+n")  # then the round's list
+        await pilot.pause(0.2)
+        assert not picker.display and not screen._battle_picking
+        await pilot.press("ctrl+n")  # both back, the list with this round's choices
+        await pilot.pause(0.3)
+        assert stage.display and picker.display and story.region.height == before
 
 
 # -- what a fight costs the screen, and what the settings stop -------------------------------------------

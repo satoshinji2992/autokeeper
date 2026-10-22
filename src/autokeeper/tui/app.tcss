@@ -252,6 +252,9 @@ GameScreen.-chase #stage {
 GameScreen.-chase #stage.-beat {
     border-bottom: heavy #5a6478;
 }
+GameScreen.-folded #stage {  /* Ctrl+N: room to read (GameScreen.action_fold) */
+    display: none;
+}
 GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {
     border: heavy #c1121f;
 }
