@@ -75,6 +75,7 @@ from ..agents.card import CardError
 from ..engine import debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
+from ..engine.encounter import views
 from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.state import GameState
@@ -1345,11 +1346,14 @@ class Hub:
     async def _ai_turn(self, inv: Any) -> None:
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game))  # in a fight: its choices
+        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game),  # in a fight: its choices
+                                            stances=views.stances(self.game, inv.id))
         if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
             await self._event({"type": "status", "text": ""})
             await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}本轮未行动。"})
             return
+        if move.react:  # its answer to blows from now on, as a seat's "react" sets it
+            self.game.set_react(inv.id, move.react)
         await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
         await self._run(move.text, inv.id, ai=True, push=move.push)
 

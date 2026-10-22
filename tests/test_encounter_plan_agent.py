@@ -236,12 +236,27 @@ async def test_an_ai_investigator_picks_one_offered_option_by_id(cast, state):
     options = [("hit", "打向犬脸的身影"), ("run", "往楼梯跑")]
     SCRIPT.append({"choice": "run"})
     out = await cast.encounter_choice(state, "zhouheng", "【眼前】犬脸的身影扑了过来", options)
-    assert out.ok and out.value == "run"
+    assert out.ok and out.value.choice == "run" and out.value.react == ""
     sent = SEEN[-1]
     assert sent["schema"]["properties"]["choice"]["enum"] == ["hit", "run"]
+    assert "react" not in sent["schema"]["properties"]  # a chase: no answer to blows to set
     assert "【可选】\n- hit：打向犬脸的身影\n- run：往楼梯跑" in sent["messages"][-1]["content"]
     assert "周衡" in sent["system"] and "守秘人的底牌" not in sent["system"]  # the public view only
     assert state.usage["choice"]["calls"] == 1
+
+
+async def test_in_a_fight_an_ai_investigator_sets_its_answer_to_blows_in_the_same_answer(cast, state):
+    """The review: with the answer to blows out of the option words, AI companions only ever dodged. In
+    a fight the same answer may set it, one of those it can set; one it cannot goes back once."""
+    options = [("hit", "攻击 犬脸的身影（徒手，1D3）"), ("guard", "防守")]
+    SCRIPT.append({"choice": "hit", "react": "cover"})
+    SCRIPT.append({"choice": "hit", "react": "fight_back"})
+    out = await cast.encounter_choice(state, "zhouheng", "第 1 轮战斗。", options, ["dodge", "fight_back"])
+    assert out.ok and (out.value.choice, out.value.react) == ("hit", "fight_back")
+    first, second = SEEN[-2], SEEN[-1]
+    assert first["schema"]["properties"]["react"]["enum"] == ["", "dodge", "fight_back"]
+    assert "【被攻击时的应对（react）】dodge（闪避）、fight_back（反击）" in first["messages"][-1]["content"]
+    assert "react" in second["messages"][-1]["content"] and "cover" in second["messages"][-1]["content"]  # sent back once
 
 
 # -- the arbiter in an encounter ------------------------------------------------------------------

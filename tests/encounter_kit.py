@@ -8,7 +8,7 @@ from typing import Any
 from langgraph.types import Command
 
 from autokeeper.agents.cast import Plan
-from autokeeper.agents.encounter import Checked
+from autokeeper.agents.encounter import Checked, Choice
 from autokeeper.engine.encounter.plan import (
     AttackPick,
     DeclaredAction,
@@ -69,9 +69,14 @@ class Keeper(FakeCast):
         problems = check(start) if check is not None else []
         return Checked(value=start, problems=problems, raw=start.model_dump(mode="json"))
 
-    async def encounter_choice(self, state, inv_id, situation, options):
+    async def encounter_choice(self, state, inv_id, situation, options, stances=None):
+        """`choose(options)`: an option's id, or (id, react) to set the answer to blows too."""
+        self.stances = stances
         pick = self.choose(options) if callable(self.choose) else None
-        return Checked(value=pick, problems=[] if pick else ["没选"])
+        if pick is None:
+            return Checked(value=None, problems=["没选"])
+        choice, react = pick if isinstance(pick, tuple) else (pick, "")
+        return Checked(value=Choice(choice=choice, react=react), problems=[])
 
     async def arbiter(self, state, action, at=None, *, encounter="", problems=None):
         self.ruled.append(action)

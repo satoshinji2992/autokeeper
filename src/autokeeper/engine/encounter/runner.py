@@ -76,6 +76,20 @@ def _end_slot(enc: EncounterState) -> int:
     return len(enc.order)
 
 
+def _stance_problem(ctx: Ctx, who: str, react: str) -> str:
+    """Why investigator `who` cannot set `react` as their answer to blows now ("" when they can): in a
+    fight they can act in, one of choices.presets. A player's Tab (set_react) and an AI's own answer
+    (_ai_declare) are held to the same."""
+    if ctx.enc.mode != "fight":
+        return "现在不在战斗中"
+    p = ctx.p(who)
+    if p is None or p.kind != "investigator" or not ctx.acting(who):
+        return "这名调查员现在无法行动"
+    if react not in choices.presets(ctx, who):
+        return "这场战斗中不能这样应对"
+    return ""
+
+
 def _undecided_flight(ctx: Ctx, x: str) -> bool:
     """A foe that ran this very round, with an investigator who could still go after it (they declared
     before it ran): theirs to choose next round (追赶), it is not away yet."""
@@ -160,11 +174,10 @@ class Encounters:
         if self.state.pending_turn:
             return "本轮正在结算"
         ctx = Ctx.of(self)
+        if why := _stance_problem(ctx, who, react):
+            return why
         p = ctx.p(who)
-        if p is None or p.kind != "investigator" or not ctx.acting(who):
-            return "这名调查员现在无法行动"
-        if react not in choices.presets(ctx, who):
-            return "这场战斗中不能这样应对"
+        assert p is not None
         if p.react == react:
             return ""
         step = EncounterStep(id=f"enc/{enc.id}/preset/{who}/{self.world.rec.seq}", encounter=enc.id, unit="preset",
@@ -895,19 +908,25 @@ class Encounters:
 
     async def _ai_declare(self, pid: str, rnd: int, turn: Turn) -> None:
         """An AI companion's pick among the round's choices (Cast.encounter_choice), from what the
-        players' screens show; without a valid pick, it only defends."""
+        players' screens show, with how it answers blows from now on in a fight (as a player's Tab
+        sets it, held to the same: _stance_problem); without a valid pick, it only defends."""
         enc = self.encounter()
         assert enc is not None
-        offered = choices.options(self, pid)
+        ctx = Ctx.of(self)
+        offered = choices.options(self, pid, ctx)
+        stances = choices.presets(ctx, pid) if enc.mode == "fight" else None
 
         async def pick() -> dict | None:
             chooser = getattr(self.cast, "encounter_choice", None)
             if chooser is None or not offered:
                 return None
             situation = self._public_situation(pid)
-            checked = await chooser(self.state, pid, situation, offered)
-            chosen = next((o for o in offered if o.id == checked.value), None)
-            return chosen.value if chosen is not None else None
+            checked = await chooser(self.state, pid, situation, offered, stances)
+            answer = checked.value
+            chosen = next((o for o in offered if answer is not None and o.id == answer.choice), None)
+            if chosen is None:
+                return None
+            return {**chosen.value, "react": answer.react or chosen.value.get("react", "")}
 
         value = await self._resolution_step(f"/enc/{enc.id}/r{rnd}/ai/{pid}", turn, pick)
         d = DeclaredAction.model_validate(value) if value else DeclaredAction(do="defend", summary="只防守")
@@ -916,7 +935,7 @@ class Encounters:
             w.enc.receipts.append(ActionReceipt(id=f"{w.enc.id}:r{rnd}:{pid}:0", round=rnd, actor=pid, source="ai", declared=d,
                                                 summary=d.summary))
             me = w.enc.get(pid)
-            if me is not None and d.react:
+            if me is not None and d.react and not _stance_problem(w.ctx, pid, d.react):
                 me.react = d.react
 
         await self._unit(f"enc/{enc.id}/r{rnd}/ai/{pid}/decl", turn, declare)
@@ -927,6 +946,9 @@ class Encounters:
         for f in view["fighters"]:
             hp = f"生命 {f['hp']}/{f['hp_max']}" if f["hp"] is not None else f["wound"]
             rows.append(f"- {f['name']}（{'我方' if f['side'] == 'party' else '对手'}）：{hp}" + (f"，{f['status']}" if f["status"] else ""))
+        enc = self.encounter()
+        if enc is not None and enc.mode == "fight":
+            rows.append(f"你被攻击时：{actions.REACT_WORDS[choices.preset(Ctx.of(self), pid)]}")
         return "\n".join(rows)
 
     def _by_hand(self, actor: str) -> bool:

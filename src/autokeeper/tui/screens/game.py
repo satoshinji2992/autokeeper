@@ -28,6 +28,7 @@ from ... import config, imagery, paths, roster, weather
 from ...agents.cast import Cast
 from ...engine import debrief, idea
 from ...engine import graph as turn_graph
+from ...engine.encounter import views
 from ...engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice
 from ...engine.state import GameState, time_of_day
 from ...harness import models as channels
@@ -1117,8 +1118,6 @@ class GameScreen(Screen):
     def _battle_now(self) -> dict | None:
         """The fight or the chase going on as the players' screens hold it, with each investigator's
         choices this round (engine/encounter/views.table); None outside one."""
-        from ...engine.encounter import views
-
         if self.game is None or self.state.ending:
             return None
         return views.table(self.game)
@@ -1772,10 +1771,12 @@ class GameScreen(Screen):
         inv = st.investigators[idx]
         self._status(f"{inv.name} 正在决定行动…")
         situation = self._situation()
-        move = await self.cast.investigator(st, inv.id, situation)
+        move = await self.cast.investigator(st, inv.id, situation, stances=views.stances(self.game, inv.id))
         if move is None:  # no action it could play (Cast.investigator): none is made up
             self.story.add("system", Text(f"{inv.name}（AI）本轮未行动。", style="dim"))
             return
+        if move.react:  # its answer to blows from now on, as a player's Tab sets it
+            self.game.set_react(inv.id, move.react)
         self.story.add("player", Text(f"▶ {inv.name}（AI）：{move.text}"))
         await self._run_turn({"input": move.text, "by_hand": False}, auto=True, push=move.push)
 
@@ -1798,13 +1799,16 @@ class GameScreen(Screen):
             if not alive:
                 break
             self._status("AI 调查员在商量…")
-            result = await party.ainvoke({"situation": situation(self.m, st, game=self.game), "ids": alive, "proposals": []})
+            result = await party.ainvoke({"situation": situation(self.m, st, game=self.game), "ids": alive, "proposals": [],
+                                          "stances": {x: views.stances(self.game, x) for x in alive}})
             if not result["proposals"]:  # no AI investigator gave an action it could play: watching stops
                 self.story.add("system", Text("AI 调查员本轮均未给出有效行动，观战停止。", style="dim"))
                 break
-            for inv_id, text, push in result["proposals"]:
+            for inv_id, text, push, react in result["proposals"]:
                 if st.ending or self._leave_when_ready is not None:  # 讲完再走: after this one
                     break
+                if react:  # its answer to blows from now on, as a player's Tab sets it
+                    self.game.set_react(inv_id, react)
                 st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == inv_id)
                 self._panels()
                 self.story.add("player", Text(f"▶ {st.investigator.name}（AI）：{text}"))

@@ -379,6 +379,13 @@ def table(game: Any) -> dict | None:
     return out
 
 
+def stances(game: Any, pid: str) -> list[str] | None:
+    """The answers to blows investigator `pid` may set now (choices.presets): in a fight they can act
+    in; None otherwise. What an AI player may write in its answer (agents/cast.Proposal.react)."""
+    now = table(game)
+    return now["answers"].get(pid) if now is not None and now["kind"] == "fight" else None
+
+
 def danger(ctx: Ctx, pid: str) -> int:
     """The worst blow a foe `pid` can see could deal them (choices.risk, 0–3)."""
     from . import choices
@@ -414,5 +421,8 @@ def situation(now: dict, who: str | None, names: dict[str, str]) -> str:
             continue
         out.append(f"{names.get(pid, pid)}这一轮可以做的（照原样写出其中一行“——”前面的文字；别的具体动作也可以，写清楚做什么）：")
         out += [f"  {label} —— {note}" for label, note in rows]
+        if answers := now.get("answers", {}).get(pid):
+            word = actions.REACT_WORDS.get(now.get("presets", {}).get(pid, ""), "闪避")
+            out.append(f"  被攻击时：{word}（react 可改为：" + "、".join(f"{x} {actions.REACT_WORDS[x]}" for x in answers) + "）")
     out.append("这一轮你做什么？")
     return "\n".join(out)

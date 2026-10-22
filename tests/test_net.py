@@ -50,7 +50,7 @@ class TableCast:
     async def npc(self, state, npc_id, message):
         return "……"
 
-    async def investigator(self, state, inv_id, situation):
+    async def investigator(self, state, inv_id, situation, *, stances=None):
         self.ai_turns.append(inv_id)
         return Proposal(text="我四下看看")
 
@@ -518,7 +518,7 @@ async def test_an_ai_seat_with_no_action_to_play_makes_no_move(fake):
     2026-10-22: 「我四下看看。」 was played in its place)."""
 
     class Blank(TableCast):
-        async def investigator(self, state, inv_id, situation):
+        async def investigator(self, state, inv_id, situation, *, stances=None):
             self.ai_turns.append(inv_id)
             return None
 
@@ -650,7 +650,7 @@ async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next
                 raise TimeoutError("模型超时")
             return await super().keeper(state, report, on_delta, lore)
 
-        async def investigator(self, state, inv_id, situation):
+        async def investigator(self, state, inv_id, situation, *, stances=None):
             if self.fail_ai:
                 self.fail_ai -= 1
                 raise ConnectionError("断网")
@@ -1013,6 +1013,7 @@ async def test_an_ai_player_in_a_fight_sees_it_and_the_rounds_choices(fake):
     text = situation(m, st, "lin", game)
     assert "正在战斗（第 1 轮）" in text and "楼梯口打盹的老人（重伤" in text and "HP 3" not in text  # its wounds in words
     assert "林秋这一轮可以做的" in text and "周衡这一轮可以做的" not in text
+    assert "被攻击时：闪避（react 可改为：dodge 闪避、fight_back 反击）" in text  # its answer to blows, and what it may set
     order = next(line.strip().split(" —— ")[0] for line in text.splitlines() if line.strip().startswith("攻击 楼梯口打盹的老人"))
     found = choices.match(game, "lin", order)
     assert found is not None and found.do == "attack" and found.attacks[0].target == "warden"  # the very words the engine matches
@@ -1037,7 +1038,7 @@ async def test_an_ai_seat_pushes_the_way_it_said_it_would_and_the_arbiter_review
             return Ruling(needs_roll=True, skill="侦查", clues_on_success=["c_notice"], minutes=5,
                           on_push_fail=Failure(text="纸被撕破了"))
 
-        async def investigator(self, state, inv_id, situation):
+        async def investigator(self, state, inv_id, situation, *, stances=None):
             self.ai_turns.append(inv_id)
             return Proposal(text="我细看告示栏", push="把每一层告示都揭起来对着光看，花上半个钟头")
 

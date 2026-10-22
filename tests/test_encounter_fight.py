@@ -624,3 +624,25 @@ async def test_options_name_the_action_and_the_answer_to_blows_is_the_preset_set
     assert choices.match(game, "zhouheng", "攻击 楼梯口打盹的老人（徒手，1D3）｜被攻击时闪避") is None
     game.state.pending_turn = {"input": "x"}
     assert game.set_react("zhouheng", "dodge") == "本轮正在结算"
+
+
+async def test_an_ai_companion_sets_its_answer_to_blows_with_its_pick(module, fake):
+    """The review: since the answer to blows left the option words, AI teammates only ever had the
+    stored one (a dodge). Its pick sets it, held to what a player's Tab may set: fighting back yes,
+    diving for cover (no foe with a gun) no."""
+    li = module.pregens[0].model_copy(update={"id": "li", "name": "李四"}, deep=True)
+    picks = [("防守", "fight_back"), ("防守", "cover")]
+
+    def choose(options):
+        label, react = picks.pop(0)
+        return next(o.id for o in options if o.label == label), react
+
+    keep = arrange("warden", DeclaredAction(do="defend", summary="守着"))
+    game, cast, _ = fight_game(module, fake, choose=choose, arrange=lambda *a: EncounterTurnPlan(npcs=[keep]))
+    game.state.investigators.append(li)
+    await begin(game, ["warden"], npcs=[keep])
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "防守")
+    assert cast.stances == ["dodge", "fight_back"] and game.state.encounter.get("li").react == "fight_back"
+    await play(app, "防守")
+    assert game.state.encounter.get("li").react == "fight_back"  # cover is no answer it can set here

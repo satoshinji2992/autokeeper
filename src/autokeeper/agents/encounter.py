@@ -79,9 +79,12 @@ class ArrangePlan(EncounterTurnPlan):
 
 
 class Choice(BaseModel):
-    """An AI investigator's pick among the offered options; the schema's enum is set per call."""
+    """An AI investigator's pick among the offered options, and in a fight how it answers blows from
+    now on (Participant.react, as a player's Tab sets it); the schema's enums are set per call."""
 
     choice: str = Field(description="选哪一项：只填列出的选项 id")
+    react: Literal["", "dodge", "fight_back", "cover"] = Field("", description=(
+        "战斗中被攻击时怎么应对，只填列出的应对：dodge 闪避，fight_back 反击，cover 扑向掩体；照旧留空"))
 
 
 # -- the brief: plain data the engine fills in ----------------------------------------------------
@@ -428,7 +431,8 @@ ENCOUNTER_START_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到
 
 CHOICE_SYSTEM = """你在玩一场 CoC 7 版中文跑团，扮演调查员「{name}」（{occupation}）。
 {sheet}
-现在正在战斗或追逐里。你只知道眼前看得到的事。从列出的选项里选一个：像一个谨慎的玩家，先救濒死的同伴，打得过就打，打不过就退，不去送死。只填选项 id。"""
+现在正在战斗或追逐里。你只知道眼前看得到的事。从列出的选项里选一个：像一个谨慎的玩家，先救濒死的同伴，打得过就打，打不过就退，不去送死。choice 只填选项 id。
+战斗中列出了被攻击时的应对时，react 可以改它（之后每次挨打都照它应对）：近身肉搏占上风时反击，对方有枪时扑向掩体，其余闪避；不改留空。"""
 
 # The book's Table III (Keeper Rulebook, pp. 102–103), for harm the engine has no rule of its own for.
 OTHER_DAMAGE = """【其他类型的伤害】（规则书表 III；按情况可增可减。一次或一轮的量，仍在伤害源里的每轮再受一次）
