@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .. import __version__
 from ..cards import Drawn
 from ..rules.coc import Investigator
 from ..world.record import WorldRecord
 from .encounter.model import EncounterState, EncounterSummary
+
+# The layout of a save file (GameState.save_format), raised when a save of the version before can no longer be
+# read as it is. A save without it (0.0.3 and before) or with another one is refused whole (read_save): loading it
+# would drop what this version does not know (0.0.3's `chase`, `pending_resolution`) and the next autosave would
+# write it back without them. Old saves are not migrated; their files are left as they are.
+SAVE_FORMAT = 1
 
 LogKind = Literal["opening", "player", "speech", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
@@ -77,13 +85,12 @@ class WorldFact(BaseModel):
 
 class Mention(BaseModel):
     """How present a clue has been at the table, for the Idea roll's difficulty (engine/idea.py):
-    when it first and last came up (game minutes), whether the party was where it lies or met the
-    one who holds it, how many tellings named it (the keeper's, an NPC's, an event's) and how many of
-    the players' own inputs did."""
+    when it first and last came up (game minutes), how many tellings carried its own words (the
+    keeper's, an NPC's, an event's) and how many of the players' own inputs did. Its place and its
+    NPC are no mention."""
 
     first: int = 0
     last: int = 0
-    seen: bool = False  # its place visited, or its NPC met
     told: int = 0
     said: int = 0
 
@@ -123,6 +130,7 @@ class CheckRecord(BaseModel):
 
 
 class GameState(BaseModel):
+    save_format: int = SAVE_FORMAT  # see SAVE_FORMAT; checked before a save file is read (read_save)
     module: str
     slot: str = "default"
     label: str = ""  # the player's own name for this save (继续调查 → 改名); the module title when empty
@@ -289,6 +297,31 @@ class GameState(BaseModel):
         u["output"] += usage.get("output_tokens", 0)
         u["cost_usd"] += reply.cost_usd or 0.0
         u["seconds"] += reply.seconds or 0.0
+
+
+class SaveRefused(ValueError):
+    """A save file of another save format (SAVE_FORMAT): not loaded, so never written over. Its words say so."""
+
+    def __init__(self, found: object):
+        self.found = found
+        newer = type(found) is int and found > SAVE_FORMAT
+        super().__init__(f"{'新' if newer else '旧'}版本存档，{__version__} 无法读取")
+
+
+def check_save(raw: object) -> dict:
+    """A save file's data, when this version reads it. SaveRefused for another save format (none: 0.0.3 and
+    before); ValueError for what is no save at all."""
+    if not isinstance(raw, dict) or "module" not in raw:
+        raise ValueError("不是存档")
+    if raw.get("save_format") != SAVE_FORMAT:
+        raise SaveRefused(raw.get("save_format"))
+    return raw
+
+
+def read_save(text: str) -> GameState:
+    """A save file's text as the game. Every way a save file is opened goes through here (the saves screen,
+    a LAN room, `autokeeper host --load`): SaveRefused for another save format, ValueError for a broken file."""
+    return GameState.model_validate(check_save(json.loads(text)))
 
 
 TURNS_KEPT = 200  # per-turn usage rows a save keeps

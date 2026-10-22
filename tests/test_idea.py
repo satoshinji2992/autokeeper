@@ -62,23 +62,78 @@ def test_difficulty_follows_how_present_the_clue_already_was(module, fake):
     st = game.state
     idea.note(module, st)
     assert idea.difficulty(st, "c_gears") == "常规"  # never mentioned
-    st.add("keeper", "钟楼顶上的齿轮间里传来咔哒声。")
+    st.add("keeper", "钟楼顶上的齿轮间里传来咔哒声。")  # its place and its title, not the clue
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "常规"
+    st.add("keeper", "你瞥见最大的那只齿轮背后好像缠着什么。")  # the clue's own words
     idea.note(module, st)
     assert idea.difficulty(st, "c_gears") == "困难"  # mentioned once
     st.minutes += 2 * 1440
     assert idea.difficulty(st, "c_gears") == "常规"  # mentioned long ago
     for _ in range(idea.STRESSED):
-        st.add("keeper", "齿轮间又响了一声。")
+        st.add("keeper", "那圈不属于钟的东西又动了一下。")
     idea.note(module, st)
     assert idea.difficulty(st, "c_gears") == "极难"  # stressed
     idea.note(module, st)
     assert st.mentions["c_gears"].told == idea.STRESSED + 1  # counting again adds nothing
-    st.add("player", "我想看看报社里有什么旧报合订本")
+    st.add("player", "我想看看报社里有什么旧报合订本")  # where it lies, not what it says
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_archive") == "常规"
+    st.add("player", "午夜钟声也多敲过一下？去旧报里找找那一年")
     idea.note(module, st)
     assert idea.difficulty(st, "c_archive") == "极难"  # the players discussed it themselves
+
+
+def test_its_place_its_holder_and_their_names_are_no_mention(module, fake):
+    """The review of 2026-10-22 (p. 168: whether the clue itself was mentioned): being where a clue lies,
+    greeting the one who holds it, or a telling that names them, made the roll hard or extreme."""
+    game, *_ = make(module, fake, {})
+    st = game.state
+    name = module.npc("warden").name
+    st.location = "tower"
     st.visited.append("tower")
+    st.npc("warden").met = True
+    st.add("keeper", f"钟楼里很暗，{name}守在齿轮间门口，怀里揣着守钟人的日记。")
+    st.add("player", f"我向{name}问好，问他今天忙不忙。")
+    st.add("npc", "忙？钟走着，我就不忙。", who=name)
     idea.note(module, st)
-    assert idea.presence(st, "c_diary").mentioned  # they were where the diary's keeper is
+    assert not st.mentions
+    assert idea.difficulty(st, "c_gears") == "常规" and idea.difficulty(st, "c_diary") == "常规"
+    st.add("npc", "它在钟里很安静……我只能说这么多。", who=name)  # the diary's words, the diary not handed over
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_diary") == "困难" and "c_diary" not in st.clues
+
+
+def test_staying_by_a_clue_does_not_bring_its_mention_back(module, fake):
+    """The review of 2026-10-22: two days later, still at the tower with nothing new said, the mention was
+    counted again and the roll went back to hard."""
+    game, *_ = make(module, fake, {})
+    st = game.state
+    st.location = "tower"
+    st.visited.append("tower")
+    st.add("keeper", "最大的那只齿轮背后好像缠着什么。")
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "困难"
+    st.minutes += 2 * 1440
+    st.add("keeper", "又过了两天，齿轮间里还是咔哒作响。")
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_gears") == "常规" and st.mentions["c_gears"].told == 1
+
+
+def test_names_inside_a_clue_s_words_never_carry_it():
+    """A transliterated name, a newspaper's title or a place a clue names is no part of its own words."""
+    from autokeeper.engine.state import GameState
+    from autokeeper.paths import MODULES
+
+    zhui = Module.load(MODULES / "zhuishuren")
+    st = GameState(module=zhui.id, investigators=zhui.pregens, location=zhui.locations[0].id)
+    st.add("keeper", "图书馆的管理员说起道格拉斯·金博尔，又提到《阿诺兹堡广告报》和梅洛迪亚斯·杰弗逊。")
+    for n in zhui.npcs:
+        st.add("player", f"我去找{n.name}问问情况。")
+    for c in zhui.clues:
+        st.add("keeper", f"你们来到{zhui.location(c.where).name}，〔{c.title}〕就在{c.feature or '那边'}。")
+    idea.note(zhui, st)
+    assert not st.mentions
 
 
 # -- the roll -----------------------------------------------------------------------------------
