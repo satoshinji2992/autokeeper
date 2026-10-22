@@ -168,6 +168,16 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             p.backstory = q.backstory
         for h, g in zip(then.handouts, now.handouts, strict=True):
             h.originals = g.originals
+        if folder.name == "fallout3-youxierenyouyanbujin":
+            # The town's clock and the original's 催促玩家 (2026-10-22): events, their flags, an ending the
+            # clock brings and its big scene, written after the original ones, which stay as they were;
+            # the keeper's notes on them appended under 【AutoKeeper 补充】.
+            for name in ("events", "endings", "showcases"):
+                had = {x.id for x in getattr(then, name)}
+                setattr(then, name, [*getattr(then, name), *(x for x in getattr(now, name) if x.id not in had)])
+            then.flags |= {k: v for k, v in now.flags.items() if k not in then.flags}
+            assert now.keeper_notes.startswith(then.keeper_notes.rstrip())
+            then.keeper_notes = now.keeper_notes
         # The fights the story scripts (Event.fight), the gun the deputy fires in it, and what the players
         # call a creature before they know what it is (Creature.called): written by hand from the modules'
         # own text on 2026-10-21.

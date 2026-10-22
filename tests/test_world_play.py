@@ -477,6 +477,22 @@ async def test_an_agenda_step_with_an_outcome_goes_ahead_with_no_model_and_its_f
     assert game.state.ending == "stopped" and turn.ending == "stopped"  # the clock ran out with no one stepping in
 
 
+async def test_a_step_that_goes_where_its_npc_already_is_still_goes_ahead(module, fake):
+    """斯托威尔的牧师半夜在他本来就在的教堂办弥撒：已经在那里不算做不到，这一步的标记照样立起来。"""
+    from autokeeper.module.schema import Agenda, Move
+
+    module.agendas = [Agenda(npc="warden", goals=["守住秘密"], steps=[
+        Move(id="stop", text="在钟楼里把钟停下", when="D1 15:00", does="at:warden:tower & flag:bell_stopped")])]
+    module.npc("warden").location = "tower"
+    game, _, _ = make(module, fake, {}, location="square")
+    assert game.world.place("warden") == "tower"
+    game.brain = Canned(lambda ask: Scene(decisions=[]))  # type: ignore[assignment]
+    game.minds = scheduler.Budget(turn=2, skip=4)
+    fake.queue_totals(3)  # the ending's sanity reward
+    await game.resolve(WAIT, ruled(minutes=70))
+    assert "bell_stopped" in game.state.flags and game.world.agent("warden").plan[0].status == "done"
+
+
 async def test_the_modules_past_is_remembered_by_those_who_know_it(module, fake):
     from autokeeper.module.schema import Past
     from autokeeper.world import context

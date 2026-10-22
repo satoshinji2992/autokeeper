@@ -101,6 +101,13 @@ foreshadow:
   pays_off: k_blessed
   stages:
   - hint: 格兰达端着蛋糕走到屋后窗下，孩子们谁也没伸手接，她便一直端着，直到蛋糕上的热气散尽。
+- id: steakhouse_back_door
+  hint: 牛排馆后门的小巷里，一个戴厨师帽的人拖着两桶垃圾出来，听见脚步声就把帽檐压低，倒完桶匆匆退回门里，始终没抬头。
+  where: steakhouse
+  pays_off: k_broken
+  stages:
+  - hint: 店门口聚着几个被辞退的服务员和厨工，凑在一起低声商量，说要在店门前示威、讨回工钱；见了熟人，就招手让对方也来。
+    when: flag:town_stage_2
 ties:
 - id: tie_glenda_kin
   hook: 格兰达·弗格森是调查员从小喊“姐”的邻家嫂子，上周还托他捎话给卫斯理，说家里出了点事。
@@ -150,6 +157,18 @@ ties:
   place: jensen_farm
   fits:
   - 重要之人
+- id: tie_raymond_father
+  hook: 雷蒙德·劳里是调查员的父亲，一贯严肃，在本镇银行做事；母亲露希尔刚打来电话，说他据守客厅废寝忘食地奏乐，叫调查员回家。
+  npc: raymond
+  place: lowry_house
+  fits:
+  - 重要之人
+- id: tie_steakhouse_dishes
+  hook: 调查员近来手头拮据，在埃尔默牛排馆洗盘子；今天领班菲利克斯打发他走，连工钱也不结，老板伦纳德却一句话没说。
+  npc: leonard
+  place: steakhouse
+  fits:
+  - 职业
 - id: tie_park_mine_father
   hook: 调查员的父亲在金矿塌方里没出来，公园旁那块裸石山是他从小被警告别去的地方，如今马西在那里日夜凿石。
   npc: massey
@@ -217,28 +236,29 @@ agendas:
     when: D1 20:30
     does: at:stanley:police_station
   - id: stanley_watch_players
-    text: 盯着镇上的动静：谁打听警局、报案或农场的事，他都记下，并派人去查。
+    text: 盯着镇上的动静：谁打听警局、报案或农场的事，他都记下，并派人去查；有人想离镇或向县里报案，他亲自带人拦截，必要时摆出警用路障拦路。
     when: flag:mccurdy_dead
     meet: false
-    only_if: 有镇民或巡逻的警员当面报告，调查员在打听警局、报案或农场的事
-    source: 守秘人须知 police_station；斯坦利秘密（有福者绝不允许有人逃离或报案）；补写
+    only_if: 有镇民或巡逻的警员当面报告，调查员在打听警局、报案或农场的事，或正要离镇、向县里报案
+    source: 守秘人须知 police_station；斯坦利秘密（有福者绝不允许有人逃离或报案）；追逐障碍：斯坦利的警用路障；补写
   - id: stanley_arrests
     text: 带人上门抓人，关进警局后面的牢房。
     when: flag:learned_telescope
     meet: false
     only_if: 有手下或有福者向他报告、或他亲眼看到调查员在追查教授和望远镜；调查员自己知道了不等于他知道
     source: 守秘人须知 police_station；斯坦利秘密
-  - id: stanley_block_escape
-    text: 调查员想离镇或向县里报案时，他亲自带人拦截，必要时摆出警用路障拦路。
-    when: flag:mccurdy_dead
-    ruling: true
-    source: 真相；斯坦利秘密；追逐障碍：斯坦利的警用路障
   - id: stanley_meet_reply
     text: 被问到麦克迪或收尸的事，他听完要想很久，皱眉说麦克迪是个疯了的流浪汉，很快就有人来正式收尸，镇上一切都好。
     when: at:players:police_station
     meet: true
     once: false
     source: 斯坦利 NPC 会撒的谎；扮演特征：说话总皱眉
+  - id: stanley_sweep
+    text: 不再找借口：带着卡瓦诺和手下挨家盘查，把对有福者不满、说话不中听的镇民直接抓进警局后面的牢房；菲茨杰拉德牧师在一旁作证，说这些人不必审判。
+    when: D4 09:00 & flag:town_stage_3 & !flag:telescope_destroyed
+    does: flag:police_sweep
+    meet: false
+    source: 有福者出击；守秘人剧情（警察努力消灭不满有福者统治的人）；催促埃洛娃·伯奇（牧师帮警察制造冤案）；补写：时刻
 - npc: hart
   goals:
   - 劝人看望远镜，领略宇宙的奥妙
@@ -255,15 +275,28 @@ agendas:
     meet: false
     source: e_special_mass；守秘人须知 greenhouse
   - id: hart_repair
-    text: 望远镜被毁后，他先陷入混乱，再召集助手到工作室翻找备件和透镜毛坯，想办法在一天内造出新镜。
+    text: 望远镜被毁后，他先陷入混乱，再召集助手到工作室翻找备件和透镜毛坯，想办法在一天内造出新镜；此后每过一小时，知情的有福者发现新联系方式的几率 +1%，按当前几率判定或由守秘人直接决定。
     when: flag:telescope_destroyed
     ruling: true
-    source: 守秘人须知 greenhouse；真相：毁望远镜；大智慧联系状态（修复需工作室备件）
-  - id: hart_discovery_chance
-    text: 望远镜被毁后每过一小时，知情的有福者发现新联系方式的几率 +1%，按当前几率判定或由守秘人直接决定。
-    when: flag:telescope_destroyed
-    ruling: true
-    source: 规则清单 大智慧联系状态；给守秘人的建议：延长剧情
+    source: 守秘人须知 greenhouse；真相：毁望远镜；大智慧联系状态（修复需工作室备件）；给守秘人的建议：延长剧情
+  - id: hart_second_night
+    text: 第二夜，牧师送来的又一批会众在温室里轮流看了望远镜，一半有福、一半崩溃；镇上没看过的人又少了一批。
+    when: D3 05:00 & !flag:telescope_destroyed
+    does: at:hart:greenhouse & flag:town_stage_2
+    meet: false
+    source: 守秘人剧情（每天晚上都有正常镇民去看教授的望远镜）；开幕剧情（玩家按兵不动时，拜访哈特教授的镇民日日增多）；补写：时刻
+  - id: hart_third_night
+    text: 第三夜来看望远镜的人更多，挨家谈话的政府巡视员也被领来：教授和他们谈过以后，请他们看了望远镜。
+    when: D4 05:00 & !flag:telescope_destroyed
+    does: at:hart:greenhouse & flag:town_stage_3
+    meet: false
+    source: 政府巡视员（如果调查员不管，他们最后会和教授谈话，并看望远镜）；守秘人剧情；补写：时刻
+  - id: hart_fourth_night
+    text: 第四夜照旧有人来看望远镜，联系没有断；镇上的公用事业和买卖已全由有福者和崩溃者奴隶把持。
+    when: D5 05:00 & !flag:telescope_destroyed
+    does: at:hart:greenhouse & flag:town_lost
+    meet: false
+    source: 守秘人剧情（时间一天天过去，有福者逐渐控制了小镇）；补写：时刻与结局 e_town_lost
 - npc: jensen
   goals:
   - 讨好有福者，换取奴隶与赏赐
@@ -287,10 +320,23 @@ agendas:
     ruling: true
     source: 守秘人须知 jensen_farm；詹森知道：有福者让他捉拿逃奴
   - id: jensen_drive_victim_car
-    text: 偶尔开阿诺德的车进镇，在街上晃一圈，时机由守秘人决定。
-    when: flag:mccurdy_dead
-    ruling: true
-    source: 催促贝蒂·康西丁
+    text: 开着阿诺德·麦克德莫特的车进镇，在大街上慢慢兜圈，看谁多看了这辆车一眼。
+    when: D2 14:00 & !flag:telescope_destroyed
+    does: at:jensen:main_street
+    meet: false
+    source: 催促贝蒂·康西丁（詹森也可能偶尔开阿诺德的车到镇上）；c_farm_cars；补写：时刻
+  - id: jensen_hunt_gladys
+    text: 发现格拉迪斯趁夜从农场跑了，带着喽啰开车满镇找她，要把她拖回农场。
+    when: D3 09:00 & !flag:telescope_destroyed
+    does: at:jensen:main_street & flag:gladys_fled
+    meet: false
+    source: 催促贝蒂·康西丁（格拉迪斯可能逃出詹森农场）；NPC gladys（随时可能出逃）；詹森知道：有福者让他捉拿逃奴；补写：时刻
+  - id: jensen_roundup
+    text: 入夜带三个喽啰开皮卡在镇上转，把逃出来的崩溃者和夜里落单的镇民拖上车，拉回农场关起来。
+    when: D3 20:00 & flag:town_stage_2 & !flag:telescope_destroyed
+    does: at:jensen:jensen_farm
+    meet: false
+    source: 有福者出击（警察与詹森匪帮搜捕）；无妄之灾；詹森（捉拿逃奴、屋里关着崩溃者奴隶）；补写：时刻
 - npc: fitzgerald
   goals:
   - 挑选会众送去看望远镜，让崩溃者服侍有福的选民
@@ -319,6 +365,18 @@ agendas:
     when: at:players:police_station
     ruling: true
     source: 催促埃洛娃·伯奇；fitzgerald 秘密
+  - id: fitz_flyers
+    text: 派会众里一个热心的姑娘到大街路口散发传单，劝人来听布道，传单上写着雷蒙德·劳里将弹管风琴。
+    when: D2 12:00 & !flag:telescope_destroyed
+    does: flag:flyers_out
+    meet: false
+    source: 催促埃洛娃·伯奇（路口有位姑娘散发传单）；c_flyer；h_flyer；补写：时刻
+  - id: fitz_concert
+    text: 晚上在教堂办音乐会，雷蒙德·劳里弹管风琴；有福者把持的电话交换台在线路里放这支曲子，全镇的收音机也只收得到它。
+    when: D3 19:00 & !flag:telescope_destroyed
+    does: at:fitzgerald:church & flag:organ_concert
+    meet: false
+    source: 催促伯特·劳里（教堂音乐会；收音机与电话交换台）；补写：时刻
 - npc: bingham
   goals:
   - 收回欠债人的房产，分给有福者
@@ -331,7 +389,8 @@ agendas:
     source: 催促弗雷德·申克；c_eviction_notice；h_eviction
   - id: bingham_armed_evict
     text: 封条贴出 12 小时后的整点，武装执行员强行驱逐住户，可能与住户枪战，路人也可能被波及；封条晚贴则顺延。
-    when: D2 08:00
+    when: D2 08:00 & !flag:telescope_destroyed
+    does: flag:armed_eviction
     meet: false
     source: 规则清单：银行封条后满 12 小时整点武装驱逐；守秘人须知 bank（补写：起点按封条贴出时间顺延）
   - id: bingham_meet
@@ -340,6 +399,12 @@ agendas:
     meet: true
     once: false
     source: NPC bingham 说话特征；守秘人须知 bank；c_bingham_meeting（信用评级（常规）才可得）
+  - id: bingham_steak_dinner
+    text: 收工后去埃尔默牛排馆，和别的有福者一起吃几乎没煎的久久熟成牛排。
+    when: D4 19:00 & !flag:telescope_destroyed
+    does: at:bingham:steakhouse & flag:blessed_dinner
+    meet: false
+    source: 催促安娜贝尔·希恩（每天晚上都有很多有福者来店吃饭，如宾汉先生）；守秘人须知 steakhouse；补写：时刻
 - npc: twins
   goals:
   - 弄明白活物的构造，需要一个还新鲜的实验对象
@@ -357,8 +422,22 @@ agendas:
     meet: false
   - id: twins_chase_donald
     text: 发现父亲挣脱跑了，就去街上把他抓回来，顺便告诉有福者大人。
-    when: D2 03:00
-    does: at:twins:main_street
+    when: D2 03:00 & !flag:telescope_destroyed
+    does: at:twins:main_street & flag:donald_loose
+    meet: false
+    source: 催促卫斯理·弗罗斯特（唐纳德逃出地下室，在街上觅食）；补写：时刻
+  - id: twins_dinner_out
+    text: 傍晚换上干净衣服去埃尔默牛排馆吃饭，把格兰达一个人留在家里。
+    when: D2 18:30 & !flag:telescope_destroyed
+    does: at:twins:steakhouse & flag:glenda_alone
+    meet: false
+    source: 催促安娜贝尔·希恩（双胞胎晚上来店吃饭）；催促卫斯理·弗罗斯特（格兰达突然暂时清醒，打电话求救）；补写：两件事接在同一晚
+  - id: twins_basement_fire
+    text: 回家在地下室里接着做实验，地下室起了火，整座房子烧成平地；姐妹俩一个死在火里，活下来的那个去找调查员，要他们收养她。
+    when: D4 14:00 & !flag:telescope_destroyed
+    does: at:twins:ferguson_house & flag:ferguson_fire
+    meet: false
+    source: 催促卫斯理·弗罗斯特（格兰达家地下室起火，双胞胎一死一存）；补写：时刻
 history:
 - when: 两周前（2 月 14 日）
   text: 哈特教授在温室里装上自己磨的新透镜，把镜筒对准昴星团附近，看见一颗暗弱星体；从那天起他能与那个有意识的存在“大智慧”相连。
