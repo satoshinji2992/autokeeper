@@ -152,18 +152,18 @@ async def test_an_npc_with_nothing_left_to_do_plans_again_when_time_jumps_not_ev
     assert len(game.brain.asks) == 1  # no new reason: respect its chosen wait
 
 
-async def test_autonomous_onscreen_actions_cannot_bypass_clue_permissions(module, fake):
+async def test_autonomous_onscreen_actions_cannot_disclose_unknown_facts(module, fake):
     module.npc("warden").important = True
     game, _, _ = make(module, fake, {}, location="tower")
     secret = module.npc("warden").secrets[0]
     game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[
         O.Occur(text=secret, place="tower"),
-        O.Learn(fact="clue:c_diary", who=["players"]),
+        O.Learn(fact="truth", who=["players"]),
     ])]))
     game.minds = scheduler.Budget()
     turn = await game.resolve(WAIT, ruled(minutes=10))
     assert turn.world == []
-    assert game.world.rec.facts["clue:c_diary"].revealed is None
+    assert game.world.rec.facts["truth"].revealed is None
 
 
 async def test_an_onscreen_npc_can_share_a_clue_the_player_has_unlocked(module, fake):

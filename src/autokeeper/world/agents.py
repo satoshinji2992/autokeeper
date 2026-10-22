@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
-from ..agents import guard
 from ..engine import world as legacy_world
 from ..engine.state import hours, within
 from . import knowledge
@@ -103,7 +102,7 @@ NPC_MIND_SYSTEM = """你替跑团里的 NPC 决定接下来做什么。玩家看
 - 计划与执行严格分开：说要出门不等于已到目的地。走动必须 move，交物必须 transfer，同意陪同必须 follow；先执行再用 step 标记完成。新计划为移动、交物等步骤填写 achieved 完成条件；note、notice、judge、summary 和台词都不能替代状态操作。
 - 条件只用已列出的真实 id；调查员集体可用 players。& 表示同时满足，| 表示任一满足，at:players:地点可用于等调查员抵达。不要自造调查员昵称或地点 id。
 - 根据已发生的变化选择下一步；没有理由时可以等待，不为显得主动而每轮插话、制造危险或重复问答。先前已经完成的对话不再演一遍。
-- 在场的人只能观察到外在行为。公开事件不写人物内心、秘密、未获授权的线索或幕后计划；需要公开案情时仍遵守调查进展与线索权限。
+- 在场的人只能观察到外在行为和实际说出口的话。公开事件不写未说出口的内心、秘密或幕后计划；人物可以按自己的动机主动坦白确实知道的事。有搜索、交付或交涉条件的资料，按这次场面判断条件是否成立，不能因为资料里有线索就提前兑现发现。确实告知的事实用 learn 或 occur.facts 登记，猜测、传言和谎言不能因此变成已经证实的真相。
 - 人物可以有动机地欺骗、假答应或隐瞒，不限反派。公开记录写清“他说/声称了什么”，不能把不实口供直接写成世界事实；自己的私有欺骗记录与真实打算优先于表面的承诺，不因主动行动而突然无条件坦白。
 - 若为谋害、操纵或报复而示好，公开行为可以温和，真实计划保留在私有记忆与计划中。不要为了让玩家知道系统正在运作而公开内心独白、泄露阴谋，或在提交时把恶意修正成体面帮助。
 - 几个 NPC 同在一处时，这是一场幕后的戏：summary 里一两句写清发生了什么，每个人的操作分开写在 decisions 里。
@@ -372,35 +371,14 @@ def _beside(w: World, npc: str, other: str) -> bool:
     return other == npc or (other == PLAYERS and w.place(npc) == w.st.location) or (w.place(other) == w.place(npc) != "")
 
 
-def _disclosure(w: World, npc: str, op: Any) -> list[str]:
-    """An autonomous action has the same disclosure limits as an NPC's reply."""
-    visible = op.visibility == "public" or (op.visibility == "auto" and w.place(npc) == w.st.location)
-    if isinstance(op, Learn):
-        visible = visible or PLAYERS in op.who
-    if isinstance(op, Equip):
-        visible = op.reveal
-    if not visible:
-        return []
-    n = w.m.npc(npc)
-    allowed = set(w.st.clues) | set(w.st.npc(npc).unlocked) | {cid for cid in n.clues if cid not in n.gates}
-    protected = {f.id: f.text for f in w.rec.facts.values()
-                 if not f.retracted and f.revealed is None and f.kind in {"secret", "truth", "clue", "conclusion"}
-                 and not (f.id.startswith("clue:") and f.id.removeprefix("clue:") in allowed)}
-    facts = [op.fact] if isinstance(op, Learn) else getattr(op, "facts", [])
-    blocked = [fid for fid in facts if fid in protected]
-    public = "\n".join(f.text for f in w.rec.facts.values()
-                       if not f.retracted and (f.revealed is not None
-                                               or (f.id.startswith("clue:") and f.id.removeprefix("clue:") in allowed)))
-    text = op.evidence if isinstance(op, Equip) else f"{op.name}\n{op.look}" if isinstance(op, Bring) else getattr(op, "text", "")
-    blocked += guard.leaks(text, protected, public=public)
-    return [f"不能通过公开行动透露未解锁的信息：{fid}" for fid in dict.fromkeys(blocked)]
-
-
 def vet(w: World, npc: str, op: Any) -> list[str]:
-    """What this NPC cannot do of this op, from where it is and what it knows."""
+    """Check identity, reach and explicit fact references, never infer secrets from prose.
+
+    An NPC decides whether to share its own knowledge from its character context. Learn.check
+    and Occur's checks below still reject facts it does not know; text similarity cannot decide
+    whether a confession, a lie or an everyday action is appropriate.
+    """
     me, name = npc, w.name(npc)
-    if problems := _disclosure(w, npc, op):
-        return problems
     if isinstance(op, Move):
         if op.entity != me:
             return [f"{name}只能决定自己去哪"]
