@@ -8,6 +8,10 @@ a copy gets a slot of its own (a fresh thread; everything a turn needs is in the
 pending_turn included), and a deleted save leaves its checkpoints where they are, so putting
 the file back from data/games/trash/ brings the game back whole. Nothing here touches another
 slot's file, line or thread.
+
+A save of another version (engine/state.SaveRefused: 0.0.3's, with no save format) is listed as
+such and never opened, so nothing writes over it; renaming one changes its index line only, and
+deleting it moves the file to the trash as it is.
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ... import imagery, paths
-from ...engine.state import GameState, time_of_day
+from ...engine.state import SAVE_FORMAT, GameState, SaveRefused, read_save, time_of_day
 from ...module.schema import Module
 from ..modals.menu import AskText, Confirm
 
@@ -44,6 +48,7 @@ class Save:
     slot: str
     meta: dict
     state: GameState | None  # None: missing, or this version cannot read it (读不了)
+    refused: str = ""  # why not, for a save of another version (SaveRefused): 旧版本存档，… 无法读取
 
     @property
     def name(self) -> str:
@@ -83,11 +88,15 @@ def saves() -> list[Save]:
     for slot, meta in _index().items():
         meta = meta if isinstance(meta, dict) else {}
         file = paths.save(slot)
+        state: GameState | None = None
+        refused = ""
         try:
-            state: GameState | None = GameState.model_validate_json(file.read_text(encoding="utf-8"))
+            state = read_save(file.read_text(encoding="utf-8"))
+        except SaveRefused as exc:
+            refused = str(exc)
         except (OSError, ValueError):
-            state = None
-        out.append(Save(slot, meta, state))
+            pass
+        out.append(Save(slot, meta, state, refused))
     mtime = {s.slot: paths.save(s.slot).stat().st_mtime if paths.save(s.slot).exists() else 0.0 for s in out}
     return sorted(out, key=lambda s: (str(s.meta.get("updated", "")), mtime[s.slot]), reverse=True)
 
@@ -111,11 +120,15 @@ def to_trash(files: list[Path], name: str, note: dict | None = None) -> Path:
 
 
 def rename(slot: str, label: str) -> None:
-    """A name of the player's own, in the save and its index line. Empty: the module title."""
+    """A name of the player's own, in the save and its index line. Empty: the module title.
+    A save of another version keeps its file as it is: the name goes in its index line only."""
     file = paths.save(slot)
     data = json.loads(file.read_text(encoding="utf-8"))
-    data["label"] = label
-    _write_json(file, data)
+    if not isinstance(data, dict):
+        raise ValueError("不是存档")
+    if data.get("save_format") == SAVE_FORMAT:
+        data["label"] = label
+        _write_json(file, data)
     idx = _index()
     if slot in idx:
         idx[slot]["label"] = label
@@ -177,7 +190,7 @@ def line(save: Save, playing: bool = False) -> Group:
     top = Text(save.name, style="bold" if save.state else "dim", no_wrap=True, overflow="ellipsis")
     tags = Text()
     if save.state is None:
-        tags.append(" 无法读取", style="bold red")
+        tags.append(" 旧版本" if save.refused else " 无法读取", style="bold red")
     if playing:
         tags.append(" 当前游戏", style="bold")
     if save.lan:
@@ -191,7 +204,7 @@ def line(save: Save, playing: bool = False) -> Group:
     grid.add_row(top, Text(when(str(save.meta.get("updated", ""))), style="dim"))
     st = save.state
     if st is None:
-        below = Text("无法读取此存档，可选择删除。", style="dim")
+        below = Text(f"{save.refused}。" if save.refused else "无法读取此存档，可选择删除。", style="dim")
     else:
         party = "、".join(inv.name for inv in st.investigators)
         place = save.meta.get("location", "")
@@ -208,7 +221,7 @@ def details(save: Save, m: Module | None) -> Text:
     out = Text()
     if st is None:
         out.append(f"{save.name}\n\n", style="bold")
-        out.append("无法读取此存档。按 D 删除。", style="dim")
+        out.append(f"{save.refused}。按 R 改名，按 D 删除。" if save.refused else "无法读取此存档。按 D 删除。", style="dim")
         return out
     out.append(save.name + "\n", style="bold")
     if st.label:
@@ -314,6 +327,8 @@ class LoadScreen(Screen):
         if save is not None and save.state is not None:
             keys.append(("open", "Enter 返回游戏" if save.slot == self.current else "Enter 继续"))
             keys += [("rename", "R 改名"), ("copy", "C 复制")]
+        elif save is not None and save.refused:
+            keys.append(("rename", "R 改名"))
         if save is not None and save.slot != self.current:
             keys.append(("delete", "D 删除"))
         keys.append(("back", "Esc 返回"))
@@ -389,7 +404,7 @@ class LoadScreen(Screen):
         if save is None:
             return
         if save.state is None:
-            self.app.notify("无法读取此存档，当前仅支持删除。", severity="warning")
+            self.app.notify(f"{save.refused}。" if save.refused else "无法读取此存档，当前仅支持删除。", severity="warning")
             return
         if save.slot == self.current:
             self.dismiss(None)
@@ -410,7 +425,7 @@ class LoadScreen(Screen):
 
     def action_rename(self) -> None:
         save = self._chosen()
-        if save is None or save.state is None:
+        if save is None or (save.state is None and not save.refused):
             return
 
         def done(name: str | None) -> None:
@@ -425,7 +440,8 @@ class LoadScreen(Screen):
                 self.playing.state.label = name  # or its next autosave would bring the old name back
             self._fill(save.slot)
 
-        self.app.push_screen(AskText("重命名存档", save.state.label, f"留空使用《{save.meta.get('title', '')}》"), done)
+        label = save.state.label if save.state else str(save.meta.get("label", ""))
+        self.app.push_screen(AskText("重命名存档", label, f"留空使用《{save.meta.get('title', '')}》"), done)
 
     def action_copy(self) -> None:
         save = self._chosen()

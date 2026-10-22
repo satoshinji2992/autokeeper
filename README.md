@@ -233,7 +233,7 @@ uv tool upgrade autokeeper   # 更新
 - **规则书与卡组**：`autokeeper rules index` 读入规则书，裁定和 `/kp` 提问时查原文；`autokeeper cards import` 读入守秘人卡组，疯狂与惨事照卡抽取。
 - **模组**：三本自带模组补上追逐路线、写定的袭击和伏笔的变化；《有些人油盐不进》加上小镇的时钟。
 - **联机**：每个座位自己掷骰、自己应对攻击，倒计时按秒计；守秘人的资料不再发给客户端。
-- **升级须知**：0.0.4 不兼容旧存档，以前的存档可能无法读取；在 Claude Code 里经 MCP 主持的方式与 Claude Code 插件已删除。
+- **升级须知**：0.0.4 不兼容旧存档，以前的存档会标为旧版本、拒绝读取，原文件保留；在 Claude Code 里经 MCP 主持的方式与 Claude Code 插件已删除。
 - 详见[完整更新记录](CHANGELOG.md)。
 
 </details>
