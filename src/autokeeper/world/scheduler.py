@@ -34,7 +34,7 @@ from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from . import agents, context, stage
-from .ops import AdvancePlan, Occur, SetPlan, parse
+from .ops import AdvancePlan, Occur, SetPlan, execution_order, parse
 from .record import Agent
 
 if TYPE_CHECKING:
@@ -96,7 +96,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     prepared = []
     involved: list[str] = []
     leaving: list[str] = []
-    for i, raw in enumerate(ops):
+    for i, raw in execution_order(ops):
         try:
             raw = Gateway(trial, actor).normalize_ops([raw])[0]
             op = parse({**raw, "actor": actor, "id": f"{prefix}:{i}"})

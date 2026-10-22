@@ -23,7 +23,21 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ..engine import world as legacy_world
-from .ops import Break, Bring, Condition, Equip, Follow, Fulfil, Learn, MakePromise, Move, Occur, Transfer, parse
+from .ops import (
+    Break,
+    Bring,
+    Condition,
+    Equip,
+    Follow,
+    Fulfil,
+    Learn,
+    MakePromise,
+    Move,
+    Occur,
+    Transfer,
+    execution_order,
+    parse,
+)
 from .record import PLAYERS, Beat
 
 if TYPE_CHECKING:
@@ -167,7 +181,7 @@ def commit(w: World, actor: str, raw_ops: list[dict[str, Any]]) -> list[str]:
     trial.clock = w.clock
     problems: list[str] = []
     ops = []
-    for raw in raw_ops:
+    for _, raw in execution_order(raw_ops):
         try:
             op = parse(raw)
         except ValueError as exc:

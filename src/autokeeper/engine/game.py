@@ -3738,6 +3738,14 @@ class Game(Encounters):
             out.append("【仅供KP的裁定依据】" + turn.ruling.reason
                        + "\n这不是各分支都已发生：依实际成败兑现当前请求，把成立的现场变化写进scene。"
                        "以本轮实际结算和已展示台词继续；骰前的阻拦不能推翻骰后成功，私有依据不直接念给玩家。")
+        if turn.ruling and turn.ruling.why:
+            out.append("【主行动的公开裁定目标】" + turn.ruling.why
+                       + "\n按已向玩家说明的范围承接最终结果，不因技能名称另改目标；"
+                       "其他事件的骰不覆盖本次结果，尚未结算的附带行动也不自动成功或失败。")
+            if turn.primary is not None:
+                out.append("【该目标的最终主检定】" + turn.checks[turn.primary].describe())
+            elif turn.earlier is not None:
+                out.append("【该目标沿用的主检定】" + turn.earlier.text)
         if a and (settled := self._social_result(turn, a.npc)):
             out.append("【与NPC收到的同一份交涉结算】" + settled)
         if len(turn.route) > 2:

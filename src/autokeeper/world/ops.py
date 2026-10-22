@@ -1041,6 +1041,32 @@ class AdvancePlan(Base):
                       participants=[self.npc], visibility="private", witnesses=[], op=oid), None  # fmt: skip
 
 
+def execution_order[T](ops: list[T]) -> list[tuple[int, T]]:
+    """Effects retain their order; completion receipts check their plan version last.
+
+    Keep input indices for operation identities and error reporting. This does not make a
+    receipt true: the normal actor, achieved-condition and execution-evidence checks still run.
+    """
+    def completion(item: tuple[int, T]) -> bool:
+        op = item[1]
+        return ((isinstance(op, AdvancePlan) and op.status == "done")
+                or (isinstance(op, dict) and op.get("kind") == "step" and op.get("status") == "done"))
+
+    ordered: list[tuple[int, T]] = []
+    segment: list[tuple[int, T]] = []
+    for item in enumerate(ops):
+        op = item[1]
+        replaces = ((isinstance(op, SetPlan) and op.steps is not None)
+                    or (isinstance(op, dict) and op.get("kind") == "plan" and op.get("steps") is not None))
+        if replaces:
+            ordered.extend(sorted(segment, key=completion))
+            segment.clear()
+            ordered.append(item)
+        else:
+            segment.append(item)
+    return [*ordered, *sorted(segment, key=completion)]
+
+
 # -- backstage ---------------------------------------------------------------------------------
 class Rewrite(Base):
     """Rewrite a fact or a private event the players have not met (world/rewrite.py)."""

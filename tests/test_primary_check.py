@@ -37,7 +37,11 @@ def restored(turn: Turn) -> Turn:
 def assert_success(game: Game, turn: Turn) -> None:
     text = game._social_result(turn, "warden")
     assert "本次交涉成功" in text and "本次交涉未达成" not in text
-    assert text in game._npc_message(turn, "warden") and text in game._report(turn)
+    report = game._report(turn)
+    assert text in game._npc_message(turn, "warden") and text in report
+    if turn.ruling and turn.ruling.why:
+        assert "【主行动的公开裁定目标】" + turn.ruling.why in report
+        assert "【该目标的最终主检定】" + turn.checks[turn.primary].describe() in report
     assert not game._social_result(turn, "preacher")
 
 
@@ -152,4 +156,34 @@ async def test_an_event_alone_does_not_become_a_social_check_for_the_action(modu
                                                      now=["social_done"])))
     assert turn.primary is None and len(turn.checks) == 1 and turn.checks[0].passed
     assert not game._social_result(turn, "warden")
+    await game.close()
+
+
+async def test_nonsocial_goal_reaches_the_keeper_with_its_primary_result_without_telling_bystanders(module, fake):
+    followup(module, skill="侦查")
+    game, _, _ = make(module, fake.queue(1, 99), {}, location="tower")
+    action = Action(kind="investigate", summary="借遮挡读清票据日期", target="票据")
+    goal = "确认能否在旁人未看到票据内容时读清日期"
+    ruling = Ruling(needs_roll=True, skill="侦查", why=goal, reason="折痕令票面字迹模糊", set_flags=["social_done"])
+    turn = restored(await game.resolve(action, ruling))
+    assert turn.primary == 0 and turn.checks[0].passed and not turn.checks[1].passed
+    report = game._report(turn)
+    assert "【主行动的公开裁定目标】" + goal in report
+    assert "【该目标的最终主检定】" + turn.checks[0].describe() in report
+    assert "【该目标的最终主检定】" + turn.checks[1].describe() not in report
+    from autokeeper.agents.cast import Initiative
+
+    assert goal not in game._joining(turn, Initiative(npc="preacher", does="继续收好讲义"))
+    await game.close()
+
+
+async def test_an_event_check_is_not_reported_as_the_unrolled_goals_result(module, fake):
+    followup(module, skill="侦查")
+    game, _, _ = make(module, fake.queue(1), {}, location="tower")
+    turn = restored(await game.resolve(Action(kind="daily", summary="抄写已经看清的日期"),
+                                       Ruling(needs_roll=False, why="抄下已经读到的日期", now=["social_done"])))
+    assert turn.primary is None and len(turn.checks) == 1
+    report = game._report(turn)
+    assert "【主行动的公开裁定目标】抄下已经读到的日期" in report
+    assert "【该目标的最终主检定】" not in report
     await game.close()

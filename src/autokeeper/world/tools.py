@@ -29,6 +29,7 @@ from .ops import (
     Remember,
     Schedule,
     SetPlan,
+    execution_order,
     parse,
 )
 from .record import Entity, Fact, Request
@@ -288,7 +289,7 @@ class Gateway:
         trial.clock = w.clock
         prepared, results = [], []
         try:
-            for i, raw in enumerate(ops):
+            for i, raw in execution_order(ops):
                 raw = self.normalize_ops([raw])[0]
                 op = self._bind(raw, ident=f"world-tool:{self.actor}:{digest(request_id)[:20]}:{i}")
                 if not self.staff and (problems := agents.vet(trial, self.actor, op)):
