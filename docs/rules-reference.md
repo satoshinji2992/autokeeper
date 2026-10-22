@@ -138,7 +138,7 @@
 | 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`；引擎不换 | 未做（规则层有） | `test_rules_chase` |
 | 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | 「设路障」：力量检定加 1 行动点，成功在所在地点放一道路障（推开或翻过）；其他交裁定员 | 简化 | `test_a_hazard_failed_costs…` |
 | 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：还有人在打时不转为追逐，转为追逐时调查员一方全体在内；结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…`、`test_a_flight_is_not_chased_while_the_others_still_fight…` |
-| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
+| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值；NPC 变成的怪物卡（`Creature.npc`）没写的，用这个 NPC 自己的数值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…`、`test_douglas_as_the_ghoul_keeps_his_own_skills…` |
 | 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement`，在地图上沿逃离方向摆 | 符合 | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 追上与转为战斗 | 116 | 追上只是到了同一地点，按战斗处理冲突 | 到同一处是接触不是抓住；有人回身迎战、逃离者被制住或倒在追兵面前，且其余人都在一处之内，转为战斗，伤势、弹药、速度、后果都保留 | 符合 | `test_turning_to_fight_where_they_meet…`、`test_switches_keep_wounds_speeds…` |
 | 追逐的终点 | — | 跑到哪里就在哪里 | 守秘人的人移到跑到的地点（经效果接口），调查员一行到达玩家落脚的地点 | 符合 | `test_the_route_end_moves_the_world…`、`test_a_keeper_quarry_that_reaches_its_way_out…` |
