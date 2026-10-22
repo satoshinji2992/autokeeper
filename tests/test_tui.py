@@ -162,6 +162,8 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         stakes = "".join(str(w.render()) for w in app.screen.query(Static))
         assert "再次失败：管理员下班锁门，你被关在馆里过夜" in stakes and "幸运 55 → 52" in stakes  # the price, before the choice
         assert "接受这次失败" in stakes and "仍可取得" not in stakes  # giving up finds nothing
+        # The push is ruled again on how it is made (Game._method): the skill or difficulty may change with it.
+        assert "目标仍为" not in stakes and "通常仍按 ≤60 检定" in stakes and "技能、难度与失败后果可能随之调整" in stakes
 
 
 async def test_after_the_ending_only_the_dice_lookups_work(canned, monkeypatch):
