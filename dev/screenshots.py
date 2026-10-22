@@ -164,6 +164,35 @@ async def _developer(app, pilot, screen, m):
     screen.action_developer()
 
 
+LIBRARY = ("阅览室比外面更冷，窗子开得很高，光从上头斜斜落下来。你顺着那排皮脊合订本摸过去，指尖沾了一层细细的书灰，"
+           "只有靠里一册的书脊被摸得发亮，像常有人抽它。\n\n"
+           "你把它搬到长桌上翻开。纸页发黄发脆，铅字挤得很密。翻到十多年前的一期，一篇不起眼的短讯夹在农产品价格中间。")
+
+
+async def _library(app, pilot, screen, m):
+    """A check in the library as a turn shows it: the action, the dice thrown for real, the clue they
+    found and the keeper's telling."""
+    from rich.text import Text
+
+    from autokeeper.engine.game import _check_view
+    from autokeeper.rules.coc import Rules
+    from autokeeper.rules.physdice import PhysDice
+
+    inv = screen.state.investigator
+    screen.story.add("player", Text(f"▶ {inv.name}：请管理员拿来十多年前的《阿诺兹堡广告报》合订本，一期一期往下翻"))
+    seed = 0
+    while (check := Rules(dice=PhysDice(seed=seed)).check(inv, "图书馆使用")).level.zh != "常规成功":
+        seed += 1  # a throw that passes plainly: the same picture every time
+    await screen.handle({"type": "dice", "who": inv.name, **_check_view(check)})
+    await pilot.pause(4.0)  # the dice at rest
+    clue = next(c for c in m.clues if c.id == "c_library_article")
+    await screen.handle({"type": "outcome", "who": inv.name, "lines": [f"获得线索〔{clue.title}〕"]})
+    screen.state.clues.append(clue.id)  # found, as the turn would have it before the screen hears of it
+    await screen.handle({"type": "clue", "id": clue.id, "title": clue.title, "text": clue.text.strip()})
+    await screen.handle({"type": "keeper_start"})
+    await screen.handle({"type": "keeper_end", "text": LIBRARY})
+
+
 async def _talk(app, pilot, screen, m):
     """A conversation as it comes in: the cook's reply, the keeper's telling with a passer-by's line."""
     await screen.handle({"type": "npc", "npc": "doreen_ratger", "name": "多琳·拉特格", "portrait": "",
@@ -383,7 +412,7 @@ async def _horde(app, pilot, screen, m, played):
 
 SHOTS = {
     "title": title,
-    "game": lambda: in_game("game", "zhuishuren", "tushuguan", ZHUI),
+    "game": lambda: in_game("game", "zhuishuren", "tushuguan", ZHUI, then=_library),
     "found": lambda: in_game("found", "dongxuezhixia", "post_office", DONG),  # a place with a picture found for it (pictures.py)
     "map": lambda: in_game("map", "dongxuezhixia", "main_street", DONG, then=_map),
     "handout": lambda: in_game("handout", "zhuishuren", "shufang", ZHUI, then=_handout("h_diary")),

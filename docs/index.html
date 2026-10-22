@@ -27,12 +27,14 @@
             <h2>中文 CoC 7 版终端跑团</h2>
             <p>AutoKeeper 是基于《克苏鲁的呼唤》第 7 版规则的中文终端跑团程序。玩家扮演调查员，以自然语言描述行动；AI 担任守秘人，负责场景叙述、NPC 扮演与检定裁定。支持单人游玩、AI 同伴和多人联机。</p>
             <p>开局叙事结合模组背景与调查员经历展开，调查过程保留主线之外的日常活动与探索空间。《追书人》以早班火车抵达阿诺兹堡为起点：托马斯的家位于小镇尽头的公墓旁，玩家可在途中问路、用餐，或前往图书馆查阅旧报。对于原作未覆盖的行动，守秘人可即兴补充人物、地点和支线，并将其写入本局记录；严格模式则限制对原作的扩展。</p>
-            <p>检定采用物理模拟的十面骰，由玩家操作；消耗幸运与孤注一掷也由玩家决定。系统按规则结算理智、伤势和成长，记录已发现的线索、手稿及人物信息，并在每回合结束后自动保存进度。</p>
+            <p>检定采用物理模拟的十面骰，由玩家操作；消耗幸运与孤注一掷也由玩家决定，调查陷入僵局时可以进行灵感检定。系统按规则结算理智、伤势和成长，记录已发现的线索、手稿及人物信息，并在每回合结束后自动保存进度。</p>
+            <h3>战斗与追逐</h3>
+            <p>战斗与追逐按第 7 版规则逐轮结算。玩家从列出的行动中选择，也可以自行描述；被攻击时的应对可以预先设定，危险升高时才会询问。追逐沿地图上的路线进行，包括险阻、路障、躲藏与跟丢。伤势、弹药和掉落的武器记入本局的世界记录。</p>
             <h3>彩色字符画与场景表现</h3>
-            <p>历史照片与模组插图经转换后以彩色字符画呈现，配合随场景变化的雨雪、雾气和灯影。NPC 对话显示人物立绘，重要场景可展开为整屏画面，即兴生成的人物与地点也支持配图。本机安装并登录 Codex 后，可启用 AI 图像生成，根据剧情变化重绘受损建筑、受伤人物等内容。</p>
+            <p>历史照片与模组插图经转换后以彩色字符画呈现，配合随场景变化的雨雪、雾气和灯影。NPC 对话显示人物立绘，重要场景可展开为整屏画面；模组缺图的地点、人物和怪物先查找写实照片，找不到时由 AI 绘制。本机安装并登录 Codex 后，可启用 AI 图像生成，根据剧情变化重绘受损建筑、受伤人物等内容。</p>
             <a data-action href="#gallery">查看实机</a><a data-action href="https://github.com/satoshinji2992/autokeeper#readme">完整 README</a>
         </section>
-        <section id="gallery" data-title="实机画面"><h2>调查桌面与实机图集</h2><p>调查桌面、人物卡、地图与联机房间的实机截图。</p><p><a href="img/game.png">调查桌面</a> · <a href="img/map.png">地图</a> · <a href="img/cards.png">角色库</a> · <a href="img/plugins.png">插件</a> · <a href="img/lobby.png">开房间</a></p><img src="img/game.png" alt="追书人：图书馆、物理骰子与人物状态" width="1800" height="1171" loading="lazy"></section>
+        <section id="gallery" data-title="实机画面"><h2>调查桌面与实机图集</h2><p>调查桌面、地图、战斗、追逐、人物卡与联机房间的实机截图。</p><p><a href="img/game.png">调查桌面</a> · <a href="img/map.png">地图</a> · <a href="img/fight.png">战斗</a> · <a href="img/chase.png">追逐</a> · <a href="img/cards.png">角色库</a> · <a href="img/plugins.png">插件</a> · <a href="img/lobby.png">开房间</a></p><img src="img/game.png" alt="追书人：图书馆、物理骰子与人物状态" width="1704" height="1034" loading="lazy"></section>
         <section id="modules" data-title="模组与规则">
             <h2>模组导入与原创生成</h2>
             <p>仓库附带《追书人》《冬雪之下》和《有些人油盐不进》三个模组，也支持导入其他 CoC 模组。可接受的文件格式包括 PDF、Word、Markdown、文本和 ZIP。AI 通读原文后整理人物、地点、线索与事件，保留插图和手稿，经校验后编译为可游玩的模组。</p>
@@ -58,7 +60,7 @@
             <p>支持 Claude、DeepSeek、Codex、Ollama 及兼容接口，可按职责分别配置模型。在标题页选择“新的调查”，指定模组与调查员后开始游戏。</p>
             <pre id="launch-code">autokeeper</pre>
             <p>在任意目录都能启动；浏览器游玩用 autokeeper serve，换模型或补 Key 用 autokeeper login。本网站仅提供项目介绍，实际游戏与模型调用在用户设备上运行。</p>
-            <h3>从 0.0.1 升级</h3><p>升级前请备份 saves/。0.0.2 将数据整理到 data/，自己的调查员、本地模型和知识库会自动迁移，但旧版存档不能继续读取。</p>
+            <h3>升级须知</h3><p>0.0.4 不兼容旧版本的存档，更新后以前的存档可能无法读取。各版本的变化见仓库的更新记录。</p>
             <a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#安装">各系统安装说明</a><a data-action href="https://github.com/satoshinji2992/autokeeper/blob/main/docs/playing.md#模型与花费">模型与花费</a>
         </section>
         <section id="credits" data-title="文档与署名">

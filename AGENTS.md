@@ -8,9 +8,9 @@ AutoKeeper runs Chinese Call of Cthulhu 7th-edition games on Python 3.12+.
 - `src/autokeeper/tui/`: `app.py` (the Textual app) and `library.py` (save index, module loading, `art_text`); `screens/` full pages (title, setup, game, cards, LAN host, lobby, saves, import); `modals/` dialogs over a screen; `widgets/` panels, speaker, pages, tips; `drawing/` title art, cover and dice. Each `.tcss` sits beside its code.
 - `bridge/`: Node.js JSON-lines bridge to BCDice.
 - `tests/`: tests, `conftest.py` fixtures (every test gets its own `paths.DATA`, `paths.DEV_OUTPUT` and `paths.USER_DIR`), and `cassettes/` recordings.
-- `modules/<id>/`: the three bundled scenarios: `module.yaml` plus `places.yaml`, `people.yaml`, `clues.yaml`, `story.yaml`, `plugins/`, and `art/{places,people,items,ascii}/` with one `art/credits.yaml`. `src/autokeeper/module/example/` is the format fixture. Never commit derived files into a module (prepared pictures, compiled skills); they live under `data/cache/` and `skills/module-*`.
+- `modules/<id>/`: the three bundled scenarios: `module.yaml` plus `places.yaml`, `people.yaml`, `clues.yaml`, `story.yaml`, `situation.yaml`, `plugins/`, and `art/{places,people,items,ascii}/` with one `art/credits.yaml`. `src/autokeeper/module/example/` is the format fixture. Never commit derived files into a module (prepared pictures, compiled skills); they live under `data/cache/` and `skills/module-*`.
 - `skills/`: shared Agent Skills the engine injects into prompts (`coc7-core`, `keeper-craft`, `pingshu-voice`, `ascii-art`; read through `skills.py` and `paths.skill`). Shared skills are tracked; `skills/module-*` are compiled and ignored. `docs/` contains technical documentation; `docs/img/` holds screenshots.
-- `dev/`: developer scripts (public-share tunnel); their output and eval/autoplay reports go to ignored `dev/output/`.
+- `dev/`: developer scripts (README screenshots, public-share tunnel); their output and eval/autoplay reports go to ignored `dev/output/`.
 
 ## Build, Test, and Development Commands
 
