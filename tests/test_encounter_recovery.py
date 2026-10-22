@@ -27,6 +27,9 @@ def warden_attacks(state, text, brief):
 
 
 async def turn_of(game, text):
+    """A turn begun with the player's words as the turn graph begins one (its journal, pending_turn,
+    is what a retry goes on from), read and ruled."""
+    game.state.pending_turn = {"input": text}
     action = await game.encounter_input(text)
     return action, await game.rule(action)
 
@@ -177,6 +180,7 @@ async def test_a_failed_die_of_a_first_sights_loss_is_rolled_again_and_the_loss_
     action = Action(kind="other", summary="开打", declared={"start": start.model_dump(mode="json", by_alias=True)})
     ruling = Ruling(needs_roll=False, reason="x")
     san = game.state.investigator.san
+    game.state.pending_turn = {"input": "开打"}
     fake.queue(99)  # the SAN roll fails; the 1D6 loss has no die yet: the dice break there
     with pytest.raises(IndexError):
         await game.resolve(action, ruling)
@@ -256,6 +260,7 @@ async def test_an_opening_blow_that_killed_its_foe_still_ends_the_fight_on_a_ret
         await original(ev)
 
     game.emit = broken
+    game.state.pending_turn = {"input": "开打"}
     fake.queue(1, 99)  # a critical punch kills him; his answer fails
     with pytest.raises(ConnectionError):
         await game.resolve(action, ruling)

@@ -283,6 +283,7 @@ async def test_a_chase_cut_short_between_two_dice_throws_each_once_and_lands_eac
 
     game, _cast, events = await chased(module, fake)
     game.state.turn += 1
+    game.state.pending_turn = {"input": "全力奔跑"}  # the turn's journal: what the retry goes on from
     action = await game.encounter_input("全力奔跑")
     ruling = await game.rule(action)
     fake.queue(90, 90).queue_totals(2, 1)  # the stairs failed (2 points, 1 harm); his Spot Hidden

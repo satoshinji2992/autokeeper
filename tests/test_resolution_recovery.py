@@ -24,6 +24,12 @@ def module() -> Module:
     return Module.load(EXAMPLE)
 
 
+def turn_going(game: Game, text: str) -> None:
+    """A turn begun as the turn graph begins one (graph.route): its journal (pending_turn) keeps the
+    stages a retry goes on from."""
+    game.state.pending_turn = {"input": text}
+
+
 def snapshots(game: Game) -> list[str]:
     saved: list[str] = []
     game.checkpoint = lambda: saved.append(game.state.model_dump_json())
@@ -44,6 +50,7 @@ async def test_failed_dice_delivery_resumes_saved_roll_route_and_partial_turn(mo
     action = Action(kind="investigate", summary="去报社查旧报", destination="office", target="旧报合订本")
     ruling = Ruling(needs_roll=True, skill="图书馆使用", clues_on_success=["c_archive"], minutes=15)
     game, _, _ = make(module, fake.queue(5), {})
+    turn_going(game, "去报社查旧报")
     saved = snapshots(game)
     start = game.state.minutes
 
@@ -56,8 +63,7 @@ async def test_failed_dice_delivery_resumes_saved_roll_route_and_partial_turn(mo
         await game.resolve(action, ruling)
     state = GameState.model_validate_json(saved[-1])
     assert len(state.checks) == 1 and state.location == "office"
-    assert state.pending_resolution["steps"]["check"]["done"]
-    assert not state.pending_turn
+    assert state.pending_turn["resolution"]["steps"]["check"]["done"]
 
     resumed, events = reload_game(module, saved[-1], fake)
     turn = await resumed.resolve(action, ruling)
@@ -67,7 +73,7 @@ async def test_failed_dice_delivery_resumes_saved_roll_route_and_partial_turn(mo
     assert resumed.state.minutes == start + 10 + 15
     assert len(fake.values) == 0
     assert sum(event["type"] == "dice" for event in events) == 1
-    assert not resumed.state.pending_resolution
+    assert resumed.state.pending_turn["resolution"]["complete"]
     await game.close()
     await resumed.close()
 
@@ -77,6 +83,7 @@ async def test_clue_delivery_failure_keeps_handout_and_sanity_and_finishes_notif
     action = Action(kind="investigate", summary="查看日记", target="守钟人的柜子")
     ruling = Ruling(needs_roll=False, auto_clues=["c_diary"], minutes=7)
     game, _, _ = make(module, fake.queue(20), {}, "tower")
+    turn_going(game, "查看日记")
     saved = snapshots(game)
     before = game.state.investigator.san
 
@@ -106,6 +113,7 @@ async def test_cancelled_timed_event_resumes_move_damage_and_ending_once_after_r
     action = Action(kind="wait", summary="稍候")
     ruling = Ruling(needs_roll=False, minutes=12)
     game, _, _ = make(module, fake.queue_totals(2, 3), {})
+    turn_going(game, "稍候")
     saved = snapshots(game)
     started = asyncio.Event()
     hp, start = game.state.investigator.hp, game.state.minutes
@@ -143,6 +151,7 @@ async def test_failure_after_damage_does_not_repeat_damage_or_time(module, fake)
     action = Action(kind="wait", summary="等十分钟")
     ruling = Ruling(needs_roll=False, minutes=10)
     game, _, _ = make(module, fake.queue_totals(2), {})
+    turn_going(game, "等十分钟")
     saved = snapshots(game)
     hp, start = game.state.investigator.hp, game.state.minutes
 
@@ -163,10 +172,11 @@ async def test_failure_after_damage_does_not_repeat_damage_or_time(module, fake)
     await resumed.close()
 
 
-async def test_completed_plugins_skip_while_unfinished_phase_retries_and_direct_calls_remain_independent(module, fake):
+async def test_completed_plugins_skip_while_unfinished_phase_retries_and_the_next_turn_is_its_own(module, fake):
     action = Action(kind="daily", summary="整理笔记")
     ruling = Ruling(needs_roll=False, minutes=3)
     game, _, _ = make(module, fake, {})
+    turn_going(game, "整理笔记")
     snapshots(game)
     calls: list[str] = []
     original = game._time
@@ -188,7 +198,10 @@ async def test_completed_plugins_skip_while_unfinished_phase_retries_and_direct_
     await game.resolve(action, ruling)
     assert calls.count("turn") == 1 and calls.count("time") == 2
     assert game.state.minutes == start + 3
-    assert not game.state.pending_resolution
+    assert game.state.pending_turn["resolution"]["complete"]
+    await game.resolve(action, ruling)  # the same turn again: nothing settles twice
+    assert game.state.minutes == start + 3 and calls.count("turn") == 1
+    turn_going(game, "整理笔记")  # the next turn
     await game.resolve(action, ruling)
     assert game.state.minutes == start + 6 and calls.count("turn") == 2
     await game.close()
@@ -230,6 +243,7 @@ async def test_flag_already_committed_still_finishes_its_event_after_retry(modul
     action = Action(kind="investigate", summary="拉下警铃")
     ruling = Ruling(needs_roll=False, set_flags=["alarm"], minutes=4)
     game, _, _ = make(module, fake.queue_totals(1), {})
+    turn_going(game, "拉下警铃")
     saved = snapshots(game)
     hp = game.state.investigator.hp
 
@@ -257,6 +271,7 @@ async def test_sanity_tool_receipts_keep_completed_rolls_if_the_madness_table_fa
     ruling = Ruling(needs_roll=False, auto_clues=["c_diary"], minutes=5)
     fake.queue(90, 5).queue_totals(5)  # SAN fails; five points lost; INT succeeds; temporary madness.
     game, _, _ = make(module, fake, {}, "tower")
+    turn_going(game, "阅读骇人的日记")
     saved = snapshots(game)
     san = game.state.investigator.san
     table = fake.table
@@ -270,7 +285,7 @@ async def test_sanity_tool_receipts_keep_completed_rolls_if_the_madness_table_fa
     assert not game.state.clues and not game.state.handouts
     assert game.state.investigator.san == san and not game.state.investigator.conditions
     assert not fake.values and not fake.totals
-    receipt = game.state.pending_resolution["steps"]["clue:c_diary/commit"]
+    receipt = game.state.pending_turn["resolution"]["steps"]["clue:c_diary/commit"]
     assert not receipt["done"] and len(receipt["tools"]) == 3
     fake.table = table
     resumed, _ = reload_game(module, saved[-1], fake)
@@ -289,6 +304,7 @@ async def test_damage_tool_receipt_does_not_reroll_damage_if_constitution_check_
     action = Action(kind="wait", summary="等待")
     ruling = Ruling(needs_roll=False, minutes=2)
     game, _, _ = make(module, fake, {})
+    turn_going(game, "等待")
     saved = snapshots(game)
     hp = game.state.investigator.hp
     amount = (game.state.investigator.hp_max + 1) // 2
@@ -320,6 +336,7 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     if choice == PUSH:
         fake.queue(5)
     game, _, _ = make(module, fake, {}, "office")
+    turn_going(game, "查旧报")
     saved = snapshots(game)
     first = await game.resolve(action, ruling)
     assert first.push and game.state.pending_push
@@ -346,7 +363,7 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     assert resumed.state.investigator.luck == luck - (5 if choice == "luck" else 0)
     assert resumed.state.minutes == start + (10 if choice == PUSH else 20 if choice == "drop" else 0)  # a push takes its own time
     assert len(turn.checks) == (1 if choice == PUSH else 0)
-    assert not fake.values and not resumed.state.pending_resolution
+    assert not fake.values and resumed.state.pending_turn["push_resolution"]["complete"]
     await game.close()
     await resumed.close()
 
@@ -394,6 +411,7 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
     game, _, _ = make(module, fake, {})
     game.state.turn, game.state.progress_at = 20, 0
     game.state.clues = ["c_notice"]  # the notice gives nothing new: a stall
+    turn_going(game, "查看告示栏")
     saved = snapshots(game)
 
     async def broken(event: dict) -> None:
@@ -427,6 +445,7 @@ async def test_a_push_that_fails_with_a_sanity_cost_takes_it_once_even_when_resu
                     on_push_fail=Failure(text="翻到一张不该看的照片", sanity="1/1D4"))
     fake.queue(65, 95, 99).queue_totals(3)  # the check fails, the push fails, the SAN roll fails: 1D4 = 3
     game, _, _ = make(module, fake, {}, "office")
+    turn_going(game, "查旧报")
     saved = snapshots(game)
     await game.resolve(action, ruling)
     san = game.state.investigator.san
@@ -445,7 +464,7 @@ async def test_a_push_that_fails_with_a_sanity_cost_takes_it_once_even_when_resu
     assert sum(entry.kind == "sanity" for entry in resumed.state.log) == 1
     assert [e["type"] for e in events].count("sanity") == 1  # the notice the connection lost, shown now
     assert any("理智受到冲击" in note for note in turn.notes)
-    assert not fake.values and not fake.totals and not resumed.state.pending_resolution
+    assert not fake.values and not fake.totals and resumed.state.pending_turn["push_resolution"]["complete"]
     await game.close()
     await resumed.close()
 

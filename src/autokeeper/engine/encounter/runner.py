@@ -83,7 +83,7 @@ def _between(enc: EncounterState) -> bool:
 class Encounters:
     """The fight engine, mixed into Game."""
 
-    asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (a direct resolution)
+    asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (a scripted test)
     by_hand_seats: frozenset[str] = frozenset()  # LAN: seated players, who throw their own dice in a fight (net/hub.py)
     ask_reactions = "major"  # when a player is asked how to answer a blow: "always" (设置: 每次被攻击都询问应对) or "major"
 
@@ -1122,9 +1122,6 @@ class Encounters:
         able = [a for a in (p.arrangement.actions if p.arrangement else []) if not actions.preconditions(ctx, actor, a)
                 and not actions.out_of_reach(ctx, actor, a)]
         asked = ((self._resolution or {}).get("steps") or {}).get(f"{base}/replan", {}).get("done")
-        if self._resolution is None:  # no journal (a test's direct call): once a slot all the same
-            replans: set = self.__dict__.setdefault("_replans", set())
-            asked, _ = base in replans, replans.add(base)
         if not able and getattr(self.cast, "plan", None) is not None and not asked:
             # Asked once a slot: a call that failed (a timeout) is asked again when the turn is retried.
             checked = await self._resolution_step(f"/{base}/replan", turn, lambda: self._arrange_call())
@@ -1555,18 +1552,8 @@ class Encounters:
         from ..game import TURN_RECORD, Turn
 
         async with self._resolution_lock:  # type: ignore[attr-defined]
-            st = self.state
-            direct = not st.pending_turn
-            key = f"respond:{cid}"
-            saved = (st.pending_resolution or None) if direct else st.pending_turn.get(key)
-            identity = {"kind": "respond", "id": cid}
-            if saved is not None and saved.get("identity") != identity:
-                raise ValueError("已有未完成的选择，请先继续原选择")
-            journal = saved or {"identity": identity, "steps": {}}
-            if direct:
-                st.pending_resolution = journal
-            else:
-                st.pending_turn[key] = journal
+            journal = self._stage_journal(f"respond:{cid}", {"kind": "respond", "id": cid},  # type: ignore[attr-defined]
+                                          "已有未完成的选择，请先继续原选择")
             self._resolution, self._resolution_scope = journal, []  # type: ignore[attr-defined]
             turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn()
             try:
@@ -1574,10 +1561,6 @@ class Encounters:
                     await self._respond_stages(cid, value, who, turn)
                     journal["complete"] = True
                     self._resolution_save(turn)  # type: ignore[attr-defined]
-                if direct:
-                    st.pending_resolution = {}
-                    if self.checkpoint:  # type: ignore[attr-defined]
-                        self.checkpoint()  # type: ignore[attr-defined]
                 return turn
             finally:
                 self._resolution, self._resolution_scope = None, []  # type: ignore[attr-defined]

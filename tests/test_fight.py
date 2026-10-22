@@ -210,6 +210,7 @@ async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fa
 
     module.events.append(AMBUSH.model_copy())
     game, _, _ = make(module, fake, {}, location="tower")
+    game.state.pending_turn = {"input": "等着"}  # the turn's journal: what the retry goes on from
     saved = snapshots(game)
 
     async def broken(event: dict) -> None:
@@ -225,7 +226,7 @@ async def test_a_resumed_turn_does_not_begin_the_scripted_fight_again(module, fa
     turn = await resumed.resolve(WAIT, ruling)
     assert [p.id for p in resumed.state.encounter.participants] == ["zhouheng", "warden"]
     assert sum(e["type"] == "fight_start" for e in events) == 1 and turn.fight.count(turn.fight[0]) == 1
-    assert not resumed.state.pending_resolution
+    assert resumed.state.pending_turn["resolution"]["complete"]
     await game.close()
     await resumed.close()
 

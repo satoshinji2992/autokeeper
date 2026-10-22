@@ -161,7 +161,6 @@ class GameState(BaseModel):
     # What a LAN client is sent of the encounter going on (engine/encounter/views.table): its public view and
     # each seat's choices. Only ever in a client's copy; the host's own is computed when it is needed.
     encounter_public: dict | None = None
-    pending_resolution: dict = Field(default_factory=dict)  # direct resolution outside the turn graph
     narrator_context_version: int = 0
     # Agent memory lives in the save, not in any backend: per-agent conversation windows
     # (keeper, npc:<id>, arbiter, investigator:<id>) and the summaries of older turns.

@@ -1345,6 +1345,20 @@ class Game(Encounters):
         finally:
             self._resolution_scope = old_scope
 
+    def _stage_journal(self, key: str, identity: dict, busy: str, **fresh: Any) -> dict:
+        """The journal of one stage of the turn going on (pending_turn[key]: its resolution, a push, an
+        answer to a choice): the same stage again resumes it; another one while it is unfinished is
+        refused with `busy`. A call with no turn going on (a scripted test's) journals for itself
+        alone: there is no turn to resume."""
+        st = self.state
+        saved = st.pending_turn.get(key)
+        if saved is not None and saved.get("identity") != identity:
+            raise ValueError(busy)
+        journal = saved or {"identity": identity, "steps": {}, **fresh}
+        if st.pending_turn:
+            st.pending_turn[key] = journal
+        return journal
+
     async def resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         """Settle an action in durable stages, including partially completed resolution."""
         async with self._resolution_lock:
@@ -1354,15 +1368,7 @@ class Game(Encounters):
         st = self.state
         identity = {"at": st.turn, "action": action.model_dump(mode="json"),
                     "ruling": ruling.model_dump(mode="json") if ruling else None}
-        direct = not st.pending_turn
-        saved = (st.pending_resolution or None) if direct else st.pending_turn.get("resolution")
-        if saved is not None and saved.get("identity") != identity:
-            raise ValueError("尚有未完成的行动结算，请先继续原回合")
-        journal = saved or {"identity": identity, "steps": {}}
-        if direct:
-            st.pending_resolution = journal
-        else:
-            st.pending_turn["resolution"] = journal
+        journal = self._stage_journal("resolution", identity, "尚有未完成的行动结算，请先继续原回合")
         self._resolution = journal
         self._resolution_scope = []
         turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn(action=action, ruling=ruling)
@@ -1371,10 +1377,6 @@ class Game(Encounters):
                 await self._resolve_stages(action, ruling, turn)
                 journal["complete"] = True
                 self._resolution_save(turn)
-            if direct:
-                st.pending_resolution = {}
-                if self.checkpoint:
-                    self.checkpoint()
             return turn
         finally:
             self._resolution = None
@@ -1632,18 +1634,11 @@ class Game(Encounters):
         mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
-            direct = not st.pending_turn
-            saved = (st.pending_resolution or None) if direct else st.pending_turn.get("push_resolution")
             identity = {"kind": "push", "at": st.turn, "mode": mode, "active": st.active} | ({"how": how} if how else {})
-            if saved is not None and saved.get("identity") != identity:
-                raise ValueError("已有未完成的检定选择，请先继续原选择")
-            if saved is None and not st.pending_push:
+            if st.pending_turn.get("push_resolution") is None and not st.pending_push:
                 return Turn()
-            journal = saved or {"identity": identity, "pending": dict(st.pending_push), "steps": {}}
-            if direct:
-                st.pending_resolution = journal
-            else:
-                st.pending_turn["push_resolution"] = journal
+            journal = self._stage_journal("push_resolution", identity, "已有未完成的检定选择，请先继续原选择",
+                                          pending=dict(st.pending_push or {}))
             self._resolution, self._resolution_scope = journal, []
             turn = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn()
             try:
@@ -1651,10 +1646,6 @@ class Game(Encounters):
                     await self._push_stages(mode, journal["pending"], turn, how)
                     journal["complete"] = True
                     self._resolution_save(turn)
-                if direct:
-                    st.pending_resolution = {}
-                    if self.checkpoint:
-                        self.checkpoint()
                 return turn
             finally:
                 self._resolution, self._resolution_scope = None, []

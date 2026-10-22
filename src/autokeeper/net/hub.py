@@ -99,7 +99,6 @@ WINDOW = 7.0
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
-PRIVATE |= {"pending_resolution"}
 PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes came: pictures reach the screens, not notes
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
