@@ -411,9 +411,9 @@ HELP = Text.from_markup(
   F10 结局后复盘
   Ctrl+S 存档       Ctrl+O 叙事偏好    Ctrl+Q 离开
   Ctrl+A 画法       Ctrl+T 配色        Ctrl+B 用量
-  Ctrl+K 规则插件   Ctrl+G 右栏翻页：经过、进展、背景
+  Ctrl+G 右栏翻页：经过、进展、背景
   Ctrl+Y 整理进展   Ctrl+L 灵感检定    Ctrl+N 收起画面
-  Esc 菜单（存档、读档、设置、回到标题）
+  Esc 菜单（存档、读档、玩法说明、回到标题、设置）
 
 [b]战斗与追逐[/b]
   ↑↓ 回车 选择本轮行动    Esc 自行输入

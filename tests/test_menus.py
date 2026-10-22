@@ -10,7 +10,7 @@ import time
 
 import pytest
 from rich.console import Console
-from textual.widgets import Input, OptionList, Static
+from textual.widgets import Button, ContentSwitcher, Input, OptionList, Static
 
 from autokeeper import config, imagery, paths, roster
 from autokeeper.config import Role
@@ -103,7 +103,10 @@ async def test_esc_opens_the_menu_and_each_entry_does_its_thing(canned):
         await pilot.pause()
         assert isinstance(app.screen, GameMenu)
         ol = app.screen.query_one(OptionList)
-        assert options(ol) == [k for k, _ in MENU if k != "plugins"] and ol.highlighted == 0  # no plugins here
+        assert options(ol) == [k for k, _ in MENU] and ol.highlighted == 0
+        assert options(ol) == ["continue", "save", "load", "guide", "title", "quit", "settings"]  # 设置 at the foot
+        assert [str(ol.get_option_at_index(i).prompt) for i in range(ol.option_count)] == [
+            "继续", "存档", "读档", "玩法说明", "回到标题", "退出游戏", "设置"]  # no 灵感检定, no 规则插件
         await pilot.press("escape")  # Esc again: back in the game, the box ready for typing
         await pilot.pause()
         assert app.screen is screen and screen.query_one("#command", Input).has_focus
@@ -120,11 +123,19 @@ async def test_esc_opens_the_menu_and_each_entry_does_its_thing(canned):
         await pilot.pause()
         assert app.screen is screen
 
-        await pick(pilot, app, "keys")
-        assert isinstance(app.screen, GuideScreen) and app.screen.first_page == "keys"
+        await pick(pilot, app, "guide")  # 玩法说明: the guide, the keys one of its pages
+        guide = app.screen
+        assert isinstance(guide, GuideScreen) and guide.first_page == "play"
+        pages = guide.query_one("#guide-pages", OptionList)
+        assert str(pages.get_option("keys").prompt) == "按键说明"
+        pages.highlighted = pages.get_option_index("keys")
+        await pilot.pause()
+        assert guide.query_one(ContentSwitcher).current == "guide-keys"
         await pilot.press("escape")
-        await pick(pilot, app, "guide")
-        assert isinstance(app.screen, GuideScreen) and app.screen.first_page == "play"
+        await pilot.pause()
+        await pilot.press("f1")  # F1 too: the same guide, where the last hint pointed or at the keys
+        await pilot.pause()
+        assert isinstance(app.screen, GuideScreen)
         await pilot.press("escape")
         await pilot.pause()
 
@@ -146,6 +157,76 @@ async def test_esc_opens_the_menu_and_each_entry_does_its_thing(canned):
         assert app.screen is screen
         screen._busy(False)  # the turn is over: now it goes
         assert await until(pilot, lambda: isinstance(app.screen, TitleScreen))
+
+
+async def test_settings_in_a_game_hold_models_preferences_and_the_developer_mode(canned, monkeypatch):
+    """设置 at the foot of the Esc menu opens 换模型, 叙事偏好 and 开发者模式; 规则插件 (Ctrl+K, the
+    Ctrl+P list, 设置) only while 开发者模式 is on."""
+    from autokeeper.tui.app import Menu
+    from autokeeper.tui.modals.engine import EngineModal
+    from autokeeper.tui.modals.plugins import PluginsModal
+    from autokeeper.tui.modals.prefs import PrefsModal
+
+    web = []
+    monkeypatch.setattr(GameScreen, "open_developer", lambda self: web.append(True))  # no web page here
+    m = Module.load(EXAMPLE)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        screen = await game_at_rest(app, pilot, m, slot="settings")
+
+        def palette() -> list[str]:
+            return [name for name, _, _ in Menu(screen)._entries()]
+
+        await pick(pilot, app, "settings")
+        settings = app.screen
+        assert isinstance(settings, SettingsModal)
+        await pilot.pause()
+        shown = [str(b.label) for b in settings.query(".settings-page").results(Button) if b.display]
+        assert shown == ["换模型 >", "叙事偏好 >", "开启开发者模式"]  # 规则插件 hidden while the mode is off
+        settings.query_one("#settings-models", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, EngineModal)  # what F9 opens
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is settings
+        settings.query_one("#settings-prefs", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, PrefsModal)  # what Ctrl+O opens
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is settings
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is screen
+
+        await pilot.press("ctrl+k")  # not in 开发者模式: no 规则插件
+        await pilot.pause()
+        assert app.screen is screen and not screen.developing
+        assert not any(name.startswith("规则插件") for name in palette())
+        await pick(pilot, app, "settings")
+        await pilot.pause()
+        app.screen.query_one("#settings-developer", Button).press()
+        await pilot.pause()
+        assert screen.developing and web and str(app.screen.query_one("#settings-developer", Button).label) == "关闭开发者模式"
+        app.screen.query_one("#settings-plugins", Button).press()
+        await pilot.pause()
+        assert isinstance(app.screen, PluginsModal)
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is screen and any(name.startswith("规则插件") for name in palette())
+        await pilot.press("ctrl+k")
+        await pilot.pause()
+        assert isinstance(app.screen, PluginsModal)
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("f12")  # off: Ctrl+K is the box's own again
+        await pilot.pause()
+        assert not screen.developing
+        await pilot.press("ctrl+k")
+        await pilot.pause()
+        assert app.screen is screen
 
 
 async def test_leaving_now_mid_turn_saves_first(canned):
@@ -215,14 +296,24 @@ async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path,
         assert screen.link.host
         await pilot.press("escape")
         await pilot.pause()
-        shown = options(app.screen.query_one(OptionList))
-        assert "load" not in shown and "save" not in shown and "engine" in shown and "settings" in shown and "title" in shown
+        assert options(app.screen.query_one(OptionList)) == ["continue", "guide", "title", "quit", "settings"]  # the host saves
+        await pilot.press("escape")
+        await pilot.pause()
+        screen.action_settings()
+        await pilot.pause()
+        shown = [b.id for b in app.screen.query(".settings-page").results(Button)]
+        assert shown == ["settings-models"]  # the host tells: no 叙事偏好; the game is not here: no 开发者模式
         await pilot.press("escape")
         await pilot.pause()
         screen.link.host = False  # a guest: the host picks the models
         await pilot.press("escape")
         await pilot.pause()
-        assert "engine" not in options(app.screen.query_one(OptionList))
+        assert options(app.screen.query_one(OptionList)) == ["continue", "guide", "title", "quit", "settings"]
+        await pilot.press("escape")
+        await pilot.pause()
+        screen.action_settings()
+        await pilot.pause()
+        assert isinstance(app.screen, SettingsModal) and not app.screen.query(".settings-page")
         await pilot.press("escape")
     await closed(task)
 

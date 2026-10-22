@@ -16,6 +16,7 @@ from textual.widgets.option_list import Option
 from ... import imagery
 from ..drawing import art, cover
 from ..modals.guide import GuideScreen
+from ..modals.menu import GameMenu
 from .saves import LoadScreen
 from .setup import SetupScreen
 
@@ -48,8 +49,7 @@ class TitleScreen(Screen):
         yield OptionList(
             Option("新的调查", id="new"),
             Option("继续调查", id="continue"),
-            Option("开房间", id="host"),
-            Option("加入房间", id="join"),
+            Option("多人游戏", id="lan"),
             Option("观战（AI 调查员）", id="watch"),
             Option("角色卡", id="cards"),
             Option("导入模组", id="import"),
@@ -76,9 +76,6 @@ class TitleScreen(Screen):
         cover.clear()
 
     def on_screen_resume(self) -> None:
-        room = getattr(self.app, "room", None)  # a LAN room this app opened (tui/screens/host.py)
-        label = "回到房间" if room is not None and room.is_open else "开房间"
-        self.query_one("#menu", OptionList).replace_option_prompt("host", label)
         if self.ticker is not None:
             self.ticker.resume()
         if self.area is not None:  # the frames again, in the art style chosen meanwhile (F9)
@@ -225,14 +222,8 @@ class TitleScreen(Screen):
             self.app.push_screen(SetupScreen(spectate=True))
         elif choice == "continue":
             self.app.push_screen(LoadScreen())
-        elif choice == "host":
-            from .host import HostScreen, back_to_room
-
-            self.app.push_screen(back_to_room(self.app) or HostScreen())
-        elif choice == "join":
-            from .net import JoinScreen
-
-            self.app.push_screen(JoinScreen())
+        elif choice == "lan":
+            self.app.push_screen(GameMenu(self.lan_items(), "host", title="多人游戏", hint="Enter 选择 · Esc 返回"), self.lan)
         elif choice == "cards":
             from .cards import CardsScreen
 
@@ -247,6 +238,22 @@ class TitleScreen(Screen):
             self.app.push_screen(GuideScreen())
         elif choice == "quit":
             self.app.exit()
+
+    def lan_items(self) -> list[tuple[str, str]]:
+        """多人游戏: a room of one's own (回到房间 while the one this app opened is open,
+        tui/screens/host.py), or someone else's."""
+        room = getattr(self.app, "room", None)
+        return [("host", "回到房间" if room is not None and room.is_open else "开房间"), ("join", "加入房间")]
+
+    def lan(self, choice: str | None) -> None:
+        if choice == "host":
+            from .host import HostScreen, back_to_room
+
+            self.app.push_screen(back_to_room(self.app) or HostScreen())
+        elif choice == "join":
+            from .net import JoinScreen
+
+            self.app.push_screen(JoinScreen())
 
     def action_settings(self) -> None:
         from ..modals.settings import SettingsModal

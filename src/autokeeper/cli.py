@@ -249,7 +249,7 @@ def host(
     load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
     web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页版")] = True,
 ) -> None:
-    """开局域网房间，和标题画面的「开房间」一样。"""
+    """开局域网房间，和标题画面「多人游戏 → 开房间」一样。"""
     from rich.cells import cell_len
 
     from .engine.state import SaveRefused

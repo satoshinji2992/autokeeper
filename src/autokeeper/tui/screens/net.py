@@ -128,26 +128,21 @@ class NetGameScreen(GameScreen):
 
     COMMANDS = {RoomCommands}
 
-    def action_plugins(self) -> None:
-        from ..modals.plugins import PluginsModal
-
-        def send(text: str) -> None:
-            self.run_worker(partial(self.link.send, {"t": "house_rule", "text": text}))
-
-        # Read-only view of the same public rule information. The host also gets a box for a
-        # house rule: its code runs on the host's machine, so only they can add one; the Hub
-        # drafts and installs it, and the result syncs back.
-        self.app.push_screen(PluginsModal(self.m, self.state, manage=False, send=send if self.link.host else None))
-
     SHOW_ENGINE = True  # "轮到谁" is on the top bar
 
     def menu_items(self) -> list[tuple[str, str]]:
-        """The Esc menu at a shared table: the host saves and tells; only the host changes models."""
-        off = {"save", "load", "prefs"} | (set() if self.link.host else {"engine"})
-        items = [item for item in super().menu_items() if item[0] not in off]
+        """The Esc menu at a shared table: the host saves; 关闭房间 before 回到标题 for the
+        host who opened the room in this app."""
+        items = [item for item in super().menu_items() if item[0] not in ("save", "load")]
         if getattr(self.app, "room", None) is not None:  # the room was opened in this app
-            items.insert(len(items) - 2, ("close_room", "关闭房间"))
+            items.insert([key for key, _ in items].index("title"), ("close_room", "关闭房间"))
         return items
+
+    def settings_items(self) -> list[tuple[str, str]]:
+        """设置 at a shared table: the host tells, so 叙事偏好 is theirs, and only the host changes
+        models; 开发者模式 needs the game, which runs on the host's machine (super())."""
+        off = {"prefs"} | (set() if self.link.host else {"engine"})
+        return [item for item in super().settings_items() if item[0] not in off]
 
     def __init__(self, module: Module, state: GameState, link: Link, seat: str | None, backlog: list[LogEntry]):
         super().__init__(module, state, resume=True, spectate=False)

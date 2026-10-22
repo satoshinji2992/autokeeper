@@ -1,0 +1,10 @@
+/* 设置 (settings.py); .modal, .modal-title, .buttons and .system come from app.tcss */
+
+#settings-panel { width: 76; max-width: 96%; height: auto; max-height: 90%; }
+#settings-panel Select { margin-bottom: 1; }
+#settings-panel .settings-row { height: 3; align: left middle; }
+#settings-panel .settings-row Static { width: 1fr; }
+#settings-panel .settings-row Switch { width: auto; }
+#settings-panel .settings-page {
+    width: 100%; height: 1; margin-top: 1; border: none; content-align: left middle; text-align: left;
+}

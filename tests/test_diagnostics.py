@@ -9,6 +9,7 @@ import json
 import aiohttp
 import pytest
 from rich.console import Console
+from textual.widgets import Button
 
 from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
@@ -21,6 +22,7 @@ from autokeeper.harness import Reply, Session
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.settings import SettingsModal
 from autokeeper.tui.screens.game import GameScreen
 
 from .test_engine import make
@@ -294,8 +296,17 @@ async def test_f12_opens_a_webpage_while_terminal_play_remains_available(monkeyp
         await pilot.press("f12")  # off again: the page stays, the screen goes back
         await pilot.pause()
         assert not panel.display and not screen.has_class("-dev") and len(opened) == 1
-        screen._menu_chosen("developer")  # from the Esc menu: did nothing (an unawaited run_action), 2026-10-21
+        screen._menu_chosen("settings")  # 设置 → 开发者模式, on at once with 设置 still open
+        assert await until(pilot, lambda: isinstance(app.screen, SettingsModal))
+        settings = app.screen
+        await pilot.pause()
+        assert not settings.query_one("#settings-plugins").display  # 规则插件 only in the mode
+        settings.query_one("#settings-developer", Button).press()
         assert await until(pilot, lambda: panel.display)
+        assert str(settings.query_one("#settings-developer", Button).label) == "关闭开发者模式"
+        assert settings.query_one("#settings-plugins").display
+        await pilot.press("escape")
+        await pilot.pause()
         screen.action_open_dev_web()  # the page again, from the panel's link
         assert await until(pilot, lambda: len(opened) == 2)
         assert opened[0] == opened[1] and server is screen.game.debug_server
