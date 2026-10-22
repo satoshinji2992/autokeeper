@@ -307,3 +307,38 @@ async def test_the_hosts_notes_in_a_save_never_reach_another_screen(fake):
         assert "房主自己的推测" not in text and "notebook" not in text
     assert hub.state.notebook  # still the host's, in its save
     await hub.game.close()
+
+
+async def test_a_failed_note_save_keeps_the_page_open_and_can_be_retried(canned, monkeypatch):
+    from autokeeper.tui.modals import notebook
+
+    monkeypatch.setattr(notebook, "KEEP_AFTER", 60)
+    write = notes.write
+    attempts = 0
+
+    def interrupted(path, text):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("磁盘暂不可写")
+        write(path, text)
+
+    monkeypatch.setattr(notes, "write", interrupted)
+    m, state = game_state("lan-notes-save-error")
+    me = state.investigators[0].id
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(140, 44)) as pilot:
+        link = Link()
+        screen = await seated(app, pilot, m, state, me, link)
+        await pilot.press("f2")
+        assert await until(pilot, lambda: isinstance(app.screen, NotebookModal))
+        book = app.screen
+        book.query_one("#notes-text", TextArea).load_text("只有我记下的推测")
+        await pilot.pause()
+        await pilot.press("escape")
+        assert app.screen is book and book.text == "只有我记下的推测"
+        assert not paths.table_notes(m.id, state.slot, me).exists()
+        await pilot.press("escape")
+        assert await until(pilot, lambda: app.screen is screen)
+        assert paths.table_notes(m.id, state.slot, me).read_text(encoding="utf-8") == "只有我记下的推测"
+        assert link.sent == []

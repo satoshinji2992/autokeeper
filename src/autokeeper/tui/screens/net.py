@@ -215,17 +215,20 @@ class NetGameScreen(GameScreen):
             self.jotted = "" if self.guest else notes.read(self._notes_file())
         return self.jotted
 
-    def keep_notes(self, text: str) -> None:
+    def keep_notes(self, text: str) -> bool:
         """Kept on this machine, never sent: not to the host, not to the others."""
         if not self.seat:
-            return
+            return False
         self.jotted = text
         if not self.guest:
             try:
                 notes.write(self._notes_file(), text)
             except OSError as exc:
                 self.app.notify(f"笔记未能保存：{exc}", severity="error", timeout=6)
+                self._notes_shown()
+                return False
         self._notes_shown()
+        return True
 
     def _notes_notice(self) -> str:
         if self.guest:

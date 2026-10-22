@@ -37,7 +37,7 @@ class NotebookModal(ModalScreen[None]):
         Binding("tab", "turn", "翻页", show=False),  # the page has no use for a tab character
     ]
 
-    def __init__(self, notes: str | None, papers: list[tuple[str, str]], *, keep: Callable[[str], None] | None = None,
+    def __init__(self, notes: str | None, papers: list[tuple[str, str]], *, keep: Callable[[str], bool | None] | None = None,
                  read: Callable[[str], None] | None = None, notice: str = "", first: str = "notes"):
         super().__init__()
         self.notes, self.papers = notes, papers
@@ -83,10 +83,12 @@ class NotebookModal(ModalScreen[None]):
             self._waiting.stop()
         self._waiting = self.set_timer(KEEP_AFTER, self._keep)
 
-    def _keep(self) -> None:
-        if self.keep is not None and self.notes is not None and self.text != self.kept:
+    def _keep(self, *, force: bool = False) -> bool:
+        if self.keep is not None and self.notes is not None and (force or self.text != self.kept):
+            if self.keep(self.text) is False:
+                return False
             self.kept = self.text
-            self.keep(self.text)
+        return True
 
     @on(OptionList.OptionSelected, "#papers")
     def _open(self, event: OptionList.OptionSelected) -> None:
@@ -103,8 +105,8 @@ class NotebookModal(ModalScreen[None]):
             widget.focus()
 
     def action_close(self) -> None:
-        self._keep()
-        self.dismiss(None)
+        if self._keep(force=True):
+            self.dismiss(None)
 
     def on_unmount(self) -> None:
-        self._keep()  # gone some other way (the game it was over left): what was typed is not lost
+        self._keep()  # retry pending changes when leaving another way

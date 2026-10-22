@@ -1932,19 +1932,25 @@ class GameScreen(Screen):
         who = self._notes_owner()
         return None if who is None else self.state.notebook.get(who, "")
 
-    def keep_notes(self, text: str) -> None:
+    def keep_notes(self, text: str) -> bool:
         """In a local game the notes go with the save: kept now, written with it once no turn runs
         (a turn's own checkpoints carry them meanwhile)."""
         who = self._notes_owner()
         if who is None:
-            return
+            return False
         if text.strip():
             self.state.notebook[who] = text
         else:
             self.state.notebook.pop(who, None)
         if self.game is not None and not self.busy:
-            write_save(self.state, self.m)
+            try:
+                write_save(self.state, self.m)
+            except OSError as exc:
+                self.app.notify(f"笔记未能保存：{exc}", severity="error", timeout=6)
+                self._notes_shown()
+                return False
         self._notes_shown()
+        return True
 
     def _notes_notice(self) -> str:
         """A line under the page on where the notes are kept, where that needs saying."""
