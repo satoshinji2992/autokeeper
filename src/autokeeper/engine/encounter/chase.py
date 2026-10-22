@@ -583,8 +583,9 @@ def places(ctx: Ctx, enc: EncounterState) -> dict[str, str]:
 
 def party_place(game, enc: EncounterState, where: dict[str, str]) -> tuple[str, dict[str, str]]:
     """Where the party goes when the chase ends (no split party, the user's call): the place most of
-    the human investigators ended at (on a tie, the speaking one's); the others are left there until
-    their next move (GameState.apart)."""
+    the human investigators ended at (on a tie, the speaking one's); the others, one out cold where it
+    began too, are left there until their next move (GameState.apart, which the keeper's brief and the
+    plan's bearings name)."""
     st = game.state
     humans = [i.id for i in st.investigators if i.id in st.human] or [st.investigator.id]
     counts: dict[str, int] = {}

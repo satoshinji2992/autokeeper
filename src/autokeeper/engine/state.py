@@ -157,7 +157,9 @@ class GameState(BaseModel):
     encounter_log: list[EncounterSummary] = Field(default_factory=list)
     sightings: dict[str, list[str]] = Field(default_factory=dict)  # investigator -> horrors whose first sight they paid for
     identified: list[str] = Field(default_factory=list)  # creatures the players can name (their true name is shown)
-    apart: dict[str, str] = Field(default_factory=dict)  # investigator -> place, left behind by a chase; rejoins on the next move
+    # investigator -> place, left behind by a chase; named to the keeper (world/context.keeper_brief) and the plan
+    # (Cast.bearings) until the party's next move
+    apart: dict[str, str] = Field(default_factory=dict)
     # What a LAN client is sent of the encounter going on (engine/encounter/views.table): its public view and
     # each seat's choices. Only ever in a client's copy; the host's own is computed when it is needed.
     encounter_public: dict | None = None

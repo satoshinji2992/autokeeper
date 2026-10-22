@@ -353,6 +353,16 @@ def with_li(module, fake, li_does: list[str], **modes):
 GUARD = DeclaredAction(do="defend", summary="守着")
 
 
+def as_chase(game) -> None:
+    """The fight made a chase the way the engine changes it (one op), for a state set up by hand."""
+    from autokeeper.engine.encounter.model import SetMode
+    from autokeeper.world.ops import EncounterStep
+    from autokeeper.world.record import ENGINE
+
+    assert game.world.apply(EncounterStep(id="test/mode", encounter=game.state.encounter.id, unit="t",
+                                          changes=[SetMode(mode="chase")], actor=ENGINE)).ok
+
+
 async def test_a_flight_is_not_chased_while_the_others_still_fight_and_the_chase_takes_the_whole_party(module, fake):
     """The review's blocker: one investigator fled and was chased while the other still fought the preacher
     at the start; the chase ended the whole encounter as lost with him on his feet. Now the chase waits
@@ -384,7 +394,7 @@ async def test_a_chase_is_never_lost_while_an_investigator_can_still_act(module,
     down far away. Whoever can still act keeps it going."""
     from autokeeper.engine.encounter import chase as chasing
     from autokeeper.engine.encounter.actions import Ctx
-    from autokeeper.engine.encounter.model import ChaseState, SetMode
+    from autokeeper.engine.encounter.model import ChaseState
 
     from .encounter_kit import begin
 
@@ -398,11 +408,7 @@ async def test_a_chase_is_never_lost_while_an_investigator_can_still_act(module,
         for p in e.participants:
             p.node = far if p.id in ("zhouheng", "warden") else built.origin
     change(game, edit)
-    from autokeeper.world.ops import EncounterStep
-    from autokeeper.world.record import ENGINE
-
-    assert game.world.apply(EncounterStep(id="t/mode", encounter=game.state.encounter.id, unit="t",
-                                          changes=[SetMode(mode="chase")], actor=ENGINE)).ok
+    as_chase(game)
     inv = game.state.investigators[0]
     inv.hp, inv.conditions = 0, ["昏迷"]
     ctx = Ctx.of(game)
@@ -566,3 +572,36 @@ async def test_the_ways_past_an_obstacle_read_short_and_care_is_one_choice(modul
     assert not any("（往" in x for x in labels)
     careful = choices.match(game, "zhouheng", "小心通过：堆着报纸的楼梯")
     assert careful is not None and (careful.method, careful.careful, careful.to) == ("run", 1, "office_stairs")  # 敏捷 65 over 攀爬 20
+
+
+async def test_who_the_chase_left_behind_is_known_to_the_keeper_and_the_plan_until_the_party_moves(module, fake):
+    """The review: GameState.apart was written and never read. The keeper's brief and the plan's
+    bearings name who was left where, an investigator out cold at the start too."""
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.engine.encounter.model import ChaseState
+    from autokeeper.world import context as world_view
+
+    from .encounter_kit import begin
+
+    game, _cast, _ = with_li(module, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden"])
+    built = site.build(module, "office")
+
+    def edit(e):
+        e.chase = ChaseState(site=built, quarry=["zhouheng", "li"], pursuers=["warden"])
+        for p in e.participants:
+            p.node = "fog_square" if p.id == "zhouheng" else built.origin
+        e.get("zhouheng").presence = "escaped"
+    change(game, edit)
+    as_chase(game)
+    li = game.state.investigators[1]
+    li.hp, li.conditions = 0, ["昏迷"]
+    await game._encounter_end("fled", Turn())
+    st = game.state
+    assert st.location == "square" and st.apart == {"li": "office"}
+    assert "和大家分开的调查员" in world_view.keeper_brief(game.world) and "李四在报社（昏迷）" in world_view.keeper_brief(game.world)
+    cast = Cast(config.Config(), module)
+    assert "【和大家分开的调查员】李四在报社（昏迷）" in cast.bearings(st)
+    await game._arrive("tower", Turn())
+    assert not st.apart and "李四" not in world_view.keeper_brief(game.world)  # the party moved: together again

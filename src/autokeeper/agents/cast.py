@@ -825,12 +825,14 @@ class Cast:
             place = next((loc.name for loc in m.locations if seen and loc.id == seen.place), "")
             label = f"，最后亲历记录：{place}，{format_time(seen.t)}" if seen and place else ""
             last_seen.append(f"{n.name}({n.id})不在当前房间{label}；当前位置未获确认")
+        left = world_view.apart(state, lambda pid: next((x.name for x in m.locations if x.id == pid), pid))
         return (
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
             f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
             f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
+            + (f"\n【和大家分开的调查员】{left}（追逐后落在那里，下次移动时归队）" if left else "")
         )
 
     # -- agents -------------------------------------------------------------------
