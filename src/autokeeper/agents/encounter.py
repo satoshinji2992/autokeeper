@@ -371,7 +371,7 @@ def encounter_brief(b: Brief) -> str:
         out.append(f"【有人逃跑】{'、'.join(b.fled)}：{'、'.join(keepers) or '对手'} 每人都要在 pursue 或 let_go 里写明追不追")
     if b.down:
         out.append(f"【调查员一方全部倒下】{'、'.join(b.down)}：对手照各自的本性和目标决定怎么收场，写进安排："
-                   "了结倒下的人（attack，打昏迷的人必中，生命为 0 的一下毙命）、带走（maneuver 制住）、"
+                   "了结倒下的人（attack，打昏迷的人必中，生命为 0 的一下毙命）、控制（maneuver 制住，转移地点要另行落实）、"
                    "离开（flee，或 end gave_up）、停手（defend，或 end dispersed）。哪一轮对他们什么也没做、又没人濒死，打斗就此结束")
     if b.stakes:
         out.append("【胜负后果】" + "；".join(f"{s.when} → {'、'.join(s.flags) or '无标记'}" + (f"（{s.note}）" if s.note else "")
