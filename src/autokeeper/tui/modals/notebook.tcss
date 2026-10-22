@@ -1,0 +1,33 @@
+/* F2, the notebook (notebook.py): the page as large as the window lets it be, the papers a list. */
+#notebook-modal {
+    width: 84;
+    max-width: 100%;
+    height: 80%;
+    max-height: 100%;
+}
+#notebook-modal TabbedContent {
+    height: 1fr;
+}
+#notebook-modal ContentTabs {
+    height: 1;
+}
+#notebook-modal Tab {
+    padding: 0 1;
+}
+#notebook-modal Tab.-active {
+    color: $background;
+    background: $primary;
+    text-style: bold;
+}
+#notebook-modal ContentSwitcher, #notebook-modal TabPane {
+    height: 1fr;
+    padding: 0;
+}
+#notes-text {
+    height: 1fr;
+    min-height: 4;
+}
+#papers {
+    height: auto;
+    max-height: 100%;
+}

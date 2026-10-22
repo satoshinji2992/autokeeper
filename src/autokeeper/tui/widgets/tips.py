@@ -2,7 +2,8 @@
 
 The first time something happens in a game (the opening, a roll, a roll that is not made
 again, the second chance after a failed one, a handout, someone talking, a sanity
-loss, HP running low, the keeper improvising, a walk somewhere, a few turns going nowhere),
+loss, HP running low, the keeper improvising, a walk somewhere, a few turns going nowhere, the
+notebook once a turn or two has been played),
 one dim line in the story says how it works and which key or guide page tells more. Each hint once per player and at
 most one a turn, after the narration, where the player looks before typing: never on top
 of a choice that is being made (a notification there covered the push dialog's buttons on
@@ -48,11 +49,12 @@ TIPS: dict[str, Tip] = {
     ),
     "hurt": Tip("HP 已降至三分之一以下。HP 到 0 可能昏迷或濒死，具体取决于伤势。F4 查看人物状态。", "screen"),
     "sanity": Tip("这是理智（SAN）损失。一次损失达到 5 点时，可能触发临时疯狂。F1 查看理智规则。", "sanity"),
-    "handout": Tip("F2 打开线索本，可重看已获得的手稿、完整文字和原图。", "clues"),
+    "handout": Tip("按 F2 打开笔记，在「资料」页可重看已获得的手稿、完整文字和原图。", "notes"),
     "check": Tip("检定结果：骰值不超过目标值即通过；↳ 一行记录本次检定的结果。F1 查看成功等级与奖励骰。", "dice"),
     "repeat": Tip("情况没有变化，同一尝试沿用上次结果。改变做法或获得新信息后，可以再试。", "dice"),
     "waived": Tip(".ra 是检定请求。结果明确，或技能不适用时，守秘人会直接说明，不掷骰。", "dice"),
     "npc": Tip("与 NPC 对话时，可直接输入问题或台词。需要说服对方时，守秘人才会要求检定。", "play"),
+    "notes": Tip("调查中得知的事只出现在叙述和对话里。按 F2 打开笔记自行记录，或输入「/记 内容」记下一行，不占回合。", "notes"),
     "improv": Tip("模组未覆盖的行动可由守秘人按情境即兴处理。F1「模组之外」有详细说明。", "improv"),
     "move": Tip("移动消耗游戏内时间，顶部显示当前时间。F3 查看已知地点。", "screen"),
     "stuck": Tip("需要思路时按 F5，选中的建议只会填入输入框。调查陷入僵局时，可按 Ctrl+L 做灵感检定，每个游戏日一次。", "push"),
@@ -65,10 +67,12 @@ OPENINGS = {
 HOUSE = {"jinboer_jia", "shufang"}  # 《追书人》: the Kimballs' house and the uncle's study
 OUTSIDE_AFTER = 4  # turns spent in the house before the nudge out of the door
 STUCK_AFTER = 4  # turns without a clue, an event or a new place before F5 is mentioned
+NOTES_AFTER = 2  # the player's turns before the notebook is mentioned: they have heard something by then
 # When several wait, the more urgent and the rarer go first; the rest keep for a later turn,
 # except those about this very turn, which no later one would make sense of.
 NOW = {"start", "offer"}
-ORDER = ("start", "offer", "hurt", "sanity", "handout", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
+ORDER = ("start", "offer", "hurt", "sanity", "handout", "check", "repeat", "waived", "npc", "notes", f"{TUTORIAL}:outside", "stuck",
+         "improv", "move")
 
 
 class TipLine(Static):
@@ -189,11 +193,13 @@ def _called_for(st, player: Investigator, ev: dict) -> str | None:
 
 
 def _due(st, player: Investigator) -> list[str]:
-    """What the game's course asks for at the end of the player's turn: a few turns going
-    nowhere, and in 《追书人》 a few turns still in the house."""
+    """What the game's course asks for at the end of the player's turn: the notebook once there is
+    something to note, a few turns going nowhere, and in 《追书人》 a few turns still in the house."""
     if st.investigator.id != player.id:
         return []
     due = ["stuck"] if st.turn - st.progress_at >= STUCK_AFTER else []
+    if st.turn >= NOTES_AFTER:
+        due.append("notes")
     if st.module == TUTORIAL and st.turn >= OUTSIDE_AFTER and set(st.visited) <= HOUSE:
         due.append(f"{TUTORIAL}:outside")
     return due

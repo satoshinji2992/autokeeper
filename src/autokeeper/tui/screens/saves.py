@@ -39,6 +39,7 @@ from textual.widgets.option_list import Option
 from ... import imagery, paths
 from ...engine.state import SAVE_FORMAT, GameState, SaveRefused, read_save, time_of_day
 from ...module.schema import Module
+from .. import notes
 from ..modals.menu import AskText, Confirm
 
 
@@ -214,8 +215,8 @@ def line(save: Save, playing: bool = False) -> Group:
 
 
 def details(save: Save, m: Module | None) -> Text:
-    """The preview's words: where and when, the party, the story so far. No clue's title: the
-    players keep what they learnt in their own notes (F2)."""
+    """The preview's words: where and when, the party, the start of the player's own notes (F2), the
+    story so far. No clue's title: what they learnt the players keep in those notes."""
     from ..widgets.pages import tight
 
     st = save.state
@@ -240,6 +241,10 @@ def details(save: Save, m: Module | None) -> Text:
         if inv.conditions:
             out.append("  " + "、".join(inv.conditions), style="red")
         out.append("\n")
+    owners = dict.fromkeys([*st.human, *(inv.id for inv in st.investigators)])  # the player's own first
+    if jotted := next((notes.head(st.notebook[i]) for i in owners if st.notebook.get(i, "").strip()), []):
+        out.append("\n笔记\n", style="bold")
+        out.append("".join(f"  {line}\n" for line in jotted[:4]))
     if st.progress.text.strip():
         out.append("\n进展\n", style="bold")
         out.append(tight(st.progress.text.strip()) + "\n")

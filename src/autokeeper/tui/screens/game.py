@@ -36,14 +36,16 @@ from ...module.schema import Module
 from ...prefs import Prefs
 from ...rules import commands
 from ...rules.coc import Investigator, Rules
+from .. import notes
 from ..library import THEMES, art_text, face_text, write_save
 from ..modals.debrief import DebriefModal
 from ..modals.deck import DeckCardModal
-from ..modals.dialogs import HandoutModal, NotebookModal, PushModal, RollModal, SketchModal
+from ..modals.dialogs import HandoutModal, PushModal, RollModal, SketchModal
 from ..modals.engine import EngineModal
 from ..modals.guide import GuideScreen
 from ..modals.mapview import MapModal
 from ..modals.menu import MENU, SETTINGS, Confirm, GameMenu
+from ..modals.notebook import NotebookModal
 from ..modals.plugins import plugin_commands
 from ..modals.reaction import ChoiceModal
 from ..modals.retell import RetellModal
@@ -64,10 +66,10 @@ from ..widgets.pages import Page, PagesHead, PagesModal, background_view, progre
 from ..widgets.panels import (
     LIGHT_MARK,
     PORTRAIT,
-    CluePanel,
     DiceTray,
     HistoryPanel,
     ItemCard,
+    NotesPanel,
     RollCard,
     SceneArt,
     SheetPanel,
@@ -85,13 +87,13 @@ from .saves import LoadScreen
 
 COMMANDS = (
     ("帮助", "F1", "玩法说明和按键", "help"),
-    ("线索本", "F2", "找到的线索和手稿", "notes"),
+    ("笔记", "F2", "自己的笔记和收到的资料", "notes"),
     ("地图", "F3", "去过和听说过的地方", "map"),
     ("人物卡", "F4", "完整人物卡，←→ 切换调查员", "sheet"),
     ("行动建议", "F5", "根据当前情况生成三条行动建议", "suggest"),
-    ("重讲上一段", "F6", "调整叙述方式，保留检定与线索", "retell"),
+    ("重讲上一段", "F6", "调整叙述方式，保留检定结果与对话", "retell"),
     ("前情回顾", "F7", "回顾本局已发生的事件", "recap"),
-    ("经过", "", "行动、检定与发现记录；右栏也有", "page('history')"),
+    ("经过", "", "行动与检定的记录；右栏也有", "page('history')"),
     ("进展", "Ctrl+G", "当前调查进展，有新进展时右栏标「进展·新」", "page('progress')"),
     ("背景", "", "开局已知信息与调查员背景", "page('background')"),
     ("整理进展", "Ctrl+Y", "整理当前调查进展，每轮一次", "recount"),
@@ -113,6 +115,8 @@ COMMANDS = (
 
 
 
+# Commands that open a window or write a note: they work while the keeper is telling (notes.JOT too).
+ANYTIME = ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo")
 BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's round waits for the player (设置 turns it off)
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
@@ -132,7 +136,7 @@ class GameScreen(Screen):
         # Esc and F1–F5 on the footer, the rest in order of use; everything common is in the Esc menu
         Binding("escape", "menu", "菜单", key_display="Esc"),
         Binding("f1", "help", "帮助"),
-        Binding("f2", "notes", "线索本"),
+        Binding("f2", "notes", "笔记"),
         Binding("f3", "map", "地图"),
         Binding("f4", "sheet", "人物卡"),
         Binding("f5", "suggest", "行动建议"),
@@ -216,7 +220,7 @@ class GameScreen(Screen):
                     yield HistoryPanel(id="history")
                     for name in ("progress", "background", "plugins"):  # turned to in place (PagesHead)
                         yield Page(id=f"side-{name}", classes="page side-page")
-                yield CluePanel(id="clues")
+                yield NotesPanel(id="notes")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -523,15 +527,15 @@ class GameScreen(Screen):
         right.display = width >= 96
         # The dice tray as tall as 0.0.2 had it (thirteen lines on a tall screen); shrunk to make room
         # for the history it came out too small to read (the user, 2026-10-21). The history and the
-        # clues give way instead: both open in full (Ctrl+G, F2). Only a very short screen trims it.
+        # notes give way instead: both open in full (Ctrl+G, F2). Only a very short screen trims it.
         tray = self.query_one(DiceTray)
         height = event.size.height
         sheet = 14 if height >= 40 else 10 if height >= 34 else 6
-        clues = 6 if height >= 48 else 4 if height >= 40 else 3
-        spare = (height - 2) - sheet - clues - PAGES_MIN  # the top bar and the footer take a line each
+        jotted = 6 if height >= 48 else 4 if height >= 40 else 3  # the start of the notes
+        spare = (height - 2) - sheet - jotted - PAGES_MIN  # the top bar and the footer take a line each
         tray.styles.height = max(5, min(13 if height >= 40 else 12 if height >= 34 else 11, spare))
         self.query_one(SheetPanel).styles.max_height = sheet
-        self.query_one(CluePanel).styles.max_height = clues
+        self.query_one(NotesPanel).styles.max_height = jotted
         if right.display:
             self.call_after_refresh(tray.prepare)
         self.query_one(SceneArt).refit()  # a taller terminal gets a taller picture
@@ -696,7 +700,7 @@ class GameScreen(Screen):
         face = self._thumb(inv) if tall else None
         self.query_one(SheetPanel).show(inv, face, st.investigators)
         self.story.mark(st.investigators, self._me())
-        self.query_one(CluePanel).show([self.m.clue(c).title for c in st.clues])
+        self.query_one(NotesPanel).show(self.notes())
         lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
         for scene in self.query(SceneArt):  # none while the screen is being taken down (a face drawn late)
             scene.madness = max(0.0, min(0.6, lost * 2))
@@ -1609,7 +1613,7 @@ class GameScreen(Screen):
         if text:
             self._close_orders()  # their own order instead of the round's list
         talk = chat.ooc(text) is not None or self._said(text) is not None  # shown at once, never queued as an action
-        if self.busy and text and not talk and text.split()[0] not in ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo"):
+        if self.busy and text and not talk and text.split()[0] not in ANYTIME and not text.startswith(notes.JOT):
             if (not text.startswith("/") or text.startswith("/kp ")) and self.queued is None and not self.state.ending:
                 self.queued = text  # typed ahead: it goes in as soon as the keeper is done
                 event.input.value = ""
@@ -1689,6 +1693,10 @@ class GameScreen(Screen):
     def _slash(self, text: str) -> None:
         cmd, *args = text.split()
         cmd = cmd.lower()
+        ruled = [name for name, _ in plugin_commands(self.m, self.state)]
+        if text.startswith(notes.JOT) and cmd[1:] not in ruled:  # 「/记 内容」 (or 「/记内容」): no turn, no keeper
+            self.jot(text.removeprefix(notes.JOT))
+            return
         actions = {"/draw": self.action_sketch, "/notes": self.action_notes, "/map": self.action_map, "/sheet": self.action_sheet,
                    "/help": self.action_help, "/recap": self.action_recap, "/save": self.action_save, "/debrief": self.action_debrief,
                    "/prefs": self.action_prefs, "/suggest": self.action_suggest, "/usage": self.action_usage}
@@ -1714,7 +1722,7 @@ class GameScreen(Screen):
             self.app.theme = names[(names.index(self.app.theme) + 1) % len(names)] if self.app.theme in names else names[0]
         elif cmd == "/quit":
             self._leave()
-        elif any(name == cmd[1:] for name, _ in plugin_commands(self.m, self.state)):
+        elif cmd[1:] in ruled:
             self.plugin_command(cmd[1:], " ".join(args))
         else:
             self.app.notify(f"未知命令：{cmd}", severity="warning")
@@ -1903,16 +1911,59 @@ class GameScreen(Screen):
     def action_help(self) -> None:
         self.app.push_screen(GuideScreen(tips.page(self) or "keys"))  # where the last hint pointed, else the keys
 
-    @work(group="ui")
-    async def action_notes(self) -> None:
-        st = self.state
-        clues = [(self.m.clue(c).title, self.m.clue(c).text.strip()) for c in st.clues]
-        handouts = [(h, self.m.handout(h).title) for h in st.handouts]
-        facts = [f"{'已履行' if f.status == 'fulfilled' else '记下了'}：{f.text}" for f in st.world.values()]
-        chosen = await self.app.push_screen_wait(NotebookModal(clues, handouts, facts))
-        if chosen:
-            h = self.m.handout(chosen)
-            self.app.push_screen(HandoutModal(h.title, h.text, self.m.handout_pictures(h), kind=h.kind))
+    # -- the player's own notes (F2, /记; tui/notes.py) -----------------------------------------------
+    def action_notes(self) -> None:
+        """F2, /notes: the notebook, its page the player's notes, then the papers handed to them."""
+        papers = [(h.id, h.title) for hid in self.state.handouts for h in self.m.handouts if h.id == hid]
+        self.app.push_screen(NotebookModal(self.notes(), papers, keep=self.keep_notes, read=self._read_paper,
+                                           notice=self._notes_notice()))
+
+    def _read_paper(self, hid: str) -> None:
+        h = self.m.handout(hid)
+        self.app.push_screen(HandoutModal(h.title, h.text, self.m.handout_pictures(h), kind=h.kind))
+
+    def _notes_owner(self) -> str | None:
+        """Whose notes this screen keeps: the investigator played here (whoever acts, at a screen
+        several play); None when nobody plays here (watching)."""
+        return None if self.spectate or not self.state.investigators else self._speaker().id
+
+    def notes(self) -> str | None:
+        """The notes of this screen's player; None when there are none to keep (watching)."""
+        who = self._notes_owner()
+        return None if who is None else self.state.notebook.get(who, "")
+
+    def keep_notes(self, text: str) -> None:
+        """In a local game the notes go with the save: kept now, written with it once no turn runs
+        (a turn's own checkpoints carry them meanwhile)."""
+        who = self._notes_owner()
+        if who is None:
+            return
+        if text.strip():
+            self.state.notebook[who] = text
+        else:
+            self.state.notebook.pop(who, None)
+        if self.game is not None and not self.busy:
+            write_save(self.state, self.m)
+        self._notes_shown()
+
+    def _notes_notice(self) -> str:
+        """A line under the page on where the notes are kept, where that needs saying."""
+        return ""
+
+    def _notes_shown(self) -> None:
+        for panel in self.query(NotesPanel):  # none while the screen is being taken down
+            panel.show(self.notes())
+
+    def jot(self, typed: str) -> None:
+        """「/记 内容」: the line at the end of the notes, from the input box; no turn is taken."""
+        text, line = self.notes(), notes.line(typed)
+        if text is None:
+            self.app.notify("观战时没有笔记。", timeout=3)
+        elif not line:
+            self.app.notify("请在 /记 后输入要记下的内容。", timeout=4)
+        else:
+            self.keep_notes(notes.append(text, line))
+            self.app.notify("已记入笔记。", timeout=2)
 
     def action_sheet(self) -> None:
         from ..modals.sheet import SheetModal

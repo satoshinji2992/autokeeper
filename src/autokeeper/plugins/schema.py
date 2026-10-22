@@ -304,7 +304,7 @@ BANNED_NAMES = frozenset({
 # The game's own slash commands (tui/screens/game.py, tui/screens/net.py): a plugin command may not shadow them.
 BUILTIN_COMMANDS = frozenset({
     "draw", "notes", "map", "sheet", "help", "recap", "save", "debrief", "prefs", "suggest", "usage",
-    "retry", "undo", "retell", "theme", "quit", "done", "pass",
+    "retry", "undo", "retell", "theme", "quit", "done", "pass", "记",
 })
 
 

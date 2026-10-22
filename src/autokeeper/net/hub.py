@@ -113,6 +113,8 @@ PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll wou
 # and all), the foreshadowing handed out (a sign's id names what it points to), the director's expansions
 # (diagnostics) and the keeper's own word on what was going on as the last telling stopped (Telling.scene).
 PRIVATE |= {"held", "signs", "expanded", "ongoing"}
+# A player's notes are theirs alone (tui/notes.py): the host's own, kept in a save played on this machine, too.
+PRIVATE |= {"notebook"}
 # What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
 # failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
 PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")

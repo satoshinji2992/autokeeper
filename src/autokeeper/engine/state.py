@@ -183,6 +183,9 @@ class GameState(BaseModel):
     logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
     deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)
+    # The players' own notes (F2, tui/notes.py), investigator id -> the page, in a local game. Never sent to
+    # a LAN table (net/hub.py PRIVATE): there each player keeps theirs on their own machine.
+    notebook: dict[str, str] = Field(default_factory=dict)
     progress: Progress = Field(default_factory=Progress)  # the players' 故事至今, on the 进展 page
     prologue: str = ""  # the keeper's opening as the table heard it, on the 背景 page
     pending_push: dict | None = None

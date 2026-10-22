@@ -269,11 +269,6 @@ GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {
     content-align: center middle;
     background: #0b0505 70%;
 }
-.clue {
-    border: round $success;
-    padding: 0 1;
-    color: $foreground;
-}
 .handout {
     color: $warning;
 }
@@ -376,12 +371,17 @@ GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {
 #command.mine {
     border: tall $accent;
 }
-#clues {
+#notes {  /* the start of the player's notes (panels.NotesPanel): a line each, cut short, never wrapped */
     height: auto;
     max-height: 12;
     padding: 0 1;
     border-top: dashed $primary-darken-2;
-    overflow-y: auto;
+    overflow-y: hidden;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+#notes:hover {
+    background: $panel;
 }
 
 /* ---------- modals ---------- */

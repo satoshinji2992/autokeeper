@@ -32,7 +32,7 @@ from autokeeper.tui.modals.sheet import SheetModal, sheet_view
 from autokeeper.tui.modals.usage import usage_view
 from autokeeper.tui.screens.game import COMMANDS, GameScreen
 from autokeeper.tui.widgets.pages import Page, PagesHead, PagesModal
-from autokeeper.tui.widgets.panels import CluePanel, HistoryPanel
+from autokeeper.tui.widgets.panels import HistoryPanel, NotesPanel
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened, pool_open, until
@@ -641,7 +641,7 @@ async def test_the_right_column_keeps_the_history_and_opens_the_other_pages_over
         for n in range(40):
             screen._history("player", Text(f"▶ 周衡：第{n}件事"), None)
         await pilot.pause()
-        screen.query_one(CluePanel).show([f"线索{n}" for n in range(10)])  # the list below grows, the page shrinks
+        screen.query_one(NotesPanel).show("\n".join(f"笔记第{n}行" for n in range(10)))  # the notes below grow, the page shrinks
         await pilot.pause()
         panel = screen.query_one(HistoryPanel)
         assert panel.max_scroll_y > 0 and panel.scroll_y == panel.max_scroll_y  # the newest line still in sight
@@ -699,7 +699,7 @@ async def test_without_room_for_the_column_the_pages_open_over_the_story(writer)
 
 
 @pytest.mark.parametrize("height", [24, 30, 34, 40, 44])
-async def test_dice_and_clues_leave_the_history_readable(writer, height):
+async def test_dice_and_notes_leave_the_history_readable(writer, height):
     from autokeeper.tui.screens.game import PAGES_MIN
     from autokeeper.tui.widgets.panels import DiceTray, SheetPanel
 
@@ -711,7 +711,7 @@ async def test_dice_and_clues_leave_the_history_readable(writer, height):
         app.push_screen(screen)
         await until_idle(pilot, screen)
         screen.query_one(DiceTray).display = True
-        screen.query_one(CluePanel).show([f"很长的线索标题第{i}条" for i in range(20)])
+        screen.query_one(NotesPanel).show("\n".join(f"很长很长的一行笔记，第{i}行，写满了这一栏放不下的字" for i in range(20)))
         await pilot.pause(0.3)
         column, tray = screen.query_one("#pages"), screen.query_one(DiceTray)
         assert column.outer_size.height >= PAGES_MIN  # the history's head and a few lines; it opens in full

@@ -1,5 +1,5 @@
-"""Modal screens: the roll prompt, push offer, handouts, notebook, sketch canvas, map, help,
-models, ending."""
+"""Modal screens: the roll prompt, push offer, handouts, sketch canvas, help, models, ending.
+The notebook (F2) is notebook.py's."""
 
 from __future__ import annotations
 
@@ -273,39 +273,6 @@ class HandoutModal(ModalScreen[None]):
         self.query_one("#paper", Static).update(self.sheet.render(self.revealed))
 
 
-class NotebookModal(ModalScreen[str | None]):
-    BINDINGS = [("escape", "dismiss(None)", "关闭")]
-
-    def __init__(self, clues: list[tuple[str, str]], handouts: list[tuple[str, str]], facts: list[str] | None = None):
-        super().__init__()
-        self.clues, self.handouts = clues, handouts
-        self.facts = facts or []
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Static(f"线索本 · {len(self.clues)} 条", classes="modal-title")
-            with VerticalScroll(classes="modal-body"):
-                if not self.clues:
-                    yield Static("暂无已发现的线索。", classes="system")
-                for title, text in self.clues:
-                    t = Text()
-                    t.append(f"〔{title}〕\n", style="bold")
-                    t.append(text)
-                    yield Static(t, classes="entry clue")
-                if self.facts:
-                    yield Static("人情、约定与物品往来", classes="modal-title")
-                    for fact in self.facts:
-                        yield Static(Text(fact), classes="entry")
-            if self.handouts:
-                with Horizontal(classes="buttons"):
-                    for hid, title in self.handouts:
-                        yield Button(f"手稿：{title}", id=f"h-{hid}")
-
-    @on(Button.Pressed)
-    def open_handout(self, event: Button.Pressed) -> None:
-        self.dismiss((event.button.id or "")[2:])
-
-
 class SketchCanvas(Canvas):
     """Left button draws, right button erases."""
 
@@ -405,7 +372,7 @@ HELP = Text.from_markup(
 输入时按 → 补全指令和技能名。
 
 [b]按键[/b]
-  F1 玩法说明       F2 线索本与手稿    F3 地图
+  F1 玩法说明       F2 笔记与资料      F3 地图
   F4 人物卡         F5 行动建议        F6 重讲上一段
   F7 前情回顾       F8 手绘            F9 模型
   F10 结局后复盘
@@ -420,11 +387,12 @@ HELP = Text.from_markup(
   Tab 切换被攻击时的应对，不占用行动
 
 F5 的建议只填入输入框，确认后再发送。
-F6 只改叙述，骰子、线索与 NPC 对话保留。
+F6 只改叙述，骰子与 NPC 对话保留。
 
 [b]输入框命令[/b]
   /draw /notes /map /sheet /suggest /recap /retell
   /debrief /save /prefs /usage /help /theme /quit
+  /记     后接内容，记到笔记末尾，不占回合
   /灵感   灵感检定，每个游戏日一次
   /retry  接续模型中断的回合"""
 )
