@@ -82,6 +82,10 @@ def test_difficulty_follows_how_present_the_clue_already_was(module, fake):
     st.add("player", "午夜钟声也多敲过一下？去旧报里找找那一年")
     idea.note(module, st)
     assert idea.difficulty(st, "c_archive") == "极难"  # the players discussed it themselves
+    st.mentions.pop("c_archive")
+    st.add("speech", "周衡：在报社对林秋说：“午夜钟声也多敲过一下，去旧报里找找那一年。”")  # said to one another
+    idea.note(module, st)
+    assert idea.difficulty(st, "c_archive") == "极难"
 
 
 def test_its_place_its_holder_and_their_names_are_no_mention(module, fake):
