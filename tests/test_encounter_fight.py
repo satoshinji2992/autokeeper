@@ -192,7 +192,7 @@ async def test_an_explicit_let_go_is_obeyed_and_the_stakes_wait_for_it(module, f
     app = turn_graph.build(game, InMemorySaver())
     _out, asked = await play(app, FLEE)
     st = game.state
-    assert not asked and st.chase is None and "got_away" in st.flags
+    assert not asked and "got_away" in st.flags
     assert st.encounter is None and st.encounter_log[-1].ended.how == "fled"
     report = cast.reports[-1]
     assert report.index("【周衡 脱身逃跑】") < report.index("周衡脱身了，没有人追上去") < report.index("【战斗结束】")
@@ -210,7 +210,7 @@ async def test_an_undecided_pursuer_is_asked_before_the_outcome_and_a_chase_foll
     out, _asked = await play(app, FLEE)
     st = game.state
     assert "pursuit" in [c[0] for c in cast.calls] and "zhouheng" in cast.calls[-1][2]  # asked, and told who ran
-    assert st.chase is not None and st.encounter.mode == "chase" and "got_away" not in st.flags  # not judged yet
+    assert st.encounter.chase is not None and st.encounter.mode == "chase" and "got_away" not in st.flags  # not judged yet
     assert any(e["type"] == "chase_start" for e in out) and "【战斗转为追逐】" in cast.reports[-1]
     assert "【战斗结束】" not in cast.reports[-1]
 
@@ -221,7 +221,7 @@ async def test_a_pursuit_nobody_decides_is_no_pursuit_and_says_so(module, fake):
     await begin(game, ["warden"])
     app = turn_graph.build(game, InMemorySaver())
     await play(app, FLEE)
-    assert game.state.chase is None and game.state.encounter_log[-1].ended.how == "fled"
+    assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "fled"
 
 
 # -- a horror first seen ------------------------------------------------------------------------------
@@ -420,21 +420,6 @@ async def test_outnumbered_a_defender_who_has_answered_gives_the_next_attacker_a
     assert acts[0]["roll"]["bonus"] == 0 and acts[1]["roll"]["bonus"] == 1 and "以多打少" in acts[1]["line"]
 
 
-async def test_caught_at_the_end_of_a_chase_it_is_a_fight_again_in_the_same_encounter(module, fake):
-    from autokeeper.engine.game import Turn
-
-    hounds = Event(id="e_run", title="守钟人追了上来", when="flag:x", text="", chase=["warden"])
-    game, _cast, events = fight_game(module, fake)
-    fake.queue(40, 40)
-    await game._fire(hounds, Turn())
-    eid = game.state.encounter.id
-    await game._chase_end(Turn(), "caught", "守钟人追上了周衡", fight_ids=["warden", "zhouheng"])
-    enc = game.state.encounter
-    assert game.state.chase is None and enc.id == eid and enc.mode == "fight" and enc.phase == "open"
-    assert enc.switches == ["r0:fight"] and [(e.a, e.b) for e in enc.scene.engaged] == [("warden", "zhouheng")]
-    assert [e["type"] for e in events][-2:] == ["chase_end", "fight_start"]
-
-
 async def test_the_push_offer_passes_its_answer_on_as_it_came(module, fake, monkeypatch):
     """§9: the push offer's resume value is the player's word or {"choice": "push", "how": ...}; the
     graph hands it to Game.push unchanged."""
@@ -470,7 +455,90 @@ async def test_a_fight_the_plan_said_a_failure_sets_off_begins_after_a_failed_pu
     cast.script["lie"] = (talk, ruling)
     app = turn_graph.build(game, InMemorySaver())
     fake.queue(90, 90)  # the lie fails; pushed, it fails again
-    out, asked = await play(app, "lie", answers=["push"])
+    out, asked = await play(app, "lie", answers=[{"choice": "push", "how": "换个说法再试一次"}])
     assert [a["kind"] for a in asked] == ["push"]
     assert game.state.encounter is not None and any(e["type"] == "fight_start" for e in out)
     assert not any(e["type"] == "npc" for e in out)  # the fight it set off: no ordinary reply on top of it
+
+
+# -- WP-D: delaying one's action, the aim, the NPC's own voice, an event's move held back ---------------
+async def test_a_delayed_action_waits_for_the_one_named_and_then_goes(module, fake):
+    """pp. 86, 113: a character may delay their action until another has acted."""
+    wait = DeclaredAction(do="attack", attacks=[AttackPick(target="warden", with_="natural:徒手")], after="warden",
+                          summary="周衡等守钟人先动")
+    game, cast, _ = fight_game(module, fake, act=EncounterTurnPlan(action=wait), arrange=warden_attacks)
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(90, 90, 90, 90)  # the warden misses, 周衡's dodge fails too; then 周衡 misses, the warden's answer fails
+    out, _asked = await play(app, "等他先动手，我再打", answers=["dodge"])
+    acts = [e["attacker"] for e in out if e["type"] == "fight_act"]
+    assert acts == ["f1", "zhouheng"]  # DEX 65 would have gone first
+    assert "周衡等着老守钟人先动" in cast.reports[-1] and not fake.values
+
+
+async def test_an_aim_is_for_the_next_shot_only(module, fake):
+    game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(
+        npcs=[arrange("warden", DeclaredAction(do="defend", summary="守着"))]))
+    game.state.investigator.inventory.append(".38 左轮手枪")
+    game.state.investigator.skills["射击(手枪)"] = 50
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    labels = [o.label for o in choices.options(game, "zhouheng")]
+    aim = next(x for x in labels if x.startswith("瞄准"))
+    shot = next(x for x in labels if x.startswith("射击"))
+    await play(app, aim)
+    fake.queue(95, 95)
+    out, _ = await play(app, shot)
+    out2, _ = await play(app, shot)
+    first, second = (next(e for e in o if e["type"] == "fight_act") for o in (out, out2))
+    assert first["roll"]["bonus"] == 1 and "瞄准" in first["line"]
+    assert second["roll"]["bonus"] == 0  # the aim was spent on the shot after it
+
+
+async def test_a_punch_after_aiming_does_not_spend_the_aim_but_the_round_after_it_is_gone(module, fake):
+    game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(
+        npcs=[arrange("warden", DeclaredAction(do="defend", summary="守着"))]))
+    game.state.investigator.inventory.append(".38 左轮手枪")
+    game.state.investigator.skills["射击(手枪)"] = 50
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    labels = [o.label for o in choices.options(game, "zhouheng")]
+    await play(app, next(x for x in labels if x.startswith("瞄准")))
+    fake.queue(95, 95)  # the punch misses, the warden's answer fails
+    out, _ = await play(app, HIT)
+    assert next(e for e in out if e["type"] == "fight_act")["roll"]["bonus"] == 0
+    assert not any(e.source.startswith("aim") for e in game.state.encounter.get("zhouheng").edges)  # not kept past its round
+
+
+async def test_an_npc_the_plan_has_speak_says_it_through_his_own_reply(module, fake):
+    talk = arrange("warden", DeclaredAction(do="defend", summary="守着"), speak=True, goal="劝他们离开钟楼")
+    game, cast, _events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[talk]))
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(95, 95)
+    out, _ = await play(app, HIT)
+    said = [m for who, m in cast.npc_calls if who == "warden"]
+    assert len(said) == 1 and "正在打斗" in said[0] and "劝他们离开钟楼" in said[0]
+    assert any(e["type"] == "npc" and e["npc"] == "warden" for e in out)
+
+
+async def test_an_events_move_waits_while_a_fight_goes_on(module, fake):
+    from autokeeper.engine.game import Turn
+
+    game, _cast, _ = fight_game(module, fake)
+    await begin(game, ["warden"])
+    turn = Turn()
+    await game._fire(Event(id="e_away", title="钟声把人震出了钟楼", when="flag:x", text="", move_to="square"), turn)
+    assert game.state.location == "tower" and any("遭遇还在进行" in n for n in turn.notes)
+
+
+async def test_asked_every_time_when_the_player_says_so(module, fake):
+    game, _cast, _ = fight_game(module, fake, arrange=warden_attacks)
+    await begin(game, ["warden"])
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(95, 95, 95, 95)  # both rounds: the punch and its answer miss; the warden's blow and the dodge miss
+    _out, asked = await play(app, HIT, answers=[{"choice": "dodge", "ask": "always"}])
+    assert [a["kind"] for a in asked] == ["reaction"] and game.state.encounter.get("zhouheng").ask == "always"
+    fake.queue(95, 95, 95, 95)
+    _out, asked = await play(app, HIT, answers=["dodge"], thread={**THREAD, "configurable": {"thread_id": "again"}})
+    assert [a["kind"] for a in asked] == ["reaction"] and asked[0]["ask"] == "always"  # a blow that could not put him down

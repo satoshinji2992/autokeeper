@@ -11,7 +11,7 @@
 | 对抗的难度 | 72 | 对活物，难度由对方相应的技能或属性定：低于 50 常规，50 及以上困难，90 及以上极难；对物一般常规，明显超出常规困难，异常困难极难 | 裁定员提示写明这条，并说不因调查员自己技能高而提高难度、准备充分可不掷骰（`agents/cast.ARBITER_SYSTEM`）；行动对着 NPC 时，提示附上对方的相应数值和各自给出的难度（`cast.opposing`，用 `rules/melee.opposed_difficulty`；模组没写的按常人技能基础值），模组门槛另有规定的照门槛 | 符合（提示与上下文） | `test_idea::test_the_opposing_values…`、`test_the_arbiters_prompt_marks…` |
 | 关键线索 | 170–171 | 避免让一条隐藏线索成为整场冒险的关键；错失时还有灵感检定；推进情节必需的设为显明线索，发现它不需要掷骰 | 裁定员看到的可得线索标【关键】（`Clue.core`）：没写检定或摆在明处的直接给；要检定的失败了照旧失败，补救靠换办法或灵感检定，不重掷照样适用 | 符合（提示与上下文） | `test_idea::test_the_arbiter_is_told…`、`test_the_arbiters_prompt_marks…` |
 | 失败 | 73 | 失败通常不造成伤害或理智损失，可能只是没做成；“最糟的事”留给孤注一掷 | 裁定员提示：普通失败多为没做成，`on_fail` 多数留空，最糟的后果写进 `on_push_fail`；失败照旧失败（`Game._failed`） | 符合（提示） | `test_idea::test_the_arbiter_is_told…`、`test_engine::test_a_failed_roll_stays_failed…` |
-| 孤注一掷要说明怎么做 | 73 | 玩家问能否孤注一掷，守秘人总要问“你如何行动”；时间总会流逝；目标必须仍可实现；技能难度通常不变，局势变了可调整 | 界面与联机选孤注一掷时必须写明做法（`PushModal`）；裁定员复核一次（`Cast.repush`，记进回合日志，重试不再问）：做不到则不掷骰、按放弃处理并说明理由；做法的耗时先过去；可换技能、难度和照这个做法的失败后果。AI 调查员行动时连同“检定失败时怎样孤注一掷”一起说（`agents/cast.Proposal.push`），收到孤注一掷的选择时按这个做法走同样的复核（`engine/game.ai_choice`）；没说做法的用幸运或放弃，不再直接重掷。旧存档的 `"push"` 照旧直接重掷 | 符合 | `test_idea::test_a_push_says_how…`、`test_a_push_that_cannot_reach…`、`test_a_push_without_a_way…`、`test_an_ai_players_stated_push…`、`test_net::test_an_ai_seat_pushes…` |
+| 孤注一掷要说明怎么做 | 73 | 玩家问能否孤注一掷，守秘人总要问“你如何行动”；时间总会流逝；目标必须仍可实现；技能难度通常不变，局势变了可调整 | 界面与联机选孤注一掷时必须写明做法（`PushModal`）；裁定员复核一次（`Cast.repush`，记进回合日志，重试不再问）：做不到则不掷骰、按放弃处理并说明理由；做法的耗时先过去；可换技能、难度和照这个做法的失败后果。AI 调查员行动时连同“检定失败时怎样孤注一掷”一起说（`agents/cast.Proposal.push`），收到孤注一掷的选择时按这个做法走同样的复核（`engine/game.ai_choice`）；没说做法的用幸运或放弃，不再直接重掷。界面和联机不再接受不写做法的孤注一掷；只有回放 0.0.3 录下的对局（`engine/autoplay`，未写做法的录像）时，`"push"` 照原样重掷 | 符合 | `test_idea::test_a_push_says_how…`、`test_a_push_that_cannot_reach…`、`test_a_push_without_a_way…`、`test_an_ai_players_stated_push…`、`test_net::test_an_ai_seat_pushes…` |
 | 揭示预兆 | 74 | 孤注一掷前可说明失败后果 | 选择前显示裁定员写的一般后果（`Ruling.on_push_fail`） | 符合 | `test_tui`（弹窗） |
 | 孤注一掷的范围 | 73 | 只有技能和属性检定可孤注一掷；幸运、理智、战斗不可 | `rules/coc.Check.can_push`；灵感检定不提供孤注一掷 | 符合 | `test_rules` |
 | 灵感检定 | 82、167–168 | 僵局时由玩家提议；守秘人找出遗漏的最关键线索；智力最高的调查员掷智力；无论成败都拿到线索；罕见而重大 | `engine/idea.py`：Ctrl+L、`/灵感`、菜单、联机座位；线索按“未得到、前置已满足、关键优先、支持离得最近的结论”确定性选出；每个游戏日一次 | 符合 | `test_idea::test_the_most_crucial…`、`test_a_successful_idea_roll…` |
@@ -59,7 +59,7 @@
 |---|---|---|---|---|---|
 | 行动顺序 | 86 | 敏捷从高到低；平手时战斗技能高者先 | `rules/combat.turn_order`、`order`：敏捷，平手时战斗技能高者，再平手调查员先（项目设定） | 符合 | `test_combat_rules::test_a_readied_gun_counts_only…` |
 | 准备好的枪 | 95 | 准备射击时按敏捷 +50 | `rules/firearms.readied_bonus`、`combat.order(firing=…)`：只给本轮要开火、有子弹、没卡壳的枪 +50；旧引擎按这一轮宣告开枪的人传 `firing`，打拳不再 +50 | 符合 | `test_rules_firearms::test_a_readied_gun_goes_first…`、`test_combat_rules` |
-| 推迟行动 | 86 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 无 | 未做 | 重构 |
+| 推迟行动 | 86、113 | 可推迟到另一角色之后；全部推迟则本轮无人行动 | 行动写 `after`：轮到时挪到那人之后，只挪一次（两人互等时都会行动，与原文“这一轮可能都不行动”不同） | 简化（互等） | test_encounter_fight::test_a_delayed_action_waits_for_the_one_named_and_then_goes |
 | 每轮行动 | 86 | 攻击、战技、脱离、施法、其他耗时动作；多次攻击的怪物全在自己的回合内打完 | 引擎（`engine/encounter`）每人每轮在自己的敏捷位行动一次；多次攻击的怪物在自己的位上把每次攻击都打完（`actions.picks`：安排写得少的，余下几次打同一个目标） | 符合 | test_encounter_fight::test_npcs_fight_back_and_a_creature_with_three_attacks_makes_them_all |
 | 反击 | 86–87 | 格斗对抗；成功等级高者伤对方；平手攻击者胜；都失败无人受伤 | `rules/melee.melee_outcome`；旧引擎 `rules/combat.melee` | 符合 | `test_rules_melee::test_every_pair_of_levels…`、`test_melee_both_fail_nobody_hits` |
 | 闪避 | 87 | 平手闪避者胜；都失败无人受伤 | 同上 | 符合 | 同上 |
@@ -79,12 +79,12 @@
 | 寻找掩体 | 95 | 闪避检定，成功则射手一颗惩罚骰；无论成败失去下一次攻击 | `rules/firearms.dive_for_cover`；引擎：扑向掩体掷闪避，成功射手一颗惩罚骰，无论成败失去下一次行动（`RoundBudget.lost_next`） | 符合 | test_encounter_fight::test_an_opening_blow_keeps_the_weapon_it_named |
 | 部分遮蔽 | 95 | 一半以上被遮住，一颗惩罚骰 | `rules/firearms.shot_modifiers`（`partial_cover`）；引擎：扑向掩体成功的人记一处半遮的掩体（`FightScene.cover`，`partial`），守秘人也可在计划里写（`CoverNote`，`full=False`），之后朝他开枪一颗惩罚骰 | 符合 | `test_encounter_perception::test_a_dive_leaves_the_target_half_hidden…` |
 | 抵近射击 | 95 | 敏捷五分之一英尺内一颗奖励骰；目标不能闪避或反击 | `rules/firearms.point_blank`、`shot_modifiers`；引擎：射手与目标扭打在一起，或守秘人填的距离在射手敏捷五分之一英尺内，算抵近 | 符合 | test_rules_firearms::test_point_blank_and_volleys |
-| 瞄准 | 95 | 花一回合瞄准，下回合射击一颗奖励骰 | `rules/firearms.shot_modifiers`（`aimed`）；引擎：行动 `aim`（界面「瞄准 X」），他的下一次掷骰（一般就是下一枪）一颗奖励骰（`Edge`，`until="next_roll"`） | 符合 | `test_encounter_perception::test_aiming_a_round…` |
+| 瞄准 | 95 | 花一回合瞄准，下回合射击一颗奖励骰 | `rules/firearms.shot_modifiers`（`aimed`）；引擎：行动 `aim`（界面「瞄准 X」），只给下一枪（`Shot.aimed`）；拳脚不用掉它，下一轮没开枪就作废 | 符合 | `test_encounter_perception::test_aiming_a_round…`、test_encounter_fight::test_an_aim_is_for_the_next_shot_only |
 | 高速目标、目标体格 | 96 | MOV8 以上全速移动一颗惩罚骰；体格 −2 以下惩罚骰，4 以上奖励骰 | `rules/firearms.shot_modifiers`（`fast_target`、`target_build`）；引擎：目标这一轮或上一轮宣告逃跑、奔跑、追赶（守秘人的人看它这一轮排在前面能做的安排）且 MOV 8 以上算全速；体格取目标人物卡 | 符合 | `test_encounter_perception::test_a_man_running_flat_out…`、`test_a_big_target…` |
 | 装填 | 96 | 一轮装两发；换弹夹一轮；装一发并开火有惩罚骰 | `rules/firearms.reload`；引擎装填按两发一轮、弹匣一轮，不超过备弹（`WeaponState.spare`，未知时不限） | 符合 | test_rules_firearms::test_reloading_and_ammunition |
 | 手枪连射 | 96 | 一轮 2–3 发，每发各掷一次，各一颗惩罚骰 | `rules/firearms.shots_allowed`、`shot_modifiers`；引擎按 `AttackPick.shots` 逐发掷，每发都带惩罚骰 | 符合 | test_rules_firearms::test_point_blank_and_volleys |
 | 射击近战中的目标 | 96 | 一颗惩罚骰；大失败打中队友 | `rules/firearms.shot_modifiers`（`into_melee`）、`fumble_hits`；引擎：扭打关系跨轮保留（`FightScene.engaged`），朝与己方扭打的目标开枪一颗惩罚骰；大失败打中正和目标扭打的己方中幸运最低的一个 | 符合 | test_encounter_fight::test_shooting_into_a_melee_takes_a_penalty_die、`test_encounter_perception::test_a_big_target…` |
-| NPC 看得见谁 | 87、119 | 守秘人知道一切，但 NPC 只按自己看见的行动；躲起来的人对方侦查不成功就找不到 | 引擎（项目，见 `combat.md` 守秘人全知）：守秘人的人看不见躲在全遮掩体后（`CoverNote` `full=True`）、战斗中躲藏成功（潜行，攻击即暴露）、旧追逐里躲起来、或身处黑暗且不带光源也没贴身扭打的人（怪物不受黑暗限制）；遭遇简报写明各人看得见谁、听说过谁（世界记录里这个 NPC 知道的事实）；计划让他攻击看不见的人，检查不通过（`plan_check`） | 符合 | `test_encounter_perception::test_a_position_the_keeper_declares…`、`test_a_hide_that_works…`、`test_the_dark_hides…`、`test_someone_hidden_in_the_old_chase…`、`test_what_an_npc_was_told…` |
+| NPC 看得见谁 | 87、119 | 守秘人知道一切，但 NPC 只按自己看见的行动；躲起来的人对方侦查不成功就找不到 | 引擎（项目，见 `combat.md` 守秘人全知）：守秘人的人看不见躲在全遮掩体后（`CoverNote` `full=True`）、战斗中躲藏成功（潜行，攻击即暴露）、追逐中被跟丢（躲藏成功或跟丢了踪迹）、或身处黑暗且不带光源也没贴身扭打的人（怪物不受黑暗限制）；遭遇简报写明各人看得见谁、听说过谁（世界记录里这个 NPC 知道的事实）；计划让他攻击看不见的人，检查不通过（`plan_check`） | 符合 | `test_encounter_perception::test_a_position_the_keeper_declares…`、`test_a_hide_that_works…`、`test_the_dark_hides…`、`test_someone_lost_in_a_chase…`、`test_what_an_npc_was_told…` |
 | 自动武器 | 96–98 | 弹幕、短点射、逐组惩罚骰 | 不在规则层：交守秘人按 `other` 裁定（`rules/firearms` 文档写明） | 未做 | — |
 | 故障 | 98 | 出目不低于故障值就没开火；转轮、中折、手动枪机只是哑弹；杠杆式卡壳，修理 1D6 轮并需机械维修或射击检定 | `rules/firearms.malfunction`；引擎：转轮、中折、手动枪机只是哑弹（耗一发），杠杆式等卡壳（`effects.Jam`）；排除卡壳是一轮一次机械维修或射击检定（书上先要 1D6 轮，项目简化） | 简化（排除卡壳的轮数） | test_world_life::test_rounds_fired_and_a_jam…、test_a_revolver_that_misfires_only_had_a_dud |
 | 弹药与卡壳的延续 | — | 打空、卡壳要延续到下一场 | 枪是物件（`Entity.weapon`），每次开火、卡壳、装填都经 `engine/effects` 写进世界，下一场照旧 | 符合 | `test_world_life::test_rounds_fired_and_a_jam_carry_into_the_next_fight` |
@@ -109,39 +109,43 @@
 
 ## 追逐（第七章，111–128 页）
 
+引擎是 `engine/encounter/chase.py`（单元）与 `site.py`（地图），数字在 `rules/chase.ChaseRules`。测试默认在 `test_encounter_chase`，另注的除外。
+
 | 条目 | 页 | 原文要点 | 当前 | 状态 | 测试 |
 |---|---|---|---|---|---|
-| 速度检定 | 112 | 体质（驾驶用汽车驾驶）；极难 MOV+1，失败 MOV−1 | `rules/chase.speed_after`（旧引擎 `speed_roll` 用它）；MOV 不低于 1 是项目设定 | 符合 | `test_rules_chase::test_the_speed_roll…` |
-| 直接甩开 | 112 | 逃离者调整后 MOV 高于追逐者就逃走，追逐不开始 | `rules/chase.escapes_at_once`、`placement` | 符合 | `test_rules_chase::test_the_speed_roll…` |
-| 起始距离 | 112 | 追逐者落后两个地点；特殊情况可设为一个；不要超过两个 | `ChaseRules.start_gap` 2（1 到 2） | 符合 | `test_rules_chase::test_placing_three_cultists…` |
-| 地点 | 112 | 地点是叙事单位，不是等长距离；险境与障碍放在地点之间 | 路线段 | 符合 | — |
-| 行动顺序 | 113 | 按敏捷；平手时敏捷对抗 | `rules/chase.chase_order`：敏捷，平手按敏捷对抗的成功等级 | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_monsters_joiners…` |
-| 行动点 | 113 | 每人 1 点，MOV 每比全场最慢者高 1 多 1 点 | `rules/chase.action_points` | 符合 | `test_rules_chase::test_action_points…` |
-| 可做的事 | 113 | 前进、攻击、施法、撬锁等耗时动作；可推迟；多次攻击的怪物在自己回合全打完 | 只有奔跑、躲藏、设路障、回身 | 简化 | 重构 WP-D |
+| 速度检定 | 112 | 体质（驾驶用汽车驾驶）；极难 MOV+1，失败 MOV−1 | `rules/chase.speed_after`；开始时在场、速度还没定的人各掷一次，整场遭遇保留（转为战斗再转回不重掷）；MOV 不低于 1 是项目设定 | 符合 | `test_rules_chase::test_the_speed_roll…`、`test_a_chase_begins_on_the_modules_route…`、`test_switches_keep_wounds_speeds…` |
+| 直接甩开 | 112 | 逃离者调整后 MOV 高于追逐者就逃走，追逐不开始 | `rules/chase.placement`；全部甩开时遭遇随即结束 | 符合 | `test_fight::test_a_quarry_much_faster_is_gone_at_once` |
+| 起始距离 | 112 | 追逐者落后两个地点；特殊情况可设为一个；不要超过两个 | `ChaseRules.start_gap` 2；沿逃离者要去的方向在地图上摆放，路太短时整体后移 | 符合 | `test_a_chase_begins_on_the_modules_route…` |
+| 地点 | 112 | 地点是叙事单位，不是等长距离；险境与障碍放在地点之间 | 地图的节点：模组路线的段（`id`、`place`、`links`、`exit`），没有就是世界地图的地点；障碍在进入那一处时过 | 符合 | `test_fight::test_a_chase_runs_the_modules_way…`、`test_a_chase_begins_on_the_map…` |
+| 行动顺序 | 113 | 按敏捷；平手时敏捷对抗 | `chase.order`：敏捷，平手各掷敏捷按成功等级 | 符合 | `test_a_round_runs_through_the_graph…` |
+| 行动点 | 113 | 每人 1 点，MOV 每比全场最慢者高 1 多 1 点 | `rules/chase.action_points`，每轮开始算（`RoundBudget.movement`） | 符合 | `test_rules_chase::test_action_points…`、`test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
+| 可做的事 | 113 | 前进、攻击、施法、撬锁等耗时动作；可推迟；多次攻击的怪物在自己回合全打完 | 奔跑（沿最短路，可指定去处）、追赶（追上后可接着攻击）、攻击、射击、战技、躲藏、设路障、回身迎战、急救、装填、喊话、别的事（交裁定员）；撬锁这类耗时的事花 1 行动点（项目设定 `act_cost`）；推迟同战斗 | 简化（耗时动作一律 1 行动点） | `test_something_else_in_a_chase_is_ruled…` |
 | 不可孤注一掷 | 113 | 追逐中不能，可下轮再试 | 同 | 符合 | — |
-| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `rules/chase.careful`、`hazard`：花 1–2 行动点换奖励骰；失败守秘人定伤害并失去 1D3 行动点，仍到下一地点。模组路线的险境写几种办法（`methods`）和按表 III 的伤害骰式（`harm`），矮墙、矮栅栏按原文算险境 | 符合（规则层与模组数据）；接入待 WP-D | `test_rules_chase::test_hazards_and_barriers`、`test_fight_module` |
-| 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `rules/chase.spend`、`start_round`：不够扣的行动点记作欠下，从下一轮扣 | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
-| 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | `rules/chase.barrier`：失败不前进；可开路的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定）。模组路线写多种办法（`methods`，打开后后面的人直接过的写 `opens`） | 符合 | `test_rules_chase::test_hazards_and_barriers`、`test_fight_module` |
-| 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | `rules/chase.barrier_hit`、`BARRIER_HP`（室内门/薄围栏 5、后门 10、外门 15、砖墙 25、大树 50、桥墩 100）；模组路线按耐久表写 `hp`（自带模组已写，`check` 提醒没写的门和墙） | 符合（规则层与模组数据）；接入待 WP-D | `test_rules_chase`、`test_fight_module` |
-| 追逐中的攻击 | 116 | 只能打同一地点的目标（有枪除外）；花 1 行动点；受每轮攻击次数限制；按普通战斗处理；无论剩不剩行动点，被攻击时总能应对 | `rules/chase.attack_problems`：同一地点（有枪除外）、1 行动点、每轮攻击次数上限；被攻击时总能应对。旧引擎里选开枪仍会变成奔跑 | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
-| 追逐中的战技 | 116 | 成功则目标如同险境失败：失去 1D3 行动点，可能受伤；或照战斗中的战技目的生效 | `ChaseRules.maneuver_loss` 1D3，按险境失败结算（`hazard`） | 符合（规则层）；接入待 WP-D | `test_rules_chase` |
-| 择路而逃 | 117 | 逃离者可选岔路，守秘人应常给岔路 | 模组路线有岔路和出口（`links`、`exit`），各地点的路线按段 id 连成一张图、段落在真实地点里（`place`；自带模组已写，`graph.route_edges`）；引擎仍走一条直线 | 未做（数据已备） | 重构 WP-D；`test_fight_module` |
-| 随机险境 | 117 | 1D100：60+ 普通，85+ 困难，96+ 极难 | `rules/chase.random_hazard` | 符合（规则层，可选） | `test_rules_chase` |
+| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `chase._cross`：选项里有「小心……」（多花 1 点）；失败失去 1D3、受模组写的伤害（读不了的伤害式只记一笔），仍然过去 | 符合 | `test_a_hazard_failed_costs_1d3_points…`、`test_world_life::test_a_chase_hazard_with_unreadable_harm…` |
+| 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `RoundBudget.owed`，下一轮开始先扣 | 符合 | `test_a_hazard_failed_costs_1d3_points_and_what_this_round_cannot_pay…` |
+| 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | 每种办法一个选项；失败停在原处；可打开的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定） | 符合 | `test_a_broken_barrier_stays_broken_for_those_behind` |
+| 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | 有耐久的路障多一个「砸开」：不掷攻击骰，按手里最好的近战武器掷伤害抵耐久，砸开后通行；残骸不另成险境 | 简化（残骸） | `test_rules_chase` |
+| 追逐中的攻击 | 116 | 只能打同一地点的目标（有枪除外）；花 1 行动点；受每轮攻击次数限制；按普通战斗处理；被攻击时总能应对 | 按战斗的单元结算（应对、伤害同战斗）；不在同一处的近战不出手并说明；花 1 行动点 | 符合 | `test_a_quarry_that_drops_is_not_counted_as_escaped` |
+| 追逐中的战技 | 116 | 成功则目标如同险境失败：失去 1D3 行动点，可能受伤；或照战斗中的战技目的生效 | 推倒类：失去 1D3 行动点；缴械、夺取、制住照战斗生效，制住即转为战斗 | 符合 | — |
+| 择路而逃 | 117 | 逃离者可选岔路，守秘人应常给岔路 | 地图有岔路和出口；选项列出相邻的每一处；守秘人的人按安排去它要去的地方 | 符合 | `test_a_keeper_quarry_that_reaches_its_way_out…` |
+| 随机险境 | 117 | 1D100：60+ 普通，85+ 困难，96+ 极难 | `rules/chase.random_hazard`；引擎不自动放 | 未做（可选） | `test_rules_chase` |
 | 突发险境 | 117–118 | 团体幸运检定，玩家与守秘人轮流放置 | 无 | 未做（可选） | — |
-| 跟丢 | 119 | 守秘人判定在哪里跟丢：例如逃出视线后追逐者过追踪检定 | `rules/chase.out_of_sight`、`lost_track`：领先两个地点以上或隔着挡视线的地点（项目设定 `sight_gap`）后，追逐者过追踪（或侦查），失败就跟丢 | 简化（规则层）；接入待 WP-D | `test_rules_chase::test_hiding_and_losing_track` |
-| 躲藏 | 119 | **任何时候**都可尝试；潜行难度视情况，领先多可给奖励骰；追逐者侦查不成功则逃脱 | `rules/chase.hide_difficulty`、`hide_bonus`、`hidden`：任何时候；潜行难度按追逐者侦查定，领先多给奖励骰（项目设定 `hide_far`） | 符合（规则层）；旧引擎仍要领先两段 | 同上 |
-| 追逐中开枪 | 120 | 停下射击：花 1 行动点不前进，按战斗轮射击；边跑边射：射击加一颗惩罚骰，不花行动点 | `rules/chase.shot_cost`：停下 1 行动点不前进；边跑边射一颗惩罚骰不花行动点（`firearms.Shot.moving`） | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_attacks_and_shots…` |
-| 另一种方式处理地点 | 120 | 玩家可以用意料之外的方式利用地点（改去开门等） | 交给裁定员 | 简化 | 重构 |
-| 中途加入 | 120 | 做速度检定后放到合适地点；比最慢逃离者还慢的追逐者可忽略；重算行动点 | `rules/chase.joins`：比最慢逃离者还慢的追逐者忽略；之后按新的最慢者重算行动点 | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_monsters_joiners…` |
-| 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`：无数据按 MOV 一半 | 符合（规则层） | 同上 |
-| 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | `rules/chase.CREATED`：闩门 1 行动点免检定、锁匠锁门一整轮加检定、推重物挡门力量加 1 行动点、掀摊子 1 行动点、开枪惊散人群幸运、喊人帮忙话术或恐吓 | 符合（规则层）；接入待 WP-D | 同上 |
-| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做） | 简化 | — |
-| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | `rules/chase.monster_skill`：擅长用敏捷，平常一半，不擅长五分之一 | 符合（规则层）；`engine/encounter/profiles` 读怪物卡，缺的技能用技能表基础值，读不懂的特性列进 `unread`；按擅长程度折算接入待 WP-C/D | `test_combatant_profiles` |
-| 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement` | 符合（规则层）；接入待 WP-D | `test_rules_chase::test_placing_three_cultists…` |
+| 跟丢 | 119 | 守秘人判定在哪里跟丢：例如逃出视线后追逐者过追踪检定 | 轮末逃出视线（领先三个地点以上，项目设定 `sight_gap`；或隔着挡视线的地点、关着的路障）时追兵过追踪或侦查（取高），失败跟丢；跟丢的人不能追、不能打 | 简化（视线的远近） | `test_a_round_runs_through_the_graph_and_losing_sight…`、`test_encounter_perception::test_someone_lost_in_a_chase…` |
+| 躲藏 | 119 | **任何时候**都可尝试；潜行难度视情况，领先多可给奖励骰；追逐者侦查不成功则逃脱 | 任何时候；难度按追兵最好的侦查定，领先两处一颗、三处以上两颗奖励骰（项目设定 `hide_far`）；成功则所有追兵跟丢，用掉这一轮 | 符合 | `test_hiding_far_ahead_gets_a_bonus_die…`、`test_fight::test_a_chase_begins_on_the_map_and_hiding_ends_it` |
+| 追逐中开枪 | 120 | 停下射击：花 1 行动点不前进，按战斗轮射击；边跑边射：射击加一颗惩罚骰，不花行动点 | 「停下射击」花 1 点；声明了去处的射击是边跑边射（惩罚骰），射完照跑；其余修正同战斗 | 符合 | `test_shooting_in_a_chase_shoots_and_costs_a_point…`、`test_firing_on_the_move…` |
+| 另一种方式处理地点 | 120 | 玩家可以用意料之外的方式利用地点（改去开门等） | 交裁定员；成功时障碍的变化（打开、堵上、毁掉）落在地图上 | 符合 | `test_something_else_in_a_chase_is_ruled_and_lands_on_the_way` |
+| 中途加入 | 120 | 做速度检定后放到合适地点；比最慢逃离者还慢的追逐者可忽略；重算行动点 | 在场但不在追的人留在原处，跑起来就算加入，速度开始时已掷；行动点每轮按当时最慢的跑者重算 | 简化（加入者不另摆位置） | — |
+| 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`；引擎不换 | 未做（规则层有） | `test_rules_chase` |
+| 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | 「设路障」：力量检定加 1 行动点，成功在所在地点放一道路障（推开或翻过）；其他交裁定员 | 简化 | `test_a_hazard_failed_costs…` |
+| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…` |
+| 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
+| 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement`，在地图上沿逃离方向摆 | 符合 | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
+| 追上与转为战斗 | 116 | 追上只是到了同一地点，按战斗处理冲突 | 到同一处是接触不是抓住；有人回身迎战、逃离者被制住或倒在追兵面前，且其余人都在一处之内，转为战斗，伤势、弹药、速度、后果都保留 | 符合 | `test_turning_to_fight_where_they_meet…`、`test_switches_keep_wounds_speeds…` |
+| 追逐的终点 | — | 跑到哪里就在哪里 | 守秘人的人移到跑到的地点（经效果接口），调查员一行到达玩家落脚的地点 | 符合 | `test_the_route_end_moves_the_world…`、`test_a_keeper_quarry_that_reaches_its_way_out…` |
 | 载具 | 115–123 | 猛踩油门、乘客、交通事故、载具速度表 | 无 | 未做 | 以后 |
 
 ## 怎么用这张表
 
 - 改规则代码时同步改这张表的「当前」「状态」「测试」三栏。
 - 测试名写进「测试」栏；状态写「符合」的条目必须有测试。
-- 规则书没写、引擎自己定的数值（例如追逐里的 `LOST`），在代码里标「待核验」或「项目简化」，并在这里列为「简化」。
+- 规则书没写、引擎自己定的数值（例如追逐里的 `sight_gap`），在 `ChaseRules` 里标 `verified=False` 并写明项目设定，在这里列为「简化」。

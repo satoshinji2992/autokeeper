@@ -1,4 +1,4 @@
-"""A fight and a chase on the stage (engine/fighting.py runs them; these only show them).
+"""A fight and a chase on the stage (engine/encounter runs them; these only show them).
 
 Both take the stage in place of the scene (Arena): a picture (Canvas) and a column beside it.
 
@@ -37,7 +37,6 @@ from textual.widgets import Static
 
 from ... import atmosphere, imagery
 from ...module.schema import Module
-from ...rules.chase import LOST, SIGHT
 from ...rules.combat import STANCES
 from .panels import rich_content
 
@@ -640,13 +639,11 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
     out.append(status, style=f"bold {'reverse ' if gap <= 0 and blink % 2 else ''}{hot}")
     out.append("\n")
     if 0 <= gap < 9:
-        need = LOST - gap
         if fleeing:
-            goal = f"再领先 {need} 段即可脱离" if need > 0 else "本轮结束时即可脱离"
-            goal += " · 可躲藏" if gap >= SIGHT else ""
+            goal = "到出口或甩掉追兵即脱离" + (" · 随时可躲藏" if width >= 40 else "")
         else:
-            goal = "追至同一段即进入战斗" if gap <= 1 else f"对方再领先 {max(0, need)} 段即脱离"
-        out.append(goal + "\n", style=SAFE if fleeing and gap >= SIGHT else ASH)
+            goal = "已在同一处，可以动手" if gap <= 0 else "追至同一处才能近身攻击"
+        out.append(goal + "\n", style=SAFE if fleeing and gap >= 2 else ASH)
     else:
         out.append("\n")
     out.append("─" * width + "\n", style=DEEP)
@@ -661,8 +658,8 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
             lo += 1
         else:
             hi -= 1
-    if legs and hi == len(legs) - 1:  # the end of the way is in sight
-        out.append("   ⇡ 跑出此路线即可脱离\n" if fleeing else "   ⇡ 对方跑出此路线即脱离\n", style=SAFE if fleeing else MIST)
+    if legs and hi == len(legs) - 1 and legs[-1].get("exit", True):  # the way out is in sight
+        out.append("   ⇡ 跑到出口即可脱离\n" if fleeing else "   ⇡ 对方跑到出口即脱离\n", style=SAFE if fleeing else MIST)
     else:
         out.append("   ⋯ 前方：尚未看清\n", style=MIST)
     for i in range(hi, lo - 1, -1):
@@ -695,8 +692,10 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                 tag, tag_style = f"▢ {ob['what']}", ASH
             else:
                 hard = "" if ob.get("difficulty", "常规") == "常规" else ob["difficulty"][:1]
-                tag = f"{'▦' if ob['kind'] == 'barrier' else '⚠'}{ob['skill']}{hard}{ob.get('harm') or ''}"
+                tag = f"{'▦' if ob['kind'] == 'barrier' else '⚠'}{ob['skill']}{hard}"
                 tag_style = f"bold {BLOOD}" if ob["kind"] == "barrier" else AMBER
+        elif leg.get("exit"):
+            tag, tag_style = "⇡ 出口", SAFE
         else:
             tag, tag_style = "", ASH
         row.append_text(cell_text(tag, tag_w, tag_style))
@@ -716,7 +715,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                                   f"bold {AMBER if mine else BLOOD}"))
         out.append(f" 速度 {r['speed']}", style=BONE)
         if r.get("actions"):
-            out.append(f" · 每轮跑 {r['actions']} 段", style=ASH)
+            out.append(f" · 行动点 {r['actions']}", style=ASH)
         if r["status"] in DOWN:
             out.append(f" · {r['status']}", style=f"bold {GORE}")
     return out

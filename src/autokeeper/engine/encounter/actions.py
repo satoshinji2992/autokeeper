@@ -31,7 +31,7 @@ LIGHTS = ("手电", "火把", "火炬", "油灯", "提灯", "马灯", "煤油灯
 VERBS = {"attack": "攻击", "shoot": "射击", "maneuver": "战技", "aid": "急救", "reload": "装填", "unjam": "排除故障",
          "ready": "拿出武器", "defend": "防守", "flee": "逃跑", "pursue": "追赶", "move": "奔跑", "cross": "越过障碍",
          "hide": "躲藏", "aim": "瞄准", "barrier": "设置障碍", "help": "协助", "speak": "喊话", "surrender": "投降", "stand": "回身迎战",
-         "use": "使用", "other": "其他"}
+         "use": "使用", "other": "其他", "delay": "推迟"}
 REACT_WORDS = {"dodge": "闪避", "fight_back": "反击", "cover": "找掩护", "none": "不应对"}
 UNARMED_ID = "natural:徒手"
 
@@ -110,9 +110,9 @@ class Ctx:
     def hidden_from(self, watcher: str, pid: str) -> str:
         """Why `watcher` cannot perceive `pid` now ("" when it can). The keeper sees all; an NPC only
         what is in front of it (guide #25): gone from the scene, hidden behind full cover (a hide that
-        worked, a position the keeper declared), out of sight in the old chase (hid, or ran out of
-        sight), lost in a chase, or the dark (a place lit only by torches, or fog) when they are not
-        close to it and carry no light."""
+        worked, a position the keeper declared), lost in a chase (it hid, or ran out of sight and its
+        trail was lost), or the dark (a place lit only by torches, or fog) when they are not close to it
+        and carry no light."""
         p = self.p(pid)
         if p is None:
             return "不在这场遭遇里"
@@ -122,9 +122,6 @@ class Ctx:
             return ""  # one's own side is known where it is
         if any(c.who == pid and not c.partial for c in self.enc.scene.cover):
             return "藏在掩体后面，看不见"
-        ch = self.game.state.chase
-        if ch is not None and pid in ch.hidden:
-            return "躲起来了，看不见"
         if self.enc.chase is not None and f"{watcher}|{pid}" in self.enc.chase.lost_sight:
             return "已经跟丢了"
         prof = getattr(self.view(watcher), "profile", None)
@@ -243,6 +240,8 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
     held = ctx.held_by(actor)
     if ctx.enc.mode == "fight" and d.do in CHASE_ONLY:
         return [f"{d.do} 只在追逐中用"]
+    if d.after and (d.after == actor or ctx.p(d.after) is None):
+        out.append(f"after 里的 {d.after} 不是这场遭遇里的另一个人")
     if d.do in ATTACKING:
         if not d.attacks:
             return [f"{actor} 的 {d.do} 没写 attacks（打谁）"]
@@ -270,10 +269,31 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
     elif d.do == "flee":
         if held:
             out.append(f"{actor} 被 {held} 制住了，逃不掉")
+    elif d.do == "pursue" and ctx.enc.chase is not None:
+        ch = ctx.enc.chase
+        p = ctx.p(d.target)
+        if held:
+            out.append(f"{actor} 被 {held} 制住了，跑不了")
+        if p is None or d.target not in ch.quarry or p.presence != "in":
+            out.append(f"{d.target or '（没写对象）'} 不是还在跑的人（在逃的：{'、'.join(ch.quarry) or '无'}）")
+        elif why := ctx.hidden_from(actor, d.target):
+            out.append(f"{actor} 追不了 {d.target}：{why}")
+        for pick in d.attacks:
+            out += _pick(ctx, actor, v, pick, d.model_copy(update={"do": "attack"}), takes or [])
     elif d.do == "pursue":
         p = ctx.p(d.target)
         if p is None or p.presence != "fled":
             out.append(f"{d.target or '（没写对象）'} 没有在逃")
+    elif d.do in ("move", "cross") and ctx.enc.chase is not None:
+        out += _route(ctx, actor, d, held)
+    elif d.do == "stand" and ctx.enc.chase is not None:
+        from .chase import at
+        from .site import distance
+
+        near = [x for x in ctx.foes(actor) if (n := distance(ctx.enc.chase.site, at(ctx.enc, actor), at(ctx.enc, x))) is not None
+                and n <= 1]
+        if not near:
+            out.append(f"{actor} 附近没有对手，站住迎战没有对象")
     elif d.do in ("help", "speak", "surrender"):
         if d.target and ctx.p(d.target) is None:
             out.append(f"{d.target} 不在这场遭遇里")
@@ -282,6 +302,48 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
     elif d.do == "use":
         if not d.target:
             out.append(f"{actor} 的 use 没写用什么（target）")
+    return out
+
+
+def _route(ctx: Ctx, actor: str, d: DeclaredAction, held: str) -> list[str]:
+    """What a run in a chase lacks: somewhere on the site to run to, a way there, not held fast."""
+    from . import site
+
+    ch = ctx.enc.chase
+    assert ch is not None
+    out = [f"{actor} 被 {held} 制住了，跑不了"] if held else []
+    if d.do == "cross":
+        if not any(d.target in (n.obstacle, n.id) and n.obstacle for n in ch.site.nodes):
+            out.append(f"{d.target or '（没写对象）'} 不是路线上的障碍（障碍：{'、'.join(ch.site.obstacles) or '无'}）")
+        return out
+    if d.to in ("", "away"):
+        return out
+    nodes = [n.id for n in ch.site.nodes if d.to in (n.id, n.place)]
+    if not nodes:
+        out.append(f"{d.to} 不是追逐路线上的节点（节点：{'、'.join(n.id for n in ch.site.nodes)}）")
+    elif not any(site.path(ch.site, ctx.p(actor).node, x) for x in nodes):  # type: ignore[union-attr]
+        out.append(f"从 {actor} 那里到不了 {d.to}")
+    if d.method and not any(d.method == m.id for o in ch.site.obstacles.values() for m in o.methods):
+        out.append(f"{d.method} 不是路线上哪个障碍的办法")
+    return out
+
+
+def out_of_reach(ctx: Ctx, actor: str, d: DeclaredAction) -> list[str]:
+    """In a chase, what keeps an attack from being made at the slot now (p. 116): a blow only at the
+    same location; and an action point it costs. [] outside a chase."""
+    if ctx.enc.mode != "chase" or ctx.enc.chase is None or not (d.do in ATTACKING or (d.do == "pursue" and d.attacks)):
+        return []
+    from .chase import at, points
+
+    out = []
+    v = ctx.view(actor)
+    for pick in d.attacks:
+        opt = option(v, pick.with_, "attack" if d.do == "pursue" else d.do) if v is not None else None
+        ranged = opt is not None and (opt.firearm or opt.skill == "投掷")
+        if not ranged and at(ctx.enc, actor) != at(ctx.enc, pick.target):
+            out.append(f"{{{pick.target}}}不在同一个地点，够不着")
+    if points(ctx.enc, actor) < 1 and not (d.do == "shoot" and d.to):
+        out.append("这一轮的行动点用完了")
     return out
 
 
@@ -347,4 +409,4 @@ def skill_of(opt: AttackOption, do: str) -> str:
     return BRAWL if do == "maneuver" else opt.skill
 
 
-__all__ = ["ATTACKING", "REACT_WORDS", "VERBS", "Ctx", "best_melee", "option", "picks", "preconditions"]
+__all__ = ["ATTACKING", "REACT_WORDS", "VERBS", "Ctx", "best_melee", "option", "out_of_reach", "picks", "preconditions"]

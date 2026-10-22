@@ -22,7 +22,7 @@ lacks and leaves what it has:
     prelude     开局演出    a few pictures and lines on the story's background, played before the
                             game screen while the director adapts (module/prelude.py); it reads
                             only what the players are told, never the keeper's book
-    combat      战斗与追逐  what a fight and a chase read of the module (engine/combat.py): what the players
+    combat      战斗与追逐  what a fight and a chase read of the module (engine/encounter): what the players
                             call each creature (Creature.called), creature sheets the rules can use
                             (hit points, DEX, attacks, the traits of their notes), sheets
                             for the NPCs who fight, a chase route for the places a chase is likely
@@ -57,7 +57,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from .. import config
-from ..engine import combat as battle
+from ..engine.encounter import profiles
 from ..harness import Session
 from ..rules import dice_expr
 from ..rules.chase import Leg
@@ -490,14 +490,14 @@ def _violent(m: Module) -> list[str]:
 
 
 def _unfit(m: Module) -> list[str]:
-    """The creatures a fight cannot read whole (engine/combat.from_creature): no hit points or DEX,
+    """The creatures a fight cannot read whole (engine/encounter/profiles): no hit points or DEX,
     no attack the rules read. A swarm with no sheet needs neither: it fights as one."""
     out = []
     for c in m.creatures:
-        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+        if profiles.SWARM.search(c.notes + c.description) and not c.stats:
             continue
         s = stats_of(c.stats)
-        natural = any(w in k for k in s for w in battle.NATURAL)
+        natural = any(w in k for k in s for w in profiles.NATURAL)
         if "生命" not in s or "敏捷" not in s or not (natural or any(parse_attack(x) for x in c.attacks)):
             out.append(c.id)
     return out
@@ -561,15 +561,15 @@ def _armoury(m: Module) -> str:
     unfit, forms = set(_unfit(m)), dict(_forms(m))
     rows = ["\n【战斗与追逐：引擎现在读到的】", "怪物："]
     for c in m.creatures:
-        f = battle.from_creature(c)
+        f = profiles.of_creature(c)
         whose = (f"；是 NPC {c.npc} 打起来的样子" if c.npc else f"；名字里有 NPC {forms[c.id]} 的名字，是他变的就写 npc" if c.id in forms else "")
         whose += "" if c.pursues is None else f"；pursues {'true' if c.pursues else 'false'}"
-        if battle.SWARM.search(c.notes + c.description) and not c.stats:
+        if profiles.SWARM.search(c.notes + c.description) and not c.stats:
             rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}{whose}）：成群，整群当一个对手打，不用写 stats。{_clip(c.description, 80)}")
             continue
         read = "、".join(f"{a.name} {a.value}%（{a.damage}）" for a in f.attacks)
         rows.append(f"- {c.id} {c.name}（called {c.called or '缺'}{whose}）：{_clip(c.description, 80)}\n  stats {c.stats or '空'}；attacks {c.attacks or '空'}；"
-                    f"notes {c.notes.strip() or '空'}\n  引擎读到：生命 {f.hp_max}、敏捷 {f.dex}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
+                    f"notes {c.notes.strip() or '空'}\n  引擎读到：生命 {f.hp_max}、敏捷 {f.chars.get("敏捷", 50)}，攻击 {read}" + ("；还缺" if c.id in unfit else ""))
     if not m.creatures:
         rows.append("- 没有")
     rows.append("NPC 的战斗数值：")
@@ -845,8 +845,8 @@ def _signs(m: Module, out: Signs) -> list[tuple[Any, ...]]:
 
 def _marks(notes: str) -> set[str]:
     """What the rules make of a creature's notes: its traits, letting the runners go, a swarm."""
-    return set(traits(notes)) | ({"lets_go"} if battle.LETS_GO.search(notes) else set()) | (
-        {"swarm"} if battle.SWARM.search(notes) else set())
+    return set(traits(notes)) | ({"lets_go"} if profiles.LETS_GO.search(notes) else set()) | (
+        {"swarm"} if profiles.SWARM.search(notes) else set())
 
 
 def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
@@ -871,7 +871,7 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
         called = x.called.strip()
         if called and not c.called.strip() and c.name not in called and len(called) <= 20:  # what it is stays the keeper's
             found.append(("put", "creatures", c.id, "called", called))
-        swarm = bool(battle.SWARM.search(c.notes + c.description)) and not c.stats
+        swarm = bool(profiles.SWARM.search(c.notes + c.description)) and not c.stats
         if x.npc and not c.npc and not swarm and x.npc in npcs and x.npc not in forms:  # one person, one life: one sheet each
             forms.add(x.npc)
             found.append(("put", "creatures", c.id, "npc", x.npc))
@@ -968,7 +968,7 @@ def _route(m: Module, legs: list[Leg], places: dict[str, Any]) -> list[dict[str,
             if not known_skill(ob.skill) or (ob.harm and not dice_expr.valid(ob.harm)):
                 ob = None  # one the rules cannot cross is no obstacle
             else:
-                ob = ob.model_copy(update={"methods": methods, "hp": ob.hp if ob.kind == "barrier" else None, "open": False})
+                ob = ob.model_copy(update={"methods": methods, "hp": ob.hp if ob.kind == "barrier" else None})
             update["obstacle"] = ob
         out.append(leg.model_copy(update=update).model_dump(mode="json", exclude_defaults=True))
     return out

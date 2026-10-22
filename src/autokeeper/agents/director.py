@@ -28,9 +28,8 @@ from .writing import INTERFACE_COPY
 # have not met, make an NPC important and give it a plan, arrange what happens at an hour.
 WorldOp = Annotated[Rewrite | Enlist | SetPlan | Schedule | Relate | Learn | Occur | Move | Condition, Field(discriminator="kind")]
 
-# 推进 (a lead for a stuck party) is no longer asked for: a stall offers the Idea roll instead
-# (Game._nudge). It stays for the plans old saves keep (GameState.improv).
-Kind = Literal["开局改编", "展开", "后果", "推进", "千钧一发"]
+# A stall offers the Idea roll (Game._nudge); the director is not asked for a lead.
+Kind = Literal["开局改编", "展开", "后果", "千钧一发"]
 
 
 class NewFlag(BaseModel):
@@ -129,7 +128,7 @@ class NewArc(BaseModel):
 
 
 class Improv(BaseModel):
-    kind: Literal["开局改编", "展开", "后果", "推进", "千钧一发", "不需要"]
+    kind: Literal["开局改编", "展开", "后果", "千钧一发", "不需要"]
     reason: str = Field(description="为什么这样安排，玩家看不到")
     flags: list[NewFlag] = Field(default_factory=list)
     locations: list[NewLocation] = Field(default_factory=list)

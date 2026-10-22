@@ -77,7 +77,7 @@ def reached(work: Path, key: str) -> int:
     return STAGES.index(done["stage"]) + 1
 VISION = "你是跑团模组整理员的读图助手。看图，用简体中文如实回答问题；看不清的地方直说。"
 
-# What a fight and a chase read of a module (engine/combat.py, engine/fighting.py), for the brief.
+# What a fight and a chase read of a module (engine/encounter), for the brief.
 FIGHTS = """- 战斗和追逐由引擎按 CoC 7 版规则一轮一轮结算，不用插件；数值从模组里读，照 _example/schema.json 里这几个字段的写法写：
   - creatures：called 写调查员还不知道它是什么时的叫法，只写看得见的样子（“墓地里的黑影”“披着人皮的东西”），不写学名、真名和剧情真相，屏幕上给玩家看的是它；
     stats 写战斗数值（生命、敏捷一定要有，还有力量、体质、体型、闪避、移动），原文的数值照抄，原文没写的按 CoC 7 版规则书里同类怪物的数值；

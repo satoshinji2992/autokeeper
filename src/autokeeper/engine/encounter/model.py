@@ -182,6 +182,7 @@ class ActionReceipt(BaseModel):
     lines: list[str] = Field(default_factory=list)  # keeper-form lines with {id} refs, rendered per audience
     settled: int = 0  # attacks of `declared` settled so far (a multi-attack creature makes them all on its slot)
     prompted: bool = False  # the player throwing their own dice was shown the roll before its first die
+    moved: bool = False  # a chase: its running is done (before its attack, or after it)
 
 
 # -- a choice a player is being asked ------------------------------------------------------------

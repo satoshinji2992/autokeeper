@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import pytest
 
-from autokeeper.engine import combat as battle
 from autokeeper.engine.encounter import plan_check, views
 from autokeeper.engine.encounter.model import Engagement
 from autokeeper.engine.encounter.plan import CoverNote, DeclaredAction, Distance, EncounterStart, EncounterTurnPlan
@@ -85,11 +84,18 @@ async def test_the_dark_hides_whoever_carries_no_light_but_not_from_a_creature(m
     assert landed.npcs  # it hunts in the dark
 
 
-async def test_someone_hidden_in_the_old_chase_cannot_be_gone_after(module, fake):
-    game, _, _ = await started(module, fake)
-    me, warden = battle.from_investigator(game.state.investigator), battle.from_npc(module.npc("warden"))
-    game.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party", hidden=[me.id])
-    assert refused(game) and "躲起来了" in refused(game)[0]
+async def test_someone_lost_in_a_chase_cannot_be_gone_after(module, fake):
+    """A pursuer that lost sight of its quarry (a hide that worked, a trail lost) cannot pursue or strike it."""
+    from autokeeper.module.schema import Event
+
+    game, _, _ = fight_game(module, fake, location="office")
+    fake.queue(40, 40)
+    await game._fire(Event(id="e_run", title="追", when="flag:x", text="", chase=["warden"]), Turn())
+    chase = game.state.encounter.chase
+    plan = EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(do="pursue", target="zhouheng", summary="追"))], pace=15)
+    assert not plan_check.land(game, plan, act=False).unsettled
+    chase.lost_sight.append("warden|zhouheng")
+    assert any("跟丢了" in p for p in plan_check.land(game, plan, act=False).unsettled)
 
 
 async def test_what_an_npc_was_told_of_someone_is_in_the_brief(module, fake):

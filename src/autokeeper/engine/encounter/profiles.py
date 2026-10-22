@@ -37,6 +37,7 @@ BEAST = {"力量": 60, "体质": 60, "体型": 60, "敏捷": 50}  # a creature s
 CHARS = ("力量", "体质", "体型", "敏捷", "意志", "智力", "外貌", "教育", "幸运")
 NATURAL = ("爪", "咬", "撕", "抓", "踢", "触手", "刺", "撞", "角", "獠牙", "拳")  # a sheet's own attacks
 SWARM = re.compile(r"数量多|成群|几十|一大群|无法对抗|蜂拥")
+LETS_GO = re.compile(r"不追|不会追|任其离开|放他们走")  # a creature's notes: it does not go after those who run
 # Words in a creature's notes that name a rule; a clause with one the engine does not read is unread.
 _RULEISH = re.compile(r"免疫|抗性|法术|咒语|施法|飞行|隐身|隐形|毒|吸血|魔法|不受|无视|穿透|只能被|只有.{0,6}才能|再生|复活|变形|附身|催眠|麻痹")
 _READ = re.compile(r"护甲|减半|恢复|回复|愈合|打晕|击晕|伤害加[值成]|体格|移动|MOV|成群|几十|无法对抗|不追|不会追|每(?:轮|回合)")
@@ -136,15 +137,26 @@ def profile(w: World, ident: str) -> CombatProfile | None:
     ent = w.rec.entities.get(who)
     fills = dict(ent.fills) if ent is not None else {}
     if creature is not None:
-        p = _from_creature(w, creature, fills)
+        p = _from_creature(creature, fills)
         if npc is not None:  # its form: the NPC's id, life and place; its name for the keeper
             p.id, p.kind, p.called = npc.id, "npc", creature.called or npc.called
             p.preset = npc.status
     else:
         assert npc is not None
-        p = _from_npc(w, npc, fills)
+        held = {e.id: e.name for e in w.rec.entities.values() if e.kind == "item" and e.at == npc.id}
+        p = _from_npc(npc, fills, held)
     _worldly(w, p)
     return p
+
+
+def of_creature(c: Creature) -> CombatProfile:
+    """A creature's sheet as the rules read it, without a game (the module compiler and checker)."""
+    return _from_creature(c, {})
+
+
+def of_npc(npc: NPC, things: list[str] | None = None) -> CombatProfile:
+    """An NPC's sheet as the rules read it, holding `things` (the module's items it owns), without a game."""
+    return _from_npc(npc, {}, {f"{npc.id}:{t}": t for t in things or []})
 
 
 def _apply_fills(s: dict[str, int], fills: dict[str, int]) -> dict[str, int]:
@@ -178,7 +190,7 @@ def _weapon(w: Weapon, value: int, item: str | None) -> AttackProfile:
                          capacity=w.ammo if w.firearm else 0, malfunction=w.malfunction)
 
 
-def _from_npc(w: World, npc: NPC, fills: dict[str, int]) -> CombatProfile:
+def _from_npc(npc: NPC, fills: dict[str, int], held: dict[str, str]) -> CombatProfile:
     """A module NPC as he fights: an empty sheet is an ordinary person's numbers; what he carries is
     what the record has him hold, and what his look says he carries."""
     s = _apply_fills({**HUMAN, **stats_of(npc.stats)}, fills)
@@ -191,11 +203,10 @@ def _from_npc(w: World, npc: NPC, fills: dict[str, int]) -> CombatProfile:
             unread_lines.append(f"攻击“{line}”：{why}")
         if (a := _written(npc.id, line, creature=False)) is not None:
             attacks.append(a)
-    held = {e.id: e for e in w.rec.entities.values() if e.kind == "item" and e.at == npc.id}
-    for weapon in carried([*(e.name for e in held.values()), npc.look]):
+    for weapon in carried([*held.values(), npc.look]):
         if any(a.name == weapon.name for a in attacks):
             continue
-        item = next((i for i, e in held.items() if weapon_in(e.name) is weapon), f"{npc.id}:{weapon.name}")
+        item = next((i for i, name in held.items() if weapon_in(name) is weapon), f"{npc.id}:{weapon.name}")
         value = s.get(weapon.skill) or (fighting if weapon.melee else s.get(canonical(weapon.skill)) or base_value(weapon.skill, s))
         attacks.append(_weapon(weapon, value, item))
     return CombatProfile(id=npc.id, kind="npc", name=npc.name, called=getattr(npc, "called", ""), sheet=f"npc:{npc.id}",
@@ -208,7 +219,7 @@ def _from_npc(w: World, npc: NPC, fills: dict[str, int]) -> CombatProfile:
                          unread=unread_lines)
 
 
-def _from_creature(w: World, c: Creature, fills: dict[str, int]) -> CombatProfile:
+def _from_creature(c: Creature, fills: dict[str, int]) -> CombatProfile:
     """A creature as it fights: its sheet's numbers, its attacks as written, what its notes say the
     rules can use (rules/combat.traits). A swarm (几十只, 无法对抗) fights as one, hard to put down."""
     s = _apply_fills(stats_of(c.stats), fills)

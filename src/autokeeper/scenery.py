@@ -1,6 +1,5 @@
 """What sort of place a place is, from its name and its description: an office, a study, a cellar,
-a shop, a bedroom; a street, a graveyard, a church, a station, water, woods, hills, fields. A
-chase with no route of its own runs along one for its kind (engine/combat.default_track), and an
+a shop, a bedroom; a street, a graveyard, a church, a station, water, woods, hills, fields. An
 indoor place keeps the rain and snow of the module's outside pictures off its own.
 
 Places, people, things and creatures with no picture of their own get a photo or a drawing

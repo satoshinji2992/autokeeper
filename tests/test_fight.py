@@ -1,5 +1,5 @@
-"""Fights and chases as the game runs them (engine/encounter; chases still on engine/fighting.py), through
-the turn graph, and the stage the screens draw them on."""
+"""Fights and chases as the game runs them (engine/encounter), through the turn graph, and the stage the
+screens draw them on. A chase's rules in detail: tests/test_encounter_chase.py."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction, Encount
 from autokeeper.module.schema import Creature, Event, Module, Stake
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.chase import Leg, Obstacle
+from autokeeper.tui.widgets.fight import chase_route
 
 from .encounter_kit import THREAD, Keeper, arrange, attack, play
 from .test_engine import make
@@ -110,39 +111,41 @@ async def test_a_quarry_much_faster_is_gone_at_once(module, fake):
     app = turn_graph.build(game, InMemorySaver())
     out, _ = await play(app, "run")
     kinds = [e["type"] for e in out]
-    assert "chase_start" in kinds and "chase_end" in kinds and game.state.chase is None
+    assert "chase_start" in kinds and "chase_end" in kinds and game.state.encounter is None
     assert "got_away" in game.state.flags and game.state.encounter_log[-1].ended.how == "fled"
 
 
-async def test_a_chase_runs_leg_by_leg_and_hiding_ends_it(module, fake):
-    game, cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE, starts=[chased()])
+async def test_a_chase_begins_on_the_map_and_hiding_ends_it(module, fake):
+    """No route written for the tower: the chase runs over the map around it; hiding works at any time
+    (p. 119), and a quarry every pursuer lost has got away."""
+    game, cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE, starts=[chased()],
+                             arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", DeclaredAction(
+                                 do="pursue", target="zhouheng", summary="守钟人追上去"), react="dodge")]))
     app = turn_graph.build(game, InMemorySaver())
-    # speeds 8 and 8; 周衡 (at 2) crosses the crates (闪避, 10); the warden slips on the ice (敏捷 90) and loses 2
-    fake.queue(40, 40, 10, 90).queue_totals(2)
+    fake.queue(40, 40)  # speeds 8 and 8
     await play(app, "run")
-    ch = game.state.chase
-    assert ch is not None and ch.round == 1 and game.state.encounter.mode == "chase"
-    me, warden = ch.get("zhouheng"), ch.get("warden")
-    assert (me.pos, warden.pos) == (3, 1) and warden.name == "楼梯口打盹的老人"  # the name the players know
-    assert any("堆满木箱的后院" in line for line in cast.reports[-1].splitlines())
-    fake.queue(10, 20)  # out of sight: 潜行 hard against 侦查 regular
+    enc = game.state.encounter
+    assert enc.mode == "chase" and enc.chase.site.source == "location_graph"
+    assert [n.id for n in enc.chase.site.nodes] == ["tower", "square", "office"] and enc.chase.site.nodes[-1].exit
+    assert any(label == "躲藏" for label, _note in views.table(game)["choices"]["zhouheng"]["run"])
+    fake.queue(10)  # 潜行 against the warden's Spot Hidden (25: regular)
     out, _ = await play(app, "躲藏", thread={**THREAD, "configurable": {"thread_id": "c2"}})
-    assert game.state.chase is None and any(e["type"] == "chase_end" and e["end"] == "escaped" for e in out)
+    assert any(e["type"] == "chase_end" and e["end"] == "fled" for e in out)
     assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "fled"
+    assert "躲了起来" in cast.reports[-1]
 
 
 async def test_words_in_a_chase_are_the_keeper_plans_never_parsed(module, fake):
     """The review: in a chase, 打 at the start of the words turned to fight."""
     door = EncounterTurnPlan(action=DeclaredAction(do="other", summary="周衡想推开路边的门躲进去"))
     game, cast, _ = fighters(module, fake, {"run": (RUN, Ruling(needs_roll=False))}, hints=CHASE, starts=[chased()], act=door)
+    cast.ruling_for["周衡想推开路边的门躲进去"] = Ruling(needs_roll=False, reason="门没锁")
     app = turn_graph.build(game, InMemorySaver())
-    fake.queue(40, 40, 10, 90).queue_totals(2)
+    fake.queue(40, 40)
     await play(app, "run")
-    fake.queue(90)  # the warden runs on: the ice again
-    fake.queue_totals(1)
     out, _ = await play(app, "打开门躲进去", thread={**THREAD, "configurable": {"thread_id": "c3"}})
-    assert cast.calls[-1][:2] == ("act", "打开门躲进去") and game.state.chase is not None and game.state.encounter.mode == "chase"
-    assert not any(e["type"] == "fight_start" for e in out)
+    assert ("act", "打开门躲进去") in [c[:2] for c in cast.calls] and game.state.encounter.mode == "chase"
+    assert not any(e["type"] == "fight_start" for e in out) and "周衡想推开路边的门躲进去" in cast.reports[-1]
 
 
 # -- what the module scripts: an event's attack, the way a chase from a place runs -------------------
@@ -248,11 +251,11 @@ async def test_a_chase_runs_the_modules_way_from_the_place_or_the_place_it_is_in
     game, _, events = fighters(module, fake, {})
     fake.queue(40, 40)  # both CON regular: speeds 8 and 8, no one gone at once
     await game._fire(hounds, Turn())
-    ch = game.state.chase
-    assert ch is not None and ch.quarry == "party" and [leg.name for leg in ch.track.legs] == [leg.name for leg in STAIRS]
-    assert game.state.encounter is not None and game.state.encounter.mode == "chase"
-    ch.track.legs[3].obstacle.open = True  # what a chase does to its way stays in that chase
-    assert not module.location("square").chase[3].obstacle.open
+    enc = game.state.encounter
+    assert enc is not None and enc.mode == "chase" and enc.chase.site.source == "module"
+    assert [n.name for n in enc.chase.site.nodes] == [leg.name for leg in STAIRS]
+    door = next(o for o in enc.chase.site.obstacles.values() if o.what == "沉重的木门")
+    assert door.state == "intact" and "open" not in module.location("square").chase[3].obstacle.model_dump()  # the chase's own
     assert any(e["type"] == "chase_start" for e in events)
 
 
@@ -266,20 +269,44 @@ async def test_running_from_a_fight_with_someone_after_you_is_the_same_way(modul
     await play(app, "hit")
     fake.queue(40, 40)  # the speeds
     _out, _ = await play(app, "逃跑｜被攻击时闪避", thread={**THREAD, "configurable": {"thread_id": "f2"}})
-    assert game.state.chase is not None and game.state.chase.track.legs[1].name == "又窄又陡的楼梯"
-    assert game.state.encounter.mode == "chase" and game.state.encounter.switches == ["r1:chase"]
+    enc = game.state.encounter
+    assert enc.mode == "chase" and enc.switches == ["r1:chase"] and "又窄又陡的楼梯" in [n.name for n in enc.chase.site.nodes]
+
+
+class Runner:
+    """Someone on a chase's way, as the stage's view names them."""
+
+    def __init__(self, ident: str, name: str, side: str, pos: int = 0, speed: int = 8, actions: int = 1):
+        self.id, self.name, self.side, self.pos, self.speed, self.actions = ident, name, side, pos, speed, actions
+
+    def row(self) -> dict:
+        return {"id": self.id, "name": self.name, "kind": "investigator" if self.side == "party" else "npc", "side": self.side,
+                "pos": self.pos, "speed": self.speed, "actions": self.actions, "status": "", "wound": "无伤", "hidden": False,
+                "hp": 11 if self.side == "party" else None, "hp_max": 11 if self.side == "party" else None, "portrait": ""}
+
+
+WAY = [("墓园小径", None), ("墓碑间的窄道", {"kind": "hazard", "what": "倒伏的墓碑", "skill": "跳跃"}),
+       ("新挖的墓穴", {"kind": "hazard", "what": "敞口的墓穴", "skill": "敏捷"}), ("柏树下", None),
+       ("铁栅栏", {"kind": "barrier", "what": "锈蚀的铁栅栏", "skill": "攀爬"}), ("墓园外的土路", None),
+       ("田埂", {"kind": "hazard", "what": "冻硬的田埂", "skill": "敏捷"}), ("远处的树林", None)]
+
+
+def chase_of(*runners: Runner, round: int = 1, quarry: str = "party") -> dict:
+    """A chase's view as the engine sends it (engine/encounter/chase.view)."""
+    legs = [{"name": n, "look": "", "exit": i == len(WAY) - 1, "obstacle": {**ob, "difficulty": "常规", "open": False} if ob else None}
+            for i, (n, ob) in enumerate(WAY)]
+    return {"round": round, "quarry": quarry, "legs": legs, "runners": [r.row() for r in runners]}
 
 
 def fight_screen(module):
-    from autokeeper.engine import combat as battle
     from autokeeper.engine.game import Game
     from autokeeper.tui.screens.game import GameScreen
 
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="fight-screen")
     state.location, state.prologue, state.turn = "tower", "（开场已讲过）", 3
     state.add("keeper", "钟楼里只有齿轮的声音。")
-    warden = battle.from_npc(module.npc("warden"))  # the old chase's runners, for the chase stage
-    me = battle.from_investigator(state.investigators[0])
+    me = Runner(state.investigators[0].id, state.investigators[0].name, "party", pos=2)
+    warden = Runner("f1", "楼梯口打盹的老人", "foe")
     begun(module, state, ["warden"], round=1)
     return GameScreen(module, state, resume=True), me, warden
 
@@ -306,7 +333,6 @@ HURT = {"type": "fight_act", "round": 1, "attacker": "warden", "attacker_name": 
 @pytest.mark.usefixtures("canned")
 async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, fake):
     from autokeeper import config
-    from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.widgets.fight import Arena, BloodFlash
     from autokeeper.tui.widgets.panels import SceneArt
@@ -352,8 +378,7 @@ async def test_the_stage_shows_the_fight_and_offers_the_rounds_choices(module, f
         await screen.handle({"type": "fight_end", "end": "won", "text": "调查员一方占了上风"})
         await pilot.pause()
         assert not arena.display and not screen.has_class("-fight") and screen.query_one(SceneArt).display
-        await screen.handle({"type": "chase_start", "chase": battle.chase_view(battle.Chase(
-            runners=[me, warden], track=battle.default_track("street"), quarry="party")), "line": "【追逐开始】"})
+        await screen.handle({"type": "chase_start", "chase": chase_of(me, warden), "line": "【追逐开始】"})
         await pilot.pause()
         assert arena.display and arena.mode == "chase" and screen.has_class("-chase")  # the place, and what is behind you in it
         assert not screen.query_one(SceneArt).display and "追逐" in str(arena.query_one(".side").render())
@@ -386,31 +411,44 @@ async def test_a_choice_not_made_in_time_only_defends(module, fake, monkeypatch)
 
 
 def test_a_chase_is_drawn_as_the_way_run_and_in_sight_with_who_is_where(module):
-    from autokeeper.engine import combat as battle
-    from autokeeper.engine.game import Game
-    from autokeeper.tui.widgets.fight import chase_route
-
-    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="route")
-    me, warden = battle.from_investigator(state.investigators[0]), battle.from_npc(module.npc("warden"))
-    me.pos, warden.pos, me.speed, warden.speed, me.actions, warden.actions = 4, 2, 8, 9, 1, 2
-    ch = battle.Chase(runners=[me, warden], track=battle.default_track("graveyard"), quarry="party", round=2)
-    text = chase_route(battle.chase_view(ch), 44, 24, 1, was={me.id: 2, warden.id: 0}).plain
+    me = Runner("zhouheng", "周衡", "party", pos=4, actions=1)
+    warden = Runner("f1", "楼梯口打盹的老人", "foe", pos=2, speed=9, actions=2)
+    view = chase_of(me, warden, round=2)
+    text = chase_route(view, 44, 24, 1, was={me.id: 2, warden.id: 0}).plain
     lines = text.splitlines()
-    legs = [leg.name for leg in ch.track.legs]
+    legs = [n for n, _ in WAY]
     row = {name: next(line for line in lines if name in line) for name in legs[:7]}
-    assert "在身后 2 段" in lines[1] and "再领先 1 段即可脱离" in lines[2] and "可躲藏" in lines[2]
+    assert "在身后 2 段" in lines[1] and "到出口或甩掉追兵即脱离" in lines[2] and "随时可躲藏" in lines[2]
     assert lines.index(row[legs[6]]) < lines.index(row[legs[0]])  # the way ahead at the top
-    assert "◆" in row[legs[4]] and "◉◉" in row[legs[2]] and "老守钟人" in row[legs[2]]
+    assert "◆" in row[legs[4]] and "◉◉" in row[legs[2]] and "楼梯口打盹的老人" in row[legs[2]]
     assert "┆" in row[legs[3]] and "┆" in row[legs[1]]  # run through this round
     assert "▦攀爬" in row[legs[4]] and "⚠敏捷" in row[legs[6]]  # the fence they are at; the next thing in the way
-    # Past the frozen field (the first thing in the way ahead) nothing is known yet: not its name, not
-    # where the way ends; and the stretch where they would lose it is a count, never a name.
-    assert legs[7] not in text and "前方：尚未看清" in lines[4] and "脱离" not in row[legs[5]]
-    assert any("每轮跑 2 段" in line for line in lines)
-    me.pos = 6  # the end of the way in sight
-    assert "跑出此路线即可脱离" in chase_route(battle.chase_view(ch), 44, 24).plain
-    narrow = chase_route(battle.chase_view(ch), 28, 24).plain.splitlines()  # a narrow panel: shorter columns
+    # Past the frozen field (the first thing in the way ahead) nothing is known yet: not its name, not where it ends.
+    assert legs[7] not in text and "前方：尚未看清" in lines[4]
+    assert any("行动点 2" in line for line in lines)
+    me.pos = 6  # the way out in sight
+    assert "跑到出口即可脱离" in chase_route(chase_of(me, warden), 44, 24).plain
+    assert all(cell_len(line) <= 44 for line in chase_route(chase_of(me, warden), 44, 24).plain.splitlines())
+    narrow = chase_route(chase_of(me, warden), 28, 24).plain.splitlines()  # a narrow panel: shorter columns
     assert all(cell_len(line) <= 28 for line in narrow) and any("周衡" in line for line in narrow)
+
+
+async def test_the_chase_view_comes_from_the_site_by_shown_names_with_the_hazards_ahead(module, fake):
+    """The engine's chase as the stage draws it: a straight way through the site from the pursuer to the
+    quarry and on to the way out; the foe by the name the players know, no harm told in advance."""
+    from autokeeper.engine.game import Turn
+
+    game, _, _ = fighters(module, fake, {}, location="office")
+    fake.queue(40, 40)
+    await game._fire(Event(id="e_run", title="守钟人追了上来", when="flag:x", text="", chase=["warden"]), Turn())
+    view = views.chase_view(game)
+    assert [leg["name"] for leg in view["legs"]] == ["档案室", "报社的楼梯", "报社大门", "去广场的街", "雾里的广场"]
+    assert view["legs"][-1]["exit"] and view["legs"][1]["obstacle"]["what"] == "堆着报纸的楼梯"
+    assert "harm" not in view["legs"][1]["obstacle"]
+    who = {r["name"]: r["pos"] for r in view["runners"]}
+    assert who == {"周衡": 2, "楼梯口打盹的老人": 0} and "老守钟人" not in str(view)  # never the keeper's name for him
+    text = chase_route(view, 44, 24).plain
+    assert "楼梯口打盹的老人" in text and "⚠敏捷" in text
 
 
 # -- windows over the fight: only the one in front ever goes (Textual's dismiss pops the top) ---------
@@ -422,7 +460,6 @@ async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_ba
     from PIL import Image
 
     from autokeeper import imagery
-    from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.modals.showcase import ShowcaseScreen
     from autokeeper.tui.widgets.fight import BloodFlash
@@ -435,14 +472,10 @@ async def test_caught_in_a_chase_the_blood_then_its_face_and_the_screen_comes_ba
     module.pictures["face-warden"] = str(face)
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(150, 44)) as pilot:
-        screen, me, warden = fight_screen(module)
-        st = screen.state
-        me.pos = 2
-        st.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party", round=1)
+        screen, _me, _warden = fight_screen(module)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         screen.busy = True  # the round is being settled: the engine ends the chase and starts the fight
-        st.chase = None  # the encounter is a fight again (engine/encounter/runner._chase_closed)
         await screen.handle({"type": "chase_end", "end": "caught", "text": "追逐结束：老守钟人追上了周衡", "hunter": "warden",
                              "hunter_name": "老守钟人", "portrait": "face-warden"})
         await screen.handle({"type": "fight_start", "fight": views.fight_view(screen.game), "line": "【追逐转为战斗】扭打在一起"})
@@ -563,7 +596,7 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
         await pilot.pause(0.1)
         await pilot.press("tab")  # mid-turn: no stance of the fight being settled changes
         assert await until(pilot, lambda: not screen.busy and seen)
-        assert sent == ["我"] and seen == [None] and me.stance == "dodge"  # nothing set by the list's Tab
+        assert sent == ["我"] and seen == [None] and (screen.state.encounter is None or screen.state.encounter.get(me.id).react in (None, "dodge"))
         await pilot.pause(0.2)
         assert not picker.display and not screen._battle_picking  # nothing of the fight's list after it
         await pilot.press("enter")
@@ -600,7 +633,7 @@ async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_
         for _ in range(4):  # Tab does not start it over
             await pilot.pause(0.3)
             await pilot.press("tab")
-        assert len(sent) == 2 and me.stance == "dodge"  # the stance is in the words, not in the fight
+        assert len(sent) == 2 and screen.state.encounter.get(me.id).react in (None, "dodge")  # in the words, not in the fight
         screen._offer_orders()
         await pilot.pause(0.2)
         config.load().battle_timer = False  # 设置: 限时选择 off, with a clock running
@@ -680,7 +713,6 @@ async def test_on_a_small_terminal_the_rounds_list_and_the_box_stay_on_screen(mo
 
 @pytest.mark.usefixtures("canned")
 async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_keeps_its_picture(module, fake):
-    from autokeeper.engine import combat as battle
     from autokeeper.tui.app import AutoKeeperApp
     from autokeeper.tui.widgets.fight import Arena
 
@@ -700,8 +732,7 @@ async def test_a_fight_shrunk_mid_round_fits_its_new_size_and_a_narrow_chase_kee
         assert arena.region.height < 22
         screen.state.encounter, me.pos = None, 2
         await screen.handle({"type": "fight_end", "end": "fled", "text": "调查员逃离了"})
-        screen.state.chase = battle.Chase(runners=[me, warden], track=battle.default_track("street"), quarry="party")
-        await screen.handle({"type": "chase_start", "chase": battle.chase_view(screen.state.chase), "line": "【追逐开始】"})
+        await screen.handle({"type": "chase_start", "chase": chase_of(me, warden), "line": "【追逐开始】"})
         await pilot.resize_terminal(96, 30)  # the right column is up: the route narrows, the picture keeps room
         await pilot.pause(0.5)
         assert arena.canvas.size.width >= 28 and arena.query_one(".side").size.width >= 26
@@ -883,10 +914,44 @@ async def test_a_blow_aimed_at_the_player_is_asked_in_a_window_and_escape_keeps_
         answers: list[str] = []
         app.push_screen(ChoiceModal(offer), answers.append)
         await pilot.pause(0.1)
-        assert [b.label.plain for b in app.screen.query(Button)] == ["闪避", "反击"]
+        assert [b.label.plain for b in app.screen.query(Button)] == ["闪避（原定）", "反击", "按原定"]
         await pilot.click("#o1")
         assert await until(pilot, lambda: answers == ["fight_back"])
         app.push_screen(ChoiceModal(offer), answers.append)
         await pilot.pause(0.1)
         await pilot.press("escape")
         assert await until(pilot, lambda: answers == ["fight_back", "dodge"])  # what they set for the round
+
+
+@pytest.mark.usefixtures("canned")
+async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_when_told_and_counts_down(module, fake):
+    import time
+
+    from textual.widgets import Checkbox, Static
+
+    from autokeeper import config
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.reaction import ChoiceModal
+
+    from .test_tui import until
+
+    offer = {"kind": "reaction", "id": "e1:r1:warden:0:react:0", "who": "zhouheng", "name": "周衡", "ask": "major",
+             "prompt": "楼梯口打盹的老人向你扑来，你怎么应对？", "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避", "note": "闪避 32：成功等级不低于对方就躲开"},
+                         {"id": "fight_back", "label": "反击", "note": "格斗(斗殴) 25：成功等级高于对方就打中对方"}]}
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        answers: list = []
+        app.push_screen(ChoiceModal(offer), answers.append)
+        await pilot.pause(0.2)
+        assert "闪避 32" in "".join(str(w.render()) for w in app.screen.query(Static))
+        app.screen.query_one(Checkbox).value = True  # 每次被攻击都询问
+        await pilot.click("#o1")
+        assert await until(pilot, lambda: answers == [{"choice": "fight_back", "text": "", "ask": "always"}])
+        assert config.ui_settings()["ask_every_blow"] is True  # kept in 设置 too
+        timed = {**offer, "ask": "always", "deadline": time.time() + 0.6}
+        app.push_screen(ChoiceModal(timed), answers.append)
+        await pilot.pause(0.2)
+        assert "超时按原定" in "".join(str(w.render()) for w in app.screen.query(Static))
+        assert await until(pilot, lambda: len(answers) == 2, tries=30)
+        assert answers[1] == "dodge"  # nobody answered in time: what they set for the round

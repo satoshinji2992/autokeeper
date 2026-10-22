@@ -71,7 +71,9 @@ class DeclaredAction(BaseModel):
     target: str = Field("", description=(
         "aid、help、speak、surrender、pursue 的对象 id；use、ready、reload、unjam 的物品 id；cross 的障碍 id；没有留空"))
     to: str = Field("", description="move、flee 往哪去：节点 id，或 away 表示离开现场")
-    method: str = Field("", description="cross 用障碍的哪种办法（办法 id）")
+    method: str = Field("", description="cross、move 遇到障碍时用哪种办法（办法 id）")
+    careful: int = Field(0, ge=0, le=2, description="追逐中过险阻时多花几点行动点换几颗奖励骰（0–2）")
+    after: str = Field("", description="推迟行动：等这个人（id）行动之后再做；不等留空")
     react: Literal["", "dodge", "fight_back", "cover", "none"] = Field("", description=_REACT + "；留空照旧")
     takes: list[Thing] = Field(default_factory=list, max_length=2, description="动手前先拿起的日常物件（屋里的拨火棍）；没有留空")
     speech: str = Field("", max_length=80, description="同时说的话；不说话留空")

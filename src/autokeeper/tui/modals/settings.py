@@ -61,6 +61,7 @@ class SettingsModal(ModalScreen[None]):
                                       ("操作提示", "tips", cfg.tips),
                                       ("大场景", "showcase", cfg.showcase),
                                       ("战斗与追逐限时选择", "battle_timer", cfg.battle_timer),
+                                      ("每次被攻击都询问应对", "ask_every_blow", cfg.ask_every_blow),
                                       ("即兴人物、场景与物品配图", "pictures", cfg.visual_limit > 0),
                                       ("联网搜索与参考配图", "search", cfg.search != "none")):
                 with Horizontal(classes="settings-row"):
@@ -113,7 +114,8 @@ class SettingsModal(ModalScreen[None]):
     @on(Button.Pressed, "#settings-save")
     def keep(self) -> None:
         cfg = config.load()
-        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins", "showcase", "battle_timer")}
+        choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins", "showcase", "battle_timer",
+                                                                                   "ask_every_blow")}
         choice |= {"improv": self.query_one("#settings-improv", Select).value,
                    "art_style": self.query_one("#settings-art", Select).value,
                    "theme": self.query_one("#settings-theme", Select).value,

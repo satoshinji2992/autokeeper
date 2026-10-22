@@ -74,8 +74,8 @@ class View(BaseModel):
 
 
 # -- a chase's way (Location.chase) ------------------------------------------------------------
-# Read by the old chase engine (rules/chase.py, engine/fighting.py, which import them from here) and
-# compiled into an encounter's site graph (engine/encounter/plan.SiteNode) by the new one.
+# Compiled into an encounter's site graph (engine/encounter/site.py: plan.SiteNode, plan.ObstacleState),
+# where the chase keeps what becomes of each obstacle (opened, broken), never in the module.
 class Method(BaseModel):
     """One way past an obstacle the players are offered, with the roll it takes."""
 
@@ -97,9 +97,6 @@ class Obstacle(BaseModel):
     # A barrier's hit points (the rulebook's table, p. 116): at 0 it is broken, open for everyone after.
     hp: int | None = Field(None, ge=1, description=(
         "路障挨几点伤害才破，照规则书：室内门或薄围栏 5，普通后门 10，坚固的外门 15，9 寸砖墙 25，大树 50；险阻和打不破的不写"))
-    # A barrier someone got through (broke it, unlocked it): open for those behind. The chase's own
-    # state, saved with it; a module or a drawn way never writes it.
-    open: bool = Field(False, description="追逐中已被打开的路障，由引擎记下；不用写")
 
 
 class Leg(BaseModel):
@@ -113,13 +110,6 @@ class Leg(BaseModel):
     links: list[str] = Field(default_factory=list, description="从这一段还能岔到哪几段（段的 id 或名字）；只是接着下一段就留空")
     # An exit ends its branch: the leg listed after it starts another one, reached only by links.
     exit: bool = Field(False, description="跑到这里就能脱身（出了墓园、钻进地道）时填 true；它是一条岔路的尽头，列在它后面的段不接着它")
-
-
-class Track(BaseModel):
-    legs: list[Leg] = Field(min_length=4, max_length=12)
-
-    def at(self, pos: int) -> Leg | None:
-        return self.legs[pos] if 0 <= pos < len(self.legs) else None
 
 
 class NPC(BaseModel):
@@ -137,7 +127,7 @@ class NPC(BaseModel):
     gates: dict[str, Check] = Field(default_factory=dict, description="线索 id -> 需要的社交检定")
     location: str | None = None
     portrait: str | None = None
-    # A fight reads it (engine/combat.from_npc): an empty sheet is an ordinary person's numbers.
+    # A fight reads it (engine/encounter/profiles): an empty sheet is an ordinary person's numbers.
     stats: dict[str, int] = Field(default_factory=dict, description=(
         "战斗数值，打起来时引擎照这些结算，键用中文：力量、体质、体型、敏捷、生命（HP）、移动、闪避、格斗(斗殴)，"
         "会用的武器技能（射击(手枪)、射击(步枪/霰弹枪)、格斗(刀剑)、投掷），追逐里用得着的侦查、潜行、攀爬、跳跃；"
@@ -175,8 +165,7 @@ class Location(BaseModel):
     )
     looks: list[Look] = Field(default_factory=list, description="剧情让这里明显变样之后的场景图（烧毁、被淹、被洗劫），最多两种；昼夜不用写")
     views: list[View] = Field(default_factory=list, max_length=4, description="同一个地点的另外几张图：室内、近景、夜景，最多 4 张")
-    # Where a chase from here runs (engine/fighting.Fighting._chase_way): read instead of a way drawn on
-    # the spot. Its length is checked by the validator, not here: a module with a short one still loads.
+    # Where a chase from here runs (engine/encounter/site.py): read instead of the map around it. Its length is checked by the validator, not here: a module with a short one still loads.
     chase: list[Leg] = Field(default_factory=list, description=(
         "追逐路线：从这里（和它里面的地方）跑出去的一场追逐沿着跑的路，4–12 段，按跑的先后排，最后一段是能脱身或被逼进绝路的地方。"
         "每段写名字和一句样子；大约一半有一处 obstacle：hazard 险阻边跑边过（结冰的台阶、灌木丛），barrier 路障过了检定才过得去（矮墙、锁着的门），"
@@ -212,7 +201,7 @@ class Handout(BaseModel):
 
 
 class Creature(BaseModel):
-    """A creature as a fight reads it (engine/combat.from_creature): its numbers from `stats`, each
+    """A creature as a fight reads it (engine/encounter/profiles): its numbers from `stats`, each
     line of `attacks` as rules/weapons.parse_attack reads it, what its `notes` say the rules can use
     (rules/combat.traits). A swarm with no sheet fights as one, hard to put down."""
 
@@ -268,7 +257,7 @@ class Event(BaseModel):
     performance: str = Field("", description="表演要求，NPC 会结合本局发生过的事现编")
     ending: str | None = Field(None, description="触发时若还没有结局，就进入这个结局")
     art: str = Field("", description="这件事发生那一刻的图片键（art/places/<键>.jpg）；有就在场景里放这一张，直到调查员下一次行动")
-    # A scripted attack or pursuit (engine/fighting.Fighting._scripted): it starts as a ruling starts
+    # A scripted attack or pursuit (engine/encounter/runner._scripted): it starts as a ruling starts
     # one, where the investigators are, and the next input is the first round's order.
     fight: list[str] = Field(default_factory=list, description=(
         "这件事发生时当场动手的 NPC 或怪物 id：调查员在场、还能行动就打起来，下一次行动就是第一轮。"

@@ -8,13 +8,11 @@ from __future__ import annotations
 import pytest
 
 from autokeeper.agents.cast import RuledEffect, Ruling
-from autokeeper.engine import combat as battle
 from autokeeper.engine.encounter.actions import Ctx
 from autokeeper.engine.encounter.plan import DeclaredAction, EncounterStart, EncounterTurnPlan
 from autokeeper.engine.game import Turn
 from autokeeper.module.schema import Creature, Module
 from autokeeper.paths import EXAMPLE
-from autokeeper.rules.chase import Leg, Obstacle, Track
 
 from .encounter_kit import arrange, begin, fight_game
 
@@ -145,15 +143,23 @@ async def test_a_ruled_damage_that_is_no_expression_is_a_note_not_a_locked_save(
 
 
 async def test_a_chase_hazard_with_unreadable_harm_still_delays_and_is_noted(module, fake):
-    game, _cast, _ = fight_game(module, fake)
+    from autokeeper.engine.encounter import chase as chasing
+    from autokeeper.engine.encounter.model import ActionReceipt
+    from autokeeper.engine.encounter.resolve import Work
+    from autokeeper.module.schema import Event
+
+    game, _cast, _ = fight_game(module, fake, location="office")
+    fake.queue(40, 40)
+    await game._fire(Event(id="e_run", title="追", when="flag:x", text="", chase=["warden"]), Turn())
     inv = game.state.investigator
-    me = battle.from_investigator(inv, world=game.world)
-    (warden,) = game._others(["warden"])
-    track = Track(legs=[Leg(name=f"道路{i}") for i in range(6)])
-    track.legs[1].obstacle = Obstacle(kind="hazard", what="结冰的台阶", skill="敏捷", harm="1D3（滑倒）")
-    me.pos, me.actions = 0, 2
-    game.state.chase = battle.Chase(runners=[me, warden], track=track, quarry="party")
-    fake.queue(99).queue_totals(1)  # slips: one movement action lost
-    turn = Turn()
-    game._chase_act(inv.id, turn)
-    assert inv.hp == inv.hp_max and any("伤害式无法使用" in line for line in turn.fight)
+    w = Work(game, Ctx.of(game), "test")
+    w.enc.chase.site.obstacles["ob_office_stairs"].harm = "1D3（滑倒）"
+    w.enc.get(inv.id).node = "archive"
+    w.enc.budget.movement[inv.id] = 2
+    d = DeclaredAction(do="move", to="office_door", summary="跑")
+    r = ActionReceipt(id="r", round=1, actor=inv.id, source="button", declared=d, summary="跑")
+    w.enc.receipts.append(r)
+    fake.queue(99).queue_totals(1)  # slips: one action point lost
+    chasing.run(w, r)
+    assert inv.hp == inv.hp_max and any("伤害式无法使用" in line for line in w.unit.lines)
+    assert w.enc.get(inv.id).node == "office_stairs"  # crossed it all the same, the point lost

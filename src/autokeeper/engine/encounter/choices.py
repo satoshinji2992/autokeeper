@@ -64,6 +64,8 @@ def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = Non
     v = ctx.view(who)
     if me is None or v is None or not ctx.acting(who):
         return []
+    if ctx.enc.mode == "chase" and ctx.enc.chase is not None:
+        return chase_options(ctx, who)
     react = react or me.react or "dodge"
     if react not in presets(ctx, who):
         react = "dodge"
@@ -119,9 +121,101 @@ def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = Non
     return out
 
 
+def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
+    """A chase's choices for investigator `who` (pp. 113–121): run on (the quarry for the way out, a
+    pursuer after the one it chases), run to each place next to them (each way past what is in the way
+    there, a hazard also with care), strike someone at the same place, shoot anyone in sight, hide, put
+    something in the way, turn to fight, aid, reload. Their answer to blows stays as it is."""
+    from . import chase as chasing
+    from . import site
+
+    enc = ctx.enc
+    ch = enc.chase
+    assert ch is not None
+    me, v = ctx.p(who), ctx.view(who)
+    assert me is not None and v is not None
+    react = me.react or "dodge"
+    name = v.public_name("players")
+    here = me.node
+    out: list[ChoiceOption] = []
+    labels: set[str] = set()
+
+    def add(d: DeclaredAction, label: str, note: str) -> None:
+        if label in labels:
+            return
+        labels.add(label)
+        d = d.model_copy(update={"react": react, "summary": f"{name}：{label}"})
+        out.append(ChoiceOption(id=f"o{len(out)}", label=label, note=note, value=d.model_dump(mode="json", by_alias=True)))
+
+    points = enc.budget.movement.get(who)
+    steps = f"这一轮 {points} 行动点" if points is not None and enc.round else f"速度 {me.speed or v.mov()}"
+    seen = [x for x in ctx.foes(who) if ctx.alive(x) and not ctx.hidden_from(who, x) and ctx.present(x)]
+    if who in ch.quarry or (who not in ch.pursuers and ctx.side(who) == ctx.side((ch.quarry or [""])[0])):
+        goal = chasing.goal_of(ctx, enc, who)
+        if goal and goal != here:
+            add(DeclaredAction(do="move", to=goal, summary="-"), "全力奔跑", f"往{chasing.node_name(enc, goal)}跑 · {steps}")
+    else:
+        for q in [x for x in ch.quarry if x in seen]:
+            far = site.distance(ch.site, here, chasing.at(enc, q))
+            add(DeclaredAction(do="pursue", target=q, summary="-"), f"追赶 {ctx.name(q, 'players')}",
+                f"相隔 {far} 处 · {steps}" if far else f"就在这里 · {steps}")
+    for nid, _cost in site.neighbours(ch.site, here):
+        n = site.node(ch.site, nid)
+        assert n is not None
+        ob = ch.site.obstacles.get(n.obstacle)
+        if ob is None or ob.state in ("open", "broken"):
+            add(DeclaredAction(do="move", to=nid, summary="-"), f"跑向{n.name}", "出口：到这里就脱身" if n.exit else "畅通")
+            continue
+        for m in ob.methods:
+            if m.id == site.BREAK:
+                add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"砸开{ob.what}",
+                    f"不用掷骰，按武器伤害算，还剩耐久 {ob.hp}" if ob.hp else "按武器伤害算")
+                continue
+            hard = "" if m.difficulty == "常规" else f" · {m.difficulty}"
+            what = "险阻：失败耽搁 1D3 行动点，可能受伤" if ob.kind == "hazard" else "路障：失败就过不去"
+            add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"{m.label}：{ob.what}（往{n.name}）",
+                f"{m.skill} {v.skill(m.skill)}{hard} · {what}")
+            if ob.kind == "hazard":
+                add(DeclaredAction(do="move", to=nid, method=m.id, careful=1, summary="-"), f"小心{m.label}：{ob.what}（往{n.name}）",
+                    f"多花 1 行动点，{m.skill}得一颗奖励骰")
+    for f in seen:
+        them = ctx.name(f, "players")
+        for a in v.attacks():
+            if a.damage is None:
+                continue
+            if a.firearm or a.skill == "投掷":
+                if a.jammed or (a.firearm and a.loaded is not None and a.loaded <= 0):
+                    continue
+                left = f" · 余弹 {a.loaded}" if a.firearm and a.loaded is not None else ""
+                add(DeclaredAction(do="shoot", attacks=[AttackPick(target=f, with_=a.id)], summary="-"),
+                    _label("停下射击", them, a.name), f"{a.skill} {a.value} · 花 1 行动点{left}")
+            elif chasing.at(enc, f) == here:
+                add(DeclaredAction(do="attack", attacks=[AttackPick(target=f, with_=a.id)], summary="-"),
+                    _label("攻击", them, a.name), f"{a.skill} {a.value} · 花 1 行动点")
+        if chasing.at(enc, f) == here:
+            add(DeclaredAction(do="maneuver", maneuver="推倒", attacks=[AttackPick(target=f, with_=UNARMED_ID)], summary="-"),
+                _label("推倒", them), "战技：成功则对方耽搁 1D3 行动点")
+    if not actions.preconditions(ctx, who, DeclaredAction(do="stand", summary="-")):
+        add(DeclaredAction(do="stand", summary="-"), "回身迎战", "站住和对方打：大家都在一处之内就转为战斗")
+    if who in ch.quarry:
+        add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对追兵的侦查 · 用掉这一轮")
+        add(DeclaredAction(do="barrier", summary="-"), "设路障", f"力量 {v.char('力量')} · 挡住身后的人 · 花 1 行动点")
+    for f in ctx.allies(who):
+        if chasing.at(enc, f) == here and not actions._aid(ctx, who, f):
+            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players")), f"急救 {v.skill('急救')}")
+    for a in v.attacks():
+        if a.firearm and a.capacity and a.loaded is not None and a.loaded < a.capacity:
+            if not actions.preconditions(ctx, who, DeclaredAction(do="reload", target=a.id, summary="-")):
+                add(DeclaredAction(do="reload", target=a.id, summary="-"), _label("装填", weapon=a.name), f"装满 {a.capacity} 发 · 花 1 行动点")
+                break
+    return out
+
+
 def offered(game: Any, who: str) -> list[ChoiceOption]:
     """Every list the screens may show this round (one per answer to blows), for matching."""
     ctx = Ctx.of(game)
+    if ctx.enc.mode == "chase":
+        return options(game, who, ctx=ctx)
     return [o for r in presets(ctx, who) for o in options(game, who, r, ctx)]
 
 
@@ -169,6 +263,21 @@ def reaction_options(ctx: Ctx, defender: str, kind: str, *, maneuver: bool = Fal
     return out
 
 
+def reaction_note(ctx: Ctx, defender: str, reaction: str) -> str:
+    """What answering a blow this way rolls and costs, in a line for the player."""
+    v = ctx.view(defender)
+    if v is None:
+        return ""
+    if reaction == "dodge":
+        return f"闪避 {v.skill('闪避')}：成功等级不低于对方就躲开"
+    if reaction == "fight_back":
+        best = actions.best_melee(v)
+        return f"{best.skill if best else '格斗(斗殴)'} {best.value if best else v.skill('格斗(斗殴)')}：成功等级高于对方就打中对方"
+    if reaction == "cover":
+        return f"闪避 {v.skill('闪避')}：成功则对方射击吃一颗惩罚骰；无论成败失去下一次行动"
+    return "不掷骰，攻击照常结算"
+
+
 def max_damage(opt, db: str, impale: bool) -> int:
     try:
         expr = DamageExpr.parse(opt.damage_text.replace("+灼烧", "").replace("灼烧", ""))
@@ -195,4 +304,4 @@ def should_ask(ctx: Ctx, defender: str, attacker: str, opt, kind: str, choices: 
     return top >= body.hp or top * 2 >= body.hp_max
 
 
-__all__ = ["match", "needs_arrangement", "offered", "options", "presets", "reaction_options", "should_ask"]
+__all__ = ["chase_options", "match", "needs_arrangement", "offered", "options", "presets", "reaction_options", "should_ask"]

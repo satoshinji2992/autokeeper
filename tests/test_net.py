@@ -396,7 +396,7 @@ async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skil
         offer = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
         assert offer["kind"] == "roll" and (offer["skill"], offer["target"], offer["why"]) == ("侦查", 55, "告示贴得很高，字又小")
         assert fake.values  # the dice wait for the player
-        await ws.send_json({"t": "choice", "mode": "roll"})
+        await ws.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
         led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome")
         assert led["ev"]["lines"] == ["获得线索〔广场告示〕"] and not fake.values
         await ws.close()
@@ -719,10 +719,22 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
         seen: list[dict] = []
+        offers: dict[str, list[dict]] = {"a": [], "b": []}
+        notices: list[str] = []
+
+        async def answer(ws, who: str, offer: dict) -> None:
+            offers[who].append(offer)
+            choice = offer.get("default") if offer["kind"] in ("reaction", "redeclare") else "roll"
+            await ws.send_json({"t": "respond", "id": offer["respond_id"], "choice": choice})
+            if len(offers[who]) == 1:  # the same answer again: taken once, the second ignored with a word
+                await ws.send_json({"t": "respond", "id": offer["respond_id"], "choice": choice})
+
         while True:  # each throws their own dice when asked; the round goes on until it is told
             msg = await asyncio.wait_for(a.receive_json(), 5)
             if msg["t"] == "offer":
-                await a.send_json({"t": "choice", "mode": "roll"})
+                await answer(a, "a", msg["offer"])
+            if msg["t"] == "notice":
+                notices.append(msg["text"])
             if msg["t"] == "event":
                 seen.append(msg["ev"])
                 if msg["ev"]["type"] == "keeper_end":
@@ -733,7 +745,13 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
                 except TimeoutError:
                     break
                 if other["t"] == "offer":
-                    await b.send_json({"t": "choice", "mode": "roll"})
+                    await answer(b, "b", other["offer"])
+        # Every seated player throws their own dice, whoever's action settled the round (the review: only the last)
+        assert [o["kind"] for o in offers["b"]] == ["roll"] and offers["b"][0]["seat"] == "lin"
+        assert [o["kind"] for o in offers["a"]] == ["roll", "reaction"] or [o["kind"] for o in offers["a"]] == ["reaction", "roll"]
+        reaction = next(o for o in offers["a"] if o["kind"] == "reaction")
+        assert reaction["deadline"] and reaction["deadline"] > 0 and reaction["respond_id"] == reaction["id"]
+        assert notices and all("没有生效" in n or "已忽略" in n for n in notices)
         kinds = [e["type"] for e in seen]
         assert kinds.count("fight_round") == 1 and kinds.count("fight_act") == 3  # two investigators and the warden
         assert len(cast.reports) == told + 1 and "【战斗 · 第 1 轮】" in cast.reports[-1]
@@ -746,7 +764,6 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
 async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_faces(fake, tmp_path):
     from PIL import Image
 
-    from autokeeper.engine import combat as battle
     from autokeeper.engine.encounter import views
     from autokeeper.engine.encounter.plan import EncounterStart
     from autokeeper.engine.game import Turn
@@ -774,12 +791,13 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     events = [m["ev"] for m in sent if m["t"] == "event"]
     kinds = [e["type"] for e in events]
     art = [e for e in events if e["type"] == "art"]
-    assert [a["key"] for a in art] == ["creature-ghoul"] and art[0]["picture_data"]  # its face once, never the bestiary
+    # its face once, never the bestiary; under a key that does not say what it is (creature-ghoul would)
+    assert len(art) == 1 and art[0]["key"].startswith("face-") and "ghoul" not in art[0]["key"] and art[0]["picture_data"]
     assert kinds.index("art") < kinds.index("fight_start")  # the face before the fight that shows it
     start, reveal = events[len(kinds) - 1 - kinds[::-1].index("fight_start")], events[kinds.index("reveal")]
     foe = next(f for f in start["fight"]["fighters"] if f["id"] == "f1")  # its seat, never its own id
     assert "look" not in foe and "dex" not in foe and foe["wound"] == "受伤" and foe["hp"] is None and foe["name"] == "腐臭的影子"
-    assert "look" not in reveal and reveal["portrait"] == "creature-ghoul"
+    assert "look" not in reveal and reveal["portrait"] == art[0]["key"] and foe["portrait"] == art[0]["key"]
     view = hub._view()
     assert "encounter" not in view and "sightings" not in view  # the keeper's: every HP, the arrangements, true names
     now = view["encounter_public"]
@@ -791,15 +809,7 @@ async def test_a_fight_reaches_the_table_as_the_table_sees_it_and_with_its_foes_
     assert next(f for f in now["fight"]["fighters"] if f["id"] == me.id)["hp"] == me.hp  # an investigator whole
     client = GameState.model_validate(view)  # the screens read its choices from the table's view
     assert client.encounter is None and client.encounter_public["choices"][me.id] == views.table(hub.game)["choices"][me.id]
-    runner = battle.from_investigator(me)
-    ghoul = hub.game._fighter("ghoul")
-    runner.pos, ghoul.pos = 2, 0
-    st.chase = battle.Chase(runners=[runner, ghoul], track=battle.default_track("street"), quarry="party", reason="它追来了")
-    view = hub._view()
-    legs = [leg["name"] for leg in view["chase"]["track"]["legs"]]
-    assert all(legs[:5]) and not any(legs[5:]) and view["chase"]["reason"] == ""  # the way only as far as it is seen
-    legs = [leg["name"] for leg in view["encounter_public"]["chase"]["legs"]]
-    assert all(legs[:5]) and not any(legs[5:])
+    assert "ghoul" not in str(now)
     await hub.game.close()
 
 
@@ -925,4 +935,32 @@ async def test_an_ai_seat_pushes_the_way_it_said_it_would_and_the_arbiter_review
     assert cast.pushes == ["把每一层告示都揭起来对着光看，花上半个钟头"]  # reviewed as a player's push is
     assert "c_notice" in hub.state.clues and hub.state.minutes - start == 5 + 30
     assert any(e.kind == "player" and e.text.startswith("孤注一掷：把每一层告示") for e in hub.state.log)
+    await hub.game.close()
+
+
+async def test_a_reaction_not_answered_in_time_takes_the_default_and_a_late_answer_is_told_so(monkeypatch, tmp_path, skills_dir, fake):
+    from autokeeper.net import hub as hubs
+
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    monkeypatch.setattr(hubs, "REACTION_WAIT", 0.2)
+    m = Module.load(EXAMPLE)
+    lead = m.pregens[0].model_copy(deep=True)
+    state = Game.new(m, [lead], slot="lan-late", human=[lead.id])
+    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
+    sent: list[tuple[str, dict]] = []
+
+    async def send(cid, msg):
+        sent.append((cid, msg))
+
+    hub._send = send
+    hub.sits[lead.id] = "c1"
+    hub.clients["c1"] = None  # type: ignore[assignment]
+    offer = {"kind": "reaction", "id": "e1:r1:warden:0:react:0", "who": lead.id, "default": "dodge",
+             "options": [{"id": "dodge", "label": "闪避"}, {"id": "fight_back", "label": "反击"}]}
+    answer = await hub._ask(lead.id, "c1", offer, timed=True)
+    shown = next(msg["offer"] for cid, msg in sent if msg["t"] == "offer")
+    assert answer is None and shown["respond_id"] == offer["id"] and shown["deadline"] > 0  # the default stands
+    await hub._on("c1", {"t": "respond", "id": offer["id"], "choice": "fight_back"})
+    assert sent[-1][1] == {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。"}
+    assert hub.choices[lead.id].empty()  # it never reaches the next offer
     await hub.game.close()

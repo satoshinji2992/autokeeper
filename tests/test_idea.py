@@ -342,12 +342,12 @@ async def test_a_seated_player_pushes_saying_how_and_asks_for_an_idea_roll(monke
         fake.queue(90, 30)  # the notice is missed, then the push finds it
         await ws.send_json({"t": "act", "text": "我看看告示栏"})
         await ws.send_json({"t": "done"})
-        await until(ws, lambda x: x["t"] == "offer")
-        await ws.send_json({"t": "choice", "mode": "roll"})
+        roll = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
+        await ws.send_json({"t": "respond", "id": roll["respond_id"], "choice": "roll"})
         push = (await until(ws, lambda x: x["t"] == "offer"))["offer"]
         assert push["kind"] == "push" and push["can_push"]
         before = hub.state.minutes
-        await ws.send_json({"t": "choice", "mode": {"choice": "push", "how": "搬来椅子站上去，凑近了一行行看"}})
+        await ws.send_json({"t": "respond", "id": push["respond_id"], "choice": {"choice": "push", "how": "搬来椅子站上去，凑近了一行行看"}})
         await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "广场告示" in "".join(x["ev"]["lines"]))
         assert "c_notice" in hub.state.clues and hub.state.minutes - before >= 10  # its time passed first
         assert any("孤注一掷：搬来椅子" in e.text for e in hub.state.log)

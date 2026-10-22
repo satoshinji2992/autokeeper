@@ -1,0 +1,26 @@
+/* 应对攻击 (reaction.py); .modal, .modal-title, .modal-body and .buttons come from app.tcss */
+
+.choice-modal {
+    width: 72;
+    max-width: 96%;
+    height: auto;
+    max-height: 90%;
+}
+.choice-option {
+    height: auto;
+}
+.choice-option Button {
+    width: 100%;
+}
+.choice-note {
+    color: $text-muted;
+    padding: 0 1 1 1;
+}
+.choice-clock {
+    color: $warning;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+#choice-own {
+    margin: 1 0 0 0;
+}

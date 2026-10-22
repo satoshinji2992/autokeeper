@@ -185,7 +185,7 @@ def _called_for(st, player: Investigator, ev: dict) -> str | None:
     if t in ("repeat", "waived"):
         return t if ev.get("who") == player.name else None
     if t == "improv":  # the kinds the story tells; a consequence speaks for itself
-        return "improv" if ev.get("kind") in ("开局改编", "展开", "推进") else None
+        return "improv" if ev.get("kind") in ("开局改编", "展开") else None
     return {"handout": "handout", "clue": "clue", "dice": "check", "npc": "npc", "move": "move"}.get(t or "")
 
 

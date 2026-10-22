@@ -15,7 +15,10 @@ are table talk and reach everyone at once.
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
 leave the turn open, and once the game is over they still work, growth rolls (.en) too.
 A seated player throws their own dice: the roll prompt reaches them as an offer of kind
-"roll", like a push offer, and the turn goes on when they answer (or leave). While the
+"roll", like a push offer, and the turn goes on when they answer (or leave); in a fight every seated
+player throws their own, whoever's input settles the round. Every offer carries the id its answer
+must quote (respond_id): an answer to another, or a second one, is ignored with a word to the sender.
+A reaction carries its deadline: after it, what they set for the round stands. While the
 table waits for a seated player, any seated player may ask the keeper to tell the latest
 narration again (the turn loop does it, between actions); after the end, too. A seated
 player may also ask for ideas (F5) at any time: the host's investigator agent thinks for
@@ -25,14 +28,15 @@ screen with the state; a seated player may ask for it between rounds, once a rou
 
 Messages are JSON objects with a "t" field:
 
-    client -> hub   hello {name} · sit {investigator} · start · act {text} · choice {mode} · say {text}
+    client -> hub   hello {name} · sit {investigator} · start · act {text} · respond {id, choice | text, ask} · say {text}
                     · retell {nudge} · epilogue · suggest · recount
     client -> hub   (before the start) bring {investigator, portrait} or {pregen} · ready {on} · card {op ...}
     client -> hub   (in a round) done · undo
     client -> hub   answer {prompt, value, skip} · command {name, text}   (a rule plugin's question, a /command)
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
-                    · event {ev} · module · sync {state} · offer · say · ideas {ideas}
+                    · event {ev} · module · sync {state} · offer {offer: … respond_id, deadline} · say · ideas {ideas}
+                    · notice {text} (an answer that came too late, or twice)
                     · prelude {frames, art, colors, picture_data} · prelude_ready (the opening performance)
                     · over · error
 
@@ -101,7 +105,7 @@ PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, w
 # its public view instead (views.table, as encounter_public).
 PRIVATE |= {"encounter", "encounter_log", "sightings", "encounter_public"}
 PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll would pick from (engine/idea.py)
-# What a fight or a chase shows of someone who is not an investigator (engine/combat.view): no sheet behind it
+# What a fight or a chase shows of someone who is not an investigator (engine/encounter/views): no sheet behind it
 SHOWN = ("id", "name", "kind", "side", "status", "prone", "held_by", "stance", "weapon", "portrait", "build", "pos", "speed",
          "actions")
 LOOKS = {"轻伤": 90, "受伤": 60, "重伤": 20}  # hit points out of 100 that look as hurt as the word says (Fighter.wound_word)
@@ -192,7 +196,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
 
 def public_fighter(f: dict[str, Any], word: str = "无伤") -> dict[str, Any]:
     """Someone in a fight or a chase as a player's screen may hold them. An investigator whole; anyone
-    else as the table sees them (engine/combat.view): hit points only as many as say how hurt they
+    else as the table sees them (engine/encounter/views): hit points only as many as say how hurt they
     look (`word`), the weapons by name, never their numbers, skills, armour, healing, the keeper's
     description and notes, or what seeing it costs. An ally's hit points are on the screens anyway."""
     if f.get("kind") == "investigator":
@@ -209,7 +213,7 @@ def public_way(legs: list[dict[str, Any]], at: list[int]) -> list[dict[str, Any]
     frontmost runner (positions `at`); past them blank, so what is on it and where it ends stay the
     host's (the screens say 「前方：尚未看清」)."""
     front = max(at, default=0)
-    return [leg if i <= front + AHEAD else {"name": "", "look": "", "obstacle": None} for i, leg in enumerate(legs)]
+    return [leg if i <= front + AHEAD else {"name": "", "look": "", "obstacle": None, "exit": False} for i, leg in enumerate(legs)]
 
 
 def public_battle(ev: dict[str, Any]) -> dict[str, Any]:
@@ -221,7 +225,9 @@ def public_battle(ev: dict[str, Any]) -> dict[str, Any]:
                                              {k: v for k, v in f.items() if k not in ("look", "dex")} for f in fight["fighters"]]}
     if chase := ev.get("chase"):
         at = [r["pos"] for r in chase.get("runners", []) if r.get("status") not in DOWN and not (r.get("hidden") and r["side"] != "party")]
-        ev["chase"] = {**chase, "legs": public_way(chase.get("legs", []), at)}
+        legs = [{k: v for k, v in leg.items() if k != "id"} for leg in chase.get("legs", [])]  # the module's own ids stay here
+        runners = [{k: v for k, v in r.items() if k != "node"} for r in chase.get("runners", [])]
+        ev["chase"] = {**chase, "legs": public_way(legs, at), "runners": runners}
     return ev
 
 
@@ -330,6 +336,9 @@ class Hub:
         self.sits: dict[str, str | None] = {inv_id: None for inv_id in [*state.human, *self.blank]}  # human seat -> client
         self.inbox: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in self.sits}
         self.choices: dict[str, asyncio.Queue] = {inv_id: asyncio.Queue() for inv_id in self.sits}
+        self.asking: dict[str, str] = {}  # seat -> the id of the offer it is being asked (its respond_id)
+        self.settled: list[str] = []  # offers answered or timed out, the latest: a late or second answer is told so
+        self.faces: dict[str, str] = {}  # opaque picture key -> the module's (a creature's key names what it is)
         self.ready: set[str] = set()  # player seats whose player is happy with their card
         self.origin: dict[str, str] = {}  # seat -> "own" (a card of the player's) or "new" (made at the table)
         self.notes: dict[str, str] = {}  # seat -> a word for the host about the card (era_note)
@@ -461,10 +470,22 @@ class Hub:
                 return
             self.wake.set()
             await self._pool()
-        elif t == "choice":
+        elif t == "respond":
             seat = self._seat_of(cid)
-            if seat is not None:
-                self.choices[seat].put_nowait(msg.get("mode"))
+            rid = str(msg.get("id") or "")
+            if seat is None:
+                return
+            if not rid or self.asking.get(seat) != rid:
+                late = rid in self.settled
+                await self._send(cid, {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。" if late
+                                       else "没有在等这个回复，已忽略。"})
+                return
+            self.asking.pop(seat, None)
+            self.settled = [*self.settled[-31:], rid]
+            answer = msg.get("choice")
+            if msg.get("text") or msg.get("ask"):  # their own words, or "ask me every time" (engine/encounter respond)
+                answer = {"choice": msg.get("choice") or "", "text": str(msg.get("text") or "")[:200], "ask": msg.get("ask") or ""}
+            self.choices[seat].put_nowait(answer)
         elif t == "say":
             await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
         elif t == "retell":
@@ -731,15 +752,8 @@ class Hub:
         game = getattr(self, "game", None)
         now = views.table(game) if game is not None else None
         if now is not None:  # the fight as the table sees it, each seat's choices with it
-            now = public_battle(now)
+            now = self._faced(public_battle(now))
         view["encounter_public"] = now
-        if st.chase is not None:
-            ch = st.chase
-            words = {f.id: f.wound_word() for f in ch.runners}
-            view["chase"]["runners"] = [public_fighter(f, words.get(f["id"], "无伤")) for f in view["chase"]["runners"]]
-            at = [f.pos for f in ch.runners if f.standing and not (f.id in ch.hidden and f.side != "party")]
-            view["chase"]["track"]["legs"] = public_way(view["chase"]["track"]["legs"], at)
-            view["chase"]["orders"], view["chase"]["reason"] = {}, ""
         if view.get("pending_push"):
             view["pending_push"] = {k: v for k, v in view["pending_push"].items() if k not in ("clues", "flags")}
         return view
@@ -815,16 +829,18 @@ class Hub:
             await self._picture(key)
 
     async def _picture(self, key: str) -> None:
-        """A picture to every screen as an art event, unless they have it: never a path on the host. One
-        not on disk yet goes the next time it is shown."""
-        path = self.m.pictures.get(key)
-        if not path or self.sent.get(key) == path:
+        """A picture to every screen as an art event, unless they have it: never a path on the host, and a
+        creature's under its opaque key (_face). One not on disk yet goes the next time it is shown."""
+        real = self.faces.get(key, key)
+        shown = self._face(real)
+        path = self.m.pictures.get(real)
+        if not path or self.sent.get(shown) == path:
             return
         if data := media.pack(path):
-            self.sent[key] = path
-            art = self.m.art.get(key, "")
-            await self._broadcast({"t": "event", "ev": {"type": "art", "key": key, "art": art, "status": "ready",
-                                                        "mask": self.m.art_colors.get(key) or artkit.auto_mask(art),
+            self.sent[shown] = path
+            art = self.m.art.get(real, "")
+            await self._broadcast({"t": "event", "ev": {"type": "art", "key": shown, "art": art, "status": "ready",
+                                                        "mask": self.m.art_colors.get(real) or artkit.auto_mask(art),
                                                         "picture_data": data}})
 
     async def _faces(self, ev: dict[str, Any]) -> None:
@@ -885,7 +901,7 @@ class Hub:
             await self._picture(ev.get("key", ""))
         elif ev.get("type") in BATTLE:  # a fight or a chase: its faces first, then what the table sees of it
             await self._faces(ev)
-            ev = public_battle(ev)
+            ev = self._faced(public_battle(ev))
         elif ev.get("type") == "ending":  # the book opens with the ending, before any screen knows it is over
             await self._broadcast({"t": "module", "module": self._book()})
         elif ev.get("type") in ("plugin_effect", "plugin_show", "plugin_panel", "plugin_answered"):  # public; the id stays on the host
@@ -1301,6 +1317,7 @@ class Hub:
         """One action through the turn graph. A push offer goes to its seated player; an AI seat's, or
         one whose player left, is answered with the push the AI said it would make (`push`), if any."""
         inp: Any = {"input": text, "by_hand": not ai and self.sits.get(inv_id) is not None}  # a seated player throws their own dice
+        self.game.by_hand_seats = frozenset(x for x, cid in self.sits.items() if cid is not None)  # in a fight, every seated one
         while True:
             offer = None
             async for mode, chunk in self.graph.astream(inp, self.thread, stream_mode=["custom", "updates"]):
@@ -1311,20 +1328,16 @@ class Hub:
             if offer is None:
                 break
             choice = None
-            asked = offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id  # a blow's answer: the defender's
+            # Whose answer it is: a blow's, the defender's; a roll in a fight, the seat whose slot it is; else the actor's.
+            asked = offer.get("seat") or (offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id)
             who = self.sits.get(asked)
-            if (not ai or asked != inv_id) and who is not None:
-                queue = self.choices[asked]
-                while not queue.empty():
-                    queue.get_nowait()
-                await self._send(who, {"t": "offer", "offer": offer})
-                try:
-                    choice = await asyncio.wait_for(queue.get(), REACTION_WAIT if asked != inv_id else None)
-                except TimeoutError:
-                    choice = None
+            if who is not None and not (ai and asked == inv_id and inv_id not in self.state.human):
+                choice = await self._ask(asked, who, offer, timed=asked != inv_id or offer.get("kind") == "reaction")
             if offer.get("kind") in ("reaction", "redeclare"):  # answered, or the default (what they set for the round)
+                picked = choice.get("choice") if isinstance(choice, dict) else choice
                 words = isinstance(choice, dict) and str(choice.get("text", "")).strip()  # their own words: the keeper reads them
-                choice = choice if words or any(o["id"] == choice for o in offer.get("options", [])) else offer.get("default")
+                if not words and not any(o["id"] == picked for o in offer.get("options", [])):
+                    choice = offer.get("default")
             elif offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
                 choice = "roll"
             elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice
@@ -1333,6 +1346,52 @@ class Hub:
         self.game.emit = self._event
         self._save()
         await self._broadcast({"t": "sync", "state": self._view()})
+
+    async def _ask(self, seat: str, who: str, offer: dict, *, timed: bool) -> Any:
+        """An offer to the seat it is for, with the id its answer must quote and, when the table cannot
+        wait long (a blow, a roll on another's turn), its deadline; the answer, or None when there is
+        none in time (the default then stands). The others are told who the table waits for."""
+        rid = str(offer.get("id") or uuid.uuid4().hex[:12])
+        deadline = time.time() + REACTION_WAIT if timed else None
+        offer = self._faced({**offer, "respond_id": rid, "deadline": deadline})
+        queue = self.choices[seat]
+        while not queue.empty():
+            queue.get_nowait()
+        self.asking[seat] = rid
+        name = next((i.name for i in self.state.investigators if i.id == seat), "")
+        if offer.get("kind") in ("reaction", "redeclare", "roll"):
+            for cid in list(self.clients):
+                if cid != who:
+                    await self._send(cid, {"t": "event", "ev": {"type": "encounter_wait", "who": name, "kind": offer.get("kind"),
+                                                                 "closes_in": REACTION_WAIT if timed else None}})
+        await self._send(who, {"t": "offer", "offer": offer})
+        try:
+            return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
+        except TimeoutError:
+            return None
+        finally:
+            if self.asking.get(seat) == rid:
+                self.asking.pop(seat, None)
+                self.settled = [*self.settled[-31:], rid]
+
+    def _face(self, key: str) -> str:
+        """The key a player's screen gets for a picture: a creature's own key names what it is
+        ("creature-ghoul"), so it goes out as an opaque one; the rest as they are."""
+        if not key or not key.startswith("creature-"):
+            return key
+        mask = "face-" + uuid.uuid5(uuid.NAMESPACE_URL, f"{self.key}:{key}").hex[:10]
+        self.faces[mask] = key
+        return mask
+
+    def _faced(self, ev: dict[str, Any]) -> dict[str, Any]:
+        """An event or a view with every picture key in it as the players' screens get it (_face)."""
+        ev = dict(ev)
+        if isinstance(ev.get("portrait"), str):
+            ev["portrait"] = self._face(ev["portrait"])
+        for key, people in (("fight", "fighters"), ("chase", "runners")):
+            if isinstance(ev.get(key), dict) and isinstance(ev[key].get(people), list):
+                ev[key] = {**ev[key], people: [{**f, "portrait": self._face(f.get("portrait") or "")} for f in ev[key][people]]}
+        return ev
 
     def _save(self) -> None:
         from ..tui.library import write_save
@@ -1377,11 +1436,11 @@ class Hub:
 
 def _choice_ok(choice: Any, offer: dict) -> bool:
     """A seated player's answer to a push offer: "luck" or "drop", or a push with its way said
-    ({"choice": "push", "how": ...}, Keeper Rulebook p. 73); a bare "push" from an older client too."""
+    ({"choice": "push", "how": ...}, Keeper Rulebook p. 73)."""
     try:
         mode, how = push_choice(choice)
     except ValueError:
         return False
     if mode == "push":
-        return bool(offer.get("can_push")) and (bool(how) or choice == "push")
+        return bool(offer.get("can_push")) and bool(how)
     return mode != "luck" or offer.get("luck") is not None

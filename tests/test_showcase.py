@@ -266,7 +266,7 @@ async def test_the_director_adds_a_few_big_scenes_at_most_kept_with_the_save(tmp
 
     monkeypatch.setattr(imagegen, "make", make)
     m = Module.load(EXAMPLE)
-    plans = [Improv(kind="推进", reason=f"r{i}", showcases=[NewShowcase(id=f"d{i}", kind="危机", when="event:e_finale",
+    plans = [Improv(kind="展开", reason=f"r{i}", showcases=[NewShowcase(id=f"d{i}", kind="危机", when="event:e_finale",
                                                                           title="午夜", prompt="钟楼在月下")]) for i in range(4)]
     asks = {f"x{i}": (Action(kind="other", summary=f"行动{i}"), Ruling(needs_roll=False, scope="可即兴")) for i in range(4)}
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="director-scenes")

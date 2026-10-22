@@ -632,7 +632,7 @@ async def test_a_finished_plan_plays_out_between_turns(module, fake):
     game, *_ = make(module, fake, script)
     cast = SlowDirector(script, [NEWSSTAND])
     game.cast, game.director_wait = cast, PLAY_WAIT
-    await game._improvise("推进", at=game.state.location, patience=0.0)
+    await game._improvise("展开", at=game.state.location, patience=0.0)
     assert await game.interlude() is None  # still being written
     await asyncio.sleep(0.3)
     turn = await game.interlude()  # nobody has to act for it to happen

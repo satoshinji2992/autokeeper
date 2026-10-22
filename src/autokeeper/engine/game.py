@@ -41,7 +41,6 @@ from ..world.store import World, digest
 from . import diagnostics, effects, fog, idea, progress, signs, views, world
 from .encounter.runner import Encounters
 from .encounter.telling import tell
-from .fighting import Fighting
 from .showcase import IMPROV_MAX as IMPROV_SHOWCASES
 from .showcase import Showcases
 from .state import (
@@ -101,9 +100,10 @@ class Turn:
     world: list[str] = field(default_factory=list)  # what the rest of the world did in front of the party (world/)
     ending: str | None = None
     interlude: bool = False  # no action of theirs: the director's scene comes in between turns
-    fight: list[str] = field(default_factory=list)  # a fight's or a chase's round as settled, for the keeper (engine/fighting.py)
+    fight: list[str] = field(default_factory=list)  # a fight's or a chase's round as settled, for the keeper (engine/encounter)
     declared: bool = False  # a LAN round's order, settled with the others' by the last of them
     replies: dict[str, Said] = field(default_factory=dict)  # each NPC reply's receipt, by what asked for it (Game._reply)
+    voices: list[str] = field(default_factory=list)  # NPCs the keeper plan has speak in this round of an encounter (Game.talk)
 
     def absorb(self, later: Turn) -> None:
         """What another stage of the same turn settled (the replies before the ruling, the push
@@ -111,6 +111,7 @@ class Turn:
         and the keeper's report have them."""
         for name in ("checks", "sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
+        self.voices += [x for x in later.voices if x not in self.voices]
         for key, said in later.replies.items():
             self.replies.setdefault(key, said)
         self.clues += [c for c in later.clues if c not in self.clues]
@@ -181,7 +182,7 @@ class _ResolutionDice:
         return invoke
 
 
-class Game(Encounters, Fighting):
+class Game(Encounters):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
@@ -881,8 +882,6 @@ class Game(Encounters, Fighting):
                 return None
             plan.kind = kind  # type: ignore[assignment]
             problems = improv.check(self.m, plan, at=at, actors={i.id for i in self.state.investigators})
-            if kind == "推进" and plan.go:
-                problems.append("推进只能呈现事件或机会，不能替玩家决定移动；go 必须留空。")
             if not problems:
                 from ..plugins.runtime import verify
 
@@ -1629,10 +1628,10 @@ class Game(Encounters, Fighting):
                                           + (f"，{item.status}" if item.status else "") + "。只在与本次动作有关时叙述，不逐项播报装备栏。")
 
     async def push(self, choice: str | dict) -> Turn:
-        """Resume the saved choice without paying luck or rolling its push twice. `choice` is "push",
-        "luck" or "drop" (as old saves and journals have it), or {"choice": "push", "how": "..."}: a
-        push the player said how to make (Keeper Rulebook p. 73), ruled again once before it is
-        rolled (_method)."""
+        """Resume the saved choice without paying luck or rolling its push twice. `choice` is "luck" or
+        "drop", or {"choice": "push", "how": "..."}: a push the player said how to make (Keeper
+        Rulebook p. 73), ruled again once before it is rolled (_method); a bare "push" (push_choice) is
+        rolled as offered."""
         mode, how = push_choice(choice)
         async with self._resolution_lock:
             st = self.state
@@ -1674,7 +1673,7 @@ class Game(Encounters, Fighting):
             return {"flags": list(st.flags), "minutes": st.minutes}
 
         start = await step("initial", turn, initial)
-        known = start["flags"] if isinstance(start, dict) else start  # a choice saved before minutes were kept
+        known = start["flags"]
         if mode == "drop":
             await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
             await step("plugins", turn, lambda: self.plugins.settled(turn))
@@ -1693,7 +1692,7 @@ class Game(Encounters, Fighting):
         # What the failure cost settles as any turn's does: the clock moved on, so what was due by
         # now happens (scheduled events, the rest of the world, rule timers), and an ending it
         # brought about ends the game.
-        if isinstance(start, dict) and st.minutes > start["minutes"]:
+        if st.minutes > start["minutes"]:
             await step("time", turn, lambda: self._time(turn))
         await step("ending", turn, lambda: self._check_ending(turn))
         await step("settle", turn, lambda: self._settle(record))
@@ -1792,7 +1791,14 @@ class Game(Encounters, Fighting):
         action = turn.action
         if (action is not None and action.declared is not None) or self.fought_this_turn():
             # A round of a fight, or a turn that began one (a talk that went wrong): the encounter's voices
-            # are its own (engine/encounter), no ordinary reply on top of it (design §1.6).
+            # are its own (engine/encounter), no ordinary reply on top of it (design §1.6). Those the keeper
+            # plan has speak this round say it through the NPC's own reply, as anywhere else.
+            for npc_id in turn.voices:
+                if any(n.id == npc_id for n in m.npcs) and self.world.place(npc_id) == st.location:
+                    npc = m.npc(npc_id)
+                    await self._reply(turn, f"encounter:{npc_id}:{st.turn}", npc_id,
+                                      lambda npc_id=npc_id: self.cast.npc(st, npc_id, self._encounter_message(turn, npc_id)),
+                                      self._keep, status=f"等待 {npc.name} 开口…")
             await self._world(turn)
             await self._people()
             self._keep(turn)
@@ -2247,6 +2253,7 @@ class Game(Encounters, Fighting):
             if src != loc_id:
                 self.world.rec.left[src] = self.world.rec.seq
             st.location = loc_id
+            st.apart.clear()  # those a chase left elsewhere rejoin the party as it moves
             came: set[str] = set()
             for ent in list(self.world.rec.entities.values()):
                 if ent.kind != "npc" or ent.at != src or ent.following != st.investigator.id:
@@ -2489,7 +2496,7 @@ class Game(Encounters, Fighting):
             done = w.apply(op.model_copy(update={"actor": DIRECTOR, "id": f"review-trial:{i}"}))
             problems += [f"幕后第 {i + 1} 条（{op.kind}）：{p}" for p in done.problems]
         if not problems and any(isinstance(op, Rewrite) for op in ops):
-            problems = await self._consistent(Improv(kind="推进", reason=reason or "幕后调整", backstage=ops))
+            problems = await self._consistent(Improv(kind="后果", reason=reason or "幕后调整", backstage=ops))
         if problems:
             return problems
         raw = [op.model_dump(mode="json", exclude={"id"}) | {"actor": DIRECTOR} for op in ops]
@@ -2628,9 +2635,12 @@ class Game(Encounters, Fighting):
                 await step("view", turn, lambda: self._view(ev.art, "moment"))
             await step("showcase", turn, lambda: self.showcases.fire(f"event:{ev.id}"))
             await step("named", turn, lambda: self.showcases.named(f"{ev.title}\n{ev.read_aloud}"))
-            if ev.move_to:
+            if ev.move_to and self.encounter() is None:
                 await step("move", turn, lambda: self._arrive(ev.move_to, turn) if ev.move_to != st.location
                            or self._resolution_pending(f"arrive:{ev.move_to}") else None)
+            elif ev.move_to and ev.move_to != st.location:  # during a fight or a chase nobody is carried off (design §6.6)
+                await step("move-held", turn, lambda: turn.notes.append(
+                    f"事件「{ev.title}」本要把调查员带到{self.m.location(ev.move_to).name}，遭遇还在进行，调查员没有被带走。"))
             if ev.sanity:
                 for inv in st.investigators:
                     notice = await step(f"sanity:{inv.id}", turn, lambda inv=inv: sanity_for(inv))
@@ -2643,7 +2653,7 @@ class Game(Encounters, Fighting):
             await step("sets", turn, sets)
             for flag in ev.sets:
                 await step(f"flag-showcase:{flag}", turn, lambda flag=flag: self.showcases.fire(f"flag:{flag}"))
-            if (ev.fight or ev.chase) and not ev.ending:  # a scripted attack or pursuit (engine/fighting.py)
+            if (ev.fight or ev.chase) and not ev.ending:  # a scripted attack or pursuit (engine/encounter)
                 await self._scripted(ev, turn)
             if ev.ending:
                 await step("check-ending", turn, lambda: self._check_ending(turn))
@@ -2726,6 +2736,19 @@ class Game(Encounters, Fighting):
             parts.append("尚无可公开的门槛线索；仍可按你已知的日常信息正常回答。")
         parts.append("用你的口吻回答。）")
         return "".join(parts)
+
+    def _encounter_message(self, turn: Turn, npc_id: str) -> str:
+        """What an NPC in a fight or a chase is told when the keeper has him speak: where, what just
+        happened (as the players saw it), what he is after. He answers in his own voice."""
+        st, m = self.state, self.m
+        enc = st.encounter
+        p = enc.get(npc_id) if enc is not None else None
+        goal = p.arrangement.goal if p is not None and p.arrangement is not None else m.npc(npc_id).goal
+        seen = [e.text for e in st.log if e.turn == st.turn and e.kind in ("dice", "event")][-6:]  # as the table saw it
+        kind = "追逐" if enc is not None and enc.mode == "chase" else "打斗"
+        return (f"（系统：{st.clock}，{m.location(st.location).name}，正在{kind}。刚才：{'；'.join(seen) or '刚刚动起手来'}。"
+                f"你此刻要的：{goal or '保住自己'}。守秘人让你此刻开口：说一两句符合处境的话，可以喊、劝、威胁、求饶；"
+                "不描写别人的动作，不替调查员决定。用你的口吻回答。）")
 
     def _deeds(self, npc_id: str) -> str:
         """A performer's own records; the party's private log and summary are not its memory."""
@@ -3158,7 +3181,9 @@ def _threshold(target: int, difficulty: str) -> int:
 
 
 def push_choice(value: Any) -> tuple[str, str]:
-    """A push offer's answer as (mode, how): the old strings, or {"choice": ..., "how": ...}."""
+    """A push offer's answer as (mode, how): "luck" or "drop", or {"choice": "push", "how": ...} (Keeper
+    Rulebook p. 73). A bare "push" comes only from replaying a game recorded before pushes were said
+    (engine/autoplay, an unstated tape): the screens and the LAN table always say how."""
     if isinstance(value, dict):
         mode, how = str(value.get("choice", "")), " ".join(str(value.get("how") or "").split())[:PUSH_HOW]
     else:

@@ -34,16 +34,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from pydantic import BaseModel
-
-# The way a chase runs is module format now (module/schema.py); still importable from here.
+# The way a chase runs is module format (module/schema.py); still importable from here.
 from ..module.schema import Leg as Leg
 from ..module.schema import Method as Method
 from ..module.schema import Obstacle as Obstacle
-from ..module.schema import Track as Track
 from .bcdice import Level
-from .coc import Check
-from .combat import Fighter, check
 from .melee import opposed_difficulty
 
 Aptitude = Literal["good", "plain", "poor"]
@@ -72,11 +67,12 @@ class ChaseRules:
     hazard_moves: bool = _rule(True, "114")  # a hazard is crossed, failed or not
     barrier_cost: int = _rule(1, "115", verified=False, note="项目设定：每试一次越过障碍花 1 行动点")
     attack_cost: int = _rule(1, "116")
+    act_cost: int = _rule(1, "113", verified=False, note="项目设定：撬锁、急救、装弹这类耗时的事花 1 行动点；书上只说要花时间")
     maneuver_loss: str = _rule("1D3", "116")  # action points the target of a manoeuvre loses
     shoot_stopped_cost: int = _rule(1, "120")  # stop and shoot: one point, no move
     shoot_moving_penalty: int = _rule(1, "120")  # shoot on the move: a penalty die, no points
-    sight_gap: int = _rule(2, "119", verified=False,
-                           note="项目设定：领先两个地点以上或隔着挡住视线的地点就算逃出视线；书上由守秘人判定")
+    sight_gap: int = _rule(3, "119", verified=False,
+                           note="项目设定：领先三个地点以上（起始的两个地点仍看得见）或隔着挡住视线的地点就算逃出视线；书上由守秘人判定")
     hide_far: int = _rule(2, "119", verified=False,
                           note="项目设定：领先两个地点以上时躲藏得一个奖励骰，三个以上两个；书上由守秘人视情况给")
     lock_rounds: int = _rule(1, "121")  # locking a door with Locksmith takes a whole round and a roll
@@ -331,82 +327,3 @@ def random_hazard(roll: int, rules: ChaseRules = RULES) -> Level | None:
     if roll >= regular:
         return Level.REGULAR
     return None
-
-
-# -- the old chase engine (engine/fighting.py) -------------------------------------------------------
-# What the chase of 0.0.3 still runs on until the encounter engine replaces it (work package D).
-# Checked against the Keeper Rulebook (Chinese edition, ch. 7; docs/rules-reference.md): the head start
-# is the book's; LOST and SIGHT are the project's simplification (the book has the keeper decide where
-# the pursuers lose track, and lets the quarry try to hide at any time).
-LOST = 3  # legs ahead of every pursuer at the end of a round: they have lost you (simplified)
-HEAD_START = 2  # legs the quarry starts ahead (rulebook p. 112: two locations)
-SIGHT = 2  # legs ahead at which the quarry may hide (simplified: the book allows it at any time)
-DIFFICULTY = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
-
-
-def speed_roll(dice, f: Fighter) -> Check:
-    """CON for speed: an extreme success one MOV faster for this chase, a failure one slower."""
-    roll = check(dice, "体质", f.con)
-    f.speed = speed_after(f.move, roll.level)
-    return roll
-
-
-def gone_at_once(quarry: list[Fighter], pursuers: list[Fighter]) -> bool:
-    """Every quarry faster than every pursuer: there is no chase."""
-    runners = [p for p in pursuers if p.standing]
-    return bool(quarry) and (not runners or min(q.speed for q in quarry) > max(p.speed for p in runners))
-
-
-def actions_for(f: Fighter, slowest: int) -> int:
-    return 1 + max(0, f.speed - slowest)
-
-
-class Crossing(BaseModel):
-    """What happened at an obstacle."""
-
-    who: str
-    what: str
-    kind: Literal["hazard", "barrier"]
-    skill: str
-    passed: bool
-    lost: int = 0  # movement actions it cost
-    harm: int = 0
-    harm_text: str = ""
-
-
-def cross(dice, f: Fighter, leg: Leg, *, value: int, bonus: int = 0) -> tuple[Check | None, Crossing | None]:
-    """Getting through the obstacle of the leg ahead. `value`: the runner's skill for it. A hazard
-    is always crossed, perhaps late and hurt; a barrier holds the runner when they fail."""
-    ob = leg.obstacle
-    if ob is None or (ob.kind == "barrier" and ob.open):
-        return None, None
-    roll = check(dice, ob.skill, value, DIFFICULTY.get(ob.difficulty, Level.REGULAR), bonus)
-    out = Crossing(who=f.id, what=ob.what, kind=ob.kind, skill=ob.skill, passed=roll.passed)
-    if roll.passed:
-        if ob.kind == "barrier" and ob.skill in ("力量", "锁匠", "机械维修"):  # broken or unlocked: open behind them
-            ob.open = True
-        return roll, out
-    if ob.kind == "hazard":
-        out.lost = dice.total("1D3")
-        if ob.harm:
-            out.harm = dice.total(ob.harm)
-            out.harm_text = f"{ob.harm} = {out.harm}"
-    return roll, out
-
-
-def gap(quarry: list[Fighter], pursuers: list[Fighter]) -> int:
-    """How far ahead the nearest quarry is of the nearest pursuer still running (legs)."""
-    runners = [p for p in pursuers if p.standing]
-    ahead = [q for q in quarry if q.standing]
-    if not runners or not ahead:
-        return LOST
-    return min(q.pos for q in ahead) - max(p.pos for p in runners)
-
-
-def hide(dice, stealth: int, spotters: list[Fighter]) -> tuple[Check, list[tuple[str, Check]], bool]:
-    """Stealth against every pursuer's Spot Hidden: hidden when the runner's level of success beats
-    every one of theirs."""
-    roll = check(dice, "潜行", stealth)
-    seen = [(p.id, check(dice, "侦查", p.value("侦查"))) for p in spotters]
-    hidden = roll.passed and all(roll.level > s.level for _, s in seen)
-    return roll, seen, hidden

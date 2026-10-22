@@ -85,3 +85,53 @@ async def test_the_end_of_a_fight_can_set_off_the_next_one_and_it_begins_cleanly
     assert st.encounter is not None and st.encounter.id != first and [p.id for p in st.encounter.participants][-1] == "ghouls"
     kinds = [e["type"] for e in out]
     assert kinds.index("fight_end") < len(kinds) - 1 - kinds[::-1].index("fight_start")  # the horde's after the end
+
+
+# -- the chase ------------------------------------------------------------------------------------------
+async def test_douglas_runs_with_the_books_thomas_helps_and_the_stake_fires_by_the_dice(module, fake):
+    """The acceptance case: the thief runs for the tomb with the books, the investigator after him and
+    Thomas helping (his help a bonus die on the wall); it comes down to the dice, the stake its outcome
+    names fires, and the world places follow the run."""
+    from autokeeper.engine.encounter.plan import AttackPick
+    from autokeeper.module.schema import Stake
+
+    from .encounter_kit import begin  # noqa: F401  (the kit the fights use)
+
+    module.events = []
+    douglas = arrange("douglas", DeclaredAction(do="move", to="low_tunnel", summary="道格拉斯抱着书往陵墓跑"), react="dodge",
+                      goal="带书逃回地下")
+    thomas = arrange("thomas", DeclaredAction(do="help", target="brennan", summary="托马斯托着布伦南翻墙"), react="dodge",
+                     goal="帮调查员抓贼")
+    game, cast, _events = fight_game(module, fake, location="jinboer_jia", arrange=lambda *a: EncounterTurnPlan(npcs=[douglas, thomas]))
+    fake.queue(10, 40, 40, 40)  # the first sight of him (no event here pays it), then CON for speed: 布伦南, 道格拉斯, 托马斯
+    start = EncounterStart(mode="chase", foes=["douglas_ghoul"], allies=["thomas"], quarry="foe", npcs=[douglas, thomas], pace=15,
+                           reason="人影抱着书跑向墓地",
+                           stakes=[Stake(when="escaped:douglas", flags=["douglas_escaped"]), Stake(when="down:douglas", flags=["douglas_down"])])
+    assert await game._encounter_open(start, Turn())
+    enc = game.state.encounter
+    assert {p.id: p.side for p in enc.participants} == {"brennan": "party", "douglas": "foe", "thomas": "party"}
+    assert {p.id: p.speed for p in enc.participants} == {"brennan": 8, "douglas": 5, "thomas": 8}
+    assert enc.chase.quarry == ["douglas"] and enc.chase.pursuers == ["brennan", "thomas"]
+    assert {p.id: p.node for p in enc.participants} == {"brennan": "backyard_path", "douglas": "shrubs", "thomas": "backyard_path"}
+    app = turn_graph.build(game, InMemorySaver())
+    cast.modes["act"] = EncounterTurnPlan(action=DeclaredAction(do="defend", summary="布伦南等托马斯过来搭手"))
+    fake.queue(10, 10)  # he is out of sight behind the wall: both follow his trail
+    await play(app, "等托马斯过来搭把手")
+    enc = game.state.encounter
+    assert enc.get("douglas").node == "dirt_road" and game.world.place("douglas") == "mudi"  # into the cemetery: he is there
+    assert any(e.source == "thomas" for e in enc.get("brennan").edges)
+    fake.queue(15, 30, 10, 10)  # 布伦南 over the wall, through the shrubs; 道格拉斯 over the graves; 托马斯 follows the trail
+    out, _ = await play(app, "追赶 犬脸的佝偻身影")
+    wall = next(e for e in out if e["type"] == "dice")
+    assert wall["bonus"] == 1  # Thomas's help on the wall
+    enc = game.state.encounter
+    assert enc.get("brennan").node == "dirt_road" and enc.get("douglas").node == "graves"
+    game.world.rec.entities["douglas"].life.hp = 1
+    strike = DeclaredAction(do="pursue", target="douglas", attacks=[AttackPick(target="douglas")], summary="布伦南追上去扑倒他")
+    cast.modes["act"] = EncounterTurnPlan(action=strike)
+    fake.queue(5, 10, 90).queue_totals(2, 1)  # the graves (Thomas helps again); the blow lands, his dodge fails
+    await play(app, "追上去把他扑倒")
+    st = game.state
+    assert "douglas_down" in st.flags and "douglas_escaped" not in st.flags
+    assert st.location == "mudi"  # the party is where it caught him
+    assert st.encounter is None and st.encounter_log[-1].ended.how == "won"
