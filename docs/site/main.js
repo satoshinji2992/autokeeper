@@ -409,7 +409,7 @@
     }
     const commands = [
         {name: "about", label: "项目介绍", run: () => screen("about")},
-        {name: "gallery", label: "十二张实机图", run: () => screen("gallery")},
+        {name: "gallery", label: "十四张实机图", run: () => screen("gallery")},
         {name: "modules", label: "模组编译与插件", run: () => screen("modules")},
         {name: "party", label: "角色创建与多人联机", run: () => screen("party")},
         {name: "install", label: "安装与启动", run: () => screen("install")},
