@@ -1109,7 +1109,7 @@ def history_line(kind: str, body, block=None) -> Text | None:
     if not first:
         return None
     if kind == "player":
-        line = Text(first.removeprefix("▶ "), style="bold")
+        line = Text(first.removeprefix("▶ ").removeprefix("▷ "), style="bold")
         line.truncate(120, overflow="ellipsis")
         return line
     if kind == "dice":
@@ -1123,7 +1123,7 @@ def history_line(kind: str, body, block=None) -> Text | None:
 
 def log_line(entry) -> Text | None:
     """A saved log entry (state.log, the LAN backlog) as a history line."""
-    if entry.kind == "player":
+    if entry.kind in ("player", "speech"):  # an action, or words to the party (engine/chat.py)
         return Text(f"{entry.who}：{entry.text}"[:120], style="bold")
     if entry.kind == "dice":
         return Text(f"  ◈ {entry.text}", style="dim")

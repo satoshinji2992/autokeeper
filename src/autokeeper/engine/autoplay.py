@@ -64,7 +64,7 @@ def party_graph(cast: Cast, state: GameState):
     return g.compile()
 
 
-TOLD = ("opening", "keeper", "npc", "player", "dice", "clue", "handout", "event", "sanity", "damage")  # log lines the players read
+TOLD = ("opening", "keeper", "npc", "player", "speech", "dice", "clue", "handout", "event", "sanity", "damage")  # log lines the players read
 TELLER = {"opening": "开场", "clue": "线索", "handout": "手稿", "event": "事件"}
 
 

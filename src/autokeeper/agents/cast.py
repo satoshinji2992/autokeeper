@@ -403,6 +403,7 @@ LOOKUP_HITS = 6  # record lines one lookup brings back
 # No player says what another's investigator does (Keeper Rulebook p. 167): the third line.
 ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声明的意图、尝试与方法，不提前确认行动成功。
   玩家替别的调查员说的动作、台词或决定，不记成那位调查员做了；只记这位玩家自己的调查员。
+  向别的调查员要东西、求他帮忙只是请求：那位调查员的物品和行动由他自己的玩家决定，不写成已交出、已答应或已做到。
   “肚子饿了”只表示饥饿或用餐意愿，不增写起身、摸肚子、进入饭馆或点餐；“想挖开墓穴”不表示已拿到铲子。
   工具和用品以实际持有记录为准。玩家声称使用未登记的物件时保留“试图使用”的意图，交裁定员核实，不替他取得。
   以下内容一律不写：
@@ -1900,7 +1901,7 @@ def opposing(npc: NPC) -> str:
     return out + (f"；按常人算：{'、'.join(ordinary)}" if ordinary else "")
 
 
-def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "npc", "keeper", "event", "clue", "handout")) -> str:
+def _recent(state: GameState, n: int = 10, *, kinds: tuple[str, ...] = ("player", "speech", "npc", "keeper", "event", "clue", "handout")) -> str:
     """Keep contiguous exchanges and their sources; do not reduce each reply to its last line."""
     rows = [e for e in state.log if e.kind in kinds][-n:]
     kept, left = [], 10000

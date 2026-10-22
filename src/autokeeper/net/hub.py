@@ -72,7 +72,7 @@ from langgraph.types import Command
 
 from .. import __version__, artkit, config, paths, roster
 from ..agents.card import CardError
-from ..engine import debrief, fog, idea
+from ..engine import chat, debrief, fog, idea
 from ..engine import graph as turn_graph
 from ..engine.autoplay import situation
 from ..engine.encounter import views
@@ -360,6 +360,7 @@ class Hub:
         self.done: set[str] = set()  # seats that said they have nothing more this round
         self.early: list[tuple[str, str]] = []  # (seat, action) for the next round: sent while the keeper told, or with no room
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
+        self.spoken: list[tuple[str, chat.Said]] = []  # (seat, words to the party) shown, recorded between actions
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
         self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
@@ -500,8 +501,10 @@ class Hub:
             else:
                 self._save()
                 await self._broadcast({"t": "sync", "state": self._view()})
-        elif t == "say":
+        elif t == "say":  # out of character (engine/chat.ooc): shown to everyone, spectators too, never recorded
             await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
+        elif t == "speak":
+            await self._speak(cid, str(msg.get("text", ""))[:500])
         elif t == "retell":
             await self._ask_retell(cid, str(msg.get("nudge") or "换个讲法"))
         elif t == "epilogue":
@@ -1043,6 +1046,32 @@ class Hub:
             mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
             await self._send(cid, {**public, "mine": mine if seat else {}})
 
+    async def _speak(self, cid: str, text: str) -> None:
+        """Words to the party (engine/chat.said): on every screen at once, as the investigator saying
+        them; into the log and the world record between actions (_heard), never in the middle of one.
+        The keeper is not asked and no action is spent."""
+        seat = self._seat_of(cid)
+        inv = next((i for i in self.state.investigators if i.id == seat), None)
+        said = chat.said(text, [i.name for i in self.state.investigators if i.id != seat]) if inv else None
+        if inv is None:
+            await self._send(cid, {"t": "error", "text": "观战模式下只能发送场外消息。"})
+        elif self.over:
+            await self._send(cid, {"t": "error", "text": "本局已结束。"})
+        elif said is None:
+            await self._send(cid, {"t": "error", "text": "未识别为对同伴说的话，请作为行动提交。"})
+        else:
+            await self._event({"type": "speech", "who": inv.name, "player": self.names.get(cid, ""), "to": said.to, "text": said.line})
+            self.spoken.append((inv.id, said))
+            self.wake.set()
+
+    def _heard(self) -> None:
+        """What was said to the party meanwhile goes on record: before the next action is settled."""
+        spoken, self.spoken = self.spoken, []
+        for seat, said in spoken:
+            self.game.speak(seat, said.line, said.to)
+        if spoken:
+            self._save()
+
     async def _collect(self) -> None:
         """Open the pool and wait until it is full or everyone is done. What was said for this
         round while the keeper told the last goes in first. Meanwhile the table's requests
@@ -1053,6 +1082,7 @@ class Hub:
             while not queue.empty():
                 queue.get_nowait()
         early, self.early = self.early, []
+        self._heard()  # said while the keeper told
         players = self._players()
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
             if seat in players:
@@ -1066,6 +1096,7 @@ class Hub:
                 await self._house_rules()
                 await self._plays()
                 await self._asks()
+                self._heard()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
                     await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
@@ -1081,6 +1112,7 @@ class Hub:
                 self.wake.clear()
         finally:
             self.open, self.closes_at = False, None
+        self._heard()  # said as the round closed: on record before it is settled
         await self._pool()
 
     async def _settle(self) -> None:

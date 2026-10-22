@@ -48,7 +48,7 @@ LONG_AGO = 2  # game days since its last mention after which a hard roll is regu
 LOST = 180  # game minutes a failed roll costs before the cut
 SAME_RUN = 7  # characters in a row a line shares with a clue's own words to carry it (six match 是个和蔼的人)
 TOLD = ("opening", "keeper", "npc", "event")  # log lines that tell the table something
-SAID = ("player",)
+SAID = ("player", "speech")  # the players' own words: their actions and what they said to one another
 _BREAK = re.compile(r"[\s\W_]+")  # punctuation and spaces: a run of the clue's words never crosses them
 _DOT = re.compile(r"[·•・]")
 # A transliterated name, 道格拉斯·金博尔, though the module has no one by it: a few characters either side of the dot
