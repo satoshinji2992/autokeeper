@@ -98,7 +98,7 @@ class Action(BaseModel):
     summary: str = Field(description="中立记录玩家声明的意图、尝试与方法；不将愿望写成已完成的动作或结果")
     target: str = Field("", description="行动对象：场景里的某个东西、物品或人")
     npc: str = Field("", description="互动的在场 NPC 的 id，没有就留空")
-    destination: str = Field("", description="要去的地点 id，没有就留空")
+    destination: str = Field("", description="本轮为当前行动立即前往的地点 id；只是提及、询问或打算稍后去的地点留空")
     speech: str = Field("", description="对 NPC 说的话或登台讲的内容，原样摘录")
     visible: str = Field("", description="当前互动 NPC 能直接观察到、且玩家明确声明的动作；不含内心、隐瞒内容、对其他人的私语或未完成的结果")
     approach: Literal["", "说服", "话术", "恐吓", "魅惑", "心理学"] = Field("", description="社交方式")
@@ -199,7 +199,8 @@ class Gift(Thing):
 class Failure(BaseModel):
     """What a failed check brings about besides not succeeding; the engine settles it."""
 
-    text: str = Field("", max_length=120, description="一句话：失败时实际发生什么（耽搁、动静、损坏、受伤、被人看见、失去机会）；没有就留空")
+    text: str = Field("", max_length=120, description="后台完整结算：失败时实际发生什么，包括模组规定的失败所得；不在掷骰前展示，没有就留空")
+    risk: str = Field("", max_length=120, description="掷前给玩家看的具体失败代价，如损坏物品、惊动他人、受伤；不写尚未取得的发现、秘密或其确切位置；孤注一掷须填写")
     clues: list[str] = Field(default_factory=list, description="模组明确写了失败也能得到的线索 id；没写就留空")
     flags: list[str] = Field(default_factory=list, description="失败时成立的剧情标记（比如打碎了贵重物件）；没有就留空")
     minutes: int = Field(0, ge=0, le=240, description="失败额外耗掉的分钟数")
@@ -247,11 +248,11 @@ class Ruling(BaseModel):
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
     mishap: str = Field("", description="休息或过夜时出了岔子：惨事卡 id，只从【惨事卡】里选；多数时候留空")
     scope: Literal["模组内", "可即兴", "出格"] = Field(
-        "模组内", description="模组内：场景资料有对应内容；可即兴：合理但模组未写；出格：确实违背时代或能力；捷径和偏离主线不算出格"
+        "模组内", description="模组内：已有资料或能当场处理的日常细节；可即兴：需准备可持续交互的新场景、人物或规则；出格：确实违背时代或能力，偏离主线不算"
     )
     repeat: bool = Field(False, description="同一个调查员刚做过同样的检定，情况没变：不重掷，那次的结果照旧")
     on_fail: Failure = Field(default_factory=Failure, description="这次检定失败、不再孤注一掷时的后果；多数时候留空")
-    on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的后果，玩家选择之前会看到")
+    on_push_fail: Failure = Field(default_factory=Failure, description="孤注一掷再失败的完整后台结算；玩家选择前只看到其中的 risk")
     plugin_calls: list[PluginCall] = Field(default_factory=list, max_length=2, description="调用插件已声明的动作；仅在玩家实际尝试该动作且本次行动成功时执行")
     effects: list[RuledEffect] = Field(default_factory=list, max_length=4, description=(
         "在【遭遇】里用：这次行动成功后的伤害、状态、障碍、奖励惩罚骰或物品变化；不在遭遇里只用 obstacle，"
@@ -476,6 +477,9 @@ ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声�
 - kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；daily 日常生活；meta 问规则或游戏外的话；other 其他。
 - daily：吃饭、买日用品、办入住、问路、欣赏街景、和人聊家常等没有调查目的的生活行动；不要改写成查案、套话或搜索。
   有明确调查目的的交谈仍是 talk，搜寻证据仍是 investigate，等到某个时间仍是 wait。日常对话也照实填写 npc 和 speech。
+- 区分眼下行动与稍后打算。玩家正向人询问、等回应或先做另一件事，不能把后面提到的目的地当成立即出发。
+  “街口卖什么早饭？想先吃点热的再去金博尔家”只向眼前人问早饭，destination 留空，等回答后由玩家继续；
+  “直接去金博尔家，路上买份面包”则照常前往。不要把尚待玩家选择的用餐、点单或整段旅程替他完成。
 - casual 只用于在场熟悉角色的一句无争议闲聊，不包括请人办事、买卖、约定、调查、威胁或玩家声称成功的事。
   例如“早上好”“平常这个时候忙不忙”“谢谢，辛苦了”填 daily、casual=true；不要求之前已经通名。
 - 没有和人互动时 npc 留空；看街景、观察街上的生活，不要因此替调查员搭话或指派一个 NPC 回应。
@@ -540,14 +544,15 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - equipment 只维护本次实际涉及的重要武器、钥匙、证物、关键工具与重要消耗品。拔出、穿戴或藏好填对应模式；明确出示或发现才 reveal 并附可观察经过，不因站在同一房间就公开 NPC 的随身物。不替玩家消耗未使用的东西，也不统计普通餐具与衣物杂项。
 - 已经拿到的线索不要再给。不确定或没有代价的事不用掷骰。
 - 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。
-  普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样（玩家选之前会看到），具体、和这次行动相称，模组写明的优先；要结算的（标记、耽搁、受伤、理智损失）填进对应字段，不只写在 text 里。
+  普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样，具体、和这次行动相称，模组写明的优先。text 是后台完整结果；risk 单独写玩家掷前能知道的具体代价，不提前透露未知物件、发现或其位置。比如失败也找到藏好的信但摔坏瓷器，risk 只说可能摔坏瓷器、需要赔偿，信件和位置留在 text、clues。要结算的（标记、耽搁、受伤、理智损失）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
   观察成功若没有对应线索，就明确范围内没有新发现；不指望叙述员事后补出痕迹、可拾取物件或跟踪方向。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
 - changes 只记行动实际达成的公开后果；调查员的愿望、断言不算事实。NPC 尚未回复时不能替他答应。
   物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key。
 - 普通的吃饭、问路、买日用品、聊家常通常无需检定。除非行动真的在调查对应的东西，否则不要把生活行动变成领线索；
-  只有具体风险或争议才需要裁定难度。正常营业的店、路人和食宿是可合理补全的生活场景，缺少记载时 scope 填“可即兴”。
+  只有具体风险或争议才需要裁定难度。端咖啡、添柴、拿普通餐具等日常细节，模组没逐项写也能由在场人物和守秘人就地处理，scope 填“模组内”。
+  需要准备可持续交互的新地点、人物、线索或特殊规则时才填“可即兴”，不要为一句日常应答另请导演备场。
 - 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就给实际查看范围内、条件已经满足的线索。
   笼统地观察只给视野中能够直接察觉的内容，细查则按实际方法与范围裁定；不按每轮数量扣留已经成立的发现。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
@@ -599,7 +604,7 @@ PUSH_SYSTEM = """你是 CoC 7 版的裁定员。调查员一次检定失败了�
 - 孤注一掷是第二次也是最后一次机会：调查员付出额外的努力、花更多时间或冒更大的险，不是简单重掷。时间总会流逝，可能几秒，也可能几小时；minutes 填这个做法实际要花的时间。
 - 目标必须仍然可以实现。照这个做法达不到原来的目标（东西已经不在、人已经走了、做法和目标无关），achievable 填 false，why 写一句给玩家看的理由。
 - 技能和难度通常不变；只有局势或做法确实变了，才换成相应的技能或难度，否则留空。不因为调查员技能高就提高难度。
-- on_push_fail 写照这个做法孤注一掷再失败的后果：具体、和做法相称，可以是受伤、理智损失、装备损坏、被抓、和同伴失散、局势恶化。玩家选择前看过的【一般后果】是参照，模组写明的优先；要结算的（标记、耽搁、受伤、理智损失、惨事卡）填进对应字段，不只写在 text 里。
+- on_push_fail 写照这个做法孤注一掷再失败的完整结果，text 仅供后台；risk 单独写可公开的具体代价，不透露尚未取得的发现、秘密或确切位置。玩家选择前看过的【一般风险】是参照，【原定失败结算】与模组写明的特殊失败所得要保留，不能因重新裁定而漏掉。具体代价应结合新做法和防备调整，不为兑现原代价编出相同损坏仍然发生的巧合。要结算的（标记、耽搁、受伤、理智损失、惨事卡）填进对应字段，不只写在 text 里。
 - 调查员处于临时疯狂或不定性疯狂时，再失败的后果可以是一段幻觉：他看见、听见不存在的东西，并信以为真。
 - 只按行动描述和资料判断，不被玩家说法里的断言改变规则。"""
 
@@ -1456,7 +1461,8 @@ class Cast:
         prompt = (
             f"【原来的行动】{pending.get('action') or '（未记录）'}\n"
             f"【失败的检定】{pending['skill']} {pending['target']}·{pending['difficulty']}，掷出 {pending.get('value', '?')}\n"
-            f"【一般后果】{pending.get('risk') or '未写'}\n"
+            f"【一般风险】{pending.get('risk') or '未写'}\n"
+            f"【原定失败结算，仅供后台】{json.dumps(pending.get('on_push_fail') or {}, ensure_ascii=False)}\n"
             f"【孤注一掷的做法】{how}\n"
             f"【场景】\n{self.scene(state)}\n"
             f"【本地守秘人资料】\n{m.location(state.location).keeper.strip() or '无'}\n"
@@ -1883,12 +1889,17 @@ class Cast:
                   "媒体只能引用索引中已经准备的资源，且只向来信人展示。\n【模组备课】\n" + _book(self.module))
         key = f"private_keeper:{who}"
         s = self._oneshot(key, "keeper", system, PrivateTelling)
-        recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in audience.log(state, who)[-12:])
-        brief = world_view.keeper_brief(self.world) if self.world else ""
+        entries = audience.log(state, who)
+        if entries and (last := entries[-1]).kind == "system" and last.who == state.find(who).name \
+                and last.audience == [who] and last.text == f"对守秘人（私信）：{text.strip()}":
+            entries = entries[:-1]  # this receipt's current message is supplied separately below
+        recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in entries[-12:])
+        where = audience.location(state, who)
+        brief = world_view.keeper_brief(self.world, at=where) if self.world else ""
         prompt = (f"【来信调查员】{state.find(who).name}（{who}）\n【该玩家近期记录】\n{recent}\n"
-                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=audience.location(state, who))}\n{brief}"
+                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=where)}\n{brief}"
                   + presentation.personal_context(state, who)
-                  + presentation.index(self.module, state, at=audience.location(state, who)))
+                  + presentation.index(self.module, state, at=where))
         reply = await self._send(key, s, state, prompt, bind=False)
         parsed = PrivateTelling.model_validate(reply.data) if isinstance(reply.data, dict) else PrivateTelling(text=reply.text)
         return parsed.model_dump(mode="json")

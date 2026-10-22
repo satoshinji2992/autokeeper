@@ -214,7 +214,7 @@ class Event(BaseModel):
     place: str = ""
     text: str
     visibility: Literal["public", "private"] = "private"  # public: witnessed by the investigators at emission time
-    witnesses: list[str] = Field(default_factory=list)  # NPC ids who saw it
+    witnesses: list[str] = Field(default_factory=list)  # actors, including investigator seats, who saw it then
     facts: list[str] = Field(default_factory=list)
     trace: str = ""  # what can still be noticed at the place afterwards
     op: str = ""
@@ -303,6 +303,12 @@ class Beat(BaseModel):
     note: str = ""  # why it was dropped
 
 
+class Sighting(BaseModel):
+    place: str
+    event: str  # the observation's source; never inferred from a later true position
+    left: bool = False  # seen leaving this place, without learning the destination
+
+
 class WorldRecord(BaseModel):
     seq: int = 0
     seeded: list[str] = Field(default_factory=list)  # module objects already in the record
@@ -314,6 +320,7 @@ class WorldRecord(BaseModel):
     agents: dict[str, Agent] = Field(default_factory=dict)
     scheduled: dict[str, Scheduled] = Field(default_factory=dict)
     events: list[Event] = Field(default_factory=list)
+    sightings: dict[str, dict[str, Sighting]] = Field(default_factory=dict)  # investigator -> NPC -> last observation
     revisions: list[Revision] = Field(default_factory=list)
     requests: dict[str, Request] = Field(default_factory=dict)
     ticks: list[str] = Field(default_factory=list)  # time advances already simulated

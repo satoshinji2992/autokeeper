@@ -47,6 +47,7 @@ import sys
 import time
 import weakref
 from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -163,15 +164,24 @@ def _resolve(root: dict, node: dict) -> dict:
 
 
 def example(root: dict, node: dict | None = None, depth: int = 0) -> Any:
-    """A skeleton object for the prompt, so models without schema decoding see the shape."""
-    node = _resolve(root, root if node is None else node)
+    """Show every field without inventing optional actions; definitions remain in the schema."""
+    node = root if node is None else node
+    if "default" in node:  # before resolving Optional: a default null is meaningful
+        return deepcopy(node["default"])
+    node = _resolve(root, node)
+    if "default" in node:
+        return deepcopy(node["default"])
+    if "const" in node:
+        return deepcopy(node["const"])
     if "enum" in node:
         return node["enum"][0]
     kind = node.get("type")
     if kind == "object" or "properties" in node:
         return {k: example(root, v, depth + 1) for k, v in node.get("properties", {}).items()}
     if kind == "array":
-        return [example(root, node.get("items", {}), depth + 1)] if depth < 3 else []
+        # Pydantic default_factory=list has no schema default. An unconstrained array may
+        # stay empty; filling it would demonstrate a goal rewrite, image, injury, etc.
+        return [example(root, node.get("items", {}), depth + 1) for _ in range(node.get("minItems", 0))]
     return {"string": "…", "integer": 0, "number": 0, "boolean": False}.get(kind or "")
 
 

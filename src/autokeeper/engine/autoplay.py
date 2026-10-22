@@ -90,11 +90,8 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
     known, there = fog.known(m, st), set(fog.been(m, st))
     places = "、".join(f"{name}（{'去过' if pid in there else '听说过'}）" for pid, name in known.items() if pid != loc.id)
     met = [n for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met and n.id not in masks]
-    people = "、".join(
-        f"{n.name}（{n.role + '，' if n.role else ''}"
-        f"{'就在这里' if n.location == loc.id else f'在{known[n.location]}' if n.location in known else '不知道在哪'}）"
-        for n in met
-    )  # fmt: skip
+    people = "、".join(f"{n.name}（{n.role + '，' if n.role else ''}"
+                      f"{_person_where(m, st, n.id, loc.id, who)}）" for n in met)
     handouts = "；".join(f"〔{m.handout(h).title}〕{_flat(m.handout(h).text, 160)}" for h in st.handouts)
     party = "\n".join(f"- {_status(inv)}" for inv in st.investigators if inv.id not in masks)
     visible = audience.log(st, who)
@@ -136,6 +133,24 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
                    "做不做由你决定。")
     out.append(f"最近发生的事：\n{lines or '（刚开场）'}\n（你们在这一带已经行动了约 {stay} 次。）你下一步做什么？")
     return "\n".join(out)
+
+
+def _person_where(m: Module, st: GameState, npc: str, here: str, who: str | None) -> str:
+    """Actual positions are usable only within sight; elsewhere keep each observer's source."""
+    awake = who is None or not {"死亡", "昏迷"}.intersection(st.find(who).conditions)
+    if awake and m.npc(npc).location == here:
+        return "就在这里"
+    if who is not None:
+        sighting = st.record.sightings.get(who, {}).get(npc)
+    else:
+        # The shared situation cannot borrow one investigator's private observations.
+        views = [st.record.sightings.get(i.id, {}).get(npc) for i in st.investigators]
+        sighting = views[0] if views and all(v is not None and v.place == views[0].place
+                                          and v.left == views[0].left for v in views) else None
+    if sighting is None:
+        return "不知道在哪"
+    place = next((loc.name for loc in m.locations if loc.id == sighting.place), "上次见面的地方")
+    return f"已离开{place}，去向不明" if sighting.left else f"上次在{place}见过，当前位置不明"
 
 
 def battle_now(st: GameState, who: str | None = None, game: Game | None = None) -> str:

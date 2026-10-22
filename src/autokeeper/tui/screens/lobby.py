@@ -104,6 +104,7 @@ class LobbyScreen(Screen):
         self.state: GameState | None = None
         self.seats: list[dict[str, Any]] = []
         self.chosen: str | None = None  # the seat taken, "" for watching
+        self.pending_seat: str | None = None  # wait for its personal snapshot before entering the game
         self.gone = False
         self.faces: dict[tuple[str, str], Text] = {}  # portraits drawn so far: (picture, art style) -> art
         self.width, self.short = 40, False  # the seat list's lines: how wide, and whether two a seat
@@ -198,8 +199,21 @@ class LobbyScreen(Screen):
             self._list_seats()
             self._head()
             self._card()
-        elif t == "seated":  # your seat's investigator changed: the seat goes by its id
+        elif t == "seated":  # a confirmed seat, or a brought card's replacement investigator
             self.chosen = msg["investigator"]
+            self.pending_seat = None
+            if "state" in msg:
+                self.welcome = msg
+                self.m = table_module(msg)
+                self.state = GameState.model_validate(msg["state"])
+                self.seats = msg["seats"]
+                self.bring = bool(msg.get("bring"))
+                if self.started:
+                    self._enter([msg["pool"]])
+                else:
+                    self._show_all()
+                    if any(s.get("blank") and s["investigator"] == self.chosen for s in self.seats) and self.bring:
+                        self.action_pick()
         elif t == "history" and self.welcome is not None and msg.get("seat") == self.chosen:
             self.welcome["log"] = with_private_history(self.welcome.get("log", []), msg.get("log", []))
         elif t == "media_sync" and self.welcome is not None and msg.get("seat") == self.chosen:
@@ -223,6 +237,9 @@ class LobbyScreen(Screen):
             if self.chosen is None:
                 self._show_all()
         elif t == "error":
+            if self.pending_seat is not None:
+                self.pending_seat = None
+                self._buttons()
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed" and self.remote is not None:
             self.remote.reply(msg)
@@ -231,7 +248,8 @@ class LobbyScreen(Screen):
             self.app.notify("房主关闭了房间", severity="error")
             self.query_one("#lobby-hint", Static).update(Text("房间已关闭，按 Esc 离开。", style="bold"))
             self._buttons()
-        if t in ("begin", "turn", "event") and self.chosen is not None and self.welcome is not None and not self.gone:
+        if (t in ("begin", "turn", "event") and self.chosen is not None and self.pending_seat is None
+                and self.welcome is not None and not self.gone):
             self._enter([msg])
 
     @property
@@ -357,7 +375,7 @@ class LobbyScreen(Screen):
     def _buttons(self) -> None:
         seat = self._highlighted()
         sittable = bool(seat and seat["human"] and (not seat["online"] or seat["investigator"] == self.chosen))
-        self.query_one("#sit", Button).disabled = not sittable or self.gone
+        self.query_one("#sit", Button).disabled = not sittable or self.gone or self.pending_seat is not None
         self.query_one("#start", Button).disabled = self.started or self.gone
         self.query_one("#watch", Button).disabled = self.gone
         mine = next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
@@ -451,7 +469,7 @@ class LobbyScreen(Screen):
 
     async def action_sit(self) -> None:
         seat = self._highlighted()
-        if self.gone or seat is None:
+        if self.gone or seat is None or self.pending_seat is not None:
             return
         if not seat["human"]:
             self.app.notify("这个座位由 AI 扮演", severity="warning")
@@ -459,12 +477,9 @@ class LobbyScreen(Screen):
         if seat["online"] and seat["investigator"] != self.chosen:
             self.app.notify(f"{seat['player']} 已占用此座位", severity="warning")
             return
-        self.chosen = seat["investigator"]
-        await self.link.send({"t": "sit", "investigator": self.chosen})
-        if self.started:
-            self._enter([])
-        elif seat.get("blank") and self.bring:  # nobody to play yet: choose first
-            self.action_pick()
+        self.pending_seat = seat["investigator"]
+        self._buttons()
+        await self.link.send({"t": "sit", "investigator": self.pending_seat})
 
     # -- your investigator, before the start ------------------------------------------------
     def _my_seat(self) -> dict[str, Any] | None:
@@ -527,7 +542,7 @@ class LobbyScreen(Screen):
         await self.link.send({"t": "ready", "on": not seat.get("ready")})
 
     async def action_watch(self) -> None:
-        if self.gone:
+        if self.gone or self.pending_seat is not None:
             return
         self.chosen = ""
         if self.started:
@@ -536,7 +551,7 @@ class LobbyScreen(Screen):
             self._list_seats()
 
     async def action_start(self) -> None:
-        if self.gone or self.started:
+        if self.gone or self.started or self.pending_seat is not None:
             return
         if self.chosen is None:
             self.chosen = ""

@@ -89,6 +89,7 @@ from ..engine.autoplay import situation
 from ..engine.encounter import views
 from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
+from ..engine.offers import public_push
 from ..engine.state import GameState
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
@@ -129,9 +130,6 @@ PRIVATE |= {"held", "signs", "expanded", "ongoing"}
 PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
-# What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
-# failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
-PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")
 REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
@@ -225,11 +223,6 @@ def known_items(m: Module, st: GameState) -> set[str]:
                 and (item.where in visited or item.id in seen)))
 
     return {item.id for item in m.items if visible(item)}
-
-
-def public_push(pending: dict[str, Any]) -> dict[str, Any]:
-    """A push offer, or the pending push in the state, as a player's screen gets it (PUSH_SHOWN)."""
-    return {k: v for k, v in pending.items() if k in PUSH_SHOWN}
 
 
 def public_way(legs: list[dict[str, Any]], at: list[int]) -> list[dict[str, Any]]:
@@ -385,7 +378,7 @@ class Hub:
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
         self.private_requests: asyncio.Queue = asyncio.Queue()  # (seat, text, request id); no public action slot
         for ident, receipt in self.state.private_messages.items():
-            if not receipt.get("reply_shown"):
+            if not receipt.get("delivered"):
                 self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
         self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F5)
         self.port = 0
@@ -629,6 +622,8 @@ class Hub:
         await self._personal_faces(cid)
         if not self.bringing and all(self.sits.values()):  # a saved game: every human seat is taken, it goes on
             self.started.set()
+        await self._send(cid, {**self._welcome(cid), "t": "seated", "investigator": inv_id,
+                               "pool": self._pool_view(cid)})
         await self._maybe_begin()
 
     def _free(self, seat: str) -> None:
@@ -973,6 +968,12 @@ class Hub:
                 if ev.get("type") == "art" and not perception.picture_visible(self.game, viewer, self.faces.get(ev.get("key"), ev.get("key"))):
                     return
                 msg = perception.project_payload(self.game, viewer, msg)
+                # Personal projection may rebuild a battle view. Apply the network contract
+                # last so its fresh names cannot restore private stats, route nodes or asset ids.
+                if isinstance(event := msg.get("ev"), dict) and (event.get("type") in BATTLE or "fight" in event or "chase" in event):
+                    msg["ev"] = self._faced(public_battle(event))
+                if isinstance(state := msg.get("state"), dict) and isinstance(battle := state.get("encounter_public"), dict):
+                    msg["state"] = {**state, "encounter_public": self._faced(public_battle(battle))}
                 await ws.send_str(json.dumps(msg, ensure_ascii=False, default=str))
                 pictures = msg.get("picture_data")
                 delivered = list(pictures.items()) if isinstance(pictures, dict) else (
@@ -1138,18 +1139,22 @@ class Hub:
             return None
         return max(0.0, self.closes_at - asyncio.get_running_loop().time())
 
-    async def _pool(self) -> None:
-        """The round as everyone sees it, and each player's own lines: in it, and waiting for the next."""
+    def _pool_view(self, cid: str) -> dict[str, Any]:
+        """The current collection window, including only this connection's declarations."""
         names = {inv.id: inv.name for inv in self.state.investigators}
         waiting = self._waiting_for() if self.open else []
         public = {"t": "pool", "open": self.open, "capacity": self.capacity(), "count": len(self.pool),
                   "by": {seat: self._count(seat) for seat in self._players()}, "done": sorted(self.done),
                   "waiting": [names[i] for i in waiting], "open_to": waiting, "extra": names.get(self._extra() or "", ""),
                   "closes_in": self._left()}
+        seat = self._seat_of(cid)
+        mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
+        return {**public, "mine": mine if seat else {}}
+
+    async def _pool(self) -> None:
+        """The round as everyone sees it, and each player's own lines: in it, and waiting for the next."""
         for cid in list(self.clients):
-            seat = self._seat_of(cid)
-            mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
-            await self._send(cid, {**public, "mine": mine if seat else {}})
+            await self._send(cid, self._pool_view(cid))
 
     async def _speak(self, cid: str, text: str, *, to: Any = None, private: bool = False,
                      channel: str = "whisper") -> None:

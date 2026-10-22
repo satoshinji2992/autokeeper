@@ -288,7 +288,7 @@ def test_a_push_always_says_how():
 
 
 async def test_a_push_says_how_and_its_time_passes_before_the_roll(module, fake):
-    risk = Failure(text="翻得太狠，合订本散了架，管理员把你请出了报社", minutes=20)
+    risk = Failure(text="翻得太狠，合订本散了架，管理员把你请出了报社", risk="合订本可能散架，被管理员请出报社", minutes=20)
     game, *_ = make(module, fake, {}, location="office")
     game.cast = cast = Arbiter({}, PushRuling(achievable=True, minutes=90, on_push_fail=risk))
     app = turn_graph.build(game, InMemorySaver())
@@ -303,7 +303,8 @@ async def test_a_push_says_how_and_its_time_passes_before_the_roll(module, fake)
     assert st.minutes - start == 30 + 90 + 20  # the search, the push's own time, then its failure
     assert "c_archive" not in st.clues and any("孤注一掷：把三十年前" in e.text for e in st.log if e.kind == "player")
     outcome = [e for e in out if e["type"] == "outcome"][-1]
-    assert "合订本散了架" in outcome["lines"][0]  # the failure fitting this way, not the general one
+    assert outcome["lines"][0] == f"孤注一掷也没成：{risk.risk}"
+    assert any(risk.text in report for report in cast.reports)  # the complete result still reaches the keeper
 
 
 async def test_a_push_that_cannot_reach_the_goal_is_refused_and_nothing_is_rolled(module, fake):

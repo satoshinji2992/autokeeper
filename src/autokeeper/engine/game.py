@@ -458,26 +458,9 @@ class Game(Encounters):
         action = await self._arrange(text)
         # What a dice command asks for is read off the command, never taken from the model.
         action = action.model_copy(update={"asked": commands.asked(text), "echo": ""})
-        if action.kind != "meta" and (action.kind == "move" or action.destination):
-            # A named destination in an actual movement request outranks an intermediate
-            # exit chosen by the parser. Only match names the party can already use.
-            names = fog.aliases(self.m)
-            routing = text.replace(action.speech, "") if action.speech else text
-            routing = fog.plain(re.sub(r'「[^」]*」|“[^”]*”|"[^"]*"', "", routing))
-            mentioned = []
-            for pid in fog.bearings(self.m, st):
-                for name in names.get(pid, ()):
-                    for match in re.finditer(r"(?:前往|赶往|回到|去|回|到)\s*" + re.escape(name), routing):
-                        before = routing[max(0, match.start() - 4):match.start()]
-                        if (not re.search(r"(?:不|别|不要|不想|没有|没打算)$", before)
-                                and not re.match(r"之前|前先|前[，,]", routing[match.end():])):
-                            mentioned.append((match.end(), pid))
-            # The parser's own pick stands when the player named it ("先去书房再去客厅" goes to the
-            # study first); otherwise the first place named, not a later stop of the plan.
-            if mentioned and action.destination not in {pid for _, pid in mentioned}:
-                action = action.model_copy(update={"destination": min(mentioned)[1]})
-            if action.destination and not re.search(r"沿途|沿路|边走边|逛|慢慢|随便走走", routing):
-                action = action.model_copy(update={"travel": "direct"})
+        # Meaning, destination and pace belong to the keeper's reading of the whole input.
+        # A place-name regex cannot distinguish a rejected destination from the next stop,
+        # or a route description from a direct journey. Resolution still validates the route.
         if (action.kind == "daily" and action.npc and not action.approach and not action.destination
                 and re.fullmatch(r"[，。！？、\s]*(早上好|早安|你好|您好|午安|晚安|谢谢|多谢|辛苦了|今天忙不忙|平常这个时候忙不忙)[，。！？、\s]*", action.speech)):
             action = action.model_copy(update={"casual": True})
@@ -704,7 +687,9 @@ class Game(Encounters):
                     request = speech or f"请与我一同前往{place}。"
                     invite = f"调查员想请你一同前往{place}。" if asked and speech else ""
                     privacy = "这是避开其他人的私下交谈，其他人没有听到。" if private else ""
-                    message = (f"（系统：出发前，调查员{st.investigator.name}对你说：「{request}」。{invite}{privacy}"
+                    address = f"对你说：「{speech}」。" if speech else f"提出与你一同前往{place}。"
+                    context = f"眼前的行动：{action.visible or action.target}。" if asked and (action.visible or action.target) else ""
+                    message = (f"（系统：出发前，调查员{st.investigator.name}{address}{invite}{context}{privacy}"
                                "是否同意由你决定，不替其他人答应。）")
                     ask = partial(self.cast.npc, st, nid, message, travel=asked or not speech, private=private)
                     await self._reply(turn, key, nid, ask, keep,
@@ -947,7 +932,11 @@ class Game(Encounters):
             receipt["reply_shown"] = True
             if self.checkpoint:
                 self.checkpoint()
-        await self.present(receipt.get("media", []), key=f"private:{ident}")
+        # Text and attachments have separate receipts: a disconnect after the text must
+        # still resume the same saved media without asking the keeper again.
+        receipt["delivered"] = not await self.present(receipt.get("media", []), key=f"private:{ident}")
+        if self.checkpoint:
+            self.checkpoint()
         return receipt["reply"]
 
     async def _improvise(
@@ -1712,7 +1701,7 @@ class Game(Encounters):
                                  "bonus": ruling.bonus, "clues": self._valid_clues(ruling.clues_on_success, action),
                                  "flags": ruling.set_flags, "can_push": rolled.can_push,
                                  "luck": luck, "left": inv.luck - (luck or 0),
-                                 "risk": ruling.on_push_fail.text.strip(),
+                                 "risk": ruling.on_push_fail.risk.strip(),
                                  "on_fail": ruling.on_fail.model_dump(), "on_push_fail": ruling.on_push_fail.model_dump(),
                                  "npc": action.npc if action.kind in ("talk", "perform") else "", "value": rolled.value,
                                  "tells": self._asks(action, turn), "action": action.summary,
@@ -1720,6 +1709,9 @@ class Game(Encounters):
                                  "action_record": action.model_dump(mode="json"),
                                  "success": ruling.model_dump(mode="json")}
                     st.pending_push = turn.push
+                    if rolled.can_push and not turn.push["risk"]:
+                        self._debug("push", {"phase": "risk-missing", "action": action.summary,
+                                             "note": "未写明具体公开风险，玩家仅收到通用提示；不公开后台失败结算。"})
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
         checked = await step("check", turn, check)
@@ -2070,7 +2062,15 @@ class Game(Encounters):
             changed["need"] = _threshold(changed.get("target", pending["target"]), changed.get("difficulty", pending["difficulty"]))
         risk = r.on_push_fail
         if risk.model_dump() != Failure().model_dump():
-            changed.update(on_push_fail=risk.model_dump(), risk=risk.text.strip() or pending.get("risk", ""))
+            if r.achievable:
+                # A push is still the same goal. The module's explicit failure finds
+                # survive a revised method; its costs may change with that method.
+                promised = (pending.get("on_push_fail") or {}).get("clues", [])
+                risk = risk.model_copy(update={"clues": self._valid_clues([*promised, *risk.clues], None)})
+            changed.update(on_push_fail=risk.model_dump(), risk=risk.risk.strip())
+            if r.achievable and not risk.risk.strip():
+                self._debug("push", {"phase": "risk-missing", "method": how,
+                                     "note": "新做法未写明具体公开风险；不使用后台失败结算作为公开文本。"})
         out["pending"] = changed
         return out
 
@@ -2186,8 +2186,11 @@ class Game(Encounters):
         there: ahead of the action (Initiative.first, _step_in) or after it (_join_in)."""
         st, inv, name = self.state, self.state.investigator, self.m.npc(npc_id).name
         text = f"{name}抢在{inv.name}动手之前：「{line}」" if first else f"{name}主动对{inv.name}：「{line}」"
-        self.world.apply(Occur(id=f"talk:{st.turn}:{npc_id}:initiative", actor=inv.id, participants=[npc_id], place=st.location,
-                               text=text, visibility="public", transcript=True))
+        done = self.world.apply(Occur(id=f"talk:{st.turn}:{npc_id}:initiative", actor=inv.id, participants=[npc_id], place=st.location,
+                                     text=text, visibility="public", transcript=True))
+        if done.ok:
+            self.world.observe(st.location, self.world.observers(st.location), done.event,
+                               leaving=npc_id if self.world.place(npc_id) != st.location else "")
 
     def _held(self) -> set[str]:
         """Those the keeper's plan has join in this turn (also as a resumed turn's journal keeps them):
@@ -2211,7 +2214,8 @@ class Game(Encounters):
             heard = [f"{inv.name}正要：{action.visible or action.summary}（还没做成）。"]
         return (f"（系统：{st.clock}，{m.location(st.location).name}。{''.join(heard)}"
                 f"这一轮你{'抢在前面' if before else ''}主动：{x.does}。这是守秘人的安排，不是你知道的事：只用你自己的知识、亲历和口吻演出来，不知道的不说。"
-                "当场拿出或递出东西、走开、同行，照常写在回复里；不替调查员说话或做决定。）")
+                "当场拿出或递出东西、走开、同行，照常写在回复里；不替调查员说话或做决定。"
+                + self._npc_disclosure(turn, x.npc) + "）")
 
     def _exchanged(self, npc_id: str, action: Action, line: str, *, private: bool = False) -> None:
         """A conversation goes into the world record: everyone there saw it, an important NPC keeps
@@ -2220,8 +2224,11 @@ class Game(Encounters):
         inv = st.investigator
         said = action.speech or action.visible or "（没有逐字台词）"
         text = f"{inv.name}和{npc.name}说话：「{said}」{npc.name}答：「{line}」"
-        self.world.apply(Occur(id=f"talk:{st.turn}:{inv.id}:{npc_id}", actor=inv.id, participants=[npc_id], place=st.location,
-                               text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
+        done = self.world.apply(Occur(id=f"talk:{st.turn}:{inv.id}:{npc_id}", actor=inv.id, participants=[npc_id], place=st.location,
+                                     text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
+        if done.ok:
+            self.world.observe(st.location, [inv.id] if private else self.world.observers(st.location), done.event,
+                               leaving=npc_id if self.world.place(npc_id) != st.location else "")
 
     def speak(self, inv_id: str, line: str, to: str = "", *, audience: list[str] | None = None,
               private: bool = False) -> LogEntry:
@@ -3286,19 +3293,21 @@ class Game(Encounters):
             e = turn.earlier
             effect = "本次交涉已成功，让步仍限于这次请求和已授权内容" if e.passed else "本次请求仍未达成，不增加新的敌意或惩罚"
             parts.append(f"检定：同样的{e.skill}刚才已经试过，不重掷，结果照旧：{effect}。")
-        # Permission persists across turns; an empty *new* clue list must not make the NPC
-        # retract something it already disclosed earlier in the conversation.
+        parts.append(self._npc_disclosure(turn, npc_id))
+        parts.append("用你的口吻回答。）")
+        return "".join(parts)
+
+    def _npc_disclosure(self, turn: Turn, npc_id: str) -> str:
+        """The same disclosure context for replies, initiative and encounter speech."""
+        st, m = self.state, self.m
         npc = m.npc(npc_id)
         available = set(st.npc(npc_id).unlocked) | {c for c in npc.clues if c not in npc.gates and m.clue(c).available(st.flags, st.clues)}
         available |= {c for c in turn.clues if m.clue(c).npc == npc_id or c in npc.clues}
         mine = [c.id for c in m.clues if c.id in available]
         if mine:
-            parts.append("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine)
-                         + "。不必这一回都说完：顺着他的话聊，带出一两处，说出了要点就填进 told。")
-        else:
-            parts.append("尚无可公开的门槛线索；仍可按你已知的日常信息正常回答。")
-        parts.append("用你的口吻回答。）")
-        return "".join(parts)
+            return ("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine)
+                    + "。按本次问题和眼下处境交代相关内容；需要说清时一次说清，不按条数拖到后续回合。说出了要点就填进 told。")
+        return "尚无可公开的门槛线索；仍可按你已知的日常信息正常回答。"
 
     def _encounter_message(self, turn: Turn, npc_id: str) -> str:
         """What an NPC in a fight or a chase is told when the keeper has him speak: where, what just
@@ -3311,7 +3320,7 @@ class Game(Encounters):
         kind = "追逐" if enc is not None and enc.mode == "chase" else "打斗"
         return (f"（系统：{st.clock}，{m.location(st.location).name}，正在{kind}。刚才：{'；'.join(seen) or '刚刚动起手来'}。"
                 f"你此刻要的：{goal or '保住自己'}。守秘人让你此刻开口：说一两句符合处境的话，可以喊、劝、威胁、求饶；"
-                "不描写别人的动作，不替调查员决定。用你的口吻回答。）")
+                "不描写别人的动作，不替调查员决定。" + self._npc_disclosure(turn, npc_id) + "用你的口吻回答。）")
 
     def _deeds(self, npc_id: str) -> str:
         """A performer's own records; the party's private log and summary are not its memory."""
@@ -3393,6 +3402,11 @@ class Game(Encounters):
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
             out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复检定卡；只叙述本轮另行发生的变化。")
+            for npc_id, line in turn.npc_lines:
+                said = next((s for s in turn.replies.values() if s.npc == npc_id and s.line == line), None)
+                listeners = "全桌" if said is None or said.audience is None else "仅" + "、".join(st.find(i).name for i in said.audience)
+                out.append(f"【{listeners}已听到的原话及动作｜{m.npc(npc_id).name}】{line}")
+            out.append("以上动作已经演出，接着其完成后的状态叙述，不重新端茶、问同一问题或把已做完的事写成准备做；私下内容不转述给其他人。")
             if turn.joined:
                 out.append(f"其中{'、'.join(m.npc(x).name for x in turn.joined)}是这一轮自己主动开口的。")
         if turn.performance:

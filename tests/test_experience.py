@@ -8,9 +8,9 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from autokeeper import paths
-from autokeeper.agents.cast import Action, BeforeTravel, Ruling
+from autokeeper.agents.cast import Action, BeforeTravel, Initiative, Ruling
 from autokeeper.engine import graph, world
-from autokeeper.engine.game import Game, Turn
+from autokeeper.engine.game import Game, Said, Turn
 from autokeeper.engine.state import CheckRecord, GameState, WorldChange
 from autokeeper.module.schema import Check as ModuleCheck
 from autokeeper.module.schema import Item, Module
@@ -142,6 +142,53 @@ async def test_an_npc_keeps_permission_to_discuss_clues_unlocked_on_previous_tur
     await game.close()
 
 
+async def test_initiative_and_encounter_speech_receive_the_same_disclosure_permissions(module, fake):
+    game, _, _ = make(module, fake, {}, location="tower")
+    turn = Turn(action=Action(kind="talk", summary="周衡询问过去发生的事", npc="warden"))
+
+    def messages():
+        return (game._npc_message(turn, "warden"),
+                game._joining(turn, Initiative(npc="warden", does="主动解释刚才提过的事")),
+                game._encounter_message(turn, "warden"))
+
+    assert all("c_diary" not in text for text in messages())
+    game.state.npc("warden").unlocked.append("c_diary")
+    assert all("c_diary" in text for text in messages())
+    await game.close()
+
+
+async def test_narration_has_the_completed_dialogue_and_its_actual_listeners(module, fake):
+    game, _, _ = make(module, fake, {}, location="tower")
+    who = game.state.investigator.id
+    line = "我把咖啡端给你了。糖已经放好。"
+    turn = Turn(action=Action(kind="daily", summary="喝咖啡"), npc_lines=[("warden", line)],
+                replies={"answer": Said(npc="warden", line=line, audience=[who])})
+    report = game._report(turn)
+    assert line in report
+    assert f"仅{game.state.investigator.name}已听到" in report
+    assert "全桌已听到" not in report
+    await game.close()
+
+
+async def test_an_invitation_keeps_the_visible_goal_without_disclosing_private_motives(module, fake):
+    module.npc("warden").location = module.start
+    action = Action(kind="investigate", summary="去钟楼窗外查看，心里想以后偷偷搜他的卧室", destination="tower",
+                    target="窗外的攀爬痕迹", companions=["warden"])
+    game, cast, _ = make(module, fake, {})
+    seen = []
+
+    async def answer(state, npc, message, **kwargs):
+        seen.append(message)
+        return "我带你去。"
+
+    cast.npc = answer
+    game.state.pending_turn = {"input": "请他带我去窗外"}
+    await game.prepare(action)
+    assert len(seen) == 1 and action.target in seen[0]
+    assert "偷偷搜" not in seen[0] and "对你说：「" not in seen[0]
+    await game.close()
+
+
 async def test_narration_receives_current_inventory_and_ignores_legacy_first_beats(module, fake):
     game, _, _ = make(module, fake, {})
     game.state.investigator.inventory = ["笔记本"]
@@ -153,14 +200,27 @@ async def test_narration_receives_current_inventory_and_ignores_legacy_first_bea
     await game.close()
 
 
-async def test_an_explicit_destination_overrides_an_intermediate_exit_and_default_strolling(fake):
+async def test_a_direct_journey_resolves_the_keepers_destination_without_an_intermediate_stop(fake):
     m = Module.load(paths.MODULES / "zhuishuren")
-    wrong = Action(kind="move", summary="出门去公墓与托马斯会合", destination="jiefang", travel="stroll")
-    game, _, _ = make(m, fake, {"出门去公墓和托马斯会合": (wrong, Ruling(needs_roll=False))}, location="jinboer_jia")
+    planned = Action(kind="move", summary="出门去公墓与托马斯会合", destination="mudi", travel="direct")
+    game, _, _ = make(m, fake, {"出门去公墓和托马斯会合": (planned, Ruling(needs_roll=False))}, location="jinboer_jia")
     action = await game.parse("出门去公墓和托马斯会合")
     assert action.destination == "mudi" and action.travel == "direct"
     turn = await game.resolve(action, await game.rule(action))
     assert turn.arrived == "mudi" and game.state.location == "mudi" and not game.state.journey
+    await game.close()
+
+
+@pytest.mark.parametrize(("text", "destination", "travel"), [
+    ("我不打算去钟楼了，先去找报社的编辑。", "office", "direct"),
+    ("去钟楼的路上，顺便看看街边的摊贩。", "tower", "stroll"),
+    ("先在这里吃早饭，等会再去钟楼。", "", "direct"),
+])
+async def test_parse_does_not_overrule_contextual_destinations_or_pace(module, fake, text, destination, travel):
+    planned = Action(kind="move" if destination else "daily", summary=text, destination=destination, travel=travel)
+    game, _, _ = make(module, fake, {text: (planned, Ruling(needs_roll=False))})
+    action = await game.parse(text)
+    assert (action.destination, action.travel) == (destination, travel)
     await game.close()
 
 

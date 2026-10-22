@@ -177,6 +177,11 @@ class Move(Base):
             text = f"{e.name}来到{w.name(self.to)}"
         moved = w.emit("move", text, actor=actor, participants=[e.id], place=place,
                        visibility=vis, witnesses=seeing, op=oid)  # fmt: skip
+        if self.visibility != "private":
+            departing, arriving = w.observers(src), w.observers(self.to)
+            moved.witnesses = list(dict.fromkeys([*moved.witnesses, *departing, *arriving]))
+            w.observe(src, departing, moved.id, leaving=e.id)
+            w.observe(self.to, arriving, moved.id)
         if self.trace and src:  # what it left behind stays where it was, for whoever comes there next
             w.emit("trace", self.trace, actor=actor, participants=[e.id], place=src, visibility="private", witnesses=[],
                    trace=self.trace, op=oid)  # fmt: skip

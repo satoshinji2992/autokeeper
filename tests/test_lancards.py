@@ -75,6 +75,8 @@ async def test_a_brought_card_takes_the_seat_and_everyone_sees_it(monkeypatch, t
         assert welcome["bring"] and [s.get("blank", False) for s in welcome["seats"]] == [False, True]
         host, _ = await hello(http, hub, "房主", key=hub.key)
         await a.send_json({"t": "sit", "investigator": "zhouheng"})
+        confirmed = await until(a, lambda x: x["t"] == "seated")
+        assert confirmed["investigator"] == "zhouheng" and "state" in confirmed and "pool" in confirmed
         await a.send_json({"t": "bring", "investigator": card(skills={"计算机使用": 60}, hp_max=99), "portrait": jpeg()})
         seated = await until(a, lambda x: x["t"] == "seated")
         mine = seated["investigator"]
@@ -126,6 +128,8 @@ async def test_starting_now_fills_or_drops_the_empty_seats(monkeypatch, tmp_path
         await a.send_json({"t": "start"})
         assert "尚无已选角色" in (await until(a, lambda x: x["t"] == "error"))["text"] and not hub.started.is_set()
         await a.send_json({"t": "sit", "investigator": "seat-2"})
+        confirmed = await until(a, lambda x: x["t"] == "seated")
+        assert confirmed["investigator"] == "seat-2" and "state" in confirmed
         await a.send_json({"t": "start"})  # the seat with a player gets the free pregen; the other goes
         assert (await until(a, lambda x: x["t"] == "seated"))["investigator"] == "zhouheng"
         await until(a, lambda x: x["t"] == "begin")

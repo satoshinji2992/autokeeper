@@ -178,6 +178,65 @@ async def test_private_keeper_failures_only_reach_the_requesting_seat(private_hu
     assert not any("provider" in json.dumps(m) for _, m in messages)
 
 
+@pytest.mark.parametrize("stopped_at", ["reply_checkpoint", "media_emit"])
+async def test_a_private_reply_resumes_undelivered_attachments_after_reload(
+    private_hub, tmp_path, monkeypatch, fake, stopped_at,
+):
+    hub, _ = private_hub
+    paper = private_paper(hub, tmp_path)
+    calls, snapshots = [], []
+
+    async def reply(state, who, text):
+        calls.append((who, text))
+        return {"text": "这是单独交给你的信。", "media": [paper]}
+
+    def checkpoint():
+        receipt = hub.state.private_messages.get("lin:resume-letter", {})
+        if stopped_at == "reply_checkpoint" and receipt.get("reply_shown") and not hub.state.presentations:
+            snapshots.append(hub.state.model_dump_json())
+            raise OSError("process stopped after text delivery")
+
+    async def emit(ev):
+        if stopped_at == "media_emit" and ev["type"] == "presentation":
+            snapshots.append(hub.state.model_dump_json())
+            raise OSError("display disconnected")
+        await hub._event(ev)
+
+    monkeypatch.setattr(hub.cast, "private_keeper", reply, raising=False)
+    hub.game.checkpoint = checkpoint
+    hub.game.emit = emit
+    with pytest.raises(OSError):
+        await hub.game.private_message("lin", "请单独把信给我。", request="resume-letter")
+
+    restored = GameState.model_validate_json(snapshots[-1])
+    assert restored.private_messages["lin:resume-letter"]["reply_shown"]
+    assert not restored.private_messages["lin:resume-letter"].get("delivered")
+    resumed = Hub(EXAMPLE, state=restored, cast=hub.cast, rules=Rules(dice=fake))
+    resumed.m = resumed.game.m = hub.m
+    resumed.clients, resumed.sits = hub.clients.copy(), hub.sits.copy()
+    resumed.game.checkpoint = lambda: None
+    messages = []
+
+    async def send(cid, msg):
+        messages.append((cid, copy.deepcopy(msg)))
+
+    monkeypatch.setattr(resumed, "_send", send)
+    monkeypatch.setattr(resumed, "_save", lambda: None)
+    assert resumed.private_requests.qsize() == 1
+    await resumed._privates()
+    assert calls == [("lin", "请单独把信给我。")]
+    assert len(restored.presentations) == 1
+    assert restored.private_messages["lin:resume-letter"]["delivered"]
+    assert len(restored.log) == 3  # accepted question, keeper reply, received document
+    assert [cid for cid, _ in messages] == ["b"]
+    assert messages[0][1]["ev"]["type"] == "presentation"
+    assert messages[0][1]["ev"]["payload"]["handout"]["text"] == "零点，独自到东门。"
+
+    complete = GameState.model_validate_json(restored.model_dump_json())
+    reloaded = Hub(EXAMPLE, state=complete, cast=hub.cast, rules=Rules(dice=fake))
+    assert reloaded.private_requests.empty()
+
+
 async def test_keeper_media_use_separate_receipts_for_two_responses_in_the_same_turn(fake):
     module = Module.load(EXAMPLE)
     module.art["presentation_test"] = "[ a dark room ]"
@@ -219,6 +278,35 @@ async def test_a_private_keeper_call_uses_isolated_transcripts_and_the_keeper_ro
         assert "不执行秘密物理行动" in SEEN[0]["system"]
         assert f"private_keeper:{state.investigator.id}" in cast.sessions
         assert not any(e.audience is None for e in state.log)
+    finally:
+        await game.close()
+
+
+async def test_a_split_player_private_reply_reads_their_own_place_and_current_question_once(fake):
+    module = Module.load(EXAMPLE)
+    module.location("square").keeper = "主队地点独有的幕后机关。"
+    module.location("office").keeper = "报社独有的幕后须知：档案柜钥匙由主编保管。"
+    first = module.pregens[0].model_copy(deep=True)
+    second = first.model_copy(update={"id": "split_reader", "name": "留在报社的记者"}, deep=True)
+    state = Game.new(module, [first, second])
+    state.location = "square"
+    state.apart[second.id] = "office"
+    question = "这里的柜子锁着吗？"
+    state.add("system", f"对守秘人（私信）：{question}", who=second.name, audience=[second.id])
+    state.add("keeper", "你还未检查过柜子。", who="守秘人", audience=[second.id])
+    state.add("keeper", "另一人的私密约定，不应出现在这封信里。", who="守秘人", audience=[first.id])
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+                             visual_limit=0, imagegen=False, search="none"), module)
+    game = Game(module, state, cast, Rules(dice=fake))
+    SCRIPT.append({"text": "你仍在报社，柜子的状态需要正式检查。"})
+    try:
+        await game.private_message(second.id, question, request="split-scene")
+        prompt = SEEN[0]["messages"][-1]["content"]
+        assert "报社独有的幕后须知" in prompt and "主队地点独有的幕后机关" not in prompt
+        assert "此地（报社）的守秘人须知" in prompt
+        assert prompt.count(question) == 2  # one old exchange and this new message, not the new log twice
+        assert "你还未检查过柜子" in prompt and "另一人的私密约定" not in prompt
+        assert state.location == "square" and state.apart[second.id] == "office"
     finally:
         await game.close()
 

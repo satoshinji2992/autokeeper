@@ -36,6 +36,7 @@ from ..agents.cast import Action, Ruling
 from ..rules.commands import instant
 from .game import Game, Turn
 from .observability import record_event
+from .offers import public_push
 
 TURN = TypeAdapter(Turn)
 
@@ -172,7 +173,7 @@ def build(game: Game, checkpointer=None):
         journal = game.state.pending_turn
         if held().push and not journal.get("push_merged"):
             if "push_choice" not in journal:
-                offer = {k: v for k, v in (game.state.pending_push or {}).items() if k not in ("clues", "flags")}
+                offer = public_push(game.state.pending_push or {})
                 journal["push_choice"] = interrupt({"kind": "push", **offer})  # as it came: a word, or {choice, how}
                 keep()
             extra = await game.push(journal["push_choice"])

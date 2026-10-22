@@ -392,14 +392,14 @@ def apart(st: GameState, name: Callable[[str], str]) -> str:
     return "；".join(rows)
 
 
-def keeper_brief(w: World) -> str:
+def keeper_brief(w: World, *, at: str = "") -> str:
     """What the keeper keeps behind the screen for the telling it is about to give (the user's
     call, 2026-10-20: the keeper sees everything): what this place hides, what the people here and
     in the other rooms of the building hide and mean to do, what is coming, what was rewritten.
     Read from the record, so a rewrite shows; sent with each telling and never kept in the
     keeper's memory. What of it reaches the players stays the keeper's call under its rules."""
     rec, st, m = w.rec, w.st, w.m
-    here = st.location
+    here = at or st.location
     lines: list[str] = []
     pending = [b for b in rec.beats if b.status == "waiting"]
     if pending:

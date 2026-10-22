@@ -29,7 +29,7 @@ from ..engine.state import GameState, WorldFact
 from ..module.schema import Module
 from ..rules.coc import Investigator
 from . import knowledge
-from .record import ENGINE, PLAYERS, Agent, Entity, Entry, Event, Memory, Relation, WorldRecord, relation_key
+from .record import ENGINE, PLAYERS, Agent, Entity, Entry, Event, Memory, Relation, Sighting, WorldRecord, relation_key
 
 if TYPE_CHECKING:
     from .ops import Op
@@ -137,6 +137,23 @@ class World:
         """NPCs at a place, alive and not gone missing."""
         return [e.id for e in self.rec.entities.values() if e.kind == "npc" and e.at == place and e.status not in ("死亡", "失踪")]
 
+    def observers(self, place: str) -> list[str]:
+        """Seats physically able to see a public occurrence here, frozen when it happens."""
+        return [i.id for i in self.st.investigators if self.st.apart.get(i.id, self.st.location) == place
+                and not {"死亡", "昏迷"}.intersection(i.conditions)]
+
+    def observe(self, place: str, witnesses: list[str], event: str, *, leaving: str = "") -> None:
+        """Keep the latest sourced personal sighting; private moves do not call this for bystanders."""
+        for who in self.observers(place):
+            if who not in witnesses:
+                continue
+            masked = self.st.perceptions.get(who, {})
+            people = [*self.present(place), *([leaving] if leaving else [])]
+            for npc in dict.fromkeys(people):
+                if npc in masked or not ((known := self.st.npcs.get(npc)) and known.met):
+                    continue
+                self.rec.sightings.setdefault(who, {})[npc] = Sighting(place=place, event=event, left=npc == leaving)
+
     def agent(self, npc: str) -> Agent | None:
         return self.rec.agents.get(npc)
 
@@ -182,7 +199,9 @@ class World:
         public = visibility != "private" and place == self.st.location and place != ""
         npcs = [p for p in people if (x := rec.entities.get(p)) is not None and x.kind == "npc"]
         around = [] if visibility == "private" else self.present(place)  # covert: only who took part or was named
-        seeing = list(dict.fromkeys([*npcs, *around, *(witnesses or [])]))
+        local = self.observers(place)
+        pc = [x for x in local if visibility != "private" or x in people or x in (witnesses or [])]
+        seeing = list(dict.fromkeys([*npcs, *around, *(witnesses or []), *pc]))
         base = f"ev:{op or rec.seq}"
         n = sum(1 for x in rec.events[-8:] if x.id.split("#")[0] == base)
         e = Event(id=base if not n else f"{base}#{n + 1}", seq=rec.seq, t=self.now, turn=self.st.turn, kind=kind, actor=actor,
@@ -190,6 +209,7 @@ class World:
                   witnesses=seeing, facts=list(facts or []), trace=trace[:120], op=op, reactive=reactive)  # fmt: skip
         rec.events.append(e)
         del rec.events[:-EVENTS_KEEP]
+        self.observe(place, pc, e.id)
         for npc in dict.fromkeys([*seeing, *(p for p in people if p in rec.agents)]):
             for fid in e.facts:
                 if (f := rec.facts.get(fid)) and npc not in f.known_by and npc in rec.entities:

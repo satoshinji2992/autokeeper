@@ -312,7 +312,7 @@ async def test_walking_somewhere_to_act_moves_the_party_first(module, fake):
     assert game._heading(gaze) is None  # unknown places do not move anyone
 
 
-def test_ai_players_know_where_the_people_they_met_are(module, fake):
+def test_met_people_without_a_position_source_do_not_reveal_their_real_location(module, fake):
     from autokeeper.engine.autoplay import situation
 
     game, *_ = make(module, fake, {}, location="office")
@@ -320,7 +320,7 @@ def test_ai_players_know_where_the_people_they_met_are(module, fake):
     game.state.npc("warden").met = True
     first, *rest = situation(module, game.state).split("\n")
     met = next(line for line in rest if line.startswith("见过的人"))
-    assert "老守钟人（钟楼的守钟人，在钟楼）" in met and "见过" not in first  # the first line is what they remember
+    assert "老守钟人（钟楼的守钟人，不知道在哪）" in met and "见过" not in first
 
 
 async def test_narration_sets_the_sky_and_it_passes(module, fake):
@@ -577,7 +577,8 @@ async def test_a_conversation_keeps_new_world_events_without_repeating_the_reply
     turn = Turn(npc_lines=[("warden", "钟楼晚上八点关门。")], world=["守钟人放下工具，开始检查门锁"])
     await game.narrate(turn)
     assert "开始检查门锁" in cast.reports[-1]
-    assert "钟楼晚上八点关门" not in cast.reports[-1]
+    assert "【全桌已听到的原话及动作｜老守钟人】钟楼晚上八点关门。" in cast.reports[-1]
+    assert "不要引用、概述或解释刚才的对话" in cast.reports[-1]
     assert "不要引用、概述或解释刚才的对话" in cast.reports[-1]
 
 
@@ -779,18 +780,18 @@ async def test_a_failure_the_module_lets_find_something_finds_it(module, fake):
 async def test_a_failed_push_brings_what_was_said_before_the_choice(module, fake):
     look = Action(kind="investigate", summary="周衡查看齿轮间", target="齿轮")
     module.flags["warden_woken"] = "守钟人被惊动了"
-    risk = Failure(text="齿轮突然转动，夹伤了手，还惊动了守钟人", flags=["warden_woken"], minutes=15, damage="1D3")
+    risk = Failure(text="齿轮突然转动，夹伤了手，还惊动了守钟人", risk="可能夹伤手、惊动守钟人", flags=["warden_woken"], minutes=15, damage="1D3")
     ruling = Ruling(needs_roll=True, skill="侦查", difficulty="困难", clues_on_success=["c_gears"], minutes=10, on_push_fail=risk)
     game, _, events = make(module, fake, {"x": (look, ruling)}, location="tower")
     fake.queue(99)
     turn = await game.resolve(look, ruling)
-    assert turn.push["risk"] == risk.text  # said before the choice
+    assert turn.push["risk"] == risk.risk  # only the stated cost is said before the choice
     hp, before = game.state.investigator.hp, game.state.minutes
     fake.queue(99).queue_totals(2)  # the pushed roll fails; the wound is 2
     pushed = await game.push({"choice": "push", "how": "把手伸进齿轮缝里摸"})
     assert "c_gears" not in game.state.clues and "warden_woken" in game.state.flags
     assert game.state.minutes - before == 10 + 15 and game.state.investigator.hp == hp - 2  # the push's own time, then the failure's
-    assert any(e["type"] == "outcome" and e["lines"][0] == f"孤注一掷也没成：{risk.text}" for e in events)
+    assert any(e["type"] == "outcome" and e["lines"][0] == f"孤注一掷也没成：{risk.risk}" for e in events)
     assert any("孤注一掷也没有成功" in n for n in pushed.notes)
 
 
