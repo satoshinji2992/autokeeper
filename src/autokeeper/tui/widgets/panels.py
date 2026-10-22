@@ -1065,8 +1065,8 @@ class HistoryPanel(VerticalScroll):
         self.tooltip = "点击一条记录，故事跳到那一段"
 
     def _stick(self) -> None:
-        """The newest line stays in sight once there are more than fit (also when the clue list below
-        grows; scrolling up lets go). Not before: an anchored panel stands its few lines at the bottom."""
+        """The newest line stays in sight once there are more than fit (also when the notes below
+        grow; scrolling up lets go). Not before: an anchored panel stands its few lines at the bottom."""
         if self.max_scroll_y > 0:
             self.anchor()
 
@@ -1114,21 +1114,18 @@ def history_line(kind: str, body, block=None) -> Text | None:
         return line
     if kind == "dice":
         return Text("  " + first, style="dim")
-    if kind == "clue":
-        return Text.assemble(("  ↳ ", "dim"), (first, "bold #e9c46a"))
     if kind in ("sanity", "handout", "ending") or (kind == "system" and first.startswith(("✚", "◎"))):
         return Text("  " + first, style="bold" if kind == "ending" else "")
     return None
 
 
 def log_line(entry) -> Text | None:
-    """A saved log entry (state.log, the LAN backlog) as a history line."""
+    """A saved log entry (state.log, the LAN backlog) as a history line. Never a clue's: the
+    module's words for what was found are the keeper's, the story told it."""
     if entry.kind in ("player", "speech"):  # an action, or words to the party (engine/chat.py)
         return Text(f"{entry.who}：{entry.text}"[:120], style="bold")
     if entry.kind == "dice":
         return Text(f"  ◈ {entry.text}", style="dim")
-    if entry.kind == "clue":
-        return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
     first = entry.text.split("\n", 1)[0]
     if entry.kind in ("sanity", "damage"):  # whose, as the live line has it
         return Text(f"  {'※' if entry.kind == 'sanity' else '✚'} {entry.who + ' ' if entry.who else ''}{first}")

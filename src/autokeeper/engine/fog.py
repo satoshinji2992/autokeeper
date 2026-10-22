@@ -336,16 +336,6 @@ def met(m: Module, st: GameState) -> dict[str, list[str]]:
     return out
 
 
-def found(m: Module, st: GameState) -> dict[str, list[str]]:
-    """The titles of the clues found, by the place they were found at, in the order found."""
-    clues = {c.id: c for c in m.clues}
-    out: dict[str, list[str]] = {}
-    for cid in st.clues:
-        if cid in clues and clues[cid].where:
-            out.setdefault(clues[cid].where, []).append(clues[cid].title)
-    return out
-
-
 def things(m: Module, st: GameState) -> dict[str, str]:
     """The things the investigators know are lying at a place: item id -> place. They saw it
     there (named in what they saw on arriving, or in a clue found there) or left it there. What

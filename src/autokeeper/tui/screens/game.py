@@ -873,20 +873,8 @@ class GameScreen(Screen):
             story.add("dice", Text(f"◈ {ev.get('who', '')}：{ev['text']}"))
         elif t == "idea_offer":  # the game stalled: the keeper offers an Idea roll (engine/idea.py)
             story.add("system", Text(f"◇ {ev['text']}", style="bold"))
-        elif t == "clue":
-            art = next((c.art for c in self.m.clues if c.id == ev["id"]), "")
-            if ev.get("heard"):  # said in conversation, already on screen in their words: a line, not the module's text again
-                story.add("clue", Text(f"✎ 记入线索本：〔{ev['title']}〕", style="bold"))
-            elif art and art in self.m.pictures and imagery.available():  # the thing it was found in, photographed
-                story.add("clue", ItemCard(self.m, {"id": ev["id"], "name": f"〔{ev['title']}〕", "text": ev["text"], "art": art},
-                                           self.app.art_style))  # fmt: skip
-            else:
-                body = Text()
-                body.append(f"〔{ev['title']}〕\n", style="bold")
-                body.append(ev["text"])
-                story.add("clue", body)
-            self._panels()
-            self.app.notify(f"获得线索：{ev['title']}", timeout=3)
+        # A clue found ("clue") shows nothing: the players hear it in the story, in the narration or
+        # someone's words, and keep their own notes (the user, 2026-10-22: no summary handed to them).
         elif t == "handout":
             story.add("handout", Text(f"▤ 手稿：{ev['title']}（F2 可重看）", style="bold"))
             handout = next((h for h in self.m.handouts if h.id == ev.get("id")), None)
@@ -1427,7 +1415,7 @@ class GameScreen(Screen):
             elif self.state.pending_turn:
                 self.story.add("system", Text("上一回合尚未讲完，正在接续已保存的结果。"))
                 for entry in self.state.log:
-                    if entry.turn == self.state.turn and entry.kind in ("dice", "npc", "event", "clue"):
+                    if entry.turn == self.state.turn and entry.kind in ("dice", "npc", "event"):
                         self.story.add(entry.kind, Text(entry.text))
                 await self._run_turn({"input": "/retry"})
             elif self.resume:

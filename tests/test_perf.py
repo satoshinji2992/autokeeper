@@ -125,7 +125,7 @@ async def test_a_long_story_keeps_its_latest_blocks_and_folds_the_rest():
         screen = await story_screen(app, pilot)
         story = screen.story
         before = len(story.children)  # the recap's
-        clue = story.add("clue", Text("〔旧报〕\n钟楼十年前也停过一次。"))  # a line in the history panel too
+        paper = story.add("handout", Text("▤ 手稿：钟楼十年前的旧报（F2 可重看）"))  # a line in the history panel too
         for i in range(400):
             story.add("system", Text(f"第 {i} 段"))
         await pilot.pause()
@@ -145,13 +145,13 @@ async def test_a_long_story_keeps_its_latest_blocks_and_folds_the_rest():
         assert len([w for w in story.children if not isinstance(w, Folded)]) == len(blocks) + StoryLog.FOLD
         assert f"前面还有 {folded - StoryLog.FOLD} 段" in str(header.render())
 
-        line = next(h for h in screen.query(HistoryLine) if h.block is clue)
-        assert clue.parent is None  # folded away
+        line = next(h for h in screen.query(HistoryLine) if h.block is paper)
+        assert paper.parent is None  # folded away
         line.on_click()  # the history panel still takes you there
         await pilot.pause()
         await pilot.pause()
-        back = next(w for w in story.children if "钟楼十年前也停过一次" in str(w.render()))
-        assert back.has_class("clue") and story.scroll_offset.y <= back.virtual_region.y <= story.scroll_offset.y + story.size.height
+        back = next(w for w in story.children if "钟楼十年前的旧报" in str(w.render()))
+        assert back.has_class("handout") and story.scroll_offset.y <= back.virtual_region.y <= story.scroll_offset.y + story.size.height
 
 
 @pytest.mark.usefixtures("canned")

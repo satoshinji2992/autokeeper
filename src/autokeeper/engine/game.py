@@ -730,15 +730,14 @@ class Game(Encounters):
         return why if len(why) <= WHY_LEN else why[: WHY_LEN - 1] + "…"
 
     def _led_to(self, won: list[str], done: list[str], passed: bool, npc: str = "", offer: dict | None = None) -> list[str]:
-        """What a roll led to, written under it: the clues it won and who gave them up, what it
-        set in motion, or that it came to nothing. Only what the investigator now knows."""
+        """What a roll led to, written under it: that it found something and who gave it up, what
+        it set in motion, or that it came to nothing. Never what was found: the telling says that,
+        in the story's words (the user, 2026-10-22: no clue's title or summary on the screen)."""
         m = self.m
         lines = []
-        for cid in won:
-            clue = m.clue(cid)
-            owner = next((n for n in m.npcs if cid in n.clues), None)
-            got = f"{owner.name}松了口：〔{clue.title}〕" if owner else f"获得线索〔{clue.title}〕"
-            lines.append(got if passed else f"没过，可关键线索还是到手了：〔{clue.title}〕，代价看叙述")
+        if won:
+            owner = next((n.name for cid in won for n in m.npcs if cid in n.clues), "")
+            lines.append((f"{owner}松了口" if owner else "有所发现") if passed else "没过，但仍有所得，代价见叙述")
         if done:
             lines.append("行动奏效了")  # flag descriptions are private notes, not player-facing outcomes
         if offer is not None:
@@ -1264,8 +1263,8 @@ class Game(Encounters):
         told = (idea.realised(clue.title, mentioned=bool(plan.get("mentioned", True))) if passed
                 else idea.cut(clue.title, idea.LOST, staged=staged))
         await step("idea-note", turn, lambda: turn.notes.append(told))
-        lines = ([f"灵感检定成功：想到了〔{clue.title}〕"] if passed else
-                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", f"〔{clue.title}〕仍然得到"])
+        lines = (["灵感检定成功：理出了一条思路"] if passed else  # what it is, the telling says
+                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", "那条思路仍会在局面中显露"])
         await step("idea-outcome", turn, lambda: self.emit({"type": "outcome", "who": roller.name, "lines": lines}))
         await step("turn-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
         await step("ending", turn, lambda: self._check_ending(turn))
@@ -2193,7 +2192,9 @@ class Game(Encounters):
         if len(recent) < 48:
             return
         old, keep = st.log[:-24], st.log[-24:]
-        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old if e.kind != "dice")
+        # What the table was told, not the module's own words for each clue: the memory feeds the
+        # players' recap and 故事至今, and the telling that put each clue into the story is there.
+        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old if e.kind not in ("dice", "clue"))
         await self.emit({"type": "status", "text": "记录员整理笔记…"})
         st.memory = await self.cast.chronicle(st, text)
         st.log = keep

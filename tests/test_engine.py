@@ -1003,7 +1003,9 @@ async def test_the_player_throws_their_own_dice(module, fake):
     assert not asks and kinds.index("dice") < kinds.index("outcome") < kinds.index("npc")
     dice = next(e for e in out if e["type"] == "dice")
     assert (dice["tens"], dice["units"], dice["kept"], dice["level"]) == ([0], 8, 0, "极难成功")
-    assert next(e for e in out if e["type"] == "outcome")["lines"] == ["老守钟人松了口：〔守钟人的日记〕"]
+    # who gave in, never what he gave up: that is the telling's (the user, 2026-10-22: no clue titles on the screen)
+    assert next(e for e in out if e["type"] == "outcome")["lines"] == ["老守钟人松了口"]
+    assert "日记" not in str([e for e in out if e["type"] in ("dice", "outcome")])
     assert game.state.clues == ["c_diary"] and "已解锁" in cast.npc_calls[-1][1]
 
 

@@ -1,7 +1,7 @@
 """First-time hints (新手提示) and the first game.
 
 The first time something happens in a game (the opening, a roll, a roll that is not made
-again, the second chance after a failed one, a clue, a handout, someone talking, a sanity
+again, the second chance after a failed one, a handout, someone talking, a sanity
 loss, HP running low, the keeper improvising, a walk somewhere, a few turns going nowhere),
 one dim line in the story says how it works and which key or guide page tells more. Each hint once per player and at
 most one a turn, after the narration, where the player looks before typing: never on top
@@ -49,7 +49,6 @@ TIPS: dict[str, Tip] = {
     "hurt": Tip("HP 已降至三分之一以下。HP 到 0 可能昏迷或濒死，具体取决于伤势。F4 查看人物状态。", "screen"),
     "sanity": Tip("这是理智（SAN）损失。一次损失达到 5 点时，可能触发临时疯狂。F1 查看理智规则。", "sanity"),
     "handout": Tip("F2 打开线索本，可重看已获得的手稿、完整文字和原图。", "clues"),
-    "clue": Tip("这条线索已记入线索本，按 F2 查看。", "clues"),
     "check": Tip("检定结果：骰值不超过目标值即通过；↳ 一行记录本次检定的结果。F1 查看成功等级与奖励骰。", "dice"),
     "repeat": Tip("情况没有变化，同一尝试沿用上次结果。改变做法或获得新信息后，可以再试。", "dice"),
     "waived": Tip(".ra 是检定请求。结果明确，或技能不适用时，守秘人会直接说明，不掷骰。", "dice"),
@@ -69,7 +68,7 @@ STUCK_AFTER = 4  # turns without a clue, an event or a new place before F5 is me
 # When several wait, the more urgent and the rarer go first; the rest keep for a later turn,
 # except those about this very turn, which no later one would make sense of.
 NOW = {"start", "offer"}
-ORDER = ("start", "offer", "hurt", "sanity", "handout", "clue", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
+ORDER = ("start", "offer", "hurt", "sanity", "handout", "check", "repeat", "waived", "npc", f"{TUTORIAL}:outside", "stuck", "improv", "move")
 
 
 class TipLine(Static):
@@ -186,7 +185,7 @@ def _called_for(st, player: Investigator, ev: dict) -> str | None:
         return t if ev.get("who") == player.name else None
     if t == "improv":  # the kinds the story tells; a consequence speaks for itself
         return "improv" if ev.get("kind") in ("开局改编", "展开") else None
-    return {"handout": "handout", "clue": "clue", "dice": "check", "npc": "npc", "move": "move"}.get(t or "")
+    return {"handout": "handout", "dice": "check", "npc": "npc", "move": "move"}.get(t or "")
 
 
 def _due(st, player: Investigator) -> list[str]:

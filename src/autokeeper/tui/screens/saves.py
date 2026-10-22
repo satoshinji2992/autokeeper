@@ -214,7 +214,8 @@ def line(save: Save, playing: bool = False) -> Group:
 
 
 def details(save: Save, m: Module | None) -> Text:
-    """The preview's words: where and when, the party, the clues, the story so far."""
+    """The preview's words: where and when, the party, the story so far. No clue's title: the
+    players keep what they learnt in their own notes (F2)."""
     from ..widgets.pages import tight
 
     st = save.state
@@ -239,12 +240,6 @@ def details(save: Save, m: Module | None) -> Text:
         if inv.conditions:
             out.append("  " + "、".join(inv.conditions), style="red")
         out.append("\n")
-    titles = [c.title for c in m.clues if c.id in st.clues] if m else []
-    out.append(f"\n线索 {len(st.clues)} 条\n", style="bold")
-    for t in titles[:8]:
-        out.append(f"  {t}\n")
-    if len(titles) > 8:
-        out.append(f"  还有 {len(titles) - 8} 条\n", style="dim")
     if st.progress.text.strip():
         out.append("\n进展\n", style="bold")
         out.append(tight(st.progress.text.strip()) + "\n")
@@ -341,7 +336,7 @@ class LoadScreen(Screen):
         return f"（{played}）" if played else ""
 
     def _module(self, save: Save) -> Module | None:
-        """The save's module for its picture and clue names (not compiled: only to look at)."""
+        """The save's module for its picture and place names (not compiled: only to look at)."""
         from ..library import module_dir
 
         key = str(save.meta.get("module", ""))

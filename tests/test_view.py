@@ -62,7 +62,10 @@ def test_ai_players_see_what_the_players_were_shown_and_no_more(zhui):
     assert not any(s in view for s in ("杰弗逊", "外套口袋", "陵墓", "隧道"))  # nobody introduced, no pocket, no way on
     st.clues.append("c_footprints")  # the hoofprints lead to a mausoleum's door
     view = situation(zhui, st)
-    assert "陵墓（听说过）" in view and "通向一座陵墓的门前" in view and "隧道" not in view
+    assert "陵墓（听说过）" in view and "隧道" not in view
+    # Not the module's words for it: the keeper's telling carries those, as it does to the human beside it
+    # (the user, 2026-10-22: no clue summaries handed to the players).
+    assert "通向一座陵墓的门前" not in view and "墓碑旁的怪足迹" not in view and "已有线索" not in view
     st.visited += ["lingmu", "suidao"]
     st.location = "suidao"  # down in the tunnels, where the man they are after is too
     view = situation(zhui, st)

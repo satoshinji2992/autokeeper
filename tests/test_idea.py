@@ -490,7 +490,8 @@ async def test_a_seated_player_pushes_saying_how_and_asks_for_an_idea_roll(monke
         assert push["kind"] == "push" and push["can_push"]
         before = hub.state.minutes
         await ws.send_json({"t": "respond", "id": push["respond_id"], "choice": {"choice": "push", "how": "搬来椅子站上去，凑近了一行行看"}})
-        await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "广场告示" in "".join(x["ev"]["lines"]))
+        led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "有所发现" in x["ev"]["lines"])
+        assert "广场告示" not in str(led)  # what it found is the telling's, never a title on the screen
         assert "c_notice" in hub.state.clues and hub.state.minutes - before >= 10  # its time passed first
         assert any("孤注一掷：搬来椅子" in e.text for e in hub.state.log)
         sync = await until(ws, lambda x: x["t"] == "sync")

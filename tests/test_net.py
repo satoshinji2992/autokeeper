@@ -312,10 +312,10 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         await pilot.press("enter")
         for _ in range(40):
             await pilot.pause(0.1)
-            if "↳ 获得线索〔广场告示〕" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
+            if "↳ 有所发现" in "".join(str(w.render()) for w in screen.query_one(StoryLog).children):
                 break  # the dice have settled, and under them what they led to
         lines = "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
-        assert "周衡（小明·房主）：我看看告示栏" in lines and "↳ 获得线索〔广场告示〕" in lines and "叙事" in lines
+        assert "周衡（小明·房主）：我看看告示栏" in lines and "↳ 有所发现" in lines and "叙事" in lines
         notice = hub.m.clue("c_notice")
         assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
     await closed(task)
@@ -408,7 +408,7 @@ async def test_a_seated_player_throws_their_own_dice(monkeypatch, tmp_path, skil
         assert fake.values  # the dice wait for the player
         await ws.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
         led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome")
-        assert led["ev"]["lines"] == ["获得线索〔广场告示〕"] and not fake.values
+        assert led["ev"]["lines"] == ["有所发现"] and not fake.values  # what it found, the telling says
         await ws.close()
     await closed(task)
 

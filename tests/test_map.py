@@ -304,7 +304,8 @@ def test_what_they_know_inside_a_place(zhui):
     lines = cemetery.split("\n")
     assert lines[0] == "◉ 公墓  当前位置"
     assert lines[1] == "".join(x.strip() for x in zhui.location("mudi").read_aloud.split("\n"))  # what they saw, unwrapped
-    assert "内部区域 陵墓" in cemetery and "已遇见人物 梅洛迪亚斯·杰弗逊" in cemetery and "线索 墓碑旁的怪足迹" in cemetery
+    assert "内部区域 陵墓" in cemetery and "已遇见人物 梅洛迪亚斯·杰弗逊" in cemetery
+    assert "线索" not in cemetery and "墓碑旁的怪足迹" not in cemetery  # what was found there the story told (the user, 2026-10-22)
     assert "通往 金博尔家 10 分钟、艾尔斯伯里大街 10 分钟" in cemetery and "陵墓（未行经）" in cemetery and "天气 ☂ 雨" in cemetery
     street = mapview.about(zhui, st, c, "jiefang").plain
     assert street.startswith("● 艾尔斯伯里大街  已途经") and zhui.location("jiefang").read_aloud.strip()[:8] not in street
@@ -314,7 +315,7 @@ def test_what_they_know_inside_a_place(zhui):
     everything = "\n".join(mapview.about(zhui, st, c, place).plain for place in c.names)
     shown = "\n".join(fog.shown(zhui, st)) + "".join(n.name for n in zhui.npcs if st.npc(n.id).met)
     unseen = [f for loc in zhui.locations for f in loc.features if f not in shown]  # what could be searched, not what was seen
-    secret = [loc.keeper.strip()[:12] for loc in zhui.locations] + unseen + [x.title for x in zhui.clues if x.id not in st.clues]
+    secret = [loc.keeper.strip()[:12] for loc in zhui.locations] + unseen + [x.title for x in zhui.clues]  # found or not
     secret += [s for n in zhui.npcs for s in n.secrets] + ["食尸鬼", "隧道"]
     assert "杰弗逊的外套口袋" in unseen and not [s for s in secret if s and s in everything]
 
@@ -342,7 +343,7 @@ def test_the_example_says_who_was_met_where_and_the_weather_over_it():
     tower = mapview.about(m, st, c, "tower").plain
     assert tower.startswith("◉ 钟楼  当前位置 · 所属区域：广场") and "已遇见人物 老守钟人" in tower and "天气" not in tower  # indoors
     square = mapview.about(m, st, c, "square").plain
-    assert "内部区域 钟楼" in square and "线索 广场告示" in square and "天气 ≋ 雾" in square
+    assert "内部区域 钟楼" in square and "天气 ≋ 雾" in square and "广场告示" not in square
     legend = mapview.legend(c, mapview.tree(c, mapview.default_open(c))).plain
     assert "已听闻，路线未知：○ 报社" in legend and "▸" not in legend  # the tower's square is open: nothing folded
 

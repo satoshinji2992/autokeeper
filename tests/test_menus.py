@@ -389,7 +389,8 @@ async def test_the_save_list_newest_first_with_its_labels_and_preview(canned, mo
         assert "联机" in rows[1] and "已结束" in rows[1] and "2021年5月1日" in rows[1]
         assert "第一次试玩" in rows[2] and "联机" not in rows[2]
         preview = plain(screen.query_one("#preview-body", Static).content)
-        assert "HP" in preview and "SAN" in preview and clue.title in preview and "守钟人说钟声" in preview
+        assert "HP" in preview and "SAN" in preview and "守钟人说钟声" in preview
+        assert clue.title not in preview and "线索" not in preview  # what was found the players keep in their own notes
         assert "Enter 继续" in str(screen.query_one("#setup-hint", Static).content)
         await pilot.press("enter")
         assert await until(pilot, lambda: isinstance(app.screen, GameScreen))
