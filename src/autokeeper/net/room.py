@@ -9,6 +9,7 @@ the LAN saves to go on with, and the last room's settings."""
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextlib
 import ipaddress
 import json
@@ -19,6 +20,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
@@ -298,6 +300,15 @@ class Room:
                 return url
             time.sleep(0.1)
         raise RoomError("网页版启动失败", f"等待 {timeout:.0f} 秒后启动超时，日志位于 {paths.web_log()}")
+
+    def run[T](self, work: Coroutine[Any, Any, T]) -> concurrent.futures.Future[T]:
+        """Run `work` on the Hub's loop, in the Hub's thread: the host's own screen reads the game (开发者模式)
+        and changes it only from there, never from its own thread. RuntimeError once the room has closed."""
+        loop = self._loop
+        if loop is None or loop.is_closed() or not self.is_open:
+            work.close()
+            raise RuntimeError("房间已关闭")
+        return asyncio.run_coroutine_threadsafe(work, loop)
 
     def wait(self) -> None:
         """Until the room closes; Ctrl+C gets through."""

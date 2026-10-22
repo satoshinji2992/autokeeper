@@ -33,6 +33,7 @@ Messages are JSON objects with a "t" field:
     client -> hub   (before the start) bring {investigator, portrait} or {pregen} · ready {on} · card {op ...}
     client -> hub   (in a round) done · undo
     client -> hub   answer {prompt, value, skip} · command {name, text}   (a rule plugin's question, a /command)
+    client -> hub   (the host only) engine {choice} · house_rule {text} · pause_plugin {id, paused}
     hub -> client   welcome · seats · seated {investigator} · face {key, picture_data} · card · turn (the action being settled)
                     · pool {open, capacity, count, by, done, waiting, open_to, extra, mine {now, next}}
                     · event {ev} · module · sync {state} · offer {offer: … respond_id, closes_in} · offer_closed {id} · say · ideas {ideas}
@@ -545,6 +546,17 @@ class Hub:
                 self.rules.put_nowait((cid, text))
                 self.wake.set()
                 await self._send(cid, {"t": "error", "text": "规则请求已排队，将于当前叙述结束后处理。"})
+        elif t == "pause_plugin":  # 规则插件 in the host's 开发者模式: a rule paused, or started again
+            if cid not in self.hosts:
+                await self._send(cid, {"t": "error", "text": "规则插件仅限房主管理。"})
+            elif (identity := str(msg.get("id", ""))) in self.m.plugins:
+                if msg.get("paused"):
+                    self.state.plugin_errors[identity] = "已手动暂停"
+                else:
+                    self.state.plugin_errors.pop(identity, None)
+                self._save()
+                await self._share_book()  # every screen's 规则插件 says whether it is paused (public_plugins)
+                await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _ideas(self, cid: str, seat: str) -> None:
         """Three ideas for a seated player's next move, from the view the AI seats get. The game

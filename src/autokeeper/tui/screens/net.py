@@ -8,12 +8,16 @@ is your turn, words to the party as speech, and out-of-character chat (engine/ch
 from __future__ import annotations
 
 import asyncio
+import copy
+import inspect
 import math
 import os
 import time
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from rich.text import Text
 from textual import events, on, work
@@ -39,7 +43,11 @@ from ..widgets.panels import SceneArt
 from .game import GameScreen
 from .prelude import PreludeScreen
 
+if TYPE_CHECKING:
+    from ...net.hub import Hub
+
 IDEAS_WAIT = 60.0  # seconds F5 waits for the host's ideas
+HUB_WAIT = 10.0  # seconds the host's screen waits for the Hub's loop to read its game (开发者模式)
 
 
 def table_module(welcome: dict[str, Any]) -> Module:
@@ -140,7 +148,7 @@ class NetGameScreen(GameScreen):
 
     def settings_items(self) -> list[tuple[str, str]]:
         """设置 at a shared table: the host tells, so 叙事偏好 is theirs, and only the host changes
-        models; 开发者模式 needs the game, which runs on the host's machine (super())."""
+        models; 开发者模式 needs the game, which runs in the host's own app (may_develop)."""
         off = {"prefs"} | (set() if self.link.host else {"engine"})
         return [item for item in super().settings_items() if item[0] not in off]
 
@@ -158,6 +166,7 @@ class NetGameScreen(GameScreen):
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
         self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F5
+        self._peeking = self._peek_again = False  # the developer panel is being made on the Hub's loop; again after
 
     async def on_mount(self, event: events.Mount) -> None:
         event.prevent_default()  # no local agents, checkpoints or opening: the Hub runs the game
@@ -294,6 +303,8 @@ class NetGameScreen(GameScreen):
             self.inbox.append(msg)
             return
         t = msg["t"]
+        if self.has_class("-dev") and t != "event":  # an event's own turn comes in handle()
+            self._dev()
         if t == "event":
             pictures = msg["ev"].get("picture_data")
             if isinstance(pictures, dict) and msg["ev"].get("type") == "handout":
@@ -560,3 +571,104 @@ class NetGameScreen(GameScreen):
 
     def action_usage(self) -> None:
         self.app.notify("模型调用由房主设备发起，用量记录保存在房主设备。")
+
+    # -- 开发者模式 on the host's own screen ---------------------------------------------------------
+    # The room this app opened (app.room, net/room.py) runs its Hub, and the Hub's Game, in a thread
+    # with a loop of its own. The host's screen reads that game there (Room.run): the panel is made
+    # on the Hub's loop and only shown here, and what changes the game (a house rule, a pause) goes
+    # to the Hub as the host's message. Nothing of it goes to the other screens.
+    def _room(self) -> lan.Room | None:
+        """The room this app opened, when this screen is its host's."""
+        room = getattr(self.app, "room", None)
+        if not self.link.host or room is None or room.hub is None or not room.is_open:
+            return None
+        return room if urlsplit(self.link.url).port == room.port else None  # not another room on this machine
+
+    @property
+    def may_develop(self) -> bool:
+        return self._room() is not None
+
+    async def _on_hub(self, work: Callable[[Hub], Any]) -> Any:
+        """work(hub) called on the Hub's loop (awaited there if it gives an awaitable), its result here.
+        RuntimeError when the room has closed, TimeoutError when its loop is held up."""
+        room = self._room()
+        if room is None:
+            raise RuntimeError("房间已关闭")
+        hub = room.hub  # taken here: the Hub's thread has no app to ask
+
+        async def there() -> Any:
+            out = work(hub)
+            return await out if inspect.isawaitable(out) else out
+
+        return await asyncio.wait_for(asyncio.wrap_future(room.run(there())), HUB_WAIT)
+
+    def _dev(self) -> None:
+        """The panel again, from the Hub's game; asked for while it is being made, once more after."""
+        if self._peeking:
+            self._peek_again = True
+            return
+        self._peeking = True
+        self.run_worker(self._peek(), group="devpanel", exit_on_error=False)
+
+    async def _peek(self) -> None:
+        from ..widgets.devpanel import DevPanel, view
+
+        url, errors = self.dev_url, list(self.dev_errors)
+
+        def made(hub: Hub) -> Text:  # on the Hub's loop: nothing changes the game while it is read
+            if (server := getattr(hub.game, "debug_server", None)) is not None:
+                server.busy = hub.started.is_set() and not hub.open and not hub.over  # the keeper is settling
+            return view(hub.game, url, errors)
+
+        try:
+            while True:
+                self._peek_again = False
+                try:
+                    text = await self._on_hub(made)
+                except (RuntimeError, TimeoutError):  # the room closed, or its loop is held up: the panel stays
+                    return
+                self.query_one(DevPanel).put(text)
+                if not self._peek_again:
+                    return
+                url, errors = self.dev_url, list(self.dev_errors)
+        finally:
+            self._peeking = False
+
+    async def _dashboard(self) -> str:
+        """The developer web page on the Hub's game, served from the Hub's loop."""
+        from ...engine.developer_web import open_dashboard
+
+        errors = self.dev_errors
+        return await self._on_hub(lambda hub: open_dashboard(hub.game, errors=errors))
+
+    @work(exclusive=True, group="plugins")
+    async def action_plugins(self) -> None:
+        """Ctrl+K or 设置 → 规则插件 in the host's 开发者模式: a copy of the Hub's rules, made on its loop."""
+        from ..modals.plugins import PluginsModal
+
+        if not self.developing:
+            return
+
+        def copied(hub: Hub) -> tuple[Module, GameState]:
+            m, st = hub.m, hub.state
+            module = m.model_copy(update={"plugins": list(m.plugins), "extensions": dict(m.extensions),
+                                          "extension_errors": dict(m.extension_errors)})
+            # Only what the window reads, copied: the rest of the Hub's state stays where it is.
+            state = st.model_copy(update={"plugin_errors": dict(st.plugin_errors), "plugin_status": dict(st.plugin_status),
+                                          "plugin_log": copy.deepcopy(st.plugin_log),
+                                          "plugin_panels": copy.deepcopy(st.plugin_panels)})
+            return module, state
+
+        try:
+            module, state = await self._on_hub(copied)
+        except (RuntimeError, TimeoutError):
+            self.app.notify("房间已关闭。", severity="warning")
+            return
+        self.app.push_screen(PluginsModal(module, state, manage=True, send=self._ask_house_rule, toggle=self._pause_plugin))
+
+    def _ask_house_rule(self, text: str) -> None:
+        """The host's own message to the Hub (Hub._house_rules drafts and installs it between actions)."""
+        self.run_worker(partial(self.link.send, {"t": "house_rule", "text": text}))
+
+    def _pause_plugin(self, identity: str, paused: bool) -> None:
+        self.run_worker(partial(self.link.send, {"t": "pause_plugin", "id": identity, "paused": paused}))
