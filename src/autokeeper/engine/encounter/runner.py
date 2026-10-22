@@ -64,8 +64,9 @@ if TYPE_CHECKING:
     from ..game import Turn
 
 UNSETTLED = "【未落实】"
-# The keeper's lines the screens never get: cues, what did not land, the round's order line, stakes, a Luck pool.
-KEEPER_ONLY = ("【可观察】", UNSETTLED, "【战斗 · 第", "【后果】", "【幸运池】")
+# The keeper's lines the screens never get: cues, what did not land, the round's order line (in a chase with
+# everyone's place and action points), stakes, a Luck pool.
+KEEPER_ONLY = ("【可观察】", UNSETTLED, "【战斗 · 第", "【追逐 · 第", "【后果】", "【幸运池】")
 OUTCOME_WORDS = {"won": "调查员一方占了上风", "fled": "调查员逃离了", "lost": "调查员一方全部倒下", "escaped": "对手跑了",
                  "parley": "双方停手谈和", "surrender": "有一方投降了", "dispersed": "各自散去", "caught": "被抓住了",
                  "aftermath_done": "战斗结束"}
@@ -764,7 +765,8 @@ class Encounters:
             after = Ctx.of(self, self.state.encounter or w.enc)
             kn, pn = views.names(after, "keeper"), views.names(after, "players")
             turn.fight += [telling.render(x, kn) for x in w.unit.lines]
-            shown = [telling.render(x, pn) for x in w.unit.lines if not x.startswith(KEEPER_ONLY)]
+            public = [w.unit.public.get(i, x) for i, x in enumerate(w.unit.lines)]
+            shown = [telling.render(x, pn) for x in public if x and not x.startswith(KEEPER_ONLY)]
             notices = []
             for ev in w.unit.notices:
                 ev = dict(ev)

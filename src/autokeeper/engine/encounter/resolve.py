@@ -59,6 +59,7 @@ from .plan import DeclaredAction
 class Unit:
     effects: list = field(default_factory=list)
     lines: list[str] = field(default_factory=list)  # keeper form, {id}
+    public: dict[int, str] = field(default_factory=dict)  # what the players get of line i instead ("": nothing; Work.tell)
     notices: list[dict] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
     rest: dict | None = None  # an `other` ruling's remainder for the turn's investigator (clues, takes, changes)
@@ -182,6 +183,13 @@ class Work:
         sc.engaged = [e for e in sc.engaged if pid not in (e.a, e.b)]
         sc.holds = [h for h in sc.holds if h.by != pid]
         self.change("down", pid)
+
+    def tell(self, line: str, public: str | None = None) -> None:
+        """A line of the keeper's account; `public`, when given, what the players get of it instead
+        ("" nothing: what their investigators do not perceive, such as where a runner they lost went)."""
+        if public is not None:
+            self.unit.public[len(self.unit.lines)] = public
+        self.unit.lines.append(line)
 
     def change(self, kind: str, who: str) -> None:
         c = Change(round=self.enc.round, kind=kind, who=who)  # type: ignore[arg-type]

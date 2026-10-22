@@ -467,3 +467,88 @@ async def test_an_arrangement_to_pursue_someone_it_no_longer_sees_is_not_followe
     st = game.state
     assert st.encounter is None and st.encounter_log[-1].ended.how == "fled" and not fake.values
     assert "追不了周衡" in cast.reports[-1] and "【战斗转为追逐】" not in cast.reports[-1]
+
+
+def players_lines(out: list[dict]) -> list[str]:
+    """Every line the players' screens were sent of the chase."""
+    return [x for e in out if e["type"] in ("chase_state", "fight_state") for x in e.get("lines") or []]
+
+
+async def test_a_foe_who_hides_has_no_place_on_the_players_screens(module, fake):
+    """The review: the round's line gave every runner's place and points, the hide line where the warden
+    hid, and the route kept his node. The players get what their investigators perceive; the keeper all."""
+    hide = DeclaredAction(do="hide", summary="守钟人躲起来")
+    game, cast, _ = fight_game(module, fake, location="office", arrange=lambda *a: EncounterTurnPlan(
+        npcs=[arrange("warden", hide, react="dodge")]))
+    fake.queue(40, 40)  # the speed rolls
+    await game._fire(RUN.model_copy(update={"chase_party": "追"}), Turn())
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(1, 1)  # 周衡 down the stairs; the warden's Stealth
+    out, _ = await play(app, "追赶 楼梯口打盹的老人")
+    shown = players_lines(out)
+    assert "楼梯口打盹的老人不见了踪影" in shown and not any("【追逐 · 第" in x or "报社大门" in x for x in shown)
+    hid = [r for e in out if e["type"] == "chase_state" for r in e["chase"]["runners"] if r["name"] == "楼梯口打盹的老人"][-1]
+    assert hid["hidden"] and hid["pos"] is None and hid["node"] == ""
+    report = cast.reports[-1]
+    assert "【追逐 · 第 1 轮】" in report and "在报社大门躲了起来" in report  # the keeper's account keeps it all
+
+
+async def test_a_pursuer_nobody_sees_runs_unseen(module, fake):
+    """Running where no investigator perceives it (the keeper declared the fog): the players get nothing of
+    where it went, nor of the obstacle it crossed; the keeper does."""
+    from autokeeper.engine.encounter.plan import SightNote
+
+    from .test_fight import chase_route
+
+    game, cast, _ = await chased(module, fake)
+    open_door(game)
+    await game._plan_unit("fog", EncounterTurnPlan(sight=[SightNote(watcher="zhouheng", who="warden", why="浓雾")]).model_dump(
+        mode="json", by_alias=True), [], Turn())
+    app = turn_graph.build(game, InMemorySaver())
+    fake.queue(10)  # the warden on the stairs
+    out, _ = await play(app, "全力奔跑")
+    shown = players_lines(out)
+    assert shown and not any(x.startswith("楼梯口打盹的老人") for x in shown)
+    assert "老守钟人跑到了报社的楼梯" in cast.reports[-1]  # the keeper knows him by name
+    view = next(e for e in reversed(out) if e["type"] == "chase_state")["chase"]
+    warden = next(r for r in view["runners"] if r["side"] == "foe")
+    assert warden["pos"] is None and warden["node"] == ""
+    lines = chase_route(view, 40, 30).plain.split("\n")
+    rules = [i for i, x in enumerate(lines) if x and set(x) == {"─"}]
+    way = lines[rules[0] + 1:rules[1]]
+    assert way and not any("楼梯口打盹的老人" in x for x in way)  # not on the way drawn
+
+
+async def test_the_fight_a_chase_turns_into_is_where_contact_found_it(module, fake):
+    """The review: contact() and to_fight() each picked the meeting point their own way. A quarry struck
+    down where its pursuer stands is the meeting point, not the place of a companion who turned round
+    with nobody there to face."""
+    from autokeeper.engine.encounter import chase as chasing
+    from autokeeper.engine.encounter.actions import Ctx
+    from autokeeper.engine.encounter.model import ActionReceipt, ChaseState
+    from autokeeper.engine.encounter.resolve import Work
+
+    from .encounter_kit import begin
+
+    game, _cast, _ = with_li(module, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden"])
+    built = site.build(module, "office")
+    here = built.origin
+    there = site.neighbours(built, here)[0][0]
+
+    def edit(e):
+        e.mode, e.round = "chase", 1
+        e.chase = ChaseState(site=built, quarry=["zhouheng", "li"], pursuers=["warden"])
+        for p in e.participants:
+            p.node = there if p.id == "li" else here
+    change(game, edit)
+    inv = game.state.investigators[0]
+    inv.hp, inv.conditions = 0, ["昏迷"]  # struck down where the warden stands
+    w = Work(game, Ctx.of(game), "t")
+    w.enc.mode, w.enc.round = "chase", 1
+    w.enc.receipts.append(ActionReceipt(id="x", round=1, actor="li", source="ai", summary="-", phase="committed",
+                                        declared=DeclaredAction(do="stand", summary="-")))
+    assert chasing.contact(w) == here
+    assert chasing.round_end(w) == "fight"
+    assert w.enc.mode == "fight" and {p.node for p in w.enc.participants} == {here}
+    assert [{e.a, e.b} for e in w.enc.scene.engaged] == [{"zhouheng", "warden"}]

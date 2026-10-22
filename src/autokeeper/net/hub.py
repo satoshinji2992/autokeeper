@@ -230,7 +230,8 @@ def public_battle(ev: dict[str, Any]) -> dict[str, Any]:
         ev["fight"] = {**fight, "fighters": [f if f.get("kind") == "investigator" else
                                              {k: v for k, v in f.items() if k not in ("look", "dex")} for f in fight["fighters"]]}
     if chase := ev.get("chase"):
-        at = [r["pos"] for r in chase.get("runners", []) if r.get("status") not in DOWN and not (r.get("hidden") and r["side"] != "party")]
+        at = [r["pos"] for r in chase.get("runners", []) if r.get("pos") is not None and r.get("status") not in DOWN
+              and not (r.get("hidden") and r["side"] != "party")]
         legs = [{k: v for k, v in leg.items() if k != "id"} for leg in chase.get("legs", [])]  # the module's own ids stay here
         runners = [{k: v for k, v in r.items() if k != "node"} for r in chase.get("runners", [])]
         ev["chase"] = {**chase, "legs": public_way(legs, at), "runners": runners}
