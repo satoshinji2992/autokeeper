@@ -6,7 +6,9 @@ clues found, flags set, events fired. So "what can a table reach" is a fixpoint,
 few rounds, with no search over orders:
 
     places    the start, every exit of a place reached, where a fired event takes the party
-    clues     at a place reached (or with an NPC who is there), every requirement met
+    clues     every requirement met, and at a place reached when it comes from no one; one that comes
+              from someone (or that someone else can tell) with that person at a place reached, or
+              brought before the investigators by an event that fires (Event.present)
     flags     set by an event that fires; any other declared flag only when the investigators
               bring it about, as the arbiter rules (counted, but marked: it depends on them)
     events    their moment comes: a place reached (visit:), a flag set (flag:), an hour (D1 21:00)
@@ -34,7 +36,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .graph import supporting_clues
+from .graph import supporting_clues, tellers
 from .schema import Module
 
 TIMED = re.compile(r"D\d+ \d{1,2}:\d{2}")
@@ -47,6 +49,7 @@ class Reach:
     flags: set[str] = field(default_factory=set)  # set by the module's own events
     events: set[str] = field(default_factory=set)
     endings: dict[str, str] = field(default_factory=dict)  # ending id -> "事件" (it comes) or "行动" (they bring it about)
+    met: set[str] = field(default_factory=set)  # NPCs a fired event puts before the investigators (Event.present)
 
 
 def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_npcs: frozenset[str] = frozenset(),
@@ -72,17 +75,18 @@ def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_np
             if (kind == "visit" and what in r.places) or (kind == "flag" and what in r.flags | acted) or TIMED.fullmatch(when):
                 r.events.add(e.id)
                 r.flags |= set(e.sets)
+                r.met |= set(e.present)
                 if e.move_to and e.move_to in places and e.move_to not in without_places:
                     r.places.add(e.move_to)
         holders = {n: place for n, place in where.items() if n not in without_npcs}
         for c in m.clues:
             if c.id in r.clues:
                 continue
-            # As Game._valid_clues has it: a clue is to be had where it lies, or wherever the one
-            # who tells it is. Taking that person away takes away only the second way.
-            here = c.where in r.places or (bool(c.npc) and holders.get(c.npc) in r.places)
-            if c.npc and c.npc in without_npcs:
-                here = c.where in r.places and not any(n == c.npc and place == c.where for n, place in where.items())
+            # As Game._valid_clues has it (graph.at_hand): one that comes from no one where it lies; one
+            # that comes from someone, or someone else can tell, with that person. Taking a person away
+            # takes away what only they can give.
+            here = (not c.npc and c.where in r.places) or any(
+                t in holders and (holders[t] in r.places or t in r.met) for t in tellers(m, c))
             met = all(x[5:] in r.flags | acted if x.startswith("flag:") else x in r.clues for x in c.requires)
             if here and met:
                 r.clues.add(c.id)
@@ -249,7 +253,7 @@ def playthrough(m: Module) -> Report:
             if loc.id != m.start and not loc.public and not any(c in reach(m, without_places=frozenset({loc.id})).clues for c in got):
                 hangs.append(f"地点 {loc.id}")
         for n in m.npcs:
-            if any(m.clue(c).npc == n.id for c in got) and not any(c in reach(m, without_npcs=frozenset({n.id})).clues for c in got):
+            if any(n.id in tellers(m, m.clue(c)) for c in got) and not any(c in reach(m, without_npcs=frozenset({n.id})).clues for c in got):
                 hangs.append(f"NPC {n.id}")
         fragile[k] = hangs
     issues = []

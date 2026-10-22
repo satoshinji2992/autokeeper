@@ -60,9 +60,13 @@ def judge(monkeypatch):
         calls.append(material)
         return adapt.Verdict(flags=[adapt.Flag(ref=ref, problem="脚本：绕过了条件") for ref in fake.flags])
 
+    async def clues(cfg, material):  # the clues' review that follows: nothing to report here
+        return adapt.ClueVerdict()
+
     fake.flags = []
     fake.calls = calls
     monkeypatch.setattr(adapt, "_judge", fake)
+    monkeypatch.setattr(adapt, "_judge_clues", clues)
     return fake
 
 
@@ -137,7 +141,7 @@ def test_the_waves_follow_what_each_pass_reads():
     at = {name: i for i, wave in enumerate(order) for name in wave}
     assert at["npcs"] < at["relations"] < at["agendas"] < at["meet"]
     assert at["clueweb"] < at["foreshadow"] and at["history"] < at["agendas"] and at["endings"] < at["agendas"]
-    assert len(order) == 4 and {"npcs", "clueweb", "endings", "mechanics", "prelude", "combat"} == set(order[0])
+    assert len(order) == 4 and {"npcs", "present", "clueweb", "endings", "mechanics", "prelude", "combat"} == set(order[0])
 
 
 # -- 3. and 4. what it may not hand over --------------------------------------------------------

@@ -26,6 +26,7 @@ from ..agents.cast import Action, Cast, Failure, Initiative, Rejoin, Ruling, kp_
 from ..agents.director import Improv
 from ..harness.models import refused
 from ..harness.replay import CassetteError
+from ..module import graph as module_graph
 from ..module import improv
 from ..module.schema import Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
@@ -2425,7 +2426,8 @@ class Game(Encounters):
         died. Nobody asked, nothing is held back: a passed roll on someone talk() does not ask gives
         its clue as found (the review of 2026-10-22: 有些人油盐不进's c_fitz_talk, a 心理学 roll that
         passed, came to nothing). Nor what their manner gives away (a 心理学 gate): the investigator
-        sees it, nobody tells it, a paper is handed over."""
+        sees it, nobody tells it, a paper is handed over. Only what is theirs to tell (NPC.clues): one
+        that comes from them without it (Clue.npc), what is seen of them, is found."""
         st, m = self.state, self.m
         if not npc:
             return []
@@ -2435,7 +2437,7 @@ class Game(Encounters):
             clue = m.clue(cid)
             gate = sheet.gates.get(cid) or clue.check
             observed = gate is not None and canonical(gate.skill) == "心理学"
-            return (clue.npc == npc or cid in sheet.clues) and not clue.handout and not observed
+            return cid in sheet.clues and not clue.handout and not observed
 
         spoken = [c for c in ids if told(c)]
         unlocked = st.npc(npc).unlocked
@@ -2463,10 +2465,11 @@ class Game(Encounters):
                 and clues[cid].available(st.flags, st.clues)]
 
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
+        """Of the clues a ruling gives, those to be had here now (module/graph.at_hand): what lies here,
+        and what comes from someone the world record has here, alive and not gone (2026-10-22: the
+        clue about the truck's driver was given at an empty cab)."""
         st, m = self.state, self.m
-        here = {c.id for c in m.clues_at(st.location)}
-        for n in m.npcs_at(st.location):
-            here |= set(n.clues)
+        here = {c.id for c in module_graph.at_hand(m, st.location, self.world.present(st.location))}
         known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
         found = [c for c in dict.fromkeys(ids) if c in known and c in here and c not in st.clues]
         if action and (action.approach == "心理学" or (action.asked and canonical(action.asked.skill) == "心理学")):
@@ -2761,8 +2764,20 @@ class Game(Encounters):
                 if flag not in st.flags:
                     st.flags.append(flag)
 
+        def appear() -> None:
+            """Who the read-aloud puts before the investigators is there in the record too (2026-10-22:
+            the truck's driver stepped down in the event, the record had him nowhere, and the keeper
+            then told an empty cab): where the event takes the party, else where it is."""
+            to = ev.move_to if ev.move_to and self.encounter() is None else st.location
+            for nid in ev.present:
+                ent = self.world.rec.entities.get(nid)
+                if ent is not None and ent.kind == "npc" and ent.at != to and ent.status not in ("死亡", "失踪"):
+                    self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=to))
+
         async def fire() -> None:
             await step("commit", turn, commit)
+            if ev.present and self.world is not None:
+                await step("present", turn, appear)
             if not turn.told:  # at the opening the keeper tells it, once (the user, 2026-10-22: shown, then told again)
                 await step("notice", turn, lambda: self.emit({"type": "event", "id": ev.id, "title": ev.title, "text": ev.read_aloud.strip()}))
             if ev.art and views.shown(self.m, ev.art):

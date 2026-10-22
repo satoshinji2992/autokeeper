@@ -27,13 +27,23 @@ class Check(BaseModel):
 
 
 class Clue(BaseModel):
+    """What the investigators can come by. `npc` is the person it takes: the one it comes from (what
+    they say or hand over, what is seen of them) or whose say-so on the spot it needs (their gates).
+    It is to be had where they are, with them there; `where`/`feature` say where they are met.
+    Without `npc` it is found where it lies. Whoever lists it in NPC.clues can tell it or hand it
+    over too (module/graph.at_hand); what is only seen of someone is not theirs to tell."""
+
     id: str
     title: str = Field(description="线索的短标题，守秘人和复盘用；游戏中不给玩家看")
-    text: str = Field(description="调查员得到的信息；守秘人照它在叙述里讲出，原文不直接给玩家看")
-    where: str = Field(description="所在地点 id")
-    feature: str = Field("", description="具体在哪：书桌、木匣、某个 NPC 口中")
+    text: str = Field(description="调查员得到的信息，由守秘人叙述、NPC 台词或手稿交代，原文不直接给玩家看；"
+                                  "被问到才说的话、要满足条件才有的事不写成事实，"
+                                  "写进那个人的 knows、lies（要交涉才肯说的写 gates），或另写一条带检定、前置条件的线索")
+    where: str = Field(description="在哪找到（地点 id）；出自某人的线索写平时在哪见到他")
+    feature: str = Field("", description="具体在哪：书桌、木匣；出自某人的写他在哪、在做什么")
     check: Check | None = Field(None, description="需要的检定；为空表示搜到即得")
-    npc: str | None = Field(None, description="由哪个 NPC 提供")
+    npc: str | None = Field(None, description="线索出自谁（NPC id）：他说的话、交出的东西、在他身上看到的样子，"
+                                              "或要他当场点头才拿得到（交涉检定写进他的 gates）；他在场才拿得到。"
+                                              "东西在别处找到、这人只是指路、给钥匙或转述的不写，转述的人把它列进自己的 clues")
     core: bool = Field(False, description="关键线索：拿不到就推进不下去")
     handout: str | None = None
     requires: list[str] = Field(default_factory=list, description="全部前置条件：线索 id，或 flag:标记；未满足时不能发出线索或附图")
@@ -123,7 +133,8 @@ class NPC(BaseModel):
     knows: list[str] = Field(default_factory=list, description="这个 NPC 知道的事")
     secrets: list[str] = Field(default_factory=list, description="不被逼问不会说的事")
     lies: list[str] = Field(default_factory=list, description="会主动撒的谎")
-    clues: list[str] = Field(default_factory=list, description="能给出的线索 id")
+    clues: list[str] = Field(default_factory=list, description="他能说出或交出的线索 id：他说的、交出的，和他亲身知道、能转述的；"
+                                                             "在他身上看到的、要亲眼查看才得到的不写，对他过心理学才看得出的除外（gates 写心理学）")
     gates: dict[str, Check] = Field(default_factory=dict, description="线索 id -> 需要的社交检定")
     location: str | None = None
     portrait: str | None = None
@@ -251,6 +262,8 @@ class Event(BaseModel):
     read_aloud: str = ""
     sets: list[str] = Field(default_factory=list)
     sanity: str | None = None
+    present: list[str] = Field(default_factory=list, description="朗读里出现在调查员眼前的 NPC id（推门进来的人、桥头的人影）；"
+                                                                "触发时他们来到事件发生的地方。只是听说、打来电话、远远望见的不写")
     damage: str | None = Field(None, description="当场受到的伤害，如 1D3（由行动的调查员承受）")
     move_to: str | None = None
     performer: str | None = Field(None, description="由哪个 NPC 当场表演（例如说书）")

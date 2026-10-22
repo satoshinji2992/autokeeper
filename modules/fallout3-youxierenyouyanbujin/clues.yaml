@@ -28,7 +28,7 @@ clues:
   - flag:mccurdy_dead
   points_to:
   - k_cover_up
-  text: 来收尸的是农民弗雷迪·詹森，开的是一辆破皮卡，既不是法医中心的车也不是医院的车。他把尸体卷进床单扔上车斗，往镇东头开走了。
+  text: 来收尸的是农民弗雷迪·詹森，开的是一辆破皮卡，既不是法医中心的车也不是医院的车。
 - id: c_broken_words
   title: 路人的胡话
   where: main_street

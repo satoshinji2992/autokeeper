@@ -206,16 +206,21 @@ BRIEF = """你是 AutoKeeper 的模组构建员。把 source/source.md 这份 Co
 - 照着 _example/module.yaml（字段齐全的格式样例）写；字段含义见 _example/schema.json。
 - 模组 id 用 "{module_id}"。所有 id 用小写英文或拼音加下划线。
 - 只整理模组里有的东西；剧情、真相、线索内容、检定要求、理智损失、结局都按原文，不要改编。
-  原文没写的细节（NPC 的说话方式、地点的可调查物）可以合理补全。
+  原文没写的细节（NPC 的说话方式、地点的可调查物）可以合理补全；说话方式里的口头禅、咳嗽、习惯动作写成偶尔带出的，不写成每句都做。
 - 保留原文的开局引入，别把调查员直接放进任务清单。原文直接从委托或调查开始时，可补一处不改变案情的抵达地点与日常接触，
   在 keeper_notes 注明“AutoKeeper 补充”；start、opening、locations/exits 要一致，玩家可以问路、歇脚或直接赴约。
   不补新的案情线索、怪异预兆和强制检定，不改原作必须发生的开局事件与时限。
 - clues 要全：写清在哪（where、feature）、要什么检定（check，技能名用中文，如 侦查、图书馆使用、外语(拉丁文)）、
-  指向哪个结论（points_to），推进剧情必需的标 core: true。NPC 口中的线索写 npc，并在该 NPC 的 clues 和 gates 里登记。
+  指向哪个结论（points_to），推进剧情必需的标 core: true。
+  线索出自某人（他说的话、交出的东西、在他身上看到的样子），或要他当场点头才拿得到，才写 npc；他在场才拿得到，where 写平时在哪见到他。
+  他说的、交出的登记进他的 clues，要交涉的写进 gates；在他身上看到的不登记，对他过心理学才看得出的除外（gates 写心理学）。东西在别处找到、这人只是指路、给钥匙或转述的，不写 npc，
+  能转述的人把它列进自己的 clues。
+- 线索的 text 只写拿到时就成立的事。原文写着被问到才说的话、要检定或某件事发生以后才有的事，写进那个人的 knows、lies
+  （要交涉才肯说的写 gates），或另写一条带检定、前置条件（requires）的线索，不写成无条件的事实。
 - NPC 的 knows / secrets / lies 分清楚，NPC 只知道原文里他知道的事。
 - 只使用 schema 声明的字段，不发明 clues.sets 等不会执行的字段；复杂条件和暂未支持的规则完整写入 keeper_notes。
-- 有时间点的事情写进 events（when 用 "D1 21:00"，或 visit:地点id、flag:标记）；结局 endings 和奖励照原文；
-  用到的剧情标记都要在 flags 里声明。
+- 有时间点的事情写进 events（when 用 "D1 21:00"，或 visit:地点id、flag:标记）；朗读里出现在调查员眼前的 NPC（没写名字的也对照原文认出是谁）写进 present；
+  结局 endings 和奖励照原文；用到的剧情标记都要在 flags 里声明。
 """ + FIGHTS + """
 - 原文没有预设调查员的话，按模组的年代和地点设计两名，写进 pregens，backstory 里注明“AutoKeeper 补充”。
 - 原文有通用引擎未支持的持续机制时，读 _example/plugins.md，用 write_plugin 编写并运行测试，不能只在 keeper_notes 写“请手动执行”就宣称自动支持。

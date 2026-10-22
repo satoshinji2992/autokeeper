@@ -60,7 +60,7 @@ clues:
   sanity: null
 - id: c_hauling
   title: 拉尸体的人
-  text: 开卡车替人拉尸体的是埃里·赫琴斯。他瘦高、清秀，说话前先发出一阵软弱却刺耳的咳嗽， 说是有片弹片卡在胸腔里取不出来。他不太眨眼，动作比常人慢半拍。
+  text: 开卡车替人拉尸体的是埃里·赫琴斯。他瘦高、清秀，说话前先发出一阵软弱却刺耳的咳嗽。他不太眨眼，动作比常人慢半拍。
   where: main_street
   feature: 街角的卡车
   check: null
@@ -178,7 +178,7 @@ clues:
   sanity: 0/1D4
 - id: c_anna_tale
   title: 安娜的讲述
-  text: 安娜说萨缪尔是镇上第一个病死的。他被带回家那晚已经开始胡言乱语，那时他身上还没有任何症状。 他说自己打猎时遇到了一个包裹全身的人，还说：“他回家了。他本来就在这，但他现在又回来了。” 她还低声承认，埃里是她丈夫最长久的朋友之一，但自从埃里从战场回来，两人的关系就变得有些紧张。
+  text: 安娜说萨缪尔是镇上第一个病死的。他被带回家那晚已经开始胡言乱语，那时他身上还没有任何症状。 他说自己打猎时遇到了一个包裹全身的人，还说：“他回家了。他本来就在这，但他现在又回来了。” 埃里是她丈夫最长久的朋友之一。
   where: post_office
   feature: 安娜的柜台
   check: null
@@ -196,7 +196,7 @@ clues:
   where: eastman_house
   feature: 那本潦草的日记
   check: null
-  npc: anna
+  npc: null
   core: true
   handout: h_nightmare
   requires: []
@@ -247,7 +247,7 @@ clues:
     skill: 说服
     difficulty: 常规
     bonus: 0
-  npc: caroline
+  npc: null
   core: true
   handout: null
   requires: []
@@ -288,7 +288,7 @@ clues:
   where: clinic
   feature: 护士的值班记录
   check: null
-  npc: ante
+  npc: null
   core: true
   handout: null
   requires:
@@ -298,7 +298,7 @@ clues:
   sanity: null
 - id: c_theft_suspect
   title: 她还要一具尸体
-  text: 卡洛琳希望调查员再帮她弄一具尸体以了解更多。她的要求会越来越多：先是要更多的尸体， 最终变本加厉地索要活着的病人，好在仪式中献祭以定位“掩藏者”的位置。
+  text: 卡洛琳希望调查员再帮她弄一具尸体以了解更多。
   where: darvill_house
   feature: 地下室的门
   check: null
@@ -309,7 +309,6 @@ clues:
   - flag:body_stolen
   points_to:
   - k_caroline
-  - k_buried
   sanity: null
 - id: c_seance
   title: 门后的招魂
@@ -324,7 +323,8 @@ clues:
   npc: null
   core: true
   handout: null
-  requires: []
+  requires:
+  - flag:body_stolen
   points_to:
   - k_buried
   - k_nightmare
