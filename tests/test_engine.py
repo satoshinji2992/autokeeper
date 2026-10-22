@@ -908,7 +908,7 @@ async def test_one_scoped_social_settlement_reaches_both_npc_and_keeper(module, 
     public_scope = "检定决定守钟人是否陪你查看广场，不涉及交出日记。"
     ruling = Ruling(needs_roll=True, skill="恐吓", why=public_scope, reason="后台日记藏在锁住的抽屉里")
     fake.queue(rolled)
-    turn = Turn(action=SCARE, ruling=ruling, checks=[game.rules.check(game.state.investigator, "恐吓")])
+    turn = Turn(action=SCARE, ruling=ruling, primary=0, checks=[game.rules.check(game.state.investigator, "恐吓")])
     assert turn.checks[0].passed == passed
     settled = game._social_result(turn, "warden")
     message = game._npc_message(turn, "warden")
@@ -927,9 +927,79 @@ async def test_a_psychology_result_does_not_tell_the_observed_npc_the_players_ju
     fake.queue(8)
     action = SCARE.model_copy(update={"approach": "心理学"})
     turn = Turn(action=action, ruling=Ruling(needs_roll=True, skill="心理学", why="你判断他在隐瞒家事"),
-                checks=[game.rules.check(game.state.investigator, "心理学")])
+                primary=0, checks=[game.rules.check(game.state.investigator, "心理学")])
     assert game._social_result(turn, "warden") == ""
     assert "你判断他在隐瞒家事" not in game._npc_message(turn, "warden")
+    await game.close()
+
+
+@pytest.mark.parametrize("rolled,passed", [(8, True), (99, False)])
+async def test_social_performance_follows_the_settled_skill_when_it_differs_from_the_requested_approach(
+        module, fake, rolled, passed):
+    from autokeeper.engine.game import TURN_RECORD
+
+    game, *_ = make(module, fake, {}, location="tower")
+    action = SCARE.model_copy(update={"approach": "魅惑"})
+    ruling = Ruling(needs_roll=True, skill="说服", why="确认守钟人是否愿意陪你去广场")
+    fake.queue(rolled)
+    turn = Turn(action=action, ruling=ruling, primary=0, checks=[game.rules.check(game.state.investigator, "说服")])
+    restored = TURN_RECORD.validate_json(TURN_RECORD.dump_json(turn))
+    settled = game._social_result(restored, "warden")
+    assert turn.checks[0].passed == passed and "检定：说服" in settled
+    assert ("本次交涉成功" if passed else "本次交涉未达成") in settled
+    assert settled in game._npc_message(restored, "warden") and settled in game._report(restored)
+    assert game._social_result(restored, "preacher") == ""
+    await game.close()
+
+
+async def test_a_reused_social_result_keeps_its_actual_skill_after_the_requested_approach_changes(module, fake):
+    from autokeeper.engine.state import CheckRecord
+
+    game, *_ = make(module, fake, {}, location="tower")
+    action = SCARE.model_copy(update={"approach": "魅惑"})
+    ruling = Ruling(needs_roll=False, repeat=True, skill="说服", why="确认守钟人是否陪同")
+    earlier = CheckRecord(turn=1, who=game.state.investigator.id, at="tower", skill="说服", npc="warden",
+                          text="说服失败", passed=False)
+    turn = Turn(action=action, ruling=ruling, earlier=earlier)
+    assert "同样的说服刚才已经试过" in game._npc_message(turn, "warden")
+    assert "本次请求仍未达成" in game._report(turn)
+    assert not fake.values
+    await game.close()
+
+
+@pytest.mark.parametrize("final_skill", ["魅惑", "心理学"])
+async def test_a_push_with_a_revised_skill_uses_the_actual_second_throw_for_performance(module, fake, final_skill):
+    from autokeeper.engine.game import TURN_RECORD
+
+    game, *_ = make(module, fake, {}, location="tower")
+    ruling = Ruling(needs_roll=True, skill="说服", why="确认守钟人是否愿意帮忙")
+    fake.queue(99, 1)
+    original = Turn(action=SCARE.model_copy(update={"approach": "说服"}), ruling=ruling,
+                    primary=0, checks=[game.rules.check(game.state.investigator, "说服")])
+    second = game.rules.check(game.state.investigator, final_skill, pushed=True)
+    original.absorb(Turn(checks=[second], primary=0))
+    restored = TURN_RECORD.validate_json(TURN_RECORD.dump_json(original))
+    message = game._social_result(restored, "warden")
+    if final_skill == "心理学":
+        assert not message  # an observed judgment is not another concession to the NPC
+    else:
+        assert f"检定：{final_skill}" in message and "本次交涉成功" in message
+        assert "未达成" not in message and message in game._npc_message(restored, "warden")
+    assert not fake.values
+    await game.close()
+
+
+async def test_a_failed_push_does_not_instruct_the_npc_to_cancel_already_ruled_consequences(module, fake):
+    game, *_ = make(module, fake, {}, location="tower")
+    ruling = Ruling(needs_roll=True, skill="恐吓", why="确认守钟人是否交还钥匙",
+                    on_push_fail=Failure(text="守钟人拒绝继续接待并关门", risk="对方可能关门，请你离开"))
+    fake.queue(99)
+    turn = Turn(action=SCARE, ruling=ruling,
+                primary=0, checks=[game.rules.check(game.state.investigator, "恐吓", pushed=True)])
+    settled = game._social_result(turn, "warden")
+    assert "已结算的后果仍成立" in settled
+    assert "不因此增加敌意" not in settled and ruling.on_push_fail.text not in settled
+    assert settled in game._npc_message(turn, "warden") and settled in game._report(turn)
     await game.close()
 
 

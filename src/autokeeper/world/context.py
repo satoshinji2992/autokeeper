@@ -432,9 +432,22 @@ def keeper_brief(w: World, *, at: str = "") -> str:
         things = [e.name for e in rec.entities.values() if e.kind == "item" and e.at == npc]  # what is on them, everyday or not
         parts += [f"身上有：{'、'.join(things)}"] if things else []
         if (a := rec.agents.get(npc)) is not None:
-            steps = [f"{_clip(s.text, 80)}（{_when(s.due) if s.due is not None else s.when or '想到就做'}）"
-                     for s in a.plan if s.status == "pending"][:3]
-            parts += [f"打算：{'；'.join(steps)}"] if steps else []
+            steps = []
+            for s in a.plan:
+                if s.status not in {"pending", "blocked"}:
+                    continue
+                state = ["待处理" if s.status == "pending" else "受阻"]
+                if s.due is not None:
+                    state.append(f"最早 {_when(s.due)}")
+                if s.when:
+                    state.append(f"前置 {s.when}")
+                if s.achieved:
+                    state.append(f"完成须 {s.achieved}")
+                if s.note:
+                    state.append(f"经过 {s.note}")
+                steps.append(f"{s.id}：{s.text}（{'；'.join(state)}）")
+            parts += [f"未完成安排：{'；'.join(steps)}"] if steps else []
+            parts += [f"上次执行未成：{a.refused}"] if a.refused else []
             parts += [f"心境：{_clip(a.mood, 60)}"] if a.mood else []
         # What may come of a ruling of the keeper's (Move.ruling): not the NPC's to do, the keeper's to decide.
         ruled = [_clip(s.text, 100) + (f"（只在{s.only_if}时）" if s.only_if else "") for g in m.agendas if g.npc == npc

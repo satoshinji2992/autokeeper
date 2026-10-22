@@ -99,6 +99,7 @@ class Turn:
     action: Action | None = None
     ruling: Ruling | None = None
     checks: list[Check] = field(default_factory=list)
+    primary: int | None = None  # the action's own final check in checks; event gates never replace it
     clues: list[str] = field(default_factory=list)
     sanity: list[tuple[str, Sanity]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
@@ -128,16 +129,17 @@ class Turn:
         """What another stage of the same turn settled (the replies before the ruling, the push
         choice): its rolls, finds, events, lines and notes join this turn's, so the NPCs on stage
         and the keeper's report have them."""
-        for checked in later.checks:
+        for source, checked in enumerate(later.checks):
             # Luck changes the outcome of the same throw. Keep its original dice and one final
             # result, rather than leaving NPCs and the keeper with the pre-choice failure.
-            index = next((i for i in range(len(self.checks) - 1, -1, -1)
-                          if checked.luck_spent and self.checks[i].name == checked.name
-                          and self.checks[i].target == checked.target and self.checks[i].roll == checked.roll), None)
+            index = self.primary if checked.luck_spent and source == later.primary else None
             if index is None:
+                index = len(self.checks)
                 self.checks.append(checked)
             else:
                 self.checks[index] = checked
+            if source == later.primary:
+                self.primary = index
         for name in ("sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
         self.voices += [x for x in later.voices if x not in self.voices]
@@ -264,6 +266,7 @@ class Game(Encounters):
         self._dealing: set[str] = set()  # who the investigators dealt with this turn: their beats wait (world/stage.py)
         self.initiative: list[Initiative] = []  # who here the keeper's plan has join in this turn (Cast.plan, talk)
         self._directed: set[str] = set()  # those it has join in: the world does not decide for them too this turn
+        self._hosted_turn: int | None = self._hosted_at()  # the accepted plan also covers the people who stay quiet
         self.prelude_played = False  # a screen played the opening performance: no big picture over the keeper's first words
         self._moved_on = False  # the party went somewhere else since the world last lived (scheduler.advance)
         self.listener: Emit = self.emit  # the screen's own: background work outlives a turn's stream
@@ -468,6 +471,7 @@ class Game(Encounters):
         await self._world_settled()  # finish work at the preceding focus before changing its context
         self._focus()
         self.initiative, self._directed = [], set()  # a new turn: nobody arranged yet, a question to the keeper too
+        self._hosted_turn = None
         if text.startswith("/kp "):
             question = text[4:].strip()
             self.state.add("system", f"对守秘人：{question}", who=self.state.investigator.name)
@@ -577,6 +581,7 @@ class Game(Encounters):
                     st.pending_turn["encounter_hint"] = hint.model_dump(mode="json", by_alias=True) if hint else None
                 self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
                                      "kept": [x.npc for x in self.initiative], "registration": receipt})
+                self._hosted_turn = st.turn
                 return plan.action
         return await self.cast.intent(st, text)
 
@@ -1821,6 +1826,7 @@ class Game(Encounters):
                 event = {"type": "waived", "who": inv.name, "skill": canonical(action.asked.skill)}
             elif ruling.needs_roll and ruling.skill:
                 rolled = self.rules.check(inv, ruling.skill, DIFFICULTY_ZH.get(ruling.difficulty, Level.REGULAR), ruling.bonus)
+                turn.primary = len(turn.checks)
                 turn.checks.append(rolled)
                 passed = rolled.passed
                 self._record(action, rolled)
@@ -1899,7 +1905,7 @@ class Game(Encounters):
         for item in self._items_for(action):
             await step(f"item:{item.id}", turn, lambda item=item: self.emit({"type": "item", "id": item.id, "name": item.name,
                        "text": item.description, "art": item.art}))
-        if turn.checks or turn.earlier:
+        if turn.primary is not None or turn.earlier:
             await step("settle", turn, lambda: self._settle(st.checks[-1]))
 
     async def _success(self, ruling: Ruling, turn: Turn) -> None:
@@ -2160,6 +2166,7 @@ class Game(Encounters):
             if lucky:
                 adjusted = CHECK_DATA.validate_python(pending["rolled"])
                 adjusted.luck_spent += pending["luck"]
+                turn.primary = len(turn.checks)
                 turn.checks.append(adjusted)
                 inv.luck -= pending["luck"]
                 st.add("dice", f"花费幸运 {pending['luck']} 点，{pending['skill']} 检定改为成功", who=inv.name)
@@ -2167,6 +2174,7 @@ class Game(Encounters):
                 return {"passed": True, "notice": {"type": "luck", "who": inv.name, "spent": pending["luck"], "left": inv.luck}}
             diff = DIFFICULTY_ZH.get(pending["difficulty"], Level.REGULAR)
             rolled = self.rules.check(inv, pending["skill"], diff, pending["bonus"], pushed=True, target=pending["target"])
+            turn.primary = len(turn.checks)
             turn.checks.append(rolled)
             st.add("dice", rolled.describe(), who=inv.name)
             self._settle(record, rolled.passed, rolled.describe())
@@ -2347,10 +2355,22 @@ class Game(Encounters):
             self.world.observe(st.location, self.world.observers(st.location), done.event,
                                leaving=npc_id if self.world.place(npc_id) != st.location else "")
 
+    def _hosted_at(self) -> int | None:
+        """An accepted arrangement's existing receipt, including a prepared scene's continuation."""
+        pending = self.state.pending_turn
+        arrangements = (pending.get("arrangement", {}), pending.get("prepared_action", {}).get("arrangement", {}))
+        return next((r["at"] for r in arrangements
+                     if r.get("plan") and r.get("landed") and r.get("at") == self.state.turn), None)
+
     def _held(self) -> set[str]:
-        """Those the keeper's plan has join in this turn (also as a resumed turn's journal keeps them):
-        the world's own decisions leave them be until the next turn (scheduler.advance)."""
-        saved = self.state.pending_turn.get("initiative") if self.state.pending_turn else None
+        """An accepted keeper plan owns this turn's actual scene, including silent bystanders.
+        Prepared schedules still run; only autonomous decisions wait. Departed people are free
+        to decide offscreen, and casts without a keeper plan retain the initiative-only boundary.
+        """
+        st = self.state
+        if self._hosted_turn == st.turn or self._hosted_at() == st.turn:
+            return set(self.world.present(st.location))
+        saved = st.pending_turn.get("initiative") if st.pending_turn else None
         return self._directed | {x["npc"] for x in saved or [] if isinstance(x, dict) and x.get("npc")}
 
     def _joining(self, turn: Turn, x: Initiative, *, before: bool = False) -> str:
@@ -3563,19 +3583,28 @@ class Game(Encounters):
         if action is None or action.npc != npc_id:
             return ""
         social = {"说服", "话术", "恐吓", "魅惑"}
-        checks = [c for c in turn.checks if canonical(c.name) in social and canonical(c.name) == action.approach]
         result = ""
-        if checks:
-            c = checks[-1]
-            effect = "本次交涉成功，让步限于这次请求和已授权内容" if c.passed else "本次交涉未达成，不因此增加敌意或新的惩罚"
+        passed = False
+        if turn.primary is not None:
+            c = turn.checks[turn.primary]
+            if canonical(c.name) not in social:
+                return ""
+            passed = c.passed
+            effect = ("本次交涉成功，让步限于这次请求和已授权内容" if c.passed else
+                      "本次交涉未达成，已结算的后果仍成立，不额外追加未裁定的惩罚")
             result = f"检定：{c.name} {c.level.zh}，{effect}。"
-        elif turn.earlier is not None and turn.earlier.skill in social and turn.earlier.skill == action.approach:
+        elif turn.earlier is not None:
             e = turn.earlier
-            effect = "本次交涉已成功，让步仍限于这次请求和已授权内容" if e.passed else "本次请求仍未达成，不增加新的敌意或惩罚"
+            if canonical(e.skill) not in social:
+                return ""
+            passed = e.passed
+            effect = ("本次交涉已成功，让步仍限于这次请求和已授权内容" if e.passed else
+                      "本次请求仍未达成，既有后果继续成立，不另加惩罚")
             result = f"检定：同样的{e.skill}刚才已经试过，不重掷，结果照旧：{effect}。"
         if result and turn.ruling and turn.ruling.why:
             result += (f"本次检定范围：{turn.ruling.why}。这是演出边界，不是角色听到的说明；"
-                       "按此兑现该项让步或未达成的请求，其他事项按自身条件处理，不替本次失败另行完成同一个请求。")
+                       + ("兑现已经成功的这项让步，其他事项按自身条件处理。" if passed else
+                          "这项请求没有达成，不另行完成同一个请求；其他事项按自身条件处理。"))
         return result
 
     def _npc_disclosure(self, turn: Turn, npc_id: str) -> str:

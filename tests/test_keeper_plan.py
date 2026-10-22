@@ -198,11 +198,16 @@ async def test_one_who_joined_in_is_not_woken_backstage_in_the_same_turn(module,
     await game.talk(turn)  # the world lives after the exchange (world_later off)
     assert turn.joined == ["warden"] and decided == [] and game._directed == {"warden"}
     cast.plans["我看看齿轮"] = Plan(action=LOOK)
-    await game.parse("我看看齿轮")  # next turn, nobody joins in: he is the world's again
+    await game.parse("我看看齿轮")  # a valid keeper plan also owns the people who stay quiet
     assert game._directed == set()
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
-    assert decided == [["warden"]]
+    assert decided == []
+    cast.plans["我看看齿轮"] = RuntimeError("the keeper plan is unavailable")
+    action = await game.parse("我看看齿轮")  # a parser-only turn retains the autonomous path
+    turn = await game.resolve(action, await game.rule(action))
+    await game.talk(turn)
+    assert decided == [["warden"]] and cast.heard == ["我看看齿轮"]
     await game.close()
 
 
