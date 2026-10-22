@@ -69,15 +69,101 @@ async def test_json_is_validated_and_repaired_once():
 
 
 async def test_a_line_said_in_plain_words_needs_no_repair():
-    from autokeeper.agents.cast import Dialogue
-
-    schema = Dialogue.model_json_schema()
+    schema = {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
     SCRIPT.append("（搓着手）钥匙就挂在门边，您拿去吧。")
     reply = await hm.make_model(SCRIPTED, "NPC").complete([{"role": "user", "content": "能借我钥匙吗？"}], schema=schema)
     assert reply.data == {"text": "（搓着手）钥匙就挂在门边，您拿去吧。"} and reply.repairs == 0 and len(SEEN) == 1
     SCRIPT.extend(["   ", {"text": "好。"}])  # nothing said at all is still repaired
     reply = await hm.make_model(SCRIPTED, "NPC").complete([{"role": "user", "content": "嗯？"}], schema=schema)
     assert reply.data == {"text": "好。"} and reply.repairs == 1
+
+
+async def test_stateful_dialogue_is_not_downgraded_to_plain_text_when_its_side_effects_are_optional():
+    from autokeeper.agents.cast import Dialogue
+
+    schema = Dialogue.model_json_schema()
+    assert not hm.spoken(schema)
+    SCRIPT.extend(["您拿着这盏灯。我亲眼见过那辆车。",
+                   {"text": "您拿着这盏灯。我亲眼见过那辆车。", "items": [{"name": "煤油灯", "to": "zhouheng"}],
+                    "told": ["c_car"]}])
+    reply = await hm.make_model(SCRIPTED, "NPC").complete([{"role": "user", "content": "能借灯并说说那辆车吗？"}], schema=schema)
+    assert reply.repairs == 1 and reply.data["told"] == ["c_car"]
+    assert reply.data["items"] == [{"name": "煤油灯", "to": "zhouheng"}]
+
+
+async def test_a_whitespace_json_transport_repairs_once_in_prompt_mode_without_losing_the_contract():
+    from types import SimpleNamespace
+
+    from autokeeper.agents.cast import Dialogue
+
+    calls = []
+
+    class Chat:
+        def __init__(self, json_mode=False):
+            self.json_mode = json_mode
+
+        def bind(self, **kwargs):
+            return Chat(json_mode=bool(kwargs.get("response_format")))
+
+        async def ainvoke(self, history):
+            calls.append((self.json_mode, history))
+            text = "   " if self.json_mode else json.dumps({"text": "我见过那辆车。", "told": ["c_car"]}, ensure_ascii=False)
+            return SimpleNamespace(text=text, additional_kwargs={}, content=text,
+                                   usage_metadata={"input_tokens": 100, "output_tokens": 10})
+
+    model = object.__new__(hm.LangChainModel)
+    hm.Model.__init__(model, Role("langchain", "mock:model", None), "你扮演NPC", label="npc")
+    model.provider, model.mode, model.chat = "deepseek", "json", Chat()
+    reply = await model.complete([{"role": "user", "content": "您见过车吗？"}], schema=Dialogue.model_json_schema())
+    assert [mode for mode, _ in calls] == [True, False]
+    assert reply.repairs == 1 and reply.data["told"] == ["c_car"]
+    assert all("JSON Schema" in history[0].content for _, history in calls)
+    assert reply.usage["input_tokens"] == 200 and not hm._format_retry.get()
+
+
+async def test_literal_newline_in_npc_json_preserves_dialogue_and_actions():
+    from autokeeper.agents.cast import Dialogue
+
+    SCRIPT.append('{"text":"别担心。\n我陪您去。","accompany":"graveyard"}')
+    reply = await hm.make_model(SCRIPTED, "NPC").complete(
+        [{"role": "user", "content": "能陪我去吗？"}], schema=Dialogue.model_json_schema()
+    )
+    assert reply.data == {"text": "别担心。\n我陪您去。", "accompany": "graveyard"}
+    assert reply.repairs == 0 and len(SEEN) == 1
+
+
+async def test_broken_structured_npc_reply_is_repaired_instead_of_displayed_as_dialogue():
+    from autokeeper.agents.cast import Dialogue
+
+    SCRIPT.extend(['{"text":"我陪您去。", "accompany":', {"text": "我陪您去。", "accompany": "graveyard"}])
+    reply = await hm.make_model(SCRIPTED, "NPC").complete(
+        [{"role": "user", "content": "能陪我去吗？"}], schema=Dialogue.model_json_schema()
+    )
+    assert reply.data == {"text": "我陪您去。", "accompany": "graveyard"}
+    assert reply.repairs == 1 and len(SEEN) == 2
+
+
+async def test_a_dialogue_prefix_cannot_hide_operational_fields_after_the_first_json_object():
+    from autokeeper.agents.cast import Dialogue
+
+    broken = '{"text":"我见过那辆车。"}\n（补充）\n"told":["c_car"]}'
+    assert hm.parse_json(broken) is None
+    SCRIPT.extend([broken, {"text": "我见过那辆车。", "told": ["c_car"]}])
+    reply = await hm.make_model(SCRIPTED, "NPC").complete(
+        [{"role": "user", "content": "您知道那辆车吗？"}], schema=Dialogue.model_json_schema())
+    assert reply.repairs == 1 and reply.data == {"text": "我见过那辆车。", "told": ["c_car"]}
+
+
+async def test_unrepairable_npc_json_never_returns_private_fields_as_spoken_text():
+    from autokeeper.agents.cast import Dialogue
+
+    broken = '{"text":"请留下守夜。" ","deceptions":[{"intent":"秘密安排"}]}'
+    SCRIPT.extend([broken, broken])
+    with pytest.raises(ValueError, match="回复格式未通过校验"):
+        await hm.make_model(SCRIPTED, "NPC").complete(
+            [{"role": "user", "content": "今晚有什么事？"}], schema=Dialogue.model_json_schema()
+        )
+    assert len(SEEN) == 2
 
 
 class Flaky(Scripted):
@@ -745,7 +831,7 @@ async def test_companion_consent_is_structured_without_changing_normal_npc_outpu
     assert "accompany" in SEEN[-1]["schema"]["required"]
     ent = game.world.rec.entities["warden"]
     assert (ent.following, ent.follow_to) == (state.investigator.id, "square")
-    SCRIPT.append("我的外套留在钟楼就好。")
+    SCRIPT.append({"text": "我的外套留在钟楼就好。"})
     await cast.npc(state, "warden", "要不要带外套？")
     assert SEEN[-1]["schema"]["required"] == ["text"] and len(SEEN) == 2
     await game.close()

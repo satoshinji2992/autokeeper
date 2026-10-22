@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
+from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, field_validator, model_serializer
 from pydantic.json_schema import SkipJsonSchema
 
 from .bcdice import BCDice, Level, Roll
@@ -63,6 +63,18 @@ class Investigator(BaseModel):
     # Kept by the rules (rules/wounds via engine/effects), never written by a module or a model: out
     # of the schema, and out of the dump while there is nothing in it (_without_empty_injury).
     injury: SkipJsonSchema[InjuryState] = Field(default_factory=InjuryState)
+
+    @field_validator("skills")
+    @classmethod
+    def _skill_names(cls, skills: dict[str, int]) -> dict[str, int]:
+        """Cards, modules and saves share the same names as checks and weapon skills."""
+        named: dict[str, int] = {}
+        for name, value in skills.items():
+            key = canonical(name)
+            if key in named and named[key] != value:
+                raise ValueError(f"{key} 有两个不同的技能值，请在人物卡中保留一个")
+            named[key] = value
+        return named
 
     @model_serializer(mode="wrap")
     def _without_empty_injury(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -238,7 +250,8 @@ class Check:
             dice = f"{'奖励' if self.bonus > 0 else '惩罚'}骰×{abs(self.bonus)} "
         tag = "孤注一掷 " if self.pushed else ""
         mark = "✓" if self.passed else "✗"
-        return f"{tag}{self.name} {self.target}{diff} {dice}→ {self.value} {self.level.zh} {mark}"
+        luck = f"（花 {self.luck_spent} 点幸运）" if self.luck_spent else ""
+        return f"{tag}{self.name} {self.target}{diff} {dice}→ {self.value} {self.level.zh} {mark}{luck}"
 
 
 @dataclass

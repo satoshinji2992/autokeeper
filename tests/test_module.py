@@ -242,6 +242,60 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             c.npc, c.pursues, c.attacks, c.notes, c.sanity = d.npc, d.pursues, d.attacks, d.notes, d.sanity
         then.items += [i for i in now.items if i.id == "stanley_revolver"]
         _reread(then, now, REREAD.get(folder.name, []))
+        if folder.name == "zhuishuren":
+            # The original e_figure explicitly says midnight and one Luck check each night;
+            # its former flag-only trigger did not execute either requirement.
+            before = next(e for e in then.events if e.id == "e_figure")
+            after = next(e for e in now.events if e.id == "e_figure")
+            assert before.when == "flag:watching" and "午夜过后" in before.read_aloud
+            assert "幸运检定" in before.text and after.when == "flag:watching & hour:0-6"
+            assert after.check and after.check.skill == "幸运"
+            before.when, before.check = after.when, after.check
+            ending = next(e for e in then.endings if e.id == "farewell")
+            current = next(e for e in now.endings if e.id == "farewell")
+            assert "听取真相" in ending.reward and "恢复 1D6 理智" in ending.reward
+            assert current.requires == ["c_douglas_truth"] and current.sanity_gain == "1D6"
+            ending.requires, ending.sanity_gain = current.requires, current.sanity_gain
+            # The original permits any polite follow-up and choosing to follow him underground.
+            # Learning the truth is therefore not itself the end of that conversation.
+            assert ending.condition == "flag:talked_douglas" and current.condition == "flag:douglas_departed"
+            ending.condition = current.condition
+            assert "实际动身" in now.flags["douglas_departed"] and "仍在追问" in now.flags["douglas_departed"]
+            then.flags["douglas_departed"] = now.flags["douglas_departed"]
+            assert now.flags["recognized"].startswith("调查员在杀死或击晕人影后")
+            then.flags["recognized"] = now.flags["recognized"]
+            for ident in ("e_recognized", "e_horde"):
+                before = next(e for e in then.events if e.id == ident)
+                after = next(e for e in now.events if e.id == ident)
+                assert after.when == "flag:douglas_down & " + before.when
+                before.when = after.when
+            before = next(e for e in then.events if e.id == "e_hello")
+            after = next(e for e in now.events if e.id == "e_hello")
+            assert after.text.startswith(before.text) and "仍应让调查员回应" in after.text
+            assert before.sets == ["talked_douglas"] and after.sets == []
+            before.text, before.sets = after.text, after.sets
+            for ident, target in (("e_fainted", "20:00"), ("e_tunnel_maze", "19:00")):
+                before = next(e for e in then.events if e.id == ident)
+                after = next(e for e in now.events if e.id == ident)
+                assert "晚上" in before.text or "夜晚" in before.text
+                assert not before.advance_to and after.advance_to == target
+                before.advance_to = after.advance_to
+            assert "克苏鲁神话技能 +3%" in then.clue("c_douglas_truth").text
+            assert now.clue("c_douglas_truth").mythos == 3
+            then.clue("c_douglas_truth").mythos = 3
+        if folder.name == "dongxuezhixia":
+            # Original p. 14: the organs are found on either autopsy result, but only a failed
+            # Medicine roll ruptures them and calls for SAN. External inspection is not dissection.
+            before, after = then.clue("c_autopsy"), now.clue("c_autopsy")
+            assert before.sanity == "0/1D4" and after.sanity is None
+            assert "检定失败意味着" in before.text and "检定失败" not in after.text
+            assert "内脏器官扭曲变形" in after.text and "果冻状物质" in after.text
+            assert "开棺解剖" in after.feature and "外表不足" in after.feature
+            before.text, before.feature, before.sanity = after.text, after.feature, after.sanity
+            church = now.location("church")
+            assert church.keeper.startswith(then.location("church").keeper)
+            assert "无论成败" in church.keeper and "失败才" in church.keeper and "0/1D4" in church.keeper
+            then.location("church").keeper = church.keeper
         assert then.model_dump(mode="json") == now.model_dump(mode="json")
         assert {k: p.fingerprint for k, p in then.extensions.items()} == {k: p.fingerprint for k, p in now.extensions.items()}
 

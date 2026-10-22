@@ -126,6 +126,7 @@ class CheckRecord(BaseModel):
     target: str = ""
     text: str  # Check.describe(), after any push or luck
     passed: bool
+    action: str = ""  # neutral attempt, so a new request is not mistaken for the same roll on the same NPC
     minutes: int = 0  # game clock when the attempt was over
     seen: int = 0  # clues + flags + events by then: a higher count later means something new came up
     bonus: int = 0  # bonus (+) or penalty (-) dice it was rolled with
@@ -159,6 +160,8 @@ class GameState(BaseModel):
     presentation_issues: dict[str, dict] = Field(default_factory=dict)  # attempted media not delivered; next keeper can finish it
     flags: list[str] = Field(default_factory=list)
     fired: list[str] = Field(default_factory=list)
+    event_attempts: dict[str, dict] = Field(default_factory=dict)  # {day, roll}: checked events, once per game day
+    pending_story_flags: dict[str, list[str]] = Field(default_factory=dict)  # completion flags waiting for actual finds
     npcs: dict[str, NpcState] = Field(default_factory=dict)
     world: dict[str, WorldFact] = Field(default_factory=dict)
     item_owners: dict[str, str] = Field(default_factory=dict)

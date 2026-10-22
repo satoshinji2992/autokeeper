@@ -240,10 +240,10 @@ class Ruling(BaseModel):
     auto_clues: list[str] = Field(default_factory=list, description="不用掷骰就能获得的线索 id")
     set_flags: list[str] = Field(default_factory=list, description="行动成功（或无需检定）时设置的剧情标记")
     minutes: int = Field(0, description="实际耗时：一句交谈或点头可为 0；吃饭约 20，搜索依范围；赶路由引擎算，填 0；休息最多 720")
-    changes: list[WorldChange] = Field(default_factory=list, description="成功后发生的生活事实、关系、约定或物品转交；不得新增案情、凭空造物或替 NPC 答应")
+    changes: list[WorldChange] = Field(default_factory=list, description="调查员本次行动直接完成的生活事实、自己的约定或转交；请求NPC交物、答应或履行其承诺尚待角色本次回应，不能提前写成事实或替NPC演出")
     equipment: list[EquipmentChange] = Field(default_factory=list, max_length=3,
                                             description="成功后调查员对重要装备实际进行的取用、穿戴、藏匿、消耗或出示；无相关动作留空")
-    takes: list[Thing] = Field(default_factory=list, max_length=3, description="成功后调查员当场拿起的日常物件，如屋里的手杖、桌上的火柴；没有就留空")
+    takes: list[Thing] = Field(default_factory=list, max_length=3, description="调查员自己当场拿起确实已有的日常物件；向NPC借用或索取的东西由NPC在回应中交付，不在这里提前入手；没有就留空")
     missing: list[str] = Field(default_factory=list, max_length=4, description="这次行动缺少、因而做不成的工具或条件；没有就留空")
     rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
     mishap: str = Field("", description="休息或过夜时出了岔子：惨事卡 id，只从【惨事卡】里选；多数时候留空")
@@ -260,6 +260,7 @@ class Ruling(BaseModel):
     rejoin: list[Rejoin] = Field(default_factory=list, max_length=3, description=(
         "这次行动成功后，【和大家分开的调查员】里的人回到了大家身边时写：谁、怎么回来的；大家走到他那里不用写；多数时候留空"))
     reason: str = Field("", description="一句话理由（玩家看不到）")
+    why: str = Field("", description="给玩家看的本次检定目标：用当前公开尝试说明在确认能否完成哪项行动或让步。不从后台资料补写难度原因、人物性格和隐情、未发现的结果或数值；无需检定可留空")
     # The rule it wants looked up in the rulebooks first (rules_lookup.py); in the schema only
     # when there is an index of them (Cast._arbiter), answered and asked again once (Cast.arbiter).
     lookup: SkipJsonSchema[str] = ""
@@ -489,6 +490,7 @@ ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声�
 - 玩家明确“先私下告诉甲……，然后和乙去某处”，前一项交谈写入 before（含私下标记），最终目的地与同行者照常填写，不丢掉前半句，也不提前写 NPC 点头、跟随或完成任务。没有移动时 before 留空。
 - npc 只填写能从上下文明确认出的角色 id。玩家明确找某个已认识但不在场的人时保留该人，不用眼前别人替换；
   “问阿萨塔”是向阿萨塔发问，“问托马斯关于阿萨塔”才是向托马斯打听阿萨塔。destination 只能填给出的地点 id。
+  玩家明确要去的地方暂时没有可用 id，仍保留 move 与完整目的，不改成留在原地听人说话；交裁定与导演安排找路或接触，不凭空改成另一个目的地。
 - 调查员为了做这件事要先走到另一个地点（“我走到陵墓石门前看门缝”“我去书房翻日记”），destination 填那个地点，
   kind 照实填（看门缝还是 investigate）。只是远远望一眼、隔空喊话、打听那个地方，不算去，destination 留空。
 - speech：对 NPC 说的话、登台讲的内容，照抄原话。
@@ -506,6 +508,9 @@ INTENT_SYSTEM = INTENT_HEAD + "\n\n" + ACTION_RULES
 # Someone joining in does not solve it for them: the investigators stay the ones who act (Keeper Rulebook
 # pp. 156, 182).
 PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底牌，拥有最高主持权限。每轮玩家说完话，你先交一份安排：补齐已经成立的现场记录（present、people），把玩家的话整理成一条行动（action），决定在场的人这一轮会不会主动参与（initiative）。叙述另外进行，这里只交安排。
+
+你负责让人物和局势继续发展。先接住玩家实际想做的事，再看哪些未办完的约定、愿望或冲突会影响眼前：有求于调查员的人可以主动帮忙、提出办法或承担事务，有所隐瞒的人可以转移话题、试探或设局。让反应来自此时的利益与经历，不等玩家逐句催动，不把每个人都演成拒绝配合。
+压力来自正在推进的计划和可以察觉的后果；一次成功可以打乱计划、缓解危险或改变关系。日常、交谈与休整有其价值，不按回合数硬塞危机，也不保证预设场面必然上演。
 
 - action 交给看不到玩家原话的裁定员，summary 和第一句还会显示在玩家屏幕上。summary 只用玩家说过的叫法和【场景】里给出的名字，不写底牌里的人名、地名、真相，也不写玩家还不知道的事；只写调查员这一轮说了、做了什么，不写你对局面的判断（谁在不在、有没有约定）。destination 只填【场景】里能去的地点 id。
 - 玩家的话是对在场的人说的，或者当着他问出来的（提问、质疑、抱怨、打招呼），照常填 talk 和 npc，由那个人回应；不要改成 initiative，也不要当成问你的 meta。meta 只用于玩家明确问规则或游戏外的事。
@@ -529,6 +534,8 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 
 - 线索只能从“本场景可得线索”里选 id。没有检定要求的线索，调查到对应的东西就放进 auto_clues。
 - 有检定要求的线索按要求掷；行动方法换了，可以换成合理的替代技能（用锁匠开锁、用力量撬开），难度不低于原要求。
+- 本场景可得线索是备选资料，不代表玩家已经实施取得它的方法。先核对声明的检查范围、接触对象与必要步骤：外观检查不等于开腹尸检，看门缝不等于进屋搜查。不能为了发出完整线索替调查员升级动作；合理的其他办法可以成立，但须实际触及能得出该发现的依据。
+- 线索正文里的成功、失败与后续条件分别裁定，只有本次实际成立的部分才进入结果。失败限定的理智、伤害或失手不能在成功后演出。reason 写后台依据；why 只说明本次检定在确认能否完成哪项公开行动或让步，不把后台难度依据改写为玩家已知事实。多个请求不自动捆绑成一次成功或失败，未纳入本次检定的部分仍按实际条件处理；掷前不透露未知发现、人物私心或后台数值。
 - 标【关键】的线索是推进调查必需的。模组没写检定要求、或就摆在明处的关键线索，调查员查对了地方就放进 auto_clues，不另设检定（显明线索不用掷骰）。
   要检定的关键线索失败了照旧是失败，不改判、不另给，补救靠玩家换办法或做灵感检定；不重掷的规矩照样适用。
 - 难度要有依据。针对人的行动（说服、话术、恐吓、魅惑、潜行、跟踪、撒谎、藏东西），难度由对方相应的技能或属性定：
@@ -546,13 +553,14 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 失败不送线索：检定失败就是没拿到；模组写明失败也能得到、或失败另有后果的，写进 on_fail。
   普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样，具体、和这次行动相称，模组写明的优先。text 是后台完整结果；risk 单独写玩家掷前能知道的具体代价，不提前透露未知物件、发现或其位置。比如失败也找到藏好的信但摔坏瓷器，risk 只说可能摔坏瓷器、需要赔偿，信件和位置留在 text、clues。要结算的（标记、耽搁、受伤、理智损失）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
-  观察成功若没有对应线索，就明确范围内没有新发现；不指望叙述员事后补出痕迹、可拾取物件或跟踪方向。
+  观察成功兑现范围内确实能观察的信息；没有可观察依据时如实说明，并判断原本是否需要检定。clues 清单为空不等于成功没有效果：未预写的日常细节可由KP结合现场确定并记录，不能借此越过既有线索的发现条件。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
 - changes 只记行动实际达成的公开后果；调查员的愿望、断言不算事实。NPC 尚未回复时不能替他答应。
-  物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key。
+  不编写NPC本轮将有的动作、台词、交付或履约再当作亲历写入记录；这些由NPC本次回应和KP场面落实。调查员提出请求与NPC接受请求是两件事，借东西不提前填 takes。物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key，且调查员须是该约定的履约方，不能替NPC兑现其待办。
 - 普通的吃饭、问路、买日用品、聊家常通常无需检定。除非行动真的在调查对应的东西，否则不要把生活行动变成领线索；
   只有具体风险或争议才需要裁定难度。端咖啡、添柴、拿普通餐具等日常细节，模组没逐项写也能由在场人物和守秘人就地处理，scope 填“模组内”。
   需要准备可持续交互的新地点、人物、线索或特殊规则时才填“可即兴”，不要为一句日常应答另请导演备场。
+- 请求出发但 destination 为空时，旅行尚未落实。结合调查员真实背景与地点资料，若需要找地址、问路或准备去处，填“可即兴”交导演接续完整目的，不把留在原处当成已经完成旅行；玩家猜到一个秘密名称不等于知道路径。
 - 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就给实际查看范围内、条件已经满足的线索。
   笼统地观察只给视野中能够直接察觉的内容，细查则按实际方法与范围裁定；不按每轮数量扣留已经成立的发现。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
@@ -610,13 +618,14 @@ PUSH_SYSTEM = """你是 CoC 7 版的裁定员。调查员一次检定失败了�
 
 KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持模组《{title}》。
 
-你不掷骰，也不决定检定结果。每一轮系统会告诉你发生了什么：行动、检定结果、拿到的线索原文、触发的事件、NPC 的原话。你负责把它讲成故事。
-叙事强度服从当前模组与已结算的局势，不额外升级威胁。失败、死亡与疯狂成立时如实呈现，不淡化成虚惊，也不补出救援或恢复；玩家成功脱险、解决案件或平静收束时同样完整呈现，不强行续接危机或悲剧。
+你统筹整场故事，可以即兴安排人物反应、现场细节与发展方向。每轮结合全部幕后资料和本局记录，让玩家的选择产生具体变化；有持续身份的新人物、现场物件和痕迹写进 scene，与叙述一起落实。你当场扮演的人说了什么、NPC 见证了什么，影响后续应答的重要内容写进 scene.observations，witnesses 只列真正听见或看见的角色；不把私语、异地事件、内心与幕后真相分给不知情的人。记录见闻及消息来源，不把传言或谎话登记成真相，也不用逐句抄写旁白。需要完整的新地点、线索路线或规则时使用导演准备的内容。掷骰与数值结算由规则工具执行。
+叙事强度依据模组基调、人物动机与本局局势。危险可以随真实行动和时限升级，也可以被调查员的应对缓解。失败、死亡与疯狂成立时如实呈现，不淡化成虚惊，也不补出救援或恢复；玩家成功脱险、解决案件或平静收束时同样完整呈现，不强行续接危机或悲剧。
 
 硬规则：
-1. 只能用系统给你的线索原文；没给你的线索、NPC 的秘密、模组真相，一个字都不能透露，也不能暗示。
+1. 既有案情以模组与本局改写记录为准，已结算的发现完整交代；尚未取得的线索、NPC 未透露的秘密与模组真相不提前揭露。现场即兴可以发展新关系、提出矛盾或留下可追查的细节，通过 scene 登记实际出现的人与痕迹；不借即兴绕过现有发现条件，不凭空改变已发生的事。
    叙述始终限于调查员能感知或经明确来源获知的事，不切换到异地 NPC 的视角，也不以“与此同时”展示幕后行动。被指出越界时承认信息权限错误，不以“玩家知道但角色不知道”为已经发生的泄露辩解，不再扩展那些内容。
 2. NPC 台词已直接展示给玩家，不复述或补写新的台词；有助于理解场景时，再补充动作与环境变化。
+   这些话已经说出口，不是备选草稿。不能把已经邀请玩家进门写成拒绝开门，也不能说刚回应过的人始终没有应声。若存在未落实的动作，按明确返回的原因交代实际经过，不改写他说过什么。
 3. 仅叙述系统给定的检定结果。界面已提供的检定选项无需重复说明，也不自行追加重试机会、代价或线索。
 4. 以第二人称叙述。普通回合通常 80–200 字，简单应答或过渡可更短，开场与重要场景按本轮要求展开。信息交代完整即可结束，不凑篇幅，不固定以悬念、反问或行动邀请收尾，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
@@ -624,16 +633,18 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
+   冲突由具体人物想得到什么、害怕失去什么引起，随着时间和玩家行动变化。用可察觉的行为、期限与后果表现逼近的危险，给应对留出空间；诡异可以逐步改变熟悉事物，避免只重复风雪、咳嗽与阴影。有效的防备、拒绝和脱险应真正改变局势，不强行把人送回预设高潮。
    线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；玩家没有线索卡，原文里的事都要在叙述里讲到。它意味着什么、指向哪里，留给玩家自己推理。
    消息出自人口时（路人、店主这些由你扮演的人），让他用自己的话说，有来有往；不要用“他说……”把一整条消息概括转述。
    由你扮演的人开口时，他的话单独成段，段首用【】写玩家对他的称呼，紧接着写他说的话，比如：【开卡车的年轻人】赫琴斯自个儿不在这儿。动作和神情写在前后的叙述段里。模组里的 NPC 不这样写，他们的话系统另外显示。
 9. 先让地方像有人生活：人有手头的活、口味、习惯和琐事；没给新线索的一顿饭、一次问路也可以完整成立。
-   可以补符合年代的气味、街边营生和普通过客的一两句应答；不借此新增案情、危险、物品效果或检定结果。
-   已有 NPC 的对话仍由对应角色说。玩家愿意停下来就展开，明确赶路或略过时压缩过渡；不能替调查员决定行动、态度或内心感受。
+   可以展开符合年代的营生、琐事、人物关系与普通应答，采用不同于模组预写的合理办法。新增的重要人物和可追查的现场变化同时写进 scene；特殊物品效果、检定结果与伤害仍须工具结算。
+   已有 NPC 的对话仍由对应角色说。玩家愿意停下来就展开，明确赶路或略过时压缩过渡；不能替调查员决定行动、态度或内心感受。NPC 提出的新要求不等于玩家已经接受；完成当前声明的行动后，停在需要玩家作出新决定的位置。
 10. 行动描述是玩家的尝试，不保证已经完成。持有物、转交与取得以本轮记录为准，不为动作补出铲子、武器、钥匙或钱物；缺少条件时说明限制，保留玩家选择。
+    保留玩家声明的行动范围及不做的事。只看外观、不进屋、暂不开门时，只写该位置实际能观察到的内容，不从场景底稿替他完成进入、解剖、翻找或接触危险。
     心理学、侦查等成功只说明系统允许观察到的内容，不读出未解锁的思想；失败的代价以本轮结算为准，已结算的敌意、伤害或物品损失照实呈现，不自行追加。
 11. 场景介绍是首次进入时的底稿。此刻的人物、时间、物品和事件优先于底稿，不让已经离开的人重现，也不把一个房间无人扩大成整栋房屋无人：同一处别的房间里的人听得见调查员喊人、敲门，照他的打算应声、出来或隔着门答话，不写成没人应。
-    没有结算新发现时，不新增可追查的脚印、异物、藏物动作等案情。准备中的内容由系统等待，不用悬念或虚构的意外遮掩。
+    模组原有的隐藏发现保留其条件；你即兴留下的新痕迹须在 scene 中登记其实际经过，不把猜测当作既有真相。准备中的内容由系统等待，不用悬念或虚构的意外遮掩。
 12. 你统筹全部幕后信息，但玩家并不共享所有见闻。公共 text 只讲共同获知的内容；仅一人或几人听见、梦见或收到的消息，写进 asides，to 填实际收件人的调查员 id。不在公共叙述中复述私语或暴露其内容；点名交谈本身不等于私语。
     存在个人知觉时，公共 text 只写各方都能观察的动作，不揭示真实身份与个人所见的对应关系；各人的具体所见分别写入 asides。图片与手稿可通过 media 指定实际受众，未指定展示时保持当前画面，不因私下发现就向全桌展示。
     私人描述只记录相应人物的见闻，不因此变成世界真相；伤害、移动、交物、取得线索和分发材料仍须通过相应操作结算。没有私人消息时 asides 留空。
@@ -672,6 +683,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 大多数时候直接开口说话。动作和神态写在（）里，只在它有助于理解人物反应或实际行动时才写，不为每句话配一个小动作。
 - 说话方式里写的口头禅、咳嗽、小动作是这个人的习惯，隔几句露一次就够，资料写着“总是”也不必句句都带；上一轮说过的话，换个说法或者干脆不提。
 - 接住对方实际说的话，结合关系与眼前局势回应；有自己的问题、需要确认的事或想请人帮忙时再问。不要为了维持交谈反问，也不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
+- 本轮获准交代、交付或同意的内容就在这次回复中发生；只有近期真实对话里已经说过、做过，才称“刚才说了”“已经给了”。后台刚结算入账不等于玩家此前见过这段演出。
 - 已解锁的线索是你知道、也愿意说的事，不是必须逐条朗读的清单。根据话题把相关内容说清；对方问得具体、事情紧迫或你有主动求助的理由时，不故意分成几轮挤牙膏。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
@@ -971,7 +983,10 @@ class Cast:
         asked = commands.asked(text)
         prompt = (f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
                   if shared else "")
-        prompt += f"【调查员】{inv.name}\n【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}"
+        prompt += (self._party(state) + f"\n【调查员】{inv.name}({inv.id})\n"
+                   f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}")
+        if inv.backstory:
+            prompt += "\n【调查员既有背景】" + "；".join(f"{key}：{value}" for key, value in inv.backstory.items() if value)
         if shared and state.perceptions and self.world is not None:
             prompt += "\n【主持专用：个人知觉与真实对象】\n" + perception.brief(state)
         if self.world is not None:
@@ -981,6 +996,13 @@ class Cast:
         if asked is not None:
             prompt += f"（骰子指令：{inv.name}想在这里用「{asked.skill}」）"
         return prompt
+
+    @staticmethod
+    def _party(state: GameState) -> str:
+        people = "、".join(f"{p.name}({p.id}，{'真人玩家' if p.id in state.human else 'AI调查员'})"
+                          for p in state.investigators)
+        return (f"【本局调查员身份】{people}。这些人不是 NPC，不写入 people/here/initiative，不另造同名人物；"
+                "彼此说话照实记录，真人的回答与决定由对应玩家提交，不代替答应、交物或行动。")
 
     async def intent(self, state: GameState, text: str) -> Action:
         s = self._intent(state)
@@ -1404,7 +1426,9 @@ class Cast:
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
             f"【NPC 门槛】\n{chr(10).join(gates) or '无'}\n"
             f"【调查员】{inv.name}：{sheet}\n背包：{'、'.join(inv.inventory) or '无'}\n"
-            f"【本地物件】" + "；".join(local) + "\n"
+            + ("既有背景：" + "；".join(f"{key}：{value}" for key, value in inv.backstory.items() if value) + "\n"
+               if inv.backstory else "") +
+            "【本地物件】" + "；".join(local) + "\n"
             f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
         if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
@@ -1485,7 +1509,8 @@ class Cast:
             ago = "刚才" if state.turn - r.turn <= 1 else f"{state.turn - r.turn} 轮前"
             aim = f"{npcs[r.npc]}({r.npc})" if r.npc in npcs else r.target or "（没有具体对象）"
             when = f"{format_time(r.minutes)}，{places.get(r.at, r.at)}"
-            rows.append(f"- {ago}（{when}）{people.get(r.who, r.who)}对{aim}：{r.text}")
+            attempt = f"；当时尝试：{r.action}" if r.action else ""
+            rows.append(f"- {ago}（{when}）{people.get(r.who, r.who)}对{aim}：{r.text}{attempt}")
         return "\n".join(rows)
 
     def _npc_system(self, npc: NPC) -> str:
@@ -1690,6 +1715,9 @@ class Cast:
         s = await self._fresh_npc(npc_id)
         mood = (f"\n【先前人物走向】{npc.arc}\n这是此前的基线；最新心境及本轮亲历、可信消息优先，可自然改变反应，不须始终维持这一状态。"
                 if npc.arc else "")
+        mood = f"\n【当前时刻】{state.clock}（{time_of_day(state.minutes)}）；此前带日期的记录是过去的经历。\n" + mood
+        mood += (f"【本次操作身份】你是 {npc_id}，当前交谈对象的操作 id 是 {state.investigator.id}。"
+                 "操作字段使用这些 id，不在台词中念出；items.to 写实际收物者。\n")
         equipment_names = {"carried": "携带", "worn": "穿戴", "held": "手持", "concealed": "藏匿"}
         items = (world_knowledge.visible_items(self.world, npc_id, holder=npc_id) if self.world is not None else
                  [item for item in self.module.items if item.important and world.owner(self.module, state, item.id) == npc_id])
@@ -1728,7 +1756,7 @@ class Cast:
         mood += "\n【可提出同行的地点】" + "、".join(f"{name}（{pid}）" for pid, name in destinations.items())
         output = {"schema": _schema(TravelDialogue)} if travel else {}
         reply = await self._send(key, s, state, message, extra=mood, **output)
-        dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
+        dialogue = Dialogue.model_validate(reply.data)  # stateful replies cannot silently become text-only
         text = dialogue.text.strip()
         # What it says is its own (the user's call, 2026-10-20: no string matching or cutting of a
         # model's words). It knows only its own part (_npc_system); what of it it tells is its call.
@@ -1741,7 +1769,7 @@ class Cast:
             fix = "\n\n【行动校验未通过】\n" + "\n".join(problems)
             fix += "\n重写本次完整回复，按实际位置、物件与已发生事实处理；嘴上说此刻交出、同行、走开的事要在 items、accompany、leave 里写上，做不到就别这样说；不得保留未能执行的动作或交付，也不能事后编造有意欺骗来解释系统执行失败。"
             reply = await self._send(key, s, state, message, extra=mood + fix, **output)
-            dialogue = Dialogue.model_validate(reply.data) if isinstance(reply.data, dict) else Dialogue(text=reply.text)
+            dialogue = Dialogue.model_validate(reply.data)
             text = dialogue.text.strip()
             problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
@@ -1858,7 +1886,7 @@ class Cast:
             if found := await self._rules(state, question):  # a /kp question about the rules: the book's words
                 lore += ("\n【规则书原文】（玩家问的是规则时，照原文回答并说出书名和页码；不是规则问题就不用管）\n"
                          + rules_lookup.quote(found))
-        extra = ("\n\n" + lore.strip() if lore.strip() else "") + self.prefs.for_keeper() + fix
+        extra = ("\n\n" + lore.strip() if lore.strip() else "") + "\n" + self._party(state) + self.prefs.for_keeper() + fix
         if check is None:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
             return reply.text.strip()

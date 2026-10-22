@@ -376,6 +376,8 @@ def _location_md(m: Module, loc: Location) -> str:
                 extra.append("关键")
             if c.sanity:
                 extra.append(f"理智 {c.sanity}")
+            if c.mythos:
+                extra.append(f"实际获知时神话 +{c.mythos}%")
             if c.handout:
                 extra.append(f"手稿 `{c.handout}`")
             if c.requires:
@@ -434,6 +436,12 @@ def _events_md(m: Module) -> str:
             out += [f"> {e.read_aloud.strip()}", ""]
         out += [e.text.strip(), ""]
         meta = []
+        if e.where:
+            meta.append(f"发生在 `{e.where}`（调查员不在场不搬运队伍）")
+        if e.check:
+            meta.append(f"还须 {e.check.skill}·{e.check.difficulty} 成功，每游戏日最多尝试一次")
+        if e.advance_to:
+            meta.append(f"在场经历此事至少推进到 {e.advance_to}（不倒退时间）")
         if e.sanity:
             meta.append(f"理智 {e.sanity}")
         if e.move_to:
@@ -464,6 +472,10 @@ def _endings_md(m: Module) -> str:
     out = ["# 结局", ""]
     for e in m.endings:
         out += [f"## {e.title}（`{e.id}`）", "", f"条件：{e.condition}", "", e.text.strip(), ""]
+        if e.requires:
+            out += ["还须实际完成：" + "、".join(e.requires) + "（获准交涉、计划发放不算已听到）", ""]
+        if e.sanity_gain:
+            out += [f"进入结局时恢复理智：{e.sanity_gain}", ""]
         if e.reward:
             out += [f"奖励 / 代价：{e.reward}", ""]
     return "\n".join(out)

@@ -141,6 +141,7 @@ clues:
     npc: douglas
     core: true
     sanity: 1D4/1D4
+    mythos: 3
     points_to: [k_ghoul, k_last_night, k_joined]
     text: |
       他说，他只是厌倦了人类社会的种种俗事。他唯一的诉求是随时随地读书、不被打扰，可其他人一直在侵占他的人生。

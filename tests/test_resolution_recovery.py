@@ -109,7 +109,8 @@ async def test_clue_delivery_failure_keeps_handout_and_sanity_and_finishes_notif
 @pytest.mark.parametrize("interrupted", ["event", "move", "ending"])
 async def test_cancelled_timed_event_resumes_move_damage_and_ending_once_after_reload(module, fake, interrupted):
     module.events.append(Event(id="collapse", title="楼板塌陷", when=module.start_time, text="事故",
-                               read_aloud="脚下的木板断裂。", move_to="office", damage="1D3", ending="stopped"))
+                               read_aloud="脚下的木板断裂。", where=module.start, move_to="office",
+                               damage="1D3", ending="stopped"))
     action = Action(kind="wait", summary="稍候")
     ruling = Ruling(needs_roll=False, minutes=12)
     game, _, _ = make(module, fake.queue_totals(2, 3), {})
@@ -364,7 +365,9 @@ async def test_cancelled_push_choice_resumes_without_repaying_rerolling_or_regai
     assert sum(entry.kind == "clue" for entry in resumed.state.log) == 1
     assert resumed.state.investigator.luck == luck - (5 if choice == "luck" else 0)
     assert resumed.state.minutes == start + (10 if choice == PUSH else 20 if choice == "drop" else 0)  # a push takes its own time
-    assert len(turn.checks) == (1 if choice == PUSH else 0)
+    assert len(turn.checks) == (0 if choice == "drop" else 1)
+    if choice == "luck":
+        assert turn.checks[0].passed and turn.checks[0].luck_spent == 5 and turn.checks[0].value == 65
     assert not fake.values and resumed.state.pending_turn["push_resolution"]["complete"]
     await game.close()
     await resumed.close()
@@ -403,6 +406,10 @@ async def test_graph_restores_push_choice_and_merges_its_turn_once_after_json_re
     assert sum(entry.kind == "dice" for entry in resumed.state.log) == 2
     assert sum(entry.kind == "clue" for entry in resumed.state.log) == 1
     assert not resumed.state.pending_turn and not fake.values
+    if choice == "luck":
+        report = resumed.cast.reports[-1]
+        assert "花 5 点幸运" in report and "65 常规成功 ✓" in report
+        assert "65 失败 ✗" not in report
     await game.close()
     await resumed.close()
 

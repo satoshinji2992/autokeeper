@@ -94,8 +94,10 @@ class Session:
         if self.memory and include_memory:
             if self.summary:
                 msgs += [
-                    {"role": "user", "content": f"【更早的经过（系统摘要）】\n{self.summary}"},
-                    {"role": "assistant", "content": "好的，我记得这些。"},
+                    {"role": "user", "content": ("【更早的经过（压缩摘要）】\n"
+                                               "摘要可能省略或误记，本轮原始资料和正式记录优先。"
+                                               "不能仅据摘要把打算、承诺或尝试认定为已完成。\n" + self.summary)},
+                    {"role": "assistant", "content": "已读摘要，结合当前记录继续。"},
                 ]
             msgs += self.transcript
         msgs.append({"role": "user", "content": prompt})

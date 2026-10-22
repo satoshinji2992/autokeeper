@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from autokeeper.agents.cast import Action, Plan
 from autokeeper.engine.state import GameState
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Item, Module
@@ -53,6 +54,38 @@ def test_registered_remote_position_still_requires_actual_travel(fake):
     prepared = scene.plan(game.world, {"here": ["preacher"]}, ctx(game, 0, walk=False))
     assert any("要 10 分钟" in p and "只过了 0 分钟" in p for p in prepared.problems)
     assert not prepared.held and game.world.rec.entities["preacher"].at == "square"
+
+
+@pytest.mark.parametrize("fields", [
+    {"companions": ["misspelled_actor"]},
+    {"npc": "misspelled_actor"},
+    {"before": [{"npc": "misspelled_actor", "speech": "一起走吧"}]},
+    {"destination": "misspelled_place"},
+])
+async def test_structured_action_references_are_checked_before_consent_or_travel(fields):
+    game, _ = made()
+    prepared = game._planned_scene(Plan(action=Action(kind="move", summary="尝试与同伴出发", **fields)))
+    assert prepared.problems and any("未登记" in problem for problem in prepared.problems)
+    await game.close()
+
+
+async def test_the_existing_plan_repair_corrects_a_party_reference_without_creating_an_npc():
+    game, _ = made()
+    teammate = game.state.investigator.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    game.state.investigators.append(teammate)
+    game.state.human.append(teammate.id)
+    game.world.sync()
+    SCRIPT.extend([
+        {"action": {"kind": "move", "summary": "周衡与林秋去钟楼", "destination": "tower", "companions": ["lynn"]}},
+        {"action": {"kind": "move", "summary": "周衡与林秋去钟楼", "destination": "tower", "companions": ["lin"]}},
+    ])
+    plan = await game.cast.plan(game.state, "和林秋一起去钟楼", check=lambda p: game._planned_scene(p).problems)
+    assert len(SEEN) == 2 and "lynn 未登记" in SEEN[-1]["messages"][-1]["content"]
+    assert plan.action.companions == ["lin"] and not game._planned_scene(plan).problems
+    await game.prepare(plan.action)
+    assert not game.state.pending_turn["preparation"]["blocked"] and len(SEEN) == 2
+    assert not any(n.name == "林秋" for n in game.m.npcs)
+    await game.close()
 
 
 def test_new_person_is_prepared_without_live_changes_then_visible_to_runtime_and_reload(fake):

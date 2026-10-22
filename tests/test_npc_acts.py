@@ -134,6 +134,27 @@ async def test_a_companion_who_will_not_come_holds_the_party_back_once_asked(fak
     await game.close()
 
 
+async def test_a_player_teammate_is_not_asked_for_npc_consent_before_departure(fake):
+    game, _ = setup(fake)
+    teammate = game.state.investigator.model_copy(update={"id": "liyan", "name": "李雁"}, deep=True)
+    game.state.investigators.append(teammate)
+    game.state.human.append(teammate.id)
+    game.world.sync()
+    action = Action(kind="move", summary="周衡与李雁去广场", destination="square", companions=[teammate.id],
+                    before=[BeforeTravel(npc=teammate.id, speech="我先去广场看看。", private=True)])
+    await game.prepare(action)
+    journal = game.state.pending_turn["preparation"]
+    assert not journal["blocked"] and not SEEN  # no NPC or investigator model speaks for 李雁
+    speeches = [entry for entry in game.state.log if entry.kind == "speech"]
+    assert len(speeches) == 1 and speeches[0].audience == [game.state.investigator.id, teammate.id]
+    assert speeches[0].who == game.state.investigator.name
+    await game.prepare(action)
+    assert len([entry for entry in game.state.log if entry.kind == "speech"]) == 1
+    turn = await game.resolve(action, Ruling(needs_roll=False))
+    assert game.state.location == "square" and not any("李雁没有一起来" in note for note in turn.notes)
+    await game.close()
+
+
 async def test_the_arbiter_sees_everyday_things_here_and_on_the_people_here(fake):
     from autokeeper.world import ops as O
 

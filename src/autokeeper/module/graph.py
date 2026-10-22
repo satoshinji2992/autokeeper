@@ -56,8 +56,8 @@ def build(m: Module) -> nx.MultiDiGraph:
             g.add_edge(c.id, k, rel="points_to")
     for e in m.events:
         g.add_node(e.id, kind="event", name=e.title)
-        if e.move_to:
-            g.add_edge(e.id, e.move_to, rel="happens_at")
+        if e.where or e.move_to:
+            g.add_edge(e.id, e.where or e.move_to, rel="happens_at")
         if e.performer:
             g.add_edge(e.performer, e.id, rel="performs")
     return g
@@ -139,7 +139,7 @@ def brought(m: Module) -> dict[str, set[str]]:
     agenda step takes them (does at:him:place)."""
     out: dict[str, set[str]] = {}
     for e in m.events:
-        place = e.move_to or (e.when[6:] if e.when.startswith("visit:") else "")
+        place = e.where or e.move_to or (e.when[6:] if e.when.startswith("visit:") else "")
         for who in e.present if place else ():
             out.setdefault(who, set()).add(place)
     for a in m.agendas:
@@ -258,6 +258,16 @@ def _waits(m: Module, atoms: list[str], when: str = "") -> list[str]:
     return out
 
 
+def event_when_problems(m: Module, when: str) -> list[str]:
+    """The event's clock or arrival trigger, or the existing world condition language."""
+    if when.startswith("visit:"):
+        return [] if when[6:] in {loc.id for loc in m.locations} else [f"触发地点 {when[6:]} 不存在"]
+    atoms = [atom.strip().lstrip("!") for group in when.split("|") for atom in group.split("&")]
+    out = _waits(m, atoms, when)
+    out += [f"触发标记 {atom[5:]} 未声明" for atom in atoms if atom.startswith("flag:") and atom[5:] not in m.flags]
+    return out
+
+
 def audit(m: Module) -> list[Issue]:
     issues: list[Issue] = []
     def err(text: str) -> None:
@@ -345,6 +355,8 @@ def audit(m: Module) -> list[Issue]:
             if k not in concl:
                 err(f"线索 {c.id} 指向的结论 {k} 不存在")
     for e in m.events:
+        if e.where and e.where not in locs:
+            err(f"事件 {e.id} 的发生地点 {e.where} 不存在")
         if e.move_to and e.move_to not in locs:
             err(f"事件 {e.id} 的地点 {e.move_to} 不存在")
         if e.performer and e.performer not in npcs:
@@ -362,13 +374,16 @@ def audit(m: Module) -> list[Issue]:
                 err(f"事件 {e.id} 设置了未声明的标记 {f}")
         if e.art and e.art not in m.pictures:
             warn(f"事件 {e.id} 的图 {e.art} 还没有")
-        if e.when.startswith("visit:") and e.when[6:] not in locs:
-            err(f"事件 {e.id} 的触发地点 {e.when[6:]} 不存在")
-        if e.when.startswith("flag:") and e.when[5:] not in m.flags:
-            err(f"事件 {e.id} 的触发标记 {e.when[5:]} 未声明")
+        for problem in event_when_problems(m, e.when):
+            err(f"事件 {e.id} 的条件 {problem}")
     for end in m.endings:
         if end.condition.startswith("flag:") and end.condition[5:] not in m.flags:
             err(f"结局 {end.id} 依赖未声明的标记 {end.condition[5:]}")
+        for required in end.requires:
+            if (required[5:] not in m.flags) if required.startswith("flag:") else (required not in clues):
+                err(f"结局 {end.id} 的完成前置 {required} 不存在")
+        if end.sanity_gain and (why := dice_expr.problem(end.sanity_gain)):
+            err(f"结局 {end.id} 的理智恢复式不合法：{why}")
     changing = [(f"地点 {x.id}", x.art, x.looks) for x in m.locations] + [(f"NPC {n.id}", n.portrait, n.looks) for n in m.npcs]
     for who, base, looks in changing:
         for look in looks:

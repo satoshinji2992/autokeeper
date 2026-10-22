@@ -345,6 +345,9 @@ def _beats_zhuishuren() -> list[Beat]:
         Beat("天黑以后，我躲在灌木后面盯着那块墓碑",
              Action(kind="wait", summary=f"{who}天黑后躲在灌木丛里监视那块墓碑", target="道格拉斯最喜欢的墓碑", echo=f"{who}缩进灌木丛的阴影里"),
              Ruling(needs_roll=False, set_flags=["watching"], minutes=600, rest=True)),
+        Beat("我继续守到午夜过后",
+             Action(kind="wait", summary=f"{who}继续守候，等待午夜过后的动静", target="道格拉斯最喜欢的墓碑"),
+             Ruling(needs_roll=False, minutes=360, rest=True), dice=(20,)),
     ]  # fmt: skip
 
 

@@ -36,6 +36,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from ..engine.state import hours
 from .graph import supporting_clues, tellers
 from .schema import Module
 
@@ -63,6 +64,29 @@ def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_np
     if m.start in places and m.start not in without_places:
         r.places.add(m.start)
     acted = set(m.flags)  # what the arbiter may set when the investigators do what it means
+
+    def possible(when: str) -> bool:
+        def atom(part: str) -> bool:
+            if part.startswith("!"):  # a route may be taken before a later fact comes about
+                return True
+            if TIMED.fullmatch(part):
+                return True
+            kind, _, rest = part.partition(":")
+            if kind == "visit":
+                return rest in r.places
+            if kind == "flag":
+                return rest in r.flags | acted
+            if kind == "hour":
+                return hours(rest) is not None
+            who, _, target = rest.partition(":")
+            if kind == "at":
+                return target in r.places and (who == "players" or where.get(who) == target)
+            if kind == "knows" and who == "players" and target.startswith("clue:"):
+                return target[5:] in r.clues
+            return False
+
+        return any(all(atom(part.strip()) for part in group.split("&")) for group in when.split("|"))
+
     while True:
         before = (len(r.places), len(r.clues), len(r.flags), len(r.events))
         for pid in list(r.places):
@@ -71,8 +95,7 @@ def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_np
             if e.id in r.events:
                 continue
             when = e.when.strip()
-            kind, _, what = when.partition(":")
-            if (kind == "visit" and what in r.places) or (kind == "flag" and what in r.flags | acted) or TIMED.fullmatch(when):
+            if possible(when):
                 r.events.add(e.id)
                 r.flags |= set(e.sets)
                 r.met |= set(e.present)
@@ -93,6 +116,8 @@ def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_np
         if (len(r.places), len(r.clues), len(r.flags), len(r.events)) == before:
             break
     for end in m.endings:
+        if not all(x[5:] in r.flags | acted if x.startswith("flag:") else x in r.clues for x in end.requires):
+            continue
         flag = end.condition[5:] if end.condition.startswith("flag:") else ""
         if flag in r.flags:
             r.endings[end.id] = "事件"

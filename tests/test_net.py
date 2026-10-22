@@ -438,7 +438,8 @@ class NoticeCast(TableCast):
 
     async def arbiter(self, state, action, at=None):
         if "告示栏" in action.summary and "c_notice" not in state.clues:
-            return Ruling(needs_roll=True, skill="侦查", minutes=5, clues_on_success=["c_notice"], reason="告示贴得很高，字又小")
+            return Ruling(needs_roll=True, skill="侦查", minutes=5, clues_on_success=["c_notice"],
+                          reason="后台裁定依据", why="告示贴得很高，字又小")
         return await super().arbiter(state, action, at)
 
 

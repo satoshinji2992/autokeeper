@@ -176,8 +176,12 @@ def _strip(node, keys: set[str]):
 
 # -- modules --------------------------------------------------------------------------------------
 def _given_comes_back(given, dumped, where: str = "") -> None:
-    """Everything a module's files write is in the loaded module, as written."""
+    """Module values survive loading; investigator skill aliases share the rules' canonical keys."""
     if isinstance(given, dict):
+        if where.endswith("/skills"):
+            from autokeeper.rules.catalog import canonical
+
+            given = {canonical(k): v for k, v in given.items()}
         assert isinstance(dumped, dict), where
         for k, v in given.items():
             assert k in dumped, f"{where}/{k}"

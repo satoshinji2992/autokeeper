@@ -329,6 +329,7 @@ class Bring(Base):
     holder: str = Field("", description="拿着它的人：调查员或 NPC id；放在那里没人拿就留空，填 place")
     place: str = Field("", description="它放在哪个地点；有人拿着就留空")
     item: str = Field("", description="新物件的 id，留空由系统生成")
+    source: SkipJsonSchema[str] = Field("", description="已实际取得的手稿线索；只由引擎落实守秘人明确写出的持有场面")
 
     def check(self, w: World) -> list[str]:
         name, here = self.name.strip(), w.st.location
@@ -337,6 +338,12 @@ class Bring(Base):
         if bool(self.holder) == bool(self.place):
             return ["holder 和 place 填一个：有人拿着填 holder，放在那里填 place"]
         problems = [] if len(self.look) <= 80 else ["外观写一句，不超过 80 字"]
+        document = next((c for c in w.m.clues if c.id == self.source and c.id in w.st.clues and c.handout
+                         and c.handout in w.st.handouts), None)
+        sourced = document is not None and self.actor in STAFF and any(
+            names(name, label) for label in (document.title, w.m.handout(document.handout).title))
+        if self.source and not sourced:
+            problems.append("材料来源尚未实际取得，不能登记成已经拿到的证物")
         where = self.holder or self.place
         if self.holder and not (any(i.id == self.holder for i in w.st.investigators)
                                 or ((e := _npc(w, self.holder)) is not None and e.at == here and e.status not in ("死亡", "失踪"))):
@@ -345,12 +352,12 @@ class Bring(Base):
             problems.append(f"{w.name(self.place)}不是调查员此刻所在的地方")
         if self.item and self.item in w.rec.entities:
             problems.append(f"id {self.item} 已经用过")
-        if clash := reserved(w, name):  # an NPC is told why without hearing of the module's things
+        if not sourced and (clash := reserved(w, name)):  # an NPC never hears of the module's hidden things
             problems.append(f"「{name}」和{clash}重名：这样的东西只由模组、线索或裁定给出" if self.actor in STAFF
                             else f"「{name}」不是随手就有的日常物件，不能当场拿出来")
-        if ARMS.search(name):
+        if not sourced and ARMS.search(name):
             problems.append(f"「{name}」不是随手就有的日常物件：枪支、弹药和炸药只由模组、调查员的装备或裁定给出")
-        if gap := lacking(w, name):
+        if not sourced and (gap := lacking(w, name)):
             problems.append(f"这一轮的行动正缺{gap}，不能当场拿出来")
         if have := holding(w, where, name):
             problems.append(f"{w.name(where)}已经有{w.name(have)}了")
@@ -362,7 +369,8 @@ class Bring(Base):
         name, look = self.name.strip(), self.look.strip()
         where = self.holder or self.place
         ident = self.item or f"thing:{hashlib.sha256(oid.encode()).hexdigest()[:10]}"
-        ent = w.rec.entities[ident] = Entity(id=ident, kind="item", name=name, origin="game", at=where, important=False,
+        ent = w.rec.entities[ident] = Entity(id=ident, kind="item", name=name, origin="game", at=where,
+                                             important=bool(self.source),
                                              look=look, changed=w.rec.seq)
         w.st.item_owners[ident] = where
         for inv in w.st.investigators:
@@ -1074,7 +1082,8 @@ class Improvise(Base):
             plan = Improv.model_validate(self.plan)
         except ValueError as exc:
             return [f"方案格式不对：{str(exc)[:200]}"]
-        return improv.check(w.m, plan, at=self.at or w.st.location, actors={inv.id for inv in w.st.investigators})
+        return improv.check(w.m, plan, at=self.at or w.st.location, actors={inv.id for inv in w.st.investigators},
+                            player_names={inv.name for inv in w.st.investigators})
 
     def settle(self, w: World, oid: str):
         from ..agents.director import Improv

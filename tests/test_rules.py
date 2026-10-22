@@ -27,6 +27,29 @@ def test_derived_values(inv):
     assert inv.value("外语") == 40  # general skill falls back to the specialisation
 
 
+def test_cards_and_reloaded_saves_use_the_same_skill_names_as_rolls(inv):
+    from autokeeper.rules.coc import Investigator
+
+    data = inv.model_dump()
+    data["skills"] = {"斗殴": 45, "自然学": 30, "领航": 50, "外语（日语）": 40}
+    card = Investigator.model_validate(data)
+    restored = Investigator.model_validate_json(card.model_dump_json())
+    for sheet in (card, restored):
+        assert sheet.value("格斗(斗殴)") == sheet.value("斗殴") == 45
+        assert sheet.value("博物学") == 30
+        assert sheet.value("导航") == 50
+        assert sheet.value("外语(日语)") == 40
+
+
+def test_conflicting_alias_values_are_not_silently_lost(inv):
+    from autokeeper.rules.coc import Investigator
+
+    data = inv.model_dump()
+    data["skills"] = {"斗殴": 45, "格斗(斗殴)": 25}
+    with pytest.raises(ValueError, match="两个不同的技能值"):
+        Investigator.model_validate(data)
+
+
 def test_check_difficulty_and_marks(rules, fake, inv):
     fake.queue(25, 36)
     hard = rules.check(inv, "侦查", Level.HARD)

@@ -141,14 +141,14 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
         Canned.told = []
         s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
-    assert s["narrations"] == 9 and s["hits"]["仿佛"] == 9 and s["usage"]["calls"] == 9
+    assert s["narrations"] == 10 and s["hits"]["仿佛"] == 10 and s["usage"]["calls"] == 10
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
     told = "\n".join(reports[0])
     assert "侦查 60 → 24 困难成功" in told and "侦查 60 → 83 失败" in told
     assert "魅惑 15 → 9 常规成功" not in told  # the NPC already answered this social check
     assert "一个佝偻的身影翻过矮墙" in told and "雷区" not in told
     saved = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
-    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 9 and len(saved["reports"]) == 9
+    assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 10 and len(saved["reports"]) == 10
     assert saved["examples"] == style.examples(skills.body("keeper-craft"))  # the passages the keeper was shown
 
 

@@ -49,6 +49,7 @@ class Clue(BaseModel):
     requires: list[str] = Field(default_factory=list, description="全部前置条件：线索 id，或 flag:标记；未满足时不能发出线索或附图")
     points_to: list[str] = Field(default_factory=list, description="支持哪些结论 id")
     sanity: str | None = Field(None, description="发现时的理智检定，如 0/1D3")
+    mythos: int = Field(0, ge=0, description="实际获知这条禁忌知识时增加的克苏鲁神话百分点")
     art: str = Field("", description="找到的那样东西的照片的图片键（art/items/<键>.jpg），随模组保存；游戏中不单独展示")
 
     def available(self, flags: list[str], clues: list[str]) -> bool:
@@ -257,7 +258,11 @@ class Stake(BaseModel):
 class Event(BaseModel):
     id: str
     title: str
-    when: str = Field(description="触发条件：'D1 21:00' 表示时间，'flag:x' 表示标记，'visit:地点id' 表示到达")
+    when: str = Field(description="触发条件：D1 21:00、flag:x、visit:地点id；也可用 &、| 连接 flag、hour:0-6、at:players:地点、knows:players:clue:线索；! 表示未成立")
+    where: str = Field("", description="事件实际发生的地点；异地事件只进入世界记录，不搬运调查员、不向异地玩家展示现场或结算当场伤害")
+    check: Check | None = Field(None, description="条件满足后还需通过的检定；每游戏日最多尝试一次，失败后下日可再试，成功才发生")
+    advance_to: str = Field("", pattern=r"^(?:(?:D[1-9]\d* )?(?:[01]\d|2[0-3]):[0-5]\d)?$",
+                            description="在场经历此事后至少推进到的时刻：HH:MM指当日，D2 20:00指指定日；已过不倒退。异地事件不跳过玩家的时间")
     text: str = Field(description="守秘人须知：发生了什么")
     read_aloud: str = ""
     sets: list[str] = Field(default_factory=list)
@@ -302,6 +307,8 @@ class Ending(BaseModel):
     condition: str
     text: str
     reward: str = ""
+    requires: list[str] = Field(default_factory=list, description="终局还需实际取得的线索 id 或 flag:标记；计划透露、获准交涉不算已经听到")
+    sanity_gain: str = Field("", description="进入结局时恢复的理智骰式，如 1D6；reward只负责说明，数值写在这里")
 
 
 # The engine's own end, for what any game can come to whatever its module writes: every investigator

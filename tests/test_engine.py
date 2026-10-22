@@ -198,12 +198,30 @@ def test_a_check_rolled_again_under_new_conditions_is_a_new_attempt(module, fake
     st.turn = 1
     st.add("player", "我查看齿轮间", who=st.investigator.name)
     st.checks.append(CheckRecord(turn=1, who=st.investigator.id, at="tower", skill="侦查", target="齿轮间", text="侦查 失败",
-                                 passed=False, minutes=st.minutes, seen=game._seen(), bonus=0, difficulty="常规"))  # fmt: skip
+                                 passed=False, action="周衡再查看齿轮间", minutes=st.minutes,
+                                 seen=game._seen(), bonus=0, difficulty="常规"))  # fmt: skip
     st.turn = 2
     look = Action(kind="investigate", summary="周衡再查看齿轮间", target="齿轮间")
     assert game._no_reroll(look, Ruling(needs_roll=True, skill="侦查", difficulty="常规"), "tower").repeat  # the same roll again
     lamp = Ruling(needs_roll=True, skill="侦查", difficulty="常规", bonus=1)  # the arbiter saw the lamp brought in
     assert not game._no_reroll(look, lamp, "tower").repeat
+
+
+async def test_a_new_request_to_the_same_npc_is_not_overruled_by_an_older_failed_check(module, fake):
+    game, _, _ = make(module, fake, {}, location="tower")
+    state = game.state
+    old = Action(kind="talk", summary="请守钟人解释账上的记号", npc="warden", approach="说服")
+    state.turn = 1
+    state.add("player", "账上的记号是什么意思？", who=state.investigator.name)
+    fake.queue(99)
+    game._record(old, game.rules.check(state.investigator, "说服"))
+    state.turn = 2
+    new = old.model_copy(update={"summary": "请守钟人履行刚才的约定，暂时盖住齿轮等医生到场"})
+    ruling = Ruling(needs_roll=True, skill="说服", reason="这是不同请求，且有新的约定作为筹码")
+    checked = game._no_reroll(new, ruling, "tower")
+    assert checked.needs_roll and not checked.repeat
+    assert state.checks[-1].action == old.summary
+    await game.close()
 
 
 def test_a_plan_for_two_passing_travellers_is_not_turned_away(module):
@@ -365,8 +383,8 @@ async def test_travel_time_and_timed_events(module, fake):
     assert [e.id for e in turn.events] == ["e_dusk"]
 
 
-async def test_timed_event_moves_party_and_npc_performs(module, fake):
-    game, cast, events = make(module, fake, {}, location="office")
+async def test_a_local_timed_event_has_the_npc_perform_without_moving_the_party(module, fake):
+    game, cast, events = make(module, fake, {}, location="square")
     game.state.add("player", "我去报社翻三十年前的旧报", who="周衡")
     game.state.minutes = parse_time("D1 20:55")
     fake.queue(30)  # sanity check during the sermon
@@ -861,6 +879,62 @@ async def test_finds_ruled_visible_in_a_general_look_are_not_silently_discarded(
 SCARE = Action(kind="talk", summary="周衡逼近一步，威吓守钟人说出钟里的事", target="老守钟人", npc="warden", approach="恐吓")
 
 
+@pytest.mark.parametrize("rolled,passed", [(8, True), (99, False)])
+async def test_one_scoped_social_settlement_reaches_both_npc_and_keeper(module, fake, rolled, passed):
+    from autokeeper.agents.cast import Initiative
+
+    game, *_ = make(module, fake, {}, location="tower")
+    public_scope = "检定决定守钟人是否陪你查看广场，不涉及交出日记。"
+    ruling = Ruling(needs_roll=True, skill="恐吓", why=public_scope, reason="后台日记藏在锁住的抽屉里")
+    fake.queue(rolled)
+    turn = Turn(action=SCARE, ruling=ruling, checks=[game.rules.check(game.state.investigator, "恐吓")])
+    assert turn.checks[0].passed == passed
+    settled = game._social_result(turn, "warden")
+    message = game._npc_message(turn, "warden")
+    assert settled and settled in message and settled in game._report(turn)
+    assert public_scope in message and ruling.reason not in message
+    assert "不涉及交出日记" in settled
+    initiative = Initiative(npc="warden", does="回答同行的请求")
+    assert settled in game._joining(turn, initiative)
+    assert settled not in game._joining(turn, initiative, before=True)
+    assert game._social_result(turn, "preacher") == ""  # not another character's concession
+    await game.close()
+
+
+async def test_a_psychology_result_does_not_tell_the_observed_npc_the_players_judgment(module, fake):
+    game, *_ = make(module, fake, {}, location="tower")
+    fake.queue(8)
+    action = SCARE.model_copy(update={"approach": "心理学"})
+    turn = Turn(action=action, ruling=Ruling(needs_roll=True, skill="心理学", why="你判断他在隐瞒家事"),
+                checks=[game.rules.check(game.state.investigator, "心理学")])
+    assert game._social_result(turn, "warden") == ""
+    assert "你判断他在隐瞒家事" not in game._npc_message(turn, "warden")
+    await game.close()
+
+
+async def test_luck_updates_the_same_throw_for_npc_keeper_and_saved_turn(module, fake):
+    from autokeeper.engine.game import TURN_RECORD
+
+    game, *_ = make(module, fake, {}, location="tower")
+    ruling = Ruling(needs_roll=True, skill="恐吓", why="确认守钟人是否同意陪你到广场")
+    fake.queue(18)  # intimidation 15: spend 3 Luck, without throwing again
+    original = await game.resolve(SCARE, ruling)
+    assert original.push and not original.checks[0].passed
+    before = game.state.investigator.luck
+    adjusted = await game.push("luck")
+    original.absorb(adjusted)
+    restored = TURN_RECORD.validate_json(TURN_RECORD.dump_json(original))
+    assert len(restored.checks) == 1 and restored.checks[0].passed
+    assert restored.checks[0].value == 18 and restored.checks[0].luck_spent == 3
+    assert game.state.investigator.luck == before - 3 and not fake.values
+    assert game.state.checks[-1].passed
+    assert "本次交涉成功" in game._npc_message(restored, "warden")
+    assert "检定：恐吓 失败" not in game._npc_message(restored, "warden")
+    report = game._report(restored)
+    assert "常规成功 ✓（花 3 点幸运）" in report and "本次交涉成功" in report
+    await game.close()
+
+
 async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fake):
     """`.ra 恐吓` is the investigator's attempt, read in context and ruled like any action:
     rolled once, and the NPC answers the outcome without a second telling."""
@@ -994,6 +1068,7 @@ async def test_growth_waits_for_the_ending_and_comes_once(module, fake):
 PLEAD = Action(kind="talk", summary="周衡劝守钟人说出钟里的事", target="老守钟人", npc="warden", approach="说服")
 HARD_TALK = Ruling(
     needs_roll=True, skill="说服", difficulty="困难", bonus=1, clues_on_success=["c_diary"], minutes=10,
+    why="守钟人就在一旁盯着你，他护着钟楼",
     reason="守钟人就在一旁盯着你，他护着钟楼；替代门槛，成功可取得 c_diary 守钟人的日记",
 )  # fmt: skip
 
@@ -1045,16 +1120,14 @@ async def test_ai_dice_do_not_wait(module, fake):
 
 def test_the_roll_prompt_never_gives_the_module_away(module, fake):
     game, *_ = make(module, fake, {}, location="tower")
-
-    def why(reason: str) -> str:
-        return game._why(Ruling(needs_roll=True, skill="侦查", reason=reason))
-
-    assert why("守钟人就在场，绕到他柜前翻看需潜行避开注意；难度不低于说服·困难，成功可取得日记。") == "守钟人就在场，绕到他柜前翻看需潜行避开注意"
-    assert why("齿轮间里很暗，齿轮转得飞快") == "齿轮间里很暗，齿轮转得飞快"  # a place on screen, not a secret
-    assert why("c_gears 就在那里") == ""  # an id
-    assert why("他在钟里藏了东西，所以拦着人") == ""  # echoes a secret
-    assert why("守钟人的日记就锁在柜子里") == ""  # a clue not found yet
-    assert len(why("、".join(["守钟人坐在楼梯口打盹手里还攥着一块油布"] * 3))) == 40
+    reason = "日记在旧书桌，成功可得怪足迹；守墓人信墓里有鬼。"
+    ruling = Ruling(needs_roll=True, skill="侦查", reason=reason)
+    action = Action(kind="investigate", summary="仔细查看书桌")
+    assert game.roll_prompt(action, ruling)["why"] == ""
+    ruling.why = "抽屉里光线很暗，需要仔细查看。"
+    assert game.roll_prompt(action, ruling)["why"] == ruling.why
+    action.idea = {"roller": game.state.investigator.id}
+    assert game.roll_prompt(action, ruling)["why"] == ruling.why
 
 
 async def test_losing_a_fifth_of_san_in_one_day_is_indefinite_insanity_and_the_count_starts_again_each_day(fake):

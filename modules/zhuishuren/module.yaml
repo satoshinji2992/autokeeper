@@ -68,13 +68,14 @@ flags:
   douglas_escaped: 道格拉斯躲开或打倒了调查员，带着书逃回墓地
   douglas_down: 道格拉斯被杀死或被击晕
   unmasked: 调查员凑近看清了倒地人影的脸
-  recognized: 调查员认出这头食尸鬼正是道格拉斯
+  recognized: 调查员在杀死或击晕人影后凑近辨认，认出倒地的食尸鬼正是道格拉斯；礼貌交谈中认出活着的道格拉斯不属于此分支
   horde_arrived: 几十只食尸鬼从夜幕中现身
   temp_insane: 调查员陷入了临时性疯狂
   asylum: 调查员疯狂昏倒，被送进阿诺兹堡疗养院
   taken_by_ghouls: 调查员与食尸鬼群搏斗，被制服带走
   fled_ghouls: 调查员从食尸鬼群面前逃走
   talked_douglas: 调查员与道格拉斯交谈过，听到了真相
+  douglas_departed: 调查员听取真相后结束提问，明确不跟随而让道格拉斯离开，道格拉斯实际动身返回地下；问好、听完首次回答、仍在追问或提出其他安排都不算
   followed_douglas: 调查员跟随道格拉斯下到了地底
   told_thomas: 调查员把道格拉斯的真相告诉了托马斯
   sign_f_mud_on_sill_1: 伏笔 f_mud_on_sill 第 1 步露出了，场景图换成：窗台原有的浅色干土上多了几粒深色湿泥。（露出时由引擎设置）

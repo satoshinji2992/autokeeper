@@ -9,6 +9,10 @@ going and company together; the investigators' walk between the rooms of one pla
 moves of the people in it; an everyday thing brought out together with its handing on. A unit lands
 whole or not at all.
 
+Explicit observations keep what named NPCs actually saw or heard, including the keeper's own
+performance of their speech. They are private witnessed events, not physical traces or new facts;
+arriving later does not disclose them. No observation is extracted from the telling's words.
+
 A scene does not move the clock: someone comes or goes only as far as the minutes this turn already
 took (Context.elapsed, measured with Game._travel). The investigators go somewhere else only on their
 own action, ruled and timed by the engine. Someone gone from the scene has left, and went somewhere.
@@ -32,7 +36,7 @@ from pydantic import BaseModel, Field
 
 from ..engine import world as legacy_world
 from .context import rooms
-from .ops import Follow, Improvise, Move, Occur, Transfer, names
+from .ops import Bring, Follow, Improvise, Move, Occur, Transfer, names
 from .record import ENGINE, KEEPER
 
 if TYPE_CHECKING:
@@ -64,6 +68,11 @@ class Trace(BaseModel):
         return "priv" in self.visibility.lower() or self.visibility.strip() in ("私下", "暗中", "没注意到")
 
 
+class Observation(BaseModel):
+    witnesses: list[str] = Field(description="本段实际在场看见或听见内容的 NPC id 或姓名；只写确实知情者")
+    text: str = Field(max_length=300, description="当场获知的重要事实或承诺，一两句；含KP替NPC说过且影响后续回答的话。不是痕迹、推测或尚未完成的结果")
+
+
 class Person(BaseModel):
     """A lasting person improvised here, without a full character sheet or a scene package."""
 
@@ -87,6 +96,8 @@ class Scene(BaseModel):
     holds: list[Holding] = Field(default_factory=list, description="这段里换了手的物件")
     things: list[Thing] = Field(default_factory=list, description="这段里拿出来的日常小物件；递给了别人就再写进 holds")
     traces: list[Trace] = Field(default_factory=list, description="这段里留下的新痕迹")
+    observations: list[Observation] = Field(default_factory=list,
+                                           description="本段NPC实际看见或听见的重要事实与承诺，明确witnesses；只记影响后续应答的内容，不写逐句流水账")
     now: str = Field("", description="讲完时眼前还在进行的事，一句话，只写调查员看得到的；没有就留空")
 
 
@@ -107,7 +118,7 @@ class Unit:
     """Changes that land whole or not at all."""
 
     key: str
-    steps: list[dict[str, Any]] = field(default_factory=list)  # world ops; {"kind": "walk"} and {"kind": "meet"} are this module's
+    steps: list[dict[str, Any]] = field(default_factory=list)  # world ops; walk, meet and witness are scene checks
     said: list[str] = field(default_factory=list)  # what it changes, in words
     problems: list[str] = field(default_factory=list)  # why it does not hold
 
@@ -202,7 +213,17 @@ def _item(w: World, text: str) -> tuple[str, str] | None:
         holder = next((i.id for i in w.st.investigators if x in i.inventory), None) or w.st.item_owners.get(x)
         if holder:
             return x, holder
+    if source := _document(w, text):
+        if (item := w.rec.entities.get(f"document:{source}")) is not None:
+            return item.id, item.at
     return None
+
+
+def _document(w: World, text: str) -> str:
+    """An acquired material, by its clue or handout name. Knowing an unrelated fact creates no object."""
+    return next((c.id for c in w.m.clues if c.id in w.st.clues and c.handout in w.st.handouts
+                 and c.handout and (text in (c.id, c.handout)
+                                    or any(names(text, label) for label in (c.title, w.m.handout(c.handout).title)))), "")
 
 
 def _blank(text: str) -> bool:
@@ -227,6 +248,11 @@ def bring(w: World, step: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
     this action lacks (Ruling.missing) is not brought out."""
     from .adapters import bring_ops
 
+    if source := _document(w, step["name"]):
+        op = Bring(id=step["id"], item=f"document:{source}", name=step["name"], source=source,
+                   holder=step.get("holder") or "", place=step.get("place") or "", actor=KEEPER)
+        bad = op.check(w)
+        return ([] if bad else [op.model_dump(mode="json")]), bad
     found = bring_ops(w, [step["name"]], actor=step["actor"], holder=step.get("holder") or None,
                       place=step.get("place") or None, missing=step.get("missing", ()))
     ops = [op.model_copy(update={"id": step["id"]}).model_dump(mode="json") for op in found.ops]
@@ -247,6 +273,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     party = {i.id for i in st.investigators}
     lead = st.investigator.id
     src = st.location
+    at_start = set(w.present(src))
     problems: list[str] = []
     units: dict[str, Unit] = {}
     count = itertools.count(ctx.start)
@@ -408,12 +435,15 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     # party holds is in hand already (the Ratgers' map of Esnel, 2026-10-22: written in as a new thing,
     # it was refused as one not had for the asking, and the whole telling was asked for again).
     held = [c.title for c in w.m.clues if c.id in w.st.clues] + [h.title for h in w.m.handouts if h.id in w.st.handouts]
-    things = {_named(t.name): t for t in scene.things if not _blank(t.name) and not any(names(t.name, x) for x in held)}
+    things = {_named(t.name): t for t in scene.things if not _blank(t.name)
+              and (_document(w, t.name) or not any(names(t.name, x) for x in held))}
     handed: dict[str, str] = {}
     for h in scene.holds:
         if _blank(h.item):
             continue
         found = _item(w, h.item)
+        if found is None and _document(w, h.item) and _named(h.item) not in things:
+            things[_named(h.item)] = Thing(name=h.item, holder=lead)
         if found is None and _named(h.item) in things:
             handed[_named(h.item)] = h.holder
             continue
@@ -459,6 +489,22 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                            visibility="private" if t.private else "public", actor=KEEPER)]
             u.said.append(f"留下痕迹：{_clip(t.text, 60)}")
 
+    for i, observed in enumerate(scene.observations):
+        if _blank(observed.text):
+            continue
+        witnesses = list(dict.fromkeys(_npc(w, x) for x in observed.witnesses))
+        if not witnesses or None in witnesses:
+            problems.append("observations.witnesses 要写本段实际在场的 NPC id 或姓名，不能留空或写未登记的人。")
+            continue
+        u = unit(f"observation:{i}")
+        for who in witnesses:
+            u.steps.append({"kind": "witness", "who": who, "lead": lead, "room": room,
+                            "at_start": who in at_start,
+                            "why": f"{name(who)}本段起点、结尾都未实际在场，不能记下这段见闻。"})
+        u.steps.append(op(Occur, text=observed.text.strip(), participants=witnesses,
+                          place=room, visibility="private", actor=KEEPER, reactive=False))
+        u.said.append(f"{'、'.join(name(n) for n in witnesses)}当场获知：{observed.text.strip()}")
+
     merged = _merge(units, movers)
     end_words = _try(original, merged)
     for u in merged:
@@ -484,9 +530,11 @@ def _merge(units: dict[str, Unit], movers: dict[str, str]) -> list[Unit]:
 
     for key, u in units.items():
         for step in u.steps:
-            if step.get("kind") != "meet":
+            kind = step.get("kind")
+            if kind not in ("meet", "witness"):
                 continue
-            for who in (step["a"], step["b"]):
+            people = (step["a"], step["b"]) if kind == "meet" else (step["who"], step["lead"])
+            for who in people:
                 if (other := movers.get(who)) and other in units and other != key:
                     a, b = find(key), find(other)
                     if a != b:
@@ -514,6 +562,14 @@ def run(w: World, u: Unit) -> list[str]:
             continue
         if kind == "meet":
             if w.place(step["a"]) != w.place(step["b"]):
+                problems = [step["why"]]
+                break
+            continue
+        if kind == "witness":
+            person = w.rec.entities.get(step["who"])
+            if person is None or person.kind != "npc" or (not step["at_start"] and (
+                    person.status in ("死亡", "失踪") or w.place(person.id) != step["room"]
+                    or w.st.location != step["room"])):
                 problems = [step["why"]]
                 break
             continue

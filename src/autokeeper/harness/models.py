@@ -47,6 +47,7 @@ import sys
 import time
 import weakref
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
@@ -57,6 +58,7 @@ from . import spend, trace
 
 OnDelta = Callable[[str], Awaitable[None]] | None
 Msg = dict[str, str]  # {"role": "user" | "assistant", "content": str}
+_format_retry: ContextVar[bool] = ContextVar("format_retry", default=False)
 
 
 class ContextBudgetExceeded(RuntimeError):
@@ -143,14 +145,30 @@ listeners: list[Callable[[str], None]] = []  # told when a role switches to its 
 
 # -- structured output -----------------------------------------------------------------
 def parse_json(text: str) -> Any:
-    """The first JSON object in a reply, tolerating code fences and chatter around it."""
+    """One complete JSON object, tolerating a code fence or an introduction before it.
+
+    A second object or trailing prose/fields means the response is incomplete, not that its
+    first text field is a valid substitute for the missing actions.
+    """
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
     start = text.find("{")
     if start == -1:
         return None
+
+    def decode(decoder: json.JSONDecoder) -> Any:
+        value, end = decoder.raw_decode(text[start:])
+        return None if text[start + end:].strip() else value
+
     try:
-        return json.JSONDecoder().raw_decode(text[start:])[0]
-    except json.JSONDecodeError:
+        return decode(json.JSONDecoder())
+    except json.JSONDecodeError as exc:
+        if exc.msg.startswith("Invalid control character"):
+            try:
+                # Some providers leave literal line breaks in a JSON string. Preserve the
+                # whole object, including NPC acts, instead of treating its envelope as speech.
+                return decode(json.JSONDecoder(strict=False))
+            except json.JSONDecodeError:
+                pass
         return None
 
 
@@ -256,9 +274,8 @@ def problems(data: Any, schema: dict) -> list[str]:
 
 
 def spoken(schema: dict) -> bool:
-    """A schema whose one required field is `text`, the rest optional (an NPC's line and what it
-    changed): a reply in plain words can stand for it."""
-    return schema.get("required") == ["text"]
+    """Only a text-only contract can lose its envelope without losing operational information."""
+    return schema.get("required") == ["text"] and set(schema.get("properties", {})) == {"text"}
 
 
 REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完整、正确的 JSON 对象（json），只输出 JSON。"
@@ -354,7 +371,9 @@ class Model:
             self._guard_input(messages, schema)
             spend.guard(self.spec.model)
             reply = await self._attempt(messages, schema=schema, images=images, on_delta=on_delta)
-            if schema is not None and reply.data is None and reply.text.strip() and spoken(schema):
+            plain = reply.text.strip()
+            envelope = plain.startswith(("{", "[", "```")) or bool(re.search(r'\{\s*"text"\s*:', plain))
+            if schema is not None and reply.data is None and plain and spoken(schema) and not envelope:
                 reply.data = {"text": reply.text.strip()}  # a line said in plain words is a line: no repair call
             if schema is not None and (errors := problems(reply.data, schema)):
                 fix = [
@@ -363,11 +382,25 @@ class Model:
                     {"role": "user", "content": REPAIR.format(errors="\n".join(errors))},
                 ]
                 trace.progress("repair", input=fix, problems=errors, context=self._input_parts(fix, schema))
-                second = await self._attempt(fix, schema=schema, images=images, on_delta=None)  # a reading still needs its picture
+                # Keep the output contract, but let the backend avoid repeating a broken
+                # transport mode (for example json_object producing only whitespace).
+                token = _format_retry.set(True)
+                try:
+                    second = await self._attempt(fix, schema=schema, images=images, on_delta=None)
+                finally:
+                    _format_retry.reset(token)
                 reply.add(second)
                 reply.repairs += 1
                 if not problems(second.data, schema) or (reply.data is None and second.data is not None):
                     reply.data, reply.text = second.data, second.text
+                if (problems(reply.data, schema) and not isinstance(reply.data, dict)
+                        and "text" in schema.get("properties", {}) and (envelope or not spoken(schema))):
+                    # A structured envelope can contain private plans and motives. After the
+                    # one format retry, fail the call; never turn that envelope into dialogue.
+                    # Stateful plain-text replies also lack their operation/disclosure receipt.
+                    # Parsed but incomplete drafts go to their caller's domain validator;
+                    # encounter plans and missing keeper scenes already have recovery there.
+                    raise ValueError("模型回复格式未通过校验，本次回应尚未完成")
             return reply
         except BaseException as exc:
             error = f"{type(exc).__name__}: {exc}"
@@ -753,9 +786,9 @@ class LangChainModel(Model):
                     reply.usage = _usage(chunk.usage_metadata)
             return reply
         if self.mode == "json":
-            # DeepSeek's JSON mode now and then answers with whitespace alone, about one NPC line in five in
-            # a playtest, each one a second call to repair; a spoken line is taken as plain words instead.
-            switch = self.provider in JSON_SWITCH and not spoken(schema)
+            # Dialogue can carry actions, discoveries and private intentions. Optional fields do
+            # not make that contract text-only: keep JSON mode for every stateful reply.
+            switch = self.provider in JSON_SWITCH and not spoken(schema) and not _format_retry.get()
             runnable = self.chat.bind(response_format={"type": "json_object"}) if switch else self.chat
             if on_delta:  # the JSON as it is written, for a caller that reads it on the way (the keeper's telling)
                 async for chunk in runnable.astream(history):

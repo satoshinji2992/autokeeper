@@ -20,7 +20,7 @@ from pydantic.json_schema import SkipJsonSchema
 from .. import cards
 from ..engine.presentation import MediaAction
 from ..engine.state import GameState
-from ..module.schema import Leg, Module, Stake
+from ..module.schema import Check, Leg, Module, Stake
 from ..plugins.schema import Plugin
 from ..world.ops import Condition, Enlist, Learn, Move, Occur, Relate, Rewrite, Schedule, SetPlan
 from .writing import INTERFACE_COPY
@@ -78,6 +78,8 @@ class NewClue(BaseModel):
     skill: str = Field("", description="需要什么检定，留空表示找到就有")
     difficulty: Literal["常规", "困难", "极难"] = "常规"
     points_to: list[str] = Field(default_factory=list, description="支持模组里的哪些结论 id")
+    sanity: str = Field("", description="实际获知时必然需要的理智检定，如 0/1D4；失败专属后果不填")
+    mythos: int = Field(0, ge=0, description="实际获知时增加的克苏鲁神话百分点")
 
 
 class NewItem(BaseModel):
@@ -97,6 +99,10 @@ class NewEvent(BaseModel):
     id: str
     title: str
     when: str = Field(description="now 表示这一轮马上发生；也可以是 'D1 22:00'、'flag:标记'、'visit:地点id'")
+    where: str = Field("", description="事件发生的地点；异地发生只记世界，不强行移动调查员")
+    check: Check | None = Field(None, description="条件成立后还需通过的检定；每游戏日最多一次，失败次日可再试")
+    advance_to: str = Field("", pattern=r"^(?:(?:D[1-9]\d* )?(?:[01]\d|2[0-3]):[0-5]\d)?$",
+                            description="在场经历此事至少推进到HH:MM当日时刻或D2 20:00指定时刻；已过不倒退，异地事件不推进玩家时间")
     read_aloud: str = Field(description="调查员看到、听到的那一段演出")
     text: str = Field("", description="守秘人须知")
     sanity: str = Field("", description="理智检定，如 0/1D3，不需要就留空")
@@ -120,6 +126,8 @@ class NewEnding(BaseModel):
     title: str
     condition: str = Field(description="flag:某个标记")
     text: str = Field(description="结局的叙述")
+    requires: list[str] = Field(default_factory=list, description="实际取得的线索或flag:标记；获准交涉不等于已经听到真相")
+    sanity_gain: str = Field("", description="进入结局时恢复的理智骰式，如1D6")
 
 
 class NewLook(BaseModel):
@@ -169,6 +177,7 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
 世界观不能破：
 - 时代、地域与神话体系以模组为准。已向玩家建立的事实保持一致；未公开的秘密、动机、往事和真相可为改善剧情而调整，玩家见过、听过的事也可以为阴谋或剧情改出另一个真相，但只能通过 backstage 的 rewrite 提交并接受世界记录校验，不能靠新增旁白或传言暗中覆盖。
 - 新人物、新地点要像本来就在这个故事里：符合时代和地方，和已有的人和事有关联。
+- 本局调查员保持自己的 id 与身份，不把队友或调查员背景中对自己的描述另建成同名 NPC，也不代替真人玩家作答、同意或行动。
 - 新人物的消息有来源和局限。传言可以错误，但须作为人物的说法存在，不由旁白替它作证；尚未提交到记录的改写不能当成新事实使用。
 - 新人物写出 look；地点的 read_aloud 和物件的 description 写出能画出来的外观，后台美术会据此独立配图。
   玩家拿起来看、打算购买或特别在意的物件写进 items（最多三件），不要把所有桌椅餐具逐个登记。登记不代表已经买到或获得特殊效果。
@@ -209,7 +218,7 @@ DIRECTOR_SYSTEM = """你是这场 CoC 7 版跑团的导演，在模组没写到�
   场面停在调查员必须立刻应对的一刻：不替他们行动，不预先决定结果，伤害和理智损失只写进事件由规则结算。give 留空：那条线索由引擎交出。
 
 格式：
-- 方案要小。开局改编最多 2 个新 NPC、1 个新地点、3 条新线索、3 个事件；其他时候最多 1 个 NPC、1 个地点、2 条线索、1 个事件、1 个结局。用不着的留空；确实什么都不用加，kind 填“不需要”。
+- 围绕这次需要准备可交互的场面，人物有动机，调查有依据，局势能被玩家改变。通常一处地点和少数人物就够；确需多人、几条路线或连续事件才能成立时一并准备，不为凑数量扩写，也不因默认规模拆掉必要关系。用不着的留空；确实什么都不用加，kind 填“不需要”。
 - id 用英文小写加下划线，不和已有的重复。引用的地点、NPC、线索、标记、结论、结局，要么已经存在，要么在这次方案里新建；用到的新标记要写进 flags。
 - 新地点通过 exits 和已有地点相连。调查员这一轮要去某个地点（新建的或已有的），go 填那个地点。
 - give 只能放这次新建的、这一轮能拿到的线索，线索要在调查员所在的地点（填了 go 就是 go 的地点）。
@@ -273,7 +282,8 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
     people = []
     for inv in st.investigators:
         story = "；".join(f"{k}：{v}" for k, v in inv.backstory.items() if k != "说明" and v)
-        people.append(f"- {inv.name}，{inv.age} 岁，{inv.occupation}。{story or '没有写背景'}")
+        people.append(f"- {inv.name}({inv.id}，{'真人玩家' if inv.id in st.human else 'AI调查员'})，{inv.age} 岁，"
+                      f"{inv.occupation}。{story or '没有写背景'}")
     recent = "\n".join(f"- {e.who or e.kind}：{e.text[:160]}" for e in st.log[-12:] if e.kind != "system")
     arcs = "；".join(f"{n.name}：{n.arc}" for n in m.npcs if n.arc) or "无"
     before = "\n".join(f"- 第 {p.get('turn', 0)} 轮 {p.get('kind', '')}：{p.get('plan', {}).get('reason', '')}" for p in st.improv) or "无"

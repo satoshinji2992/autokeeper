@@ -39,7 +39,12 @@ def _now_flag(event_id: str) -> str:
     return event_id if event_id.startswith("now_") else f"now_{event_id}"
 
 
-def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> list[str]:
+def _identity(name: str) -> str:
+    return "".join(name.split()).translate(str.maketrans("", "", "·・.．•")).casefold()
+
+
+def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None,
+          player_names: set[str] | None = None) -> list[str]:
     """What is wrong with a plan, in words the director can fix; empty when it can go in."""
     problems: list[str] = []
     from ..plugins.schema import check as check_plugin
@@ -60,6 +65,7 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
     if len(plan.items) > ITEMS:
         problems.append(f"新物件最多 {ITEMS} 件")
     taken = {x.id for group in (m.locations, m.npcs, m.clues, m.events, m.endings, m.items) for x in group}
+    taken |= actors or set()
     new_ids = [x.id for group in (plan.locations, plan.npcs, plan.clues, plan.events, plan.endings, plan.items) for x in group]
     for i in new_ids:
         if i in taken:
@@ -72,13 +78,15 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
     flags |= {key for plugin in plan.plugins for key in plugin.flags}
     endings = {x.id for x in m.endings} | {x.id for x in plan.endings}
     conclusions = {x.id for x in m.conclusions}
-    from .graph import stake_problems
+    from .graph import event_when_problems, stake_problems
 
     references = m.model_copy(update={
         "npcs": [*m.npcs, *(NPC(**n.model_dump(exclude={"card"})) for n in plan.npcs)],
         "locations": [*m.locations, *(Location(**loc.model_dump()) for loc in plan.locations)],
         "items": [*m.items, *(Item(**item.model_dump()) for item in plan.items)],
         "flags": dict.fromkeys(flags, ""),
+        "clues": [*m.clues, *(Clue(id=c.id, title=c.title, text=c.text, where=c.where, npc=c.npc or None)
+                                for c in plan.clues)],
     })
     for loc in plan.locations:
         if not loc.exits:
@@ -88,7 +96,11 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
             problems.append(f"新地点 {loc.id} 所在的地点 {loc.within} 不存在")
         problems += [f"新地点 {loc.id} 的路程 {pid} 必须对应出口且分钟数非负"
                      for pid, minutes in loc.travel_minutes.items() if pid not in loc.exits or minutes < 0]
+    # Selected pregens cover callers without a World; custom cards supply their actual names.
+    players = (player_names or set()) | {p.name for p in m.pregens if p.id in (actors or set())}
     for n in plan.npcs:
+        if _identity(n.name) in {_identity(name) for name in players}:
+            problems.append(f"{n.name} 是本局调查员，不能另建为 NPC；保留其调查员身份与玩家决定权")
         if n.location not in locs:
             problems.append(f"新 NPC {n.id} 所在地点 {n.location} 不存在")
     for item in plan.items:
@@ -113,15 +125,13 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None) -> l
                      for problem in stake_problems(references, stake.when, actors=actors)]
         problems += [f"事件 {e.id} 的恐怖照面 {creature} 不存在" for creature in e.sights if creature not in {c.id for c in m.creatures}]
         when = e.when.strip()
-        if when.startswith("flag:") and when[5:] not in flags:
-            problems.append(f"事件 {e.id} 的触发标记 {when[5:]} 没有声明")
-        elif when.startswith("visit:") and when[6:] not in locs:
-            problems.append(f"事件 {e.id} 的触发地点 {when[6:]} 不存在")
-        elif when != "now" and not when.startswith(("flag:", "visit:")) and not when.startswith("D"):
-            problems.append(f"事件 {e.id} 的 when 写法不对：{when}")
+        if when != "now":
+            problems += [f"事件 {e.id} 的条件 {problem}" for problem in event_when_problems(references, when)]
         problems += [f"事件 {e.id} 设置的标记 {f} 没有声明" for f in e.sets if f not in flags]
         if e.move_to and e.move_to not in locs:
             problems.append(f"事件 {e.id} 的地点 {e.move_to} 不存在")
+        if e.where and e.where not in locs:
+            problems.append(f"事件 {e.id} 的发生地点 {e.where} 不存在")
         if e.performer and e.performer not in npcs:
             problems.append(f"事件 {e.id} 的表演者 {e.performer} 不存在")
         if e.ending and e.ending not in endings:
@@ -208,7 +218,7 @@ def apply(m: Module, plan: Any) -> Applied:
         gate = Check(skill=c.skill, difficulty=c.difficulty) if c.skill else None
         m.clues.append(
             Clue(id=c.id, title=c.title, text=c.text, where=c.where, feature=c.feature, check=None if c.npc else gate,
-                 npc=c.npc or None, points_to=c.points_to)
+                 npc=c.npc or None, points_to=c.points_to, sanity=c.sanity or None, mythos=c.mythos)
         )  # fmt: skip
         if c.npc:
             giver = m.npc(c.npc)
@@ -218,7 +228,8 @@ def apply(m: Module, plan: Any) -> Applied:
                 giver.gates[c.id] = gate
     for end in plan.endings:
         if end.id not in have:
-            m.endings.append(Ending(id=end.id, title=end.title, condition=end.condition, text=end.text))
+            m.endings.append(Ending(id=end.id, title=end.title, condition=end.condition, text=end.text,
+                                    requires=list(end.requires), sanity_gain=end.sanity_gain))
     for e in plan.events:
         when = e.when.strip()
         if when == "now":  # fired this turn through a flag of its own
@@ -229,6 +240,7 @@ def apply(m: Module, plan: Any) -> Applied:
             continue
         m.events.append(
             Event(id=e.id, title=e.title, when=when, text=e.text or e.read_aloud, read_aloud=e.read_aloud, sets=e.sets,
+                  where=e.where, check=e.check, advance_to=e.advance_to,
                   sanity=e.sanity or None, damage=e.damage or None, move_to=e.move_to or None, performer=e.performer or None,
                   performance=e.performance, ending=e.ending or None, present=list(e.present), fight=list(e.fight),
                   surprise=e.surprise, chase=list(e.chase), chase_party=e.chase_party,

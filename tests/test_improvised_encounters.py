@@ -5,11 +5,14 @@ from __future__ import annotations
 import pytest
 
 from autokeeper.agents.director import Improv, NewEvent, NewFlag, NewLocation, NewNPC
-from autokeeper.engine.game import TURN_RECORD, Turn
+from autokeeper.engine.game import TURN_RECORD, Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.module import improv
 from autokeeper.module.schema import Leg, Module, Stake
 from autokeeper.paths import EXAMPLE
+from autokeeper.world.ops import Improvise
+from autokeeper.world.record import KEEPER
+from autokeeper.world.store import World
 
 from .encounter_kit import Keeper, fight_game
 from .test_harness import harness_sandbox  # noqa: F401
@@ -24,6 +27,28 @@ def scene(*, chase: bool = False):
                                    present=["driver"], chase=["driver"] if chase else [],
                                    fight=[] if chase else ["driver"], surprise="" if chase else "party",
                                    chase_party="追" if chase else "", stakes=[Stake(when="ended:parley", flags=["driver_talked"])])])
+
+
+@pytest.mark.parametrize("ident,name", [("player", "新来的人"), ("betty_copy", "贝蒂·康西丁"),
+                                       ("betty_copy", "贝蒂 康西丁")])
+def test_new_npc_cannot_duplicate_a_live_player_identity(ident, name):
+    module = Module.load(EXAMPLE)
+    player = module.pregens[0].model_copy(update={"id": "player", "name": "贝蒂·康西丁"}, deep=True)
+    state = Game.new(module, [player], human=[player.id])
+    world = World(module, state)
+    plan = Improv(kind="展开", reason="现场登记", npcs=[NewNPC(id=ident, name=name, role="同伴", location=state.location)])
+    before = set(world.rec.entities)
+    result = world.apply(Improvise(plan=plan.model_dump(mode="json"), actor=KEEPER))
+    assert not result.ok
+    assert set(world.rec.entities) == before and not state.improv
+
+
+def test_unselected_pregen_does_not_lose_the_ability_to_appear_as_an_npc():
+    module = Module.load(EXAMPLE)
+    npc = NewNPC(id="other_investigator", name="贝蒂·康西丁", role="受邀人", location="square")
+    module.pregens.append(module.pregens[0].model_copy(update={"id": "betty", "name": npc.name}, deep=True))
+    plan = Improv(kind="展开", reason="别的受邀人来访", npcs=[npc])
+    assert not improv.check(module, plan, at="square", actors={module.pregens[0].id})
 
 
 @pytest.mark.parametrize("chase", [False, True])
