@@ -14,20 +14,26 @@ supporting clues already held, module/graph.supporting_clues), then the module's
 clue missing: the best non-core one by the same measure.
 
 How present it was (`presence`, counted after every turn by `note` from the log, so it outlives
-the log being folded into the chronicler's memory):
-  - mentioned: the party was where it lies or met the NPC who holds it, or a telling (the
-    keeper's narration, an NPC's line, an event) named its feature, its NPC or its title;
-  - stressed: tellings named it STRESSED times or more, or the players' own inputs named it
-    (they discussed it themselves).
+the log being folded into the chronicler's memory). Only the clue itself counts (p. 168: whether
+it was mentioned, stressed or discussed), never where it lies or who holds it: a line carries the
+clue when it shares a run of SAME_RUN characters with the clue's own words (its text, its
+handout's), the names in them left out (people, places, the clue's title and its feature).
+  - mentioned: a telling (the keeper's narration, an NPC's line, an event) carried it;
+  - stressed: tellings carried it STRESSED times or more, or the players' own inputs did (they
+    discussed it themselves).
+Being at its place, meeting its NPC or naming either is no mention: the players cannot have
+missed what they were never shown.
 Difficulty (p. 168): never mentioned, regular; mentioned but not stressed, hard (regular again
 when the last mention is LONG_AGO game days back); stressed or discussed, extreme.
 
 How often: once per game day for the party; a roll the keeper offered on a stall does not count
-and is not held back by one made that day.
+and is not held back by one made that day. The day limit, LONG_AGO and LOST are this project's
+settings, not the book's (docs/rules-reference.md).
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ..module import graph as module_graph
@@ -36,11 +42,19 @@ from ..rules.coc import Investigator
 from .state import GameState, IdeaRoll, Mention, parse_time
 
 WORDS = ("/灵感", "/idea")  # what asks for it in the input box, at a LAN table, from an AI player
-STRESSED = 3  # tellings that name a clue before it counts as stressed
+STRESSED = 3  # tellings that carry a clue before it counts as stressed
+# Project settings, not the book's: p. 168's "long ago" is weeks of real time, p. 169 only says time passes.
 LONG_AGO = 2  # game days since its last mention after which a hard roll is regular again
-LOST = 180  # game minutes a failed roll costs before the cut (p. 169: time passes)
-TOLD = ("keeper", "npc", "event")  # log lines that tell the table something
+LOST = 180  # game minutes a failed roll costs before the cut
+SAME_RUN = 7  # characters in a row a line shares with a clue's own words to carry it (six match 是个和蔼的人)
+TOLD = ("opening", "keeper", "npc", "event")  # log lines that tell the table something
 SAID = ("player",)
+_BREAK = re.compile(r"[\s\W_]+")  # punctuation and spaces: a run of the clue's words never crosses them
+_DOT = re.compile(r"[·•・]")
+# A transliterated name, 道格拉斯·金博尔, though the module has no one by it: a few characters either side of the dot
+# (Chinese has no spaces to say where it ends; one more character gone only shortens the run around it).
+# A title in 《》 (a newspaper, a book) is a name too.
+_FOREIGN = re.compile(r"\w{1,4}(?:[·•・]\w{1,4})+|《[^》]*》")
 
 OFFER = "调查陷入停滞。守秘人提议做一次灵感检定：按 Ctrl+L 或输入 /灵感。"
 NOTHING = "目前没有被遗漏的线索。"
@@ -66,34 +80,49 @@ class Presence:
     last: int  # game minutes of the last mention; 0 if none
 
 
-def _names(m: Module, c: Clue) -> list[str]:
-    """What the table would call the clue's thing: its feature, its NPC, its title."""
-    names = [c.feature, c.title]
-    if c.npc and any(n.id == c.npc for n in m.npcs):
-        names.append(m.npc(c.npc).name)
-    return [x for x in dict.fromkeys(n.strip() for n in names if n) if len(x) >= 2 and "口中" not in x]
+def _names(m: Module, st: GameState, c: Clue) -> list[str]:
+    """What only names where the clue is or whom it is about: people, places, the clue's title and feature.
+    A full name's parts too (道格拉斯 of 道格拉斯·金博尔); the longest first, so a name goes whole."""
+    names = [c.title, c.feature, *(n.name for n in m.npcs), *(i.name for i in [*m.pregens, *st.investigators])]
+    for loc in m.locations:
+        names += [loc.name, *loc.aliases]
+    names += [part for n in list(names) if _DOT.search(n) for part in _DOT.split(n)]
+    return sorted({n.strip() for n in names if len(n.strip()) >= 2}, key=len, reverse=True)
+
+
+def _runs(text: str) -> set[str]:
+    """Every SAME_RUN characters in a row of a text, none across punctuation."""
+    return {piece[i:i + SAME_RUN] for piece in _BREAK.split(text) for i in range(len(piece) - SAME_RUN + 1)}
+
+
+def words(m: Module, st: GameState, c: Clue) -> set[str]:
+    """The clue's own words, as runs a line has to share to carry it: its text and its handout's, with the
+    names in them taken out (a line naming only the place, the person or the clue's title carries nothing)."""
+    text = c.text
+    if c.handout and any(h.id == c.handout for h in m.handouts):
+        text += "\n" + m.handout(c.handout).text
+    for name in _names(m, st, c):
+        text = text.replace(name, "\n")
+    return _runs(_FOREIGN.sub("\n", text))
 
 
 def note(m: Module, st: GameState) -> None:
-    """Count what came up since the last count: the log lines added since (by GameState.logged),
-    and where the party is and whom they have met. Called after each turn (Game.remember) and
-    before a roll; counting twice adds nothing."""
+    """Count what came up since the last count: the log lines added since (by GameState.logged) that
+    carry a missed clue's own words. Called after each turn (Game.remember) and before a roll;
+    counting twice adds nothing."""
     fresh = st.logged - st.mentions_at
     lines = st.log[-fresh:] if 0 < fresh <= len(st.log) else (list(st.log) if fresh > 0 else [])
+    lines = [(e, _runs(e.text)) for e in lines if e.kind in TOLD + SAID]
     st.mentions_at = st.logged
+    if not lines:
+        return
     now = st.minutes
     for c in m.clues:
         if c.id in st.clues:
             continue
-        met = bool(c.npc) and st.npcs.get(c.npc or "") is not None and st.npcs[c.npc or ""].met
-        if c.where in st.visited or met:
-            mark = st.mentions.get(c.id)
-            here = st.location == c.where or (met and any(n.id == c.npc and n.location == st.location for n in m.npcs))
-            if mark is None or not mark.seen or here:
-                _touch(st, c.id, now).seen = True
-        names = _names(m, c)
-        for e in lines:
-            if e.kind not in TOLD + SAID or not any(n in e.text for n in names):
+        runs = words(m, st, c)
+        for e, said in lines:
+            if runs.isdisjoint(said):
                 continue
             try:
                 at = parse_time(e.time)
@@ -118,7 +147,7 @@ def presence(st: GameState, clue_id: str) -> Presence:
     mark = st.mentions.get(clue_id)
     if mark is None:
         return Presence(False, False, 0)
-    return Presence(mark.seen or mark.told > 0 or mark.said > 0, mark.told >= STRESSED or mark.said > 0, mark.last)
+    return Presence(mark.told > 0 or mark.said > 0, mark.told >= STRESSED or mark.said > 0, mark.last)
 
 
 def difficulty(st: GameState, clue_id: str) -> str:

@@ -85,13 +85,12 @@ class WorldFact(BaseModel):
 
 class Mention(BaseModel):
     """How present a clue has been at the table, for the Idea roll's difficulty (engine/idea.py):
-    when it first and last came up (game minutes), whether the party was where it lies or met the
-    one who holds it, how many tellings named it (the keeper's, an NPC's, an event's) and how many of
-    the players' own inputs did."""
+    when it first and last came up (game minutes), how many tellings carried its own words (the
+    keeper's, an NPC's, an event's) and how many of the players' own inputs did. Its place and its
+    NPC are no mention."""
 
     first: int = 0
     last: int = 0
-    seen: bool = False  # its place visited, or its NPC met
     told: int = 0
     said: int = 0
 
