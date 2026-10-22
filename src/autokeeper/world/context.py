@@ -171,7 +171,9 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
         # What it does on meeting the investigators is its voice's (npc_brief), not a backstage step.
-        steps = [f"- {s.id}：{s.text}（{_when(s.due)}{'，条件 ' + s.when if s.when else ''}，{s.status}）"
+        steps = [f"- {s.id}：{s.text}（{_when(s.due)}{'，条件 ' + s.when if s.when else ''}，{s.status}"
+                 + ("，completion=report：仅本人工作报告，不证明外部结果" if s.completion == "report" else "")
+                 + (f"；本人工作报告，未经外部证实：{s.note}" if s.completion == "report" and s.status == "done" and s.note.strip() else "") + "）"
                  for s in a.plan if s.status != "dropped" and not agents.meeting(w, npc, s)]
         lines.append("【你的计划】\n" + ("\n".join(steps) or "- 还没有"))
     concerns = _concerns(w, npc)
@@ -261,9 +263,14 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
         if a.mood:
             lines.append(f"【你的心境】{a.mood}")
         pending = [s for s in a.plan if s.status == "pending"]
-        steps = [s.text + (f"（完成须满足 {s.achieved}）" if s.achieved else "") for s in pending if not agents.meeting(w, npc, s)][:3]
+        steps = [s.text + ("（completion=report：仅本人工作报告，不证明外部结果）" if s.completion == "report"
+                          else f"（完成须满足 {s.achieved}）" if s.achieved else "")
+                 for s in pending if not agents.meeting(w, npc, s)][:3]
         if steps:
             lines.append("【你正打算】" + "；".join(steps))
+        reports = [f"{s.id}：{s.note}" for s in a.plan if s.completion == "report" and s.status == "done" and s.note.strip()]
+        if reports:
+            lines.append("【本人工作报告，未经外部证实】\n" + "\n".join(reports))
         meet = [f"{s.text}（{s.id}{ONCE.get(s.once, '')}）" for s in pending if agents.meets(w, npc, s)][:4]
         if meet and any(w.place(i.id) == ent.at for i in w.st.investigators):
             lines.append("【见到调查员时，你会】" + "；".join(meet))
@@ -462,6 +469,8 @@ def keeper_brief(w: World, *, at: str = "") -> str:
                 if s.status not in {"pending", "blocked"}:
                     continue
                 state = ["待处理" if s.status == "pending" else "受阻"]
+                if s.completion == "report":
+                    state.append("completion=report：仅本人工作报告，不证明外部结果")
                 if s.due is not None:
                     state.append(f"最早 {_when(s.due)}")
                 if s.when:
@@ -495,13 +504,14 @@ def keeper_brief(w: World, *, at: str = "") -> str:
     from ..module.graph import at_hand, tellers
 
     # What is to be had here: what lies here, and what comes from those who are here (graph.at_hand).
-    hidden = [c for c in at_hand(m, here, present) if c.id not in st.clues]
+    hidden = [c for c in at_hand(m, here, present, record=rec) if c.id not in st.clues]
 
     def source(c) -> str:
-        if c.npc in present:
+        providers = tellers(m, c, record=rec)
+        if c.npc in present and (c.npc in providers or c.id not in m.npc(c.npc).clues):
             return f"出自{w.name(c.npc)}"
         if c.npc or c.where != here:  # someone here who can tell it
-            return "、".join(w.name(x) for x in tellers(m, c) if x in present) + "能说出"
+            return "、".join(w.name(x) for x in providers if x in present) + "能说出"
         return c.feature or "此处"
 
     if hidden:
@@ -543,7 +553,9 @@ def director_view(w: World) -> View:
     rec = w.rec
     lines = []
     for npc, a in rec.agents.items():
-        steps = "；".join(f"{s.id} {s.text}（{_when(s.due)}，{s.status}）" for s in a.plan[-4:]) or "无"
+        steps = "；".join(f"{s.id} {s.text}（{_when(s.due)}，{s.status}"
+                         + ("，completion=report：仅本人工作报告，不证明外部结果" if s.completion == "report" else "") + "）"
+                         for s in a.plan[-4:]) or "无"
         lines.append(f"【{w.name(npc)}（{npc}，v{a.version}）】在 {w.name(w.place(npc))}；目标：{'；'.join(a.goals) or '无'}；计划：{steps}"
                      + (f"；心境：{a.mood}" if a.mood else "") + (f"；目标依据：{a.goal_reason}" if a.goal_reason else ""))  # fmt: skip
     rows = threads.ranked(w)

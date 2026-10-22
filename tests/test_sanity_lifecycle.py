@@ -167,7 +167,7 @@ def test_a_scene_cannot_clear_madness_without_completed_rest_time(module, fake, 
     inv = game.state.investigator
     inv.add_condition("临时疯狂")
     planned = scene.plan(game.world, {"rested": [inv.id]},
-                         scene.Context(travel=game._travel, resting=resting, elapsed=elapsed))
+                         scene.Context(travel=game._travel, rests={inv.id: (0, elapsed)} if resting else {}, elapsed=elapsed))
     assert planned.problems and not planned.rested
     assert "临时疯狂" in inv.conditions
 

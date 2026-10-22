@@ -77,11 +77,14 @@ class SettingsModal(ModalScreen[None]):
                                       ("大场景", "showcase", cfg.showcase),
                                       ("战斗与追逐限时选择", "battle_timer", cfg.battle_timer),
                                       ("每次被攻击都询问应对", "ask_every_blow", cfg.ask_every_blow),
+                                      ("普通检定骰值向全桌公开", "public_rolls", cfg.public_rolls),
                                       ("即兴人物、场景与物品配图", "pictures", cfg.visual_limit > 0),
                                       ("联网搜索与参考配图", "search", cfg.search != "none")):
                 with Horizontal(classes="settings-row"):
                     yield Static(label)
                     yield Switch(value, id=f"settings-{key}")
+                if key == "public_rolls":
+                    yield Static("仅公开骰值和技能，孤注一掷选项仍限原现场。新开局或重新载入后生效。", classes="help")
             codex = imagegen.recheck()  # off without a logged-in Codex: one plain line says why (the fix is in the guide)
             with Horizontal(classes="settings-row"):
                 yield Static("AI 画图")
@@ -165,7 +168,7 @@ class SettingsModal(ModalScreen[None]):
     def keep(self) -> None:
         cfg = config.load()
         choice = {key: self.query_one(f"#settings-{key}", Switch).value for key in ("animations", "tips", "plugins", "showcase", "battle_timer",
-                                                                                   "ask_every_blow")}
+                                                                                   "ask_every_blow", "public_rolls")}
         choice |= {"improv": self.query_one("#settings-improv", Select).value,
                    "art_style": self.query_one("#settings-art", Select).value,
                    "theme": self.query_one("#settings-theme", Select).value,

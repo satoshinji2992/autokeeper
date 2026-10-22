@@ -834,7 +834,9 @@ class Hub:
             now = self._faced(public_battle(now))
         view["encounter_public"] = now
         if view.get("pending_push"):
-            view["pending_push"] = public_push(view["pending_push"])
+            view["pending_push"] = (public_push(view["pending_push"])
+                                    if audience.visible(view["pending_push"], viewer) else None)
+        view["checks"] = [check for check in view["checks"] if audience.visible(check, viewer)]
         here = {n.id for n in self.m.npcs if n.location == st.location}  # as the book has them (table())
         view["npcs"] = {k: {**v, "unlocked": [c for c in v["unlocked"] if c in st.clues]}  # what each may tell: only what was found
                         for k, v in view["npcs"].items() if v["met"] or k in here}

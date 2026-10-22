@@ -131,6 +131,8 @@ class CheckRecord(BaseModel):
     seen: int = 0  # clues + flags + events by then: a higher count later means something new came up
     bonus: int = 0  # bonus (+) or penalty (-) dice it was rolled with
     difficulty: str = ""  # 常规 / 困难 / 极难 it was rolled at; "" in older saves
+    audience: list[str] | None = None  # the original scene's readers; never expanded by a later reunion
+    roll_audience: list[str] | None = None  # optional table-public numbers, not the attempt or failure contract
 
     @property
     def aim(self) -> str:
@@ -174,7 +176,7 @@ class GameState(BaseModel):
     round_spent: int | None = None
     round_elapsed: dict[str, int] = Field(default_factory=dict)  # serial work per investigator inside the shared window
     round_plan: dict = Field(default_factory=dict)  # private batch plans and consumption receipts, not player-visible
-    held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report"}, told together (Game.narrate)
+    held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report", "rest"}, told together (Game.narrate)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.
     encounter: EncounterState | None = None

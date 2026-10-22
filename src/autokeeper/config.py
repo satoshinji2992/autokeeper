@@ -27,6 +27,7 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
     battle_timer = true        # a fight's or a chase's round waits only so long for the choice (off by default)
     ask_every_blow = true      # asked how to answer every attack, not only the first and the dangerous ones (off by default)
+    public_rolls = false       # ordinary check numbers go only to their original scene unless opted into table-public dice
 
     [prices]                   # USD per million tokens, for an API the built-in table does not know
     "openai:gpt-5" = [1.25, 0.125, 10.0]   # input, cached input, output
@@ -256,6 +257,7 @@ class Config:
     animations: bool = True
     battle_timer: bool = False  # opt-in: a fight's or a chase's round waits only so long for the player (tui/screens/game.py)
     ask_every_blow: bool = False  # opt-in: the player is asked how to answer every attack (engine/encounter/choices.should_ask)
+    public_rolls: bool = False  # ordinary check numbers only; actions, risks and full check records retain their scene scope
     dice: str = "bone"  # tui/drawing/dice.py SKINS
     rulebooks: str = ""  # the rulebooks' folder for `autokeeper rules index`; "" is paths.rulebooks()
 
@@ -537,7 +539,7 @@ def ui_settings() -> dict:
     for key, values in choices.items():
         if isinstance(data.get(key), str) and data[key] in values:
             out[key] = data[key]
-    for key in ("tips", "animations", "plugins", "imagegen", "showcase", "battle_timer", "ask_every_blow"):
+    for key in ("tips", "animations", "plugins", "imagegen", "showcase", "battle_timer", "ask_every_blow", "public_rolls"):
         if type(data.get(key)) is bool:
             out[key] = data[key]
     for key in ("model", "fallback"):
@@ -625,6 +627,7 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.showcase = data.get("showcase", cfg.showcase) is not False
     cfg.battle_timer = data.get("battle_timer", cfg.battle_timer) is True  # off unless switched on (设置)
     cfg.ask_every_blow = data.get("ask_every_blow", cfg.ask_every_blow) is True  # off unless switched on (设置, the reaction prompt)
+    cfg.public_rolls = data.get("public_rolls", cfg.public_rolls) is True
     cfg.search = os.environ.get("AUTOKEEPER_SEARCH") or data.get("search", cfg.search)
     budget = os.environ.get("AUTOKEEPER_BUDGET_USD") or data.get("budget_usd")
     cfg.budget_usd = float(budget) if budget not in (None, "") else None

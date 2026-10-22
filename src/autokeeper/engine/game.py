@@ -65,6 +65,7 @@ from .state import (
     GameState,
     LogEntry,
     Progress,
+    format_time,
     parse_time,
     time_of_day,
 )
@@ -100,6 +101,7 @@ class Turn:
     ruling: Ruling | None = None
     checks: list[Check] = field(default_factory=list)
     primary: int | None = None  # the action's own final check in checks; event gates never replace it
+    rest: dict | None = None  # this actor's executed rest interval, not the shared clock increment
     clues: list[str] = field(default_factory=list)
     sanity: list[tuple[str, Sanity]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
@@ -149,6 +151,7 @@ class Turn:
         self.events += [e for e in later.events if all(e.id != x.id for x in self.events)]
         self.performed += [e for e in later.performed if e not in self.performed]
         self.performance = later.performance or self.performance
+        self.rest = later.rest or self.rest
         if later.arrived:  # an event carried them off
             self.arrived, self.first_visit, self.route = later.arrived, later.first_visit, later.route
         self.ending = self.ending or later.ending
@@ -219,6 +222,7 @@ class Game(Encounters):
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
         self.emit: Emit = emit or _silent
+        self.public_rolls = getattr(getattr(cast, "cfg", None), "public_rolls", False) is True
         self.checkpoint: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None
         self._resolution: dict | None = None
@@ -312,6 +316,7 @@ class Game(Encounters):
         """A model switch also replaces the game's outstanding background work."""
         await self.close()
         self.cast = cast
+        self.public_rolls = getattr(getattr(cast, "cfg", None), "public_rolls", False) is True
         cast.world = self.world
         self.brain = self._brain(cast)
         self.visuals.cfg = self.showcases.cfg = getattr(cast, "cfg", None)
@@ -917,12 +922,21 @@ class Game(Encounters):
         st = self.state
         return len(st.clues) + len(st.flags) + len(st.fired)
 
-    def _record(self, action: Action, check: Check) -> None:
+    def _check_scope(self, actor: str, earlier: CheckRecord | None = None) -> dict:
+        """Freeze one check's readers before delivery; replay never consults the current focus."""
+        if earlier is not None:
+            return {"audience": earlier.audience, "roll_audience": earlier.roll_audience}
+        watching = list(dict.fromkeys([actor, *self.world.observers(self.world.place(actor))]))
+        return {"audience": watching, "roll_audience": None if self.public_rolls else watching}
+
+    def _record(self, action: Action, check: Check, *, scope: dict | None = None) -> None:
         st = self.state
+        scope = self._check_scope(st.investigator.id) if scope is None else scope
         st.checks.append(CheckRecord(
             turn=st.turn, who=st.investigator.id, at=st.location, skill=check.name, npc=action.npc,
             target=action.target.strip(), text=check.describe(), passed=check.passed, action=action.summary.strip(), minutes=st.minutes,
             bonus=check.bonus, difficulty=next((zh for zh, level in DIFFICULTY_ZH.items() if level == check.difficulty), ""),
+            **scope,
         ))  # fmt: skip
         del st.checks[:-KEEP_CHECKS]
 
@@ -1426,7 +1440,15 @@ class Game(Encounters):
         first, is settled here (a clue the module lets a failure find, a flag, time, a wound),
         and the keeper is told what was tried, what was not found and what happened."""
         st, step = self.state, self._resolution_step
-        clues = self._valid_clues([c for c in failure.clues if c not in st.clues], action)
+
+        def awards() -> dict:
+            clues = self._valid_clues([c for c in failure.clues if c not in st.clues], action)
+            originals = [cid for cid in clues if module_graph.original_source_at_hand(
+                self.m, self.m.clue(cid), st.location, self.world.present(st.location), record=self.world.rec)]
+            return {"clues": clues, "originals": originals}
+
+        awarded = await step("fail-clue-awards", turn, awards)
+        clues = awarded["clues"]
         missed = [self.m.clue(c).title for c in wanted if c not in st.clues and c not in clues]
         flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
@@ -1439,7 +1461,7 @@ class Game(Encounters):
         if flags:
             await step("fail-flags", turn, lambda: self._flags(flags, turn))
         if clues:
-            await step("fail-clues", turn, lambda: self._gain(clues, turn, action))
+            await step("fail-clues", turn, lambda: self._gain(clues, turn, action, originals=set(awarded["originals"])))
         damage_notice = None
         if failure.damage.strip():
             injury = f"fail:{st.turn}:{self._resolution_key('fail-damage')}"
@@ -1802,12 +1824,18 @@ class Game(Encounters):
         # The declared work has an end time, not an extra duration to add after an arrival
         # event has already taken the party through those hours. Freeze it before arrival;
         # failure costs still add time after the attempt, and a route stop does no later work.
-        def action_end() -> int:
+        def action_end() -> dict:
             resting = action.kind == "wait" or ruling.rest
             minutes = 0 if moving.get("stopping") else max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
-            return st.minutes + self._overlap(minutes)
+            # A later parallel action can use a whole night's effort while adding no
+            # global minutes. Freeze its own interval before _overlap updates the round.
+            start = (st.minutes if st.round_spent is None else
+                     st.minutes - st.round_spent + st.round_elapsed.get(inv.id, 0))
+            rest = ({"who": inv.id, "start": start, "end": start + minutes,
+                     "interrupted": bool(ruling.mishap or st.encounter)} if ruling.rest and minutes > 0 else None)
+            return {"end": st.minutes + self._overlap(minutes), "rest": rest}
 
-        end_at = await step("action-end", turn, action_end)
+        timed = await step("action-end", turn, action_end)
         if moving:
             await step("arrival", turn, lambda: self._arrive(moving["heading"], turn, alone=action.alone, party=True,
                                                              companions=action.companions))
@@ -1829,7 +1857,8 @@ class Game(Encounters):
         def elapsed() -> None:
             if ruling.note:
                 turn.notes.append(f"导演的安排：{ruling.note}")
-            st.minutes = max(st.minutes, end_at)
+            st.minutes = max(st.minutes, timed["end"])
+            turn.rest = timed["rest"]
 
         await step("elapsed", turn, elapsed)
 
@@ -1838,6 +1867,9 @@ class Game(Encounters):
                 await self._view(key, "focus" if key == views.focus(self.m, self.m.location(st.location), action.target) else "")
 
         await step("focus", turn, focus)
+
+        scope = await step("audience", turn, lambda: self._check_scope(
+            inv.id, self._earlier(action, ruling, st.location) if ruling.repeat else None))
 
         def check() -> dict:
             passed = not ruling.needs_roll and not ruling.repeat
@@ -1856,8 +1888,8 @@ class Game(Encounters):
                 turn.primary = len(turn.checks)
                 turn.checks.append(rolled)
                 passed = rolled.passed
-                self._record(action, rolled)
-                st.add("dice", rolled.describe(), who=inv.name)
+                self._record(action, rolled, scope=scope)
+                st.add("dice", rolled.describe(), who=inv.name, audience=scope["roll_audience"])
                 event = {"type": "dice", "who": inv.name, **_check_view(rolled)}
                 need = rolled.luck_needed()
                 luck = need if need is not None and need <= inv.luck else None
@@ -1876,12 +1908,15 @@ class Game(Encounters):
                                  "rolled": CHECK_DATA.dump_python(rolled, mode="json"),
                                  "tells": self._asks(action, turn), "action": action.summary,
                                  "actor": inv.id, "place": st.location,
+                                 **scope,
                                  "action_record": action.model_dump(mode="json"),
                                  "success": ruling.model_dump(mode="json")}
                     st.pending_push = turn.push
                     if rolled.can_push and not turn.push["risk"]:
                         self._debug("push", {"phase": "risk-missing", "action": action.summary,
                                              "note": "未写明具体公开风险，玩家仅收到通用提示；不公开后台失败结算。"})
+            if event is not None:
+                event["audience"] = scope["roll_audience"]
             return {"passed": passed, "event": event, "failed": not passed and turn.push is None and bool(turn.checks)}
 
         checked = await step("check", turn, check)
@@ -1900,7 +1935,8 @@ class Game(Encounters):
             if passed:
                 gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             spoken = self._spoken(gained, self._asks(action, turn))  # the one talked to tells these, in their own time (talk)
-            gained = [c for c in gained if c not in spoken]
+            gained = [c for c in gained if c not in spoken and module_graph.original_source_at_hand(
+                self.m, self.m.clue(c), st.location, self.world.present(st.location), record=self.world.rec)]
             return {"known": list(st.flags), "gained": gained, "spoken": spoken}
 
         found = await step("available", turn, available)
@@ -1919,6 +1955,7 @@ class Game(Encounters):
             done = [f for f in ruling.set_flags if f in st.flags and f not in found["known"]]
             npc = action.npc if action.kind in ("talk", "perform") else ""
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
+                       "audience": scope["audience"],
                        "lines": self._led_to(won, done, passed, npc, offer=turn.push)}))
         if ruling.now:
             await step("now", turn, lambda: self._flags(ruling.now, turn))
@@ -2192,6 +2229,7 @@ class Game(Encounters):
             await step("plugins", turn, lambda: self.plugins.settled(turn))
             won = [c for c in turn.clues if c in pending["clues"]]
             await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
+                       "audience": pending.get("audience"),
                        "lines": self._led_to(won, [], False, npc) if won else ["放弃了，换条路"]}))
         else:
             await self._pushed(mode, pending, turn, record, known, how)
@@ -2222,7 +2260,7 @@ class Game(Encounters):
             method = await step("method", turn, lambda: self._method(pending, how))
 
             def told() -> None:
-                st.add("player", f"孤注一掷：{how}", who=inv.name)
+                st.add("player", f"孤注一掷：{how}", who=inv.name, audience=pending.get("audience"))
                 if method["achievable"]:
                     st.minutes += self._overlap(method["minutes"])
                     turn.notes.append(f"孤注一掷的做法：{how}（约 {method['minutes']} 分钟）")
@@ -2235,6 +2273,7 @@ class Game(Encounters):
                 await self._failed(Failure.model_validate(pending.get("on_fail") or {}), pending["clues"], turn, None)
                 await step("plugins", turn, lambda: self.plugins.settled(turn))
                 await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name,
+                           "audience": pending.get("audience"),
                            "lines": [f"孤注一掷不成立：{method['why'] or '这样做达不到目标'}", "没有掷骰，按放弃处理"]}))
                 return
             pending = {**pending, **method["pending"]}
@@ -2246,16 +2285,19 @@ class Game(Encounters):
                 turn.primary = len(turn.checks)
                 turn.checks.append(adjusted)
                 inv.luck -= pending["luck"]
-                st.add("dice", f"花费幸运 {pending['luck']} 点，{pending['skill']} 检定改为成功", who=inv.name)
+                st.add("dice", f"花费幸运 {pending['luck']} 点，{pending['skill']} 检定改为成功", who=inv.name,
+                       audience=pending.get("roll_audience"))
                 self._settle(record, True, f"{record.text}，花 {pending['luck']} 点幸运改为成功" if record else "")
-                return {"passed": True, "notice": {"type": "luck", "who": inv.name, "spent": pending["luck"], "left": inv.luck}}
+                return {"passed": True, "notice": {"type": "luck", "who": inv.name, "spent": pending["luck"],
+                                                   "left": inv.luck, "audience": pending.get("roll_audience")}}
             diff = DIFFICULTY_ZH.get(pending["difficulty"], Level.REGULAR)
             rolled = self.rules.check(inv, pending["skill"], diff, pending["bonus"], pushed=True, target=pending["target"])
             turn.primary = len(turn.checks)
             turn.checks.append(rolled)
-            st.add("dice", rolled.describe(), who=inv.name)
+            st.add("dice", rolled.describe(), who=inv.name, audience=pending.get("roll_audience"))
             self._settle(record, rolled.passed, rolled.describe())
-            return {"passed": rolled.passed, "notice": {"type": "dice", "who": inv.name, **_check_view(rolled)}}
+            return {"passed": rolled.passed, "notice": {"type": "dice", "who": inv.name,
+                                                       "audience": pending.get("roll_audience"), **_check_view(rolled)}}
 
         checked = await step("check", turn, check)
         passed = checked["passed"]
@@ -2266,7 +2308,9 @@ class Game(Encounters):
                 await step("plugins", turn, lambda: self.plugins.settled(turn))
                 return
             spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], pending.get("tells", "")))
-            await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
+            discovered = [c for c in pending["clues"] if c not in spoken and module_graph.original_source_at_hand(
+                self.m, self.m.clue(c), st.location, self.world.present(st.location), record=self.world.rec)]
+            await step("gain", turn, lambda: self._gain(discovered, turn, None))
             for index, call in enumerate(ruling.plugin_calls):
                 await step(f"action-plugin:{index}", turn,
                            lambda call=call: self.plugins.run("action", turn, **call.model_dump(mode="json")))
@@ -2280,7 +2324,8 @@ class Game(Encounters):
             lines.insert(0, f"花了 {pending['luck']} 点幸运，算作成功")
         elif not passed:
             lines.insert(0, "孤注一掷也没成")
-        await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines}))
+        await step("outcome", turn, lambda: self.emit({"type": "outcome", "who": inv.name, "lines": lines,
+                                                     "audience": pending.get("audience")}))
 
     async def _method(self, pending: dict, how: str) -> dict:
         """The arbiter's word on how a push is made (Cast.repush, one call): can the goal still be
@@ -2550,6 +2595,7 @@ class Game(Encounters):
         npc = m.npc(npc_id)
         said = turn.replies.get(key)
         if said is None:
+            allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec)
             listeners = recipients.listeners(st, st.investigator.id)
             if audience is None and len(listeners) != len(st.investigators):
                 audience = listeners
@@ -2559,7 +2605,8 @@ class Game(Encounters):
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
             # and its receipt, kept below with the words.
             told = self.cast.told.pop(npc_id, [])
-            said = turn.replies[key] = Said(npc=npc_id, line=line, told=self._told_clues(npc_id, told),
+            said = turn.replies[key] = Said(npc=npc_id, line=line,
+                                           told=self._told_clues(npc_id, [cid for cid in told if cid in allowed], present=False),
                                            media=getattr(self.cast, "media", {}).pop(npc_id, []), audience=audience)
             if audience is not None:
                 said.media = [{**raw, "to": audience} for raw in said.media]
@@ -2588,8 +2635,6 @@ class Game(Encounters):
                 for cid in said.told:
                     self.world.apply(Learn(id=f"private-told:{st.turn}:{npc_id}:{key}:{cid}", fact=f"clue:{cid}",
                                            who=said.audience, actor=npc_id, visibility="private", how="私下告知"))
-                    if paper := m.clue(cid).handout:
-                        said.media.append({"ref": f"handout:{paper}", "to": said.audience})
             else:
                 with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
                     await self._gain(said.told, turn, None, heard=npc_id)
@@ -2659,7 +2704,7 @@ class Game(Encounters):
         report = self._report(turn)
         if self.holding and not turn.ending:  # others act in this round too: told together, by the last
             if not any(h["turn"] == st.turn for h in st.held):  # a resumed turn holds it once
-                st.held.append({"turn": st.turn, "who": st.investigator.name, "report": report})
+                st.held.append({"turn": st.turn, "who": st.investigator.name, "report": report, "rest": turn.rest})
             self.told = None
             await self.emit({"type": "held"})
             return ""
@@ -2959,7 +3004,7 @@ class Game(Encounters):
         """A SAN check at the actual game clock; the bout table remains its own immediate event."""
         return self.rules.sanity(inv, ok, bad, now=self.state.minutes)
 
-    async def _recover_madness(self, turn: Turn, *, rested: list[str] | None = None, since: int | None = None) -> None:
+    async def _recover_madness(self, turn: Turn, *, rested: dict[str, tuple[int, int]] | None = None) -> None:
         """Rule-owned expiry or an accepted telling's completed safe rest, with one saved receipt
         for the state, log and notices. This never interprets narrative text or a player's wish."""
         st = self.state
@@ -2967,7 +3012,9 @@ class Game(Encounters):
         def commit() -> list[dict]:
             notices = []
             for inv in st.investigators:
-                for recovered in inv.recover_madness(st.minutes, rested_since=since if inv.id in (rested or ()) else None):
+                period = (rested or {}).get(inv.id)
+                since = period[0] if period is not None and period[0] < period[1] <= st.minutes else None
+                for recovered in inv.recover_madness(st.minutes, rested_since=since):
                     text = f"{inv.name}：{recovered}；已损失的理智不返还。"
                     st.add("system", text, audience=[inv.id])
                     turn.notes.append(text)
@@ -3103,8 +3150,9 @@ class Game(Encounters):
         died. Nobody asked, nothing is held back: a passed roll on someone talk() does not ask gives
         its clue as found (the review of 2026-10-22: 有些人油盐不进's c_fitz_talk, a 心理学 roll that
         passed, came to nothing). Nor what their manner gives away (a 心理学 gate): the investigator
-        sees it, nobody tells it, a paper is handed over. Only what is theirs to tell (NPC.clues): one
-        that comes from them without it (Clue.npc), what is seen of them, is found."""
+        sees it, nobody tells it, a paper is handed over. Actual knowledge in the world record can
+        make a new witness a teller. A native Clue.npc source absent from NPC.clues is instead
+        something seen of that person, and is found directly."""
         st, m = self.state, self.m
         if not npc:
             return []
@@ -3112,9 +3160,11 @@ class Game(Encounters):
 
         def told(cid: str) -> bool:
             clue = m.clue(cid)
-            gate = sheet.gates.get(cid) or clue.check
+            gate = module_graph.disclosure_gate(m, clue, npc)
             observed = gate is not None and canonical(gate.skill) == "心理学"
-            return cid in sheet.clues and not clue.handout and not observed
+            native_observation = clue.npc == npc and cid not in sheet.clues
+            return (npc in module_graph.tellers(m, clue, record=self.world.rec)
+                    and not native_observation and (not clue.handout or cid not in sheet.clues) and not observed)
 
         spoken = [c for c in ids if told(c)]
         unlocked = st.npc(npc).unlocked
@@ -3131,13 +3181,13 @@ class Game(Encounters):
             return ""
         return npc
 
-    def _told_clues(self, npc_id: str, ids: list[str]) -> list[str]:
-        """Of the clues a reply told (Dialogue.told), those for the notebook: ones it may tell (unlocked,
-        or on its sheet with no gate, as Cast.npc has them), there to be found now (Clue.requires), not
-        found before. Where it is now does not matter: one that walked off after saying it said it here."""
+    def _told_clues(self, npc_id: str, ids: list[str], *, present: bool = True) -> list[str]:
+        """Of the clues a reply told (Dialogue.told), those currently known, authorized and available,
+        not found before. The reply's pre-speech snapshot checks presence; its receipt may pass
+        present=False after the speaker walks away without unsaying what it told here."""
         st, m = self.state, self.m
-        sheet, clues = m.npc(npc_id), {c.id: c for c in m.clues}
-        allowed = set(st.npc(npc_id).unlocked) | {c for c in sheet.clues if c not in sheet.gates}
+        clues = {c.id: c for c in m.clues}
+        allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec, present=present)
         return [cid for cid in dict.fromkeys(ids) if cid in allowed and cid in clues and cid not in st.clues
                 and clues[cid].available(st.flags, st.clues)]
 
@@ -3146,21 +3196,31 @@ class Game(Encounters):
         and what comes from someone the world record has here, alive and not gone (2026-10-22: the
         clue about the truck's driver was given at an empty cab)."""
         st, m = self.state, self.m
-        here = {c.id for c in module_graph.at_hand(m, st.location, self.world.present(st.location))}
+        people = self.world.present(st.location)
+        here = {c.id for c in module_graph.at_hand(m, st.location, people, record=self.world.rec)}
         known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
         found = [c for c in dict.fromkeys(ids) if c in known and c in here and c not in st.clues]
+        addressed = self._addressed(action)
+        found = [cid for cid in found if module_graph.original_source_at_hand(
+            m, m.clue(cid), st.location, people, record=self.world.rec)
+            or addressed in module_graph.tellers(m, m.clue(cid), record=self.world.rec)]
         if action and (action.approach == "心理学" or (action.asked and canonical(action.asked.skill) == "心理学")):
             # An observation cannot unlock testimony behind a different social gate, even
             # when the arbiter mistakenly awards it. Explicit psychology clues still work.
             def observable(cid: str) -> bool:
                 clue = m.clue(cid)
-                gate = m.npc(clue.npc).gates.get(cid) if clue.npc else None
+                subject = action.npc or clue.npc
+                gate = module_graph.disclosure_gate(m, clue, subject) if subject else None
                 return gate is None or canonical(gate.skill) == "心理学"
 
             found = [cid for cid in found if observable(cid)]
         return found
 
-    async def _gain(self, ids: list[str], turn: Turn, action: Action | None, heard: str = "") -> None:
+    async def _gain(self, ids: list[str], turn: Turn, action: Action | None, heard: str = "", *,
+                    originals: set[str] | None = None) -> None:
+        """Commit an authorized award and its costs. Callers may explicitly limit which awards
+        came through the original discovery/material route; a summary still grants the clue,
+        SAN/Mythos and its actual consequences, without the source's paper or personal gate."""
         st, m = self.state, self.m
         step = self._resolution_step
         for cid in ids:
@@ -3184,13 +3244,14 @@ class Game(Encounters):
                 st.clues.append(cid)
                 st.progress_at = st.turn
                 turn.clues.append(cid)
-                if clue.npc:
+                original = originals is None or cid in originals
+                if clue.npc and not heard and original:
                     unlocked = st.npc(clue.npc).unlocked
                     if cid not in unlocked:
                         unlocked.append(cid)
                 st.add("clue", f"〔{clue.title}〕{clue.text.strip()}")
                 notices = [{"type": "clue", "id": cid, "title": clue.title, "text": clue.text.strip(), "heard": heard}]
-                if clue.handout and clue.handout not in st.handouts:
+                if not heard and original and clue.handout and clue.handout not in st.handouts:
                     h = m.handout(clue.handout)
                     st.handouts.append(h.id)
                     st.add("handout", h.title)
@@ -3716,9 +3777,7 @@ class Game(Encounters):
     def _npc_disclosure(self, turn: Turn, npc_id: str) -> str:
         """The same disclosure context for replies, initiative and encounter speech."""
         st, m = self.state, self.m
-        npc = m.npc(npc_id)
-        available = set(st.npc(npc_id).unlocked) | {c for c in npc.clues if c not in npc.gates and m.clue(c).available(st.flags, st.clues)}
-        available |= {c for c in turn.clues if m.clue(c).npc == npc_id or c in npc.clues}
+        available = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec)
         mine = [c.id for c in m.clues if c.id in available]
         if mine:
             return ("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine)
@@ -3888,7 +3947,7 @@ class Game(Encounters):
             line = f"获得线索〔{c.title}〕：{c.text.strip()}"
             if cid in told:
                 line += f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）"
-            elif c.handout and any(h.id == c.handout for h in m.handouts):
+            elif c.handout and (c.handout in self.state.handouts or c.handout in presentation.papers(self.state, None)):
                 line += f"（手稿〔{m.handout(c.handout).title}〕的原文在玩家手里：交代怎么拿到、看到它，不复述全文）"
             else:
                 untold.append(cid)
@@ -3953,7 +4012,7 @@ class Game(Encounters):
                 self.visuals.schedule()
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
-                receipt["rested"] = []
+                receipt["rested"] = {}
             else:
                 receipt["story_flags"] = []
                 for flag in receipt.get("flags", []):
@@ -3982,7 +4041,7 @@ class Game(Encounters):
                 self.checkpoint()
         if receipt.get("rested") and not receipt.get("rested_landed"):
             with self._journal(receipt.setdefault("rest_journal", {}), self._keep):
-                await self._recover_madness(turn or Turn(), rested=receipt["rested"], since=receipt["rest_since"])
+                await self._recover_madness(turn or Turn(), rested=receipt["rested"])
             receipt["rested_landed"] = True
             if self.checkpoint:
                 self.checkpoint()
@@ -4104,12 +4163,13 @@ class Game(Encounters):
         down: it may tell of what did not land), and the scene in words for telling it again."""
         return {"text": text, "units": [u.dump() for u in p.held], "flags": [] if partial else p.flags,
                 "room": p.room, "now": "" if partial else p.now,
-                "note": scene.kept(p), "rested": [] if partial else p.rested, "rest_since": p.rest_since}
+                "note": scene.kept(p), "rested": {} if partial else p.rested}
 
     def _scene_context(self, turn: Turn | None) -> scene.Context:
         """What the keeper's scene is checked with: this turn's minutes so far (from the player's
         words, as the log has them), what the action lacks, whether the investigators acted, and
-        the op ids not yet used this turn."""
+        the op ids not yet used this turn. Rest candidates come from executed individual receipts,
+        including the completed actions held for this telling, never its prose or shared elapsed time."""
         st, rec = self.state, self.world.rec
         acted = turn is not None and turn.action is not None and not turn.interlude
         said = next((e for e in reversed(st.log) if e.kind == "player" and e.turn == st.turn), None)
@@ -4121,10 +4181,16 @@ class Game(Encounters):
         used = [int(n) for e in rec.journal if e.id.startswith(ids + ":") and (n := e.id.rsplit(":", 1)[1]).isdigit()]
         ruling = turn.ruling if turn is not None else None
         lacks = (getattr(ruling, "missing", None) or []) if ruling is not None else []
+        rests = {}
+        if acted:
+            for receipt in [*(h.get("rest") for h in st.held), turn.rest]:
+                if (receipt and not receipt["interrupted"] and not st.encounter
+                        and receipt["start"] < receipt["end"] <= st.minutes
+                        and any(i.id == receipt["who"] for i in st.investigators)):
+                    rests[receipt["who"]] = (receipt["start"], receipt["end"])
         return scene.Context(travel=self._travel, elapsed=max(0, st.minutes - start) if acted else 0,
                              missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1,
-                             resting=bool(acted and ruling and (ruling.rest or turn.action.kind == "wait")
-                                          and not ruling.mishap and st.encounter is None), rest_since=start)
+                             rests=rests)
 
     def _scene_brief(self, ctx: scene.Context) -> str:
         """The scene as the record has it, for the keeper's to start from: where they are, who is
@@ -4141,10 +4207,16 @@ class Game(Encounters):
             madness = "临时疯狂是持续数小时的潜在状态，不能当作整个期间都在即时发作；不定性疯狂不因过夜自动治愈。"
             if ctx.resting:
                 madness += "scene.rested 只写实际在安全处良好过夜、已经完成休息的调查员；想睡、等待、守夜、途中惊醒或紧张防袭不能算。"
+        rest_scope = ""
+        if ctx.rests:
+            periods = "；".join(f"{who}（{format_time(start)}至{format_time(end)}，本人已执行{end - start}分钟休息）"
+                               for who, (start, end) in ctx.rests.items())
+            rest_scope = (f"本段可确认休息的调查员：{periods}。scene.rested只能从这些人中确认实际安全、充分休息者；"
+                          "同地点、一起等待或全局过了一夜，不代表其他调查员也睡过；个人时段不因并行增量为0而消失。")
         return (f"\n\n【场面】先写 scene，是这段讲完时的样子，没变的照抄。现在：调查员在 {st.location}（{w.name(st.location)}），"
                 f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。"
                 "本段真正做成的剧情事实写进 scene.flags，不等下一轮裁定员补记；未完成的决定和谎言不算事实。"
-                + madness +
+                + madness + rest_scope +
                 "物件的拿起、交出、归还或放回地点都写进 holds；已有 item 用下表实际 id，不能用合称另造物件。"
                 "新日常物件先在 things 写拿出者，交出或留下时再以同名写 holds。"
                 f"放在本处的桌上、抽屉或门边时 holder 填 {st.location}，细部位置在事实或痕迹中交代；"

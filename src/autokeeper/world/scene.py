@@ -118,8 +118,11 @@ class Context:
     walk: bool = True  # the investigators acted this turn, so they may walk between the rooms of the place
     ids: str = "keeper:0"  # op ids are f"{ids}:{i}"
     start: int = 0  # the first i
-    resting: bool = False  # the timed action was rest, without a ruled interruption
-    rest_since: int = 0  # the actual timed action's start, never the planned wake-up time
+    rests: dict[str, tuple[int, int]] = field(default_factory=dict)  # actual completed rest attempts, by their own actor
+
+    @property
+    def resting(self) -> bool:
+        return bool(self.rests)
 
 
 @dataclass
@@ -150,8 +153,7 @@ class Plan:
     now: str = ""
     end: str = ""  # how it stands once the units that hold have landed, in words
     flags: list[str] = field(default_factory=list)  # completed story facts; only a whole accepted scene may commit these
-    rested: list[str] = field(default_factory=list)
-    rest_since: int = 0
+    rested: dict[str, tuple[int, int]] = field(default_factory=dict)
 
     @property
     def held(self) -> list[Unit]:
@@ -543,11 +545,11 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     flags = list(dict.fromkeys(scene.flags))
     problems += [f"剧情标记 {flag} 没有声明：只能从模组标记中选择。" for flag in flags if flag not in w.m.flags]
     rested = list(dict.fromkeys(scene.rested))
-    if rested and (not ctx.resting or ctx.elapsed <= 0):
-        problems.append("本轮没有实际完成休息时间，或休息已中断；不能把想睡、等待或守夜写成安全过夜恢复。")
     problems += [f"休息者 {who} 不是本局调查员。" for who in rested if who not in party]
+    problems += [f"{who}没有本段本人实际完成且未中断的休息记录，不能替其确认安全过夜恢复。"
+                 for who in rested if who in party and (who not in ctx.rests or ctx.rests[who][0] >= ctx.rests[who][1])]
     return Plan(units=merged, problems=list(dict.fromkeys(problems)), now=now, end=end_words,
-                flags=[] if problems else flags, rested=[] if problems else rested, rest_since=ctx.rest_since)
+                flags=[] if problems else flags, rested={} if problems else {who: ctx.rests[who] for who in rested})
 
 
 def _meet(a: str, b: str, why: str) -> dict[str, Any]:

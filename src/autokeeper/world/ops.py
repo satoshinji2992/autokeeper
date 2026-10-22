@@ -952,6 +952,9 @@ class SetPlan(Base):
         for s in self.steps or []:
             if s.status != "pending":
                 problems.append(f"步骤 {s.id} 是新计划，不能预先标记为 {s.status}")
+            if s.completion == "report" and (s.achieved.strip() or s.ops):
+                problems.append(f"步骤 {s.id} 的 report 只记录本人私有工作报告，不能同时填写 achieved 或 ops；"
+                                "有移动、交物等实际结果的步骤请用 completion=state")
             problems += [f"步骤 {s.id}：{p}" for p in condition_problems(w, s.when)]
             problems += [f"步骤 {s.id} 完成条件：{p}" for p in condition_problems(w, s.achieved)]
             for raw in s.ops:
@@ -1002,7 +1005,7 @@ class AdvancePlan(Base):
     npc: str
     step: str
     status: Literal["done", "blocked", "dropped"]
-    note: str = ""
+    note: str = Field("", description="完成 report 步骤时必填：具体说明该人物的私有工作及判断；NPC仅能报告自己的工作，主持可代记；不是外部事实、交付或线索发现")
 
     def check(self, w: World) -> list[str]:
         a = w.rec.agents.get(self.npc)
@@ -1017,11 +1020,20 @@ class AdvancePlan(Base):
             return []
         from .agents import holds, meeting
 
+        if s.completion == "report":
+            if s.achieved.strip() or s.ops:
+                return [f"步骤 {self.step} 的 report 不能同时填写 achieved 或 ops；实际结果请用 completion=state"]
+            if self.actor != self.npc and self.actor not in STAFF:
+                return ["NPC只能提交自己的 report 工作完成报告，主持角色可代记"]
+            return [] if self.note.strip() else [f"步骤 {self.step} 的 report 完成须填写具体 note，说明本人做了哪些工作、形成什么判断；"
+                                                "不以报告代替外部状态变化"]
+
         if meeting(w, self.npc, s):  # what it does on meeting them is its own to play: played, it is done
             return []
 
         if not s.started and not s.achieved and not s.ops:
-            return [f"步骤 {self.step} 是缺少完成依据的旧计划；先重新规划并明确 achieved 条件或执行操作"]
+            return [f"步骤 {self.step} 是缺少完成依据的旧计划；先重新规划并明确 achieved 条件或执行操作；"
+                    "仅本人定性工作可在新计划中显式选择 completion=report，完成时提交具体 note"]
         if s.achieved:
             return [] if holds(w, s.achieved) else [f"步骤 {self.step} 的实际完成条件尚未满足：{s.achieved}"]
         # Old plans have no declared outcome. Require an actual action, not another plan,
@@ -1029,7 +1041,8 @@ class AdvancePlan(Base):
         actions = {"move", "follow", "transfer", "occur", "learn", "promise", "fulfil", "break", "condition"}
         if any(e.seq > s.started and e.actor == self.npc and e.kind in actions and e.t == w.now for e in w.rec.events):
             return []
-        return [f"步骤 {self.step} 尚无实际执行记录；先执行行动，或为计划填写可验证的 achieved 条件"]
+        return [f"步骤 {self.step} 尚无实际执行记录；先执行行动，或为计划填写可验证的 achieved 条件；"
+                "仅本人定性工作可在新计划中显式选择 completion=report，不能用报告代替移动或交物"]
 
     def settle(self, w: World, oid: str):
         a = w.rec.agents[self.npc]
@@ -1037,6 +1050,8 @@ class AdvancePlan(Base):
         s.status, s.note = self.status, self.note or s.note
         w.touch(a)
         word = {"done": "做成了", "blocked": "受阻", "dropped": "放弃了"}[self.status]
+        if self.status == "done" and s.completion == "report":
+            word = "报告完成"
         return w.emit("step", f"{w.name(self.npc)}{word}：{s.text}" + (f"（{self.note}）" if self.note else ""), actor=self.npc,
                       participants=[self.npc], visibility="private", witnesses=[], op=oid), None  # fmt: skip
 

@@ -60,7 +60,6 @@ from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Enlist, Follow, SetPlan
 from ..world.record import Step
 from ..world.scene import Person, Scene
-from . import guard
 from .aftermath import AFTERMATH, Aftermath
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
@@ -252,7 +251,7 @@ class Ruling(BaseModel):
                                             description="成功后调查员对重要装备实际进行的取用、穿戴、藏匿、消耗或出示；无相关动作留空")
     takes: list[Thing] = Field(default_factory=list, max_length=3, description="调查员自己当场拿起确实已有的日常物件；向NPC借用或索取的东西由NPC在回应中交付，不在这里提前入手；没有就留空")
     missing: list[str] = Field(default_factory=list, max_length=4, description="这次行动缺少、因而做不成的工具或条件；没有就留空")
-    rest: bool = Field(False, description="这次是在等待、休息或过夜，时间可以一下跳过好几个小时")
+    rest: bool = Field(False, description="这次明确安排本人实际充分休息或睡眠；清醒等候、守夜不填true，长时间等待用Action.kind=wait推进。是否安全睡够仍由KP结合实际场面确认")
     mishap: str = Field("", description="休息或过夜时出了岔子：惨事卡 id，只从【惨事卡】里选；多数时候留空")
     scope: Literal["模组内", "可即兴", "出格"] = Field(
         "模组内", description="模组内：已有资料或能当场处理的日常细节；可即兴：需准备可持续交互的新场景、人物或规则；出格：确实违背时代或能力，偏离主线不算"
@@ -576,8 +575,9 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
 - 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就给实际查看范围内、条件已经满足的线索。
   笼统地观察只给视野中能够直接察觉的内容，细查则按实际方法与范围裁定；不按每轮数量扣留已经成立的发现。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
-- 等待、休息、睡觉（不管行动类别填的是什么，哪怕是对同伴说“先回去睡一觉”）把 rest 设为 true，按说的时长给分钟数，
-  比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
+- 等待、守夜和休息按实际需要推进时间，kind=wait 可跳过长时间，最多 720 分钟。
+  rest 只标本人明确开始的休息或睡眠；清醒等候、守夜填 false，不把邀请同伴休息当作已经入睡，也不替其他调查员接受。
+  例如晚上 22 点明确睡到天亮，可推进至次日早上 7 点左右；是否真正安全、充分休息由实际场面确认。
 - scope：行动在场景资料里有对应的东西，填“模组内”。调查员动机正常、合情合理，只是场景资料没写到（想去没写的地方、
   找没写的人、用模组没想到的办法），填“可即兴”，不要判它做不到，导演会补上内容。违背世界观或常识（那个年代没有的东西、
   调查员做不到的事）填“出格”。合乎常理的捷径、拒绝委托、求助、离开或破坏物件都允许尝试，按实际风险处理，不因偏离主线惩罚玩家。
@@ -1399,15 +1399,17 @@ class Cast:
         where = at or state.location
         # Who is there and what is to be had with them, as the world record has it (2026-10-22: the
         # clue about the truck's driver was listed at an empty cab, and given).
-        near = module_graph.neighbourhood(m, where, self.present(where))
+        record = self.world.rec if self.world is not None else None
+        near = module_graph.neighbourhood(m, where, self.present(where), record=record)
         here = {n.id: f"{n.name}({n.id})" for n in near["npcs"]}
         lines = []
         for c in near["clues"]:
             if c.id in state.clues or not c.available(state.flags, state.clues):
                 continue
-            need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
-            tell = "、".join(here[x] for x in module_graph.tellers(m, c) if x in here and x != c.npc)
-            if c.npc in here:  # what they say, or what is seen of them
+            need = f"原载体发现参考：{c.check.skill}·{c.check.difficulty}" if c.check else "原载体未设发现检定"
+            providers = module_graph.tellers(m, c, record=record)
+            tell = "、".join(here[x] for x in providers if x in here and x != c.npc)
+            if c.npc in here and (c.npc in providers or c.id not in m.npc(c.npc).clues):
                 src = f"出自 {here[c.npc]}" + (f"（{c.feature}）" if c.feature else "")
             elif c.npc or c.where != where:  # its person or its place is elsewhere: someone here can tell it
                 src = f"{tell} 能说出"
@@ -1416,11 +1418,14 @@ class Cast:
             lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}{src}，{need}；内容：{c.text.strip()}")
         gates = []
         for n in near["npcs"]:
-            for cid in n.clues:
-                if cid in state.clues or not m.clue(cid).available(state.flags, state.clues):
+            for c in near["clues"]:
+                cid = c.id
+                if cid in state.clues or not c.available(state.flags, state.clues):
                     continue
-                g = n.gates.get(cid)
-                gates.append(f"- {n.id} 的 {cid}：{f'{g.skill}·{g.difficulty}' if g else '问到就说'}")
+                if n.id not in module_graph.tellers(m, c, record=record) and c.npc != n.id:
+                    continue
+                g = module_graph.disclosure_gate(m, c, n.id)
+                gates.append(f"- {n.id} 的 {cid}：{f'{g.skill}·{g.difficulty}' if g else '无个人披露门槛，按当前动机回应'}")
         top = sorted(inv.skills.items(), key=lambda kv: -kv[1])
         sheet = "，".join(f"{k}{v}" for k, v in top) + "；" + "，".join(f"{k}{v}" for k, v in inv.characteristics.items())
         held = "、".join(m.clue(c).title for c in state.clues) or "无"
@@ -1437,6 +1442,7 @@ class Cast:
             f"【本地守秘人资料】\n{m.location(where).keeper.strip() or '无'}\n"
             f"【本场景可得线索】\n{chr(10).join(lines) or '（没有了）'}\n"
             f"【NPC 门槛】\n{chr(10).join(gates) or '无'}\n"
+            "原载体发现参考属于原有查验或搜索途径，不自动变成人物口述门槛；人物已知的结论按其自身门槛、当前处境与本次获取方式裁定，线索前置仍须成立。\n"
             f"【调查员】{inv.name}：{sheet}\n背包：{'、'.join(inv.inventory) or '无'}\n"
             + ("既有背景：" + "；".join(f"{key}：{value}" for key, value in inv.backstory.items() if value) + "\n"
                if inv.backstory else "") +
@@ -1537,10 +1543,14 @@ class Cast:
             return "\n".join(f"- {x}" for x in items) or "- 无"
 
         clues = []
-        for cid in npc.clues:
-            c = m.clue(cid)
-            g = npc.gates.get(cid)
-            clues.append(f"- {cid}「{c.title}」：{c.text.strip()}（{'门槛：' + g.skill + '·' + g.difficulty if g else '有人问起就可以说'}）")
+        record = self.world.rec if self.world is not None else None
+        for c in m.clues:
+            if npc.id not in module_graph.tellers(m, c, record=record) or (record is None and c.id not in npc.clues):
+                continue
+            cid = c.id
+            g = module_graph.disclosure_gate(m, c, npc.id)
+            permission = "披露门槛：" + g.skill + "·" + g.difficulty if g else "无个人披露门槛，是否透露按当前动机与本轮裁定"
+            clues.append(f"- {cid}「{c.title}」：{c.text.strip()}（{permission}）")
         extra = ""
         if _storyteller(npc):  # a teahouse storyteller in the module, not anyone the director puts on stage
             extra = "\n你是说书人，表演时用下面的评书腔：\n" + skills.wrap("pingshu-voice")
@@ -1574,17 +1584,6 @@ class Cast:
         secrets = [f.text for f in facts if f.origin == "game" and f.kind == "secret" and npc_id in f.known_by
                    and npc_id in f.about and not f.retracted]  # fmt: skip
         return knows, secrets
-
-    def _protected(self, state: GameState, npc: NPC) -> dict[str, str]:
-        """Texts this NPC must not reproduce right now."""
-        m = self.module
-        allowed = set(state.npc(npc.id).unlocked) | {c for c in npc.clues if c not in npc.gates}
-        out = {f"clue:{c.id}": c.text for c in m.clues if c.id not in allowed and c.id not in state.clues}
-        for other in m.npcs:
-            if other.id != npc.id:
-                out.update({f"secret:{other.id}:{i}": s for i, s in enumerate(other.secrets)})
-        out["truth"] = m.truth
-        return out
 
     async def _fresh_npc(self, npc_id: str) -> Session:
         """The NPC's session, opened again when its sheet changed under it: the world record
@@ -1638,8 +1637,6 @@ class Cast:
 
         trial = World(self.module.model_copy(deep=True), state.model_copy(deep=True))
         problems = []
-        known = "\n".join(f.text for f in world_knowledge.known(trial.rec, npc_id))
-        known += "\n" + world_view.npc_brief(trial, npc_id, query=text)
         for deception in dialogue.deceptions:
             if not all(part.strip() for part in (deception.claim, deception.intent, deception.motive)):
                 problems.append("有意欺骗必须明确台词、真实意图与具体动机")
@@ -1651,8 +1648,6 @@ class Cast:
                 problems.append("假答应同行不能同时提交实际 accompany，必须区分公开声称与真实行动")
             if any(world_knowledge.resolve_ref(trial, npc_id, ref) is None for ref in deception.basis):
                 problems.append("欺骗依据引用了角色不知道的资料")
-            if guard.leaks(deception.intent + "\n" + deception.motive, self._protected(state, self.module.npc(npc_id)), public=known):
-                problems.append("真实意图或动机使用了角色未知的幕后信息")
         for change in dialogue.changes:
             if change.kind != "promise" and any(deception.claim in change.text or change.text in deception.claim
                                                 for deception in dialogue.deceptions):
@@ -1724,6 +1719,10 @@ class Cast:
 
     async def npc(self, state: GameState, npc_id: str, message: str, *, travel: bool = False, private: bool = False) -> str:
         npc = self.module.npc(npc_id)
+        # Capture disclosure while the speaker is actually here. Its reply may hand things
+        # over and leave; that does not unsay the words it spoke before departing.
+        allowed = world_knowledge.disclosable_clues(self.module, state, npc_id,
+                                                   record=self.world.rec if self.world is not None else None)
         key = f"npc:{npc_id}"
         # What an earlier reply handed over and nobody took is not this one's (Game._reply takes it at once).
         self.unsettled.pop(npc_id, None)
@@ -1823,8 +1822,6 @@ class Cast:
                 self.world.touch(agent)
         else:
             world.apply(self.module, state, dialogue.changes, source=npc_id, spoken=text)
-        npc_sheet = self.module.npc(npc_id)
-        allowed = set(state.npc(npc_id).unlocked) | {c for c in npc_sheet.clues if c not in npc_sheet.gates}
         self.told[npc_id] = [c for c in dict.fromkeys(dialogue.told) if c in allowed and c not in state.clues]
         listeners = audience.listeners(state, state.investigator.id)
         if private:

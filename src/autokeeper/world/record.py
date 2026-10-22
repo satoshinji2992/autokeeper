@@ -157,6 +157,8 @@ class Step(BaseModel):
     when: str = Field("", description="开始条件；& 表示且，| 表示或：flag:标记、!flag:标记、at:谁:地点、promise:约定:状态、"
                                        "owner:物件:持有者、knows:NPC:事实、after:分钟、gone:谁、hour:22-6（几点到几点）；"
                                        "状态为 active/fulfilled/broken；调查员集体用 players")
+    completion: Literal["state", "report"] = Field("state", description="state：实际状态或执行证据核验完成；移动、交物等用此类。"
+        "report：仅人物的定性工作完成报告，不产生外部结果；不得填 achieved 或 ops，完成时本人或主持角色用 step.note 具体说明该人物所做工作及判断。")
     achieved: str = Field("", description="完成后必须实际成立的条件，语法同 when；移动填 at:NPC:目的地，交物填 owner:物品:接收者；不能以打算或口头宣称代替")
     # Lands without a model call while the plan is fresh.
     ops: list[dict[str, Any]] = Field(default_factory=list, description="到时直接结算的操作，格式同操作；要到时再想就留空")

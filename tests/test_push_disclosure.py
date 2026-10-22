@@ -40,7 +40,8 @@ async def test_local_and_network_push_offers_share_the_same_public_contract(fake
         encoded = json.dumps(offer, ensure_ascii=False)
         assert all(secret not in encoded for secret in (hidden, "夹板", "c_archive", "on_push_fail", "success", "action_record"))
         hub = Hub(EXAMPLE, state=game.state, cast=game.cast, rules=Rules(dice=fake))
-        assert hub._view()["pending_push"] == public_push(game.state.pending_push)
+        assert hub._view(game.state.investigator.id)["pending_push"] == public_push(game.state.pending_push)
+        assert hub._view()["pending_push"] is None  # an unseated reader does not inherit this scene's offer
         assert game.state.pending_push["on_push_fail"]["text"] == hidden
         assert game.state.pending_push["success"]["clues_on_success"] == ["c_archive"]
     finally:

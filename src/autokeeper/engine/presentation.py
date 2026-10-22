@@ -136,6 +136,14 @@ def personal_context(state: GameState, viewer: str) -> str:
 
 
 def npc_refs(module: Module, state: GameState, npc: str) -> set[str]:
+    """Original material permissions and explicit knowledge of a whole handout. A learned clue
+    summary, including an unlocked chance to retell it, does not supply the underlying document."""
+    from ..world.knowledge import sees
+
     sheet = module.npc(npc)
     unlocked = set(state.npc(npc).unlocked) | {cid for cid in sheet.clues if cid not in sheet.gates}
-    return {f"handout:{c.handout}" for c in module.clues if c.id in unlocked and c.handout}
+    refs = {f"handout:{c.handout}" for c in module.clues if c.id in sheet.clues and c.id in unlocked
+            and c.handout and c.available(state.flags, state.clues)}
+    refs |= {f"handout:{h.id}" for h in module.handouts
+             if (fact := state.record.facts.get(f"handout:{h.id}")) is not None and sees(fact, npc)}
+    return refs

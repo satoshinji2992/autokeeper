@@ -416,7 +416,7 @@ def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report,
         if s.status != "pending" or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
             continue  # not yet; or what it does on meeting the investigators, for its voice
         problems = agents.condition_problems(w, s.when) + agents.condition_problems(w, s.achieved)
-        if not s.started and not s.achieved and not s.ops:
+        if s.completion == "state" and not s.started and not s.achieved and not s.ops:
             problems.append("旧计划缺少完成依据，需重新规划")
         if problems:
             # Older saves may contain invented IDs or an unsupported condition.

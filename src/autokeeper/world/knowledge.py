@@ -80,7 +80,7 @@ def seed(m: Module, st: GameState, rec: WorldRecord) -> int:
                                       status=item.status, hidden=item.hidden or item.equipment == "concealed"))  # fmt: skip
     for c in m.clues:
         put(f"clue:{c.id}", Fact(id=f"clue:{c.id}", text=c.text, kind="clue", about=[x for x in (c.where, c.npc) if x],
-                                 known_by=[c.npc] if c.npc else [], origin=origin(c.id), explains=[c.id]))  # fmt: skip
+                                 known_by=[n.id for n in m.npcs if c.id in n.clues], origin=origin(c.id), explains=[c.id]))  # fmt: skip
     for e in m.events:
         about = [x for x in (e.move_to, e.performer) if x]
         put(f"event:{e.id}", Fact(id=f"event:{e.id}", text=e.text, kind="event", about=about, origin=origin(e.id)))
@@ -266,6 +266,26 @@ def sees(fact: Fact, viewer: str) -> bool:
     return viewer in fact.known_by
 
 
+def disclosable_clues(m: Module, st: GameState, npc: str, *, record: WorldRecord | None = None,
+                     present: bool = True) -> set[str]:
+    """One disclosure contract for NPC prompts, replies and the engine: actual current knowledge,
+    live clue, prerequisites and its gate. Knowing is not revealing; only Dialogue.told records
+    what was actually said. The reply receipt may be checked after its speaker walked away."""
+    from ..module.graph import disclosure_gate, tellers
+
+    if present:
+        if record is not None:
+            actor = record.entities.get(npc)
+            if actor is None or actor.at != st.location or actor.status in {"死亡", "失踪"}:
+                return set()
+        elif m.npc(npc).location != st.location or m.npc(npc).status in {"死亡", "失踪"}:
+            return set()
+    unlocked = set(st.npc(npc).unlocked)
+    return {c.id for c in m.clues if npc in tellers(m, c, record=record)
+            and (record is not None or c.id in m.npc(npc).clues) and c.available(st.flags, st.clues)
+            and (c.id in unlocked or disclosure_gate(m, c, npc) is None)}
+
+
 def saw(event: Event, viewer: str) -> bool:
     if viewer == DIRECTOR:
         return True
@@ -337,7 +357,9 @@ def visible_items(w: World, viewer: str, holder: str = "") -> list[Entity]:
 # -- back into this game's module ---------------------------------------------------------------
 def project(m: Module, rec: WorldRecord) -> None:
     """Write the record's current truth into this game's module: where NPCs are, rewritten texts,
-    what important NPCs learned. Idempotent; the module on disk never changes."""
+    what important NPCs learned. Idempotent; the module on disk never changes. Clue providers
+    read this same record (module.graph.tellers); NPC.clues/gates remain the source declaration,
+    not a mutable projection that would retain a former knower or lose its original gate."""
     facts = rec.facts
 
     def text(fid: str, base: str) -> str:

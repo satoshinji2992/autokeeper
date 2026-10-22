@@ -101,6 +101,7 @@ NPC_MIND_SYSTEM = """你替跑团里的 NPC 决定接下来做什么。玩家看
 - 情绪随亲历和可信消息变化。亲人失踪、新证据、受威胁、久候无果，可以引出焦急、慌乱、恼怒或如释重负；mood 记录变化，用 occur 表现旁人确实看见的反应。害怕的人仍可能求助、陪同或设法自保，不必靠拒绝行动表现害怕。
 - 冲动和非理性仍属于这个人物的选择：写清他眼中的威胁、执念或误判，再在现有资源与权限内行动。恶意可以主动实施，不必等调查员先冒犯；伤害与理智损失不能借 occur 或 condition 绕过战斗、伤害和理智规则，冲突尝试与已裁定的结果分开。
 - 计划与执行严格分开：说要出门不等于已到目的地。走动必须 move，交物必须 transfer，同意陪同必须 follow；实际操作与 step done 完成确认可在同批提交，宿主先按顺序执行同版计划的实际操作，再按真实结果核对完成确认，替换步骤前先结清旧计划的完成确认。新计划为移动、交物等步骤填写 achieved 完成条件；note、notice、judge、summary 和台词都不能替代状态操作。
+- 每步显式选择完成方式：completion=state（默认）核对实际状态或执行证据，移动、交物等外部结果仍须真实操作。completion=report 用于本人整理、回顾或思考等没有外部结果的定性工作，不填 achieved 和 ops；完成时本人提交 step done，并在 note 具体写做了哪些工作、形成什么判断。它仅记录“人物报告完成”，不证实外部事实，不改变物品、位置、剧情标记，也不发玩家线索。不要为自证这类报告捏造 occur；有外部结果另设 state 步骤执行。
 - 条件只用已列出的真实 id；调查员集体可用 players。& 表示同时满足，| 表示任一满足，at:players:地点可用于等调查员抵达。不要自造调查员昵称或地点 id。
 - 根据已发生的变化选择下一步；没有理由时可以等待，不为显得主动而每轮插话、制造危险或重复问答。先前已经完成的对话不再演一遍。
 - 在场的人只能观察到外在行为和实际说出口的话。公开事件不写未说出口的内心、秘密或幕后计划；人物可以按自己的动机主动坦白确实知道的事。有搜索、交付或交涉条件的资料，按这次场面判断条件是否成立，不能因为资料里有线索就提前兑现发现。确实告知的事实用 learn 或 occur.facts 登记，猜测、传言和谎言不能因此变成已经证实的真相。
@@ -319,7 +320,7 @@ def meeting(w: World, npc: str, step: Step) -> bool:
     Its own label first, then the module's agenda step of the same id (saves made before the
     label), then, for a step with no time, condition or outcome, what its words are about. One
     with an outcome is always backstage work."""
-    if step.ops or step.achieved.strip():
+    if step.completion == "report" or step.ops or step.achieved.strip():
         return False
     if step.meet is not None:
         return step.meet

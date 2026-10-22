@@ -13,8 +13,12 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
+from typing import TYPE_CHECKING
 
 import networkx as nx
+
+if TYPE_CHECKING:
+    from ..world.record import WorldRecord
 
 from ..engine.encounter import profiles
 from ..engine.state import hours
@@ -22,7 +26,7 @@ from ..rules import dice_expr
 from ..rules.catalog import CHARACTERISTICS, SKILL_BASE, canonical
 from ..rules.combat import stats_of
 from ..rules.weapons import carried, parse_attack, unread
-from .schema import Clue, Event, Leg, Module, Obstacle
+from .schema import Check, Clue, Event, Leg, Module, Obstacle
 
 
 def build(m: Module) -> nx.MultiDiGraph:
@@ -84,22 +88,54 @@ def supporting_clues(m: Module) -> dict[str, list[str]]:
     return support
 
 
-def tellers(m: Module, c: Clue) -> list[str]:
-    """Whom a clue is to be had from: the one it comes from (Clue.npc), then anyone else whose
-    clues have it (NPC.clues: they can tell it or hand it over)."""
+def tellers(m: Module, c: Clue, *, record: WorldRecord | None = None) -> list[str]:
+    """Current knowers supply testimony in a running game. Without a record, the static module
+    graph uses Clue.npc and NPC.clues for compilation and reachability checks."""
+    if record is not None:
+        from ..world.knowledge import sees
+
+        fact = record.facts.get(f"clue:{c.id}")
+        return [n.id for n in m.npcs if fact is not None and sees(fact, n.id)]
     return list(dict.fromkeys([*([c.npc] if c.npc else []), *(n.id for n in m.npcs if c.id in n.clues)]))
 
 
-def at_hand(m: Module, place: str, present: Iterable[str]) -> list[Clue]:
+def disclosure_gate(m: Module, c: Clue, npc: str) -> Check | None:
+    """This speaker's explicit disclosure gate. Clue.check belongs to the original discovery
+    method; neither it nor another character's personal conditions follow a learned result."""
+    return m.npc(npc).gates.get(c.id)
+
+
+def original_source_at_hand(m: Module, c: Clue, place: str, present: Iterable[str], *,
+                            record: WorldRecord | None = None) -> bool:
+    """The original discovery or material route, distinct from a new witness's learned summary."""
+    here = set(present)
+    if not c.npc and c.where == place:
+        return True
+    if c.npc in here and c.id not in m.npc(c.npc).clues:
+        return True  # something observed of that person, not their testimony
+    providers = set(tellers(m, c, record=record))
+    return any(n.id in here and n.id in providers and c.id in n.clues for n in m.npcs)
+
+
+def at_hand(m: Module, place: str, present: Iterable[str], *, record: WorldRecord | None = None) -> list[Clue]:
     """The clues to be had at a place with these people there. One that comes from someone (Clue.npc:
     what they say, or what is seen of them) needs them there, or another who can tell it, wherever
     that is: its `where` is where they are met. One that comes from no one lies where it is found,
     and whoever is there and can tell it may (Game._valid_clues, the arbiter, the keeper's brief)."""
     here = set(present)
-    return [c for c in m.clues if (not c.npc and c.where == place) or here.intersection(tellers(m, c))]
+
+    def available(c: Clue) -> bool:
+        if record is not None and ((f := record.facts.get(f"clue:{c.id}")) is None or f.retracted):
+            return False
+        # Clue.npc can name the person being observed, not a willing/knowing teller. Keep that
+        # physical source distinct from somebody whose new knowledge supplies testimony.
+        observed = c.npc in here and (record is None or c.id not in m.npc(c.npc).clues)
+        return (not c.npc and c.where == place) or observed or bool(here.intersection(tellers(m, c, record=record)))
+
+    return [c for c in m.clues if available(c)]
 
 
-def neighbourhood(m: Module, location: str, present: Iterable[str] | None = None) -> dict:
+def neighbourhood(m: Module, location: str, present: Iterable[str] | None = None, *, record: WorldRecord | None = None) -> dict:
     """What the keeper needs at a location: exits, who is there (`present`, as the world record has
     them; without it, the module's people of that place who are alive and not gone) and the clues
     to be had with them (at_hand)."""
@@ -113,7 +149,7 @@ def neighbourhood(m: Module, location: str, present: Iterable[str] | None = None
         "location": loc,
         "exits": [m.location(e) for e in loc.exits if any(x.id == e for x in m.locations)],
         "npcs": people,
-        "clues": at_hand(m, location, [n.id for n in people]),
+        "clues": at_hand(m, location, [n.id for n in people], record=record),
     }
 
 
