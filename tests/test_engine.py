@@ -1075,3 +1075,20 @@ async def test_an_early_rewrite_stays_over_the_source_however_many_follow(module
 
     text = await Cast._private_lore(Source(), game.state, "去报社查旧刊", ["报社"])  # type: ignore[arg-type]
     assert truth in text and "他在钟里藏了第 7 样东西" in text and "第 6 样" not in text  # each once, as it is now
+
+
+async def test_a_find_at_the_start_is_put_into_the_opening_telling(module, fake):
+    """No clue card shows it (the user, 2026-10-22): a rule's find as the game starts reaches the
+    players only through the keeper's opening, which is asked to tell it."""
+    game, cast, _ = make(module, fake, {})
+    run = game.plugins.run
+
+    async def found_at_start(hook, turn, **kw):
+        if hook == "start":
+            await game._gain(["c_notice"], turn, None)
+        return await run(hook, turn, **kw)
+
+    game.plugins.run = found_at_start  # type: ignore[method-assign]
+    await game.start()
+    assert game.state.clues == ["c_notice"]
+    assert "获得线索〔广场告示〕：告示说钟楼即日起谢绝参观" in cast.reports[0] and "【讲出发现】" in cast.reports[0]

@@ -353,6 +353,7 @@ class Game(Encounters):
         happened = [e.read_aloud.strip() or e.title for e in opening.events]
         if happened:
             report += "【开场时发生的事（尚未展示给玩家，融入同一段叙事，按先后自然带出，不逐件罗列）】\n" + "\n".join(happened) + "\n"
+        report += "".join(f"{line}\n" for line in self._found(opening))  # a rule's find at the start (plugins "start")
         report += (
             "请用 180–320 字、两到四个自然段引入故事（有玩家篇幅偏好时以偏好为准）："
             "先用来信、旅途、职业或已写的关系自然交代为何而来，再让调查员看见眼前的生活和地方。"
@@ -2117,13 +2118,14 @@ class Game(Encounters):
             return ""
         await self._foreshadow(turn)
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
-        # what the player did still wants telling.
+        # what the player did still wants telling, and so does a find no one said in their line.
+        told = self._told_by(turn)
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
-                and not turn.arrived and not turn.world and not turn.sanity and not turn.hints):
+                and not turn.arrived and not turn.world and not turn.sanity and not turn.hints and all(c in told for c in turn.clues)):
             self.told = None
             await self.emit({"type": "dialogue_end"})
             if not st.held or self.holding:
-                return ""  # the reply, clue cards and roll outcomes have already been shown
+                return ""  # the reply, in its words what it told, and the roll outcomes have already been shown
             return await self.tell_held(turn=turn, on_delta=on_delta)  # the round's last: the others still want telling
         report = self._report(turn)
         if self.holding and not turn.ending:  # others act in this round too: told together, by the last
@@ -2955,14 +2957,12 @@ class Game(Encounters):
                 opts.append(f"花 {turn.push['luck']} 点幸运")
             out.append(f"（玩家可以选择：{'或'.join(opts)}，结果下一步揭晓；现在只写失败的样子。）")
         out += turn.fight  # a round of a fight or a chase, as settled (engine/encounter)
-        for cid in turn.clues:
-            c = m.clue(cid)
-            out.append(f"获得线索〔{c.title}〕：{c.text.strip()}")
+        out += self._found(turn)
         for who, s in turn.sanity:
             out.append(f"理智：{who} {s.describe()}" + (f"；疯狂发作表（日文原文，请用中文演出）：{s.bout}" if s.bout else ""))
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
-            out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复线索卡与检定卡；只叙述本轮另行发生的变化。")
+            out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复检定卡；只叙述本轮另行发生的变化。")
             if turn.joined:
                 out.append(f"其中{'、'.join(m.npc(x).name for x in turn.joined)}是这一轮自己主动开口的。")
         if turn.performance:
@@ -2985,6 +2985,22 @@ class Game(Encounters):
         else:
             out.append("请叙述。")
         return "\n".join(out)
+
+    def _told_by(self, turn: Turn) -> dict[str, str]:
+        """The clues of this turn an NPC's shown line told (Said.told): clue id -> that NPC."""
+        return {cid: said.npc for said in turn.replies.values() for cid in said.told if cid in turn.clues}
+
+    def _found(self, turn: Turn) -> list[str]:
+        """What the investigators came to know this turn, for the keeper: each clue in its own words.
+        The players see no clue card (the user's call, 2026-10-22: no summaries handed to them): what
+        no NPC said in the line already shown, the telling has to put into the story."""
+        told, m = self._told_by(turn), self.m
+        out = [f"获得线索〔{m.clue(cid).title}〕：{m.clue(cid).text.strip()}"
+               + (f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）" if cid in told else "") for cid in turn.clues]
+        if any(cid not in told for cid in turn.clues):
+            out.append("【讲出发现】玩家看不到线索卡，只能从你的叙述里得知上面的线索。这一轮就把它讲出来：写调查员实际看到、读到、听到或想到的东西，"
+                       "原文里的人名、地点、时间和细节照实写具体，用故事里的说法；不概括成结论，不点明这是线索，不添原文没有的内容。")
+        return out
 
     def _unknown(self, events: list[Event]) -> list[str]:
         """Who of those the turn's events show the players do not know yet, with what they would call

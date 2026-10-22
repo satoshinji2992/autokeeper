@@ -285,3 +285,36 @@ async def test_a_clue_is_left_to_the_one_asked_when_they_are_asked(fake):
     assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["npc", "clue"]
     assert game.state.clues == ["c_diary"]
     await game.close()
+
+
+async def test_what_the_npc_said_is_not_told_again_and_nobody_is_asked_to_narrate_it(fake):
+    """No clue card follows the words (the user, 2026-10-22: players hear it in the fiction and keep
+    their own notes): the warden's line is how they learn what he told, so the keeper is not asked to
+    tell it again, and its report says he said it."""
+    game, cast, events = table(fake)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    await game.talk(turn)
+    assert turn.clues == ["c_diary"]
+    report = game._report(turn)
+    assert "获得线索〔守钟人的日记〕" in report and "老守钟人刚才已经亲口说出，不要复述" in report
+    assert "【讲出发现】" not in report and "线索卡与检定卡" not in report
+    assert await game.narrate(turn) == "" and cast.reports == [] and events[-1]["type"] == "dialogue_end"
+    await game.close()
+
+
+async def test_a_find_nobody_said_is_the_keepers_to_tell_even_in_a_conversation(fake):
+    """The gears found while the warden talks: his line tells the diary, nothing shows the gears. The
+    keeper tells that turn, and the report asks for what was found in the story's own words."""
+    m = Module.load(EXAMPLE)
+    gears = m.clue("c_gears")
+    gears.check, gears.sanity = None, None  # in plain sight here, and no roll for it
+    game, cast, _ = table(fake, module=m)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False, auto_clues=["c_gears"]))
+    await game.talk(turn)
+    assert turn.clues == ["c_gears", "c_diary"] and turn.npc_lines == [("warden", DIARY)]
+    await game.narrate(turn)
+    report = cast.reports[-1]
+    assert f"获得线索〔齿轮间〕：{gears.text.strip()}" in report and "亲口说出" in report  # the diary was his line
+    assert "【讲出发现】玩家看不到线索卡，只能从你的叙述里得知上面的线索" in report
+    assert all(words in report for words in ("看到、读到、听到或想到", "不概括成结论", "不点明这是线索", "不添原文没有的内容"))
+    await game.close()

@@ -153,7 +153,8 @@ async def test_a_successful_idea_roll_gives_the_clue_as_the_investigators_own_th
     assert dice["skill"] == "灵感" and dice["who"] == "李雁" and dice["target"] == 90 and dice["difficulty"] == "常规"
     assert st.ideas[-1].passed and st.ideas[-1].clue == "c_gears" and st.ideas[-1].day == 0
     report = cast.reports[-1]
-    assert "灵感检定成功" in report and "迂回地融入" in report and "获得线索〔齿轮间〕" in report
+    assert "灵感检定成功" in report and "自己的领悟" in report and "获得线索〔齿轮间〕" in report
+    assert "想到了什么具体写出来" in report and "【讲出发现】" in report  # no clue card: the telling says what they thought of
     assert "此前没有出现过" in report  # never mentioned: the keeper needs a way in for it
     assert st.investigators[1].id == roller and st.minutes == Game.new(module, [module.pregens[0]]).minutes  # no time lost
     assert game.idea_refused() == idea.TODAY  # once a game day
