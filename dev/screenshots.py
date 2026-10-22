@@ -4,7 +4,10 @@
     uv run --extra claude python dev/screenshots.py map game   # some
 
 Each scene starts from a bundled module with a few turns already in the log; nothing calls a
-model (the recap is fixed text) and nothing is written to the real data folder. Textual saves an
+model (the recap is fixed text) and nothing is written to the real data folder. The fights and the
+chases are the real encounter engine's: a scripted keeper plan and scripted dice (as the tests' own,
+tests/encounter_kit.py) play a round before the screen opens on it, and the screen is given what that
+round showed. Textual saves an
 SVG; headless Chrome turns it into a PNG. The SVG names Fira Code, which has no Chinese, and a
 fallback font draws Chinese narrower than its two cells, so names look letter-spaced; the SVG is
 pointed at Noto Sans Mono CJK SC (two cells to a Chinese character, as a terminal draws it)
@@ -95,8 +98,11 @@ async def until(pilot, test, rounds: int = 80) -> None:
 
 
 async def in_game(name: str, mid: str, location: str, visited: list[str], met: tuple[str, ...] = (), then=None,
-                  size: tuple[int, int] = SIZE, settle: float = 2.0) -> Path:
+                  size: tuple[int, int] = SIZE, settle: float = 2.0, prepare=None) -> Path:
+    """A game screen on the module at `location`. `prepare(m, st)` plays what comes before the screen
+    opens (a fight's first round) and returns what `then(app, pilot, screen, m, played)` shows on it."""
     m, st = game_state(mid, location, visited, met)
+    played = await prepare(m, st) if prepare is not None else None
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=size) as pilot:
         screen = GameScreen(m, st, resume=True)
@@ -104,7 +110,7 @@ async def in_game(name: str, mid: str, location: str, visited: list[str], met: t
         await until(pilot, lambda: screen.game is not None and not screen.busy)
         await pilot.pause(3.0)  # the picture drawn, in a thread
         if then is not None:
-            await then(app, pilot, screen, m)
+            await (then(app, pilot, screen, m, played) if prepare is not None else then(app, pilot, screen, m))
             await pilot.pause(settle)
         return Path(app.save_screenshot(f"{name}.svg", path=str(OUT)))
 
@@ -169,100 +175,209 @@ async def _talk(app, pilot, screen, m):
                          "多琳朝他摆摆手，他又咳了两声，退回雪里去了。"})
 
 
-def _fighting(app, pilot, screen, m):
-    """A fight with the ghoul in the study: two rounds of it on the stage and in the story."""
-    from autokeeper.engine import combat as battle
+# -- fights and chases: the real encounter engine, with a scripted keeper plan and scripted dice ----------
+class Dice:
+    """Scripted dice, as the tests' FakeDice: the d100 values and the totals queued, then steady ones."""
 
-    st = screen.state
-    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
-    party = [battle.from_investigator(inv) for inv in st.investigators]
-    st.fight = battle.Fight(fighters=[*party, ghoul], place=st.location, round=2)
-    me = party[0]
-    names = {f.id: f.name for f in st.fight.fighters}
-    return [
-        {"type": "fight_start", "fight": battle.view(st.fight), "line": f"【战斗开始】{me.name}一方对上{ghoul.name}"},
-        {"type": "fight_round", "round": 2, "order": [me.id, ghoul.id], "fight": battle.view(st.fight)},
-        {"type": "fight_act", "round": 2, "attacker": me.id, "defender": ghoul.id, "attacker_name": me.name,
-         "defender_name": ghoul.name, "attacker_side": "party", "defender_side": "foe", "hurt_side": "foe", "kind": "melee",
-         "attack": "棍棒", "roll": {"skill": "格斗(斗殴)", "target": 60, "value": 23, "level": "困难成功", "passed": True},
-         "answer": {"skill": "闪避", "target": 30, "value": 71, "level": "失败", "passed": False}, "reaction": "dodge",
-         "winner": "attacker", "hurt": ghoul.id, "damage": 7, "damage_text": "1D8+1D4 = 7", "effect": "", "extreme": False,
-         "jammed": False, "empty": False, "notes": ["重伤"], "line": "", "dice": None},
-        {"type": "fight_say", "who": ghoul.id, "name": ghoul.name, "text": "……把书……留下……"},
-        {"type": "fight_act", "round": 2, "attacker": ghoul.id, "defender": me.id, "attacker_name": ghoul.name,
-         "defender_name": me.name, "attacker_side": "foe", "defender_side": "party", "hurt_side": "party", "kind": "melee",
-         "attack": "爪击", "roll": {"skill": "格斗(斗殴)", "target": 50, "value": 12, "level": "困难成功", "passed": True},
-         "answer": {"skill": "闪避", "target": 32, "value": 58, "level": "失败", "passed": False}, "reaction": "dodge",
-         "winner": "attacker", "hurt": me.id, "damage": 4, "damage_text": "1D6 = 4", "effect": "", "extreme": False,
-         "jammed": False, "empty": False, "notes": ["受到 4 点伤害（HP 12 → 8）"], "line": "", "dice": None},
-    ], names
+    LABEL = {"critical": "大成功", "extreme": "極限成功", "hard": "困難成功", "regular": "一般成功", "failure": "失敗",
+             "fumble": "大失敗"}
+
+    def __init__(self, values=(), totals=(), *, then: int = 70, total: int = 2):
+        from collections import deque
+
+        self.values, self.totals, self.then, self.rest = deque(values), deque(totals), then, total
+
+    def check(self, target: int, bonus: int = 0):
+        from autokeeper.rules.bcdice import Roll
+
+        v = self.values.popleft() if self.values else self.then
+        fumble_at = 100 if target >= 50 else 96
+        label = ("critical" if v == 1 else "fumble" if v >= fumble_at else "extreme" if v <= target // 5
+                 else "hard" if v <= target // 2 else "regular" if v <= target else "failure")
+        text = f"(1D100<={target}) 獎勵・懲罰骰[{bonus}] ＞ {v} ＞ {v} ＞ {self.LABEL[label]}"
+        return Roll(f"CC<={target}", text, success=v <= target, failure=v > target)
+
+    def roll(self, expr: str):
+        from autokeeper.rules.bcdice import Roll
+
+        return Roll(expr, f"({expr}) ＞ {self.total(expr)}")
+
+    def total(self, expr: str) -> int:
+        return self.totals.popleft() if self.totals else self.rest
+
+    def table(self, name: str) -> str:
+        return f"{name} 表结果"
 
 
-async def _fight(app, pilot, screen, m):
-    events, _ = _fighting(app, pilot, screen, m)
-    st = screen.state
-    st.fight.fighters[-1].hp = 5  # the ghoul hurt, the investigator too
-    st.fight.fighters[-1].status = "重伤"
-    st.investigators[0].hp -= 4
-    for ev in events:
-        if ev["type"] in ("fight_start", "fight_round"):
-            ev["fight"] = __import__("autokeeper.engine.combat", fromlist=["view"]).view(st.fight)
+class Keeper:
+    """The keeper plan, scripted: every round the same arrangement for the keeper's people; nothing else
+    is asked of a model in these scenes."""
+
+    def __init__(self, npcs: list) -> None:
+        self.npcs = npcs
+
+    async def plan(self, state, text, *, encounter=None, mode="act", check=None, ask=""):
+        from autokeeper.agents.encounter import Checked
+        from autokeeper.engine.encounter.plan import EncounterTurnPlan
+
+        return Checked(value=EncounterTurnPlan(npcs=self.npcs), problems=[], raw=None)
+
+    async def encounter_choice(self, state, inv_id, situation, options):
+        from autokeeper.agents.encounter import Checked
+
+        return Checked(value=None, problems=["没选"])
+
+    async def keeper(self, state, report, on_delta=None, lore=""):
+        return ""
+
+
+def arranged(who: str, d, react: str = "fight_back"):
+    from autokeeper.engine.encounter.plan import NpcArrangement
+
+    return NpcArrangement(who=who, goal="夺书离开", actions=[d], react=react)  # type: ignore[arg-type]
+
+
+def claw(target: str):
+    from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction
+
+    return DeclaredAction(do="attack", attacks=[AttackPick(target=target, with_="")], summary="佝偻的身影扑了上来")
+
+
+async def engine(m, st, npcs: list, dice: Dice):
+    """A game over this state with the scripted keeper and dice, and what it shows (its events)."""
+    from autokeeper.engine.game import Game
+    from autokeeper.rules.coc import Rules
+
+    shown: list[dict] = []
+
+    async def emit(ev: dict) -> None:
+        shown.append(ev)
+
+    game = Game(m, st, Keeper(npcs), Rules(dice=dice), emit=emit)  # type: ignore[arg-type]
+    game.asking = False  # the answer set stands: the window is its own scene (_reaction)
+    return game, shown
+
+
+async def a_round(game, words: str) -> None:
+    """One round as a button press plays it (engine/encounter.Encounters.encounter_input)."""
+    game.state.turn += 1
+    action = await game.encounter_input(words)
+    await game.resolve(action, await game.rule(action))
+
+
+TOLD = ("书房里只剩煤油灯晃动的光。那东西被你一拳砸在肩上，踉跄着撞翻了书架，旧书哗啦啦落了一地；"
+        "它喉咙里挤出一声像狗又像人的呜咽，又扑了回来。爪子划开你的外套，袖子一下子湿透了。")
+
+
+async def _fight_round(m, st, *, asking: bool = False):
+    """The ghoul in the study (《追书人》 shufang): a round fought, the ghoul hurt, the investigator too."""
+    from autokeeper.engine.encounter import choices
+    from autokeeper.engine.encounter.plan import EncounterStart
+    from autokeeper.engine.game import Turn
+
+    me = st.investigators[0]
+    npcs = [arranged("douglas", claw(me.id), react="dodge")]
+    # his punch lands hard and the ghoul's dodge fails: 3; its claws land hard and his dodge fails: 4
+    game, shown = await engine(m, st, npcs, Dice([20, 71, 12, 58], [3, 4]))
+    start = EncounterStart(mode="fight", foes=["douglas_ghoul"], pace=6, reason="书房的窗户被撬开，一个佝偻的身影扑了进来", npcs=npcs)
+    await game._encounter_open(start, Turn())
+    words = next(o.label for o in choices.options(game, me.id) if o.label.startswith("攻击"))
+    if asking:  # the round stops at the blow aimed at him: the question the window asks
+        game.asking = True
+        await a_round(game, words)
+        return game.offer_payload(game.state.encounter.pending)
+    await a_round(game, words)
+    return [ev for ev in shown if ev["type"] not in ("fight_start", "reveal", "sanity", "showcase")]
+
+
+async def _replay(screen, pilot, events: list[dict], *, upto: int | None = None) -> None:
+    for ev in events[:upto]:
         await screen.handle(ev)
         await pilot.pause(0.3)
+
+
+async def _fight(app, pilot, screen, m, played):
+    """The round as the screen shows it, the keeper's telling after it, the next round's choices up."""
+    await _replay(screen, pilot, played)
+    await screen.handle({"type": "keeper_start"})
+    await screen.handle({"type": "keeper_end", "text": TOLD})
     await pilot.pause(2.5)
+    screen._offer_orders()
 
 
-async def _wounded(app, pilot, screen, m):
+async def _wounded(app, pilot, screen, m, played):
     """The moment the ghoul's claws land: blood over the screen, the claws across the picture."""
-    events, _ = _fighting(app, pilot, screen, m)
-    for ev in events[:-1]:
-        await screen.handle(ev)
-        await pilot.pause(0.3)
+    hit = max(i for i, ev in enumerate(played) if ev["type"] == "fight_act" and ev.get("hurt_side") == "party")
+    await _replay(screen, pilot, played, upto=hit)
     await pilot.pause(2.5)
-    await screen.handle(events[-1])
+    await screen.handle(played[hit])
     await pilot.pause(0.12)
 
 
-async def _closing(app, pilot, screen, m):
-    """A chase with the ghoul one stretch behind."""
-    from autokeeper.engine import combat as battle
+async def _reaction(app, pilot, screen, m, played):
+    """The window a blow aimed at the player stops for, before any of its dice."""
+    from autokeeper.tui.modals.reaction import ChoiceModal
 
-    st = screen.state
-    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
-    me = battle.from_investigator(st.investigators[0])
-    me.pos, ghoul.pos, me.speed, ghoul.speed = 4, 3, 8, 9
-    st.chase = battle.Chase(runners=[me, ghoul], track=battle.default_track("graveyard"), quarry="party", place=st.location, round=3)
-    await screen.handle({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【追逐开始】"})
+    app.push_screen(ChoiceModal(played))
+    await pilot.pause(1.0)
+
+
+async def _ask_first(m, st):
+    """The question, asked of a fight at its first round (the screen shows the round before it)."""
+    offer = await _fight_round(m, st.model_copy(deep=True), asking=True)
+    await _fight_round_open(m, st)
+    return offer
+
+
+async def _fight_round_open(m, st):
+    from autokeeper.engine.encounter.plan import EncounterStart
+    from autokeeper.engine.game import Turn
+
+    me = st.investigators[0]
+    npcs = [arranged("douglas", claw(me.id), react="dodge")]
+    game, _ = await engine(m, st, npcs, Dice())
+    await game._encounter_open(EncounterStart(mode="fight", foes=["douglas_ghoul"], pace=6, reason="书房的窗户被撬开", npcs=npcs), Turn())
+
+
+async def _chase_round(m, st, *, clean: bool = False):
+    """The investigator after the ghoul through the graveyard (《追书人》 mudi's route): it runs for the
+    Kimball house and the books, over the shrubs and the low wall; a round run, in which he falls at the
+    wall (or, `clean`, gets over it and is at its heels)."""
+    from autokeeper.engine.encounter import choices
+    from autokeeper.engine.encounter.plan import DeclaredAction, EncounterStart
+    from autokeeper.engine.game import Turn
+
+    me = st.investigators[0]
+    home = DeclaredAction(do="move", to="back_door", summary="佝偻的身影朝金博尔家的后门跑")
+    npcs = [arranged("douglas", home, react="dodge")]
+    # speeds: his CON regular (8), the ghoul's extreme (6); through the shrubs (DEX 45), then the wall (Climb)
+    game, shown = await engine(m, st, npcs, Dice([40, 5, 45, 10 if clean else 45], then=45))
+    start = EncounterStart(mode="chase", foes=["douglas_ghoul"], quarry="foe", pace=15, reason="那东西抱着书逃进了墓园", npcs=npcs)
+    await game._encounter_open(start, Turn())
+    run = choices.options(game, me.id)
+    await a_round(game, next((o.label for o in run if o.label.startswith("追赶")), run[0].label))
+    return [ev for ev in shown if ev["type"] not in ("chase_start", "fight_start", "reveal", "sanity", "showcase")]
+
+
+async def _chase(app, pilot, screen, m, played):
+    await _replay(screen, pilot, played)
     await pilot.pause(4.0)
 
 
-async def _horde(app, pilot, screen, m):
-    """Every creature of the module in one fight: their portraits as the fight panel shows them."""
-    from autokeeper.engine import combat as battle
+async def _horde_open(m, st):
+    """Every creature of the module in one fight: their faces as the fight's column shows them."""
+    from autokeeper.engine.encounter.plan import DeclaredAction, EncounterStart
+    from autokeeper.engine.game import Turn
 
-    st = screen.state
-    foes = [battle.from_creature(c, portrait=f"creature-{c.id}") for c in m.creatures]
-    party = [battle.from_investigator(inv) for inv in st.investigators]
-    st.fight = battle.Fight(fighters=[*party, *foes], place=st.location, round=1)
-    await screen.handle({"type": "fight_start", "fight": battle.view(st.fight), "line": "【战斗开始】"})
-    await pilot.pause(4.0)
+    hold = DeclaredAction(do="defend", summary="逼近")
+    foes = [c.id for c in m.creatures]
+    npcs = [arranged(c.npc or c.id, hold) for c in m.creatures]
+    game, _ = await engine(m, st, npcs, Dice(then=20))
+    await game._encounter_open(EncounterStart(mode="fight", foes=foes, pace=6, reason="墓园里的东西围了上来", npcs=npcs), Turn())
+    return []
 
 
-async def _chase(app, pilot, screen, m):
-    from autokeeper.engine import combat as battle
-
-    st = screen.state
-    ghoul = battle.from_creature(next(c for c in m.creatures if c.id == "douglas_ghoul"), portrait="creature-douglas_ghoul")
-    me = battle.from_investigator(st.investigators[0])
-    track = battle.default_track("graveyard")
-    me.pos, ghoul.pos, me.speed, ghoul.speed, me.actions, ghoul.actions = 2, 0, 8, 9, 1, 2
-    st.chase = battle.Chase(runners=[me, ghoul], track=track, quarry="party", place=st.location, round=1)
-    await screen.handle({"type": "chase_start", "chase": battle.chase_view(st.chase), "line": "【追逐开始】调查员在逃，身后是食尸鬼",
-                         "speeds": [f"{me.name}的体质 41 常规成功：速度 8", f"{ghoul.name}的体质 9 极难成功：速度 9"]})
-    await pilot.pause(0.5)
-    me.pos, ghoul.pos, st.chase.round = 4, 2, 2  # a round run: two stretches each
-    await screen.handle({"type": "chase_round", "chase": battle.chase_view(st.chase),
-                         "lines": [f"{me.name}越过了倒伏的墓碑（跳跃 18 常规成功）", f"{ghoul.name}跑到了墓碑间的窄道"]})
+async def _horde(app, pilot, screen, m, played):
     await pilot.pause(4.0)
 
 
@@ -277,12 +392,14 @@ SHOTS = {
     "developer": lambda: in_game("developer", "zhuishuren", "jingju", ZHUI, met=("jingguan",), then=_developer),
     "host": host,
     "talk": lambda: in_game("talk", "dongxuezhixia", "ratger_house", DONG, met=("doreen_ratger",), then=_talk),
-    "fight": lambda: in_game("fight", "zhuishuren", "shufang", ZHUI, then=_fight),
-    "fight-narrow": lambda: in_game("fight-narrow", "zhuishuren", "shufang", ZHUI, then=_fight, size=(120, 36)),
-    "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, then=_chase),
-    "creatures": lambda: in_game("creatures", "zhuishuren", "mudi", ZHUI, then=_horde),
-    "fight-hit": lambda: in_game("fight-hit", "zhuishuren", "shufang", ZHUI, then=_wounded, settle=0.0),
-    "chase-close": lambda: in_game("chase-close", "zhuishuren", "mudi", ZHUI, then=_closing),
+    "fight": lambda: in_game("fight", "zhuishuren", "shufang", ZHUI, prepare=_fight_round, then=_fight),
+    "fight-narrow": lambda: in_game("fight-narrow", "zhuishuren", "shufang", ZHUI, prepare=_fight_round, then=_fight, size=(100, 30)),
+    "fight-hit": lambda: in_game("fight-hit", "zhuishuren", "shufang", ZHUI, prepare=_fight_round, then=_wounded, settle=0.0),
+    "reaction": lambda: in_game("reaction", "zhuishuren", "shufang", ZHUI, prepare=_ask_first, then=_reaction),
+    "chase": lambda: in_game("chase", "zhuishuren", "mudi", ZHUI, prepare=_chase_round, then=_chase),
+    "chase-close": lambda: in_game("chase-close", "zhuishuren", "mudi", ZHUI,
+                                   prepare=lambda m, st: _chase_round(m, st, clean=True), then=_chase),
+    "creatures": lambda: in_game("creatures", "zhuishuren", "mudi", ZHUI, prepare=_horde_open, then=_horde),
 }
 
 
