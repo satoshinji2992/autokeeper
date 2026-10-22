@@ -675,13 +675,13 @@ class Game(Encounters):
         await self._curtain(action)  # finish a scene this action would otherwise overtake
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
-        if action.kind == "move" and action.destination:
+        if action.kind == "move" and action.destination and not action.arrival_after_success:
             me = self.state.investigator
             if me.id in self.state.apart and action.destination == self.state.location:  # back to the others on foot
                 way = self._travel(self.state.apart[me.id], action.destination) or 0
                 return Ruling(needs_roll=False, minutes=way, rejoin=[Rejoin(who=me.id, how="walked")], reason="走回大家身边")
             return Ruling(needs_roll=False, minutes=0, reason="移动")
-        if self._stop_on_route(action):
+        if self._stop_on_route(action) and not action.arrival_after_success:
             return Ruling(needs_roll=False, minutes=0, reason="先走到沿途地点，之后由玩家决定是否继续")
         if (action.kind in ("daily", "talk") and action.casual and action.npc and not action.asked
                 and not action.destination and not action.approach
@@ -1594,7 +1594,8 @@ class Game(Encounters):
         the tomb door and check the seams"): a reachable place other than here, which they know
         of or can find from here (engine/fog.py)."""
         dst = action.destination
-        if action.kind == "move" or not dst or dst == self.state.location or self._travel(self.state.location, dst) is None:
+        if (action.kind == "move" or action.arrival_after_success or not dst or dst == self.state.location
+                or self._travel(self.state.location, dst) is None):
             return None
         return dst if fog.findable(self.m, self.state, dst) else None
 
@@ -1743,8 +1744,17 @@ class Game(Encounters):
             await self._encounter_stages(action, ruling, turn, kind)
             return
         inv = st.investigator
+        blocked = await step("entry-condition", turn, lambda: bool(action.arrival_after_success and (
+            ruling.missing or not action.destination or not fog.findable(self.m, st, action.destination)
+            or self._travel(st.location, action.destination) is None))) if action.arrival_after_success else False
+        if blocked:
+            await step("entry-blocked", turn, lambda: turn.notes.append(
+                "进入所需条件或可用路线尚未成立，调查员仍在原处；没有完成进入或目的地的后续行动。"))
+            return
 
         def travel() -> dict:
+            if action.arrival_after_success:
+                return {}  # the attempted entry is settled here; successful arrival belongs to _success
             if inv.id in st.apart:
                 return self._straggle(inv, ruling.go or action.destination, turn)
             heading = ruling.go or (action.destination if action.kind == "move" else self._heading(action))
@@ -1878,7 +1888,14 @@ class Game(Encounters):
 
         found = await step("available", turn, available)
         if passed:
-            await self._success(ruling, turn)
+            completed = await self._success(ruling, turn)
+            if not completed:
+                await step("travel-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
+                await step("time", turn, lambda: self._time(turn))
+                await step("ending", turn, lambda: self._check_ending(turn))
+                if turn.primary is not None:
+                    await step("settle", turn, lambda: self._settle(st.checks[-1]))
+                return
         await step("gain", turn, lambda: self._gain(found["gained"], turn, action))
         if turn.checks:
             won = [c for c in turn.clues if c in ruling.clues_on_success]
@@ -1908,13 +1925,17 @@ class Game(Encounters):
         if turn.primary is not None or turn.earlier:
             await step("settle", turn, lambda: self._settle(st.checks[-1]))
 
-    async def _success(self, ruling: Ruling, turn: Turn) -> None:
+    async def _success(self, ruling: Ruling, turn: Turn) -> bool:
         """The same success operations for an immediate, lucky, or pushed success.
 
         Each operation retains its own receipt, so a dropped connection cannot transfer a
-        possession twice. Time and automatic discoveries belong to the original attempt.
+        possession twice. Effort and automatic discoveries belong to the original attempt;
+        successful entry alone adds its route time and visit.
         """
         step = self._resolution_step
+        if turn.action is not None and turn.action.arrival_after_success:
+            if not await step("entry", turn, lambda: self._enter(turn.action, turn)):
+                return False
         def flags() -> list[str]:
             immediate = []
             for flag in ruling.set_flags:
@@ -1939,6 +1960,45 @@ class Game(Encounters):
             await step("rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
         if any(e.kind == "obstacle" for e in ruling.effects):
             await step("ways", turn, lambda: self._ways(ruling, turn))
+        return True
+
+    async def _enter(self, action: Action, turn: Turn) -> bool:
+        """Commit successful entry once, including its normal route time and visit consequences."""
+        st, step = self.state, self._resolution_step
+
+        def route() -> dict:
+            path = self._route(st.location, action.destination)
+            if not path or not fog.findable(self.m, st, action.destination):
+                turn.notes.append("原定路线已无法使用，尚未抵达目的地。")
+                return {}
+            stopping = action.travel == "stroll" and len(path) > 2
+            target = path[1] if stopping else action.destination
+            return {"target": target, "route": self._route(st.location, target),
+                    "minutes": self._travel(st.location, target), "stopping": stopping}
+
+        moving = await step("route", turn, route)
+        if not moving:
+            return False
+
+        def elapsed() -> None:
+            st.minutes += moving["minutes"]
+            turn.route = moving["route"]
+            if st.round_spent is not None:
+                st.round_spent = 0
+                st.round_elapsed.clear()
+
+        await step("elapsed", turn, elapsed)
+        await step("arrival", turn, lambda: self._arrive(moving["target"], turn, alone=action.alone, party=True,
+                                                         companions=action.companions))
+
+        def arrived() -> None:
+            st.journey = action.destination if moving["stopping"] else ""
+            if moving["stopping"]:
+                name = self.m.location(action.destination).name
+                turn.notes.append(f"路途暂歇，尚未抵达{name}；只描写眼前，不能替玩家继续赶路或执行目的地的行动。")
+
+        await step("arrived", turn, arrived)
+        return not moving["stopping"]
 
     def _lacking(self, ruling: Ruling, turn: Turn) -> None:
         """What this action lacks and so cannot do (Ruling.missing) is kept for the turn: whoever
@@ -2185,7 +2245,9 @@ class Game(Encounters):
         await step("check-notice", turn, lambda: self.emit(checked["notice"]))
         if passed:
             ruling = Ruling.model_validate(pending["success"])
-            await self._success(ruling, turn)
+            if not await self._success(ruling, turn):
+                await step("plugins", turn, lambda: self.plugins.settled(turn))
+                return
             spoken = await step("spoken", turn, lambda: self._spoken(pending["clues"], pending.get("tells", "")))
             await step("gain", turn, lambda: self._gain([c for c in pending["clues"] if c not in spoken], turn, None))
             for index, call in enumerate(ruling.plugin_calls):

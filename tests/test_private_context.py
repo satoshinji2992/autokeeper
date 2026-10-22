@@ -154,3 +154,23 @@ async def test_intent_and_arbiter_recent_observations_use_the_acting_investigato
     await cast.arbiter(state, Action(kind="investigate", summary="林秋查看街角的汽车"))
     assert SECOND in asked[0] and FIRST not in asked[0] and ARCHIVED not in asked[0] and BACKSTAGE not in asked[0]
     await cast.close()
+
+
+async def test_npc_output_recipients_follow_each_call_not_the_persistent_role(private_game, monkeypatch):
+    module, state = private_game
+    cast = Cast(config.Config(), module)
+    prompted = []
+
+    async def send(key, session, state, prompt, **kwargs):
+        prompted.append(kwargs["extra"].split("【本次回复的收件调查员】", 1)[1].split("。", 1)[0])
+        return Reply(text="", data={"text": "（向你点了点头。）"})
+
+    monkeypatch.setattr(cast, "_send", send)
+    try:
+        await cast.npc(state, "warden", "我们听着。")
+        await cast.npc(state, "warden", "请只告诉我。", private=True)
+        state.apart["lin"] = "tower"
+        await cast.npc(state, "warden", "现在这里只有我。")
+        assert prompted == ["周衡（zhouheng）、林秋（lin）", "周衡（zhouheng）", "周衡（zhouheng）"]
+    finally:
+        await cast.close()

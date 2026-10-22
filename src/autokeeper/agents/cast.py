@@ -99,6 +99,9 @@ class Action(BaseModel):
     target: str = Field("", description="行动对象：场景里的某个东西、物品或人")
     npc: str = Field("", description="互动的在场 NPC 的 id，没有就留空")
     destination: str = Field("", description="本轮为当前行动立即前往的地点 id；只是提及、询问或打算稍后去的地点留空")
+    arrival_after_success: bool = Field(False, description=(
+        "本轮主行动就是避开阻拦、攀越或穿过障碍而抵达目的地，完成前仍在出发点时填 true；"
+        "这只规定成功后才移动，不强制检定。普通赶路、先到目的地再搜索或交谈填 false"))
     speech: str = Field("", description="对 NPC 说的话或登台讲的内容，原样摘录")
     visible: str = Field("", description="当前互动 NPC 能直接观察到、且玩家明确声明的动作；不含内心、隐瞒内容、对其他人的私语或未完成的结果")
     approach: Literal["", "说服", "话术", "恐吓", "魅惑", "心理学"] = Field("", description="社交方式")
@@ -242,7 +245,8 @@ class Ruling(BaseModel):
     clues_on_success: list[str] = Field(default_factory=list, description="检定成功后获得的线索 id")
     auto_clues: list[str] = Field(default_factory=list, description="不用掷骰就能获得的线索 id")
     set_flags: list[str] = Field(default_factory=list, description="行动成功（或无需检定）时设置的剧情标记")
-    minutes: int = Field(0, description="实际耗时：一句交谈或点头可为 0；吃饭约 20，搜索依范围；赶路由引擎算，填 0；休息最多 720")
+    minutes: int = Field(0, description="实际耗时：一句交谈或点头可为 0；吃饭约 20，搜索依范围；普通赶路填 0。"
+                        "arrival_after_success 时只填前置阻碍的尝试耗时，成功路程由引擎另算一次；休息最多 720")
     changes: list[WorldChange] = Field(default_factory=list, description="调查员本次行动直接完成的生活事实、自己的约定或转交；请求NPC交物、答应或履行其承诺尚待角色本次回应，不能提前写成事实或替NPC演出")
     equipment: list[EquipmentChange] = Field(default_factory=list, max_length=3,
                                             description="成功后调查员对重要装备实际进行的取用、穿戴、藏匿、消耗或出示；无相关动作留空")
@@ -307,7 +311,7 @@ class IntentionChange(BaseModel):
 
 
 class Dialogue(BaseModel):
-    text: str = Field(description="NPC 当场说的话和动作，玩家会看到")
+    text: str = Field(description="本次收件调查员实际能听见的话、看见的动作；不含未听见的密谈或角色内心")
     media: list[presentation.MediaAction] = Field(default_factory=list, description="当场展示自己获准提供的已有材料；普通对话留空，不引用未知资源")
     mood: str = Field("", description="根据这次亲历或可信消息变化后的心境，供后续扮演使用；无变化留空，不能凭空获知秘密")
     changes: list[WorldChange] = Field(default_factory=list, description="只记自己本次回复里明确承诺或发生的生活事实；text 必须逐字摘自回复；不给线索或改规则")
@@ -498,6 +502,8 @@ ACTION_RULES = """- summary：第三人称一句话，记录调查员明确声�
   玩家明确要去的地方暂时没有可用 id，仍保留 move 与完整目的，不改成留在原地听人说话；交裁定与导演安排找路或接触，不凭空改成另一个目的地。
 - 调查员为了做这件事要先走到另一个地点（“我走到陵墓石门前看门缝”“我去书房翻日记”），destination 填那个地点，
   kind 照实填（看门缝还是 investigate）。只是远远望一眼、隔空喊话、打听那个地方，不算去，destination 留空。
+- 进入、穿越或避开阻碍本身就是本轮要完成的行动，成功前不能算已抵达时，kind=move、arrival_after_success=true；
+  是否需要检定仍交裁定。普通赶路和先到目的地再调查，arrival_after_success=false；不靠方法中的某个词自动判成有风险。
 - speech：对 NPC 说的话、登台讲的内容，照抄原话。
 - visible：只记录当前互动 NPC 当下能看见的、玩家明确声明的动作，例如“把日记摊在你面前”。内心打算、故意隐瞒的消息和对别人的私语只保留在 summary 或 before，不让 NPC 从中获知。没有可见动作时留空。
 - approach：劝说填 说服，连哄带骗填 话术，威胁填 恐吓，讨好套近乎填 魅惑，察言观色填 心理学。
@@ -705,6 +711,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 检定等级不是情绪指令。让步限于本次交涉与系统授权，不将一次成功扩大为无条件信任；心理学或聆听的结果不表示你知道调查员的判断，也不迫使你解释内心或认罪。
 - 交涉方式与检定是后台说明，不表示角色知道调查员的策略、谎言或私下计划；按已听到的话、已看到的动作与获准结果反应。
 - 只说自己的话、做自己的事。不代写玩家的问题、行动、承诺或内心，也不重复已经完成的动作。
+- text 会直接交给本次收件调查员，只写他们能听见、看见的内容。角色间未被听见的密谈只呈现可见动作，不附原话；私下心境和真实打算分别写 mood、intentions，需要说明有意欺骗时写 deceptions。确实当面透露的内容仍可直接说出。
 - 威胁、诱骗和指控可以是台词；是否伤害、束缚或夺走调查员物品须由系统实际裁定，不能仅凭台词或括号动作宣布完成。
 - 真正同意与调查员去某处时，在 accompany 填该地点 id，系统据此记录实际同行。假答应只在 deceptions.accompany 写公开目的地，顶层 accompany 留空，并说明真实策略；只约在那里碰面也不建立同行。目的地只用本轮给出的地点。
 - 明确许诺或形成生活事实时，必须同时填写 changes，逐字引用这次台词作为 text；参与者只用给出的 id。当场拿出或递出身边的日常东西，写进 items，递给调查员时 to 填他的 id；说完马上走开，leave 填去处。只讨论可能性不算交付。
@@ -1436,6 +1443,10 @@ class Cast:
             "【本地物件】" + "；".join(local) + "\n"
             f"{world.context(state)}\n【已有线索】{held}\n【当前标记】{'、'.join(state.flags) or '无'}"
         )
+        if action.arrival_after_success:
+            prompt += ("\n【成功后才抵达】调查员仍在当前出发点，先裁定突破阻碍这项行动；是否需要掷骰按实际条件判断。"
+                       "minutes 只填突破阻碍的前置尝试耗时，失败也会消耗；成功后路程时间由引擎另算一次。"
+                       "尚未抵达或搜索目的地，不提前给予那里的发现或替同行者答应。")
         if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
             prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
         prompt += "\n【本地人物的处境】\n" + ("\n".join(
@@ -1723,6 +1734,9 @@ class Cast:
         mood = f"\n【当前时刻】{state.clock}（{time_of_day(state.minutes)}）；此前带日期的记录是过去的经历。\n" + mood
         mood += (f"【本次操作身份】你是 {npc_id}，当前交谈对象的操作 id 是 {state.investigator.id}。"
                  "操作字段使用这些 id，不在台词中念出；items.to 写实际收物者。\n")
+        listeners = [state.investigator.id] if private else audience.listeners(state, state.investigator.id)
+        mood += "【本次回复的收件调查员】" + "、".join(f"{state.find(who).name}（{who}）" for who in listeners)
+        mood += "。text 直接展示给这些人；他们没有听见的私语或内心不写在 text 中。\n"
         equipment_names = {"carried": "携带", "worn": "穿戴", "held": "手持", "concealed": "藏匿"}
         items = (world_knowledge.visible_items(self.world, npc_id, holder=npc_id) if self.world is not None else
                  [item for item in self.module.items if item.important and world.owner(self.module, state, item.id) == npc_id])
