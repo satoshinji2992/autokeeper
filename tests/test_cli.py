@@ -85,14 +85,3 @@ def test_only_a_join_from_the_host_machine_carries_the_room_key(monkeypatch, tmp
     assert room_key("ws://26.1.2.3:8765/ws") == ""  # a friend's machine has no such file anyway
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # the browser seats the host command starts
     assert room_key("ws://127.0.0.1:8765/ws") == ""
-
-
-def test_slow_things_move_once_from_the_old_saves_folder():
-    (paths.OLD_SAVES / "models" / "bge").mkdir(parents=True)
-    (paths.OLD_SAVES / "investigators").mkdir()
-    (paths.OLD_SAVES / "investigators" / "chen.json").write_text("{}", encoding="utf-8")
-    (paths.OLD_SAVES / "old-game.json").write_text("{}", encoding="utf-8")
-    assert sorted(paths.adopt_old()) == ["investigators", "models"]
-    assert (paths.models() / "bge").is_dir() and (paths.cards() / "chen.json").is_file()
-    assert (paths.OLD_SAVES / "old-game.json").is_file() and not paths.save("old-game").exists()  # games stay behind
-    assert paths.adopt_old() == []

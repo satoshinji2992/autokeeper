@@ -224,3 +224,56 @@ async def test_the_meeting_pass_marks_only_the_steps_left_to_judge(example, monk
     assert "天亮前下楼离开" not in asked[0]  # only what is left to judge is asked about
     assert [s.once for a in m.agendas for s in a.steps if s.id == "door"] == [True, None]
     assert not adapt.wanted(m, "meet")  # run again: nothing left
+
+
+@pytest.fixture
+def dry(monkeypatch):
+    """Every way adapt reaches a model, and the configuration it would load, noted and refused (a
+    pass's call fails inside asyncio.gather, so the note is what the test reads)."""
+    calls: list[str] = []
+
+    def refuse(name: str):
+        def call(*args, **kwargs):
+            calls.append(name)
+            raise AssertionError(f"a dry run asks no model ({name})")
+
+        return call
+
+    for name in ("_ask", "_judge", "review", "Session"):
+        monkeypatch.setattr(adapt, name, refuse(name))
+    monkeypatch.setattr(adapt.config, "load", refuse("config.load"))
+    return calls
+
+
+async def test_a_dry_run_says_which_passes_would_run_and_why(example, dry):
+    """`upgrade --dry-run` asked the model for every pass it meant to run (the review of 2026-10-22):
+    now it only reports, by what the module lacks (need), and writes nothing."""
+    files = {p: p.read_bytes() for p in example.rglob("*") if p.is_file()}
+    lines: list[str] = []
+    results = await adapt.adapt(example, dry=True, log=lines.append)
+    m = Module.load(example)
+    assert [r.name for r in results] == list(adapt.PASSES)
+    assert all(r.need == adapt.need(m, r.name) and bool(r.need) == adapt.wanted(m, r.name) for r in results[:-1])
+    assert results[0].need == "缺性格、口吻、目标或所知的人物：街头布道者" and not results[-1].written
+    assert any("人物补全：要补（缺性格" in line for line in lines) and {p: p.read_bytes() for p in files} == files
+    alone = await adapt.adapt(example, passes=("verify",), dry=True, log=lines.append)  # the whole layer, by rule alone
+    assert [r.name for r in alone] == ["verify"] and {p: p.read_bytes() for p in files} == files
+    assert dry == []
+
+
+def test_upgrade_dry_run_from_the_command_line_finds_the_example_and_asks_no_model(dry):
+    from typer.testing import CliRunner
+
+    from autokeeper.cli import app
+
+    files = {p: p.read_bytes() for p in paths.EXAMPLE.rglob("*") if p.is_file() and "__pycache__" not in p.parts}
+    out = CliRunner().invoke(app, ["upgrade", "example", "--dry-run"])
+    text = out.output.replace("\n", "")
+    assert out.exit_code == 0, out.output
+    m = Module.load(paths.EXAMPLE)
+    for name in adapt.PASSES[:-1]:
+        assert f"{adapt.LABELS[name]}：{'要补' if adapt.need(m, name) else '已经有了'}" in text, name
+    assert f"可玩度 {adapt.score(m).total} / 100" in text and "推演" in text
+    assert {p: p.read_bytes() for p in files} == files
+    out = CliRunner().invoke(app, ["upgrade", "example", "--dry-run", "--review"])  # the review is a call
+    assert out.exit_code == 1 and "--review" in out.output and dry == []

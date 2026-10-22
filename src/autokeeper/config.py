@@ -117,9 +117,6 @@ DEFAULT_ROLES: dict[str, Role] = {
 # Optional roles inherit the effective route, including local/global overrides. Leaving
 # them out of presets keeps older configurations and custom arbiter routes compatible.
 ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
-# Roles that once were and are no more: a configuration naming one still loads, and the name is
-# ignored. tactics (gone in 0.0.4): a fight's NPCs are the keeper plan's now (agents/cast.Cast.plan).
-RETIRED_ROLES = ("tactics",)
 # What an inherited role changes of its parent's route. Important NPCs' own decisions think
 # low, not at the arbiter's high (the user's call, 2026-10-20): at high one took 6.4 s and they
 # were four tenths of a replayed session's spend. A configured effort still wins.
@@ -606,7 +603,6 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
         every.update(backend=backend, model=model)
     if fallback := given("fallback", "AUTOKEEPER_FALLBACK"):
         every.update(fallback=fallback)
-    roles = {name: spec for name, spec in roles.items() if name not in RETIRED_ROLES}
     for name in (set(DEFAULT_ROLES) | set(roles)) - {"all", *ROLE_PARENTS}:
         cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
     for name, parent in ROLE_PARENTS.items():

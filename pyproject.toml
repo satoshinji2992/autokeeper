@@ -102,8 +102,10 @@ dev-mode-dirs = ["src"]  # `uv sync` puts src/ on the path; the checkout keeps i
 "bridge" = "autokeeper/bundle/bridge"
 
 [tool.hatch.build.targets.sdist]
-skip-excluded-dirs = true  # an old checkout's .agents/skills and .claude/skills link to skills/: walked first, they would hide it
-exclude = ["/docs", "/dev", "/.github", "/.agents", "/.claude", "/data", "/saves", "/modules/local", "/modules/inbox", "/modules/*/source", "/skills/module-*", "/bridge/node_modules"]
+skip-excluded-dirs = true  # the big folders left out (data/, bridge/node_modules/) are not walked
+# .claude/: Claude Code's own settings for this folder (settings.local.json), not part of the game.
+exclude = ["/docs", "/dev", "/.github", "/.claude", "/data", "/modules/local", "/modules/inbox", "/modules/*/source", "/skills/module-*",
+           "/bridge/node_modules"]
 
 [dependency-groups]
 dev = [
