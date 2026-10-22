@@ -1249,9 +1249,7 @@ class Game(Encounters):
                 staged = True
                 if applied["go"] and applied["go"] != st.location and any(x.id == applied["go"] for x in m.locations):
                     await step("idea-go", turn, lambda: self._arrive(applied["go"], turn, party=True))
-                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))
-                given = await step("idea-give", turn, lambda: self._valid_clues(applied["give"], None))
-                await step("idea-given", turn, lambda: self._gain(given, turn, None))
+                await step("idea-flags", turn, lambda: self._flags(applied["now"], turn))  # the clue is the engine's (idea-clue)
                 if applied["note"]:
                     await step("idea-staged", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
         await step("idea-clue", turn, lambda: self._gain([clue.id], turn, None))

@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, Proposal, PushRuling, Ruling, opposing
-from autokeeper.agents.director import DIRECTOR_SYSTEM, Improv, NewEvent
+from autokeeper.agents.director import DIRECTOR_SYSTEM, Improv, NewClue, NewEvent
 from autokeeper.engine import autoplay, idea
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import STALL_TURNS, Game, Turn, ai_choice, push_choice
@@ -130,6 +130,20 @@ async def test_a_failed_idea_roll_still_gives_the_clue_and_cuts_to_the_worst_sit
     assert st.minutes - start >= idea.LOST and "c_gears" in st.clues and not st.ideas[-1].passed
     notes = "\n".join(turn.notes)
     assert "千钧一发" in notes and "导演的安排：守钟人锁上了齿轮间的门" in notes and "〔齿轮间〕" in notes
+
+
+async def test_the_cut_hands_over_the_missed_clue_and_nothing_the_director_gives(module, fake):
+    """The director is told to leave give empty in 千钧一发 (the clue is the engine's); what it gives
+    anyway is not handed over (the review of 2026-10-22: _idea still processed it)."""
+    cut = Improv(kind="千钧一发", reason="钟楼里正在出事", go="tower", give=["c_cut_note"],
+                 clues=[NewClue(id="c_cut_note", title="门上的划痕", text="齿轮间门上有新的划痕。", where="tower")],
+                 events=[NewEvent(id="e_cut", title="齿轮间的动静", when="now", read_aloud="齿轮间的门在你们面前猛地关上。")])
+    game, *_ = make(module, fake, {})
+    game.cast = Improvising({}, [cut])
+    fake.queue(99, 10)
+    turn = await game.resolve(game.idea_action(), Ruling(needs_roll=True, skill="灵感"))
+    assert game.state.location == "tower" and "e_cut" in game.state.fired
+    assert turn.clues == ["c_gears"] and "c_cut_note" not in game.state.clues
 
 
 async def test_nothing_overlooked_is_said_plainly_and_spends_no_turn(module, fake):
