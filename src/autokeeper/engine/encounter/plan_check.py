@@ -42,6 +42,7 @@ class Landed:
     end: Any = None
     pace: int | None = None
     cover: list[Any] = field(default_factory=list)
+    sight: list[Any] = field(default_factory=list)
     distances: list[Any] = field(default_factory=list)
     unsettled: list[str] = field(default_factory=list)  # 【未落实】 lines for the keeper
 
@@ -180,6 +181,12 @@ def land(game: Any, plan: EncounterTurnPlan, actor: str = "", *, act: bool = Tru
             out.unsettled.append(f"cover 里 {c.who} 不在这场遭遇里")
         else:
             out.cover.append(c)
+    for x in plan.sight:
+        wrong = [y for y in (x.watcher, x.who) if ctx.p(y) is None]
+        if wrong:
+            out.unsettled.append(f"sight 里 {'、'.join(wrong)} 不在这场遭遇里")
+        else:
+            out.sight.append(x)
     for d in plan.distances:
         wrong = [x for x in (d.a, d.b) if ctx.p(x) is None]
         if wrong:

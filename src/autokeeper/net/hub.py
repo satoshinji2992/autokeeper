@@ -486,6 +486,17 @@ class Hub:
             if msg.get("text") or msg.get("ask"):  # their own words, or "ask me every time" (engine/encounter respond)
                 answer = {"choice": msg.get("choice") or "", "text": str(msg.get("text") or "")[:200], "ask": msg.get("ask") or ""}
             self.choices[seat].put_nowait(answer)
+        elif t == "react":  # Tab beside a fight's choices: the seat's answer to blows from now on, no action spent
+            seat = self._seat_of(cid)
+            if seat is None:
+                await self._send(cid, {"t": "error", "text": "观战模式下无可操作的调查员。"})
+            elif not self.open:
+                await self._send(cid, {"t": "error", "text": "本轮正在结算，结束后可切换应对。"})
+            elif why := self.game.set_react(seat, str(msg.get("react") or "")):
+                await self._send(cid, {"t": "error", "text": f"{why}。"})
+            else:
+                self._save()
+                await self._broadcast({"t": "sync", "state": self._view()})
         elif t == "say":
             await self._broadcast({"t": "say", "from": self.names.get(cid, "?"), "text": str(msg.get("text", ""))[:500]})
         elif t == "retell":
@@ -1349,11 +1360,12 @@ class Hub:
 
     async def _ask(self, seat: str, who: str, offer: dict, *, timed: bool) -> Any:
         """An offer to the seat it is for, with the id its answer must quote and, when the table cannot
-        wait long (a blow, a roll on another's turn), its deadline; the answer, or None when there is
-        none in time (the default then stands). The others are told who the table waits for."""
+        wait long (a blow, a roll on another's turn), the seconds it waits (`closes_in`: the clocks of
+        two machines need not agree); the answer, or None when there is none in time (the default then
+        stands, and the seat's window is told to close: "offer_closed"). The others are told who the
+        table waits for."""
         rid = str(offer.get("id") or uuid.uuid4().hex[:12])
-        deadline = time.time() + REACTION_WAIT if timed else None
-        offer = self._faced({**offer, "respond_id": rid, "deadline": deadline})
+        offer = self._faced({**offer, "respond_id": rid, "closes_in": REACTION_WAIT if timed else None})
         queue = self.choices[seat]
         while not queue.empty():
             queue.get_nowait()
@@ -1368,6 +1380,7 @@ class Hub:
         try:
             return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
         except TimeoutError:
+            await self._send(who, {"t": "offer_closed", "id": rid})  # the default stands: the window goes, nothing is sent back
             return None
         finally:
             if self.asking.get(seat) == rid:

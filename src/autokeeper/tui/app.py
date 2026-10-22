@@ -47,7 +47,7 @@ class Menu(Provider):
 
 
 class AutoKeeperApp(App):
-    CSS_PATH = "app.tcss"
+    CSS_PATH = ["app.tcss", "widgets/fight.tcss"]
     COMMANDS = {Menu}
     TITLE = "AutoKeeper"
     BINDINGS = [

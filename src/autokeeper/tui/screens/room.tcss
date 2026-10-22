@@ -58,10 +58,6 @@ HostScreen .field Input {
     margin-right: 2;
     background: $panel;
 }
-HostScreen #host-port,
-HostScreen #host-web-port {
-    width: 9;
-}
 HostScreen .field Input:focus {
     background: $primary 30%;
 }

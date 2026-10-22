@@ -185,6 +185,8 @@ GameScreen.-dev #topbar {
     max-height: 10;
     border: round $primary;
     background: $surface;
+    text-wrap: nowrap;  /* a choice a row: cut short with an ellipsis, never wrapped (GameScreen._order_rows) */
+    text-overflow: ellipsis;
 }
 #command {
     border: tall $primary-darken-1;
@@ -251,6 +253,9 @@ GameScreen.-chase #stage {
 }
 GameScreen.-chase #stage.-beat {
     border-bottom: heavy #5a6478;
+}
+GameScreen.-folded #stage {  /* Ctrl+N: room to read (GameScreen.action_fold) */
+    display: none;
 }
 GameScreen.-fight #picker.-urgent, GameScreen.-chase #picker.-urgent {
     border: heavy #c1121f;
@@ -403,6 +408,11 @@ ModalScreen {
     max-height: 30;
     overflow-y: auto;
 }
+.timed-clock {  /* a LAN host's countdown on a roll, a push, a fight's question (modals/dialogs.Timed) */
+    color: $warning;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
 #mode {
     width: 100%;
     margin: 1 0 0 0;
@@ -458,7 +468,4 @@ ModalScreen {
     width: 72;
     height: 22;
     border: round $secondary;
-}
-#ending-art {
-    color: $primary;
 }

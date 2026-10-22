@@ -177,6 +177,13 @@ class CoverNote(BaseModel):
     full: bool = Field(False, description="整个人藏住、对手看不见时填 true；只挡住一半填 false")
 
 
+class SightNote(BaseModel):
+    watcher: str = Field(description="谁（id）")
+    who: str = Field(description="看的是谁（id）")
+    sees: bool = Field(False, description="看不见填 false；先前登记的看不见如今看得见了填 true")
+    why: str = Field("", max_length=20, description="为什么看不见：四下漆黑、浓烟、隔着墙")
+
+
 class Distance(BaseModel):
     a: str = Field(description="一个人的 id")
     b: str = Field(description="另一个人的 id")
@@ -194,4 +201,6 @@ class EncounterTurnPlan(BaseModel):
     end: EndProposal | None = Field(None, description="有人投降、谈和或放弃，遭遇就此收场时写")
     pace: int | None = Field(None, ge=1, le=600, description="一轮在故事里过几秒；不变留空")
     cover: list[CoverNote] = Field(default_factory=list, max_length=6, description="谁躲在了什么后面（局面变了才写）；没有留空")
+    sight: list[SightNote] = Field(default_factory=list, max_length=6, description=(
+        "谁确实看不见谁、为什么（局面变了才写）；天气和光线只是背景，由你判断；没有留空"))
     distances: list[Distance] = Field(default_factory=list, max_length=6, description="开枪时相隔的距离（定射程用）；近身或不开枪留空")

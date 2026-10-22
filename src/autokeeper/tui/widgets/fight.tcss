@@ -1,0 +1,36 @@
+/* A fight and a chase on the stage (fight.py). Loaded with the app's stylesheet (app.py CSS_PATH). */
+
+Canvas {
+    width: 1fr;
+    height: 100%;
+    content-align: center middle;
+    background: #050303;
+    text-wrap: nowrap;
+    text-overflow: clip;
+}
+Arena {
+    height: 20;
+    display: none;
+    background: #050303;
+}
+Arena .side {  /* written a line a row for its own width (fight_column, chase_route): never wrapped */
+    width: 38;
+    height: 100%;
+    padding: 0 1;
+    border-left: tall #3a0a0a;
+    background: #0b0505;
+    text-wrap: nowrap;
+    text-overflow: clip;
+}
+Arena.-chase .side {
+    width: 46;
+    border-left: tall #2a3448;
+    background: #07080c;
+}
+Arena.-close .side {
+    border-left: tall #c1121f;
+    background: #160506;
+}
+BloodFlash {
+    background: #8a0000 50%;
+}

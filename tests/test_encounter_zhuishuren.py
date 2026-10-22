@@ -53,7 +53,7 @@ async def test_running_from_the_horde_ends_as_the_module_says(module, fake):
     cast.modes["pursuit"] = lambda *a: None  # nobody decides: no pursuit, and it is said
     cast.modes["arrange"] = lambda *a: EncounterTurnPlan(npcs=[arrange("ghouls", attack(inv, n=3))])
     app = turn_graph.build(game, InMemorySaver())
-    _out, _asked = await play(app, "逃跑｜被攻击时闪避")
+    _out, _asked = await play(app, "逃跑")
     assert "fled_ghouls" in game.state.flags and "taken_by_ghouls" not in game.state.flags
     assert game.state.encounter_log[-1].ended.how == "fled"
 
@@ -76,7 +76,7 @@ async def test_the_end_of_a_fight_can_set_off_the_next_one_and_it_begins_cleanly
     me = game.state.investigator.id
     app = turn_graph.build(game, InMemorySaver())
     label = next(o.label for o in __import__("autokeeper.engine.encounter.choices", fromlist=["x"]).options(game, me)
-                 if o.label.startswith("攻击 犬脸的佝偻身影（徒手）"))
+                 if o.label.startswith("攻击 犬脸的佝偻身影（徒手，"))
     fake.queue(1, 99, 10, 10)  # a critical punch, his answer fails; e_unmasked's and e_horde's sanity rolls hold
     out, _asked = await play(app, label)
     st = game.state

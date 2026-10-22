@@ -59,29 +59,40 @@ async def test_a_position_the_keeper_declares_hides_them(module, fake):
 async def test_a_hide_that_works_hides_them_until_they_strike(module, fake):
     game, _, _ = await started(module, fake)
     fake.queue(5)  # 潜行 (base 20) against the warden's Spot Hidden: an extreme success
-    turn = await act(game, "躲藏｜被攻击时闪避")
+    turn = await act(game, "躲藏")
     assert any("躲了起来" in line for line in turn.fight) and refused(game)
     fake.queue(90, 90)  # out of hiding, a swing that misses
-    await act(game, f"攻击 {WARDEN}（徒手）｜被攻击时闪避")
+    await act(game, f"攻击 {WARDEN}（徒手，1D3）")
     assert not refused(game)  # striking gave them away
 
 
-async def test_the_dark_hides_whoever_carries_no_light_but_not_from_a_creature(module, fake):
-    module.location("tower").weather = ["torch"]
+async def test_only_what_the_keeper_declares_hides_them_never_the_pictures_weather_or_a_things_name(module, fake):
+    """Review 2026-10-22: a place's picture weather (fog, torchlight) took every attack away, and an unlit
+    candle in the bag made its carrier seen. Sight is the keeper's declared fact (plan.SightNote) and
+    holds until the keeper says otherwise."""
+    from autokeeper.engine.encounter import choices
+    from autokeeper.engine.encounter.plan import SightNote
+
     game, _, _ = await started(module, fake)
-    assert refused(game) and "四下漆黑" in refused(game)[0]
-    game.state.investigator.inventory.append("手电筒")
-    assert not refused(game)  # a light they carry: seen
-    game.state.investigator.inventory.remove("手电筒")
-    game.state.encounter.scene.engaged.append(Engagement(a="warden", b="zhouheng", since=1))
-    assert not refused(game)  # close enough to grab
-    module.creatures.append(Creature(id="hound", name="猎犬", description="影子", sanity="0/0", stats={"生命": 8},
-                                     attacks=["咬 30%，伤害 1D4"]))
-    fake.queue(10)
-    game2, _, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("hound", DEFEND)]))
-    await begin(game2, ["hound"])
-    landed = plan_check.land(game2, EncounterTurnPlan(npcs=[arrange("hound", attack("zhouheng"))]), act=False)
-    assert landed.npcs  # it hunts in the dark
+    who = game.state.investigator.id
+    module.location("tower").weather = ["fog"]
+    game.state.sky = "fog"
+    assert any(o.value["do"] == "attack" for o in choices.options(game, who)) and not refused(game)
+    module.location("tower").weather = ["torch"]
+    game.state.investigator.inventory = []
+    assert not refused(game)  # the picture's light decides nothing
+    game.state.investigator.inventory = ["未点燃的蜡烛"]
+    assert not refused(game)  # nor the name of what they carry
+    assert "只有手电或火把照亮" in views.keeper_text(game)  # the keeper judges with the place's weather in view
+    await game._plan_unit("dark", EncounterTurnPlan(sight=[SightNote(watcher="warden", who=who, why="四下漆黑")]).model_dump(
+        mode="json", by_alias=True), [], Turn())
+    assert refused(game) == [f"warden 的第 1 个行动（attack）：warden 看不见 {who}：看不见（四下漆黑）"]
+    assert f"看不见：warden 看不见 {who}（四下漆黑）" in views.keeper_text(game)
+    game.state.encounter.scene.engaged.append(Engagement(a="warden", b=who, since=1))
+    assert refused(game)  # declared, it holds until the keeper says otherwise
+    await game._plan_unit("lit", EncounterTurnPlan(sight=[SightNote(watcher="warden", who=who, sees=True)]).model_dump(
+        mode="json", by_alias=True), [], Turn())
+    assert not refused(game) and not game.state.encounter.scene.unseen
 
 
 async def test_someone_lost_in_a_chase_cannot_be_gone_after(module, fake):
@@ -115,7 +126,7 @@ async def gunfight(module, fake, react: str = "fight_back", do: DeclaredAction =
     return game, events
 
 
-SHOOT = f"射击 {WARDEN}（{GUN}）｜被攻击时闪避"
+SHOOT = f"射击 {WARDEN}（{GUN}，1D10）"
 
 
 async def test_the_range_band_follows_the_distance_the_keeper_set(module, fake):
@@ -134,7 +145,7 @@ async def test_the_range_band_follows_the_distance_the_keeper_set(module, fake):
 
 async def test_aiming_a_round_gives_the_next_shot_a_bonus_die(module, fake):
     game, events = await gunfight(module, fake)
-    await act(game, f"瞄准 {WARDEN}｜被攻击时闪避")
+    await act(game, f"瞄准 {WARDEN}")
     fake.queue(90)
     await act(game, SHOOT)
     shot = next(e for e in events if e["type"] == "fight_act")
@@ -169,7 +180,7 @@ async def test_a_big_target_is_easier_and_a_fumble_into_a_melee_hits_a_friend(mo
     assert await game._encounter_open(EncounterStart(mode="fight", foes=["beast"], allies=["preacher"], pace=6, reason="x"), Turn())
     game.state.encounter.scene.engaged.append(Engagement(a="preacher", b="beast", since=0))
     fake.queue(100).queue_totals(4)  # a fumble: the shot goes into the preacher wrestling it
-    await act(game, f"射击 {views.Ctx.of(game).name('beast', 'players')}（{GUN}）｜被攻击时闪避")
+    await act(game, f"射击 {views.Ctx.of(game).name('beast', 'players')}（{GUN}，1D10）")
     shot = next(e for e in events if e["type"] == "fight_act")
     assert "目标体型巨大" in shot["line"] and "朝扭打中的人开枪" in shot["line"]
     assert "失手打中了自己人" in shot["line"] and game.world.rec.entities["preacher"].life.hp < game.world.rec.entities["preacher"].life.hp_max

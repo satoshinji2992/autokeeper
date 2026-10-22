@@ -1,15 +1,18 @@
 """What a player is offered in a fight, and when the game stops to ask them.
 
 The screens offer the round's choices as words (`options`): one per attack on each foe, each
-manoeuvre, first aid for a hurt ally, reloading, clearing a jam, defending, running. The words carry
-the answer to blows the player picked for the round ("｜被攻击时闪避"), so Tab only changes which list
-is shown. What comes back is matched against those words exactly (`match`): the option's own
-declaration, with no model call and nothing parsed out of the words. Anything else the player types
-is the keeper plan's to read.
+manoeuvre, first aid for a hurt ally, reloading, clearing a jam, defending, running. The words name
+the action only. The answer to blows is the investigator's preset (`Participant.react`), shown once
+beside the list and changed with Tab (Encounters.set_react: no action spent, no model asked); every
+choice carries the preset as it stands. What comes back is matched against those words exactly
+(`match`): the option's own declaration, with no model call and nothing parsed out of the words.
+Anything else the player types is the keeper plan's to read.
 
 `should_ask` is the reaction policy (design §3.3): a human defender is asked, before any die of the
-attack is thrown, the first time they are attacked in an encounter, when the blow could put them
-down, when they asked to be asked every time, or when the answer they set does not fit this attack.
+attack is thrown, the first time they are attacked in an encounter, when the answer they set does not
+fit this attack, when they asked to be asked every time, and once each time the danger rises a level
+(`risk`: a blow that could put them down, then one that could kill outright). Otherwise the answer
+they set stands.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ if TYPE_CHECKING:
     from .model import EncounterState, Participant
 
 MATERIAL = ("down", "joined", "fled", "surrendered", "disarmed", "freed", "switched")
-STANCE_WORDS = {"dodge": "闪避", "fight_back": "反击", "cover": "找掩护"}
+STANCE_WORDS = {"dodge": "闪避", "fight_back": "反击", "cover": "找掩护"}  # the preset's words beside the list
 REACTION_LABELS = {"dodge": "闪避", "fight_back": "反击", "cover": "扑向掩体", "none": "不应对"}
 
 
@@ -41,24 +44,29 @@ def damage_words(damage: str, db: str) -> str:
 
 
 def presets(ctx: Ctx, who: str) -> list[str]:
-    """The answers to blows the round's list can carry: dodge, fight back, and diving for cover when a
-    foe has a gun."""
+    """The answers to blows a player can set (Tab): dodge, fight back, and diving for cover when a foe
+    has a gun."""
     armed = any(a.firearm for f in ctx.foes(who) if (v := ctx.view(f)) is not None for a in v.attacks())
     return ["dodge", "fight_back", *(["cover"] if armed else [])]
 
 
-def _label(verb: str, target: str = "", weapon: str = "", react: str = "") -> str:
+def _label(verb: str, target: str = "", weapon: str = "", damage: str = "") -> str:
+    """An option's words: the action, whom, with what (攻击 犬脸的佝偻身影（徒手，1D3+1D4）)."""
     out = f"{verb} {target}".strip()
-    if weapon:
-        out += f"（{weapon}）"
-    if react:
-        out += f"｜被攻击时{STANCE_WORDS[react]}"
-    return out
+    held = "，".join(x for x in (weapon, damage) if x)
+    return out + (f"（{held}）" if held else "")
 
 
-def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = None) -> list[ChoiceOption]:
-    """The round's choices for investigator `who`, carrying the answer `react` (their preset, else
-    dodge). [] when they cannot act."""
+def preset(ctx: Ctx, who: str) -> str:
+    """The answer to blows `who` has set, as it fits this fight (dodge when it does not)."""
+    me = ctx.p(who)
+    react = (me.react if me is not None else None) or "dodge"
+    return react if react in presets(ctx, who) else "dodge"
+
+
+def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
+    """The round's choices for investigator `who`, each carrying their preset answer to blows. []
+    when they cannot act."""
     ctx = ctx or Ctx.of(game)
     me = ctx.p(who)
     v = ctx.view(who)
@@ -66,9 +74,7 @@ def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = Non
         return []
     if ctx.enc.mode == "chase" and ctx.enc.chase is not None:
         return chase_options(ctx, who)
-    react = react or me.react or "dodge"
-    if react not in presets(ctx, who):
-        react = "dodge"
+    react = preset(ctx, who)
     name = v.public_name("players")
     out: list[ChoiceOption] = []
 
@@ -87,37 +93,34 @@ def options(game: Any, who: str, react: str | None = None, ctx: Ctx | None = Non
                     continue
                 left = f" · 余弹 {a.loaded}" if a.firearm and a.loaded is not None else ""
                 add(DeclaredAction(do="shoot", attacks=[AttackPick(target=f, with_=a.id)], summary="-"),
-                    _label("射击", them, a.name, react), f"{a.skill} {a.value}{left}")
+                    _label("射击", them, a.name, damage_words(a.damage_text, v.db())), f"{a.skill} {a.value}{left}")
             else:
                 add(DeclaredAction(do="attack", attacks=[AttackPick(target=f, with_=a.id)], summary="-"),
-                    _label("攻击", them, a.name, react), f"{a.skill} {a.value} · 伤害 {damage_words(a.damage_text, v.db())}")
+                    _label("攻击", them, a.name, damage_words(a.damage_text, v.db())), f"{a.skill} {a.value}")
         tv = ctx.view(f)
         for m in ("推倒", "缴械", "制住"):
             add(DeclaredAction(do="maneuver", maneuver=m, attacks=[AttackPick(target=f, with_=UNARMED_ID)], summary="-"),
-                _label(m, them, react=react), f"战技 · 体格 {v.build()} 对 {tv.build() if tv is not None else '?'}")
+                _label(m, them), f"战技 · 体格 {v.build()} 对 {tv.build() if tv is not None else '?'}")
     for f in ctx.allies(who):
         if not actions._aid(ctx, who, f):
-            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players"), react=react),
-                f"急救 {v.skill('急救')}")
+            add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players")), f"急救 {v.skill('急救')}")
     for a in v.attacks():
         if a.firearm and a.capacity and a.loaded is not None and a.loaded < a.capacity:
             if not actions.preconditions(ctx, who, DeclaredAction(do="reload", target=a.id, summary="-")):
-                add(DeclaredAction(do="reload", target=a.id, summary="-"), _label("装填", weapon=a.name, react=react),
-                    f"装满 {a.capacity} 发")
+                add(DeclaredAction(do="reload", target=a.id, summary="-"), _label("装填", weapon=a.name), f"装满 {a.capacity} 发")
                 break
     for a in v.attacks():
         if a.jammed:
-            add(DeclaredAction(do="unjam", target=a.id, summary="-"), _label("排除故障", weapon=a.name, react=react), "这一轮不能射击")
+            add(DeclaredAction(do="unjam", target=a.id, summary="-"), _label("排除故障", weapon=a.name), "本轮不能射击")
             break
     if any(a.firearm and a.usable for a in v.attacks()):
         for f in foes:
-            add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, "players"), react=react),
-                "这一轮不开枪，下一枪得奖励骰")
+            add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, "players")), "下一枪得一颗奖励骰")
     if foes:
-        add(DeclaredAction(do="hide", summary="-"), _label("躲藏", react=react), f"潜行 {v.skill('潜行')} 对对手的侦查")
-    add(DeclaredAction(do="defend", summary="-"), _label("防守", react=react), "不出手，只防守")
+        add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对侦查")
+    add(DeclaredAction(do="defend", summary="-"), "防守", "本轮不出手")
     if not ctx.held_by(who):
-        add(DeclaredAction(do="flee", to="away", summary="-"), _label("逃跑", react=react), "离开战斗")
+        add(DeclaredAction(do="flee", to="away", summary="-"), "逃跑", "离开战斗")
     return out
 
 
@@ -134,7 +137,7 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
     assert ch is not None
     me, v = ctx.p(who), ctx.view(who)
     assert me is not None and v is not None
-    react = me.react or "dodge"
+    react = me.react or "dodge"  # a chase has no Tab: what they set in the fight stands
     name = v.public_name("players")
     here = me.node
     out: list[ChoiceOption] = []
@@ -164,20 +167,20 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
         assert n is not None
         ob = ch.site.obstacles.get(n.obstacle)
         if ob is None or ob.state in ("open", "broken"):
-            add(DeclaredAction(do="move", to=nid, summary="-"), f"跑向{n.name}", "出口：到这里就脱身" if n.exit else "畅通")
+            add(DeclaredAction(do="move", to=nid, summary="-"), f"跑向{n.name}", "出口" if n.exit else "畅通")
             continue
         for m in ob.methods:
             if m.id == site.BREAK:
                 add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"砸开{ob.what}",
-                    f"不用掷骰，按武器伤害算，还剩耐久 {ob.hp}" if ob.hp else "按武器伤害算")
+                    f"按武器伤害计 · 耐久 {ob.hp}" if ob.hp else "按武器伤害计")
                 continue
-            hard = "" if m.difficulty == "常规" else f" · {m.difficulty}"
-            what = "险阻：失败耽搁 1D3 行动点，可能受伤" if ob.kind == "hazard" else "路障：失败就过不去"
+            hard = "" if m.difficulty == "常规" else f"（{m.difficulty}）"
+            what = "失败耽搁 1D3 行动点" if ob.kind == "hazard" else "失败则过不去"
             add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"{m.label}：{ob.what}（往{n.name}）",
                 f"{m.skill} {v.skill(m.skill)}{hard} · {what}")
             if ob.kind == "hazard":
                 add(DeclaredAction(do="move", to=nid, method=m.id, careful=1, summary="-"), f"小心{m.label}：{ob.what}（往{n.name}）",
-                    f"多花 1 行动点，{m.skill}得一颗奖励骰")
+                    "多花 1 行动点 · 奖励骰 1")
     for f in seen:
         them = ctx.name(f, "players")
         for a in v.attacks():
@@ -194,12 +197,12 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
                     _label("攻击", them, a.name), f"{a.skill} {a.value} · 花 1 行动点")
         if chasing.at(enc, f) == here:
             add(DeclaredAction(do="maneuver", maneuver="推倒", attacks=[AttackPick(target=f, with_=UNARMED_ID)], summary="-"),
-                _label("推倒", them), "战技：成功则对方耽搁 1D3 行动点")
+                _label("推倒", them), "战技 · 对方耽搁 1D3 行动点")
     if not actions.preconditions(ctx, who, DeclaredAction(do="stand", summary="-")):
-        add(DeclaredAction(do="stand", summary="-"), "回身迎战", "站住和对方打：大家都在一处之内就转为战斗")
+        add(DeclaredAction(do="stand", summary="-"), "回身迎战", "转为战斗")
     if who in ch.quarry:
-        add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对追兵的侦查 · 用掉这一轮")
-        add(DeclaredAction(do="barrier", summary="-"), "设路障", f"力量 {v.char('力量')} · 挡住身后的人 · 花 1 行动点")
+        add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对侦查 · 用掉本轮")
+        add(DeclaredAction(do="barrier", summary="-"), "设路障", f"力量 {v.char('力量')} · 花 1 行动点")
     for f in ctx.allies(who):
         if chasing.at(enc, f) == here and not actions._aid(ctx, who, f):
             add(DeclaredAction(do="aid", target=f, summary="-"), _label("急救", ctx.name(f, "players")), f"急救 {v.skill('急救')}")
@@ -211,18 +214,11 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
     return out
 
 
-def offered(game: Any, who: str) -> list[ChoiceOption]:
-    """Every list the screens may show this round (one per answer to blows), for matching."""
-    ctx = Ctx.of(game)
-    if ctx.enc.mode == "chase":
-        return options(game, who, ctx=ctx)
-    return [o for r in presets(ctx, who) for o in options(game, who, r, ctx)]
-
-
 def match(game: Any, who: str, text: str) -> DeclaredAction | None:
-    """The option whose words are exactly `text`, as its declaration; None for anything else."""
+    """The option whose words are exactly `text`, as its declaration (with the preset answer to blows);
+    None for anything else."""
     words = text.strip()
-    for o in offered(game, who):
+    for o in options(game, who):
         if o.label == words:
             return DeclaredAction.model_validate(o.value)
     return None
@@ -269,12 +265,12 @@ def reaction_note(ctx: Ctx, defender: str, reaction: str) -> str:
     if v is None:
         return ""
     if reaction == "dodge":
-        return f"闪避 {v.skill('闪避')}：成功等级不低于对方就躲开"
+        return f"闪避 {v.skill('闪避')} · 成功等级不低于对方即躲开"
     if reaction == "fight_back":
         best = actions.best_melee(v)
-        return f"{best.skill if best else '格斗(斗殴)'} {best.value if best else v.skill('格斗(斗殴)')}：成功等级高于对方就打中对方"
+        return f"{best.skill if best else '格斗(斗殴)'} {best.value if best else v.skill('格斗(斗殴)')} · 成功等级高于对方即打中对方"
     if reaction == "cover":
-        return f"闪避 {v.skill('闪避')}：成功则对方射击吃一颗惩罚骰；无论成败失去下一次行动"
+        return f"闪避 {v.skill('闪避')} · 成功则对方射击得一颗惩罚骰 · 失去下一次行动"
     return "不掷骰，攻击照常结算"
 
 
@@ -287,8 +283,23 @@ def max_damage(opt, db: str, impale: bool) -> int:
     return top + (expr.weapon().maximum("0") if impale else 0)
 
 
+def risk(ctx: Ctx, defender: str, attacker: str, opt, kind: str) -> int:
+    """How much this blow could do to `defender` at its most (Keeper Rulebook pp. 119–121): 3 kill
+    outright (its damage reaching their maximum hit points), 2 put them down from where they stand
+    (to 0), 1 a major wound (half their maximum), 0 none of these."""
+    av, dv = ctx.view(attacker), ctx.view(defender)
+    if av is None or dv is None:
+        return 0
+    body = dv.body()
+    top = max_damage(opt, av.db() if kind == "melee" else "0", opt.impale)
+    return 3 if top >= body.hp_max else 2 if top >= body.hp else 1 if top * 2 >= body.hp_max else 0
+
+
 def should_ask(ctx: Ctx, defender: str, attacker: str, opt, kind: str, choices: list[str]) -> bool:
-    """Whether the game stops to ask the player how `defender` answers this attack (design §3.3)."""
+    """Whether the game stops to ask the player how `defender` answers this attack (design §3.3): the
+    first time they are attacked, when they asked to be asked every time, when the answer they set
+    does not fit this attack (a gun, and they set fighting back), and when the blow is a level more
+    dangerous than any they were asked about (`risk`). Otherwise the answer they set stands."""
     p = ctx.p(defender)
     if p is None or p.controller != "human" or choices == ["none"] or not ctx.present(defender):
         return False
@@ -298,10 +309,7 @@ def should_ask(ctx: Ctx, defender: str, attacker: str, opt, kind: str, choices: 
         return True
     if p.react is None or p.react not in choices:
         return True
-    av, dv = ctx.view(attacker), ctx.view(defender)
-    body = dv.body()
-    top = max_damage(opt, av.db() if kind == "melee" else "0", opt.impale)
-    return top >= body.hp or top * 2 >= body.hp_max
+    return risk(ctx, defender, attacker, opt, kind) > p.risk
 
 
-__all__ = ["chase_options", "match", "needs_arrangement", "offered", "options", "presets", "reaction_options", "should_ask"]
+__all__ = ["chase_options", "match", "needs_arrangement", "options", "preset", "presets", "reaction_options", "risk", "should_ask"]

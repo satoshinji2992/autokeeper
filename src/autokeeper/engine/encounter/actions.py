@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 ATTACKING = ("attack", "shoot", "maneuver")
 CHASE_ONLY = ("move", "cross", "barrier", "stand")
-LIGHTS = ("手电", "火把", "火炬", "油灯", "提灯", "马灯", "煤油灯", "蜡烛", "灯笼")  # what lets the dark see you
 VERBS = {"attack": "攻击", "shoot": "射击", "maneuver": "战技", "aid": "急救", "reload": "装填", "unjam": "排除故障",
          "ready": "拿出武器", "defend": "防守", "flee": "逃跑", "pursue": "追赶", "move": "奔跑", "cross": "越过障碍",
          "hide": "躲藏", "aim": "瞄准", "barrier": "设置障碍", "help": "协助", "speak": "喊话", "surrender": "投降", "stand": "回身迎战",
@@ -109,10 +108,11 @@ class Ctx:
 
     def hidden_from(self, watcher: str, pid: str) -> str:
         """Why `watcher` cannot perceive `pid` now ("" when it can). The keeper sees all; an NPC only
-        what is in front of it (guide #25): gone from the scene, hidden behind full cover (a hide that
-        worked, a position the keeper declared), lost in a chase (it hid, or ran out of sight and its
-        trail was lost), or the dark (a place lit only by torches, or fog) when they are not close to it
-        and carry no light."""
+        what is in front of it (guide #25), and only established facts hide anyone: gone from the
+        scene, hidden behind full cover (a hide that worked, a position the keeper declared), lost in a
+        chase (it hid, or ran out of sight and its trail was lost), or what the keeper declared it
+        cannot see (dark, smoke, a wall between: FightScene.unseen). The picture's weather and the
+        names of what someone carries decide nothing."""
         p = self.p(pid)
         if p is None:
             return "不在这场遭遇里"
@@ -124,29 +124,9 @@ class Ctx:
             return "藏在掩体后面，看不见"
         if self.enc.chase is not None and f"{watcher}|{pid}" in self.enc.chase.lost_sight:
             return "已经跟丢了"
-        prof = getattr(self.view(watcher), "profile", None)
-        sees_dark = prof is not None and not prof.human  # a creature hunts by smell and in the dark
-        if not sees_dark and self.dark() and not self.engaged(watcher, pid) and not self.lit(pid):
-            return f"{self.dark()}，看不清他在哪"
+        if u := next((u for u in self.enc.scene.unseen if u.watcher == watcher and u.who == pid), None):
+            return f"看不见（{u.why}）" if u.why else "看不见"
         return ""
-
-    def dark(self) -> str:
-        """What keeps the place dark ("" when it is not): a place lit only by torches, or fog."""
-        st = self.game.state
-        loc = next((x for x in self.game.m.locations if x.id == self.enc.place), None)
-        weather = set(loc.weather if loc is not None else [])
-        if "torch" in weather:
-            return "四下漆黑"
-        if "fog" in weather or st.sky == "fog":
-            return "雾太大"
-        return ""
-
-    def lit(self, pid: str) -> bool:
-        """Whether `pid` carries a light the dark sees them by."""
-        inv = next((i for i in self.game.state.investigators if i.id == pid), None)
-        things = list(inv.inventory) if inv is not None else []
-        things += [e.name for e in self.world.rec.entities.values() if e.kind == "item" and e.at == pid]
-        return any(w in t for t in things for w in LIGHTS)
 
     def told(self, watcher: str, pid: str) -> list[str]:
         """What `watcher` was told or saw of `pid` (the world's facts it knows about them)."""

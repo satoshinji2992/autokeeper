@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from autokeeper.agents.cast import RuledEffect, Ruling
+from autokeeper.engine.encounter import choices
 from autokeeper.engine.encounter.actions import Ctx
 from autokeeper.engine.encounter.plan import DeclaredAction, EncounterStart, EncounterTurnPlan
 from autokeeper.engine.game import Turn
@@ -60,7 +61,7 @@ async def test_rounds_fired_and_a_jam_carry_into_the_next_fight(module, fake):
     inv = game.state.investigator
     inv.inventory.append(RIFLE)
     await begin(game, ["warden"])
-    shoot = f"射击 楼梯口打盹的老人（{RIFLE}）｜被攻击时闪避"
+    shoot = next(o.label for o in choices.options(game, inv.id) if o.label.startswith(f"射击 楼梯口打盹的老人（{RIFLE}，"))
     fake.queue(90)  # a miss: one round gone
     await act(game, shoot)
     gun = game.world.rec.entities[RIFLE]
@@ -79,7 +80,7 @@ async def test_a_revolver_that_misfires_only_had_a_dud(module, fake):
     game.state.investigator.inventory.append(GUN)
     await begin(game, ["warden"])
     fake.queue(100)
-    await act(game, f"射击 楼梯口打盹的老人（{GUN}）｜被攻击时闪避")
+    await act(game, f"射击 楼梯口打盹的老人（{GUN}，1D10）")
     gun = game.world.rec.entities[GUN]
     assert gun.weapon.loaded == 5 and not gun.weapon.jammed
 
@@ -91,7 +92,7 @@ async def test_a_disarmed_weapon_leaves_the_inventory_and_lies_on_the_floor(modu
     inv.inventory.append(GUN)
     await begin(game, ["warden"])
     fake.queue(10, 90)  # the warden's grab succeeds; 周衡's dodge fails
-    await act(game, "防守｜被攻击时闪避")
+    await act(game, "防守")
     assert GUN not in inv.inventory and game.world.rec.entities[GUN].at == "tower"
     assert not any(a.firearm for a in Ctx.of(game).view(inv.id).attacks())
 
@@ -102,7 +103,7 @@ async def test_claws_cannot_be_disarmed(module, fake):
     fake.queue(30)
     await begin(game, ["ghoul"])
     fake.queue(10, 90)
-    turn = await act(game, "缴械 食尸鬼｜被攻击时闪避")
+    turn = await act(game, "缴械 食尸鬼")
     assert [a.name for a in Ctx.of(game).view("ghoul").attacks()] == ["爪击"] and any("夺不走" in line for line in turn.fight)
 
 
@@ -113,7 +114,7 @@ async def test_a_dead_creature_stays_dead(module, fake):
     await begin(game, ["ghoul"])
     assert game.world.rec.entities["ghoul"].kind == "creature"  # a world entity from the moment it fights
     fake.queue(10, 90).queue_totals(3)  # 周衡 hits; its answer fails; 3 damage
-    await act(game, "攻击 食尸鬼（徒手）｜被攻击时闪避")
+    await act(game, "攻击 食尸鬼（徒手，1D3）")
     body = game.world.rec.entities["ghoul"].life
     assert body.hp == 0 and "死亡" in body.conditions
     assert game.state.encounter is None and game.state.encounter_log[-1].ended.how == "won"  # into the log as it ended
@@ -125,7 +126,7 @@ async def test_a_hurt_npc_comes_back_hurt(module, fake):
     await begin(game, ["warden"])
     full = Ctx.of(game).view("warden").body().hp_max
     fake.queue(10, 90).queue_totals(4)
-    await act(game, "攻击 楼梯口打盹的老人（徒手）｜被攻击时闪避")
+    await act(game, "攻击 楼梯口打盹的老人（徒手，1D3）")
     await over(game)
     await begin(game, ["warden"])
     assert Ctx.of(game).view("warden").body().hp == full - 4 and game.world.rec.entities["warden"].life.hp == full - 4

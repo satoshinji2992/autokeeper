@@ -17,8 +17,6 @@
     padding: 0 1 1 1;
 }
 .choice-clock {
-    color: $warning;
-    text-style: bold;
     padding: 0 0 1 0;
 }
 #choice-own {

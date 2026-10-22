@@ -32,7 +32,7 @@ from ...net import media
 from ...net import room as lan
 from ...net.link import Link
 from ...rules import commands
-from ..modals.dialogs import PushModal, RollModal
+from ..modals.dialogs import PushModal, RollModal, Timed
 from ..modals.engine import EngineModal
 from ..modals.retell import RetellModal
 from ..widgets.panels import SceneArt
@@ -242,6 +242,8 @@ class NetGameScreen(GameScreen):
             choice = await self.app.push_screen_wait(ChoiceModal(offer))
         else:
             choice = await self.app.push_screen_wait(RollModal(offer) if offer.get("kind") == "roll" else PushModal(offer))
+        if choice is None:  # the time ran out, or the host settled it: the host takes what was set, nothing goes back
+            return
         answer = {"t": "respond", "id": offer.get("respond_id", "")}  # the host takes it once, for this offer only
         if isinstance(choice, dict) and offer.get("kind") in ("reaction", "redeclare"):
             answer |= {"choice": choice.get("choice", ""), "text": choice.get("text", ""), "ask": choice.get("ask", "")}
@@ -261,6 +263,10 @@ class NetGameScreen(GameScreen):
 
     def _in_battle(self) -> bool:
         return self._battle_now() is not None
+
+    def _set_react(self, react: str) -> None:
+        """Tab at a shared table: the host sets it (Hub "react"); its state comes back with the answer."""
+        self.run_worker(self.link.send({"t": "react", "react": react}), group="react")
 
     def _sync(self, view: dict[str, Any]) -> None:
         self.state = GameState.model_validate(view)
@@ -286,6 +292,8 @@ class NetGameScreen(GameScreen):
             self._close_orders()
         elif not self._battle_picking:
             self._offer_orders()
+        else:
+            self._react_shown()  # the answer to blows as the host now has it (Tab)
 
     async def on_msg(self, msg: dict[str, Any]) -> None:
         if not self.ready:
@@ -353,6 +361,11 @@ class NetGameScreen(GameScreen):
             self._turnline()
         elif t == "offer":  # throw your own dice, or push / spend luck after a failure
             self._offer(msg["offer"])
+        elif t == "offer_closed":  # the host stopped waiting and took the default: that window goes, sending nothing
+            for screen in list(self.app.screen_stack):
+                asked = getattr(screen, "offer", None) or getattr(screen, "ask", None)
+                if isinstance(screen, Timed) and isinstance(asked, dict) and asked.get("respond_id") == msg.get("id"):
+                    screen.settled()
         elif t == "say":
             self.story.add("system", Text(f"【场外】{msg['from']}：{msg['text']}", style="italic dim"))
         elif t == "notice":  # an answer that came too late, or twice: the host ignored it
