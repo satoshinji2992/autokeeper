@@ -11,6 +11,7 @@ Three layouts, picked once at import:
     modules/inbox/      drop module files here to find them in 导入模组
     skills/             shared skills; skills/module-<id>/ are compiled from the modules
     bridge/             the BCDice bridge and its node_modules/
+    rule/               the rulebooks and card decks you keep beside the code, not in git (rulebooks())
     data/               everything the game writes while you play (below)
     dev/output/         evaluation runs, autoplay logs and other developer output
 
@@ -23,6 +24,7 @@ Three layouts, picked once at import:
       modules/<id>/  inbox/      your imports, and files to import
       skills/                    skills compiled from the modules (the shared ones stay in the package)
       bridge/                    the bridge script, copied from the package by prepare(), and node_modules/
+      rule/                      the rulebooks and card decks (rulebooks())
       dev-output/
     ~/.cache/autokeeper/         the cache below (Windows: %LOCALAPPDATA%\\autokeeper\\Cache)
     ~/Documents/AutoKeeper/角色卡导出/
@@ -32,6 +34,7 @@ The data folder:
     data/
       games/            <slot>.json, index.json, checkpoints.sqlite
         art/            pictures a game made or a LAN player sent
+        debug/          <slot>.jsonl, a game's private developer record
         rooms/          <port>.key of a running LAN room
         trash/          deleted games and cards, restorable by moving them back
       cards/            your own investigators (<id>.json and photo); .work/ while one is made
@@ -40,9 +43,11 @@ The data folder:
         models/         local embedding models (about 90 MB)
         kb/             LightRAG knowledge base per module; kb/rules/ the rulebooks' index
         showcases/      big-scene pictures per module
+        art/<module>/   pictures found or drawn for what a module has none of (pictures.py, module_art())
         cards/          the keeper card decks read from their PDFs (cards.py)
         pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
+        tools/          chafa's official build, where no package manager put one (imagery.fetch_chafa)
       logs/             traces/<date>.jsonl, stderr.log, web.log
       preferences.json  tips.json  spend.json  imagegen/<module>.json
 

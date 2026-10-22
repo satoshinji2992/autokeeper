@@ -835,7 +835,7 @@ def art_prepare(
     force: Annotated[bool, typer.Option("--force", help="最近找过没找到、画过没画成的也再试一次")] = False,
 ) -> None:
     """给模组里没有图的地点、人物（路人除外）、重要物件和怪物配图：先找照片并处理，找不到合适的再由 AI 画。
-    图存在本机缓存里，每局都用，模组文件夹不变；两样都不行的，游戏里用程序画的图。"""
+    图存在本机缓存里，每局都用，模组文件夹不变；两样都没有的，游戏里只用文字描述。"""
     from . import imagegen, pictures
     from .module.schema import Module
 

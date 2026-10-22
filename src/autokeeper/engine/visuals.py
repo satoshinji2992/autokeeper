@@ -239,8 +239,8 @@ class Visuals:
     # -- the module's own places, people, things and creatures with no picture -------------------
     def gaps(self) -> None:
         """What the module has no picture of its own for (pictures.gaps), looked for in the
-        background once for all its games: a photo, else a drawing by Codex (pictures.fill). The
-        painted ones show until then, and wherever neither is to be had."""
+        background once for all its games: a photo, else a drawing by Codex (pictures.fill). Until
+        then, and wherever neither is to be had, it has no picture and is told in words only."""
         cfg = self.cfg
         if (not self.fill_gaps or cfg is None or "gaps" in self.tasks or cfg.visual_limit == 0 or cfg.visual_budget_usd == 0
                 or not pictures.gaps(self.module)):
