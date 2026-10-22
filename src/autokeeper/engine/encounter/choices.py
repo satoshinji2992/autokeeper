@@ -65,8 +65,8 @@ def preset(ctx: Ctx, who: str) -> str:
 
 
 def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
-    """The round's choices for investigator `who`, each carrying their preset answer to blows. []
-    when they cannot act."""
+    """The round's choices for investigator `who`, each carrying their preset answer to blows: going
+    after a foe who ran among them. [] when they cannot act."""
     ctx = ctx or Ctx.of(game)
     me = ctx.p(who)
     v = ctx.view(who)
@@ -118,6 +118,8 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
             add(DeclaredAction(do="aim", target=f, summary="-"), _label("瞄准", ctx.name(f, "players")), "下一枪得一颗奖励骰")
     if foes:
         add(DeclaredAction(do="hide", summary="-"), "躲藏", f"潜行 {v.skill('潜行')} 对侦查")
+    for f in [p.id for p in ctx.enc.participants if p.presence == "fled" and ctx.opposed(who, p.id) and not ctx.hidden_from(who, p.id)]:
+        add(DeclaredAction(do="pursue", target=f, summary="-"), _label("追赶", ctx.name(f, "players")), "对方逃跑了 · 转为追逐")
     add(DeclaredAction(do="defend", summary="-"), "防守", "本轮不出手")
     if not ctx.held_by(who):
         add(DeclaredAction(do="flee", to="away", summary="-"), "逃跑", "离开战斗")

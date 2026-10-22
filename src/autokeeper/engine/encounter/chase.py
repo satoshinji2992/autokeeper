@@ -535,17 +535,15 @@ def to_fight(w: Work) -> None:
 
 def verdict(ctx: Ctx) -> str:
     """How a chase that has run its course ends ("" while some pair is still running): the quarry got
-    away (fled, or escaped for the keeper's side), every quarry down (lost, or won)."""
+    away (fled, or escaped for the keeper's side), every quarry down (lost, or won). Never lost while
+    an investigator can still act: it goes on."""
     enc = ctx.enc
     ch = enc.chase
     if ch is None:
         return ""
-    def up(x: str) -> bool:
-        p = enc.get(x)
-        return p is not None and p.presence == "in" and ctx.acting(x)
 
-    prey = [q for q in ch.quarry if up(q)]
-    hunters = [h for h in ch.pursuers if up(h)]
+    prey = [q for q in ch.quarry if ctx.acting(q)]
+    hunters = [h for h in ch.pursuers if ctx.acting(h)]
     if prey and hunters and any(not lost(enc, h, q) for h in hunters for q in prey):
         return ""
     party = any(ctx.side(q) == "party" for q in ch.quarry)
@@ -553,6 +551,8 @@ def verdict(ctx: Ctx) -> str:
     if prey and not hunters:
         away = True
     if party:
+        if not (away or prey) and any(p.kind == "investigator" and ctx.acting(p.id) for p in enc.participants):
+            return ""
         return "fled" if away or prey else "lost"
     return "escaped" if away or prey else "won"
 

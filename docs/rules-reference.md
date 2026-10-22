@@ -73,7 +73,7 @@
 | 突袭 | 90–91 | 聆听/侦查对潜行定难度；没准备好的目标自动命中（大失败除外）或给奖励骰；远程攻击总要掷骰 | 规则层同前；引擎：被偷袭一方第一轮不能应对，近战除大失败外命中，远程照常掷；`EncounterStart.surprise_contest` 由引擎掷对抗 | 符合 | test_fight::test_an_event_that_scripts_an_attack… |
 | 寡不敌众 | 91 | 本轮已闪避或反击过后，之后的近战攻击得一颗奖励骰；多次攻击的怪物要应对同样次数后才算；不适用于远程 | `rules/melee.outnumbered_bonus`；引擎按本轮已应对次数（多次攻击的按其攻击次数）给后来的近战攻击一颗奖励骰，远程不给 | 符合 | test_encounter_fight::test_outnumbered_a_defender_who_has_answered… |
 | 投掷武器 | 91 | 可闪避；不能反击，除非在敏捷五分之一英尺内；加一半伤害加值 | `rules/melee.reactions_against`；引擎按攻击种类给应对选项：投掷只能闪避，开枪只能扑向掩体或不应对 | 符合 | test_rules_melee::test_what_a_throw… |
-| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑在自己的位上脱离（被制住不行），轮末先问守秘人的人追不追（安排里写明的照办，明说不追就不追），再判胜负后果 | 符合 | test_encounter_fight::test_an_explicit_let_go_is_obeyed…、test_an_undecided_pursuer_is_asked… |
+| 脱离近战 | 91 | 花一个回合脱离，前提是有路且未被压制 | 逃跑在自己的位上脱离（被制住不行），轮末先定谁追（安排里写明的照办，明说不追就不追，没写的问一次；对手逃跑的下一轮调查员可选「追赶」；看不见的人不追），再判胜负后果；还有人在打时逃跑的人先离开战斗，打完再追 | 符合 | test_encounter_fight::test_an_explicit_let_go_is_obeyed…、test_an_undecided_pursuer_is_asked…、test_encounter_chase::test_a_foe_who_runs_may_be_chased…、test_a_flight_is_not_chased_while_the_others_still_fight… |
 | 护甲 | 91 | 从伤害中减去；对魔法、毒、溺水无效 | `rules/wounds.apply_wound`：先扣护甲；毒、溺水窒息、魔法不扣；摔落、火焰按表 III 由守秘人定，不扣 | 符合 | `test_rules_wounds::test_armour_first…` |
 | 射击难度 | 95 | 基础射程常规，两倍困难，四倍极难；超射程只有大成功贯穿 | `rules/firearms.range_band`、`shot_difficulty`、`ShotModifiers.impale_needs`：基础/两倍/四倍射程，超射程只有大成功贯穿；霰弹枪各档都是常规难度、按档降伤害（54 页）。引擎：守秘人在遭遇计划里填两人间的距离（`EncounterTurnPlan.distances`，记进 `FightScene.distance`），开枪按距离定档，超过四倍射程打不着；没填距离按基础射程 | 符合 | `test_rules_firearms::test_range_bands…`、`test_a_shotgun_keeps…`、`test_encounter_perception::test_the_range_band_follows…` |
 | 寻找掩体 | 95 | 闪避检定，成功则射手一颗惩罚骰；无论成败失去下一次攻击 | `rules/firearms.dive_for_cover`；引擎：扑向掩体掷闪避，成功射手一颗惩罚骰，无论成败失去下一次行动（`RoundBudget.lost_next`） | 符合 | test_encounter_fight::test_an_opening_blow_keeps_the_weapon_it_named |
@@ -137,7 +137,7 @@
 | 中途加入 | 120 | 做速度检定后放到合适地点；比最慢逃离者还慢的追逐者可忽略；重算行动点 | 在场但不在追的人留在原处，跑起来就算加入，速度开始时已掷；行动点每轮按当时最慢的跑者重算 | 简化（加入者不另摆位置） | — |
 | 更换移动方式 | 120–121 | 游泳等无数据时按 MOV 一半 | `rules/chase.other_movement`；引擎不换 | 未做（规则层有） | `test_rules_chase` |
 | 人为险境 | 121 | 闩门 1 行动点免检定；用锁匠锁门一整轮加检定；推衣柜挡门力量检定加 1 行动点；喊人帮忙用话术或恐吓 | 「设路障」：力量检定加 1 行动点，成功在所在地点放一道路障（推开或翻过）；其他交裁定员 | 简化 | `test_a_hazard_failed_costs…` |
-| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…` |
+| 分头行动 | 121 | 走不同路线就另记一场追逐 | 不支持（用户决定第一版不做）：还有人在打时不转为追逐，转为追逐时调查员一方全体在内；结束时一行到人最多的地方，落单的记在 `GameState.apart`，下次移动归队 | 简化 | `test_the_route_end_moves_the_world…`、`test_a_flight_is_not_chased_while_the_others_still_fight…` |
 | 怪物的技能 | 121 | 擅长用敏捷，平常用敏捷一半，不擅长用五分之一；侦查可按智力折算 | 怪物卡没写的追逐技能按“平常”：敏捷一半，侦查、追踪、聆听、导航按智力一半；人类 NPC 用技能表基础值 | 简化（一律按平常） | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 多人追逐的摆放 | 124 | 最慢追逐者在起点，其余按 MOV 差向前；最慢逃离者在最快追逐者前两个地点，其余按差值向前；比最快追逐者快的逃离者可直接逃走 | `rules/chase.placement`，在地图上沿逃离方向摆 | 符合 | `test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 追上与转为战斗 | 116 | 追上只是到了同一地点，按战斗处理冲突 | 到同一处是接触不是抓住；有人回身迎战、逃离者被制住或倒在追兵面前，且其余人都在一处之内，转为战斗，伤势、弹药、速度、后果都保留 | 符合 | `test_turning_to_fight_where_they_meet…`、`test_switches_keep_wounds_speeds…` |

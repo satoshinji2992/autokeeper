@@ -75,6 +75,16 @@ def _end_slot(enc: EncounterState) -> int:
     return len(enc.order)
 
 
+def _undecided_flight(ctx: Ctx, x: str) -> bool:
+    """A foe that ran this very round, with an investigator who could still go after it (they declared
+    before it ran): theirs to choose next round (追赶), it is not away yet."""
+    enc = ctx.enc
+    if ctx.side(x) == "party" or not any(c.kind == "fled" and c.who == x and c.round == enc.round for c in enc.changes):
+        return False
+    return any(p.controller != "keeper" and ctx.acting(p.id) and ctx.opposed(p.id, x) and not ctx.hidden_from(p.id, x)
+               for p in enc.participants)
+
+
 def _between(enc: EncounterState) -> bool:
     """No round going on: none begun yet, or the last one is over (its end and its switch done)."""
     return enc.round == 0 or enc.cursor >= len(enc.order) + 2
@@ -1330,9 +1340,17 @@ class Encounters:
             raise RuntimeError("；".join(result.problems))
 
     async def _switch(self, enc: EncounterState, turn: Turn) -> None:
-        """Whoever fled this round: the keeper's people say whether they give chase (asked once if
-        their arrangement did not say; an explicit "no" is obeyed; no answer, no chase, noted); a
-        chase begins, or those who fled got away. Decided before any stake is judged."""
+        """Whoever fled: who goes after them. The keeper's people say so in their arrangements (asked
+        once if they did not; an explicit "no" is obeyed; no answer, no chase, noted), an investigator
+        by pursuing them (追赶, offered the round after a foe ran); nobody goes after someone they
+        cannot perceive. Those nobody chases got away, except a foe who ran this round while an
+        investigator could still go after it: the next round is theirs to choose.
+
+        There is no split party (the user's call): a chase begins only when nobody outside it is still
+        fighting; until then whoever fled stays out of the fight and the pursuit waits for the fight to
+        end. When it begins, the party is in it whole (whoever of it neither runs nor chases runs with
+        their side), and the keeper's people who take no part stay behind, out of it. Decided before
+        any stake is judged."""
         ctx = Ctx.of(self)
         base = f"enc/{enc.id}/r{enc.round}/switch"
         fled = [p.id for p in enc.participants if p.presence == "fled"]
@@ -1353,7 +1371,7 @@ class Encounters:
             decisions = await self._resolution_step(f"/{base}/ask", turn, ask)
 
         def switch(w: Work) -> None:
-            e = w.enc
+            e, c = w.enc, w.ctx
             for d in decisions.get("decisions", []):
                 p = e.get(d["who"])
                 if p is not None:
@@ -1362,30 +1380,54 @@ class Encounters:
                     p.arrangement = a.model_copy(update={"pursue": d["pursue"], "let_go": d["let_go"]})
             if decisions.get("problems"):
                 w.unit.lines.append(f"{UNSETTLED}追不追没有定下来：" + "；".join(decisions["problems"]) + "。没定的不追")
+            e.cursor = _end_slot(e) + 2
             chasers: dict[str, list[str]] = {}
             for x in fled:
                 for p in e.participants:
-                    if p.presence != "in" or not w.standing(p.id) or not w.ctx.opposed(p.id, x):
+                    if p.presence != "in" or not w.standing(p.id) or not c.opposed(p.id, x):
                         continue
-                    if p.controller == "keeper" and p.arrangement is not None and x in p.arrangement.pursue:
-                        chasers.setdefault(x, []).append(p.id)
-                    if p.controller != "keeper" and any(r.actor == p.id and r.round == e.round and r.declared.do == "pursue"
-                                                        and r.declared.target == x for r in e.receipts):
-                        chasers.setdefault(x, []).append(p.id)
+                    if p.controller == "keeper":
+                        wants = p.arrangement is not None and x in p.arrangement.pursue
+                    else:
+                        wants = any(r.actor == p.id and r.round == e.round and r.declared.do == "pursue" and r.declared.target == x
+                                    for r in e.receipts)
+                    if not wants:
+                        continue
+                    if why := c.hidden_from(p.id, x):  # an arrangement made before it lost sight of them
+                        w.unit.lines.append(f"{UNSETTLED}{{{p.id}}}追不了{{{x}}}：{why}")
+                        continue
+                    chasers.setdefault(x, []).append(p.id)
             for x in fled:
-                if x not in chasers:
-                    e.get(x).presence = "escaped"  # type: ignore[union-attr]
-                    w.unit.lines.append(f"{{{x}}}脱身了，没有人追上去")
-            e.cursor = _end_slot(e) + 2
-            if chasers:
-                quarry = sorted(chasers)
-                hunters = sorted({h for hs in chasers.values() for h in hs})
-                w.unit.lines.append("【战斗转为追逐】" + "、".join(f"{{{x}}}" for x in quarry) + "在逃，"
-                                    + "、".join(f"{{{h}}}" for h in hunters) + "追了上去")
-                e.mode = "chase"
-                e.switches.append(f"r{e.round}:chase")
-                e.scene.engaged = [g for g in e.scene.engaged if not ({g.a, g.b} & set(quarry))]
-                chasing.begin(w, quarry, hunters, site.build(self.m, e.place))
+                if x in chasers or _undecided_flight(c, x):
+                    continue
+                e.get(x).presence = "escaped"  # type: ignore[union-attr]
+                w.unit.lines.append(f"{{{x}}}脱身了，没有人追上去")
+            if not chasers:
+                return
+            running = set(chasers) | {h for hs in chasers.values() for h in hs}
+            if any(p.id not in running and c.acting(p.id) and any(c.acting(o) for o in c.foes(p.id)) for p in e.participants):
+                w.unit.lines.append("、".join(f"{{{x}}}" for x in sorted(chasers)) + "逃离了战斗；这里还在打，暂时没人追上去")
+                return
+            quarry = sorted(chasers)
+            hunters = sorted({h for hs in chasers.values() for h in hs})
+            party_flees = c.side(quarry[0]) == "party"
+            for p in e.participants:
+                if p.id in running:
+                    continue
+                if p.presence == "fled":  # ran too, and nobody went after them in the confusion
+                    p.presence = "escaped"
+                    w.unit.lines.append(f"{{{p.id}}}脱身了，没有人追上去")
+                elif c.acting(p.id) and p.side == "party":  # the party is not split: it runs, or chases, together
+                    (quarry if party_flees else hunters).append(p.id)
+                elif c.acting(p.id):  # the keeper's people who take no part stay where they are, out of it
+                    p.presence = "left"
+                    w.unit.lines.append(f"{{{p.id}}}没有跟上去，留在了原地")
+            w.unit.lines.append("【战斗转为追逐】" + "、".join(f"{{{x}}}" for x in quarry) + "在逃，"
+                                + "、".join(f"{{{h}}}" for h in hunters) + "追了上去")
+            e.mode = "chase"
+            e.switches.append(f"r{e.round}:chase")
+            e.scene.engaged = [g for g in e.scene.engaged if not ({g.a, g.b} & set(quarry))]
+            chasing.begin(w, quarry, hunters, site.build(self.m, e.place))
 
         await self._unit(base, turn, switch)
         enc = self.encounter()
@@ -1413,7 +1455,9 @@ class Encounters:
     # -- how it ends ------------------------------------------------------------------------------
     def _outcome(self, ctx: Ctx) -> str:
         """"" while it goes on; else how it ended: won (no foe can fight on, nobody left dying or coming
-        back), fled (the investigators got away), lost (nobody of theirs is left standing)."""
+        back), escaped (none can, and one of them ran off), fled (the investigators got away), lost
+        (nobody of theirs is left standing). Not while whether someone who ran is chased is still open
+        (_switch)."""
         enc = ctx.enc
         if enc.mode == "chase":
             return chasing.verdict(ctx)
@@ -1423,8 +1467,12 @@ class Encounters:
                      and ((v.body().dying and not v.body().stabilized) or v.body().regenerating)]
         if not any(p.presence == "in" and ctx.alive(p.id) for p in invs):
             return "fled" if any(p.presence in ("fled", "escaped") for p in invs) else "lost"
+        if any(p.presence == "fled" for p in enc.participants):
+            return ""
         if not any(ctx.acting(x) for x in foes):
-            return "" if lingering else "won"
+            if lingering:
+                return ""
+            return "escaped" if any(p.side == "foe" and p.presence == "escaped" for p in enc.participants) else "won"
         # The investigators down but alive: it is not over, the foes and anyone still standing go on (继续,
         # /encounter), and the dying roll on (the review: downed investigators were frozen).
         return ""

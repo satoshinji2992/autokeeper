@@ -97,7 +97,8 @@ def _pursue(ctx: Ctx, who: str, ids: list[str], *, ahead: bool = False) -> list[
 
 
 def undecided(ctx: Ctx, plan_npcs: list[NpcArrangement]) -> list[str]:
-    """Keeper opponents who must say whether they chase someone who fled, and have not."""
+    """Keeper opponents who must say whether they chase someone who fled, and have not (of those they
+    can perceive: someone gone from their sight is no one to decide about)."""
     fled = [p.id for p in ctx.enc.participants if p.presence == "fled"]
     out = []
     for p in ctx.enc.participants:
@@ -105,7 +106,7 @@ def undecided(ctx: Ctx, plan_npcs: list[NpcArrangement]) -> list[str]:
             continue
         mine = next((a for a in plan_npcs if a.who == p.id), None) or p.arrangement
         said = set(mine.pursue) | set(mine.let_go) if mine is not None else set()
-        missing = [x for x in fled if ctx.opposed(p.id, x) and x not in said]
+        missing = [x for x in fled if ctx.opposed(p.id, x) and x not in said and not ctx.hidden_from(p.id, x)]
         if missing:
             out.append(p.id)
     return out
@@ -251,7 +252,7 @@ def pursuit(game: Any, deciders: list[str]) -> Callable[[Any], list[str]]:
                 out.append(f"缺少 {who} 的决定")
                 continue
             for x in fled:
-                if ctx.opposed(who, x) and x not in d.pursue and x not in d.let_go:
+                if ctx.opposed(who, x) and x not in d.pursue and x not in d.let_go and not ctx.hidden_from(who, x):
                     out.append(f"{who} 没写追不追 {x}")
             out += _pursue(ctx, who, d.pursue)
         out += [f"{w} 不用决定" for w in given if w not in deciders]

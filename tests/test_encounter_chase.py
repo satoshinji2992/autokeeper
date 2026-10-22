@@ -333,3 +333,137 @@ async def test_hiding_far_ahead_gets_a_bonus_die_and_a_hidden_quarry_cannot_be_g
     assert die["bonus"] == 2  # three locations ahead (rules/chase.hide_bonus)
     st = game.state
     assert st.encounter is None and st.encounter_log[-1].ended.how == "fled"  # lost by every pursuer: away
+
+
+# -- the pre-release review (2026-10-22): no split party, a foe who runs, perception at the switch ------------
+def with_li(module, fake, li_does: list[str], **modes):
+    """A fight in the office with two investigators: 周衡 (the player) and 李四 (an AI companion who
+    picks the option named next in `li_does`, the last one again and again)."""
+    li = module.pregens[0].model_copy(update={"id": "li", "name": "李四"}, deep=True)
+
+    def choose(options):
+        want = li_does.pop(0) if len(li_does) > 1 else li_does[0]
+        return next(o.id for o in options if o.label == want)
+
+    game, cast, events = fight_game(module, fake, location="office", choose=choose, **modes)
+    game.state.investigators.append(li)
+    return game, cast, events
+
+
+GUARD = DeclaredAction(do="defend", summary="守着")
+
+
+async def test_a_flight_is_not_chased_while_the_others_still_fight_and_the_chase_takes_the_whole_party(module, fake):
+    """The review's blocker: one investigator fled and was chased while the other still fought the preacher
+    at the start; the chase ended the whole encounter as lost with him on his feet. Now the chase waits
+    until nobody outside it is still fighting; whoever fled is out of the fight meanwhile."""
+    from autokeeper.engine.encounter.actions import Ctx
+
+    from .encounter_kit import begin
+
+    warden = arrange("warden", GUARD, react="dodge", pursue=["zhouheng", "li"])
+    preacher = arrange("preacher", GUARD, react="dodge", let_go=["zhouheng", "li"])
+    game, cast, _ = with_li(module, fake, ["防守", "逃跑"], arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden", "preacher"], npcs=[warden, preacher])
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "逃跑")  # 周衡 runs; 李四 stays and guards, the preacher in front of him
+    enc = game.state.encounter
+    assert enc.mode == "fight" and enc.get("zhouheng").presence == "fled" and Ctx.of(game).acting("li")
+    assert game._outcome(Ctx.of(game)) == "" and "这里还在打，暂时没人追上去" in cast.reports[-1]
+    assert choices.options(game, "zhouheng") == []  # out of the fight while it waits
+    fake.queue(40, 40, 40)  # 李四 runs too: the speed rolls of 周衡, 李四 and the warden
+    await play(app, "/encounter")
+    enc = game.state.encounter
+    assert enc.mode == "chase" and sorted(enc.chase.quarry) == ["li", "zhouheng"] and enc.chase.pursuers == ["warden"]
+    assert enc.get("preacher").presence == "left"  # he let them go: out of it, where he stood
+    assert not fake.values
+
+
+async def test_a_chase_is_never_lost_while_an_investigator_can_still_act(module, fake):
+    """The review's probe: a chase set up while someone else still stood at the start; the quarry struck
+    down far away. Whoever can still act keeps it going."""
+    from autokeeper.engine.encounter import chase as chasing
+    from autokeeper.engine.encounter.actions import Ctx
+    from autokeeper.engine.encounter.model import ChaseState, SetMode
+
+    from .encounter_kit import begin
+
+    game, _cast, _ = with_li(module, fake, ["防守"], arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden", "preacher"])
+    built = site.build(module, "office")
+    far = next(n.id for n in built.nodes if (site.distance(built, built.origin, n.id) or 0) >= 2)
+
+    def edit(e):
+        e.chase = ChaseState(site=built, quarry=["zhouheng"], pursuers=["warden"])
+        for p in e.participants:
+            p.node = far if p.id in ("zhouheng", "warden") else built.origin
+    change(game, edit)
+    from autokeeper.world.ops import EncounterStep
+    from autokeeper.world.record import ENGINE
+
+    assert game.world.apply(EncounterStep(id="t/mode", encounter=game.state.encounter.id, unit="t",
+                                          changes=[SetMode(mode="chase")], actor=ENGINE)).ok
+    inv = game.state.investigators[0]
+    inv.hp, inv.conditions = 0, ["昏迷"]
+    ctx = Ctx.of(game)
+    assert ctx.acting("li") and chasing.verdict(ctx) == "" and game._outcome(ctx) == ""
+    game.state.investigators[1].conditions = ["昏迷"]
+    assert chasing.verdict(Ctx.of(game)) == "lost"  # nobody of theirs left who can act
+
+
+async def test_a_foe_who_runs_may_be_chased_next_round_and_otherwise_got_away(module, fake):
+    """The review: the fight's options never offered going after a foe who ran, and a fight the foe ran
+    from ended as won. The round after it ran offers 追赶; let go, it ends as escaped."""
+    from autokeeper.module.schema import Stake
+
+    from .encounter_kit import begin
+
+    module.flags["warden_gone"] = "守钟人跑了"
+    flee = DeclaredAction(do="flee", to="away", summary="守钟人逃跑")
+    game, _cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", flee, react="dodge")]))
+    await begin(game, ["warden"], npcs=[arrange("warden", flee, react="dodge")],
+                stakes=[Stake(when="ended:escaped", flags=["warden_gone"])])
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "防守")
+    enc = game.state.encounter
+    assert enc is not None and enc.get("warden").presence == "fled"  # not away yet: the party may go after him
+    labels = [o.label for o in choices.options(game, "zhouheng")]
+    assert "追赶 楼梯口打盹的老人" in labels and not any(x.startswith("攻击") for x in labels)
+    await play(app, "防守")
+    st = game.state
+    assert st.encounter is None and st.encounter_log[-1].ended.how == "escaped" and "warden_gone" in st.flags
+
+
+async def test_going_after_a_foe_who_ran_turns_the_fight_into_a_chase(module, fake):
+    from .encounter_kit import begin
+
+    flee = DeclaredAction(do="flee", to="away", summary="守钟人逃跑")
+    game, _cast, _ = fight_game(module, fake, location="office",
+                                arrange=lambda *a: EncounterTurnPlan(npcs=[arrange("warden", flee, react="dodge")]))
+    await begin(game, ["warden"], npcs=[arrange("warden", flee, react="dodge")])
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "防守")
+    fake.queue(40, 40)  # the speed rolls: 周衡, the warden
+    await play(app, "追赶 楼梯口打盹的老人")
+    enc = game.state.encounter
+    assert enc.mode == "chase" and enc.chase.quarry == ["warden"] and enc.chase.pursuers == ["zhouheng"]
+    assert not fake.values
+
+
+async def test_an_arrangement_to_pursue_someone_it_no_longer_sees_is_not_followed(module, fake):
+    """The review: a pursuit written into an arrangement before the keeper declared the dark held at the
+    round's end. Nobody goes after someone they cannot perceive."""
+    from autokeeper.engine.encounter.plan import SightNote
+
+    from .encounter_kit import begin
+
+    keep = arrange("warden", GUARD, react="dodge", pursue=["zhouheng"])
+    game, cast, _ = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan())
+    await begin(game, ["warden"], npcs=[keep])
+    await game._plan_unit("dark", EncounterTurnPlan(sight=[SightNote(watcher="warden", who="zhouheng", why="四下漆黑")]).model_dump(
+        mode="json", by_alias=True), [], Turn())
+    app = turn_graph.build(game, InMemorySaver())
+    await play(app, "逃跑")
+    st = game.state
+    assert st.encounter is None and st.encounter_log[-1].ended.how == "fled" and not fake.values
+    assert "追不了周衡" in cast.reports[-1] and "【战斗转为追逐】" not in cast.reports[-1]

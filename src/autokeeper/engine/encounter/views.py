@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .model import EncounterState
 
 DOWN = ("死亡", "濒死", "昏迷", "倒下")  # the status words of someone who can do nothing now (status)
-GONE = {"fled": "逃走", "escaped": "逃走", "left": "逃走", "surrendered": "投降", "captured": "被抓住"}
+GONE = {"fled": "逃走", "escaped": "逃走", "left": "离开", "surrendered": "投降", "captured": "被抓住"}
 
 
 def wound_word(body: Body) -> str:
@@ -43,7 +43,7 @@ def wound_word(body: Body) -> str:
 
 
 def status(ctx: Ctx, pid: str) -> str:
-    """The screens' status word: 死亡 濒死 昏迷 倒下 (coming back), 逃走 投降, 重伤, or nothing."""
+    """The screens' status word: 死亡 濒死 昏迷 倒下 (coming back), 逃走 离开 投降, 重伤, or nothing."""
     p, v = ctx.p(pid), ctx.view(pid)
     if v is not None:
         b = v.body()

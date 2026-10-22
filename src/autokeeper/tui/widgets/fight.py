@@ -46,7 +46,7 @@ BLOOD, DEEP, EMBER, AMBER, BONE, ASH, BILE = "#c1121f", "#7a0a0a", "#ff6b35", "#
 GORE = "#ff1a1a"  # fresh blood: the claw marks, the numbers
 CHILL, MIST, SAFE = "#9fb4c8", "#5a6478", "#7fd18b"  # a chase: the cold of it, the way behind, the way out
 WOUND = {"无伤": 4, "轻伤": 3, "受伤": 2, "重伤": 1}  # segments of a foe's meter, in words
-GONE = ("逃走", "投降")
+GONE = ("逃走", "离开", "投降", "被抓住")
 TICK = 0.12  # seconds a frame of a canvas stays up
 
 
