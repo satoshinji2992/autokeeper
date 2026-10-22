@@ -129,8 +129,9 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
 def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
     """A chase's choices for investigator `who` (pp. 113–121): run on (the quarry for the way out, a
     pursuer after the one it chases), run to each place next to them (each way past what is in the way
-    there, a hazard also with care), strike someone at the same place, shoot anyone in sight, hide, put
-    something in the way, turn to fight, aid, reload. Their answer to blows stays as it is."""
+    there, the method and the obstacle; a hazard once more with care, the way they are best at), strike
+    someone at the same place, shoot anyone in sight, hide, put something in the way, turn to fight,
+    aid, reload. Their answer to blows stays as it is."""
     from . import chase as chasing
     from . import site
 
@@ -164,25 +165,28 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
             far = site.distance(ch.site, here, chasing.at(enc, q))
             add(DeclaredAction(do="pursue", target=q, summary="-"), f"追赶 {ctx.name(q, 'players')}",
                 f"相隔 {far} 处 · {steps}" if far else f"就在这里 · {steps}")
-    for nid, _cost in site.neighbours(ch.site, here):
-        n = site.node(ch.site, nid)
+    ways = [(nid, site.node(ch.site, nid)) for nid, _cost in site.neighbours(ch.site, here)]
+    blocked = [ch.site.obstacles[n.obstacle].what for _, n in ways if n is not None and n.obstacle in ch.site.obstacles
+               and ch.site.obstacles[n.obstacle].state not in ("open", "broken")]
+    for nid, n in ways:
         assert n is not None
         ob = ch.site.obstacles.get(n.obstacle)
         if ob is None or ob.state in ("open", "broken"):
             add(DeclaredAction(do="move", to=nid, summary="-"), f"跑向{n.name}", "出口" if n.exit else "畅通")
             continue
+        what = ob.what + (f"（往{n.name}）" if blocked.count(ob.what) > 1 else "")  # the way named only when two look alike
         for m in ob.methods:
             if m.id == site.BREAK:
-                add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"砸开{ob.what}",
+                add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"砸开{what}",
                     f"按武器伤害计 · 耐久 {ob.hp}" if ob.hp else "按武器伤害计")
                 continue
-            hard = "" if m.difficulty == "常规" else f"（{m.difficulty}）"
-            what = "失败耽搁 1D3 行动点" if ob.kind == "hazard" else "失败则过不去"
-            add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"{m.label}：{ob.what}（往{n.name}）",
-                f"{m.skill} {v.skill(m.skill)}{hard} · {what}")
-            if ob.kind == "hazard":
-                add(DeclaredAction(do="move", to=nid, method=m.id, careful=1, summary="-"), f"小心{m.label}：{ob.what}（往{n.name}）",
-                    "多花 1 行动点 · 奖励骰 1")
+            add(DeclaredAction(do="move", to=nid, method=m.id, summary="-"), f"{m.label}：{what}",
+                f"{_method(v, m)} · " + ("失败耽搁 1D3 行动点" if ob.kind == "hazard" else "失败则过不去"))
+        crossing = [m for m in ob.methods if m.id != site.BREAK]
+        if ob.kind == "hazard" and crossing:  # with care (p. 114): the way they are best at, a point for a bonus die
+            m = max(crossing, key=lambda m: v.skill(m.skill) // {"困难": 2, "极难": 5}.get(m.difficulty, 1))
+            add(DeclaredAction(do="move", to=nid, method=m.id, careful=1, summary="-"), f"小心通过：{what}",
+                f"{_method(v, m)} · 多花 1 行动点，奖励骰 1")
     for f in seen:
         them = ctx.name(f, "players")
         for a in v.attacks():
@@ -214,6 +218,11 @@ def chase_options(ctx: Ctx, who: str) -> list[ChoiceOption]:
                 add(DeclaredAction(do="reload", target=a.id, summary="-"), _label("装填", weapon=a.name), f"装满 {a.capacity} 发 · 花 1 行动点")
                 break
     return out
+
+
+def _method(v, m) -> str:
+    """A way past an obstacle in a choice's note: its skill and the number, and how hard."""
+    return f"{m.skill} {v.skill(m.skill)}" + ("" if m.difficulty == "常规" else f"（{m.difficulty}）")
 
 
 def match(game: Any, who: str, text: str) -> DeclaredAction | None:

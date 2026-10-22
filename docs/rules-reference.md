@@ -121,7 +121,7 @@
 | 行动点 | 113 | 每人 1 点，MOV 每比全场最慢者高 1 多 1 点 | `rules/chase.action_points`，每轮开始算（`RoundBudget.movement`） | 符合 | `test_rules_chase::test_action_points…`、`test_encounter_zhuishuren::test_douglas_runs_with_the_books…` |
 | 可做的事 | 113 | 前进、攻击、施法、撬锁等耗时动作；可推迟；多次攻击的怪物在自己回合全打完 | 奔跑（沿最短路，可指定去处）、追赶（追上后可接着攻击）、攻击、射击、战技、躲藏、设路障、回身迎战、急救、装填、喊话、别的事（交裁定员）；撬锁这类耗时的事花 1 行动点（项目设定 `act_cost`）；推迟同战斗 | 简化（耗时动作一律 1 行动点） | `test_something_else_in_a_chase_is_ruled…` |
 | 不可孤注一掷 | 113 | 追逐中不能，可下轮再试 | 同 | 符合 | — |
-| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `chase._cross`：选项里有「小心……」（多花 1 点）；失败失去 1D3、受模组写的伤害（读不了的伤害式只记一笔），仍然过去 | 符合 | `test_a_hazard_failed_costs_1d3_points…`、`test_world_life::test_a_chase_hazard_with_unreadable_harm…` |
+| 险境 | 114 | 谨慎通过：花 1 或 2 行动点换 1 或 2 颗奖励骰；失败由守秘人定伤害（表 III），并失去 1D3 行动点；无论成败都到下一地点 | `chase._cross`：每个险阻有一项「小心通过」（按最拿手的办法，多花 1 点）；失败失去 1D3、受模组写的伤害（读不了的伤害式只记一笔），仍然过去 | 符合 | `test_a_hazard_failed_costs_1d3_points…`、`test_world_life::test_a_chase_hazard_with_unreadable_harm…` |
 | 耽搁跨轮 | 114 | 本轮行动点不够扣时，欠下的从下一轮扣（农夫例） | `RoundBudget.owed`，下一轮开始先扣 | 符合 | `test_a_hazard_failed_costs_1d3_points_and_what_this_round_cannot_pay…` |
 | 障碍 | 115 | 越过前挡住去路；失败通常只是无法前进；可多种方法 | 每种办法一个选项；失败停在原处；可打开的办法成功后后来者直接通过；每试一次花 1 行动点（项目设定） | 符合 | `test_a_broken_barrier_stays_broken_for_those_behind` |
 | 破坏障碍 | 115–116 | 打出伤害抵掉耐久（室内门 5、后门 10、外门 15、砖墙 25…）；打穿后残骸可成险境 | 有耐久的路障多一个「砸开」：不掷攻击骰，按手里最好的近战武器掷伤害抵耐久，砸开后通行；残骸不另成险境 | 简化（残骸） | `test_rules_chase` |

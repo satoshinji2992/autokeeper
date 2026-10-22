@@ -552,3 +552,17 @@ async def test_the_fight_a_chase_turns_into_is_where_contact_found_it(module, fa
     assert chasing.round_end(w) == "fight"
     assert w.enc.mode == "fight" and {p.node for p in w.enc.participants} == {here}
     assert [{e.a, e.b} for e in w.enc.scene.engaged] == [{"zhouheng", "warden"}]
+
+
+async def test_the_ways_past_an_obstacle_read_short_and_care_is_one_choice(module, fake):
+    """The review's screenshot: the same hazard four times over, each with the place it leads to in
+    brackets and a 小心 copy of every way past it. Now each way once (the method and the obstacle) and
+    one careful crossing, by the way the investigator is best at; the words are still matched exactly."""
+    game, _cast, _ = await chased(module, fake)
+    put(game, zhouheng="archive", warden="archive")
+    labels = [o.label for o in choices.options(game, "zhouheng")]
+    ways = [x for x in labels if "堆着报纸的楼梯" in x]
+    assert ways == ["冲下去：堆着报纸的楼梯", "顺着扶手滑下去：堆着报纸的楼梯", "小心通过：堆着报纸的楼梯"]
+    assert not any("（往" in x for x in labels)
+    careful = choices.match(game, "zhouheng", "小心通过：堆着报纸的楼梯")
+    assert careful is not None and (careful.method, careful.careful, careful.to) == ("run", 1, "office_stairs")  # 敏捷 65 over 攀爬 20
