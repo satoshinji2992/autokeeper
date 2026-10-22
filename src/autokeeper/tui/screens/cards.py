@@ -31,7 +31,7 @@ from textual.widgets import Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ... import artkit, credits, imagery, paths, roster
-from ...engine.state import GameState
+from ...engine.state import GameState, check_save
 from ...module.schema import Module
 from ...rules.coc import Investigator
 from ..library import FACE
@@ -285,8 +285,8 @@ class CardsScreen(Screen):
         raw = self.saves.get(tag)
         if isinstance(raw, dict):
             try:
-                raw = GameState.model_validate(raw)
-            except ValueError:  # a save this version cannot read still shows the card
+                raw = GameState.model_validate(check_save(raw))
+            except ValueError:  # a save this version cannot read (another version's too) still shows the card
                 raw = None
             self.saves[tag] = raw
         return raw

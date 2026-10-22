@@ -145,9 +145,11 @@ def lan_saves(module_id: str | None = None) -> list[tuple[str, dict[str, Any]]]:
 
 
 def saved(slot: str) -> GameState:
-    from ..engine.state import GameState
+    """A LAN save to go on with. engine/state.SaveRefused for one of another version (its file stays as it is),
+    ValueError for a broken one."""
+    from ..engine.state import read_save
 
-    return GameState.model_validate_json(paths.save(slot).read_text(encoding="utf-8"))
+    return read_save(paths.save(slot).read_text(encoding="utf-8"))
 
 
 def recall() -> dict[str, Any]:
