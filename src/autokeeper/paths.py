@@ -11,6 +11,7 @@ Three layouts, picked once at import:
     modules/inbox/      drop module files here to find them in 导入模组
     skills/             shared skills; skills/module-<id>/ are compiled from the modules
     bridge/             the BCDice bridge and its node_modules/
+    rule/               the rulebooks and card decks you keep beside the code, not in git (rulebooks())
     data/               everything the game writes while you play (below)
     dev/output/         evaluation runs, autoplay logs and other developer output
 
@@ -23,6 +24,7 @@ Three layouts, picked once at import:
       modules/<id>/  inbox/      your imports, and files to import
       skills/                    skills compiled from the modules (the shared ones stay in the package)
       bridge/                    the bridge script, copied from the package by prepare(), and node_modules/
+      rule/                      the rulebooks and card decks (rulebooks())
       dev-output/
     ~/.cache/autokeeper/         the cache below (Windows: %LOCALAPPDATA%\\autokeeper\\Cache)
     ~/Documents/AutoKeeper/角色卡导出/
@@ -32,6 +34,7 @@ The data folder:
     data/
       games/            <slot>.json, index.json, checkpoints.sqlite
         art/            pictures a game made or a LAN player sent
+        debug/          <slot>.jsonl, a game's private developer record
         rooms/          <port>.key of a running LAN room
         trash/          deleted games and cards, restorable by moving them back
       cards/            your own investigators (<id>.json and photo); .work/ while one is made
@@ -40,9 +43,11 @@ The data folder:
         models/         local embedding models (about 90 MB)
         kb/             LightRAG knowledge base per module; kb/rules/ the rulebooks' index
         showcases/      big-scene pictures per module
+        art/<module>/   pictures found or drawn for what a module has none of (pictures.py, module_art())
         cards/          the keeper card decks read from their PDFs (cards.py)
         pictures/       the renderer's prepared copy of every photo
         sessions/       working folder of the Claude Code and Codex processes
+        tools/          chafa's official build, where no package manager put one (imagery.fetch_chafa)
       logs/             traces/<date>.jsonl, stderr.log, web.log
       preferences.json  tips.json  spend.json  imagegen/<module>.json
 
@@ -98,8 +103,7 @@ def _documents() -> Path:
 
 
 CONFIG_HOME, DATA_HOME, CACHE_HOME = _user_dirs()
-_OLD_USER_DIR = Path.home() / ".config" / "autokeeper"  # Windows kept its settings here before 0.0.3
-USER_DIR = _OLD_USER_DIR if not CONFIG_HOME.exists() and _OLD_USER_DIR.is_dir() else CONFIG_HOME
+USER_DIR = CONFIG_HOME
 
 
 class Layout(NamedTuple):
@@ -129,7 +133,6 @@ def layout(home: str | None, installed: bool, data_home: Path, cache_home: Path)
 _HOME = os.environ.get("AUTOKEEPER_HOME")
 INSTALLED = not _HOME and not is_checkout(SOURCE)  # a package install: the folders are the user's
 ROOT, MODULES, LOCAL_MODULES, INBOX, SKILLS, BRIDGE, DATA, DEV_OUTPUT, CACHE, EXPORTS = layout(_HOME, INSTALLED, DATA_HOME, CACHE_HOME)
-OLD_SAVES = ROOT / "saves"  # the single folder used before 0.0.2; see adopt_old()
 EXAMPLE = PACKAGE / "module" / "example"  # format sample for tests and the importer
 
 
@@ -340,31 +343,6 @@ def dev_output(*parts: str) -> Path:
     return DEV_OUTPUT.joinpath(*parts)
 
 
-# -- the old saves/ folder -------------------------------------------------------------------
-ADOPTED = {"models": ("cache", "models"), "kb": ("cache", "kb"), "showcases": ("cache", "showcases"), "investigators": ("cards",)}
-
-
-def _adopted_target(parts: tuple[str, ...]) -> Path:
-    return cache().joinpath(*parts[1:]) if parts[0] == "cache" else DATA.joinpath(*parts)
-
-
-def adopt_old() -> list[str]:
-    """Move what is slow to rebuild (local models, knowledge bases, big-scene pictures, your
-    own cards) from the old saves/ folder, once. Old games are not read any more; saves/ can
-    be deleted afterwards."""
-    moved = []
-    for old, new in ADOPTED.items():
-        source, target = OLD_SAVES / old, _adopted_target(new)
-        if source.is_dir() and not target.exists():
-            try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(source), str(target))
-                moved.append(old)
-            except OSError:
-                pass
-    return moved
-
-
 # -- an installed copy: its folders, and the saves of a checkout ------------------------------
 MARK = ".from-package"  # in a folder prepare() fills: the digest of the package files it holds
 CHECKOUTS = "checkouts.json"  # in USER_DIR: the checkouts this user has played from
@@ -410,48 +388,27 @@ def _fill(source: Path, target: Path, *, keep: tuple[str, ...] = ()) -> bool:
     return True
 
 
-def prepare() -> list[str]:
-    """Ready the folders an installed copy plays from, at every start: move an old one-line
-    install's checkout out of the data folder, copy the package's bridge script to where its npm
-    packages go. What it did, for the screen."""
-    done: list[str] = []
-    if INSTALLED and is_checkout(DATA_HOME):  # the 0.0.3 test installer cloned the repository here
-        aside = _free(DATA_HOME.with_name(DATA_HOME.name + "-old-install"))
-        try:
-            DATA_HOME.rename(aside)
-            remember_checkout(aside)
-            done.append(f"旧的安装目录移到了 {aside}")
-        except OSError as exc:
-            done.append(f"旧的安装目录 {DATA_HOME} 移不走（{exc.strerror or exc}），关掉用到它的程序后再启动一次")
+def prepare() -> None:
+    """Ready the folders an installed copy plays from, at every start: copy the package's bridge
+    script to where its npm packages go."""
     lock = BRIDGE / "package-lock.json"
     old_lock = lock.read_bytes() if lock.is_file() else b""
     if _fill(BUNDLE / "bridge", BRIDGE, keep=("node_modules",)) and old_lock and lock.read_bytes() != old_lock:
         shutil.rmtree(BRIDGE / "node_modules", ignore_errors=True)  # other packages now: install them again
-    return done
 
 
-def _free(path: Path) -> Path:
-    n, candidate = 1, path
-    while candidate.exists():
-        n += 1
-        candidate = path.with_name(f"{path.name}-{n}")
-    return candidate
-
-
-def remember_checkout(root: Path | None = None) -> None:
-    """Note a checkout that holds saves (this one when it is one), for adopt() on an installed
-    copy's first start. Writing a save calls this."""
-    if root is None:
-        if INSTALLED or not is_checkout(ROOT):
-            return
-        root = ROOT
+def remember_checkout() -> None:
+    """Note this checkout, when the game runs from one, for adopt() on an installed copy's first
+    start. Writing a save calls this."""
+    if INSTALLED or not is_checkout(ROOT):
+        return
     try:
         known = json.loads((USER_DIR / CHECKOUTS).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         known = []
     if not isinstance(known, list):
         known = []
-    where = str(Path(root).resolve())
+    where = str(ROOT.resolve())
     if where in known:
         return
     with contextlib.suppress(OSError):
@@ -470,7 +427,7 @@ def known_checkouts() -> list[Path]:
 
 
 def _holds_saves(root: Path) -> bool:
-    return any((root / where).is_dir() for where in ("data/games", "data/cards", "saves", "modules/local"))
+    return any((root / where).is_dir() for where in ("data/games", "data/cards", "modules/local"))
 
 
 def _merge(source: Path, target: Path, skip: tuple[str, ...] = (), join: str = "") -> int:
@@ -520,7 +477,6 @@ def adopt(root: Path) -> dict[str, int]:
     if is_checkout(root):
         plan += [("导入的模组", root / "modules" / "local", LOCAL_MODULES, (), ""),
                  ("待导入的文件", root / "modules" / "inbox", INBOX, (), "")]
-        plan += [("旧版的角色卡与缓存", root / "saves" / old, _adopted_target(new), (), "") for old, new in ADOPTED.items()]
     counts: dict[str, int] = {}
     for label, source, target, skip, join in plan:
         if not source.is_dir() or source.resolve() == target.resolve():

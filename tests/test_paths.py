@@ -46,7 +46,6 @@ def installed(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "INSTALLED", True)
     monkeypatch.setattr(paths, "BUNDLE", bundle)
     monkeypatch.setattr(paths, "DATA_HOME", data)
-    monkeypatch.setattr(paths, "OLD_SAVES", bundle / "saves")
     (bundle / "bridge").mkdir(parents=True)
     for name in ("bcdice_bridge.mjs", "package.json", "package-lock.json"):
         (bundle / "bridge" / name).write_text(name, encoding="utf-8")
@@ -162,17 +161,6 @@ def test_the_first_start_of_an_installed_copy_finds_the_checkouts_played_before(
     assert paths.adopt_known() == {} and not paths.save("old").exists()
 
 
-def test_an_old_one_line_install_is_moved_out_of_the_data_folder(installed, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    checkout(paths.DATA_HOME)
-    (paths.DATA_HOME / ".git").mkdir()
-    done = paths.prepare()
-    aside = paths.DATA_HOME.with_name("autokeeper-old-install")
-    assert aside.is_dir() and "旧的安装目录移到了" in done[0] and not paths.is_checkout(paths.DATA_HOME)
-    assert list(paths.adopt_known()) == [aside.resolve()]
-    assert paths.save("old").is_file() and (paths.LOCAL_MODULES / "mine").is_dir()
-
-
 def test_migrate_copies_a_named_checkout(installed, tmp_path):
     old = checkout(tmp_path / "repo")
     out = CliRunner().invoke(app, ["migrate", str(old)])
@@ -193,3 +181,20 @@ def test_check_takes_a_module_id():
     assert out.exit_code == 0, out.output
     out = CliRunner().invoke(app, ["check", "nosuch"])
     assert out.exit_code == 1 and "找不到模组" in out.output.replace("\n", "")
+
+
+def test_upgrade_and_showcase_find_modules_as_check_does(monkeypatch):
+    """They looked in the modules folder only, so `upgrade example` missed the format sample."""
+    from autokeeper.engine import showcase
+
+    async def no_pictures(*args, **kwargs):
+        raise AssertionError("the example has no big scenes to prepare")
+
+    monkeypatch.setattr(showcase, "prepare_module", no_pictures)
+    out = CliRunner().invoke(app, ["showcase", "example"])
+    assert out.exit_code == 0 and "没有大场景" in out.output.replace("\n", ""), out.output
+    out = CliRunner().invoke(app, ["upgrade", "example", "--dry-run", "--only", "endings"])
+    assert out.exit_code == 0 and "额外结局：要补" in out.output.replace("\n", ""), out.output
+    for command in ("showcase", "upgrade"):
+        out = CliRunner().invoke(app, [command, "nosuch"])
+        assert out.exit_code == 1 and "找不到模组：nosuch" in out.output.replace("\n", ""), command
