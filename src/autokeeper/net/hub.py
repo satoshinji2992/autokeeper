@@ -51,8 +51,12 @@ A saved game goes on with the investigators it has.
 
 Players' screens never hold the keeper's book while the game is on: they get the module
 without its truth, keeper notes, NPC minds and anything not yet found, and a state without
-agent memory or the director's plans. Once it has ended the whole module goes out, so every
-screen can open the debrief (复盘); the epilogue is told on the host and reaches everyone.
+agent memory or the director's plans. Nor the words of any clue: of one found they get where it
+was found and the places and things it names, for their own map, never its title or its text.
+What was found the story tells, in the narration and the NPCs' lines, and each player keeps
+their own notes on their own machine (tui/notes.py; the user, 2026-10-22).
+Once it has ended the whole module goes out, so every screen can open the debrief (复盘); the
+epilogue is told on the host and reaches everyone.
 """
 
 from __future__ import annotations
@@ -91,7 +95,7 @@ from .room import BLANKS
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())  # recorded if logging is set up, never printed over the game
 
-SYNC_AFTER = {"clue", "move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
+SYNC_AFTER = {"move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 # A round is a moment in real time (the user, 2026-10-21: 「时间同一轮应该是个现实 7s 的窗口」): from the
@@ -113,6 +117,8 @@ PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll wou
 # and all), the foreshadowing handed out (a sign's id names what it points to), the director's expansions
 # (diagnostics) and the keeper's own word on what was going on as the last telling stopped (Telling.scene).
 PRIVATE |= {"held", "signs", "expanded", "ongoing"}
+# A player's notes are theirs alone (tui/notes.py): the host's own, kept in a save played on this machine, too.
+PRIVATE |= {"notebook"}
 # What a push offer shows a player (tui/modals/dialogs.PushModal): never what it would find or set, nor the
 # failures' clues, flags and mishap cards (Ruling.on_fail, on_push_fail), nor who would tell it (Game._asks).
 PUSH_SHOWN = ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")
@@ -124,7 +130,9 @@ BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start
 
 def table(m: Module, st: GameState) -> dict[str, Any]:
     """The module as a player's screen may hold it: places, names, faces, pictures, and the
-    clues and handouts already found (the rest arrive with the events that reveal them)."""
+    handouts already found (the rest arrive with the events that reveal them). Of the clues, only
+    those found, as the map needs them (fog.named): where each was found and the places and things
+    it names, never its title or its words; what was found the story told."""
     d = m.model_dump(mode="json")
     d["plugins"] = []
     d["showcases"] = []  # big scenes (a final boss, the endings) spoil: each travels only when it comes (Hub._event)
@@ -160,10 +168,6 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         n["status"] = m.npc(n["id"]).status  # the dead and the missing are not shown standing in a scene
         if n["location"] not in visited:
             n["location"] = None
-    for c in d["clues"]:
-        if c["id"] not in st.clues:
-            c.update(title="", text="", feature="", check=None, npc=None, core=False, handout=None, points_to=[], sanity=None)
-            c["where"] = ""
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
@@ -182,11 +186,13 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         e.update(title="", text="", reward="")
     for sk in d["sketches"]:
         sk["target"] = ""
-    d["clues"] = [c for c in d["clues"] if c["id"] in st.clues]
-    for c in d["clues"]:
-        c.update(check=None, points_to=[], core=False, npc=None)
     d["handouts"] = [h for h in d["handouts"] if h["id"] in st.handouts]
     d["sketches"] = [sk for sk in d["sketches"] if not sk["after"] or sk["after"] in st.clues]
+    for sk in d["sketches"]:
+        sk.update(clue=None, after=None)  # what a drawing finds, and after what: clue ids
+    places, things = {loc["id"] for loc in d["locations"]}, {item["id"] for item in d["items"]}
+    d["clues"] = [{"id": c.id, "title": "", "where": c.where, "text": fog.named(m, f"{c.title}\n{c.text}", places, things)}
+                  for c in m.clues if c.id in st.clues]
     return d
 
 
@@ -797,6 +803,7 @@ class Hub:
         here = {n.id for n in self.m.npcs if n.location == st.location}  # as the book has them (table())
         view["npcs"] = {k: {**v, "unlocked": [c for c in v["unlocked"] if c in st.clues]}  # what each may tell: only what was found
                         for k, v in view["npcs"].items() if v["met"] or k in here}
+        view["deeds"] = [d for d in view["deeds"] if d["kind"] != "clue"]  # a 0.0.4 save's lines with clue titles (state.Deed)
         if view["item_owners"]:  # where things are, only of the things the players know of
             shown = known_items(self.m, st)
             view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
@@ -838,7 +845,7 @@ class Hub:
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
             "picture_data": self._shared(self._pictures(book, keys)),
             "state": self._view(),
-            "log": [e.model_dump(mode="json") for e in self.state.log[-40:]],
+            "log": [e.model_dump(mode="json") for e in self.state.log[-40:] if e.kind != "clue"],  # the module's words: the keeper's
             "seats": self._seats(cid),
             "bring": self.bringing,  # seats may still change their investigator
             "started": self.started.is_set(),
@@ -847,7 +854,7 @@ class Hub:
 
     def _art_keys(self, book: dict) -> set[str]:
         return ({x.get("art") for x in book["locations"] + book["items"]} | {p.portrait for p in self.m.pregens}
-                | {v["key"] for x in book["locations"] for v in x.get("views", [])} | {c.get("art") for c in book["clues"]}
+                | {v["key"] for x in book["locations"] for v in x.get("views", [])}
                 | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
                 | {key for h in book["handouts"] for key in _handout_keys(h)})
 
@@ -927,7 +934,11 @@ class Hub:
         if ev.get("type") == "flag":
             await self._broadcast({"t": "sync", "state": self._view()})
             return
-        if ev.get("type") in ("improv", "move", "npc", "performance", "clue", "handout", "people"):
+        if ev.get("type") == "clue":  # its title and words are the keeper's: the screens get what it changed
+            await self._share_book()
+            await self._broadcast({"t": "sync", "state": self._view()})
+            return
+        if ev.get("type") in ("improv", "move", "npc", "performance", "handout", "people"):
             await self._share_book()
             ev = {k: v for k, v in ev.items() if k != "reason"}  # the director's reasoning is for the keeper
             if ev.get("type") == "handout":

@@ -1003,7 +1003,9 @@ async def test_the_player_throws_their_own_dice(module, fake):
     assert not asks and kinds.index("dice") < kinds.index("outcome") < kinds.index("npc")
     dice = next(e for e in out if e["type"] == "dice")
     assert (dice["tens"], dice["units"], dice["kept"], dice["level"]) == ([0], 8, 0, "极难成功")
-    assert next(e for e in out if e["type"] == "outcome")["lines"] == ["老守钟人松了口：〔守钟人的日记〕"]
+    # who gave in, never what he gave up: that is the telling's (the user, 2026-10-22: no clue titles on the screen)
+    assert next(e for e in out if e["type"] == "outcome")["lines"] == ["老守钟人松了口"]
+    assert "日记" not in str([e for e in out if e["type"] in ("dice", "outcome")])
     assert game.state.clues == ["c_diary"] and "已解锁" in cast.npc_calls[-1][1]
 
 
@@ -1077,6 +1079,23 @@ async def test_an_early_rewrite_stays_over_the_source_however_many_follow(module
     assert truth in text and "他在钟里藏了第 7 样东西" in text and "第 6 样" not in text  # each once, as it is now
 
 
+async def test_a_find_at_the_start_is_put_into_the_opening_telling(module, fake):
+    """No clue card shows it (the user, 2026-10-22): a rule's find as the game starts reaches the
+    players only through the keeper's opening, which is asked to tell it."""
+    game, cast, _ = make(module, fake, {})
+    run = game.plugins.run
+
+    async def found_at_start(hook, turn, **kw):
+        if hook == "start":
+            await game._gain(["c_notice"], turn, None)
+        return await run(hook, turn, **kw)
+
+    game.plugins.run = found_at_start  # type: ignore[method-assign]
+    await game.start()
+    assert game.state.clues == ["c_notice"]
+    assert "获得线索〔广场告示〕：告示说钟楼即日起谢绝参观" in cast.reports[0] and "【讲出发现】" in cast.reports[0]
+
+
 async def test_who_an_event_puts_before_the_investigators_is_there_in_the_record(module, fake):
     """2026-10-22: the truck's driver stepped down in the read-aloud, the record had him nowhere, the
     arbiter gave what he would say and the keeper then told an empty cab."""
@@ -1087,3 +1106,62 @@ async def test_who_an_event_puts_before_the_investigators_is_there_in_the_record
     await game._arrive("office", Turn())
     assert "driver" in game.state.fired and game.world.rec.entities["warden"].at == "office"
     assert "warden" in game.world.present("office")
+
+
+async def test_an_event_that_takes_the_party_somewhere_brings_its_people_there(module, fake):
+    """Event.present lands where the event leaves the investigators (its move_to), not where they were."""
+    module.flags["called"] = "布道者来叫人"
+    call = Event(id="call", title="布道者来叫人", when="flag:called", text="布道者领调查员去报社",
+                 read_aloud="布道者拉着你的袖子，一路把你带到报社门口。", move_to="office", present=["preacher"])
+    module.events.append(call)
+    game, _, _ = make(module, fake, {}, location="tower")
+    await game._fire(call, Turn())
+    assert game.state.location == "office" and game.world.rec.entities["preacher"].at == "office"
+
+
+async def test_a_clue_from_someone_is_had_with_them_not_where_they_were(module, fake):
+    """2026-10-22: the clue about the truck's driver was given at an empty cab. A clue that comes from
+    someone (Clue.npc) is to be had where the world record has them, alive and not gone."""
+    from autokeeper.world import context as world_view
+    from autokeeper.world.ops import Move
+
+    game, *_ = make(module, fake, {}, location="tower")
+    assert game._valid_clues(["c_diary"], None) == ["c_diary"]
+    assert "守钟人的日记（出自老守钟人）" in world_view.keeper_brief(game.world)
+    assert game.world.apply(Move(id="away", entity="warden", to="square")).ok
+    assert game._valid_clues(["c_diary"], None) == []  # his to hand over: not at the tower he left
+    assert "守钟人的日记" not in world_view.keeper_brief(game.world)
+    assert game._valid_clues(["c_gears"], None) == ["c_gears"]  # what lies in the tower stays there
+    game.state.location = "square"
+    assert game._valid_clues(["c_diary"], None) == ["c_diary"]  # it goes with him
+    game.world.rec.entities["warden"].status = "失踪"
+    assert game._valid_clues(["c_diary"], None) == []
+
+
+async def test_the_arbiter_lists_who_is_there_and_their_clues_as_the_record_has_them(module, fake, monkeypatch):
+    from autokeeper import config
+    from autokeeper.agents.cast import Cast
+    from autokeeper.harness import Reply
+    from autokeeper.world.ops import Move
+
+    cast = Cast(config.Config(), module)
+    seen: list[str] = []
+
+    async def send(key, session, state, prompt, **kw):
+        seen.append(prompt)
+        return Reply(text="", data=Ruling(needs_roll=False).model_dump())
+
+    monkeypatch.setattr(cast, "_send", send)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
+    state.location = "tower"
+    game = Game(module, state, cast, Rules(dice=fake))
+    look = Action(kind="investigate", summary="周衡在钟楼里四处看看")
+    await cast.arbiter(state, look)
+    assert "c_diary「守钟人的日记」出自 老守钟人(warden)" in seen[-1] and "- warden 的 c_diary：说服·困难" in seen[-1]
+    assert "在场 NPC：老守钟人(warden)" in seen[-1] and "- 老守钟人(warden)：寡言" in seen[-1]
+    assert game.world.apply(Move(id="away", entity="warden", to="square")).ok
+    await cast.arbiter(state, look)
+    assert "c_diary" not in seen[-1] and "在场 NPC：无" in seen[-1] and "【本地人物的处境】\n这里没有别人" in seen[-1]
+    assert "c_gears「齿轮间」【关键】在 齿轮间" in seen[-1]
+    await game.close()
+    await cast.close()

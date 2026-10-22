@@ -32,7 +32,7 @@ from autokeeper.tui.modals.sheet import SheetModal, sheet_view
 from autokeeper.tui.modals.usage import usage_view
 from autokeeper.tui.screens.game import COMMANDS, GameScreen
 from autokeeper.tui.widgets.pages import Page, PagesHead, PagesModal
-from autokeeper.tui.widgets.panels import CluePanel, HistoryPanel
+from autokeeper.tui.widgets.panels import HistoryPanel, NotesPanel
 
 from .test_engine import FakeCast
 from .test_net import TableCast, closed, opened, pool_open, until
@@ -217,9 +217,11 @@ async def test_the_story_so_far_comes_after_a_milestone_from_what_the_table_saw(
     await game._recounting
     asked = Writer.asked[0]
     assert m.hook.strip()[:10] in asked and "钟楼的影子" in asked and "我做第1件事" in asked and "我做第6件事" in asked
-    assert m.clue("c_notice").text.strip()[:10] in asked and "老守钟人（NPC）：外乡人？" in asked and dusk.read_aloud in asked
+    assert "老守钟人（NPC）：外乡人？" in asked and dusk.read_aloud in asked
+    # Not the module's words for the notice found, nor its title: the telling of it is what the table heard
+    # (the user, 2026-10-22: no clue summaries handed to the players, the 进展 page's writer included).
     secrets = [m.truth, m.keeper_notes, *[s for n in m.npcs for s in n.secrets], *[loc.keeper for loc in m.locations if loc.keeper],
-               *[e.text for e in m.events], *[c.text.strip() for c in m.clues if c.id != "c_notice"],
+               *[e.text for e in m.events], *[c.text.strip() for c in m.clues], m.clue("c_notice").title, "找到线索",
                "导演的安排", "守秘人自己记的"]
     assert all(s.strip()[:12] not in asked for s in secrets if s.strip())
     assert st.progress == Progress(text=ACCOUNT, turn=6, asked=6, seen=st.logged, marks=progress.marks(st))
@@ -239,6 +241,39 @@ async def test_the_story_so_far_comes_after_a_milestone_from_what_the_table_saw(
     assert ACCOUNT in again and "第 6 轮" in again  # the last account, and what came after it
     assert "我做第6件事" not in again and "我做第7件事" in again and "我做第13件事" in again
     assert st.progress.turn == 13
+
+
+async def test_the_recap_and_the_memory_are_made_from_the_telling_not_the_clues_own_words(writer, monkeypatch):
+    """The chronicler's memory (it feeds the recap, the 进展 page and the AI players) and the recap (F7)
+    are made from what the table was told: the keeper's telling of a find, never the module's own words
+    or title for it (the user, 2026-10-22: no clue summaries handed to the players)."""
+    seen: list[str] = []
+    call = Writer._call
+
+    async def keep(self, messages, **kw):
+        seen.append(messages[-1]["content"])
+        return await call(self, messages, **kw)
+
+    monkeypatch.setattr(Writer, "_call", keep)
+    m = Module.load(EXAMPLE)
+    game, _ = table_game(writer, m)
+    st = game.state
+    play(st, 1, "我看看告示栏")
+    find(st, m, "c_notice")  # the engine's own record of it, for the keeper
+    for turn in range(2, 30):
+        play(st, turn, f"我做第{turn}件事")
+    await game.remember()  # a long log: the chronicler folds the start of it
+    if game._recounting is not None:
+        await game._recounting
+    folded = next(s for s in seen if "并进摘要" in s)
+    assert "我看看告示栏" in folded and "（第1轮的叙述）" in folded
+    find(st, m, "c_archive")  # one in the lines the recap reads itself
+    await game.cast.recap(st)
+    recap = seen[-1]
+    assert "前情回顾" in recap and "我做第29件事" in recap
+    for clue in (m.clue("c_notice"), m.clue("c_archive")):
+        assert all(clue.text.strip()[:10] not in s and clue.title not in s for s in seen)
+    await game.close()
 
 
 async def test_the_story_so_far_never_holds_up_a_turn_and_a_failed_one_keeps_the_last(writer):
@@ -358,6 +393,7 @@ def deeds_game() -> tuple[Module, GameState]:
     st.turn, st.active = 2, 1
     st.add("player", "我翻翻书桌上的记账簿", who=her.name)
     st.add("clue", "〔记账簿〕最后几页写着一个陌生的名字")
+    st.add("handout", "记账簿里夹着的收据")
     st.add("sanity", "理智检定 55 → 77 失败，损失 1D3 = 2（55 → 53）", who=me.name)  # an event: everyone checks
     st.active = 0
     st.add("damage", "受到 2 点伤害（HP 12 → 10）", who=me.name)
@@ -374,12 +410,14 @@ def test_the_sheet_tells_the_whole_story_and_what_they_went_through():
         assert v in sheet, k  # every field, the note on where the card came from too
     assert "为人" in sheet and "牵挂" in sheet and me.occupation in sheet and f"住在{me.residence}" in sheet
     record = sheet.split("本局经历", 1)[1]
-    assert "我去书房看看窗框" in record and "侦查 60 → 23 困难成功" in record and "〔被撬的窗框〕" in record
-    assert "我翻翻书桌上的记账簿" not in record and "〔记账簿〕" not in record  # hers, on her card
+    assert "我去书房看看窗框" in record and "侦查 60 → 23 困难成功" in record
+    assert "被撬的窗框" not in record and "线索" not in record  # what was found the story told, never the clue's title
+    assert "我翻翻书桌上的记账簿" not in record and "收据" not in record  # hers, on her card
     assert "理智检定 55 → 77" in record and "受伤 1 次，共 2 点" in record and "理智共失去 2 点" in record
     assert "托马斯答应让他们住进空房间（未了）" in record and "闹翻了" not in record
     theirs = plain(sheet_view(her, state=st)).split("本局经历", 1)[1]
-    assert "我翻翻书桌上的记账簿" in theirs and "〔记账簿〕" in theirs and "伊迪丝和报社主编闹翻了" in theirs
+    assert "我翻翻书桌上的记账簿" in theirs and "伊迪丝和报社主编闹翻了" in theirs
+    assert "手稿〔记账簿里夹着的收据〕" in theirs and "陌生的名字" not in theirs  # the paper handed over, not the clue
     assert "本局经历" not in plain(sheet_view(me, width=60))  # outside a game (the lobby, the cards): the card alone
     bare = m.pregens[0].model_copy(update={"backstory": {}, "inventory": []})
     assert "为人" not in plain(sheet_view(bare))
@@ -392,7 +430,8 @@ def test_an_old_save_finds_its_record_in_the_log_it_has():
         data.pop(key)
     old = GameState.model_validate(data)
     assert old.logged == len(st.log)
-    assert [(d.who, d.kind, d.text) for d in old.deeds] == [(d.who, d.kind, d.text) for d in st.deeds]  # clues to whose turn it was
+    assert [(d.who, d.kind, d.text) for d in old.deeds] == [(d.who, d.kind, d.text) for d in st.deeds]  # papers to whose turn it was
+    assert "clue" not in [d.kind for d in old.deeds]
 
 
 async def test_a_parse_that_breaks_off_leaves_no_line_in_the_record(fake):
@@ -456,7 +495,8 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         assert told["ev"] == {"type": "progress", "text": ACCOUNT, "turn": 6}
         view = GameState.model_validate(next(x for x in heard if x["t"] == "sync" and x["state"]["progress"]["text"])["state"])
         assert view.progress.text == ACCOUNT and (view.progress.turn, view.progress.asked) == (6, 6)
-        assert [d.text for d in view.deeds if d.kind == "act"] == acts and "c_notice" in view.clues
+        assert [d.text for d in view.deeds if d.kind == "act"] == acts
+        assert "c_notice" in view.clues and "clue" not in [d.kind for d in view.deeds]  # found; its title is in no line
         assert view.prologue == "叙事" and not view.log  # the opening as told; the log stays on the host
         assert len(cast.material) == 1 and hub.m.truth not in cast.material[0]
         await ws.send_json({"t": "recount"})  # asked for again in the same round
@@ -602,7 +642,7 @@ async def test_the_right_column_keeps_the_history_and_opens_the_other_pages_over
         for n in range(40):
             screen._history("player", Text(f"▶ 周衡：第{n}件事"), None)
         await pilot.pause()
-        screen.query_one(CluePanel).show([f"线索{n}" for n in range(10)])  # the list below grows, the page shrinks
+        screen.query_one(NotesPanel).show("\n".join(f"笔记第{n}行" for n in range(10)))  # the notes below grow, the page shrinks
         await pilot.pause()
         panel = screen.query_one(HistoryPanel)
         assert panel.max_scroll_y > 0 and panel.scroll_y == panel.max_scroll_y  # the newest line still in sight
@@ -660,7 +700,7 @@ async def test_without_room_for_the_column_the_pages_open_over_the_story(writer)
 
 
 @pytest.mark.parametrize("height", [24, 30, 34, 40, 44])
-async def test_dice_and_clues_leave_the_history_readable(writer, height):
+async def test_dice_and_notes_leave_the_history_readable(writer, height):
     from autokeeper.tui.screens.game import PAGES_MIN
     from autokeeper.tui.widgets.panels import DiceTray, SheetPanel
 
@@ -672,7 +712,7 @@ async def test_dice_and_clues_leave_the_history_readable(writer, height):
         app.push_screen(screen)
         await until_idle(pilot, screen)
         screen.query_one(DiceTray).display = True
-        screen.query_one(CluePanel).show([f"很长的线索标题第{i}条" for i in range(20)])
+        screen.query_one(NotesPanel).show("\n".join(f"很长很长的一行笔记，第{i}行，写满了这一栏放不下的字" for i in range(20)))
         await pilot.pause(0.3)
         column, tray = screen.query_one("#pages"), screen.query_one(DiceTray)
         assert column.outer_size.height >= PAGES_MIN  # the history's head and a few lines; it opens in full

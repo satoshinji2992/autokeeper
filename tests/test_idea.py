@@ -153,7 +153,8 @@ async def test_a_successful_idea_roll_gives_the_clue_as_the_investigators_own_th
     assert dice["skill"] == "灵感" and dice["who"] == "李雁" and dice["target"] == 90 and dice["difficulty"] == "常规"
     assert st.ideas[-1].passed and st.ideas[-1].clue == "c_gears" and st.ideas[-1].day == 0
     report = cast.reports[-1]
-    assert "灵感检定成功" in report and "迂回地融入" in report and "获得线索〔齿轮间〕" in report
+    assert "灵感检定成功" in report and "自己的领悟" in report and "获得线索〔齿轮间〕" in report
+    assert "想到了什么具体写出来" in report and "【讲出发现】" in report  # no clue card: the telling says what they thought of
     assert "此前没有出现过" in report  # never mentioned: the keeper needs a way in for it
     assert st.investigators[1].id == roller and st.minutes == Game.new(module, [module.pregens[0]]).minutes  # no time lost
     assert game.idea_refused() == idea.TODAY  # once a game day
@@ -489,7 +490,8 @@ async def test_a_seated_player_pushes_saying_how_and_asks_for_an_idea_roll(monke
         assert push["kind"] == "push" and push["can_push"]
         before = hub.state.minutes
         await ws.send_json({"t": "respond", "id": push["respond_id"], "choice": {"choice": "push", "how": "搬来椅子站上去，凑近了一行行看"}})
-        await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "广场告示" in "".join(x["ev"]["lines"]))
+        led = await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "outcome" and "有所发现" in x["ev"]["lines"])
+        assert "广场告示" not in str(led)  # what it found is the telling's, never a title on the screen
         assert "c_notice" in hub.state.clues and hub.state.minutes - before >= 10  # its time passed first
         assert any("孤注一掷：搬来椅子" in e.text for e in hub.state.log)
         sync = await until(ws, lambda x: x["t"] == "sync")

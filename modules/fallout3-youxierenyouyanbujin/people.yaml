@@ -506,8 +506,6 @@ npcs:
   - 教授和望远镜的事
   secrets:
   - 他会伪装成调查员认识的人
-  clues:
-  - c_herman_disguise
   location: main_street
   portrait: herman
 - id: brad_todd

@@ -105,7 +105,6 @@ npcs:
   clues:
   - c_cure_offer
   - c_nightmares
-  - c_shadow
   - c_theft_suspect
   gates:
     c_cure_offer:
@@ -143,7 +142,7 @@ npcs:
   secrets:
   - 它不是埃里；真正的埃里被它杀死埋在绸缎山下
   lies:
-  - “弹片卡在里头，取不出来。”
+  - 被问起咳嗽时：“弹片卡在里头，取不出来。”
   - “我就是埃里，我从法国回来了。”
   clues:
   - c_hauling
@@ -172,14 +171,13 @@ npcs:
   - 萨缪尔是镇上第一个病死的，死前还没有任何症状就开始胡言乱语
   - 萨缪尔说“他回家了。他本来就在这，但他现在又回来了。”
   - 萨缪尔说打猎时遇到一个包裹全身的人
-  - 萨缪尔与埃里从战场回来后关系有些紧张
+  - 萨缪尔与埃里从战场回来后关系有些紧张（被问起才低声承认）
   - 家里那本写满潦草字迹的日记
   secrets:
   - 她怕回家，也怕那本日记
   lies: []
   clues:
   - c_anna_tale
-  - c_samuel_diary
   gates: {}
   location: post_office
   portrait: anna
@@ -225,8 +223,7 @@ npcs:
   - 他已经开始盘算把农场抵出去
   lies:
   - “我没事，我清醒得很。”
-  clues:
-  - c_cattle
+  clues: []
   gates: {}
   location: brucker_farm
   portrait: reggie

@@ -243,8 +243,8 @@ def realised(title: str, *, mentioned: bool) -> str:
     """The keeper's note for a successful roll (p. 168): the investigators' own realisation."""
     origin = ("" if mentioned else
               "这条线索此前没有出现过，要为它找一个合情合理的来由：想起的一句话、翻出的旧笔记、偶然看见的东西。")
-    return (f"【灵感检定成功】调查员把已知的线索重新梳理了一遍，想通了〔{title}〕。把它写成调查员自己的领悟，迂回地融入叙述，"
-            f"从他们见过、听过的东西里自然地想到它，并落到一个明确的方向上；不要写成有人直接告诉他们，也不要替玩家决定下一步。{origin}")
+    return (f"【灵感检定成功】调查员把已知的线索重新梳理了一遍，想通了〔{title}〕。把它写成调查员自己的领悟，"
+            f"从他们见过、听过的东西里自然地想到它，想到了什么具体写出来，并落到一个明确的方向上；不要写成有人直接告诉他们，也不要替玩家决定下一步。{origin}")
 
 
 def cut(title: str, minutes: int, *, staged: bool) -> str:

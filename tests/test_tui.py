@@ -143,8 +143,11 @@ async def test_a_player_throws_the_dice_and_sees_what_it_led_to(canned, fake):
         await pilot.press("escape")  # no way out
         assert app.screen is modal and fake.values
         await pilot.press("enter")
-        assert await until(pilot, lambda: "↳ 老守钟人松了口：〔守钟人的日记〕" in story_text(screen))
+        assert await until(pilot, lambda: "↳ 老守钟人松了口" in story_text(screen))
         assert "十位" in story_text(screen) and "极难成功" in story_text(screen) and not fake.values
+        # what he gave up is told in the story, never as the clue's title or card (the user, 2026-10-22)
+        clue = m.clue("c_diary")
+        assert f"〔{clue.title}〕" not in story_text(screen) and clue.text.strip()[:8] not in story_text(screen)
         assert await until(pilot, lambda: isinstance(app.screen, HandoutModal))  # the diary came with it
         await pilot.press("escape")
         assert await until(pilot, lambda: app.screen is screen and not screen.busy)
@@ -579,7 +582,7 @@ def test_names_light_up_in_the_telling_and_the_history_keeps_a_line_per_event():
     assert history_line("player", Text("▶ 贝蒂·康西丁（sq）：仔细听"), None).plain == "贝蒂·康西丁（sq）：仔细听"
     assert history_line("keeper", Text("一大段叙述"), None) is None  # the telling stays in the story
     clue = LogEntry(turn=5, time="19:20", kind="clue", text="〔有人入室〕后屋传来窗框被撬开的吱呀声")
-    assert log_line(clue).plain == "  ↳ 〔有人入室〕"
+    assert log_line(clue) is None  # the module's words for a find stay the keeper's: the story told it
     assert HistoryPanel.KEEP > 0
 
 

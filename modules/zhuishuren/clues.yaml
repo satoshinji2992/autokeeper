@@ -98,10 +98,9 @@ clues:
     title: 书架上的空档
     where: shufang
     feature: 书架上的空档
-    npc: thomas
     core: true
     points_to: [k_not_burglar]
-    text: 书架上少了好几本书（托马斯认为是六本），空档很显眼。托马斯说不清丢的是哪几本。屋里其他值钱的东西一样没少。
+    text: 书架上少了好几本书，空档很显眼。屋里其他值钱的东西一样没少。
   - id: c_window
     title: 松动的窗锁
     where: shufang

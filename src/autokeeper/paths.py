@@ -36,6 +36,7 @@ The data folder:
         art/            pictures a game made or a LAN player sent
         debug/          <slot>.jsonl, a game's private developer record
         rooms/          <port>.key of a running LAN room
+        notes/          your own notes at LAN tables: <module>/<save>/<seat>.txt
         trash/          deleted games and cards, restorable by moving them back
       cards/            your own investigators (<id>.json and photo); .work/ while one is made
       角色卡导出/        where 导出 puts a card unless you pick another folder
@@ -223,6 +224,12 @@ def table_art() -> Path:
 
 def room_key(port: int) -> Path:
     return games() / "rooms" / f"{port}.key"
+
+
+def table_notes(module: str, slot: str, seat: str) -> Path:
+    """A player's own notes at a LAN table (tui/notes.py): on their own machine only, one file per
+    game (the host's module and save) and seat, found again when they sit down there once more."""
+    return games() / "notes" / _safe(module) / _safe(slot) / f"{_safe(seat)}.txt"
 
 
 def trash() -> Path:

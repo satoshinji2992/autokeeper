@@ -1,9 +1,10 @@
 """The whole investigator sheet, as on paper: portrait, characteristics with their half and
 fifth, derived values, every skill (the raised ones stand out, improvement ticks shown),
 what they carry (装备, always shown), the backstory grouped as the paper sheet has it. In a game, also 本局经历:
-what they did and rolled, what they found, what it cost them, and the promises and ties in
-the world ledger that are theirs, all of it what the table saw (GameState.deeds, which a LAN
-screen gets through the sync). ←/→ go through the party."""
+what they did and rolled, the papers handed to them, what it cost them, and the promises and
+ties in the world ledger that are theirs, all of it what the table saw (GameState.deeds, which a
+LAN screen gets through the sync). Never a clue's title: what they learnt the story told, and
+the player keeps it in their own notes. ←/→ go through the party."""
 
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ GROUPS = (
     ("牵挂", ("重要之人", "之地", "地点", "宝贵", "珍视")),
     ("异闻", ("伤", "疤", "恐惧", "躁狂", "典籍", "咒", "神器", "接触", "遭遇")),
 )
-MARKS = {"act": "▸", "check": "◈", "clue": "↳", "handout": "▤", "sanity": "※", "damage": "✚"}
+MARKS = {"act": "▸", "check": "◈", "handout": "▤", "sanity": "※", "damage": "✚"}
 LEDGER = {"fact": "记下", "relationship": "关系", "promise": "约定", "fulfill": "约定", "transfer": "转交"}
 
 
@@ -192,8 +193,8 @@ def backstory_view(inv: Investigator) -> Table | None:
 
 def record_view(st: GameState, inv: Investigator) -> Group:
     """本局经历: their own actions and what came of them, a line each under the game clock;
-    what they found, what it cost them; the promises and ties of theirs in the world ledger."""
-    mine = [d for d in st.deeds if d.who == inv.id]
+    the papers handed to them, what it cost them; the promises and ties of theirs in the world ledger."""
+    mine = [d for d in st.deeds if d.who == inv.id and d.kind != "clue"]  # a clue's title: never shown (state.Deed)
     parts: list[RenderableType] = [Text("本局经历", style="bold")]
     if mine:
         grid = Table.grid(padding=(0, 2))
@@ -207,10 +208,7 @@ def record_view(st: GameState, inv: Investigator) -> Group:
     else:
         parts.append(Text("暂无行动记录。", style="dim"))
     rows: list[tuple[str, Text]] = []
-    found = "".join(f"〔{d.text}〕" for d in mine if d.kind == "clue")
     papers = "".join(f"〔{d.text}〕" for d in mine if d.kind == "handout")
-    if found:
-        rows.append(("线索", Text(found, style="bold #e9c46a")))
     if papers:
         rows.append(("手稿", Text(papers, style="bold")))
     hurt = [int(n) for d in mine if d.kind == "damage" for n in re.findall(r"受到 (\d+) 点伤害", d.text)]
@@ -237,8 +235,6 @@ def _deed(d: Deed) -> Text:
     mark = MARKS.get(d.kind, "·")
     if d.kind == "act":
         return Text.assemble((f"{mark} ", "dim"), (d.text, "bold"))
-    if d.kind == "clue":
-        return Text.assemble((f"{mark} ", "dim"), (f"〔{d.text}〕", "bold #e9c46a"))
     if d.kind == "handout":
         return Text.assemble((f"{mark} 手稿", "dim"), (f"〔{d.text}〕", "bold"))
     style = {"sanity": "magenta", "damage": "red"}.get(d.kind, "dim")

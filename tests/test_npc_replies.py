@@ -264,6 +264,21 @@ async def test_what_ones_manner_gives_away_is_found_even_when_they_are_spoken_to
     await game.close()
 
 
+async def test_what_is_seen_of_someone_is_found_even_when_they_are_spoken_to(fake):
+    """A clue that comes from someone (Clue.npc) and is not theirs to tell (not in their NPC.clues: a
+    disguise seen through, a spell seen cast) is a card when it is ruled, never left to their reply."""
+    game, cast, events = table(fake)
+    warden = game.m.npc("warden")
+    warden.clues, warden.gates = [], {}
+    game.state.npc("warden").unlocked = []
+    cast.tells = {}
+    turn = await game.resolve(ASK, Ruling(needs_roll=False, auto_clues=["c_diary"]))
+    assert turn.clues == ["c_diary"] and game.state.npc("warden").unlocked == ["c_diary"]
+    await game.talk(turn)
+    assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["clue", "npc"]
+    await game.close()
+
+
 async def test_a_daily_action_that_says_nothing_finds_what_it_finds(fake):
     """A daily action with someone and not a word to them: talk() asks nobody, so the clue the arbiter
     gives is found, not held back for a reply that never comes."""
@@ -284,4 +299,51 @@ async def test_a_clue_is_left_to_the_one_asked_when_they_are_asked(fake):
     await game.talk(turn)
     assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["npc", "clue"]
     assert game.state.clues == ["c_diary"]
+    await game.close()
+
+
+async def test_what_the_npc_said_is_not_told_again_and_nobody_is_asked_to_narrate_it(fake):
+    """No clue card follows the words (the user, 2026-10-22: players hear it in the fiction and keep
+    their own notes): the warden's line is how they learn what he told, so the keeper is not asked to
+    tell it again, and its report says he said it."""
+    game, cast, events = table(fake)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    await game.talk(turn)
+    assert turn.clues == ["c_diary"]
+    report = game._report(turn)
+    assert "获得线索〔守钟人的日记〕" in report and "老守钟人刚才已经亲口说出，不要复述" in report
+    assert "【讲出发现】" not in report and "线索卡与检定卡" not in report
+    assert await game.narrate(turn) == "" and cast.reports == [] and events[-1]["type"] == "dialogue_end"
+    await game.close()
+
+
+async def test_a_find_nobody_said_is_the_keepers_to_tell_even_in_a_conversation(fake):
+    """The gears found while the warden talks: his line tells the diary, nothing shows the gears. The
+    keeper tells that turn, and the report asks for what was found in the story's own words."""
+    m = Module.load(EXAMPLE)
+    gears = m.clue("c_gears")
+    gears.check, gears.sanity = None, None  # in plain sight here, and no roll for it
+    game, cast, _ = table(fake, module=m)
+    turn = await game.resolve(ASK, Ruling(needs_roll=False, auto_clues=["c_gears"]))
+    await game.talk(turn)
+    assert turn.clues == ["c_gears", "c_diary"] and turn.npc_lines == [("warden", DIARY)]
+    await game.narrate(turn)
+    report = cast.reports[-1]
+    assert f"获得线索〔齿轮间〕：{gears.text.strip()}" in report and "亲口说出" in report  # the diary was his line
+    assert "【讲出发现】玩家看不到线索卡，〔齿轮间〕的内容只能从你的叙述里得知" in report  # the diary was said
+    assert all(words in report for words in ("看到、读到、听到或想到", "不概括成结论", "不点明这是线索", "不添原文没有的内容"))
+    await game.close()
+
+
+async def test_a_paper_handed_over_speaks_for_itself(fake):
+    """A clue that comes with a paper: the players hold its words (the handout window, F2's 资料), so the
+    keeper tells how they came by it, not the whole of it again."""
+    m = Module.load(EXAMPLE)
+    game, _, events = table(fake, module=m)
+    m.clue("c_diary").handout = "h_diary"  # the warden's diary, handed over this time
+    turn = Turn(action=LOOK)
+    await game._gain(["c_diary"], turn, None)
+    assert "handout" in [e["type"] for e in events]
+    report = game._report(turn)
+    assert "手稿〔守钟人的日记〕的原文在玩家手里" in report and "不复述全文" in report and "【讲出发现】" not in report
     await game.close()

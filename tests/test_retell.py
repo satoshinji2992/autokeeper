@@ -268,7 +268,8 @@ async def test_f9_tells_it_again_and_f10_opens_the_book(canned, fake):
         cast = screen.game.cast = teller(FakeCast({"看告示": (LOOK, BOARD)}))
         screen.game.rules = Rules(dice=fake)
         screen.send_line("看告示")
-        assert await waits(pilot, lambda: "〔广场告示〕" in story_text(screen) and not screen.busy)
+        assert await waits(pilot, lambda: "叙事" in story_text(screen) and not screen.busy)
+        assert "〔广场告示〕" not in story_text(screen) and "c_notice" in screen.state.clues  # found, told, no card
         blocks = list(screen.story.query(".keeper"))
         assert screen.told is blocks[-1] and str(blocks[-1].render()) == "叙事"
         screen.busy = True  # mid-turn: refused

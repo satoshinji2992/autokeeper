@@ -15,6 +15,8 @@ lacks and leaves what it has:
     ties        私人牵连    threads an investigator's background can be tied to (Module.ties)
     endings     额外结局    the ends a table is likely to reach that the module never wrote
     mechanics   插件清单    the rules the engine does not keep by itself (Module.mechanics)
+    present     出场人物    who each event puts before the investigators (Event.present): the one the
+                            read-aloud shows on the scene, named or not, as the original has them
     meet        见面反应    which agenda steps are what an NPC does on meeting the investigators (Move.meet):
                             character material for its voice, never a backstage decision; for
                             modules whose agendas were written before the label
@@ -30,7 +32,10 @@ lacks and leaves what it has:
                             the numbers from the original text, the rulebook's where it gives none
 
     verify      复核        what this run added, read against the original text by one more call: what gets
-                            round a condition the module keeps (a roll, a prerequisite, a gate) is taken out
+                            round a condition the module keeps (a roll, a prerequisite, a gate) is taken out;
+                            then the clues, by one more: one whose words make plain fact of what the original
+                            gives only on a condition (said only when asked), one whose npc is not the person
+                            it comes from, one listed for someone who cannot tell it. Reported, never rewritten
 
 Every call reads the whole of the keeper's book with its conditions kept whole (book(): each
 place's keeper notes, each clue's words, check and prerequisites, each NPC's gates) and the
@@ -63,13 +68,13 @@ from ..rules import dice_expr
 from ..rules.combat import stats_of, traits
 from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
-from .graph import SLUG, audit, fighting, known_skill, leg_key, stake_problems, supporting_clues, ways
+from .graph import SLUG, audit, fighting, known_skill, leg_key, shown, stake_problems, supporting_clues, tellers, ways
 from .schema import Agenda, Bond, Foreshadow, Leg, Mechanic, Module, Past, PreludeFrame, Stage, Stake, Tie
 
-PASSES = ("npcs", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history", "prelude",
-          "combat", "verify")
-LABELS = {"npcs": "人物补全", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "meet": "见面反应", "foreshadow": "伏笔",
-          "clueweb": "线索网", "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史",
+PASSES = ("npcs", "present", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history",
+          "prelude", "combat", "verify")
+LABELS = {"npcs": "人物补全", "present": "出场人物", "relations": "冲突图", "agendas": "局面（重要 NPC 的打算）", "meet": "见面反应",
+          "foreshadow": "伏笔", "clueweb": "线索网", "ties": "私人牵连", "endings": "额外结局", "mechanics": "插件清单", "history": "前史",
           "prelude": "开局演出", "combat": "战斗与追逐", "verify": "复核"}  # fmt: skip
 # What a pass reads that another pass writes: it waits for that one (the plans read the people as
 # just filled in, the signs the clues just added).
@@ -152,8 +157,9 @@ class Signs(BaseModel):
 
 class NewClue(BaseModel):
     id: str
-    title: str = Field(description="线索本里的短标题")
-    text: str = Field(description="调查员得到的信息（玩家可见），不比原作的关键线索说得多，不直接说出真相")
+    title: str = Field(description="线索的短标题，只给守秘人看")
+    text: str = Field(description="调查员得到的信息，由守秘人在叙述里讲出；不比原作的关键线索说得多，不直接说出真相；"
+                                  "被问到才说的话、要满足条件才有的事不写成事实")
     where: str = Field(description="所在地点 id")
     feature: str = Field(description="具体在哪样东西上、哪里")
     skill: str = Field("", description="需要什么检定，如 侦查、图书馆使用；找到就有就留空")
@@ -187,6 +193,15 @@ class Mechanics(BaseModel):
 
 class Pasts(BaseModel):
     history: list[Past] = Field(default_factory=list, max_length=8)
+
+
+class Appearance(BaseModel):
+    event: str = Field(description="事件 id")
+    present: list[str] = Field(default_factory=list, description="这件事发生时出现在调查员眼前的 NPC id；没有就留空")
+
+
+class Appearances(BaseModel):
+    events: list[Appearance] = Field(default_factory=list)
 
 
 class Prelude(BaseModel):
@@ -280,6 +295,10 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                 "检定、孤注一掷或调查员的具体做法之后才可能发生的结果（孤注一掷成功时他过来帮忙找），写 ruling: true，交给守秘人裁定。"
                 "见面反应不写台词，不把原作要检定才找到的东西写成他主动指出、交出或讲明。"
                 "每步写 source：原作哪里写到（地点、线索、NPC 的 id，或 真相、守秘人须知）；推出来的写 补写。", Agendas),
+    "present": ("下面【事件】每一件写一条：它发生时出现在调查员眼前的 NPC id（present）。朗读和守秘人须知写到当场在调查员面前的人都算，"
+                "没写名字的（推门进来的人、桥头的人影、递信的少年）对照原文认出是谁；当场表演、当场动手的也算。"
+                "只是被人提起、打来电话、远远望见，或要看调查员在不在场才见得到的，不写；不是 NPC 的人（路人、护士）和怪物不写。"
+                "没有人就写空的。", Appearances),
     "meet": ("下面【打算里没标的步骤】，逐条判断：是见面时的反应（调查员来问、来访、在场时他才会做的事：应门招呼、领人去看、被问到时怎么说），"
              "还是要他自己在幕后去做的事（盯梢、报信、藏东西、搬走什么、找人商量）。见面时的反应填 true，幕后去做的填 false。"
              "一步里既有见面时的反应、又有之后在幕后要做的事（比如被问完就去报信），填 false。"
@@ -296,7 +315,8 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                    "声音、气味、有人说起这些画面上看不出来的不写。"
                    "【伏笔（已写）】里列着的不重写：已写的够 3 条就不再写新的；给其中值得的补 stages 时，沿用它的 id，hint、where、pays_off 照抄。", Signs),
     "clueweb": ("三线索原则：每个结论至少要有三条独立的线索能推出来。下面列着每个结论现有的线索；不够三条的，补一两条新线索："
-                "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。", NewClues),
+                "在哪个地点、哪样东西上，要什么检定，指向哪个结论。新线索不比原作的关键线索说得多，不直接说出真相，放在调查员会去的地方。"
+                "text 只写找到时就成立的事：原作里被问到才说的话、要满足条件才有的事，不写成事实。", NewClues),
     "ties": ("写 4–8 条私人牵连：调查员背景里的重要之人、意义非凡之地、思想与信念、宝贵之物、职业，可以怎样接上这个模组的人和地方。"
              "每条牵到一个 NPC 或地点，一句话说清这层关系。开局时导演按调查员的背景挑着用。", Ties),
     "endings": ("原作的结局之外，补 1–2 个玩家很可能走到、原作却没写的结局：放弃调查离开、和对手做了交易、只救下一部分人……"
@@ -404,7 +424,9 @@ def _book(m: Module, short: int | None) -> str:
                                             + ("，藏着" if i.hidden else "") for i in m.items))
     rows = []
     for c in m.clues:
-        where = f"在 {c.where}" + (f"·{c.feature}" if c.feature else "") + (f"，由 {c.npc} 说出" if c.npc else "")
+        others = [x for x in tellers(m, c) if x != c.npc]
+        where = (f"在 {c.where}" + (f"·{c.feature}" if c.feature else "") + (f"，出自 {c.npc}" if c.npc else "")
+                 + (f"，{'、'.join(others)} 也能说出" if others else ""))
         how = f"检定 {c.check.skill}（{c.check.difficulty}）" if c.check else "搜到即得"
         if c.npc and c.npc in npcs and c.id in npcs[c.npc].gates:
             gate = npcs[c.npc].gates[c.id]
@@ -413,13 +435,14 @@ def _book(m: Module, short: int | None) -> str:
         extra += [f"理智 {c.sanity}"] if c.sanity else []
         extra += [f"手稿 {c.handout}"] if c.handout else []
         rows.append(f"- {c.id}「{c.title}」{where}；{'；'.join(extra)}；指向 {'、'.join(c.points_to) or '无'}")
-        rows.append(f"  原文：{c.text.strip()}")
+        rows.append(f"  线索原文：{c.text.strip()}")
     lines.append("【线索】\n" + "\n".join(rows))
     if m.handouts:
         lines.append("【手稿】\n" + "\n".join(f"- {h.id}「{h.title}」（{h.kind}）：{_clip(h.text, short and 200)}" for h in m.handouts))
     lines.append("【结论】\n" + "\n".join(f"- {k.id}：{k.text}" for k in m.conclusions))
     lines.append("【事件】\n" + "\n".join(
-        f"- {e.id}「{e.title}」{e.when}：{_clip(e.text, None)}" + (f"；设标记 {'、'.join(e.sets)}" if e.sets else "")
+        f"- {e.id}「{e.title}」{e.when}：{_clip(e.text, None)}" + (f"；出场 {'、'.join(e.present)}" if e.present else "")
+        + (f"；设标记 {'、'.join(e.sets)}" if e.sets else "")
         + (f"；理智 {e.sanity}" if e.sanity else "") + (f"；进入结局 {e.ending}" if e.ending else "") for e in m.events))
     lines.append("【结局】\n" + "\n".join(f"- {e.id}「{e.title}」条件 {e.condition}：{_clip(e.text, short and 120)}" for e in m.endings))
     if m.extensions:
@@ -563,6 +586,10 @@ def need(m: Module, name: str) -> str:
         return "；".join(why)
     if name == "endings":
         return f"结局只有 {len(m.endings)} 个" if len(m.endings) < 3 else ""
+    if name == "present":  # once some event says who it brings, the module's events have been read for it
+        if any(e.present for e in m.events):
+            return ""
+        return f"朗读里有人到场、没写出场人物的事件：{_few(seen)}" if (seen := [e.id for e in m.events if shown(m, e)]) else ""
     if name == "meet":
         return f"{n} 步打算没标明是不是见面反应，或只演一次还是每次都演" if (n := len(_unmarked(m))) else ""
     if name == "foreshadow":  # none yet, or none that changes: the pass then gives the written ones their stages
@@ -650,6 +677,13 @@ def _material(m: Module, name: str) -> str:
         rows = [f"- {npc} / {s.id}：{s.text}" + (f"（条件 {s.when}）" if s.when else "") + ("（已标见面反应，只差 once）" if s.meet else "")
                 for npc, s in _unmarked(m)]
         return "\n【打算里没标的步骤】\n" + "\n".join(rows)
+    if name == "present":  # each event whole, read aloud and the keeper's words, with the people's other names
+        rows = [f"- {e.id}「{e.title}」{e.when}" + (f"，把调查员带到 {e.move_to}" if e.move_to else "")
+                + (f"；表演者 {e.performer}" if e.performer else "") + (f"；当场动手 {'、'.join(e.fight)}" if e.fight else "")
+                + f"\n  朗读：{_clip(e.read_aloud, None) or '（没有）'}\n  守秘人须知：{_clip(e.text, None)}" for e in m.events if not e.present]
+        called = [f"{n.id}：{n.called}" for n in m.npcs if n.called]
+        return ("\n【事件】（朗读和守秘人须知全文）\n" + "\n".join(rows)
+                + ("\n【调查员还不认识时的叫法】" + "；".join(called) if called else ""))
     if name == "clueweb":
         from .simulate import playthrough
 
@@ -740,6 +774,13 @@ def edits(m: Module, name: str, out: Any) -> list[tuple[Any, ...]]:
             if (s.meet or x.meet) and s.once is None and x.once is not None:
                 marks[(x.npc, x.step, "once")] = x.once
         return [("step", "agendas", npc, step, key, value) for (npc, step, key), value in marks.items()]
+    if name == "present":  # an event that says already is left as it is; one named twice, the first answer
+        events, found = {e.id: e for e in m.events}, []
+        for x in out.events:
+            e = events.pop(x.event, None)
+            if e is not None and not e.present and (who := [n for n in dict.fromkeys(x.present) if n in npcs]):
+                found.append(("put", "events", e.id, "present", who))
+        return found
     if name == "clueweb":
         taken = {c.id for c in m.clues}
         conclusions = {k.id for k in m.conclusions}
@@ -1264,8 +1305,8 @@ async def plan(folder: Path, passes: tuple[str, ...] = PASSES, *, log: Callable[
         log(f"[dim]  {'、'.join(waits)}要等前面的步骤补完；以上按模组现在的内容判断[/]")
     if "verify" in passes:
         if len(passes) > 1:
-            log(f"  {LABELS['verify']}：补完以后对照原文核对这次补的")
-            results.append(Result("verify", need="对照原文核对这次补的"))
+            log(f"  {LABELS['verify']}：补完以后对照原文核对这次补的和全部线索")
+            results.append(Result("verify", need="对照原文核对这次补的和全部线索"))
         else:
             results.append(await verify(folder, log=log, dry=True))
     return results
@@ -1370,11 +1411,25 @@ async def _judge(cfg: config.Config, material: str) -> Verdict:
 
 async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[str] | None = None,
                  log: Callable[[str], None] = print, dry: bool = False) -> Result:  # fmt: skip
-    """复核: what was added (this run's `refs`, or the whole situation layer when none are given:
-    its steps, signs, past and rules, never the NPCs' sheets)
-    held to the module's conditions by rule (module/conditions.py), then read against the original
-    text by one call; what gets round one is taken out of the files. `dry`: the rules' findings
+    """复核: what was added (this run's `refs`, or the whole situation layer when none are given), then
+    the module's clues, each read against the original text by one call (_layer, _clues). What of the
+    layer gets round a condition is taken out; what is wrong with a clue is reported, never rewritten
+    (the clue's words are the module's: whoever runs the review decides). `dry`: the rules' findings
     alone, with no call and nothing taken out."""
+    if not dry:
+        cfg = cfg or config.load()
+    out = await _layer(folder, cfg, refs=refs, log=log, dry=dry)
+    if found := await _clues(folder, cfg, log=log, dry=dry):
+        out.problems = [*(out.problems or []), *found]
+    return out
+
+
+async def _layer(folder: Path, cfg: config.Config | None, *, refs: list[str] | None, log: Callable[[str], None],
+                 dry: bool) -> Result:  # fmt: skip
+    """The added layer (this run's `refs`, or the whole situation layer when none are given: its steps,
+    signs, past and rules, never the NPCs' sheets) held to the module's conditions by rule
+    (module/conditions.py), then read against the original text by one call; what gets round one is
+    taken out of the files."""
     folder = Path(folder)
     m = Module.load(folder)
     # The whole layer, when no run's refs are given: what the NPCs know is the module's own sheet then, not this.
@@ -1395,7 +1450,7 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
         if hints:
             log(f"  按关键词可疑的 {len(hints)} 处，要调用模型对照原文判断")
         return Result("verify", problems=found or None, need=f"对照原文核对 {len(chosen)} 条")
-    cfg = cfg or config.load()
+    assert cfg is not None
     log(f"[bold]{LABELS['verify']}[/] {len(chosen)} 条补写对照原文…")
     try:
         verdict = await _judge(cfg, f"{book(m)}{_source(original(folder, _focus(m, 'verify')))}\n\n【补写的条目】\n" + "\n".join(_rows(m, chosen))
@@ -1427,6 +1482,75 @@ async def verify(folder: Path, cfg: config.Config | None = None, *, refs: list[s
         return Result("verify", problems=[*found, *new_errors])
     log(f"  [green]✓ {LABELS['verify']}[/]：拿掉了 {len(flagged)} 条")
     return Result("verify", len(flagged), problems=found, left_out=found)
+
+
+CLUES_SYSTEM = """你是 CoC 7 版跑团的资深守秘人，开团前对照原文核对整理好的线索。下面先是守秘人资料和原文，最后是要核对的线索。只挑这三种：
+- 条件：原文有条件才成立的事（被问到才说的话、检定成功或某件事发生以后才有的），线索原文写成了拿到线索时就成立的事实。
+  例：原文写“如果被问起那晚的事，他会说自己在家睡觉”，线索却写“他说那晚在家睡觉”。
+- 出处：npc 应是线索出自的人（他说的话、交出的东西、在他身上看到的样子）或要他当场点头才拿得到的人；东西在别处找到，这人只是指路、给钥匙或转述的，npc 写错了。
+- 转述：某个 NPC 的 clues 列着这条线索，可他说不出、也交不出线索写的内容（在他身上看到的样子、要亲眼查看或在别处检定才得到的东西）；
+  对他过心理学才看得出、gates 写着心理学的不算。
+原作本来就无条件成立的不算；没有问题的不列，拿不准的不列。"""
+
+
+class ClueFlag(BaseModel):
+    clue: str = Field(description="线索 id")
+    kind: Literal["条件", "出处", "转述"]
+    npc: str = Field("", description="转述：列着这条线索的 NPC id；其余留空")
+    original: str = Field(description="原文怎么写，摘一句，写明在哪一段或哪一页")
+    problem: str = Field(description="哪里不对，一句话")
+    fix: str = Field(description="怎么改：条件写去掉那部分后的线索全文，和那部分该写进谁的 knows、lies，"
+                                 "或改成带检定、前置条件（requires）的线索（gates 只写对人的交涉检定）；"
+                                 "出处写清空 npc、谁能转述；转述写从谁的 clues 拿掉")
+
+
+class ClueVerdict(BaseModel):
+    flags: list[ClueFlag] = Field(default_factory=list, max_length=24)
+
+
+def _clue_rows(m: Module) -> list[str]:
+    """Each clue to review, by its ref, with whom it comes from and who else lists it; its words are
+    in the book above (线索原文)."""
+    return [f"[{c.id}]「{c.title}」在 {c.where}" + (f"，出自 {c.npc}" if c.npc else "，不出自某个人")
+            + (f"；列在 {'、'.join(t)} 的 clues 里" if (t := [n.id for n in m.npcs if c.id in n.clues]) else "") for c in m.clues]
+
+
+async def _judge_clues(cfg: config.Config, material: str) -> ClueVerdict:
+    """The clue review's one call."""
+    s = Session("importer", cfg.role("importer"), CLUES_SYSTEM, schema=ClueVerdict.model_json_schema())
+    try:
+        reply = await s.send(material)
+        return ClueVerdict.model_validate(reply.data or {})
+    finally:
+        await s.close()
+
+
+async def _clues(folder: Path, cfg: config.Config | None, *, log: Callable[[str], None], dry: bool) -> list[str]:
+    """The module's clues read against the original (one call): a condition made plain fact (what
+    someone says only when asked), an npc who is not the one it comes from, someone listing a clue
+    they cannot tell. Reported for whoever runs the review to fix; nothing is written."""
+    m = Module.load(Path(folder))
+    if not m.clues:
+        return []
+    if dry:
+        log(f"  {len(m.clues)} 条线索要调用模型对照原文核对，这次不调用")
+        return []
+    assert cfg is not None
+    log(f"[bold]{LABELS['verify']}[/] {len(m.clues)} 条线索对照原文…")
+    try:
+        verdict = await _judge_clues(cfg, f"{book(m)}{_source(original(Path(folder), _focus(m, 'verify')))}\n\n【要核对的线索】\n"
+                                          + "\n".join(_clue_rows(m)))
+    except Exception as exc:
+        log(f"  [yellow]线索核对没有成功（{type(exc).__name__}）[/]")
+        return []
+    ids, npcs = {c.id for c in m.clues}, {n.id for n in m.npcs}
+    found = [f"线索 {f.clue}（{f.kind}{'，' + f.npc if f.npc in npcs else ''}）：{f.problem.strip()}｜原文：{f.original.strip()}｜改：{f.fix.strip()}"
+             for f in verdict.flags if f.clue in ids]
+    for line in found:
+        log(f"  [yellow]要改 {line}[/]")
+    if not found:
+        log("  [green]✓ 线索[/]：和原文对得上")
+    return found
 
 
 # -- how ready a module is to play -------------------------------------------------------------

@@ -64,18 +64,19 @@ def party_graph(cast: Cast, state: GameState):
     return g.compile()
 
 
-TOLD = ("opening", "keeper", "npc", "player", "speech", "dice", "clue", "handout", "event", "sanity", "damage")  # log lines the players read
-TELLER = {"opening": "开场", "clue": "线索", "handout": "手稿", "event": "事件"}
+TOLD = ("opening", "keeper", "npc", "player", "speech", "dice", "handout", "event", "sanity", "damage")  # log lines the players read
+TELLER = {"opening": "开场", "handout": "手稿", "event": "事件"}
 
 
 def situation(m: Module, st: GameState, who: str | None = None, game: Game | None = None) -> str:
     """What an AI player sees, and no more than the players have been shown: where they are
     and what they saw on arriving, the places they know (engine/fog.py: been to, or heard of
-    by the name they heard), the people they have met and where, the clues and handouts they
-    found, the party's state, and the game so far as it was told. Not the place's list of
-    things to search, its exits, or the people there they have not met: those are the
-    keeper's. A companion who knew them would play another game than the human beside it,
-    and autoplay would finish modules no table could.
+    by the name they heard), the people they have met and where, the handouts they hold, the
+    party's state, and the game so far as it was told. Not the place's list of things to search,
+    its exits, or the people there they have not met: those are the keeper's. Nor the module's
+    own words for the clues found: the players hear them in the story and keep their own notes
+    (the user, 2026-10-22), and so does an AI player. A companion who knew more would play
+    another game than the human beside it, and autoplay would finish modules no table could.
 
     In a fight or a chase, also how it stands as the players' screens show it and the round's choices
     in the words the engine reads (battle_now): for `who`, or for every investigator in it.
@@ -90,7 +91,6 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
         f"{'就在这里' if n.location == loc.id else f'在{known[n.location]}' if n.location in known else '不知道在哪'}）"
         for n in met
     )  # fmt: skip
-    clues = "\n".join(f"- 〔{m.clue(c).title}〕{_flat(m.clue(c).text, 240)}" for c in st.clues)
     handouts = "；".join(f"〔{m.handout(h).title}〕{_flat(m.handout(h).text, 160)}" for h in st.handouts)
     party = "\n".join(f"- {_status(inv)}" for inv in st.investigators)
     recent = [e for e in st.log if e.kind in TOLD][-10:]
@@ -106,7 +106,6 @@ def situation(m: Module, st: GameState, who: str | None = None, game: Game | Non
         out.append(f"你和大家分开了：你在{m.location(st.apart[who]).name}，大家在{loc.name}。")
     if people:  # talking to someone who is not here wastes a turn
         out.append(f"见过的人：{people}。不在这里的人，要先过去才说得上话。")
-    out.append(f"已有线索：\n{clues}" if clues else "已有线索：无")
     if handouts:
         out.append(f"手上的文件：{handouts}")
     out.append(f"队伍：\n{party}")

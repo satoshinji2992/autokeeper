@@ -33,8 +33,10 @@ class LogEntry(BaseModel):
 
 class Deed(BaseModel):
     """A line of one investigator's own record, the sheet's 本局经历: what they did and rolled,
-    what turned up on their turn, what it cost them. Only what the table saw, so it goes to
-    every screen at a shared table; and it is kept after the log is folded into memory."""
+    the papers handed to them on their turn, what it cost them. Only what the table saw, so it
+    goes to every screen at a shared table; and it is kept after the log is folded into memory.
+    No clue: what they learnt is in the story and in their own notes, never under the module's
+    title for it. A `clue` line comes only from a save made before 0.0.5, and is shown nowhere."""
 
     turn: int
     time: str
@@ -43,7 +45,7 @@ class Deed(BaseModel):
     text: str
 
 
-DEEDS = {"player": "act", "dice": "check", "clue": "clue", "handout": "handout", "sanity": "sanity", "damage": "damage"}
+DEEDS = {"player": "act", "dice": "check", "handout": "handout", "sanity": "sanity", "damage": "damage"}
 
 
 class Progress(BaseModel):
@@ -181,6 +183,9 @@ class GameState(BaseModel):
     logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
     deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)
+    # The players' own notes (F2, tui/notes.py), investigator id -> the page, in a local game. Never sent to
+    # a LAN table (net/hub.py PRIVATE): there each player keeps theirs on their own machine.
+    notebook: dict[str, str] = Field(default_factory=dict)
     progress: Progress = Field(default_factory=Progress)  # the players' 故事至今, on the 进展 page
     prologue: str = ""  # the keeper's opening as the table heard it, on the 背景 page
     pending_push: dict | None = None
@@ -263,14 +268,13 @@ class GameState(BaseModel):
 
     def _deed(self, e: LogEntry, acting: str) -> None:
         """A log line about one investigator goes into their record too: what was done and
-        rolled under their name; a clue or a handout goes to `acting`, whose turn it was."""
+        rolled under their name; a handout goes to `acting`, whose turn it was."""
         kind = DEEDS.get(e.kind)
-        name = acting if e.kind in ("clue", "handout") else e.who
+        name = acting if e.kind == "handout" else e.who
         who = next((i.id for i in self.investigators if i.name == name), "") if kind else ""
         if not who:
             return
-        text = e.text.split("〕", 1)[0].lstrip("〔") if e.kind == "clue" else e.text[:120]  # a clue's title; F2 has the rest
-        self.deeds.append(Deed(turn=e.turn, time=e.time, who=who, kind=kind, text=text))  # type: ignore[arg-type]
+        self.deeds.append(Deed(turn=e.turn, time=e.time, who=who, kind=kind, text=e.text[:120]))  # type: ignore[arg-type]
         del self.deeds[:-KEEP_DEEDS]
 
     def npc(self, npc_id: str) -> NpcState:

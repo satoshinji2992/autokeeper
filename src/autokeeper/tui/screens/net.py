@@ -27,7 +27,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Input, Static
 
-from ... import config
+from ... import config, paths
 from ...engine import chat, idea
 from ...engine.game import RETELL
 from ...engine.state import GameState, LogEntry
@@ -36,6 +36,7 @@ from ...net import media
 from ...net import room as lan
 from ...net.link import Link
 from ...rules import commands
+from .. import notes
 from ..modals.dialogs import PushModal, RollModal, Timed
 from ..modals.engine import EngineModal
 from ..modals.retell import RetellModal
@@ -166,6 +167,10 @@ class NetGameScreen(GameScreen):
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
         self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F5
+        # The player's own notes (tui/notes.py): this machine's, never sent anywhere. A browser's seat runs
+        # on the host's machine (net/web.py): its notes live as long as its page, and nothing is written.
+        self.guest = bool(os.environ.get("AUTOKEEPER_GUEST"))
+        self.jotted: str | None = None  # read from this machine the first time they are wanted
         self._peeking = self._peek_again = False  # the developer panel is being made on the Hub's loop; again after
 
     async def on_mount(self, event: events.Mount) -> None:
@@ -195,6 +200,40 @@ class NetGameScreen(GameScreen):
 
     def _me(self) -> str | None:
         return self.seat or None
+
+    # -- the player's own notes: on this machine, per game and seat (tui/notes.py) -----------------------
+    def _notes_owner(self) -> str | None:
+        return self.seat or None  # watching: no notes
+
+    def _notes_file(self) -> Path:
+        return paths.table_notes(self.state.module, self.state.slot, self.seat or "")
+
+    def notes(self) -> str | None:
+        if not self.seat:
+            return None
+        if self.jotted is None:  # sat down here before: what was written then
+            self.jotted = "" if self.guest else notes.read(self._notes_file())
+        return self.jotted
+
+    def keep_notes(self, text: str) -> bool:
+        """Kept on this machine, never sent: not to the host, not to the others."""
+        if not self.seat:
+            return False
+        self.jotted = text
+        if not self.guest:
+            try:
+                notes.write(self._notes_file(), text)
+            except OSError as exc:
+                self.app.notify(f"笔记未能保存：{exc}", severity="error", timeout=6)
+                self._notes_shown()
+                return False
+        self._notes_shown()
+        return True
+
+    def _notes_notice(self) -> str:
+        if self.guest:
+            return "网页版不保存笔记，关闭或刷新页面后即清空。"
+        return "笔记只保存在这台电脑上，不会发给房主和其他玩家。"
 
     def _countdown(self) -> None:
         """The round's window counting down on the turn line."""
@@ -409,9 +448,8 @@ class NetGameScreen(GameScreen):
         if t == "retold":  # the keeper is about to tell the last narration again, for everyone
             self.app.notify(f"{ev.get('who') or '有人'}请守秘人重讲上一段" + ("" if ev.get("nudge") == "换个讲法" else f"：{ev.get('nudge')}"), timeout=4)
             return
-        if t in ("clue", "handout"):  # hidden from this screen until now
-            items = self.m.clues if t == "clue" else self.m.handouts
-            if found := next((x for x in items if x.id == ev["id"]), None):
+        if t == "handout":  # hidden from this screen until now
+            if found := next((x for x in self.m.handouts if x.id == ev["id"]), None):
                 found.title, found.text = ev["title"], ev["text"]
         await super().handle(ev)
 

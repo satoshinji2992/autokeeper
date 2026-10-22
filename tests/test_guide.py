@@ -143,8 +143,8 @@ async def test_a_hint_comes_once_per_player(canned):
         await turn(screen, dice(name))
         assert len(shown(screen)) == 2 and "检定结果" in shown(screen)[-1]
         await turn(screen, dice(name, 80))
-        assert len(shown(screen)) == 2  # the second roll: nothing new to say
-    assert sorted(json.loads(paths.tips().read_text(encoding="utf-8"))["seen"]) == ["check", "start"]
+        assert len(shown(screen)) == 3 and "F2" in shown(screen)[-1]  # the second roll: nothing new to say of it; the notebook
+    assert sorted(json.loads(paths.tips().read_text(encoding="utf-8"))["seen"]) == ["check", "notes", "start"]
 
     app = AutoKeeperApp(theme="amber")  # the same player, another day
     async with app.run_test(size=(140, 44)) as pilot:
@@ -158,19 +158,22 @@ async def test_at_most_one_hint_a_turn_the_rest_wait(canned):
     async with app.run_test(size=(140, 44)) as pilot:
         screen = await open_game(app, pilot, resume=True)  # a loaded game: no opening, no "how to begin"
         name = screen.state.investigator.name
-        clue = {"type": "clue", "id": "c_notice", "title": "告示", "text": "午夜的钟声多了一下。"}
+        clue = {"type": "clue", "id": "c_notice", "title": "标题哨兵", "text": "原文哨兵。"}
         npc = {"type": "npc", "npc": "warden", "name": "老守钟人", "text": "钟有钟的规矩。", "portrait": ""}
         await turn(screen, dice(name), clue, npc)
-        assert len(shown(screen)) == 1 and "线索本" in shown(screen)[0]  # the clue first
+        assert len(shown(screen)) == 1 and "检定结果" in shown(screen)[0]  # the roll first; a clue found shows nothing
         await screen.handle({"type": "keeper_end", "text": "就在这时，楼梯上传来脚步声。"})  # an interlude, same turn
         assert len(shown(screen)) == 1
         await turn(screen)
-        await turn(screen)
-        assert len(shown(screen)) == 3 and "检定结果" in shown(screen)[1] and "与 NPC 对话" in shown(screen)[2]
+        assert len(shown(screen)) == 2 and "与 NPC 对话" in shown(screen)[1]
+        await turn(screen)  # something heard by now: where to note it
+        assert len(shown(screen)) == 3 and "/记 内容" in shown(screen)[2] and "F2" in shown(screen)[2]
         await turn(screen)  # four turns and nothing found: there is F5
         assert len(shown(screen)) == 4 and "F5" in shown(screen)[3]
         await turn(screen)
         assert len(shown(screen)) == 4  # nothing left waiting
+        story = "".join(str(w.render()) for w in screen.story.children)
+        assert "原文哨兵" not in story and "标题哨兵" not in story
 
 
 async def test_a_real_turn_ends_with_one_hint_after_its_narration(canned, fake):

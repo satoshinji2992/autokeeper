@@ -102,7 +102,11 @@ def example(tmp_path, monkeypatch):
     async def judge(cfg, material):  # the review of what was added (verify): finds nothing here
         return adapt.Verdict()
 
+    async def clues(cfg, material):  # and of the clues: nothing either
+        return adapt.ClueVerdict()
+
     monkeypatch.setattr(adapt, "_judge", judge)
+    monkeypatch.setattr(adapt, "_judge_clues", clues)
     return folder
 
 
@@ -239,7 +243,7 @@ def dry(monkeypatch):
 
         return call
 
-    for name in ("_ask", "_judge", "review", "Session"):
+    for name in ("_ask", "_judge", "_judge_clues", "review", "Session"):
         monkeypatch.setattr(adapt, name, refuse(name))
     monkeypatch.setattr(adapt.config, "load", refuse("config.load"))
     return calls
@@ -277,3 +281,64 @@ def test_upgrade_dry_run_from_the_command_line_finds_the_example_and_asks_no_mod
     assert {p: p.read_bytes() for p in files} == files
     out = CliRunner().invoke(app, ["upgrade", "example", "--dry-run", "--review"])  # the review is a call
     assert out.exit_code == 1 and "--review" in out.output and dry == []
+
+
+async def test_the_present_pass_names_who_each_event_puts_before_the_investigators(example, monkeypatch):
+    """2026-10-22: the read-aloud had the truck's driver step down, the record had him nowhere. The pass
+    writes Event.present from the read-aloud and the original, and only for events that lack it."""
+    story = example / "story.yaml"
+    text = story.read_text(encoding="utf-8").replace("    present: [preacher]", "    # present")  # as an import leaves it
+    story.write_text(yamledit.append(text, "events", [{"id": "truck", "title": "卡车停下", "when": "visit:office",
+                                                       "text": "开车的人下车", "read_aloud": "驾驶座上的人下来，他开口前先咳了一声。"}]),
+                     encoding="utf-8")
+    m = Module.load(example)
+    assert adapt.need(m, "present") == "朗读里有人到场、没写出场人物的事件：truck"
+    assert "驾驶座上的人下来" in adapt._material(m, "present") and "布道者登上台阶" in adapt._material(m, "present")
+    asked = []
+
+    async def ask(cfg, name, m, **_):
+        asked.append(name)
+        return adapt.Appearances(events=[adapt.Appearance(event="truck", present=["warden", "nobody"]),
+                                         adapt.Appearance(event="e_sermon", present=["preacher"]),
+                                         adapt.Appearance(event="e_dusk", present=[])])
+
+    monkeypatch.setattr(adapt, "_ask", ask)
+    [result] = await adapt.adapt(example, passes=("present",), cfg=SimpleNamespace(), log=lambda _: None)
+    m = Module.load(example)
+    assert asked == ["present"] and result.written == 2
+    assert {e.id: e.present for e in m.events} == {"e_dusk": [], "e_sermon": ["preacher"], "e_finale": [], "truck": ["warden"]}
+    assert not adapt.wanted(m, "present") and not [i for i in adapt.audit(m) if i.level == "error"]
+
+
+async def test_the_clue_review_reports_what_the_original_gives_on_a_condition_and_writes_nothing(example, monkeypatch):
+    """A clue's words that make plain fact of what the original has someone say only when asked
+    (2026-10-22: the shrapnel in the driver's chest): reported with the original's words, never rewritten."""
+    seen = []
+
+    async def clues(cfg, material):
+        seen.append(material)
+        return adapt.ClueVerdict(flags=[
+            adapt.ClueFlag(clue="c_diary", kind="条件", original="被说服以后他才拿出日记", problem="写成了一见面就有", fix="去掉……"),
+            adapt.ClueFlag(clue="c_nothing", kind="出处", original="", problem="没有这条", fix="")])
+
+    monkeypatch.setattr(adapt, "_judge_clues", clues)
+    files = {p: p.read_bytes() for p in example.rglob("*") if p.is_file()}
+    lines: list[str] = []
+    out = await adapt.verify(example, SimpleNamespace(), log=lines.append)
+    assert "【要核对的线索】" in seen[0] and "[c_diary]「守钟人的日记」在 tower，出自 warden" in seen[0]
+    assert "[c_notice]「广场告示」在 square，不出自某个人" in seen[0] and "线索原文：" in seen[0]
+    assert out.problems == ["线索 c_diary（条件）：写成了一见面就有｜原文：被说服以后他才拿出日记｜改：去掉……"]
+    assert any(line.startswith("  [yellow]要改 线索 c_diary") for line in lines)
+    assert {p: p.read_bytes() for p in files} == files  # the clue's words are the module's: reported, never rewritten
+
+
+def test_every_place_that_writes_a_clues_words_keeps_conditions_out_of_them():
+    """What someone says only when asked, or what comes only on a condition, is no plain fact of a clue:
+    the importer's brief, the schema it reads, the clue web's new clues and the clue review all say so."""
+    from autokeeper.module import importer
+    from autokeeper.module.schema import Clue
+
+    for text in (importer.BRIEF, Clue.model_fields["text"].description, adapt.ASK["clueweb"][0],
+                 adapt.NewClue.model_fields["text"].description, adapt.CLUES_SYSTEM):
+        assert "被问到才说的话" in text, text[:40]
+    assert "朗读里出现在调查员眼前的 NPC" in importer.BRIEF and "present" in importer.BRIEF

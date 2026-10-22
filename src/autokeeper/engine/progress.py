@@ -9,9 +9,11 @@ stale for ever; with nothing new at all, never. The ending always gets a last on
 a player may ask for one (Ctrl+Y), once a turn.
 
 It is written from the last one and what the table was shown since: the keeper's narration,
-the investigators' actions, what people said to them, the clues and handouts found, and the
-hook they started from. It is never given the module's truth, the keeper's notes, anyone's
-secrets or the director's plans, so it cannot give them away. The summarizer's cheap model
+the investigators' actions, what people said to them, the handouts found, and the hook they
+started from. It is never given the module's truth, the keeper's notes, anyone's secrets or the
+director's plans, so it cannot give them away; nor the module's own words for a clue found (the
+user, 2026-10-22: the players hear it in the story and keep their own notes), only the telling
+that put it into the story. The summarizer's cheap model
 writes it in the background (Game._recount): no turn waits for it, and when a call fails the
 old text stands."""
 
@@ -26,10 +28,10 @@ SAN_LOSS = 3  # the party's sanity lost since the last account that is a milesto
 HP_LOSS = 1  # HP lost since then that is one: any wound
 TIME_SKIP = 240  # game minutes gone since then that count as a jump in time (a rest, a night)
 LIMIT = 200  # characters asked for
-SHOWN = ("opening", "keeper", "player", "speech", "npc", "clue", "handout", "event", "sanity", "damage", "ending")  # what the table saw
+SHOWN = ("opening", "keeper", "player", "speech", "npc", "handout", "event", "sanity", "damage", "ending")  # what the table saw
 LINES = 60  # log lines one account reads at most
 LONG = 400  # characters of one line
-TELLER = {"opening": "开场", "keeper": "守秘人", "clue": "找到线索", "event": "发生", "ending": "结局"}
+TELLER = {"opening": "开场", "keeper": "守秘人", "event": "发生", "ending": "结局"}
 FOUND = ("clues", "handouts", "places", "people", "beats", "worse")  # counts that only go up
 WHAT = {"clues": "线索", "handouts": "手稿", "places": "新地点", "people": "新面孔", "beats": "剧情",
         "worse": "伤病或疯狂", "san": "理智", "hp": "伤势", "time": "时间", "day": "新的一天"}

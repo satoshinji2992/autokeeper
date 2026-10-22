@@ -369,8 +369,8 @@ def _location_md(m: Module, loc: Location) -> str:
     clues = m.clues_at(loc.id)
     if clues:
         out += ["## 线索", ""]
-        for c in clues:
-            where = c.feature or (m.npc(c.npc).name if c.npc else "")
+        for c in clues:  # one that comes from someone is had with them there (graph.at_hand)
+            where = "，".join(x for x in (c.feature, f"出自{m.npc(c.npc).name}，本人在场才拿得到" if c.npc else "") if x)
             extra = []
             if c.core:
                 extra.append("关键")

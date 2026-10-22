@@ -554,8 +554,8 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 7. 调查员做了模组没写到的事，系统会附上导演的安排：新的人物、地点、线索、事件，或者一段后果。顺着安排讲，把新内容自然地织进故事。
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
-   线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；它意味着什么、指向哪里，留给玩家自己推理。
-   消息出自人口时（路人、店主这些由你扮演的人），让他用自己的话说，有来有往；不要用“他说……”把一整条消息概括转述。一次只带出一两处，其余留给玩家追问。
+   线索给到了，写出他是怎么发现的、看到了什么，写实，写到玩家能在脑子里画出来；玩家没有线索卡，原文里的事都要在叙述里讲到。它意味着什么、指向哪里，留给玩家自己推理。
+   消息出自人口时（路人、店主这些由你扮演的人），让他用自己的话说，有来有往；不要用“他说……”把一整条消息概括转述。
    由你扮演的人开口时，他的话单独成段，段首用【】写玩家对他的称呼，紧接着写他说的话，比如：【开卡车的年轻人】赫琴斯自个儿不在这儿。动作和神情写在前后的叙述段里。模组里的 NPC 不这样写，他们的话系统另外显示。
 9. 先让地方像有人生活：人有手头的活、口味、习惯和琐事；没给新线索的一顿饭、一次问路也可以完整成立。
    可以补符合年代的气味、街边营生和普通过客的一两句应答；不借此新增案情、危险、物品效果或检定结果。
@@ -597,7 +597,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 篇幅跟着情绪走：被惹恼了一两句就够；心里有事、正想找人倒一倒的时候，可以说上一大段，最多七八句。长句短句错开。
 - 说你自己的事：你的营生、家里人、身上的毛病、你在乎的东西，这些家常可以随口带出来。回答问题时带上你的看法和偏见，不光交代事实；但和案子有关的人、事、怪象，只说上面写着的，别添新的。
 - 大多数时候直接开口说话。动作和神态写在（）里，只在它比话更能说明问题时才写，一次最多一处。
-- 口头禅偶尔带一下就好；上一轮说过的话，换个说法或者干脆不提。
+- 说话方式里写的口头禅、咳嗽、小动作是这个人的习惯，隔几句露一次就够，资料写着“总是”也不必句句都带；上一轮说过的话，换个说法或者干脆不提。
 - 有来有往地聊：一般说三到六句，接住对方的话，说说你的看法和手头的琐事，常常顺口反问一句；被惹恼、急着打发人时才一两句。只回答他实际问的话，不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
 - 已解锁的线索是你知道、也愿意说的事，不是要一口气交代的清单。先接着对方的话聊，把其中一两处细节揉进家常、抱怨或别人的闲话里带出来，别的留着等对方追问；对方问得具体，再说得具体。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
@@ -623,12 +623,12 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 {extra}"""
 
 CHRONICLER_SYSTEM = """你是这场跑团的记录员。你会收到游戏记录，按要求写摘要或前情回顾。
-摘要：客观、紧凑，记下调查员去过哪里、见过谁、拿到哪些线索、做了哪些关键决定、身心状态。
-前情回顾：像守秘人开团前帮玩家接上进度。用平实的现代汉语，称呼调查员的名字，按时间讲清发生了什么、手上有哪些线索、现在在哪、还悬着什么问题。不用评书和说书人的套话，不写诗，不加感叹和评点。
+摘要：客观、紧凑，记下调查员去过哪里、见过谁、听到和看到了什么、做了哪些关键决定、身心状态。
+前情回顾：像守秘人开团前帮玩家接上进度。用平实的现代汉语，称呼调查员的名字，按时间讲清发生了什么、现在在哪、还悬着什么问题；不替玩家把线索整理成清单。不用评书和说书人的套话，不写诗，不加感叹和评点。
 只输出纯文本，界面不渲染 Markdown：不要加粗、标题和列表符号。"""
 
 PROGRESS_SYSTEM = """你给跑团的玩家写「故事至今」：放在屏幕一侧、随时可以翻看的一段进度。
-只用给你的材料：开场的缘起、守秘人讲给玩家听的叙述、调查员的行动、NPC 当面说的话、找到的线索和手稿。材料里没有的事不写，不猜真相，不评点，不出主意。
+只用给你的材料：开场的缘起、守秘人讲给玩家听的叙述、调查员的行动、NPC 当面说的话、拿到的手稿。材料里没有的事不写，不猜真相，不评点，不出主意。
 用平实的现代汉语、第三人称，称呼调查员的名字，按时间顺序交代来龙去脉，最后落在他们眼下的处境和还没解开的疑问上。
 只输出这一段纯文本，不要标题、列表和 Markdown。"""
 
@@ -654,7 +654,7 @@ SUGGEST_SYSTEM = """你坐在一场 CoC 7 版中文跑团的桌边，帮玩家�
 {sheet}
 开场时玩家知道的：{hook}
 
-你只知道下面告诉你的情况：守秘人讲过的事，玩家见过的人，去过和听说过的地方，找到的线索。模组里还藏着什么，你不知道，也别去猜。
+你只知道下面告诉你的情况：守秘人讲过的事，玩家见过的人，去过和听说过的地方，手上的文件。模组里还藏着什么，你不知道，也别去猜。
 想三个方向不同的行动，每个都是玩家在桌上会说的一句话：第一人称，{name}的口吻，具体到人、东西或地方，不超过 30 字，
 比如“我蹲下看看门槛上的泥印”“我问掌柜：昨晚谁来过？”“我先回客栈睡一觉，明早再来”。
 只用情况里出现过的人、地方和东西，不编新的；只说要做什么，不写结果，也不替调查员下结论。"""
@@ -794,10 +794,18 @@ class Cast:
                 for item in world_knowledge.visible_items(self.world, who, holder=who)]
 
     # -- context builders -------------------------------------------------------
+    def present(self, place: str) -> list[str]:
+        """Who is at a place as the world record has them, alive and not gone; without a record (a
+        bare Cast), the module's people of that place."""
+        if self.world is not None:
+            return self.world.present(place)
+        return [n.id for n in self.module.npcs_at(place) if n.status not in ("死亡", "失踪")]
+
     def scene(self, state: GameState, at: str | None = None) -> str:
         m = self.module
         loc = m.location(at or state.location)
-        npcs = "、".join(f"{n.name}({n.id})" for n in m.npcs_at(loc.id)) or "无"
+        here = set(self.present(loc.id))
+        npcs = "、".join(f"{n.name}({n.id})" for n in m.npcs if n.id in here) or "无"
         exits = "、".join(f"{m.location(e).name}({e})" for e in loc.exits)
         known = "、".join(f"{x.name}({x.id})" for x in m.locations if x.id != loc.id and x.id not in loc.exits)
         return (
@@ -1165,14 +1173,23 @@ class Cast:
         s = self._arbiter(state)
         inv = state.investigator
         where = at or state.location
-        near = module_graph.neighbourhood(m, where)
+        # Who is there and what is to be had with them, as the world record has it (2026-10-22: the
+        # clue about the truck's driver was listed at an empty cab, and given).
+        near = module_graph.neighbourhood(m, where, self.present(where))
+        here = {n.id: f"{n.name}({n.id})" for n in near["npcs"]}
         lines = []
         for c in near["clues"]:
             if c.id in state.clues or not c.available(state.flags, state.clues):
                 continue
             need = f"{c.check.skill}·{c.check.difficulty}" if c.check else "无需检定"
-            src = "、".join(x for x in (c.feature, f"NPC {c.npc} 口中" if c.npc else "") if x)
-            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}在 {src}，{need}；内容：{c.text.strip()}")
+            tell = "、".join(here[x] for x in module_graph.tellers(m, c) if x in here and x != c.npc)
+            if c.npc in here:  # what they say, or what is seen of them
+                src = f"出自 {here[c.npc]}" + (f"（{c.feature}）" if c.feature else "")
+            elif c.npc or c.where != where:  # its person or its place is elsewhere: someone here can tell it
+                src = f"{tell} 能说出"
+            else:
+                src = f"在 {c.feature or '此处'}" + (f"，{tell} 也能说出" if tell else "")
+            lines.append(f"- {c.id}「{c.title}」{'【关键】' if c.core else ''}{src}，{need}；内容：{c.text.strip()}")
         gates = []
         for n in near["npcs"]:
             for cid in n.clues:
@@ -1202,9 +1219,9 @@ class Cast:
         )
         if action.npc and any(n.id == action.npc for n in m.npcs):  # the difficulty against someone comes from them (p. 72)
             prompt += f"\n【对方的相应数值】{opposing(m.npc(action.npc))}"
-        prompt += "\n【本地人物的处境】\n" + "\n".join(
+        prompt += "\n【本地人物的处境】\n" + ("\n".join(
             f"- {n.name}({n.id})：{n.personality}；想要：{n.goal}" for n in near["npcs"]
-        )
+        ) or "这里没有别人")
         prompt += "\n【调查员重要装备状态】" + ("；".join(self._equipment(inv.id)) or "尚无单独登记")
         if self.world is not None and not encounter and (ways := chase_site.ways_at(m, self.world.rec.obstacles, where)):
             prompt += ("\n【本局改变过的通路】" + "；".join(ways)
@@ -1668,7 +1685,8 @@ class Cast:
 
     async def recap(self, state: GameState, on_delta: OnDelta = None) -> str:
         s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)
-        recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:])
+        # What the table was told: the telling that put each clue into the story, not the module's words for it.
+        recent = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in state.log[-30:] if e.kind != "clue")
         prompt = f"写一段前情回顾，150–250 字，只讲调查员已经知道的事，最后落在他们现在的处境上。\n摘要：{state.memory or '无'}\n最近记录：\n{recent}"
         reply = await self._send("chronicler", s, state, prompt, on_delta=on_delta)
         return reply.text.strip()

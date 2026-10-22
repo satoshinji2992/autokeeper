@@ -40,7 +40,7 @@ class RetellModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal", id="retell-modal"):
             yield Static("重讲上一段", classes="modal-title")
-            yield Static(Text("仅调整叙述方式，检定、线索与 NPC 已有对话保持不变。", style="dim"))
+            yield Static(Text("仅调整叙述方式，检定结果与 NPC 已有对话保持不变。", style="dim"))
             options = [Option(Text.assemble((LABELS.get(name, name).ljust(5, "　"), "bold"), HINTS.get(name, "")), id=name) for name in RETELL]
             yield OptionList(*options, id="nudges")
             yield Static("Enter 选择 · Esc 取消", classes="system")

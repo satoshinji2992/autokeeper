@@ -25,6 +25,7 @@ from ... import artkit, atmosphere, imagery, pictures, scenery, weather
 from ...module.schema import Module
 from ...rules.catalog import CHARACTERISTICS, SKILL_BASE
 from ...rules.coc import Investigator
+from .. import notes
 from ..drawing import art
 
 LEVEL_STYLE = {
@@ -765,7 +766,8 @@ def command_suggester(inv: Investigator | None = None, actions: list[str] | None
     checks = [f"{cmd} {name}" for cmd in (".ra", ".rab", ".rap", ".rc") for name in names]
     checks += [f".ra {level}{name}" for level in ("困难", "极难") for name in names]
     lookups = [".r 1d100", ".r 1d6", ".st", ".en", ".coc", ".ti", ".li"]
-    slash = ["/draw", "/notes", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help", "/dev", "/theme", "/quit"]
+    slash = ["/draw", "/notes", "/记 ", "/map", "/sheet", "/suggest", "/recap", "/retell", "/retry", "/debrief", "/save", "/usage", "/prefs", "/help",
+             "/dev", "/theme", "/quit"]
     return SuggestFromList([*checks, *lookups, *slash, *(actions or [])], case_sensitive=False)
 
 
@@ -1065,8 +1067,8 @@ class HistoryPanel(VerticalScroll):
         self.tooltip = "点击一条记录，故事跳到那一段"
 
     def _stick(self) -> None:
-        """The newest line stays in sight once there are more than fit (also when the clue list below
-        grows; scrolling up lets go). Not before: an anchored panel stands its few lines at the bottom."""
+        """The newest line stays in sight once there are more than fit (also when the notes below
+        grow; scrolling up lets go). Not before: an anchored panel stands its few lines at the bottom."""
         if self.max_scroll_y > 0:
             self.anchor()
 
@@ -1114,21 +1116,18 @@ def history_line(kind: str, body, block=None) -> Text | None:
         return line
     if kind == "dice":
         return Text("  " + first, style="dim")
-    if kind == "clue":
-        return Text.assemble(("  ↳ ", "dim"), (first, "bold #e9c46a"))
     if kind in ("sanity", "handout", "ending") or (kind == "system" and first.startswith(("✚", "◎"))):
         return Text("  " + first, style="bold" if kind == "ending" else "")
     return None
 
 
 def log_line(entry) -> Text | None:
-    """A saved log entry (state.log, the LAN backlog) as a history line."""
+    """A saved log entry (state.log, the LAN backlog) as a history line. Never a clue's: the
+    module's words for what was found are the keeper's, the story told it."""
     if entry.kind in ("player", "speech"):  # an action, or words to the party (engine/chat.py)
         return Text(f"{entry.who}：{entry.text}"[:120], style="bold")
     if entry.kind == "dice":
         return Text(f"  ◈ {entry.text}", style="dim")
-    if entry.kind == "clue":
-        return Text.assemble(("  ↳ ", "dim"), (entry.text.split("〕", 1)[0] + "〕", "bold #e9c46a"))
     first = entry.text.split("\n", 1)[0]
     if entry.kind in ("sanity", "damage"):  # whose, as the live line has it
         return Text(f"  {'※' if entry.kind == 'sanity' else '✚'} {entry.who + ' ' if entry.who else ''}{first}")
@@ -1137,17 +1136,21 @@ def log_line(entry) -> Text | None:
     return None
 
 
-class CluePanel(Static):
-    """What has been found, newest last. How many there are to find is not the player's to know."""
+class NotesPanel(Static):
+    """The start of the player's own notes (F2, tui/notes.py) under the right column, a line each, as
+    many as the column holds (GameScreen.on_resize); a formal hint while there are none. Someone only
+    watching keeps none: the line says where the papers are. A click opens the notebook. Never what
+    the game found: the notes are the player's (the user, 2026-10-22)."""
 
-    def show(self, titles: list[str]) -> None:
+    HEAD = 12  # lines of the notes it takes; the column shows what fits
+
+    def show(self, text: str | None) -> None:
         out = Text()
-        out.append(f"线索本 · {len(titles)} 条", style="bold")
-        out.append("   F2 展开\n", style="dim")
-        for t in titles[-12:]:
-            out.append("〔", style="dim")
-            out.append(t, style="bold")
-            out.append("〕\n", style="dim")
-        if not titles:
-            out.append("暂无已发现的线索。\n", style="dim")
+        out.append("资料" if text is None else "笔记", style="bold")
+        out.append(" · F2 查看" if text is None else " · F2 展开" if text.strip() else " · F2 记录", style="dim")
+        for line in notes.head(text or "")[: self.HEAD]:
+            out.append(f"\n{line}")
         self.update(out)
+
+    async def on_click(self) -> None:
+        await self.screen.run_action("notes")

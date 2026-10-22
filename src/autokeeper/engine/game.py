@@ -26,6 +26,7 @@ from ..agents.cast import Action, Cast, Failure, Initiative, Rejoin, Ruling, kp_
 from ..agents.director import Improv
 from ..harness.models import refused
 from ..harness.replay import CassetteError
+from ..module import graph as module_graph
 from ..module import improv
 from ..module.schema import PARTY_DEAD, PARTY_UNFIT, Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
@@ -354,6 +355,7 @@ class Game(Encounters):
         happened = [e.read_aloud.strip() or e.title for e in opening.events]
         if happened:
             report += "【开场时发生的事（尚未展示给玩家，融入同一段叙事，按先后自然带出，不逐件罗列）】\n" + "\n".join(happened) + "\n"
+        report += "".join(f"{line}\n" for line in self._found(opening))  # a rule's find at the start (plugins "start")
         report += (
             "请用 180–320 字、两到四个自然段引入故事（有玩家篇幅偏好时以偏好为准）："
             "先用来信、旅途、职业或已写的关系自然交代为何而来，再让调查员看见眼前的生活和地方。"
@@ -730,15 +732,14 @@ class Game(Encounters):
         return why if len(why) <= WHY_LEN else why[: WHY_LEN - 1] + "…"
 
     def _led_to(self, won: list[str], done: list[str], passed: bool, npc: str = "", offer: dict | None = None) -> list[str]:
-        """What a roll led to, written under it: the clues it won and who gave them up, what it
-        set in motion, or that it came to nothing. Only what the investigator now knows."""
+        """What a roll led to, written under it: that it found something and who gave it up, what
+        it set in motion, or that it came to nothing. Never what was found: the telling says that,
+        in the story's words (the user, 2026-10-22: no clue's title or summary on the screen)."""
         m = self.m
         lines = []
-        for cid in won:
-            clue = m.clue(cid)
-            owner = next((n for n in m.npcs if cid in n.clues), None)
-            got = f"{owner.name}松了口：〔{clue.title}〕" if owner else f"获得线索〔{clue.title}〕"
-            lines.append(got if passed else f"没过，可关键线索还是到手了：〔{clue.title}〕，代价看叙述")
+        if won:
+            owner = next((n.name for cid in won for n in m.npcs if cid in n.clues), "")
+            lines.append((f"{owner}松了口" if owner else "有所发现") if passed else "没过，但仍有所得，代价见叙述")
         if done:
             lines.append("行动奏效了")  # flag descriptions are private notes, not player-facing outcomes
         if offer is not None:
@@ -1264,8 +1265,8 @@ class Game(Encounters):
         told = (idea.realised(clue.title, mentioned=bool(plan.get("mentioned", True))) if passed
                 else idea.cut(clue.title, idea.LOST, staged=staged))
         await step("idea-note", turn, lambda: turn.notes.append(told))
-        lines = ([f"灵感检定成功：想到了〔{clue.title}〕"] if passed else
-                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", f"〔{clue.title}〕仍然得到"])
+        lines = (["灵感检定成功：理出了一条思路"] if passed else  # what it is, the telling says
+                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", "那条思路仍会在局面中显露"])
         await step("idea-outcome", turn, lambda: self.emit({"type": "outcome", "who": roller.name, "lines": lines}))
         await step("turn-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
         await step("ending", turn, lambda: self._check_ending(turn))
@@ -2119,13 +2120,14 @@ class Game(Encounters):
             return ""
         await self._foreshadow(turn)
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
-        # what the player did still wants telling.
+        # what the player did still wants telling, and so does a find no one said in their line.
+        told = self._told_by(turn)
         if (any(nid not in turn.joined for nid, _ in turn.npc_lines) and not turn.events and not turn.notes and not turn.ending
-                and not turn.arrived and not turn.world and not turn.sanity and not turn.hints):
+                and not turn.arrived and not turn.world and not turn.sanity and not turn.hints and all(c in told for c in turn.clues)):
             self.told = None
             await self.emit({"type": "dialogue_end"})
             if not st.held or self.holding:
-                return ""  # the reply, clue cards and roll outcomes have already been shown
+                return ""  # the reply, in its words what it told, and the roll outcomes have already been shown
             return await self.tell_held(turn=turn, on_delta=on_delta)  # the round's last: the others still want telling
         report = self._report(turn)
         if self.holding and not turn.ending:  # others act in this round too: told together, by the last
@@ -2193,7 +2195,9 @@ class Game(Encounters):
         if len(recent) < 48:
             return
         old, keep = st.log[:-24], st.log[-24:]
-        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old if e.kind != "dice")
+        # What the table was told, not the module's own words for each clue: the memory feeds the
+        # players' recap and 故事至今, and the telling that put each clue into the story is there.
+        text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old if e.kind not in ("dice", "clue"))
         await self.emit({"type": "status", "text": "记录员整理笔记…"})
         st.memory = await self.cast.chronicle(st, text)
         st.log = keep
@@ -2424,7 +2428,8 @@ class Game(Encounters):
         died. Nobody asked, nothing is held back: a passed roll on someone talk() does not ask gives
         its clue as found (the review of 2026-10-22: 有些人油盐不进's c_fitz_talk, a 心理学 roll that
         passed, came to nothing). Nor what their manner gives away (a 心理学 gate): the investigator
-        sees it, nobody tells it, a paper is handed over."""
+        sees it, nobody tells it, a paper is handed over. Only what is theirs to tell (NPC.clues): one
+        that comes from them without it (Clue.npc), what is seen of them, is found."""
         st, m = self.state, self.m
         if not npc:
             return []
@@ -2434,7 +2439,7 @@ class Game(Encounters):
             clue = m.clue(cid)
             gate = sheet.gates.get(cid) or clue.check
             observed = gate is not None and canonical(gate.skill) == "心理学"
-            return (clue.npc == npc or cid in sheet.clues) and not clue.handout and not observed
+            return cid in sheet.clues and not clue.handout and not observed
 
         spoken = [c for c in ids if told(c)]
         unlocked = st.npc(npc).unlocked
@@ -2462,10 +2467,11 @@ class Game(Encounters):
                 and clues[cid].available(st.flags, st.clues)]
 
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
+        """Of the clues a ruling gives, those to be had here now (module/graph.at_hand): what lies here,
+        and what comes from someone the world record has here, alive and not gone (2026-10-22: the
+        clue about the truck's driver was given at an empty cab)."""
         st, m = self.state, self.m
-        here = {c.id for c in m.clues_at(st.location)}
-        for n in m.npcs_at(st.location):
-            here |= set(n.clues)
+        here = {c.id for c in module_graph.at_hand(m, st.location, self.world.present(st.location))}
         known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
         found = [c for c in dict.fromkeys(ids) if c in known and c in here and c not in st.clues]
         if action and (action.approach == "心理学" or (action.asked and canonical(action.asked.skill) == "心理学")):
@@ -2764,11 +2770,12 @@ class Game(Encounters):
         def appear() -> None:
             """Who the read-aloud puts before the investigators is there in the record too (2026-10-22:
             the truck's driver stepped down in the event, the record had him nowhere, and the keeper
-            then told an empty cab)."""
+            then told an empty cab): where the event takes the party, else where it is."""
+            to = ev.move_to if ev.move_to and self.encounter() is None else st.location
             for nid in ev.present:
                 ent = self.world.rec.entities.get(nid)
-                if ent is not None and ent.kind == "npc" and ent.at != st.location and ent.status not in ("死亡", "失踪"):
-                    self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=st.location))
+                if ent is not None and ent.kind == "npc" and ent.at != to and ent.status not in ("死亡", "失踪"):
+                    self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=to))
 
         async def fire() -> None:
             await step("commit", turn, commit)
@@ -3061,14 +3068,12 @@ class Game(Encounters):
                 opts.append(f"花 {turn.push['luck']} 点幸运")
             out.append(f"（玩家可以选择：{'或'.join(opts)}，结果下一步揭晓；现在只写失败的样子。）")
         out += turn.fight  # a round of a fight or a chase, as settled (engine/encounter)
-        for cid in turn.clues:
-            c = m.clue(cid)
-            out.append(f"获得线索〔{c.title}〕：{c.text.strip()}")
+        out += self._found(turn)
         for who, s in turn.sanity:
             out.append(f"理智：{who} {s.describe()}" + (f"；疯狂发作表（日文原文，请用中文演出）：{s.bout}" if s.bout else ""))
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
-            out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复线索卡与检定卡；只叙述本轮另行发生的变化。")
+            out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复检定卡；只叙述本轮另行发生的变化。")
             if turn.joined:
                 out.append(f"其中{'、'.join(m.npc(x).name for x in turn.joined)}是这一轮自己主动开口的。")
         if turn.performance:
@@ -3092,6 +3097,33 @@ class Game(Encounters):
         else:
             out.append("请叙述。")
         return "\n".join(out)
+
+    def _told_by(self, turn: Turn) -> dict[str, str]:
+        """The clues of this turn an NPC's shown line told (Said.told): clue id -> that NPC."""
+        return {cid: said.npc for said in turn.replies.values() for cid in said.told if cid in turn.clues}
+
+    def _found(self, turn: Turn) -> list[str]:
+        """What the investigators came to know this turn, for the keeper: each clue in its own words.
+        The players see no clue card (the user's call, 2026-10-22: no summaries handed to them): what
+        no NPC said in the line already shown, and no paper they now hold says, the telling has to put
+        into the story."""
+        told, m = self._told_by(turn), self.m
+        out, untold = [], []
+        for cid in turn.clues:
+            c = m.clue(cid)
+            line = f"获得线索〔{c.title}〕：{c.text.strip()}"
+            if cid in told:
+                line += f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）"
+            elif c.handout and any(h.id == c.handout for h in m.handouts):
+                line += f"（手稿〔{m.handout(c.handout).title}〕的原文在玩家手里：交代怎么拿到、看到它，不复述全文）"
+            else:
+                untold.append(cid)
+            out.append(line)
+        if untold:
+            out.append(f"【讲出发现】玩家看不到线索卡，{''.join(f'〔{m.clue(c).title}〕' for c in untold)}的内容只能从你的叙述里得知，"
+                       "这一轮就讲出来：写调查员实际看到、读到、听到或想到的东西，原文里的人名、地点、时间和细节照实写具体，用故事里的说法；"
+                       "不概括成结论，不点明这是线索，不添原文没有的内容。")
+        return out
 
     def _unknown(self, events: list[Event]) -> list[str]:
         """Who of those the turn's events show, and of those in the fight going on, the players call

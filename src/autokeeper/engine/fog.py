@@ -336,14 +336,15 @@ def met(m: Module, st: GameState) -> dict[str, list[str]]:
     return out
 
 
-def found(m: Module, st: GameState) -> dict[str, list[str]]:
-    """The titles of the clues found, by the place they were found at, in the order found."""
-    clues = {c.id: c for c in m.clues}
-    out: dict[str, list[str]] = {}
-    for cid in st.clues:
-        if cid in clues and clues[cid].where:
-            out.setdefault(clues[cid].where, []).append(clues[cid].title)
-    return out
+def named(m: Module, text: str, places: Iterable[str], things: Iterable[str]) -> str:
+    """Of a text, only the places and the things it names, by the names it uses, among those given:
+    what a shared table's copy keeps of a clue found (net/hub.py table), its own words left out, so
+    its screens still draw the same map from it (chart, things)."""
+    places, things = set(places), set(things)
+    flat = plain(text)
+    said = [name for pid, name in mentions(m, [text]).items() if pid in places]
+    held = [item.name for item in m.items if item.id in things and any(h in flat for h in _heads(item.name))]
+    return "、".join([*said, *held])
 
 
 def things(m: Module, st: GameState) -> dict[str, str]:

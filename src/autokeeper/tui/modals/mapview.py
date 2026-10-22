@@ -794,9 +794,10 @@ def fold(text: str, width: int, indent: int = 0) -> str:
 def about(m: Module, st: GameState, c: Chart, place: str, width: int = 0) -> Content:
     """What the investigators know of a place on the map: what they saw on arriving (only
     where they stopped), the places in it, the people met there, the things they know lie
-    there, the clues found there, how far the neighbours are by the roads walked, and the sky
-    if it is open to it. Nothing else: no keeper's notes, no list of what could be searched,
-    no clue not found, no way or place they do not know. All of it is in a shared table's
+    there, how far the neighbours are by the roads walked, and the sky if it is open to it.
+    Nothing else: no keeper's notes, no list of what could be searched, no clue, found or not
+    (what was found there the story told; the players keep their own notes), no way or place
+    they do not know. All of it is in a shared table's
     copy of the module too (net/hub.py table), so every screen says the same. With a `width`,
     the text is folded to it (fold) and each way out gets its own line."""
     kind = c.kinds[place]
@@ -816,8 +817,7 @@ def about(m: Module, st: GameState, c: Chart, place: str, width: int = 0) -> Con
     lying = fog.things(m, st)
     facts = [("内部区域", [c.names[q] for q in c.names if c.within.get(q) == place]),
              ("已遇见人物", fog.met(m, st).get(place, [])),
-             ("物件", [i.name for i in m.items if lying.get(i.id) == place]),
-             ("线索", fog.found(m, st).get(place, []))]  # fmt: skip
+             ("物件", [i.name for i in m.items if lying.get(i.id) == place])]  # fmt: skip
     ways = [f"{c.names[b if a == place else a]} {fog.minutes(m, place, b if a == place else a)} 分钟" for a, b in c.roads if place in (a, b)]
     ways += [f"{c.names[b if a == place else a]}（未行经）" for a, b in c.trails if place in (a, b)]
     facts.append(("通往", ways))
