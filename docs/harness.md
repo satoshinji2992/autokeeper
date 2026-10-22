@@ -129,7 +129,7 @@ max_input_chars = 120000
 
 这样，泄露的话从来不会变成 NPC“说过的话”。
 
-当前 `keeper` 实际是只接收公开现场与结算结果的叙述模型，完整真相、隐藏地点与原文检索留在其他角色一侧。升级旧存档还会清掉其历史私人报告。这是当前保密实现，不是完整守秘人的目标权限。新架构要求 KP 能读取全部信息、输出叙述和世界操作；应限制公开披露，并保留 NPC 的知识隔离。运行代码尚未完成这一转变。
+当前 `keeper` 实际是只接收公开现场与结算结果的叙述模型，完整真相、隐藏地点与原文检索留在其他角色一侧。这是当前保密实现，不是完整守秘人的目标权限。新架构要求 KP 能读取全部信息、输出叙述和世界操作；应限制公开披露，并保留 NPC 的知识隔离。运行代码尚未完成这一转变。
 
 行动解析器每轮读取最近十条连续的可见经过（总计最多一万字符）、时间与来源、公开约定和实际持有物，不再把每段回复截成末尾 160 字。摘要必须区分亲历、听说和推测，邀请与计划不能压成已完成行动。`Action.echo` 仅供旧记录兼容，不再展示。出发前的交谈保存在 `Action.before`，同行由对应 NPC 确认。
 
@@ -369,7 +369,7 @@ fallback = "ollama:qwen3:14b"  # 备用模型；不带前缀的 claude-* 走 Cla
 
 ### 文件放在哪里
 
-所有位置都由 `src/autokeeper/paths.py` 给出，别的代码不自己拼路径。从源码目录运行时，游戏写的东西都在仓库根目录的 `data/` 下（设了 `AUTOKEEPER_HOME` 就在那个目录下，布局和仓库一样）；装成命令（`uv tool install autokeeper`）以后，同样的内容放在用户目录：`data/` 换成 `~/.local/share/autokeeper/`，`cache/` 换成 `~/.cache/autokeeper/`，导入的模组在 `~/.local/share/autokeeper/modules/`，Windows 见[游玩指南](playing.md#东西放在哪)。自带的模组、共用的 Skills 和掷骰脚本随包一起装好，掷骰组件的 npm 依赖装在 `~/.local/share/autokeeper/bridge/`。
+所有位置都由 `src/autokeeper/paths.py` 给出，别的代码不自己拼路径。从源码目录运行时，游戏写的东西都在仓库根目录的 `data/` 下（设了 `AUTOKEEPER_HOME` 就在那个目录下，布局和仓库一样）；装成命令（`uv tool install autokeeper`）以后，同样的内容放在用户目录：`data/` 换成 `~/.local/share/autokeeper/`，`cache/` 换成 `~/.cache/autokeeper/`，导入的模组在 `~/.local/share/autokeeper/modules/`，Windows 见[游玩指南](playing.md#东西放在哪)。规则书和守秘人卡组放在 `rule/`（源码目录里，或装成命令后的 `~/.local/share/autokeeper/rule/`），不进 Git。自带的模组、共用的 Skills 和掷骰脚本随包一起装好，掷骰组件的 npm 依赖装在 `~/.local/share/autokeeper/bridge/`。
 
 ```text
 data/
@@ -381,7 +381,9 @@ data/
   角色卡导出/      导出角色卡的默认位置
   cache/          可以整个删掉，用到时重建
     models/       本地向量模型（约 90 MB）
-    kb/           各模组的 LightRAG 知识库
+    kb/           各模组的 LightRAG 知识库；kb/rules/ 是规则书的检索索引
+    art/          各模组缺图的地点、人物、物件和怪物找到或画好的图
+    cards/        读入的守秘人卡组
     showcases/    各模组的大场景图
     pictures/     照片的预处理副本，画面上显示的是它
     sessions/     Claude Code、Codex 进程的工作目录
