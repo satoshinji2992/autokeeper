@@ -370,6 +370,9 @@ def test_a_shared_table_draws_the_same_map_from_its_copy_and_holds_no_more(folde
             if loc["id"] not in stopped:
                 assert not loc["read_aloud"] and all(any(fog.plain(a) in text for text in read) for a in loc["aliases"])
         assert {c["id"] for c in book["clues"]} <= set(st.clues)
+        for c in book["clues"]:  # found ones, as far as the map needs them: never the title or the words (the user, 2026-10-22)
+            words = m.clue(c["id"]).text.strip()
+            assert not c["title"] and words[:12] not in c["text"] and words[-12:] not in c["text"]
         assert not any(n["secrets"] or n["knows"] for n in book["npcs"])
 
 

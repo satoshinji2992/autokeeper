@@ -495,7 +495,8 @@ async def test_a_shared_table_gets_the_story_so_far_and_the_records_through_the_
         assert told["ev"] == {"type": "progress", "text": ACCOUNT, "turn": 6}
         view = GameState.model_validate(next(x for x in heard if x["t"] == "sync" and x["state"]["progress"]["text"])["state"])
         assert view.progress.text == ACCOUNT and (view.progress.turn, view.progress.asked) == (6, 6)
-        assert [d.text for d in view.deeds if d.kind == "act"] == acts and "c_notice" in view.clues
+        assert [d.text for d in view.deeds if d.kind == "act"] == acts
+        assert "c_notice" in view.clues and "clue" not in [d.kind for d in view.deeds]  # found; its title is in no line
         assert view.prologue == "叙事" and not view.log  # the opening as told; the log stays on the host
         assert len(cast.material) == 1 and hub.m.truth not in cast.material[0]
         await ws.send_json({"t": "recount"})  # asked for again in the same round

@@ -317,8 +317,61 @@ async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills
         lines = "".join(str(w.render()) for w in screen.query_one(StoryLog).children)
         assert "周衡（小明·房主）：我看看告示栏" in lines and "↳ 有所发现" in lines and "叙事" in lines
         notice = hub.m.clue("c_notice")
-        assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == notice.title  # revealed by the event
+        # Found: on this screen only as the story told it (the user, 2026-10-22), never its title or its words.
+        assert "c_notice" in screen.state.clues and screen.m.clue("c_notice").title == ""
+        assert notice.text.strip()[:6] not in screen.m.clue("c_notice").text
+        seen = lines + "".join(str(w.render()) for w in screen.query("#notes, #history"))
+        assert notice.title not in seen and notice.text.strip()[:10] not in seen
     await closed(task)
+
+
+async def test_no_clue_title_or_words_go_over_the_wire_while_the_game_is_on(monkeypatch, tmp_path, skills_dir, fake):
+    """The user, 2026-10-22: no clue summaries handed to the players. A clue found at a shared table
+    reaches no screen as its title or its words: not as an event, not in the module or the state the
+    screens are sent, not in the log a late arrival gets. Every message the hub sends is read here
+    (Hub._send); once the game is over the debrief opens the book."""
+    monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
+    m = Module.load(EXAMPLE)
+    notice = m.clue("c_notice")
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub.m.clue("c_notice").sanity = "0/1"  # a find with a cost: the roll still shows, the clue does not
+    sent: list[tuple[str, dict]] = []
+    send = hub._send
+
+    async def spy(cid: str, msg: dict) -> None:
+        sent.append((cid, msg))
+        await send(cid, msg)
+
+    hub._send = spy
+    task = await opened(hub)
+    async with aiohttp.ClientSession() as http:
+        ws = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+        await ws.send_json({"t": "hello", "name": "小明"})
+        await until(ws, lambda x: x["t"] == "welcome")
+        await ws.send_json({"t": "sit", "investigator": "zhouheng"})
+        await ws.send_json({"t": "ready"})
+        await until(ws, pool_open)
+        fake.queue(10)  # the notice's sanity roll: passed
+        await ws.send_json({"t": "act", "text": "我看看告示栏"})
+        await ws.send_json({"t": "done"})
+        await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
+        await until(ws, pool_open)  # told, and the next round open
+        assert "c_notice" in hub.state.clues and any(e.kind == "clue" for e in hub.state.log)
+        late = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")  # someone arriving after it was found
+        await late.send_json({"t": "hello", "name": "小红"})
+        welcome = await until(late, lambda x: x["t"] == "welcome")
+        assert welcome["log"] and all(e["kind"] != "clue" for e in welcome["log"])
+        await ws.close()
+        await late.close()
+    await closed(task)
+    wire = json.dumps([msg for _, msg in sent], ensure_ascii=False)
+    for secret in (notice.title, notice.text.strip()[:10], notice.text.strip()[-8:], "获得线索"):
+        assert secret not in wire, secret
+    kinds = [msg["ev"]["type"] for _, msg in sent if msg["t"] == "event"]
+    assert "clue" not in kinds and "sanity" in kinds and "keeper_end" in kinds  # its cost shows; the find is told
+
+    hub.state = hub.state.model_copy(update={"ending": "stopped"})  # the debrief lays the book open afterwards
+    assert any(c["id"] == "c_notice" and c["title"] == notice.title for c in hub._book()["clues"])
 
 
 class LeverCast(TableCast):

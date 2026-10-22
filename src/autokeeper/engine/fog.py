@@ -336,6 +336,17 @@ def met(m: Module, st: GameState) -> dict[str, list[str]]:
     return out
 
 
+def named(m: Module, text: str, places: Iterable[str], things: Iterable[str]) -> str:
+    """Of a text, only the places and the things it names, by the names it uses, among those given:
+    what a shared table's copy keeps of a clue found (net/hub.py table), its own words left out, so
+    its screens still draw the same map from it (chart, things)."""
+    places, things = set(places), set(things)
+    flat = plain(text)
+    said = [name for pid, name in mentions(m, [text]).items() if pid in places]
+    held = [item.name for item in m.items if item.id in things and any(h in flat for h in _heads(item.name))]
+    return "、".join([*said, *held])
+
+
 def things(m: Module, st: GameState) -> dict[str, str]:
     """The things the investigators know are lying at a place: item id -> place. They saw it
     there (named in what they saw on arriving, or in a clue found there) or left it there. What
