@@ -16,7 +16,7 @@ from autokeeper.agents.cast import Action, Failure, PushRuling, Ruling, Sketch
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
-from autokeeper.module.schema import Event, Module
+from autokeeper.module.schema import Clue, Event, Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.rules.commands import Asked
@@ -103,6 +103,24 @@ async def test_locked_clue_cannot_leak_its_handout_even_if_an_agent_requests_it(
     await game._gain([clue.id], Turn(), None)
     assert clue.handout in game.state.handouts
     assert [event["type"] for event in events] == ["clue", "handout", "sheet"]
+
+
+@pytest.mark.parametrize("target", ["", "书桌"])
+@pytest.mark.parametrize("rolled", [False, True])
+async def test_all_established_finds_are_recorded_without_a_per_turn_clue_limit(module, fake, target, rolled):
+    module.clues = [Clue(id=f"c_found_{n}", title=f"发现{n}", text=f"书桌上的第{n}份记录。", where=module.start)
+                    for n in range(3)]
+    ids = [clue.id for clue in module.clues]
+    action = Action(kind="investigate", summary="周衡查看书桌", target=target)
+    ruling = (Ruling(needs_roll=True, skill="侦查", auto_clues=ids[:1], clues_on_success=ids, minutes=5)
+              if rolled else Ruling(needs_roll=False, auto_clues=ids, minutes=5))
+    game, _, events = make(module, fake, {})
+    if rolled:
+        fake.queue(1)
+    turn = await game.resolve(action, ruling)
+    assert turn.clues == ids and game.state.clues == ids
+    assert [event["id"] for event in events if event["type"] == "clue"] == ids
+    await game.close()
 
 
 async def test_start_fires_the_starting_locations_arrival_event_once(module, fake):
@@ -680,13 +698,14 @@ async def test_improvised_branches_survive_a_reload(module, fake):
     assert fresh.clue("c_rumor").where == "square"
 
 
-async def test_a_stuck_party_is_offered_an_idea_roll_not_sent_a_lead(module, fake):
+async def test_a_stall_is_a_private_signal_not_a_director_lead_or_automatic_offer(module, fake):
     wait = Action(kind="wait", summary="周衡在广场上发呆")
     game, cast, events = improvised(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))}, [])
     game.state.turn = 12  # nothing found since the start
-    await game.resolve(wait, await game.rule(wait))
-    assert cast.asked == [] and game.state.idea_offer == 12 and game.state.progress_at == 12
-    assert [e["type"] for e in events].count("idea_offer") == 1
+    turn = await game.resolve(wait, await game.rule(wait))
+    assert cast.asked == [] and game.state.idea_offer == 0 and game.state.progress_at == 12
+    assert "内部节奏参考" in "\n".join(turn.notes)
+    assert not any(e["type"] == "idea_offer" for e in events)
 
 
 async def _asked_on(game, cast, plays):
@@ -723,8 +742,10 @@ async def test_moving_on_and_a_stuck_party_are_not_held_back(module, fake):
     assert game.state.expanded == {"square": 4, "tower": 3}
     game.state.turn = game.state.progress_at + 12  # and nothing found for a long while
     asked = len(cast.asked)
-    await game._nudge(Turn())
-    assert len(cast.asked) == asked and game.state.idea_offer == game.state.turn  # an offer, not a lead
+    turn = Turn()
+    await game._nudge(turn)
+    assert len(cast.asked) == asked and game.state.idea_offer == 0
+    assert "内部节奏参考" in "\n".join(turn.notes)
 
 
 async def test_a_failed_roll_stays_failed_and_the_keeper_hears_what_was_missed(module, fake):
@@ -823,13 +844,13 @@ async def test_an_ending_a_failure_brings_about_ends_the_game_when_they_give_up(
     assert game.state.ending == "stopped" and dropped.ending == "stopped"
 
 
-async def test_a_look_around_does_not_empty_a_room(module, fake):
+async def test_finds_ruled_visible_in_a_general_look_are_not_silently_discarded(module, fake):
     vague = Action(kind="investigate", summary="周衡在钟楼里四处查看")
     ruling = Ruling(needs_roll=False, auto_clues=["c_gears", "c_diary"], minutes=10)
     game, *_ = make(module, fake, {"x": (vague, ruling)}, location="tower")
     fake.queue(10, 10)  # sanity checks that finding the clues may call for
     await game.resolve(vague, ruling)
-    assert len(game.state.clues) == 1  # one plain thing; the rest waits for a closer look
+    assert game.state.clues == ["c_gears", "c_diary"]  # the arbiter, not a numeric engine cap, determines scope
     pointed = Action(kind="investigate", summary="周衡翻看齿轮旁的日记", target="日记")
     await game.resolve(pointed, ruling)
     assert set(game.state.clues) == {"c_gears", "c_diary"}

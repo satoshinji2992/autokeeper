@@ -27,8 +27,9 @@ Difficulty (p. 168): never mentioned, regular; mentioned but not stressed, hard 
 when the last mention is LONG_AGO game days back); stressed or discussed, extreme.
 
 How often: once per game day for the party; a roll the keeper offered on a stall does not count
-and is not held back by one made that day. The day limit, LONG_AGO and LOST are this project's
-settings, not the book's (docs/rules-reference.md).
+and is not held back by one made that day. The day limit and LONG_AGO are this project's
+settings, not the book's (docs/rules-reference.md). The keeper decides how much time a failure
+actually takes (Cast.idea_failure); no fixed time penalty is imposed.
 """
 
 from __future__ import annotations
@@ -45,7 +46,6 @@ WORDS = ("/灵感", "/idea")  # what asks for it in the input box, at a LAN tabl
 STRESSED = 3  # tellings that carry a clue before it counts as stressed
 # Project settings, not the book's: p. 168's "long ago" is weeks of real time, p. 169 only says time passes.
 LONG_AGO = 2  # game days since its last mention after which a hard roll is regular again
-LOST = 180  # game minutes a failed roll costs before the cut
 SAME_RUN = 7  # characters in a row a line shares with a clue's own words to carry it (six match 是个和蔼的人)
 TOLD = ("opening", "keeper", "npc", "event")  # log lines that tell the table something
 SAID = ("player", "speech")  # the players' own words: their actions and what they said to one another
@@ -56,7 +56,7 @@ _DOT = re.compile(r"[·•・]")
 # A title in 《》 (a newspaper, a book) is a name too.
 _FOREIGN = re.compile(r"\w{1,4}(?:[·•・]\w{1,4})+|《[^》]*》")
 
-OFFER = "调查陷入停滞。守秘人提议做一次灵感检定：按 Ctrl+L 或输入 /灵感。"
+OFFER = "守秘人提议做一次灵感检定：按 Ctrl+L 或输入 /灵感。"
 NOTHING = "目前没有被遗漏的线索。"
 TODAY = "今天已经做过一次灵感检定。每个游戏日限一次；调查停滞时守秘人会另行提议。"
 ENDED = "本局已结束。"

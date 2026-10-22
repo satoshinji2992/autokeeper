@@ -8,7 +8,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from autokeeper.agents.cast import Action, Failure, Ruling
+from autokeeper.agents.cast import Action, Failure, IdeaFailure, Ruling
 from autokeeper.engine import graph
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
@@ -407,7 +407,7 @@ async def test_graph_restores_push_choice_and_merges_its_turn_once_after_json_re
     await resumed.close()
 
 
-async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once(module, fake):
+async def test_an_explicit_keeper_offer_resumes_from_the_saved_telling_and_is_made_once(module, fake):
     action = Action(kind="investigate", summary="查看告示栏", target="告示栏")
     ruling = Ruling(needs_roll=False, minutes=1)
     game, _, _ = make(module, fake, {})
@@ -415,6 +415,10 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
     game.state.clues = ["c_notice"]  # the notice gives nothing new: a stall
     turn_going(game, "查看告示栏")
     saved = snapshots(game)
+    turn = await game.resolve(action, ruling)
+    assert game.state.idea_offer == 0  # the counter alone offered nothing
+    game.state.pending_turn["keeper"] = {"text": "我们可以重新梳理一下线索。", "offer_idea": True}
+    game.checkpoint()
 
     async def broken(event: dict) -> None:
         if event["type"] == "idea_offer":
@@ -422,7 +426,7 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
 
     game.emit = broken
     with pytest.raises(RuntimeError):
-        await game.resolve(action, ruling)
+        await game.narrate(turn)
     assert game.state.progress_at == game.state.turn == game.state.idea_offer
     resumed, _ = reload_game(module, saved[-1], fake)
     offers: list[dict] = []
@@ -432,8 +436,46 @@ async def test_the_stall_offer_resumes_after_its_saved_cooldown_and_is_made_once
             offers.append(event)
 
     resumed.emit = heard
-    await resumed.resolve(action, ruling)
+    await resumed.narrate(turn)
     assert len(offers) == 1 and resumed.state.idea_offer == 20
+    await game.close()
+    await resumed.close()
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_a_failed_idea_roll_keeps_its_arrangement_and_elapsed_time_after_reload(module, fake, legacy):
+    game, cast, _ = make(module, fake, {})
+    game.state.turn = 1
+    choices = []
+
+    async def arrange(state, clue_id):
+        choices.append(clue_id)
+        return IdeaFailure(minutes=17, situation="钟楼的异响迫使调查员重新查看齿轮。")
+
+    cast.idea_failure = arrange
+    turn_going(game, "/灵感")
+    saved = snapshots(game)
+    start, action = game.state.minutes, game.idea_action()
+    ruling = Ruling(needs_roll=True, skill="灵感")
+    fake.queue(99, 10)
+
+    async def broken(event):
+        if event["type"] == "clue":
+            raise ConnectionError("disconnected after the failed Idea roll was settled")
+
+    game.emit = broken
+    with pytest.raises(ConnectionError):
+        await game.resolve(action, ruling)
+    kept = GameState.model_validate_json(saved[-1])
+    if legacy:  # a pre-0.0.5 save: time already passed, no small keeper arrangement was recorded
+        kept.pending_turn["resolution"]["steps"].pop("idea-arrangement")
+        kept.minutes = start + 180
+    resumed, _ = reload_game(module, kept.model_dump_json(), fake)  # the old cast has no idea_failure method
+    turn = await resumed.resolve(action, ruling)
+    assert choices == ["c_gears"] and not fake.values
+    assert resumed.state.minutes - start == (180 if legacy else 17) and turn.clues == ["c_gears"]
+    assert ("又过去了3 小时" if legacy else "又过去了17 分钟") in "\n".join(turn.notes)
+    assert len(resumed.state.ideas) == 1 and sum(e.kind == "dice" for e in resumed.state.log) == 1
     await game.close()
     await resumed.close()
 

@@ -1054,6 +1054,9 @@ class Improvise(Base):
     undoable: ClassVar[bool] = False
     plan: dict[str, Any]
     at: str = ""
+    # Host-only: registering a scene's person does not by itself open a mystery. Ordinary director
+    # packages retain their existing question thread; this is not another model-facing option.
+    thread: SkipJsonSchema[bool] = True
 
     def check(self, w: World) -> list[str]:
         from ..agents.director import Improv
@@ -1075,7 +1078,7 @@ class Improvise(Base):
         w.sync()
         new = [x.id for g in (plan.npcs, plan.locations, plan.items) for x in g]
         facts = [f"clue:{c.id}" for c in plan.clues]
-        if plan.kind in ("展开", "后果") and (new or facts):
+        if self.thread and plan.kind in ("展开", "后果") and (new or facts):
             tid = f"improv:{oid}"
             w.rec.threads[tid] = Thread(id=tid, kind="question", title=plan.reason[:40] or plan.kind, opened=w.now, opened_turn=w.st.turn,
                                         last=w.now, last_turn=w.st.turn, entities=new, facts=facts)  # fmt: skip

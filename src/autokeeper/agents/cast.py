@@ -8,7 +8,7 @@
                   can uncover; reads the current local record
     npc:<id>      one session per NPC; knows only its own file and its own conversations, and
                   of the world record (world/) its own life: what it is after, remembers, promised
-    keeper        narrates resolved, public facts; never carries the module's hidden truth
+    keeper        reads the full situation and narrates what the investigators can perceive
     chronicler    compresses old log into memory, writes factual recaps of the players' experience
     progress      the players' 故事至今 when the story has moved, on the summarizer's cheap
                   model; gets only what the table was shown (engine/progress.py)
@@ -57,8 +57,9 @@ from ..world import adapters
 from ..world import context as world_view
 from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Follow
-from ..world.scene import Scene
+from ..world.scene import Person, Scene
 from . import guard
+from .aftermath import AFTERMATH, Aftermath
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
 from .encounter import (
@@ -136,10 +137,12 @@ class Initiative(BaseModel):
 class Plan(BaseModel):
     lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
     action: Action = Field(description="玩家这一轮的行动")
-    # At most two, as the schema says; more do not void the plan: the engine keeps the first two
-    # that hold (Game._arrange).
-    initiative: list[Initiative] = Field(default_factory=list, json_schema_extra={"maxItems": 2},
-                                         description="在场的人这一轮主动开口、帮忙或阻拦，最多 2 条；大多数轮次留空")
+    present: list[str] = Field(default_factory=list,
+                              description="已经在眼前、但位置漏记的已有 NPC id；不是让远处的人瞬移，也不写尚未发生的行动结果")
+    people: list[Person] = Field(default_factory=list,
+                                description="现场即兴且后续需要记住的新人物；只登记人物，不替调查员完成交涉或取得物品，普通背景人群不必逐人写")
+    initiative: list[Initiative] = Field(default_factory=list,
+                                         description="在场的人这一轮主动开口、帮忙或阻拦；通常只需一两人，有必要时可多人，没人参与就留空")
     # A fight or a chase this turn begins (the engine then asks Cast.plan_encounter how); one small
     # object, so the everyday schema stays small for cheap models.
     encounter: EncounterHint | None = Field(None, description="这一轮真的打起来或追起来时写；大多数轮次留空")
@@ -284,6 +287,9 @@ class TravelDialogue(Dialogue):
 class Telling(BaseModel):
     scene: Scene = Field(description="先写：这段讲完时的场面")
     text: str = Field(description="再写：讲给玩家听的叙述")
+    offer_idea: bool = Field(False, description=(
+        "只有你判断调查确实陷入僵局、并在本次叙述中提议玩家做灵感检定时填 true；"
+        "持续交谈、日常、讨论和正常等待不算停滞，不因内部回合计数自动提议"))
 
 
 @dataclass
@@ -295,6 +301,13 @@ class Narration:
     scene: dict | None = None
     shown: bool = False
     first: bool = True
+    offer_idea: bool = False
+
+
+class IdeaFailure(BaseModel):
+    minutes: int = Field(ge=1, description="调查员梳理线索未果、局势发展实际经过的分钟数；按当前局势决定，不固定几个小时")
+    situation: str = Field(min_length=1, description="千钧一发的切入点：利用眼前人物、已定日程与局势，让遗漏的线索在危机中显露；不替玩家行动")
+    prepare: bool = Field(False, description="确实需要导演建立缺少的人物、地点或事件时才为 true；既有局势足够就为 false")
 
 
 class _Telling:
@@ -438,11 +451,13 @@ INTENT_SYSTEM = INTENT_HEAD + "\n\n" + ACTION_RULES
 # Its own book follows (_book); the action is filled in as the parser would (ACTION_RULES).
 # Someone joining in does not solve it for them: the investigators stay the ones who act (Keeper Rulebook
 # pp. 156, 182).
-PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底牌，拥有最高主持权限。每轮玩家说完话，你先交一份安排：把玩家的话整理成一条行动（action），再决定在场的人这一轮会不会主动参与（initiative）。叙述另外进行，这里只交安排。
+PLAN_SYSTEM = """你是这场 CoC 7 版跑团的守秘人，看得到全部底牌，拥有最高主持权限。每轮玩家说完话，你先交一份安排：补齐已经成立的现场记录（present、people），把玩家的话整理成一条行动（action），决定在场的人这一轮会不会主动参与（initiative）。叙述另外进行，这里只交安排。
 
 - action 交给看不到玩家原话的裁定员，summary 和第一句还会显示在玩家屏幕上。summary 只用玩家说过的叫法和【场景】里给出的名字，不写底牌里的人名、地名、真相，也不写玩家还不知道的事；只写调查员这一轮说了、做了什么，不写你对局面的判断（谁在不在、有没有约定）。destination 只填【场景】里能去的地点 id。
 - 玩家的话是对在场的人说的，或者当着他问出来的（提问、质疑、抱怨、打招呼），照常填 talk 和 npc，由那个人回应；不要改成 initiative，也不要当成问你的 meta。meta 只用于玩家明确问规则或游戏外的事。
-- initiative：在场的人会不会主动开口、帮忙、阻拦，由你按他的目标、心境和局势决定。宁少勿多，没有就留空，最多 2 条。npc 只填【在场、可以主动的人】里的 id；玩家正在交谈的那个人会照常回应，不用写进来。does 写一句他这一轮主动说什么或做什么，只写他自己知道、出于他自己打算的事；他会用自己的资料和口吻演出来。帮忙只做他力所能及的一步，不替调查员查明真相、做关键决定。要抢在调查员动手之前拦住、提醒或递上东西，会改变这次行动条件的，first 填 true：他先演，裁定员再按变了的局面裁定。临时路人（模组里没有的人）不进 initiative，由你在叙述里直接演。
+- present：人物已经在眼前、但位置漏记时，直接填已有 NPC id，裁定员将读到补好的现场。已经明确在远处、死亡或失踪的人不能靠补记出场；真正移动要有时间和经过。people：现场即兴而后续需要记住的证人、同行者、店主等，给出最小资料；普通背景人群不用逐个登记。新人物只知道亲历或有来源的事，不因你知道底牌而全知。完成登记的人可以被交谈，也可以参与 initiative。
+- present、people 只准备场面，不兑现尚待检定或应对的结果。调查员说“抢走钥匙”，仍只是尝试；不能先改物品归属或写一个证人证实其断言，再交裁定员。已经在场的司机可以补记，调查员期望有人在场不等于那个人已经出现。
+- initiative：在场的人会不会主动开口、帮忙、阻拦，由你按他的目标、心境和局势决定。通常只需一两人，没有就留空，有必要时可多人参与。npc 填【在场、可以主动的人】或本次 present、people 中实际登记到场的 id；玩家正在交谈的那个人会照常回应，不用写进来。does 写一句他这一轮主动说什么或做什么，只写他自己知道、出于他自己打算的事；他会用自己的资料和口吻演出来。帮忙只做他力所能及的一步，不替调查员查明真相、做关键决定。要抢在调查员动手之前拦住、提醒或递上东西，会改变这次行动条件的，first 填 true：他先演，裁定员再按变了的局面裁定。没有持续身份的背景人群由你在叙述里直接演。
 - lookup：手头的资料不够、答案又会改变这一轮的安排时，写一句想查的事，比如「托马斯知道日记的哪些事」「图书馆那篇旧报道的原文」「杰弗逊最近在哪」。action 照样先填好；系统查完会把结果给你，再问你一次。不用查就留空。
 - encounter：这一轮真的打起来或追起来才写：调查员动手攻击在场的人或怪物、对方因为这次行动真的动手（被激怒、被发现、伏击扑上来）写 fight；调查员拔腿逃离追来的人或怪物、去追逃跑的人写 chase。with 只填【可能动手的】里的 id。要看检定结果的（偷东西被发现才打起来）trigger 填 on_fail 或 on_success。威胁、推搡、吵架、亮出武器都还不算；对方只是走开也不算。怎么打由之后的遭遇安排来定，这里不写。
 
@@ -483,8 +498,8 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
   物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key。
 - 普通的吃饭、问路、买日用品、聊家常通常无需检定。除非行动真的在调查对应的东西，否则不要把生活行动变成领线索；
   只有具体风险或争议才需要裁定难度。正常营业的店、路人和食宿是可合理补全的生活场景，缺少记载时 scope 填“可即兴”。
-- 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就只给那样东西上的线索；笼统地“搜一搜”“调查一下这里”，
-  最多给一条一眼就能看到的（无需检定的），其余的留在原处，等他说具体查哪。一次行动最多给两条。
+- 线索跟着具体的东西走，每条都写着它在哪。调查员查的是哪样东西，就给实际查看范围内、条件已经满足的线索。
+  笼统地观察只给视野中能够直接察觉的内容，细查则按实际方法与范围裁定；不按每轮数量扣留已经成立的发现。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
 - 等待、休息、睡觉（不管行动类别填的是什么，哪怕是对同伴说“先回去睡一觉”）把 rest 设为 true，按说的时长给分钟数，
   比如晚上 22 点说“睡到天亮”就给到第二天早上 7 点左右，最多 720 分钟。
@@ -582,7 +597,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 你知道的事：
 {knows}
 
-你的秘密（未被说服或拆穿前不得透露）：
+你的秘密（是否隐瞒、主动透露或有所保留，结合动机、关系、处境及本轮裁定决定）：
 {secrets}
 
 你会使用的谎言：
@@ -594,12 +609,12 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 表达：
 - 像一个活人那样说话。你有自己的日子、心事和偏见：先想清楚此刻你对眼前这个人是什么态度（防着他、有求于他、嫌他烦、盼着有人来问），这件事碰到了你哪根神经，再开口。
 - 情绪放在话里：心慌的人絮叨、绕弯、说半截又改口；恼火的人话短、带刺；伤心的人说着说着就岔到旧事上。
-- 篇幅跟着情绪走：被惹恼了一两句就够；心里有事、正想找人倒一倒的时候，可以说上一大段，最多七八句。长句短句错开。
+- 篇幅取决于此刻有什么需要说、对方问了什么。简短回应、沉默或一段较长的倾诉都可以，不凑句数，不在话已经说清后重复解释。
 - 说你自己的事：你的营生、家里人、身上的毛病、你在乎的东西，这些家常可以随口带出来。回答问题时带上你的看法和偏见，不光交代事实；但和案子有关的人、事、怪象，只说上面写着的，别添新的。
-- 大多数时候直接开口说话。动作和神态写在（）里，只在它比话更能说明问题时才写，一次最多一处。
+- 大多数时候直接开口说话。动作和神态写在（）里，只在它有助于理解人物反应或实际行动时才写，不为每句话配一个小动作。
 - 说话方式里写的口头禅、咳嗽、小动作是这个人的习惯，隔几句露一次就够，资料写着“总是”也不必句句都带；上一轮说过的话，换个说法或者干脆不提。
-- 有来有往地聊：一般说三到六句，接住对方的话，说说你的看法和手头的琐事，常常顺口反问一句；被惹恼、急着打发人时才一两句。只回答他实际问的话，不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
-- 已解锁的线索是你知道、也愿意说的事，不是要一口气交代的清单。先接着对方的话聊，把其中一两处细节揉进家常、抱怨或别人的闲话里带出来，别的留着等对方追问；对方问得具体，再说得具体。说出了一条线索的要点，就在 told 里填它的 id。
+- 接住对方实际说的话，结合关系与眼前局势回应；有自己的问题、需要确认的事或想请人帮忙时再问。不要为了维持交谈反问，也不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
+- 已解锁的线索是你知道、也愿意说的事，不是必须逐条朗读的清单。根据话题把相关内容说清；对方问得具体、事情紧迫或你有主动求助的理由时，不故意分成几轮挤牙膏。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
 - 角色可以有意说谎、敷衍或假答应，包括为了自保、保护他人、利益、羞耻或体面；不限定反派，也不要求每次坦白。根据具体处境决定，不按比例撒谎。新编的有意欺骗在 deceptions 私下说明逐字台词、真实意图与动机，不能仅凭一句话就获知角色未知的真相。
@@ -937,6 +952,11 @@ class Cast:
         brief = world_view.keeper_brief(self.world) if self.backstage and self.world is not None else ""
         prompt = (brief + "\n\n" if brief else "") + self._heard(state, text)
         prompt += "\n【在场、可以主动的人】" + ("、".join(f"{n.name}({n.id})" for n in self.able(state)) or "无")
+        if self.world is not None:
+            unplaced = [f"{n.name}({n.id})：{n.role}" for n in self.module.npcs
+                        if (e := self.world.entity(n.id)) is not None and not e.at and e.status not in ("死亡", "失踪")]
+            if unplaced:
+                prompt += "\n【位置尚未登记的人，不代表在场】" + "；".join(unplaced)
         prompt += "\n【可能动手的】" + self._fighters(state)
         reply = await self._send("plan", s, state, prompt)
         plan = Plan.model_validate(reply.data)
@@ -961,6 +981,16 @@ class Cast:
                 if journal:
                     journal.append("lookup", {"status": "failed", "error": type(exc).__name__}, turn=state.turn)
                 break
+        if check is not None and (problems := check(plan)):
+            prompt += ("\n\n【现场登记未落实】\n" + "\n".join(f"- {p}" for p in problems)
+                       + "\n按具体原因修正一次安排；无法落实的保留为意图，不改写成已经发生。")
+            try:
+                reply = await self._send("plan", s, state, prompt)
+                plan = Plan.model_validate(reply.data)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._journal("plan", {"status": "repair-failed", "error": type(exc).__name__}, state)
         return plan.model_copy(update={"lookup": "", "action": plan.action.model_copy(update={"echo": ""})})
 
     def _fighters(self, state: GameState) -> str:
@@ -1496,7 +1526,7 @@ class Cast:
         if knows:
             mood += "\n【你在本局新知道的】" + "；".join(knows)
         if secrets:
-            mood += "\n【你在本局新有的秘密（不被逼问不说）】" + "；".join(secrets)
+            mood += "\n【你在本局新有的秘密】结合当前动机、关系、处境及本轮裁定决定是否透露：" + "；".join(secrets)
         mood += self.prefs.for_npc()
         destinations = {state.location: self.module.location(state.location).name, **fog.bearings(self.module, state)}
         mood += "\n【可提出同行的地点】" + "、".join(f"{name}（{pid}）" for pid, name in destinations.items())
@@ -1627,13 +1657,31 @@ class Cast:
         if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
             text, scene = _words(reply.text), None
         told = Narration(text=text.strip(), scene=scene if isinstance(scene, dict) else None, shown=reader.shown,
-                         first=reader.first)
+                         first=reader.first, offer_idea=data.get("offer_idea") is True)
         holds = told.scene is None or check(told.scene)  # the final word, on the scene as it came back
         if told.shown or holds:
             self._kept(s, report, told.text)
         else:
             self._unsaid(s, report)
         return told
+
+    async def idea_failure(self, state: GameState, clue_id: str) -> IdeaFailure:
+        """The keeper chooses the failed Idea roll's time and cut, on its usual session. This rare
+        rules result has its own schema, not its own model or a call on ordinary turns."""
+        clue = self.module.clue(clue_id)
+        prompt = ("【灵感检定失败后的安排】规则书第 169 页：时间流逝，调查员陷入能够意识到的最糟局面，"
+                  "遗漏的线索仍在其中显露。决定实际经过多久以及从哪个危机切入；这不是普通检定失败送线索。\n"
+                  f"【遗漏的线索】{clue.title}：{clue.text.strip()}\n"
+                  f"【现在】{state.clock}，{self.module.location(state.location).name}\n"
+                  + world.context(state))
+        if self.world is not None:
+            prompt += "\n" + world_view.keeper_brief(self.world)
+        prompt += ("\n只交安排，不对玩家直接叙述。minutes 按实际局势决定；时间推进会触发已有日程，后续以实际记录为准。"
+                   "situation 是随后叙述采用的切入点，不是已经执行的事实，不预先宣布伤害、强制移动或交物。"
+                   "可以利用已有危险，不为每次失败新增敌人。需要新增设定才填 prepare；已有局势足够就不请导演。")
+        reply = await self._send("keeper", self._keeper(state), state, prompt, schema=_schema(IdeaFailure),
+                                 extra=self.prefs.for_keeper(), remember="（安排灵感检定失败后的时间与场面）")
+        return IdeaFailure.model_validate(reply.data)
 
     @staticmethod
     def _kept(s: Session, report: str, text: str) -> None:
@@ -1676,6 +1724,17 @@ class Cast:
         await s.settle()
         s.forget()
         return reply.text.strip()
+
+    async def aftermath(self, state: GameState, report: str, problems: list[str] | None = None) -> Aftermath:
+        """The same keeper arranges aid and the next interval, with its full record, only when needed."""
+        brief = world_view.keeper_brief(self.world) if self.world is not None else ""
+        prompt = AFTERMATH + "\n【模组资料】\n" + _book(self.module)
+        prompt += "\n【本局完整幕后简报】\n" + brief + "\n【当前伤势与日程】\n" + report
+        if problems:
+            prompt += "\n【请修正这些无法落实的安排】\n" + "\n".join(problems)
+        reply = await self._send("keeper", self._keeper(state), state, prompt, schema=_schema(Aftermath),
+                                 remember="（安排全员倒下后的施救、时间与收尾）")
+        return Aftermath.model_validate(reply.data)
 
     async def chronicle(self, state: GameState, entries: str) -> str:
         s = self._open("chronicler", "chronicler", CHRONICLER_SYSTEM)

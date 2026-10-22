@@ -7,7 +7,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, Proposal, PushRuling, Ruling, opposing
+from autokeeper.agents.cast import ARBITER_SYSTEM, Action, Failure, IdeaFailure, Proposal, PushRuling, Ruling, opposing
 from autokeeper.agents.director import DIRECTOR_SYSTEM, Improv, NewClue, NewEvent
 from autokeeper.engine import autoplay, idea
 from autokeeper.engine import graph as turn_graph
@@ -182,12 +182,16 @@ async def test_a_failed_idea_roll_still_gives_the_clue_and_cuts_to_the_worst_sit
                  note="守钟人锁上了齿轮间的门")
     game, cast, _ = make(module, fake, {})
     game.cast = cast = Improvising({}, [cut])
+    async def arrange(state, clue_id):
+        return IdeaFailure(minutes=37, situation="守钟人趁调查员梳理思路时关上齿轮间的门。", prepare=True)
+
+    cast.idea_failure = arrange
     start = game.state.minutes
     fake.queue(99, 10)  # INT 75: a failure; the gears' sanity check passes
     turn = await game.resolve(game.idea_action(), Ruling(needs_roll=True, skill="灵感"))
     st = game.state
     assert cast.asked[0][0] == "千钧一发" and st.location == "tower" and "e_cut" in st.fired
-    assert st.minutes - start >= idea.LOST and "c_gears" in st.clues and not st.ideas[-1].passed
+    assert st.minutes - start == 37 and "c_gears" in st.clues and not st.ideas[-1].passed
     notes = "\n".join(turn.notes)
     assert "千钧一发" in notes and "导演的安排：守钟人锁上了齿轮间的门" in notes and "〔齿轮间〕" in notes
 
@@ -215,23 +219,47 @@ async def test_nothing_overlooked_is_said_plainly_and_spends_no_turn(module, fak
     assert any(e["type"] == "command" and e["text"] == idea.NOTHING for e in out)
 
 
-async def test_a_stall_offers_the_idea_roll_instead_of_a_silent_lead(module, fake):
+async def test_a_counter_only_gives_the_keeper_a_private_pacing_signal(module, fake):
     wait = Action(kind="wait", summary="周衡在广场上发呆")
     game, cast, events = make(module, fake, {"x": (wait, Ruling(needs_roll=False, minutes=5))})
     game.cast = cast = Improvising({"x": (wait, Ruling(needs_roll=False, minutes=5))}, [])
     st = game.state
     st.turn = STALL_TURNS
-    await game.resolve(wait, Ruling(needs_roll=False, minutes=5))
-    assert cast.asked == [] and st.idea_offer == STALL_TURNS and st.progress_at == STALL_TURNS
-    assert any(e["type"] == "idea_offer" for e in events)
-    assert "/灵感" in autoplay.situation(module, st)  # an AI player decides for itself
+    turn = await game.resolve(wait, Ruling(needs_roll=False, minutes=5))
+    assert cast.asked == [] and st.idea_offer == 0 and st.progress_at == STALL_TURNS
+    assert not any(e["type"] == "idea_offer" for e in events)
+    assert "内部节奏参考" in "\n".join(turn.notes)
+    assert "守秘人提议做一次灵感检定" not in autoplay.situation(module, st)
     st.ideas.append(idea.IdeaRoll(turn=1, day=0, clue="c_notice", difficulty="常规", passed=True))
+    assert game.idea_refused() == idea.TODAY
+    st.idea_offer = st.turn  # explicitly offered by the keeper, not by the counter
     assert game.idea_refused() == ""  # offered: not held back by today's roll
     action = game.idea_action()
     assert action.idea["offered"]
     fake.queue(10, 10)
     await game.resolve(action, Ruling(needs_roll=True, skill="灵感"))
     assert st.idea_offer == 0 and st.ideas[-1].offered and game.idea_refused() == idea.TODAY
+
+
+@pytest.mark.parametrize("improvising", [True, False])
+async def test_the_keeper_chooses_a_failed_idea_rolls_time_without_requiring_new_scenery(module, fake, improvising):
+    game, cast, events = make(module, fake, {})
+    cast.improvising = improvising
+    choices = []
+
+    async def arrange(state, clue_id):
+        choices.append((state.minutes, clue_id))
+        return IdeaFailure(minutes=17, situation="钟声突然停了，调查员在齿轮间的异响中注意到遗漏的东西。")
+
+    cast.idea_failure = arrange
+    start = game.state.minutes
+    fake.queue(99, 10)
+    turn = await game.resolve(game.idea_action(), Ruling(needs_roll=True, skill="灵感"))
+    assert choices == [(start, "c_gears")]
+    assert game.state.minutes - start == 17 and turn.clues == ["c_gears"]
+    assert "钟声突然停了" in "\n".join(turn.notes)
+    assert any("17 分钟" in "\n".join(event["lines"]) for event in events if event["type"] == "outcome")
+    await game.close()
 
 
 # -- pushing a stated way ------------------------------------------------------------------------

@@ -22,13 +22,13 @@ from pydantic import TypeAdapter
 
 from .. import cards, pictures, weather
 from ..agents import guard
-from ..agents.cast import Action, Cast, Failure, Initiative, Rejoin, Ruling, kp_line
+from ..agents.cast import Action, Cast, Failure, IdeaFailure, Initiative, Plan, Rejoin, Ruling, kp_line
 from ..agents.director import Improv
 from ..harness.models import refused
 from ..harness.replay import CassetteError
 from ..module import graph as module_graph
 from ..module import improv
-from ..module.schema import PARTY_DEAD, PARTY_UNFIT, Event, Item, Module
+from ..module.schema import Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
 from ..rules import commands, wounds
 from ..rules.bcdice import Level, Roll
@@ -52,7 +52,6 @@ from .state import (
     GameState,
     LogEntry,
     Progress,
-    format_time,
     parse_time,
     time_of_day,
 )
@@ -423,10 +422,14 @@ class Game(Encounters):
         self.showcases.settle()  # someone acts: the opening's big picture, if still on its way, is not shown now
         self.showcases.prepare()
         st = self.state
-        await self._world_settled()  # what the rest of the world did since the last turn, before this one
-        await self._curtain(Action(kind="other", summary=text))
-        st.turn += 1
-        if text.strip() != "/encounter":
+        resumed_at = st.pending_turn.get("arrangement", {}).get("at")
+        if resumed_at is not None:
+            st.turn = resumed_at  # a saved arrangement is inside this same parse, before graph.parse's action receipt
+        else:
+            await self._world_settled()  # what the rest of the world did since the last turn, before this one
+            await self._curtain(Action(kind="other", summary=text))
+            st.turn += 1
+        if text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
             st.add("player", text, who=st.investigator.name)
         if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
             return self.idea_action()
@@ -469,20 +472,44 @@ class Game(Encounters):
         those it may be (here, alive, the module's: _present), by their ids alone, and kept for
         talk(), in the turn's journal too, so a resumed turn still has it."""
         st = self.state
+        receipt = st.pending_turn.setdefault("arrangement", {}) if st.pending_turn else {}
         planner = getattr(self.cast, "plan", None)
         if planner is not None:
             try:
-                plan = await planner(st, text)
+                if receipt.get("plan"):
+                    plan = Plan.model_validate(receipt["plan"])
+                elif _takes(planner, "check"):
+                    plan = await planner(st, text, check=lambda p: self._planned_scene(p).problems)
+                else:
+                    plan = await planner(st, text)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # the parser still reads the player's words
                 self._debug("plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
             else:
+                if "units" not in receipt:
+                    prepared = self._planned_scene(plan)
+                    receipt.update(at=st.turn, plan=plan.model_dump(mode="json"), units=[u.dump() for u in prepared.held],
+                                   problems=prepared.problems)
+                    if receipt["units"] and self.checkpoint:
+                        self.checkpoint()
+                if not receipt.get("landed"):
+                    units = [scene.Unit.load(u) for u in receipt["units"]]
+                    landed = {u.key for u in scene.land(self.world, units)} if units else set()
+                    receipt["problems"].extend(f"{'；'.join(u.said) or u.key}未落实，按当前记录继续。"
+                                               for u in units if u.key not in landed)
+                    receipt["landed"] = True
+                    if plan.people:
+                        self.visuals.schedule()
+                    if units and self.checkpoint:
+                        self.checkpoint()
+                if not st.pending_turn:
+                    self._late.notes.extend(f"现场登记未落实：{p}" for p in receipt["problems"])
                 here, kept = set(self._present()), {}
                 for x in plan.initiative:
                     if x.npc in here and x.npc not in kept and x.does.strip():
                         kept[x.npc] = x
-                self.initiative = list(kept.values())[:2]
+                self.initiative = list(kept.values())
                 self._directed = {x.npc for x in self.initiative}  # the world does not decide for them this turn
                 if st.pending_turn:
                     st.pending_turn["initiative"] = [x.model_dump() for x in self.initiative]
@@ -490,9 +517,24 @@ class Game(Encounters):
                     hint = getattr(plan, "encounter", None)
                     st.pending_turn["encounter_hint"] = hint.model_dump(mode="json", by_alias=True) if hint else None
                 self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
-                                     "kept": [x.npc for x in self.initiative]})
+                                     "kept": [x.npc for x in self.initiative], "registration": receipt})
                 return plan.action
         return await self.cast.intent(st, text)
+
+    def _planned_scene(self, plan: Plan) -> scene.Plan:
+        """Register the established cast before ruling, without handing over things or resolving
+        anybody's attempted action. Real moves still use the scene's route and time checks."""
+        if plan.action.kind == "meta" or not (plan.present or plan.people):
+            return scene.Plan()
+        here = list(dict.fromkeys([*self._present(), *plan.present, *(p.id for p in plan.people)]))
+        raw = scene.Scene(people=plan.people, here=here)
+        prepared = scene.plan(self.world, raw, scene.Context(travel=self._travel, walk=False,
+                                                           ids=f"plan:{self.state.turn}"))
+        introduced = {p.id for p in plan.people}
+        for ident in plan.present:
+            if ident not in introduced and (not (e := self.world.entity(ident)) or e.kind != "npc"):
+                prepared.problems.append(f"{ident} 不是已登记的 NPC；需要持续记住的新人物写进 people。")
+        return prepared
 
     async def rule(self, action: Action) -> Ruling | None:
         if action.idea is not None:  # the Idea roll: INT at the difficulty the engine set (engine/idea.py)
@@ -1192,27 +1234,25 @@ class Game(Encounters):
         return {"type": "damage", "who": inv.name, "text": text, "injury": injury}
 
     async def _nudge(self, turn: Turn) -> None:
-        """Stuck for a while (STALL_TURNS without a clue, a flag, an event or a new place): the keeper
-        offers the Idea roll (Keeper Rulebook p. 169) and the players decide; an AI player sees the
-        offer in its situation (engine/autoplay.py). The director no longer sends a lead on its own:
-        its push is what a failed Idea roll stages (Game._idea). Offered once a stall."""
+        """A private pacing signal after a stretch without recorded progress. The keeper decides
+        whether this is a genuine dead end in its normal telling (Telling.offer_idea); counting
+        turns does not tell players they are stuck, nor start a director call."""
         st = self.state
         step = self._resolution_step
         eligible = await step("eligible", turn, lambda: not (turn.action and turn.action.kind == "daily")
-                              and not st.ending and st.turn - st.progress_at >= STALL_TURNS)
+                              and not st.ending and not idea.offered(st) and st.turn - st.progress_at >= STALL_TURNS)
         if not eligible:
             return
 
-        def offer() -> dict | None:
-            st.progress_at = st.turn  # the next offer only after another stall
+        def signal() -> None:
+            st.progress_at = st.turn  # do not repeat the same internal reminder every turn
             if self.battling() or idea.pick(self.m, st) is None:
-                return None
-            st.idea_offer = st.turn
-            return {"type": "idea_offer", "text": idea.OFFER}
+                return
+            turn.notes.append("【内部节奏参考】近期没有新的线索、标记、事件或地点记录，不代表玩家陷入停滞。"
+                              "结合近期交谈判断：关系发展、讨论、日常和有意等待都可以继续，不必催促或暗示遗漏。"
+                              "确实无从着手时，才在叙述中提议灵感检定并填写 offer_idea；否则不向玩家展示这条参考。")
 
-        notice = await step("offer", turn, offer)
-        if notice:
-            await step("offer-notice", turn, lambda: self.emit(notice))
+        await step("signal", turn, signal)
 
     # -- the Idea roll (engine/idea.py) -------------------------------------------------------------
     def idea_refused(self) -> str:
@@ -1246,14 +1286,37 @@ class Game(Encounters):
 
         checked = await step("idea-check", turn, roll)
         await step("idea-notice", turn, lambda: self.emit(checked["event"]))
-        passed, staged = checked["passed"], False
+        passed, staged, minutes = checked["passed"], False, 0
         if not passed:
+            lost_key = self._resolution_key("idea-lost")
+
+            async def arrange() -> dict:
+                old_time = (self._resolution or {}).get("steps", {}).get(lost_key, {})
+                if old_time.get("done"):  # pre-0.0.5 journal: its historical three-hour cost already landed
+                    return IdeaFailure(minutes=180, situation="沿用此前已经结算的时间，从当前实际局势继续。",
+                                       prepare=self.improvising).model_dump(mode="json")
+                choose = getattr(self.cast, "idea_failure", None)
+                if choose is None:  # older/scripted casts: use the next concrete deadline, not a fixed three hours
+                    due = [parse_time(e.when) - st.minutes for e in m.events
+                           if e.id not in st.fired and re.fullmatch(r"D\d+ \d{1,2}:\d{2}", e.when)
+                           and parse_time(e.when) > st.minutes]
+                    return IdeaFailure(minutes=min(due, default=1), situation="按实际推进后的局势切入危机。",
+                                       prepare=self.improvising).model_dump(mode="json")
+                chosen = await choose(st, clue.id)
+                return IdeaFailure.model_validate(chosen).model_dump(mode="json")
+
+            arranged = await step("idea-arrangement", turn, arrange)
+            minutes = arranged["minutes"]
+
             def lost() -> None:
-                st.minutes += idea.LOST
+                st.minutes += self._overlap(minutes)
 
             await step("idea-lost", turn, lost)
             await step("idea-time", turn, lambda: self._time(turn))
-            applied = await step("idea-scene", turn, lambda: self._cut(clue.id)) if self.improvising else None
+            await step("idea-arrangement-note", turn, lambda: turn.notes.append(
+                "【灵感失败后的切入安排】" + arranged["situation"] + "。以时间推进后的实际记录为准，未结算的变化在场面快照中落实。"))
+            applied = (await step("idea-scene", turn, lambda: self._cut(clue.id, arranged["situation"]))
+                       if arranged["prepare"] and self.improvising and not st.ending else None)
             if applied:
                 staged = True
                 if applied["go"] and applied["go"] != st.location and any(x.id == applied["go"] for x in m.locations):
@@ -1263,22 +1326,22 @@ class Game(Encounters):
                     await step("idea-staged", turn, lambda: turn.notes.append(f"导演的安排：{applied['note']}"))
         await step("idea-clue", turn, lambda: self._gain([clue.id], turn, None))
         told = (idea.realised(clue.title, mentioned=bool(plan.get("mentioned", True))) if passed
-                else idea.cut(clue.title, idea.LOST, staged=staged))
+                else idea.cut(clue.title, minutes, staged=staged))
         await step("idea-note", turn, lambda: turn.notes.append(told))
         lines = (["灵感检定成功：理出了一条思路"] if passed else  # what it is, the telling says
-                 [f"灵感检定失败：耗去 {idea.LOST // 60} 小时，局面转入危急", "那条思路仍会在局面中显露"])
+                 [f"灵感检定失败：经过 {_span(minutes)}，局势发生变化", "那条思路仍会在局面中显露"])
         await step("idea-outcome", turn, lambda: self.emit({"type": "outcome", "who": roller.name, "lines": lines}))
         await step("turn-plugins", turn, lambda: self.plugins.run("turn", turn, action=action.model_dump(mode="json")))
         await step("ending", turn, lambda: self._check_ending(turn))
 
-    async def _cut(self, clue_id: str) -> dict | None:
+    async def _cut(self, clue_id: str, situation: str = "") -> dict | None:
         """The director's 千钧一发 after a failed Idea roll, prepared before the turn goes on."""
         m = self.m
         clue = m.clue(clue_id)
         where = m.location(clue.where).name + (f"的{clue.feature}" if clue.feature else "")
         said = Action(kind="other", target=clue.title,
                       summary=f"灵感检定失败。调查员漏掉的线索〔{clue.title}〕：{clue.text.strip()}（在{where}）")
-        why = Ruling(needs_roll=False, reason="灵感检定失败，千钧一发：时间已经过去，直接切入调查员能意识到的最糟局面，让这条线索在局面里显露出来。")
+        why = Ruling(needs_roll=False, reason="灵感检定失败，千钧一发：时间已经过去，直接切入调查员能意识到的最糟局面，让这条线索在局面里显露出来。" + situation)
         applied = await self._improvise("千钧一发", action=said, ruling=why, required=True)
         return asdict(applied) if applied is not None else None
 
@@ -1399,6 +1462,7 @@ class Game(Encounters):
             return
 
         def initial() -> bool:
+            turn.notes.extend(f"现场登记未落实：{p}" for p in st.pending_turn.get("arrangement", {}).get("problems", []))
             preparation = st.pending_turn.get("preparation", {})
             if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
                 turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
@@ -1535,7 +1599,7 @@ class Game(Encounters):
                 gained += [c for c in self._valid_clues(ruling.clues_on_success, action) if c not in gained]
             spoken = self._spoken(gained, self._asks(action, turn))  # the one talked to tells these, in their own time (talk)
             gained = [c for c in gained if c not in spoken]
-            return {"known": list(st.flags), "gained": gained[: MAX_FOUND if action.target else 1], "spoken": spoken}
+            return {"known": list(st.flags), "gained": gained, "spoken": spoken}
 
         found = await step("available", turn, available)
         if passed:
@@ -2859,94 +2923,36 @@ class Game(Encounters):
 
     # -- nobody of them can act ----------------------------------------------------------------------
     async def _party_down(self, turn: Turn) -> None:
-        """Nobody of the party can act and no fight goes on (the user's solo game of 2026-10-22: 托马斯
-        down, the game sat at an empty input box). The dying nobody can tend roll CON every round until
-        it fails (Keeper Rulebook p. 101); every investigator dead, the game ends as the module's endings
-        say, else with the engine's own (module/schema.PARTY_DEAD); otherwise time passes until the first
-        of them comes to (rules/wounds.waking), the world going on meanwhile, and play resumes. The
-        keeper tells what they wake to from the record."""
-        st, step = self.state, self._resolution_step
-        if st.ending or self.encounter() is not None or any(i.can_act for i in st.investigators):
-            return
-        for notice in await step("down-dying", turn, lambda: self._untended(turn)):
-            await step(f"down-dying/{notice['fighter']}", turn, lambda notice=notice: self.emit(notice))
-        if all("死亡" in i.conditions for i in st.investigators):
-            await step("down-ending", turn, lambda: self._check_ending(turn))
-            if not st.ending:
-                await step("down-end", turn, lambda: self._end(PARTY_DEAD.id, turn))
-            return
-        since = await step("down-wait", turn, lambda: self._sleep(turn))
-        if since is None:
-            await step("down-unfit", turn, lambda: self._end(PARTY_UNFIT.id, turn))
-            return
-        await step("down-time", turn, lambda: self._time(turn))
-        await step("down-wake", turn, lambda: self._wake_due(turn, since=since))
-        await step("down-ending-after", turn, lambda: self._check_ending(turn))
-        if not st.ending and self.encounter() is None and not any(i.can_act for i in st.investigators):
-            await step("down-unfit-after", turn, lambda: self._end(PARTY_UNFIT.id, turn))
+        """The existing keeper arranges rescue, treatment, waiting or a justified interruption."""
+        from . import aftermath
 
-    def _untended(self, turn: Turn) -> list[dict]:
-        """The dying nobody can tend: CON at every round's end until one fails, and they die (p. 101:
-        only First Aid holds it, and no one is there to give it). Their notices."""
-        st, out = self.state, []
-        for inv in st.investigators:
-            body = effects.body_of(self.world, inv.id)
-            if body is None or not body.dying or body.stabilized:
-                continue
-            rounds, con = 0, None
-            while rounds < UNTENDED_ROUNDS and (con is None or con.passed):
-                rounds += 1
-                con = self.rules.check(inv, "体质", mark=False)
-            if con is None or con.passed:
-                turn.notes.append(f"{inv.name}还在濒死，没有人能救他。")
-                continue
-            done = effects.commit(self.world, [effects.Die(target=inv.id, why=f"濒死无人救治，体质检定失败（{con.value}）")],
-                                  op_id=f"untended:{inv.id}:{st.turn}", source="engine")
-            if done.ok:
-                st.add("damage", "伤重不治", who=inv.name)
-                turn.notes.append(f"{inv.name}倒在那里，没有人能救他：撑了 {rounds} 轮，体质检定失败（{con.value}），伤重不治。")
-                out.append({"type": "damage", "who": inv.name, "text": "伤重不治", "fighter": inv.id})
-        return out
-
-    def _sleep(self, turn: Turn) -> int | None:
-        """Time passes until the first of the party out cold comes to (rules/wounds.waking: from when they
-        fell, or from now when that is not known): the clock moved there and the keeper told how long
-        they lay; the clock as it was ("since"), or None when none of them comes to by themselves."""
-        st = self.state
-        now = st.minutes
-        due = []
-        for inv in st.investigators:
-            body = effects.body_of(self.world, inv.id)
-            if body is not None and (after := wounds.waking(body)) is not None:
-                due.append((body.unconscious_at if body.unconscious_at is not None else now) + after)
-        if not due:
-            turn.notes.append("调查员均无法继续行动，也没有能够自行苏醒的人。按各人的实际状态收束，不把失去行动能力写成死亡。")
-            return None
-        st.minutes = max(now, min(due))
-        names = "、".join(i.name for i in st.investigators if "死亡" not in i.conditions)
-        turn.notes.append(f"【昏迷】{names}失去了知觉，从 {format_time(now)} 到 {st.clock}。这段时间里发生的事见本轮的记录；"
-                          "叙述从他们醒来时的所见所感写起，只写记录里有的事和留下的痕迹，不替他们决定接下来做什么。")
-        return now
+        await aftermath.settle(self, turn)
 
     async def _wake_due(self, turn: Turn, *, since: int | None = None) -> None:
         """Investigators out cold whose time has come (rules/wounds.waking, from when they fell, or from
         `since` when that is not known) come to: at 0 HP with the day's first point of natural healing
         (p. 101). Each once, in its own op."""
-        st = self.state
+        st, step = self.state, self._resolution_step
         for inv in st.investigators:
-            body = effects.body_of(self.world, inv.id)
-            after = wounds.waking(body) if body is not None else None
-            start = body.unconscious_at if body is not None and body.unconscious_at is not None else since
-            if after is None or start is None or st.minutes < start + after:
-                continue
-            woke = [effects.Heal(target=inv.id, amount=1, means="natural")] if body.hp <= 0 else []
-            done = effects.commit(self.world, [*woke, effects.Wake(target=inv.id)], op_id=f"wake:{inv.id}:{start + after}",
-                                  source="engine")
-            if done.ok and not done.repeat:
+            def commit(inv=inv) -> dict | None:
+                body = effects.body_of(self.world, inv.id)
+                after = wounds.waking(body) if body is not None else None
+                start = body.unconscious_at if body is not None and body.unconscious_at is not None else since
+                if after is None or start is None or st.minutes < start + after:
+                    return None
+                woke = [effects.Heal(target=inv.id, amount=1, means="natural")] if body.hp <= 0 else []
+                done = effects.commit(self.world, [*woke, effects.Wake(target=inv.id)], op_id=f"wake:{inv.id}:{start + after}",
+                                      source="engine")
+                if not done.ok or done.repeat:
+                    return None
                 text = f"醒了过来（昏迷了 {_span(st.minutes - start)}）"
                 st.add("damage", text, who=inv.name)
                 turn.notes.append(f"{inv.name}{text}，生命 {inv.hp}/{inv.hp_max}。")
-                await self.emit({"type": "damage", "who": inv.name, "text": text})
+                return {"type": "damage", "who": inv.name, "text": text}
+
+            notice = await step(f"wake:{inv.id}/commit", turn, commit)
+            if notice:
+                await step(f"wake:{inv.id}/notice", turn, lambda notice=notice: self.emit(notice))
 
     def _npc_message(self, turn: Turn, npc_id: str) -> str:
         st, m = self.state, self.m
@@ -3173,6 +3179,8 @@ class Game(Encounters):
         text = receipt["text"]
         if not receipt.get("landed"):  # the record and the log together, with no await between
             landed = scene.land(self.world, [scene.Unit.load(u) for u in receipt.get("units", [])])
+            if any(u.key.startswith("introduce:") for u in landed):
+                self.visuals.schedule()
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
             st.ongoing = receipt.get("now", "")
@@ -3188,6 +3196,13 @@ class Game(Encounters):
         await self._people()
         entry = next((e for e in reversed(st.log) if e.kind == "keeper" and e.text == text), None) or st.add("keeper", text, who="守秘人")
         await self.emit({"type": "keeper_end", "text": text})
+        if receipt.get("offer_idea") and not receipt.get("idea_offered"):
+            if st.turn > 0 and not st.ending and not self.battling() and idea.pick(self.m, st) is not None:
+                st.idea_offer = st.turn
+                await self.emit({"type": "idea_offer", "text": idea.OFFER})
+            receipt["idea_offered"] = True
+            if self.checkpoint:
+                self.checkpoint()
         await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
         self.told = Told(report, lore + receipt.get("note", ""), entry, sky)
@@ -3201,7 +3216,7 @@ class Game(Encounters):
         an old one's), or a turn told out of the story (a question to the KP, the ending) has no scene."""
         st = self.state
         keeper = self.cast.keeper
-        words = {"units": [], "room": "", "now": "", "note": ""}
+        words = {"units": [], "room": "", "now": "", "note": "", "offer_idea": False}
         if not _staged(turn) or not _takes(keeper, "check"):
             return words | {"text": await keeper(st, report, on_delta=delta, lore=lore)}
         ctx = self._scene_context(turn)
@@ -3221,7 +3236,7 @@ class Game(Encounters):
                 return words | {"text": told}
             if told.scene is None or len(plans) == asked:  # no scene could be read
                 if told.shown:  # already before the players: its words stand, the record as it was
-                    return words | {"text": told.text}
+                    return words | {"text": told.text, "offer_idea": told.offer_idea}
                 # Its words would say what the record never got ("the warden goes with you", nobody
                 # following): asked again for the scene, and the second time held to the record as it is.
                 self._debug("scene", {"phase": "missing", "attempt": attempt})
@@ -3233,7 +3248,7 @@ class Game(Encounters):
                     await delta(told.text)
                 if p.problems:  # shown on a scene that held, then came back otherwise: what holds of it lands
                     self._debug("scene", {"phase": "kept", "problems": p.problems, "scene": told.scene})
-                return self._staging(told.text, p, partial=bool(p.problems))
+                return self._staging(told.text, p, partial=bool(p.problems)) | {"offer_idea": told.offer_idea}
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})
@@ -3392,10 +3407,8 @@ NOWHERE = (
     "不要写他们到了别处。要是当地人人都知道的地方，可以写有人给他们指了路、说出地名，下一轮就能去；"
     "要是他们还没发现的地方，别说出、确认或暗示它的任何事"
 )
-STALL_TURNS = 12  # turns without a clue, flag, event or new place before the keeper offers an Idea roll
+STALL_TURNS = 12  # turns without recorded progress before an internal pacing signal, never an automatic player hint
 PUSH_HOW = 200  # characters of a push's stated way that are kept
-MAX_FOUND = 2  # clues one action can turn up; a look around without a target, one
-UNTENDED_ROUNDS = 600  # the dying nobody can tend roll CON this many rounds at most (an hour of 6-second rounds)
 ACT_CAP = 180  # minutes one action may take
 WAIT_CAP = 720  # minutes one wait or rest may skip: a night's sleep
 

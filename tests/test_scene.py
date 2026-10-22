@@ -99,6 +99,37 @@ def told(events: list[dict]) -> str:
     return "".join(e["text"] for e in events if e["type"] == "keeper_delta")
 
 
+@pytest.mark.parametrize("offer", [False, True])
+async def test_only_the_keepers_explicit_choice_opens_an_idea_offer(offer):
+    game, events = made()
+    turn = acted(game, "我和守钟人再聊一会儿", 0, kind="talk")
+    game.state.turn = 12
+    await game._nudge(turn)
+    assert game.state.idea_offer == 0 and not any(event["type"] == "idea_offer" for event in events)
+    text = "我们可以试着重新梳理线索。" if offer else "守钟人说起那年修钟时的旧事。"
+    SCRIPT.append({"scene": {}, "text": text, "offer_idea": offer})
+    await game.narrate(turn)
+    assert game.state.idea_offer == (12 if offer else 0)
+    assert len([event for event in events if event["type"] == "idea_offer"]) == int(offer)
+    assert "内部节奏参考" not in told(events)
+    await game.close()
+
+
+async def test_a_failed_ideas_arrangement_uses_the_keeper_session_without_changing_its_next_telling():
+    game, _ = made("tower")
+    SCRIPT.append({"minutes": 17, "situation": "齿轮间的异响再次响起。", "prepare": False})
+    chosen = await game.cast.idea_failure(game.state, "c_gears")
+    assert chosen.minutes == 17 and not chosen.prepare
+    session = game.cast.sessions["keeper"]
+    assert set(SEEN[0]["schema"]["properties"]) == {"minutes", "situation", "prepare"}
+    assert "齿轮间里藏着东西" in str(SEEN[0]["messages"])
+    SCRIPT.append(telling("齿轮间里传来一声轻响。"))
+    await game.narrate(acted(game, "我仔细听", 1))
+    assert game.cast.sessions["keeper"] is session
+    assert set(SEEN[-1]["schema"]["properties"]) >= {"scene", "text", "offer_idea"}
+    await game.close()
+
+
 # -- the scene against the record ---------------------------------------------------------------
 async def test_company_and_a_walk_between_rooms_of_one_place_land(fake):
     game, events = made("square")

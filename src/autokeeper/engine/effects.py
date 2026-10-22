@@ -80,6 +80,13 @@ class Die(BaseModel):
     why: str  # 濒死时体质检定失败、一击超过生命上限……
 
 
+class Relapse(BaseModel):
+    """The failed hourly CON of someone First Aid stabilized (Keeper Rulebook p. 101)."""
+
+    kind: Literal["relapse"] = "relapse"
+    target: str
+
+
 class Ammo(BaseModel):
     """What is in the gun `item` and carried for it now, absolute (WeaponState)."""
 
@@ -169,7 +176,7 @@ class Fills(BaseModel):
 
 
 Effect = Annotated[
-    Wound | Heal | Wake | Stabilize | Die | Ammo | Jam | Ready | Drop | Relocate | Party | Obstacle | Mark | Luck | Fills,
+    Wound | Heal | Wake | Stabilize | Die | Relapse | Ammo | Jam | Ready | Drop | Relocate | Party | Obstacle | Mark | Luck | Fills,
     Field(discriminator="kind"),
 ]
 
@@ -213,6 +220,12 @@ def heal(body: Body, h: Heal) -> Body:
     and a creature that heals itself is up again once it has any."""
     if body.dead:
         return body
+    if h.means == "medicine" and h.amount > 0:
+        # The caller has already checked the day/difficulty and rolled a successful Medicine.
+        # Its effect must also clear a stabilized dying mark and remember the treated injury.
+        treated = wounds.medicine(body, Level.EXTREME, h.amount, h.injury).body
+        key = wounds.MEDICINE_KEY + h.injury
+        return replace(treated, aided=(*treated.aided, key)) if h.injury and key not in treated.aided and treated is not body else treated
     aided = body.aided + ((h.injury,) if h.means == "first_aid" and h.injury and h.injury not in body.aided else ())
     out = replace(body, hp=min(body.hp_max, body.hp + h.amount), aided=aided)
     if out.regenerating and out.hp > 0:
@@ -371,7 +384,7 @@ def problems(w: World, effects: list) -> list[str]:
     seen: set[tuple[str, str]] = set()
     investigators = {i.id: i for i in w.st.investigators}
     for e in effects:
-        if isinstance(e, Wound | Heal | Wake | Stabilize | Die):
+        if isinstance(e, Wound | Heal | Wake | Stabilize | Die | Relapse):
             body = body_of(w, e.target)
             if body is None:
                 out.append(f"{e.target} 不是调查员、NPC 或怪物")
@@ -450,7 +463,7 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
 
     out = Settled()
     for e in effects:
-        if isinstance(e, Wound | Heal | Wake | Stabilize | Die):
+        if isinstance(e, Wound | Heal | Wake | Stabilize | Die | Relapse):
             body = body_of(w, e.target)
             assert body is not None
             text = ""
@@ -472,6 +485,9 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
             elif isinstance(e, Wake):
                 after = wounds.wake(body)
                 text, body = ("醒了过来" if after.conditions != body.conditions else ""), after
+            elif isinstance(e, Relapse):
+                after = wounds.stabilized_roll(body, Level.FAILURE)
+                text, body = ("伤势再度恶化，必须立即急救" if after is not body else ""), after
             else:
                 after = die(body)
                 text, body = (f"死了（{e.why}）" if after is not body else ""), after

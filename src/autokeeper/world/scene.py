@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 
 from ..engine import world as legacy_world
 from .context import rooms
-from .ops import Follow, Move, Occur, Transfer, names
+from .ops import Follow, Improvise, Move, Occur, Transfer, names
 from .record import ENGINE, KEEPER
 
 if TYPE_CHECKING:
@@ -64,10 +64,23 @@ class Trace(BaseModel):
         return "priv" in self.visibility.lower() or self.visibility.strip() in ("私下", "暗中", "没注意到")
 
 
+class Person(BaseModel):
+    """A lasting person improvised here, without a full character sheet or a scene package."""
+
+    id: str = Field(description="新人物的 id，英文小写加下划线；已有的人只写进 here")
+    name: str = Field(description="姓名或稳定称呼")
+    role: str = Field("路人", description="身份，一句话")
+    look: str = Field("", description="看得见的外貌、衣着")
+    personality: str = Field("", description="性格和处事方式")
+    goal: str = Field("", description="眼下想做什么")
+    knows: list[str] = Field(default_factory=list, description="亲身知道的事；不能把待调查的结果提前算作他知道")
+
+
 # How things stand as the telling ends; a field left out is as the record has it. (No docstring: the
 # model reads a schema's descriptions, and these are written for it.)
 class Scene(BaseModel):
     room: str = Field("", description="讲完时调查员在哪；只在同一处的房间之间走动时写，没走动留空")
+    people: list[Person] = Field(default_factory=list, description="现场新出现、后续还会参与的人；只登记必要资料，普通背景人群不用写")
     here: list[str] = Field(default_factory=list, description="讲完时和调查员在一起的人；没变也照抄")
     follow: list[str] = Field(default_factory=list, description="here 里跟着调查员走的人")
     left: list[Left] = Field(default_factory=list, description="这段里离开的人和去向")
@@ -228,6 +241,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         scene = raw if isinstance(raw, Scene) else Scene.model_validate(raw)
     except ValueError as exc:
         return Plan(problems=[f"scene 的格式不对，按字段说明重写：{str(exc).splitlines()[0][:120]}"])
+    original = w
     given = scene.model_fields_set
     st, rec = w.st, w.rec
     party = {i.id for i in st.investigators}
@@ -262,6 +276,29 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             room = where
 
     # Who is with them: the people there now, and as it ends.
+    if scene.people:
+        from .store import World
+
+        w = World(w.m.model_copy(deep=True), w.st.model_copy(deep=True))
+        rec = w.rec
+        for p in scene.people:
+            if not p.id.strip() or not p.name.strip():
+                problems.append("新人物的 id 和姓名不能为空。")
+                continue
+            if p.id in w.rec.entities:
+                problems.append(f"人物 id {p.id} 已经存在：已有的人只写进 here，不要重新登记。")
+                continue
+            raw = op(Improvise, at=room, actor=KEEPER, thread=False,
+                     plan={"kind": "展开", "reason": f"现场登记：{p.name}", "npcs": [{**p.model_dump(), "location": room}]})
+            result = w.apply(raw)
+            if not result.ok:
+                problems += [f"登记{p.name}：{why}" for why in result.problems]
+                continue
+            # Improvise changes the module and cannot be undone. Keep registration separate from
+            # later handovers/company, which may fail without making the person cease to exist.
+            u = unit(f"introduce:{p.id}")
+            u.steps.append(raw)
+            u.said.append(f"登记{p.name}，在{name(room)}")
     here_now = w.present(src)
     there_now = w.present(room) if room != src else []
     seen = list(dict.fromkeys([*here_now, *there_now]))
@@ -301,7 +338,13 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             party_unit.said.append(f"{e.name}一起过去")
             movers[n] = "party"
             continue
-        minutes = _way(w, ctx, e.at, room) if e.at else None
+        if not e.at:
+            u = unit(f"npc:{n}")
+            u.steps.append(op(Move, entity=n, to=room, actor=KEEPER, reason="补记已在眼前的人，原位置未登记"))
+            u.said.append(f"补记{e.name}在{name(room)}")
+            movers[n] = u.key
+            continue
+        minutes = _way(w, ctx, e.at, room)
         if minutes is None:
             problems.append(f"{e.name}在{name(e.at) or '别处'}，从那里到不了{name(room)}：他不在这里，可以写他没来。")
         elif minutes > ctx.elapsed:
@@ -417,7 +460,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             u.said.append(f"留下痕迹：{_clip(t.text, 60)}")
 
     merged = _merge(units, movers)
-    end_words = _try(w, merged)
+    end_words = _try(original, merged)
     for u in merged:
         problems += u.problems
     now = "" if _blank(scene.now) else _clip(scene.now)
