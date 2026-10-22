@@ -411,8 +411,12 @@ HELP = Text.from_markup(
   Ctrl+S 存档       Ctrl+O 叙事偏好    Ctrl+Q 离开
   Ctrl+A 画法       Ctrl+T 配色        Ctrl+B 用量
   Ctrl+K 规则插件   Ctrl+G 右栏翻页：经过、进展、背景
-  Ctrl+Y 整理进展   Ctrl+L 灵感检定
+  Ctrl+Y 整理进展   Ctrl+L 灵感检定    Ctrl+N 收起画面
   Esc 菜单（存档、读档、设置、回到标题）
+
+[b]战斗与追逐[/b]
+  ↑↓ 回车 选择本轮行动    Esc 自行输入
+  Tab 切换被攻击时的应对，不占用行动
 
 F5 的建议只填入输入框，确认后再发送。
 F6 只改叙述，骰子、线索与 NPC 对话保留。

@@ -441,6 +441,8 @@ def test_a_chase_is_drawn_as_the_way_run_and_in_sight_with_who_is_where(module):
     assert all(cell_len(line) <= 44 for line in chase_route(chase_of(me, warden), 44, 24).plain.splitlines())
     narrow = chase_route(chase_of(me, warden), 28, 24).plain.splitlines()  # a narrow panel: shorter columns
     assert all(cell_len(line) <= 28 for line in narrow) and any("周衡" in line for line in narrow)
+    marks = [line for line in narrow if "⚠" in line or "▦" in line]  # a stretch's name cut short never runs into its tag
+    assert marks and all(" ⚠" in line or " ▦" in line for line in marks), marks
 
 
 async def test_the_chase_view_comes_from_the_site_by_shown_names_with_the_hazards_ahead(module, fake):
@@ -643,7 +645,7 @@ async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_
         for _ in range(4):  # Tab does not start it over
             await pilot.pause(0.3)
             await pilot.press("tab")
-        assert len(sent) == 2 and screen.state.encounter.get(me.id).react in (None, "dodge")  # in the words, not in the fight
+        assert len(sent) == 2 and screen.state.encounter.get(me.id).react == "dodge"  # four times round: back where it was
         screen._offer_orders()
         await pilot.pause(0.2)
         config.load().battle_timer = False  # 设置: 限时选择 off, with a clock running
@@ -702,8 +704,13 @@ def _all_on_screen(screen, height: int) -> None:
     assert story.region.height >= 3
 
 
+def _rows(widget) -> list[str]:
+    """What a widget shows, a row a line, as it is drawn on the screen (not what it was given)."""
+    return [widget.render_line(y).text for y in range(widget.size.height)]
+
+
 @pytest.mark.usefixtures("canned")
-@pytest.mark.parametrize("size", [(80, 24), (100, 30)])
+@pytest.mark.parametrize("size", [(80, 24), (100, 30), (40, 24)])
 async def test_on_a_small_terminal_the_rounds_list_and_the_box_stay_on_screen(module, fake, size):
     from autokeeper.tui.app import AutoKeeperApp
 
@@ -715,10 +722,17 @@ async def test_on_a_small_terminal_the_rounds_list_and_the_box_stay_on_screen(mo
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
         assert await until(pilot, lambda: screen.query_one("#picker").display)
-        await pilot.pause(0.3)
-        _all_on_screen(screen, size[1])
-        side = str(screen.query_one(".side").render())
-        assert side.count("11/11") == 2 and "调查员" in side and "你们" not in side  # every investigator's blood bar
+        await pilot.pause(0.5)
+        if size[0] >= 80:
+            _all_on_screen(screen, size[1])
+        side = screen.query_one(".side")
+        rows = _rows(side)
+        shown = "\n".join(rows)
+        # every investigator's blood bar, drawn for the column's own width: no row wrapped or cut into the next
+        assert shown.count("11/11") == 2 and "你们" not in shown, shown
+        assert "调查员" in shown or side.size.height < 6  # its line where the stage has room for it
+        assert sum("闪避" in r for r in rows) == 2  # each bar whole, its answer to blows after it
+        assert any("楼梯口打盹的" in r for r in rows), shown  # the foe faced, at least
 
 
 @pytest.mark.usefixtures("canned")

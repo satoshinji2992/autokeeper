@@ -185,6 +185,8 @@ GameScreen.-dev #topbar {
     max-height: 10;
     border: round $primary;
     background: $surface;
+    text-wrap: nowrap;  /* a choice a row: cut short with an ellipsis, never wrapped (GameScreen._order_rows) */
+    text-overflow: ellipsis;
 }
 #command {
     border: tall $primary-darken-1;
@@ -466,7 +468,4 @@ ModalScreen {
     width: 72;
     height: 22;
     border: round $secondary;
-}
-#ending-art {
-    color: $primary;
 }

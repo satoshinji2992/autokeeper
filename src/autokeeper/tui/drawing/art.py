@@ -76,11 +76,6 @@ def title(width: int, flicker: float = 0.0, palette: tuple[str, ...] = ("#ff2a2a
     return out
 
 
-@lru_cache(maxsize=16)
-def big_digit(d: str) -> tuple[str, ...]:
-    return tuple(pyfiglet.figlet_format(d, font="small").rstrip("\n").splitlines()[:4])
-
-
 def corrupt(text: str, rate: float) -> str:
     """Replace a fraction of visible characters with noise (used for SAN-loss glitches)."""
     if rate <= 0:

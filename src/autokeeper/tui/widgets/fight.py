@@ -10,8 +10,9 @@ what order, how hurt every foe looks (in words, never numbers), the investigator
 
 In a chase the picture is the place, cold and smeared with running, and what is behind you in it: far
 off a shape, then a face, at your heels a face that fills the stage, lunging every time it gains. The
-column: how many stretches are left between you in figures five rows tall, the way between, and
-what is in the way ahead.
+column: how far behind it is, the way run and in sight with who is where, and what is in the way.
+
+Their styles are in fight.tcss (loaded with the app's: a widget has no stylesheet of its own).
 
 The screen does the rest (tui/screens/game.py): the whole screen floods red when an investigator
 is hurt (BloodFlash), the screen lurches, a creature first seen comes up over the whole screen before
@@ -193,10 +194,6 @@ class Canvas(Static):
     The picture stands still while the player types (quiet) and, with 设置's animations off, it
     neither moves nor lunges, shakes or claws; the blows' numbers still come up."""
 
-    DEFAULT_CSS = """
-    Canvas { width: 1fr; height: 100%; content-align: center middle; background: #050303; text-wrap: nowrap; text-overflow: clip; }
-    """
-
     def __init__(self, **kw):
         super().__init__(**kw)
         self.key: tuple = ()  # what is shown
@@ -355,25 +352,12 @@ class Canvas(Static):
         self.update("")
 
 
-def big_number(n: int, style: str) -> list[Text]:
-    """A number five rows tall (DIGITS), a line a row."""
-    figures = [DIGITS[c] for c in str(n) if c in DIGITS]
-    return [Text(" ".join(f[row] for f in figures), style=style) for row in range(5)]
-
-
 # -- the stage: a fight, a chase ------------------------------------------------------------------
 class Arena(Horizontal):
     """A fight or a chase in place of the scene: the picture (Canvas) and, beside it, who acts in what
     order and how hurt everyone is, or how far behind it is and what is in the way. The screen sets
     its height (GameScreen._stage_rows); the column takes a share of its width, so a narrow screen
     keeps the picture some room, and writes itself again for every new size."""
-
-    DEFAULT_CSS = """
-    Arena { height: 20; display: none; background: #050303; }
-    Arena .side { width: 38; height: 100%; padding: 0 1; border-left: tall #3a0a0a; background: #0b0505; }
-    Arena.-chase .side { width: 46; border-left: tall #2a3448; background: #07080c; }
-    Arena.-close .side { border-left: tall #c1121f; background: #160506; }
-    """
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -392,15 +376,13 @@ class Arena(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Canvas()
-        yield Static(classes="side")
+        yield Column(classes="side")
 
     def on_mount(self) -> None:
         self.set_interval(0.35, self._flicker)
 
     def on_resize(self) -> None:
-        self._fit_side()
-        if self.display and self.view is not None:
-            self.call_after_refresh(self._side)  # once the column has its new size
+        self._fit_side()  # the column's own resize (Column) writes it again for its new size
 
     def _fit_side(self) -> None:
         if width := self.size.width:
@@ -481,20 +463,20 @@ class Arena(Horizontal):
         self._side()
 
     def _side(self) -> None:
+        if not self.query_one(".side", Static).content_size.width:
+            return  # not laid out yet: written once it has its size (Column.on_resize)
         column = self._chase_side() if self.mode == "chase" else self._fight_side()
         if column != self._column:  # a blink that changed nothing, a round's view that is the same: not painted
             self._column = column
             self.query_one(".side", Static).update(column, layout=False)  # the column's size is its own, not its text's
 
     def _fight_side(self) -> Text:
-        side = self.query_one(".side", Static)
-        width, height = side.content_size.width or 35, side.content_size.height or 20
-        return fight_column(self.view or {}, self.order, self.acting, self.facing, width, height)
+        size = self.query_one(".side", Static).content_size
+        return fight_column(self.view or {}, self.order, self.acting, self.facing, size.width, size.height)
 
     def _chase_side(self) -> Text:
-        side = self.query_one(".side", Static)
-        width, height = side.content_size.width or 42, side.content_size.height or 20
-        return chase_route(self.view or {}, width, height, self.blink, self.was)
+        size = self.query_one(".side", Static).content_size
+        return chase_route(self.view or {}, size.width, size.height, self.blink, self.was)
 
     def round_begins(self, order: list[str], view: dict) -> None:
         self.order, self.acting = order, ""
@@ -527,11 +509,23 @@ class Arena(Horizontal):
         self.remove_class("-chase", "-close")
 
 
+class Column(Static):
+    """The column beside the picture: written again for every size it is given (the first one too: it
+    was written before the layout, at a guessed width, and never again)."""
+
+    def on_resize(self) -> None:
+        arena = self.parent
+        if isinstance(arena, Arena) and arena.display and arena.view is not None:
+            arena._column = None
+            arena._side()
+
+
 def fight_column(view: dict, order: list[str], acting: str, facing: str, width: int, height: int) -> Text:
     """A fight beside the picture: the round and who acts in what order (`acting` lit), how hurt every
     foe looks (in words, never numbers; `facing` marked), the investigators' blood bars. Two lines a
     fighter where the column is tall enough, one where it is not (a short terminal, a crowd); foes
-    past what it holds are counted, the investigators always shown."""
+    past what it holds are counted, the investigators always shown, first of all: on a stage four
+    rows tall, the round, the investigators and the foe faced."""
     people = view.get("fighters", [])
     names = {f["id"]: f["name"] for f in people}
     foes = [f for f in people if f["side"] != "party"]
@@ -550,11 +544,12 @@ def fight_column(view: dict, order: list[str], acting: str, facing: str, width: 
         turns.append(names.get(fid, fid)[:6], style=f"bold reverse {colour}" if fid == acting else colour)
     lines += [head, turns, Text()] if roomy else [head.append("  ").append_text(turns)]
     per = 2 if roomy else 1
-    room = max(0, height - len(lines) - 1 - per * len(party))  # the investigators' lines first
+    rule = roomy or height - len(lines) - len(party) >= 2 + min(1, len(foes))  # the ━━ 调查员 ━━ line, where it fits
+    room = max(0, height - len(lines) - int(rule) - per * len(party))  # the investigators' lines first
     shown = foes
-    if per * len(foes) > room:  # the one faced and those still standing first, the rest counted
+    if per * len(foes) > room:  # the one faced and those still standing first, the rest counted where a line is left
         ranked = sorted(foes, key=lambda f: (f["id"] != facing, f["status"] in DOWN or f["status"] in GONE))
-        shown = ranked[: max(0, (room - 1) // per)]
+        shown = ranked[: max(min(1, room // per), (room - 1) // per)]
     for f in shown:
         row = Text(no_wrap=True, overflow="crop")
         row.append("▶ " if f["id"] == facing else "  ", style=f"bold {GORE}")
@@ -570,17 +565,21 @@ def fight_column(view: dict, order: list[str], acting: str, facing: str, width: 
             row.append(" ")
             row.append_text(wound_meter(f["wound"], f["status"]))
             lines.append(row)
-    if len(shown) < len(foes):
+    if len(shown) < len(foes) and per * len(shown) < room:
         lines.append(Text(f"  另有 {len(foes) - len(shown)} 名对手", style=ASH))
-    lines.append(Text("━━ 调查员 ━━", style=DEEP))
+    if rule:
+        lines.append(Text("━━ 调查员 ━━", style=DEEP))
     for f in party:
         name_style = f"bold reverse {AMBER}" if f["id"] == acting else f"bold {AMBER}"
         bars = Text(no_wrap=True, overflow="crop")
-        if f["hp"] is not None:
-            bars.append_text(hp_bar(f["hp"], f["hp_max"], max(4, min(16, width - (10 if roomy else 19)))))
-            bars.append(f" {f['hp']}/{f['hp_max']}", style=f"bold {BONE}")
         tag = f["status"] or STANCES.get(f["stance"], "")
-        bars.append(f"  {tag}" if roomy else f" {tag}", style=f"bold {GORE}" if f["status"] else ASH)
+        tag = f"  {tag}" if roomy else f" {tag}"
+        if f["hp"] is not None:
+            hp = f" {f['hp']}/{f['hp_max']}"
+            used = cell_len(hp) + cell_len(tag) + (0 if roomy else 9)  # one line: the name (8) and a space before the bar
+            bars.append_text(hp_bar(f["hp"], f["hp_max"], max(4, min(16, width - used))))
+            bars.append(hp, style=f"bold {BONE}")
+        bars.append(tag, style=f"bold {GORE}" if f["status"] else ASH)
         if roomy:
             lines += [Text(f["name"][:10], style=name_style), bars]
         else:
@@ -642,7 +641,7 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
         if fleeing:
             goal = "到出口或甩掉追兵即脱离" + (" · 随时可躲藏" if width >= 40 else "")
         else:
-            goal = "已在同一处，可以动手" if gap <= 0 else "追至同一处才能近身攻击"
+            goal = "已在同一处" if gap <= 0 else "追至同一处才能近身攻击"
         out.append(goal + "\n", style=SAFE if fleeing and gap >= 2 else ASH)
     else:
         out.append("\n")
@@ -685,7 +684,8 @@ def chase_route(view: dict, width: int, height: int, blink: int = 0, was: dict[s
                       else ASH if i < hind else BONE)
         row = Text(no_wrap=True)
         row.append_text(cell_text(f" {mark}", 4, mark_style))
-        row.append_text(cell_text(leg["name"], leg_w, name_style))
+        row.append_text(cell_text(leg["name"], leg_w - 1, name_style))  # a cut name never runs into its tag
+        row.append(" ")
         ob = leg.get("obstacle")
         if ob:
             if ob.get("open"):
@@ -740,8 +740,6 @@ class BloodFlash(ModalScreen[None]):
     meanwhile closed the prompt (the turn waiting on it never went on), stayed behind, see-through,
     eating the keys, and the next key dismissed it a second time (InvalidStateError, the app gone).
     Under another window it drains all the same and goes once it is in front again."""
-
-    DEFAULT_CSS = "BloodFlash { background: #8a0000 50%; }"
 
     def __init__(self, strength: float = 0.5):
         super().__init__()
@@ -874,4 +872,4 @@ def pulse_rate(hp: int, top: int) -> float:
     return 0.35 + 0.65 * max(0.0, min(1.0, share)) ** 0.7
 
 
-__all__ = ["Arena", "BloodFlash", "Canvas", "banner", "chase_gap", "chase_lines", "fight_card", "pulse_rate", "title_frames"]
+__all__ = ["Arena", "BloodFlash", "Canvas", "Column", "banner", "chase_gap", "chase_lines", "fight_card", "pulse_rate", "title_frames"]
