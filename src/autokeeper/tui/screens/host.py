@@ -24,6 +24,7 @@ from textual.widgets import Button, Checkbox, ContentSwitcher, Footer, Input, Op
 from textual.widgets.option_list import Option
 
 from ... import imagery, paths
+from ...engine.state import SaveRefused
 from ...module.schema import Module
 from ...net import room as lan
 from ...rules.coc import Investigator
@@ -354,6 +355,9 @@ class HostScreen(Screen):
         else:
             try:
                 state = lan.saved(oid.removeprefix("slot:"))
+            except SaveRefused as exc:
+                self.app.notify(f"{exc}。", severity="error")
+                return
             except (OSError, ValueError):
                 self.app.notify("无法读取这个存档。", severity="error")
                 return

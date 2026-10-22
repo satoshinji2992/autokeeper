@@ -252,6 +252,7 @@ def host(
     """开局域网房间，和标题画面的「开房间」一样。"""
     from rich.cells import cell_len
 
+    from .engine.state import SaveRefused
     from .net import room as lan
 
     module = _module(module)
@@ -260,6 +261,9 @@ def host(
     plan = [x.strip() for x in seats.replace("，", ",").split(",") if x.strip()] or None
     try:
         state = lan.saved(load) if load else None
+    except SaveRefused as exc:
+        console.print(f"[red]{exc}：{load}（存档在 {paths.games()}，文件未改动）[/]")
+        raise typer.Exit(1) from None
     except (OSError, ValueError):
         console.print(f"[red]读不了存档 {load}（存档在 {paths.games()}）[/]")
         raise typer.Exit(1) from None
