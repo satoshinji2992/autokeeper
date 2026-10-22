@@ -228,23 +228,6 @@ async def test_a_performance_cut_off_after_it_was_kept_is_shown_and_not_staged_a
     await resumed.close()
 
 
-async def test_a_turn_journal_from_before_the_receipts_still_resumes(fake):
-    """A save cut off mid-turn by an older version: its preparation kept lines and notes of its own,
-    its turn no receipts. They still join the turn, and no one who spoke is asked again."""
-    game, cast, _ = table(fake)
-    game.state.pending_turn = {"input": "问日记", "preparation": {
-        "done": ["first:warden"], "lines": [["warden", "别碰！"]], "notes": ["旧的备注"], "joined": ["warden"], "blocked": False}}
-    turn = await game.resolve(ASK, Ruling(needs_roll=False))
-    assert turn.npc_lines == [("warden", "别碰！")] and turn.joined == ["warden"] and "旧的备注" in turn.notes
-    await game.talk(turn)
-    assert cast.npc_calls == []  # he spoke already this turn
-    old = TURN_RECORD.validate_python({**TURN_RECORD.dump_python(Turn(action=ASK), mode="json"),
-                                       "npc_lines": [["warden", DIARY]]} | {"replies": {}})
-    await game.talk(old)
-    assert cast.npc_calls == []
-    await game.close()
-
-
 # -- a passed roll on someone nobody asks (the review of 2026-10-22) ---------------------------------------
 async def test_a_passed_psychology_roll_gives_its_clue_without_asking_anyone(fake):
     """有些人油盐不进's c_fitz_talk: a 心理学 gate, watched and not spoken to. The roll passed; the clue

@@ -1388,10 +1388,6 @@ class Game(Encounters):
             preparation = st.pending_turn.get("preparation", {})
             if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
                 turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
-            # A journal saved before the preparation kept a turn of its own: its lines and notes as they were.
-            turn.npc_lines += [tuple(row) for row in preparation.get("lines", [])]
-            turn.joined += [x for x in preparation.get("joined", []) if x not in turn.joined]  # stepped in (Game._step_in)
-            turn.notes += preparation.get("notes", [])
             if preparation.get("blocked"):
                 return False
             late, self._late = self._late, Turn()
