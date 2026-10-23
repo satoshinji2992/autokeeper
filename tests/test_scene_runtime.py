@@ -17,8 +17,10 @@ from .conftest import FakeDice
 from .test_request_execution import RequestCast, module, run, telling
 
 
-def made(fake, *, plans=None, rulings=None, tellings=None, state=None):
-    m = module()
+def made(fake, *, plans=None, rulings=None, tellings=None, state=None, m=None):
+    if m is None:
+        m = module()
+        m.location("tower").within = None  # these tests exercise two independent hosting regions
     if state is None:
         a = m.pregens[0].model_copy(deep=True)
         b = a.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
@@ -95,10 +97,13 @@ async def test_reconcile_closes_a_split_source_and_preserves_actual_audienced_ex
         assert [entry.text for entry in runtime.state_view(b).log] == ["你们一起看见门打开了"]
         assert not runtime.state_view(a).transcripts and not runtime.state_view(b).transcripts
         runtime.scenes[a].at = 610
+        runtime.scenes[a].member_at["zhouheng"] = 610
         runtime.state.minutes = 720
         runtime.state.positions["lin"] = "tower"
-        assert len(runtime.reconcile()) == 2  # actual different minutes cannot silently merge
-        assert runtime.scenes[b].at == 600
+        merged = runtime.reconcile()
+        assert len(merged) == 1  # one hosting region keeps one KP; global max is not its actual time
+        assert runtime.scenes[merged[0]].at == 610
+        assert runtime.scenes[merged[0]].member_at == {"zhouheng": 610, "lin": 600}
     finally:
         await runtime.close()
 
@@ -478,3 +483,107 @@ async def test_failed_parse_keeps_private_reply_and_handout_delivered_during_its
     assert not any(deed.kind == "act" for deed in runtime.state.deeds)
     assert view.logged == runtime.state.logged == 2
     await runtime.close()
+
+
+async def test_rooms_and_floors_in_one_region_keep_one_kp_without_sharing_hearing(fake):
+    from autokeeper.engine.scenes import hosting_region
+
+    m = module()
+    m.location("office").within = "tower"  # a room, within a floor, within the same hosting region
+    runtime, _, _ = made(fake, m=m)
+    try:
+        scene = runtime.scenes[runtime.for_member("zhouheng")]
+        assert scene.id == runtime.for_member("lin")
+        assert scene.region == hosting_region(m, "office") == "square"
+        game = runtime.game(scene.id)
+        cast = game.cast
+        runtime.state.positions["lin"] = "office"
+        scene.member_at.update(zhouheng=600, lin=605)
+        scene.at = 605
+        assert runtime.reconcile() == [scene.id]
+        assert runtime.game(scene.id).cast is cast
+        assert runtime.state.positions == {"zhouheng": "tower", "lin": "office"}
+        assert game.world.observers("tower") == ["zhouheng"]
+        assert game.world.observers("office") == ["lin"]
+        game.state.add("keeper", "钟楼里低声说的话", who="守秘人")
+        assert runtime.state.log[-1].audience == ["zhouheng"]
+        # Changing which room the same host describes does not physically move the other player.
+        game.state.active = 1
+        game._focus()
+        assert game.state.location == "office" and game.world.place("zhouheng") == "tower"
+        assert runtime.reconcile() == [scene.id]
+    finally:
+        await runtime.close()
+
+
+@pytest.mark.parametrize("recover", [False, True])
+async def test_real_party_round_split_keeps_the_idle_players_own_time_after_round_cleanup(fake, recover):
+    m = module()
+    m.location("tower").within = None
+    m.location("tower").travel_minutes["square"] = 0
+    m.location("square").travel_minutes["office"] = 10
+    a = m.pregens[0].model_copy(deep=True)
+    b = a.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [a, b], human=[a.id, b.id])
+    state.location, state.minutes = "tower", 600
+    go = Action(kind="move", summary="周衡独自前往报社", destination="office", alone=True)
+    stay = Action(kind="use", summary="林秋在原地记下门牌")
+    runtime, _, _ = made(fake, state=state, m=m, plans={"走": Plan(action=go), "记": Plan(action=stay)},
+                         rulings={stay.summary: Ruling(needs_roll=False)})
+    original = runtime.for_member("zhouheng")
+    game = runtime.game(original)
+    try:
+        game.begin_round()
+        await game.arrange_party([("zhouheng", "走"), ("lin", "记")])
+        await run(runtime.graph(original), game, {"input": "走"})
+        game.state.active = 1
+        await run(runtime.graph(original), game, {"input": "记"})
+        assert game.state.round_elapsed == {"zhouheng": 10, "lin": 0}
+        game.end_round()
+        assert not game.state.round_elapsed and game.state.round_spent is None
+        assert runtime.scenes[original].member_at == {"zhouheng": 610, "lin": 600}
+        if recover:
+            saved = runtime.state.model_dump_json()
+            await runtime.close()
+            runtime, _, _ = made(fake, state=GameState.model_validate_json(saved), m=m)
+        else:
+            runtime.reconcile()
+        sid_a, sid_b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+        assert sid_a != sid_b and runtime.scenes[original].closed
+        assert runtime.scenes[sid_a].at == 610 and runtime.scenes[sid_b].at == 600
+        assert runtime.state.positions == {"zhouheng": "office", "lin": "tower"}
+        assert runtime.state.minutes == 610
+    finally:
+        await runtime.close()
+
+
+async def test_retired_and_closed_hosts_release_their_owned_dice_and_cast(fake):
+    runtime, casts, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    closed = []
+
+    class OwnedDice(FakeDice):
+        def __init__(self, ident):
+            super().__init__()
+            self.ident = ident
+
+        def close(self):
+            closed.append(("dice", self.ident))
+
+    runtime.rules_factory = lambda ident: Rules(dice=OwnedDice(ident))
+    ga, gb = runtime.game(a), runtime.game(b)
+
+    async def cast_a():
+        closed.append(("cast", a))
+
+    async def cast_b():
+        closed.append(("cast", b))
+
+    casts[a].close, casts[b].close = cast_a, cast_b
+    runtime.graph(a)
+    await runtime.retire(a)
+    assert a not in runtime._games and a not in runtime._graphs
+    assert closed == [("cast", a), ("dice", a)] and runtime._games[b] is gb
+    await runtime.close()
+    assert closed == [("cast", a), ("dice", a), ("cast", b), ("dice", b)]
+    assert ga is not gb and not runtime._games

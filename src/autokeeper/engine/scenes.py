@@ -8,6 +8,7 @@ Only temporary read/validation copies materialize a GameState.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable, Iterator, MutableMapping
 from copy import deepcopy
 from typing import Any
@@ -23,8 +24,24 @@ from .game import Game, PreparationError
 from .state import GameState, LogEntry, SceneState, format_time, parse_time
 from .timing import SceneResourceConflict, SceneTimeBoundary
 
-LOCAL_FIELDS = set(SceneState.model_fields) - {"id", "members", "place", "at", "busy", "closed", "reservation", "notices", "passed_until"}
+LOCAL_FIELDS = set(SceneState.model_fields) - {"id", "members", "place", "at", "busy", "closed", "reservation", "notices", "passed_until", "region", "member_at"}
 LOCAL_FIELDS |= {"location", "minutes"}
+
+
+def hosting_region(module: Module, place: str) -> str:
+    """Rooms/floors keep a single host through their declared `within` hierarchy."""
+    locations = {location.id: location for location in module.locations}
+    path: list[str] = []
+    here = place
+    while here in locations:
+        if here in path:
+            return min(path[path.index(here):])  # malformed runtime data must not loop forever
+        path.append(here)
+        parent = locations[here].within
+        if not parent or parent not in locations:
+            return here
+        here = parent
+    return place
 
 
 class ScenePositions(MutableMapping[str, str]):
@@ -106,7 +123,8 @@ class SceneView:
     def add(self, kind, text: str, who: str = "", **kwargs) -> LogEntry:
         # Assign the actual source scene and keep the same entry in the aggregate history.
         if kwargs.get("audience") is None:
-            kwargs["audience"] = list(self.scene.members)
+            kwargs["audience"] = [who for who in self.scene.members
+                                  if self.root.positions.get(who) == self.scene.place]
         entry = GameState.add(self, kind, text, who=who, **kwargs)
         entry.scene = self.scene.id
         self.root.log.append(entry)
@@ -201,6 +219,9 @@ class SceneRuntime:
         self.on_checkpoint: Callable[[], None] | None = None
         for saved_scene in state.scenes.values():
             saved_scene.busy = False  # process-owned tasks are rebuilt from durable journals
+            saved_scene.region = hosting_region(module, saved_scene.place)
+            if not saved_scene.member_at:
+                saved_scene.member_at = dict.fromkeys(saved_scene.members, saved_scene.at)
             if joint := saved_scene.pending_turn.get("scene_joint"):
                 joint["preparing"] = False
         if not state.positions:
@@ -227,7 +248,9 @@ class SceneRuntime:
         root = self.state
         root.next_scene += 1
         scene = SceneState(id=f"scene-{root.next_scene}", members=list(members), place=place, at=at,
-                           active=next(n for n, inv in enumerate(root.investigators) if inv.id == members[0]), day=at // 1440)
+                           active=next(n for n, inv in enumerate(root.investigators)
+                                       if inv.id in members and root.positions[inv.id] == place), day=at // 1440,
+                           region=hosting_region(self.module, place), member_at=dict.fromkeys(members, at))
         histories = sources or []
         # Aggregate history retains lines folded out of individual scene model windows.
         logs = root.log
@@ -258,53 +281,76 @@ class SceneRuntime:
                 setattr(scene, key, deepcopy(getattr(root, key)))
             scene.turn, scene.active = root.turn, root.active
         if histories:
+            scene.member_at = {who: source.member_at.get(who, source.at)
+                               for source in histories for who in members if who in source.members}
             scene.ongoing = "\n".join(dict.fromkeys(source.ongoing for source in histories if source.ongoing))
             scene.journey = next((source.journey for source in histories if source.journey), "")
         root.scenes[scene.id] = scene
         return scene
 
     def reconcile(self) -> list[str]:
-        """Replace stable membership once. Busy journals and encounters retain their owner.
+        """Regroup stable hosts by their large location, retaining real room positions.
 
-        A new arrival cannot merge with an earlier scene until both have reached the same
-        actual minute. A genuine split inherits the old scene's time and attributed history.
+        Rooms in one building share a host, independent of their personal cursor difference.
+        A genuine split into different regions inherits each traveller's actual personal time;
+        it does not charge another player's work to the person who stayed behind.
         """
         root = self.state
         current = [scene for scene in self.scenes.values() if not scene.closed]
         if not current:
             groups: dict[str, list[str]] = {}
             for inv in root.investigators:
-                groups.setdefault(root.positions[inv.id], []).append(inv.id)
-            return [self._new(members, place, root.minutes, opening=True).id for place, members in groups.items()]
+                groups.setdefault(hosting_region(self.module, root.positions[inv.id]), []).append(inv.id)
+            created = []
+            for members in groups.values():
+                focused = root.investigator.id if root.investigator.id in members else members[0]
+                scene = self._new(members, root.positions[focused], root.minutes, opening=True)
+                if root.round_spent is not None:
+                    base = root.round_plan.get("started", root.minutes - root.round_spent)
+                    scene.member_at = {who: base + root.round_elapsed.get(who, 0) for who in members}
+                    scene.at = max(scene.member_at.values())
+                created.append(scene.id)
+            return created
         fixed = [scene for scene in current if scene.busy or scene.pending_turn or scene.encounter or scene.reservation]
         owned = {who for scene in fixed for who in scene.members}
         source_for = {who: scene for scene in current for who in scene.members}
-        groups: dict[tuple[str, int], list[str]] = {}
+        groups: dict[str, list[str]] = {}
         for inv in root.investigators:
-            if inv.id in owned:
-                continue
-            source = source_for.get(inv.id)
-            at = source.at if source else root.minutes
-            groups.setdefault((root.positions[inv.id], at), []).append(inv.id)
+            if inv.id not in owned:
+                groups.setdefault(hosting_region(self.module, root.positions[inv.id]), []).append(inv.id)
         active = [scene.id for scene in fixed]
         retained: set[str] = set(active)
-        for (place, at), members in groups.items():
+        for region, members in groups.items():
             exact = next((scene for scene in current if scene.id not in retained
-                          and scene.place == place and set(scene.members) == set(members)), None)
+                          and hosting_region(self.module, scene.place) == region and set(scene.members) == set(members)), None)
             if exact is not None:
+                exact.region = region
                 active.append(exact.id)
                 retained.add(exact.id)
                 continue
             sources = list({source_for[who].id: source_for[who] for who in members if who in source_for}.values())
-            created = self._new(members, place, at, sources)
+            times = {who: source_for[who].member_at.get(who, source_for[who].at) if who in source_for else root.minutes
+                     for who in members}
+            focus = next((who for who in members if root.positions[who] == region), members[0])
+            created = self._new(members, root.positions[focus], max(times.values()), sources)
+            created.member_at = times
             active.append(created.id)
             retained.add(created.id)
-        # Every replaced group closes together, including a source split into two smaller groups.
         for previous in current:
             if previous.id not in retained:
                 previous.closed = True
         self._notify()
         return active
+
+    def remember_members(self, ident: str) -> None:
+        """Capture this batch before Game.end_round discards its parallel time ledger."""
+        scene = self.scenes[ident]
+        if scene.round_spent is None:
+            return
+        base = scene.round_plan.get("started", scene.at - scene.round_spent)
+        for who in scene.members:
+            scene.member_at[who] = max(scene.member_at.get(who, base), base + scene.round_elapsed.get(who, 0))
+        self.checkpoint(ident)
 
     def state_view(self, ident: str) -> SceneView:
         if ident not in self._views:
@@ -321,7 +367,8 @@ class SceneRuntime:
             game.allocate_turn = self.allocate_turn
             game.time_reserve = lambda action, ruling: self.reserve(ident, action, ruling)
             game.time_wait = lambda end=None: self.wait(ident, end)
-            game.time_commit = lambda end: self.commit_time(ident, end)
+            game.time_commit = lambda end, people: self.commit_time(ident, end, people)
+            game.round_checkpoint = lambda: self.remember_members(ident)
             game.time_release = lambda: self.release(ident)
             game.world_scheduler_lock = self.world_scheduler_lock
             game.listener = game.emit = lambda event: self.emit(ident, event)
@@ -501,12 +548,15 @@ class SceneRuntime:
             # No await occurred between the predicate and capturing its next change signal.
             await pulse.wait()
 
-    def commit_time(self, ident: str, end: int) -> None:
+    def commit_time(self, ident: str, end: int, people: list[str] | None = None) -> None:
         scene = self.scenes[ident]
+        if end > scene.at and (not scene.reservation or end > scene.reservation.get("end", scene.at) or self.blockers(ident, end)):
+            raise SceneTimeBoundary(end)
+        for who in people or [self.state.investigators[scene.active].id]:
+            if who in scene.members:
+                scene.member_at[who] = max(scene.member_at.get(who, scene.at), end)
         if end <= scene.at:
             return
-        if not scene.reservation or end > scene.reservation.get("end", scene.at) or self.blockers(ident, end):
-            raise SceneTimeBoundary(end)
         # Permission is consumed at the actual synchronous clock mutation. A new declaration
         # accepted before this point revokes permission; one accepted afterwards sees this time.
         for other in self.scenes.values():
@@ -514,6 +564,7 @@ class SceneRuntime:
                 continue
             if other.passed_until == -1 or end <= other.passed_until:
                 other.at = end
+                other.member_at.update(dict.fromkeys(other.members, end))
                 other.day = end // 1440
         scene.reservation["committed"] = max(scene.reservation.get("committed", scene.at), end)
 
@@ -659,10 +710,28 @@ class SceneRuntime:
         if self.on_checkpoint is not None:
             self.on_checkpoint()
 
+    async def retire(self, ident: str) -> None:
+        """Release one retired host's tasks, sessions, graph and owned dice bridge."""
+        game = self._games.pop(ident, None)
+        self._graphs.pop(ident, None)
+        self._views.pop(ident, None)
+        if game is None:
+            return
+        closers = [game.close, getattr(game.cast, "close", None), getattr(game.rules.dice, "close", None)]
+        errors = []
+        for close in closers:
+            if close is not None:
+                try:
+                    result = close()
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception as exc:
+                    errors.append(exc)
+        if errors:
+            raise ExceptionGroup("现场资源未完全关闭", errors)
+
     async def close(self) -> None:
-        for game in self._games.values():
-            await game.close()
-            if close := getattr(game.cast, "close", None):
-                await close()
-        self._games.clear()
-        self._graphs.clear()
+        results = await asyncio.gather(*(self.retire(ident) for ident in list(self._games)), return_exceptions=True)
+        errors = [result for result in results if isinstance(result, Exception)]
+        if errors:
+            raise ExceptionGroup("部分现场未完全关闭", errors)

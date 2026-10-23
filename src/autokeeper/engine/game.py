@@ -244,7 +244,8 @@ class Game(Encounters):
         self.allocate_turn: Callable[[], int] | None = None
         self.time_reserve: Callable[[Action, Ruling | None], None] | None = None
         self.time_wait: Callable[[int | None], Awaitable[None]] | None = None
-        self.time_commit: Callable[[int], None] | None = None
+        self.time_commit: Callable[[int, list[str]], None] | None = None
+        self.round_checkpoint: Callable[[], None] | None = None
         self.time_release: Callable[[], None] | None = None
         self.world_scheduler_lock: asyncio.Lock | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None
@@ -3328,6 +3329,8 @@ class Game(Encounters):
             self.state.round_plan["started"] = self.state.minutes
 
     def end_round(self, *, interrupted: bool = False) -> None:
+        if self.round_checkpoint is not None:
+            self.round_checkpoint()  # personal cursors survive clearing the shared collection window
         if not interrupted and not self.state.pending_turn:
             self.state.round_spent = None
             self.state.round_elapsed.clear()
@@ -3556,7 +3559,7 @@ class Game(Encounters):
         start = max(self._actor_cursor(person) for person in people)
         end = start + max(0, minutes)
         if self.time_commit is not None:
-            self.time_commit(end)
+            self.time_commit(end, people)
         if not turn.interval:
             turn.interval = {"actor": who, "start": own_start, "end": end, "participants": people,
                              "origin": self.world.place(who), "destination": self.world.place(who)}

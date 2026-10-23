@@ -148,6 +148,8 @@ class SceneState(BaseModel):
     members: list[str]
     place: str
     at: int
+    region: str = ""  # top-level containing location; rooms share one continuing KP
+    member_at: dict[str, int] = Field(default_factory=dict)  # actual personal cursors retained when a group splits
     active: int = 0  # index in the canonical investigator roster
     turn: int = 0
     busy: bool = False
