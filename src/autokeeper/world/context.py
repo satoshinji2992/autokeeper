@@ -84,8 +84,17 @@ def _concerns(w: World, npc: str) -> str:
     return "\n".join(parts)
 
 
+def _at_view_time(w: World, when: int) -> bool:
+    """Only a host-owned historical view cuts off knowledge; unscoped views show settled state.
+
+    The scheduler can land its report before its caller advances GameState.minutes. That
+    already-settled report is current, unless the host explicitly requested an earlier clock.
+    """
+    return w.clock is None or when <= w.clock
+
+
 def _npc_facts(w: World, npc: str, query: str, concerns: str) -> list[Fact]:
-    facts = sorted(knowledge.known(w.rec, npc), key=lambda f: f.t)
+    facts = sorted((f for f in knowledge.known(w.rec, npc) if _at_view_time(w, f.t)), key=lambda f: f.t)
     if len(facts) <= 30:
         return facts
     keep = set(_recall_indices([f.text for f in facts], query, concerns, recent=12, related=12))
@@ -114,13 +123,15 @@ def _fact_line(npc: str, fact: Fact, sources: dict[str, Event], w: World, *, cov
 def _npc_memories(w: World, npc: str, query: str, concerns: str, *, recent: int,
                   included: set[str] | None = None) -> tuple[list[str], dict[str, Event]]:
     by_event = {e.id: e for e in w.rec.events}
-    events = [e for e in w.rec.events if knowledge.saw(e, npc) and e.kind not in {"plan", "step", "remember"}]
+    events = [e for e in w.rec.events if _at_view_time(w, e.t) and knowledge.saw(e, npc)
+              and e.kind not in {"plan", "step", "remember"}]
     sources = {fid: event for event in events for fid in event.facts}
     entries = {f"event:{event.id}": Memory(t=event.t, turn=event.turn, text=event.text, event=event.id) for event in events}
     a = w.agent(npc)
     if a:
         for index, memory in enumerate(a.memory):
-            if memory.stale or (memory.fact and (memory.fact not in w.rec.facts or not knowledge.sees(w.rec.facts[memory.fact], npc))):
+            if not _at_view_time(w, memory.t) or memory.stale or (memory.fact and (
+                    memory.fact not in w.rec.facts or not knowledge.sees(w.rec.facts[memory.fact], npc))):
                 continue
             if memory.event and memory.event in by_event:
                 continue  # the authoritative visible event is already present, or was not available to this NPC
@@ -182,7 +193,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     memories, sources = _npc_memories(w, npc, query, concerns, recent=12, included=included)
     lines.append("【你知道的事】\n" + ("\n".join(_fact_line(npc, f, sources, w) for f in facts) or "- 无"))
     lines.append("【你的记忆（近期与当前相关旧事）】\n" + ("\n".join(memories) or "- 无"))
-    witnessed = [e for e in rec.events if (npc in e.participants or npc in e.witnesses)
+    witnessed = [e for e in rec.events if _at_view_time(w, e.t) and (npc in e.participants or npc in e.witnesses)
                  and e.kind not in {"plan", "step", "remember"}][-6:]
     witnessed = [event for event in witnessed if event.id not in included]
     if witnessed:
@@ -294,7 +305,7 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
         lines.append("【还没了结的约定】" + "；".join(f"{w.name(p.by)}答应{w.name(p.to)}：{p.text}（{_when(p.due)}）" for p in proms))
     # The conversation session may be compacted; the current record remains the source
     # for what the character actually witnessed, and what happened after its last reply.
-    recent = [e for e in rec.events if npc in e.participants or npc in e.witnesses][-5:]
+    recent = [e for e in rec.events if _at_view_time(w, e.t) and (npc in e.participants or npc in e.witnesses)][-5:]
     recent = [event for event in recent if event.id not in included and event.kind not in {"plan", "step", "remember"}]
     if recent:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
@@ -543,6 +554,22 @@ def keeper_brief(w: World, *, at: str = "") -> str:
     if rec.revisions:
         lines.append("改写过的设定（以改写后的为准）：\n" + "\n".join(
             f"- {_clip(r.old, 60)} → {_clip(r.new, 120)}" for r in rec.revisions[-5:]))
+    history = [enc for enc in st.encounter_log if st.investigator.id in enc.participants and enc.ended][-2:]
+    if history:
+        rows = []
+        for enc in history:
+            recorded = next((entry for entry in reversed(rec.journal)
+                             if entry.id == f"enc/{enc.id}/archive" and not entry.undone), None)
+            if recorded is not None and recorded.t > w.now:
+                continue
+            when = format_time(recorded.t) if recorded is not None else f"第{enc.started_turn}回合开始"
+            people = "、".join(w.name(who) for who in enc.participants)
+            rows.append(f"- encounter:{enc.id}（{when}归档；地点：{w.name(enc.place)}；参与者：{people}）"
+                        f"{enc.ended.text}")
+            rows.extend(f"  已结算经过：{line}" for line in enc.history[-3:])
+        if rows:
+            lines.append("本调查员参与过的正式遭遇（供你核对经过，以这些记录为准；不是NPC自动知情，"
+                         "也不是要求向玩家重述；转述仅使用玩家实际说出的话，不替他补写）：\n" + "\n".join(rows))
     if not lines:
         return ""
     return ("【幕后（只给你看）】这些用来让描写和真相一致、让在场的人照自己的打算行事；对玩家说什么、露出多少，照硬规则。\n"

@@ -571,7 +571,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             u.steps.append({"kind": "witness", "who": who, "lead": lead, "room": room,
                             "at_start": who in at_start, "remote": remote,
                             "why": f"{name(who)}本段起点、结尾都未实际在场，不能记下这段见闻。"})
-        u.steps.append(op(Occur, text=observed.text.strip(), participants=[*witnesses, *([lead] if remote else [])],
+        u.steps.append(op(Occur, text=observed.text.strip(), witnesses=[*witnesses, *([lead] if remote else [])],
                           place=room, visibility="private", actor=KEEPER, reactive=False))
         u.said.append(f"{'、'.join(name(n) for n in witnesses)}当场获知：{observed.text.strip()}")
 
@@ -635,9 +635,12 @@ def run(w: World, u: Unit) -> list[str]:
 
 def _run(w: World, u: Unit) -> list[str]:
     applied, walked, problems = 0, None, []
-    people = {step[key] for step in u.steps for key in ("a", "b", "who", "entity", "npc", "actor")
+    # Witnesses can receive an earlier, actually observed memory after another parallel
+    # segment has landed. Only operations that act on a person reserve their time.
+    active = [step for step in u.steps if step.get("kind") != "witness"]
+    people = {step[key] for step in active for key in ("a", "b", "who", "entity", "npc", "actor")
               if key in step and isinstance(step[key], str)}
-    people.update(who for step in u.steps for who in step.get("participants", []))
+    people.update(who for step in active for who in step.get("participants", []))
     available = {who: w.available_at(who) for who in people
                  if (person := w.rec.entities.get(who)) is not None and person.kind == "npc"}
     repeated = all(step.get("id") and any(entry.id == step["id"] for entry in w.rec.journal)
@@ -669,9 +672,10 @@ def _run(w: World, u: Unit) -> list[str]:
             continue
         if kind == "witness":
             person = w.rec.entities.get(step["who"])
+            here = w.place_at(step["who"], u.end) if u.end is not None else w.place(step["who"])
             if person is None or person.kind != "npc" or (step.get("remote") and person.status in ("死亡", "失踪")) or (
                     not step.get("remote") and not step["at_start"] and (
-                    person.status in ("死亡", "失踪") or w.place(person.id) != step["room"]
+                    person.status in ("死亡", "失踪") or here != step["room"]
                     or w.st.location != step["room"])):
                 problems = [step["why"]]
                 break

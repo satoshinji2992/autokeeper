@@ -238,7 +238,7 @@ async def test_committed_travel_interval_is_reused_after_arrival_disconnect(fake
             await old.close()
 
 
-async def test_an_earlier_scene_cannot_rewrite_a_later_npc_observation(fake):
+async def test_an_earlier_heard_claim_keeps_the_later_npc_commitment_intact(fake):
     game, _ = make(fake, RequestCast({}, {}, []), party=True)
     st, start = game.state, game.state.minutes
     st.location = "square"
@@ -248,11 +248,15 @@ async def test_an_earlier_scene_cannot_rewrite_a_later_npc_observation(fake):
                                    text="他已经在稍后作出承诺", place="square", visibility="private"))
         game.begin_round()
         turn = await game.resolve(Action(kind="use", summary="周衡先检查五分钟"), Ruling(needs_roll=False, minutes=5))
-        denied = scene.plan(game.world, {
+        planned = scene.plan(game.world, {
             "observations": [{"witnesses": ["preacher"], "text": "他较早承诺相反的事情"}],
         }, game._scene_context(turn))
-        assert denied.problems and not denied.held
-        assert not any("较早承诺" in event.text for event in st.record.events)
+        assert not planned.problems and scene.land(game.world, planned.held)
+        assert next(event for event in st.record.events if "较早承诺" in event.text).t == start + 5
+        assert next(event for event in st.record.events if event.id == "ev:later-preacher").t == start + 20
+        assert game.world.available_at("preacher") == start + 20
+        # Two recorded claims are not a rewrite of a fact, a promise operation or an old action.
+        assert not st.record.revisions and not st.record.promises
     finally:
         await game.close()
 

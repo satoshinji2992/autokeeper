@@ -34,7 +34,7 @@ async def test_a_new_npc_without_an_agent_remembers_the_keepers_performance_only
     assert text not in context.npc_brief(game.world, "preacher")  # at the same place is not enough
     event = next(e for e in game.world.rec.events if e.text == text)
     assert event.visibility == "private" and not event.trace and not event.facts and not event.reactive
-    assert event.participants == ["keeper", "clerk"]
+    assert event.participants == ["keeper"] and event.witnesses == ["clerk"]
     # Arriving later does not acquire an old private observation as a physical trace.
     assert game.world.apply(Move(id="later", entity="warden", to="square")).ok
     assert text not in context.npc_brief(game.world, "warden")

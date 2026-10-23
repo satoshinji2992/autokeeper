@@ -170,9 +170,16 @@ class World:
         return place
 
     def available_at(self, ident: str) -> int | None:
-        """Latest committed participation; earlier parallel work cannot reuse that person."""
+        """Latest physical/action commitment, not merely being mentioned or learning something.
+
+        Participants are also graph links: a fact's subject, a relation's informed people or
+        a thread's cast need not do anything then. Passive scene knowledge uses witnesses;
+        actual conversations remain occurrences with active participants.
+        """
+        information = {"fact", "learn", "relate", "thread", "remember", "plan", "step", "rewrite", "schedule", "trace"}
         return max((event.t for event in self.rec.events
-                    if ident in event.participants or ident == event.actor or ident in event.motions), default=None)
+                    if ident in event.motions or (event.kind not in information
+                    and (ident in event.participants or ident == event.actor))), default=None)
 
     def present(self, place: str, *, at: int | None = None) -> list[str]:
         """NPCs at a place, alive and not gone missing."""

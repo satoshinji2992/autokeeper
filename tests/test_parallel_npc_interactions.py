@@ -101,7 +101,7 @@ async def test_a_later_actual_scene_witness_is_aligned_before_the_check_too(fake
         await ask(game, cast, "再问")
         assert cast.cursors == [10] and len(cast.npc_calls) == 1
         assert game.state.round_elapsed == {"zhouheng": 12}
-        assert game.world.available_at("preacher") == base + 12
+        assert game.world.available_at("preacher") == base + 10  # the later passive observation is not work
     finally:
         await game.close()
 
