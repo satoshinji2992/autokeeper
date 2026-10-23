@@ -134,8 +134,10 @@ async def test_the_scene_registrar_leaves_what_is_there_and_picks_up_what_lies_a
                                    {"name": "怀表", "holder": "老守钟人"}, {"name": "茶杯", "place": "钟楼"}],
                                actor="keeper", holder=inv.id)
     assert json.dumps(w.domain(), sort_keys=True) == before  # pure: nothing lands until the ops are applied
-    assert found.ids[:2] == ["随身小螺丝刀与钳子", poker]  # already on them; taken up from where it lay
-    assert found.ids[3] == "" and found.problems == ["一支手电筒：同一件东西写了两次"]
+    assert found.ids[:2] == ["", poker]  # part of an inventory bundle is not the whole object
+    assert "随身小螺丝刀与钳子" in found.problems[0] and "完整名称" in found.problems[0]
+    assert found.ids[3] == "" and found.problems[1:] == ["一支手电筒：同一件东西写了两次"]
+    assert adapters.bring_ops(w, ["随身小螺丝刀与钳子"], actor="keeper", holder=inv.id) == ([], [], ["随身小螺丝刀与钳子"])
     assert [op.kind for op in found.ops] == ["transfer", "bring", "bring", "bring"]
     assert [(op.holder, op.place) for op in found.ops[1:]] == [(inv.id, ""), ("warden", ""), ("", "tower")]  # names read as ids
     for op in found.ops:

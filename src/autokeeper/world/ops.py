@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
@@ -119,13 +120,55 @@ def lacking(w: World, name: str) -> str:
 
 def holding(w: World, where: str, name: str) -> str:
     """The thing of this name already at `where` (a person or a place): its record id, or the line
-    of an investigator's inventory; empty when there is none."""
-    hit = next((e.id for e in w.rec.entities.values() if e.kind == "item" and e.at == where and overlap(name, e.name)), "")
-    hit = hit or next((i.id for i in w.m.items if overlap(name, i.name) and legacy_world.owner(w.m, w.st, i.id) == where), "")
-    if hit:
-        return hit
+    of an investigator's inventory; empty when there is none. Partial and ambiguous labels need
+    clarification, rather than silently transferring an unrelated object or its whole container."""
+    candidates = {e.id: e.name for e in w.rec.entities.values() if e.kind == "item" and e.at == where}
+    candidates.update({i.id: i.name for i in w.m.items
+                       if i.id not in candidates and legacy_world.owner(w.m, w.st, i.id) == where})
     inv = next((i for i in w.st.investigators if i.id == where), None)
-    return next((line for line in inv.inventory if overlap(name, line)), "") if inv is not None else ""
+    if inv is not None:
+        candidates.update({line: line for line in inv.inventory
+                           if line not in candidates and not any(same_item_name(line, title) for title in candidates.values())})
+    return named_item(name, candidates.items())
+
+
+def same_item_name(a: str, b: str) -> bool:
+    """A full label, allowing one item's leading article (手电筒 / 一支手电筒).
+
+    Two explicit portions or containers keep their own labels; 一杯茶 is not 一碗茶. Removing
+    punctuation and an optional singular article never makes a substring into an identity.
+    """
+    a, b = _MARKS.sub("", a).casefold(), _MARKS.sub("", b).casefold()
+    if a == b:
+        return bool(a)
+    ca, cb = _COUNT.match(a), _COUNT.match(b)
+    if ca is not None and cb is None and ca.group()[:-1] in ("一", "1"):
+        return a[ca.end():] == b
+    if cb is not None and ca is None and cb.group()[:-1] in ("一", "1"):
+        return b[cb.end():] == a
+    return False
+
+
+def named_item(name: str, candidates: Iterable[tuple[str, str]]) -> str:
+    """Resolve an explicit identity or full label; provide candidates for a model to clarify.
+
+    A partial label is evidence that an existing thing may be intended, not permission to take
+    it or create a duplicate. A separately named portion may instead be registered normally.
+    """
+    choices = dict(candidates)
+    if name in choices:
+        return name
+    exact = {ident: title for ident, title in choices.items() if same_item_name(name, title)}
+    if len(exact) == 1:
+        return next(iter(exact))
+    text = _MARKS.sub("", name).casefold()
+    similar = exact or {ident: title for ident, title in choices.items()
+                        if text and min(len(text), len(label := _MARKS.sub("", title).casefold())) >= 2
+                        and (text in label or label in text)}
+    if similar:
+        labels = "、".join(f"{title}（{ident}）" for ident, title in similar.items())
+        raise ValueError(f"「{name}」不能确定要用哪件或哪一份；已有：{labels}。使用完整名称或物件 id，分出的一份请另写完整名称")
+    return ""
 
 
 def bring_count(w: World) -> int:
@@ -280,8 +323,10 @@ class Transfer(Base):
             return [f"物件 {self.item} 不存在或不知道在谁手里"]
         if self.giver and self.giver != before:
             return [f"{self.item} 现在不在 {self.giver} 手里"]
-        if not _who(w, self.to, players=False):
-            return [f"{self.to} 不存在"]
+        destination = w.rec.entities.get(self.to)
+        if not any(i.id == self.to for i in w.st.investigators) and (
+                destination is None or destination.kind not in {"npc", "creature", "location"}):
+            return [f"{self.to} 不是人物或地点，不能作为物件持有者"]
         if (item := w.rec.entities.get(ident)) is not None and item.quantity <= 0:
             return [f"物件 {self.item} 已耗尽，不能转交"]
         return [f"{self.item} 已经在 {self.to} 手里"] if before == self.to else []
@@ -295,7 +340,8 @@ class Transfer(Base):
         ent = w.rec.entities.get(key)
         name = ent.name if ent is not None else item.name if item else key
         for inv in st.investigators:  # the same bookkeeping as engine/world.apply
-            if inv.id == before and name in inv.inventory:
+            if (inv.id == before and name in inv.inventory
+                    and not legacy_world.other_named_item(m, st, before, name, excluding=key)):
                 inv.inventory.remove(name)
             if inv.id == self.to and name not in inv.inventory:
                 inv.inventory.append(name)
@@ -360,8 +406,11 @@ class Bring(Base):
             problems.append(f"「{name}」不是随手就有的日常物件：枪支、弹药和炸药只由模组、调查员的装备或裁定给出")
         if not sourced and (gap := lacking(w, name)):
             problems.append(f"这一轮的行动正缺{gap}，不能当场拿出来")
-        if have := holding(w, where, name):
-            problems.append(f"{w.name(where)}已经有{w.name(have)}了")
+        try:
+            if have := holding(w, where, name):
+                problems.append(f"{w.name(where)}已经有{w.name(have)}了")
+        except ValueError as exc:
+            problems.append(str(exc))
         if bring_count(w) >= MAX_BRING:
             problems.append(f"这一轮已经登记了 {MAX_BRING} 件东西")
         return problems
@@ -453,7 +502,8 @@ class Equip(Base):
                 item.equipment = "carried"
             for inv in w.st.investigators:
                 if inv.id == item.at:
-                    if not item.quantity and item.name in inv.inventory:
+                    if (not item.quantity and item.name in inv.inventory
+                            and not legacy_world.other_named_item(w.m, w.st, item.at, item.name, excluding=item.id)):
                         inv.inventory.remove(item.name)
                     elif item.quantity and item.name not in inv.inventory:
                         inv.inventory.append(item.name)

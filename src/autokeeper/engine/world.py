@@ -42,6 +42,14 @@ def owner(m: Module, st: GameState, item: str, *, holder: str = "") -> str:
     return next((x.owner or x.where for x in m.items if x.id == item), "")
 
 
+def other_named_item(m: Module, st: GameState, holder: str, name: str, *, excluding: str) -> bool:
+    """Another actual possession still represented by this inventory display line."""
+    return (any(e.id != excluding and e.kind == "item" and e.at == holder and e.name == name and e.quantity > 0
+                for e in st.record.entities.values())
+            or any(i.id != excluding and i.id not in st.record.entities and i.name == name and i.quantity > 0
+                   and owner(m, st, i.id) == holder for i in m.items))
+
+
 def actors(m: Module, st: GameState) -> set[str]:
     return {i.id for i in st.investigators} | {n.id for n in m.npcs_at(st.location)} | {st.location}
 
@@ -85,7 +93,8 @@ def apply(m: Module, st: GameState, changes: list[WorldChange], *, source: str, 
             entity = st.record.entities.get(ident)
             name = entity.name if entity else item.name if item else ident
             for inv in st.investigators:
-                if inv.id == before and name in inv.inventory:
+                if (inv.id == before and name in inv.inventory
+                        and not other_named_item(m, st, before, name, excluding=ident)):
                     inv.inventory.remove(name)
                 if inv.id == c.owner and name not in inv.inventory:
                     inv.inventory.append(name)

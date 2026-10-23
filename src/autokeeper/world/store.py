@@ -146,14 +146,18 @@ class World:
 
     def place(self, ident: str) -> str:
         """An investigator's actual place, or an item's holder's place."""
-        if any(i.id == ident for i in self.st.investigators):
-            return self.st.positions.get(ident, self.st.apart.get(ident, self.st.location))
-        e = self.rec.entities.get(ident)
-        if e is None:
-            return ""
-        if e.kind == "item" and e.at in self.rec.entities and self.rec.entities[e.at].kind != "location":
-            return self.place(e.at)
-        return e.id if e.kind == "location" else e.at
+        seen: set[str] = set()
+        while ident not in seen:
+            seen.add(ident)
+            if any(i.id == ident for i in self.st.investigators):
+                return self.st.positions.get(ident, self.st.apart.get(ident, self.st.location))
+            e = self.rec.entities.get(ident)
+            if e is None:
+                return ""
+            if e.kind != "item" or e.at not in self.rec.entities or self.rec.entities[e.at].kind == "location":
+                return e.id if e.kind == "location" else e.at
+            ident = e.at
+        return ""  # invalid cyclic ownership has no physical location
 
     def place_at(self, ident: str, when: int) -> str:
         """Project actual committed travel; a person in transit is at neither endpoint."""

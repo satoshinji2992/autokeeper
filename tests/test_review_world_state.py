@@ -1,4 +1,4 @@
-"""Confirmed world-state defects retained as strict expected failures during review."""
+"""Shared identities and explicit item resolution across multiplayer world operations."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from autokeeper.agents.cast import Action, PushRuling, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.engine.scenes import SceneView
-from autokeeper.engine.state import SceneState
+from autokeeper.engine.state import SceneState, WorldChange
 from autokeeper.rules.coc import Rules
 from autokeeper.world import adapters
 from autokeeper.world.ops import Bring
@@ -18,13 +18,11 @@ from autokeeper.world.store import World
 from autokeeper.world.tools import Gateway
 
 from .test_engine import FakeCast
-from .test_harness import SCRIPT, harness_sandbox  # noqa: F401
+from .test_harness import SCRIPT, SEEN, harness_sandbox  # noqa: F401
 from .test_npc_acts import setup as npc_setup
 from .test_world import fresh
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="Gateway publication replaces investigators held across another scene's model await")
 async def test_parallel_npc_handover_preserves_pushed_success_growth_mark(fake):
     w = fresh("office")
     root = w.st
@@ -74,8 +72,6 @@ async def test_parallel_npc_handover_preserves_pushed_success_growth_mark(fake):
         await game.close()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="Substring item resolution transfers an entire container for an unspecified portion")
 def test_serving_soup_does_not_transfer_the_whole_pot():
     w = fresh("tower")
     me = w.st.investigator.id
@@ -90,8 +86,6 @@ def test_serving_soup_does_not_transfer_the_whole_pot():
 
 
 @pytest.mark.parametrize("reverse", [False, True])
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="NPC item lookup selects the first of multiple important objects matching one name")
 def test_ambiguous_important_item_name_requires_disambiguation(reverse):
     w = fresh("tower")
     me = w.st.investigator.id
@@ -103,8 +97,6 @@ def test_ambiguous_important_item_name_requires_disambiguation(reverse):
     assert problems and not groups
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="Transferring one same-named entity erases the inventory entry for another still owned")
 def test_transferring_one_of_two_same_named_items_keeps_the_other_visible():
     w = fresh("tower")
     me = w.st.investigator.id
@@ -120,8 +112,6 @@ def test_transferring_one_of_two_same_named_items_keeps_the_other_visible():
     assert "钥匙" in w.st.investigator.inventory
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="An NPC items reply accepts a held item as its own recipient, creating recursive ownership")
 async def test_npc_reply_rejects_an_item_as_its_own_holder(fake):
     game, cast = npc_setup(fake)
     game.world.rec.entities["key-a"] = Entity(id="key-a", name="钥匙", kind="item", important=True, at="warden")
@@ -133,3 +123,85 @@ async def test_npc_reply_rejects_an_item_as_its_own_holder(fake):
         assert game.world.place("key-a") == "tower"
     finally:
         await game.close()
+
+
+def test_world_gateway_preserves_live_record_and_module_entity_references():
+    w = fresh("tower")
+    record, entities, npc, sheet = w.rec, w.rec.entities, w.entity("warden"), w.m.npc("warden")
+    result = Gateway(w, "warden").settle(
+        [{"kind": "move", "entity": "warden", "to": "square"}], request_id="walk-out")
+    assert result["ok"], result
+    assert w.rec is record and w.rec.entities is entities
+    assert w.entity("warden") is npc and npc.at == "square"
+    assert w.m.npc("warden") is sheet and sheet.location == "square"
+
+
+async def test_npc_can_clarify_which_important_key_it_hands_over(fake):
+    game, cast = npc_setup(fake)
+    me = game.state.investigator.id
+    game.world.rec.entities.update({
+        "steel-key": Entity(id="steel-key", name="钢钥匙", kind="item", at="warden"),
+        "brass-key": Entity(id="brass-key", name="黄铜钥匙", kind="item", at="warden"),
+    })
+    SCRIPT.extend([
+        {"text": "钥匙给您。", "items": [{"name": "钥匙", "to": me}]},
+        {"text": "黄铜的这把给您。", "items": [{"name": "brass-key", "to": me}]},
+    ])
+    try:
+        assert await cast.npc(game.state, "warden", "把钥匙给我。") == "黄铜的这把给您。"
+        assert len(SEEN) == 2 and "steel-key" in SEEN[-1]["messages"][-1]["content"]
+        assert game.world.rec.entities["brass-key"].at == me
+        assert game.world.rec.entities["steel-key"].at == "warden"
+        assert not cast.unsettled
+    finally:
+        await game.close()
+
+
+async def test_npc_can_register_a_serving_without_moving_its_container(fake):
+    game, cast = npc_setup(fake)
+    me = game.state.investigator.id
+    assert game.world.apply(Bring(name="一锅热汤", holder="warden", actor="warden")).ok
+    SCRIPT.extend([
+        {"text": "给您盛一碗。", "items": [{"name": "热汤", "to": me}]},
+        {"text": "给您盛一碗。", "items": [{"name": "一碗热汤", "to": me}]},
+    ])
+    try:
+        assert await cast.npc(game.state, "warden", "给我一碗汤。") == "给您盛一碗。"
+        assert len(SEEN) == 2 and not cast.unsettled
+        assert game.state.investigator.inventory == ["一碗热汤"]
+        assert any(e.name == "一锅热汤" and e.at == "warden" for e in game.world.rec.entities.values())
+    finally:
+        await game.close()
+
+
+def test_separately_named_portions_do_not_collapse_to_one_object():
+    w = fresh("tower")
+    assert w.apply(Bring(name="一杯热茶", holder="warden", actor="warden")).ok
+    second = w.apply(Bring(name="一碗热茶", holder="warden", actor="warden"))
+    assert second.ok, second.problems
+    assert {e.name for e in w.rec.entities.values() if e.kind == "item" and e.at == "warden"} >= {"一杯热茶", "一碗热茶"}
+
+
+def test_location_lookup_does_not_recurse_forever_on_cyclic_record():
+    w = fresh("tower")
+    w.rec.entities.update({
+        "a": Entity(id="a", name="物件甲", kind="item", at="b"),
+        "b": Entity(id="b", name="物件乙", kind="item", at="a"),
+    })
+    assert w.place("a") == w.place("b") == ""
+
+
+def test_legacy_transfer_keeps_a_still_owned_same_named_item_visible():
+    from autokeeper.engine import world
+
+    w = fresh("tower")
+    me = w.st.investigator.id
+    for ident in ("key-a", "key-b"):
+        w.rec.entities[ident] = Entity(id=ident, name="钥匙", kind="item", at=me)
+        w.st.item_owners[ident] = me
+    w.st.investigator.inventory.append("钥匙")
+    world.apply(w.m, w.st, [WorldChange(kind="transfer", key="give-key", item="key-a", owner="warden",
+                                      text="把其中一把钥匙交给守钟人。")], source="arbiter")
+    assert w.rec.entities["key-a"].at == "warden"
+    assert w.rec.entities["key-b"].at == me
+    assert "钥匙" in w.st.investigator.inventory

@@ -36,6 +36,7 @@ from .ops import (
     bring_count,
     holding,
     lacking,
+    named_item,
     overlap,
 )
 from .ops import Condition as ConditionOp
@@ -142,10 +143,11 @@ def _lying(w: World, name: str, taken: list[str], *, here: str = "") -> str:
     """An everyday thing of this name lying where the investigators are, not spoken for in this batch:
     one registered as it came up (Bring), or one of the module's items of no importance."""
     here = here or w.st.location
-    hit = next((e.id for e in w.rec.entities.values() if e.kind == "item" and not e.important and e.at == here
-                and e.id not in taken and overlap(name, e.name)), "")
-    return hit or next((i.id for i in w.m.items if not i.important and i.id not in taken and i.id not in w.rec.entities
-                        and legacy_world.owner(w.m, w.st, i.id) == here and overlap(name, i.name)), "")
+    candidates = {e.id: e.name for e in w.rec.entities.values() if e.kind == "item" and not e.important
+                  and e.at == here and e.id not in taken}
+    candidates.update({i.id: i.name for i in w.m.items if not i.important and i.id not in taken
+                       and i.id not in w.rec.entities and legacy_world.owner(w.m, w.st, i.id) == here})
+    return named_item(name, candidates.items())
 
 
 def bring_ops(w: World, items: Iterable[Any], *, actor: str, holder: str | None = None, place: str | None = None,
@@ -177,11 +179,18 @@ def bring_ops(w: World, items: Iterable[Any], *, actor: str, holder: str | None 
             problems.append("有一件东西没写名称")
             ids.append("")
             continue
-        if where and (there := holding(w, where, name)):
+        here = w.place(actor) or w.place(who) or w.st.location
+        try:
+            there = holding(w, where, name) if where else ""
+            lying = _lying(w, name, ids, here=here) if not there and who and not at else ""
+        except ValueError as exc:
+            problems.append(str(exc))
+            ids.append("")
+            continue
+        if there:
             ids.append(there)  # it is already where it is said to be
             continue
-        here = w.place(actor) or w.place(who) or w.st.location
-        if who and not at and (lying := _lying(w, name, ids, here=here)):  # taken up from where it lies
+        if lying:  # taken up from where it lies
             take = Transfer(id=f"pick:{w.st.turn}:{lying}:{who}", item=lying, to=who, actor=actor,
                             visibility=visibility)  # type: ignore[arg-type]
             if bad := take.check(w):

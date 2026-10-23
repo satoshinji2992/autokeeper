@@ -33,7 +33,7 @@ from .ops import (
     parse,
 )
 from .record import Entity, Fact, Request
-from .store import World, digest
+from .store import World, _restore, digest
 
 MAX_OPS = 24
 MAX_DEPTH = 3
@@ -371,9 +371,12 @@ class Gateway:
                          if value != getattr(current, name)}
         module_changes = {name: copy.deepcopy(value) for name, value in trial.m.__dict__.items()
                           if value != w.m.__dict__.get(name)}
-        w.m.__dict__.update(module_changes)
+        # Other scenes may be awaiting a model with investigator/entity references. Merge the
+        # validated values into those objects, rather than orphaning their later rule updates.
+        for name, value in module_changes.items():
+            setattr(w.m, name, _restore(getattr(w.m, name), value))
         for name, value in state_changes.items():
-            setattr(w.st, name, value)
+            setattr(w.st, name, _restore(getattr(w.st, name), value))
 
 
 def harness_tools(gateway: Gateway, *, writable: bool = False) -> list:
