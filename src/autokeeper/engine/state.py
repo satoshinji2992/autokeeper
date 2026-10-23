@@ -172,7 +172,7 @@ class GameState(BaseModel):
     # threads, important NPCs and the event stream. Private at a LAN table (net/hub.py PRIVATE).
     record: WorldRecord = Field(default_factory=WorldRecord)
     pending_turn: dict = Field(default_factory=dict)  # serializable stage journal; retry without rolling twice
-    unfinished: dict[str, dict] = Field(default_factory=dict)  # private unexecuted intent, never an automatic action queue
+    unfinished: dict[str, dict] = Field(default_factory=dict)  # private intent; execution only resumes an already authorized wait
     last_actions: dict[str, int] = Field(default_factory=dict)  # last committed action segment, including a request's continuation
     # A LAN round's actions happen at once (net/hub.py _settle, Game.begin_round): the minutes the
     # longest of them took so far (None outside a round), and the reports held for the one telling.
@@ -180,6 +180,7 @@ class GameState(BaseModel):
     round_elapsed: dict[str, int] = Field(default_factory=dict)  # serial work per investigator inside the shared window
     round_plan: dict = Field(default_factory=dict)  # private batch plans and consumption receipts, not player-visible
     queued_actions: list[tuple[str, str]] = Field(default_factory=list)  # LAN declarations not yet assigned to a settled window
+    queued_receipts: list[dict] = Field(default_factory=list)  # unstarted LAN input: seat, text and accepted game minute
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report", "rest"}, told together (Game.narrate)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.

@@ -133,7 +133,7 @@ PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
 PRIVATE |= {"unfinished", "last_actions"}  # remaining private intent is for its player and the keeper only
-PRIVATE |= {"queued_actions", "world", "event_attempts", "pending_story_flags", "ideas"}
+PRIVATE |= {"queued_receipts", "queued_actions", "world", "event_attempts", "pending_story_flags", "ideas"}
 # Export only the parts the current client uses. New module fields remain keeper-only until
 # deliberately added here; Module's defaults supply the omitted collections on the client.
 PLAYER_MODULE_FIELDS = {
@@ -389,6 +389,7 @@ class Hub:
         self.game.world_later = True  # NPCs decide between rounds, not while the table waits
         self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
         self.game.table_turn_based = True
+        self.game.wait_horizon = self._wait_horizon
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}, "recursion_limit": 100}  # a fight asks a few times a turn (graph offer)
@@ -409,6 +410,7 @@ class Hub:
         self.card_builder = lambda: _builder(self.cast, self.m)
         self.started = asyncio.Event()
         self.open = False  # the round's action pool takes actions
+        self.automatic: set[str] = set()  # saved authorized waits, never fresh player declarations
         self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
         self.done: set[str] = set()  # seats that said they have nothing more this round
         self.confirming: set[str] = set()  # a queued declaration needs its owner's choice in the new encounter
@@ -509,6 +511,7 @@ class Hub:
                 await self._on(cid, {"t": "respond", "id": rid, "text": text})
                 await self._send(cid, {"t": "offer_closed", "id": rid})
             elif self.open and self._may_add(seat):
+                self._accept_declaration(seat, text)
                 self.pool.append((seat, text))
                 self.done.discard(seat)
                 self._start_window()
@@ -518,6 +521,8 @@ class Hub:
             elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
                 await self._send(cid, {"t": "error", "text": f"下一轮已有 {PER_PLAYER} 条行动，可用 /undo 撤回上一条。"})
             else:  # the keeper is telling, or this round has no room for it: first in the next round
+                self._accept_declaration(seat, text)
+                self.done.discard(seat)
                 self.early.append((seat, text))
                 self._save_queued()
                 await self._pool()
@@ -555,14 +560,21 @@ class Hub:
             held = [i for i, (s, _) in enumerate(self.early) if s == seat]
             mine = [i for i, (s, _) in enumerate(self.pool) if s == seat] if self.open else []
             if held:
-                self.early.pop(held[-1])
+                removed = self.early.pop(held[-1])
+                self._forget_declaration(*removed)
                 if seat in self.confirming and (rid := self.asking.get(seat)):
                     await self._on(cid, {"t": "respond", "id": rid, "choice": "withdraw"})
                     await self._send(cid, {"t": "offer_closed", "id": rid})
             elif mine:
-                self.pool.pop(mine[-1])
+                removed = self.pool.pop(mine[-1])
+                self._forget_declaration(*removed)
+                self._cancel_wait(seat, "玩家已取消尚未执行的等待")
+                self.automatic.discard(seat)
                 self.done.discard(seat)
+            elif self._cancel_wait(seat, "玩家已取消尚未执行的等待"):
+                await self._send(cid, {"t": "notice", "text": "已取消尚未执行的继续等待；此前经过保留。"})
             else:
+                await self._send(cid, {"t": "notice", "text": "没有可撤回的未执行声明。"})
                 return
             self.wake.set()
             self._save_queued()
@@ -1252,11 +1264,12 @@ class Hub:
         if self.game.world_encounter() is not None:
             return [seat for seat in self._round_seats() if seat not in self.done and not self._count(seat)]
         return [seat for seat in self._players() if self.sits.get(seat) is not None
-                and seat not in self.done and self._may_add(seat)]
+                and seat not in self.automatic and seat not in self.done and self._may_add(seat)]
 
     def _start_window(self) -> None:
         """The first action of the round starts its window (WINDOW)."""
-        if self.open and self.game.world_encounter() is None and self.closes_at is None and self.pool:
+        manual = any(seat not in self.automatic for seat, _ in self.pool)
+        if self.open and self.game.world_encounter() is None and self.closes_at is None and manual:
             self.closes_at = asyncio.get_running_loop().time() + self.window
 
     def _round_seats(self) -> list[str]:
@@ -1297,8 +1310,77 @@ class Hub:
 
     def _save_queued(self) -> None:
         """Only unstarted original declarations are queued; round_plan owns the closed batch."""
-        self.state.queued_actions = [*(self.pool if self.open else []), *self.early]
+        self.state.queued_actions = [*((pair for pair in self.pool if pair[0] not in self.automatic) if self.open else []), *self.early]
         self._save()
+
+    def _accept_declaration(self, seat: str, text: str) -> None:
+        """An accepted replacement supersedes only an unperformed wait, never its past effects."""
+        self.state.queued_receipts.append({"seat": seat, "text": text, "at": self.state.minutes})
+        self._cancel_wait(seat, "玩家已提交新行动，原等待未执行部分已取消")
+        if seat in self.automatic:
+            self.pool = [pair for pair in self.pool if pair[0] != seat]
+            self.automatic.discard(seat)
+
+    def _cancel_wait(self, seat: str, reason: str) -> bool:
+        note = self.state.unfinished.get(seat, {})
+        if not note.pop("execution", None):
+            return False
+        note.update(remaining="", reason=reason)
+        return True
+
+    def _forget_declaration(self, seat: str, text: str) -> None:
+        row = next((row for row in reversed(self.state.queued_receipts)
+                    if row["seat"] == seat and row["text"] == text), None)
+        if row is not None:
+            self.state.queued_receipts.remove(row)
+
+    def _freeze_declarations(self) -> None:
+        """The closed batch owns its input timestamps; retry and reconnect reuse them."""
+        receipt = self.state.round_plan
+        for step in receipt.get("steps", []):
+            if "received" in step:
+                continue
+            seat, text = receipt["input"][int(step["token"])]
+            row = next((row for row in self.state.queued_receipts
+                        if row["seat"] == seat and row["text"] == text), None)
+            step["received"] = row["at"] if row else receipt["started"]
+            if row is not None:
+                self.state.queued_receipts.remove(row)
+
+    def _wait_horizon(self, actor: str) -> int | None:
+        """A wait may catch up with settled work; forward skips need the other seats' consent.
+
+        Ordinary walking, talking and checks never use this gate. A queued action is a handoff,
+        not consent to wait until someone else's morning. Already committed time is not undone.
+        """
+        st = self.state
+        if self.game.world_encounter() is not None:
+            return st.minutes
+        limits = []
+        peers = [inv.id for inv in st.investigators if inv.can_act and inv.id != actor
+                 and (self.sits.get(inv.id) is not None or any(seat == inv.id for seat, _ in self.early)
+                      or st.unfinished.get(inv.id, {}).get("execution"))]
+        if any(seat == actor for seat, _ in self.early):
+            limits.append(st.minutes)
+        for peer in peers:
+            if any(seat == peer for seat, _ in self.early):
+                limits.append(st.minutes)
+                continue
+            wait = st.unfinished.get(peer, {}).get("execution", {})
+            request = wait.get("request", {})
+            deadline = request.get("wait_window", {}).get("end")
+            piece = request.get("wait_slice", {}).get("end")
+            if wait:
+                available = min(value for value in (deadline, piece) if value is not None) if deadline is not None or piece is not None else None
+                if available is not None:
+                    limits.append(max(st.minutes, available))
+                continue
+            if peer in self.done:
+                continue
+            # No authorized passive wait or pass: deal with its work, or leave its input
+            # window open. The guard can still catch up with time already actually spent.
+            limits.append(st.minutes)
+        return min(limits) if limits else None
 
     async def _speak(self, cid: str, text: str, *, to: Any = None, private: bool = False,
                      channel: str = "whisper") -> None:
@@ -1375,6 +1457,17 @@ class Hub:
         capacity = self.capacity()  # queued seats still count when their connection has gone
         early, self.early = self.early, []
         affected = {person.id for person in self.game.world_encounter().participants} if self.game.world_encounter() is not None else set()
+        self.automatic = {seat for seat, note in self.state.unfinished.items() if note.get("execution")
+                          and self._acts(seat) and not any(owner == seat for owner, _ in early)}
+        for seat in list(self.automatic):
+            if seat in affected:
+                note = self.state.unfinished[seat]
+                early.append((seat, note["original"]))
+                note.pop("execution")
+                note["reason"] = "新的遭遇打断了等待，先确认本轮行动"
+                self.automatic.remove(seat)
+        self.pool.extend((inv.id, self.state.unfinished[inv.id]["original"]) for inv in self.state.investigators
+                         if inv.id in self.automatic)
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
             (self.pool if seat not in affected and self._acts(seat) and self._may_add(seat, capacity=capacity)
              else self.early).append((seat, text))
@@ -1387,6 +1480,19 @@ class Hub:
                 if seat in self._round_seats() and not self._count(seat) and seat not in self.done and (seat, text) in self.early:
                     await self._confirm_queued(seat, text)
             while True:  # once at least: a .r sent while the keeper told runs even if the round is already full
+                # An interlude can start an encounter after collection opened. An old
+                # automatic wait is never that person's explicit tactical declaration.
+                for seat in [seat for seat in self._round_seats() if seat in self.automatic]:
+                    note = self.state.unfinished[seat]
+                    text = note["original"]
+                    self.pool = [pair for pair in self.pool if pair[0] != seat]
+                    self.automatic.remove(seat)
+                    note.pop("execution", None)
+                    note["reason"] = "新的遭遇打断了等待，先确认本轮行动"
+                    if (seat, text) not in self.early:
+                        self.early.append((seat, text))
+                    self._save_queued()
+                    await self._confirm_queued(seat, text)
                 await self._swap()
                 await self._house_rules()
                 await self._plays()
@@ -1431,6 +1537,9 @@ class Hub:
         if revised or picked == "keep":
             if (seat, text) in self.early:
                 self.early.remove((seat, text))
+            if revised and revised != text:
+                self._forget_declaration(seat, text)
+                self._accept_declaration(seat, revised)
             self.pool.append((seat, revised or text))
         elif picked == "pass":
             self.done.add(seat)
@@ -1463,13 +1572,20 @@ class Hub:
         order = (saved if saved is not None else
                  [*self.pool, *[(inv.id, None) for inv in st.investigators
                                 if inv.id not in acted | declared and inv.id not in self.done and self.sits.get(inv.id) is None]])
+        if saved is None and self.automatic:
+            order.sort(key=lambda pair: pair[0] in self.automatic)  # actual new requests precede passive continuations
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
         settled = False
         try:
             # arrange_party checkpoints its raw receipt before its first await, atomically
             # moving this window out of the unstarted queue and into round_plan.
             st.queued_actions = list(self.early)
-            order = await self.game.arrange_party(order)
+            prepared = {str(n): self.state.unfinished[seat]["execution"]["arrangement"]["plan"]
+                        for n, (seat, _) in enumerate(order)
+                        if seat in self.automatic and self.state.unfinished.get(seat, {}).get("execution")}
+            order = (await self.game.arrange_party(order, prepared=prepared) if prepared else
+                     await self.game.arrange_party(order))
+            self._freeze_declarations()
             if confirmed is not None:
                 st.round_plan["encounter"] = confirmed
                 self._save()
@@ -1510,6 +1626,14 @@ class Hub:
             token = next((step["token"] for step in st.round_plan.get("steps", [])
                           if step["token"] not in st.round_plan.get("done", [])
                           and st.round_plan["input"][int(step["token"])] == [seat, text]), None)
+            step = next((row for row in st.round_plan.get("steps", []) if row["token"] == token), {})
+            resuming = step.get("resuming_wait", False)
+            if (resuming and not st.unfinished.get(seat, {}).get("execution")
+                    and st.pending_turn.get("party_token") != token):
+                # Its owner replaced or cancelled the not-yet-started continuation while
+                # another seat was being ruled. The closed batch is not consent to revive it.
+                self.game.finish_party_declaration(seat, text, token=token)
+                continue
             inv = next((i for i in st.investigators if i.id == seat), None)
             if st.ending:
                 return
@@ -1551,12 +1675,20 @@ class Hub:
                 continue
             from ..engine.perception import input_label
 
-            await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""),
-                               "text": input_label(self.game, inv.id, text), "audience": [inv.id]})
+            resumed = self.game.resume_wait(seat, token=token) if resuming else False
+            if not resumed:
+                await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""),
+                                   "text": input_label(self.game, inv.id, text), "audience": [inv.id]})
             original = text
             while True:
                 try:
                     await self._run(text, seat, ai=False)
+                    if continuation := st.unfinished.get(seat, {}).get("execution"):
+                        request = continuation["request"]
+                        if not request.get("handoff_announced"):
+                            request["handoff_announced"] = True
+                            await self._send(self.sits.get(seat) or "", {"t": "notice",
+                                "text": "同伴还有行动待处理，原等待与截止已保留。"})
                     break
                 except Exception as exc:
                     self.game.visuals.resume()

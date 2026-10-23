@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from functools import partial
 from itertools import pairwise
@@ -264,6 +265,7 @@ class Game(Encounters):
         self._walked_receipts: set[str] = set()  # restored visit results already joined to this instance's _late
         self.debug_world: list[scheduler.Report] = []  # recent scheduling decisions, including refused operations
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
+        self.wait_horizon: Callable[[str], int | None] | None = None  # LAN handoff; None permits a time skip
         self.holding = False  # a round's action that is not its last: its telling waits for the others (narrate)
         if not state.pending_turn and not self.pending_party():  # unfinished batches retain their shared time ledger
             state.round_spent = None
@@ -557,7 +559,8 @@ class Game(Encounters):
         planner = getattr(self.cast, "plan", None)
         if continuation is not None and planner is None:
             raise PreparationError("当前主持接口缺少新场面的行动交接，尚未裁定或执行剩余行动")
-        batched = self._party_step(text) if continuation is None and not receipt.get("plan") else None
+        batched = (self._party_step(text) if continuation is None and not receipt.get("plan")
+                   and not st.pending_turn.get("wait_refresh") else None)
         if planner is not None or batched is not None or receipt.get("plan"):
             try:
                 if receipt.get("plan"):
@@ -574,7 +577,7 @@ class Game(Encounters):
                 raise
             except Exception as exc:  # the parser still reads the player's words
                 self._debug("plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
-                if continuation is not None:
+                if continuation is not None or st.pending_turn.get("wait_refresh"):
                     raise PreparationError("新场面的剩余行动尚未安排完成，原行动与已完成步骤已保留") from exc
             else:
                 if "units" not in receipt:
@@ -615,12 +618,19 @@ class Game(Encounters):
                 self._debug("plan", {"phase": "planned", "initiative": [x.model_dump() for x in plan.initiative],
                                      "kept": [x.npc for x in self.initiative], "registration": receipt})
                 self._hosted_turn = st.turn
-                if plan.remaining.strip() and st.pending_turn and "request" not in st.pending_turn:
+                if (plan.remaining.strip() or (plan.action.kind == "wait" and self.wait_horizon is not None)) and st.pending_turn and "request" not in st.pending_turn:
                     st.pending_turn["request"] = {
                         "id": f"{st.investigator.id}:{st.turn}", "actor": st.investigator.id,
                         "original": text, "origin_turn": st.turn, "part": 0, "started": self._actor_cursor(),
-                        "remaining": plan.remaining.strip(), "completed": [],
+                        "remaining": plan.remaining.strip() or plan.action.summary, "completed": [],
                     }
+                if st.pending_turn.pop("wait_refresh", False):
+                    request = st.pending_turn["request"]
+                    request["remaining"] = plan.remaining.strip() or (plan.action.summary if plan.action.kind == "wait" else "")
+                    token = st.pending_turn.get("party_token")
+                    for row in st.round_plan.get("steps", []):
+                        if row["token"] == token:
+                            row["plan"] = plan.model_dump(mode="json")
                 # The keeper read this person's old note together with the new input. Its
                 # adopted plan replaces it; only an explicitly retained tail stays pending.
                 st.unfinished.pop(st.investigator.id, None)
@@ -1999,6 +2009,8 @@ class Game(Encounters):
             turn.rest = timed["rest"]
 
         await step("elapsed", turn, elapsed)
+        if st.pending_turn.get("wait_handoff") and turn.interval.get("start") == turn.interval.get("end"):
+            return  # no waiting or check took place; another accepted declaration goes first
 
         async def focus() -> None:
             if key := views.after(self.m, st, action.kind, action.target):
@@ -2504,6 +2516,8 @@ class Game(Encounters):
     async def talk(self, turn: Turn) -> None:
         """NPC replies and stage performances, after the engine has resolved checks. Each settles
         through _reply; a resumed turn goes on from the receipts it kept (Turn.replies)."""
+        if self.state.pending_turn.get("wait_handoff") and turn.interval.get("start") == turn.interval.get("end"):
+            return
         st, m = self.state, self.m
         action = turn.action
         if (action is not None and action.declared is not None) or self.fought_this_turn():
@@ -2851,6 +2865,8 @@ class Game(Encounters):
 
     async def narrate(self, turn: Turn, on_delta=None) -> str:
         st = self.state
+        if st.pending_turn.get("wait_handoff") and turn.interval.get("start") == turn.interval.get("end"):
+            return ""
         if turn.action is not None and turn.action.idea and turn.action.idea.get("refused"):  # said on the screen already
             self.told = None
             await self.emit({"type": "dialogue_end"})
@@ -2910,7 +2926,7 @@ class Game(Encounters):
                    if step["token"] not in receipt.get("done", [])]
         return pending or None
 
-    async def arrange_party(self, order: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
+    async def arrange_party(self, order: list[tuple[str, str | None]], *, prepared: dict[str, dict] | None = None) -> list[tuple[str, str | None]]:
         """Persist every declaration before any planning, and resume only unfinished tokens."""
         st, receipt = self.state, self.state.round_plan
         if not self.pending_party():
@@ -2920,14 +2936,19 @@ class Game(Encounters):
             receipt.clear()
             receipt.update(input=[list(pair) for pair in order], steps=[{"token": str(n)} for n in range(len(order))],
                            used=[], done=[], at=st.clock, started=started, planned=False)
+            for row in receipt["steps"]:
+                if row["token"] in (prepared or {}):
+                    row["plan"] = prepared[row["token"]]
+                    row["resuming_wait"] = True
             if self.checkpoint:
                 self.checkpoint()
         if receipt.get("planned") or receipt.get("used") or receipt.get("done"):
             return self.pending_party() or []
         planner = getattr(self.cast, "party_plan", None)
         able = {i.id for i in st.investigators if i.can_act}
+        resuming = {row["token"] for row in receipt.get("steps", []) if row.get("resuming_wait")}
         inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(receipt["input"])
-                  if who in able and text and not text.startswith("/kp ") and not commands.instant(text)
+                  if str(n) not in resuming and who in able and text and not text.startswith("/kp ") and not commands.instant(text)
                   and not idea.asked(text)]
         if (planner is None or st.ending or self.battling() or len(inputs) < 2
                 or len({row.who for row in inputs}) < 2):
@@ -3052,13 +3073,19 @@ class Game(Encounters):
             journal.clear()
             return False
         completed = request.setdefault("completed", [])
-        if turn is not None and not any(row["turn"] == st.turn for row in completed):
+        if (turn is not None and not (journal.get("wait_handoff") and turn.interval.get("start") == turn.interval.get("end"))
+                and not any(row["turn"] == st.turn for row in completed)):
             completed.append({"turn": st.turn, "action": turn.action.summary if turn.action else "",
                               "start": turn.interval.get("start", request["started"]),
                               "end": turn.interval.get("end", st.minutes), "place": st.location,
                               "checks": [check.describe() for check in turn.checks],
                               "notes": turn.notes, "npc_lines": turn.npc_lines})
         remaining = request.get("remaining", "").strip()
+        if (journal.get("wait_handoff") and turn is not None
+                and turn.interval.get("start") == turn.interval.get("end")
+                and not self.battling() and not st.ending):
+            self._park_wait()
+            return False
         next_plan, pending, reason = None, "", ""
 
         def offered() -> tuple[dict | None, str, str]:
@@ -3086,8 +3113,16 @@ class Game(Encounters):
             next_plan, pending, reason = None, remaining, "原定等待时限已到，后续行动尚未执行"
         if next_plan:
             plan = Plan.model_validate(next_plan)
+            if plan.action.kind == "wait" and "wait_window" not in request:
+                started = self._actor_cursor()
+                ends = ([started + plan.action.wait_limit] if plan.action.wait_limit is not None else [])
+                if plan.action.wait_until:
+                    ends.append(parse_time(plan.action.wait_until))
+                if ends:
+                    request["wait_window"] = {"start": started, "end": min(ends)}
             request.update(part=request["part"] + 1, started=self._actor_cursor(), previous_turn=st.turn,
-                           remaining=plan.remaining.strip(), ready=True)
+                           remaining=plan.remaining.strip() or (plan.action.summary if plan.action.kind == "wait"
+                                                               and self.wait_horizon is not None else ""), ready=True)
             next_journal = {"input": request["original"], "by_hand": journal.get("by_hand", False),
                             "active": journal.get("active", st.active), "request": request,
                             "arrangement": {"at": st.turn + 1, "plan": plan.model_dump(mode="json")}}
@@ -3095,7 +3130,15 @@ class Game(Encounters):
                 next_journal["party_token"] = journal["party_token"]
             journal.clear()
             journal.update(next_journal)
+            if (plan.action.kind == "wait" and self.wait_horizon is not None
+                    and (horizon := self.wait_horizon(request["actor"])) is not None
+                    and self._actor_cursor() >= horizon):
+                self._park_wait(planned=True)
+                return False
             return True
+        if journal.get("wait_handoff") and not next_plan:
+            pending = pending or remaining or journal["action"]["summary"]
+            reason = reason or "原等待尚未完成，后续尚未安排"
         if pending:
             st.unfinished[request["actor"]] = {"original": request["original"], "remaining": pending,
                                                 "completed": completed, "reason": reason}
@@ -3299,24 +3342,120 @@ class Game(Encounters):
         return base + st.round_elapsed.get(who or st.investigator.id, 0)
 
     def _wait_minutes(self, action: Action, minutes: int, turn: Turn, *, start: int) -> int:
-        """A continuous wait shares one original deadline across segments and saved retries."""
-        journal = self.state.pending_turn
+        """Keep the original deadline, yielding before accepted work can be skipped over."""
+        st, journal = self.state, self.state.pending_turn
         owner = journal.get("request") or journal
         if action.kind != "wait":
             owner.pop("wait_window", None)
             return minutes
         window = owner.get("wait_window")
         if window is None:
-            ends = ([start + action.wait_limit] if action.wait_limit is not None else [])
+            accepted = start
+            token = journal.get("party_token")
+            row = next((row for row in st.round_plan.get("steps", []) if row["token"] == token), {})
+            if not action.destination and owner.get("part", 0) == 0:
+                accepted = min(start, row.get("received", start))
+            ends = ([accepted + action.wait_limit] if action.wait_limit is not None else [])
             if action.wait_until:
                 ends.append(parse_time(action.wait_until))
-            if not ends:
-                return minutes
-            window = owner["wait_window"] = {"start": start, "end": min(ends)}
-        spent = min(minutes, max(0, window["end"] - start))
-        left = max(0, window["end"] - start - spent)
-        turn.notes.append(f"本次等待截至{format_time(window['end'])}，本段实际等候{spent}分钟，剩余{left}分钟；时限不因分段续办重置。")
+            if ends:
+                window = owner["wait_window"] = {"start": accepted, "end": min(ends)}
+        spent = min(minutes, max(0, window["end"] - start)) if window else minutes
+        if self.wait_horizon is not None:
+            due = [parse_time(event.when) for event in self.m.events if event.id not in st.fired
+                   and re.fullmatch(r"D[1-9]\d* (?:[01]?\d|2[0-3]):[0-5]\d", event.when)
+                   and st.minutes < parse_time(event.when) <= start + spent]
+            if due:
+                spent = min(due) - start
+                turn.notes.append("原等待先推进到下一项已安排事件，是否继续由实际发生的情况决定。")
+        if self.wait_horizon is not None and (horizon := self.wait_horizon(st.investigator.id)) is not None:
+            permitted = min(spent, max(0, horizon - start))
+            if permitted < spent:
+                journal["wait_handoff"] = {"start": start + permitted, "end": start + spent}
+                turn.notes.append("原等待尚未结束；先办理其他调查员已提交的行动或等待其时间推进许可，随后按原意图继续。")
+                spent = permitted
+        if window:
+            left = max(0, window["end"] - start - spent)
+            turn.notes.append(f"本次等待截至{format_time(window['end'])}，本段实际等候{spent}分钟，剩余{left}分钟；时限不因分段续办重置。")
+        passed = owner.pop("wait_passed", None)
+        if passed:
+            turn.notes.append(f"办理同伴行动期间，原等候已经过去{passed}分钟；不重复推进这些时间。")
         return spent
+
+    def _park_wait(self, *, planned: bool = False) -> None:
+        """Save only the unperformed waiting slice, outside the table's active turn journal."""
+        st, journal = self.state, self.state.pending_turn
+        request = journal["request"]
+        if planned:
+            continuation = deepcopy(journal)
+        else:
+            action = Action.model_validate(journal["action"])
+            handed = journal["wait_handoff"]
+            # This slice never spent its waiting time or threw its roll. Prior preparation
+            # and registration already landed, so only the same action/ruling are resumed.
+            resumed = action.model_copy(update={"before": [], "destination": ""})
+            ruling = Ruling.model_validate(journal["ruling"]).model_copy(
+                update={"minutes": handed["end"] - handed["start"], "go": ""})
+            request = deepcopy(request)
+            request["wait_slice"] = dict(handed)
+            request.update(part=request["part"] + 1, ready=True)
+            continuation = {"input": request["original"], "by_hand": journal.get("by_hand", False),
+                            "active": journal.get("active", st.active), "request": request,
+                            "arrangement": {"at": st.turn + 1,
+                                            "plan": Plan(action=resumed, remaining=request["remaining"]).model_dump(mode="json")},
+                            "ruling": ruling.model_dump(mode="json")}
+            if journal.get("roll_confirmed"):
+                continuation["roll_confirmed"] = True
+        continuation.pop("party_token", None)
+        continuation["request"]["wait_state"] = self._wait_state()
+        continuation["request"]["wait_action"] = {key: continuation["arrangement"]["plan"]["action"].get(key)
+                                                   for key in ("kind", "summary", "target", "wait_limit", "wait_until")}
+        self.complete_party_action()
+        st.unfinished[request["actor"]] = {"original": request["original"],
+            "remaining": request.get("remaining") or continuation["arrangement"]["plan"]["action"]["summary"],
+            "completed": request.get("completed", []), "reason": "等待交接；原意图与截止保留，无需重新声明",
+            "execution": continuation}
+        journal.clear()
+
+    def _wait_state(self) -> str:
+        # Some legacy physical updates sync the current record without creating an event.
+        # Hash actual world state, not the counter alone, and never include execution journals.
+        st = self.state
+        return digest({"record": self.world.rec.model_dump(mode="json"), "flags": st.flags,
+                       "fired": st.fired, "clues": st.clues})
+
+    def resume_wait(self, who: str, *, token: str | None = None) -> bool:
+        """Resume the saved next segment at the current world boundary, never in the past."""
+        st = self.state
+        note = st.unfinished.get(who, {})
+        if "execution" not in note or st.pending_turn:
+            return False
+        self._focus()  # select its real current place before installing the next segment's journal
+        journal = deepcopy(note.pop("execution"))
+        request = journal["request"]
+        if st.round_spent is not None:
+            base = st.round_plan["started"]
+            st.round_elapsed[who] = max(st.round_elapsed.get(who, 0), st.minutes - base)
+        if piece := request.pop("wait_slice", None):
+            passed = max(0, min(st.minutes, piece["end"]) - piece["start"])
+            request["wait_passed"] = passed
+            journal["ruling"]["minutes"] = max(0, piece["end"] - st.minutes)
+        current_state = self._wait_state()
+        if request.pop("wait_state", current_state) != current_state:
+            # Another seat may have fulfilled a stop condition or changed the scene. The
+            # same KP now reads its current brief before any further time is committed.
+            journal["arrangement"] = {}
+            journal.pop("ruling", None)
+            journal.pop("roll_confirmed", None)
+            journal["wait_refresh"] = True
+            note["reason"] = "等待期间有实际变化，先按当前记录检查原停止条件；不重做已结算前缀"
+        journal["arrangement"]["at"] = st.turn + 1
+        request.update(started=st.minutes, ready=True)
+        if token is not None:
+            journal["party_token"] = token
+            st.round_plan.setdefault("used", []).append(token)
+        st.pending_turn.update(journal)
+        return True
 
     def _travellers(self, action: Action, destination: str) -> list[str]:
         """A teammate's own first outstanding declaration authorizes a shared LAN journey.
