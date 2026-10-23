@@ -460,3 +460,21 @@ async def test_missing_joint_plan_never_acknowledges_or_discards_either_attempt(
         assert not casts[a].ruled and not casts[b].ruled
     finally:
         await runtime.close()
+
+
+async def test_failed_parse_keeps_private_reply_and_handout_delivered_during_its_model_await(fake):
+    runtime, _, _ = made(fake)
+    a = runtime.for_member("zhouheng")
+    view = runtime.state_view(a)
+    before = view.turn
+    view.turn = runtime.allocate_turn()
+    view.add("player", "准备失败的行动", who=view.investigator.name)
+    view.add("keeper", "另一任务刚交回的私信", who="守秘人", audience=["zhouheng"])
+    view.add("handout", "另一任务交付的材料", who="守秘人", audience=["zhouheng"])
+    view.rollback_parse(before, 0, 0)
+    assert [entry.kind for entry in runtime.state.log] == ["keeper", "handout"]
+    assert [entry.kind for entry in view.log] == ["keeper", "handout"]
+    assert any(deed.kind == "handout" for deed in runtime.state.deeds)
+    assert not any(deed.kind == "act" for deed in runtime.state.deeds)
+    assert view.logged == runtime.state.logged == 2
+    await runtime.close()

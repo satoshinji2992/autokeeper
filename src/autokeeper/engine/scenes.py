@@ -114,13 +114,17 @@ class SceneView:
         return entry
 
     def rollback_parse(self, turn: int, count: int, logged: int) -> None:
-        removed = {id(entry) for entry in self.scene.log[count:]}
-        failed_turn = self.scene.turn
+        failed_turn, actor = self.scene.turn, self.investigator
+        removed = {id(entry) for entry in self.scene.log[count:]
+                   if entry.kind == "player" and entry.turn == failed_turn and entry.who == actor.name}
         self.root.log[:] = [entry for entry in self.root.log if id(entry) not in removed]
         self.root.logged = max(0, self.root.logged - len(removed))
-        self.root.deeds[:] = [deed for deed in self.root.deeds if deed.turn != failed_turn]
-        del self.scene.log[count:]
-        self.scene.turn, self.scene.logged = turn, logged
+        self.root.deeds[:] = [deed for deed in self.root.deeds
+                             if not (deed.turn == failed_turn and deed.who == actor.id and deed.kind == "act")]
+        # Private mail/media may finish during this parse's model await. Those delivered
+        # receipts belong to independent work, even when they use the same current turn id.
+        self.scene.log[:] = [entry for entry in self.scene.log if id(entry) not in removed]
+        self.scene.turn, self.scene.logged = turn, max(logged, self.scene.logged - len(removed))
 
     def _deed(self, entry: LogEntry, acting: str) -> None:
         GameState._deed(self, entry, acting)
