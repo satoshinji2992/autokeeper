@@ -81,6 +81,8 @@ class Investigator(BaseModel):
         named: dict[str, int] = {}
         for name, value in skills.items():
             key = canonical(name)
+            if key == "克苏鲁神话" and not 0 <= value <= 99:
+                raise ValueError("调查员的克苏鲁神话须在 0 到 99 之间。")
             if key in named and named[key] != value:
                 raise ValueError(f"{key} 有两个不同的技能值，请在人物卡中保留一个")
             named[key] = value
@@ -130,7 +132,17 @@ class Investigator(BaseModel):
     # -- lookups ------------------------------------------------------------
     @property
     def san_max(self) -> int:
-        return 99 - self.skills.get("克苏鲁神话", 0)
+        return max(0, 99 - self.skills.get("克苏鲁神话", 0))
+
+    def learn_mythos(self, points: int) -> None:
+        """Forbidden knowledge lowers SAN's ceiling, not a horror roll or daily SAN loss
+        (Keeper Rulebook, Cthulhu Mythos skill / Maximum Sanity). SAN 0 still ends a PC."""
+        if points < 0:
+            raise ValueError("克苏鲁神话增长不能为负数。")
+        self.skills["克苏鲁神话"] = min(99, self.value("克苏鲁神话") + points)
+        self.san = max(0, min(self.san, self.san_max))
+        if self.san == 0:
+            self.add_condition("永久疯狂")
 
     @property
     def damage_bonus(self) -> str:

@@ -4024,35 +4024,44 @@ class Game(Encounters):
                         paper = h.id
                 return {"notices": notices, "paper": paper, "audience": audience}
 
-            def exposure(reader: str, clue=clue, cid=cid) -> dict | None:
+            def exposure(reader: str, clue=clue, cid=cid) -> list[dict]:
                 if reader in st.clue_settled.get(cid, []):
-                    return None
+                    return []
                 inv = st.find(reader)
                 trial = inv.model_copy(deep=True)
                 sanity = self._sanity(trial, *clue.sanity.split("/")) if clue.sanity else None
+                mythos_before, san_before_cap = trial.value("克苏鲁神话"), trial.san
                 if clue.mythos:
-                    trial.skills["克苏鲁神话"] = trial.value("克苏鲁神话") + clue.mythos
+                    trial.learn_mythos(clue.mythos)
                 inv.__dict__.update(trial.__dict__)
                 st.clue_settled.setdefault(cid, []).append(reader)
-                if sanity is None:
-                    return None
-                turn.sanity.append((inv.name, sanity))
-                st.add("sanity", sanity.describe(), who=inv.name, audience=[reader])
-                return {"type": "sanity", "who": inv.name, **_sanity_view(sanity),
-                        **self._madness(inv, sanity, turn), "audience": [reader]}
+                notices = []
+                if sanity is not None:
+                    turn.sanity.append((inv.name, sanity))
+                    st.add("sanity", sanity.describe(), who=inv.name, audience=[reader])
+                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity),
+                                    **self._madness(inv, sanity, turn), "audience": [reader]})
+                if clue.mythos:
+                    text = f"克苏鲁神话 {mythos_before} → {inv.value('克苏鲁神话')}；理智上限 {inv.san_max}。"
+                    if inv.san != san_before_cap:
+                        text += f"当前理智 {san_before_cap} → {inv.san}（上限调整，不计入本日理智损失）。"
+                        if inv.san == 0:
+                            text += "理智为 0，已永久疯狂。"
+                    st.add("system", text, who=inv.name, audience=[reader])
+                    turn.notes.append(f"【主持用个人神话结算；只向{inv.name}交代】{text}")
+                    notices.append({"type": "status", "text": text, "audience": [reader]})
+                return notices
 
             async def gain(cid: str = cid) -> None:
                 observed = await step("audience", turn, lambda: {"audience": readers, "readers": selected})
                 effects = []
                 for reader in observed["readers"]:
-                    notice = await step(f"exposure:{reader}", turn, lambda reader=reader: exposure(reader))
-                    if notice is not None:
-                        effects.append(notice)
+                    effects += await step(f"exposure:{reader}", turn, lambda reader=reader: exposure(reader))
                 acquired = await step("commit", turn, lambda: commit(observed))
                 for index, notice in enumerate(acquired["notices"]):
                     await step(f"notice:{index}", turn, lambda notice=notice: self.emit(notice))
                 for notice in effects:
-                    await step(f"sanity-notice:{notice['audience'][0]}", turn, lambda notice=notice: self.emit(notice))
+                    await step(f"{notice['type']}-notice:{notice['audience'][0]}", turn, lambda notice=notice: self.emit(notice))
                 if acquired["paper"]:
                     await step("paper", turn, lambda cid=cid: self.present(
                         [{"ref": f"handout:{acquired['paper']}", "to": acquired["audience"]}],
