@@ -227,3 +227,37 @@ async def test_an_offline_defender_is_asked_before_any_attack_dice_are_thrown(fa
             await asyncio.gather(task, return_exceptions=True)
         await hub.game.close()
         await game.close()
+
+
+async def test_an_offline_human_keeps_an_encounter_retry_until_reconnecting(round_hub, monkeypatch):
+    hub = round_hub
+    text = "守住门口"
+    hub.state.round_plan["encounter"] = ["sudden", "fight", 1]
+    hub.state.pending_turn = {"input": text}
+    calls = []
+
+    async def run(value, seat, **kwargs):
+        calls.append(value)
+        if len(calls) == 1:
+            raise RuntimeError("离线回合尚未完成")
+        hub.state.pending_turn.clear()
+
+    monkeypatch.setattr(hub, "_run", run)
+    task = None
+    try:
+        async with sockets(hub) as (http, url):
+            spectator = await http.ws_connect(url)
+            await spectator.send_json({"t": "hello", "name": "watching"})
+            await until(spectator, lambda msg: msg["t"] == "welcome")
+            task = asyncio.create_task(hub._settle_round([("zhouheng", text)]))
+            await asyncio.sleep(0.03)
+            assert not task.done() and hub.retrying == "zhouheng" and calls == [text]
+            a = await sit(http, url, "zhouheng")
+            await until(a, lambda msg: msg["t"] == "error" and msg.get("retry"))
+            await a.send_json({"t": "act", "text": "/retry"})
+            await asyncio.wait_for(task, 1)
+            assert calls == [text, "/retry"] and hub.retrying is None
+    finally:
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
