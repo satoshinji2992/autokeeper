@@ -14,7 +14,7 @@ class Takeovers:
         self.active: set[str] = set()
         self.tasks: dict[str, asyncio.Task] = {}
         self.epoch = 0
-        self.used: dict[str, int] = {}
+        self.used: dict[str, tuple[int, int, int]] = {}
         self.changed = asyncio.Event()
         self.closed = False
 
@@ -83,11 +83,15 @@ class Takeovers:
         while self.enabled and all(who in self.active for who in members):
             tables = self.hub._scene_tables
             scene = tables.runtime.scenes[ident] if tables else None
-            needs_time = scene is not None and any(
-                not other.closed and other.id != ident and other.reservation.get("end", other.at) > scene.at
-                for other in tables.runtime.scenes.values())
-            if self.online() and (needs_time or self.used.get(ident, -1) != self.epoch):
-                self.used[ident] = self.epoch
+            at = scene.at if scene is not None else 0
+            target = max((other.reservation.get("end", other.at) for other in tables.runtime.scenes.values()
+                          if not other.closed and other.id != ident), default=at) if tables else at
+            stamp = self.epoch, at, target
+            previous = self.used.get(ident)
+            # A zero-minute proposal cannot spend more calls on the same outstanding request.
+            if self.online() and (previous is None or previous[0] != self.epoch
+                                  or (target > at and previous != stamp)):
+                self.used[ident] = stamp
                 return
             signal = self.changed
             if scene is not None:

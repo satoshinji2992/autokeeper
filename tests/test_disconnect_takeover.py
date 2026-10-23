@@ -6,6 +6,7 @@ import asyncio
 import os
 from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 
 import aiohttp
 import pytest
@@ -15,6 +16,7 @@ from autokeeper.agents.cast import Action, Proposal, Ruling
 from autokeeper.engine.game import TURN_RECORD, Game, Turn
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
+from autokeeper.net.takeover import Takeovers
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui.app import AutoKeeperApp
@@ -44,6 +46,77 @@ async def eventually(check):
     async with asyncio.timeout(3):
         while not check():
             await asyncio.sleep(0.005)
+
+
+def pacing_room():
+    away = SimpleNamespace(id="away", at=0, reservation={}, closed=False)
+    live = SimpleNamespace(id="live", at=0, reservation={"end": 30}, closed=False)
+    runtime = SimpleNamespace(scenes={"away": away, "live": live}, _pulse=asyncio.Event(), changed=asyncio.Event())
+    hub = SimpleNamespace(state=SimpleNamespace(human=["lin", "zhouheng"]),
+                          sits={"lin": None, "zhouheng": "connected"}, wake=asyncio.Event(),
+                          _scene_tables=SimpleNamespace(runtime=runtime, workers={}))
+    takeovers = Takeovers(hub, True)
+    takeovers.active.add("lin")
+
+    def world_changed():
+        old, runtime._pulse = runtime._pulse, asyncio.Event()
+        old.set()
+
+    return takeovers, away, live, world_changed
+
+
+async def test_takeover_without_time_progress_waits_for_new_room_activity():
+    takeovers, _, _, world_changed = pacing_room()
+    await takeovers.pace("away", ["lin"])
+    again = asyncio.create_task(takeovers.pace("away", ["lin"]))
+    try:
+        # A world notification alone does not turn a zero-minute proposal into progress.
+        world_changed()
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(again), 0.03)
+        takeovers.pulse()
+        await asyncio.wait_for(again, 1)
+    finally:
+        again.cancel()
+        await asyncio.gather(again, return_exceptions=True)
+        await takeovers.close()
+
+
+async def test_takeover_may_keep_catching_up_while_its_game_time_advances():
+    takeovers, away, _, world_changed = pacing_room()
+    await takeovers.pace("away", ["lin"])
+    for minute in (10, 20):
+        away.at = minute
+        world_changed()
+        await asyncio.wait_for(takeovers.pace("away", ["lin"]), 1)
+    away.at = 30
+    world_changed()
+    caught_up = asyncio.create_task(takeovers.pace("away", ["lin"]))
+    try:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(caught_up), 0.03)
+    finally:
+        caught_up.cancel()
+        await asyncio.gather(caught_up, return_exceptions=True)
+        await takeovers.close()
+
+
+async def test_new_outstanding_time_request_allows_one_more_takeover_attempt():
+    takeovers, _, live, world_changed = pacing_room()
+    await takeovers.pace("away", ["lin"])
+    pending = asyncio.create_task(takeovers.pace("away", ["lin"]))
+    try:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(pending), 0.03)
+        live.reservation["end"] = 40
+        world_changed()
+        await asyncio.wait_for(pending, 1)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(takeovers.pace("away", ["lin"]), 0.03)
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await takeovers.close()
 
 
 async def test_disconnected_remote_scene_continues_and_reconnect_returns_its_control(fake):
