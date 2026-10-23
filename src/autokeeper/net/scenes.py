@@ -114,6 +114,7 @@ class SceneTable(Hub):
                     await self._collect()
                 if self.halted or self.scene.closed:
                     return
+                await self.tables.host_ready.wait()
                 self.tables.runtime.set_busy(self.ident, True)
                 try:
                     await self._settle()
@@ -138,6 +139,9 @@ class SceneTables:
         self.tasks: dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
         self.closing = False
+        self.host_ready = asyncio.Event()
+        self.host_ready.set()
+        root.game.scene_runtime = self.runtime
 
     def for_member(self, who: str | None) -> SceneTable | None:
         return self.workers.get(self.runtime.for_member(who)) if who else None
@@ -184,6 +188,24 @@ class SceneTables:
                     raise task.exception()
             if not any(person.can_act for person in self.root.state.investigators):
                 break
+            if ((not self.root.swaps.empty() or not self.root.rules.empty())
+                    and not any(scene.busy or scene.pending_turn for scene in self.runtime.scenes.values()
+                                if not scene.closed)):
+                self.host_ready.clear()
+                try:
+                    swapping = not self.root.swaps.empty()
+                    await self.root._swap()
+                    if swapping:
+                        for worker in self.workers.values():
+                            if worker.halted:
+                                continue
+                            old = worker.cast
+                            worker.cast = self.runtime.cast_factory(worker.ident)
+                            await worker.game.replace_cast(worker.cast)
+                            await old.close()
+                    await self.root._house_rules()
+                finally:
+                    self.host_ready.set()
             self.runtime.changed.clear()
             wake = asyncio.create_task(self.runtime.changed.wait())
             running = [task for task in self.tasks.values() if not task.done()]

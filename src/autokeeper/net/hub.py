@@ -470,7 +470,7 @@ class Hub:
             self._drop_card(cid)
             for inv_id, who in list(self.sits.items()):
                 if who == cid:
-                    self._free(inv_id)
+                    self._free(inv_id, keep_offer=True)
             await self._share_seats()
         return ws
 
@@ -646,6 +646,8 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "模型仅限房主切换。"})
             elif isinstance(msg.get("choice"), dict):
                 self.swaps.put_nowait((cid, msg["choice"]))
+                if self._scene_tables is not None:
+                    self._scene_tables.runtime.changed.set()
                 await self._send(cid, {"t": "error", "text": "模型切换已排队，将于当前叙述结束后生效。"})
         elif t == "recount":  # the story so far, now (Ctrl+Y): between rounds, once a round
             why = ("观战模式下无法执行此操作。" if self._seat_of(cid) is None else "本轮正在结算，结束后可整理进展。"
@@ -671,6 +673,8 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "自定义规则仅限房主添加。"})
             elif text:
                 self.rules.put_nowait((cid, text))
+                if self._scene_tables is not None:
+                    self._scene_tables.runtime.changed.set()
                 self.wake.set()
                 await self._send(cid, {"t": "error", "text": "规则请求已排队，将于当前叙述结束后处理。"})
         elif t == "pause_plugin":  # 规则插件 in the host's 开发者模式: a rule paused, or started again
@@ -729,13 +733,13 @@ class Hub:
             self._scene_tables.wake(inv_id)
         await self._maybe_begin()
 
-    def _free(self, seat: str) -> None:
+    def _free(self, seat: str, *, keep_offer: bool = False) -> None:
         """Release the connection, retaining an encounter human's unfinished choices."""
         self.sits[seat] = None
         self.ready.discard(seat)
         if self._scene_tables is not None:
             self._scene_tables.wake(seat)
-        if not self._encounter_human(seat) and not self._context(seat).asking.get(seat):
+        if not self._encounter_human(seat) and not (keep_offer and self._context(seat).asking.get(seat)):
             self.inbox[seat].put_nowait(None)
             self.choices[seat].put_nowait(None)
         self.wake.set()
@@ -1221,7 +1225,8 @@ class Hub:
     async def play(self) -> None:
         await self.started.wait()
         await self._broadcast({"t": "begin"})
-        self._start_privates()
+        if self.scene_cast_factory is None or len(self.state.investigators) < 2:
+            self._start_privates()
         st = self.state
         if self.fresh and not st.log:
             try:

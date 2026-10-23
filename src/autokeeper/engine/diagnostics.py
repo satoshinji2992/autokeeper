@@ -124,6 +124,13 @@ def snapshot(game: Game, *, errors: list[str] | None = None, busy: bool = False,
                       "knowledge_base_open": getattr(cast, "kb", None) is not None,
                       "last_narration": game.told.report if game.told else ""},
     }
+    if runtime := getattr(game, "scene_runtime", None):
+        result["scene_contexts"] = {
+            ident: {"execution": scene.model_dump(mode="json"),
+                    "calls": list(getattr(runtime._games.get(ident).cast, "debug_calls", []))
+                    if ident in runtime._games else []}
+            for ident, scene in runtime.scenes.items() if not scene.closed
+        }
     # JSON roundtrip detaches lists from live sessions and turns dataclass payloads into plain data.
     return redact(json.loads(json.dumps(result, ensure_ascii=False, default=str)))
 

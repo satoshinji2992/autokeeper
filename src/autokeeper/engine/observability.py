@@ -44,6 +44,9 @@ class Journal:
 
         row = redact({"id": uuid.uuid4().hex, "at": datetime.now().isoformat(timespec="milliseconds"),
                       "run": self.run, "kind": kind, "turn": turn, "data": data})
+        if self.owner is not None and (owner := self.owner()) is not None:
+            if scene := getattr(owner.state, "scene", None):
+                row["scene"] = scene.id
         try:
             with self._lock:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
