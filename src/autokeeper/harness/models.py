@@ -144,20 +144,23 @@ listeners: list[Callable[[str], None]] = []  # told when a role switches to its 
 
 
 # -- structured output -----------------------------------------------------------------
-def parse_json(text: str) -> Any:
-    """One complete JSON object, tolerating a code fence or an introduction before it.
+def _parse_json(text: str) -> tuple[Any, str]:
+    """One complete JSON value, tolerating a code fence or an introduction before an object/array.
 
     A second object or trailing prose/fields means the response is incomplete, not that its
     first text field is a valid substitute for the missing actions.
     """
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    start = text.find("{")
-    if start == -1:
-        return None
+    if not text:
+        return None, "回复只有空白，没有 JSON 值"
+    starts = [i for symbol in ("{", "[") if (i := text.find(symbol)) >= 0]
+    start = 0 if text.startswith(('"', "null", "true", "false")) or text[0] in "-0123456789" else min(starts, default=0)
 
-    def decode(decoder: json.JSONDecoder) -> Any:
+    def decode(decoder: json.JSONDecoder) -> tuple[Any, str]:
         value, end = decoder.raw_decode(text[start:])
-        return None if text[start + end:].strip() else value
+        if text[start + end:].strip():
+            return None, f"JSON 值结束后仍有多余内容（字符位置 {start + end}），须重新输出完整且仅一个 JSON 值"
+        return value, ""
 
     try:
         return decode(json.JSONDecoder())
@@ -167,9 +170,14 @@ def parse_json(text: str) -> Any:
                 # Some providers leave literal line breaks in a JSON string. Preserve the
                 # whole object, including NPC acts, instead of treating its envelope as speech.
                 return decode(json.JSONDecoder(strict=False))
-            except json.JSONDecodeError:
-                pass
-        return None
+            except json.JSONDecodeError as retry:
+                exc = retry
+        return None, f"JSON 解析失败：{exc.msg}（第 {exc.lineno} 行，第 {exc.colno} 列）"
+
+
+def parse_json(text: str) -> Any:
+    """Read a complete JSON value without discarding trailing output or operational fields."""
+    return _parse_json(text)[0]
 
 
 def _resolve(root: dict, node: dict) -> dict:
@@ -184,6 +192,9 @@ def _resolve(root: dict, node: dict) -> dict:
 def example(root: dict, node: dict | None = None, depth: int = 0) -> Any:
     """Show every field without inventing optional actions; definitions remain in the schema."""
     node = root if node is None else node
+    for sample in node.get("examples", []):
+        if not problems(sample, {**node, "$defs": root.get("$defs", {})}):
+            return deepcopy(sample)
     if "default" in node:  # before resolving Optional: a default null is meaningful
         return deepcopy(node["default"])
     node = _resolve(root, node)
@@ -241,7 +252,7 @@ def schema_text(schema: dict) -> str:
 
 def json_instruction(schema: dict) -> str:
     return (
-        "\n\n## 输出格式\n只输出一个 JSON 对象（json），不要代码块，不要其他文字。字段定义（JSON Schema）：\n"
+        "\n\n## 输出格式\n只输出一个符合定义的 JSON 值（json），不要代码块，不要其他文字。字段定义（JSON Schema）：\n"
         f"{schema_text(schema)}\n格式示例（只示意结构）："
         f"{json.dumps(example(schema), ensure_ascii=False, separators=(',', ':'))}"
     )
@@ -265,12 +276,27 @@ def _markup(node: Any, path: str = "") -> list[str]:
 
 
 def problems(data: Any, schema: dict) -> list[str]:
-    if not isinstance(data, dict):
-        return ["没有输出一个可解析的 JSON 对象"]
     from jsonschema import Draft202012Validator
 
     errors = sorted(Draft202012Validator(schema).iter_errors(data), key=lambda e: list(e.path))
     return ([f"{'/'.join(map(str, e.path)) or '(根)'}：{e.message}" for e in errors[:8]] + _markup(data))[:8]
+
+
+def _output_problems(reply: Reply, schema: dict) -> list[str]:
+    if reply.data is None:
+        reply.data, error = _parse_json(reply.text)
+        if error:
+            return [error]
+    return problems(reply.data, schema)
+
+
+class StructuredOutputError(ValueError):
+    """A format repair failed; no domain operation or narration may be inferred from the draft."""
+
+    def __init__(self, initial: list[str], repaired: list[str]):
+        self.initial, self.repaired = initial, repaired
+        super().__init__("模型回复格式未通过校验，本次回应尚未完成：首次“" + "；".join(initial)
+                         + "”；修复后“" + "；".join(repaired) + "”")
 
 
 def spoken(schema: dict) -> bool:
@@ -278,7 +304,7 @@ def spoken(schema: dict) -> bool:
     return schema.get("required") == ["text"] and set(schema.get("properties", {})) == {"text"}
 
 
-REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完整、正确的 JSON 对象（json），只输出 JSON。"
+REPAIR = "上一条输出不符合格式要求：\n{errors}\n请重新输出完整、正确、符合定义的 JSON 值（json），只输出 JSON。"
 
 
 def _shown(on_delta: OnDelta) -> bool:
@@ -375,7 +401,7 @@ class Model:
             envelope = plain.startswith(("{", "[", "```")) or bool(re.search(r'\{\s*"text"\s*:', plain))
             if schema is not None and reply.data is None and plain and spoken(schema) and not envelope:
                 reply.data = {"text": reply.text.strip()}  # a line said in plain words is a line: no repair call
-            if schema is not None and (errors := problems(reply.data, schema)):
+            if schema is not None and (errors := _output_problems(reply, schema)):
                 fix = [
                     *messages,
                     {"role": "assistant", "content": reply.text or "（空）"},
@@ -391,16 +417,16 @@ class Model:
                     _format_retry.reset(token)
                 reply.add(second)
                 reply.repairs += 1
-                if not problems(second.data, schema) or (reply.data is None and second.data is not None):
+                remaining = _output_problems(second, schema)
+                if not remaining or (reply.data is None and second.data is not None):
                     reply.data, reply.text = second.data, second.text
-                if (problems(reply.data, schema) and not isinstance(reply.data, dict)
-                        and "text" in schema.get("properties", {}) and (envelope or not spoken(schema))):
+                if _output_problems(reply, schema) and not isinstance(reply.data, dict):
                     # A structured envelope can contain private plans and motives. After the
                     # one format retry, fail the call; never turn that envelope into dialogue.
                     # Stateful plain-text replies also lack their operation/disclosure receipt.
                     # Parsed but incomplete drafts go to their caller's domain validator;
                     # encounter plans and missing keeper scenes already have recovery there.
-                    raise ValueError("模型回复格式未通过校验，本次回应尚未完成")
+                    raise StructuredOutputError(errors, remaining)
             return reply
         except BaseException as exc:
             error = f"{type(exc).__name__}: {exc}"

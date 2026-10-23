@@ -1124,19 +1124,26 @@ class Game(Encounters):
             raise ValueError("私信需要本局调查员和正文")
         ident = f"{who}:{request or len(st.private_messages)}"
         receipt = st.private_messages.get(ident)
+        fresh = receipt is None
         if receipt is None:
             receipt = st.private_messages[ident] = {"who": who, "text": text.strip()}
             st.add("system", f"对守秘人（私信）：{text.strip()}", who=st.find(who).name, audience=[who])
+        elif receipt["text"] != text.strip():
+            raise ValueError("同一私信编号不能替换正文")
+        if "reply" not in receipt and not receipt.get("context"):
             from ..agents.cast import private_context
 
             receipt["context"] = private_context(self.m, st, who, text.strip(), self.world)
+            if not fresh:
+                receipt["context_restored"] = True
+                receipt["context"] = ("【恢复说明】原信未保存提问时上下文，本答复只依据本次恢复时的记录，不能追认原提问时状态。\n"
+                                      + receipt["context"].replace("【提问时刻】", "【恢复时刻】", 1))
             if offer is not None:
-                receipt["context"] += "\n【本人提问时待答选择】" + json.dumps(offer, ensure_ascii=False)
+                label = "本人恢复时待答选择" if receipt.get("context_restored") else "本人提问时待答选择"
+                receipt["context"] += f"\n【{label}】" + json.dumps(offer, ensure_ascii=False)
                 receipt["waiting"] = True
             if self.checkpoint:
                 self.checkpoint()
-        elif receipt["text"] != text.strip():
-            raise ValueError("同一私信编号不能替换正文")
         return ident, receipt
 
     async def show_private_input(self, who: str, receipt: dict) -> None:
@@ -1156,7 +1163,10 @@ class Game(Encounters):
         await self.show_private_input(who, receipt)
         if "reply" not in receipt:
             result = await self.cast.private_keeper(st, who, receipt["text"], context=receipt["context"])
-            receipt["reply"] = ("（按你提问时的状态答复，不改变当前待答选择或已结算结果。）\n" if receipt.get("waiting") else "") + result["text"]
+            prefix = ("（原提问时上下文未保存；以下按本次恢复时的记录答复，不改变当前选择或已结算结果。）\n"
+                      if receipt.get("context_restored") else
+                      "（按你提问时的状态答复，不改变当前待答选择或已结算结果。）\n" if receipt.get("waiting") else "")
+            receipt["reply"] = prefix + result["text"]
             receipt["media"] = [{**m, "to": [who]} for m in result.get("media", [])]
             st.add("keeper", receipt["reply"], who="守秘人", audience=[who])
             if self.checkpoint:

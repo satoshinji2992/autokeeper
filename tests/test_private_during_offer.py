@@ -141,6 +141,8 @@ async def test_saved_private_reply_recovers_after_disconnect_without_recalling_t
     with pytest.raises(OSError):
         await hub.game.private_message("zhouheng", "检定规则？", request="saved")
     restored = GameState.model_validate_json(hub.state.model_dump_json())
+    saved_reply = restored.private_messages["zhouheng:saved"]["reply"]
+    restored.private_messages["zhouheng:saved"].pop("context")  # completed text needs no reconstructed prompt
     resumed = Hub(EXAMPLE, state=restored, cast=hub.cast, rules=Rules(dice=fake))
     resumed.started.set()
     async with sockets(resumed) as (http, url):
@@ -149,6 +151,8 @@ async def test_saved_private_reply_recovers_after_disconnect_without_recalling_t
         offer = (await until(a, lambda m: m["t"] == "offer"))["offer"]
         await until(a, lambda m: m.get("ev", {}).get("type") == "aside")
         assert len(calls) == 1 and resumed.state.pending_turn == {"input": "原行动", "request": {"actor": "zhouheng"}}
+        assert restored.private_messages["zhouheng:saved"]["reply"] == saved_reply
+        assert "context" not in restored.private_messages["zhouheng:saved"]
         assert not task.done() and resumed.asking["zhouheng"] == offer["respond_id"]
         await a.send_json({"t": "kp_private", "request": "saved", "text": "检定规则？"})
         await drain_to_welcome(a)
@@ -186,3 +190,66 @@ async def test_private_attachments_are_preserved_until_the_action_finishes(mail_
         shown = await until(a, lambda m: m.get("ev", {}).get("type") == "presentation")
         assert shown["ev"]["audience"] == ["zhouheng"]
         assert len(calls) == 1 and receipt["delivered"]
+
+
+async def test_a_restored_accepted_letter_without_context_freezes_recovery_once_before_calling_the_keeper(
+    mail_hub, monkeypatch, fake,
+):
+    hub = mail_hub
+    question = "原来的检定数值正确吗？"
+    hub.state.private_messages["zhouheng:old-pending"] = {"who": "zhouheng", "text": question, "input_shown": True}
+    hub.state.add("system", f"对守秘人（私信）：{question}", who=hub.state.investigators[0].name, audience=["zhouheng"])
+    hub.state.add("keeper", "恢复时本人已知的记录。", audience=["zhouheng"])
+    st = GameState.model_validate_json(hub.state.model_dump_json())
+    resumed = Hub(EXAMPLE, state=st, cast=hub.cast, rules=Rules(dice=fake))
+    resumed.started.set()
+    contexts, checkpoints = [], []
+    began, release = asyncio.Event(), asyncio.Event()
+
+    async def reply(state, who, text, *, context):
+        contexts.append(context)
+        assert checkpoints and checkpoints[-1]["context"] == context
+        began.set()
+        await release.wait()
+        if len(contexts) == 1:
+            raise RuntimeError("temporary offline model failure")
+        return {"text": "按恢复记录说明，检定尚未完成。"}
+
+    def checkpoint():
+        checkpoints.append(copy.deepcopy(st.private_messages["zhouheng:old-pending"]))
+
+    monkeypatch.setattr(hub.cast, "private_keeper", reply, raising=False)
+    resumed.game.checkpoint = checkpoint
+    pending, record, minutes = copy.deepcopy(st.pending_turn), st.record.model_dump_json(), st.minutes
+    try:
+        async with sockets(resumed) as (http, url):
+            a, b = await sit(http, url, "zhouheng"), await sit(http, url, "lin")
+            task = asyncio.create_task(resumed._ask("zhouheng", resumed.sits["zhouheng"], {"kind": "roll", "target": 40}, timed=False))
+            offer = (await until(a, lambda m: m["t"] == "offer"))["offer"]
+            await asyncio.wait_for(began.wait(), 1)
+            receipt = st.private_messages["zhouheng:old-pending"]
+            assert receipt["context_restored"] and receipt["input_shown"]
+            assert "【恢复时刻】" in receipt["context"] and "【提问时刻】" not in receipt["context"]
+            assert "恢复时本人已知" in receipt["context"] and not task.done()
+            release.set()
+            await until(a, lambda m: m["t"] == "error" and "私信暂未完成" in m["text"])
+            st.add("keeper", "第一次恢复之后才出现的记录。", audience=["zhouheng"])
+            await a.send_json({"t": "kp_private", "request": "old-pending", "text": question})
+            aside = await until(a, lambda m: m.get("ev", {}).get("type") == "aside")
+            assert "本次恢复时的记录答复" in aside["ev"]["text"]
+            assert len(contexts) == 2 and contexts[0] == contexts[1]
+            assert "第一次恢复之后才出现" not in contexts[1]
+            assert st.pending_turn == pending and st.minutes == minutes and st.record.model_dump_json() == record
+            assert resumed.asking["zhouheng"] == offer["respond_id"] and receipt["delivered"]
+            before = len(contexts)
+            await a.send_json({"t": "kp_private", "request": "old-pending", "text": question})
+            seen = await drain_to_welcome(a)
+            assert len(contexts) == before and not any(m.get("ev", {}).get("type") == "private_input" for m in seen)
+            assert question not in json.dumps(await drain_to_welcome(b), ensure_ascii=False)
+            await a.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
+            assert await asyncio.wait_for(task, 1) == "roll"
+    finally:
+        if resumed.private_task is not None:
+            resumed.private_task.cancel()
+            await asyncio.gather(resumed.private_task, return_exceptions=True)
+        await resumed.game.close()

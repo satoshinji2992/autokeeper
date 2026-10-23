@@ -96,7 +96,7 @@ class BeforeTravel(BaseModel):
 
 class Action(BaseModel):
     kind: ActionKind = Field(description="行动类别")
-    summary: str = Field(description="中立记录玩家声明的意图、尝试与方法；不将愿望写成已完成的动作或结果")
+    summary: str = Field(description="中立记录玩家声明的意图、尝试与方法；不将愿望写成已完成的动作或结果。wait须保留等待终点、停止条件与玩家给定上限，顺带观察不是另一个主行动")
     target: str = Field("", description="行动对象：场景里的某个东西、物品或人")
     npc: str = Field("", description="互动的 NPC id；本地须在场，远程须明确communication，没有就留空")
     communication: Communication = Field("local", description="local：面对面；remote：通过已具备的电话、无线电等非同场渠道交流，只传实际说话，不看见另一端动作或房间。不是要求远处人物赶来")
@@ -152,10 +152,11 @@ class BeatChoice(BaseModel):
 
 class Plan(BaseModel):
     lookup: str = Field("", description="安排前想先查的一件事，一句话；手头资料够用就留空")
-    action: Action = Field(description="原请求当前可执行的一个前缀；后续意图留在 remaining，不提前兑现")
+    action: Action = Field(description="原请求当前可执行的一个前缀；持续等待及其停止条件是完整wait，不拆成逐分钟听看。真正后续意图留在remaining，不提前兑现")
     remaining: str = Field("", description=(
         "原请求在当前行动之后尚待办理的意图，保留顺序和条件；没有则留空。"
-        "不是后续动作数组，不预定回应、成功、交物或抵达，也不丢掉玩家已明确交代的后半段"))
+        "不是后续动作数组，不预定回应、成功、交物或抵达，也不丢掉玩家已明确交代的后半段。"
+        "主行动本就是等待时，其终点、停止条件与期间警戒方式保留在action，不把整个等待挪到这里"))
     present: list[str] = Field(default_factory=list,
                               description="已经在眼前、但位置漏记的已有 NPC id；不是让远处的人瞬移，也不写尚未发生的行动结果")
     people: list[Person] = Field(default_factory=list,
@@ -173,10 +174,12 @@ class Continuation(BaseModel):
     next: Plan | None = Field(None, description=(
         "当前段实际结束后，原请求无需玩家新选择即可继续时，安排下一个即时前缀；"
         "其后仍未办理的意图放入该 Plan.remaining。不能预定后续回应或结果。"
+        "已授权等待尚未结束、没有实际新情况或新选择时，可续办wait；不因暂时安静而反复交还玩家。"
         "lookup 必须为空：续办不会再次执行资料检索；尚需补查时改填 pending，不能把待查计划当作可执行行动"))
     pending: str = Field("", description=(
         "需要玩家新决定或资料补查尚未完成时，保留尚待办理的意图及条件；不能同时填 next。"
-        "next 为 null 且此项为空才表示原请求已经办完；尝试失败或被打断不等于办完"))
+        "next 为 null 且此项为空才表示原请求已经办完；尝试失败或被打断不等于办完。"
+        "等待条件尚未到、这段暂时没有动静，不是新的决定或中断理由"))
 
     @model_validator(mode="after")
     def exclusive(self) -> Continuation:
@@ -580,6 +583,8 @@ ACTION_RULES = """- summary：第三人称一句话，只记录当前可执行�
 - kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；daily 日常生活；meta 问规则或游戏外的话；other 其他。
 - daily：吃饭、买日用品、办入住、问路、欣赏街景、和人聊家常等没有调查目的的生活行动；不要改写成查案、套话或搜索。
   有明确调查目的的交谈仍是 talk，搜寻证据仍是 investigate，等到某个时间仍是 wait。日常对话也照实填写 npc 和 speech。
+- 持续守候时顺带听动静、看住门口或记下已经见过的情况，是等待的方式，主行动仍是wait；summary保留玩家的等待终点、停止条件和最长时限，不把整个等待挪到remaining。
+  只有确需先确认、会影响下一步的具体疑点才拆出一次观察；结算这次观察后，没有新的选择或实际变化便继续原先已授权的等待，不要求玩家反复重说。
 - 区分眼下行动与稍后打算。玩家正向人询问、等回应或先做另一件事，不能把后面提到的目的地当成立即出发。
   “街口卖什么早饭？想先吃点热的再去金博尔家”先向眼前人问早饭，destination 留空；后续打算仍需保留，但不替玩家选餐或提前出发；
   “直接去金博尔家，路上买份面包”则照常前往。不要把尚待玩家选择的用餐、点单或整段旅程替他完成。
@@ -671,6 +676,9 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
   笼统地观察只给视野中能够直接察觉的内容，细查则按实际方法与范围裁定；不按每轮数量扣留已经成立的发现。
 - 不憋线索：查对了东西、方法合理，就给那里的线索；能直接看到的不要硬设检定。
 - 等待、守夜和休息按实际需要推进时间，kind=wait 可跳过长时间，最多 720 分钟。
+  单纯守候与被动警戒不靠循环聆听、侦查来维持；只有具体不确定、且会影响选择的信息才检定，不保证看清或听清。
+  minutes计本段实际等待，结合已知时间、玩家上限与当前危险合理略过，不只取一个听看动作的耗时；不凭空保证所等的人或事件到来。
+  若先结算一次观察，成败只决定该发现，不取消玩家已经授权的继续等待。等待是清醒守候，不等于睡眠。
   rest 只标本人明确开始的休息或睡眠；清醒等候、守夜填 false，不把邀请同伴休息当作已经入睡，也不替其他调查员接受。
   例如晚上 22 点明确睡到天亮，可推进至次日早上 7 点左右；是否真正安全、充分休息由实际场面确认。
 - scope：行动在场景资料里有对应的东西，填“模组内”。调查员动机正常、合情合理，只是场景资料没写到（想去没写的地方、
@@ -2072,6 +2080,9 @@ class Cast:
                       "next 与 pending 不能同时非空：可继续才填 next；需要玩家回答、选择或新事件打断时，"
                       "next=null，pending 保留尚未办理的意图与条件。两者都空只表示原请求确已办完，不能用来略过后半段。"
                       "next.lookup 必须为空；续办不会再次检索，尚需补查资料时用 pending 保留意图，不声称已经查过。"
+                      "已授权的等待若尚未结束，没有实际新情况或必要的新选择，就用next续办wait，合理略过安静时段；"
+                      "暂未听见声音、援助还没来或这一小段叙述结束，本身不构成pending理由。"
+                      "只按已经出现的变化决定是否中断续办，不预定援助到场、检定成功或下一段的结果。"
                       "不预演下一段的结果，不替其他真人答应或行动。已单独展示的台词不必重复；本段无需额外叙述时 text 可为空。")
         if check is None and not continuing and voices is None:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta, remember=remember)
@@ -2086,7 +2097,24 @@ class Cast:
             hosted_model = ContinuedHostedReply if continuing else HostedReply
             schema = _schema(hosted_model)
             schema["properties"]["npc"]["enum"] = ["", *dict.fromkeys(npc for npc in voices if npc)]
+            scene_sample = {"here": self.present(state.location)}
+            if self.world is not None:
+                party = {inv.id for inv in state.investigators}
+                scene_sample["follow"] = [npc for npc in scene_sample["here"]
+                                          if self.world.rec.entities[npc].following in party]
+            final = {"scene": scene_sample, "text": "（依本段已经结算的结果叙述）"}
+            if continuing:
+                final["continuation"] = {"next": None, "pending": "（仍需玩家选择时保留未办意图；确已办完则留空）"}
+            samples = [{"kind": "tell", "telling": final}]
+            if available := next((npc for npc in voices if npc), ""):
+                samples.append({"kind": "npc", "npc": available, "instruction": "依据本人实际知情范围回应本次请求"})
+            for sample in samples:
+                hosted_model.model_validate(sample)
+            schema["examples"] = samples
             extra += ("\n\n【本轮现场主持与配音】\n"
+                      "格式示例中的 scene 只给出当前在场与跟随记录，实际变化按本段已结算报告填写；不因照抄例子让人物离场或取消跟随。"
+                      "text、instruction 与 continuation 是格式示意，不是本轮正文、指令或续办决定；"
+                      "是否继续、挂起或完成原请求，仍按 remaining、已结算结果和实际回应判断。"
                       "骰前 initiative 是尚待考虑的参与意图；依据最终主检定、当前实际记录和已经发生的回复，"
                       "决定谁此刻参与、怎样参与，或不再参与。已结算范围优先，未决部分仍保留角色自身选择。"
                       "需要人物回应时 kind=npc，npc 只用本次名单：" + "、".join(voices or ["无"]) + "。"

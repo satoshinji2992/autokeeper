@@ -62,7 +62,7 @@ class Thing(BaseModel):
 
 
 class Trace(BaseModel):
-    text: str = Field(description="留下的痕迹，一句话")
+    text: str = Field(description="本段新产生、有后续意义的痕迹，一句话；不重复静态摆设或已登记的痕迹")
     # A plain string rather than an enum: a word off here is read as public, not sent back for repair.
     visibility: str = Field("public", description="public：调查员看得见；private：他们没注意到")
 
@@ -72,7 +72,7 @@ class Trace(BaseModel):
 
 
 class Observation(BaseModel):
-    witnesses: list[str] = Field(description="本段实际在场看见或听见内容的 NPC id 或姓名；只写确实知情者")
+    witnesses: list[str] = Field(description="本段实际看见或听见内容的NPC id或姓名，只写确实知情的NPC；调查员见闻已随实际投递保存，不把PL再填成NPC见证者")
     text: str = Field(max_length=300, description="当场获知的重要事实或承诺，一两句；含KP替NPC说过且影响后续回答的话。不是痕迹、推测或尚未完成的结果")
     communication: Communication = Field("local", description="local：实际在场见闻；remote：本段已实际通话的联系人仅听见的交流内容，不含另一端房间、动作或私语")
 
@@ -98,9 +98,9 @@ class Scene(BaseModel):
     here: list[str] = Field(default_factory=list, description="讲完时和调查员在一起的人；没变也照抄")
     follow: list[str] = Field(default_factory=list, description="here 里跟着调查员走的人")
     left: list[Left] = Field(default_factory=list, description="这段里离开的人和去向")
-    holds: list[Holding] = Field(default_factory=list, description="这段实际拿起、交出、归还或放回地点的物件；使用实际物件id和人物/地点id，细部位置不代替归属地点")
+    holds: list[Holding] = Field(default_factory=list, description="本段实际拿起、交出、归还或放回地点，发生归属变化的物件；未变的不重抄。使用实际物件id和人物/地点id，细部位置不代替归属地点")
     things: list[Thing] = Field(default_factory=list, description="本段首次拿出的日常小物件；交出或留下时再写进holds。已有物件使用实际id写holds，不改名另造一件")
-    traces: list[Trace] = Field(default_factory=list, description="这段里留下的新痕迹")
+    traces: list[Trace] = Field(default_factory=list, description="本段新产生、有后续意义的痕迹；不每段抄写原有摆设或旧痕迹")
     observations: list[Observation] = Field(default_factory=list,
                                            description="本段NPC实际看见或听见的重要事实与承诺，明确witnesses；只记影响后续应答的内容，不写逐句流水账")
     flags: list[str] = Field(default_factory=list, description=(
