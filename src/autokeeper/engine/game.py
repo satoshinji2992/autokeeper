@@ -186,6 +186,7 @@ class Told:
     lore: str
     entry: LogEntry
     sky: tuple[str, int]
+    memory: str | None = None
 
 
 class _ResolutionDice:
@@ -4005,7 +4006,7 @@ class Game(Encounters):
         people = "\n".join(f"{n.name}" + (f"（{status[n.id]}）" if n.id in status else "") + f"：{n.look}" for n in self.m.npcs_at(loc_id))
         return f"{loc.name}\n{loc.read_aloud.strip()}\n{people}"
 
-    def _report(self, turn: Turn) -> str:
+    def _report(self, turn: Turn, *, omit_replies: set[str] | None = None) -> str:
         st, m = self.state, self.m
         inv = st.investigator
         loc = m.location(st.location)
@@ -4092,8 +4093,14 @@ class Game(Encounters):
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
             out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复检定卡；只叙述本轮另行发生的变化。")
+            unpaired = list(turn.replies.items())
             for npc_id, line in turn.npc_lines:
-                said = next((s for s in turn.replies.values() if s.npc == npc_id and s.line == line), None)
+                pair = next(((key, s) for key, s in unpaired if s.npc == npc_id and s.line == line), None)
+                if pair is not None:
+                    unpaired.remove(pair)
+                    if omit_replies and pair[0] in omit_replies:
+                        continue  # the actual tool receipt below carries this same reply and its audience
+                said = pair[1] if pair is not None else None
                 listeners = "全桌" if said is None or said.audience is None else "仅" + "、".join(st.find(i).name for i in said.audience)
                 out.append(f"【{listeners}已听到的原话及动作｜{m.npc(npc_id).name}】{line}")
             out.append("以上动作已经演出，接着其完成后的状态叙述，不重新端茶、问同一问题或把已做完的事写成准备做；私下内容不转述给其他人。")
@@ -4288,7 +4295,8 @@ class Game(Encounters):
                 self.checkpoint()
         await self.showcases.named(text)  # a creature the narration names for the first time
         await self._sky(text)
-        self.told = Told(report, lore + receipt.get("note", ""), entry, sky)
+        self.told = Told(receipt.get("report", report), lore + receipt.get("note", ""), entry, sky,
+                         receipt.get("memory"))
         if turn is not None and receipt.get("story_flags"):
             await self._scene_story(receipt, turn, on_delta, owner=_owner or turn)
         return text
@@ -4325,8 +4333,11 @@ class Game(Encounters):
         already-recorded voice again. Only the final telling can carry a next player action.
         """
         keeper = self.cast.keeper
-        if not enabled or turn is None or not self.state.pending_turn or not _takes(keeper, "voices"):
-            return await keeper(self.state, report, on_delta=delta, lore=lore(), **kwargs)
+        if ((not enabled and not receipt.get("calls")) or turn is None
+                or not self.state.pending_turn or not _takes(keeper, "voices")):
+            told = await keeper(self.state, report, on_delta=delta, lore=lore(), **kwargs)
+            receipt.update(report=report, memory=report)
+            return told
         own_report = receipt.setdefault("own_report", report == self._report(turn))
         if "voice_turn" in receipt:
             restored = TURN_RECORD.validate_python(receipt["voice_turn"])
@@ -4338,15 +4349,41 @@ class Game(Encounters):
                 self.checkpoint()
 
         calls = receipt.setdefault("calls", [])
+        remembering = _takes(keeper, "remember")
+        if remembering and "memory_id" not in receipt:
+            journal = self.state.pending_turn
+            serial = journal.get("keeper_memory_serial", 0)
+            journal["keeper_memory_serial"] = serial + 1
+            receipt["memory_id"] = f"{self.state.turn}:{serial}"
+            keep(turn)
+
+        def memory_at() -> int:
+            """Recover the last actual exchange, including a save taken while its words were delivered."""
+            cursor = receipt.get("memory_at", -1)
+            if remembering:
+                prefix = f"【主持记录 {receipt['memory_id']}｜配音回执至 "
+                last = self.state.transcripts.get("keeper", [])[-2:]
+                if len(last) == 2 and last[0]["role"] == "user" and last[0]["content"].startswith(prefix):
+                    header = last[0]["content"].split("\n", 1)[0]
+                    index = header.removeprefix(prefix).removesuffix("】")
+                    if index.isdecimal():
+                        cursor = max(cursor, int(index))
+            return cursor
+
         while True:
             for index, row in enumerate(calls):
                 if row.get("done"):
                     continue
                 npc_id, instruction = row["npc"], row["instruction"]
                 if npc_id not in self._present() or self.battling():
-                    row.update(done=True, result={"npc": npc_id, "problem": "人物不在当前现场，未执行配音或操作"})
+                    row.update(done=True, result={"call": index, "npc": npc_id,
+                                                 "private": row.get("private", False), "audience": [], "told": [],
+                                                 "problem": "人物不在当前现场，未执行配音或操作"})
                     keep(turn)
                     continue
+                if "before" not in row:
+                    row["before"] = {"seq": self.world.rec.seq, "notes": len(turn.notes), "world": len(turn.world)}
+                    keep(turn)
                 private = row.get("private", False)
                 action = turn.action
                 addressed = self._addressed(action) == npc_id
@@ -4368,9 +4405,16 @@ class Game(Encounters):
                     await self._resolution_step("world", turn, lambda: self._world(turn))
                     await self._resolution_step("people", turn, self._people)
                     await self._resolution_step("ending", turn, lambda: self._check_ending(turn))
-                row.update(done=True, result={"npc": npc_id, "line": said.line, "told": said.told, "private": private})
+                before = row["before"]
+                dialogue = (f"talk:{self.state.turn}:{self.state.investigator.id}:{npc_id}:keeper:{index}" if addressed else
+                            f"talk:{self.state.turn}:{npc_id}:keeper:{index}")
+                effects = [{"id": entry.id, "kind": entry.kind, "text": entry.summary} for entry in self.world.rec.journal
+                           if entry.seq > before["seq"] and entry.id != dialogue and not entry.undone]
+                row.update(done=True, result={"call": index, "npc": npc_id, "line": said.line, "told": said.told,
+                                             "private": private, "audience": said.audience, "effects": effects,
+                                             "notes": turn.notes[before["notes"]:], "world": turn.world[before["world"]:]})
                 keep(turn)
-            voices = [] if self.battling() or self.fought_this_turn() else self._present()
+            voices = [] if not enabled or self.battling() or self.fought_this_turn() else self._present()
             extra = ""
             if intents := self._voice_intents(turn):
                 extra += ("\n【骰前考虑的参与意图，尚未发生】\n" + json.dumps(intents, ensure_ascii=False)
@@ -4382,16 +4426,33 @@ class Game(Encounters):
                 actual += "\n台词已向实际听见者展示，不复述；未落实不当作成功，不替玩家接受新条件。"
                 # Render the current action once, not one growing copy per voice. A held
                 # round also retains its other investigators' original reports.
-                current_report = self._report(turn)
+                current_report = self._report(turn, omit_replies={f"keeper:{i}:{row['npc']}" for i, row in enumerate(calls)})
                 if not own_report:
                     current_report = report + "\n【本次行动更新】\n" + current_report
             # Tool observations belong to the keeper's conversation, not just an ephemeral
             # lore block: otherwise its next turn remembers a request without its result.
-            told = await keeper(self.state, current_report + actual, on_delta=delta,
+            prompt = current_report + actual
+            kept_at = memory_at()
+            remember = prompt
+            if remembering:
+                remember = f"【主持记录 {receipt['memory_id']}｜配音回执至 {len(calls)}】\n"
+                if kept_at < 0:
+                    remember += report
+                fresh = [row["result"] for row in calls[max(0, kept_at):]]
+                if fresh:
+                    remember += "\n【新增实际配音回执】\n" + json.dumps(fresh, ensure_ascii=False)
+                elif kept_at >= 0:
+                    remember += "原行动与配音均按已记结果；本次只修正或收束主持输出，不重新执行。"
+            told = await keeper(self.state, prompt, on_delta=delta,
                                 lore=lore() + extra,
-                                **({"voices": voices} if voices else {}), **kwargs)
+                                **({"voices": voices} if voices else {}),
+                                **({"remember": remember} if remembering else {}), **kwargs)
             if error := getattr(told, "call_error", ""):
                 raise PreparationError(error)
+            receipt.update(report=prompt, memory=remember)
+            # A rejected scene is removed from the conversation. Do not acknowledge its
+            # observations until an actual exchange retains them, including after a retry.
+            receipt["memory_at"] = memory_at()
             if (call := getattr(told, "call", None)) is None:
                 return told
             calls.append(call.model_dump(mode="json"))
@@ -4614,7 +4675,9 @@ class Game(Encounters):
 
         old = told.entry.text
         try:
-            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge), on_delta=delta)
+            remembered = {"remember": told.memory} if _takes(self.cast.retell, "remember") else {}
+            text = await self.cast.retell(st, told.report, old, extra=told.lore + _retold(old, nudge), on_delta=delta,
+                                          **remembered)
         except Exception:
             self.told = told
             await self.emit({"type": "keeper_end", "text": old})  # the old telling stands

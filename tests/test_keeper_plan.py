@@ -87,7 +87,7 @@ async def test_a_failed_plan_or_a_cast_without_one_falls_back_to_the_parser(modu
     await game.close()
 
 
-async def test_the_plan_runs_on_the_keepers_model_in_its_own_session_with_the_book_and_the_backstage(module, fake):
+async def test_the_plan_uses_its_model_and_the_shared_keeper_memory_with_the_book_and_the_backstage(module, fake):
     cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
     cast = Cast(cfg, module)
     game = make(module, fake, cast)
@@ -103,9 +103,13 @@ async def test_the_plan_runs_on_the_keepers_model_in_its_own_session_with_the_bo
     assert "【玩家】我看看齿轮" in prompt and "钟有钟的规矩" in prompt
     assert set(sent["schema"]["properties"]) >= {"action", "initiative"}
     assert action.summary == "周衡查看齿轮" and [x.npc for x in game.initiative] == ["warden"]
-    assert "plan" in cast.sessions and "keeper" not in cast.sessions and "intent" not in cast.sessions
+    assert set(cast.sessions) == {"plan", "keeper"}
     assert game.state.usage["plan"]["calls"] == 1 and "intent" not in game.state.usage
-    assert not game.state.transcripts.get("plan")  # stateless: the narration's memory is not touched either
+    assert not game.state.transcripts.get("plan")  # only the plan transport is cached here
+    assert cast.sessions["keeper"].transcript is game.state.transcripts["keeper"]
+    assert "我看看齿轮" in game.state.transcripts["keeper"][-2]["content"]
+    assert json.loads(game.state.transcripts["keeper"][-1]["content"])["action"]["target"] == "齿轮间"
+    assert not cast.sessions["plan"].transcript
     await game.close()
     await cast.close()
 

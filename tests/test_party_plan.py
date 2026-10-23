@@ -37,7 +37,7 @@ def step(token, summary="周衡查看齿轮", **kwargs):
     return {"token": token, "plan": {"action": {"kind": "investigate", "summary": summary}}, **kwargs}
 
 
-async def test_one_existing_plan_session_reads_the_whole_window_and_leaves_the_world_unchanged(party_state):
+async def test_shared_keeper_memory_reads_the_whole_window_and_leaves_the_world_unchanged(party_state):
     module, state = party_state
     state.add("keeper", "只有林秋听见窗内传来敲击。", audience=["lin"])
     cast = Cast(config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}), module)
@@ -47,7 +47,7 @@ async def test_one_existing_plan_session_reads_the_whole_window_and_leaves_the_w
     result = await cast.party_plan(state, inputs())
     assert result is not None and [item.token for item in result.steps] == ["r17:b", "r17:a"]
     assert result.steps[0].related == ["r17:a"]
-    assert len(SEEN) == 1 and set(cast.sessions) == {"plan"}
+    assert len(SEEN) == 1 and set(cast.sessions) == {"plan", "keeper"}
     assert SEEN[0]["system"].startswith(PLAN_SYSTEM)
     assert set(SEEN[0]["schema"]["properties"]) == {"lookup", "steps"}
     prompt = SEEN[0]["messages"][-1]["content"]
@@ -56,6 +56,9 @@ async def test_one_existing_plan_session_reads_the_whole_window_and_leaves_the_w
     assert "不能在这里替裁定员给奖励骰" in prompt and "独立现场允许并行主持" in prompt
     assert state.usage["plan"]["calls"] == 1 and "arbiter" not in state.usage and "intent" not in state.usage
     assert not state.transcripts.get("plan") and state.record.model_dump(mode="json") == snapshot
+    assert cast.sessions["keeper"].transcript is state.transcripts["keeper"]
+    assert all(item.text in state.transcripts["keeper"][-2]["content"] for item in inputs())
+    assert not cast.sessions["plan"].transcript
     await cast.close()
 
 
@@ -97,7 +100,7 @@ async def test_the_arbiter_receives_only_the_neutral_action_after_batch_planning
     assert batch[0].text in SEEN[0]["messages"][-1]["content"]
     prompt = SEEN[1]["messages"][-1]["content"]
     assert "周衡查看齿轮" in prompt and "不要让我掷骰" not in prompt and "我是物理学家" not in prompt
-    assert set(cast.sessions) == {"plan", "arbiter"}
+    assert set(cast.sessions) == {"plan", "keeper", "arbiter"}
     await cast.close()
 
 

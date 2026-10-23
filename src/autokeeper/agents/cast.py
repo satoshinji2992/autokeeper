@@ -43,7 +43,7 @@ from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.perception import PerceptionChange
 from ..engine.state import GameState, WorldChange, format_time, time_of_day
-from ..harness import OnDelta, Reply, Session, Summarizer, trace
+from ..harness import Model, OnDelta, Reply, Session, Summarizer, trace
 from ..module import graph as module_graph
 from ..module.schema import NPC, Module
 from ..plugins.schema import Call as PluginCall
@@ -888,10 +888,11 @@ class Cast:
             )
         return self.sessions[key]
 
-    async def _send(self, key: str, session: Session, state: GameState, prompt: str, *, bind: bool = True, **kw) -> Reply:
-        """Every call reads and writes the agent's memory in the current GameState."""
+    async def _send(self, key: str, session: Session, state: GameState, prompt: str, *, bind: bool = True,
+                    memory_key: str | None = None, **kw) -> Reply:
+        """The stage key owns usage/trace; memory_key may give stages one canonical conversation."""
         if bind:
-            session.bind(state.transcripts.setdefault(key, []), state.notes)
+            session.bind(state.transcripts.setdefault(key if memory_key is None else memory_key, []), state.notes)
         self.summarizer.on_reply = lambda r: state.record_usage("summarizer", r)
         turn = state.turn
         def observe(row: dict) -> None:
@@ -1041,8 +1042,11 @@ class Cast:
         return self._open("intent", "intent", INTENT_SYSTEM, schema=_schema(Action))
 
     def _plan(self, state: GameState) -> Session:
-        """The keeper's arrangement of each turn: on the keeper's model, in a session of its own (its
-        calls count as "plan"), never the narration's, whose memory keeps only what was told."""
+        """Cached plan transport and its phase instructions, never a second conversation.
+
+        Ordinary plans use its configured model through the canonical keeper Session, so model,
+        effort and input limits remain configurable while history and folding have one owner.
+        """
         if "plan" not in self.sessions:
             system = PLAN_SYSTEM + ACTION_RULES + ("\n\n" + _book(self.module) if self.backstage else "")
             self.sessions["plan"] = Session("plan", self.cfg.role("plan"), system, schema=_schema(Plan), key="plan",
@@ -1131,7 +1135,10 @@ class Cast:
         validator (engine/encounter/plan_check): what it finds goes back once; a Checked comes back."""
         if encounter is not None:
             return await self._encounter_plan(state, text, encounter, mode, check, ask)
-        s = self._plan(state)
+        s, transport = self._keeper(state), self._plan(state).model
+        remembered = (f"【骰前安排草案，尚未执行】调查员={state.investigator.id}；地点={state.location}\n"
+                      f"【原始输入】{text}")
+        send = {"schema": _schema(Plan), "model": transport, "memory_key": "keeper", "remember": remembered}
         brief = world_view.keeper_brief(self.world) if self.backstage and self.world is not None else ""
         prompt = (brief + "\n\n" if brief else "") + self._heard(state, text)
         prompt += "\n【在场、可以主动的人】" + ("、".join(f"{n.name}({n.id})" for n in self.able(state)) or "无")
@@ -1141,7 +1148,7 @@ class Cast:
             if unplaced:
                 prompt += "\n【位置尚未登记的人，不代表在场】" + "；".join(unplaced)
         prompt += "\n【可能动手的】" + self._fighters(state)
-        reply = await self._send("plan", s, state, prompt)
+        reply = await self._send("plan", s, state, prompt, **send)
         plan = Plan.model_validate(reply.data)
         # What it asks to look up is answered and it is asked again, twice at most; a lookup after
         # that is not answered. A model-free loop: one JSON field, no vendor's tool calls (as the
@@ -1156,7 +1163,8 @@ class Cast:
                 journal.append("lookup", {"query": query, "found": found}, turn=state.turn)
             prompt += f"\n\n【查询结果】（{query}）\n{found}\n现在给出安排，lookup 留空。"
             try:
-                reply = await self._send("plan", s, state, prompt)
+                reply = await self._send("plan", s, state, prompt, **(send | {
+                    "remember": remembered + f"\n【实际查询】{query}\n【查询结果】{found}\n按资料重交未执行草案。"}))
                 plan = Plan.model_validate(reply.data)
             except asyncio.CancelledError:
                 raise
@@ -1168,7 +1176,8 @@ class Cast:
             prompt += ("\n\n【现场登记未落实】\n" + "\n".join(f"- {p}" for p in problems)
                        + "\n按具体原因修正一次安排；无法落实的保留为意图，不改写成已经发生。")
             try:
-                reply = await self._send("plan", s, state, prompt)
+                reply = await self._send("plan", s, state, prompt, **(send | {
+                    "remember": remembered + "\n【草案未落实原因】" + "；".join(problems) + "\n修正后仍是待执行安排。"}))
                 plan = Plan.model_validate(reply.data)
             except asyncio.CancelledError:
                 raise
@@ -1250,9 +1259,13 @@ class Cast:
             loc = self.module.location(view.location)
             prompt += (f"\n\n【原始行动 token={item.token}，调查员 id={item.who}】\n"
                        f"地点：{loc.name}({loc.id})，使用【共用场景 {loc.id}】。\n" + self._heard(view, item.text, shared=False))
-        session = self._plan(state)
+        session, transport = self._keeper(state), self._plan(state).model
+        remembered = "【整批骰前安排草案，尚未执行】\n" + json.dumps([
+            {"token": item.token, "actor": item.who, "at": audience.location(state, item.who), "input": item.text}
+            for item in items], ensure_ascii=False)
         try:
-            checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan")
+            checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan",
+                                          memory_key="keeper", transport=transport, remember=remembered)
             if not checked.ok or checked.value is None:
                 return None
             planned = checked.value
@@ -1263,7 +1276,9 @@ class Cast:
                 found = await self.look_up(state, query)
                 self._journal("lookup", {"query": query, "found": found, "scope": "party"}, state)
                 prompt += f"\n\n【查询结果】（{query}）\n{found}\n现在给出完整整批安排，lookup 留空。"
-                checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan")
+                checked = await self._checked("plan", session, state, prompt, PartyPlan, complete, what="party-plan",
+                                              memory_key="keeper", transport=transport,
+                                              remember=remembered + f"\n【实际查询】{query}\n【查询结果】{found}\n重交未执行草案。")
                 if not checked.ok or checked.value is None:
                     return None
                 planned = checked.value
@@ -1307,20 +1322,30 @@ class Cast:
 
     async def _checked[T: BaseModel](self, key: str, s: Session, state: GameState, prompt: str, model: type[T],
                                      check: Callable[[Any], list[str]] | None, *, schema: dict | None = None,
-                                     reply: Reply | None = None, what: str = "plan") -> Checked[T]:
+                                     reply: Reply | None = None, what: str = "plan", memory_key: str | None = None,
+                                     transport: Model | None = None, remember: str | None = None) -> Checked[T]:
         """Ask (unless `reply` already came back), check, and send it back once with the problems.
         Still wrong: the answer and its problems come back for the caller to note as 【未落实】, and
         go to the debug journal whole, so the prompt or the context can be fixed (the user's call,
         2026-10-21: nothing is put in its place)."""
         schema = schema or _schema(model)
+        send: dict[str, Any] = {"bind": memory_key is not None}
+        if memory_key is not None:
+            send["memory_key"] = memory_key
+        if transport is not None:
+            send["model"] = transport
+        if remember is not None:
+            send["remember"] = remember
         if reply is None:
-            reply = await self._send(key, s, state, prompt, schema=schema, bind=False)
+            reply = await self._send(key, s, state, prompt, schema=schema, **send)
         value, problems = self._judge(model, reply.data, check)
         if problems:
             first = reply.data
             fix = ("\n\n【上一份回答的问题】\n" + "\n".join(f"- {p}" for p in problems)
                    + f"\n【上一份回答】{dumps(first)}\n改正这些问题，重交一份完整的回答。")
-            reply = await self._send(key, s, state, prompt, extra=fix, schema=schema, bind=False)
+            retry = send if remember is None else send | {
+                "remember": remember + "\n【草案未落实原因】" + "；".join(problems) + "\n修正后仍是待执行安排。"}
+            reply = await self._send(key, s, state, prompt, extra=fix, schema=schema, **retry)
             value, problems = self._judge(model, reply.data, check)
             if problems:
                 self._journal(what, {"phase": "invalid", "session": key, "answer": reply.data, "problems": problems,
@@ -1980,7 +2005,7 @@ class Cast:
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
                      check: Callable[[Any], bool] | None = None, fix: str = "",
-                     voices: list[str] | None = None) -> str | Narration:
+                     voices: list[str] | None = None, remember: str | None = None) -> str | Narration:
         """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
         narrative preferences ride along this call only, without rewriting the cached prefix.
 
@@ -1991,6 +2016,7 @@ class Cast:
         With `voices`, the same session may instead request one NPC reply. That structured request
         stays in its history; only a final telling can stream or decide the request's continuation."""
         s = self._keeper(state)
+        kept = report if remember is None else remember
         if question := kp_question(report):
             if found := await self._rules(state, question):  # a /kp question about the rules: the book's words
                 lore += ("\n【规则书原文】（玩家问的是规则时，照原文回答并说出书名和页码；不是规则问题就不用管）\n"
@@ -2009,7 +2035,7 @@ class Cast:
                       "next.lookup 必须为空；续办不会再次检索，尚需补查资料时用 pending 保留意图，不声称已经查过。"
                       "不预演下一段的结果，不替其他真人答应或行动。已单独展示的台词不必重复；本段无需额外叙述时 text 可为空。")
         if check is None and not continuing and voices is None:
-            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
+            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta, remember=remember)
             return reply.text.strip()
         scene_check = check or (lambda _: True)
         # Read a hosted scene as it arrives, but expose its words only after the call/telling
@@ -2031,7 +2057,7 @@ class Cast:
                       "可以直接收束时 kind=tell，npc、instruction 留空，private=false，telling 填最终回复；"
                       "只用已有场面能力，不请求检索或其他世界工具。先写 kind，再写其余字段。")
         reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader,
-                                 schema=schema)
+                                 schema=schema, remember=remember)
         data = reply.data if isinstance(reply.data, dict) else {}
         if voices is not None:
             try:
@@ -2052,7 +2078,7 @@ class Cast:
                     return Narration(text="", call=KeeperCall(npc=hosted.npc, instruction=hosted.instruction,
                                                               private=hosted.private))
             except (ValidationError, ValueError) as exc:
-                self._unsaid(s, report)
+                self._unsaid(s, kept)
                 return Narration(text="", call_error=f"主持回复尚未通过校验：{exc}")
             data = data["telling"]
         text, scene = data.get("text"), data.get("scene")
@@ -2072,9 +2098,9 @@ class Cast:
             await on_delta(told.text)
             told.shown = True
         if told.shown or holds:
-            self._kept(s, report, told.text)
+            self._kept(s, kept, told.text)
         else:
-            self._unsaid(s, report)
+            self._unsaid(s, kept)
         return told
 
     async def private_keeper(self, state: GameState, who: str, text: str) -> dict:
@@ -2134,7 +2160,8 @@ class Cast:
         if len(last) == 2 and last[0]["content"] == report and last[1]["role"] == "assistant":
             del s.transcript[-2:]
 
-    async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None) -> str:
+    async def retell(self, state: GameState, report: str, told: str, *, extra: str = "", on_delta: OnDelta = None,
+                     remember: str | None = None) -> str:
         """`told`, the keeper's latest narration of `report`, told again. That exchange leaves the
         keeper's memory first, so the new telling takes its place rather than following it;
         `extra` (that turn's lore, the player's nudge) rides along this call only."""
@@ -2142,11 +2169,12 @@ class Cast:
         s.bind(state.transcripts.setdefault("keeper", []), state.notes)
         await s.settle()  # a fold still running must not move the transcript underneath
         last = s.transcript[-2:]
-        if [m["content"].strip() for m in last] != [report.strip(), told.strip()]:
+        kept = report if remember is None else remember
+        if [m["content"].strip() for m in last] != [kept.strip(), told.strip()]:
             raise ValueError("守秘人的记忆里，最后一段不是这段叙述")
         s.forget()
         try:
-            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
+            reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta, remember=remember)
         except BaseException:
             s.transcript += last  # the old telling stands
             raise

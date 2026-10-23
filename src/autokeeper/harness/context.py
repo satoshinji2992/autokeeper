@@ -21,7 +21,7 @@ from typing import Any
 
 from ..config import Role
 from . import trace
-from .models import ContextBudgetExceeded, Msg, OnDelta, Reply, make_model
+from .models import ContextBudgetExceeded, Model, Msg, OnDelta, Reply, make_model
 
 
 class Summarizer:
@@ -103,11 +103,11 @@ class Session:
         msgs.append({"role": "user", "content": prompt})
         return msgs
 
-    def context_size(self, prompt: str, schema: dict | None = None, *, extra: str = "") -> dict:
+    def context_size(self, prompt: str, schema: dict | None = None, *, extra: str = "", model: Model | None = None) -> dict:
         """Known text payload, not a model tokenizer or a claim about its maximum window."""
         messages = self.window(prompt + extra)
         schema = self.schema if schema is None else schema
-        measured = self.model.input_size(messages, schema)
+        measured = (model or self.model).input_size(messages, schema)
         parts = {"history_chars": sum(len(m["content"]) for m in self.transcript) if self.memory else 0,
                 "summary_chars": len(self.summary) if self.memory else 0, "pinned_chars": len(self.pinned),
                 "prompt_chars": len(prompt), "extra_chars": len(extra)}
@@ -116,19 +116,21 @@ class Session:
 
     async def send(
         self, prompt: str, *, extra: str = "", remember: str | None = None, images: list[bytes] | None = None,
-        on_delta: OnDelta = None, schema: dict | None = None,
+        on_delta: OnDelta = None, schema: dict | None = None, model: Model | None = None,
     ) -> Reply:
         """`extra` is appended for this call only and never stored (corrections, reminders).
         `remember` is what the transcript keeps instead of the prompt: a turn's long context
         (scene, clue lists) need not be resent forever, only what was asked.
 
         Folding old turns runs in the background after the reply is out, so the player never
-        waits for the summarizer; the next call waits for it instead."""
+        waits for the summarizer; the next call waits for it instead. `model` changes only this
+        call's transport and input limit; the conversation and its compaction remain this session's."""
         await self.settle()
+        transport = model or self.model
         response_schema = self.schema if schema is None else schema
-        parts = self.context_size(prompt, response_schema, extra=extra)
-        limit = self.spec.max_input_chars
-        fixed = self.model.input_size(self.window(prompt + extra, include_memory=False), response_schema)["total_chars"]
+        parts = self.context_size(prompt, response_schema, extra=extra, model=transport)
+        limit = transport.spec.max_input_chars
+        fixed = transport.input_size(self.window(prompt + extra, include_memory=False), response_schema)["total_chars"]
         latest = sum(len(m["content"]) for m in self.transcript[-2:]) if self.memory else 0
         if (limit > 0 and parts["total_chars"] > limit and self.memory and len(self.transcript) >= 4
                 and fixed + latest < limit):
@@ -139,21 +141,21 @@ class Session:
             # If it still cannot fit, restore the original rather than silently
             # replacing memory with an insufficient or oversized summary.
             await self.compact(target=0)
-            parts = self.context_size(prompt, response_schema, extra=extra)
+            parts = self.context_size(prompt, response_schema, extra=extra, model=transport)
             if parts["total_chars"] > limit:
                 transcript[:] = original
                 if old_summary is None:
                     notes.pop(self.key, None)
                 else:
                     notes[self.key] = old_summary
-                parts = self.context_size(prompt, response_schema, extra=extra)
+                parts = self.context_size(prompt, response_schema, extra=extra, model=transport)
         trace.progress("context", session=self.key, context=parts)
         if limit > 0 and parts["total_chars"] > limit:
             trace.progress("context_blocked", session=self.key, context=parts)
             raise ContextBudgetExceeded(parts)
         window = self.window(prompt + extra)
-        with trace.input_context(parts, owner=self.model):
-            reply = await self.model.complete(window, schema=response_schema, images=images, on_delta=on_delta)
+        with trace.input_context(parts, owner=transport):
+            reply = await transport.complete(window, schema=response_schema, images=images, on_delta=on_delta)
         if self.memory:
             answer = reply.text if response_schema is None else json.dumps(reply.data, ensure_ascii=False)
             kept = prompt if remember is None else remember
