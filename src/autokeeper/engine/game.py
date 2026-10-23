@@ -1075,10 +1075,12 @@ class Game(Encounters):
         record.minutes, record.seen = self.state.minutes, self._seen()
 
     # -- improvisation ----------------------------------------------------------------
-    async def present(self, actions: list[dict], *, key: str = "", shown: list[int] | None = None) -> list[str]:
+    async def present(self, actions: list[dict], *, key: str = "", shown: list[int] | None = None,
+                      emit: Emit | None = None) -> list[str]:
         """One addressed delivery path for keeper, NPC and director media. No clue acquisition.
         An optional caller-owned `shown` receipt records only notifications whose emit returned."""
         st, errors = self.state, []
+        deliver = self.emit if emit is None else emit
         prefix = key or f"present:{st.turn}:{len(st.presentations)}"
         for n, raw in enumerate(actions):
             if shown is not None and n in shown:
@@ -1108,7 +1110,7 @@ class Game(Encounters):
                                              text=h["title"], audience=saved["audience"]))
                 if self.checkpoint:
                     self.checkpoint()
-            await self.emit(presentation.event(saved))
+            await deliver(presentation.event(saved))
             if shown is not None:
                 shown.append(n)
                 if self.checkpoint:
@@ -1146,21 +1148,26 @@ class Game(Encounters):
                 self.checkpoint()
         return ident, receipt
 
-    async def show_private_input(self, who: str, receipt: dict) -> None:
+    async def show_private_input(self, who: str, receipt: dict, *, emit: Emit | None = None) -> None:
         """Acknowledge accepted mail without waiting for the keeper or the player's roll."""
         st = self.state
         if receipt.get("input_shown"):
             return
-        await self.emit({"type": "private_input", "audience": [who], "text": receipt["text"], "who": st.find(who).name})
+        deliver = self.listener if emit is None else emit
+        await deliver({"type": "private_input", "audience": [who], "text": receipt["text"], "who": st.find(who).name})
         receipt["input_shown"] = True
         if self.checkpoint:
             self.checkpoint()
 
-    async def private_message(self, who: str, text: str, *, request: str = "", defer_media: bool = False) -> str:
+    async def private_message(self, who: str, text: str, *, request: str = "", defer_media: bool = False,
+                              emit: Emit | None = None) -> str:
         """A PL message to the keeper, with a private reply; never a secret physical action."""
         st = self.state
+        # Mail may wait beside a turn whose graph rebinds self.emit. Freeze the screen's
+        # independent transport once; text and attachments must never borrow that graph stream.
+        deliver = self.listener if emit is None else emit
         ident, receipt = self.receive_private_message(who, text, request=request)
-        await self.show_private_input(who, receipt)
+        await self.show_private_input(who, receipt, emit=deliver)
         if "reply" not in receipt:
             result = await self.cast.private_keeper(st, who, receipt["text"], context=receipt["context"])
             prefix = ("（原提问时上下文未保存；以下按本次恢复时的记录答复，不改变当前选择或已结算结果。）\n"
@@ -1172,7 +1179,7 @@ class Game(Encounters):
             if self.checkpoint:
                 self.checkpoint()
         if not receipt.get("reply_shown"):
-            await self.emit({"type": "aside", "audience": [who], "text": receipt["reply"], "who": "守秘人"})
+            await deliver({"type": "aside", "audience": [who], "text": receipt["reply"], "who": "守秘人"})
             receipt["reply_shown"] = True
             if self.checkpoint:
                 self.checkpoint()
@@ -1180,13 +1187,13 @@ class Game(Encounters):
         # still resume the same saved media without asking the keeper again.
         if defer_media and receipt.get("media"):
             if not receipt.get("media_deferred"):
-                await self.emit({"type": "aside", "audience": [who], "who": "守秘人",
+                await deliver({"type": "aside", "audience": [who], "who": "守秘人",
                                  "text": "私信附件已保存，将在本次行动结束后单独发送。"})
                 receipt["media_deferred"] = True
             if self.checkpoint:
                 self.checkpoint()
             return receipt["reply"]
-        receipt["delivered"] = not await self.present(receipt.get("media", []), key=f"private:{ident}")
+        receipt["delivered"] = not await self.present(receipt.get("media", []), key=f"private:{ident}", emit=deliver)
         if self.checkpoint:
             self.checkpoint()
         return receipt["reply"]

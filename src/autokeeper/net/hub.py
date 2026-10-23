@@ -386,6 +386,7 @@ class Hub:
         self.game.write_progress = True  # the 进展 page on every screen, through the sync
         self.game.world_later = True  # NPCs decide between rounds, not while the table waits
         self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
+        self.game.table_turn_based = True
         self.graph = turn_graph.build(self.game, InMemorySaver())
         self.game.checkpoint = self._save
         self.thread = {"configurable": {"thread_id": state.slot}, "recursion_limit": 100}  # a fight asks a few times a turn (graph offer)
@@ -408,6 +409,7 @@ class Hub:
         self.open = False  # the round's action pool takes actions
         self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
         self.done: set[str] = set()  # seats that said they have nothing more this round
+        self.confirming: set[str] = set()  # a queued declaration needs its owner's choice in the new encounter
         self.early: list[tuple[str, str]] = list(state.queued_actions)  # original declarations waiting for a collection window
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
@@ -501,6 +503,9 @@ class Hub:
                 self.wake.set()
             elif not text.strip():
                 return
+            elif self.open and seat in self.confirming and (rid := self.asking.get(seat)):
+                await self._on(cid, {"t": "respond", "id": rid, "text": text})
+                await self._send(cid, {"t": "offer_closed", "id": rid})
             elif self.open and self._may_add(seat):
                 self.pool.append((seat, text))
                 self.done.discard(seat)
@@ -535,6 +540,9 @@ class Hub:
         elif t == "done":
             seat = self._seat_of(cid)
             if seat is not None and self.open:
+                if seat in self.confirming and (rid := self.asking.get(seat)):
+                    await self._on(cid, {"t": "respond", "id": rid, "choice": "pass"})
+                    await self._send(cid, {"t": "offer_closed", "id": rid})
                 self.done.add(seat)
                 self.wake.set()
                 await self._pool()
@@ -546,6 +554,9 @@ class Hub:
             mine = [i for i, (s, _) in enumerate(self.pool) if s == seat] if self.open else []
             if held:
                 self.early.pop(held[-1])
+                if seat in self.confirming and (rid := self.asking.get(seat)):
+                    await self._on(cid, {"t": "respond", "id": rid, "choice": "withdraw"})
+                    await self._send(cid, {"t": "offer_closed", "id": rid})
             elif mine:
                 self.pool.pop(mine[-1])
                 self.done.discard(seat)
@@ -1223,18 +1234,32 @@ class Hub:
         used it, else the extra one while nobody has it. A second action never takes the
         place of somebody's first."""
         n = self._count(seat)
+        if seat in self._round_seats():
+            return n == 0
         limit = self.capacity() if capacity is None else capacity
         return len(self.pool) < limit and (n == 0 or (n < PER_PLAYER and self._extra() is None))
 
     def _waiting_for(self) -> list[str]:
         """Players who may still put an action in: not done, and with room for it."""
+        if self.game.world_encounter() is not None:
+            return [seat for seat in self._round_seats() if seat not in self.done and not self._count(seat)]
         return [seat for seat in self._players() if self.sits.get(seat) is not None
                 and seat not in self.done and self._may_add(seat)]
 
     def _start_window(self) -> None:
         """The first action of the round starts its window (WINDOW)."""
-        if self.open and self.closes_at is None and self.pool:
+        if self.open and self.game.world_encounter() is None and self.closes_at is None and self.pool:
             self.closes_at = asyncio.get_running_loop().time() + self.window
+
+    def _round_seats(self) -> list[str]:
+        enc = self.game.world_encounter()
+        return [inv.id for inv in self.state.investigators if enc is not None and inv.can_act
+                and self.sits.get(inv.id) is not None and (person := enc.get(inv.id)) is not None
+                and person.presence == "in"]
+
+    def _encounter_round(self) -> tuple[str, str, int] | None:
+        enc = self.game.world_encounter()
+        return (enc.id, enc.mode, enc.completed_rounds + 1) if enc is not None else None
 
     def _left(self) -> float | None:
         """Seconds left in the round's window, while one runs."""
@@ -1335,15 +1360,21 @@ class Hub:
         for queue in self.inbox.values():
             while not queue.empty():
                 queue.get_nowait()
+        self.state.round_plan.pop("encounter", None)
         capacity = self.capacity()  # queued seats still count when their connection has gone
         early, self.early = self.early, []
+        affected = {person.id for person in self.game.world_encounter().participants} if self.game.world_encounter() is not None else set()
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
-            (self.pool if self._acts(seat) and self._may_add(seat, capacity=capacity) else self.early).append((seat, text))
+            (self.pool if seat not in affected and self._acts(seat) and self._may_add(seat, capacity=capacity)
+             else self.early).append((seat, text))
         self._save_queued()
         self._start_window()  # said while the keeper told: the moment starts as the round opens
         await self._event({"type": "status", "text": ""})
         await self._pool()
         try:
+            for seat, text in early:
+                if seat in self._round_seats() and not self._count(seat) and seat not in self.done and (seat, text) in self.early:
+                    await self._confirm_queued(seat, text)
             while True:  # once at least: a .r sent while the keeper told runs even if the round is already full
                 await self._swap()
                 await self._house_rules()
@@ -1360,11 +1391,40 @@ class Hub:
                 try:
                     await asyncio.wait_for(self.wake.wait(), min(1.0, left) if left is not None else 1.0)
                 except TimeoutError:  # while they think, a finished plan of the director's plays out
-                    if self._left() is None:
+                    if self._left() is None and self.game.world_encounter() is None:
                         await self._safely(self._interlude(), "剧情推进")
                 self.wake.clear()
         finally:
             self.open, self.closes_at = False, None
+        if (context := self._encounter_round()) is not None:
+            self.state.round_plan["encounter"] = list(context)
+            self._save()
+        await self._pool()
+
+    async def _confirm_queued(self, seat: str, text: str) -> None:
+        """A new encounter interrupts an old intention; only its owner can keep or replace it."""
+        who = self.sits.get(seat)
+        if who is None:
+            return
+        self.confirming.add(seat)
+        try:
+            choice = await self._ask(seat, who, {
+                "kind": "redeclare", "prompt": "场面已进入新的遭遇回合。原声明尚未执行，请确认是否仍这样行动，或写下新行动。",
+                "options": [{"id": "keep", "label": "维持原声明", "note": text},
+                            {"id": "pass", "label": "本轮跳过，保留原声明"}], "default": "pass",
+            }, timed=False)
+        finally:
+            self.confirming.discard(seat)
+        picked = choice.get("choice") if isinstance(choice, dict) else choice
+        revised = str(choice.get("text", "")).strip() if isinstance(choice, dict) else ""
+        if revised or picked == "keep":
+            if (seat, text) in self.early:
+                self.early.remove((seat, text))
+            self.pool.append((seat, revised or text))
+        elif picked == "pass":
+            self.done.add(seat)
+        self._save_queued()
+        self.wake.set()
         await self._pool()
 
     async def _settle(self) -> None:
@@ -1376,6 +1436,10 @@ class Hub:
         不排着吗，因为可能是多人同时行动」)."""
         st = self.state
         saved = self.game.pending_party()
+        confirmed = st.round_plan.get("encounter")
+        if saved is not None and self.game.world_encounter() is not None and not st.pending_turn and st.round_plan.get("encounter") != list(self._encounter_round() or ()):
+            self._defer_declarations(saved)
+            return
         if saved is not None:
             # A saved collection window keeps its original declarations and time ledger.
             # New input belongs to the next window, rather than replacing unplayed work.
@@ -1395,11 +1459,18 @@ class Hub:
             # moving this window out of the unstarted queue and into round_plan.
             st.queued_actions = list(self.early)
             order = await self.game.arrange_party(order)
+            if confirmed is not None:
+                st.round_plan["encounter"] = confirmed
+                self._save()
             await self._settle_round(order)
-            if self.game.fighting() and not any(self._acts(seat) for seat, _ in order) and not st.ending:
-                # Nobody at the table can act (all down): the fight goes on without them, a round at a time.
-                lead = next((i.id for i in st.investigators), "")
-                await self._safely(self._run("/encounter", lead, ai=True), "这一轮战斗", "/encounter")
+            enc = self.game.world_encounter()
+            if (enc is not None and st.round_plan.get("encounter") == list(self._encounter_round() or ())
+                    and not any(self._acts(seat) and enc.get(seat) is not None for seat, _ in order) and not st.ending):
+                # Explicit passes or absent players still let the confirmed round's NPCs act.
+                lead = next((i.id for i in st.investigators if enc.get(i.id) is not None), "")
+                if lead:
+                    st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == lead)
+                    await self._safely(self._run("/encounter", lead, ai=True), "这一轮战斗", "/encounter")
             settled = True
         finally:
             self.game.end_round(interrupted=not settled)
@@ -1419,7 +1490,12 @@ class Hub:
 
     async def _settle_round(self, order: list[tuple[str, str | None]]) -> None:
         st = self.state
+        context = tuple(st.round_plan["encounter"]) if st.round_plan.get("encounter") else None
         for n, (seat, text) in enumerate(order, 1):
+            if ((current := self._encounter_round()) is not None and current[:2] != (context[:2] if context else None)
+                    and not (n == 1 and st.pending_turn)):
+                self._defer_declarations(order[n - 1:])
+                return
             token = next((step["token"] for step in st.round_plan.get("steps", [])
                           if step["token"] not in st.round_plan.get("done", [])
                           and st.round_plan["input"][int(step["token"])] == [seat, text]), None)
@@ -1505,6 +1581,13 @@ class Hub:
                         break
             self.game.finish_party_declaration(seat, original, token=token)
             self._save()
+
+    def _defer_declarations(self, order: list[tuple[str, str | None]]) -> None:
+        """Move unstarted originals back to their saved queue after the scene interrupts a batch."""
+        self.early = [*(pair for pair in order if pair[1] is not None), *self.early]
+        for seat, text in order:
+            self.game.finish_party_declaration(seat, text)
+        self._save_queued()
 
     def _remember_unstarted(self, seat: str, text: str, reason: str) -> None:
         """Keep a refusal as its owner's unexecuted intention, with no retry journal."""
@@ -1681,7 +1764,6 @@ class Hub:
             while not self.private_requests.empty():
                 seat, text, request = self.private_requests.get_nowait()
                 ident = f"{seat}:{request}"
-                self.game.emit = self._event
                 try:
                     await self.game.private_message(seat, text, request=request,
                                                     defer_media=bool(self.asking or self.state.pending_turn))
@@ -1812,6 +1894,8 @@ class Hub:
         table waits for."""
         # The hub's own id, never the engine's (e1:r1:warden:0:react:0 names who is in the fight, an encounter's
         # may name the module's event): the host knows the offer by the seat asked (asking), the engine by its own.
+        enc = self.game.world_encounter()
+        timed = timed and not (enc is not None and (person := enc.get(seat)) is not None and person.presence == "in")
         rid = uuid.uuid4().hex[:12]
         shown = public_push(offer) | {"kind": "push"} if offer.get("kind") == "push" else \
             {k: v for k, v in offer.items() if k not in ("id", "receipt", "encounter")}

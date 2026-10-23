@@ -218,6 +218,7 @@ async def test_encounters_keep_their_own_round_arrangement(fake, monkeypatch, mo
     hub.pool = [("zhouheng", "冲上去"), ("lin", "退到门后")]
     hub.state.encounter = EncounterState(id="existing", mode=mode, place=hub.state.location, started_turn=0,
                                          participants=[])
+    hub.state.round_plan["encounter"] = ["existing", mode, 1]  # this is a freshly confirmed encounter batch
     settled = []
 
     async def run(text, inv_id, **kwargs):

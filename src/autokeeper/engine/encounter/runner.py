@@ -153,6 +153,7 @@ class Encounters:
     """The fight engine, mixed into Game."""
 
     asking = True  # stop to ask a player (a reaction, a stale declaration); off where nobody can answer (a scripted test)
+    table_turn_based = False  # LAN: only a batch collected for this encounter round may begin it
     by_hand_seats: frozenset[str] = frozenset()  # LAN: seated players, who throw their own dice in a fight (net/hub.py)
     ask_reactions = "major"  # when a player is asked how to answer a blow: "always" (设置: 每次被攻击都询问应对) or "major"
 
@@ -882,6 +883,12 @@ class Encounters:
                 ctx = Ctx.of(self)
                 nxt = enc.round + 1
                 humans = [p.id for p in enc.participants if p.controller == "human" and ctx.acting(p.id)]
+                # The host's saved batch records which round its players actually answered. A new
+                # encounter (or the next round) cannot spend older ordinary declarations as passes.
+                # Once begun, its slots and pending answers resume without another collection.
+                if (self.table_turn_based and humans
+                        and self.state.round_plan.get("encounter") != [enc.id, enc.mode, nxt]):
+                    return
                 waiting = [x for x in humans if self._declared(enc, x, nxt) is None]
                 # With a human who can act, the round waits for them; with none (autoplay, watching), the
                 # declaration of whoever's input this was settles it (the review: it never began).

@@ -205,9 +205,8 @@ async def test_a_private_reply_resumes_undelivered_attachments_after_reload(
 
     monkeypatch.setattr(hub.cast, "private_keeper", reply, raising=False)
     hub.game.checkpoint = checkpoint
-    hub.game.emit = emit
     with pytest.raises(OSError):
-        await hub.game.private_message("lin", "请单独把信给我。", request="resume-letter")
+        await hub.game.private_message("lin", "请单独把信给我。", request="resume-letter", emit=emit)
 
     restored = GameState.model_validate_json(snapshots[-1])
     assert restored.private_messages["lin:resume-letter"]["reply_shown"]

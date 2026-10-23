@@ -137,9 +137,8 @@ async def test_saved_private_reply_recovers_after_disconnect_without_recalling_t
 
     monkeypatch.setattr(hub.cast, "private_keeper", reply, raising=False)
     hub.game.receive_private_message("zhouheng", "检定规则？", request="saved", offer={"kind": "roll", "target": 1})
-    hub.game.emit = disconnected
     with pytest.raises(OSError):
-        await hub.game.private_message("zhouheng", "检定规则？", request="saved")
+        await hub.game.private_message("zhouheng", "检定规则？", request="saved", emit=disconnected)
     restored = GameState.model_validate_json(hub.state.model_dump_json())
     saved_reply = restored.private_messages["zhouheng:saved"]["reply"]
     restored.private_messages["zhouheng:saved"].pop("context")  # completed text needs no reconstructed prompt

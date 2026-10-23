@@ -178,6 +178,8 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 多人游玩由房主在标题页选择「多人游戏 → 开房间」，安排真人与 AI 座位，再将房间网址发给朋友。加入者用浏览器打开链接即可，不需要安装 Python 或配置模型密钥。每个座位可选模组预设、导入已有角色，或使用房主的模型新建调查员。
 
+调查和日常可以并行行动；战斗与追逐按回合进行，等参战玩家提交行动或明确跳过，再按规则顺序结算。每人确认自己的骰子与应对，不因阅读或输入超时而失去行动。突发遭遇前尚未执行的声明会请本人重新确认。
+
 <p align="center">
   <a href="docs/img/lobby.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/lobby.png" width="100%" alt="冬雪之下开房间界面：左侧是座位与调查员选择，右侧是选中调查员的肖像与人物卡"></a>
   <br><sub>《冬雪之下》开房间：左上排座位（玩家或 AI），左下为座位选调查员，右侧预览人物卡。</sub>

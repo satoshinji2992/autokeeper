@@ -914,7 +914,7 @@ async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_o
         assert [o["kind"] for o in offers["b"]] == ["roll"] and offers["b"][0]["seat"] == "lin"
         assert [o["kind"] for o in offers["a"]] == ["roll", "reaction"] or [o["kind"] for o in offers["a"]] == ["reaction", "roll"]
         reaction = next(o for o in offers["a"] if o["kind"] == "reaction")
-        assert reaction["closes_in"] and reaction["respond_id"]
+        assert reaction["closes_in"] is None and reaction["respond_id"]
         # The engine's ids name who is in the fight (e1:r1:warden:0:react:0): the screens get the hub's own.
         for offer in offers["a"] + offers["b"]:
             assert not {"id", "receipt", "encounter"} & set(offer) and re.fullmatch(r"[0-9a-f]{12}", offer["respond_id"])
