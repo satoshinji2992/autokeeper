@@ -248,6 +248,7 @@ def host(
     hub_port: Annotated[int, typer.Option(help="联机端口：终端里 autokeeper join 连这个")] = 8765,
     load: Annotated[str | None, typer.Option(help="接着玩一个存档（存档名）")] = None,
     web_ui: Annotated[bool, typer.Option("--web/--no-web", help="同时开网页版")] = True,
+    disconnect_ai: Annotated[bool, typer.Option("--disconnect-ai/--no-disconnect-ai", help="确认断线一分钟后由 AI 临时接管，重连后交还")] = True,
 ) -> None:
     """开局域网房间，和标题画面「多人游戏 → 开房间」一样。"""
     from rich.cells import cell_len
@@ -267,7 +268,7 @@ def host(
     except (OSError, ValueError):
         console.print(f"[red]读不了存档 {load}（存档在 {paths.games()}）[/]")
         raise typer.Exit(1) from None
-    room = lan.Room(module, seats=plan, state=state, port=hub_port, web_port=port)
+    room = lan.Room(module, seats=plan, state=state, port=hub_port, web_port=port, disconnect_ai=disconnect_ai)
     try:
         hub = room.open()
         if web_ui:

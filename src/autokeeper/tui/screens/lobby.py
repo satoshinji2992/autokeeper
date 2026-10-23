@@ -303,10 +303,12 @@ class LobbyScreen(Screen):
         ready = " · 已准备" if seat.get("ready") else " · 未选择角色" if seat.get("blank") else ""
         if seat["investigator"] == self.chosen:
             t.append(f"{self.link.name}（你）{ready}", style="bold" if lit else "bold green")
+        elif seat.get("ai_takeover"):
+            t.append("AI 临时代管", style="" if lit else "cyan")
         elif seat["online"]:
             t.append(f"{seat['player']}{ready}", style="" if lit else "green")
         else:
-            t.append("待入座" + ("，AI 暂代" if self.started else ""), style="" if lit else "dim")
+            t.append("待重连" if self.started else "待入座", style="" if lit else "dim")
         brought = {"own": "自有角色", "new": "新建角色"}.get(seat.get("origin", ""), "")
         if self.link.host and (brought or seat.get("note")):  # who brought what, for the host
             t.append("  " + " · ".join(x for x in (brought, seat.get("note", "")) if x), style="" if lit else "dim")

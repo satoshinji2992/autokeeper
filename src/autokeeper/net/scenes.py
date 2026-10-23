@@ -125,10 +125,15 @@ class SceneTable(Hub):
                         and self.game.world_encounter() is None and not self.state.pending_turn):
                     return
                 humans = [who for who in self.scene.members if who in self.state.human]
-                if ((humans and not any(self.sits.get(who) for who in humans)) or not self.clients):
+                offline_wait = humans and not any(
+                    self.sits.get(who) or who in self.takeovers.active for who in humans)
+                if (offline_wait or not self.clients
+                        or (self.takeovers.enabled and not self.takeovers.online())):
                     self.wake.clear()
                     await self.wake.wait()
                     continue
+                if humans and all(who in self.takeovers.active for who in humans):
+                    await self.takeovers.pace(self.ident, humans)
                 if self.game.pending_party() is None:
                     if self.state.held:
                         await self._safely(self._tell_held(), "上一轮的叙述")

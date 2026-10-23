@@ -354,6 +354,7 @@ class Hub:
         rules: Any = None,
         scene_cast_factory: Any = None,
         scene_rules_factory: Any = None,
+        disconnect_ai: bool = False,
     ):
         from ..agents.cast import Cast
         from ..rules.coc import Rules
@@ -450,6 +451,9 @@ class Hub:
         self.game.plugins.away = lambda seat: self.sits.get(seat) is None  # an empty seat's questions take the default
         self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
         self.sent_to: dict[str, dict[str, str]] = {}  # only images this connection actually received
+        from .takeover import Takeovers
+
+        self.takeovers = Takeovers(self, disconnect_ai)
         self.room: dict[str, Any] = {}  # how to reach this room, for every lobby: addresses, ports (net/room.py)
 
     # -- connections --------------------------------------------------------------------
@@ -476,6 +480,8 @@ class Hub:
 
     async def _on(self, cid: str, msg: dict[str, Any]) -> None:
         t = msg.get("t")
+        if t in ("act", "respond", "done", "speak", "kp_private") and self._seat_of(cid) is not None:
+            self.takeovers.pulse()
         if self._scene_tables is not None:
             from .scenes import ROUTED
 
@@ -711,6 +717,7 @@ class Hub:
             if who == cid and seat != inv_id:
                 self._free(seat)  # encounter choices remain with their original human seat
         self.sits[inv_id] = cid
+        await self.takeovers.returned(inv_id)
         await self._share_seats()
         private_log = [e.model_dump(mode="json") for e in audience.log(self.state, inv_id)
                        if e.audience is not None and e.kind != "clue"][-40:]
@@ -737,9 +744,12 @@ class Hub:
         """Release the connection, retaining an encounter human's unfinished choices."""
         self.sits[seat] = None
         self.ready.discard(seat)
+        self.takeovers.left(seat)
+        self.takeovers.pulse()
         if self._scene_tables is not None:
             self._scene_tables.wake(seat)
-        if not self._encounter_human(seat) and not (keep_offer and self._context(seat).asking.get(seat)):
+        if (not self.takeovers.enabled and not self._encounter_human(seat)
+                and not (keep_offer and self._context(seat).asking.get(seat))):
             self.inbox[seat].put_nowait(None)
             self.choices[seat].put_nowait(None)
         self.wake.set()
@@ -988,6 +998,7 @@ class Hub:
             out.append({
                 "investigator": inv.id, "name": inv.name, "occupation": inv.occupation,
                 "human": inv.id in self.sits, "player": self.names.get(who or "", ""), "online": who is not None,
+                "ai_takeover": inv.id in self.takeovers.active,
                 "origin": self.origin.get(inv.id, ""), "ready": inv.id in self.ready,
             })  # fmt: skip
         for seat in self.blank:
@@ -1224,6 +1235,9 @@ class Hub:
     # -- the game ---------------------------------------------------------------------------
     async def play(self) -> None:
         await self.started.wait()
+        for who in self.state.human:
+            if self.sits.get(who) is None:
+                self.takeovers.left(who)
         await self._broadcast({"t": "begin"})
         if self.scene_cast_factory is None or len(self.state.investigators) < 2:
             self._start_privates()
@@ -1290,7 +1304,7 @@ class Hub:
         """Able participants, including a disconnected seat whose declaration still stands."""
         declared = {seat for seat, _ in [*self.pool, *self.early]}
         return [inv.id for inv in self._participants() if inv.can_act
-                and (self.sits.get(inv.id) is not None or inv.id in declared)]
+                and (self.sits.get(inv.id) is not None or inv.id in declared or self.takeovers.waiting(inv.id))]
 
     def capacity(self) -> int:
         """One slot more than there are players: someone can do two things, nobody three."""
@@ -1315,7 +1329,7 @@ class Hub:
         """Players who may still put an action in: not done, and with room for it."""
         if self.game.world_encounter() is not None:
             return [seat for seat in self._round_seats() if seat not in self.done and not self._count(seat)]
-        return [seat for seat in self._players() if self.sits.get(seat) is not None
+        return [seat for seat in self._players() if (self.sits.get(seat) is not None or self.takeovers.waiting(seat))
                 and seat not in self.automatic and seat not in self.done and self._may_add(seat)]
 
     def _start_window(self) -> None:
@@ -1333,7 +1347,7 @@ class Hub:
         if context is not self:
             return context._encounter_human(seat)
         enc = self.game.world_encounter()
-        return (seat in self.state.human and enc is not None and (person := enc.get(seat)) is not None
+        return (seat not in self.takeovers.active and seat in self.state.human and enc is not None and (person := enc.get(seat)) is not None
                 and person.controller == "human" and person.presence == "in")
 
     def _encounter_round(self) -> tuple[str, str, int] | None:
@@ -1579,7 +1593,7 @@ class Hub:
     async def _confirm_queued(self, seat: str, text: str) -> None:
         """A new encounter interrupts an old intention; only its owner can keep or replace it."""
         who = self.sits.get(seat)
-        if who is None and not self._encounter_human(seat):
+        if who is None and not self._encounter_human(seat) and seat not in self.takeovers.active:
             return
         self.confirming.add(seat)
         try:
@@ -1612,6 +1626,8 @@ class Hub:
         at once: each is ruled and rolled in that order, the clock moves by the longest of them,
         and the keeper tells the round in one go after the last (the user, 2026-10-21: 「可以行动
         不排着吗，因为可能是多人同时行动」)."""
+        while self.takeovers.enabled and not self.takeovers.online():
+            await self.takeovers.changed.wait()
         st = self.state
         saved = self.game.pending_party()
         confirmed = st.round_plan.get("encounter")
@@ -1629,7 +1645,8 @@ class Hub:
         declared = {seat for seat, _ in self.early}
         order = (saved if saved is not None else
                  [*self.pool, *[(inv.id, None) for inv in self._participants()
-                                if inv.id not in acted | declared and inv.id not in self.done and self.sits.get(inv.id) is None]])
+                                if inv.id not in acted | declared and inv.id not in self.done and self.sits.get(inv.id) is None
+                                and (not self.takeovers.enabled or inv.id not in st.human or inv.id in self.takeovers.active)]])
         if saved is None and self.automatic:
             order.sort(key=lambda pair: pair[0] in self.automatic)  # actual new requests precede passive continuations
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
@@ -2041,10 +2058,24 @@ class Hub:
             await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _ai_turn(self, inv: Any) -> None:
+        delegated = inv.id in self.takeovers.active
+        if self.takeovers.enabled and inv.id in self.state.human and not delegated:
+            return
+        while self.takeovers.enabled and not self.takeovers.online():
+            await self.takeovers.changed.wait()
+        if delegated and inv.id not in self.takeovers.active:
+            return
         await self._interlude()
         await self._event({"type": "status", "text": f"{inv.name}在想下一步…"})
-        move = await self.cast.investigator(self.state, inv.id, situation(self.m, self.state, inv.id, self.game),  # in a fight: its choices
+        if delegated and inv.id not in self.takeovers.active:
+            return
+        context = situation(self.m, self.state, inv.id, self.game)
+        if delegated:
+            context += "\n【临时代管】延续这名调查员已有的意图、性格与约定，仅依据他自己的见闻行动。玩家重连后交还控制权。"
+        move = await self.cast.investigator(self.state, inv.id, context,  # in a fight: its choices
                                             stances=views.stances(self.game, inv.id))
+        if delegated and inv.id not in self.takeovers.active:
+            return  # A reconnect invalidates an unstarted AI proposal, never an executed action.
         if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
             await self._event({"type": "status", "text": ""})
             await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}本轮未行动。"})
@@ -2053,6 +2084,8 @@ class Hub:
             self.game.set_react(inv.id, move.react)
         await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True,
                            "audience": [inv.id]})
+        if delegated and inv.id not in self.takeovers.active:
+            return
         await self._run(move.text, inv.id, ai=True, push=move.push)
 
     async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
@@ -2073,7 +2106,7 @@ class Hub:
             # Whose answer it is: a blow's, the defender's; a roll in a fight, the seat whose slot it is; else the actor's.
             asked = offer.get("seat") or (offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id)
             who = self.sits.get(asked)
-            human = asked in self.state.human
+            human = asked in self.state.human and asked not in self.takeovers.active
             if human:
                 while True:
                     choice = await self._ask(asked, self.sits.get(asked), offer, timed=False)
@@ -2091,7 +2124,7 @@ class Hub:
             elif offer.get("kind") == "roll":  # an encounter human reached here only after answering
                 choice = "roll"
             elif not human and not _choice_ok(choice, offer):
-                choice = ai_choice(offer, push)
+                choice = "drop" if asked in self.takeovers.active else ai_choice(offer, push)
             inp = Command(resume=choice)
         self.game.emit = self._event
         self._save()
@@ -2153,7 +2186,19 @@ class Hub:
             await self._send(who, {"t": "offer", "offer": offer})
         self._start_privates()
         try:
-            return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
+            async def answer():
+                from .takeover import AI_HANDOFF
+
+                while True:
+                    if seat in self.takeovers.active:
+                        while seat in self.takeovers.active and not self.takeovers.online():
+                            await self.takeovers.changed.wait()
+                        if seat in self.takeovers.active:
+                            return self._takeover_answer(seat, offer)
+                    value = await queue.get()
+                    if value is not AI_HANDOFF:
+                        return value
+            return await asyncio.wait_for(answer(), REACTION_WAIT if timed else None)
         except TimeoutError:
             if who is not None:
                 await self._send(who, {"t": "offer_closed", "id": rid})
@@ -2164,6 +2209,22 @@ class Hub:
             if self.asking.get(seat) == rid:
                 self.asking.pop(seat, None)
                 self.settled = [*self.settled[-31:], rid]
+
+    def _takeover_answer(self, seat: str, offer: dict) -> str:
+        """Finish an existing choice without inventing a push or spending human luck."""
+        if self.state.investigator.id == seat:
+            self.state.pending_turn["by_hand"] = False
+        self.game.by_hand_seats = self.game.by_hand_seats - {seat}
+        kind = offer.get("kind")
+        if kind == "roll":
+            return "roll"
+        if kind == "push":
+            return "drop"
+        choices = {row["id"] for row in offer.get("options", [])}
+        if kind == "redeclare" and "keep" in choices:
+            return "keep"
+        return offer.get("default") if offer.get("default") in choices else next(
+            (row["id"] for row in offer.get("options", [])), "")
 
     def _face(self, key: str) -> str:
         """The key a player's screen gets for a picture: a creature's own key names what it is
@@ -2219,6 +2280,7 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            await self.takeovers.close()
             if self._scene_tables is not None:
                 await self._scene_tables.close()
             if self.private_task is not None:
