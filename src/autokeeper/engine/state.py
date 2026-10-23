@@ -132,7 +132,7 @@ class CheckRecord(BaseModel):
     seen: int = 0  # clues + flags + events by then: a higher count later means something new came up
     bonus: int = 0  # bonus (+) or penalty (-) dice it was rolled with
     difficulty: str = ""  # 常规 / 困难 / 极难 it was rolled at; "" in older saves
-    audience: list[str] | None = None  # the original scene's readers; never expanded by a later reunion
+    audience: list[str] | None = None  # the original result's readers; public dice do not grant its information
     roll_audience: list[str] | None = None  # optional table-public numbers, not the attempt or failure contract
 
     @property

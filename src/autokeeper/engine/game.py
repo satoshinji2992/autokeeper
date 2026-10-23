@@ -102,6 +102,7 @@ class Turn:
     ruling: Ruling | None = None
     checks: list[Check] = field(default_factory=list)
     primary: int | None = None  # the action's own final check in checks; event gates never replace it
+    observation: dict = field(default_factory=dict)  # frozen result readers, separate from table-public dice and scene events
     rest: dict | None = None  # this actor's executed rest interval, not the shared clock increment
     interval: dict = field(default_factory=dict)  # host-owned actor, actual start/end, participants and travel endpoints
     clues: list[str] = field(default_factory=list)
@@ -144,6 +145,8 @@ class Turn:
                 self.checks[index] = checked
             if source == later.primary:
                 self.primary = index
+        if later.observation:
+            self.observation = dict(later.observation)
         for name in ("sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
         self.voices += [x for x in later.voices if x not in self.voices]
@@ -1005,12 +1008,12 @@ class Game(Encounters):
         st = self.state
         return len(st.clues) + len(st.flags) + len(st.fired)
 
-    def _check_scope(self, actor: str, earlier: CheckRecord | None = None) -> dict:
+    def _check_scope(self, actor: str, earlier: CheckRecord | None = None, *, personal: bool = False) -> dict:
         """Freeze one check's readers before delivery; replay never consults the current focus."""
         if earlier is not None:
             return {"audience": earlier.audience, "roll_audience": earlier.roll_audience}
         watching = list(dict.fromkeys([actor, *self.world.observers(self.world.place(actor))]))
-        return {"audience": watching, "roll_audience": None if self.public_rolls else watching}
+        return {"audience": [actor] if personal else watching, "roll_audience": None if self.public_rolls else watching}
 
     def _record(self, action: Action, check: Check, *, scope: dict | None = None) -> None:
         st = self.state
@@ -1569,14 +1572,15 @@ class Game(Encounters):
         st, step = self.state, self._resolution_step
 
         def awards() -> dict:
-            clues = self._valid_clues([c for c in failure.clues if c not in st.clues], action)
+            clues = self._valid_clues(failure.clues, action)
             originals = [cid for cid in clues if module_graph.original_source_at_hand(
                 self.m, self.m.clue(cid), st.location, self.world.present(st.location), record=self.world.rec)]
             return {"clues": clues, "originals": originals}
 
         awarded = await step("fail-clue-awards", turn, awards)
         clues = awarded["clues"]
-        missed = [self.m.clue(c).title for c in wanted if c not in st.clues and c not in clues]
+        missed = [self.m.clue(c).title for c in wanted
+                  if not knowledge.clue_known(st, c, st.investigator.id) and c not in clues]
         flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
         def time() -> int:
@@ -2002,8 +2006,13 @@ class Game(Encounters):
 
         await step("focus", turn, focus)
 
-        scope = await step("audience", turn, lambda: self._check_scope(
-            inv.id, self._earlier(action, ruling, st.location) if ruling.repeat else None))
+        def observers() -> dict:
+            scope = self._check_scope(inv.id, self._earlier(action, ruling, st.location) if ruling.repeat else None,
+                                      personal=ruling.result_scope == "personal")
+            turn.observation = dict(scope)
+            return scope
+
+        scope = await step("audience", turn, observers)
 
         def check() -> dict:
             passed = not ruling.needs_roll and not ruling.repeat
@@ -2353,6 +2362,7 @@ class Game(Encounters):
                 raise ValueError("这次检定无法使用当前的幸运点数")
             turn.action = Action.model_validate(pending["action_record"])
             turn.ruling = Ruling.model_validate(pending["success"])
+            turn.observation = {key: pending[key] for key in ("audience", "roll_audience") if key in pending}
             self._spend(0, turn)
             st.pending_push = None
             return {"flags": list(st.flags), "minutes": st.minutes}
@@ -2764,7 +2774,8 @@ class Game(Encounters):
             # and its receipt, kept below with the words.
             told = self.cast.told.pop(npc_id, [])
             said = turn.replies[key] = Said(npc=npc_id, line=line,
-                                           told=self._told_clues(npc_id, [cid for cid in told if cid in allowed], present=False),
+                                           told=self._told_clues(npc_id, [cid for cid in told if cid in allowed],
+                                                                 present=False, readers=audience),
                                            media=getattr(self.cast, "media", {}).pop(npc_id, []), audience=audience,
                                            communication=communication)
             if audience is not None:
@@ -2798,7 +2809,7 @@ class Game(Encounters):
                                            who=said.audience, actor=npc_id, visibility="private", how="私下告知"))
             else:
                 with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
-                    await self._gain(said.told, turn, None, heard=npc_id)
+                    await self._gain(said.told, turn, None, heard=npc_id, scope={"audience": said.audience})
             said.heard = True
             keep(turn)
         await self.present(said.media, key=f"npc:{st.turn}:{npc_id}:{key}")
@@ -3752,14 +3763,17 @@ class Game(Encounters):
             return ""
         return npc
 
-    def _told_clues(self, npc_id: str, ids: list[str], *, present: bool = True) -> list[str]:
+    def _told_clues(self, npc_id: str, ids: list[str], *, present: bool = True,
+                    readers: list[str] | None = None) -> list[str]:
         """Of the clues a reply told (Dialogue.told), those currently known, authorized and available,
         not found before. The reply's pre-speech snapshot checks presence; its receipt may pass
         present=False after the speaker walks away without unsaying what it told here."""
         st, m = self.state, self.m
         clues = {c.id: c for c in m.clues}
         allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec, present=present)
-        return [cid for cid in dict.fromkeys(ids) if cid in allowed and cid in clues and cid not in st.clues
+        listeners = readers if readers is not None else [i.id for i in st.investigators]
+        return [cid for cid in dict.fromkeys(ids) if cid in allowed and cid in clues
+                and any(not knowledge.clue_known(st, cid, who) for who in listeners)
                 and clues[cid].available(st.flags, st.clues)]
 
     def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
@@ -3770,7 +3784,8 @@ class Game(Encounters):
         people = self.world.present(st.location)
         here = {c.id for c in module_graph.at_hand(m, st.location, people, record=self.world.rec)}
         known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
-        found = [c for c in dict.fromkeys(ids) if c in known and c in here and c not in st.clues]
+        found = [c for c in dict.fromkeys(ids) if c in known and c in here
+                 and not knowledge.clue_known(st, c, st.investigator.id)]
         addressed = self._addressed(action)
         found = [cid for cid in found if module_graph.original_source_at_hand(
             m, m.clue(cid), st.location, people, record=self.world.rec)
@@ -3788,15 +3803,17 @@ class Game(Encounters):
         return found
 
     async def _gain(self, ids: list[str], turn: Turn, action: Action | None, heard: str = "", *,
-                    originals: set[str] | None = None) -> None:
+                    originals: set[str] | None = None, scope: dict | None = None) -> None:
         """Commit an authorized award and its costs. Callers may explicitly limit which awards
         came through the original discovery/material route; a summary still grants the clue,
         SAN/Mythos and its actual consequences, without the source's paper or personal gate."""
         st, m = self.state, self.m
         step = self._resolution_step
+        readers = scope["audience"] if scope is not None else self._narrative_audience(turn, discovery=True)
+        selected = readers if readers is not None else [i.id for i in st.investigators]
         for cid in ids:
             key = f"/clue:{cid}"
-            if cid in st.clues and not self._resolution_pending(key):
+            if all(knowledge.clue_known(st, cid, who) for who in selected) and not self._resolution_pending(key):
                 continue
             clue = m.clue(cid)
             if not clue.available(st.flags, st.clues) and not self._resolution_pending(key):
@@ -3804,20 +3821,21 @@ class Game(Encounters):
 
             def commit(clue=clue, cid=cid) -> dict:
                 inv = st.investigator
-                audience = self._narrative_audience(turn)
+                audience = readers
+                first = not knowledge.clue_known(st, cid, inv.id)
                 sanity = None
-                if clue.sanity:
+                if clue.sanity and first:
                     ok, bad = clue.sanity.split("/")
                     trial = inv.model_copy(deep=True)
                     sanity = self._sanity(trial, ok, bad)
                     inv.__dict__.update(trial.__dict__)
-                if clue.mythos:
+                if clue.mythos and first:
                     inv.skills["克苏鲁神话"] = inv.value("克苏鲁神话") + clue.mythos
-                st.clues.append(cid)
+                if cid not in st.clues:
+                    st.clues.append(cid)
                 knowledge.seed(m, st, self.world.rec)
                 fact = self.world.rec.facts[f"clue:{cid}"]
-                readers = audience if audience is not None else [i.id for i in st.investigators]
-                fact.known_by = list(dict.fromkeys([*fact.known_by, *readers]))
+                fact.known_by = list(dict.fromkeys([*fact.known_by, *selected]))
                 st.progress_at = st.turn
                 turn.clues.append(cid)
                 original = originals is None or cid in originals
@@ -4470,9 +4488,13 @@ class Game(Encounters):
         if len(st.investigators) > 1:
             readers = self._narrative_audience(turn)
             names = "、".join(i.name for i in st.investigators if readers is None or i.id in readers)
-            out.append(f"【本段接收者】{names}。共同正文只写这些人在当前现场能够感知的事；"
+            nearby = self._scene_audience(turn)
+            seats = [i.id for i in st.investigators if nearby is None or i.id in nearby]
+            out.append(f"【正文接收者】{names}（{readers if readers is not None else seats}）。text只交给这些人。"
                        "其他地点的调查经过、未传达的私语和人物背景仍是主持资料，不替调查员获知或分享。"
-                       "只有其中一人察觉或理解的内容，用 asides 单独交代。")
+                       f"\n【共同现场名单】{seats}。个人所得为正文时，共同可见的变化另外用asides向本名单讲述；"
+                       "没有共同新变化就留空。只结算本人检定所得，不因同场或公开骰点把所得交给未成功的人；"
+                       "NPC已经公开说出的内容与共同事件仍保留原受众，已经分享的见闻不因这次个人检定重新保密。")
         people = [n.name if st.npc(n.id).met else f"未通名的人（{n.look or '暂无外观记录'}）" for n in m.npcs_at(st.location)]
         if st.ongoing:
             out.append(f"【上一段叙述停在】{st.ongoing}")
@@ -4621,13 +4643,16 @@ class Game(Encounters):
         no NPC said in the line already shown, and no paper they now hold says, the telling has to put
         into the story."""
         told, m = self._told_by(turn), self.m
+        readers = self._narrative_audience(turn)
+        readers = readers if readers is not None else [i.id for i in self.state.investigators]
         out, untold = [], []
         for cid in turn.clues:
             c = m.clue(cid)
             line = f"获得线索〔{c.title}〕：{c.text.strip()}"
             if cid in told:
                 line += f"（{m.npc(told[cid]).name}刚才已经亲口说出，不要复述）"
-            elif c.handout and (c.handout in self.state.handouts or c.handout in presentation.papers(self.state, None)):
+            elif c.handout and (c.handout in self.state.handouts
+                                or all(c.handout in presentation.papers(self.state, who) for who in readers)):
                 line += f"（手稿〔{m.handout(c.handout).title}〕的原文在玩家手里：交代怎么拿到、看到它，不复述全文）"
             else:
                 untold.append(cid)
@@ -4659,8 +4684,8 @@ class Game(Encounters):
             players |= encounter_views.names(ctx, "players")
         return telling.name_rows(keeper, players)
 
-    def _narrative_audience(self, turn: Turn | None = None) -> list[str] | None:
-        """Readers of this actual scene; callers save this before delivering or awaiting."""
+    def _scene_audience(self, turn: Turn | None = None) -> list[str] | None:
+        """Actual scene observers, independent of somebody else's private check result."""
         st = self.state
         actor = (turn.interval.get("actor") if turn and turn.interval else None) or st.investigator.id
         when = int(turn.interval["end"]) if turn and turn.interval else self.world.now
@@ -4668,6 +4693,24 @@ class Game(Encounters):
         readers = self.world.observers(place, at=when) if place else []
         # The acting player still receives their own fate when unconscious or dying.
         return recipients.scope(st, [actor, *readers])
+
+    def _narrative_audience(self, turn: Turn | None = None, *, discovery: bool = False) -> list[str] | None:
+        """A result's readers are frozen by its settlement, not inferred from co-location.
+
+        Public dice, NPC speech and event notices have their own scopes. A single telling can
+        still describe a common change through addressed asides without broadcasting its
+        acting investigator's perception, interpretation or failure contract.
+        """
+        if turn is not None and not turn.fight and turn.ruling is not None and (
+                discovery or turn.primary is not None or turn.earlier is not None or turn.clues
+                or turn.ruling.needs_roll or turn.ruling.auto_clues):
+            if "audience" in turn.observation:
+                readers = turn.observation["audience"]
+                return recipients.scope(self.state, readers) if readers is not None else None
+            if turn.ruling.result_scope == "personal":
+                actor = (turn.interval.get("actor") if turn.interval else None) or self.state.investigator.id
+                return recipients.scope(self.state, [actor])
+        return self._scene_audience(turn)
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None, *,
                        _receipt: dict | None = None, _owner: Turn | None = None, _tools: bool = True,
@@ -4787,6 +4830,14 @@ class Game(Encounters):
                 self.checkpoint()
         if receipt.get("room"):
             await self._walked(receipt["room"], receipt)
+        if not receipt.get("media_scoped"):
+            # Unaddressed media accompanies this telling's final readers. Explicit
+            # recipient lists still let the keeper actually share a discovered object.
+            receipt["media"] = [{**raw, "to": receipt["audience"]} if raw.get("to") is None else raw
+                                for raw in receipt.get("media", [])]
+            receipt["media_scoped"] = True
+            if self.checkpoint:
+                self.checkpoint()
         if not _settled_only:
             await self._people(at=int(turn.interval["end"]) if turn and turn.interval else None)
         entry = next((e for e in reversed(st.log) if e.kind == "keeper" and e.delivery == delivery), None)

@@ -268,6 +268,10 @@ class RuledEffect(BaseModel):
 
 class Ruling(BaseModel):
     needs_roll: bool = Field(description="这次行动要不要掷骰")
+    result_scope: Literal["personal", "scene"] = Field("personal", description=(
+        "本次检定或发现的所得归谁：personal仅行动者察觉、理解或私下读到，缺省不向旁人授予所得；"
+        "scene是现场目击者都能直接观察的结果，如打开门、当众出示。"
+        "按这次结果的实际可感知性判断，不按技能名或同场人数判断；公开NPC对白与独立事件另按实际受众结算"))
     skill: str = Field("", description="技能或属性名，如 侦查、图书馆使用、说服、力量")
     difficulty: Literal["常规", "困难", "极难"] = "常规"
     bonus: int = Field(0, description="奖励骰为正，惩罚骰为负，范围 -2..2")
@@ -382,12 +386,16 @@ class PrivateTelling(BaseModel):
 
 class Telling(BaseModel):
     scene: Scene = Field(description="先写：这段讲完时的场面")
-    text: str = Field(description="再写：讲给玩家听的叙述")
+    text: str = Field(description="再写：只交给报告中【正文接收者】的叙述；不默认全场共享。个人所得正文不需再移进asides")
     offer_idea: bool = Field(False, description=(
         "只有你判断调查确实陷入僵局、并在本次叙述中提议玩家做灵感检定时填 true；"
         "持续交谈、日常、讨论和正常等待不算停滞，不因内部回合计数自动提议"))
-    asides: list[Aside] = Field(default_factory=list, description="各人单独获知的信息；没有私人信息时留空，不在公共 text 中复述")
-    media: list[presentation.MediaAction] = Field(default_factory=list, description="何时向谁呈现已有图或材料；留空保持；不自动解锁全桌线索")
+    asides: list[Aside] = Field(default_factory=list, description=(
+        "向不同于正文受众的人补充叙述，to逐个列实际接收者；个人所得为正文时，可用本字段向共同现场名单讲共同可见变化。"
+        "只写对应受众可感知的内容，不在共同段复述个人所得；没有其他内容留空"))
+    media: list[presentation.MediaAction] = Field(default_factory=list, description=(
+        "何时向谁呈现已有图或材料；to未指定或null时随正文接收者，不默认公开；另外分享须明确列出实际接收者。"
+        "留空保持，不自动解锁全桌线索"))
     perceptions: list[PerceptionChange] = Field(default_factory=list, description=(
         "设置或撤销个人误认、幻觉与可见性：只改变指定人的界面与可选目标，实际人物和伤害不变；"
         "恢复时 clear=true；不要在公共 text 揭露真实对应，具体感受用 asides"))
@@ -667,6 +675,7 @@ ARBITER_SYSTEM = """你是 CoC 7 版的裁定员。你只看到结构化的行�
   普通的失败通常只是没做成：不受伤、不掉理智，on_fail 多数时候留空；最糟的后果留给孤注一掷再失败。要掷骰时在 on_push_fail 写清孤注一掷再失败会怎样，具体、和这次行动相称，模组写明的优先。text 是后台完整结果；risk 单独写玩家掷前能知道的具体代价，不提前透露未知物件、发现或其位置。比如失败也找到藏好的信但摔坏瓷器，risk 只说可能摔坏瓷器、需要赔偿，信件和位置留在 text、clues。要结算的（标记、耽搁、受伤、理智损失）填进对应字段，不只写在 text 里。
 - 裁定前明确这次行动实际能改变什么。社交成功应兑现合理且有限的让步，不能成功后照常拒绝，也不能为了制造冲突让被观察者自动察觉心理学检定。
   观察成功兑现范围内确实能观察的信息；没有可观察依据时如实说明，并判断原本是否需要检定。clues 清单为空不等于成功没有效果：未预写的日常细节可由KP结合现场确定并记录，不能借此越过既有线索的发现条件。
+  result_scope决定所得的接收范围：个人发现、辨认、理解或私下阅读用personal；打开门、公开展示等共同目击的结果用scene。人在同场不等于通过了别人的检定，公开骰点也不共享所得；人物当众说话仍按实际听众处理。
 - 对话按实际耗时推进，一句问答通常 0–1 分钟，不要每说一句就消耗一刻钟。
 - changes 只记行动实际达成的公开后果；调查员的愿望、断言不算事实。NPC 尚未回复时不能替他答应。
   不编写NPC本轮将有的动作、台词、交付或履约再当作亲历写入记录；这些由NPC本次回应和KP场面落实。调查员提出请求与NPC接受请求是两件事，借东西不提前填 takes。物品转交只用背包或本地确实存在的物件，不能凭空增加钱物；履行约定使用账本里原有 key，且调查员须是该约定的履约方，不能替NPC兑现其待办。
@@ -763,9 +772,9 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
     心理学、侦查等成功只说明系统允许观察到的内容，不读出未解锁的思想；失败的代价以本轮结算为准，已结算的敌意、伤害或物品损失照实呈现，不自行追加。
 11. 场景介绍是首次进入时的底稿。此刻的人物、时间、物品和事件优先于底稿，不让已经离开的人重现，也不把一个房间无人扩大成整栋房屋无人：同一处别的房间里的人听得见调查员喊人、敲门，照他的打算应声、出来或隔着门答话，不写成没人应。
     模组原有的隐藏发现保留其条件；你即兴留下的新痕迹须在 scene 中登记其实际经过，不把猜测当作既有真相。准备中的内容由系统等待，不用悬念或虚构的意外遮掩。
-12. 你统筹全部幕后信息，但玩家并不共享所有见闻。公共 text 只讲共同获知的内容；仅一人或几人听见、梦见或收到的消息，写进 asides，to 填实际收件人的调查员 id。不在公共叙述中复述私语或暴露其内容；点名交谈本身不等于私语。
-    存在个人知觉时，公共 text 只写各方都能观察的动作，不揭示真实身份与个人所见的对应关系；各人的具体所见分别写入 asides。图片与手稿可通过 media 指定实际受众，未指定展示时保持当前画面，不因私下发现就向全桌展示。
-    私人描述只记录相应人物的见闻，不因此变成世界真相；伤害、移动、交物、取得线索和分发材料仍须通过相应操作结算。没有私人消息时 asides 留空。
+12. 你统筹全部幕后信息，但玩家并不共享所有见闻。text严格交给报告中的【正文接收者】，不是默认公开：本次个人检定所得直接写入仅本人的text；共同现场变化需要另讲时，写进asides，to填报告中的共同现场名单。正文为共同受众时，仅一人或几人听见、梦见或收到的消息才另外写进asides。不在共同叙述中复述私语或暴露其内容；点名交谈本身不等于私语。
+    存在个人知觉时，共同受众的段落只写各方都能观察的动作，不揭示真实身份与个人所见的对应关系；各人的具体所见分别交给本人。图片与手稿可通过 media 指定实际受众，未指定展示时保持当前画面，不因私下发现就向全桌展示。
+    私人描述只记录相应人物的见闻，不因此变成世界真相；伤害、移动、交物、取得线索和分发材料仍须通过相应操作结算。没有额外受众的消息时 asides 留空。
 
 {craft}
 
@@ -1546,7 +1555,7 @@ class Cast:
         here = {n.id: f"{n.name}({n.id})" for n in near["npcs"]}
         lines = []
         for c in near["clues"]:
-            if c.id in state.clues or not c.available(state.flags, state.clues):
+            if world_knowledge.clue_known(state, c.id, inv.id) or not c.available(state.flags, state.clues):
                 continue
             need = f"原载体发现参考：{c.check.skill}·{c.check.difficulty}" if c.check else "原载体未设发现检定"
             providers = module_graph.tellers(m, c, record=record)
@@ -1562,7 +1571,7 @@ class Cast:
         for n in near["npcs"]:
             for c in near["clues"]:
                 cid = c.id
-                if cid in state.clues or not c.available(state.flags, state.clues):
+                if world_knowledge.clue_known(state, cid, inv.id) or not c.available(state.flags, state.clues):
                     continue
                 if n.id not in module_graph.tellers(m, c, record=record) and c.npc != n.id:
                     continue
@@ -2470,7 +2479,7 @@ def private_context(m: Module, state: GameState, who: str, text: str, w: World |
 
 
 def _asides(raw: Any, state: GameState) -> list[dict]:
-    """Only an addressed personal observation can leave the keeper's private reply."""
+    """Additional observations are delivered only to their explicit investigator lists."""
     if not isinstance(raw, list):
         return []
     ids = {i.id for i in state.investigators}

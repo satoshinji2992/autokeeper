@@ -87,16 +87,29 @@ async def test_failed_check_projects_offer_and_full_record_only_to_original_scen
         await hub.game.close()
 
 
-async def test_scene_observers_receive_the_check_but_an_unseated_connection_does_not(check_hub, fake):
+async def test_scene_observers_receive_dice_but_not_another_persons_result_contract(check_hub, fake):
     hub, messages = check_hub()
     hub.state.apart.clear()
     fake.queue(88)
     try:
         await hub.game.resolve(ACTION, RULING)
-        assert set(hub.state.pending_push["audience"]) == {i.id for i in hub.state.investigators}
+        assert hub.state.pending_push["audience"] == [hub.state.investigator.id]
         assert events(messages, "b", "dice") and not events(messages, "watch", "dice")
+        assert hub._view("lin")["pending_push"] is None and not hub._view("lin")["checks"]
+        assert hub._view()["pending_push"] is None
+    finally:
+        await hub.game.close()
+
+
+async def test_a_common_visible_result_keeps_its_original_scene_scope(check_hub, fake):
+    hub, messages = check_hub()
+    hub.state.apart.clear()
+    fake.queue(88)
+    try:
+        await hub.game.resolve(ACTION, RULING.model_copy(update={"result_scope": "scene"}))
+        assert set(hub.state.pending_push["audience"]) == {i.id for i in hub.state.investigators}
         assert hub._view("lin")["pending_push"]["risk"] == RULING.on_push_fail.risk
-        assert hub._view("lin")["checks"] and hub._view()["pending_push"] is None
+        assert hub._view("lin")["checks"] and not events(messages, "watch", "dice")
     finally:
         await hub.game.close()
 

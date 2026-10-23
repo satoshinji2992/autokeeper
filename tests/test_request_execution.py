@@ -262,7 +262,7 @@ async def test_party_compound_work_overlaps_and_completes_each_token_once_with_a
         a1.summary: Ruling(needs_roll=True, skill="侦查", minutes=5),
         a2.summary: Ruling(needs_roll=True, skill="聆听", minutes=10),
         b.summary: Ruling(needs_roll=True, skill="图书馆使用", minutes=20),
-    }, [telling(next=Plan(action=a2)), telling()])
+    }, [telling(next=Plan(action=a2)), telling(), telling()])  # different personal results are not one public body
     game, graph = make(fake, cast, party=True)
     st, start = game.state, game.state.minutes
     a_id, b_id = [i.id for i in st.investigators]

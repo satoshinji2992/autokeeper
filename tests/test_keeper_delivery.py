@@ -34,7 +34,7 @@ def prepared(fake):
                            media=[{"ref": "handout:h_diary", "to": ["lin"]}])
     SCRIPT.extend([
         {"action": {"kind": "use", "summary": "周衡小心地把封签纸包放到桌上", "target": "封签纸包"}},
-        {"needs_roll": True, "skill": "敏捷", "minutes": 3},
+        {"needs_roll": True, "skill": "敏捷", "minutes": 3, "result_scope": "scene"},
         voice("warden", "看见他放下纸包，拿一块擦手布给他。"),
         {"text": FIRST, "items": [{"name": "擦手布", "to": game.state.investigator.id}]},
         told,

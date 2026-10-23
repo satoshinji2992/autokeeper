@@ -310,6 +310,14 @@ def sees(fact: Fact, viewer: str) -> bool:
     return viewer in fact.known_by
 
 
+def clue_known(state: GameState, clue: str, viewer: str) -> bool:
+    """Global progress is not another investigator's knowledge of a discovery."""
+    fact = state.record.facts.get(f"clue:{clue}")
+    if fact is not None:
+        return not fact.retracted and (viewer in fact.known_by or PLAYERS in fact.known_by)
+    return len(state.investigators) == 1 and clue in state.clues
+
+
 def disclosable_clues(m: Module, st: GameState, npc: str, *, record: WorldRecord | None = None,
                      present: bool = True) -> set[str]:
     """One disclosure contract for NPC prompts, replies and the engine: actual current knowledge,
