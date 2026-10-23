@@ -2,12 +2,12 @@
 #   irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
 # 没有 uv 就先装 uv，再用 uv tool 装好 autokeeper 命令；再运行一次就是更新。
 # 已经有 uv 的话，这个脚本做的就是：uv tool install autokeeper，然后 autokeeper setup。
-# 可选环境变量同 install.sh：AUTOKEEPER_VERSION、AUTOKEEPER_EXTRAS、AUTOKEEPER_FROM（pypi 或 git）、
-# AUTOKEEPER_REF、AUTOKEEPER_NO_MODIFY_PATH。
+# 可选环境变量同 install.sh：AUTOKEEPER_VERSION、AUTOKEEPER_EXTRAS、AUTOKEEPER_FROM（auto / pypi / github / git）、
+# AUTOKEEPER_REF、AUTOKEEPER_SHA256、AUTOKEEPER_NO_MODIFY_PATH。
 $ErrorActionPreference = "Stop"
 $Repo = if ($env:AUTOKEEPER_REPO) { $env:AUTOKEEPER_REPO } else { "https://github.com/satoshinji2992/autokeeper" }
-$Ref = if ($env:AUTOKEEPER_REF) { $env:AUTOKEEPER_REF } else { "main" }
-$From = if ($env:AUTOKEEPER_FROM) { $env:AUTOKEEPER_FROM } else { "pypi" }
+$Ref = $env:AUTOKEEPER_REF
+$From = if ($env:AUTOKEEPER_FROM) { $env:AUTOKEEPER_FROM } else { "auto" }
 $Version = $env:AUTOKEEPER_VERSION
 $Extras = $env:AUTOKEEPER_EXTRAS
 
@@ -35,13 +35,41 @@ if (-not (Get-Command chafa -ErrorAction SilentlyContinue)) {  # photos as colou
 }
 
 $Name = if ($Extras) { "autokeeper[$Extras]" } else { "autokeeper" }
-if ($From -eq "pypi") {
-    try { Invoke-WebRequest -UseBasicParsing -Method Head "https://pypi.org/pypi/autokeeper/json" | Out-Null }
-    catch { Write-Warning "PyPI 上暂时没有 autokeeper，改从 GitHub 装（$Ref）。"; $From = "git" }
+if ($From -notin @("auto", "pypi", "github", "git")) { Fail "AUTOKEEPER_FROM 只能是 auto、pypi、github 或 git。" }
+if ($Version) {
+    $Version = $Version -replace '^v', ''
+    if ($Version -notmatch '^\d+\.\d+\.\d+([.a-zA-Z0-9+-]*)$') { Fail "AUTOKEEPER_VERSION 格式无效。" }
+}
+if ($From -eq "auto" -and $Ref) { $From = "git" }
+if ($From -in @("auto", "github")) {
+    if (-not $Version) {
+        $Api = $Repo -replace '^https://github.com/', 'https://api.github.com/repos/'
+        try { $Release = Invoke-RestMethod "$Api/releases/latest" -Headers @{ 'User-Agent' = 'AutoKeeper-installer' } }
+        catch { Fail "无法确认最新发行版。检查网络，或用 AUTOKEEPER_VERSION 指定版本。" }
+        $Tag = $Release.tag_name
+        $Version = $Tag -replace '^v', ''
+        if (-not $Tag -or $Version -notmatch '^\d+\.\d+\.\d+([.a-zA-Z0-9+-]*)$') { Fail "未取得有效的发行版标签。" }
+    } else { $Tag = "v$Version" }
+    $Available = $false
+    if ($From -eq "auto") {
+        try { Invoke-WebRequest -UseBasicParsing -Method Head "https://pypi.org/pypi/autokeeper/$Version/json" | Out-Null; $Available = $true }
+        catch { $Available = $false }
+    }
+    $From = if ($Available) { "pypi" } else { "github" }
 }
 if ($From -eq "git") {
+    if ($Version) {
+        if ($Ref -and $Ref -notin @($Version, "v$Version")) { Fail "AUTOKEEPER_VERSION 与 AUTOKEEPER_REF 不一致；请只指定一个版本。" }
+        if (-not $Ref) { $Ref = "v$Version" }
+    } elseif (-not $Ref) { $Ref = "main" }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "从 GitHub 装需要 git：winget install Git.Git，装好后开新终端再运行" }
     $Spec = "$Name @ git+$Repo@$Ref"
+} elseif ($From -eq "github") {
+    $Spec = "$Name @ $Repo/releases/download/$Tag/autokeeper-$Version-py3-none-any.whl"
+    if ($env:AUTOKEEPER_SHA256) {
+        if ($env:AUTOKEEPER_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { Fail "AUTOKEEPER_SHA256 必须是发行包的 SHA256。" }
+        $Spec += "#sha256=$($env:AUTOKEEPER_SHA256)"
+    }
 } elseif ($Version) {
     $Spec = "$Name==$Version"
 } else {

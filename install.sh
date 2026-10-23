@@ -6,14 +6,15 @@
 # 可选环境变量：
 #   AUTOKEEPER_VERSION  装哪个版本，如 0.0.3（默认最新）
 #   AUTOKEEPER_EXTRAS   可选组件，如 graphrag（模组原文检索，约 1 GB）
-#   AUTOKEEPER_FROM     pypi（默认；PyPI 上还没有时改从 GitHub 装）或 git
+#   AUTOKEEPER_FROM     auto（默认；发行版优先）、pypi、github（发行包）或 git
 #   AUTOKEEPER_REF      从 GitHub 装时用哪个分支或标签（默认 main）
+#   AUTOKEEPER_SHA256   从 GitHub 发行包装时，可指定发行页公布的 SHA256
 #   AUTOKEEPER_NO_MODIFY_PATH=1  不改 shell 配置文件里的 PATH
 set -euo pipefail
 
 REPO="${AUTOKEEPER_REPO:-https://github.com/satoshinji2992/autokeeper}"
-REF="${AUTOKEEPER_REF:-main}"
-FROM="${AUTOKEEPER_FROM:-pypi}"
+REF="${AUTOKEEPER_REF:-}"
+FROM="${AUTOKEEPER_FROM:-auto}"
 VERSION="${AUTOKEEPER_VERSION:-}"
 EXTRAS="${AUTOKEEPER_EXTRAS:-}"
 
@@ -45,13 +46,44 @@ if ! command -v chafa >/dev/null; then  # photos as coloured characters; without
 fi
 
 name="autokeeper${EXTRAS:+[$EXTRAS]}"
-if [ "$FROM" = pypi ] && ! curl -fsS -o /dev/null "https://pypi.org/pypi/autokeeper/json" 2>/dev/null; then
-  warn "PyPI 上暂时没有 autokeeper，改从 GitHub 装（$REF）。"
-  FROM=git
+case "$FROM" in auto|pypi|github|git) ;; *) die "AUTOKEEPER_FROM 只能是 auto、pypi、github 或 git。" ;; esac
+if [ -n "$VERSION" ]; then
+  VERSION="${VERSION#v}"
+  [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9+-]*)$ ]] || die "AUTOKEEPER_VERSION 格式无效。"
+fi
+if [ "$FROM" = auto ] && [ -n "$REF" ]; then FROM=git; fi
+if [ "$FROM" = auto ] || [ "$FROM" = github ]; then
+  if [ -z "$VERSION" ]; then
+    latest="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$REPO/releases/latest")" \
+      || die "无法确认最新发行版。检查网络，或用 AUTOKEEPER_VERSION 指定版本。"
+    tag="${latest##*/}"
+    VERSION="${tag#v}"
+    [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9+-]*)$ ]] || die "未取得有效的发行版标签。"
+  else
+    tag="v$VERSION"
+  fi
+  if [ "$FROM" = auto ] && curl -fsS -o /dev/null "https://pypi.org/pypi/autokeeper/$VERSION/json" 2>/dev/null; then
+    FROM=pypi
+  else
+    FROM=github
+  fi
 fi
 if [ "$FROM" = git ]; then
+  if [ -n "$VERSION" ]; then
+    [ -z "$REF" ] || [ "$REF" = "$VERSION" ] || [ "$REF" = "v$VERSION" ] \
+      || die "AUTOKEEPER_VERSION 与 AUTOKEEPER_REF 不一致；请只指定一个版本。"
+    REF="${REF:-v$VERSION}"
+  else
+    REF="${REF:-main}"
+  fi
   command -v git >/dev/null || die "从 GitHub 装需要 git：Debian/Ubuntu 用 sudo apt install git，macOS 用 xcode-select --install"
   spec="$name @ git+$REPO@$REF"
+elif [ "$FROM" = github ]; then
+  spec="$name @ $REPO/releases/download/$tag/autokeeper-$VERSION-py3-none-any.whl"
+  if [ -n "${AUTOKEEPER_SHA256:-}" ]; then
+    [[ "$AUTOKEEPER_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || die "AUTOKEEPER_SHA256 必须是发行包的 SHA256。"
+    spec="$spec#sha256=$AUTOKEEPER_SHA256"
+  fi
 else
   spec="$name${VERSION:+==$VERSION}"
 fi
