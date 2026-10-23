@@ -102,7 +102,7 @@ async def test_an_actual_pending_attack_never_rolls_on_disconnect_and_resumes_on
                 await until(spectator, lambda msg: msg["t"] == "seats" and not msg["seats"][0]["online"])
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
             if disconnect_before_offer:
-                await asyncio.sleep(0.05)
+                await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
                 assert not task.done() and hub.asking.get("zhouheng")
                 assert list(fake.values) == [10, 90] and list(fake.totals) == [1]
                 a = await sit(http, url, "zhouheng")
@@ -154,7 +154,7 @@ async def test_a_submitted_attack_still_generates_a_human_roll_when_its_owner_is
             await spectator.send_json({"t": "hello", "name": "watching"})
             await until(spectator, lambda msg: msg["t"] == "welcome")
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
-            await asyncio.sleep(0.05)
+            await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
             assert not task.done() and hub.asking.get("zhouheng")
             assert hub.state.encounter.pending.kind == "roll"
             assert list(fake.values) == [10, 90] and list(fake.totals) == [1]
@@ -217,7 +217,7 @@ async def test_an_offline_defender_is_asked_before_any_attack_dice_are_thrown(fa
             await spectator.send_json({"t": "hello", "name": "watching"})
             await until(spectator, lambda msg: msg["t"] == "welcome")
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
-            await asyncio.sleep(0.05)
+            await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
             assert not task.done() and hub.asking.get("zhouheng")
             assert hub.state.encounter.pending.kind == "reaction" and list(fake.values) == [10, 90]
             a = await sit(http, url, "zhouheng")

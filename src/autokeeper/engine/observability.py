@@ -8,7 +8,7 @@ import threading
 import uuid
 from collections import deque
 from collections.abc import Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 
 MAX_BYTES = 200 * 1024 * 1024  # split into numbered segments; no older segment is overwritten
+READ_BYTES = 64 * 1024
 # The state, the world and the sessions are written whole when they changed: on every event that
 # was nearly every event, 16 snapshots a turn and some 2 MB (a two-turn game came to 3.9 MB). The
 # events themselves are all kept; the whole picture is taken once a turn is over (its "sheet"),
@@ -81,18 +82,38 @@ class Journal:
     def _lines(self) -> Iterator[tuple[int, str]]:
         """A stable view of all segments, using global line cursors across rotation.
 
-        Open under the writer's lock, then release it before scanning. Renaming a
-        live segment cannot lose or duplicate its already-open file in this read.
+        Snapshot lengths and the live segment's eventual archive name under the
+        writer's lock. Each bounded read closes before yielding: on Windows an
+        open ordinary reader would prevent the writer from rotating the segment.
         """
-        with ExitStack() as stack:
-            with self._lock:
-                files = self._segments() + ([self.path] if self.path.exists() else [])
-                streams = [stack.enter_context(p.open(encoding="utf-8")) for p in files]
-            number = 0
-            for stream in streams:
-                for line in stream:
+        with self._lock:
+            archives = self._segments()
+            files = [(p, p.stat().st_size, False) for p in archives]
+            if self.path.exists():
+                number = int(archives[-1].stem.rsplit(".", 1)[1]) + 1 if archives else 1
+                files.append((self.path.with_suffix(f".{number}.jsonl"), self.path.stat().st_size, True))
+        number = 0
+        for archive, length, live in files:
+            position, fragments = 0, []
+            while position < length:
+                with self._lock:
+                    path = self.path if live and not archive.exists() else archive
+                    with path.open("rb") as stream:
+                        stream.seek(position)
+                        chunk = stream.read(min(READ_BYTES, length - position))
+                if not chunk:
+                    break
+                position += len(chunk)
+                pieces = chunk.split(b"\n")
+                for piece in pieces[:-1]:
+                    fragments.append(piece)
                     number += 1
-                    yield number, line
+                    yield number, b"".join(fragments).decode("utf-8") + "\n"
+                    fragments.clear()
+                fragments.append(pieces[-1])
+            if any(fragments):
+                number += 1
+                yield number, b"".join(fragments).decode("utf-8")
 
     def read(self, *, after: int = 0, limit: int | None = None, kind: str = "") -> tuple[list[dict], int]:
         """Line cursors permit complete history without loading it all into the webpage."""

@@ -352,7 +352,7 @@ async def test_replacing_a_closed_but_unstarted_wait_during_another_seats_ruling
         await hub.game.close()
 
 
-async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnection(fake):
+async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnection(fake, monkeypatch):
     import aiohttp
 
     from .test_net import closed, opened, pool_open, until
@@ -360,7 +360,22 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
     plans, rulings = wait_plans()
     hub = made(fake, plans, rulings)
     hub.sits = {"zhouheng": None, "lin": None}
-    hub.window = .02
+    expired = asyncio.Event()
+    collect = hub._collect
+
+    async def collect_until_expired():
+        expired.clear()
+        await collect()
+
+    # Drive the collection deadline only after the server acknowledges each action.
+    # Reconnection speed must not decide whether the scripted human becomes an AI.
+    monkeypatch.setattr(hub, "_collect", collect_until_expired)
+    monkeypatch.setattr(hub, "_left", lambda: 0 if expired.is_set() else None)
+
+    def expire_window():
+        expired.set()
+        hub.wake.set()
+
     task = await opened(hub)
     try:
         async with aiohttp.ClientSession() as http:
@@ -373,6 +388,8 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
             await until(first, pool_open)
             start = hub.state.minutes
             await first.send_json({"t": "act", "text": "守候"})
+            await until(first, lambda message: pool_open(message) and message["mine"]["now"] == ["守候"])
+            expire_window()
             await until(first, lambda message: pool_open(message) and "execution" in hub.state.unfinished.get("zhouheng", {}))
             assert hub.state.minutes == start
             await first.close()
@@ -383,6 +400,8 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
             seated = await until(replacement, lambda message: message["t"] == "seated")
             assert seated["pool"]["open"] and seated["pool"]["mine"]["now"] == ["守候"]
             await second.send_json({"t": "act", "text": "急事"})
+            await until(second, lambda message: pool_open(message) and message["mine"]["now"] == ["急事"])
+            expire_window()
             await until(second, lambda message: pool_open(message) and hub.game.world.place("lin") == "square")
             assert hub.state.minutes == start + hub.game._travel("tower", "square")
             assert hub.game.world.place("zhouheng") == "tower"
@@ -390,10 +409,12 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
             await until(replacement, lambda message: pool_open(message) and hub.state.minutes == 1800 and not hub.state.pending_turn)
             assert not hub.state.pending_turn and not hub.state.unfinished
             assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "守候"]) == 1
-            await second.close()
-            await replacement.close()
+            # Stop collection before socket cleanup can legitimately start an offline AI turn.
+            await closed(task)
+            task = None
     finally:
-        await closed(task)
+        if task is not None:
+            await closed(task)
 
 
 async def test_pending_means_a_real_handoff_and_is_not_silently_overridden_by_the_wait_driver(fake):

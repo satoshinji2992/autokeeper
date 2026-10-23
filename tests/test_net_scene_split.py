@@ -58,9 +58,9 @@ class SplitCast(TableCast):
         return f"{state.investigator.id}|{state.location}|现场继续。"
 
     async def close(self):
-        self.closed = True
         self.background.cancel()
         await asyncio.gather(self.background, return_exceptions=True)
+        self.closed = True
 
 
 def host(state, fake, casts, *, started=None, release=None):
