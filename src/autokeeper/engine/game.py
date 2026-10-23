@@ -722,6 +722,8 @@ class Game(Encounters):
         await self._curtain(action)  # finish a scene this action would otherwise overtake
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
+        if missing := self._align_interaction(action):
+            return Ruling(needs_roll=False, missing=missing, reason="交谈对象已不在实际现场，尚未进行本次交涉检定")
         if action.kind == "move" and action.destination and not action.arrival_after_success:
             me = self.state.investigator
             if me.id in self.state.apart and action.destination == self.state.location:  # back to the others on foot
@@ -858,6 +860,8 @@ class Game(Encounters):
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
         and consent before travelling, checkpointed one at a time. Each reply settles as any does
         (_reply), into the preparation's own turn (_preparing)."""
+        if self._align_interaction(action):
+            return
         await self._step_in(action)
         if not action.destination or action.kind == "meta" or not fog.findable(self.m, self.state, action.destination, viewer=self.state.investigator.id):
             return
@@ -1869,6 +1873,8 @@ class Game(Encounters):
             return
 
         def initial() -> bool:
+            if note := st.pending_turn.get("interaction", {}).get("note"):
+                turn.notes.append(note)
             arrangements = [st.pending_turn.get("arrangement", {}),
                             st.pending_turn.get("prepared_action", {}).get("arrangement", {})]
             for arranged in arrangements:
@@ -3217,6 +3223,54 @@ class Game(Encounters):
             self.state.round_spent = None
             self.state.round_elapsed.clear()
         self.holding = False
+
+    def _align_interaction(self, action: Action) -> list[str]:
+        """Reserve this conversation after its actual NPC resources' committed work, before dice.
+
+        A local scene shares its real witnesses; a remote call only needs its addressee. The
+        saved waiting interval advances this investigator alone and is never charged on retry.
+        """
+        if action.declared is not None or action.kind == "meta":
+            return []
+        st = self.state
+        remote = action.communication == "remote"
+        heading = self._heading(action) or (action.destination if action.kind == "move" else "")
+        where = heading or st.location
+        targets = {self._addressed(action): (where, self._travel(st.location, where) or 0)}
+        targets.pop("", None)
+        if not remote:
+            for before in action.before:
+                if before.npc in self.world.rec.entities and self.world.rec.entities[before.npc].kind == "npc":
+                    targets[before.npc] = (st.location, 0)
+            if not action.alone:
+                for who in action.companions:
+                    if (ent := self.world.entity(who)) is not None and ent.kind == "npc":
+                        targets[who] = (st.location, 0)
+        if not targets:
+            return []
+        missing = [f"{self.world.name(who)}不在本次交谈现场" for who, (place, _) in targets.items()
+                   if (ent := self.world.entity(who)) is None or ent.kind != "npc" or ent.status in ("死亡", "失踪")
+                   or (not remote and self.world.place(who) != place)]
+        if missing:
+            return missing
+        key = digest(action.model_dump(mode="json"))
+        saved = st.pending_turn.get("interaction", {})
+        if saved.get("action") == key:
+            return []
+        cursor = self._actor_cursor()
+        required = cursor
+        for who, (place, travel) in targets.items():
+            people = [who] if remote else list(dict.fromkeys([who, *self.world.present(place)]))
+            required = max(required, *(max(cursor, (self.world.available_at(npc) or cursor) - travel) for npc in people))
+        receipt = {"action": key, "start": cursor, "end": required, "wait": required - cursor}
+        if required > cursor:
+            receipt["interval"] = self._spend(required - cursor, Turn())
+            receipt["note"] = f"等候了{_span(required - cursor)}才开始这次交谈；此前已经发生的交谈和行动保持有效。"
+        if st.pending_turn:
+            st.pending_turn["interaction"] = receipt
+            if self.checkpoint:
+                self.checkpoint()
+        return []
 
     def _actor_cursor(self, who: str | None = None) -> int:
         st = self.state
