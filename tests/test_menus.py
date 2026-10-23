@@ -186,21 +186,19 @@ async def test_settings_in_a_game_hold_models_preferences_and_the_developer_mode
         switched: list[dict | None] = []
         monkeypatch.setattr(screen, "_switch_engine", switched.append)  # F9's way: mid-turn it waits for the turn's end
         settings.query_one("#settings-models", Button).press()
-        await pilot.pause()
-        assert isinstance(app.screen, EngineModal)  # what F9 opens
+        # push_screen updates the stack before Mount has finished. A slow runner must not
+        # dismiss the dialog while its initial key rows are still being composed.
+        assert await until(pilot, lambda: isinstance(app.screen, EngineModal) and app.screen.is_mounted)  # F9
         app.screen.dismiss({"preset": "canned"})
-        await pilot.pause()
+        assert await until(pilot, lambda: app.screen is settings and bool(switched))
         assert switched == [{"preset": "canned"}]
         assert app.screen is settings
         settings.query_one("#settings-prefs", Button).press()
-        await pilot.pause()
-        assert isinstance(app.screen, PrefsModal)  # what Ctrl+O opens
+        assert await until(pilot, lambda: isinstance(app.screen, PrefsModal) and app.screen.is_mounted)  # Ctrl+O
         await pilot.press("escape")
-        await pilot.pause()
-        assert app.screen is settings
+        assert await until(pilot, lambda: app.screen is settings)
         await pilot.press("escape")
-        await pilot.pause()
-        assert app.screen is screen
+        assert await until(pilot, lambda: app.screen is screen)
 
         await pilot.press("ctrl+k")  # not in 开发者模式: no 规则插件
         await pilot.pause()
@@ -212,18 +210,16 @@ async def test_settings_in_a_game_hold_models_preferences_and_the_developer_mode
         await pilot.pause()
         assert screen.developing and web and str(app.screen.query_one("#settings-developer", Button).label) == "关闭开发者模式"
         app.screen.query_one("#settings-plugins", Button).press()
-        await pilot.pause()
-        assert isinstance(app.screen, PluginsModal)
+        assert await until(pilot, lambda: isinstance(app.screen, PluginsModal) and app.screen.is_mounted)
         await pilot.press("escape")
-        await pilot.pause()
+        assert await until(pilot, lambda: isinstance(app.screen, SettingsModal))
         await pilot.press("escape")
-        await pilot.pause()
+        assert await until(pilot, lambda: app.screen is screen)
         assert app.screen is screen and any(name.startswith("规则插件") for name in palette())
         await pilot.press("ctrl+k")
-        await pilot.pause()
-        assert isinstance(app.screen, PluginsModal)
+        assert await until(pilot, lambda: isinstance(app.screen, PluginsModal) and app.screen.is_mounted)
         await pilot.press("escape")
-        await pilot.pause()
+        assert await until(pilot, lambda: app.screen is screen)
         await pilot.press("f12")  # off: Ctrl+K is the box's own again
         await pilot.pause()
         assert not screen.developing
