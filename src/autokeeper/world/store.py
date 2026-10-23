@@ -184,6 +184,8 @@ class World:
 
     def present(self, place: str, *, at: int | None = None) -> list[str]:
         """NPCs at a place, alive and not gone missing."""
+        if at is None and getattr(self.st, "scene", None) is not None:
+            at = self.now
         return [e.id for e in self.rec.entities.values() if e.kind == "npc"
                 and (e.at if at is None else self.place_at(e.id, at)) == place and e.status not in ("死亡", "失踪")]
 

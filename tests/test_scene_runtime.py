@@ -175,8 +175,9 @@ async def test_failed_world_transaction_keeps_other_awaiting_scene_references_li
         await entered.wait()
         luck = inv.luck
         monkeypatch.setattr(SetFlag, "settle", broken)
-        result = ga.world.apply(SetFlag(flag="bad"))
+        result = ga.world.apply(SetFlag(flag="bell_stopped"))
         assert not result.ok and "应回滚" not in runtime.state.flags
+        assert "离线注入失败" in "；".join(result.problems)
         assert gb.world.rec is record and runtime.state.find("lin") is inv
         assert gb.world.rec.entities["warden"] is npc and inv.luck == luck
         release.set()
@@ -186,4 +187,151 @@ async def test_failed_world_transaction_keeps_other_awaiting_scene_references_li
     finally:
         release.set()
         await task
+        await runtime.close()
+
+
+async def test_prepared_time_ticket_restores_without_new_input_log_or_relative_deadline(fake):
+    long = Action(kind="use", summary="查档两小时")
+    runtime, _, _ = made(fake, plans={"B": Plan(action=long)},
+                         rulings={long.summary: Ruling(needs_roll=False, minutes=120)})
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    task = asyncio.create_task(run(runtime.graph(b), runtime.game(b), {"input": "B"}))
+    try:
+        await spin_until(lambda: runtime.scenes[b].reservation.get("blocked"))
+        runtime.scenes[b].busy = True
+        saved = runtime.state.model_dump_json()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        restored, casts, _ = made(fake, state=GameState.model_validate_json(saved))
+        try:
+            assert not restored.scenes[b].busy and restored.scenes[b].reservation["end"] == 720
+            assert restored.pass_time(a)
+            await asyncio.wait_for(run(restored.graph(b), restored.game(b), {"input": "/retry"}), 3)
+            assert not casts[b].planned and not casts[b].ruled
+            assert restored.scenes[b].at == 720
+            assert len([entry for entry in restored.state.log if entry.kind == "player"]) == 1
+        finally:
+            await restored.close()
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await runtime.close()
+
+
+async def test_group_movement_updates_only_actual_members_and_preserves_other_scene(fake):
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga, gb = runtime.game(a), runtime.game(b)
+    try:
+        assert runtime.pass_time(b)
+        ga.state.turn = runtime.allocate_turn()
+        action = Action(kind="move", summary="独自去报社", destination="office", alone=True)
+        ruling = Ruling(needs_roll=False)
+        runtime.reserve(a, action, ruling)
+        await runtime.wait(a)
+        await ga.resolve(action, ruling)
+        assert ga.world.place("zhouheng") == "office" and gb.world.place("lin") == "square"
+        assert runtime.scenes[b].place == "square"
+        assert ga.state.apart["lin"] == "square"
+    finally:
+        await runtime.close()
+
+
+async def test_failed_parse_does_not_erase_other_scene_log_deeds_or_monotonic_turn_ids(fake):
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    va, vb = runtime.state_view(a), runtime.state_view(b)
+    before = va.turn
+    va.turn = runtime.allocate_turn()
+    va.add("player", "失败请求", who=va.investigator.name)
+    failed_id = va.turn
+    vb.turn = runtime.allocate_turn()
+    vb.add("player", "另一现场已成立", who=vb.investigator.name)
+    va.rollback_parse(before, 0, 0)
+    assert [entry.text for entry in runtime.state.log] == ["另一现场已成立"]
+    assert all(deed.turn != failed_id for deed in runtime.state.deeds)
+    assert any(deed.turn == vb.turn for deed in runtime.state.deeds)
+    assert runtime.allocate_turn() > vb.turn
+    await runtime.close()
+
+
+async def test_revoked_pass_rechecks_the_synchronous_time_commit_before_spending(fake):
+    from autokeeper.engine.game import Turn
+    from autokeeper.engine.timing import SceneTimeBoundary
+
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga = runtime.game(a)
+    try:
+        assert runtime.pass_time(b)
+        ga.state.turn = runtime.allocate_turn()
+        runtime.reserve(a, Action(kind="use", summary="搜查"), Ruling(needs_roll=False, minutes=20))
+        await runtime.wait(a)
+        runtime.revoke_pass(b)  # accepted during a prior await, before any real time mutation
+        try:
+            ga._spend(20, Turn())
+        except SceneTimeBoundary as boundary:
+            assert boundary.end == 620
+        else:
+            raise AssertionError("不能越过刚收到的同伴声明")
+        assert runtime.scenes[a].at == runtime.scenes[b].at == 600
+    finally:
+        await runtime.close()
+
+
+async def test_resource_conflict_retains_both_attempts_and_revalidates_the_waiting_result(fake):
+    from autokeeper.engine.timing import SceneResourceConflict
+    from autokeeper.world.ops import Move
+
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga, gb = runtime.game(a), runtime.game(b)
+    try:
+        ga.state.turn = runtime.allocate_turn()
+        gb.state.turn = runtime.allocate_turn()
+        ga.state.pending_turn["input"] = "甲致电守钟人"
+        gb.state.pending_turn["input"] = "乙也致电守钟人"
+        action = Action(kind="talk", summary="致电守钟人", npc="warden", communication="remote")
+        runtime.reserve(a, action, Ruling(needs_roll=False))
+        runtime.reserve(b, action, Ruling(needs_roll=False))
+        try:
+            await runtime.wait(a)
+        except SceneResourceConflict as conflict:
+            assert {attempt["original"] for attempt in conflict.details["attempts"]} == {"甲致电守钟人", "乙也致电守钟人"}
+        else:
+            raise AssertionError("不能按网络顺序静默完成共同人物的冲突")
+        # Represents an actual shared KP/arbiter handoff; the engine never acknowledges it on its own.
+        runtime.resolve_resource_conflict(a)
+        await runtime.wait(a)
+        result = ga.world.apply(Move(entity="warden", to="square"))
+        assert result.ok
+        runtime.release(a)
+        try:
+            await runtime.wait(b)
+        except SceneResourceConflict as conflict:
+            assert conflict.details["changed"] and conflict.details["resources"] == ["warden"]
+        else:
+            raise AssertionError("对方已改变共同人物，旧裁定不能直接兑现")
+        assert gb.state.pending_turn["input"] == "乙也致电守钟人"
+        assert "resolution" not in gb.state.pending_turn
+    finally:
+        await runtime.close()
+
+
+async def test_scoped_presence_projects_committed_movements_at_local_time(fake):
+    from autokeeper.world.ops import Move
+
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga, gb = runtime.game(a), runtime.game(b)
+    try:
+        with ga.world.at(610, start=600):
+            assert ga.world.apply(Move(entity="warden", to="square")).ok
+        assert "warden" not in gb.world.present("square")
+        runtime.scenes[b].at = 605
+        assert "warden" not in gb.world.present("square") and "warden" not in gb.world.present("tower")
+        runtime.scenes[b].at = 610
+        assert "warden" in gb.world.present("square")
+    finally:
         await runtime.close()

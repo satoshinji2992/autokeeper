@@ -45,8 +45,8 @@ class ScenePositions(MutableMapping[str, str]):
         self.view.root.positions[key] = value
 
     def __delitem__(self, key: str) -> None:
-        if key not in self:
-            raise KeyError(key)
+        if key not in self or key not in self.view.scene.members:
+            raise KeyError(key)  # removing a relative "apart" entry cannot teleport another scene's player
         self.view.root.positions[key] = self.view.scene.place
 
     def __iter__(self) -> Iterator[str]:
@@ -331,7 +331,7 @@ class SceneRuntime:
     def reserve(self, ident: str, action: Action, ruling: Ruling | None) -> None:
         scene, game = self.scenes[ident], self.game(ident)
         saved = scene.reservation
-        if saved and saved.get("turn") == scene.turn:
+        if saved and saved.get("turn") == scene.turn and saved.get("attempt"):
             return  # retries restore the original start/end instead of charging time again
         start = game._actor_cursor()
         heading = (ruling.go if ruling else "") or action.destination
@@ -359,9 +359,14 @@ class SceneRuntime:
                              "actor": self.state.investigators[scene.active].id,
                              "original": scene.pending_turn.get("input", action.summary),
                              "resources": sorted(resources), "phase": "prepared",
-                             "attempt": action.model_dump(mode="json")}
+                             "attempt": action.model_dump(mode="json"),
+                             "versions": self._resource_versions(resources)}
         scene.passed_until = None
         self.checkpoint(ident)
+
+    def _resource_versions(self, resources: set[str]) -> dict[str, dict]:
+        return {who: {"version": ent.version, "at": ent.at, "status": ent.status}
+                for who in resources if (ent := self.state.record.entities.get(who)) is not None}
 
     def blockers(self, ident: str, end: int | None = None) -> list[dict]:
         own = self.scenes[ident]
@@ -405,6 +410,19 @@ class SceneRuntime:
         while True:
             if scene.closed:
                 raise ValueError("该现场已经交接，不能继续结算原行动")
+            resources = set(scene.reservation.get("resources", []))
+            current = self._resource_versions(resources)
+            expected = scene.reservation.get("versions", current)
+            changed = [who for who in expected if expected[who] != current.get(who)]
+            if changed and scene.reservation.get("phase") != "running":
+                conflict = {"resources": changed, "changed": True,
+                            "reason": "共同人物或物品已实际变化，旧裁定尚未执行；须按最新位置、归属和实际经过重新安排",
+                            "attempts": [{"scene": ident, "actor": scene.reservation.get("actor"),
+                                          "original": scene.reservation.get("original", ""),
+                                          "action": scene.reservation.get("attempt", {})}]}
+                scene.pending_turn["scene_conflict"] = conflict
+                self.checkpoint(ident)
+                raise SceneResourceConflict(conflict)
             blocks = self.blockers(ident)
             scene.reservation["blocked"] = blocks
             if any(block.get("owner") for block in blocks):
@@ -463,6 +481,7 @@ class SceneRuntime:
         if "scene_conflict" not in scene.pending_turn:
             raise ValueError("没有需要共同裁定的行动")
         scene.reservation["joint_reviewed"] = True
+        scene.reservation["versions"] = self._resource_versions(set(scene.reservation.get("resources", [])))
         scene.pending_turn["scene_conflict"]["reviewed"] = True
         self.checkpoint(ident)
 
