@@ -7,8 +7,9 @@ import pytest
 from autokeeper.agents.cast import Action, BeforeTravel, Plan, Ruling
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
+from autokeeper.engine.timing import SceneTimeBoundary
 from autokeeper.rules.coc import Rules
-from autokeeper.world.ops import Follow, Move
+from autokeeper.world.ops import Follow, Move, Occur
 
 from .test_party_places import made
 from .test_request_execution import RequestCast
@@ -121,6 +122,116 @@ async def test_npcs_follow_the_actual_departing_leader_and_not_a_staying_teammat
         await game.resolve(action, Ruling(needs_roll=False))
         assert game.world.place("preacher") == "office" and not game.world.entity("preacher").following
         assert game.world.place("warden") == "square" and game.world.entity("warden").following == "chen"
+    finally:
+        await game.close()
+
+
+@pytest.mark.parametrize("mentioned", [False, True])
+async def test_agreed_npc_company_waits_for_committed_work_and_survives_a_new_batch(fake, mentioned):
+    action = move(companions=["preacher"] if mentioned else [])
+    game, _, _ = await travelling(fake, [action])
+    start, actor = game.state.minutes, game.state.investigator.id
+    assert game.world.apply(Follow(npc="preacher", leader=actor, destination="office", actor="preacher")).ok
+    await game.prepare(action)
+    # Another scene commits this real action while this scene still holds its earlier cursor.
+    with game.world.at(start + 4):
+        assert game.world.apply(Occur(id="companion-ready", actor="preacher", participants=[actor],
+                                     place="square", text="已经打开车门，等调查员上车。")).ok
+    try:
+        turn = await game.resolve(action, Ruling(needs_roll=False))
+        assert game.world.place("preacher") == game.world.place(actor) == "office"
+        assert not game.world.entity("preacher").following
+        assert game.state.minutes == start + 14  # The ten-minute journey starts after the committed action.
+        moves = [event for event in game.world.rec.events if "preacher" in event.motions]
+        assert len(moves) == 1
+        assert moves[0].motions["preacher"] == {
+            "origin": "square", "destination": "office", "start": start + 4, "end": start + 14}
+        assert game.world.place_at("preacher", start + 4) == game.world.place_at(actor, start + 4) == ""
+        assert any(event.id == "ev:companion-ready" for event in game.world.rec.events)
+        assert not any("没有随行" in note or "没有一起来" in note for note in turn.notes)
+    finally:
+        await game.close()
+
+
+@pytest.mark.parametrize("after_success", [False, True])
+async def test_saved_npc_company_arrival_retimes_the_original_journey_only_once(fake, after_success):
+    action = move(arrival_after_success=after_success)
+    game, cast, _ = await travelling(fake, [action])
+    actor, start = game.state.investigator.id, game.state.minutes
+    assert game.world.apply(Follow(npc="preacher", leader=actor, destination="office", actor="preacher")).ok
+    saved = []
+
+    def cut_before_arrival():
+        steps = game.state.pending_turn.get("resolution", {}).get("steps", {})
+        travelled = (any(key.endswith("entry/elapsed") and row.get("done") for key, row in steps.items())
+                     if after_success else steps.get("travel", {}).get("done"))
+        if travelled:
+            saved.append(game.state.model_dump_json())
+            raise ConnectionError("行程已计时，抵达尚未提交")
+
+    game.checkpoint = cut_before_arrival
+    with pytest.raises(ConnectionError):
+        await game.resolve(action, Ruling(needs_roll=False))
+    restored = GameState.model_validate_json(saved[-1])
+    resumed = Game(game.m, restored, cast, Rules(dice=fake))
+    resumed.table_turn_based = True
+    with resumed.world.at(start + 4):
+        assert resumed.world.apply(Occur(id="companion-ready", actor="preacher", participants=[actor],
+                                        place="square", text="打开车门，等调查员上车。")).ok
+    try:
+        await resumed.resolve(action, Ruling(needs_roll=False))
+        await resumed.resolve(action, Ruling(needs_roll=False))
+        assert resumed.world.place("preacher") == resumed.world.place(actor) == "office"
+        assert restored.minutes == start + 14 and restored.round_elapsed == {actor: 14}
+        moves = [event for event in restored.record.events if actor in event.motions or "preacher" in event.motions]
+        assert len(moves) == 2 and all(
+            motion["start"] == start + 4 and motion["end"] == start + 14
+            for event in moves for motion in event.motions.values())
+    finally:
+        await resumed.close()
+        await game.close()
+
+
+async def test_retiming_agreed_company_obeys_the_scene_time_boundary_without_double_travel(fake):
+    action = move()
+    game, _, _ = await travelling(fake, [action])
+    actor, start = game.state.investigator.id, game.state.minutes
+    assert game.world.apply(Follow(npc="preacher", leader=actor, destination="office", actor="preacher")).ok
+    with game.world.at(start + 4):
+        assert game.world.apply(Occur(id="companion-ready", actor="preacher", place="square", text="现在出发。")).ok
+    permitted, waits = {"end": start + 10}, []
+
+    def commit(end, people):
+        if end > permitted["end"]:
+            raise SceneTimeBoundary(end)
+
+    async def wait(end):
+        waits.append(end)
+        permitted["end"] = end
+
+    game.time_commit, game.time_wait = commit, wait
+    try:
+        await game.resolve(action, Ruling(needs_roll=False))
+        await game.resolve(action, Ruling(needs_roll=False))
+        assert waits == [start + 14] and game.state.round_elapsed == {actor: 14}
+        assert game.world.place("preacher") == game.world.place(actor) == "office"
+        assert len([event for event in game.world.rec.events if "preacher" in event.motions]) == 1
+    finally:
+        await game.close()
+
+
+async def test_explicit_solo_departure_still_leaves_an_agreed_companion_behind(fake):
+    action = move(alone=True)
+    game, _, _ = await travelling(fake, [action])
+    actor, start = game.state.investigator.id, game.state.minutes
+    assert game.world.apply(Follow(npc="preacher", leader=actor, destination="office", actor="preacher")).ok
+    with game.world.at(start + 4):
+        assert game.world.apply(Occur(id="companion-ready", actor="preacher", place="square", text="现在出发。")).ok
+    try:
+        await game.resolve(action, Ruling(needs_roll=False))
+        assert game.world.place(actor) == "office" and game.world.place("preacher") == "square"
+        assert game.state.minutes == start + 10 and not game.world.entity("preacher").following
+        assert not any("preacher" in event.motions for event in game.world.rec.events)
     finally:
         await game.close()
 

@@ -421,6 +421,10 @@ class SceneRuntime:
             if ends:
                 minutes = min(minutes, max(0, min(ends) - start - travel))
         resources = {self.state.investigators[scene.active].id, *action.companions}
+        if heading and heading != scene.place and not action.alone:
+            travellers = set(game._travellers(action, heading))
+            resources.update(ent.id for ent in game.world.rec.entities.values()
+                             if ent.kind == "npc" and ent.at == scene.place and ent.following in travellers)
         if action.npc:
             resources.add(action.npc)
         resources.update(row.npc for row in action.before)

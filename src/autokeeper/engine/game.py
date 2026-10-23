@@ -3860,14 +3860,27 @@ class Game(Encounters):
             places = {i.id: self.world.place(i.id) for i in st.investigators}
             coming = (set(interval.get("participants", [st.investigator.id])) if interval is not None else
                       {st.investigator.id} if alone else {who for who, place in places.items() if place == src})
+            at = (interval or {}).get("end", turn.interval.get("end", self.world.now))
+            start = (interval or {}).get("start", at)
+            if party and not alone and src != loc_id:
+                ready = max((self.world.available_at(ent.id) or start for ent in self.world.rec.entities.values()
+                             if ent.kind == "npc" and ent.at == src and ent.following in coming), default=start)
+                if ready > start:
+                    # A parallel scene may have committed the companion's work while this
+                    # journey awaited time permission. Shift the same receipt before moving
+                    # anyone; never turn a real agreement into a silent solo departure.
+                    delay = ready - start
+                    self._spend(delay, turn, participants=sorted(coming))
+                    start, at = ready, at + delay
+                    if interval is not None:
+                        interval.update(start=start, end=at)
+                    turn.notes.append(f"同行者完成已提交的行动后一起出发：{format_time(start)}至{format_time(at)}。")
             joined = [who for who, place in places.items() if src != loc_id and place == loc_id and who not in coming]
             places.update(dict.fromkeys(coming, loc_id))
             if src != loc_id and src not in places.values():
                 self.world.rec.left[src] = self.world.rec.seq
             st.location = loc_id
             st.apart = {who: place for who, place in places.items() if place != loc_id}
-            at = (interval or {}).get("end", turn.interval.get("end", self.world.now))
-            start = (interval or {}).get("start", at)
             if src != loc_id:
                 motions = {who: {"origin": src, "destination": loc_id, "start": start, "end": at} for who in coming}
                 with self.world.at(at, start=start):
