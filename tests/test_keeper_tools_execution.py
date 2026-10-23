@@ -12,6 +12,7 @@ from autokeeper import config, paths
 from autokeeper.agents.cast import Cast
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import Game
+from autokeeper.engine.scenes import SceneRuntime
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Event, Module
 from autokeeper.rules.coc import Rules
@@ -62,6 +63,54 @@ async def shut(games, casts):
         await game.close()
     for cast in casts:
         await cast.close()
+
+
+async def test_three_players_keep_their_own_checks_and_replies_after_an_npc_hands_over_an_item(fake):
+    initial, _, initial_cast = table(fake, party=True)
+    state, module = initial.state, initial.m
+    people = state.investigators
+    for person, skill in zip(people, (50, 65, 80), strict=True):
+        person.skills["侦查"] = skill
+    await shut([initial], [initial_cast])
+
+    async def emit(ident, event):
+        pass
+
+    def factory(ident):
+        return Cast(config.Config(roles={role: WRITER for role in config.DEFAULT_ROLES},
+                                  minds=0, visual_limit=0, imagegen=False), module)
+
+    runtime = SceneRuntime(state, module, factory, lambda _: Rules(dice=fake), emit)
+    ident = runtime.for_member(people[0].id)
+    game = runtime.game(ident)
+    try:
+        for index, person in enumerate(people):
+            game.state.active = index
+            text = f"{person.name}查看自己手边的刻痕"
+            SCRIPT.extend([
+                {"action": {"kind": "investigate", "summary": text, "target": "手边的刻痕"}},
+                {"needs_roll": True, "skill": "侦查", "minutes": 1, "result_scope": "personal"},
+            ])
+            if index == 0:
+                SCRIPT.extend([
+                    voice("warden", "递给来访者一只搪瓷杯。"),
+                    {"text": "杯子给你。", "items": [{"name": "搪瓷杯", "to": person.id}]},
+                ])
+            SCRIPT.append(final(f"只有{person.name}看清了自己手边的刻痕。"))
+            fake.queue(1)
+            events, offers = await run(runtime.graph(ident), game, {"input": text, "by_hand": False})
+            assert not offers and not SCRIPT
+            dice, = (event for event in events if event["type"] == "dice")
+            assert (dice["who"], dice["target"]) == (person.name, person.skills["侦查"])
+            body, = (event for event in events if event["type"] == "keeper_delta")
+            assert body["audience"] == [person.id]
+            assert game.state.record is state.record and not game.state.pending_turn
+        assert [entry.who for entry in state.log if entry.kind == "player"] == [p.name for p in people]
+        assert state.find(people[0].id).inventory.count("搪瓷杯") == 1
+        assert all("搪瓷杯" not in state.find(p.id).inventory for p in people[1:])
+        assert runtime.scenes[ident].turn == 3
+    finally:
+        await runtime.close()
 
 
 @pytest.mark.parametrize("speaker", [None, "warden", "preacher"])
