@@ -813,7 +813,7 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     d = receipt.declared
     head = d.summary if d.summary.strip() else f"{{{a}}}做了别的事"
     if ruling is None:
-        return [head]
+        return [f"尝试：{head}", "【未落实】此行动尚无裁定；意图不是已发生的结果，不据此新增控制、伤害或位移。"]
     scope = w.game._check_scope(a, personal=ruling.get("result_scope", "personal") == "personal")
     if ruling.get("needs_roll") and not ruling.get("skill"):
         w.unit.rest = {"actor": a, "scope": scope, "ruling": ruling, "passed": False}
