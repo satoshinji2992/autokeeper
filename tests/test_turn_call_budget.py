@@ -95,8 +95,13 @@ async def test_casual_rp_does_not_bypass_checks_requests_travel_or_absent_people
     action = action.model_copy(update=change)
     game, cast = game_for(fake, action)
     try:
-        await game.rule(action)
-        assert cast.calls == {"arbiter": 1}
+        ruled = await game.rule(action)
+        if "destination" in change or "npc" in change:
+            assert not cast.calls  # an absent addressee is reported before any persuasion roll
+            assert ruled.missing and not ruled.needs_roll
+            assert not game.state.checks
+        else:
+            assert cast.calls == {"arbiter": 1}
     finally:
         await game.close()
 

@@ -322,6 +322,7 @@ def test_strict_schema_for_codex_closes_every_object():
     full = {k: "" for k in strict["properties"]} | {
         "kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False, "communication": "local",
         "companions": [], "alone": False, "before": [], "precautions": [], "arrival_after_success": False,
+        "wait_limit": None,
     }
     assert not hm.problems(full, Action.model_json_schema())  # what strict mode yields still passes our check
 
