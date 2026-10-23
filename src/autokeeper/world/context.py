@@ -74,10 +74,16 @@ def _recall_indices(texts: list[str], query: str, concerns: str, *, recent: int,
     return sorted(selected)
 
 
+def _view_place(w: World, who: str) -> str:
+    """Read committed travel at this scene's time without changing authoritative positions."""
+    return w.place_at(who, w.now) if getattr(w.st, "scene", None) is not None else w.place(who)
+
+
 def _concerns(w: World, npc: str) -> str:
     a = w.agent(npc)
-    parts = [w.name(x) for x in w.present(w.place(npc)) if x != npc]
-    parts += [i.name for i in w.st.investigators if w.place(i.id) == w.place(npc)]
+    here = _view_place(w, npc)
+    parts = [w.name(x) for x in w.present(here) if x != npc] if here else []
+    parts += [i.name for i in w.st.investigators if here and _view_place(w, i.id) == here]
     if a:
         parts += [*a.goals, *(s.text for s in a.plan if s.status in {"pending", "blocked"})]
     parts += [p.text for p in w.rec.promises.values() if npc in {p.by, p.to} and p.status == "active"]
@@ -85,12 +91,15 @@ def _concerns(w: World, npc: str) -> str:
 
 
 def _at_view_time(w: World, when: int) -> bool:
-    """Only a host-owned historical view cuts off knowledge; unscoped views show settled state.
+    """A host-owned historical or continuing scene view cuts off future knowledge.
 
     The scheduler can land its report before its caller advances GameState.minutes. That
-    already-settled report is current, unless the host explicitly requested an earlier clock.
+    already-settled report is current for the unscoped host. A continuing scene, however,
+    may still be earlier than another scene's committed report, even without an op clock.
     """
-    return w.clock is None or when <= w.clock
+    if w.clock is not None:
+        return when <= w.clock
+    return getattr(w.st, "scene", None) is None or when <= w.now
 
 
 def _npc_facts(w: World, npc: str, query: str, concerns: str) -> list[Fact]:
@@ -166,15 +175,16 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     n = next((x for x in w.m.npcs if x.id == npc), None)
     ent = rec.entities[npc]
     a = rec.agents.get(npc)
-    here = w.place(npc)
+    here = _view_place(w, npc)
     lines = [f"【你是】{ent.name}（{npc}）" + (f"，{n.role}" if n else "") + (f"。性格：{n.personality}" if n and n.personality else "")]
     if ent.status or ent.conditions:
         lines.append(f"【你的状况】{'、'.join(x for x in [ent.status, *ent.conditions] if x)}")
     if ent.following:
         lines.append(f"【已同意同行】{_company(w, ent)}；改变主意须明确结束同行，不忽略刚才的约定。")
-    others = [f"{w.name(x)}（{x}）" for x in w.present(here) if x != npc]
-    others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators if w.place(i.id) == here]
-    lines.append(f"【你在】{w.name(here)}（{here}）；身边：{'、'.join(others) or '没有人'}")
+    others = [f"{w.name(x)}（{x}）" for x in w.present(here) if x != npc] if here else []
+    others += [f"{i.name}（{i.id}，调查员）" for i in w.st.investigators if here and _view_place(w, i.id) == here]
+    where = f"{w.name(here)}（{here}）" if here else "行程中，尚未抵达"
+    lines.append(f"【你在】{where}；身边：{'、'.join(others) or '没有人'}")
     if a:
         lines.append("【你的目标】" + ("；".join(a.goals) or "无"))
         if a.goal_reason:
@@ -199,7 +209,7 @@ def npc_view(w: World, npc: str, query: str = "") -> View:
     if witnessed:
         lines.append("【近期亲历或当面获知】\n" + "\n".join(
             f"- {format_time(e.t)} {w.name(e.actor)}（{e.actor}）：{e.text}" for e in witnessed))
-    if any(w.place(i.id) == here for i in w.st.investigators):
+    if here and any(_view_place(w, i.id) == here for i in w.st.investigators):
         lines.append("【眼前的交流】调查员在场。可回应刚听到的话、提出与自身目标有关的帮助或请求；其未说出的意图不在你的信息内。")
     rels = [r for r in rec.relations.values() if npc in (r.a, r.b) and npc in r.known_by]
     lines.append("【你和别人】\n" + ("\n".join(f"- {w.name(r.a)}对{w.name(r.b)}：{r.kind} {r.value}" + (f"（{r.note}）" if r.note else "")
@@ -283,7 +293,7 @@ def npc_brief(w: World, npc: str, query: str = "", *, covered_facts: dict[str, s
         if reports:
             lines.append("【本人工作报告，未经外部证实】\n" + "\n".join(reports))
         meet = [f"{s.text}（{s.id}{ONCE.get(s.once, '')}）" for s in pending if agents.meets(w, npc, s)][:4]
-        if meet and any(w.place(i.id) == ent.at for i in w.st.investigators):
+        if meet and (here := _view_place(w, npc)) and any(_view_place(w, i.id) == here for i in w.st.investigators):
             lines.append("【见到调查员时，你会】" + "；".join(meet))
     concerns = _concerns(w, npc)
     included: set[str] = set()
@@ -330,13 +340,15 @@ def rooms(m: Module, place: str) -> set[str]:
 def nearby(w: World, place: str) -> dict[str, str]:
     """NPC id -> the room of this building they are in: not in sight, not gone either."""
     near = rooms(w.m, place)
-    return {e.id: e.at for e in w.rec.entities.values() if e.kind == "npc" and e.at in near and e.status not in ("死亡", "失踪")}
+    return {e.id: at for e in w.rec.entities.values() if e.kind == "npc"
+            and (at := _view_place(w, e.id)) in near and e.status not in ("死亡", "失踪")}
 
 
 def traces(w: World, at: str) -> list[str]:
     """What can still be noticed at a place of what went on there since the party last left it."""
     since = w.rec.left.get(at, -1)
-    found = [e.trace for e in w.rec.events if e.place == at and e.trace and e.visibility == "private" and e.seq > since]
+    found = [e.trace for e in w.rec.events if _at_view_time(w, e.t) and e.place == at and e.trace
+             and e.visibility == "private" and e.seq > since]
     return list(dict.fromkeys(found))[-5:]
 
 
@@ -360,7 +372,8 @@ def item_refs(w: World, holders: Collection[str]) -> str:
 def happened(w: World, since: int) -> list[str]:
     """What the world did in front of the party since a record seq: an NPC who walked in, a
     scheduled thing that came about where they stand. Told by the keeper as it happens."""
-    return [e.text for e in w.rec.events if e.seq > since and w.st.investigator.id in e.witnesses and e.kind in SHOWN
+    return [e.text for e in w.rec.events if e.seq > since and _at_view_time(w, e.t)
+            and w.st.investigator.id in e.witnesses and e.kind in SHOWN
             and e.actor not in {i.id for i in w.st.investigators}]  # fmt: skip
 
 
@@ -368,23 +381,29 @@ def keeper_view(w: World, at: str | None = None) -> str:
     """The scene and what the table knows; no secret, no plan."""
     rec, st = w.rec, w.st
     at = at or st.location
+    scoped = getattr(st, "scene", None) is not None
+    viewer = st.investigator.id
     people = [f"{w.name(x)}" + (f"（{rec.entities[x].status}）" if rec.entities[x].status else "") for x in w.present(at)]
-    traces = [e.trace for e in rec.events if e.place == at and e.trace and e.visibility == "private"][-5:]
+    traces = [e.trace for e in rec.events if _at_view_time(w, e.t) and e.place == at and e.trace and e.visibility == "private"][-5:]
     lines = [f"【此刻在{w.name(at)}的人】{'、'.join(people) or '没有别人'}"]
     if traces:
         lines.append("【这里看得出来的变化】" + "；".join(traces))
-    told = [f for f in rec.facts.values() if f.revealed is not None and f.origin != "module" and not f.retracted][-15:]
+    told = [f for f in rec.facts.values() if _at_view_time(w, f.t) and f.origin != "module" and not f.retracted
+            and ((viewer in f.known_by or PLAYERS in f.known_by) if scoped else f.revealed is not None)][-15:]
     if told:
         at_table = knowledge.table(w.m, st, rec) if any(f.id.startswith("told:") for f in told) else None
         how = {f.id: knowledge.how_known(w, f, at_table) for f in told if at_table and f.id.startswith("told:")}
-        lines.append("【调查员已经知道】\n" + "\n".join(f"- {f.text}" + (f"（{how[f.id]}）" if how.get(f.id) else "") for f in told))
-    party = {PLAYERS, *(i.id for i in st.investigators)}
-    proms = [p for p in rec.promises.values() if p.public and p.status == "active" and party & {p.by, p.to}]
+        heading = f"【{st.investigator.name}已经知道】" if scoped else "【调查员已经知道】"
+        lines.append(heading + "\n" + "\n".join(f"- {f.text}" + (f"（{how[f.id]}）" if how.get(f.id) else "") for f in told))
+    party = {PLAYERS, viewer} if scoped else {PLAYERS, *(i.id for i in st.investigators)}
+    proms = [p for p in rec.promises.values() if _at_view_time(w, p.made) and p.public and p.status == "active" and party & {p.by, p.to}]
     if proms:
         lines.append("【还没兑现的约定】\n" + "\n".join(f"- {w.name(p.by)}答应{w.name(p.to)}：{p.text}（{_when(p.due)}）" for p in proms))
-    seen = [e for e in rec.events if e.visibility == "public"][-8:]
+    seen = [e for e in rec.events if _at_view_time(w, e.t)
+            and ((e.kind in SHOWN and knowledge.saw(e, viewer)) if scoped else e.visibility == "public")][-8:]
     if seen:
-        lines.append("【调查员亲历的近事】\n" + "\n".join(f"- {format_time(e.t)} {e.text}" for e in seen))
+        heading = f"【{st.investigator.name}亲历的近事】" if scoped else "【调查员亲历的近事】"
+        lines.append(heading + "\n" + "\n".join(f"- {format_time(e.t)} {e.text}" for e in seen))
     return "\n".join(lines)
 
 
