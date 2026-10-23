@@ -20,7 +20,8 @@ def stub(folder: Path, name: str, body: str) -> None:
     f.chmod(0o755)
 
 
-def run(tmp_path: Path, uv_install: str, *, settings: dict | None = None, available: bool = True) -> subprocess.CompletedProcess:
+def run(tmp_path: Path, uv_install: str, *, settings: dict | None = None, available: bool = True,
+        renderer: bool = True) -> subprocess.CompletedProcess:
     bin_, tools = tmp_path / "stubs", tmp_path / "tool-bin"
     bin_.mkdir()
     tools.mkdir()
@@ -29,14 +30,16 @@ def run(tmp_path: Path, uv_install: str, *, settings: dict | None = None, availa
          + f'exit {0 if available else 22}')
     stub(bin_, "node", "exit 0")
     stub(bin_, "npm", "exit 0")
-    stub(bin_, "chafa", "exit 0")
+    if renderer:
+        stub(bin_, "chafa", "exit 0")
+    stub(bin_, "brew", f'echo "unexpected system install $*" >> {log}\nexit 1')
     stub(bin_, "git", "exit 0")
     stub(bin_, "uv", f'echo "uv $*" >> {log}\ncase "$1 $2" in\n  "tool install") {uv_install} ;;\n'
                      f'  "tool dir") echo {tools} ;;\nesac\nexit 0')
     stub(tools, "autokeeper", f'echo "autokeeper $*" >> {log}')
-    env = {"PATH": f"{bin_}:/usr/bin:/bin", "HOME": str(tmp_path), "AUTOKEEPER_NO_MODIFY_PATH": "1"}
+    env = {"PATH": str(bin_), "HOME": str(tmp_path), "AUTOKEEPER_NO_MODIFY_PATH": "1"}
     env.update(settings or {})
-    return subprocess.run(["bash", str(SCRIPT)], env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+    return subprocess.run([shutil.which("bash"), str(SCRIPT)], env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                           encoding="utf-8", timeout=30)
 
 
@@ -46,6 +49,15 @@ def test_the_script_installs_the_package_and_runs_setup(tmp_path):
     calls = (tmp_path / "log").read_text(encoding="utf-8")
     assert "uv tool install --force --refresh-package autokeeper --python 3.12 autokeeper==0.0.5" in calls
     assert "autokeeper setup" in calls and "装好了" in out.stdout
+
+
+def test_renderer_is_prepared_by_setup_without_a_system_chafa_command(tmp_path):
+    out = run(tmp_path, "exit 0", renderer=False)
+    assert out.returncode == 0, out.stderr
+    calls = (tmp_path / "log").read_text()
+    assert "autokeeper setup" in calls
+    assert "unexpected system install" not in calls
+    assert "chafa 没装上" not in out.stderr
 
 
 def test_a_failed_install_stops_before_setup_and_says_why(tmp_path):

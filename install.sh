@@ -34,16 +34,7 @@ if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
   warn "没找到 Node.js：伤害、理智这些骰子要用它。装好 Node.js 18 或更新的版本（https://nodejs.org，或 sudo apt install nodejs npm）后运行 autokeeper setup。"
 fi
 
-if ! command -v chafa >/dev/null; then  # photos as coloured characters; without it, only the hand-drawn art
-  say "安装 chafa（把照片画成彩色字符）…"
-  SUDO=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
-  if command -v brew >/dev/null; then brew install chafa || true
-  elif command -v apt-get >/dev/null; then $SUDO apt-get install -y chafa </dev/tty || true
-  elif command -v dnf >/dev/null; then $SUDO dnf install -y chafa </dev/tty || true
-  elif command -v pacman >/dev/null; then $SUDO pacman -S --noconfirm chafa </dev/tty || true
-  fi
-  command -v chafa >/dev/null || warn "chafa 没装上：场景照片会改用手绘的字符画。想看照片的话，自己装上 chafa（https://hpjansson.org/chafa/）。"
-fi
+# setup checks the renderer after Python dependencies (including chafa.py) are installed.
 
 name="autokeeper${EXTRAS:+[$EXTRAS]}"
 case "$FROM" in auto|pypi|github|git) ;; *) die "AUTOKEEPER_FROM 只能是 auto、pypi、github 或 git。" ;; esac

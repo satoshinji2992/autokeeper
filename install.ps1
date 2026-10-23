@@ -13,6 +13,27 @@ $Extras = $env:AUTOKEEPER_EXTRAS
 
 function Fail($message) { throw $message }  # not exit: under irm | iex that would close the window
 
+function Test-NodeReady {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue) -or -not (Get-Command npm -ErrorAction SilentlyContinue)) { return $false }
+    try {
+        $NodeVersion = & node --version
+        return ($LASTEXITCODE -eq 0 -and $NodeVersion -match '^v(\d+)\.' -and [int]$Matches[1] -ge 18)
+    } catch { return $false }
+}
+
+if (-not (Test-NodeReady)) {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Fail "需要 Node.js 18+ 和 npm，但未找到 winget。请从 https://nodejs.org 安装 LTS 版，重新打开终端后再运行此脚本。"
+    }
+    Write-Host "安装 Node.js LTS（掷骰组件需要，系统可能请求安装权限）…"
+    winget install --id OpenJS.NodeJS.LTS --exact --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -notin @(0, 3010)) { Fail "Node.js 安装未完成，错误码 $LASTEXITCODE。请查看上方的安装信息，解决后重新运行此脚本。" }
+    $MachinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = "$MachinePath;$UserPath;$env:Path"
+    if (-not (Test-NodeReady)) { Fail "Node.js 安装后仍无法使用。请重新打开终端，确认 node --version 不低于 18、npm --version 可运行，再运行此脚本。" }
+}
+
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Write-Host "安装 uv（Python 环境管理）…"
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -20,19 +41,7 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { Fail "uv 装好了但找不到，开一个新终端再运行一次" }
 }
-if (-not (Get-Command node -ErrorAction SilentlyContinue) -or -not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Warning "没找到 Node.js：伤害、理智这些骰子要用它。winget install OpenJS.NodeJS.LTS 装好后运行 autokeeper setup。"
-}
-
-if (-not (Get-Command chafa -ErrorAction SilentlyContinue)) {  # photos as coloured characters
-    if (Get-Command scoop -ErrorAction SilentlyContinue) {
-        Write-Host "安装 chafa（把照片画成彩色字符）…"
-        scoop install chafa
-    }
-    if (-not (Get-Command chafa -ErrorAction SilentlyContinue)) {
-        Write-Warning "chafa 没装上：场景照片会改用手绘的字符画。想看照片的话，装 Scoop（https://scoop.sh）后运行 scoop install chafa。"
-    }
-}
+# setup checks the renderer after Python dependencies (including chafa.py) are installed.
 
 $Name = if ($Extras) { "autokeeper[$Extras]" } else { "autokeeper" }
 if ($From -notin @("auto", "pypi", "github", "git")) { Fail "AUTOKEEPER_FROM 只能是 auto、pypi、github 或 git。" }

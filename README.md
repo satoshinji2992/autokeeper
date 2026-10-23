@@ -223,7 +223,7 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 
 ## 开始玩
 
-掷骰组件需要 Node.js 18+。安装脚本会准备 uv 与 AutoKeeper，并尝试安装用于照片字符画的 chafa；各系统的依赖安装方法见[游玩指南](docs/playing.md#安装)。
+安装脚本会准备 uv、AutoKeeper 和图像渲染组件。掷骰需要 Node.js 18+，Windows 脚本会通过 winget 自动安装；其他系统的安装方法见[游玩指南](docs/playing.md#安装)。
 
 ```bash
 # Linux、macOS、WSL
@@ -266,7 +266,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 uv tool install autokeeper            # 用 Claude 的话：uv tool install "autokeeper[claude]"
 ```
 
-首次运行会准备掷骰组件。推荐安装 [chafa](https://hpjansson.org/chafa/) 显示照片字符画；存档位置与各系统的依赖说明见[安装说明](docs/playing.md#安装)。
+首次运行会准备掷骰组件并检查图像渲染。常用平台随包安装 chafa 渲染库，无需另装 Scoop；存档位置与各系统的依赖说明见[安装说明](docs/playing.md#安装)。
 
 </details>
 

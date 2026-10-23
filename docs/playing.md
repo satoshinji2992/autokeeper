@@ -26,15 +26,17 @@ curl -fsSL https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/inst
 irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1 | iex
 ```
 
-再运行一次脚本，或者 `uv tool upgrade autokeeper`（pipx 是 `pipx upgrade autokeeper`），就是更新。新版本不一定能读取旧版本的存档，更新前请看[更新记录](../CHANGELOG.md)。脚本可以用环境变量调整：`AUTOKEEPER_VERSION` 装指定版本（如 `0.0.3`），`AUTOKEEPER_EXTRAS=graphrag` 加上模组原文检索（约 1 GB，首次使用还会下载嵌入模型），`AUTOKEEPER_FROM=git` 和 `AUTOKEEPER_REF` 从 GitHub 的某个分支或标签装。不用脚本的话，原文检索这样加：`uv tool install "autokeeper[graphrag]"`。
+再运行一次脚本即可更新。通过 PyPI 手动安装的，也可以用 `uv tool upgrade autokeeper`（pipx 是 `pipx upgrade autokeeper`）。新版本不一定能读取旧版本的存档，更新前请看[更新记录](../CHANGELOG.md)。脚本可以用环境变量调整：`AUTOKEEPER_VERSION` 装指定版本（如 `0.0.3`），`AUTOKEEPER_EXTRAS=graphrag` 加上模组原文检索（约 1 GB，首次使用还会下载嵌入模型），`AUTOKEEPER_FROM=git` 和 `AUTOKEEPER_REF` 从 GitHub 的某个分支或标签装。不用脚本的话，原文检索这样加：`uv tool install "autokeeper[graphrag]"`。
 
-另外要装的是 Node.js 18+ 和 chafa。一键脚本会顺便用系统的包管理器装 chafa（macOS 用 brew，Linux 用 apt、dnf 或 pacman，Windows 用 Scoop）；用 `uv tool install` 装的话，第一次运行或 `autokeeper setup` 时，Windows 和 Linux 会自动下载 chafa 的官方版本，macOS 请自己 `brew install chafa`。没有 Node.js，伤害和理智的骰子掷不了；没有 chafa，照片显示成手绘字符画。
+掷骰需要 Node.js 18+ 和 npm。Windows 一键脚本会检查版本，缺少时通过 winget 安装 LTS 版，并刷新当前终端的环境后继续；已有可用版本则跳过。没有 winget 时，脚本会提示从 [Node.js 官网](https://nodejs.org/) 安装。其他系统或手动安装可参考下表；手动装好 Node.js 后，重新打开终端并运行 `autokeeper setup`。
 
 | 系统 | 安装方式 |
 |---|---|
-| macOS | `brew install node chafa` |
-| Linux | `sudo apt install nodejs npm chafa`（其他发行版用自己的包管理器）。检查 `node --version` 不低于 18。 |
-| Windows | `winget install OpenJS.NodeJS.LTS`；用 Scoop 的话 `scoop install chafa`。建议在 Windows Terminal 中运行。 |
+| macOS | `brew install node` |
+| Linux | `sudo apt install nodejs npm`（其他发行版用自己的包管理器）。检查 `node --version` 不低于 18。 |
+| Windows | 一键脚本自动安装；手动安装用 `winget install --id OpenJS.NodeJS.LTS -e`。建议在 Windows Terminal 中运行。 |
+
+Windows x64、Linux x86_64／aarch64 和 macOS 会随包安装 chafa 渲染库，通常无需另装 chafa 或 Scoop。初始化会检查实际可用性；缺少渲染库时，Windows 和 Linux 会尝试下载官方备用组件。渲染组件不可用时，仍可使用模组提供的手绘字符画。
 
 换模型、补 Key：`autokeeper login`。检查环境：`autokeeper doctor`，加 `--ping` 给每个模型发一句话试试通不通。
 
@@ -262,7 +264,7 @@ autokeeper join 192.168.1.5
 
 默认模组是《追书人》，第一位调查员留给玩家，其余交给 AI。开房间的终端不占座，房主自己另开终端 `autokeeper join 127.0.0.1`。如果程序显示了不同端口，请连显示的完整地址。续档用 `host --load 存档名`。
 
-浏览器加入无需安装。终端加入要安装 AutoKeeper；图片由各自电脑上的 chafa 转成字符画，没装则只显示手绘图。
+浏览器加入无需安装。终端加入要安装 AutoKeeper；图片由本机渲染组件转成字符画，初始化时会检查并准备组件。
 
 ### 连接排查
 
