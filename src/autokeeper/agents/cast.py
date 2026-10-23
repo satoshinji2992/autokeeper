@@ -1112,16 +1112,46 @@ class Cast:
         the investigator really holds, and the player's words (with the skill a dice command asks for).
         A batch supplies the scene and recent world record once; each action then adds only its author."""
         inv = state.investigator
-        asked = commands.asked(text)
+        request = state.pending_turn.get("request", {})
+        refreshing = bool(state.pending_turn.get("wait_refresh") and request.get("actor") == inv.id)
+        asked = None if refreshing else commands.asked(text)
         view = fog.personal(self.module, state, inv.id).model_copy(update={"journey": state.journey, "ongoing": state.ongoing})
         prompt = (f"【场景】\n{self.bearings(view)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
                   if shared else "")
         prompt += (self._party(state) + f"\n【调查员】{inv.name}({inv.id})\n"
-                   f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}")
+                   f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}")
         unfinished = getattr(state, "unfinished", {}).get(inv.id)
-        if unfinished:
+        if refreshing:
+            # The running journal owns the request after execution was removed from its
+            # parked note. Send its intent and actual past work, never the old Plan/ruling.
+            context = {key: request[key] for key in ("original", "completed", "remaining", "wait_window")
+                       if key in request}
+            if "wait_window" in context:
+                context["wait_window"] = {key: context["wait_window"][key] for key in ("start", "end")
+                                          if key in context["wait_window"]}
+            if unfinished and unfinished.get("reason"):
+                context["reason"] = unfinished["reason"]
+            if waiting := request.get("wait_action"):
+                context["wait_action"] = {key: waiting[key] for key in (
+                    "kind", "summary", "target", "wait_limit", "wait_until") if key in waiting}
+            prompt += ("\n【自动续办：按当前记录重新判断原等待】\n"
+                       + json.dumps(context, ensure_ascii=False)
+                       + "\n这不是玩家的新声明；original只作原请求依据，不从头执行。completed是已经落实的经过，"
+                       "不得重做其中的交谈、交物、检定、移动或其他前缀，也不因它们写在原话里再次要求办理。"
+                       "本次只判断wait_action和remaining尚未办理的部分：结合当前现场检查原停止条件是否已成立，"
+                       "原wait_window是整段等待的既有截止，不能从现在重新计算相对时长。"
+                       "条件未到且无需新选择时继续原等待；条件已到就结束等待，明确授权的后续才可安排。"
+                       "出现必须由玩家回答的新情况时只交代眼前情况、保留未办意图，不替他作新选择。")
+        else:
+            prompt += f"\n【玩家】{text}"
+        if unfinished and not refreshing:
+            context = {key: unfinished[key] for key in ("original", "completed", "remaining", "reason")
+                       if key in unfinished}
+            parked = unfinished.get("execution", {}).get("request", {})
+            if window := parked.get("wait_window"):
+                context["wait_window"] = {key: window[key] for key in ("start", "end") if key in window}
             prompt += ("\n【本人尚未办完的原请求】\n"
-                       + json.dumps(unfinished, ensure_ascii=False)
+                       + json.dumps(context, ensure_ascii=False)
                        + "\n这只是尚待意图，不是正在执行的旧 Plan。以本次玩家新输入为先，结合实际结果判断是否继续、改变或放弃；"
                        "不能自动恢复旧动作，也不能把尝试或承诺当作已经完成。"
                        "本次 Plan 是本人未办意图的当前版本；仍成立的旧意图合并到 remaining，改变或放弃则按本次输入更新。")
