@@ -193,6 +193,11 @@ class Continuation(BaseModel):
         return self
 
 
+class TimeHandoff(BaseModel):
+    advance: bool = Field(description="本场可以略过到指定时刻的空白时间；有待处理的危险、约定或玩家决定就填 false")
+    reason: str = Field(description="仅供后台：依据眼前局势、未完事项与日程说明判断，不代替玩家作决定或创造结果")
+
+
 class PartyInput(BaseModel):
     token: str = Field(min_length=1, description="本次收集窗口内稳定且唯一的原始行动编号")
     who: str = Field(min_length=1, description="提出这条行动的调查员 id；同一调查员可以有多条行动")
@@ -2082,6 +2087,37 @@ class Cast:
             module=module + ("\n\n" + _book(m) if self.backstage else ""),
         )
         return self._open("keeper", "keeper", system)
+
+    async def scene_time(self, state: GameState, until: int) -> TimeHandoff:
+        """The existing scene KP decides one actual time handoff, never a player's action."""
+        brief = world_view.keeper_brief(self.world) if self.world is not None else ""
+        members = getattr(getattr(state, "scene", None), "members", [i.id for i in state.investigators])
+        unfinished = {who: {key: note[key] for key in ("original", "remaining", "reason") if key in note}
+                      for who in members if (note := state.unfinished.get(who))}
+        prompt = (f"【场景时间衔接，只作幕后判断，不写正文或世界操作】\n"
+                  f"另一处已经声明的行动需要推进到{format_time(until)}（第{until}分钟）。"
+                  f"本场目前为{state.clock}（第{state.minutes}分钟）。\n"
+                  "判断能否略过本场这段空白时间，使两处行动接续，不必把每段路程等成现实中的空等。"
+                  "本场虽仍可调查，不代表必须原地冻结：没有迫切决定、危险、限时机会或未办事项时可以跳时。"
+                  "不能替调查员搜查、答应、转交、知晓秘密或决定去向；不能预定成功、让援助已经到场。"
+                  "若期间有需要玩家回应的新情况、必须先落实的日程或约定，填advance=false。"
+                  "这里只授予到指定时刻的时间许可；新玩家声明会撤销许可，实际时间尚未推进。\n\n"
+                  + self.scene(state) + "\n" + self._party(state)
+                  + f"\n【本场未完局势】{state.ongoing or '无'}；行程：{state.journey or '无'}"
+                  + "\n【各人尚待意图，不代表正在执行】" + json.dumps(unfinished, ensure_ascii=False)
+                  + "\n【本场各人的近期经过，仅供主持判断】\n"
+                  + _recent(state, keeper=True, viewers=members) + "\n\n" + brief)
+        # Disposable context: a late private question or new declaration may resume the
+        # main keeper while this suggestion is cancelled. Never bind both to its transcript.
+        original = self._keeper(state)
+        session = Session("keeper", self.cfg.role("keeper"), original.system, memory=original.memory,
+                          transcript=[dict(message) for message in original.transcript],
+                          notes=dict(original.notes), key=original.key)
+        try:
+            reply = await self._send("scene_time", session, state, prompt, schema=_schema(TimeHandoff), bind=False)
+        finally:
+            await session.close()
+        return TimeHandoff.model_validate(reply.data)
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
                      check: Callable[[Any], bool] | None = None, fix: str = "",
