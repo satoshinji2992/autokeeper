@@ -147,8 +147,11 @@ def build(game: Game, checkpointer=None):
         try:
             action = await game.parse(state["input"])
         except BaseException:
-            game.state.turn, game.state.logged, game.state.deeds = turn, logged, deeds
-            del game.state.log[count:]
+            if rollback := getattr(game.state, "rollback_parse", None):
+                rollback(turn, count, logged)
+            else:
+                game.state.turn, game.state.logged, game.state.deeds = turn, logged, deeds
+                del game.state.log[count:]
             raise
         journal["action"] = action.model_dump(mode="json")
         keep()
@@ -164,11 +167,16 @@ def build(game: Game, checkpointer=None):
                 ruling = await game.checked_skill(action, Ruling.model_validate(journal["ruling"]), at=game._heading(action))
                 journal["ruling"] = ruling.model_dump(mode="json")
                 keep()
+            if game.time_reserve is not None:
+                game.time_reserve(Action.model_validate(journal["action"]),
+                                  Ruling.model_validate(journal["ruling"]) if journal["ruling"] else None)
             return {"action": journal["action"], "ruling": journal["ruling"]}
         action = Action.model_validate(state["action"])
         ruling = await game.rule(action)
         journal["action"] = action.model_dump(mode="json")
         journal["ruling"] = ruling.model_dump(mode="json") if ruling else None
+        if game.time_reserve is not None:
+            game.time_reserve(action, ruling)
         keep()
         if ruling:
             await game.emit({"type": "ruling", **ruling.model_dump()})
@@ -201,6 +209,8 @@ def build(game: Game, checkpointer=None):
         _bind(game)
         if "turn" not in game.state.pending_turn:
             ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
+            if game.time_wait is not None:
+                await game.time_wait(None)
             holder["turn"] = await game.resolve(Action.model_validate(state["action"]), ruling)
             keep(holder["turn"])
         return {"pending": pending()}
@@ -267,6 +277,8 @@ def build(game: Game, checkpointer=None):
         # finish_request alone settles the old party token and clears or replaces its
         # journal. keep() must never write the preceding Turn into that new segment.
         await game.finish_request(held() if "turn" in game.state.pending_turn else None)
+        if game.time_release is not None:
+            game.time_release()
         keep()
         game.visuals.resume()
         await game.emit({"type": "sheet"})

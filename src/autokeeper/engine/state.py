@@ -34,6 +34,7 @@ class LogEntry(BaseModel):
     audience: list[str] | None = None  # None: public; []: keeper only; otherwise these investigator ids
     presented: dict[str, dict[str, str]] = Field(default_factory=dict)  # immutable delivery-time personal lines
     delivery: str = ""  # the same accepted telling in saved history and live delivery
+    scene: str = ""  # stable source scene, never inferred from the viewer's latest place
 
 
 class Deed(BaseModel):
@@ -140,6 +141,51 @@ class CheckRecord(BaseModel):
         return self.npc or self.target
 
 
+class SceneState(BaseModel):
+    """One continuing scene's execution cursors, not a copy of the shared world."""
+
+    id: str
+    members: list[str]
+    place: str
+    at: int
+    active: int = 0  # index in the canonical investigator roster
+    turn: int = 0
+    busy: bool = False
+    closed: bool = False
+    ongoing: str = ""
+    journey: str = ""
+    pending_turn: dict = Field(default_factory=dict)
+    pending_push: dict | None = None
+    encounter: EncounterState | None = None
+    encounter_log: list[EncounterSummary] = Field(default_factory=list)
+    round_spent: int | None = None
+    round_elapsed: dict[str, int] = Field(default_factory=dict)
+    round_plan: dict = Field(default_factory=dict)
+    queued_actions: list[tuple[str, str]] = Field(default_factory=list)
+    queued_receipts: list[dict] = Field(default_factory=list)
+    held: list[dict] = Field(default_factory=list)
+    aftercare_seconds: int = Field(0, ge=0, lt=60)
+    day: int = 0
+    transcripts: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    notes: dict[str, str] = Field(default_factory=dict)
+    log: list[LogEntry] = Field(default_factory=list)
+    private_history: list[LogEntry] = Field(default_factory=list)
+    logged: int = 0
+    memory: str = ""
+    progress: Progress = Field(default_factory=Progress)
+    progress_at: int = 0
+    view: str = ""
+    view_kind: str = ""
+    sky: str = ""
+    sky_at: int = 0
+    usage: dict[str, dict[str, float]] = Field(default_factory=dict)
+    turn_usage: list[dict[str, float]] = Field(default_factory=list)
+    tally_at: dict[str, float] = Field(default_factory=dict)
+    passed_until: int | None = None  # explicit time permission; -1 means until the next own declaration
+    reservation: dict = Field(default_factory=dict)  # original action interval and resource dependencies
+    notices: list[dict] = Field(default_factory=list)  # committed cross-scene observations awaiting this scene
+
+
 class GameState(BaseModel):
     save_format: int = SAVE_FORMAT  # see SAVE_FORMAT; checked before a save file is read (read_save)
     module: str
@@ -149,6 +195,9 @@ class GameState(BaseModel):
     human: list[str] = Field(default_factory=list)  # investigator ids played by humans; the rest are AI
     active: int = 0
     location: str
+    scenes: dict[str, SceneState] = Field(default_factory=dict)
+    positions: dict[str, str] = Field(default_factory=dict)  # canonical physical PL positions when scenes are running
+    next_scene: int = 0
     journey: str = ""  # intended destination when the player pauses along the way
     ongoing: str = ""  # what was going on as the last telling stopped (a chase, a stand-off): the keeper's scene (Game._narrate)
     visited: list[str] = Field(default_factory=list)

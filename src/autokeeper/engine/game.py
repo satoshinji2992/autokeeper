@@ -70,6 +70,7 @@ from .state import (
     parse_time,
     time_of_day,
 )
+from .timing import SceneTimeBoundary
 from .visuals import Visuals
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -233,7 +234,8 @@ class _ResolutionDice:
 
 
 class Game(Encounters):
-    def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None):
+    def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None,
+                 *, restore: bool = True):
         for inv in state.investigators:
             inv.require_sanity()  # Client projections cannot become authoritative game state.
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
@@ -241,19 +243,24 @@ class Game(Encounters):
         self.emit: Emit = emit or _silent
         self.public_rolls = getattr(getattr(cast, "cfg", None), "public_rolls", False) is True
         self.checkpoint: Callable[[], None] | None = None
+        self.allocate_turn: Callable[[], int] | None = None
+        self.time_reserve: Callable[[Action, Ruling | None], None] | None = None
+        self.time_wait: Callable[[int | None], Awaitable[None]] | None = None
+        self.time_commit: Callable[[int], None] | None = None
+        self.time_release: Callable[[], None] | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None
         self._resolution: dict | None = None
         self._resolution_scope: list[str] = []
         self._resolution_keep: Callable[[Turn], None] | None = None  # a journal kept with its turn (Game._journal)
         self._resolution_lock = asyncio.Lock()
         self._firing_events: set[str] = set()
-        if state.improv:  # a loaded game brings its own branches
+        if restore and state.improv:  # a loaded game brings its own branches
             improv.restore(module, state.improv)
         # This game's world record (world/): who is where, who knows what, promises, important
         # NPCs with plans of their own. Made from the module, then written back into this game's
         # copy of it, so a loaded game finds everyone where the record left them.
         self.world = World(module, state)
-        for op in marked(self.world):  # the NPCs the module marks important act on their own
+        for op in marked(self.world) if restore else []:  # the NPCs the module marks important act on their own
             self.world.apply(op)
         cast.world = self.world
         self.brain = self._brain(cast)
@@ -525,7 +532,7 @@ class Game(Encounters):
             st.turn = resumed_at  # a saved arrangement is inside this same parse, before graph.parse's action receipt
         else:
             await self._curtain(Action(kind="other", summary=text))
-            st.turn += 1
+            st.turn = self.next_turn()
         continuing = st.pending_turn.get("request", {}).get("part", 0) > 0
         if not continuing and text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
             from .perception import input_label
@@ -739,7 +746,7 @@ class Game(Encounters):
         await self._curtain(action)  # finish a scene this action would otherwise overtake
         if self.state.pending_turn.get("preparation", {}).get("blocked"):
             return Ruling(needs_roll=False, reason="出发前的交谈或同行尚未确认")
-        if missing := self._align_interaction(action):
+        if missing := await self.with_time_boundary(lambda: self._align_interaction(action)):
             return Ruling(needs_roll=False, missing=missing, reason="交谈对象已不在实际现场，尚未进行本次交涉检定")
         if action.kind == "move" and action.destination and not action.arrival_after_success:
             me = self.state.investigator
@@ -880,7 +887,7 @@ class Game(Encounters):
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
         and consent before travelling, checkpointed one at a time. Each reply settles as any does
         (_reply), into the preparation's own turn (_preparing)."""
-        if self._align_interaction(action):
+        if await self.with_time_boundary(lambda: self._align_interaction(action)):
             return
         await self._step_in(action)
         if not action.destination or action.kind == "meta" or not fog.findable(self.m, self.state, action.destination, viewer=self.state.investigator.id):
@@ -1813,6 +1820,9 @@ class Game(Encounters):
             self._resolution, self._resolution_scope, self._resolution_keep = outer
 
     async def _resolution_step(self, key: str, turn: Turn, work: Callable[[], Any]) -> Any:
+        return await self.with_time_boundary(lambda: self._resolution_stage(key, turn, work))
+
+    async def _resolution_stage(self, key: str, turn: Turn, work: Callable[[], Any]) -> Any:
         """Resume one stage. Synchronous mutations and its receipt share one checkpoint.
 
         Async work may be retried until it returns; any committed effects inside it must
@@ -1865,10 +1875,28 @@ class Game(Encounters):
             st.pending_turn[key] = journal
         return journal
 
+    def next_turn(self) -> int:
+        return self.allocate_turn() if self.allocate_turn is not None else self.state.turn + 1
+
+    async def with_time_boundary(self, work: Callable[[], Any]) -> Any:
+        """Resume the same durable stage after a late, real duration is known.
+
+        A failure cost or interaction wait can exceed the initial estimate. The guard runs
+        before the clock mutation; completed child stages and their dice keep their receipts.
+        """
+        while True:
+            try:
+                value = work()
+                return await value if inspect.isawaitable(value) else value
+            except SceneTimeBoundary as boundary:
+                if self.time_wait is None:
+                    raise
+                await self.time_wait(boundary.end)
+
     async def resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         """Settle an action in durable stages, including partially completed resolution."""
         async with self._resolution_lock:
-            return await self._resolve(action, ruling)
+            return await self.with_time_boundary(lambda: self._resolve(action, ruling))
 
     async def _resolve(self, action: Action, ruling: Ruling | None) -> Turn:
         st = self.state
@@ -3136,7 +3164,7 @@ class Game(Encounters):
                                                                and self.wait_horizon is not None else ""), ready=True)
             next_journal = {"input": request["original"], "by_hand": journal.get("by_hand", False),
                             "active": journal.get("active", st.active), "request": request,
-                            "arrangement": {"at": st.turn + 1, "plan": plan.model_dump(mode="json")}}
+                            "arrangement": {"at": self.next_turn(), "plan": plan.model_dump(mode="json")}}
             if "party_token" in journal:
                 next_journal["party_token"] = journal["party_token"]
             journal.clear()
@@ -3412,7 +3440,7 @@ class Game(Encounters):
             request.update(part=request["part"] + 1, ready=True)
             continuation = {"input": request["original"], "by_hand": journal.get("by_hand", False),
                             "active": journal.get("active", st.active), "request": request,
-                            "arrangement": {"at": st.turn + 1,
+                            "arrangement": {"at": self.next_turn(),
                                             "plan": Plan(action=resumed, remaining=request["remaining"]).model_dump(mode="json")},
                             "ruling": ruling.model_dump(mode="json")}
             if journal.get("roll_confirmed"):
@@ -3460,7 +3488,7 @@ class Game(Encounters):
             journal.pop("roll_confirmed", None)
             journal["wait_refresh"] = True
             note["reason"] = "等待期间有实际变化，先按当前记录检查原停止条件；不重做已结算前缀"
-        journal["arrangement"]["at"] = st.turn + 1
+        journal["arrangement"]["at"] = self.next_turn()
         request.update(started=st.minutes, ready=True)
         if token is not None:
             journal["party_token"] = token
@@ -3515,6 +3543,8 @@ class Game(Encounters):
         own_start = self._actor_cursor(who)
         start = max(self._actor_cursor(person) for person in people)
         end = start + max(0, minutes)
+        if self.time_commit is not None:
+            self.time_commit(end)
         if not turn.interval:
             turn.interval = {"actor": who, "start": own_start, "end": end, "participants": people,
                              "origin": self.world.place(who), "destination": self.world.place(who)}

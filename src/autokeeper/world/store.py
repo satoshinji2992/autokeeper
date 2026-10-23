@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import jsonpatch
+from pydantic import BaseModel
 
 from ..engine.encounter.model import EncounterState, EncounterSummary
 from ..engine.state import GameState, WorldFact
@@ -146,7 +147,7 @@ class World:
     def place(self, ident: str) -> str:
         """An investigator's actual place, or an item's holder's place."""
         if any(i.id == ident for i in self.st.investigators):
-            return self.st.apart.get(ident, self.st.location)
+            return self.st.positions.get(ident, self.st.apart.get(ident, self.st.location))
         e = self.rec.entities.get(ident)
         if e is None:
             return ""
@@ -389,21 +390,49 @@ class World:
             "encounter": {"state": st.encounter.model_dump(mode="json") if st.encounter is not None else None,
                           "log": [x.model_dump(mode="json") for x in st.encounter_log]},
             # where the party is and who of it is elsewhere: an encounter's unit may move them (effects.Party)
-            "party": {"location": st.location, "apart": dict(st.apart)},
+            "party": {"location": st.location, "apart": dict(st.apart), "positions": dict(st.positions)},
         }
         return out
 
     def load(self, d: dict[str, Any]) -> None:
         st = self.st
-        kept = {k: getattr(st.record, k) for k in BOOKKEEPING}
-        st.record = WorldRecord.model_validate(d["record"])
-        for k, v in kept.items():  # not part of the domain: the same objects go on
-            setattr(st.record, k, v)
-        st.flags = list(d["flags"])
-        st.item_owners = dict(d["item_owners"])
-        st.world = {k: WorldFact.model_validate(v) for k, v in d["world"].items()}
-        st.investigators = [Investigator.model_validate(x) for x in d["investigators"]]
+        record = WorldRecord.model_validate(d["record"])
+        for key in BOOKKEEPING:
+            setattr(record, key, getattr(st.record, key))
+        # Another scene may be awaiting a model with a live investigator/entity reference.
+        # A rejected synchronous transaction restores values without orphaning those objects.
+        _restore(st.record, record)
+        _restore(st.flags, list(d["flags"]))
+        _restore(st.item_owners, dict(d["item_owners"]))
+        _restore(st.world, {k: WorldFact.model_validate(v) for k, v in d["world"].items()})
+        _restore(st.investigators, [Investigator.model_validate(x) for x in d["investigators"]])
         enc = d["encounter"]
-        st.encounter = EncounterState.model_validate(enc["state"]) if enc["state"] is not None else None
-        st.encounter_log = [EncounterSummary.model_validate(x) for x in enc["log"]]
+        restored = EncounterState.model_validate(enc["state"]) if enc["state"] is not None else None
+        st.encounter = _restore(st.encounter, restored)
+        _restore(st.encounter_log, [EncounterSummary.model_validate(x) for x in enc["log"]])
         st.location, st.apart = d["party"]["location"], dict(d["party"]["apart"])
+        _restore(st.positions, dict(d["party"].get("positions", {})))
+
+
+def _restore(current: Any, saved: Any) -> Any:
+    """Restore a validated domain while preserving existing shared object identities."""
+    if isinstance(current, BaseModel) and type(current) is type(saved):
+        for key in type(saved).model_fields:
+            setattr(current, key, _restore(getattr(current, key), getattr(saved, key)))
+        return current
+    if isinstance(current, dict) and isinstance(saved, dict):
+        for key in current.keys() - saved.keys():
+            del current[key]
+        for key, value in saved.items():
+            current[key] = _restore(current[key], value) if key in current else value
+        return current
+    if isinstance(current, list) and isinstance(saved, list):
+        by_id = {value.id: value for value in current if isinstance(value, BaseModel) and hasattr(value, "id")}
+        restored = []
+        for number, value in enumerate(saved):
+            old = by_id.get(value.id) if isinstance(value, BaseModel) and hasattr(value, "id") else (
+                current[number] if number < len(current) else None)
+            restored.append(_restore(old, value))
+        current[:] = restored
+        return current
+    return saved
