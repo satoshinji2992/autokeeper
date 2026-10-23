@@ -4,6 +4,10 @@
 
 ## 安装
 
+Windows 10／11 x64 可下载[安装版](https://github.com/satoshinji2992/autokeeper/releases/download/v0.0.5.6/AutoKeeper-0.0.5.6-windows-x64-setup.exe)，按向导完成安装后从桌面启动；或下载[免安装版](https://github.com/satoshinji2992/autokeeper/releases/download/v0.0.5.6/AutoKeeper-0.0.5.6-windows-x64.zip)，完整解压后运行 `AutoKeeper.exe`。运行环境、掷骰、图片渲染和自带模组都在包内，不需要另装 Python、Node.js 或 uv。首次使用仍需配置自己的模型。更新时先退出游戏，再安装或解压新版；存档在 `%LOCALAPPDATA%\autokeeper`，设置在 `%APPDATA%\autokeeper`，替换程序或卸载都不会删除。命令行可用 `AutoKeeper.exe serve`、`AutoKeeper.exe join 地址`。
+
+只加入朋友房间时，浏览器打开房间网址即可，无需安装。以下是 Python 包和源码用户的安装方式。
+
 装好 [uv](https://docs.astral.sh/uv/getting-started/installation/) 以后一条命令：
 
 ```bash
@@ -271,7 +275,7 @@ autokeeper join 192.168.1.5
 
 默认模组是《追书人》，第一位调查员留给玩家，其余交给 AI。开房间的终端不占座，房主自己另开终端 `autokeeper join 127.0.0.1`。如果程序显示了不同端口，请连显示的完整地址。续档用 `host --load 存档名`。
 
-浏览器加入无需安装。终端加入要安装 AutoKeeper；图片由本机渲染组件转成字符画，初始化时会检查并准备组件。
+浏览器加入无需安装。应用或终端也可直接填写同一个房间网页地址，例如 `autokeeper join http://192.168.1.5:8000`；原有客户端地址仍可使用。断线后回到原座位，若显示「AI 临时代管」，选中后按「收回控制」。图片由本机渲染组件转成字符画，初始化时会检查并准备组件。
 
 ### 连接排查
 

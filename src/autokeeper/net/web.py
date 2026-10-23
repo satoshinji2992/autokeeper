@@ -17,7 +17,7 @@ import sys
 import threading
 from pathlib import Path
 
-from aiohttp import web
+from aiohttp import ClientError, ClientSession, WSMsgType, web
 from textual_serve.server import Server
 
 PAGE = Path(__file__).parent / "page"
@@ -34,8 +34,47 @@ class Page(Server):
     """textual-serve in our page; closing, it gives the open games a few seconds, not a minute."""
 
     def __init__(self, command: str, *, host: str = "localhost", port: int = 8000, title: str = "AutoKeeper",
-                 public_url: str | None = None):
+                 public_url: str | None = None, hub_port: int | None = None):
         super().__init__(command, host=host, port=port, title=title, public_url=public_url, templates_path=PAGE)
+        self.hub_port = hub_port
+
+    async def handle_websocket(self, request: web.Request) -> web.WebSocketResponse:
+        """The shared room URL accepts native clients as well as the browser terminal."""
+        protocols = {part.strip() for part in request.headers.get("Sec-WebSocket-Protocol", "").split(",")}
+        if "autokeeper" not in protocols:
+            return await super().handle_websocket(request)
+        client = web.WebSocketResponse(protocols=("autokeeper",), heartbeat=20, max_msg_size=64 * 1024 * 1024)
+        await client.prepare(request)
+        if self.hub_port is None:
+            await client.send_json({"t": "error", "text": "此地址是单人游戏网页，请使用多人房间地址。"})
+            await client.close()
+            return client
+
+        async def forward(source, target):
+            async for message in source:
+                if message.type == WSMsgType.TEXT:
+                    await target.send_str(message.data)
+                elif message.type == WSMsgType.BINARY:
+                    await target.send_bytes(message.data)
+
+        try:
+            async with ClientSession() as session, session.ws_connect(
+                f"http://127.0.0.1:{self.hub_port}/ws", protocols=("autokeeper",),
+                heartbeat=20, max_msg_size=64 * 1024 * 1024,
+            ) as hub:
+                tasks = [asyncio.create_task(forward(client, hub)), asyncio.create_task(forward(hub, client))]
+                try:
+                    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for task in tasks:
+                        task.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+        except (ClientError, OSError):
+            if not client.closed:
+                await client.send_json({"t": "error", "text": "无法连接房间服务，请确认房主仍在运行本局。"})
+        finally:
+            await client.close()
+        return client
 
     def serve(self, debug: bool = False, *, until_eof: bool = False) -> None:
         """`until_eof`: also stop when stdin closes (a room's page; see net/room.py)."""
@@ -66,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     os.environ["COLORTERM"] = "truecolor"  # the browser's terminal shows 24-bit colour; the games it starts inherit this
     os.environ["AUTOKEEPER_GUEST"] = "1"  # visitors' games run on the host's machine, but they are not the host
     page = Page(command("join", f"127.0.0.1:{hub_port}"), host="0.0.0.0", port=int(port), title="AutoKeeper 联机",
-                public_url=rest[0] if rest else None)
+                public_url=rest[0] if rest else None, hub_port=int(hub_port))
     page.serve(until_eof=True)
 
 

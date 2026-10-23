@@ -25,7 +25,8 @@ import sys
 import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
-from functools import lru_cache
+from functools import lru_cache, wraps
+from inspect import signature
 from pathlib import Path
 
 import httpx
@@ -287,26 +288,65 @@ def preprocessing_available() -> bool:
 
 
 def prepared(src: Path) -> Path:
-    """Where the prepared copy of a picture is cached: by its path, so a photo replaced in
-    place is prepared again (its mtime is newer)."""
+    """One immutable cache file per source version; readers never block its replacement on Windows."""
     from . import paths
 
-    digest = hashlib.sha1(str(Path(src).resolve()).encode()).hexdigest()[:24]
+    src = Path(src).resolve()
+    try:
+        stat = src.stat()
+        version = f"{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        version = "missing"
+    digest = hashlib.sha1(f"v2:{src}:{version}".encode()).hexdigest()[:24]
     return paths.prepared_pictures() / f"{digest}.png"
+
+
+def _picture_cache(maxsize: int) -> Callable:
+    """Include file versions in each layer of the renderer's in-memory caches."""
+    def decorate(function: Callable) -> Callable:
+        arguments = signature(function)
+
+        @lru_cache(maxsize=maxsize)
+        def cached(versions: tuple[str, ...], *args, **kwargs):
+            return function(*args, **kwargs)
+
+        @wraps(function)
+        def versioned(*args, **kwargs):
+            bound = arguments.bind(*args, **kwargs).arguments
+            files = (bound.get("path", ""), bound.get("scene", ""), *bound.get("people", ()))
+            versions = tuple(str(prepared(Path(path))) if path else "" for path in files)
+            return cached(versions, *args, **kwargs)
+
+        versioned.cache_clear = cached.cache_clear
+        versioned.cache_info = cached.cache_info
+        return versioned
+
+    return decorate
 
 
 def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, keep_stages: bool = False) -> Path:
     """Run the pipeline for `kind` and cache the result (prepared())."""
+    from filelock import FileLock
+
     src = Path(src)
     out = prepared(src)
     out.parent.mkdir(parents=True, exist_ok=True)
-    if out.exists() and out.stat().st_mtime >= src.stat().st_mtime and not keep_stages:
-        return out
-    im = Image.open(src).convert("RGB")
+    # Preview and selection run in different workers; browser seats may also share a cache.
+    with FileLock(str(out) + ".lock", timeout=30):
+        if out.is_file() and not keep_stages:
+            return out
+        return _preprocess(src, kind, steps, keep_stages, out)
+
+
+def _preprocess(src: Path, kind: str, steps: tuple[str, ...] | None, keep_stages: bool, out: Path) -> Path:
+    with Image.open(src) as source:
+        im = source.convert("RGB")
     if not preprocessing_available():
         im = ImageEnhance.Contrast(ImageOps.autocontrast(im, cutoff=1)).enhance(1.1)
-        im.save(temporary := out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.png"))
-        temporary.replace(out)  # whole, for a renderer reading it at the same moment
+        if not out.is_file():
+            data = io.BytesIO()
+            im.save(data, format="PNG")
+            _publish_prepared(out, data.getvalue())
         return out
     import cv2
     import numpy as np
@@ -318,10 +358,24 @@ def preprocess(src: Path, kind: str, steps: tuple[str, ...] | None = None, *, ke
         except Exception:  # a missing model or odd image skips that step, never the picture
             continue
         if keep_stages:
-            cv2.imwrite(str(out.with_name(f"{out.stem}.{i}-{step}.png")), arr)
-    cv2.imwrite(str(temporary := out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.png")), arr)
-    temporary.replace(out)
+            ok, encoded = cv2.imencode(".png", arr)
+            if ok:
+                out.with_name(f"{out.stem}.{i}-{step}.png").write_bytes(encoded.tobytes())
+    if not out.is_file():
+        ok, encoded = cv2.imencode(".png", arr)
+        if not ok:
+            raise OSError("图片预处理编码失败")
+        _publish_prepared(out, encoded.tobytes())
     return out
+
+
+def _publish_prepared(out: Path, data: bytes) -> None:
+    temporary = out.with_name(f"{out.stem}.{os.getpid()}-{threading.get_ident()}.png")
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(out)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 async def _structured(cfg: Config, role: str, system: str, prompt: str, schema: type[BaseModel], images: list[bytes] | None = None, on_reply=None):
@@ -610,8 +664,11 @@ def _chafa(source: str | Image.Image, width: int, height: int, style: str, *, wo
     symbols = STYLES.get(style, STYLES["picture"])
     if _library() is not None and not _off():
         try:
-            im = source if isinstance(source, Image.Image) else Image.open(source)
-            out = draw(im, width, height, symbols, colors, work)
+            if isinstance(source, Image.Image):
+                out = draw(source, width, height, symbols, colors, work)
+            else:
+                with Image.open(source) as im:
+                    out = draw(im, width, height, symbols, colors, work)
         except (OSError, ValueError):
             out = None
         if out is not None:
@@ -638,7 +695,7 @@ def picture_source(path: str | Path) -> str:
     p = Path(path)
     prep = prepared(p)
     try:
-        if prep.exists() and prep.stat().st_mtime >= p.stat().st_mtime:
+        if prep.is_file():
             return str(prep)
         record = credits.get(p) or {}
         if record.get("kind") == "creature":  # drawn on black for the stage (imagegen): nothing to clean up
@@ -878,7 +935,7 @@ def overlay(art: str, strokes: np.ndarray, under: np.ndarray, colour: np.ndarray
     return "\n".join(lines)
 
 
-@lru_cache(maxsize=32)
+@_picture_cache(maxsize=32)
 def _framed(path: str, width: int, height: int, fill: bool, face: bool = False, people: tuple[str, ...] = ()) -> Image.Image:
     if face:
         return frame_blur(path, width, height)
@@ -923,7 +980,7 @@ def cameos(im: Image.Image, faces: tuple[str, ...]) -> Image.Image:
 PORTRAIT_SHAPE = 1.0  # the widest a portrait's box gets (width over height); wider panels keep it in the middle
 
 
-@lru_cache(maxsize=64)
+@_picture_cache(maxsize=64)
 def frame_blur(path: str, cols: int, rows: int, *, cell: float = 0.5) -> Image.Image:
     """The whole portrait in the middle of the panel's shape, the room round it filled with
     the same photo blown up, blurred and darkened, as a phone shows a tall photo on a wide
@@ -965,7 +1022,7 @@ def silhouette(im: Image.Image) -> Image.Image | None:
     return figure.resize(im.size, Image.Resampling.BILINEAR).filter(ImageFilter.GaussianBlur(max(im.size) / 160))
 
 
-@lru_cache(maxsize=16)
+@_picture_cache(maxsize=16)
 def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) -> Image.Image:
     """A fight's or a chase's picture at the stage's own shape (tui/widgets/fight.py). Who they
     face, as tall as the stage and more, against a dark lit red from behind; in a chase, the place
@@ -1021,14 +1078,14 @@ def staged(path: str, cols: int, rows: int, scene: str = "", near: float = 1.0) 
     return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
 
-@lru_cache(maxsize=96)
+@_picture_cache(maxsize=96)
 def render_staged(path: str, cols: int, rows: int, style: str = "photo", graded: str = "", scene: str = "",
                   near: float = 1.0) -> str:  # fmt: skip
     """staged() as ANSI text, in a grade (a heartbeat's "half", a blow's "flash", "难过+dim" when down)."""
     return _chafa(grade(staged(path, cols, rows, scene, near), graded), cols, rows, style)
 
 
-@lru_cache(maxsize=32)
+@_picture_cache(maxsize=32)
 def _strokes(path: str, width: int, height: int, cols: int, rows: int, people: tuple[str, ...] = ()) -> np.ndarray:
     """A scene's strokes, found on the unlit picture: the same lines at every hour and in every
     weather layer, only their colours change. Its people's rings are lines too."""
@@ -1039,7 +1096,7 @@ def _prepared(path: str, width: int, height: int, when: str, fill: bool, graded:
     return grade(light(_framed(path, width, height, fill, people=people), when), graded, when)
 
 
-@lru_cache(maxsize=256)
+@_picture_cache(maxsize=256)
 def render(path: str, width: int, height: int, style: str = "photo", when: str = "", fill: bool = False, graded: str = "",
            face: bool = False, people: tuple[str, ...] = ()) -> str:  # fmt: skip
     """ANSI text for a picture at the given character size, lit for `when`, optionally

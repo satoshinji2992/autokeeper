@@ -309,7 +309,9 @@ class NetGameScreen(GameScreen):
         closes = getattr(self, "closes", None)
         if closes is not None:  # the moment others can still act in, counting down
             room += f" · {max(0, math.ceil(closes - time.monotonic()))} 秒后结算"
-        if self.pool_open and self.seat and not self.pooled and self.my_turn:
+        if self.retry_due:
+            text = " 本回合已中断 · 输入 /retry 继续，已结算的结果保留"
+        elif self.pool_open and self.seat and not self.pooled and self.my_turn:
             text = f" ▶ 新的一轮 · {room}"
         elif self.pool_open and self.seat and self.my_turn:
             text = f" 已交：{self.pooled[-1][:24]} · 还能交 1 条，空行回车结束 · {room}"
@@ -329,7 +331,8 @@ class NetGameScreen(GameScreen):
         line.set_class(fresh, "mine")
         inp = self.query_one("#command", Input)
         inp.set_class(fresh, "mine")
-        inp.placeholder = ("这一轮做什么" if fresh else
+        inp.placeholder = ("输入 /retry 恢复当前回合；普通行动会留到下一轮" if self.retry_due else
+                           "这一轮做什么" if fresh else
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
                            "观战模式下可用 // 开头发送场外消息")
@@ -468,6 +471,7 @@ class NetGameScreen(GameScreen):
             if len(self.held) > held:
                 self.app.notify("本轮行动名额已满，已排入下一轮。" if self.pool_open else "正在叙述，行动已排入下一轮。", timeout=4)
             if self.pool_open and not was_open:
+                self.retry_due = False
                 self.settling = ""
                 self.engine_label = "局域网联机 · 新的一轮"
                 self._topbar()
@@ -477,6 +481,7 @@ class NetGameScreen(GameScreen):
             self._turnline()
             self._battle_synced()  # in a fight or a chase: this round's choices, or none once theirs is in
         elif t == "turn":  # the pool is closed: the keeper settles this seat's action
+            self.retry_due = False
             self._sync(msg["state"])
             self.my_turn = False
             mine = bool(self.seat) and msg["investigator"] == self.seat
@@ -533,6 +538,9 @@ class NetGameScreen(GameScreen):
                 self.status_text = ""
                 self.retry_due = True
                 self.story.pause_keeper()
+                self.engine_label = "局域网联机 · 回合中断，等待重试"
+                self._topbar()
+                self._turnline()
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
             self.pool_open, self.my_turn = False, False

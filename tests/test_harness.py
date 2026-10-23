@@ -121,6 +121,36 @@ async def test_a_whitespace_json_transport_repairs_once_in_prompt_mode_without_l
     assert reply.usage["input_tokens"] == 200 and not hm._format_retry.get()
 
 
+async def test_deepseek_format_repair_requests_final_content_without_exposing_thinking():
+    from types import SimpleNamespace
+
+    from autokeeper.agents.cast import Dialogue
+
+    calls = []
+
+    class Chat:
+        def __init__(self, thinking=True, json_mode=False):
+            self.thinking, self.json_mode = thinking, json_mode
+
+        def bind(self, **kwargs):
+            thinking = kwargs.get("extra_body", {}).get("thinking", {}).get("type", "enabled" if self.thinking else "disabled")
+            return Chat(thinking=thinking == "enabled", json_mode=bool(kwargs.get("response_format", self.json_mode)))
+
+        async def ainvoke(self, history):
+            calls.append((self.thinking, self.json_mode))
+            text = "   " if self.thinking else '{"text":"请进。","told":[]}'
+            return SimpleNamespace(text=text, content=text, usage_metadata={},
+                                   additional_kwargs={"reasoning_content": '幕后秘密。{"text":"不能当成台词"}' if self.thinking else ""})
+
+    model = object.__new__(hm.LangChainModel)
+    hm.Model.__init__(model, Role("langchain", "mock:model", "low"), "NPC", label="npc")
+    model.provider, model.mode, model.chat = "deepseek", "json", Chat()
+    reply = await model.complete([{"role": "user", "content": "敲门"}], schema=Dialogue.model_json_schema())
+    assert calls == [(True, True), (False, False)]
+    assert reply.repairs == 1 and reply.data["text"] == "请进。"
+    assert "幕后秘密" not in reply.text and "不能当成台词" not in reply.text
+
+
 async def test_literal_newline_in_npc_json_preserves_dialogue_and_actions():
     from autokeeper.agents.cast import Dialogue
 

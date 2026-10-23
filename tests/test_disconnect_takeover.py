@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import aiohttp
 import pytest
-from textual.widgets import Checkbox
+from textual.widgets import Button, Checkbox
 
 from autokeeper.agents.cast import Action, Proposal, Ruling
 from autokeeper.engine.game import TURN_RECORD, Game, Turn
@@ -46,6 +46,37 @@ async def eventually(check):
     async with asyncio.timeout(3):
         while not check():
             await asyncio.sleep(0.005)
+
+
+async def test_returning_player_can_reclaim_a_delegated_seat_from_the_actual_lobby(fake):
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.net import NetGameScreen
+
+    hub = make_hub(fake)
+    hub.takeovers.active.add("lin")
+    app = AutoKeeperApp(theme="amber")
+    try:
+        async with sockets(hub) as (http, url):
+            keeper = await sit(http, url, "zhouheng")
+            async with app.run_test(size=(120, 40)) as pilot:
+                lobby = LobbyScreen(url, "回来的人")
+                await app.push_screen(lobby)
+                async with asyncio.timeout(5):
+                    while lobby.welcome is None:
+                        await pilot.pause(0.05)
+                row = next(s for s in lobby.seats if s["investigator"] == "lin")
+                assert row["human"] and row["ai_takeover"] and not row["online"]
+                assert not lobby.query_one("#sit", Button).disabled
+                await pilot.press("enter")
+                async with asyncio.timeout(5):
+                    while not isinstance(app.screen, NetGameScreen):
+                        await pilot.pause(0.05)
+                assert app.screen.seat == "lin" and "lin" not in hub.takeovers.active
+                assert hub.sits["lin"] is not None
+            await keeper.close()
+    finally:
+        await hub.takeovers.close()
+        await hub.game.close()
 
 
 async def test_ai_only_room_runs_for_spectators_and_resumes_when_they_return(fake, monkeypatch):
@@ -306,8 +337,8 @@ async def test_reconnecting_during_ai_preparation_discards_the_unstarted_proposa
     async def nothing(*args, **kwargs):
         pass
 
-    async def event(value):
-        if phase == "proposal_ready" and value.get("type") == "said":
+    async def table_input(*args, **kwargs):
+        if phase == "proposal_ready":
             entered.set()
             await release.wait()
 
@@ -317,12 +348,13 @@ async def test_reconnecting_during_ai_preparation_discards_the_unstarted_proposa
     monkeypatch.setattr(hub.cast, "investigator", proposal)
     monkeypatch.setattr(hub, "_interlude", nothing)
     monkeypatch.setattr(hub, "_run", run)
-    monkeypatch.setattr(hub, "_event", event)
+    monkeypatch.setattr(hub, "_event", nothing)
+    monkeypatch.setattr(hub, "_table_input", table_input)
     hub.sits["zhouheng"] = "another-human-present"
     hub.takeovers.active.add("lin")
     work = asyncio.create_task(hub._ai_turn(hub.state.find("lin")))
     try:
-        await entered.wait()
+        await asyncio.wait_for(entered.wait(), 2)
         hub.sits["lin"] = "returning-player"
         await hub.takeovers.returned("lin")
         release.set()

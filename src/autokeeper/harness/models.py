@@ -815,7 +815,13 @@ class LangChainModel(Model):
             # Dialogue can carry actions, discoveries and private intentions. Optional fields do
             # not make that contract text-only: keep JSON mode for every stateful reply.
             switch = self.provider in JSON_SWITCH and not spoken(schema) and not _format_retry.get()
-            runnable = self.chat.bind(response_format={"type": "json_object"}) if switch else self.chat
+            runnable = self.chat
+            if self.provider == "deepseek" and _format_retry.get():
+                # A provider may finish its thinking but leave content blank. The single
+                # format repair needs a final answer; never promote private thinking to dialogue.
+                runnable = runnable.bind(extra_body={"thinking": {"type": "disabled"}})
+            if switch:
+                runnable = runnable.bind(response_format={"type": "json_object"})
             if on_delta:  # the JSON as it is written, for a caller that reads it on the way (the keeper's telling)
                 async for chunk in runnable.astream(history):
                     if piece := chunk.text:

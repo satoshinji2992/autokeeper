@@ -324,7 +324,11 @@ class CardScreen(Screen[Investigator | None]):
     async def _picture(self, path: Path) -> Text | None:
         if not imagery.available():
             return None
-        return Text.from_ansi(await asyncio.to_thread(imagery.render, str(path), *PHOTO, self.style))
+        try:
+            return Text.from_ansi(await asyncio.to_thread(imagery.render, str(path), *PHOTO, self.style))
+        except (OSError, ValueError):
+            self.app.notify("照片预览失败，仍可选用原图或更换照片。", severity="warning")
+            return None
 
     @work(exclusive=True, group="card")
     async def look_up(self, query: str) -> None:
@@ -395,7 +399,7 @@ class CardScreen(Screen[Investigator | None]):
         if path is None:
             t.append("无法加载此照片，请选择其他图片。", style="dim")
         elif shown is None:
-            t.append("安装 chafa 后可显示照片预览。当前照片仍可选择并保存。", style="dim")
+            t.append("照片预览暂不可用，仍可选用并保存原图。", style="dim")
         else:
             t.append_text(shown)
         photo = fig.photos[i]
@@ -427,7 +431,10 @@ class CardScreen(Screen[Investigator | None]):
             self.app.notify("无法打开照片，请选择其他图片。", severity="warning")
             self._photos()
             return
-        await asyncio.to_thread(imagery.preprocess, path, "portrait")  # face crop and cleanup, like module portraits
+        try:
+            await asyncio.to_thread(imagery.preprocess, path, "portrait")
+        except (OSError, ValueError):
+            self.app.notify("照片处理失败，将使用原图。", severity="warning")
         self.chosen, self.builder.photo = path, fig.photos[i]
         self.portrait = await self._picture(path)
         self._next_after_photo()

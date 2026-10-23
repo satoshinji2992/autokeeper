@@ -128,6 +128,7 @@ async def test_a_rejoining_seat_receives_its_personal_snapshot_and_window_before
 
     monkeypatch.setattr(lobby.link, "send", send)
     monkeypatch.setattr(lobby, "_show_all", lambda: None)
+    monkeypatch.setattr(lobby, "_card", lambda: None)  # This control-flow test does not mount the lobby widgets.
     monkeypatch.setattr(lobby, "_buttons", lambda: None)
     monkeypatch.setattr(lobby, "_highlighted", lambda: {"investigator": "zhouheng", "human": True, "online": False})
     monkeypatch.setattr(lobby, "_enter", lambda first: entered.append(first))
@@ -158,6 +159,7 @@ async def test_a_pending_seat_change_cannot_enter_on_an_unrelated_turn(wire, mon
     lobby = LobbyScreen("localhost", "甲")
     entered = []
     monkeypatch.setattr(lobby, "_show_all", lambda: None)
+    monkeypatch.setattr(lobby, "_card", lambda: None)
     monkeypatch.setattr(lobby, "_enter", lambda first: entered.append(first))
     try:
         await lobby.on_msg(hub._welcome("a"))

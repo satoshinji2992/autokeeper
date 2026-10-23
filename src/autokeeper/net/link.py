@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 
@@ -16,8 +17,11 @@ log.addHandler(logging.NullHandler())
 
 
 def address(target: str) -> str:
-    """"192.168.1.5", "192.168.1.5:8765" or a full ws:// URL, as the Hub's websocket URL."""
+    """Accept a host, a native connection address, or the room's browser URL."""
     target = target.strip()
+    if target.startswith(("http://", "https://")):
+        url = urlsplit(target)
+        target = urlunsplit(("wss" if url.scheme == "https" else "ws", url.netloc, url.path, "", ""))
     if target.startswith(("ws://", "wss://")):
         return target if target.rstrip("/").endswith("/ws") else target.rstrip("/") + "/ws"
     if ":" not in target:
@@ -37,7 +41,8 @@ class Link:
 
     async def connect(self) -> None:
         self.session = aiohttp.ClientSession()
-        self.ws = await self.session.ws_connect(self.url, heartbeat=20, max_msg_size=64 * 1024 * 1024)
+        self.ws = await self.session.ws_connect(self.url, protocols=("autokeeper",),
+                                               heartbeat=20, max_msg_size=64 * 1024 * 1024)
         from .. import __version__
         from .hub import room_key
 

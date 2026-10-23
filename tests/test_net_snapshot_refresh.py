@@ -22,6 +22,27 @@ from .test_net import FakeLink
 transport_hub = _transport_hub
 
 
+async def test_failed_round_shows_retry_instead_of_claiming_the_keeper_is_still_telling():
+    from textual.widgets import Input, Static
+
+    module = Module.load(EXAMPLE)
+    lead = module.pregens[0].model_copy(deep=True)
+    state = Game.new(module, [lead], human=[lead.id])
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = NetGameScreen(module, state, FakeLink(), lead.id, [])
+        await app.push_screen(screen)
+        await pilot.pause()
+        screen.settling = "你的行动（1/2）"
+        await screen.on_msg({"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续。"})
+        assert "本回合已中断" in str(screen.query_one("#turnline", Static).content)
+        assert "/retry" in screen.query_one("#command", Input).placeholder
+        assert "守秘人在讲" not in str(screen.query_one("#turnline", Static).content)
+        await screen.on_msg({"t": "turn", "investigator": lead.id, "state": state.model_dump(mode="json"),
+                             "name": lead.name, "player": "玩家", "index": 1, "total": 2})
+        assert not screen.retry_due
+
+
 @pytest.mark.parametrize("change", ["location", "time", "sky", "people"])
 async def test_personal_snapshot_updates_the_scene_as_well_as_the_character_sheet(change, tmp_path):
     module = Module.load(EXAMPLE)

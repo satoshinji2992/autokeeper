@@ -28,7 +28,7 @@ from ...engine.state import SaveRefused
 from ...module.schema import Module
 from ...net import room as lan
 from ...rules.coc import Investigator
-from ..library import art_text, face_text, load_module
+from ..library import art_text, face_key, face_text, load_module
 from ..modals.sheet import sheet_view
 from ..widgets.waiting import wait_on
 from .lobby import NARROW
@@ -64,7 +64,7 @@ class HostScreen(Screen):
         # choose in the lobby). A seat line says who sits; the investigator is chosen under the list
         # (the user, 2026-10-21: a pregen on the seat read as already chosen).
         self.seats: list[dict[str, str]] = []
-        self.faces: dict[tuple[str, str], Text] = {}
+        self.faces: dict[tuple[str, str, str], Text] = {}
         self.ports = (lan.HUB_PORT, lan.WEB_PORT)  # taken ones are swapped for free ones (net/room.py any_port)
         self.trouble = ""  # the last error's technical part, for the 遇到问题 page
 
@@ -319,7 +319,7 @@ class HostScreen(Screen):
             return
         style = self.app.art_style  # type: ignore[attr-defined]
         picture = inv.portrait in self.module.pictures and imagery.available()
-        face = self.faces.get((inv.portrait, style)) if picture else art_text(self.module, inv.portrait)
+        face = self.faces.get(face_key(self.module, inv.portrait, style)) if picture else art_text(self.module, inv.portrait)
         width = max(40, self.query_one("#host-preview").scrollable_content_region.width - 2)
         card.update(sheet_view(inv, face, width))
         if picture and face is None:
@@ -330,7 +330,11 @@ class HostScreen(Screen):
         assert self.module is not None
         m = self.module
 
-        self.faces[(inv.portrait, style)] = await asyncio.to_thread(face_text, m, inv.portrait, style)
+        key = face_key(m, inv.portrait, style)
+        face = await asyncio.to_thread(face_text, m, inv.portrait, style)
+        if self.module is None or key != face_key(self.module, inv.portrait, style):
+            return
+        self.faces[key] = face
         if (i := self._seat_at()) is not None and self.seats[i]["inv"] == inv.id:
             self._seat_card(i)
 

@@ -33,7 +33,7 @@ from ...net import media
 from ...net import room as lan
 from ...net.link import Link
 from ...rules.coc import Investigator
-from ..library import art_text, face_text
+from ..library import art_text, face_key, face_text
 from ..modals.sheet import SheetModal, sheet_view
 from ..widgets.waiting import wait_on
 from .net import NetGameScreen, leave, table_module, with_private_history
@@ -106,7 +106,7 @@ class LobbyScreen(Screen):
         self.chosen: str | None = None  # the seat taken, "" for watching
         self.pending_seat: str | None = None  # wait for its personal snapshot before entering the game
         self.gone = False
-        self.faces: dict[tuple[str, str], Text] = {}  # portraits drawn so far: (picture, art style) -> art
+        self.faces: dict[tuple[str, str, str], Text] = {}  # picture key, style and source version
         self.width, self.short = 40, False  # the seat list's lines: how wide, and whether two a seat
         self.lit: int | None = None  # the seat drawn for the cursor
         self._game_handler: Any = None  # the game screen's, once the link is handed on to it
@@ -221,17 +221,20 @@ class LobbyScreen(Screen):
         elif t == "face" and self.m is not None:  # the picture of a card someone brought
             if path := media.unpack(msg.get("picture_data", "")):
                 self.m.pictures[str(msg.get("key", ""))] = path
+                self._card()
         elif t == "card" and self.remote is not None:
             self.remote.reply(msg)
         elif t in ("sync", "turn") and self.welcome is not None:
             self.welcome["state"] = msg["state"]  # keep up while still choosing
             self.state = GameState.model_validate(msg["state"])
+            self._card()
         elif t == "module" and self.welcome is not None and self.m is not None:  # found places and people, as the game screen takes them
             m = Module.model_validate(msg["module"])
             m.art, m.art_colors, m.pictures = self.m.art, self.m.art_colors, self.m.pictures
             m.art.update(msg.get("art", {}))
             m.art_colors.update(msg.get("colors", {}))
             self.m, self.welcome["module"] = m, msg["module"]
+            self._show_all()
         elif t == "begin" and self.welcome is not None:
             self.welcome["started"], self.bring = True, False
             if self.chosen is None:
@@ -251,7 +254,7 @@ class LobbyScreen(Screen):
         if t == "closed" and not self.gone:
             self.gone = True
             self.app.notify(msg.get("text") or "与房主的连接已断开。", severity="error")
-            self.query_one("#lobby-hint", Static).update(Text("房间已关闭，按 Esc 离开。", style="bold"))
+            self.query_one("#lobby-hint", Static).update(Text("连接已中断，按 Esc 返回。", style="bold"))
             self._buttons()
         if (t in ("begin", "turn", "event") and self.chosen is not None and self.pending_seat is None
                 and self.welcome is not None and not self.gone):
@@ -383,6 +386,7 @@ class LobbyScreen(Screen):
         seat = self._highlighted()
         sittable = bool(seat and seat["human"] and (not seat["online"] or seat["investigator"] == self.chosen))
         self.query_one("#sit", Button).disabled = not sittable or self.gone or self.pending_seat is not None
+        self.query_one("#sit", Button).label = "收回控制" if seat and seat.get("ai_takeover") else "入座"
         self.query_one("#start", Button).disabled = self.started or self.gone
         self.query_one("#watch", Button).disabled = self.gone
         mine = next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
@@ -439,11 +443,14 @@ class LobbyScreen(Screen):
             self.query_one("#lobby-sheet", Static).update(Text("空座位。入座后可选择角色。", style="dim"))
             return
         if inv is None or self.m is None or self.has_class("-narrow"):
+            if not self.has_class("-narrow"):
+                pane.border_title = "人物卡"
+                self.query_one("#lobby-sheet", Static).update(Text("等待角色资料…", style="dim"))
             return
         pane.border_title = f"人物卡 · {inv.name}"
         style = self.app.art_style  # type: ignore[attr-defined]
         picture = inv.portrait in self.m.pictures and imagery.available()
-        face = self.faces.get((inv.portrait, style)) if picture else art_text(self.m, inv.portrait)
+        face = self.faces.get(face_key(self.m, inv.portrait, style)) if picture else art_text(self.m, inv.portrait)
         width = max(40, pane.scrollable_content_region.width - 2)
         self.query_one("#lobby-sheet", Static).update(sheet_view(inv, face, width))
         if picture and face is None:
@@ -454,7 +461,11 @@ class LobbyScreen(Screen):
         assert self.m is not None
         m = self.m
 
-        self.faces[(inv.portrait, style)] = await asyncio.to_thread(face_text, m, inv.portrait, style)
+        key = face_key(m, inv.portrait, style)
+        face = await asyncio.to_thread(face_text, m, inv.portrait, style)
+        if self.m is None or key != face_key(self.m, inv.portrait, style):
+            return
+        self.faces[key] = face
         seat = self._highlighted()
         if seat and seat["investigator"] == inv.id:
             self._card()
@@ -572,7 +583,7 @@ class LobbyScreen(Screen):
         first = next((i for i, inv in enumerate(party) if seat and inv.id == seat["investigator"]), 0)
 
         def portrait(inv: Investigator) -> Text:
-            return self.faces.get((inv.portrait, style)) or face_text(m, inv.portrait, style)
+            return self.faces.get(face_key(m, inv.portrait, style)) or face_text(m, inv.portrait, style)
 
         self.app.push_screen(SheetModal(party, first, portrait))
 

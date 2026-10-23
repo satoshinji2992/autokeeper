@@ -35,7 +35,7 @@ AutoKeeper 是一款采用《克苏鲁的呼唤》第 7 版规则的中文跑团
 - **模型与上下文管理**：支持 DeepSeek、Claude、Codex、Ollama 及 OpenAI 兼容接口；分工可独立选模型，配合会话压缩、按需检索和预算限制。
 - **开发者网页与 AI 排查**：终端继续游玩，网页查看完整调用、后台任务、世界状态与历史记录，也可指定回合让独立 AI 协助分析问题。
 
-**0.0.5：分组调查、个人视角与断线接管。** 不同地点由各自的 KP 主持，共用同一份世界记录；私信、个人见闻与材料按收件人保存。战斗和追逐仍按回合结算，调查员数值继续共享。普通输入默认向全桌公开，私信使用 `/sc`。0.0.5.5 继续修复联机画面、图片更新和断线提示；此前补丁已修复建卡图片同步与选卡闪退，并补上 Windows 自动安装 Node.js。详见 [更新记录](CHANGELOG.md)。0.0.5 起使用新的存档格式，旧版存档原样保留，不直接读取。
+**0.0.5：分组调查、个人视角与断线接管。** 不同地点由各自的 KP 主持，共用同一份世界记录；私信、个人见闻与材料按收件人保存。战斗和追逐仍按回合结算，调查员数值继续共享。普通输入默认向全桌公开，私信使用 `/sc`。0.0.5.6 修复 Windows 选照片退出及准备房间换卡、换头像不刷新的问题，并提供内置运行环境的 Windows 应用；此前补丁已修复联机画面、图片传输和断线提示。详见 [更新记录](CHANGELOG.md)。0.0.5 起使用新的存档格式，旧版存档原样保留，不直接读取。
 
 <p align="center">
   <a href="docs/img/game.png"><img src="https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/docs/img/game.png" width="100%" alt="追书人实机：在图书馆查旧报，图书馆使用检定的物理十面骰，守秘人讲出旧报上的内容；右侧是人物状态、调查经过和玩家自己的笔记"></a>
@@ -222,6 +222,10 @@ autokeeper generate "1931 年上海，一张没有标签的唱片" --id changpia
 </details>
 
 ## 开始玩
+
+**Windows 10／11（64 位）**可直接下载[安装版](https://github.com/satoshinji2992/autokeeper/releases/download/v0.0.5.6/AutoKeeper-0.0.5.6-windows-x64-setup.exe)，安装后从桌面启动；也有[免安装版 ZIP](https://github.com/satoshinji2992/autokeeper/releases/download/v0.0.5.6/AutoKeeper-0.0.5.6-windows-x64.zip)，完整解压后双击 `AutoKeeper.exe`。两者已内置 Python、Node.js、图片渲染和三本模组，无需运行下方的安装命令。首次使用配置自己的模型即可，更新或卸载应用不删除用户目录中的存档。
+
+只加入朋友房间的玩家，用浏览器打开房间网址即可，无需下载安装。
 
 安装脚本会准备 uv、AutoKeeper 和图像渲染组件。掷骰需要 Node.js 18+，Windows 脚本会通过 winget 自动安装；其他系统的安装方法见[游玩指南](docs/playing.md#安装)。
 

@@ -77,6 +77,11 @@ def face_text(m: Module, key: str | None, style: str = "photo") -> Text:
     return art_text(m, key, FACE if key in m.pictures else None, style, face=True)
 
 
+def face_key(m: Module, key: str, style: str) -> tuple[str, str, str]:
+    """A portrait can keep its module key while the underlying photo changes."""
+    return key, style, str(imagery.prepared(Path(m.pictures[key]))) if key in m.pictures else ""
+
+
 def art_text(m: Module, name: str | None, size: tuple[int, int] | None = None, style: str = "photo", *, face: bool = False) -> Text:
     """A picture (chafa) when the module has one and a size is given, else the hand-drawn art.
     `face`: a portrait, cropped round the face to fill `size`."""

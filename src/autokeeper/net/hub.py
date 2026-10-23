@@ -459,7 +459,7 @@ class Hub:
 
     # -- connections --------------------------------------------------------------------
     async def ws(self, request: web.Request) -> web.WebSocketResponse:
-        ws = web.WebSocketResponse(heartbeat=20, max_msg_size=64 * 1024 * 1024)
+        ws = web.WebSocketResponse(protocols=("autokeeper",), heartbeat=20, max_msg_size=64 * 1024 * 1024)
         await ws.prepare(request)
         cid = uuid.uuid4().hex[:8]
         self.clients[cid] = ws
