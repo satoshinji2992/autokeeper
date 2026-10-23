@@ -316,6 +316,7 @@ class GameScreen(Screen):
 
     def on_paste(self, event: events.Paste) -> None:
         if event.text and (box := self._typing()):
+            self._close_orders()
             box.focus()
             box.insert_text_at_cursor(event.text.splitlines()[0])  # as the box takes a paste
             event.prevent_default()
@@ -1360,6 +1361,8 @@ class GameScreen(Screen):
             return
         if self.spectate or not self.is_attached or not self._may_order():
             return
+        if self.query_one("#command", Input).value:
+            return  # a delayed redraw of this same round must not replace a typed declaration
         me = self._viewer().id
         lists = now["choices"].get(me)
         fighting = now["kind"] == "fight"
@@ -1717,6 +1720,7 @@ class GameScreen(Screen):
         self._typing_until = time.monotonic() + 4.0  # and the heartbeat
         if event.value and self._battle_picking:  # writing their own order, in the box the list was over
             self._close_orders()
+            event.input.focus()  # a queued picker refresh may have changed focus before Changed arrived
 
     def send_line(self, text: str) -> None:
         """One line from the input box: out-of-character chat, words to the party, a slash command,

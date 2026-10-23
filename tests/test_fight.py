@@ -617,6 +617,29 @@ async def test_an_order_typed_over_the_list_closes_it_and_nothing_of_it_is_left_
 
 
 @pytest.mark.usefixtures("canned")
+async def test_a_delayed_round_list_refresh_does_not_steal_an_unsubmitted_typed_action(module):
+    from autokeeper import config
+    from autokeeper.tui.app import AutoKeeperApp
+
+    from .test_tui import until
+
+    config.load().battle_timer = True
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(150, 44)) as pilot:
+        screen, _me, _warden = fight_screen(module)
+        app.push_screen(screen)
+        assert await until(pilot, lambda: screen.game is not None and not screen.busy and screen._battle_picking)
+        box, picker = screen.query_one("#command"), screen.query_one("#picker")
+        await pilot.press("我")
+        assert await until(pilot, lambda: box.value == "我" and box.has_focus)
+        # A callback from the same round was already queued when typing began.
+        screen.call_after_refresh(screen._offer_orders)
+        await pilot.pause()
+        assert box.value == "我" and box.has_focus
+        assert not picker.display and not screen._battle_picking and screen._clock is None
+
+
+@pytest.mark.usefixtures("canned")
 async def test_the_rounds_clock_stands_still_behind_other_windows_and_tab_keeps_its_deadline(module, fake, monkeypatch):
     from autokeeper import config
     from autokeeper.tui.app import AutoKeeperApp
