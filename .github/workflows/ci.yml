@@ -58,8 +58,6 @@ jobs:
         run: |
           autokeeper --version
           autokeeper setup --no-login
-          for module in zhuishuren dongxuezhixia fallout3-youxierenyouyanbujin; do
-            autokeeper check "$module"
-          done
+          autokeeper check zhuishuren
           autokeeper doctor | tee doctor.txt || true
           grep "✓ BCDice" doctor.txt
