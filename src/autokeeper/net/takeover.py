@@ -9,7 +9,7 @@ AI_HANDOFF = object()
 
 
 class Takeovers:
-    def __init__(self, hub: Any, enabled: bool, delay: float = 15.0):
+    def __init__(self, hub: Any, enabled: bool, delay: float = 60.0):
         self.hub, self.enabled, self.delay = hub, enabled, delay
         self.active: set[str] = set()
         self.tasks: dict[str, asyncio.Task] = {}
