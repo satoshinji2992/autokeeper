@@ -99,7 +99,8 @@ async def test_active_encounter_choices_wait_for_the_players_explicit_answer(rou
     monkeypatch.setattr("autokeeper.net.hub.REACTION_WAIT", 0.01)
     async with sockets(hub) as (http, url):
         a = await sit(http, url, "zhouheng")
-        task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {"kind": kind}, timed=True))
+        task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {
+            "kind": kind, "options": [{"id": "dodge", "label": "闪避"}], "default": "dodge"}, timed=True))
         offer = (await until(a, lambda msg: msg["t"] == "offer"))["offer"]
         assert offer["closes_in"] is None
         with pytest.raises(TimeoutError):

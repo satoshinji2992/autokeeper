@@ -62,7 +62,9 @@ async def test_private_input_and_reply_arrive_while_the_original_choice_remains_
         await drain_to_welcome(spectator)
         original = copy.deepcopy(hub.state.pending_turn)
         record, when = hub.state.record.model_dump_json(), hub.state.minutes
-        task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {"kind": kind, "skill": "妙手", "target": 1}, timed=False))
+        task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {
+            "kind": kind, "skill": "妙手", "target": 1,
+            "options": [{"id": "dodge", "label": "闪避"}]}, timed=False))
         try:
             offer = (await until(a, lambda m: m["t"] == "offer"))["offer"]
             await a.send_json({"t": "kp_private", "request": "clarify", "text": "这个数值是否正确？"})
@@ -75,8 +77,9 @@ async def test_private_input_and_reply_arrive_while_the_original_choice_remains_
             assert len(calls) == 1 and '"target": 1' in calls[0]
             for ws in (b, spectator):
                 assert "这个数值是否正确" not in json.dumps(await drain_to_welcome(ws), ensure_ascii=False)
-            await a.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
-            assert await asyncio.wait_for(task, 1) == "roll"
+            selected = {"roll": "roll", "reaction": "dodge", "push": "drop"}[kind]
+            await a.send_json({"t": "respond", "id": offer["respond_id"], "choice": selected})
+            assert await asyncio.wait_for(task, 1) == selected
             assert "zhouheng" not in hub.offers
         finally:
             task.cancel()

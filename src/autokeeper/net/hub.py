@@ -577,15 +577,13 @@ class Hub:
                 await self._send(cid, {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。" if late
                                        else "没有在等这个回复，已忽略。"})
                 return
-            if self.offers.get(seat, {}).get("kind") == "roll" and msg.get("choice") != "roll":
-                await self._send(cid, {"t": "notice", "text": "请确认掷骰；这次回复没有生效，原检定仍在等待。"})
+            answer = _reply_value(msg)
+            if problem := self._reply_problem(seat, answer, self.offers.get(seat, {})):
+                await self._send(cid, {"t": "notice", "text": problem + "这次回复没有生效，原选择仍在等待。"})
                 return
             self.asking.pop(seat, None)
             self.offers.pop(seat, None)
             self.settled = [*self.settled[-31:], rid]
-            answer = msg.get("choice")
-            if msg.get("text") or msg.get("ask"):  # their own words, or "ask me every time" (engine/encounter respond)
-                answer = {"choice": msg.get("choice") or "", "text": str(msg.get("text") or "")[:200], "ask": msg.get("ask") or ""}
             self.choices[seat].put_nowait(answer)
         elif t == "react":  # Tab beside a fight's choices: the seat's answer to blows from now on, no action spent
             seat = self._seat_of(cid)
@@ -1882,7 +1880,15 @@ class Hub:
             # Whose answer it is: a blow's, the defender's; a roll in a fight, the seat whose slot it is; else the actor's.
             asked = offer.get("seat") or (offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id)
             who = self.sits.get(asked)
-            if self._encounter_human(asked) or (who is not None and not (ai and asked == inv_id and inv_id not in self.state.human)):
+            human = asked in self.state.human
+            if human:
+                while True:
+                    choice = await self._ask(asked, self.sits.get(asked), offer, timed=False)
+                    if not (problem := self._reply_problem(asked, choice, offer)):
+                        break
+                    if (who := self.sits.get(asked)) is not None:
+                        await self._send(who, {"t": "notice", "text": problem + "原选择仍在等待。"})
+            elif who is not None and not (ai and asked == inv_id):
                 choice = await self._ask(asked, who, offer, timed=asked != inv_id or offer.get("kind") == "reaction")
             if offer.get("kind") in ("reaction", "redeclare"):  # answered, or the default (what they set for the round)
                 picked = choice.get("choice") if isinstance(choice, dict) else choice
@@ -1891,12 +1897,39 @@ class Hub:
                     choice = offer.get("default")
             elif offer.get("kind") == "roll":  # an encounter human reached here only after answering
                 choice = "roll"
-            elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice
+            elif not human and not _choice_ok(choice, offer):
                 choice = ai_choice(offer, push)
             inp = Command(resume=choice)
         self.game.emit = self._event
         self._save()
         await self._broadcast({"t": "sync", "state": self._view()})
+
+    def _reply_problem(self, seat: str, answer: Any, offer: dict) -> str:
+        """Validate a human reply against this offer without selecting or spending anything."""
+        kind = offer.get("kind")
+        picked = answer.get("choice", "") if isinstance(answer, dict) else answer
+        if kind == "roll":
+            return "请确认掷骰。" if picked != "roll" else ""
+        if kind == "push":
+            if not _choice_ok(answer, offer):
+                return "请选择可用的幸运、接受失败，或写明孤注一掷的做法。"
+            if picked == "luck":
+                inv = next((inv for inv in self.state.investigators if inv.id == seat), None)
+                if inv is None or offer["luck"] > inv.luck:
+                    return "当前幸运不足，无法使用该选项。"
+            return ""
+        if kind in ("reaction", "redeclare"):
+            if isinstance(answer, dict):
+                if answer.get("ask", "") not in ("", "always", "major"):
+                    return "应对询问偏好无效。"
+                text = answer.get("text", "")
+                if isinstance(text, str) and text.strip() and offer.get("free_text", True):
+                    return ""
+            ids = {option["id"] for option in offer.get("options", [])}
+            if isinstance(picked, str) and (picked in ids or (kind == "redeclare" and picked == "withdraw" and "keep" in ids)):
+                return ""
+            return "请选择当前可用的选项，或提交具体行动。"
+        return "当前选择格式无效。"
 
     async def _ask(self, seat: str, who: str | None, offer: dict, *, timed: bool) -> Any:
         """An offer to the seat it is for, with the id its answer must quote and, when the table cannot
@@ -2017,5 +2050,23 @@ def _choice_ok(choice: Any, offer: dict) -> bool:
     except ValueError:
         return False
     if mode == "push":
-        return bool(offer.get("can_push")) and bool(how)
-    return mode != "luck" or offer.get("luck") is not None
+        return bool(offer.get("can_push")) and isinstance(choice, dict) and isinstance(choice.get("how"), str) and bool(how)
+    cost = offer.get("luck")
+    return mode != "luck" or (isinstance(cost, int) and not isinstance(cost, bool) and cost > 0)
+
+
+def _reply_value(message: dict) -> Any:
+    """Accept the modal's nested choice and the equivalent flat wire fields."""
+    value = message.get("choice")
+    if isinstance(value, dict):
+        value = dict(value)
+    elif any(key in message for key in ("how", "text", "ask")):
+        value = {"choice": value or ""}
+    else:
+        return value
+    for key in ("how", "text", "ask"):
+        if key in message and key not in value:
+            value[key] = message[key]
+    if isinstance(value.get("text"), str):
+        value["text"] = value["text"][:200]
+    return value

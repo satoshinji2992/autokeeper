@@ -30,7 +30,9 @@ async def test_disconnected_encounter_choice_waits_and_reconnect_reuses_its_orig
     try:
         async with sockets(hub) as (http, url):
             a, b = await sit(http, url, "zhouheng"), await sit(http, url, "lin")
-            task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {"kind": kind}, timed=True))
+            selected = "roll" if kind == "roll" else "dodge"
+            task = asyncio.create_task(hub._ask("zhouheng", hub.sits["zhouheng"], {
+                "kind": kind, "options": [{"id": selected, "label": "确认"}], "default": selected}, timed=True))
             offer = (await until(a, lambda msg: msg["t"] == "offer"))["offer"]
             await a.close()
             await until(b, lambda msg: msg["t"] == "seats" and not msg["seats"][0]["online"])
@@ -39,8 +41,8 @@ async def test_disconnected_encounter_choice_waits_and_reconnect_reuses_its_orig
             a = await sit(http, url, "zhouheng")
             repeated = (await until(a, lambda msg: msg["t"] == "offer"))["offer"]
             assert repeated == offer and repeated["closes_in"] is None
-            await a.send_json({"t": "respond", "id": repeated["respond_id"], "choice": "roll"})
-            assert await asyncio.wait_for(task, 1) == "roll"
+            await a.send_json({"t": "respond", "id": repeated["respond_id"], "choice": selected})
+            assert await asyncio.wait_for(task, 1) == selected
     finally:
         if task is not None:
             task.cancel()
