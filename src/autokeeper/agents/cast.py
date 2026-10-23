@@ -113,6 +113,8 @@ class Action(BaseModel):
     echo: SkipJsonSchema[str] = ""
     travel: Literal["direct", "stroll"] = Field("direct", description="前往明确目的地、会合或继续旅程填 direct；明确沿路看看才填 stroll")
     casual: bool = Field(False, description="仅对已在场 NPC 的问候、闲聊、道谢，无调查、交易、约定、等待、风险、用物或说服目的")
+    wait_limit: int | None = Field(None, ge=0, description="仅wait：玩家明确给出的整段连续等待的总分钟上限；没有明确时长则留空。十分钟分段执行仍总共十分钟，不是每段十分钟")
+    wait_until: str = Field("", pattern=r"^(?:D[1-9]\d* (?:[01]\d|2[0-3]):[0-5]\d)?$", description="仅wait：玩家明确指定等到的游戏时刻，格式D1 23:00；没有明确时刻则留空。与wait_limit同时存在时以较早者为限")
     companions: list[str] = Field(default_factory=list, max_length=3, description="玩家明确希望同行的在场人物id；NPC须自己同意，其他真人调查员须有本人同行声明；点名不代替同意。明确只和部分同伴同行时逐个列出，会合或寻找异地角色不算同行")
     alone: bool = Field(False, description="玩家明确要求独自前往、不带同伴")
     before: list[BeforeTravel] = Field(default_factory=list, max_length=3, description="移动前明确要求完成的交谈，按顺序列出；不将调查、战斗或多步结果写在这里")
@@ -583,7 +585,7 @@ ACTION_RULES = """- summary：第三人称一句话，只记录当前可执行�
 - kind：investigate 调查搜索；move 去别的地点；talk 和 NPC 交谈；use 使用或操作物品；perform 登台表演、讲故事；attack 动手；wait 等待休息；daily 日常生活；meta 问规则或游戏外的话；other 其他。
 - daily：吃饭、买日用品、办入住、问路、欣赏街景、和人聊家常等没有调查目的的生活行动；不要改写成查案、套话或搜索。
   有明确调查目的的交谈仍是 talk，搜寻证据仍是 investigate，等到某个时间仍是 wait。日常对话也照实填写 npc 和 speech。
-- 持续守候时顺带听动静、看住门口或记下已经见过的情况，是等待的方式，主行动仍是wait；summary保留玩家的等待终点、停止条件和最长时限，不把整个等待挪到remaining。
+- 持续守候时顺带听动静、看住门口或记下已经见过的情况，是等待的方式，主行动仍是wait；summary保留等待终点与停止条件，明确时长填wait_limit，明确截止时刻填wait_until，不把整个等待挪到remaining。分段续办不重置原时限。
   只有确需先确认、会影响下一步的具体疑点才拆出一次观察；结算这次观察后，没有新的选择或实际变化便继续原先已授权的等待，不要求玩家反复重说。
 - 区分眼下行动与稍后打算。玩家正向人询问、等回应或先做另一件事，不能把后面提到的目的地当成立即出发。
   “街口卖什么早饭？想先吃点热的再去金博尔家”先向眼前人问早饭，destination 留空；后续打算仍需保留，但不替玩家选餐或提前出发；
@@ -2074,7 +2076,7 @@ class Cast:
                       "尚未结算者在此前草案中写过的行动仍是尝试，不写成已完成，不用scene替他们提前执行。")
         if continuing:
             extra += ("\n\n【本次原请求的续办】\n"
-                      + json.dumps({key: request.get(key) for key in ("original", "completed", "remaining")},
+                      + json.dumps({key: request.get(key) for key in ("original", "completed", "remaining", "wait_window")},
                                    ensure_ascii=False)
                       + "\n本条报告给出当前段的实际结果；completed 只记实际执行经过，尝试不等于达成目标。"
                       "先落实当前 scene，再用 continuation 安排下一个无需玩家新选择的即时前缀。"
@@ -2085,6 +2087,9 @@ class Cast:
                       "暂未听见声音、援助还没来或这一小段叙述结束，本身不构成pending理由。"
                       "只按已经出现的变化决定是否中断续办，不预定援助到场、检定成功或下一段的结果。"
                       "不预演下一段的结果，不替其他真人答应或行动。已单独展示的台词不必重复；本段无需额外叙述时 text 可为空。")
+            if window := request.get("wait_window"):
+                extra += (f"\n本次连续等待的原定截止时刻：{format_time(window['end'])}。"
+                          "依据本条报告判断是否已到时限；到时后不再续办同一等待，后续需要新选择时保留pending。")
         if check is None and not continuing and voices is None:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta, remember=remember)
             return reply.text.strip()

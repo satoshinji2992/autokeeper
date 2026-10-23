@@ -1960,6 +1960,7 @@ class Game(Encounters):
             # A later parallel action can use a whole night's effort while adding no
             # global minutes. Freeze its own interval before committing personal work.
             start = self._actor_cursor()
+            minutes = self._wait_minutes(action, minutes, turn, start=start)
             rest = ({"who": inv.id, "start": start, "end": start + minutes,
                      "interrupted": bool(ruling.mishap or self.battling())} if ruling.rest and minutes > 0 else None)
             self._spend(minutes, turn)
@@ -3065,6 +3066,10 @@ class Game(Encounters):
         if next_plan and (st.ending or not st.investigator.can_act or self.battling()
                           or self.pending_choice() is not None or st.pending_push):
             next_plan, pending, reason = None, remaining, "当前局势需要先处理，后续行动尚未执行"
+        window = request.get("wait_window")
+        if (next_plan and next_plan["action"]["kind"] == "wait" and window
+                and self._actor_cursor() >= window["end"]):
+            next_plan, pending, reason = None, remaining, "原定等待时限已到，后续行动尚未执行"
         if next_plan:
             plan = Plan.model_validate(next_plan)
             request.update(part=request["part"] + 1, started=self._actor_cursor(), previous_turn=st.turn,
@@ -3278,6 +3283,26 @@ class Game(Encounters):
             return st.minutes
         base = st.round_plan.setdefault("started", st.minutes - st.round_spent)
         return base + st.round_elapsed.get(who or st.investigator.id, 0)
+
+    def _wait_minutes(self, action: Action, minutes: int, turn: Turn, *, start: int) -> int:
+        """A continuous wait shares one original deadline across segments and saved retries."""
+        journal = self.state.pending_turn
+        owner = journal.get("request") or journal
+        if action.kind != "wait":
+            owner.pop("wait_window", None)
+            return minutes
+        window = owner.get("wait_window")
+        if window is None:
+            ends = ([start + action.wait_limit] if action.wait_limit is not None else [])
+            if action.wait_until:
+                ends.append(parse_time(action.wait_until))
+            if not ends:
+                return minutes
+            window = owner["wait_window"] = {"start": start, "end": min(ends)}
+        spent = min(minutes, max(0, window["end"] - start))
+        left = max(0, window["end"] - start - spent)
+        turn.notes.append(f"本次等待截至{format_time(window['end'])}，本段实际等候{spent}分钟，剩余{left}分钟；时限不因分段续办重置。")
+        return spent
 
     def _travellers(self, action: Action, destination: str) -> list[str]:
         """A teammate's own first outstanding declaration authorizes a shared LAN journey.
