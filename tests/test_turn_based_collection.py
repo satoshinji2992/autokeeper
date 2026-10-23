@@ -108,7 +108,7 @@ async def test_active_encounter_choices_wait_for_the_players_explicit_answer(rou
         assert await asyncio.wait_for(task, 1) == "dodge"
 
 
-async def test_disconnect_releases_only_that_encounter_players_collection_wait(round_hub):
+async def test_disconnect_keeps_that_encounter_players_collection_wait_until_reconnect(round_hub):
     hub = round_hub
     async with sockets(hub) as (http, url):
         a, b = await sit(http, url, "zhouheng"), await sit(http, url, "lin")
@@ -117,6 +117,11 @@ async def test_disconnect_releases_only_that_encounter_players_collection_wait(r
         await a.send_json({"t": "act", "text": "掩护同伴"})
         await until(a, lambda msg: msg["t"] == "pool" and msg["count"] == 1)
         await b.close()
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(task), 0.06)
+        assert hub._waiting_for() == ["lin"]
+        b = await sit(http, url, "lin")
+        await b.send_json({"t": "done"})
         await asyncio.wait_for(task, 1)
         assert hub.pool == [("zhouheng", "掩护同伴")]
 

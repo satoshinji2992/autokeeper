@@ -1,25 +1,27 @@
 """LAN play: one game, several players.
 
 The host runs a Hub. It owns the only copy of the game (module, state, agents) and plays
-it in rounds. A round opens an action pool with one slot more than there are players at the
+it in rounds. An investigation round opens an action pool with one slot more than there are players at the
 table (one player: two, two players: three): everyone has a slot of their own, and one of
 them may take the extra one for a second action. Players send actions when they like, in any
 order; an empty Enter says "that's all from me this round", /undo takes back your last one.
+Combat and chase rounds instead require one declaration or explicit pass from every human participant.
 When the pool is full, or everyone is done, it closes and the keeper considers the collected
 declarations together, settles them as their relationships call for, then lets each AI seat act;
 then the next round opens. Nothing said
 meanwhile is lost: an action sent while the keeper tells, or that the round has no room
 for, waits for the next round and goes in first. Every player's screen connects over a
-websocket and receives the engine's events as they happen. Seats are humans or AI; a human
-who drops out is played by the AI until they sit down again. Lines in full-width brackets
+websocket and receives the engine's events as they happen. During a fight or chase, a human
+seat keeps its declarations and pending choices through disconnects and resumes on reconnect.
+Outside encounters an absent seat may use the existing AI path. Lines in full-width brackets
 are table talk and reach everyone at once.
 A check asked for with .ra is that turn's action; the instant dice commands (.r, .st)
 leave the turn open, and once the game is over they still work, growth rolls (.en) too.
 A seated player throws their own dice: the roll prompt reaches them as an offer of kind
-"roll", like a push offer, and the turn goes on when they answer (or leave); in a fight every seated
-player throws their own, whoever's input settles the round. Every offer carries the id its answer
+"roll", like a push offer, and an encounter waits for their answer even after a disconnect;
+every human participant throws their own, whoever's input settles the round. Every offer carries the id its answer
 must quote (respond_id): an answer to another, or a second one, is ignored with a word to the sender.
-A reaction carries its deadline: after it, what they set for the round stands. While the
+A reaction outside an active encounter may carry a deadline; encounter choices have none. While the
 table waits for a seated player, any seated player may ask the keeper to tell the latest
 narration again (the turn loop does it, between actions); after the end, too. A seated
 player may also ask for ideas (F5) at any time: the host's investigator agent thinks for
@@ -138,7 +140,7 @@ PLAYER_MODULE_FIELDS = {
     "id", "title", "subtitle", "system", "era", "setting", "players", "duration", "source", "license", "cover",
     "hook", "start", "start_time", "locations", "npcs", "items", "clues", "handouts", "sketches", "pregens", "prelude",
 }
-REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
+REACTION_WAIT = 20.0  # non-encounter timed offers only; active encounter choices wait for their human seat
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
           "reveal"}
@@ -575,6 +577,9 @@ class Hub:
                 await self._send(cid, {"t": "notice", "text": "这个选择已经结算，这次回复没有生效。" if late
                                        else "没有在等这个回复，已忽略。"})
                 return
+            if self.offers.get(seat, {}).get("kind") == "roll" and msg.get("choice") != "roll":
+                await self._send(cid, {"t": "notice", "text": "请确认掷骰；这次回复没有生效，原检定仍在等待。"})
+                return
             self.asking.pop(seat, None)
             self.offers.pop(seat, None)
             self.settled = [*self.settled[-31:], rid]
@@ -674,7 +679,7 @@ class Hub:
             return
         for seat, who in list(self.sits.items()):
             if who == cid and seat != inv_id:
-                self._free(seat)  # sat down elsewhere: a question waiting on the old seat is not left hanging
+                self._free(seat)  # encounter choices remain with their original human seat
         self.sits[inv_id] = cid
         await self._share_seats()
         private_log = [e.model_dump(mode="json") for e in audience.log(self.state, inv_id)
@@ -688,15 +693,20 @@ class Hub:
             self.started.set()
         await self._send(cid, {**self._welcome(cid), "t": "seated", "investigator": inv_id,
                                "pool": self._pool_view(cid)})
+        if offer := self.offers.get(inv_id):
+            await self._send(cid, {"t": "offer", "offer": offer})
+        if self.retrying == inv_id:
+            await self._send(cid, {"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续；已结算的结果保留。"})
+        self.wake.set()
         await self._maybe_begin()
 
     def _free(self, seat: str) -> None:
-        """A seat its player left (gone, or sat down in another): whoever waits for them gets an empty
-        answer. Their submitted declarations still stand until explicitly withdrawn."""
+        """Release the connection, retaining an encounter human's unfinished choices."""
         self.sits[seat] = None
         self.ready.discard(seat)
-        self.inbox[seat].put_nowait(None)
-        self.choices[seat].put_nowait(None)
+        if not self._encounter_human(seat):
+            self.inbox[seat].put_nowait(None)
+            self.choices[seat].put_nowait(None)
         self.wake.set()
 
     def _seat_of(self, cid: str) -> str | None:
@@ -1252,10 +1262,13 @@ class Hub:
             self.closes_at = asyncio.get_running_loop().time() + self.window
 
     def _round_seats(self) -> list[str]:
+        return [inv.id for inv in self.state.investigators if inv.can_act and self._encounter_human(inv.id)]
+
+    def _encounter_human(self, seat: str) -> bool:
+        """An encounter's human controller persists independently of its live connection."""
         enc = self.game.world_encounter()
-        return [inv.id for inv in self.state.investigators if enc is not None and inv.can_act
-                and self.sits.get(inv.id) is not None and (person := enc.get(inv.id)) is not None
-                and person.presence == "in"]
+        return (seat in self.state.human and enc is not None and (person := enc.get(seat)) is not None
+                and person.controller == "human" and person.presence == "in")
 
     def _encounter_round(self) -> tuple[str, str, int] | None:
         enc = self.game.world_encounter()
@@ -1404,7 +1417,7 @@ class Hub:
     async def _confirm_queued(self, seat: str, text: str) -> None:
         """A new encounter interrupts an old intention; only its owner can keep or replace it."""
         who = self.sits.get(seat)
-        if who is None:
+        if who is None and not self._encounter_human(seat):
             return
         self.confirming.add(seat)
         try:
@@ -1562,7 +1575,7 @@ class Hub:
                             "text": "本次行动尚未执行，原声明已保留。" + why})
                         break
                     who = self.sits.get(seat)
-                    if who is None:  # they left meanwhile: the table finishes it without them
+                    if who is None and not self._encounter_human(seat):
                         await self._unattended(inv, exc)
                         break
                     queue = self.inbox[seat]
@@ -1852,10 +1865,9 @@ class Hub:
         await self._run(move.text, inv.id, ai=True, push=move.push)
 
     async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
-        """One action through the turn graph. A push offer goes to its seated player; an AI seat's, or
-        one whose player left, is answered with the push the AI said it would make (`push`), if any."""
-        inp: Any = {"input": text, "by_hand": not ai and self.sits.get(inv_id) is not None}  # a seated player throws their own dice
-        self.game.by_hand_seats = frozenset(x for x, cid in self.sits.items() if cid is not None)  # in a fight, every seated one
+        """Run one declaration; encounter humans retain their choices while disconnected."""
+        inp: Any = {"input": text, "by_hand": not ai and (self.sits.get(inv_id) is not None or self._encounter_human(inv_id))}
+        self.game.by_hand_seats = frozenset(x for x, cid in self.sits.items() if cid is not None or self._encounter_human(x))
         while True:
             offer = None
             async for mode, chunk in turn_graph.stream(self.graph, self.game, inp, self.thread,
@@ -1870,14 +1882,14 @@ class Hub:
             # Whose answer it is: a blow's, the defender's; a roll in a fight, the seat whose slot it is; else the actor's.
             asked = offer.get("seat") or (offer.get("who") if offer.get("kind") in ("reaction", "redeclare") else inv_id)
             who = self.sits.get(asked)
-            if who is not None and not (ai and asked == inv_id and inv_id not in self.state.human):
+            if self._encounter_human(asked) or (who is not None and not (ai and asked == inv_id and inv_id not in self.state.human)):
                 choice = await self._ask(asked, who, offer, timed=asked != inv_id or offer.get("kind") == "reaction")
             if offer.get("kind") in ("reaction", "redeclare"):  # answered, or the default (what they set for the round)
                 picked = choice.get("choice") if isinstance(choice, dict) else choice
                 words = isinstance(choice, dict) and str(choice.get("text", "")).strip()  # their own words: the keeper reads them
                 if not words and not any(o["id"] == picked for o in offer.get("options", [])):
                     choice = offer.get("default")
-            elif offer.get("kind") == "roll":  # thrown, or they left: either way the dice fall
+            elif offer.get("kind") == "roll":  # an encounter human reached here only after answering
                 choice = "roll"
             elif not _choice_ok(choice, offer):  # gone, or an answer the offer does not take: the AI's choice
                 choice = ai_choice(offer, push)
@@ -1886,7 +1898,7 @@ class Hub:
         self._save()
         await self._broadcast({"t": "sync", "state": self._view()})
 
-    async def _ask(self, seat: str, who: str, offer: dict, *, timed: bool) -> Any:
+    async def _ask(self, seat: str, who: str | None, offer: dict, *, timed: bool) -> Any:
         """An offer to the seat it is for, with the id its answer must quote and, when the table cannot
         wait long (a blow, a roll on another's turn), the seconds it waits (`closes_in`: the clocks of
         two machines need not agree); the answer, or None when there is none in time (the default then
@@ -1911,12 +1923,14 @@ class Hub:
                 if cid != who:
                     await self._send(cid, {"t": "event", "ev": {"type": "encounter_wait", "who": name, "kind": offer.get("kind"),
                                                                  "closes_in": REACTION_WAIT if timed else None}})
-        await self._send(who, {"t": "offer", "offer": offer})
+        if who is not None:
+            await self._send(who, {"t": "offer", "offer": offer})
         self._start_privates()
         try:
             return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
         except TimeoutError:
-            await self._send(who, {"t": "offer_closed", "id": rid})  # the default stands: the window goes, nothing is sent back
+            if who is not None:
+                await self._send(who, {"t": "offer_closed", "id": rid})
             return None
         finally:
             if self.offers.get(seat, {}).get("respond_id") == rid:

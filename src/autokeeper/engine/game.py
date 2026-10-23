@@ -1938,8 +1938,10 @@ class Game(Encounters):
                 turn.notes.append(f"去不了“{heading}”")
                 return {}
             turn.route = self._route(st.location, heading) or []
-            coming = self._travellers(action.alone)
+            coming = self._travellers(action, intended)
             timed = self._spend(minutes, turn, participants=coming)
+            timed["origin"] = st.location
+            self._left_companions(action, coming, turn)
             return {"heading": heading, "intended": intended, "stopping": stopping, "interval": timed}
 
         moving = await step("travel", turn, travel)
@@ -2158,7 +2160,10 @@ class Game(Encounters):
 
         def elapsed() -> None:
             turn.route = moving["route"]
-            moving["interval"] = self._spend(moving["minutes"], turn, participants=self._travellers(action.alone))
+            coming = self._travellers(action, action.destination)
+            moving["interval"] = self._spend(moving["minutes"], turn, participants=coming)
+            moving["interval"]["origin"] = st.location
+            self._left_companions(action, coming, turn)
 
         await step("elapsed", turn, elapsed)
         await step("arrival", turn, lambda: self._arrive(moving["target"], turn, alone=action.alone, party=True,
@@ -3220,10 +3225,45 @@ class Game(Encounters):
         base = st.round_plan.setdefault("started", st.minutes - st.round_spent)
         return base + st.round_elapsed.get(who or st.investigator.id, 0)
 
-    def _travellers(self, alone: bool) -> list[str]:
+    def _travellers(self, action: Action, destination: str) -> list[str]:
+        """A teammate's own first outstanding declaration authorizes a shared LAN journey.
+
+        The caller freezes this list in the travel receipt before spending anyone's time.
+        NPC consent remains Follow's; an investigator's invitation cannot supply another seat's choice.
+        """
         st = self.state
-        return ([st.investigator.id] if alone else
-                [i.id for i in st.investigators if self.world.place(i.id) == st.location])
+        actor = st.investigator.id
+        if action.alone:
+            return [actor]
+        party = {i.id for i in st.investigators}
+        selected = party.intersection(action.companions)
+        first: dict[str, Action | None] = {}
+        receipt = st.round_plan
+        if self.table_turn_based:
+            for step in receipt.get("steps", []):
+                if step["token"] in receipt.get("done", []):
+                    continue
+                who = receipt["input"][int(step["token"])][0]
+                if who not in first:
+                    raw = step.get("plan", {}).get("action")
+                    first[who] = Action.model_validate(raw) if raw else None
+        coming = [actor]
+        for inv in st.investigators:
+            if inv.id == actor or self.world.place(inv.id) != st.location or (selected and inv.id not in selected):
+                continue
+            if self.table_turn_based and (inv.id in st.human or inv.id in first):
+                own = first.get(inv.id)
+                if (own is None or own.kind != "move" or own.destination != destination or own.alone
+                        or own.arrival_after_success or own.before or own.travel != action.travel):
+                    continue
+            coming.append(inv.id)
+        return coming
+
+    def _left_companions(self, action: Action, coming: list[str], turn: Turn) -> None:
+        party = {i.id for i in self.state.investigators}
+        for who in dict.fromkeys(action.companions):
+            if who in party and who not in coming:
+                turn.notes.append(f"{self.world.name(who)}没有参加这段旅程，仍在{self.world.name(self.world.place(who))}；不能写成同行。")
 
     def _spend(self, minutes: int, turn: Turn, *, participants: list[str] | None = None) -> dict:
         """Commit serial personal work, or a journey shared only by its real travellers."""
@@ -3523,9 +3563,10 @@ class Game(Encounters):
         step = self._resolution_step
 
         def commit() -> dict:
-            src = st.location
+            src = (interval or {}).get("origin", st.location)
             places = {i.id: self.world.place(i.id) for i in st.investigators}
-            coming = {st.investigator.id} if alone else {who for who, place in places.items() if place == src}
+            coming = (set(interval.get("participants", [st.investigator.id])) if interval is not None else
+                      {st.investigator.id} if alone else {who for who, place in places.items() if place == src})
             joined = [who for who, place in places.items() if src != loc_id and place == loc_id and who not in coming]
             places.update(dict.fromkeys(coming, loc_id))
             if src != loc_id and src not in places.values():
@@ -5021,7 +5062,7 @@ class Game(Encounters):
                     rests[receipt["who"]] = (receipt["start"], receipt["end"])
         interval = ((turn.interval["start"], turn.interval["end"]) if acted and turn.interval else None)
         elapsed = interval[1] - interval[0] if interval else max(0, st.minutes - start)
-        participants = self._travellers(turn.action.alone) if acted else []
+        participants = list(turn.interval.get("participants", [st.investigator.id])) if acted else []
         contacts = [said.npc for said in turn.replies.values()
                     if said.communication == "remote" and said.line] if turn is not None else []
         return scene.Context(travel=self._travel, elapsed=elapsed if acted else 0,

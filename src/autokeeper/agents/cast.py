@@ -113,7 +113,7 @@ class Action(BaseModel):
     echo: SkipJsonSchema[str] = ""
     travel: Literal["direct", "stroll"] = Field("direct", description="前往明确目的地、会合或继续旅程填 direct；明确沿路看看才填 stroll")
     casual: bool = Field(False, description="仅对已在场 NPC 的问候、闲聊、道谢，无调查、交易、约定、等待、风险、用物或说服目的")
-    companions: list[str] = Field(default_factory=list, max_length=3, description="玩家希望同行的在场 NPC id；会合、寻找异地角色不算同行")
+    companions: list[str] = Field(default_factory=list, max_length=3, description="玩家明确希望同行的在场人物id；NPC须自己同意，其他真人调查员须有本人同行声明；点名不代替同意。明确只和部分同伴同行时逐个列出，会合或寻找异地角色不算同行")
     alone: bool = Field(False, description="玩家明确要求独自前往、不带同伴")
     before: list[BeforeTravel] = Field(default_factory=list, max_length=3, description="移动前明确要求完成的交谈，按顺序列出；不将调查、战斗或多步结果写在这里")
     # The check a dice command asked for (.ra 恐吓). Filled in by the engine from the command
@@ -744,7 +744,7 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 3. 仅叙述系统给定的检定结果。界面已提供的检定选项无需重复说明，也不自行追加重试机会、代价或线索。
 4. 以第二人称叙述。普通回合通常 80–200 字，简单应答或过渡可更短，开场与重要场景按本轮要求展开。信息交代完整即可结束，不凑篇幅，不固定以悬念、反问或行动邀请收尾，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
-6. 天色遵循当前时间，天气承接本局已有记录。你可结合地域、季节与眼前局势补充有来由的环境细节；改变行动条件或带来危险的变化，通过相应场面与规则操作落实。
+6. 天色及正文中的具体时刻以本段正式报告为准，不另编几点几分；补叙已发生的经过时使用其发生时间，不混成眼前正在发生。天气承接本局已有记录。你可结合地域、季节与眼前局势补充有来由的环境细节；改变行动条件或带来危险的变化，通过相应场面与规则操作落实。
 7. 未预写的日常应答、人物反应与现场细节，由你结合当前动机和记录就地确定并提交 scene。完整的新地点、调查路线、持续日程与规则由备场工具准备；已提交的内容成为本局资料，你结合实时局势决定怎样呈现和发展。
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
@@ -2063,7 +2063,8 @@ class Cast:
         continuing = (not settled and request.get("actor") == state.investigator.id
                       and bool(request.get("remaining", "").strip()))
         if settled:
-            extra += "\n本段仅补叙报告中已经结算的经过，不执行当前待办请求、不添加场面操作或决定，不续办其他人的行动。"
+            extra += ("\n本段回顾报告中已经结算的经过，按各段发生时刻讲述；旧地点不是读者现在的位置，不写成仍在那里等候或尚未出发。"
+                      "不执行当前待办请求、不添加场面操作或决定，不续办其他人的行动。")
         elif (token := state.pending_turn.get("party_token")) is not None:
             receipt = state.round_plan
             done = receipt.get("done", [])
