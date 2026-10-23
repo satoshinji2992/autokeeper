@@ -412,12 +412,30 @@ def test_journal_pages_past_an_interrupted_line_in_an_archived_segment(monkeypat
     assert [r["data"]["n"] for r in resumed] == [2, 3] and final == cursor
 
 
-def test_journal_read_in_progress_keeps_its_cursor_when_the_open_segment_rotates(monkeypatch):
+@pytest.mark.parametrize("read_bytes", [17, observability.READ_BYTES])
+def test_journal_read_in_progress_keeps_its_cursor_when_the_open_segment_rotates(monkeypatch, read_bytes):
     journal = Journal("reading-during-rotation")
-    journal.append("world", {"n": 1})
+    journal.append("world", {"n": 1, "text": "轮转中的中文"})
     journal.append("world", {"n": 2})
     original_lines = journal._lines
+    original_open, original_replace = type(journal.path).open, observability.os.replace
+    streams = []
     rotated = False
+
+    def tracked_open(path, *args, **kwargs):
+        stream = original_open(path, *args, **kwargs)
+        if path.parent == journal.path.parent:
+            streams.append(stream)
+        return stream
+
+    def windows_replace(source, destination):
+        if source == journal.path and any(not stream.closed for stream in streams):
+            raise PermissionError("Windows does not rename an open ordinary reader")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(type(journal.path), "open", tracked_open)
+    monkeypatch.setattr(observability.os, "replace", windows_replace)
+    monkeypatch.setattr(observability, "READ_BYTES", read_bytes)
 
     def rotating_lines():
         nonlocal rotated
@@ -427,10 +445,12 @@ def test_journal_read_in_progress_keeps_its_cursor_when_the_open_segment_rotates
                 rotated = True
                 monkeypatch.setattr(observability, "MAX_BYTES", 1)
                 journal.append("world", {"n": 3})
+                assert not journal.error
 
     monkeypatch.setattr(journal, "_lines", rotating_lines)
     first, cursor = journal.read(limit=2)
     assert [r["data"]["n"] for r in first] == [1, 2] and cursor == 2
+    assert first[0]["data"]["text"] == "轮转中的中文"
     assert journal.path.with_suffix(".1.jsonl").exists()
 
     journal.append("world", {"n": 4})  # rotate again before requesting the next page

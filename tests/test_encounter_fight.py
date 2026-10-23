@@ -79,6 +79,23 @@ async def test_words_are_the_keeper_plans_never_parsed_by_their_first_word(modul
     assert "打开门逃跑" not in report and "周衡想拉开门逃出去" in report  # never the player's raw words
 
 
+async def test_an_unruled_npc_intention_is_not_presented_as_an_executed_hold_or_move(module, fake):
+    intention = "守钟人箍着周衡，把他拖到楼梯外"
+    other = DeclaredAction(do="other", goal="把调查员拖走", summary=intention)
+    game, cast, _ = fight_game(module, fake, arrange=lambda *args: EncounterTurnPlan(npcs=[arrange("warden", other)]))
+    try:
+        await begin(game, ["warden"])
+        app = turn_graph.build(game, InMemorySaver())
+        out, asked = await play(app, "防守")
+        assert not asked and not game.state.encounter.scene.holds
+        assert game.world.place("zhouheng") == "tower"
+        shown = [line for event in out if event["type"] == "fight_state" for line in event.get("lines", [])]
+        assert f"尝试：{intention}" in shown and intention not in shown
+        assert "此行动尚无裁定；意图不是已发生的结果" in cast.reports[-1]
+    finally:
+        await game.close()
+
+
 async def test_a_keepers_note_in_a_name_never_reaches_the_players(module, fake):
     """The user's game of 冬雪之下 (2026-10-22): the fight showed 「“埃里”（异界存在）」, a creature's name
     with the keeper's note in it. They see what they know (profiles.shown_name), never the note."""

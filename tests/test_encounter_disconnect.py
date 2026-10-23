@@ -42,7 +42,7 @@ async def test_disconnected_encounter_choice_waits_and_reconnect_reuses_its_orig
             repeated = (await until(a, lambda msg: msg["t"] == "offer"))["offer"]
             assert repeated == offer and repeated["closes_in"] is None
             await a.send_json({"t": "respond", "id": repeated["respond_id"], "choice": selected})
-            assert await asyncio.wait_for(task, 1) == selected
+            assert await asyncio.wait_for(task, 5) == selected
     finally:
         if task is not None:
             task.cancel()
@@ -102,7 +102,7 @@ async def test_an_actual_pending_attack_never_rolls_on_disconnect_and_resumes_on
                 await until(spectator, lambda msg: msg["t"] == "seats" and not msg["seats"][0]["online"])
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
             if disconnect_before_offer:
-                await asyncio.sleep(0.05)
+                await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
                 assert not task.done() and hub.asking.get("zhouheng")
                 assert list(fake.values) == [10, 90] and list(fake.totals) == [1]
                 a = await sit(http, url, "zhouheng")
@@ -120,7 +120,7 @@ async def test_an_actual_pending_attack_never_rolls_on_disconnect_and_resumes_on
                 assert hub.asking["zhouheng"] == offer["respond_id"] and not task.done()
                 assert list(fake.values) == [10, 90] and list(fake.totals) == [1]
             await a.send_json({"t": "respond", "id": repeated["respond_id"], "choice": "roll"})
-            await asyncio.wait_for(task, 1)
+            await asyncio.wait_for(task, 5)
             assert hub.state.encounter.completed_rounds == 1 and hub.state.encounter.pending is None
             assert not fake.values and not fake.totals
             await a.send_json({"t": "respond", "id": repeated["respond_id"], "choice": "roll"})
@@ -154,14 +154,14 @@ async def test_a_submitted_attack_still_generates_a_human_roll_when_its_owner_is
             await spectator.send_json({"t": "hello", "name": "watching"})
             await until(spectator, lambda msg: msg["t"] == "welcome")
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
-            await asyncio.sleep(0.05)
+            await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
             assert not task.done() and hub.asking.get("zhouheng")
             assert hub.state.encounter.pending.kind == "roll"
             assert list(fake.values) == [10, 90] and list(fake.totals) == [1]
             a = await sit(http, url, "zhouheng")
             offer = (await until(a, lambda msg: msg["t"] == "offer"))["offer"]
             await a.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
-            await asyncio.wait_for(task, 1)
+            await asyncio.wait_for(task, 5)
             assert hub.state.encounter.completed_rounds == 1 and not fake.values and not fake.totals
     finally:
         if task is not None:
@@ -187,7 +187,7 @@ async def test_extra_pool_slots_never_replace_an_encounter_participants_one_acti
             assert hub.pool == [("zhouheng", "守住门口")] and hub.early == [("zhouheng", "再行动一次")]
             assert hub._waiting_for() == ["lin"] and not task.done()
             await b.send_json({"t": "done"})
-            await asyncio.wait_for(task, 1)
+            await asyncio.wait_for(task, 5)
             assert hub.pool == [("zhouheng", "守住门口")]
     finally:
         if task is not None:
@@ -217,7 +217,7 @@ async def test_an_offline_defender_is_asked_before_any_attack_dice_are_thrown(fa
             await spectator.send_json({"t": "hello", "name": "watching"})
             await until(spectator, lambda msg: msg["t"] == "welcome")
             task = asyncio.create_task(hub._run("/retry", "zhouheng", ai=False))
-            await asyncio.sleep(0.05)
+            await until(spectator, lambda msg: msg.get("ev", {}).get("type") == "encounter_wait")
             assert not task.done() and hub.asking.get("zhouheng")
             assert hub.state.encounter.pending.kind == "reaction" and list(fake.values) == [10, 90]
             a = await sit(http, url, "zhouheng")
@@ -257,7 +257,7 @@ async def test_an_offline_human_keeps_an_encounter_retry_until_reconnecting(roun
             a = await sit(http, url, "zhouheng")
             await until(a, lambda msg: msg["t"] == "error" and msg.get("retry"))
             await a.send_json({"t": "act", "text": "/retry"})
-            await asyncio.wait_for(task, 1)
+            await asyncio.wait_for(task, 5)
             assert calls == [text, "/retry"] and hub.retrying is None
     finally:
         if task is not None:

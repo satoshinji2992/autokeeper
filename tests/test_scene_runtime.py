@@ -94,6 +94,22 @@ async def test_scoped_cursors_share_only_the_authoritative_world_and_save(fake):
         await runtime.close()
 
 
+async def test_existing_npc_company_reserves_the_same_resource_without_another_explicit_invitation(fake):
+    from autokeeper.world.ops import Follow
+
+    runtime, _, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    try:
+        game = runtime.game(a)
+        assert game.world.apply(Follow(npc="warden", actor="warden", leader="zhouheng", destination="square")).ok
+        runtime.reserve(a, Action(kind="move", summary="跟他走", destination="square"), Ruling(needs_roll=False))
+        runtime.reserve(b, Action(kind="talk", summary="打电话找守钟人", npc="warden", communication="remote"),
+                        Ruling(needs_roll=False, minutes=5))
+        assert any(block["kind"] == "resource" and block["resources"] == ["warden"] for block in runtime.blockers(b))
+    finally:
+        await runtime.close()
+
+
 async def test_reconcile_closes_a_split_source_and_preserves_actual_audienced_experience(fake):
     runtime, _, _ = made(fake)
     try:

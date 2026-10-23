@@ -58,9 +58,9 @@ class SplitCast(TableCast):
         return f"{state.investigator.id}|{state.location}|现场继续。"
 
     async def close(self):
-        self.closed = True
         self.background.cancel()
         await asyncio.gather(self.background, return_exceptions=True)
+        self.closed = True
 
 
 def host(state, fake, casts, *, started=None, release=None):
@@ -154,6 +154,8 @@ async def test_actual_move_preserves_queued_original_time_retires_background_and
             assert done_y["ev"]["text"] == "lin|square|现场继续。"
             a, b = resumed._context(lead.id), resumed._context(friend.id)
             assert a is not b and a.cast is not b.cast and len(resumed_casts) == 2
+            # keeper_end is the delivered narration, before the turn journal is closed.
+            await eventually(lambda: not a.state.pending_turn and not b.state.pending_turn)
             assert a.scene.at == b.scene.at == 611
             original_calls = [row for cast in resumed_casts.values() for row in cast.inputs if row["text"] == QUEUED]
             assert original_calls == [{"who": friend.id, "text": QUEUED, "at": 600, "received": 600, "place": "square"}]

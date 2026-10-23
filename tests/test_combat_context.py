@@ -7,13 +7,15 @@ import copy
 import pytest
 
 from autokeeper import config
-from autokeeper.agents.cast import Cast
+from autokeeper.agents.cast import Action, Cast, Ruling
 from autokeeper.engine.encounter import telling, views
 from autokeeper.engine.encounter.model import Hold
 from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction, EncounterTurnPlan
-from autokeeper.engine.game import TURN_RECORD, Turn
+from autokeeper.engine.game import TURN_RECORD, Game, Turn
+from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
+from autokeeper.rules.coc import Rules
 
 from .encounter_kit import arrange, begin, fight_game
 from .test_harness import SCRIPT, SCRIPTED, SEEN, harness_sandbox  # noqa: F401
@@ -73,6 +75,59 @@ async def test_a_saved_report_snapshot_does_not_change_when_the_current_hold_cha
     assert game._report(turn) == report
     assert game._report(restored) == report
     assert "压制：无" in views.settled_text(game.world, viewer="zhouheng")
+
+
+@pytest.mark.parametrize("restart", ["none", "before_roll", "after_roll"])
+async def test_a_report_preview_before_a_player_roll_updates_from_its_settled_release(module, fake, restart):
+    game, cast, events = fight_game(module, fake)
+    lead = game.state.investigator
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    friend.characteristics["敏捷"] = 30
+    game.state.investigators.append(friend)
+    game.state.human.append(friend.id)
+    game.world.sync()
+    keep = arrange("warden", DeclaredAction(do="defend", summary="守着门口"))
+    await begin(game, ["warden"], npcs=[keep])
+    game.state.encounter.scene.holds = [Hold(held=friend.id, by="warden", since=0)]
+    await game._declare(Turn(), friend.id, DeclaredAction(do="defend", summary="林秋护住自己"), "words", None)
+    game.by_hand_seats = frozenset({lead.id})
+    declared = DeclaredAction(do="other", summary="周衡拉开守钟人的手臂", goal="救出林秋")
+    plan = EncounterTurnPlan(action=declared)
+    action = Action(kind="other", summary=declared.summary, declared={"plan": plan.model_dump(mode="json")})
+    ruling = Ruling(needs_roll=True, skill="力量", effects=[{"kind": "freed", "target": friend.id, "what": "拉开手臂"}])
+    game.state.pending_turn = {"input": action.summary}
+    turn = await game.resolve(action, ruling)
+    pending = game.state.encounter.pending
+    assert pending is not None and pending.kind == "roll"
+    preview = game._report(turn)
+    assert "仍制住林秋" in preview and "尚未结算：正在等" in preview
+    game.state.pending_turn["turn"] = TURN_RECORD.dump_python(turn, mode="json")
+    fake.queue(25)
+    extra = await game.respond(pending.id, "roll", who=lead.id) if restart != "before_roll" else None
+    original = game
+    if restart != "none":
+        restored = GameState.model_validate_json(game.state.model_dump_json())
+        game = Game(module, restored, cast, Rules(dice=fake), emit=game.emit)
+        game.by_hand_seats = frozenset({lead.id})
+        turn = TURN_RECORD.validate_python(restored.pending_turn["turn"])
+        extra = await game.respond(pending.id, "roll", who=lead.id)
+    try:
+        assert extra is not None
+        turn.absorb(extra)  # The graph merges the answered roll into its original, previewed turn.
+        report = game._report(turn)
+        snapshot = report.split(telling.STATE_HEAD, 1)[1]
+        assert "压制：无" in snapshot and "仍制住林秋" not in snapshot and "尚未结算：正在等" not in snapshot
+        assert game.state.encounter.pending is None and not game.state.encounter.scene.holds
+        assert not fake.values and sum(event["type"] == "dice" for event in events) == 1
+        frozen = TURN_RECORD.validate_json(TURN_RECORD.dump_json(turn))
+        await game._unit("qa-later-hold", Turn(), lambda w: w.enc.scene.holds.append(
+            Hold(held=friend.id, by="warden", since=w.enc.round)))
+        assert "仍制住林秋" in views.settled_text(game.world)
+        assert game._report(turn) == report and game._report(frozen) == report
+    finally:
+        if game is not original:
+            await game.close()
+        await original.close()
 
 
 async def test_a_past_report_without_a_snapshot_does_not_claim_newer_state_as_its_own(module, fake):

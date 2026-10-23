@@ -150,6 +150,14 @@ def _between(enc: EncounterState) -> bool:
     return enc.round == 0 or enc.cursor >= len(enc.order) + 2
 
 
+def _declaration_round(enc: EncounterState, actor: str) -> int:
+    rnd = enc.round + 1 if _between(enc) else enc.round
+    if not _between(enc) and any(r.actor == actor and r.round == rnd and r.phase in ("committed", "lapsed")
+                                 for r in enc.receipts):
+        rnd += 1  # their slot has passed: it is next round's
+    return rnd
+
+
 class Encounters:
     """The fight engine, mixed into Game."""
 
@@ -383,11 +391,13 @@ class Encounters:
                 await self._encounter_end("", turn, eid=eid)
             return
         if plan := declared.get("plan"):
-            await self._plan_unit(f"enc/{enc.id}/plan/t{st.turn}", plan, declared.get("unsettled") or [], turn)
+            actor = st.investigator.id
+            key = await self._declaration_key(turn, actor, purpose="input")
+            await self._plan_unit(f"{key}/plan", plan, declared.get("unsettled") or [], turn)
             d = (plan.get("action") or None) if isinstance(plan, dict) else None
             if d:
-                await self._declare(turn, st.investigator.id, DeclaredAction.model_validate(d),
-                                    "button" if declared.get("source") == "button" else "words", ruling)
+                await self._declare(turn, actor, DeclaredAction.model_validate(d),
+                                    "button" if declared.get("source") == "button" else "words", ruling, key=key)
         if self._awaiting_encounter_declarations(enc):
             turn.declared = True
             return
@@ -490,6 +500,8 @@ class Encounters:
             if not event:
                 turn.notes.append("没有可以动手的对象")
             return ""
+        if st.held:
+            await self.tell_held()
         base = f"enc/{eid}/begin"
         done = await step("/" + base, turn, lambda: self._begin(eid, start, foes, turn, event))
         await self._notify(base, done["notices"], turn)
@@ -790,18 +802,33 @@ class Encounters:
         return next((r for r in reversed(enc.receipts) if r.actor == pid and r.round == rnd
                      and r.phase in ("declared", "awaiting_reaction")), None)
 
-    async def _declare(self, turn: Turn, actor: str, d: DeclaredAction, source: str, ruling: Ruling | None) -> None:
+    async def _declaration_key(self, turn: Turn, actor: str, *, purpose: str) -> str:
+        """Reserve this intention's round/revision before its plan or receipt lands.
+
+        Several investigators and revised intentions may share a scene turn. The durable
+        resolution keeps the chosen key so a retry after either operation reuses it.
+        """
+        enc = self.encounter()
+        assert enc is not None
+
+        def reserve() -> str:
+            rnd = _declaration_round(enc, actor)
+            revision = sum(r.actor == actor and r.round == rnd for r in enc.receipts)
+            return f"enc/{enc.id}/r{rnd}/decl/{actor}/{revision}"
+
+        return await self._resolution_step(f"/enc/{enc.id}/declaration-key/{purpose}/{actor}", turn, reserve)
+
+    async def _declare(self, turn: Turn, actor: str, d: DeclaredAction, source: str, ruling: Ruling | None,
+                       *, key: str = "") -> None:
         """A declaration for the round about to begin (or this round, when theirs is still to come)."""
-        st = self.state
         enc = self.encounter()
         if enc is None:
             return
+        key = key or await self._declaration_key(turn, actor, purpose="declare")
 
         def declare(w: Work) -> None:
             e = w.enc
-            rnd = e.round + 1 if _between(e) else e.round
-            if not _between(e) and any(r.actor == actor and r.round == rnd and r.phase in ("committed", "lapsed") for r in e.receipts):
-                rnd += 1  # their slot has passed: it is next round's
+            rnd = _declaration_round(e, actor)
             old = self._declared(e, actor, rnd)
             n = sum(1 for r in e.receipts if r.actor == actor and r.round == rnd)
             rid = f"{e.id}:r{rnd}:{actor}:{n}"
@@ -814,7 +841,7 @@ class Encounters:
             if me is not None and d.react:
                 me.react = d.react
 
-        await self._unit(f"enc/{enc.id}/decl/t{st.turn}/{actor}", turn, declare)
+        await self._unit(key, turn, declare)
 
     async def _plan_unit(self, key: str, plan: dict, unsettled: list[str], turn: Turn) -> None:
         """The keeper plan's arrangements landing: what holds (plan_check.land) for the keeper's people,

@@ -151,6 +151,10 @@ class Turn:
             self.observation = dict(later.observation)
         for name in ("sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
+        if "encounter_snapshot" in later.narrating:
+            # An answered roll settles into a separate Turn. Carry its captured state
+            # with the results, replacing the original turn's pre-roll preview only.
+            self.narrating["encounter_snapshot"] = later.narrating["encounter_snapshot"]
         self.voices += [x for x in later.voices if x not in self.voices]
         for key, said in later.replies.items():
             self.replies.setdefault(key, said)
@@ -651,6 +655,8 @@ class Game(Encounters):
     async def _cue_scene(self, plan: Plan, receipt: dict) -> None:
         """An explicit interruption changes the scene before the rules assistant reads it.
         Its operations, consequences and notices use the ordinary durable stage journal."""
+        if self.state.held:
+            await self.tell_held()
         journal = receipt.setdefault("cues", {})
         receipt.setdefault("cue_present", self._present())
         turn = TURN_RECORD.validate_python(receipt["cue_turn"]) if "cue_turn" in receipt else Turn()
@@ -2806,6 +2812,10 @@ class Game(Encounters):
         goes on from it, never asking the NPC again (the review of 2026-10-21: the line was kept and
         what the warden told was lost)."""
         st, m = self.state, self.m
+        if st.held:
+            # Deliver earlier settled actions before this visible performance can
+            # move anyone or interrupt the scene with a new encounter.
+            await self.tell_held()
         npc = m.npc(npc_id)
         said = turn.replies.get(key)
         if said is None:
@@ -3850,14 +3860,27 @@ class Game(Encounters):
             places = {i.id: self.world.place(i.id) for i in st.investigators}
             coming = (set(interval.get("participants", [st.investigator.id])) if interval is not None else
                       {st.investigator.id} if alone else {who for who, place in places.items() if place == src})
+            at = (interval or {}).get("end", turn.interval.get("end", self.world.now))
+            start = (interval or {}).get("start", at)
+            if party and not alone and src != loc_id:
+                ready = max((self.world.available_at(ent.id) or start for ent in self.world.rec.entities.values()
+                             if ent.kind == "npc" and ent.at == src and ent.following in coming), default=start)
+                if ready > start:
+                    # A parallel scene may have committed the companion's work while this
+                    # journey awaited time permission. Shift the same receipt before moving
+                    # anyone; never turn a real agreement into a silent solo departure.
+                    delay = ready - start
+                    self._spend(delay, turn, participants=sorted(coming))
+                    start, at = ready, at + delay
+                    if interval is not None:
+                        interval.update(start=start, end=at)
+                    turn.notes.append(f"同行者完成已提交的行动后一起出发：{format_time(start)}至{format_time(at)}。")
             joined = [who for who, place in places.items() if src != loc_id and place == loc_id and who not in coming]
             places.update(dict.fromkeys(coming, loc_id))
             if src != loc_id and src not in places.values():
                 self.world.rec.left[src] = self.world.rec.seq
             st.location = loc_id
             st.apart = {who: place for who, place in places.items() if place != loc_id}
-            at = (interval or {}).get("end", turn.interval.get("end", self.world.now))
-            start = (interval or {}).get("start", at)
             if src != loc_id:
                 motions = {who: {"origin": src, "destination": loc_id, "start": start, "end": at} for who in coming}
                 with self.world.at(at, start=start):

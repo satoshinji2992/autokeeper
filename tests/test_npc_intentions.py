@@ -40,7 +40,7 @@ async def test_a_conversation_replaces_the_real_goal_and_retires_old_work_across
     assert "想要：等到夜里独自守钟" not in brief
     assert all(e.visibility == "private" and set(e.witnesses) <= {"warden"} for e in w.rec.events if e.kind == "plan")
     write_save(game.state, game.m)
-    state = GameState.model_validate_json(paths.save(game.state.slot).read_text())
+    state = GameState.model_validate_json(paths.save(game.state.slot).read_text(encoding="utf-8"))
     await game.close()
 
     module = Module.load(paths.EXAMPLE)
