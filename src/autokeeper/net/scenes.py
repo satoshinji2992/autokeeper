@@ -7,6 +7,7 @@ from typing import Any
 
 from ..engine.game import PLAY_WAIT
 from ..engine.scenes import SceneRuntime
+from ..engine.timing import SceneResourceConflict
 from .hub import Hub
 
 ROUTED = {"act", "done", "undo", "respond", "react", "speak", "kp_private", "retell", "suggest", "recount",
@@ -96,6 +97,15 @@ class SceneTable(Hub):
 
     def _save(self) -> None:
         self.tables.runtime.checkpoint(self.ident)
+
+    async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
+        while True:
+            try:
+                await super()._run(text, inv_id, ai=ai, push=push)
+                return
+            except SceneResourceConflict:
+                await self.tables.runtime.prepare_conflict(self.ident)
+                text = "/retry"
 
     async def run(self) -> None:
         self._start_privates()

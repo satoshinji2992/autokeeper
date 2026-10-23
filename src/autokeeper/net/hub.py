@@ -118,7 +118,7 @@ PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes cam
 PRIVATE |= {"presentations", "private_messages", "presentation_issues"}
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
-PRIVATE |= {"scenes", "positions", "next_scene"}
+PRIVATE |= {"scenes", "positions", "next_scene", "scene_handoffs"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
 PRIVATE |= {"clue_settled"}  # formal acquisition receipts are not another player's knowledge or notebook
 PRIVATE |= {"perceptions", "perception_key"}  # real targets and signed personal choices stay on the server
@@ -1373,7 +1373,7 @@ class Hub:
 
     def _accept_declaration(self, seat: str, text: str) -> None:
         """An accepted replacement supersedes only an unperformed wait, never its past effects."""
-        self.state.queued_receipts.append({"seat": seat, "text": text, "at": self.state.minutes})
+        self.state.queued_receipts.append({"seat": seat, "text": text, "at": self.game._actor_cursor(seat)})
         self._cancel_wait(seat, "玩家已提交新行动，原等待未执行部分已取消")
         if seat in self.automatic:
             self.pool = [pair for pair in self.pool if pair[0] != seat]
