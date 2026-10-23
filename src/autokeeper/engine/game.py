@@ -151,6 +151,10 @@ class Turn:
             self.observation = dict(later.observation)
         for name in ("sanity", "npc_lines", "joined", "notes", "hints", "world", "fight"):
             getattr(self, name).extend(getattr(later, name))
+        if "encounter_snapshot" in later.narrating:
+            # An answered roll settles into a separate Turn. Carry its captured state
+            # with the results, replacing the original turn's pre-roll preview only.
+            self.narrating["encounter_snapshot"] = later.narrating["encounter_snapshot"]
         self.voices += [x for x in later.voices if x not in self.voices]
         for key, said in later.replies.items():
             self.replies.setdefault(key, said)
