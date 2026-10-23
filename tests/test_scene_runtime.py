@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from autokeeper.agents.cast import Action, Plan, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.engine.scenes import SceneRuntime
@@ -333,5 +335,123 @@ async def test_scoped_presence_projects_committed_movements_at_local_time(fake):
         assert "warden" not in gb.world.present("square") and "warden" not in gb.world.present("tower")
         runtime.scenes[b].at = 610
         assert "warden" in gb.world.present("square")
+    finally:
+        await runtime.close()
+
+
+@pytest.mark.parametrize("by_hand", [False, True])
+@pytest.mark.parametrize("recover", [False, True])
+async def test_joint_kp_order_then_real_commit_refreshes_the_other_graph_ruling(fake, by_hand, recover):
+    from autokeeper.agents.cast import PartyPlan, PartyStep
+    from autokeeper.engine.timing import SceneResourceConflict
+
+    action = Action(kind="talk", summary="打电话请教守钟人", npc="warden", communication="remote", speech="请问现在方便吗？")
+    runtime, casts, _ = made(fake, plans={"甲私下原话": Plan(action=action), "乙私下原话": Plan(action=action)},
+                             rulings={action.summary: Ruling(needs_roll=False, minutes=5)})
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga, gb = runtime.game(a), runtime.game(b)
+
+    async def voice(*args, **kwargs):
+        return "现在方便。"
+
+    casts[a].npc = casts[b].npc = voice
+    seen, contexts = [], []
+    tasks = []
+
+    async def joint(state, inputs):
+        # The KP explicitly chooses B first, overriding the earlier network/global-turn order.
+        assert {item.text for item in inputs} == {"甲私下原话", "乙私下原话"}
+        return PartyPlan(steps=[PartyStep(token=sid, plan=Plan(action=action), related=[a if sid == b else b],
+                                         coordination="两次来电，先接林秋的，再按通话实际结果处理周衡的请求")
+                                for sid in (b, a)])
+
+    async def first_rule(state, asked, at=None, coordination="", **kwargs):
+        seen.append(("B", len(runtime.state.record.events)))
+        contexts.append(coordination)
+        return Ruling(needs_roll=by_hand, skill="侦查" if by_hand else "", set_flags=["bell_stopped"])
+
+    async def later_rule(state, asked, at=None, coordination="", **kwargs):
+        seen.append(("A", "bell_stopped" in runtime.state.flags))
+        contexts.append(coordination)
+        return Ruling(needs_roll=False, missing=["先前通话已改变局势"])
+
+    try:
+        # Persist both original stages before either result may settle.
+        ta = asyncio.create_task(run(runtime.graph(a), ga, {"input": "甲私下原话"}))
+        tasks.append(ta)
+        await spin_until(lambda: runtime.scenes[a].reservation)
+        tb = asyncio.create_task(run(runtime.graph(b), gb, {"input": "乙私下原话", "by_hand": by_hand}))
+        tasks.append(tb)
+        await spin_until(lambda: ta.done())
+        assert isinstance(ta.exception(), SceneResourceConflict) and not tb.done()
+        casts[a].party_plan, casts[a].arbiter, casts[b].arbiter = joint, later_rule, first_rule
+        await runtime.prepare_conflict(a)
+        if recover:
+            saved = runtime.state.model_dump_json()
+            tb.cancel()
+            await asyncio.gather(tb, return_exceptions=True)
+            await runtime.close()
+            runtime, casts, _ = made(fake, state=GameState.model_validate_json(saved))
+            ga, gb = runtime.game(a), runtime.game(b)
+            casts[a].npc = casts[b].npc = voice
+            casts[a].arbiter, casts[b].arbiter = later_rule, first_rule
+            tb = asyncio.create_task(run(runtime.graph(b), gb, {"input": "/retry"}))
+            tasks.append(tb)
+        again = asyncio.create_task(run(runtime.graph(a), ga, {"input": "/retry"}))
+        tasks.append(again)
+        if by_hand:
+            from langgraph.types import Command
+
+            _, offers = await asyncio.wait_for(tb, 3)
+            assert offers and offers[0]["kind"] == "roll" and not again.done()
+            assert "bell_stopped" not in runtime.state.flags
+            gb.rules.dice.queue(10)
+            await asyncio.wait_for(run(runtime.graph(b), gb, Command(resume=True)), 3)
+        await asyncio.wait_for(asyncio.gather(again, tb), 3)
+        assert [entry[0] for entry in seen] == ["B", "A"]
+        assert seen[-1] == ("A", True)  # re-ruled after B's actual result, never the original ruling
+        assert all("甲私下原话" not in context and "乙私下原话" not in context for context in contexts)
+        assert all("列表先后不预定胜者" in context for context in contexts)
+        assert all("请问现在方便吗" not in context for context in contexts)
+        assert len([entry for entry in runtime.state.log if entry.kind == "player"]) == 2
+        assert casts[a].planned == ([] if recover else ["甲私下原话"])
+        assert casts[b].planned == ([] if recover else ["乙私下原话"])
+        assert not ga.state.pending_turn and not gb.state.pending_turn
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await runtime.close()
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+async def test_missing_joint_plan_never_acknowledges_or_discards_either_attempt(fake, incomplete):
+    from autokeeper.agents.cast import PartyPlan, PartyStep
+    from autokeeper.engine.game import PreparationError
+    from autokeeper.engine.timing import SceneResourceConflict
+
+    runtime, casts, _ = made(fake)
+    a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    ga, gb = runtime.game(a), runtime.game(b)
+    action = Action(kind="talk", summary="致电守钟人", npc="warden", communication="remote")
+    try:
+        for game, sid, original in ((ga, a, "原话甲"), (gb, b, "原话乙")):
+            game.state.turn = runtime.allocate_turn()
+            game.state.pending_turn["input"] = original
+            runtime.reserve(sid, action, Ruling(needs_roll=False))
+        with pytest.raises(SceneResourceConflict):
+            await runtime.wait(a)
+
+        async def unavailable(state, inputs):
+            return PartyPlan(steps=[PartyStep(token=a, plan=Plan(action=action))]) if incomplete else None
+
+        casts[a].party_plan = unavailable
+        with pytest.raises(PreparationError):
+            await runtime.prepare_conflict(a)
+        assert not runtime.state.scene_handoffs
+        assert ga.state.pending_turn["input"] == "原话甲" and gb.state.pending_turn["input"] == "原话乙"
+        assert not runtime.scenes[a].reservation.get("joint_reviewed")
+        assert not casts[a].ruled and not casts[b].ruled
     finally:
         await runtime.close()

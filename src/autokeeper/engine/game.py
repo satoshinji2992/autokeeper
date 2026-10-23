@@ -1929,6 +1929,8 @@ class Game(Encounters):
                 turn.notes.extend(f"现场登记未落实：{p}" for p in arranged.get("problems", []))
                 if "cue_turn" in arranged:
                     turn.absorb(TURN_RECORD.validate_python(arranged["cue_turn"]))
+            if note := st.pending_turn.get("scene_handoff_note"):
+                turn.notes.append(note)
             preparation = st.pending_turn.get("preparation", {})
             if "turn" in preparation:  # who stepped in or was spoken to before the journey, and what they told (_reply)
                 turn.absorb(TURN_RECORD.validate_python(preparation["turn"]))
@@ -3070,9 +3072,20 @@ class Game(Encounters):
         """Neutral coordination for the rules assistant; original player wording stays out."""
         st = self.state
         token = st.pending_turn.get("party_token")
+        shared = st.pending_turn.get("scene_coordination", {})
+        extra = ""
+        if shared:
+            extra = ("【跨现场共同安排，原话已由守秘人中立整理】" + shared.get("coordination", "")
+                     + "\n" + json.dumps([
+                         {"actor": row.get("actor", ""), "committed": row.get("committed", False),
+                          "kind": row.get("action", {}).get("kind", ""),
+                          "summary": row.get("action", {}).get("summary", ""),
+                          "target": row.get("action", {}).get("target") or row.get("action", {}).get("npc", "")}
+                         for row in shared.get("related", [])], ensure_ascii=False)
+                     + "\n列表先后不预定胜者；按当前真实位置、归属和已结算结果判断，未实施的协助不生效。")
         step = next((row for row in st.round_plan.get("steps", []) if row["token"] == token), None)
         if step is None or not (step.get("coordination") or step.get("related")):
-            return ""
+            return extra
         names = {i.id: i.name for i in st.investigators}
         lines = ["【这批行动的关系】" + step.get("coordination", "")]
         for other in st.round_plan["steps"]:
@@ -3083,7 +3096,7 @@ class Game(Encounters):
                 neutral = f"{action.kind}；{action.summary}" + (f"；对象={action.target or action.npc}" if action.target or action.npc else "")
                 actual = st.round_plan.get("results", {}).get(other["token"], "")
                 lines.append(f"- {names.get(who, who)}（{progress_}）：{neutral}" + (f"；实际检定={actual}" if actual else ""))
-        return "\n".join(lines) + "\n配合须确实成立才影响条件；争抢不因结算次序预定胜者，不替另一位玩家同意或决定行动。"
+        return "\n".join(lines) + "\n配合须确实成立才影响条件；争抢不因结算次序预定胜者，不替另一位玩家同意或决定行动。" + extra
 
     def complete_party_action(self) -> None:
         token = self.state.pending_turn.get("party_token")

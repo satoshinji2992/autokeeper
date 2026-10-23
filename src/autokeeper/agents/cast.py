@@ -1144,6 +1144,10 @@ class Cast:
                        "出现必须由玩家回答的新情况时只交代眼前情况、保留未办意图，不替他作新选择。")
         else:
             prompt += f"\n【玩家】{text}"
+        if conflict := state.pending_turn.get("scene_conflict"):
+            prompt += ("\n【共同人物或物品尚待协调，原动作未执行】\n" + json.dumps(conflict, ensure_ascii=False)
+                       + "\n结合双方原声明和实际游戏时刻安排未完成部分，不把输入或列表先后当作竞争胜负；"
+                       "已经发生的前缀不重做，原话不自动转交另一位调查员。")
         if unfinished and not refreshing:
             context = {key: unfinished[key] for key in ("original", "completed", "remaining", "reason")
                        if key in unfinished}

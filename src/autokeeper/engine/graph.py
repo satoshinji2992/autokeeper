@@ -208,10 +208,17 @@ def build(game: Game, checkpointer=None):
     async def resolve(state: TurnState) -> dict:
         _bind(game)
         if "turn" not in game.state.pending_turn:
-            ruling = Ruling.model_validate(state["ruling"]) if state.get("ruling") else None
             if game.time_wait is not None:
                 await game.time_wait(None)
-            holder["turn"] = await game.resolve(Action.model_validate(state["action"]), ruling)
+            journal = game.state.pending_turn
+            action = Action.model_validate(journal["action"])
+            ruling = Ruling.model_validate(journal["ruling"]) if journal.get("ruling") else None
+            if (state.get("by_hand") and ruling is not None and ruling.needs_roll and ruling.skill
+                    and not ruling.repeat and action.declared is None and not journal.get("roll_confirmed")):
+                interrupt({"kind": "roll", **game.roll_prompt(action, ruling)})
+                journal["roll_confirmed"] = True
+                keep()
+            holder["turn"] = await game.resolve(action, ruling)
             keep(holder["turn"])
         return {"pending": pending()}
 

@@ -14,12 +14,12 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from ..agents.cast import Action, Ruling
+from ..agents.cast import Action, PartyInput, PartyPlan, Plan, Ruling
 from ..module import improv
 from ..module.schema import Module
 from ..rules.coc import Rules
 from . import graph as turn_graph
-from .game import Game
+from .game import Game, PreparationError
 from .state import GameState, LogEntry, SceneState, format_time, parse_time
 from .timing import SceneResourceConflict, SceneTimeBoundary
 
@@ -160,6 +160,23 @@ class SceneView:
         return self.materialize().model_copy(update=update, deep=deep)
 
 
+class ScenePreparationView(SceneView):
+    """One KP's preparation window over attributed histories, without moving any cursor."""
+
+    def __init__(self, source: SceneView, members: set[str]):
+        super().__init__(source.root, source.scene)
+        object.__setattr__(self, "_history", [entry for entry in source.root.log
+                                           if entry.audience is None or members.intersection(entry.audience)])
+
+    def __getattr__(self, key: str) -> Any:
+        return self._history if key == "log" else super().__getattr__(key)
+
+    def materialize(self) -> GameState:
+        value = super().materialize()
+        value.log = list(self._history)
+        return value
+
+
 class SceneRuntime:
     """Own continuing contexts and causal time tickets over one authoritative save.
 
@@ -180,6 +197,8 @@ class SceneRuntime:
         self.on_checkpoint: Callable[[], None] | None = None
         for saved_scene in state.scenes.values():
             saved_scene.busy = False  # process-owned tasks are rebuilt from durable journals
+            if joint := saved_scene.pending_turn.get("scene_joint"):
+                joint["preparing"] = False
         if not state.positions:
             state.positions = {inv.id: state.apart.get(inv.id, state.location) for inv in state.investigators}
         # Restore the module projection once, before several scoped Games bind it.
@@ -363,6 +382,8 @@ class SceneRuntime:
                              "resources": sorted(resources), "phase": "prepared",
                              "attempt": action.model_dump(mode="json"),
                              "versions": self._resource_versions(resources)}
+        if joint := scene.pending_turn.get("scene_joint"):
+            scene.reservation.update(joint=joint["id"], joint_reviewed=True)
         scene.passed_until = None
         self.checkpoint(ident)
 
@@ -382,6 +403,12 @@ class SceneRuntime:
             peer = other.reservation
             shared = set(ticket.get("resources", [])).intersection(peer.get("resources", []))
             overlap = peer and start <= peer["end"] and peer["start"] <= end
+            joint = ticket.get("joint", "")
+            peer_joint = peer.get("joint", "")
+            if joint and joint == peer_joint:
+                order = self.state.scene_handoffs[joint]["order"]
+                if order.index(ident) < order.index(other.id):
+                    continue  # the accepted joint arrangement leaves the later attempt pending
             if shared and overlap:
                 order = (ticket.get("start", own.at), ticket.get("turn", own.turn), ident)
                 peer_order = (peer["start"], peer.get("turn", other.turn), other.id)
@@ -400,6 +427,15 @@ class SceneRuntime:
                            "until": peer.get("end", other.at)})
         return blocks
 
+    def _retained_attempt(self, ident: str) -> dict:
+        scene = self.scenes[ident]
+        request = scene.pending_turn.get("request", {})
+        return {"scene": ident, "actor": self.state.investigators[scene.active].id,
+                "original": scene.pending_turn.get("input", scene.reservation.get("original", "")),
+                "action": scene.reservation.get("attempt", {}),
+                "start": scene.reservation.get("start", scene.at), "end": scene.reservation.get("end", scene.at),
+                "request": {key: deepcopy(request[key]) for key in ("completed", "remaining", "wait_window") if key in request}}
+
     async def wait(self, ident: str, end: int | None = None) -> None:
         scene = self.scenes[ident]
         if end is not None:
@@ -410,18 +446,25 @@ class SceneRuntime:
                 scene.reservation["end"] = max(scene.reservation["end"], end)
             self.checkpoint(ident)
         while True:
+            joint = scene.pending_turn.get("scene_joint", {})
+            if joint.get("needs_prepare") and not joint.get("preparing"):
+                receipt = self.state.scene_handoffs[joint["id"]]
+                before = receipt["order"][:receipt["order"].index(ident)]
+                if any(other not in receipt.get("completed", []) for other in before):
+                    pulse = self._pulse
+                    await pulse.wait()
+                    continue
+                await self._prepare_joint(ident)
             if scene.closed:
                 raise ValueError("该现场已经交接，不能继续结算原行动")
             resources = set(scene.reservation.get("resources", []))
             current = self._resource_versions(resources)
             expected = scene.reservation.get("versions", current)
             changed = [who for who in expected if expected[who] != current.get(who)]
-            if changed and scene.reservation.get("phase") != "running":
+            if changed and scene.reservation.get("phase") != "running" and not scene.pending_turn.get("scene_joint", {}).get("preparing"):
                 conflict = {"resources": changed, "changed": True,
                             "reason": "共同人物或物品已实际变化，旧裁定尚未执行；须按最新位置、归属和实际经过重新安排",
-                            "attempts": [{"scene": ident, "actor": scene.reservation.get("actor"),
-                                          "original": scene.reservation.get("original", ""),
-                                          "action": scene.reservation.get("attempt", {})}]}
+                            "attempts": [self._retained_attempt(ident)]}
                 scene.pending_turn["scene_conflict"] = conflict
                 self.checkpoint(ident)
                 raise SceneResourceConflict(conflict)
@@ -429,11 +472,8 @@ class SceneRuntime:
             scene.reservation["blocked"] = blocks
             if any(block.get("owner") for block in blocks):
                 conflict = {"resources": sorted({resource for block in blocks for resource in block.get("resources", [])}),
-                            "attempts": [{"scene": ident, "actor": scene.reservation.get("actor"),
-                                          "original": scene.reservation.get("original", ""),
-                                          "action": scene.reservation.get("attempt", {})},
-                                         *({"scene": block["scene"], **self.scenes[block["scene"]].reservation}
-                                           for block in blocks if block.get("kind") == "resource")]}
+                            "attempts": [self._retained_attempt(sid) for sid in dict.fromkeys(
+                                [ident, *(block["scene"] for block in blocks if block.get("kind") == "resource")])]}
                 scene.pending_turn["scene_conflict"] = conflict
                 self.checkpoint(ident)
                 raise SceneResourceConflict(conflict)
@@ -473,6 +513,120 @@ class SceneRuntime:
                 other.day = end // 1440
         scene.reservation["committed"] = max(scene.reservation.get("committed", scene.at), end)
 
+    async def prepare_conflict(self, ident: str) -> None:
+        """Ask an existing KP to arrange the retained attempts, then re-enter the original Graph.
+
+        No result is inferred from network order. The accepted Plan is durable before any
+        scene resumes. Each participant prepares and rules in its own Graph context; followers
+        only do so after earlier attempts actually commit their complete results.
+        """
+        own = self.scenes[ident]
+        conflict = own.pending_turn.get("scene_conflict")
+        if conflict is None:
+            raise PreparationError("没有待交接的共同人物或物品")
+        if own.pending_turn.get("resolution") or own.pending_turn.get("turn"):
+            raise PreparationError("本段已有实际结算，须先处理保留的当前结果，不能重新执行整个行动")
+        if joint := own.pending_turn.get("scene_joint"):
+            # A previous joint arrangement is still authoritative; its later attempt now reads
+            # the actual changed world, not its pre-conflict ruling or a new player declaration.
+            joint["needs_prepare"] = True
+            own.reservation["versions"] = self._resource_versions(set(own.reservation.get("resources", [])))
+            self.checkpoint(ident)
+            return
+        scene_ids = list(dict.fromkeys(attempt["scene"] for attempt in conflict.get("attempts", [])))
+        scene_ids = [sid for sid in scene_ids if sid in self.scenes and not self.scenes[sid].closed
+                     and self.scenes[sid].pending_turn and self.scenes[sid].reservation]
+        if ident not in scene_ids:
+            scene_ids.insert(0, ident)
+        if any(self.scenes[sid].pending_turn.get("resolution") or self.scenes[sid].pending_turn.get("turn")
+               for sid in scene_ids):
+            raise PreparationError("共同操作已有实际结算，须先处理保留的当前结果，不能从原话重新执行")
+        fingerprint = [(sid, self.scenes[sid].turn, deepcopy(self.scenes[sid].reservation.get("versions", {})))
+                       for sid in scene_ids]
+        key = "scene-handoff:" + ":".join(f"{sid}-{turn}" for sid, turn, _ in sorted(fingerprint))
+        receipt = self.state.scene_handoffs.get(key)
+        if receipt is None:
+            inputs = [PartyInput(token=sid, who=self.state.investigators[self.scenes[sid].active].id,
+                                 text=self.scenes[sid].pending_turn.get("input", self.scenes[sid].reservation.get("original", "")))
+                      for sid in scene_ids]
+            members = {item.who for item in inputs}
+            view = ScenePreparationView(self.state_view(ident), members)
+            cast = self.game(ident).cast
+            if len(inputs) > 1:
+                planner = getattr(cast, "party_plan", None)
+                if planner is None or (planned := await planner(view, inputs)) is None:
+                    raise PreparationError("共同人物或物品的行动尚未取得完整安排，原声明已保留")
+                planned = PartyPlan.model_validate(planned)
+                tokens = [step.token for step in planned.steps]
+                if len(tokens) != len(inputs) or set(tokens) != set(scene_ids):
+                    raise PreparationError("共同安排须逐一保留双方行动，尚未执行或判定胜负")
+                if planned.lookup or any(step.plan.lookup or set(step.related) - set(tokens)
+                                         or step.token in step.related for step in planned.steps):
+                    raise PreparationError("共同安排仍有未完成的查询或无效关联，原行动尚未执行")
+                steps = {step.token: step.model_dump(mode="json") for step in planned.steps}
+            else:
+                planner = getattr(cast, "plan", None)
+                if planner is None:
+                    raise PreparationError("共同人物或物品已经变化，主持接口尚不能重新安排原行动")
+                plan = Plan.model_validate(await planner(view, inputs[0].text))
+                tokens, steps = [ident], {ident: {"token": ident, "plan": plan.model_dump(mode="json"),
+                                                 "coordination": conflict.get("reason", "按当前实际状态重新裁定")}}
+            for sid, turn, versions in fingerprint:
+                current = self.scenes[sid]
+                if (current.turn != turn or not current.pending_turn or current.reservation.get("versions", {}) != versions
+                        or self._resource_versions(set(versions)) != versions):
+                    raise PreparationError("共同安排期间原行动已经变化，请从已保存的当前行动继续")
+            receipt = self.state.scene_handoffs[key] = {"kind": "scene-handoff", "order": tokens,
+                                                         "steps": steps, "completed": []}
+        for sid in receipt["order"]:
+            current = self.scenes[sid]
+            current.pending_turn["scene_joint"] = {"id": key, "needs_prepare": True,
+                                                    "arrangement": {"at": current.turn,
+                                                                    "plan": receipt["steps"][sid]["plan"]}}
+            current.reservation["joint"] = key
+            current.reservation["joint_reviewed"] = True
+            current.reservation["versions"] = self._resource_versions(set(current.reservation.get("resources", [])))
+        self.checkpoint(ident)  # one short synchronous handoff saves all participants' receipts
+
+    async def _prepare_joint(self, ident: str) -> None:
+        scene, game = self.scenes[ident], self.game(ident)
+        journal, joint = scene.pending_turn, scene.pending_turn["scene_joint"]
+        receipt = self.state.scene_handoffs[joint["id"]]
+        step = receipt["steps"][ident]
+        related = [{"actor": self.state.investigators[self.scenes[sid].active].id,
+                    "action": receipt["steps"][sid]["plan"]["action"],
+                    "committed": sid in receipt["completed"]} for sid in receipt["order"] if sid != ident]
+        journal["scene_coordination"] = {"coordination": step.get("coordination", ""), "related": related}
+        journal["scene_handoff_note"] = "共同安排已交接；已发生的结果以当前世界记录为准，未办部分在本轮重新裁定。"
+        joint["preparing"] = True
+        self.checkpoint(ident)
+        try:
+            action = await game._arrange(journal["input"], continuation=joint["arrangement"])
+            if request := journal.get("request"):
+                plan = Plan.model_validate(joint["arrangement"]["plan"])
+                request["remaining"] = plan.remaining.strip() or (action.summary if action.kind == "wait" else "")
+            await game.prepare(action)
+            for cached in ("draft_ruling", "skill_correction", "roll_confirmed"):
+                journal.pop(cached, None)
+            ruling = await game.rule(action)
+            journal["action"] = action.model_dump(mode="json")
+            journal["ruling"] = ruling.model_dump(mode="json") if ruling is not None else None
+            previous = dict(scene.reservation)
+            scene.reservation.clear()
+            self.reserve(ident, action, ruling)
+            scene.reservation.update(joint=joint["id"], joint_reviewed=True)
+            if "committed" in previous:
+                scene.reservation["committed"] = previous["committed"]
+            joint["needs_prepare"] = False
+            journal.pop("scene_conflict", None)
+            self.checkpoint(ident)
+            await game.emit({"type": "action", **action.model_dump(mode="json")})
+            if ruling is not None:
+                await game.emit({"type": "ruling", **ruling.model_dump(mode="json")})
+        finally:
+            joint["preparing"] = False
+            self.checkpoint(ident)
+
     def resolve_resource_conflict(self, ident: str) -> None:
         """A caller's same-KP joint ruling grants execution, never item ownership itself.
 
@@ -488,6 +642,10 @@ class SceneRuntime:
         self.checkpoint(ident)
 
     def release(self, ident: str) -> None:
+        joint = self.scenes[ident].reservation.get("joint")
+        if joint and (receipt := self.state.scene_handoffs.get(joint)) is not None:
+            if ident not in receipt.setdefault("completed", []):
+                receipt["completed"].append(ident)
         self.scenes[ident].reservation.clear()
         self.checkpoint(ident)
 

@@ -196,6 +196,7 @@ class GameState(BaseModel):
     active: int = 0
     location: str
     scenes: dict[str, SceneState] = Field(default_factory=dict)
+    scene_handoffs: dict[str, dict] = Field(default_factory=dict)  # accepted cross-scene Plans and completion receipts
     positions: dict[str, str] = Field(default_factory=dict)  # canonical physical PL positions when scenes are running
     next_scene: int = 0
     journey: str = ""  # intended destination when the player pauses along the way
