@@ -246,8 +246,10 @@ async def test_real_action_window_passes_both_declarations_to_one_plan(fake, res
                 await b.send_json({"t": "act", "text": "我拖住布道者"})
                 await a.send_json({"t": "done"})
                 await b.send_json({"t": "done"})
-                first = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
-                assert first["ev"]["who"] == "林秋"
+                first = await until(a, lambda x: x["t"] == "turn")
+                assert first["investigator"] == "lin"  # the selected batch order, independent of private declaration echoes
+                mine = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
+                assert mine["ev"]["who"] == "周衡" and mine["ev"]["audience"] == ["zhouheng"]
                 if resume:
                     error = await until(a, lambda x: x["t"] == "error" and x.get("retry"))
                     assert error and len(cast.ruled) == 2 and len(cast.batches) == 1
@@ -255,6 +257,7 @@ async def test_real_action_window_passes_both_declarations_to_one_plan(fake, res
                     await a.send_json({"t": "act", "text": "/retry"})
                 await until(a, pool_open)
                 assert len(cast.batches) == 1 and len(cast.ruled) == 2 and not cast.individual_plans
+                assert [who for who, _ in cast.ruled] == ["lin", "zhouheng"]
                 if resume:
                     assert hub.state.minutes == minute and not hub.state.pending_turn
             finally:
@@ -280,9 +283,15 @@ async def test_a_planned_window_cancelled_before_execution_keeps_its_saved_clock
     assert saved.round_spent == 0 and saved.round_elapsed == {} and saved.minutes == before
     assert saved.round_plan["used"] == [] and saved.round_plan["done"] == []
     restored = Hub(EXAMPLE, state=saved, cast=PartyCast(fail=True), rules=Rules(dice=fake))
-    assert restored.game.pending_party() == hub.pool
-    assert await restored.game.arrange_party(hub.pool) == list(reversed(hub.pool))
+    assert saved.round_plan["input"] == [list(pair) for pair in hub.pool]  # arrival order remains intact
+    expected = list(reversed(hub.pool))
+    assert restored.game.pending_party() == expected  # only the chosen uncompleted execution order is resumed
+    assert await restored.game.arrange_party(hub.pool) == expected
     assert not restored.cast.batches  # cancellation did not require another model arrangement
+    await restored._settle()
+    assert [who for who, _ in restored.cast.ruled] == ["lin", "zhouheng"]
+    assert restored.state.minutes == before + 30 and not restored.game.pending_party()
+    assert not restored.cast.batches and not restored.cast.individual_plans
     await restored.game.close()
     await hub.game.close()
 

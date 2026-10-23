@@ -301,8 +301,9 @@ async def test_retelling_after_two_tools_replaces_the_final_exchange_using_its_a
                           game.state.investigator.inventory, len(game.world.rec.journal),
                           len(game.state.log), len(game.state.transcripts["keeper"]))
         assert [entry.text for entry in game.state.log if entry.kind == "keeper"] == [replacement]
-        assert retold_events[0] == {"type": "keeper_start", "again": True}
-        assert retold_events[-1] == {"type": "keeper_end", "text": replacement}
+        scope = {"audience": told.entry.audience, "delivery": told.entry.delivery}
+        assert retold_events[0] == {"type": "keeper_start", "again": True, **scope}
+        assert retold_events[-1] == {"type": "keeper_end", "text": replacement, **scope}
         assert len(role_calls("Dialogue")) == 2 and len(role_calls("HostedReply")) == 3
         assert len(role_calls("Plan")) == len(role_calls("Ruling")) == 1 and not fake.values
     finally:

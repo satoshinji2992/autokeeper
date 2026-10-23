@@ -39,6 +39,7 @@ from ...rules.melee import opposed_difficulty
 from ...world.ops import Bring, EncounterStep, Occur
 from ...world.record import ENGINE
 from .. import effects
+from ..audience import scope
 from . import actions, choices, clock, plan_check, profiles, site, stakes, telling, views
 from . import chase as chasing
 from .actions import ATTACKING, Ctx
@@ -184,7 +185,18 @@ class Encounters:
 
     # -- whether there is one -------------------------------------------------------------------
     def encounter(self) -> EncounterState | None:
-        """The encounter going on (not one that has closed and waits to be archived)."""
+        """The active investigator's encounter at their own scene."""
+        enc = self.world_encounter()
+        if enc is None:
+            return None
+        actor = self.state.investigator.id
+        p = enc.get(actor)
+        if enc.mode == "chase" and p is not None and p.presence == "in":
+            return enc
+        return enc if self.world.place(actor) == enc.place else None
+
+    def world_encounter(self) -> EncounterState | None:
+        """The authoritative encounter, including one at another investigator's scene."""
         enc = self.state.encounter
         return enc if enc is not None and enc.phase != "ended" else None
 
@@ -202,8 +214,9 @@ class Encounters:
     def fought_this_turn(self) -> bool:
         """A fight or a chase is going on, or this turn began one (and it is already over)."""
         st = self.state
-        return self.battling() or any(x.started_turn == st.turn for x in st.encounter_log[-3:]) or (
-            st.encounter is not None and st.encounter.started_turn == st.turn)
+        actor = st.investigator.id
+        return self.battling() or any(x.started_turn == st.turn and actor in x.participants for x in st.encounter_log[-3:]) or (
+            st.encounter is not None and st.encounter.started_turn == st.turn and st.encounter.get(actor) is not None)
 
     def pending_choice(self) -> PendingChoice | None:
         enc = self.encounter()
@@ -241,6 +254,18 @@ class Encounters:
         enc = self.encounter()
         assert enc is not None
         me = st.investigator
+        if enc.get(me.id) is None:
+            from ..game import Turn
+
+            def join(w: Work) -> None:
+                w.enc.participants.append(Participant(id=me.id, kind="investigator", side="party",
+                                                      controller="human" if me.id in st.human else "ai", node=w.enc.place))
+                w.change("joined", me.id)
+                w.unit.lines.append(f"{{{me.id}}}来到现场，加入了这场遭遇")
+
+            await self._unit(f"enc/{enc.id}/join-investigator/{me.id}/t{st.turn}", Turn(), join)
+            enc = self.encounter()
+            assert enc is not None
         if text.strip() == "/encounter":
             return Action(kind="other", summary="（这一轮接着结算）", encounter=enc.id, declared={"beat": True})
         found = choices.match(self, me.id, text)
@@ -278,7 +303,8 @@ class Encounters:
     def _action(self, enc: EncounterState, d: DeclaredAction, declared: dict) -> Action:
         from ...agents.cast import Action
 
-        return Action(kind="attack" if d.do in ATTACKING else "other", summary=d.summary, encounter=enc.id, declared=declared)
+        summary = d.summary + (f"；目标：{d.goal}" if d.goal else "")
+        return Action(kind="attack" if d.do in ATTACKING else "other", summary=summary, encounter=enc.id, declared=declared)
 
     async def _ask_plan(self, text: str, mode: str, *, ask: str = "", check=None):
         """The keeper plan inside the encounter; its answer and what is still wrong with it (Checked).
@@ -298,8 +324,8 @@ class Encounters:
 
         declared = action.declared or {}
         plan = declared.get("plan") or {}
-        do = (plan.get("action") or {}).get("do", "")
-        if do in ("other", "use") and not declared.get("ruling"):
+        d = plan.get("action") or {}
+        if (d.get("do") in ("other", "use") or (d.get("do") == "speak" and d.get("goal"))) and not declared.get("ruling"):
             return None
         if declared.get("ruling"):
             return Ruling.model_validate(declared["ruling"])
@@ -354,6 +380,10 @@ class Encounters:
         from ...agents.encounter import EncounterHint
 
         st = self.state
+        active = self.world_encounter()
+        if active is not None and (active.started_turn != st.turn or active.place != self.world.place(st.investigator.id)):
+            turn.notes.append("【未落实】另一处的遭遇仍在进行，这次新的冲突尚未开始结算")
+            return ""
         declared = action.declared or {}
         if declared.get("start"):
             start = EncounterStart.model_validate(declared["start"])
@@ -407,6 +437,11 @@ class Encounters:
         from now on, the creatures first seen (sanity, per investigator), its stakes. A fight's
         `opening` is the investigator's first action: the first round runs at once; otherwise the next
         input is the first round. Its id; "" when there is nobody there to fight after all."""
+        active = self.world_encounter()
+        if active is not None and (active.started_turn != self.state.turn
+                                   or active.place != self.world.place(self.state.investigator.id)):
+            turn.notes.append("【未落实】已有遭遇仍在进行，这次新的冲突尚未开始结算")
+            return ""
         st, step = self.state, self._resolution_step
         eid = await step("enc-id", turn, lambda: f"e{st.turn}n{len(st.encounter_log)}" + (f"x{event.id}" if event else ""))
         # Who comes, decided once: resumed after the opening blow killed its foe, the fight still ends.
@@ -462,7 +497,7 @@ class Encounters:
         allies = [profiles.combatant(self.world, x) for x in start.allies if x not in foes]
         parts: list[Participant] = []
         for inv in st.investigators:
-            if inv.id in st.apart and inv.id != st.investigator.id:  # elsewhere (GameState.apart): not in it
+            if self.world.place(inv.id) != st.location:
                 continue
             parts.append(Participant(id=inv.id, kind="investigator", side="party", controller="human" if inv.id in humans else "ai",
                                      surprised=start.surprise == "party", node=st.location,
@@ -513,9 +548,11 @@ class Encounters:
             turn.fight.append("站在调查员这边的：" + "、".join(kn.get(a, a) for a in allies if ctx.p(a)))
         personal = {viewer: {"text": telling.render(line, views.names(ctx, viewer)), "who": ""}
                     for viewer, masks in st.perceptions.items() if masks}
-        st.add("event", telling.render(line, pn), presented=personal)
-        return {"ok": True, "notices": [{"type": "fight_start", "fight": None, "line": telling.render(line, pn),
-                                          **({"_entity_line": line} if personal else {}), "surprise": surprise}]}
+        audience = scope(st, views.observers(self, enc))
+        st.add("event", telling.render(line, pn), presented=personal, audience=audience)
+        notice = self._filled({"type": "fight_start", "fight": None, "line": telling.render(line, pn),
+                               **({"_entity_line": line} if personal else {}), "surprise": surprise, "audience": audience})
+        return {"ok": True, "notices": [notice]}
 
     def _surprise_contest(self, start: EncounterStart, parts: list[Participant]) -> str:
         """The keeper's surprise contest (pp. 90–91): the first of those sneaking up rolls its skill at the
@@ -544,6 +581,8 @@ class Encounters:
         if enc is None:
             return
         ctx = Ctx.of(self)
+        observing = views.observers(self, enc)
+        audience = scope(st, observing)
         covered = {x for ev in self.m.events for x in ev.sights}
         for p in enc.participants:
             v = ctx.view(p.id)
@@ -553,7 +592,7 @@ class Encounters:
             sheet = prof.sheet.partition(":")[2]
             horror = p.id
             free = paid or horror in covered or sheet in covered or (event is not None and (horror in event.sights or sheet in event.sights))
-            present = set(self.world.observers(enc.place))
+            present = set(observing)
             watching = [inv for inv in st.investigators if inv.id in present and inv.can_act
                         and (participant := enc.get(inv.id)) is not None and participant.presence == "in"
                         and not ctx.hidden_from(inv.id, horror)]
@@ -562,10 +601,10 @@ class Encounters:
             first = not any(horror in seen for seen in st.sightings.values())
             if first:
                 face = f"creature-{sheet}" if f"creature-{sheet}" in self.m.pictures else views.portrait(self, horror)
-                audience = {} if len(watching) == len(st.investigators) else {"audience": [inv.id for inv in watching]}
-                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda v=v, horror=horror, face=face, audience=audience: self.emit(self._filled({
+                revealed = scope(st, [inv.id for inv in watching])
+                await step(f"/enc/{enc.id}/reveal/{horror}", turn, lambda v=v, horror=horror, face=face, revealed=revealed: self.emit(self._filled({
                     "type": "reveal", "id": horror, "name": ctx.name(horror, "players"), "portrait": face,
-                    "look": views.seen_look(v, 120), **audience})))
+                    "look": views.seen_look(v, 120), "audience": revealed})))
             for inv in watching:
                 if horror in st.sightings.get(inv.id, []):
                     continue
@@ -583,8 +622,8 @@ class Encounters:
                     inv.__dict__.update(trial.__dict__)
                     st.sightings.setdefault(inv.id, []).append(horror)
                     turn.sanity.append((inv.name, s))
-                    st.add("sanity", s.describe(), who=inv.name)
-                    return {"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)}
+                    st.add("sanity", s.describe(), who=inv.name, audience=audience)
+                    return {"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn), "audience": audience}
 
                 notice = await step(f"/enc/{enc.id}/sight/{inv.id}/{horror}", turn, pay)
                 if notice:
@@ -680,7 +719,7 @@ class Encounters:
             rid = f"{e.id}:r{rnd}:{actor}:{n}"
             if old is not None:
                 old.phase = "cancelled"
-            ruled = ruling.model_dump(mode="json") if ruling is not None and d.do in ("other", "use") else None
+            ruled = ruling.model_dump(mode="json") if ruling is not None and d.needs_ruling else None
             e.receipts.append(ActionReceipt(id=rid, round=rnd, actor=actor, source=source, declared=d,  # type: ignore[arg-type]
                                             summary=d.summary, ruling=ruled))
             me = e.get(actor)
@@ -713,6 +752,9 @@ class Encounters:
                 if a.side:
                     p.side = a.side  # type: ignore[assignment]
                 p.arrangement, p.arranged_round, p.react = a, upcoming, a.react
+                for held in a.release:
+                    if w.free(held, by=a.who):
+                        w.unit.lines.append(f"{{{a.who}}}主动松开了{{{held}}}")
                 if a.speak and (prof := profiles.profile(self.world, a.who)) is not None and (prof.human or prof.kind == "npc"):
                     w.unit.extra.setdefault("voices", []).append(a.who)  # his own words, through the NPC's reply (Game.talk)
                 if a.say.strip():
@@ -835,6 +877,7 @@ class Encounters:
 
         def run() -> dict:
             ctx = Ctx.of(self)
+            audience = scope(self.state, views.observers(self, ctx.enc))
             w = Work(self, ctx, key)
             fn(w)
             changes = w.changes()
@@ -858,7 +901,7 @@ class Encounters:
                     if any(self.state.perceptions.values()):
                         ev["_entity_line"] = ev["line"]
                     ev["line"] = telling.render(ev["line"], pn)
-                notices.append(ev)
+                notices.append({"audience": audience, **ev})
             now = self.state.encounter or w.enc
             if now.phase != "ended" and (shown or any(ev["type"] == "fight_act" for ev in notices)):
                 templates = [x for x in public if x and not x.startswith(KEEPER_ONLY)]
@@ -866,15 +909,16 @@ class Encounters:
                           {"type": "fight_state", "fight": None, "lines": shown})
                 if any(self.state.perceptions.values()):
                     notice["_entity_lines"] = templates
-                notices.append(notice)
+                notices.append({**notice, "audience": audience})
             if w.unit.lines and (st := self.state):
                 templates = [x for x in public if x and not x.startswith(KEEPER_ONLY)]
                 for template, x in zip(templates, shown, strict=True):
                     if not x.startswith("【"):
                         personal = {viewer: {"text": telling.render(template, views.names(after, viewer)), "who": ""}
                                     for viewer, masks in st.perceptions.items() if masks}
-                        st.add("dice", x, presented=personal)
-            return {"notices": notices, "rest": w.unit.rest, "flags": w.unit.flags, "fired": w.unit.fired, "extra": w.unit.extra}
+                        st.add("dice", x, presented=personal, audience=audience)
+            return {"notices": [self._filled(ev) for ev in notices], "rest": w.unit.rest, "flags": w.unit.flags,
+                    "fired": w.unit.fired, "extra": w.unit.extra}
 
         value = await self._resolution_step("/" + key, turn, run)
         await self._owed(key, value, turn)
@@ -891,7 +935,7 @@ class Encounters:
 
     async def _notify(self, key: str, notices: list[dict], turn: Turn) -> None:
         for k, ev in enumerate(notices):
-            await self._resolution_step(f"/{key}/n{k}", turn, lambda ev=ev: self.emit(self._filled(ev)))
+            await self._resolution_step(f"/{key}/n{k}", turn, lambda ev=ev: self.emit(ev))
 
     def _filled(self, ev: dict) -> dict:
         """A notice as the screens get it: with the fight as it now stands, for those that carry it, and
@@ -1069,9 +1113,6 @@ class Encounters:
 
             await self._unit(f"{base}/lost", turn, spend)
             return True
-        if (holder := ctx.held_by(actor)) and (r is None or not r.settled):
-            await self._unit(f"{base}/break", turn, lambda w: self._break_free(w, actor, holder, r, advance))
-            return True
         if r is None:
             if p.controller == "keeper":
                 return await self._keeper_slot(enc, actor, base, turn, advance)
@@ -1096,7 +1137,7 @@ class Encounters:
         if d.after and (wait := self._delay(enc, r)) is not None:  # waiting for someone to act first (pp. 86, 113)
             await self._unit(f"{base}/delay/{r.id}", turn, wait)
             return True
-        rolls = d.do in ATTACKING or d.do == "aid" or (d.do in ("other", "use") and (r.ruling or {}).get("needs_roll"))
+        rolls = d.do in ATTACKING or d.do == "aid" or (d.needs_ruling and (r.ruling or {}).get("needs_roll"))
         if self.asking and self._by_hand(actor) and rolls and not r.prompted:
             await self._unit(f"{base}/prompt", turn, lambda w: self._prompt(w, r))
             return False
@@ -1276,17 +1317,6 @@ class Encounters:
         await self._unit(f"{base}/decl", turn, declare)
         return True
 
-    def _break_free(self, w: Work, actor: str, holder: str, r: ActionReceipt | None, advance) -> None:
-        """Held fast: the slot goes on trying to break free, STR against STR (p. 89)."""
-        mine, theirs = w.check(actor, "力量", w.ctx.view(actor).char("力量")), w.check(holder, "力量", w.ctx.view(holder).char("力量"))
-        if mine.level > theirs.level or (mine.level == theirs.level and mine.level.ok and mine.target > theirs.target):
-            w.enc.scene.holds = [h for h in w.enc.scene.holds if h.held != actor]
-            w.change("freed", actor)
-            w.unit.lines.append(f"{{{actor}}}拼命挣脱了{{{holder}}}（力量 {mine.value} 对 {theirs.value}）")
-        else:
-            w.unit.lines.append(f"{{{actor}}}被{{{holder}}}死死制住，没能挣脱（力量 {mine.value} 对 {theirs.value}）")
-        advance(w, r, "lapsed" if r is not None else "committed", "被制住")
-
     async def _take(self, r: ActionReceipt, base: str, turn: Turn) -> None:
         """What the action picks up first (DeclaredAction.takes) registered in hand (world/ops.Bring);
         an attack written with its name then uses that very thing."""
@@ -1352,7 +1382,13 @@ class Encounters:
             target = v.skill(skill)
         difficulty = (r.ruling or {}).get("difficulty", "常规")
         need = {"困难": target // 2, "极难": target // 5}.get(difficulty, target)
-        payload = {"who": st.find(r.actor).name, "skill": skill, "difficulty": difficulty, "bonus": 0, "target": target,
+        p = w.enc.get(r.actor)
+        bonus = int((r.ruling or {}).get("bonus", 0)) + sum(
+            e.dice for e in (p.edges if p else []) if e.until == "next_roll" and not e.source.startswith("aim"))
+        if d.do in ("attack", "maneuver") and w.ctx.held_by(r.actor):
+            bonus -= 1
+        bonus = max(-2, min(2, bonus))
+        payload = {"who": st.find(r.actor).name, "skill": skill, "difficulty": difficulty, "bonus": bonus, "target": target,
                    "hard": target // 2, "extreme": target // 5, "need": need, "action": r.summary, "why": ""}
         w.enc.pending = PendingChoice(id=f"{r.id}:roll", kind="roll", who=r.actor, receipt=r.id, prompt=r.summary,
                                       options=[ChoiceOption(id="roll", label="掷骰", value=payload)], default="roll",
@@ -1389,8 +1425,11 @@ class Encounters:
                              for x in options], default=default)
                 return
             chosen, by = react_choice(w.ctx, pick.target, kind)
+            reason = choices.reaction_reason(w.ctx, pick.target)
+            if chosen == "none" and not reason:
+                reason = "按预设不应对" if by == "preset" else "守秘人安排不应对"
             rr.reactions.append(ReactionReceipt(attack=k, attacker=r.actor, defender=pick.target, options=options,  # type: ignore[arg-type]
-                                                chosen=chosen, by=by))  # type: ignore[arg-type]
+                                                chosen=chosen, by=by, reason=reason))  # type: ignore[arg-type]
 
         await self._unit(f"{base}/a{k}/react", turn, decide)
         return ask
@@ -1615,6 +1654,7 @@ class Encounters:
         key = f"enc/{eid}/end"
         if enc is not None and enc.id == eid and enc.phase != "ended":
             ctx = Ctx.of(self)
+            audience = scope(st, views.observers(self, enc))
             due = stakes.due(self, enc, how)
             text = self._summary(ctx, how)
             ran = enc.mode == "chase" and enc.chase is not None
@@ -1648,7 +1688,7 @@ class Encounters:
                           or p.kind == "investigator"]
                 self.world.apply(Occur(id=f"{key}/occur", actor=ENGINE, participants=[x for x in people if x], place=enc.place,
                                        text=text[:300], visibility="public"))
-                st.add("event", f"{word}结束：{text}")
+                st.add("event", f"{word}结束：{text}", audience=audience)
 
             await step(f"/{key}/record", turn, land)
             value = await self._unit(key, turn, close)

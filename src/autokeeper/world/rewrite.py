@@ -41,7 +41,16 @@ if TYPE_CHECKING:
 def pins(w: World, about: list[str]) -> list[Fact]:
     """Revealed facts about the same people and places: what a rewrite must not contradict."""
     near = set(about)
-    return [f for f in w.rec.facts.values() if f.revealed is not None and not f.retracted and (not near or near & set(f.about))]
+    return [f for f in w.rec.facts.values() if _known(w, f) and not f.retracted and (not near or near & set(f.about))]
+
+
+def _known(w: World, fact: Fact) -> bool:
+    return fact.revealed is not None or any(i.id in fact.known_by for i in w.st.investigators)
+
+
+def _witnessed(w: World, event) -> bool:
+    return event.visibility == "public" or any(
+        i.id in (*event.witnesses, *event.participants, event.actor) for i in w.st.investigators)
 
 
 def check(w: World, op: Rewrite) -> list[str]:
@@ -50,7 +59,7 @@ def check(w: World, op: Rewrite) -> list[str]:
         return ["改写要写新的内容；要取消这件事用 retract"]
     if len(op.text) > 600:
         return ["改写的内容不超过 600 字"]
-    at = knowledge.table(w.m, w.st, w.rec)
+    at = knowledge.table(w.m, w.st, w.rec, include_private=True)
     problems: list[str] = []
     about: list[str] = []
     if kind == "fact":
@@ -63,7 +72,7 @@ def check(w: World, op: Rewrite) -> list[str]:
             return [f"线索 {ident.removeprefix('clue:')} 已经在玩家手里，原文不能改；要改它的意思，改它背后的事"]
         if f.id.startswith("told:"):
             return [f"事实 {ident} 是玩家当初听到、看到的样子，不能改"]
-        if (f.revealed is not None or knowledge.exposed(f.text, at)) and not op.reason.strip():
+        if (_known(w, f) or knowledge.exposed(f.text, at)) and not op.reason.strip():
             return [f"玩家已经知道「{f.text[:40]}」（{knowledge.how_known(w, f, at) or '见过'}）：改写要在 reason 里写清"
                     "他们当初为什么会听到、看到那样（有人撒谎、记错、伪造、设局），其他已知的事也要说得通"]
         about = f.about
@@ -79,12 +88,12 @@ def check(w: World, op: Rewrite) -> list[str]:
         e = w.rec.event(ident)
         if e is None:
             return [f"事件 {ident} 不存在"]
-        met = e.visibility == "public" or knowledge.exposed(e.text, at)
+        met = _witnessed(w, e) or knowledge.exposed(e.text, at)
         if met and op.retract:
             return [f"事件 {ident} 玩家亲历过，不能取消；要说明它其实是另一回事，用 text 写出背后的真相"]
         if met and not op.reason.strip():
             return [f"事件 {ident} 玩家亲历过：改写要在 reason 里写清他们看到的为什么是那样（设局、假扮、伪造）"]
-        if op.retract and any((g := w.rec.facts.get(fid)) and g.revealed is not None for fid in e.facts):
+        if op.retract and any((g := w.rec.facts.get(fid)) and _known(w, g) for fid in e.facts):
             problems.append(f"事件 {ident} 带出的事实玩家已经知道，不能取消")
         about = [*e.participants, e.place]
     else:
@@ -108,8 +117,8 @@ def settle(w: World, op: Rewrite, oid: str):
     if kind == "fact":
         f = rec.facts[ident]
         old, old_version = f.text, f.version
-        at = knowledge.table(w.m, w.st, rec)
-        if f.revealed is not None or knowledge.exposed(f.text, at):  # what they were told stays theirs
+        at = knowledge.table(w.m, w.st, rec, include_private=True)
+        if _known(w, f) or knowledge.exposed(f.text, at):  # what they were told stays theirs
             touched.append(f"fact:{knowledge.keep_told(w, f, at).id}")
         f.text = op.text or f.text
         f.retracted = op.retract
@@ -120,7 +129,7 @@ def settle(w: World, op: Rewrite, oid: str):
         w.touch(f)
         quoting = {e.id for e in rec.events if ident in e.facts}
         for e in rec.events:  # private history that quoted the old words now says the new ones
-            if e.visibility == "private" and old and old in e.text:
+            if e.visibility == "private" and not _witnessed(w, e) and old and old in e.text:
                 e.text = e.text.replace(old, f.text if not op.retract else "（并无此事）")
                 e.version += 1
                 retold[e.id] = e.text
@@ -131,7 +140,7 @@ def settle(w: World, op: Rewrite, oid: str):
         e = rec.event(ident)
         assert e is not None
         old, old_version = e.text, e.version
-        if e.visibility == "public" or knowledge.exposed(e.text, knowledge.table(w.m, w.st, rec)):
+        if _witnessed(w, e) or knowledge.exposed(e.text, knowledge.table(w.m, w.st, rec, include_private=True)):
             # What they lived through keeps its words; the truth behind it is a secret of those in it.
             behind = Fact(id=f"behind:{e.id}:{e.version}", text=op.text, kind="secret", origin="game", t=w.now,
                           about=[x for x in (*e.participants, e.place) if x],

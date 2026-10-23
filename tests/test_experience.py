@@ -464,7 +464,7 @@ async def test_resuming_an_ai_companion_uses_the_original_investigator(module, f
 def test_network_projection_omits_unseen_content_and_its_art(fake):
     m = Module.load(paths.MODULES / "zhuishuren")
     st = Game.new(m, m.pregens)
-    book = table(m, st)
+    book = table(m, st, viewer=st.investigator.id)
     assert "suidao" not in {loc["id"] for loc in book["locations"]}
     assert all(not loc["read_aloud"] and not loc["features"] for loc in book["locations"] if loc["id"] != st.location)
     assert {n["id"] for n in book["npcs"]} == {"zhanwuyuan"}

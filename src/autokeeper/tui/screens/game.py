@@ -737,7 +737,7 @@ class GameScreen(Screen):
         for e in entries:
             if not audience.visible(e, self._me() or self._viewer().id):
                 continue
-            if not audience.public(e):
+            if not audience.public(e) and not (e.kind == "keeper" and e.delivery):
                 label = "守秘人·私密" if e.kind == "keeper" else f"私语·{e.who}"
                 line = Text(f"【{label}】{e.text.splitlines()[0]}")
             else:
@@ -1491,10 +1491,10 @@ class GameScreen(Screen):
                 self.story.add("system", Text("上一回合尚未讲完，正在接续已保存的结果。"))
                 for entry in audience.log(self.state, self._me() or self._viewer().id):
                     if entry.turn == self.state.turn and entry.kind in ("dice", "npc", "event", "keeper"):
-                        text = (f"【守秘人·私密】{entry.text}" if entry.kind == "keeper" and not audience.public(entry)
+                        text = (f"【守秘人·私密】{entry.text}" if entry.kind == "keeper" and not audience.public(entry) and not entry.delivery
                                 else entry.text)
                         block = self.story.add(entry.kind, Text(text), delivery=entry.delivery)
-                        if entry.kind == "keeper" and audience.public(entry):
+                        if entry.kind == "keeper" and (audience.public(entry) or entry.delivery):
                             self.told = block
                 await self._run_turn({"input": "/retry"})
             elif self.resume:

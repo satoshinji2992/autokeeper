@@ -70,9 +70,16 @@ def _arrangement(ctx: Ctx, a: NpcArrangement, joining: set[str]) -> tuple[NpcArr
         q = ctx.p(x)
         if q is None or q.presence not in ("fled", "in"):
             problems.append(f"{a.who} 的 let_go 里 {x} 不在这场遭遇里")
+    release = []
+    for x in a.release:
+        if ctx.held_by(x) != a.who:
+            problems.append(f"{a.who} 的 release 里 {x} 不是他正在压制的人")
+        else:
+            release.append(x)
     if not kept:
         return None, problems or [f"{a.who} 没有一个做得到的行动"]
-    return a.model_copy(update={"actions": kept, "pursue": [x for x in a.pursue if not _pursue(ctx, a.who, [x], ahead=True)]}), problems
+    return a.model_copy(update={"actions": kept, "release": release,
+                                "pursue": [x for x in a.pursue if not _pursue(ctx, a.who, [x], ahead=True)]}), problems
 
 
 def _pursue(ctx: Ctx, who: str, ids: list[str], *, ahead: bool = False) -> list[str]:

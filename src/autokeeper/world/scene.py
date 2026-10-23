@@ -119,6 +119,8 @@ class Context:
     ids: str = "keeper:0"  # op ids are f"{ids}:{i}"
     start: int = 0  # the first i
     rests: dict[str, tuple[int, int]] = field(default_factory=dict)  # actual completed rest attempts, by their own actor
+    interval: tuple[int, int] | None = None  # actual host-owned action interval, independent of global clock
+    participants: list[str] = field(default_factory=list)
 
     @property
     def resting(self) -> bool:
@@ -133,6 +135,8 @@ class Unit:
     steps: list[dict[str, Any]] = field(default_factory=list)  # world ops; walk, meet and witness are scene checks
     said: list[str] = field(default_factory=list)  # what it changes, in words
     problems: list[str] = field(default_factory=list)  # why it does not hold
+    begin: int | None = None
+    end: int | None = None
 
     def dump(self) -> dict[str, Any]:
         return asdict(self)
@@ -300,7 +304,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     party = {i.id for i in st.investigators}
     lead = st.investigator.id
     src = st.location
-    at_start = set(w.present(src))
+    at_start = set(w.present(src, at=ctx.interval[0])) if ctx.interval else set(w.present(src))
     problems: list[str] = []
     units: dict[str, Unit] = {}
     count = itertools.count(ctx.start)
@@ -313,7 +317,15 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         return model(id=f"{ctx.ids}:{next(count)}", **kw).model_dump(mode="json")
 
     def unit(key: str) -> Unit:
-        return units.setdefault(key, Unit(key))
+        return units.setdefault(key, Unit(key, begin=ctx.interval[0] if ctx.interval else None,
+                                         end=ctx.interval[1] if ctx.interval else None))
+
+    def budget(npc: str) -> int:
+        if ctx.interval is None:
+            return ctx.elapsed
+        begin, end = ctx.interval
+        available = w.available_at(npc)
+        return end - max(begin, available if available is not None else begin)
 
     # Where the investigators are as it ends: a room of the place they are in, or where they were.
     room = src
@@ -344,7 +356,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                 continue
             raw = op(Improvise, at=room, actor=KEEPER, thread=False,
                      plan={"kind": "展开", "reason": f"现场登记：{p.name}", "npcs": [{**p.model_dump(), "location": room}]})
-            result = w.apply(raw)
+            with w.at(ctx.interval[1] if ctx.interval else None):
+                result = w.apply(raw)
             if not result.ok:
                 problems += [f"登记{p.name}：{why}" for why in result.problems]
                 continue
@@ -375,6 +388,14 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
 
     for n in end:
         e = rec.entities[n]
+        if ctx.interval and (available := w.available_at(n)) is not None and available > ctx.interval[1]:
+            problems.append(f"{e.name}已有更晚时段的实际行动，不能在本段较早时刻重复出场；按已提交记录继续。")
+            continue
+        enc = st.encounter
+        if (enc is not None and enc.phase != "ended" and enc.place != room
+                and any(p.id == n and p.presence == "in" for p in enc.participants)):
+            problems.append(f"{e.name}仍在{name(enc.place)}的遭遇中，不能移到{name(room)}。")
+            continue
         if n in leaving:
             problems.append(f"{e.name}同时写在 here 和 left 里，只能写一处。")
             leaving.pop(n)
@@ -401,8 +422,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         minutes = _way(w, ctx, e.at, room)
         if minutes is None:
             problems.append(f"{e.name}在{name(e.at) or '别处'}，从那里到不了{name(room)}：他不在这里，可以写他没来。")
-        elif minutes > ctx.elapsed:
-            problems.append(f"{e.name}在{name(e.at)}，到{name(room)}要 {minutes} 分钟，这一轮只过了 {ctx.elapsed} 分钟，赶不到："
+        elif minutes > budget(n):
+            problems.append(f"{e.name}在{name(e.at)}，到{name(room)}要 {minutes} 分钟，这一轮只过了 {max(0, budget(n))} 分钟，赶不到："
                             "可以写他动身、在路上，还没到。")
         else:
             u = unit(f"npc:{n}")
@@ -421,8 +442,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                 problems.append(f"{e.name}的去向「{leaving[n]}」不是能离开去的地点：写一个别的地点。")
             elif minutes is None:
                 problems.append(f"{e.name}从{name(e.at)}去不了{name(to)}：写一个走得到的地点。")
-            elif minutes > ctx.elapsed:
-                problems.append(f"{e.name}从{name(e.at)}到{name(to)}要 {minutes} 分钟，这一轮只过了 {ctx.elapsed} 分钟，到不了："
+            elif minutes > budget(n):
+                problems.append(f"{e.name}从{name(e.at)}到{name(to)}要 {minutes} 分钟，这一轮只过了 {max(0, budget(n))} 分钟，到不了："
                                 "可以写他起身要走，人还写在 here 里。")
             else:
                 u = unit(f"npc:{n}")
@@ -440,7 +461,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
 
     if walks:  # the walk itself comes after the farewells and before the company arrives
         stays = sum(1 for s in party_unit.steps if s.get("kind") == "follow")
-        party_unit.steps.insert(stays, {"kind": "walk", "to": room})
+        party_unit.steps.insert(stays, {"kind": "walk", "to": room,
+                                        "participants": ctx.participants or [lead]})
 
     if "follow" in given:
         company = list(dict.fromkeys(n for x in scene.follow if (n := _npc(w, x)) is not None))
@@ -583,7 +605,7 @@ def _merge(units: dict[str, Unit], movers: dict[str, str]) -> list[Unit]:
     for key, u in units.items():  # in order: people first, then things, then traces
         top = find(key)
         if top not in out:
-            out[top] = Unit(top)
+            out[top] = Unit(top, begin=u.begin, end=u.end)
         out[top].steps += u.steps
         out[top].said += u.said
     return [u for u in out.values() if u.steps]
@@ -591,13 +613,38 @@ def _merge(units: dict[str, Unit], movers: dict[str, str]) -> list[Unit]:
 
 def run(w: World, u: Unit) -> list[str]:
     """Land one unit whole, or take it back and say why not."""
+    with w.at(u.end, start=u.begin):
+        return _run(w, u)
+
+
+def _run(w: World, u: Unit) -> list[str]:
     applied, walked, problems = 0, None, []
+    people = {step[key] for step in u.steps for key in ("a", "b", "who", "entity", "npc", "actor")
+              if key in step and isinstance(step[key], str)}
+    people.update(who for step in u.steps for who in step.get("participants", []))
+    available = {who: w.available_at(who) for who in people
+                 if (person := w.rec.entities.get(who)) is not None and person.kind == "npc"}
+    repeated = all(step.get("id") and any(entry.id == step["id"] for entry in w.rec.journal)
+                   for step in u.steps if step.get("kind") not in ("meet", "witness", "walk"))
+    if u.end is not None and not repeated:
+        late = [w.name(who) for who, at in available.items() if at is not None and at > u.end]
+        if late:
+            return [f"{'、'.join(late)}已有更晚时段的实际操作，不能在本段较早时刻重排。"]
     for step in u.steps:
         kind = step.get("kind")
         if kind == "walk":
-            walked = (w.st.location, dict(w.rec.left))
+            walked = (w.st.location, dict(w.st.apart), dict(w.rec.left), len(w.rec.events))
+            src = w.st.location
+            places = {i.id: w.place(i.id) for i in w.st.investigators}
+            coming = step.get("participants") or [i.id for i in w.st.investigators if places[i.id] == src]
+            places.update(dict.fromkeys(coming, step["to"]))
             w.rec.left[w.st.location] = w.rec.seq
             w.st.location = step["to"]
+            w.st.apart = {who: place for who, place in places.items() if place != step["to"]}
+            motions = {who: {"origin": src, "destination": step["to"], "start": w.now, "end": w.now}
+                       for who in coming if src != step["to"]}
+            w.emit("move", f"调查员走到{w.name(step['to'])}", participants=coming,
+                   place=step["to"], op=f"walk:{w.st.turn}:{w.rec.seq}", motions=motions)
             continue
         if kind == "meet":
             if w.place(step["a"]) != w.place(step["b"]):
@@ -617,7 +664,18 @@ def run(w: World, u: Unit) -> list[str]:
             problems = refused
             break
         for raw in ops:
-            result = w.apply(raw)
+            who = raw.get("entity") if raw.get("kind") == "move" else raw.get("npc")
+            if u.end is not None and who:
+                ready = available.get(who)
+                repeated = any(entry.id == raw.get("id") for entry in w.rec.journal)
+                if ready is not None and ready > u.end and not repeated:
+                    problems = [f"{w.name(who)}已有更晚时段的实际操作，不能在本段较早时刻重排。"]
+                    break
+            begin = w.now if u.begin is None else u.begin
+            ready = available.get(who)
+            departure = max(begin, begin if ready is None else ready)
+            with w.at(u.end, start=departure):
+                result = w.apply(raw)
             if not result.ok:
                 problems = [f"{'；'.join(u.said) or u.key}：{p}" for p in result.problems]
                 break
@@ -629,7 +687,8 @@ def run(w: World, u: Unit) -> list[str]:
     if applied:
         w.undo(applied)
     if walked is not None:
-        w.st.location, w.rec.left = walked
+        w.st.location, w.st.apart, w.rec.left, count = walked
+        del w.rec.events[count:]
     return problems
 
 

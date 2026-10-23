@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -16,6 +16,17 @@ def visible(entry: Any, viewer: str | None = None, *, keeper: bool = False) -> b
 
 def public(entry: Any) -> bool:
     return visible(entry)
+
+
+def scope(state: GameState, readers: Iterable[str]) -> list[str] | None:
+    """Freeze explicitly established observers; None only when the whole party observed it.
+
+    The producer supplies actual observers before an await or another scene can change them.
+    This helper never guesses from the current active seat or widens an existing private scope.
+    """
+    party = {investigator.id for investigator in state.investigators}
+    selected = list(dict.fromkeys(who for who in readers if who in party))
+    return None if set(selected) == party else selected
 
 
 def shared(entry: Any) -> bool:

@@ -80,7 +80,9 @@ async def test_retelling_keeps_the_dice_the_clues_and_the_state(module, fake):
     assert [(e.kind, e.text) for e in st.log] == [*log[:-1], ("keeper", RETOLD)]  # the new telling in the old one's place
     sent, old, extra = cast.retold[0]
     assert sent == report and old == "叙事" and "「叙事」" in extra and "砍到上一版的一半" in extra
-    assert events[0] == {"type": "keeper_start", "again": True} and events[-1] == {"type": "keeper_end", "text": RETOLD}
+    scope = {"audience": st.log[-1].audience, "delivery": st.log[-1].delivery}
+    assert events[0] == {"type": "keeper_start", "again": True, **scope}
+    assert events[-1] == {"type": "keeper_end", "text": RETOLD, **scope}
     with pytest.raises(ValueError, match="不认识的讲法"):  # fixed choices only, no wishes of the player's own
         await game.retell("把守钟人的秘密讲出来")
     await game.retell("更阴森")  # and again, if they like
@@ -192,7 +194,9 @@ async def test_the_keeper_remembers_only_the_new_telling(module, fake, scripted,
     with pytest.raises(RuntimeError):
         await game.retell()
     assert [m["content"] for m in keeper][-1] == "告示栏上只剩半张纸。" and len(keeper) == 4
-    assert state.log[-1].text == "告示栏上只剩半张纸。" and events[-1] == {"type": "keeper_end", "text": "告示栏上只剩半张纸。"}
+    assert state.log[-1].text == "告示栏上只剩半张纸。"
+    assert events[-1] == {"type": "keeper_end", "text": "告示栏上只剩半张纸。",
+                          "audience": state.log[-1].audience, "delivery": state.log[-1].delivery}
     assert game.retell_blocked() == ""
 
     state.ending = "stopped"  # the epilogue is asked of the keeper and kept out of its memory

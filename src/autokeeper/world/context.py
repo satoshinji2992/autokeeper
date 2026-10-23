@@ -349,7 +349,7 @@ def item_refs(w: World, holders: Collection[str]) -> str:
 def happened(w: World, since: int) -> list[str]:
     """What the world did in front of the party since a record seq: an NPC who walked in, a
     scheduled thing that came about where they stand. Told by the keeper as it happens."""
-    return [e.text for e in w.rec.events if e.seq > since and e.visibility == "public" and e.kind in SHOWN
+    return [e.text for e in w.rec.events if e.seq > since and w.st.investigator.id in e.witnesses and e.kind in SHOWN
             and e.actor not in {i.id for i in w.st.investigators}]  # fmt: skip
 
 

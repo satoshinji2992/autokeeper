@@ -224,20 +224,47 @@ async def test_reload_and_pending_retry_preserve_the_original_seat_and_physical_
         await loaded.close()
 
 
-async def test_a_remote_focus_cannot_abandon_an_open_encounter_or_acquire_a_new_pending_turn(fake):
-    game, cast, _ = made(fake)
+async def test_a_remote_action_finishes_without_abandoning_the_encounter_or_acquiring_an_incorrect_pending_turn(fake):
+    from autokeeper.engine.encounter.plan import DeclaredAction, EncounterTurnPlan
+
+    from .encounter_kit import Keeper, arrange, begin
+
+    game, _, _ = made(fake)
     st = game.state
-    st.apart[st.investigators[1].id] = "tower"
-    st.encounter = EncounterState(id="ongoing-fight", mode="fight", place="square", started_turn=1, participants=[])
-    st.active = 1
-    before = st.model_dump_json()
+    first, second = [investigator.id for investigator in st.investigators]
+    st.apart[second] = "tower"
+    cast = Keeper({
+        "我看看塔墙": (Action(kind="use", summary="林秋查看塔墙", target="塔墙"), Ruling(needs_roll=False, minutes=1)),
+        "回到广场": (Action(kind="move", summary="林秋独自回到广场", destination="square", alone=True),
+                    Ruling(needs_roll=False)),
+    }, act=EncounterTurnPlan(action=DeclaredAction(do="defend", summary="周衡继续防守")),
+       arrange=EncounterTurnPlan(npcs=[arrange("preacher", DeclaredAction(do="defend", summary="布道者戒备"))]))
+    game.cast, cast.world = cast, game.world
+    app = graph.build(game)
     try:
-        with pytest.raises(ValueError, match="广场的遭遇尚未结束"):
-            await graph.build(game).ainvoke({"input": "我看看塔墙"})
-        assert st.model_dump_json() == before and not st.pending_turn and not cast.heard
+        await begin(game, ["preacher"])
+        original = st.encounter.model_dump_json()
+        encounter_id = st.encounter.id
+        st.active = 1
+        await app.ainvoke({"input": "我看看塔墙"})
+        assert not st.pending_turn and cast.ruled[-1].summary == "林秋查看塔墙"
+        assert st.encounter.model_dump_json() == original and game.encounter() is None
+        assert game.world.place(first) == game.world.place("preacher") == "square"
+        assert game.world.place(second) == game.world.place("warden") == "tower"
+        await app.ainvoke({"input": "回到广场"})
+        assert not st.pending_turn and game.encounter().id == encounter_id
+        assert st.encounter.place == "square" and game.world.place("preacher") == "square"
+        assert game.world.place(first) == game.world.place(second) == "square"
+        assert game.world.place("warden") == "tower"
+        st.active = 0
+        await app.ainvoke({"input": "原现场继续防守"})
+        assert not st.pending_turn and st.encounter.id == encounter_id
+        assert any(receipt.actor == first and receipt.phase == "committed" for receipt in st.encounter.receipts)
+
+        st.active, st.apart = 1, {second: "tower"}
         st.pending_turn = {"input": "原现场尚未完成的动作", "active": 0, "resolution": {"steps": {"kept": True}}}
         pending = st.model_dump_json()
-        with pytest.raises(ValueError, match="遭遇尚未结束"):
+        with pytest.raises(ValueError, match="上一回合尚未讲完"):
             game._focus()
         assert st.model_dump_json() == pending  # neither the encounter nor its receipt is discarded
     finally:

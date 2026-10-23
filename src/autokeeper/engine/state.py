@@ -179,6 +179,7 @@ class GameState(BaseModel):
     round_spent: int | None = None
     round_elapsed: dict[str, int] = Field(default_factory=dict)  # serial work per investigator inside the shared window
     round_plan: dict = Field(default_factory=dict)  # private batch plans and consumption receipts, not player-visible
+    queued_actions: list[tuple[str, str]] = Field(default_factory=list)  # LAN declarations not yet assigned to a settled window
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report", "rest"}, told together (Game.narrate)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.

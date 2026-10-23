@@ -156,7 +156,7 @@ class Move(Base):
     def settle(self, w: World, oid: str):
         e = w.rec.entities[self.entity]
         src = e.at
-        seeing = [] if self.visibility == "private" else [*w.present(src), *w.present(self.to)]  # who saw it go and arrive
+        seeing = [] if self.visibility == "private" else [*w.present(src, at=w.now), *w.present(self.to, at=w.now)]
         e.at = self.to
         w.touch(e)
         vis = self.visibility
@@ -464,7 +464,8 @@ class Equip(Base):
         text = self.evidence if self.reveal else f"整理重要装备：{item.name}（{item.equipment}，数量{item.quantity}）"
         event = w.emit("equip", text, actor=self.actor, participants=[item.at], place=w.place(item.id), visibility=vis, op=oid)
         if self.reveal:
-            item.observed_by = list(dict.fromkeys([*item.observed_by, *event.witnesses, PLAYERS]))
+            item.observed_by = list(dict.fromkeys([*item.observed_by, *event.witnesses,
+                                                  *([PLAYERS] if event.visibility == "public" else [])]))
         w.touch(item)
         return event, None
 

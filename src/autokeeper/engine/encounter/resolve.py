@@ -106,9 +106,16 @@ class Work:
         return not b.dead and b.conscious
 
     # -- dice -----------------------------------------------------------------------------------
-    def check(self, pid: str, skill: str, value: int | None = None, difficulty: Level = Level.REGULAR, bonus: int = 0) -> Check:
+    def check(self, pid: str, skill: str, value: int | None = None, difficulty: Level = Level.REGULAR,
+              bonus: int = 0, *, aided: bool = False) -> Check:
         """A roll of anyone's, through the game's current dice. An investigator's sheet is not ticked
         here: a success is a Mark effect, landing with the unit."""
+        p = self.enc.get(pid)
+        for edge in list(p.edges if p is not None and aided else []):
+            if edge.until == "next_roll" and not edge.source.startswith("aim"):
+                bonus += edge.dice
+                p.edges.remove(edge)
+        bonus = melee.clamp(bonus)
         inv = self.investigator(pid)
         if inv is not None:
             return self.game.rules.check(inv, skill, difficulty, bonus, mark=False, target=value)
@@ -155,6 +162,10 @@ class Work:
         self.unit.effects.append(w)
         if hurt.result.major and not hurt.body.dead and pid not in self.enc.scene.prone:
             self.enc.scene.prone.append(pid)  # a major wound knocks them down at once (p. 100)
+        if hurt.result.major:
+            for hold in list(self.enc.scene.holds):
+                if hold.by == pid and self.free(hold.held, by=pid):
+                    self.unit.lines.append(f"{{{pid}}}受到重伤，松开了{{{hold.held}}}")
         if not self.standing(pid):
             self.fell(pid)
         inv = self.investigator(pid)
@@ -184,6 +195,18 @@ class Work:
         sc.engaged = [e for e in sc.engaged if pid not in (e.a, e.b)]
         sc.holds = [h for h in sc.holds if h.by != pid]
         self.change("down", pid)
+
+    def free(self, pid: str, *, by: str = "") -> bool:
+        """Release an existing hold, optionally only the named holder's; no invented release."""
+        held = [h for h in self.enc.scene.holds if h.held == pid and (not by or h.by == by)]
+        if not held:
+            return False
+        self.enc.scene.holds = [h for h in self.enc.scene.holds if h not in held]
+        p = self.enc.get(pid)
+        if p is not None:
+            p.edges = [e for e in p.edges if e.until != "freed"]
+        self.change("freed", pid)
+        return True
 
     def tell(self, line: str, public: str | None = None) -> None:
         """A line of the keeper's account; `public`, when given, what the players get of it instead
@@ -327,6 +350,8 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
           "reaction": reaction or "none", "winner": "none", "hurt": "", "damage": 0,
           "damage_text": "", "effect": "", "extreme": False, "jammed": False, "empty": False, "notes": [], "line": "",
           "dice": None, "dice_who": ""}
+    reaction_reason = receipt.reactions[k].reason if k < len(receipt.reactions) else ""
+    ev["reaction_reason"] = reaction_reason
     done = lambda line: _done(w, receipt, k, ev, line)  # noqa: E731
     if opt is None:
         return done(f"{an}手里没有能用的攻击，这一下落空了")
@@ -360,14 +385,17 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
         if penalty:
             bonus -= penalty
             reasons.append(f"对方体格大 {penalty}")
+    if ctx.held_by(a):
+        bonus -= 1
+        reasons.append("自己被制住")
     answering = reaction not in (None, "none")
     allowance = max(1, dv.attacks_per_round())
     if answering and kind == "melee" and melee.outnumbered_bonus(enc.budget.responses.get(d, 0), allowance):
         bonus += 1
         reasons.append("以多打少")
-    if melee.disadvantage_bonus(prone=d in enc.scene.prone, held=any(h.held == d for h in enc.scene.holds)):
+    if melee.disadvantage_bonus(prone=d in enc.scene.prone):
         bonus += 1
-        reasons.append("对方倒在地上" if d in enc.scene.prone else "对方被制住")
+        reasons.append("对方倒在地上")
     skill = actions.skill_of(opt, do)
     value = av.skill(BRAWL) if maneuver and opt.id == UNARMED_ID else opt.value
     roll = w.luck(a, w.check(a, skill, value, bonus=melee.clamp(bonus)))
@@ -376,12 +404,14 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
     answer = None
     parts = [f"{roll.name} {roll.target} → {roll.value} {roll.level.zh}" + (f"（{'、'.join(reasons)}）" if reasons else "")]
     if answering:
+        defense_bonus = -1 if ctx.held_by(d) else 0
         if reaction == "fight_back":
             best = actions.best_melee(dv)
-            answer = w.check(d, best.skill if best and best.id != UNARMED_ID else BRAWL, best.value if best else dv.skill(BRAWL))
+            answer = w.check(d, best.skill if best and best.id != UNARMED_ID else BRAWL,
+                             best.value if best else dv.skill(BRAWL), bonus=defense_bonus)
             how = "反击"
         else:
-            answer = w.check(d, "闪避")
+            answer = w.check(d, "闪避", bonus=defense_bonus)
             how = "闪避"
         answer = w.luck(d, answer)
         receipt.rolls.append(record(reaction, d, answer))
@@ -390,6 +420,8 @@ def strike(w: Work, r: ActionReceipt, k: int, pick) -> None:
         if kind == "melee":
             enc.budget.responses[d] = enc.budget.responses.get(d, 0) + 1
         w.mark(d, answer)
+    elif reaction_reason:
+        parts.append(f"{dn}{reaction_reason}")
     out = melee.melee_outcome(roll.level, answer.level if answer else None,
                               "none" if not answering else reaction, maneuver=maneuver)  # type: ignore[arg-type]
     ev["winner"] = out.winner
@@ -441,10 +473,16 @@ def _maneuver(w: Work, a: str, d: str, which: str, ev: dict, *, attacker_won: bo
     next action spent getting up), hold (held fast until they break free)."""
     enc, ctx = w.enc, w.ctx
     if not attacker_won:  # the defender's own manoeuvre answering: it frees itself and throws the attacker off
+        w.free(d, by=a)
         ev["effect"] = "挣脱"
         return f"{{{d}}}反手一推，挣开了{{{a}}}"
     ev["effect"] = which
     dv = ctx.view(d)
+    if which == "脱离":
+        if w.free(a, by=d):
+            return f"{{{a}}}挣脱了{{{d}}}的压制"
+        ev["effect"] = ""
+        return "当前没有可解除的压制"
     if enc.mode == "chase" and which not in ("缴械", "夺取", "制住"):  # in a chase: as a failed hazard, 1D3 points lost (p. 116)
         from ...rules.chase import RULES as CHASE
         from .chase import pay
@@ -587,6 +625,9 @@ def _running(ctx: Ctx, who: str) -> bool:
 
 def _done(w: Work, receipt: ActionReceipt, k: int, ev: dict, line: str) -> None:
     """One attack of a receipt settled: its line, its card; the receipt's count moves on."""
+    result = ev.get("effect") or ("攻击命中" if ev.get("winner") == "attacker" else
+                                  "反击命中" if ev.get("winner") == "defender" else "未命中")
+    line += f"。已结算：{result}"
     receipt.lines.append(line)
     w.unit.lines.append(line)
     ev["line"] = line
@@ -652,6 +693,8 @@ def act(w: Work, r: ActionReceipt, *, ruling: Any = None, by_hand: bool = False)
         lines.append(f"{an}喊：「{said}」" if said else f"{an}{d.summary}")
         if said:
             w.unit.notices.append({"type": "fight_say", "who": a, "name": ctx.name(a, "players"), "text": said})
+        if d.needs_ruling:
+            lines += _other(w, receipt, a, ruling)
     elif d.do in ("other", "use"):
         lines += _other(w, receipt, a, ruling)
     elif enc.mode == "fight":
@@ -672,7 +715,7 @@ def _hide(w: Work, receipt: ActionReceipt, a: str, summary: str) -> str:
     (p. 72's opposed difficulty); a success and they lose sight of them."""
     watchers = [f for f in w.ctx.foes(a) if w.standing(f)]
     best = max((w.ctx.view(f).skill("侦查") for f in watchers), default=0)
-    roll = w.check(a, "潜行", None, melee.opposed_difficulty(best))
+    roll = w.check(a, "潜行", None, melee.opposed_difficulty(best), aided=True)
     receipt.rolls.append(record("hide", a, roll))
     w.mark(a, roll)
     if w.investigator(a) is not None:
@@ -691,7 +734,7 @@ def _aid(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
     ok, why = wounds.first_aid_allowed(body)
     if not ok:
         return f"{{{a}}}想给{{{target}}}急救：{why}"
-    roll = w.check(a, "急救")
+    roll = w.check(a, "急救", aided=True)
     receipt.rolls.append(record("first_aid", a, roll))
     w.mark(a, roll)
     if w.investigator(a) is not None:
@@ -739,7 +782,7 @@ def _unjam(w: Work, receipt: ActionReceipt, a: str, target: str) -> str:
     if gun is None:
         return f"{{{a}}}检查了一下枪，没有卡住"
     skill = max(firearms.UNJAM_SKILLS, key=lambda s: v.skill(s) if s != "射击" else gun.value)
-    roll = w.check(a, gun.skill if skill == "射击" else skill, gun.value if skill == "射击" else None)
+    roll = w.check(a, gun.skill if skill == "射击" else skill, gun.value if skill == "射击" else None, aided=True)
     receipt.rolls.append(record("unjam", a, roll))
     if roll.passed and gun.item:
         w.unit.effects.append(effects.Jam(item=gun.item, jammed=False))
@@ -755,10 +798,13 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     head = d.summary if d.summary.strip() else f"{{{a}}}做了别的事"
     if ruling is None:
         return [head]
+    if ruling.get("needs_roll") and not ruling.get("skill"):
+        w.unit.rest = {"ruling": ruling, "passed": False}
+        return [head, "【未落实】裁定要求检定但没有指定技能，行动后果尚未结算"]
     passed = True
     if ruling.get("needs_roll") and ruling.get("skill"):
         roll = w.check(a, ruling["skill"], None, DIFFICULTY_ZH.get(ruling.get("difficulty", "常规"), Level.REGULAR),
-                       melee.clamp(int(ruling.get("bonus", 0))))
+                       melee.clamp(int(ruling.get("bonus", 0))), aided=True)
         receipt.rolls.append(record("other", a, roll))
         w.mark(a, roll)
         if w.investigator(a) is not None:
@@ -770,6 +816,8 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     out = [head]
     w.unit.rest = {"ruling": ruling, "passed": passed}
     if not passed:
+        if d.goal:
+            out.append(f"已结算：未达成目标（{d.goal}）")
         return out
     for e in ruling.get("effects") or []:
         target, kind = e.get("target", ""), e.get("kind", "")
@@ -794,6 +842,11 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
             if "倒" in e.get("what", "") and w.enc.get(target) is not None and target not in w.enc.scene.prone:
                 w.enc.scene.prone.append(target)
             out.append(f"{{{target}}}：{e.get('what', '')}")
+        elif kind == "freed":
+            if w.free(target):
+                out.append(f"已结算：{{{target}}}解除压制" + (f"（{e['what']}）" if e.get("what") else ""))
+            else:
+                out.append(f"{{{target}}}当前没有可解除的压制")
         elif kind == "obstacle" and w.enc.chase is not None:
             out.append(_obstacle(w, a, target, e.get("what", "")))
         elif kind == "item":

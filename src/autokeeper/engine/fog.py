@@ -114,6 +114,77 @@ def mentions(m: Module, texts: Iterable[str]) -> dict[str, str]:
     return found
 
 
+def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
+    """A read-only map projection from this investigator's actual observations and deliveries.
+
+    The world record remains the same authority. Global discoveries, visits and improvised
+    backstage locations never become evidence for a different viewer. An unseated multiplayer
+    reader has only common observations; its required location uses the public starting place
+    as a schema placeholder, without recording a visit there.
+    """
+    from ..world.record import PLAYERS
+    from . import presentation, views
+
+    party = {investigator.id for investigator in st.investigators}
+    single_history = len(party) == 1 and not any(
+        entity.kind == "investigator" and entity.id not in party for entity in st.record.entities.values())
+    if viewer is None and len(party) == 1:
+        viewer = next(iter(party))
+    if viewer is not None and viewer not in party:
+        raise ValueError("调查员不在本局中")
+    places = {loc.id: loc for loc in m.locations}
+    here = audience.location(st, viewer) if viewer is not None else m.start
+    actual = {loc.id for loc in m.locations if (entity := st.record.entities.get(loc.id)) is not None
+              and (viewer in entity.observed_by if viewer is not None else bool(party) and party <= set(entity.observed_by))}
+    if viewer is not None:
+        actual.add(here)
+        # A single investigator's own historical stops are unambiguous even in a plain UI
+        # state assembled before World initialization. Multiplayer never borrows that ledger.
+        if single_history:
+            actual.update(st.visited)
+        for event in st.record.events:
+            motion = event.motions.get(viewer)
+            if motion is not None:
+                actual.update(str(motion[key]) for key in ("origin", "destination") if motion.get(key))
+    order = [*st.visited, *places] if single_history else list(places)
+    visited = [place for place in dict.fromkeys(order) if place in actual and place in places]
+    readable = audience.log(st, viewer)
+    clues = {clue.id for clue in m.clues if any(
+        entry.kind == "clue" and entry.text.startswith(f"〔{clue.title}〕") for entry in readable)}
+    for clue in m.clues:
+        fact = st.record.facts.get(f"clue:{clue.id}")
+        if fact is not None and ((viewer is not None and viewer in fact.known_by) or PLAYERS in fact.known_by):
+            clues.add(clue.id)
+    if single_history and not st.record.seeded:  # standalone single-player UI state, before a World exists
+        clues.update(st.clues)
+    papers = presentation.papers(st, viewer)
+    handouts = {h.id for h in m.handouts if h.id in papers or any(
+        entry.kind == "handout" and entry.text.strip() == h.title.strip() for entry in readable)}
+    if single_history:
+        handouts.update(st.handouts)
+    texts = [m.title, m.subtitle, m.hook, m.setting, st.memory, st.prologue, st.progress.text]
+    texts += [places[place].read_aloud for place in visited]
+    texts += [entry.text for entry in readable if entry.kind in SHOWN]
+    texts += [f"{clue.title}\n{clue.text}" for clue in m.clues if clue.id in clues]
+    texts += [row["payload"]["handout"][key] for row in papers.values() for key in ("title", "text")]
+    texts += [h.text for h in m.handouts if h.id in handouts and h.id not in papers]
+    known_npcs = set(st.record.sightings.get(viewer, {})) if viewer is not None else set()
+    known_npcs.update(n.id for n in m.npcs if viewer is not None and n.location == here)
+    if single_history:
+        known_npcs.update(st.npcs)
+    npcs = {ident: known.model_copy(update={"unlocked": []}) for ident, known in st.npcs.items() if ident in known_npcs}
+    apart = {investigator.id: "" for investigator in st.investigators
+             if investigator.id != viewer and audience.location(st, investigator.id) != here}
+    return st.model_copy(update={
+        "location": here, "visited": visited, "heard": ({**st.heard, **mentions(m, texts)} if single_history
+                                                           else mentions(m, texts)),
+        "clues": [clue.id for clue in m.clues if clue.id in clues],
+        "handouts": [h.id for h in m.handouts if h.id in handouts], "log": readable, "private_history": [],
+        "npcs": npcs, "improv": [], "view": views.default(m, places[here], st.minutes) if here in places else "",
+        "view_kind": "", "journey": "", "ongoing": "", "apart": apart,
+    })
+
+
 def shown(m: Module, st: GameState) -> list[str]:
     """Everything the players have been shown that can name a place."""
     places = {loc.id: loc for loc in m.locations}

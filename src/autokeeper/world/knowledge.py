@@ -110,21 +110,47 @@ class PublicEvidence:
     source: str
     text: str
     turn: int | None = None
+    readers: tuple[str, ...] | None = None
 
 
-def evidence(m: Module, st: GameState, rec: WorldRecord) -> list[PublicEvidence]:
+def evidence(m: Module, st: GameState, rec: WorldRecord, *, include_private: bool = False) -> list[PublicEvidence]:
     """Primary public sources only. Revealed facts never prove that another fact was seen."""
+    party = {i.id for i in st.investigators}
+
+    def everyone(readers: Iterable[str]) -> bool:
+        known = set(readers)
+        return PLAYERS in known or (bool(party) and party <= known)
+
+    def observed(ident: str) -> bool:
+        ent = rec.entities.get(ident)
+        return len(party) == 1 or (ent is not None and everyone(ent.observed_by))
+
     out = [PublicEvidence(f"module:{key}", getattr(m, key), 0) for key in ("title", "subtitle", "hook", "setting")]
-    out += [PublicEvidence(f"arrival:{loc.id}", loc.read_aloud) for loc in m.locations if loc.id in st.visited]
+    out += [PublicEvidence(f"arrival:{loc.id}", loc.read_aloud) for loc in m.locations if loc.id in st.visited and observed(loc.id)]
     out += [PublicEvidence(f"log:{e.turn}:{e.kind}:{st.logged - len(st.log) + i}", e.text, e.turn)
-            for i, e in enumerate(st.log) if e.kind in fog.SHOWN and audience.public(e)]
-    out += [PublicEvidence(f"clue:{c.id}", c.text) for c in m.clues if c.id in st.clues]
+            for i, e in enumerate(st.log) if e.kind in fog.SHOWN and audience.shared(e)]
+    out += [PublicEvidence(f"clue:{c.id}", c.text) for c in m.clues if c.id in st.clues
+            and (len(party) == 1 or ((f := rec.facts.get(f"clue:{c.id}")) is not None and everyone(f.known_by)))]
     out += [PublicEvidence(f"handout:{h.id}", h.text) for h in m.handouts if h.id in st.handouts]
-    out += [PublicEvidence(f"look:{n.id}", n.look) for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
+    out += [PublicEvidence(f"look:{n.id}", n.look) for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met
+            and (observed(n.id) or all(n.id in rec.sightings.get(who, {}) for who in party))]
     out += [PublicEvidence(f"event:{e.id}", e.text, e.turn)
             for e in rec.events if e.visibility == "public" and e.kind in _PUBLIC_EVENTS]
     out += [PublicEvidence("memory", st.memory), PublicEvidence("prologue", st.prologue, 0),
             PublicEvidence("progress", st.progress.text, st.progress.turn)]
+    if include_private:
+        for group, rows in (("private-log", st.log), ("private-history", st.private_history)):
+            for index, entry in enumerate(rows):
+                if entry.kind not in fog.SHOWN or audience.shared(entry):
+                    continue
+                for who in party:
+                    if audience.visible(entry, who):
+                        shown = entry.presented.get(who, {}).get("text", entry.text)
+                        out.append(PublicEvidence(f"{group}:{entry.turn}:{entry.kind}:{index}", shown, entry.turn, (who,)))
+        for event in rec.events:
+            readers = tuple(who for who in party if who in (*event.witnesses, *event.participants, event.actor))
+            if event.visibility != "public" and event.kind in _PUBLIC_EVENTS and readers:
+                out.append(PublicEvidence(f"private-event:{event.id}", event.text, event.turn, readers))
     return [e for e in out if e.text]
 
 
@@ -143,8 +169,8 @@ def _plain(text: str) -> str:
     return _MARKS.sub("", text).casefold()
 
 
-def table(m: Module, st: GameState, rec: WorldRecord) -> Table:
-    entries = evidence(m, st, rec)
+def table(m: Module, st: GameState, rec: WorldRecord, *, include_private: bool = False) -> Table:
+    entries = evidence(m, st, rec, include_private=include_private)
     return Table(entries, [_plain(e.text) for e in entries])
 
 
@@ -172,7 +198,9 @@ def how_known(w: World, fact: Fact, at: Table) -> str:
     ways = []
     for source in dict.fromkeys(sources):
         kind, _, rest = source.partition(":")
-        if kind == "log":
+        if kind in ("private-log", "private-history"):
+            ways.append("私下听说" if ":npc:" in source else "个人叙述里说过")
+        elif kind == "log":
             said, _, index = rest.partition(":")[2].partition(":")
             if said == "npc":
                 at_index = int(index) - first if index.isdigit() else -1
@@ -187,6 +215,8 @@ def how_known(w: World, fact: Fact, at: Table) -> str:
             ways.append("叙述里说过")
         else:
             ways.append("亲眼见到")
+    if not ways and any(i.id in fact.known_by for i in w.st.investigators):
+        ways.append("个别调查员已知")
     return "、".join(dict.fromkeys(ways))
 
 
@@ -194,18 +224,26 @@ def keep_told(w: World, fact: Fact, at: Table) -> Fact:
     """Before a fact the players met is rewritten: what they were told or shown stays theirs,
     as words that turned out untrue, with the evidence it came in; the fact itself goes back
     to unknown, holding the new truth."""
-    seen = _matching(fact.text, at)
+    own = _plain(fact.text)
+    matches = [entry for entry, words in zip(at.entries, at.normalized, strict=True) if own and own in words]
+    seen = next((entry for entry in matches if entry.readers is None), next(iter(matches), None))
+    known = [*fact.known_by, *(who for entry in matches if entry.readers is not None for who in entry.readers)]
+    shared = fact.revealed is not None or PLAYERS in fact.known_by or any(entry.readers is None for entry in matches)
     told = Fact(id=f"told:{fact.id}:{fact.version}", text=fact.text, kind="rumor", about=list(fact.about), origin="game",
-                true=False, known_by=list(dict.fromkeys([*fact.known_by, PLAYERS])), t=w.now)
-    source = fact.reveal_source if fact.revealed is not None and fact.reveal_source else seen.source if seen else ""
+                true=False, known_by=list(dict.fromkeys(known)), t=w.now)
+    source = fact.reveal_source if fact.revealed is not None and fact.reveal_source else seen.source if seen else f"known:{fact.id}"
     excerpt = fact.reveal_excerpt if fact.revealed is not None and fact.reveal_excerpt else seen.text if seen else fact.text
-    reveal(w.rec, told, fact.revealed if fact.revealed is not None else w.st.turn, source=source, excerpt=excerpt)
+    if shared:
+        reveal(w.rec, told, fact.revealed if fact.revealed is not None else w.st.turn, source=source, excerpt=excerpt)
+    else:
+        told.reveal_source, told.reveal_excerpt = source, excerpt
     w.rec.facts[told.id] = told
     for e in w.rec.events:  # what told them now carries what they were told
         if fact.id in e.facts:
             e.facts = [told.id if x == fact.id else x for x in e.facts]
     fact.revealed, fact.reveal_source, fact.reveal_excerpt = None, "", ""
-    fact.known_by = [x for x in fact.known_by if x != PLAYERS]
+    readers = {PLAYERS, *(i.id for i in w.st.investigators)}
+    fact.known_by = [x for x in fact.known_by if x not in readers]
     return told
 
 
@@ -223,6 +261,7 @@ def reveal(rec: WorldRecord, fact: Fact, turn: int, *, source: str, excerpt: str
         fact.legacy_revealed = None
     if PLAYERS not in fact.known_by:
         fact.known_by.append(PLAYERS)
+    fact.known_by = list(dict.fromkeys([*fact.known_by, *(e.id for e in rec.entities.values() if e.kind == "investigator")]))
     return fresh
 
 
@@ -230,16 +269,17 @@ def sync(m: Module, st: GameState, rec: WorldRecord) -> list[str]:
     """Verify public knowledge; quarantine old unsupported markers without erasing history."""
     out = []
     at = table(m, st, rec)
+    personal = table(m, st, rec, include_private=True)
     event_sources = {fid: e for e in rec.events if e.visibility == "public" for fid in e.facts}
     for fact in rec.facts.values():
         if fact.retracted or not fact.text:
             continue
         source = None
         if fact.id.startswith("clue:") and fact.id.removeprefix("clue:") in st.clues:
-            source = PublicEvidence(fact.id, fact.text)
+            source = next((e for e in at.entries if e.source == fact.id), None)
         elif event := event_sources.get(fact.id):
             source = PublicEvidence(f"event:{event.id}", event.text, event.turn)
-        elif not fact.reveal_source:
+        if source is None and (fact.revealed is None or not fact.reveal_source):
             source = _matching(fact.text, at)
         if source:
             turn = fact.revealed if fact.revealed is not None else source.turn if source.turn is not None else st.turn
@@ -252,6 +292,10 @@ def sync(m: Module, st: GameState, rec: WorldRecord) -> list[str]:
             fact.legacy_revealed, fact.revealed = fact.revealed, None
             fact.known_by = [x for x in fact.known_by if x != PLAYERS]
             fact.reveal_note = "旧版本公开标记缺少来源，现存公开记录无法核验；暂停公开全文并保留历史标记，暂不允许改写。"
+        own = _plain(fact.text)
+        for entry, words in zip(personal.entries, personal.normalized, strict=True):
+            if entry.readers is not None and own and own in words:
+                fact.known_by = list(dict.fromkeys([*fact.known_by, *entry.readers]))
     return out
 
 

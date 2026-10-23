@@ -98,7 +98,7 @@ def with_private_history(public: list[dict[str, Any]], private: list[dict[str, A
 def history_text(entry: LogEntry) -> Text:
     """The restored line keeps its privacy label, without exposing internal audience ids."""
     private = getattr(entry, "audience", None) is not None
-    if private and entry.kind == "keeper":
+    if private and entry.kind == "keeper" and not getattr(entry, "delivery", ""):
         return Text(f"【守秘人·私密】{entry.text}", style="dim")
     label = "【私语】" if private and entry.kind == "speech" else ""
     who = f"{entry.who}：" if entry.who else ""
@@ -243,7 +243,7 @@ class NetGameScreen(GameScreen):
         for e in self.backlog:  # what happened before you sat down
             block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, history_text(e),
                                    delivery=e.delivery)
-            if e.kind == "keeper" and getattr(e, "audience", None) is None:  # public narration alone can be retold
+            if e.kind == "keeper" and (e.audience is None or e.delivery):
                 self.told = block
         self.ready = True
         while self.inbox:

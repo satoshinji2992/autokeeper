@@ -250,8 +250,8 @@ class RuledEffect(BaseModel):
     and applies it): harm by the book's dice, a condition, an obstacle opened or blocked, a bonus
     or penalty die, a thing lost or broken."""
 
-    kind: Literal["damage", "condition", "obstacle", "edge", "item"] = Field(
-        description="damage 伤害，condition 状态，obstacle 障碍变化，edge 下一次检定的奖励或惩罚骰，item 物品")
+    kind: Literal["damage", "condition", "obstacle", "edge", "item", "freed"] = Field(
+        description="damage 伤害，condition 状态，obstacle 障碍变化，edge 下一次检定的奖励或惩罚骰，item 物品，freed 解除target所受压制")
     target: str = Field(description="对象 id：人、障碍或物品")
     dice: DiceText = Field("", description="damage 的骰子式，如 1D6、2D10；别的留空")
     bonus: int = Field(0, ge=-2, le=2, description="edge 时：奖励骰为正，惩罚骰为负")
@@ -2005,7 +2005,7 @@ class Cast:
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
                      check: Callable[[Any], bool] | None = None, fix: str = "",
-                     voices: list[str] | None = None, remember: str | None = None) -> str | Narration:
+                     voices: list[str] | None = None, remember: str | None = None, settled: bool = False) -> str | Narration:
         """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
         narrative preferences ride along this call only, without rewriting the cached prefix.
 
@@ -2023,7 +2023,10 @@ class Cast:
                          + rules_lookup.quote(found))
         extra = ("\n\n" + lore.strip() if lore.strip() else "") + "\n" + self._party(state) + self.prefs.for_keeper() + fix
         request = state.pending_turn.get("request", {})
-        continuing = request.get("actor") == state.investigator.id and bool(request.get("remaining", "").strip())
+        continuing = (not settled and request.get("actor") == state.investigator.id
+                      and bool(request.get("remaining", "").strip()))
+        if settled:
+            extra += "\n本段仅补叙报告中已经结算的经过，不执行当前待办请求、不添加场面操作或决定，不续办其他人的行动。"
         if continuing:
             extra += ("\n\n【本次原请求的续办】\n"
                       + json.dumps({key: request.get(key) for key in ("original", "completed", "remaining")},

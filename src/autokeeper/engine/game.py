@@ -102,6 +102,7 @@ class Turn:
     checks: list[Check] = field(default_factory=list)
     primary: int | None = None  # the action's own final check in checks; event gates never replace it
     rest: dict | None = None  # this actor's executed rest interval, not the shared clock increment
+    interval: dict = field(default_factory=dict)  # host-owned actor, actual start/end, participants and travel endpoints
     clues: list[str] = field(default_factory=list)
     sanity: list[tuple[str, Sanity]] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
@@ -152,6 +153,14 @@ class Turn:
         self.performed += [e for e in later.performed if e not in self.performed]
         self.performance = later.performance or self.performance
         self.rest = later.rest or self.rest
+        if later.interval:
+            if self.interval and self.interval.get("actor") == later.interval.get("actor"):
+                self.interval["end"] = max(self.interval["end"], later.interval["end"])
+                self.interval["participants"] = list(dict.fromkeys([
+                    *self.interval["participants"], *later.interval["participants"]]))
+                self.interval["destination"] = later.interval.get("destination", self.interval.get("destination", ""))
+            elif not self.interval:
+                self.interval = dict(later.interval)
         if later.arrived:  # an event carried them off
             self.arrived, self.first_visit, self.route = later.arrived, later.first_visit, later.route
         self.ending = self.ending or later.ending
@@ -401,6 +410,8 @@ class Game(Encounters):
             "原作开场中已写明的人数、物件数量与必发事实必须保留；只有一位调查员时称‘你’，不要凭空加队友。"
             f"叙事停在当前地点“{loc.name}”能接话或行动的一刻，之后由玩家决定去哪、是否停留。"
             "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
+            "人物背景是各自的资料，不代表队友已经知情；私下来意、关系和随身物件不要在共同开场公开。"
+            "需要交代个人已知的事，用 asides 只发给本人；共同正文只写在场者能观察到的情境，不替玩家出示或分享物品。"
         )
         self.showcases.prepare()  # (already at it when the game was made inside a running loop)
         if not self.prelude_played:  # after the prelude the keeper's first words are not covered by a picture
@@ -448,13 +459,10 @@ class Game(Encounters):
 
     # -- the turn pipeline --------------------------------------------------------------
     def _focus_blocked(self) -> str:
-        """Changing the acting seat cannot leave an unfinished turn or encounter behind."""
+        """Changing the acting seat cannot leave an unfinished individual turn behind."""
         st = self.state
         if self.world.place(st.investigator.id) == st.location:
             return ""
-        if enc := self.encounter():
-            return (f"{self.world.name(enc.place)}的遭遇尚未结束，暂不支持切换到异地调查员的行动；"
-                    "请先继续原现场的遭遇。")
         if st.pending_push or set(st.pending_turn) - {"input", "active", "by_hand"}:
             return "上一回合尚未讲完，请先继续原回合，再切换到异地调查员。"
         return ""
@@ -477,6 +485,7 @@ class Game(Encounters):
     async def parse(self, text: str) -> Action:
         await self._world_settled()  # finish work at the preceding focus before changing its context
         self._focus()
+        self._bind_party_declaration(text)
         self.initiative, self._directed = [], set()  # a new turn: nobody arranged yet, a question to the keeper too
         self._hosted_turn = None
         if text.startswith("/kp "):
@@ -501,7 +510,9 @@ class Game(Encounters):
         if not continuing and text.strip() != "/encounter" and not any(e.turn == st.turn and e.kind == "player" for e in st.log):
             from .perception import input_label
 
-            st.add("player", input_label(self, st.investigator.id, text), who=st.investigator.name)
+            entry = st.add("player", input_label(self, st.investigator.id, text), who=st.investigator.name,
+                           audience=[st.investigator.id])
+            entry.time = format_time(self._actor_cursor())
         if idea.asked(text):  # the Idea roll: the engine's own action, no model reads it
             return self.idea_action()
         await self.emit({"type": "status", "text": "解析行动…"})
@@ -593,7 +604,7 @@ class Game(Encounters):
                 if plan.remaining.strip() and st.pending_turn and "request" not in st.pending_turn:
                     st.pending_turn["request"] = {
                         "id": f"{st.investigator.id}:{st.turn}", "actor": st.investigator.id,
-                        "original": text, "origin_turn": st.turn, "part": 0, "started": st.minutes,
+                        "original": text, "origin_turn": st.turn, "part": 0, "started": self._actor_cursor(),
                         "remaining": plan.remaining.strip(), "completed": [],
                     }
                 # The keeper read this person's old note together with the new input. Its
@@ -658,8 +669,10 @@ class Game(Encounters):
         if plan.present or plan.people:
             here = list(dict.fromkeys([*self._present(), *plan.present, *(p.id for p in plan.people)]))
             raw = scene.Scene(people=plan.people, here=here)
+            cursor = self._actor_cursor()
             prepared = scene.plan(self.world, raw, scene.Context(travel=self._travel, walk=False,
-                                                               ids=ids or f"plan:{self.state.turn}"))
+                                                               ids=ids or f"plan:{self.state.turn}",
+                                                               interval=(cursor, cursor)))
         introduced = {p.id for p in plan.people}
         for ident in plan.present:
             if ident not in introduced and (not (e := self.world.entity(ident)) or e.kind != "npc"):
@@ -787,7 +800,8 @@ class Game(Encounters):
         ruling = await arbiter(self.state, asked, encounter=brief)
         enc = self.encounter()
         known = {p.id for p in enc.participants} if enc is not None else set()
-        problems = [f"effects 里的 {e.target} 不在这场遭遇里" for e in ruling.effects if e.kind in ("damage", "edge") and e.target not in known]
+        problems = [f"effects 里的 {e.target} 不在这场遭遇里" for e in ruling.effects
+                    if e.kind in ("damage", "edge", "freed") and e.target not in known]
         if problems:
             ruling = await arbiter(self.state, asked, encounter=brief, problems=problems)
         return ruling
@@ -1474,9 +1488,9 @@ class Game(Encounters):
         flags = [f for f in failure.flags if f in self.m.flags and f not in st.flags]
 
         def time() -> int:
-            elapsed = self._overlap(max(0, min(failure.minutes, 240)))
-            st.minutes += elapsed
-            return elapsed
+            minutes = max(0, min(failure.minutes, 240))
+            self._spend(minutes, turn)
+            return minutes
 
         elapsed = await step("fail-time", turn, time)
         if flags:
@@ -1613,7 +1627,7 @@ class Game(Encounters):
             minutes = arranged["minutes"]
 
             def lost() -> None:
-                st.minutes += self._overlap(minutes)
+                self._spend(minutes, turn)
 
             await step("idea-lost", turn, lost)
             await step("idea-time", turn, lambda: self._time(turn))
@@ -1709,12 +1723,15 @@ class Game(Encounters):
         try:
             dice = self.rules.dice
             self.rules.dice = _ResolutionDice(self, turn, dice, row)
-            try:
-                value = work()
-            finally:
-                self.rules.dice = dice
-            if inspect.isawaitable(value):
-                value = await value
+            with self.world.at(turn.interval.get("end")):
+                try:
+                    value = work()
+                finally:
+                    self.rules.dice = dice
+                # Async stages own nested synchronous receipts. A parent dice cursor
+                # must not capture those rolls too, or skipped children shift it on resume.
+                if inspect.isawaitable(value):
+                    value = await value
             row.update(done=True, value=value)
             self._resolution_save(turn)
             return value
@@ -1785,6 +1802,7 @@ class Game(Encounters):
             return ruling is not None
 
         step = self._resolution_step
+        await step("interval", turn, lambda: self._spend(0, turn))
         self._dealing = self._engaged(action)
         flagged = await step("beats", turn, lambda: self._play(self._late, self._dealing))
         if flagged:
@@ -1835,11 +1853,9 @@ class Game(Encounters):
                 turn.notes.append(f"去不了“{heading}”")
                 return {}
             turn.route = self._route(st.location, heading) or []
-            st.minutes += minutes
-            if st.round_spent is not None:  # the round goes on from the arrival
-                st.round_spent = 0
-                st.round_elapsed.clear()
-            return {"heading": heading, "intended": intended, "stopping": stopping}
+            coming = self._travellers(action.alone)
+            timed = self._spend(minutes, turn, participants=coming)
+            return {"heading": heading, "intended": intended, "stopping": stopping, "interval": timed}
 
         moving = await step("travel", turn, travel)
         # The declared work has an end time, not an extra duration to add after an arrival
@@ -1849,17 +1865,17 @@ class Game(Encounters):
             resting = action.kind == "wait" or ruling.rest
             minutes = 0 if moving.get("stopping") else max(0, min(ruling.minutes, WAIT_CAP if resting else ACT_CAP))
             # A later parallel action can use a whole night's effort while adding no
-            # global minutes. Freeze its own interval before _overlap updates the round.
-            start = (st.minutes if st.round_spent is None else
-                     st.minutes - st.round_spent + st.round_elapsed.get(inv.id, 0))
+            # global minutes. Freeze its own interval before committing personal work.
+            start = self._actor_cursor()
             rest = ({"who": inv.id, "start": start, "end": start + minutes,
-                     "interrupted": bool(ruling.mishap or st.encounter)} if ruling.rest and minutes > 0 else None)
-            return {"end": st.minutes + self._overlap(minutes), "rest": rest}
+                     "interrupted": bool(ruling.mishap or self.battling())} if ruling.rest and minutes > 0 else None)
+            self._spend(minutes, turn)
+            return {"end": st.minutes, "rest": rest}
 
         timed = await step("action-end", turn, action_end)
         if moving:
             await step("arrival", turn, lambda: self._arrive(moving["heading"], turn, alone=action.alone, party=True,
-                                                             companions=action.companions))
+                                                             companions=action.companions, interval=moving["interval"]))
 
             def arrived() -> None:
                 if moving["intended"] == moving["heading"]:
@@ -2056,15 +2072,12 @@ class Game(Encounters):
             return False
 
         def elapsed() -> None:
-            st.minutes += moving["minutes"]
             turn.route = moving["route"]
-            if st.round_spent is not None:
-                st.round_spent = 0
-                st.round_elapsed.clear()
+            moving["interval"] = self._spend(moving["minutes"], turn, participants=self._travellers(action.alone))
 
         await step("elapsed", turn, elapsed)
         await step("arrival", turn, lambda: self._arrive(moving["target"], turn, alone=action.alone, party=True,
-                                                         companions=action.companions))
+                                                         companions=action.companions, interval=moving["interval"]))
 
         def arrived() -> None:
             st.journey = action.destination if moving["stopping"] else ""
@@ -2120,7 +2133,7 @@ class Game(Encounters):
             turn.notes.append(f"{inv.name}从{self.world.name(here)}去不了“{dest}”")
             return {}
         st.apart[inv.id] = dest
-        st.minutes += self._overlap(minutes)
+        self._spend(minutes, turn)
         turn.notes.append(f"{inv.name}独自从{self.world.name(here)}去了{self.world.name(dest)}，没有和大家在一起；大家还在"
                           f"{self.world.name(st.location)}。")
         return {}
@@ -2240,6 +2253,7 @@ class Game(Encounters):
                 raise ValueError("这次检定无法使用当前的幸运点数")
             turn.action = Action.model_validate(pending["action_record"])
             turn.ruling = Ruling.model_validate(pending["success"])
+            self._spend(0, turn)
             st.pending_push = None
             return {"flags": list(st.flags), "minutes": st.minutes}
 
@@ -2283,7 +2297,7 @@ class Game(Encounters):
             def told() -> None:
                 st.add("player", f"孤注一掷：{how}", who=inv.name, audience=pending.get("audience"))
                 if method["achievable"]:
-                    st.minutes += self._overlap(method["minutes"])
+                    self._spend(method["minutes"], turn)
                     turn.notes.append(f"孤注一掷的做法：{how}（约 {method['minutes']} 分钟）")
                 else:
                     why = method["why"].rstrip("。") or "这样做达不到目标"
@@ -2614,13 +2628,21 @@ class Game(Encounters):
         npc = m.npc(npc_id)
         said = turn.replies.get(key)
         if said is None:
+            when = turn.interval.get("end", self._actor_cursor())
+            available = self.world.available_at(npc_id)
+            if available is not None and available > when:
+                turn.notes.append(f"{npc.name}已有更晚时段的实际行动，本段较早的交谈尚未发生；按当前记录继续。")
+                said = turn.replies[key] = Said(npc=npc_id, line="", shown=True, heard=True)
+                keep(turn)
+                return said
             allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec)
-            listeners = recipients.listeners(st, st.investigator.id)
+            listeners = self.world.observers(st.location, at=when)
             if audience is None and len(listeners) != len(st.investigators):
                 audience = listeners
             if status:
                 await self.emit({"type": "status", "text": status, "audience": audience})
-            line = await ask()
+            with self.world.at(when):
+                line = await ask()
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
             # and its receipt, kept below with the words.
             told = self.cast.told.pop(npc_id, [])
@@ -2641,7 +2663,8 @@ class Game(Encounters):
             st.npc(npc_id).met = True
             st.add("npc", line, who=npc.name, audience=said.audience)
             if record is not None:
-                record(line)
+                with self.world.at(when):
+                    record(line)
             keep(turn)
         if not said.shown:
             await self.emit({"type": kind, "npc": npc_id, "name": npc.name, "text": said.line,
@@ -2707,6 +2730,16 @@ class Game(Encounters):
             await self.emit({"type": "held"})
             return ""
         await self._foreshadow(turn)
+        readers = self._narrative_audience(turn)
+        readers = sorted(readers) if readers is not None else None
+        when = turn.interval.get("end", self.world.now)
+        actor = turn.interval.get("actor", st.investigator.id)
+        place = self.world.place_at(actor, when)
+        if st.held and ((turn.action is not None and turn.action.alone)
+                        or any(h["audience"] != readers or h["place"] != place for h in st.held)):
+            # The earlier reports already settled. Tell them to their saved readers,
+            # without applying an old Turn's world operations at this new focus.
+            await self.tell_held()
         # A reply to the player is the turn's telling; someone joining in of their own accord is not:
         # what the player did still wants telling, and so does a find no one said in their line.
         told = self._told_by(turn)
@@ -2723,9 +2756,16 @@ class Game(Encounters):
                 return ""  # the reply, in its words what it told, and the roll outcomes have already been shown
             return await self.tell_held(turn=turn, on_delta=on_delta)  # the round's last: the others still want telling
         report = self._report(turn)
-        if self.holding and not turn.ending and not continuing and not voices_pending:
+        token = st.pending_turn.get("party_token")
+        later = [step for step in st.round_plan.get("steps", [])
+                 if step["token"] != token and step["token"] not in st.round_plan.get("done", [])]
+        next_actor = st.round_plan["input"][int(later[0]["token"])][0] if later else None
+        same_scene = (readers is None and turn.action is not None and not turn.action.alone
+                      and (next_actor is None or self.world.place(next_actor) == place))
+        if self.holding and same_scene and not turn.ending and not continuing and not voices_pending:
             if not any(h["turn"] == st.turn for h in st.held):  # a resumed turn holds it once
-                st.held.append({"turn": st.turn, "who": st.investigator.name, "report": report, "rest": turn.rest})
+                st.held.append({"turn": st.turn, "who": st.investigator.name, "actor": actor, "place": place,
+                                "audience": readers, "report": report, "rest": turn.rest})
             self.told = None
             await self.emit({"type": "held"})
             return ""
@@ -2736,73 +2776,100 @@ class Game(Encounters):
     # -- a round of simultaneous actions (a LAN table: net/hub.py _settle) -------------------
     def pending_party(self) -> list[tuple[str, str | None]] | None:
         receipt = self.state.round_plan
-        if any(step["token"] not in receipt.get("done", []) for step in receipt.get("steps", [])):
-            return [tuple(pair) for pair in receipt["input"]]
-        return None
+        pending = [tuple(receipt["input"][int(step["token"])]) for step in receipt.get("steps", [])
+                   if step["token"] not in receipt.get("done", [])]
+        return pending or None
 
     async def arrange_party(self, order: list[tuple[str, str | None]]) -> list[tuple[str, str | None]]:
-        """Read the declared window together before ruling any of it. Stable tokens preserve
-        duplicate declarations; the selected Plan is consumed by the ordinary turn pipeline.
-        Unannounced AI moves keep their existing path and do not hold this window open."""
-        st = self.state
-        if (saved := self.pending_party()) is not None:
-            tokens = {step["token"] for step in st.round_plan["steps"]}
-            return ([saved[int(step["token"])] for step in st.round_plan["steps"]
-                     if step["token"] not in st.round_plan.get("done", [])]
-                    + [pair for n, pair in enumerate(saved) if str(n) not in tokens])
-        planner = getattr(self.cast, "party_plan", None)
-        if planner is None or st.ending or self.battling():
-            return order
-        able = {i.id for i in st.investigators if i.can_act}
-        inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(order)
-                  if who in able and text and not text.startswith("/kp ") and not commands.instant(text)
-                  and not idea.asked(text)]
-        if len(inputs) < 2 or len({row.who for row in inputs}) < 2:
-            return order
-        source = [list(pair) for pair in order]
-        receipt = st.round_plan
-        if receipt.get("input") != source or not receipt.get("steps"):
-            if st.pending_turn:  # an interrupted action owns its saved plan until it finishes
+        """Persist every declaration before any planning, and resume only unfinished tokens."""
+        st, receipt = self.state, self.state.round_plan
+        if not self.pending_party():
+            if st.pending_turn:
                 return order
-            await self._world_settled()
-            try:
-                planned = await planner(st, inputs)
-                if planned is None:
-                    raise ValueError("这一批行动尚未取得完整场面安排")
-                planned = PartyPlan.model_validate(planned)
-                tokens = [step.token for step in planned.steps]
-                wanted = {row.token for row in inputs}
-                if len(tokens) != len(wanted) or set(tokens) != wanted:
-                    raise ValueError("整批安排没有逐一保留原始行动编号")
-                for who in {row.who for row in inputs}:
-                    declared_order = [row.token for row in inputs if row.who == who]
-                    if [token for token in tokens if token in declared_order] != declared_order:
-                        raise ValueError("同一调查员的连续行动须保留声明顺序")
-                if any(set(step.related) - wanted or step.token in step.related for step in planned.steps):
-                    raise ValueError("整批安排引用了不存在或自身的关联行动")
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                st.round_plan.clear()
-                self._late.notes.append("本批尚未完成整体安排，按原行动继续；配合、争抢与相互影响仍须裁定，不按输入先后预定结果。")
-                self._debug("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
-                return order
+            started = receipt.get("started", st.minutes)
             receipt.clear()
-            receipt.update(input=source, steps=[step.model_dump(mode="json") for step in planned.steps], used=[], done=[],
-                           at=st.clock)
+            receipt.update(input=[list(pair) for pair in order], steps=[{"token": str(n)} for n in range(len(order))],
+                           used=[], done=[], at=st.clock, started=started, planned=False)
             if self.checkpoint:
                 self.checkpoint()
-        ordered = [order[int(step["token"])] for step in receipt["steps"] if step["token"] not in receipt.get("done", [])]
-        declared = {step["token"] for step in receipt["steps"]}
-        return ordered + [pair for n, pair in enumerate(order) if str(n) not in declared]
+        if receipt.get("planned") or receipt.get("used") or receipt.get("done"):
+            return self.pending_party() or []
+        planner = getattr(self.cast, "party_plan", None)
+        able = {i.id for i in st.investigators if i.can_act}
+        inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(receipt["input"])
+                  if who in able and text and not text.startswith("/kp ") and not commands.instant(text)
+                  and not idea.asked(text)]
+        if (planner is None or st.ending or self.battling() or len(inputs) < 2
+                or len({row.who for row in inputs}) < 2):
+            receipt["planned"] = True
+            return self.pending_party() or []
+        await self._world_settled()
+        try:
+            planned = await planner(st, inputs)
+            if planned is None:
+                raise ValueError("这一批行动尚未取得完整场面安排")
+            planned = PartyPlan.model_validate(planned)
+            tokens = [step.token for step in planned.steps]
+            wanted = {row.token for row in inputs}
+            if len(tokens) != len(wanted) or set(tokens) != wanted:
+                raise ValueError("整批安排没有逐一保留原始行动编号")
+            for who in {row.who for row in inputs}:
+                declared_order = [row.token for row in inputs if row.who == who]
+                if [token for token in tokens if token in declared_order] != declared_order:
+                    raise ValueError("同一调查员的连续行动须保留声明顺序")
+            if any(set(step.related) - wanted or step.token in step.related for step in planned.steps):
+                raise ValueError("整批安排引用了不存在或自身的关联行动")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._late.notes.append("本批尚未完成整体安排，按原行动继续；配合、争抢与相互影响仍须裁定，不按输入先后预定结果。")
+            self._debug("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
+        else:
+            declared = {step.token for step in planned.steps}
+            receipt["steps"] = [step.model_dump(mode="json") for step in planned.steps] + [
+                step for step in receipt["steps"] if step["token"] not in declared]
+        receipt["planned"] = True
+        if self.checkpoint:
+            self.checkpoint()
+        return self.pending_party() or []
+
+    def _bind_party_declaration(self, text: str) -> None:
+        st, receipt = self.state, self.state.round_plan
+        if not st.pending_turn or "party_token" in st.pending_turn:
+            return
+        for step in receipt.get("steps", []):
+            token = step["token"]
+            if token in receipt.get("done", []) or token in receipt.get("used", []):
+                continue
+            who, original = receipt["input"][int(token)]
+            if who == st.investigator.id and original == text:
+                st.pending_turn["party_token"] = token
+                receipt.setdefault("used", []).append(token)
+                return
+
+    def finish_party_declaration(self, who: str, text: str | None, *, token: str | None = None) -> None:
+        """Close exactly one original declaration, including a rejected or absent AI action."""
+        receipt = self.state.round_plan
+        for step in receipt.get("steps", []):
+            key = step["token"]
+            if token is not None and key != token:
+                continue
+            if tuple(receipt["input"][int(key)]) != (who, text):
+                continue
+            if key not in receipt.setdefault("done", []):
+                receipt["done"].append(key)
+                return
+            if token is not None:
+                return
 
     def _party_step(self, text: str) -> dict | None:
-        st = self.state
-        receipt = st.round_plan
+        st, receipt = self.state, self.state.round_plan
         if self.battling():
             return None
         for step in receipt.get("steps", []):
             token = step["token"]
+            if not step.get("plan") or token in receipt.get("done", []):
+                continue
             if token in receipt.get("used", []) and token != st.pending_turn.get("party_token"):
                 continue
             who, original = receipt["input"][int(token)]
@@ -2857,7 +2924,8 @@ class Game(Encounters):
         completed = request.setdefault("completed", [])
         if turn is not None and not any(row["turn"] == st.turn for row in completed):
             completed.append({"turn": st.turn, "action": turn.action.summary if turn.action else "",
-                              "start": request["started"], "end": st.minutes, "place": st.location,
+                              "start": turn.interval.get("start", request["started"]),
+                              "end": turn.interval.get("end", st.minutes), "place": st.location,
                               "checks": [check.describe() for check in turn.checks],
                               "notes": turn.notes, "npc_lines": turn.npc_lines})
         remaining = request.get("remaining", "").strip()
@@ -2884,7 +2952,7 @@ class Game(Encounters):
             next_plan, pending, reason = None, remaining, "当前局势需要先处理，后续行动尚未执行"
         if next_plan:
             plan = Plan.model_validate(next_plan)
-            request.update(part=request["part"] + 1, started=st.minutes, previous_turn=st.turn,
+            request.update(part=request["part"] + 1, started=self._actor_cursor(), previous_turn=st.turn,
                            remaining=plan.remaining.strip(), ready=True)
             next_journal = {"input": request["original"], "by_hand": journal.get("by_hand", False),
                             "active": journal.get("active", st.active), "request": request,
@@ -3025,10 +3093,11 @@ class Game(Encounters):
 
     def begin_round(self) -> None:
         """The actions about to be settled happen at once: the clock moves by the longest of
-        them (_overlap), not their sum, and the keeper tells them together (narrate, holding)."""
+        them, not their sum, and the keeper tells them together (narrate, holding)."""
         if self.state.round_spent is None or (not self.state.pending_turn and not self.pending_party()):
             self.state.round_spent = 0
             self.state.round_elapsed.clear()
+            self.state.round_plan["started"] = self.state.minutes
 
     def end_round(self, *, interrupted: bool = False) -> None:
         if not interrupted and not self.state.pending_turn:
@@ -3040,31 +3109,77 @@ class Game(Encounters):
             self.state.round_elapsed.clear()
         self.holding = False
 
-    def _overlap(self, minutes: int) -> int:
-        """The minutes an action adds to the clock: all of them outside a round; in one, only
-        what it takes beyond the longest action of the round so far."""
+    def _actor_cursor(self, who: str | None = None) -> int:
         st = self.state
         if st.round_spent is None:
-            return minutes
-        who = st.investigator.id
-        st.round_elapsed[who] = st.round_elapsed.get(who, 0) + minutes
-        longest = max(st.round_elapsed.values(), default=0)
-        extra = max(0, longest - st.round_spent)
-        st.round_spent = max(st.round_spent, longest)
-        return extra
+            return st.minutes
+        base = st.round_plan.setdefault("started", st.minutes - st.round_spent)
+        return base + st.round_elapsed.get(who or st.investigator.id, 0)
+
+    def _travellers(self, alone: bool) -> list[str]:
+        st = self.state
+        return ([st.investigator.id] if alone else
+                [i.id for i in st.investigators if self.world.place(i.id) == st.location])
+
+    def _spend(self, minutes: int, turn: Turn, *, participants: list[str] | None = None) -> dict:
+        """Commit serial personal work, or a journey shared only by its real travellers."""
+        st, who = self.state, self.state.investigator.id
+        people = list(dict.fromkeys([who, *(participants or [])]))
+        own_start = self._actor_cursor(who)
+        start = max(self._actor_cursor(person) for person in people)
+        end = start + max(0, minutes)
+        if not turn.interval:
+            turn.interval = {"actor": who, "start": own_start, "end": end, "participants": people,
+                             "origin": self.world.place(who), "destination": self.world.place(who)}
+        else:
+            turn.interval["end"] = max(turn.interval["end"], end)
+            turn.interval["participants"] = list(dict.fromkeys([*turn.interval["participants"], *people]))
+        if st.round_spent is not None:
+            base = st.round_plan["started"]
+            for person in people:
+                st.round_elapsed[person] = end - base
+            st.round_spent = max(st.round_spent, end - base)
+        st.minutes = max(st.minutes, end)
+        if self.world.clock is not None:
+            self.world.clock = end
+        return {"start": start, "end": end, "participants": people}
 
     async def tell_held(self, report: str = "", *, turn: Turn | None = None, on_delta=None) -> str:
-        """The round told in one: what each investigator did, held as it was settled, and `report`,
-        the last action's; the keeper weaves them into one telling."""
+        """Tell one settled scene to its saved readers; combine only the same observation scope."""
         st = self.state
-        parts = [*(f"〔{h['who']}〕\n{h['report']}" for h in st.held), *([f"〔{st.investigator.name}〕\n{report}"] if report else [])]
-        combined = ("【这一轮几位调查员同时行动】下面按结算的先后列出各人的经过，前面几段里的在场人物和时间是当时的。"
-                    "讲成一段连贯的叙述：几件事同时在发生，交代每个人做了什么、结果怎样、彼此有没有看见或听见；"
-                    "不逐条罗列，不重复已经显示过的台词和检定，可以比平常长一些。\n\n" + "\n\n".join(parts))
-        told = await self._narrate(combined, on_delta, lore=self._brief(), turn=turn)
-        st.held.clear()
-        if self.checkpoint:
-            self.checkpoint()
+        current = self._narrative_audience(turn) if turn is not None else None
+        current = sorted(current) if current is not None else None
+        actor = turn.interval.get("actor", st.investigator.id) if turn is not None else ""
+        place = self.world.place_at(actor, turn.interval.get("end", self.world.now)) if turn is not None else ""
+        told = ""
+        while st.held:
+            first = st.held[0]
+            group = []
+            for row in st.held:
+                if row["audience"] != first["audience"] or row["place"] != first["place"]:
+                    break
+                group.append(row)
+            include_current = (turn is not None and len(group) == len(st.held) and current is None
+                               and turn.action is not None and not turn.action.alone
+                               and current == first["audience"] and place == first["place"])
+            parts = [f"〔{h['who']}〕\n{h['report']}" for h in group]
+            if include_current and report:
+                parts.append(f"〔{st.investigator.name}〕\n{report}")
+            combined = ("【同一现场同时行动、已经结算的经过】下面按结算先后列出各人的经过，在场人物和时间以各段记录为准。"
+                        "只向这些经过的实际读者讲述；不向新到场者补发他们没看见的事。"
+                        "讲成连贯叙述，不重复已经显示的台词和检定，不执行新的行动。\n\n" + "\n\n".join(parts))
+            if include_current:
+                told = await self._narrate(combined, on_delta, lore=self._brief(), turn=turn)
+                report, turn = "", None
+            else:
+                receipt = first.setdefault("telling", {"audience": first["audience"]})
+                told = await self._narrate(combined, on_delta, lore=self._brief(), _receipt=receipt,
+                                           _tools=False, _settled_only=True)
+            del st.held[:len(group)]
+            if self.checkpoint:
+                self.checkpoint()
+        if turn is not None and report:
+            told = await self._narrate(report, on_delta, lore=self._brief(), turn=turn)
         return told
 
     def _brief(self) -> str:
@@ -3205,12 +3320,17 @@ class Game(Encounters):
         sanity = self._sanity(trial, ok, bad)
         inv.__dict__.update(trial.__dict__)
         turn.sanity.append((inv.name, sanity))
-        self.state.add("sanity", sanity.describe(), who=inv.name)
-        return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)}
+        when = self.world.now
+        place = self.world.place_at(inv.id, when)
+        observers = self.world.observers(place, at=when) if place else []
+        audience = recipients.scope(self.state, [inv.id, *observers])
+        self.state.add("sanity", sanity.describe(), who=inv.name, audience=audience)
+        return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn),
+                "audience": audience}
 
     def _sanity(self, inv: Investigator, ok: str, bad: str) -> Sanity:
         """A SAN check at the actual game clock; the bout table remains its own immediate event."""
-        return self.rules.sanity(inv, ok, bad, now=self.state.minutes)
+        return self.rules.sanity(inv, ok, bad, now=self.world.now)
 
     async def _recover_madness(self, turn: Turn, *, rested: dict[str, tuple[int, int]] | None = None) -> None:
         """Rule-owned expiry or an accepted telling's completed safe rest, with one saved receipt
@@ -3290,7 +3410,7 @@ class Game(Encounters):
         return bool(action.travel == "stroll" and path and len(path) > 2)
 
     async def _arrive(self, loc_id: str, turn: Turn, *, alone: bool = False, party: bool = False,
-                      companions: list[str] | None = None) -> None:
+                      companions: list[str] | None = None, interval: dict | None = None) -> None:
         """The party is at loc_id now. On their own way (party), a companion goes where the
         investigator goes, a detour included, until the place it agreed to; an event that carries
         them off takes along only a companion it happens to be taking that way. Someone asked
@@ -3308,6 +3428,15 @@ class Game(Encounters):
                 self.world.rec.left[src] = self.world.rec.seq
             st.location = loc_id
             st.apart = {who: place for who, place in places.items() if place != loc_id}
+            at = (interval or {}).get("end", turn.interval.get("end", self.world.now))
+            start = (interval or {}).get("start", at)
+            if src != loc_id:
+                motions = {who: {"origin": src, "destination": loc_id, "start": start, "end": at} for who in coming}
+                with self.world.at(at, start=start):
+                    self.world.emit("move", f"调查员抵达{self.world.name(loc_id)}", participants=list(coming), place=loc_id,
+                                    op=f"travel:{st.turn}:{src}:{loc_id}", motions=motions)
+            if turn.interval:
+                turn.interval["destination"] = loc_id
             for inv_id in joined:  # the moving group came to where another investigator already was
                 turn.notes.append(f"{st.find(inv_id).name}就在{m.location(loc_id).name}，和大家会合了。")
             came: set[str] = set()
@@ -3316,7 +3445,12 @@ class Game(Encounters):
                     continue
                 path = self._route(src, ent.follow_to)
                 if not alone and src != loc_id and (party or (path and loc_id in path)):
-                    result = self.world.apply(Move(id=f"escort:{st.turn}:{ent.id}:{src}:{loc_id}", entity=ent.id, to=loc_id))
+                    ready = self.world.available_at(ent.id)
+                    if ready is not None and ready > start:
+                        turn.notes.append(f"{ent.name}在本次出发时尚有已提交的行动，没有随行。")
+                        continue
+                    with self.world.at(at, start=start):
+                        result = self.world.apply(Move(id=f"escort:{st.turn}:{ent.id}:{src}:{loc_id}", entity=ent.id, to=loc_id))
                     if result.ok:
                         came.add(ent.id)
                         turn.notes.append(f"{ent.name}与调查员一同抵达{m.location(loc_id).name}。")
@@ -3338,14 +3472,16 @@ class Game(Encounters):
             if traces := world_view.traces(self.world, loc_id):
                 self.visuals.look(f"location:{loc_id}", "；".join(traces))
             turn.foreshadow += signs.at(m, st, loc_id)
-            return {"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", ""), "view": st.view}
+            scope = recipients.scope(st, self.world.observers(loc_id, at=at))
+            return {"type": "move", "location": loc.id, "name": loc.name, "art": m.art.get(loc.art or "", ""),
+                    "view": st.view, "audience": scope}
 
         async def arrive() -> None:
             notice = await step("commit", turn, commit)
             await step("notice", turn, lambda: self.emit(notice))
             if turn.first_visit:
-                await step("showcase", turn, lambda: self.showcases.fire(f"visit:{loc_id}"))
-            await self._events(turn, visit=loc_id)
+                await step("showcase", turn, lambda: self.showcases.fire(f"visit:{loc_id}", audience=notice["audience"]))
+            await self._events(turn, visit=loc_id, at=(interval or {}).get("end", turn.interval.get("end")))
             await step("plugins", turn, lambda: self.plugins.run("visit", turn, location=loc_id))
 
         await step(f"arrive:{loc_id}", turn, arrive)
@@ -3439,8 +3575,9 @@ class Game(Encounters):
             if not clue.available(st.flags, st.clues) and not self._resolution_pending(key):
                 continue
 
-            def commit(clue=clue, cid=cid) -> list[dict]:
+            def commit(clue=clue, cid=cid) -> dict:
                 inv = st.investigator
+                audience = self._narrative_audience(turn)
                 sanity = None
                 if clue.sanity:
                     ok, bad = clue.sanity.split("/")
@@ -3450,6 +3587,10 @@ class Game(Encounters):
                 if clue.mythos:
                     inv.skills["克苏鲁神话"] = inv.value("克苏鲁神话") + clue.mythos
                 st.clues.append(cid)
+                knowledge.seed(m, st, self.world.rec)
+                fact = self.world.rec.facts[f"clue:{cid}"]
+                readers = audience if audience is not None else [i.id for i in st.investigators]
+                fact.known_by = list(dict.fromkeys([*fact.known_by, *readers]))
                 st.progress_at = st.turn
                 turn.clues.append(cid)
                 original = originals is None or cid in originals
@@ -3457,23 +3598,34 @@ class Game(Encounters):
                     unlocked = st.npc(clue.npc).unlocked
                     if cid not in unlocked:
                         unlocked.append(cid)
-                st.add("clue", f"〔{clue.title}〕{clue.text.strip()}")
-                notices = [{"type": "clue", "id": cid, "title": clue.title, "text": clue.text.strip(), "heard": heard}]
+                st.add("clue", f"〔{clue.title}〕{clue.text.strip()}", audience=audience)
+                notices = [{"type": "clue", "id": cid, "title": clue.title, "text": clue.text.strip(), "heard": heard,
+                            "audience": audience}]
+                paper = ""
                 if not heard and original and clue.handout and clue.handout not in st.handouts:
                     h = m.handout(clue.handout)
-                    st.handouts.append(h.id)
-                    st.add("handout", h.title)
-                    notices.append({"type": "handout", "id": h.id, "title": h.title, "kind": h.kind, "text": h.text})
+                    if audience is None:
+                        st.handouts.append(h.id)
+                        st.add("handout", h.title)
+                        notices.append({"type": "handout", "id": h.id, "title": h.title, "kind": h.kind, "text": h.text,
+                                        "audience": audience})
+                    else:
+                        paper = h.id
                 if sanity is not None:
                     turn.sanity.append((inv.name, sanity))
-                    st.add("sanity", sanity.describe(), who=inv.name)
-                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn)})
-                return notices
+                    st.add("sanity", sanity.describe(), who=inv.name, audience=audience)
+                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity),
+                                    **self._madness(inv, sanity, turn), "audience": audience})
+                return {"notices": notices, "paper": paper, "audience": audience}
 
-            async def gain() -> None:
-                notices = await step("commit", turn, commit)
-                for index, notice in enumerate(notices):
+            async def gain(cid: str = cid) -> None:
+                acquired = await step("commit", turn, commit)
+                for index, notice in enumerate(acquired["notices"]):
                     await step(f"notice:{index}", turn, lambda notice=notice: self.emit(notice))
+                if acquired["paper"]:
+                    await step("paper", turn, lambda cid=cid: self.present(
+                        [{"ref": f"handout:{acquired['paper']}", "to": acquired["audience"]}],
+                        key=f"clue:{st.turn}:{cid}:paper"))
 
             await step(key, turn, gain)
         if turn.clues:
@@ -3495,9 +3647,10 @@ class Game(Encounters):
                 st.progress_at = st.turn
 
             async def settle(flag=flag) -> None:
+                scope = await step("audience", turn, lambda: self._narrative_audience(turn))
                 await step("commit", turn, commit)
-                await step("notice", turn, lambda: self.emit({"type": "flag", "flag": flag, "meaning": m.flags[flag]}))
-                await step("showcase", turn, lambda: self.showcases.fire(f"flag:{flag}"))
+                await step("notice", turn, lambda: self.emit({"type": "flag", "flag": flag, "meaning": m.flags[flag], "audience": scope}))
+                await step("showcase", turn, lambda: self.showcases.fire(f"flag:{flag}", audience=scope))
                 await self._events(turn)
 
             await step(key, turn, settle)
@@ -3519,7 +3672,7 @@ class Game(Encounters):
         await self._wake_due(turn)
         await self.emit({"type": "time", "clock": st.clock, "phase": time_of_day(st.minutes)})
 
-    async def _events(self, turn: Turn, *, visit: str = "") -> None:
+    async def _events(self, turn: Turn, *, visit: str = "", at: int | None = None) -> None:
         """Settle events whose actual conditions hold. Time, place and checks are independent gates."""
         st = self.state
         ordered = sorted(self.m.events, key=lambda e: parse_time(split_when(e.when)[0])
@@ -3534,8 +3687,8 @@ class Game(Encounters):
                 if ev.when[6:] != visit:
                     continue
             else:
-                at, condition = split_when(ev.when)
-                if at and parse_time(at) > st.minutes:
+                scheduled, condition = split_when(ev.when)
+                if scheduled and parse_time(scheduled) > st.minutes:
                     continue
                 if condition and not holds(self.world, condition):
                     continue
@@ -3562,29 +3715,39 @@ class Game(Encounters):
                     st.event_attempts[ev.id]["shown"] = True
                 if not notice["passed"]:
                     continue
-            await self._fire(ev, turn)
+            if at is not None and ev.when.startswith("visit:"):
+                await self._fire(ev, turn, at=at)
+            else:
+                await self._fire(ev, turn)
 
-    def _present(self) -> tuple[str, ...]:
-        return tuple(n.id for n in self.m.npcs_at(self.state.location) if n.status not in ("死亡", "失踪"))
+    def _present(self, *, at: int | None = None) -> tuple[str, ...]:
+        return tuple(self.world.present(self.state.location, at=self.world.now if at is None else at))
 
-    async def _people(self) -> None:
+    async def _people(self, *, at: int | None = None) -> None:
         """Who is here changed without the party moving (someone walked in, left, fell): the
         screens hear of it."""
-        if (here := self._present()) != self._here:
+        when = self.world.now if at is None else at
+        scope = recipients.scope(self.state, self.world.observers(self.state.location, at=when))
+        if (here := self._present(at=when)) != self._here:
             self._here = here
-            await self.emit({"type": "people", "location": self.state.location, "ids": list(here)})
+            await self.emit({"type": "people", "location": self.state.location, "ids": list(here), "audience": scope})
         for n in self.m.npcs:  # hurt or killed backstage: their face is drawn again (Codex, when it is here)
             if n.status != self._status.get(n.id, ""):
                 self._status[n.id] = n.status
                 if n.status and n.status != "失踪":
                     self.visuals.look(f"npc:{n.id}", f"{n.name}{n.status}")
 
-    async def _view(self, key: str, kind: str = "") -> None:
+    async def _view(self, key: str, kind: str = "", *, audience: list[str] | None = None, local: bool = True,
+                    location: str = "") -> None:
         """The scene shows another picture of this place (engine/views.py)."""
         st = self.state
-        if key != st.view or kind != st.view_kind:
-            st.view, st.view_kind = key, kind
-            await self.emit({"type": "view", "location": st.location, "key": key})
+        if local and audience is None:
+            audience = self._narrative_audience()
+        if not local or key != st.view or kind != st.view_kind:
+            if local:
+                st.view, st.view_kind = key, kind
+            scope = {"audience": audience} if audience is not None else {}
+            await self.emit({"type": "view", "location": location or st.location, "key": key, **scope})
 
     async def _world(self, turn: Turn) -> None:
         """The rest of the world after what just happened: now, or once the turn is told."""
@@ -3721,16 +3884,28 @@ class Game(Encounters):
         if inline and self.turn_checkpoint:  # after a turn there is no turn record to keep
             self.turn_checkpoint(turn)
 
-    async def _fire(self, ev: Event, turn: Turn) -> None:
+    async def _fire(self, ev: Event, turn: Turn, *, at: int | None = None) -> None:
         st = self.state
         key = f"/event:{ev.id}"
         if ev.id in st.fired and not self._resolution_pending(key):
             return
         step = self._resolution_step
-        timed = bool(split_when(ev.when)[0])
+        scheduled = split_when(ev.when)[0]
+        timed = bool(scheduled)
+        event_time = parse_time(scheduled) if scheduled else self.world.now if at is None else at
+        if scheduled and not (turn.interval and turn.interval["start"] <= event_time <= turn.interval["end"]):
+            event_time = max(event_time, self.world.now)
         place = ev.where or (ev.move_to if timed else "") or st.location
-        witnessed = place == st.location
         relocate = bool(ev.move_to and (not timed or ev.where))
+        needs_context = bool(ev.fight or ev.chase or relocate or ev.advance_to)
+        witnessed = bool(self.world.observers(place, at=event_time))
+        if needs_context and witnessed and not self._resolution_pending(key):
+            existing = self.world_encounter()
+            if self.world.place(st.investigator.id) != place or (existing is not None and existing.place != place):
+                return  # this same unfired event remains executable when its real scene can take it
+            event_time = max(event_time, self._actor_cursor())
+        actor_witnessed = self.world.place_at(st.investigator.id, event_time) == place
+        witnessed = bool(self.world.observers(place, at=event_time))
         witnesses: list[str] = []
         sanity_witnesses: list[str] = []
         victim = ""
@@ -3739,7 +3914,7 @@ class Game(Encounters):
             return {} if set(witnesses) == {i.id for i in st.investigators} else {"audience": witnesses}
 
         def observers() -> dict:
-            watching = self.world.observers(place)
+            watching = self.world.observers(place, at=event_time)
             horrors = []
             if ev.sights:
                 from .encounter import profiles
@@ -3748,21 +3923,34 @@ class Game(Encounters):
             aware = [who for who in watching if st.find(who).can_act and (not horrors or any(
                 (seen := perception.get(st, who, horror)) is None or seen.visible for horror in horrors))]
             return {"witnesses": watching, "sanity": aware,
-                    "victim": st.investigator.id if self.world.place(st.investigator.id) == place else ""}
+                    "victim": st.investigator.id if self.world.place_at(st.investigator.id, event_time) == place else ""}
 
         def commit() -> None:
             st.fired.append(ev.id)
             st.progress_at = st.turn
             if witnessed:
-                turn.events.append(ev)
-                st.add("event", ev.read_aloud.strip() or ev.title, **audience())
+                if actor_witnessed:
+                    turn.events.append(ev)
+                entry = st.add("event", ev.read_aloud.strip() or ev.title, **audience())
+                entry.time = format_time(event_time)
             else:
-                self.world.apply(Occur(id=f"event:{ev.id}:away", actor="engine", place=place,
-                                       participants=ev.present, text=ev.read_aloud.strip() or ev.text,
-                                       visibility="public"))
+                with self.world.at(event_time):
+                    self.world.apply(Occur(id=f"event:{ev.id}:away", actor="engine", place=place,
+                                           participants=ev.present, text=ev.read_aloud.strip() or ev.text,
+                                           visibility="public"))
 
         def sanity_for(inv: Investigator) -> dict | None:
-            return self._lose_sanity(inv, ev.sanity, turn) if inv.can_act else None
+            local = turn if actor_witnessed else Turn()
+            if not inv.can_act:
+                return None
+            logged = len(st.log)
+            with self.world.at(event_time):
+                notice = self._lose_sanity(inv, ev.sanity, local)
+            for entry in st.log[logged:]:
+                entry.time = format_time(event_time)
+                entry.audience = audience().get("audience")
+            notice.update(audience())
+            return notice
 
         def damage() -> dict | None:
             notice = self._wound_event(victim, ev.damage or "", f"event:{ev.id}:{st.turn}", turn) if victim else None
@@ -3783,23 +3971,39 @@ class Game(Encounters):
             for nid in ev.present:
                 ent = self.world.rec.entities.get(nid)
                 if ent is not None and ent.kind == "npc" and ent.at != to and ent.status not in ("死亡", "失踪"):
-                    self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=to))
+                    if self.world.place_at(nid, event_time) == to:
+                        continue
+                    available = self.world.available_at(nid)
+                    if available is not None and available > event_time:
+                        turn.notes.append(f"事件「{ev.title}」中的{ent.name}已有更晚的实际行动，没有倒放其位置。")
+                        continue
+                    with self.world.at(event_time):
+                        self.world.apply(Move(id=f"event:{ev.id}:{nid}", entity=nid, to=to))
 
         async def fire() -> None:
-            nonlocal place, witnessed, relocate, witnesses, sanity_witnesses, victim
+            nonlocal place, witnessed, relocate, witnesses, sanity_witnesses, victim, actor_witnessed, event_time
             def context_value() -> dict:
                 target = st.minutes
                 if ev.advance_to and witnessed:
                     when = ev.advance_to if ev.advance_to.startswith("D") else f"D{st.minutes // 1440 + 1} {ev.advance_to}"
                     target = max(target, parse_time(when))
-                return {"place": place, "witnessed": witnessed, "relocate": relocate, "target": target}
+                return {"place": place, "witnessed": witnessed, "relocate": relocate, "target": target,
+                        "actor_witnessed": actor_witnessed, "at": event_time,
+                        "travellers": self.world.observers(place, at=event_time)}
 
             context = await step("context", turn, context_value)
             place, witnessed, relocate = context["place"], context["witnessed"], context["relocate"]
+            actor_witnessed, event_time = context["actor_witnessed"], context["at"]
             if ev.advance_to and witnessed:
                 # Save the absolute target before advancing: a resumed overnight event cannot add
                 # another day. _time keeps day boundaries, the living world and its schedule intact.
-                await step("elapsed", turn, lambda: setattr(st, "minutes", max(st.minutes, context.get("target", st.minutes))))
+                def advance() -> None:
+                    travellers = context["travellers"]
+                    start = max(self._actor_cursor(who) for who in travellers)
+                    self._spend(max(0, context["target"] - start), turn, participants=travellers)
+
+                await step("elapsed", turn, advance)
+                event_time = max(event_time, context["target"])
                 await step("time", turn, lambda: self._time(turn))
             # Freeze the people who actually experienced this occurrence, before it moves
             # anyone. A retry or arrival beside another investigator cannot add witnesses.
@@ -3815,9 +4019,11 @@ class Game(Encounters):
                 await step("notice", turn, lambda: self.emit({"type": "event", "id": ev.id, "title": ev.title,
                                                              "text": ev.read_aloud.strip(), **audience()}))
             if ev.art and views.shown(self.m, ev.art):
-                await step("view", turn, lambda: self._view(ev.art, "moment"))
-            await step("showcase", turn, lambda: self.showcases.fire(f"event:{ev.id}"))
-            await step("named", turn, lambda: self.showcases.named(f"{ev.title}\n{ev.read_aloud}"))
+                await step("view", turn, lambda: self._view(ev.art, "moment", audience=audience().get("audience"),
+                                                            local=actor_witnessed, location=place))
+            await step("showcase", turn, lambda: self.showcases.fire(f"event:{ev.id}", audience=audience().get("audience")))
+            await step("named", turn, lambda: self.showcases.named(f"{ev.title}\n{ev.read_aloud}",
+                                                                    audience=audience().get("audience")))
             if relocate and self.encounter() is None:
                 await step("move", turn, lambda: self._arrive(ev.move_to, turn) if ev.move_to != st.location
                            or self._resolution_pending(f"arrive:{ev.move_to}") else None)
@@ -3836,7 +4042,8 @@ class Game(Encounters):
                     await step("damage-notice", turn, lambda: self.emit(notice))
             await step("sets", turn, sets)
             for flag in ev.sets:
-                await step(f"flag-showcase:{flag}", turn, lambda flag=flag: self.showcases.fire(f"flag:{flag}"))
+                await step(f"flag-showcase:{flag}", turn, lambda flag=flag: self.showcases.fire(
+                    f"flag:{flag}", audience=audience().get("audience")))
             if (ev.fight or ev.chase) and not ev.ending:  # a scripted attack or pursuit (engine/encounter)
                 await self._scripted(ev, turn)
             if ev.ending:
@@ -4019,6 +4226,12 @@ class Game(Encounters):
         inv = st.investigator
         loc = m.location(st.location)
         out = [f"【第 {st.turn} 轮｜{st.clock}（{time_of_day(st.minutes)}）｜{loc.name}】", f"调查员：{inv.name}（{inv.occupation}）", world.context(st)]
+        if len(st.investigators) > 1:
+            readers = self._narrative_audience(turn)
+            names = "、".join(i.name for i in st.investigators if readers is None or i.id in readers)
+            out.append(f"【本段接收者】{names}。共同正文只写这些人在当前现场能够感知的事；"
+                       "其他地点的调查经过、未传达的私语和人物背景仍是主持资料，不替调查员获知或分享。"
+                       "只有其中一人察觉或理解的内容，用 asides 单独交代。")
         people = [n.name if st.npc(n.id).met else f"未通名的人（{n.look or '暂无外观记录'}）" for n in m.npcs_at(st.location)]
         if st.ongoing:
             out.append(f"【上一段叙述停在】{st.ongoing}")
@@ -4189,14 +4402,25 @@ class Game(Encounters):
         for x in dict.fromkeys(x for ev in events for x in (*ev.sights, *ev.fight, *ev.chase)):
             if (p := profiles.profile(self.world, x)) is not None:
                 keeper[p.id], players[p.id] = profiles.bare(p.name), profiles.shown_name(self.world, x)
-        if (enc := self.state.encounter) is not None:  # those in the fight going on, as its screens name them
+        if (enc := self.encounter()) is not None:  # those in the current scene's fight
             ctx = Ctx.of(self, enc)
             keeper |= encounter_views.names(ctx, "keeper")
             players |= encounter_views.names(ctx, "players")
         return telling.name_rows(keeper, players)
 
+    def _narrative_audience(self, turn: Turn | None = None) -> list[str] | None:
+        """Readers of this actual scene; callers save this before delivering or awaiting."""
+        st = self.state
+        actor = (turn.interval.get("actor") if turn and turn.interval else None) or st.investigator.id
+        when = int(turn.interval["end"]) if turn and turn.interval else self.world.now
+        place = self.world.place_at(actor, when)
+        readers = self.world.observers(place, at=when) if place else []
+        # The acting player still receives their own fate when unconscious or dying.
+        return recipients.scope(st, [actor, *readers])
+
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None, *,
-                       _receipt: dict | None = None, _owner: Turn | None = None, _tools: bool = True) -> str:
+                       _receipt: dict | None = None, _owner: Turn | None = None, _tools: bool = True,
+                       _settled_only: bool = False) -> str:
         """The keeper tells it: first how things stand as the telling ends, then the words
         (agents/cast.Telling). The scene is compared with the record and lands as world operations
         (world/scene.py); a structured telling is saved and lands before its words are delivered.
@@ -4215,23 +4439,26 @@ class Game(Encounters):
             if self.checkpoint:
                 self.checkpoint()
         delivery = receipt["delivery_id"]
+        if "audience" not in receipt:
+            receipt["audience"] = self._narrative_audience(turn)
         started = False
 
         async def start() -> None:
             nonlocal started
             if not started:
-                await self.emit({"type": "keeper_start", "delivery": delivery})
+                await self.emit({"type": "keeper_start", "delivery": delivery, "audience": receipt["audience"]})
                 started = True
 
         async def delta(text: str) -> None:
             await start()
-            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery})
+            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery, "audience": receipt["audience"]})
             if on_delta:
                 await on_delta(text)
 
         if "text" not in receipt:
             await self.emit({"type": "status", "text": "KP 正在构思…"})
-            receipt.update(await self._tell(report, lore, delta, turn, receipt=receipt, tools=_tools))
+            receipt.update(await self._tell(report, lore, delta, turn, receipt=receipt, tools=_tools,
+                                            settled_only=_settled_only))
             if started:  # the plain path already delivered its complete streamed answer
                 receipt.update(body_started=True, body_shown=True, body_forwarded=True)
             if self.checkpoint:
@@ -4262,7 +4489,10 @@ class Game(Encounters):
                     if done.ok:
                         receipt["story_flags"].append(flag)
             if not receipt.get("stale"):
-                st.ongoing = receipt.get("now", "")
+                if not _settled_only:
+                    st.ongoing = receipt.get("now", "")
+                if not receipt.get("body_started") and not _settled_only:
+                    receipt["audience"] = self._narrative_audience(turn)
             receipt["landed"] = True
             if self.checkpoint:
                 self.checkpoint()
@@ -4306,20 +4536,20 @@ class Game(Encounters):
                 self.checkpoint()
         if receipt.get("room"):
             await self._walked(receipt["room"], receipt)
-        await self._people()
-        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and recipients.public(e)
-                      and e.delivery == delivery), None)
+        if not _settled_only:
+            await self._people(at=int(turn.interval["end"]) if turn and turn.interval else None)
+        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and e.delivery == delivery), None)
         if entry is None:
-            entry = st.add("keeper", text, who="守秘人", delivery=delivery)
+            entry = st.add("keeper", text, who="守秘人", delivery=delivery, audience=receipt["audience"])
             if self.checkpoint:
                 self.checkpoint()
         if not receipt.get("body_started"):
-            await self.emit({"type": "keeper_start", "delivery": delivery})
+            await self.emit({"type": "keeper_start", "delivery": delivery, "audience": receipt["audience"]})
             receipt["body_started"] = True
             if self.checkpoint:
                 self.checkpoint()
         if not receipt.get("body_shown"):
-            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery})
+            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery, "audience": receipt["audience"]})
             receipt["body_shown"] = True
             if self.checkpoint:
                 self.checkpoint()
@@ -4329,7 +4559,7 @@ class Game(Encounters):
             if self.checkpoint:
                 self.checkpoint()
         if not receipt.get("body_ended"):
-            await self.emit({"type": "keeper_end", "text": text, "delivery": delivery})
+            await self.emit({"type": "keeper_end", "text": text, "delivery": delivery, "audience": receipt["audience"]})
             receipt["body_ended"] = True
             if self.checkpoint:
                 self.checkpoint()
@@ -4361,8 +4591,9 @@ class Game(Encounters):
             receipt["idea_offered"] = True
             if self.checkpoint:
                 self.checkpoint()
-        await self.showcases.named(text)  # a creature the narration names for the first time
-        await self._sky(text)
+        await self.showcases.named(text, audience=receipt["audience"])  # first named to these readers
+        if not _settled_only:
+            await self._sky(text)
         self.told = Told(receipt.get("report", report), lore + receipt.get("note", ""), entry, sky,
                          receipt.get("memory"))
         if turn is not None and receipt.get("story_flags"):
@@ -4443,7 +4674,8 @@ class Game(Encounters):
                 if row.get("done"):
                     continue
                 npc_id, instruction = row["npc"], row["instruction"]
-                if npc_id not in self._present() or self.battling():
+                at = int(turn.interval["end"]) if turn.interval else self.world.now
+                if npc_id not in self._present(at=at) or self.battling():
                     row.update(done=True, result={"call": index, "npc": npc_id,
                                                  "private": row.get("private", False), "audience": [], "told": [],
                                                  "problem": "人物不在当前现场，未执行配音或操作"})
@@ -4482,7 +4714,8 @@ class Game(Encounters):
                                              "private": private, "audience": said.audience, "effects": effects,
                                              "notes": turn.notes[before["notes"]:], "world": turn.world[before["world"]:]})
                 keep(turn)
-            voices = [] if not enabled or self.battling() or self.fought_this_turn() else self._present()
+            voices = ([] if not enabled or self.battling() or self.fought_this_turn() else
+                      self._present(at=int(turn.interval["end"]) if turn.interval else None))
             extra = ""
             if intents := self._voice_intents(turn):
                 extra += ("\n【骰前考虑的参与意图，尚未发生】\n" + json.dumps(intents, ensure_ascii=False)
@@ -4529,7 +4762,7 @@ class Game(Encounters):
             keep(turn)  # a stable request exists before a voice, world operation or notification runs
 
     async def _tell(self, report: str, lore: str, delta: Callable[[str], Awaitable[None]] | None, turn: Turn | None,
-                    *, receipt: dict | None = None, tools: bool = True) -> dict:
+                    *, receipt: dict | None = None, tools: bool = True, settled_only: bool = False) -> dict:
         """The keeper's telling and what of its scene lands, as the turn's journal keeps it. A scene
         that does not hold goes back once, with what did not hold and what could be written
         instead; failing again, the units that hold make up the scene, and the keeper writes the
@@ -4555,19 +4788,23 @@ class Game(Encounters):
                     current += self._scene_brief(self._scene_context(turn)) + "\n【个人知觉】\n" + perception.brief(st)
                 return current
 
-            return await self._keeper_reply(report, current_lore, delta, turn, receipt,
-                                            enabled=tools and voices and turn is not None and not (
+            if settled_only and _takes(keeper, "settled"):
+                kwargs["settled"] = True
+            return await self._keeper_reply(report, current_lore, delta, None if settled_only else turn, receipt,
+                                            enabled=not settled_only and tools and voices and turn is not None and not (
                                                 turn.fight or (turn.action is not None and turn.action.kind == "meta")),
                                             **kwargs)
 
         words = {"units": [], "flags": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
                  "media": [], "perceptions": [], "scene_complete": False}
         continuing = bool(st.pending_turn.get("request", {}).get("remaining"))
-        structured = (_staged(turn) or continuing) and _takes(keeper, "check")
+        structured = not settled_only and (_staged(turn) or continuing) and _takes(keeper, "check")
         if not structured:
             told = await ask(lore=lore)
             if isinstance(told, str):
                 return words | {"text": told}
+            if settled_only:
+                return words | {"text": told.text}
             # An ending cannot commit a new scene, but its addressed observations and
             # prepared media still belong to their readers. Do not reduce them to prose.
             return words | {"text": told.text, "offer_idea": told.offer_idea, "asides": told.asides,
@@ -4646,13 +4883,16 @@ class Game(Encounters):
         rests = {}
         if acted:
             for receipt in [*(h.get("rest") for h in st.held), turn.rest]:
-                if (receipt and not receipt["interrupted"] and not st.encounter
+                if (receipt and not receipt["interrupted"] and not self.battling()
                         and receipt["start"] < receipt["end"] <= st.minutes
                         and any(i.id == receipt["who"] for i in st.investigators)):
                     rests[receipt["who"]] = (receipt["start"], receipt["end"])
-        return scene.Context(travel=self._travel, elapsed=max(0, st.minutes - start) if acted else 0,
+        interval = ((turn.interval["start"], turn.interval["end"]) if acted and turn.interval else None)
+        elapsed = interval[1] - interval[0] if interval else max(0, st.minutes - start)
+        participants = self._travellers(turn.action.alone) if acted else []
+        return scene.Context(travel=self._travel, elapsed=elapsed if acted else 0,
                              missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1,
-                             rests=rests)
+                             rests=rests, interval=interval, participants=participants)
 
     def _scene_brief(self, ctx: scene.Context) -> str:
         """The scene as the record has it, for the keeper's to start from: where they are, who is
@@ -4660,7 +4900,7 @@ class Game(Encounters):
         w, st = self.world, self.state
         party = {i.id for i in st.investigators}
         here = "、".join(f"{n}（{w.name(n)}{'，跟着调查员' if w.rec.entities[n].following in party else ''}）"
-                        for n in w.present(st.location)) or "没有别人"
+                        for n in w.present(st.location, at=ctx.interval[1] if ctx.interval else w.now)) or "没有别人"
         # What the action lacks is said once, in the report's notes (Game._lacking); the scene's check holds it too.
         flags = "；".join(f"{flag}：{meaning}" for flag, meaning in self.m.flags.items() if flag not in st.flags)
         items = world_view.item_refs(w, {st.location, st.investigator.id, *w.present(st.location)})
@@ -4753,10 +4993,11 @@ class Game(Encounters):
         st, told = self.state, self.told
         assert told is not None
         self.told = None  # one telling at a time
-        await self.emit({"type": "keeper_start", "again": True})
+        scope = {"audience": told.entry.audience, "delivery": told.entry.delivery}
+        await self.emit({"type": "keeper_start", "again": True, **scope})
 
         async def delta(text: str) -> None:
-            await self.emit({"type": "keeper_delta", "text": text})
+            await self.emit({"type": "keeper_delta", "text": text, **scope})
             if on_delta:
                 await on_delta(text)
 
@@ -4767,12 +5008,12 @@ class Game(Encounters):
                                           **remembered)
         except Exception:
             self.told = told
-            await self.emit({"type": "keeper_end", "text": old})  # the old telling stands
+            await self.emit({"type": "keeper_end", "text": old, **scope})  # the old telling stands
             raise
         told.entry.text = text
         if st.prologue == old:  # the opening told again
             st.prologue = text
-        await self.emit({"type": "keeper_end", "text": text})
+        await self.emit({"type": "keeper_end", "text": text, **scope})
         shown = st.sky  # on the screens now, set by the old telling
         st.sky, st.sky_at = told.sky
         await self._sky(text)

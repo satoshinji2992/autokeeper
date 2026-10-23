@@ -158,5 +158,7 @@ async def test_same_persons_continuous_actions_cannot_be_reversed_by_the_batch_m
     hub = make_hub(fake, Reversed())
     order = [ORDER[0], ("zhouheng", "再查看旧报纸"), ORDER[1]]
     assert await hub.game.arrange_party(order) == order  # rejected plan, original pipeline still available
-    assert not hub.state.round_plan and any("尚未完成整体安排" in note for note in hub.game._late.notes)
+    assert hub.state.round_plan["input"] == [list(pair) for pair in order]
+    assert hub.state.round_plan["steps"] == [{"token": str(n)} for n in range(len(order))]
+    assert not hub.state.round_plan["done"] and any("尚未完成整体安排" in note for note in hub.game._late.notes)
     await hub.game.close()

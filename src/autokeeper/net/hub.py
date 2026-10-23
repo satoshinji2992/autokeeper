@@ -131,29 +131,41 @@ PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
 PRIVATE |= {"unfinished", "last_actions"}  # remaining private intent is for its player and the keeper only
+PRIVATE |= {"queued_actions", "world", "event_attempts", "pending_story_flags", "ideas"}
+# Export only the parts the current client uses. New module fields remain keeper-only until
+# deliberately added here; Module's defaults supply the omitted collections on the client.
+PLAYER_MODULE_FIELDS = {
+    "id", "title", "subtitle", "system", "era", "setting", "players", "duration", "source", "license", "cover",
+    "hook", "start", "start_time", "locations", "npcs", "items", "clues", "handouts", "sketches", "pregens", "prelude",
+}
 REACTION_WAIT = 20.0  # seconds a seat is given to answer a blow aimed at it; then its preset answer stands
 AHEAD = 2  # stretches of a chase's way past the frontmost runner the screens are sent (tui/widgets/fight.in_sight)
 BATTLE = {"fight_start", "fight_round", "fight_state", "fight_end", "chase_start", "chase_round", "chase_state", "chase_end",
           "reveal"}
 
 
-def table(m: Module, st: GameState) -> dict[str, Any]:
+def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]:
     """The module as a player's screen may hold it: places, names, faces, pictures, and the
     handouts already found (the rest arrive with the events that reveal them). Of the clues, only
     those found, as the map needs them (fog.named): where each was found and the places and things
     it names, never its title or its words; what was found the story told."""
-    d = m.model_dump(mode="json")
+    source = st
+    st = fog.personal(m, st, viewer)
+    unseated = viewer is None and len(st.investigators) > 1
+    mapped = st.model_copy(update={"location": ""}) if unseated else st
+    d = m.model_dump(mode="json", include=PLAYER_MODULE_FIELDS)
     d["plugins"] = []
     d["showcases"] = []  # big scenes (a final boss, the endings) spoil: each travels only when it comes (Hub._event)
     d["plugin_info"] = public_plugins(m, st)
-    known = fog.bearings(m, st) | {st.location: m.location(st.location).name}
-    visited = set(st.visited) | {st.location}
+    known = ((fog.known(m, mapped) | fog.landmarks(m, mapped)) if unseated else fog.bearings(m, mapped))
+    known |= {st.location: m.location(st.location).name}  # an unseated client's schema placeholder stays a bare place
+    visited = set(st.visited)
     d.update(truth="", keeper_notes="", flags={}, creatures=[], conclusions=[], events=[], endings=[])
     d["opening"] = ""  # material not yet spoken is not part of a player's knowledge
     d["locations"] = [loc for loc in d["locations"] if loc["id"] in known]
     # The screens draw their own map from this copy (tui/modals/mapview.py): the ways on it, what lies
     # in what on it, the minutes of the roads walked, and no other way out of anywhere.
-    c = fog.chart(m, st)
+    c = fog.chart(m, mapped)
     ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
     read, names = [fog.plain(text) for text in fog.kept(m, st)], fog.aliases(m)
     for loc in d["locations"]:
@@ -171,7 +183,8 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
             loc["views"] = [{**v, "features": [], "prompt": ""} for v in loc["views"]]  # nor what each picture is for
-    d["npcs"] = [n for n in d["npcs"] if n["location"] == st.location or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
+    d["npcs"] = [n for n in d["npcs"] if (not unseated and n["location"] == st.location)
+                 or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     for n in d["npcs"]:
         n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
         n["status"] = m.npc(n["id"]).status  # the dead and the missing are not shown standing in a scene
@@ -181,7 +194,7 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
     party = {inv.id for inv in st.investigators}
-    shown = known_items(m, st)
+    shown = known_items(m, source, viewer)
     d["items"] = [item for item in d["items"] if item["id"] in shown]
     for item in d["items"]:
         ent = st.record.entities.get(item["id"])
@@ -202,25 +215,50 @@ def table(m: Module, st: GameState) -> dict[str, Any]:
     places, things = {loc["id"] for loc in d["locations"]}, {item["id"] for item in d["items"]}
     d["clues"] = [{"id": c.id, "title": "", "where": c.where, "text": fog.named(m, f"{c.title}\n{c.text}", places, things)}
                   for c in m.clues if c.id in st.clues]
+    d["pregens"] = [public_card(inv, viewer, m, source) for inv in d["pregens"]]
     return d
 
 
-def known_items(m: Module, st: GameState) -> set[str]:
+def public_card(inv: dict[str, Any], viewer: str | None, m: Module, st: GameState) -> dict[str, Any]:
+    """Keep a usable public sheet while private background and possessions stay with its seat."""
+    from ..world.record import PLAYERS
+
+    if inv["id"] == viewer:
+        return inv
+    shown = known_items(m, st, viewer)
+    names = {item.name for item in m.items if item.id in shown}
+    names |= {ent.name for ent in st.record.entities.values() if ent.kind == "item" and ent.at == inv["id"]
+              and (PLAYERS in ent.observed_by or viewer in ent.observed_by)}
+    return {**inv, "backstory": {}, "inventory": [name for name in inv.get("inventory", []) if name in names],
+            "madness": {}, "injury": {}, "marks": [], "san_lost_today": 0,
+            "san_start_of_day": inv["san"],
+            "conditions": [condition for condition in inv.get("conditions", []) if "疯狂" not in condition]}
+
+
+def known_items(m: Module, st: GameState, viewer: str | None = None) -> set[str]:
     """The ids of the module's things the players know of: theirs, ones the record says they know, ones
     lying in the open where they have been or that they saw."""
     from ..world import knowledge
     from ..world.record import PLAYERS
     from ..world.store import World
 
-    seen = fog.things(m, st)
+    observed = fog.personal(m, st, viewer)
+    seen = fog.things(m, observed)
     view = World(m, st, initialize=False)
     party = {inv.id for inv in st.investigators}
-    visited = set(st.visited) | {st.location}
+    visited = set(observed.visited)
 
     def visible(item: Any) -> bool:
         if item.id in st.record.entities:
-            return knowledge.item_known(view, item.id, PLAYERS)
-        return (item.owner in party or (not item.owner and not item.hidden and item.equipment != "concealed"
+            ent = st.record.entities[item.id]
+            # Being in another investigator's pocket is not a public reveal. The world
+            # record separately retains actual observation and explicit sharing.
+            if ent.at in party:
+                return ent.at == viewer or PLAYERS in ent.observed_by or viewer in ent.observed_by
+            if viewer is None and len(st.investigators) > 1:
+                return PLAYERS in ent.observed_by
+            return knowledge.item_known(view, item.id, viewer or PLAYERS)
+        return (item.owner == viewer or (not item.owner and not item.hidden and item.equipment != "concealed"
                 and (item.where in visited or item.id in seen)))
 
     return {item.id for item in m.items if visible(item)}
@@ -369,7 +407,7 @@ class Hub:
         self.open = False  # the round's action pool takes actions
         self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
         self.done: set[str] = set()  # seats that said they have nothing more this round
-        self.early: list[tuple[str, str]] = []  # (seat, action) for the next round: sent while the keeper told, or with no room
+        self.early: list[tuple[str, str]] = list(state.queued_actions)  # original declarations waiting for a collection window
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
@@ -462,11 +500,13 @@ class Hub:
                 self.done.discard(seat)
                 self._start_window()
                 self.wake.set()
+                self._save_queued()
                 await self._pool()
             elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
                 await self._send(cid, {"t": "error", "text": f"下一轮已有 {PER_PLAYER} 条行动，可用 /undo 撤回上一条。"})
             else:  # the keeper is telling, or this round has no room for it: first in the next round
                 self.early.append((seat, text))
+                self._save_queued()
                 await self._pool()
         elif t == "kp_private":
             seat = self._seat_of(cid)
@@ -502,6 +542,7 @@ class Hub:
             else:
                 return
             self.wake.set()
+            self._save_queued()
             await self._pool()
         elif t == "respond":
             seat = self._seat_of(cid)
@@ -629,10 +670,9 @@ class Hub:
 
     def _free(self, seat: str) -> None:
         """A seat its player left (gone, or sat down in another): whoever waits for them gets an empty
-        answer and the AI plays on; what they said for the next round goes with them."""
+        answer. Their submitted declarations still stand until explicitly withdrawn."""
         self.sits[seat] = None
         self.ready.discard(seat)
-        self.early = [(s, text) for s, text in self.early if s != seat]
         self.inbox[seat].put_nowait(None)
         self.choices[seat].put_nowait(None)
         self.wake.set()
@@ -824,13 +864,21 @@ class Hub:
 
     # -- what clients see ------------------------------------------------------------------
     def _view(self, viewer: str | None = None) -> dict[str, Any]:
-        st = self.state
+        source = self.state
+        if viewer not in {investigator.id for investigator in source.investigators}:
+            viewer = None  # Empty lobby seats have no character's private view yet.
+        st = fog.personal(self.m, source, viewer)
         view = st.model_dump(mode="json", exclude=PRIVATE)
+        view["active"] = next((n for n, inv in enumerate(st.investigators) if inv.id == viewer), 0)
+        if viewer is None and len(st.investigators) > 1:
+            view["view"] = ""
         view["flags"], view["fired"] = [], []
         from ..engine.encounter import views
 
         game = getattr(self, "game", None)
         now = views.table(game, viewer=viewer) if game is not None else None
+        if viewer is None and game is not None and set(views.observers(game)) != {inv.id for inv in st.investigators}:
+            now = None
         if now is not None:  # the fight as the table sees it, each seat's choices with it
             now = self._faced(public_battle(now))
         view["encounter_public"] = now
@@ -838,12 +886,15 @@ class Hub:
             view["pending_push"] = (public_push(view["pending_push"])
                                     if audience.visible(view["pending_push"], viewer) else None)
         view["checks"] = [check for check in view["checks"] if audience.visible(check, viewer)]
+        view["investigators"] = [public_card(inv, viewer, self.m, source) for inv in view["investigators"]]
+        view["drawn"] = [card for card in view["drawn"] if card["who"] == viewer]
+        view["progress"] = {**view["progress"], "marks": {}}
         here = {n.id for n in self.m.npcs if n.location == st.location}  # as the book has them (table())
         view["npcs"] = {k: {**v, "unlocked": [c for c in v["unlocked"] if c in st.clues]}  # what each may tell: only what was found
                         for k, v in view["npcs"].items() if v["met"] or k in here}
         view["deeds"] = [d for d in view["deeds"] if d["kind"] != "clue" and audience.visible(d, viewer)]
         if view["item_owners"]:  # where things are, only of the things the players know of
-            shown = known_items(self.m, st)
+            shown = known_items(self.m, source, viewer)
             view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
         from ..engine import perception
 
@@ -873,7 +924,7 @@ class Hub:
             await self._send(cid, {"t": "seats", "seats": self._seats(cid), "bring": self.bringing})
 
     def _welcome(self, cid: str) -> dict[str, Any]:
-        book = self._book()
+        book = self._book(self._seat_of(cid))
         keys = self._art_keys(book)
         keys |= {p.portrait for p in perception.appearances(self.state, self._seat_of(cid)).values() if p.portrait}
         return {
@@ -901,6 +952,16 @@ class Hub:
                 | {x.get("portrait") for x in book["npcs"]} | {i.portrait for i in self.state.investigators}
                 | {key for h in book["handouts"] for key in _handout_keys(h)})
 
+    def _visible_art_keys(self, viewer: str | None, book: dict | None = None) -> set[str]:
+        """Pictures in this reader's own book, personal appearances or current observed encounter."""
+        keys = self._art_keys(self._book(viewer) if book is None else book)
+        keys |= {p.portrait for p in perception.appearances(self.state, viewer).values() if p.visible and p.portrait}
+        if viewer is not None or set(views.observers(self.game)) == {inv.id for inv in self.state.investigators}:
+            battle = views.table(self.game, viewer=viewer) or {}
+            for mode, people in (("fight", "fighters"), ("chase", "runners")):
+                keys |= {person.get("portrait", "") for person in (battle.get(mode) or {}).get(people, [])}
+        return keys
+
     def _pictures(self, book: dict, keys: set[str]) -> dict[str, str]:
         handouts = {key for h in book["handouts"] for key in _handout_keys(h)}
         return {k: media.pack(v, max_size=1600 if k in handouts else 512)
@@ -911,24 +972,24 @@ class Hub:
         return pictures
 
     async def _share_book(self) -> None:
-        book = self._book()
-        keys = self._art_keys(book)
-        await self._broadcast({"t": "module", "module": book,
-                               "art": {k: v for k, v in self.m.art.items() if k in keys},
-                               "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
-        # Pictures that came into view (a place first visited, a face first met, one the story
-        # redrew while nobody could see it) arrive the way new pictures do: as an art event.
-        handouts = {key for h in book["handouts"] for key in _handout_keys(h)}  # these travel with their handout
-        for key in sorted(k for k in keys - handouts if k):  # places with no art key give None
-            await self._picture(key)
+        for cid in list(self.clients):
+            book = self._book(self._seat_of(cid))
+            keys = self._visible_art_keys(self._seat_of(cid), book)
+            await self._send(cid, {"t": "module", "module": book,
+                                   "art": {k: v for k, v in self.m.art.items() if k in keys},
+                                   "colors": {k: v for k, v in self.m.art_colors.items() if k in keys}})
+            handouts = {key for h in book["handouts"] for key in _handout_keys(h)}
+            for key in sorted(k for k in keys - handouts if k):
+                await self._picture(key, only=cid)
 
-    async def _picture(self, key: str, *, only: str | None = None) -> None:
+    async def _picture(self, key: str, *, only: str | None = None, revealed: bool = False) -> None:
         """A picture to every screen as an art event, unless they have it: never a path on the host, and a
         creature's under its opaque key (_face). One not on disk yet goes the next time it is shown."""
         real = self.faces.get(key, key)
         shown = self._face(real)
         path = self.m.pictures.get(real)
         pending = [cid for cid in self.clients if (only is None or cid == only)
+                   and (revealed or real in self._visible_art_keys(self._seat_of(cid)))
                    and perception.picture_visible(self.game, self._seat_of(cid), real)
                    and self.sent_to.get(cid, {}).get(shown) != path]
         if not path or not pending:
@@ -954,13 +1015,21 @@ class Hub:
         people = [*(ev.get("fight") or {}).get("fighters", []), *(ev.get("chase") or {}).get("runners", [])]
         keys = {ev.get("portrait") or "", *(f.get("portrait") or "" for f in people if f.get("side") != "party")}
         for key in sorted(k for k in keys if k):
-            await self._picture(key)
+            for cid in list(self.clients):
+                if audience.visible(ev, self._seat_of(cid)):
+                    await self._picture(key, only=cid, revealed=True)
 
-    def _book(self) -> dict[str, Any]:
+    def _book(self, viewer: str | None = None) -> dict[str, Any]:
         """The module for the players' screens: the table's copy while the game is on, the
         whole book once it has ended (the debrief lays it open anyway), but for big scenes
         that never came."""
-        return self.m.model_dump(mode="json", exclude={"showcases"}) | {"showcases": []} if self.state.ending else table(self.m, self.state)
+        if viewer not in {investigator.id for investigator in self.state.investigators}:
+            viewer = None
+        if not self.state.ending:
+            return table(self.m, self.state, viewer)
+        book = self.m.model_dump(mode="json", exclude={"showcases"}) | {"showcases": []}
+        book["pregens"] = [public_card(inv, viewer, self.m, self.state) for inv in book["pregens"]]
+        return book
 
     async def _send(self, cid: str, msg: dict[str, Any]) -> None:
         ws = self.clients.get(cid)
@@ -994,9 +1063,17 @@ class Hub:
         scope = msg.get("ev", {}).get("audience") if msg.get("t") == "event" else msg.get("audience")
         for cid in list(self.clients):
             if scope is None or self._seat_of(cid) in scope:
+                ev = msg.get("ev", {})
+                if ev.get("type") == "art" and self.faces.get(ev.get("key"), ev.get("key")) not in self._visible_art_keys(self._seat_of(cid)):
+                    continue
                 # Sync/turn/over all carry state. An addressed deed must never enter a shared
                 # payload first and rely on the other screens to hide it.
                 shown = {**msg, "state": self._view(self._seat_of(cid))} if "state" in msg else msg
+                if "module" in shown:
+                    shown = {**shown, "module": self._book(self._seat_of(cid))}
+                    keys = self._visible_art_keys(self._seat_of(cid), shown["module"])
+                    shown = {**shown, **{field: {k: v for k, v in shown[field].items() if k in keys}
+                                        for field in ("art", "colors", "picture_data") if isinstance(shown.get(field), dict)}}
                 await self._send(cid, shown)
 
     async def _event(self, ev: dict[str, Any]) -> None:
@@ -1029,9 +1106,7 @@ class Hub:
                 if handout:
                     ev["picture_data"] = self._pictures(book, set(_handout_keys(handout)))
         elif ev.get("type") == "art":
-            if ev["key"] not in self._art_keys(self._book()):
-                return
-            ev = {k: v for k, v in ev.items() if k in ("type", "key", "art", "mask", "status")}
+            ev = {k: v for k, v in ev.items() if k in ("type", "key", "art", "mask", "status", "audience")}
             path = self.m.pictures.get(ev["key"])
             if path:
                 ev["picture_data"] = media.pack(path)
@@ -1049,7 +1124,9 @@ class Hub:
             data = media.pack(ev.get("picture", ""))
             if not data:
                 return
-            ev = {"type": "showcase", "id": ev.get("id", ""), "kind": ev.get("kind", ""), "title": ev.get("title", ""), "picture_data": data}
+            ev = {"type": "showcase", "id": ev.get("id", ""), "kind": ev.get("kind", ""),
+                  "title": ev.get("title", ""), "picture_data": data,
+                  **({"audience": ev["audience"]} if "audience" in ev else {})}
         if ev.get("type") in (*BATTLE, "npc", "people", "reveal"):
             for cid in self.clients:
                 await self._personal_faces(cid)
@@ -1078,6 +1155,8 @@ class Hub:
             while not self.clients:  # nobody at the table: the AI does not play on alone, spending
                 await asyncio.sleep(1.0)
             if self.game.pending_party() is None:
+                if st.held:
+                    await self._safely(self._tell_held(), "上一轮的叙述")
                 await self._collect()
             await self._settle()
         self.over = True
@@ -1108,8 +1187,10 @@ class Hub:
         return sum(1 for s, _ in self.pool if s == seat)
 
     def _players(self) -> list[str]:
-        """Seated players still at the table and able to act."""
-        return [inv.id for inv in self.state.investigators if inv.can_act and self.sits.get(inv.id) is not None]
+        """Able participants, including a disconnected seat whose declaration still stands."""
+        declared = {seat for seat, _ in [*self.pool, *self.early]}
+        return [inv.id for inv in self.state.investigators if inv.can_act
+                and (self.sits.get(inv.id) is not None or inv.id in declared)]
 
     def capacity(self) -> int:
         """One slot more than there are players: someone can do two things, nobody three."""
@@ -1120,16 +1201,18 @@ class Hub:
         """The seat that took the round's extra slot with a second action, if one has."""
         return next((seat for seat, _ in self.pool if self._count(seat) >= PER_PLAYER), None)
 
-    def _may_add(self, seat: str) -> bool:
+    def _may_add(self, seat: str, *, capacity: int | None = None) -> bool:
         """Room in this round for one more of the seat's actions: its own slot if it has not
         used it, else the extra one while nobody has it. A second action never takes the
         place of somebody's first."""
         n = self._count(seat)
-        return len(self.pool) < self.capacity() and (n == 0 or (n < PER_PLAYER and self._extra() is None))
+        limit = self.capacity() if capacity is None else capacity
+        return len(self.pool) < limit and (n == 0 or (n < PER_PLAYER and self._extra() is None))
 
     def _waiting_for(self) -> list[str]:
         """Players who may still put an action in: not done, and with room for it."""
-        return [seat for seat in self._players() if seat not in self.done and self._may_add(seat)]
+        return [seat for seat in self._players() if self.sits.get(seat) is not None
+                and seat not in self.done and self._may_add(seat)]
 
     def _start_window(self) -> None:
         """The first action of the round starts its window (WINDOW)."""
@@ -1158,6 +1241,11 @@ class Hub:
         """The round as everyone sees it, and each player's own lines: in it, and waiting for the next."""
         for cid in list(self.clients):
             await self._send(cid, self._pool_view(cid))
+
+    def _save_queued(self) -> None:
+        """Only unstarted original declarations are queued; round_plan owns the closed batch."""
+        self.state.queued_actions = [*(self.pool if self.open else []), *self.early]
+        self._save()
 
     async def _speak(self, cid: str, text: str, *, to: Any = None, private: bool = False,
                      channel: str = "whisper") -> None:
@@ -1194,10 +1282,14 @@ class Hub:
             scope = [inv.id, *targets]
             said = chat.Said(text.strip(), "、".join(party[who].name for who in targets))
         else:
+            # The caller already selected the RP channel. Automatic input detection still
+            # uses chat.said, but explicit speech does not need quotes or a magic prefix.
             said = chat.said(text, [i.name for i in self.state.investigators if i.id != seat])
+            if said is None and text.strip():
+                said = chat.Said(text.strip())
             scope = None if set(hearers) == {i.id for i in self.state.investigators} else hearers
         if said is None:
-            await self._send(cid, {"t": "error", "text": "未识别为对同伴说的话，请作为行动提交。"})
+            await self._send(cid, {"t": "error", "text": "请输入对话内容。"})
             return
         if not private and said.to not in ("", chat.EVERYONE) and not any(
             i.name == said.to and i.id in hearers for i in self.state.investigators
@@ -1226,11 +1318,11 @@ class Hub:
         for queue in self.inbox.values():
             while not queue.empty():
                 queue.get_nowait()
+        capacity = self.capacity()  # queued seats still count when their connection has gone
         early, self.early = self.early, []
-        players = self._players()
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
-            if seat in players:
-                (self.pool if self._may_add(seat) else self.early).append((seat, text))
+            (self.pool if self._acts(seat) and self._may_add(seat, capacity=capacity) else self.early).append((seat, text))
+        self._save_queued()
         self._start_window()  # said while the keeper told: the moment starts as the round opens
         await self._event({"type": "status", "text": ""})
         await self._pool()
@@ -1270,15 +1362,21 @@ class Hub:
         if saved is not None:
             # A saved collection window keeps its original declarations and time ledger.
             # New input belongs to the next window, rather than replacing unplayed work.
-            if self.pool != saved:
+            original = [tuple(pair) for pair in st.round_plan.get("input", [])]
+            if self.pool not in (saved, original):
                 self.early = [*self.pool, *self.early]
             self.pool = saved
         acted = {seat for seat, _ in self.pool}
-        order = [*self.pool, *[(inv.id, None) for inv in st.investigators
-                               if inv.id not in acted and inv.id not in self.done and self.sits.get(inv.id) is None]]
+        declared = {seat for seat, _ in self.early}
+        order = (saved if saved is not None else
+                 [*self.pool, *[(inv.id, None) for inv in st.investigators
+                                if inv.id not in acted | declared and inv.id not in self.done and self.sits.get(inv.id) is None]])
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
         settled = False
         try:
+            # arrange_party checkpoints its raw receipt before its first await, atomically
+            # moving this window out of the unstarted queue and into round_plan.
+            st.queued_actions = list(self.early)
             order = await self.game.arrange_party(order)
             await self._settle_round(order)
             if self.game.fighting() and not any(self._acts(seat) for seat, _ in order) and not st.ending:
@@ -1288,6 +1386,7 @@ class Hub:
             settled = True
         finally:
             self.game.end_round(interrupted=not settled)
+            self._save()
         if st.held and not st.ending:  # the round's last action was not told (it failed, or was let go): told now
             await self._safely(self._tell_held(), "这一轮的叙述")
 
@@ -1304,31 +1403,53 @@ class Hub:
     async def _settle_round(self, order: list[tuple[str, str | None]]) -> None:
         st = self.state
         for n, (seat, text) in enumerate(order, 1):
+            token = next((step["token"] for step in st.round_plan.get("steps", [])
+                          if step["token"] not in st.round_plan.get("done", [])
+                          and st.round_plan["input"][int(step["token"])] == [seat, text]), None)
             inv = next((i for i in st.investigators if i.id == seat), None)
             if st.ending:
                 return
             if inv is None or not inv.can_act:
+                if text is not None and inv is not None:
+                    self._remember_unstarted(seat, text, "当前调查员无法行动")
+                self.game.finish_party_declaration(seat, text, token=token)
+                self._save()
                 continue
-            self.game.holding = any(self._acts(later) for later, _ in order[n:])  # someone after: they tell it
             await self._plays()  # what was answered meanwhile goes in before the next action
+            place = self.game.world.place(seat)
+            readers = audience.scope(st, [seat, *self.game.world.observers(place)])
+            readers = sorted(readers) if readers is not None else None
+            if st.held and any(row["place"] != place or row["audience"] != readers for row in st.held):
+                await self._tell_held()  # close the old scene before changing the acting focus
             st.active = st.investigators.index(inv)
+            later = next((person for person, _ in order[n:] if self._acts(person)), None)
+            self.game.holding = later is not None and self.game.world.place(later) == place
             who = self.sits.get(seat)
             await self._broadcast({
                 "t": "turn", "investigator": seat, "name": inv.name, "player": self.names.get(who or "", ""),
                 "ai": text is None, "index": n, "total": len(order), "state": self._view(),
             })  # fmt: skip
             if text is None:
+                if any(owner == seat for owner, _ in self.early):
+                    # A declaration accepted after the collection window still belongs to
+                    # the human seat; reconnecting must not race an AI replacement.
+                    self.game.finish_party_declaration(seat, text, token=token)
+                    self._save()
+                    continue
                 try:
                     await self._ai_turn(inv)
                 except Exception as exc:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})
                     await self._unattended(inv, exc)
+                self.game.finish_party_declaration(seat, text, token=token)
+                self._save()
                 continue
             from ..engine.perception import input_label
 
             await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""),
-                               "text": input_label(self.game, inv.id, text)})
+                               "text": input_label(self.game, inv.id, text), "audience": [inv.id]})
+            original = text
             while True:
                 try:
                     await self._run(text, seat, ai=False)
@@ -1336,6 +1457,17 @@ class Hub:
                 except Exception as exc:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})  # nobody's screen keeps spinning
+                    if not st.pending_turn:
+                        # A refusal before route created its journal has nothing /retry can
+                        # resume. Retain the intention privately without locking the table.
+                        self._remember_unstarted(seat, original, str(exc))
+                        self.game.finish_party_declaration(seat, original, token=token)
+                        self._failed(f"{inv.name}的行动", exc)
+                        self._save()
+                        why = self.game._focus_blocked()
+                        await self._send(self.sits.get(seat) or "", {"t": "error",
+                            "text": "本次行动尚未执行，原声明已保留。" + why})
+                        break
                     who = self.sits.get(seat)
                     if who is None:  # they left meanwhile: the table finishes it without them
                         await self._unattended(inv, exc)
@@ -1354,6 +1486,16 @@ class Hub:
                     if text is None:  # they left while asked
                         await self._unattended(inv, exc)
                         break
+            self.game.finish_party_declaration(seat, original, token=token)
+            self._save()
+
+    def _remember_unstarted(self, seat: str, text: str, reason: str) -> None:
+        """Keep a refusal as its owner's unexecuted intention, with no retry journal."""
+        previous = self.state.unfinished.get(seat, {})
+        original = "\n".join(part for part in (previous.get("original", ""), text) if part)
+        remaining = "\n".join(part for part in (previous.get("remaining", ""), text) if part)
+        self.state.unfinished[seat] = {"original": original, "remaining": remaining,
+                                      "completed": previous.get("completed", []), "reason": reason}
 
     async def _unattended(self, inv: Any, exc: BaseException) -> None:
         """A turn that failed with nobody to /retry it (an AI seat, a player who left): the table
@@ -1371,6 +1513,9 @@ class Hub:
                 exc = again
         self._failed(f"{inv.name}的回合", exc)
         if self.state.pending_turn:
+            if (token := self.state.pending_turn.get("party_token")) is not None:
+                who, original = self.state.round_plan["input"][int(token)]
+                self.game.finish_party_declaration(who, original, token=token)
             self.state.pending_turn.clear()
             self._save()
             note = f"{inv.name}的回合未能完成，已结算的结果保留，游戏继续。"
@@ -1399,7 +1544,9 @@ class Hub:
         async with self.desk:  # each command runs as its own investigator
             st = self.state
             st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == seat)
-            await self._event({"type": "said", "who": st.investigator.name, "player": self.names.get(self.sits.get(seat) or "", ""), "text": text})
+            await self._event({"type": "said", "who": st.investigator.name,
+                               "player": self.names.get(self.sits.get(seat) or "", ""), "text": text,
+                               "audience": [seat]})
             await self._run(text, seat, ai=False)
 
     # -- telling again, and after the end ------------------------------------------------------
@@ -1408,8 +1555,11 @@ class Hub:
         loop, between actions, so it never runs beside a turn or an interlude; and it is that
         narration, the one on their screen when they asked, or none."""
         why = self.game.retell_blocked() or ("" if nudge in RETELL else f"可以这样要：{'、'.join(RETELL)}")
-        if self._seat_of(cid) is None:
+        seat = self._seat_of(cid)
+        if seat is None:
             await self._send(cid, {"t": "error", "text": "观战模式不支持请求重述。"})
+        elif self.game.told is not None and not audience.visible(self.game.told.entry, seat):
+            await self._send(cid, {"t": "error", "text": "当前没有可重述的已见叙述。"})
         elif why:
             await self._send(cid, {"t": "error", "text": why})
         elif self.over:
@@ -1538,10 +1688,14 @@ class Hub:
 
     async def _tell_again(self, cid: str, nudge: str, told: Told | None) -> None:
         why = "叙述已更新，请重新请求重述。" if self.game.told is not told else self.game.retell_blocked()
+        seat = self._seat_of(cid)
+        if seat is None or (told is not None and not audience.visible(told.entry, seat)):
+            why = "当前没有可重述的已见叙述。"
         if why:
             await self._send(cid, {"t": "error", "text": why})
             return
-        await self._event({"type": "retold", "who": self.names.get(cid, ""), "nudge": nudge})
+        scope = {"audience": told.entry.audience} if told is not None and told.entry.audience is not None else {}
+        await self._event({"type": "retold", "who": self.names.get(cid, ""), "nudge": nudge, **scope})
         self.game.emit = self._event
         try:
             await self.game.retell(nudge)
@@ -1580,7 +1734,8 @@ class Hub:
             return
         if move.react:  # its answer to blows from now on, as a seat's "react" sets it
             self.game.set_react(inv.id, move.react)
-        await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True})
+        await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True,
+                           "audience": [inv.id]})
         await self._run(move.text, inv.id, ai=True, push=move.push)
 
     async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:

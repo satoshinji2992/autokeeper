@@ -108,7 +108,7 @@ async def test_failure_time_note_uses_the_actual_capped_increment(module, fake):
     await game.close()
 
 
-async def test_failure_time_note_uses_only_the_increment_beyond_a_parallel_action(module, fake):
+async def test_failure_time_note_keeps_personal_duration_when_the_global_increment_is_smaller(module, fake):
     game, _, _ = make(module, fake, {}, location="tower")
     who = game.state.investigator.id
     companion = game.state.investigator.model_copy(deep=True, update={"id": "colleague", "name": "同伴"})
@@ -121,8 +121,8 @@ async def test_failure_time_note_uses_only_the_increment_beyond_a_parallel_actio
 
     assert game.state.minutes == before + 3
     assert game.state.round_elapsed[who] == 15
-    assert any("耽搁了 3 分钟" in note for note in turn.notes)
-    assert not any("耽搁了 15 分钟" in note for note in turn.notes)
+    assert any("耽搁了 15 分钟" in note for note in turn.notes)
+    assert turn.interval["start"] == before - 12 and turn.interval["end"] == before + 3
     await game.close()
 
 

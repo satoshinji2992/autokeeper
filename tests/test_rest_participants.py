@@ -99,15 +99,20 @@ async def test_last_combined_telling_uses_each_executed_rest_even_with_zero_glob
     game.begin_round()
     game.holding = True
     first_turn = await execute(game, 0, rest=True)
+    if remote:
+        cast.targets = [first.id]
     await game.narrate(first_turn)
-    assert first.conditions == ["临时疯狂"] and game.state.held[0]["rest"] == first_turn.rest
+    if remote:
+        assert first.conditions == [] and not game.state.held
+    else:
+        assert first.conditions == ["临时疯狂"] and game.state.held[0]["rest"] == first_turn.rest
     second_turn = await execute(game, 1, rest=second_rests)
     assert game.state.minutes == start + 480  # the second person's own 480 minutes overlap the first's
     if second_rests:
         assert second_turn.rest == {"who": second.id, "start": start, "end": start + 480, "interrupted": False}
     ctx = game._scene_context(second_turn)
-    assert ctx.elapsed == 0
-    expected = {first.id, second.id} if second_rests else {first.id}
+    assert ctx.elapsed == 480  # personal execution time; the shared clock need not advance again
+    expected = ({first.id} if not remote else set()) | ({second.id} if second_rests else set())
     assert set(ctx.rests) == expected
     if not second_rests:
         assert scene.plan(game.world, {"rested": [second.id]}, ctx).problems
@@ -185,7 +190,7 @@ async def test_saved_timing_receipt_does_not_repeat_parallel_effort_or_shift_the
 
 
 async def test_combined_rest_notification_resume_keeps_original_personal_recipients(fake):
-    game, cast, _ = made(fake, remote=True)
+    game, cast, _ = made(fake)
     start = game.state.minutes
     game.begin_round()
     game.holding = True

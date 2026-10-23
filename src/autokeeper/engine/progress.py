@@ -99,7 +99,9 @@ def material(m: Module, st: GameState) -> str:
     parts.append("【这之后发生的事】\n" + ("\n".join(rows) or "（没有新的事）"))
     differing = {target for masks in st.perceptions.values() for target in masks}
     party = "、".join(f"{i.name}（{i.occupation}）" for i in st.investigators if i.id not in differing) or "调查员们"
-    parts.append(f"【现在】{st.clock}，{m.location(st.location).name}；调查员：{party}")
+    places = {audience.location(st, investigator.id) for investigator in st.investigators}
+    where = m.location(st.location).name if len(places) == 1 else "调查员正在分头行动"
+    parts.append(f"【现在】{st.clock}，{where}；调查员：{party}")
     parts.append(f"把新发生的事并进去，写一段完整的「故事至今」，不超过 {LIMIT} 字。")
     return "\n\n".join(parts)
 

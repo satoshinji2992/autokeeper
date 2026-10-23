@@ -76,10 +76,19 @@ def test_discovery_requires_evidence_and_reveals_only_to_actual_participants():
     assert not w.apply(O.Equip(item="pistol", reveal=True)).ok
     assert w.apply(O.Equip(item="pistol", reveal=True, evidence="调查员搜查衣物夹层后发现一把旧手枪。",
                            visibility="private")).ok
-    assert knowledge.item_known(w, "pistol", PLAYERS)
+    assert knowledge.item_known(w, "pistol", "warden")
+    assert not knowledge.item_known(w, "pistol", PLAYERS)
     assert not knowledge.item_known(w, "pistol", "preacher")
     assert w.rec.events[-1].visibility == "private"
     assert w.entity("pistol").equipment == "concealed"  # discovery does not alter physical possession
+    remote = w.st.investigator.model_copy(update={"id": "remote", "name": "异地同伴"}, deep=True)
+    w.st.investigators.append(remote)
+    w.st.apart[remote.id] = "office"
+    w.sync()
+    # Public disclosure permits actual scene observers; it does not notify the distant party member.
+    assert w.apply(O.Equip(item="pistol", reveal=True, evidence="夹层中的旧手枪已向现场展示。", visibility="public")).ok
+    assert knowledge.item_known(w, "pistol", w.st.investigator.id)
+    assert not knowledge.item_known(w, "pistol", remote.id) and not knowledge.item_known(w, "pistol", PLAYERS)
     w.st.location = "office"
     assert not w.apply(O.Equip(item="pistol", reveal=True, evidence="远处出现了一把手枪。")).ok
 

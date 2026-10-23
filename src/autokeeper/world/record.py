@@ -73,7 +73,7 @@ class Entity(Versioned):
     equipment: Literal["carried", "worn", "held", "concealed"] = "carried"
     quantity: int = Field(1, ge=0)
     hidden: bool = False
-    observed_by: list[str] = Field(default_factory=list)  # who confirmed this item's current ownership/equipment state
+    observed_by: list[str] = Field(default_factory=list)  # witnessed location visits, or known item ownership/equipment
     look: str = ""  # an everyday thing's one line of how it looks (ops.Bring)
     life: Life | None = None  # an NPC's or a creature's body, once a fight has seeded it; None before
     weapon: WeaponState | None = None  # an item that is a weapon, once it was used in a fight
@@ -215,13 +215,14 @@ class Event(BaseModel):
     participants: list[str] = Field(default_factory=list)
     place: str = ""
     text: str
-    visibility: Literal["public", "private"] = "private"  # public: witnessed by the investigators at emission time
+    visibility: Literal["public", "private"] = "private"  # public: the entire party actually witnessed it
     witnesses: list[str] = Field(default_factory=list)  # actors, including investigator seats, who saw it then
     facts: list[str] = Field(default_factory=list)
     trace: str = ""  # what can still be noticed at the place afterwards
     op: str = ""
     version: int = 1
     reactive: bool = True  # ordinary greeting-only exchanges remain memories without waking autonomous decisions
+    motions: dict[str, dict[str, str | int]] = Field(default_factory=dict)  # host-recorded actual travel intervals
 
 
 class Scheduled(BaseModel):

@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -92,10 +94,18 @@ class World:
         self.checker = checker  # optional synchronous extension hook; ordinary play has no model approval
         self.reviewing = False  # a screen has the director look backstage after a long stretch of time (Game._look)
         self.clock: int | None = None  # game minutes ops happen at, while the scheduler runs a time skip
+        self.motion_start: int | None = None  # host-owned departure time for a committed move
         if initialize:
+            beginning = not self.rec.seeded
             if self.rec.simulated is None:  # a new game: the world starts with the story
                 self.rec.simulated = st.minutes
             self.sync()
+            if beginning:
+                for place in dict.fromkeys(self.place(i.id) for i in st.investigators):
+                    # Establish the starting location without inventing an observation
+                    # of every NPC already marked met. Actual sightings need an event.
+                    if ent := self.rec.entities.get(place):
+                        ent.observed_by = list(dict.fromkeys([*ent.observed_by, *self.observers(place)]))
 
     # -- basics ------------------------------------------------------------------------------
     @property
@@ -105,6 +115,17 @@ class World:
     @property
     def now(self) -> int:
         return self.st.minutes if self.clock is None else self.clock
+
+    @contextmanager
+    def at(self, when: int | None, *, start: int | None = None) -> Iterator[None]:
+        """Settle one host-timed operation without moving the world's furthest clock."""
+        previous = self.clock, self.motion_start
+        if when is not None:
+            self.clock, self.motion_start = when, start
+        try:
+            yield
+        finally:
+            self.clock, self.motion_start = previous
 
     def sync(self) -> list[str]:
         """Seed module objects new to the record and mark what reached the table."""
@@ -133,20 +154,44 @@ class World:
             return self.place(e.at)
         return e.id if e.kind == "location" else e.at
 
-    def present(self, place: str) -> list[str]:
-        """NPCs at a place, alive and not gone missing."""
-        return [e.id for e in self.rec.entities.values() if e.kind == "npc" and e.at == place and e.status not in ("死亡", "失踪")]
+    def place_at(self, ident: str, when: int) -> str:
+        """Project actual committed travel; a person in transit is at neither endpoint."""
+        motions = [event.motions[ident] for event in self.rec.events if ident in event.motions]
+        motions.sort(key=lambda row: (int(row["start"]), int(row["end"])))
+        if not motions:
+            return self.place(ident)
+        place = str(motions[0]["origin"])
+        for row in motions:
+            if when < int(row["start"]):
+                break
+            if when < int(row["end"]):
+                return ""
+            place = str(row["destination"])
+        return place
 
-    def observers(self, place: str) -> list[str]:
+    def available_at(self, ident: str) -> int | None:
+        """Latest committed participation; earlier parallel work cannot reuse that person."""
+        return max((event.t for event in self.rec.events
+                    if ident in event.participants or ident == event.actor or ident in event.motions), default=None)
+
+    def present(self, place: str, *, at: int | None = None) -> list[str]:
+        """NPCs at a place, alive and not gone missing."""
+        return [e.id for e in self.rec.entities.values() if e.kind == "npc"
+                and (e.at if at is None else self.place_at(e.id, at)) == place and e.status not in ("死亡", "失踪")]
+
+    def observers(self, place: str, *, at: int | None = None) -> list[str]:
         """Seats physically able to see a public occurrence here, frozen when it happens."""
-        return [i.id for i in self.st.investigators if self.st.apart.get(i.id, self.st.location) == place
+        when = self.now if at is None else at
+        return [i.id for i in self.st.investigators if self.place_at(i.id, when) == place
                 and not {"死亡", "昏迷"}.intersection(i.conditions)]
 
     def observe(self, place: str, witnesses: list[str], event: str, *, leaving: str = "") -> None:
         """Keep the latest sourced personal sighting; private moves do not call this for bystanders."""
-        for who in self.observers(place):
-            if who not in witnesses:
-                continue
+        actual = [who for who in self.observers(place) if who in witnesses]
+        location = self.rec.entities.get(place)
+        if location is not None and location.kind == "location":
+            location.observed_by = list(dict.fromkeys([*location.observed_by, *actual]))
+        for who in actual:
             masked = self.st.perceptions.get(who, {})
             people = [*self.present(place), *([leaving] if leaving else [])]
             for npc in dict.fromkeys(people):
@@ -188,25 +233,31 @@ class World:
     # -- what ops call ---------------------------------------------------------------------
     def emit(self, kind: str, text: str, *, actor: str = ENGINE, participants: list[str] | None = None, place: str = "",
              visibility: str = "auto", witnesses: list[str] | None = None, facts: list[str] | None = None,
-             trace: str = "", op: str = "", reactive: bool = True, verbatim: bool = False) -> Event:  # fmt: skip
+             trace: str = "", op: str = "", reactive: bool = True, verbatim: bool = False,
+             motions: dict[str, dict[str, str | int]] | None = None) -> Event:  # fmt: skip
         """Log an event. auto: public where the party is, private elsewhere. NPCs at the place see
         it; important NPCs keep it as a memory, and every witness learns the facts it carries."""
         rec = self.rec
         place = place or self.place(actor)
         people = list(dict.fromkeys(x for x in [actor, *(participants or [])] if x and x != ENGINE))
-        # A public event elsewhere is visible to people there, not an omniscient cutaway
-        # for the players. Only events in their scene reach the table.
-        public = visibility != "private" and place == self.st.location and place != ""
         npcs = [p for p in people if (x := rec.entities.get(p)) is not None and x.kind == "npc"]
-        around = [] if visibility == "private" else self.present(place)  # covert: only who took part or was named
+        around = [] if visibility == "private" else self.present(place, at=self.now)
         local = self.observers(place)
+        if motions:
+            moving = set(motions)
+            local = [who for who in local if who not in moving]
+            local += [i.id for i in self.st.investigators if i.id in moving
+                      and int(motions[i.id]["end"]) <= self.now and motions[i.id]["destination"] == place
+                      and not {"死亡", "昏迷"}.intersection(i.conditions)]
         pc = [x for x in local if visibility != "private" or x in people or x in (witnesses or [])]
+        public = visibility != "private" and bool(place) and {i.id for i in self.st.investigators} <= set(pc)
         seeing = list(dict.fromkeys([*npcs, *around, *(witnesses or []), *pc]))
         base = f"ev:{op or rec.seq}"
         n = sum(1 for x in rec.events[-8:] if x.id.split("#")[0] == base)
         e = Event(id=base if not n else f"{base}#{n + 1}", seq=rec.seq, t=self.now, turn=self.st.turn, kind=kind, actor=actor,
                   participants=people, place=place, text=text if verbatim else text[:300], visibility="public" if public else "private",
-                  witnesses=seeing, facts=list(facts or []), trace=trace[:120], op=op, reactive=reactive)  # fmt: skip
+                  witnesses=seeing, facts=list(facts or []), trace=trace[:120], op=op, reactive=reactive,
+                  motions=motions or {})  # fmt: skip
         rec.events.append(e)
         del rec.events[:-EVENTS_KEEP]
         self.observe(place, pc, e.id)
@@ -247,12 +298,28 @@ class World:
         if problems:
             return Result(False, oid, problems)
         before = self.domain()
+        places = {e.id: self.place(e.id) for e in self.rec.entities.values() if e.kind in ("npc", "creature")}
+        places.update({i.id: self.place(i.id) for i in self.st.investigators})
         self.rec.seq += 1
         try:
             event, data = op.settle(self, oid)
         except Exception as exc:  # an op lands whole or not at all
             self.load(before)
             return Result(False, oid, [f"结算失败：{type(exc).__name__}: {str(exc)[:200]}"])
+        moved = {who: {"origin": origin, "destination": self.place(who),
+                       "start": self.now if self.motion_start is None else self.motion_start, "end": self.now}
+                 for who, origin in places.items() if origin != self.place(who)}
+        moved.update({e.id: {"origin": "", "destination": e.at, "start": self.now, "end": self.now}
+                      for e in self.rec.entities.values() if e.kind in ("npc", "creature") and e.id not in places and e.at})
+        if moved:
+            if event is None:
+                text = "；".join(f"{self.name(who)}从{self.name(str(row['origin']))}去了{self.name(str(row['destination']))}"
+                                for who, row in moved.items())
+                event = self.emit("move", text, actor=op.actor, participants=list(moved),
+                                  place=str(next(iter(moved.values()))["destination"]), visibility=op.visibility,
+                                  op=oid, motions=moved)
+            else:
+                event.motions.update(moved)
         after = self.domain()
         entry = Entry(id=oid, seq=self.rec.seq, kind=op.kind, digest=dig, turn=self.st.turn, t=self.now, actor=op.actor,
                       summary=(event.text if event else op.kind)[:200], public=bool(event and event.visibility == "public"),

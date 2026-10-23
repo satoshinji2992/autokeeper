@@ -124,6 +124,10 @@ def options(game: Any, who: str, ctx: Ctx | None = None) -> list[ChoiceOption]:
     add(DeclaredAction(do="defend", summary="-"), "防守", "本轮不出手")
     if not ctx.held_by(who):
         add(DeclaredAction(do="flee", to="away", summary="-"), "逃跑", "离开战斗")
+    else:
+        holder = ctx.held_by(who)
+        add(DeclaredAction(do="maneuver", maneuver="脱离", attacks=[AttackPick(target=holder)], summary="-"),
+            "挣脱压制", f"格斗(斗殴) {v.skill('格斗(斗殴)')} · 被制住，承受惩罚骰")
     return out
 
 
@@ -271,14 +275,26 @@ def attack_kind(opt) -> str:
 
 def reaction_options(ctx: Ctx, defender: str, kind: str, *, maneuver: bool = False) -> list[str]:
     """What `defender` may answer this attack with (melee: dodge or fight back; a shot: dive for
-    cover; a throw: dodge), none when they cannot answer (surprised, held, out cold)."""
+    cover; a throw: dodge), none when they cannot answer (surprised or out cold). Held people
+    can still fight back or dodge, with the penalty settled on their roll (pp. 93–94)."""
     p, v = ctx.p(defender), ctx.view(defender)
-    if p is None or v is None or p.surprised or not ctx.acting(defender) or ctx.held_by(defender):
+    if p is None or v is None or p.surprised or not ctx.acting(defender):
         return ["none"]
     out = [r for r in reactions_against(kind) if r != "maneuver"]  # type: ignore[arg-type]
     if v.kind == "creature" and "fight_back" in out and actions.best_melee(v) is None:
         out.remove("fight_back")
     return out
+
+
+def reaction_reason(ctx: Ctx, defender: str) -> str:
+    p = ctx.p(defender)
+    if p is None or ctx.view(defender) is None:
+        return "不在现场，无法应对"
+    if p.surprised:
+        return "遭到突袭，无法闪避或反击"
+    if not ctx.acting(defender):
+        return "失去行动能力，无法应对"
+    return ""
 
 
 def reaction_note(ctx: Ctx, defender: str, reaction: str) -> str:

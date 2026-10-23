@@ -156,8 +156,11 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)  # hers are in first
         await a.send_json({"t": "act", "text": "我看看告示栏"})  # three in: the keeper settles it
         await until(b, lambda x: x["t"] == "pool" and not x["open"])
-        said =[(m["ev"]["who"], m["ev"]["text"]) for m in [await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said") for _ in range(3)]]
-        assert said == [("林秋", "我抢着先说"), ("林秋", "我改主意了，翻翻报纸"), ("周衡", "我看看告示栏")]  # as they came in
+        mine = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
+        assert mine["ev"]["who"] == "周衡" and mine["ev"]["text"] == "我看看告示栏"
+        said = [(m["ev"]["who"], m["ev"]["text"]) for m in
+                [await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "said") for _ in range(2)]]
+        assert said == [("林秋", "我抢着先说"), ("林秋", "我改主意了，翻翻报纸")]  # each receives their own original declarations
         await until(a, pool_open)  # told: the next round
 
         await a.send_json({"t": "say", "text": "（场外）我去倒杯水"})
@@ -168,9 +171,9 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await a.send_json({"t": "act", "text": "我四下看看"})
         assert (await until(a, lambda x: x["t"] == "pool" and x["count"] == 1))["capacity"] == 2  # alone: two
         await a.send_json({"t": "done"})  # one is enough this time
-        ai = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said" and bool(x["ev"].get("ai")))
-        assert ai["ev"]["who"] == "林秋" and cast.ai_turns == ["lin"]
+        await until(a, lambda x: x["t"] == "pool" and not x["open"])
         await until(a, pool_open)
+        assert cast.ai_turns == ["lin"]  # the AI acted; its private declaration is not a public telling
         await a.close()
     await closed(task)
     assert paths.save("lan-test").exists()  # the host saves after every turn
@@ -249,7 +252,7 @@ async def test_what_is_said_while_the_keeper_tells_goes_in_first_next_round(monk
         await a.send_json({"t": "act", "text": "我看看告示栏"})
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})  # nothing from her this round
-        await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")  # the keeper is telling
+        await until(b, lambda x: x["t"] == "turn" and x["investigator"] == "zhouheng")  # his turn is settling
         await b.send_json({"t": "act", "text": "等等，我拉住他"})
         await b.send_json({"t": "act", "text": "我喊他名字"})
         held = await until(b, lambda x: x["t"] == "pool" and len(x["mine"]["next"]) == 2)
@@ -531,9 +534,9 @@ async def test_a_lan_view_holds_no_keeper_report_true_name_or_unfound_ids(fake):
         assert secret not in text, secret
     assert view["pending_push"] == {k: v for k, v in st.pending_push.items() if k in
                                     ("skill", "target", "need", "difficulty", "bonus", "can_push", "luck", "left", "risk", "value", "action")}
-    assert "held" not in view and "signs" not in view and view["npcs"]["warden"]["unlocked"] == []
+    assert "held" not in view and "signs" not in view and view["npcs"].get("warden", {}).get("unlocked", []) == []
     st.clues.append("c_diary")
-    assert hub._view()["npcs"]["warden"]["unlocked"] == ["c_diary"]  # found: the table knows it
+    assert hub._view()["npcs"].get("warden", {}).get("unlocked", []) == []  # a global clue id is not a personal delivery
     await hub.game.close()
 
 

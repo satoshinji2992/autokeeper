@@ -42,7 +42,7 @@ STAKE_ATOMS = {
     "ended": "ended:方式 遭遇这样结束（won lost fled escaped caught parley surrender dispersed）",
 }
 
-_REACT = "挨打时怎么应对：dodge 闪避，fight_back 反击（只对近战），cover 扑向掩体（只对开枪），none 不应对"
+_REACT = "应对：dodge闪避，fight_back近战反击，cover射击扑掩体，none不应对"
 
 
 class AttackPick(BaseModel):
@@ -62,12 +62,11 @@ class Thing(BaseModel):
 
 class DeclaredAction(BaseModel):
     do: ActionDo = Field(description=(
-        "做什么：attack 近战，shoot 开枪或投掷，maneuver 战技，aim 瞄准（下一枪得奖励骰），aid 急救救人，reload 装弹，unjam 排除卡壳，ready 拿出武器，"
-        "defend 只防守，flee 逃跑，pursue 追赶，move 追逐中跑一段，cross 过障碍，hide 躲藏（潜行，藏好了对手看不见），barrier 设路障，"
-        "help 帮同伴（他下一次检定得奖励骰），speak 喊话，surrender 投降，stand 站住迎战，use 用一样东西，other 别的（交给裁定）"))
+        "attack近战，shoot射击/投掷，maneuver战技，aim瞄准，aid急救，reload装弹，unjam排卡壳，ready取武器，defend防守，"
+        "flee逃跑，pursue追赶，move跑动，cross过障碍，hide潜行，barrier路障，help协助，speak喊话，surrender投降，stand迎战，use用物品，other交裁定"))
     attacks: list[AttackPick] = Field(default_factory=list, max_length=4, description=(
-        "attack、shoot、maneuver 才写：每次攻击一条，一轮攻击几次的怪物写几条；别的行动留空"))
-    maneuver: Literal["", "缴械", "推倒", "制住", "夺取"] = Field("", description="maneuver 时是哪一种")
+        "attack/shoot/maneuver每次攻击一条；其他留空"))
+    maneuver: Literal["", "缴械", "推倒", "制住", "夺取", "脱离"] = Field("", description="战技种类；脱离以压制者为对象")
     target: str = Field("", description=(
         "aid、help、speak、surrender、pursue 的对象 id；use、ready、reload、unjam 的物品 id；cross 的障碍 id；没有留空"))
     to: str = Field("", description="move、flee 往哪去：节点 id，或 away 表示离开现场")
@@ -77,20 +76,26 @@ class DeclaredAction(BaseModel):
     react: Literal["", "dodge", "fight_back", "cover", "none"] = Field("", description=_REACT + "；留空照旧")
     takes: list[Thing] = Field(default_factory=list, max_length=2, description="动手前先拿起的日常物件（屋里的拨火棍）；没有留空")
     speech: str = Field("", max_length=80, description="同时说的话；不说话留空")
-    summary: str = Field(max_length=80, description="中立的一句话：谁对谁做什么；不照抄玩家原话")
+    goal: str = Field("", max_length=80, description="实际目标；纯台词留空")
+    summary: str = Field(max_length=80, description="中立概述谁对谁做什么")
+
+    @property
+    def needs_ruling(self) -> bool:
+        return self.do in ("other", "use") or (self.do == "speak" and bool(self.goal.strip()))
 
 
 class NpcArrangement(BaseModel):
     who: str = Field(description="NPC 或怪物 id")
-    goal: str = Field(max_length=40, description="他在这场里要什么，几个字：护书撤退、夺回钥匙、救同伴、拖延时间")
+    goal: str = Field(max_length=40, description="此刻目标，如护书撤退、救同伴")
     side: Literal["", "party", "foe", "neutral"] = Field("", description="站哪边：party 帮调查员，foe 对手，neutral 不掺和；不变留空")
-    actions: list[DeclaredAction] = Field(min_length=1, max_length=3, description="想做的行动，按优先排；轮到他时第一条做得到的落实")
+    actions: list[DeclaredAction] = Field(min_length=1, max_length=3, description="按优先顺序，落实首条可做的行动")
     react: Reaction = Field(description=_REACT)
-    say: str = Field("", max_length=24, description="动手时喊的一句；不说话留空")
-    speak: bool = Field(False, description="这一轮要他本人开口说一段话时填 true")
+    say: str = Field("", max_length=24, description="动手时的台词，可空")
+    speak: bool = Field(False, description="本轮需本人说话")
     # Explicit both ways: a fleeing investigator nobody wrote down stops the round for a decision.
-    pursue: list[str] = Field(default_factory=list, description="有调查员逃跑时，他追谁（id）")
-    let_go: list[str] = Field(default_factory=list, description="有调查员逃跑时，他放走谁、不追（id）")
+    pursue: list[str] = Field(default_factory=list, description="追赶的逃跑者id")
+    let_go: list[str] = Field(default_factory=list, description="不追的逃跑者id")
+    release: list[str] = Field(default_factory=list, description="此刻自愿松开自己压制的人id；不提前兑现需检定的承诺")
     keep: bool = Field(True, description="情况没大变就沿用到下一轮")
     # An important NPC's Luck pool (Keeper Rulebook p. 168, optional): the keeper may spend it on its
     # own failed rolls this round, up to this many points; the engine settles it.

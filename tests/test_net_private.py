@@ -99,6 +99,27 @@ async def test_addressing_someone_normally_is_not_a_whisper(private_hub):
     assert "channel" not in messages[0][1]["ev"]
 
 
+async def test_explicit_rp_accepts_natural_speech_without_reclassifying_it_as_an_action(private_hub):
+    hub, messages = private_hub
+    hub.state.apart["chen"] = "tower"
+    hub.state.record.entities["chen"].at = "tower"
+    text = "林秋，我们先在这里等一会儿，你听见刚才的声音了吗？"
+    before = hub.state.minutes
+    await hub._on("a", {"t": "speak", "text": text})
+    assert [cid for cid, _ in messages] == ["a", "b"]
+    assert all(msg["t"] == "event" and msg["ev"]["type"] == "speech" for _, msg in messages)
+    assert messages[0][1]["ev"]["text"] == text
+    assert hub.state.log[-1].audience == ["zhouheng", "lin"]
+    assert hub.state.minutes == before and not hub.pool and not hub.early and not hub.state.checks
+
+
+async def test_empty_explicit_rp_does_not_record_an_action_or_speech(private_hub):
+    hub, messages = private_hub
+    await hub._on("a", {"t": "speak", "text": "   "})
+    assert messages == [("a", {"t": "error", "text": "请输入对话内容。"})]
+    assert not hub.state.log and not hub.pool
+
+
 async def test_table_chat_remains_out_of_character_and_unrecorded(private_hub):
     hub, messages = private_hub
     await hub._on("watch", {"t": "say", "text": "稍等一分钟。"})

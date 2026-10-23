@@ -167,7 +167,9 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
     monkeypatch.setenv("AUTOKEEPER_GUEST", "1")  # a friend's seat, though on this machine
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
-    friend = lead.model_copy(update={"id": "lin", "name": "林秋", "occupation": "医生", "age": 41, "backstory": {"说明": "AutoKeeper 补充", "个人描述": "AutoKeeper 补充：总揣着一只听诊器"}}, deep=True)
+    friend = lead.model_copy(update={"id": "lin", "name": "林秋", "occupation": "医生", "age": 41,
+                                     "backstory": {"说明": "AutoKeeper 补充", "个人描述": "AutoKeeper 补充：总揣着一只听诊器",
+                                                   "秘密": "不愿公开的旧案"}, "inventory": ["诊疗手提箱"]}, deep=True)
     state = Game.new(m, [lead, friend], slot="lan-lobby", human=[lead.id, "lin"])
     hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
     hub.room.update(addresses=[["192.168.1.5", "局域网"], ["26.1.2.3", "Radmin VPN"]], port=8765, web=8000)
@@ -203,15 +205,24 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
         await pilot.pause(0.2)
         assert "人物卡 · 林秋" in str(lobby.query_one("#lobby-card").border_title)
         line = shown(lobby, "#lobby-investigator")
-        assert "林秋" in line and "医生 · 41 岁" in line and "总揣着一只听诊器" in shown(lobby, "#lobby-sheet")
+        assert "林秋" in line and "医生 · 41 岁" in line
+        public = shown(lobby, "#lobby-sheet")
+        assert all(private not in public for private in ("总揣着一只听诊器", "不愿公开的旧案", "诊疗手提箱"))
+        assert not lobby.state.find("lin").backstory and not lobby.state.find("lin").inventory
         await pilot.press("c")
         await pilot.pause(0.2)
         assert isinstance(app.screen, SheetModal) and app.screen.party[app.screen.at].id == "lin"
+        assert not app.screen.party[app.screen.at].backstory and not app.screen.party[app.screen.at].inventory
         await pilot.press("escape")
         await pilot.press("enter")  # sits in 林秋's seat
         seats = await asyncio.wait_for(_seated(lobby, "lin"), 5)
         assert seats["player"] == "小红" and seats["online"]
         assert "小红（你）" in shown(lobby, "#seats")
+        own = lobby.state.find("lin")
+        assert own.backstory == friend.backstory and own.inventory == friend.inventory
+        private = shown(lobby, "#lobby-sheet")
+        assert all(detail in private for detail in ("总揣着一只听诊器", "不愿公开的旧案", "诊疗手提箱"))
+        assert not lobby.m.truth and not lobby.m.keeper_notes
         await pilot.press("escape")  # 离开: a browser's seat has no title screen to go back to
         await pilot.pause(0.3)
         assert app.return_code == 0
@@ -221,7 +232,7 @@ async def test_the_lobby_shows_the_table_and_never_the_book(monkeypatch, tmp_pat
 async def _seated(lobby, seat: str) -> dict[str, Any]:
     while True:
         found = next((s for s in lobby.seats if s["investigator"] == seat), None)
-        if found and found["online"]:
+        if found and found["online"] and lobby.chosen == seat:
             return found
         await asyncio.sleep(0.05)
 

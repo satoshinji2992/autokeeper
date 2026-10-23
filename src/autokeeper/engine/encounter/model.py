@@ -164,6 +164,7 @@ class ReactionReceipt(BaseModel):
     chosen: Reaction | None = None
     by: Literal["preset", "player", "keeper", "rule"] = "preset"
     asked: bool = False
+    reason: str = ""  # why this answer was available/chosen; preserves surprise before round_end clears it
 
 
 class ActionReceipt(BaseModel):

@@ -380,6 +380,15 @@ def keeper_text(game: Any, **kw) -> str:
     from .. import perception
 
     text = encounter_brief(brief(game, **kw))
+    enc = kw.get("enc") or game.state.encounter
+    if enc is not None:
+        declared = [f"{r.actor}：{r.declared.summary}" + (f"；目标：{r.declared.goal}" if r.declared.goal else "")
+                    + f"（{r.phase}）" for r in enc.receipts if r.phase in ("declared", "awaiting_reaction")]
+        edges = [f"{p.id}：{e.dice:+d}骰，{e.why}" for p in enc.participants for e in p.edges]
+        if declared:
+            text += "\n【已声明、尚未结算的行动】\n" + "\n".join(declared)
+        if edges:
+            text += "\n【尚未使用的协助与调整】\n" + "\n".join(edges)
     if game.state.perceptions:
         text += "\n【主持专用：个人知觉与真实对象，不公开对应关系】\n" + perception.brief(game.state)
     left = apart(game.state, game.world.name)  # not in it: elsewhere, as they were left (GameState.apart)
@@ -390,6 +399,21 @@ __all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "na
 
 
 # -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------
+def observers(game: Any, enc: EncounterState | None = None) -> list[str]:
+    """Investigators still physically at this encounter, including people watching nearby."""
+    enc = enc or game.state.encounter
+    if enc is None:
+        return []
+    out = []
+    for inv in game.state.investigators:
+        participant = enc.get(inv.id)
+        if participant is not None and participant.presence in ("fled", "escaped", "left"):
+            continue
+        if (enc.mode == "chase" and participant is not None and participant.presence == "in") or game.world.place(inv.id) == enc.place:
+            out.append(inv.id)
+    return out
+
+
 def table(game: Any, *, viewer: str | None = None) -> dict | None:
     """The fight or the chase going on as the players' screens hold it, or None outside one: each
     acting investigator's choices for this round in the words the engine matches (`choices`), and in
@@ -401,7 +425,7 @@ def table(game: Any, *, viewer: str | None = None) -> dict | None:
 
     st = game.state
     enc = st.encounter
-    if enc is None or enc.phase == "ended":
+    if enc is None or enc.phase == "ended" or (viewer or st.investigator.id) not in observers(game, enc):
         return None
     ctx = Ctx.of(game, enc)
     chase = enc.mode == "chase" and enc.chase is not None

@@ -146,6 +146,7 @@ class Showcases:
         self.task: asyncio.Task | None = None
         self.tried: set[str] = set()  # prepared in this session, or found impossible
         self.waiting = ""  # the opening, while its picture is still on its way and nobody has acted
+        self.waiting_audience: list[str] | None = None
 
     def on(self) -> bool:
         return self.cfg is not None and getattr(self.cfg, "showcase", True)
@@ -192,9 +193,9 @@ class Showcases:
             if self.waiting == sc.id and self.state.turn == 0 and (path := self.picture(sc)):
                 self.waiting = ""
                 self.state.shown.append(sc.id)
-                await self._show(sc, path)  # the opening, still before anyone has acted
+                await self._show(sc, path, audience=self.waiting_audience)
 
-    async def fire(self, trigger: str) -> None:
+    async def fire(self, trigger: str, *, audience: list[str] | None = None) -> None:
         """The moment of the big scenes `trigger` names: shown if the picture is ready, and
         over either way. The opening waits for its picture until someone acts."""
         for sc in self.module.showcases:
@@ -203,12 +204,13 @@ class Showcases:
             path = self.picture(sc) if self.on() else ""
             if not path and trigger == "opening" and self.on():
                 self.waiting = sc.id
+                self.waiting_audience = audience
                 continue
             self.state.shown.append(sc.id)
             if path:
-                await self._show(sc, path)
+                await self._show(sc, path, audience=audience)
 
-    async def named(self, text: str) -> None:
+    async def named(self, text: str, *, audience: list[str] | None = None) -> None:
         """A creature that first comes up in what the players read: by its name, or by what they call
         it before they know it (Creature.called), since the keeper tells a horror by what is seen of it."""
         for sc in self.module.showcases:
@@ -217,7 +219,7 @@ class Showcases:
                 continue
             creature = next((c for c in self.module.creatures if c.id == ident), None)
             if creature is not None and any(word and word in text for word in (creature.name, creature.called.strip())):
-                await self.fire(sc.when)
+                await self.fire(sc.when, audience=audience)
 
     def settle(self) -> None:
         """Someone has acted: the opening's moment is over, picture or not."""
@@ -225,8 +227,9 @@ class Showcases:
             self.state.shown.append(self.waiting)
         self.waiting = ""
 
-    async def _show(self, sc: Showcase, path: str) -> None:
-        await self.emit({"type": "showcase", "id": sc.id, "kind": sc.kind, "title": sc.title, "picture": path})
+    async def _show(self, sc: Showcase, path: str, *, audience: list[str] | None = None) -> None:
+        scope = {"audience": audience} if audience is not None else {}
+        await self.emit({"type": "showcase", "id": sc.id, "kind": sc.kind, "title": sc.title, "picture": path, **scope})
 
     async def close(self) -> None:
         if self.task is not None:

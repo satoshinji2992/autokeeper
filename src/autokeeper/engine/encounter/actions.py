@@ -298,6 +298,8 @@ def preconditions(ctx: Ctx, actor: str, d: DeclaredAction, *, takes: list[str] |
             return [Lack(f"{actor} 的 {d.do} 没写 attacks（打谁）", "没说打谁")]
         if d.do == "maneuver" and not d.maneuver:
             out.append(Lack(f"{actor} 的战技没写是哪一种（maneuver）", "没说用哪一种战技"))
+        if d.do == "maneuver" and d.maneuver == "脱离" and not any(p.target == held for p in d.attacks):
+            out.append(Lack(f"{actor} 的脱离战技必须以当前压制者为对象", "当前没有对方的束缚可以挣脱"))
         if len(d.attacks) > max(1, v.attacks_per_round()):
             out.append(Lack(f"{actor} 每轮只有 {v.attacks_per_round()} 次攻击", f"{me}一轮只能攻击 {v.attacks_per_round()} 次"))
         for pick in d.attacks:
