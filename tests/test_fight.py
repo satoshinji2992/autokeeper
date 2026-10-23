@@ -1023,11 +1023,14 @@ async def test_a_blow_aimed_at_the_player_is_asked_in_a_window_and_escape_keeps_
 
 
 @pytest.mark.usefixtures("canned")
-async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_when_told_and_counts_down(module, fake):
+async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_when_told_and_counts_down(module, fake, monkeypatch):
+    from types import SimpleNamespace
+
     from textual.widgets import Checkbox, Static
 
     from autokeeper import config
     from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals import dialogs
     from autokeeper.tui.modals.reaction import ChoiceModal
 
     from .test_tui import until
@@ -1036,20 +1039,23 @@ async def test_the_reaction_window_says_what_each_answer_rolls_asks_every_time_w
              "prompt": "楼梯口打盹的老人向你扑来，你怎么应对？", "default": "dodge",
              "options": [{"id": "dodge", "label": "闪避", "note": "闪避 32 · 成功等级不低于对方即躲开"},
                          {"id": "fight_back", "label": "反击", "note": "格斗(斗殴) 25 · 成功等级高于对方即打中对方"}]}
+    now = 0.0
+    monkeypatch.setattr(dialogs, "time", SimpleNamespace(monotonic=lambda: now))
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(120, 40)) as pilot:
         answers: list = []
-        app.push_screen(ChoiceModal(offer), answers.append)
-        await pilot.pause(0.2)
+        await app.push_screen(ChoiceModal(offer), answers.append)
         assert "闪避 32" in "".join(str(w.render()) for w in app.screen.query(Static))
         app.screen.query_one(Checkbox).value = True  # 每次被攻击都询问
         await pilot.click("#o1")
         assert await until(pilot, lambda: answers == [{"choice": "fight_back", "text": "", "ask": "always"}])
         assert config.ui_settings()["ask_every_blow"] is True  # kept in 设置 too
         timed = {**offer, "ask": "always", "closes_in": 0.6}
-        app.push_screen(ChoiceModal(timed), answers.append)
-        await pilot.pause(0.2)
-        assert "超时按原定" in "".join(str(w.render()) for w in app.screen.query(Static))
+        window = ChoiceModal(timed)
+        await app.push_screen(window, answers.append)
+        assert app.screen is window and window.is_mounted
+        assert "超时按原定" in "".join(str(w.render()) for w in window.query(Static))
+        now += 0.7  # the real interval observes expiry only after the visible countdown was checked
         assert await until(pilot, lambda: len(answers) == 2, tries=30)
         assert answers[1] is None  # nobody answered in time: nothing is sent, the host takes what they set
 
