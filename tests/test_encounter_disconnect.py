@@ -172,7 +172,7 @@ async def test_a_submitted_attack_still_generates_a_human_roll_when_its_owner_is
 
 
 @pytest.mark.parametrize("mode", ["fight", "chase"])
-async def test_extra_pool_slots_never_replace_an_encounter_participants_one_action_or_confirmation(round_hub, mode):
+async def test_encounter_participants_revise_one_action_and_each_must_declare_or_pass(round_hub, mode):
     hub = round_hub
     hub.state.encounter.mode = mode
     task = None
@@ -180,15 +180,28 @@ async def test_extra_pool_slots_never_replace_an_encounter_participants_one_acti
         async with sockets(hub) as (http, url):
             a, b = await sit(http, url, "zhouheng"), await sit(http, url, "lin")
             task = asyncio.create_task(hub._collect())
-            await until(a, lambda msg: msg["t"] == "pool" and msg["open"])
-            for text in ("守住门口", "再行动一次"):
-                await a.send_json({"t": "act", "text": text})
-                await until(a, lambda msg, text=text: msg["t"] == "pool" and text in msg["mine"]["now"] + msg["mine"]["next"])
-            assert hub.pool == [("zhouheng", "守住门口")] and hub.early == [("zhouheng", "再行动一次")]
+            current = await until(a, lambda msg: msg["t"] == "pool" and msg["open"])
+            assert current["capacity"] == 2 and current["closes_in"] is None
+            for text in ("守住门口", "改为守住楼梯"):
+                await a.send_json({"t": "act", "text": text, "round": current["round"]})
+                revised = await until(a, lambda msg, text=text: msg["t"] == "pool" and msg["mine"]["now"] == [text])
+                assert revised["count"] == 1 and not revised["mine"]["next"]
+            assert hub.pool == [("zhouheng", "改为守住楼梯")] and not hub.early
             assert hub._waiting_for() == ["lin"] and not task.done()
-            await b.send_json({"t": "done"})
+            await b.send_json({"t": "done", "round": "previous-encounter-round"})
+            await until(b, lambda msg: msg["t"] == "notice")
+            assert hub._waiting_for() == ["lin"] and "lin" not in hub.done and not task.done()
+            await b.send_json({"t": "done", "round": current["round"]})
             await asyncio.wait_for(task, 5)
-            assert hub.pool == [("zhouheng", "守住门口")]
+            assert hub.pool == [("zhouheng", "改为守住楼梯")] and "lin" in hub.done
+            assert hub.state.round_plan["encounter"] == ["sudden", mode, 1]
+            accepted = list(hub.state.queued_actions)
+            assert accepted == [("zhouheng", "改为守住楼梯")]
+            await a.send_json({"t": "act", "text": "再行动一次", "round": current["round"]})
+            rejected = await until(a, lambda msg: msg["t"] == "action_rejected")
+            assert rejected["text"] == "再行动一次" and not hub.early
+            assert hub.state.queued_actions == accepted
+            assert hub.state.encounter.completed_rounds == 0
     finally:
         if task is not None:
             task.cancel()

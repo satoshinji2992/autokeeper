@@ -37,7 +37,7 @@ from ..agents.cast import (
     kp_line,
 )
 from ..agents.director import Improv
-from ..harness.models import refused
+from ..harness.models import Reply, refused
 from ..harness.replay import CassetteError
 from ..module import graph as module_graph
 from ..module import improv
@@ -78,6 +78,20 @@ Emit = Callable[[dict[str, Any]], Awaitable[None]]
 
 async def _silent(_: dict[str, Any]) -> None:
     return None
+
+
+@dataclass
+class PartyPreparation:
+    """A disposable arrangement, with no authority to change the running game."""
+
+    order: list[tuple[str, str | None]]
+    steps: list[dict]
+    at: str
+    started: int
+    turn: int
+    seq: int
+    usage: dict[str, dict[str, float]] = field(default_factory=dict)
+    note: str = ""
 
 
 @dataclass
@@ -2978,36 +2992,79 @@ class Game(Encounters):
         return pending or None
 
     async def arrange_party(self, order: list[tuple[str, str | None]], *, prepared: dict[str, dict] | None = None) -> list[tuple[str, str | None]]:
-        """Persist every declaration before any planning, and resume only unfinished tokens."""
-        st, receipt = self.state, self.state.round_plan
-        if not self.pending_party():
-            if st.pending_turn:
-                return order
-            started = receipt.get("started", st.minutes)
-            receipt.clear()
-            receipt.update(input=[list(pair) for pair in order], steps=[{"token": str(n)} for n in range(len(order))],
-                           used=[], done=[], at=st.clock, started=started, planned=False)
-            for row in receipt["steps"]:
-                if row["token"] in (prepared or {}):
-                    row["plan"] = prepared[row["token"]]
-                    row["resuming_wait"] = True
-            if self.checkpoint:
-                self.checkpoint()
-        if receipt.get("planned") or receipt.get("used") or receipt.get("done"):
+        """Resume a sealed batch, or prepare and seal for callers with no editable collection window."""
+        if self.pending_party():
             return self.pending_party() or []
-        planner = getattr(self.cast, "party_plan", None)
+        if self.state.pending_turn:
+            return order
+        try:
+            draft = await self.prepare_party(order, prepared=prepared)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # Older direct engine callers execute their individual plans after a failed
+            # batch arrangement. The editable LAN window uses prepare_party directly and
+            # remains open on failure instead of accepting an unprepared batch.
+            draft = self._party_preparation(order, prepared)
+            draft.note = "本批尚未完成整体安排，按原行动继续；配合、争抢与相互影响仍须裁定，不按输入先后预定结果。"
+            self._debug("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
+        return self.seal_party(draft)
+
+    def _party_preparation(self, order: list[tuple[str, str | None]], prepared: dict[str, dict] | None) -> PartyPreparation:
+        st = self.state
+        if len({who for who, _ in order}) != len(order):
+            raise PreparationError("每名调查员本轮只能保留一份声明，请合并或替换原声明")
+        steps = [{"token": str(n)} for n in range(len(order))]
+        for row in steps:
+            if row["token"] in (prepared or {}):
+                row.update(plan=deepcopy(prepared[row["token"]]), resuming_wait=True)
+        return PartyPreparation(order=list(order), steps=steps, at=st.clock,
+                                started=st.round_plan.get("started", st.minutes), turn=st.turn, seq=self.world.rec.seq)
+
+    async def prepare_party(self, order: list[tuple[str, str | None]], *,
+                            prepared: dict[str, dict] | None = None) -> PartyPreparation:
+        """Read an isolated snapshot; cancellation discards every draft and leaves the batch editable.
+
+        The caller compares its declaration revision before seal_party. No world operation,
+        formal conversation, round receipt or player notification is committed here.
+        Known provider usage is accounted even if this preparation is cancelled.
+        """
+        if self.state.pending_turn or self.pending_party():
+            raise PreparationError("上一批行动尚未结束，不能准备新一批行动")
+        draft = self._party_preparation(order, prepared)
+        st = self.state.model_copy(deep=True)
+        initial_usage = deepcopy(st.usage)
+        planner = getattr(self.cast, "prepare_party_plan", None) or getattr(self.cast, "party_plan", None)
         able = {i.id for i in st.investigators if i.can_act}
-        resuming = {row["token"] for row in receipt.get("steps", []) if row.get("resuming_wait")}
-        inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(receipt["input"])
+        resuming = {row["token"] for row in draft.steps if row.get("resuming_wait")}
+        inputs = [PartyInput(token=str(n), who=who, text=text) for n, (who, text) in enumerate(draft.order)
                   if str(n) not in resuming and who in able and text and not text.startswith("/kp ") and not commands.instant(text)
                   and not idea.asked(text)]
-        if (planner is None or st.ending or self.battling() or len(inputs) < 2
-                or len({row.who for row in inputs}) < 2):
-            receipt["planned"] = True
-            return self.pending_party() or []
-        await self._world_settled()
+        if planner is None or st.ending or self.battling() or not inputs:
+            return draft
+        metered = _takes(planner, "on_usage")
+        seen_calls: set[str] = set()
+
+        def account(role: str, row: dict) -> None:
+            ident = row.get("call_id", "")
+            if ident and ident in seen_calls:
+                return
+            if ident:
+                seen_calls.add(ident)
+            reply = Reply(usage={key: row.get(key, 0) for key in ("input_tokens", "output_tokens", "cache_read")},
+                          cost_usd=row.get("cost_usd", 0), seconds=row.get("seconds", 0))
+            self.state.record_usage(role, reply)
+            draft.usage.setdefault(role, {"calls": 0, "input": 0, "output": 0, "cache_read": 0,
+                                          "cost_usd": 0.0, "seconds": 0.0})
+            values = draft.usage[role]
+            values["calls"] += 1
+            for key, source in (("input", "input_tokens"), ("output", "output_tokens"), ("cache_read", "cache_read")):
+                values[key] += row.get(source, 0)
+            values["cost_usd"] += reply.cost_usd
+            values["seconds"] += reply.seconds
+
         try:
-            planned = await planner(st, inputs)
+            planned = await planner(st, inputs, **({"on_usage": account} if metered else {}))
             if planned is None:
                 raise ValueError("这一批行动尚未取得完整场面安排")
             planned = PartyPlan.model_validate(planned)
@@ -3024,13 +3081,34 @@ class Game(Encounters):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self._late.notes.append("本批尚未完成整体安排，按原行动继续；配合、争抢与相互影响仍须裁定，不按输入先后预定结果。")
-            self._debug("party-plan", {"phase": "fallback", "error": f"{type(exc).__name__}: {exc}"[:300]})
-        else:
-            declared = {step.token for step in planned.steps}
-            receipt["steps"] = [step.model_dump(mode="json") for step in planned.steps] + [
-                step for step in receipt["steps"] if step["token"] not in declared]
-        receipt["planned"] = True
+            raise PreparationError("本批行动尚未完成安排，可以修改行动后重试") from exc
+        finally:
+            if not metered:
+                draft.usage = {role: {key: value - initial_usage.get(role, {}).get(key, 0)
+                                      for key, value in values.items()} for role, values in st.usage.items()}
+                for role, values in draft.usage.items():
+                    usage = self.state.usage.setdefault(role, {})
+                    for key, value in values.items():
+                        usage[key] = usage.get(key, 0) + value
+        declared = {step.token for step in planned.steps}
+        draft.steps = [step.model_dump(mode="json") for step in planned.steps] + [
+            step for step in draft.steps if step["token"] not in declared]
+        return draft
+
+    def seal_party(self, draft: PartyPreparation) -> list[tuple[str, str | None]]:
+        """Atomically accept the current declaration version before any actual action can execute."""
+        st = self.state
+        if len({who for who, _ in draft.order}) != len(draft.order):
+            raise PreparationError("每名调查员本轮只能保留一份声明，请合并或替换原声明")
+        if st.pending_turn or self.pending_party():
+            raise PreparationError("上一批行动尚未结束，不能锁定新一批行动")
+        if (st.turn, st.clock) != (draft.turn, draft.at):
+            raise PreparationError("场面已变化，需要按当前记录重新安排行动")
+        st.round_plan.clear()
+        st.round_plan.update(input=[list(pair) for pair in draft.order], steps=deepcopy(draft.steps),
+                             used=[], done=[], at=draft.at, started=draft.started, planned=True)
+        if draft.note:
+            self._late.notes.append(draft.note)
         if self.checkpoint:
             self.checkpoint()
         return self.pending_party() or []
@@ -3645,16 +3723,23 @@ class Game(Encounters):
         recent = [e for e in st.log if e.kind != "dice"]
         if len(recent) < 48:
             return
-        old, keep = st.log[:-24], st.log[-24:]
+        old = st.log[:-24]
         # What the table was told, not the module's own words for each clue: the memory feeds the
         # players' recap and 故事至今, and the telling that put each clue into the story is there.
         text = "\n".join(f"[{e.time}] {e.who or e.kind}：{e.text}" for e in old
                          if e.kind not in ("dice", "clue") and recipients.shared(e))
         if text:
             await self.emit({"type": "status", "text": "记录员整理笔记…"})
-            st.memory = await self.cast.chronicle(st, text)
+            summary = (await self.cast.chronicle(st, text)).strip()
+            if not summary:
+                self._debug("memory", {"phase": "retained", "reason": "摘要为空，保留原摘要与原始记录"})
+                return
+            st.memory = summary
         st.private_history.extend(e for e in old if not recipients.shared(e))
-        st.log = keep
+        folded = {id(entry) for entry in old}
+        # Mail and asynchronous scene events can append while the chronicler
+        # awaits its model. Remove only the prefix that actually got summarized.
+        st.log = [entry for entry in st.log if id(entry) not in folded]
 
     def _recount(self) -> None:
         """After a turn, when the story has moved enough (progress.due): the players' 故事至今,
@@ -5226,6 +5311,8 @@ class Game(Encounters):
                         cursor = max(cursor, int(index))
             return cursor
 
+        envelope_retry = ""
+        envelope_repaired = False
         while True:
             for index, row in enumerate(calls):
                 if row.get("done"):
@@ -5307,12 +5394,26 @@ class Game(Encounters):
                     remember += "原行动与配音均按已记结果；本次只修正或收束主持输出，不重新执行。"
             # A tool-capable reply can contain world results or private material. Keep
             # its final body buffered until the caller has saved and landed that reply.
+            asking = dict(kwargs)
+            if envelope_retry:
+                asking["fix"] = asking.get("fix", "") + envelope_retry
             told = await keeper(self.state, prompt, on_delta=None if voices or calls else delta,
                                 lore=lore() + extra,
                                 **({"voices": voices} if voices else {}),
-                                **({"remember": remember} if remembering else {}), **kwargs)
+                                **({"remember": remember} if remembering else {}), **asking)
             if error := getattr(told, "call_error", ""):
+                if not envelope_repaired and _takes(keeper, "fix"):
+                    # Repair this reply only. Dice, settled voices and their receipts
+                    # remain untouched; an invalid envelope is never promoted to prose.
+                    envelope_repaired = True
+                    envelope_retry = ("\n【主持回复格式需修正】\n" + error
+                                      + "\n重新提交完整回复。kind=tell 时 scene、text、asides、media、perceptions、"
+                                      "continuation 放进 telling；kind=npc 时 telling=null。"
+                                      "只修输出结构，保留已经结算和实际配音，不再执行它们。")
+                    self._debug("keeper-format", {"phase": "repair", "error": error})
+                    continue
                 raise PreparationError(error)
+            envelope_retry = ""
             receipt.update(report=prompt, memory=remember)
             # A rejected scene is removed from the conversation. Do not acknowledge its
             # observations until an actual exchange retains them, including after a retry.
@@ -5409,9 +5510,22 @@ class Game(Encounters):
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})
-        settled = await ask(lore=lore + scene.settled(p), voices=False)
+        # Different readers still need separate observations and media when the
+        # world scene has been reduced to its executable parts. The correction
+        # may present those parts but cannot introduce another world operation.
+        kwargs = ({"check": lambda _: True,
+                   "fix": "\n场面已经确定，scene 留空，不再提交世界操作；仍按真实受众填写 asides、media、perceptions。"}
+                  if len(st.investigators) > 1 else {})
+        settled = await ask(lore=lore + scene.settled(p), voices=False, **kwargs)
         text = settled if isinstance(settled, str) else settled.text
-        return self._staging(text, p, partial=True)
+        kept = self._staging(text, p, partial=True)
+        if not isinstance(settled, str):
+            kept.update(offer_idea=settled.offer_idea, asides=settled.asides, media=settled.media,
+                        perceptions=settled.perceptions,
+                        continuation=(settled.continuation.model_dump(mode="json")
+                                      if settled.continuation is not None else None),
+                        continuation_error=settled.continuation_error)
+        return kept
 
     @staticmethod
     def _staging(text: str, p: scene.Plan, *, partial: bool) -> dict:

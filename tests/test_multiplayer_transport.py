@@ -55,26 +55,28 @@ async def sit(http, url, seat):
     return ws
 
 
-async def test_disconnect_retains_queued_declarations_and_reconnect_shows_them(transport_hub):
+async def test_disconnect_retains_current_declarations_and_reconnect_shows_them(transport_hub):
     hub = transport_hub
+    hub.open = True
+    hub.phase = "collecting"
     async with sockets(hub) as (http, url):
         a = await sit(http, url, "zhouheng")
         b = await sit(http, url, "lin")
         for ws, text in ((a, "检查门锁"), (b, "留意楼梯")):
             await ws.send_json({"t": "act", "text": text})
-            await until(ws, lambda msg, text=text: msg["t"] == "pool" and msg["mine"]["next"] == [text])
+            await until(ws, lambda msg, text=text: msg["t"] == "pool" and msg["mine"]["now"] == [text])
         await b.close()
         await until(a, lambda msg: msg["t"] == "seats" and not msg["seats"][1]["online"])
-        assert hub.early == [("zhouheng", "检查门锁"), ("lin", "留意楼梯")]
+        assert hub.pool == [("zhouheng", "检查门锁"), ("lin", "留意楼梯")] and not hub.early
         b = await sit(http, url, "lin")
         await b.send_json({"t": "hello", "name": "重连"})
         await until(b, lambda msg: msg["t"] == "welcome")
         await b.send_json({"t": "sit", "investigator": "lin"})
         seated = await until(b, lambda msg: msg["t"] == "seated")
-        assert seated["pool"]["mine"]["next"] == ["留意楼梯"]
+        assert seated["pool"]["mine"]["now"] == ["留意楼梯"]
         await b.send_json({"t": "undo"})
-        await until(b, lambda msg: msg["t"] == "pool" and not msg["mine"]["next"])
-        assert hub.early == [("zhouheng", "检查门锁")]
+        await until(b, lambda msg: msg["t"] == "pool" and not msg["mine"]["now"])
+        assert hub.pool == [("zhouheng", "检查门锁")] and not hub.early
         await a.close()
         await b.close()
 
@@ -130,6 +132,8 @@ async def test_disconnected_queued_action_is_collected_without_ai_replacement(tr
 
 async def test_pending_originals_survive_save_reload_and_explicit_undo(transport_hub, fake):
     hub = transport_hub
+    hub.open = True
+    hub.phase = "collecting"
     hub.sits["zhouheng"] = "a"
     await hub._on("a", {"t": "act", "text": "检查门锁"})
     saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
@@ -155,7 +159,7 @@ async def test_open_collection_survives_host_restart(transport_hub, fake):
 async def test_batch_restart_skips_finished_actions_and_keeps_duplicate_originals(transport_hub, monkeypatch, fake):
     hub = transport_hub
     hub.sits = {"zhouheng": "a", "lin": "b"}
-    hub.pool = [("zhouheng", "检查门锁"), ("lin", "留意楼梯"), ("lin", "留意楼梯")]
+    hub.pool = [("zhouheng", "检查门锁"), ("lin", "检查门锁")]
     run = hub._run
     calls = 0
 
@@ -172,14 +176,14 @@ async def test_batch_restart_skips_finished_actions_and_keeps_duplicate_original
         await hub._settle()
     saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
     assert saved.round_plan["done"] == ["0"]
-    assert saved.queued_actions == [("zhouheng", "记下窗户")]
+    assert not saved.queued_actions  # an action sent while executing was explicitly rejected
     restored = Hub(EXAMPLE, state=saved, cast=TableCast(), rules=Rules(dice=fake))
     await restored._settle()
     actions = [line.text for line in restored.state.log if line.kind == "player"]
-    assert sum("检查门锁" in line for line in actions) == 1
-    assert sum("留意楼梯" in line for line in actions) == 2
+    assert sum("检查门锁" in line for line in actions) == 2
+    assert {line.who for line in restored.state.log if line.kind == "player"} == {"周衡", "林秋"}
     assert restored.cast.ai_turns == []
-    assert restored.early == [("zhouheng", "记下窗户")]
+    assert not restored.early and not restored.state.queued_actions
     assert not restored.state.round_plan and not restored.state.pending_turn
 
 
@@ -300,10 +304,11 @@ async def test_graph_focus_refusal_keeps_original_and_allows_other_seat(transpor
     assert hub.state.unfinished["lin"]["original"] == "留意楼梯"
 
 
-async def test_two_refused_declarations_from_one_seat_are_both_retained(transport_hub, monkeypatch):
+async def test_one_seats_refused_declarations_remain_recorded_across_attempts(transport_hub, monkeypatch):
     hub = transport_hub
     monkeypatch.setattr(hub.game, "_focus_blocked", lambda: "原现场尚未结束")
-    await hub._settle_round([("lin", "留意楼梯"), ("lin", "检查门锁")])
+    await hub._settle_round([("lin", "留意楼梯")])
+    await hub._settle_round([("lin", "检查门锁")])
     assert hub.state.unfinished["lin"]["remaining"] == "留意楼梯\n检查门锁"
     assert not hub.state.pending_turn
 
@@ -351,11 +356,15 @@ async def test_ordinary_declaration_echo_is_public_on_every_submission_route(tra
         await watcher.send_json({"t": "hello", "name": "旁观"})
         await until(watcher, lambda msg: msg["t"] == "welcome")
         if route == "round":
+            hub.open = True
+            hub.phase = "collecting"
             await hub._on(hub.sits["zhouheng"], {"t": "act", "text": secret})
             await hub._settle_round([("zhouheng", secret)])
         elif route == "command":
             await hub._afterwards("zhouheng", secret)
         else:
+            hub.state.human.remove("zhouheng")
+            hub.sits.pop("zhouheng")  # the former player's connection now watches an actual AI seat
             await hub._ai_turn(hub.state.find("zhouheng"))
         await hub._broadcast({"t": "notice", "text": "boundary"})
         for ws in (a, b, watcher):

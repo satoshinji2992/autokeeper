@@ -4,7 +4,7 @@ single-player table with AI companions and at a LAN table (net/hub.Hub._speak)."
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
 
@@ -97,13 +97,16 @@ def test_a_ruling_cannot_move_a_teammates_things(fake):
 
 
 def lan_screen(seat: str = "zhouheng"):
+    from autokeeper.tui.screens.net import NetGameScreen
+
     sent: list[dict] = []
     notes: list[str] = []
     st = SimpleNamespace(investigators=[SimpleNamespace(id="zhouheng", name="周衡"), SimpleNamespace(id="lin", name="林秋")],
                          ending=None)
     screen = SimpleNamespace(seat=seat, state=st, link=SimpleNamespace(send=sent.append), run_worker=lambda work: work(),
                              app=SimpleNamespace(notify=lambda text, **_: notes.append(text)), pool_open=True,
-                             my_turn=True, held=[], pooled=[])
+                             my_turn=True, held=[], pooled=[], pool={"round": "test-round"})
+    screen._round_packet = MethodType(NetGameScreen._round_packet, screen)
     return screen, sent, notes
 
 
@@ -121,7 +124,8 @@ def test_the_lan_box_sends_actions_speech_and_chat_apart(text, msg):
 
     screen, sent, _ = lan_screen()
     NetGameScreen.send_line(screen, text)
-    assert sent == [msg]
+    expected = msg | ({"round": "test-round"} if msg["t"] == "act" else {})
+    assert sent == [expected]
 
 
 def test_a_spectator_may_chat_out_of_character_but_not_speak():
@@ -177,7 +181,9 @@ async def test_at_a_lan_table_words_to_the_party_take_no_slot_and_no_keeper(monk
 
         await a.send_json({"t": "speak", "text": "（压低声音）“把枪给我。”"})
         heard = await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "speech")
-        assert heard["ev"] == {"type": "speech", "who": "周衡", "player": "小明", "to": "", "text": "（压低声音）“把枪给我。”"}
+        speech = dict(heard["ev"])
+        assert speech.pop("delivery").startswith("table:")
+        assert speech == {"type": "speech", "who": "周衡", "player": "小明", "to": "", "text": "（压低声音）“把枪给我。”"}
         for _ in range(50):
             if any(e.kind == "speech" for e in hub.state.log):
                 break
@@ -199,6 +205,7 @@ async def test_at_a_lan_table_words_to_the_party_take_no_slot_and_no_keeper(monk
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
         await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said" and x["ev"]["text"] == "我看看告示栏")
+        await until(a, lambda x: x["t"] == "pool" and not x["open"])
         await until(a, pool_open)
         assert any("周衡在" in r and "把枪给我" in r for r in cast.reports)  # the keeper heard it with the round
         for ws in (a, b, c):

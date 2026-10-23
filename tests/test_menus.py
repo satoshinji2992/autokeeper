@@ -295,7 +295,7 @@ async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path,
         assert screen.link.host
         await pilot.press("escape")
         await pilot.pause()
-        assert options(app.screen.query_one(OptionList)) == ["continue", "guide", "title", "quit", "settings"]  # the host saves
+        assert options(app.screen.query_one(OptionList)) == ["continue", "save", "guide", "title", "quit", "settings"]
         await pilot.press("escape")
         await pilot.pause()
         screen.action_settings()
@@ -307,7 +307,7 @@ async def test_the_lan_menu_leaves_out_what_the_host_does(monkeypatch, tmp_path,
         screen.link.host = False  # a guest: the host picks the models
         await pilot.press("escape")
         await pilot.pause()
-        assert options(app.screen.query_one(OptionList)) == ["continue", "guide", "title", "quit", "settings"]
+        assert options(app.screen.query_one(OptionList)) == ["continue", "save", "guide", "title", "quit", "settings"]
         await pilot.press("escape")
         await pilot.pause()
         screen.action_settings()

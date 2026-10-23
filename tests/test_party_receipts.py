@@ -6,7 +6,7 @@ import pytest
 
 from autokeeper import config
 from autokeeper.agents.cast import Action, Cast, Failure, Ruling
-from autokeeper.engine.game import Game
+from autokeeper.engine.game import Game, PreparationError
 from autokeeper.engine.state import GameState
 from autokeeper.rules.coc import Rules
 
@@ -148,17 +148,10 @@ async def test_the_real_rules_assistant_receives_the_batch_relation_without_extr
     await game.close()
 
 
-async def test_same_persons_continuous_actions_cannot_be_reversed_by_the_batch_model(fake):
-    class Reversed(PartyCast):
-        async def party_plan(self, state, inputs, **kwargs):
-            out = await super().party_plan(state, inputs, **kwargs)
-            out.steps = list(reversed(out.steps))
-            return out
-
-    hub = make_hub(fake, Reversed())
+async def test_a_second_declaration_for_the_same_person_is_refused_before_batch_planning(fake):
+    hub = make_hub(fake)
     order = [ORDER[0], ("zhouheng", "再查看旧报纸"), ORDER[1]]
-    assert await hub.game.arrange_party(order) == order  # rejected plan, original pipeline still available
-    assert hub.state.round_plan["input"] == [list(pair) for pair in order]
-    assert hub.state.round_plan["steps"] == [{"token": str(n)} for n in range(len(order))]
-    assert not hub.state.round_plan["done"] and any("尚未完成整体安排" in note for note in hub.game._late.notes)
+    with pytest.raises(PreparationError, match="每名调查员本轮只能保留一份声明"):
+        await hub.game.arrange_party(order)
+    assert not hub.state.round_plan and not hub.cast.batches and not hub.game._late.notes
     await hub.game.close()

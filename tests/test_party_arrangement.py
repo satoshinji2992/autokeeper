@@ -18,7 +18,7 @@ from autokeeper.net.hub import Hub
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
-from .test_net import TableCast, closed, opened, pool_open, until
+from .test_net import TableCast, closed, hold_preparation, opened, pool_open, until
 
 
 class PartyCast(TableCast):
@@ -133,17 +133,17 @@ async def test_related_rulings_receive_the_neutral_attempt_and_actual_completion
     assert "我拖住布道者" not in second
 
 
-async def test_two_declarations_from_one_seat_are_distinct_slots(fake):
+async def test_one_player_cannot_reserve_two_declaration_slots(fake):
+    from autokeeper.engine.game import PreparationError
+
     cast = PartyCast()
     hub = make_hub(fake, cast)
-    hub.sits = {"zhouheng": "a", "lin": "b"}
-    hub.pool = [("zhouheng", "我试着开锁"), ("zhouheng", "我看看旧报纸"), ("lin", "我拖住布道者")]
+    order = [("zhouheng", "我试着开锁"), ("zhouheng", "我看看旧报纸"), ("lin", "我拖住布道者")]
     before = hub.state.minutes
-    await hub._settle()
-    assert [token for token, _, _ in cast.batches[0]] == ["0", "1", "2"]
-    assert [e.text for e in hub.state.log if e.kind == "player"] == [hub.pool[2][1], hub.pool[0][1], hub.pool[1][1]]
-    assert len(cast.ruled) == 3 and cast.individual_plans == []
-    assert hub.state.minutes - before == 40  # the same person's 30 + 10 minutes cannot overlap each other
+    with pytest.raises(PreparationError):
+        await hub.game.prepare_party(order)
+    assert not cast.batches and not cast.ruled and not hub.state.round_plan
+    assert hub.state.minutes == before
 
 
 async def test_a_batch_planning_failure_preserves_the_individual_path(fake):
@@ -163,8 +163,8 @@ async def test_a_single_declaration_does_not_wait_for_a_missing_player(fake):
     hub.sits = {"zhouheng": "a", "lin": "b"}
     hub.pool = [("zhouheng", "我试着开锁")]
     await hub._settle()
-    assert cast.batches == [] and len(cast.ruled) == 1
-    assert cast.individual_plans == ["我试着开锁"]
+    assert cast.batches == [[("0", "zhouheng", "我试着开锁")]] and len(cast.ruled) == 1
+    assert cast.individual_plans == []
 
 
 async def test_a_cast_without_party_planning_keeps_the_existing_network_path(fake):
@@ -230,9 +230,10 @@ async def test_encounters_keep_their_own_round_arrangement(fake, monkeypatch, mo
 
 
 @pytest.mark.parametrize("resume", [False, True])
-async def test_real_action_window_passes_both_declarations_to_one_plan(fake, resume):
+async def test_real_action_window_passes_both_declarations_to_one_plan(fake, monkeypatch, resume):
     cast = PartyCast(fail_telling=resume)
     hub = make_hub(fake, cast)
+    ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
     try:
         async with aiohttp.ClientSession() as http:
@@ -247,10 +248,13 @@ async def test_real_action_window_passes_both_declarations_to_one_plan(fake, res
                 await b.send_json({"t": "act", "text": "我拖住布道者"})
                 await a.send_json({"t": "done"})
                 await b.send_json({"t": "done"})
+                mine = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said"
+                                   and x["ev"]["who"] == "周衡")
+                assert mine["ev"]["who"] == "周衡" and "audience" not in mine["ev"]
+                await until(b, lambda x: x["t"] == "pool" and x["count"] == 2)
+                ready.set()
                 first = await until(a, lambda x: x["t"] == "turn")
                 assert first["investigator"] == "lin"  # the selected batch order, independent of private declaration echoes
-                mine = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
-                assert mine["ev"]["who"] == "周衡" and mine["ev"]["audience"] == ["zhouheng"]
                 if resume:
                     error = await until(a, lambda x: x["t"] == "error" and x.get("retry"))
                     assert error and len(cast.ruled) == 2 and len(cast.batches) == 1
@@ -343,13 +347,13 @@ async def test_a_reopened_room_resumes_the_old_window_before_collecting_new_inpu
                     await until(ws, lambda x: x["t"] == "welcome")
                     await ws.send_json({"t": "sit", "investigator": seat})
                 await asyncio.wait_for(cast.entered.wait(), 5)
-                # The saved declaration is already resuming; this line must wait for a new window.
+                # A sealed saved batch resumes first; new input is rejected without silently queuing it.
                 await a.send_json({"t": "act", "text": "我查看门外"})
-                queued = await until(a, lambda x: x["t"] == "pool" and x["mine"].get("next") == ["我查看门外"])
-                assert not queued["open"]
+                rejected = await until(a, lambda x: x["t"] == "action_rejected")
+                assert rejected["text"] == "我查看门外" and not hub.early
                 cast.release.set()
-                next_window = await until(a, lambda x: pool_open(x) and x["mine"].get("now") == ["我查看门外"])
-                assert next_window["count"] == 1
+                next_window = await until(a, pool_open)
+                assert next_window["count"] == 0 and next_window["mine"] == {"now": [], "next": []}
                 assert hub.state.minutes - before == 30  # not the completed ten minutes plus a new thirty
                 assert [who for who, _ in cast.ruled] == ["zhouheng"]
                 assert not cast.batches and not cast.individual_plans

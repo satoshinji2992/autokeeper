@@ -107,13 +107,15 @@ async def test_authorised_passenger_keeps_their_original_token_and_tail_without_
         await hub.game.close()
 
 
-async def test_a_later_move_token_cannot_authorise_skipping_its_owners_current_wait(fake):
-    plans = {"先去钟楼": declared_move(companions=["betty"]), "我先留守": stay(),
-             "然后我去钟楼": declared_move(), "我一直留守": stay()}
-    hub, _cast = make_hub(fake, plans, [telling(), telling(), telling(), telling()])
+async def test_a_compound_requests_future_move_cannot_skip_its_owners_current_wait(fake):
+    continuing = declared_move()
+    plans = {"先去钟楼": declared_move(companions=["betty"]),
+             "我先留守五分钟，然后去钟楼": Plan(action=stay().action, remaining="随后去钟楼"),
+             "我一直留守": stay()}
+    hub, _cast = make_hub(fake, plans, [telling(), telling(next=continuing), telling(), telling()])
     try:
         hub.sits = {"elois": "a", "betty": "b", "bert": "c"}
-        hub.pool = [("elois", "先去钟楼"), ("betty", "我先留守"), ("betty", "然后我去钟楼"), ("bert", "我一直留守")]
+        hub.pool = [("elois", "先去钟楼"), ("betty", "我先留守五分钟，然后去钟楼"), ("bert", "我一直留守")]
         await hub._settle()
         moved = journeys(hub)
         assert len(moved) == 2
@@ -124,7 +126,7 @@ async def test_a_later_move_token_cannot_authorise_skipping_its_owners_current_w
         await hub.game.close()
 
 
-async def test_an_unstarted_future_queue_is_not_permission_for_somebody_elses_current_journey(fake):
+async def test_a_retained_unstarted_declaration_does_not_authorise_somebody_elses_current_journey(fake):
     plans = {"先去钟楼": declared_move(companions=["betty"])}
     hub, cast = make_hub(fake, plans, [telling()])
     try:
@@ -135,6 +137,6 @@ async def test_an_unstarted_future_queue_is_not_permission_for_somebody_elses_cu
         assert hub.game.world.place("elois") == "tower"
         assert hub.game.world.place("betty") == hub.game.world.place("bert") == "square"
         assert hub.early == original and hub.state.queued_actions == original
-        assert set(journeys(hub)[0].motions) == {"elois"} and cast.party_calls == 0
+        assert set(journeys(hub)[0].motions) == {"elois"} and cast.party_calls == 1
     finally:
         await hub.game.close()

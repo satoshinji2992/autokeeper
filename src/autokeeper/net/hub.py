@@ -1,16 +1,12 @@
 """LAN play: one game, several players.
 
 The host runs a Hub. It owns the only copy of the game (module, state, agents) and plays
-it in rounds. An investigation round opens an action pool with one slot more than there are players at the
-table (one player: two, two players: three): everyone has a slot of their own, and one of
-them may take the extra one for a second action. Players send actions when they like, in any
-order; an empty Enter says "that's all from me this round", /undo takes back your last one.
-Combat and chase rounds instead require one declaration or explicit pass from every human participant.
-When the pool is full, or everyone is done, it closes and the keeper considers the collected
-declarations together, settles them as their relationships call for, then lets each AI seat act;
-then the next round opens. Nothing said
-meanwhile is lost: an action sent while the keeper tells, or that the round has no room
-for, waits for the next round and goes in first. Every player's screen connects over a
+it in rounds. Each investigator has one editable declaration. The first starts a read-only
+preparation; new declarations cancel the old draft and join its replacement. When the latest
+preparation completes, the server seals the batch before executing any action. During execution
+and narration, new actions are rejected without queuing them for a later round. Combat and chase
+still require every involved human to declare or explicitly pass. Independent scenes own their
+preparation and personal narration over one shared world. Each player's screen connects over a
 websocket and receives the engine's events as they happen. During a fight or chase, a human
 seat keeps its declarations and pending choices through disconnects and resumes on reconnect.
 Outside encounters an absent seat may use the existing AI path. Lines in full-width brackets
@@ -107,11 +103,6 @@ log.addHandler(logging.NullHandler())  # recorded if logging is set up, never pr
 
 SYNC_AFTER = {"move", "time", "sky", "people", "npc", "improv", "performance", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
-PER_PLAYER = 2  # actions one player may put in a round
-# A round is a moment in real time (the user, 2026-10-21: 「时间同一轮应该是个现实 7s 的窗口」): from the
-# first action put in, the others have this many seconds to act at the same time; then it is settled,
-# and what comes later is the next round's. Nobody waits on a player who does not act.
-WINDOW = 7.0
 CARD_STEPS = 12  # 车卡 steps that call a model or the web, per player per minute
 COSTLY = {"look_up", "find", "read", "propose", "build"}
 PRIVATE = {"transcripts", "notes", "usage", "turn_usage", "tally_at", "log", "memory", "improv", "missed", "visuals", "pending_turn"}
@@ -361,7 +352,6 @@ class Hub:
         from ..rules.coc import Rules
 
         self.dir = Path(module_dir)
-        self.window = WINDOW  # seconds a round stays open once someone acted (a test shortens it)
         self.m = Module.load(self.dir)
         ensure_compiled(self.m, self.dir)  # the keeper reads the module's skill package
         self.fresh = state is None
@@ -429,6 +419,7 @@ class Hub:
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
+        self._init_planning()
         self.retrying: str | None = None  # the seat whose settled action broke off, waiting for its /retry
         self.over = False  # the game has ended and its last turn is told
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
@@ -492,6 +483,14 @@ class Hub:
             if worker is not self and (t in ROUTED or (t == "say" and "to" in msg)):
                 await worker._on(cid, msg)
                 return
+        if (t in ("act", "join", "done", "undo") and msg.get("round") is not None
+                and msg["round"] != self.round_id and not self.over):
+            if t == "act":
+                await self._send(cid, {"t": "action_rejected", "text": str(msg.get("text", "")),
+                                       "reason": "这条行动属于已经结束的轮次，未执行；原文已保留。"})
+            else:
+                await self._send(cid, {"t": "notice", "text": "该轮次已结束，本次操作未生效。"})
+            return
         if t == "hello":
             self.names[cid] = (msg.get("name") or "").strip()[:16] or f"玩家{len(self.names) + 1}"
             if msg.get("key") and secrets.compare_digest(str(msg["key"]), self.key):
@@ -504,6 +503,11 @@ class Hub:
                     await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
+        elif t == "watch":
+            if (seat := self._seat_of(cid)) is not None:
+                self._free(seat, keep_offer=True)
+            await self._share_seats()
+            await self._send(cid, {**self._welcome(cid), "t": "watching"})
         elif t == "save":
             if cid not in self.hosts and self._seat_of(cid) is None:
                 await self._send(cid, {"t": "error", "text": "请先入座，再请求保存本局进度。"})
@@ -532,6 +536,9 @@ class Hub:
                 await self._afterwards(seat, text)
             elif self.over:
                 await self._send(cid, {"t": "error", "text": "本局已结束。"})
+            elif self.open and self.preparation_error and text.strip() == "/retry":
+                self._revise_preparation()
+                await self._pool()
             elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
             elif idea.asked(text) and (why := self.game.idea_refused()):  # said at once; nothing goes in the round
@@ -547,24 +554,31 @@ class Hub:
             elif self.open and seat in self.confirming and (rid := self.asking.get(seat)):
                 await self._on(cid, {"t": "respond", "id": rid, "text": text})
                 await self._send(cid, {"t": "offer_closed", "id": rid})
-            elif self.open and self._may_add(seat):
+            elif self.open and self._acts(seat):
+                previous = next((pair for pair in self.pool if pair[0] == seat), None)
+                if previous is not None:
+                    self._forget_declaration(*previous)
                 self._accept_declaration(seat, text)
+                self.pool = [pair for pair in self.pool if pair[0] != seat]
                 self.pool.append((seat, text))
                 self.done.discard(seat)
-                self._start_window()
-                self.wake.set()
+                self.joining.discard(seat)
+                self._revise_preparation()
                 self._save_queued()
                 await self._table_input(seat, perception.input_label(self.game, seat, text))
                 await self._pool()
-            elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
-                await self._send(cid, {"t": "error", "text": f"下一轮已有 {PER_PLAYER} 条行动，可用 /undo 撤回上一条。"})
-            else:  # the keeper is telling, or this round has no room for it: first in the next round
-                self._accept_declaration(seat, text)
+            else:
+                await self._send(cid, {"t": "action_rejected", "text": text,
+                                       "reason": "本轮已封闭，请在叙述结束后提交。原文已保留。"})
+        elif t == "join":
+            seat = self._seat_of(cid)
+            if seat is not None and self.open and self._acts(seat):
+                self.joining.add(seat)
                 self.done.discard(seat)
-                self.early.append((seat, text))
-                self._save_queued()
-                await self._table_input(seat, perception.input_label(self.game, seat, text))
+                self.wake.set()
                 await self._pool()
+            else:
+                await self._send(cid, {"t": "notice", "text": "本轮已封闭，无法加入。"})
         elif t == "kp_private":
             seat = self._seat_of(cid)
             text = str(msg.get("text", "")).strip()
@@ -590,7 +604,8 @@ class Hub:
                     await self._on(cid, {"t": "respond", "id": rid, "choice": "pass"})
                     await self._send(cid, {"t": "offer_closed", "id": rid})
                 self.done.add(seat)
-                self.wake.set()
+                self.joining.discard(seat)
+                self._revise_preparation()
                 await self._pool()
         elif t == "undo":  # your latest line: one waiting for the next round, else one in this round
             seat = self._seat_of(cid)
@@ -615,7 +630,7 @@ class Hub:
             else:
                 await self._send(cid, {"t": "notice", "text": "没有可撤回的未执行声明。"})
                 return
-            self.wake.set()
+            self._revise_preparation()
             self._save_queued()
             if held or mine:
                 await self._table_input(seat, "（撤回声明）" + perception.input_label(self.game, seat, removed[1]))
@@ -762,6 +777,9 @@ class Hub:
     def _free(self, seat: str, *, keep_offer: bool = False) -> None:
         """Release the connection, retaining an encounter human's unfinished choices."""
         self.sits[seat] = None
+        context = self._context(seat)
+        context.joining.discard(seat)
+        context.wake.set()
         self.ready.discard(seat)
         self.takeovers.left(seat)
         self.takeovers.pulse()
@@ -1362,23 +1380,10 @@ class Hub:
                 and (self.sits.get(inv.id) is not None or inv.id in declared or self.takeovers.waiting(inv.id))]
 
     def capacity(self) -> int:
-        """One slot more than there are players: someone can do two things, nobody three."""
-        players = len(self._players())
-        return players + 1 if players else 0
-
-    def _extra(self) -> str | None:
-        """The seat that took the round's extra slot with a second action, if one has."""
-        return next((seat for seat, _ in self.pool if self._count(seat) >= PER_PLAYER), None)
+        return len(self._players())
 
     def _may_add(self, seat: str, *, capacity: int | None = None) -> bool:
-        """Room in this round for one more of the seat's actions: its own slot if it has not
-        used it, else the extra one while nobody has it. A second action never takes the
-        place of somebody's first."""
-        n = self._count(seat)
-        if seat in self._round_seats():
-            return n == 0
-        limit = self.capacity() if capacity is None else capacity
-        return len(self.pool) < limit and (n == 0 or (n < PER_PLAYER and self._extra() is None))
+        return self._acts(seat) and self._count(seat) == 0
 
     def _waiting_for(self) -> list[str]:
         """Players who may still put an action in: not done, and with room for it."""
@@ -1386,12 +1391,6 @@ class Hub:
             return [seat for seat in self._round_seats() if seat not in self.done and not self._count(seat)]
         return [seat for seat in self._players() if (self.sits.get(seat) is not None or self.takeovers.waiting(seat))
                 and seat not in self.automatic and seat not in self.done and self._may_add(seat)]
-
-    def _start_window(self) -> None:
-        """The first action of the round starts its window (WINDOW)."""
-        manual = any(seat not in self.automatic for seat, _ in self.pool)
-        if self.open and self.game.world_encounter() is None and self.closes_at is None and manual:
-            self.closes_at = asyncio.get_running_loop().time() + self.window
 
     def _round_seats(self) -> list[str]:
         return [inv.id for inv in self._participants() if inv.can_act and self._encounter_human(inv.id)]
@@ -1424,8 +1423,11 @@ class Hub:
         waiting = self._waiting_for() if self.open else []
         public = {"t": "pool", "open": self.open, "capacity": self.capacity(), "count": len(self.pool),
                   "by": {seat: self._count(seat) for seat in self._players()}, "done": sorted(self.done),
-                  "waiting": [names[i] for i in waiting], "open_to": waiting, "extra": names.get(self._extra() or "", ""),
-                  "closes_in": self._left()}
+                  "waiting": [names[i] for i in waiting],
+                  "open_to": [i for i in self._players() if self._acts(i)] if self.open else [],
+                  "phase": self.phase, "revision": self.planning_revision,
+                  "round": self.round_id,
+                  "joining": sorted(self.joining), "error": bool(self.preparation_error), "closes_in": None}
         seat = self._seat_of(cid)
         mine = {"now": [text for s, text in self.pool if s == seat], "next": [text for s, text in self.early if s == seat]}
         return {**public, "mine": mine if seat else {}}
@@ -1573,12 +1575,169 @@ class Hub:
             await self._table_input(inv.id, said.line, speech=ev)
         self.wake.set()
 
+    def _revise_preparation(self) -> None:
+        self.planning_revision += 1
+        self.preparation_error = ""
+        if self.preparing is not None and not self.preparing.done():
+            self.preparing.cancel()
+        self.wake.set()
+
+    async def _stop_preparing(self) -> None:
+        task, self.preparing = self.preparing, None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    def _preparation_stamp(self) -> tuple:
+        """Only changes relevant to this scene invalidate its unexecuted draft."""
+        st, world = self.state, self.game.world
+        members = {person.id for person in self._participants()}
+        here = st.location
+        rooms = {here, *(world.place(who) for who in members)} - {""}
+        local = {e.id for e in world.rec.entities.values()
+                 if world.place_at(e.id, world.now) in rooms or e.id in members | rooms}
+        entities = tuple((e.id, e.version, e.at, e.status, e.quantity) for e in world.rec.entities.values()
+                         if e.id in local)
+        facts = tuple((f.id, f.version, f.retracted, tuple(f.known_by)) for f in world.rec.facts.values()
+                      if f.id == "truth" or set(f.about) & local or set(f.known_by) & members)
+        events = max((e.seq for e in world.rec.events if e.place in rooms
+                      or members.intersection([*e.participants, *e.witnesses])), default=0)
+        people = json.dumps([person.model_dump(mode="json") for person in self._participants()], sort_keys=True)
+        controllers = tuple((who, self.sits.get(who), who in self.takeovers.active) for who in sorted(members))
+        positions = tuple((who, world.place(who)) for who in sorted(members))
+        recent = tuple((entry.delivery, entry.kind, entry.who, entry.text)
+                       for entry in st.log if entry.audience is None or members.intersection(entry.audience))[-24:]
+        return (st.turn, st.minutes, here, people, positions, entities, facts, events,
+                tuple(st.flags), recent, controllers, st.ending)
+
+    def _proposed_order(self) -> list[tuple[str, str | None]]:
+        acted = {seat for seat, _ in self.pool}
+        order = [*self.pool, *[(inv.id, None) for inv in self._participants()
+                              if inv.id not in acted and inv.id not in self.done and self.sits.get(inv.id) is None
+                              and (not self.takeovers.enabled or inv.id not in self.state.human
+                                   or inv.id in self.takeovers.active)]]
+        return sorted(order, key=lambda pair: pair[0] in self.automatic)
+
     async def _collect(self) -> None:
-        """Open the pool and wait until it is full or everyone is done. What was said for this
-        round while the keeper told the last goes in first. Meanwhile the table's requests
-        (a retelling, the host's model switch, .r and .st) are done, and a finished plan of the
-        director's plays out."""
+        """Prepare an editable scene; seal the latest version before any world execution."""
+        if self.game.world_encounter() is not None:
+            await self._collect_turn_based()
+            return
+        self.pool, self.done, self.open = [], set(), True
+        self.round_id = uuid.uuid4().hex
+        self.phase, self.preparation_error = "collecting", ""
+        self.joining.clear()
+        self.state.round_plan.pop("encounter", None)
+        for queue in self.inbox.values():
+            while not queue.empty():
+                queue.get_nowait()
+        early, self.early = self.early, []
+        # Retained declarations are restored, never fresh input silently queued while telling.
+        for seat, text in early:
+            if self._acts(seat):
+                self.pool = [pair for pair in self.pool if pair[0] != seat]
+                self.pool.append((seat, text))
+        declared = {seat for seat, _ in self.pool}
+        self.automatic = {seat for seat, note in self.state.unfinished.items()
+                          if note.get("execution") and self._acts(seat) and seat not in declared}
+        self.pool.extend((inv.id, self.state.unfinished[inv.id]["original"])
+                         for inv in self._participants() if inv.id in self.automatic)
+        self._revise_preparation()
+        self._save_queued()
+        await self._pool()
+        revision, stamp = -1, ()
+        ready = None
+        try:
+            while not self.state.ending and not getattr(getattr(self, "scene", None), "closed", False):
+                # Clear before servicing work: input arriving at any await wakes the next pass.
+                self.wake.clear()
+                if not self.swaps.empty() or not self.rules.empty():
+                    self._revise_preparation()
+                    await self._stop_preparing()
+                    ready = None
+                await self._swap()
+                await self._house_rules()
+                await self._plays()
+                await self._asks()
+                self._start_privates()
+                while not self.instant.empty():
+                    seat, text = self.instant.get_nowait()
+                    await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
+                fresh = any(seat not in self.automatic for seat, _ in self.pool)
+                if not fresh and self.preparing is None and ready is None and not self.joining:
+                    await self._safely(self._interlude(), "剧情推进")
+                if self.game.world_encounter() is not None:
+                    affected = {person.id for person in self.game.world_encounter().participants}
+                    for seat in self.automatic & affected:
+                        note = self.state.unfinished[seat]
+                        note.pop("execution", None)
+                        note["reason"] = "新的遭遇打断了等待，先确认本轮行动"
+                    self.early = list(self.pool)
+                    await self._stop_preparing()
+                    await self._collect_turn_based()
+                    return
+                current = self._preparation_stamp()
+                if revision != self.planning_revision or stamp != current:
+                    await self._stop_preparing()
+                    ready = None
+                if self.preparing is not None and self.preparing.done():
+                    task, self.preparing = self.preparing, None
+                    try:
+                        ready = task.result()
+                    except asyncio.CancelledError:
+                        ready = None
+                    except Exception as exc:
+                        self._failed("本轮行动准备", exc)
+                        self.preparation_error = str(exc)
+                        self.phase = "collecting"
+                        await self._broadcast({"t": "error", "retry": True,
+                                               "text": "本轮准备未完成，声明已保留。可修改行动或输入 /retry。"})
+                        await self._pool()
+                if ready is not None and not self.joining:
+                    # No await between checking the revision, sealing, and closing admission.
+                    if revision == self.planning_revision and stamp == self._preparation_stamp():
+                        self.game.seal_party(ready)
+                        self.open, self.phase = False, "settling"
+                        self._freeze_declarations()
+                        self.state.queued_actions = []
+                        self._save()
+                        break
+                    ready = None
+                if (ready is None and self.preparing is None and not self.preparation_error
+                        and (fresh or not self._waiting_for())):
+                    revision, stamp = self.planning_revision, self._preparation_stamp()
+                    prepared = {str(n): self.state.unfinished[seat]["execution"]["arrangement"]["plan"]
+                                for n, (seat, _) in enumerate(self._proposed_order())
+                                if seat in self.automatic and self.state.unfinished.get(seat, {}).get("execution")}
+                    self.preparing = asyncio.create_task(
+                        self.game.prepare_party(self._proposed_order(), prepared=prepared), name="scene-preparation")
+                    self.phase = "thinking"
+                    await self._pool()
+                    continue
+                if ready is not None and self.phase != "ready":
+                    self.phase = "ready"
+                    await self._pool()
+                waiter = asyncio.create_task(self.wake.wait())
+                try:
+                    await asyncio.wait({waiter, *([self.preparing] if self.preparing is not None else [])},
+                                       timeout=0.5, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    waiter.cancel()
+                    await asyncio.gather(waiter, return_exceptions=True)
+        finally:
+            await self._stop_preparing()
+            self.open = False
+        await self._pool()
+
+    async def _collect_turn_based(self) -> None:
+        """Collect explicit tactical declarations or passes from all relevant players.
+
+        Restored, unexecuted declarations are confirmed when an encounter interrupts them.
+        Table requests remain available while participants choose their actions.
+        """
         self.pool, self.done, self.open, self.closes_at = [], set(), True, None
+        self.round_id = uuid.uuid4().hex
+        self.phase = "collecting"
         for queue in self.inbox.values():
             while not queue.empty():
                 queue.get_nowait()
@@ -1601,7 +1760,6 @@ class Hub:
             (self.pool if seat not in affected and self._acts(seat) and self._may_add(seat, capacity=capacity)
              else self.early).append((seat, text))
         self._save_queued()
-        self._start_window()  # said while the keeper told: the moment starts as the round opens
         await self._event({"type": "status", "text": ""})
         await self._pool()
         try:
@@ -1642,6 +1800,7 @@ class Hub:
                 self.wake.clear()
         finally:
             self.open, self.closes_at = False, None
+            self.phase = "settling"
         if (context := self._encounter_round()) is not None:
             self.state.round_plan["encounter"] = list(context)
             self._save()
@@ -1692,11 +1851,8 @@ class Hub:
             self._defer_declarations(saved)
             return
         if saved is not None:
-            # A saved collection window keeps its original declarations and time ledger.
-            # New input belongs to the next window, rather than replacing unplayed work.
-            original = [tuple(pair) for pair in st.round_plan.get("input", [])]
-            if self.pool not in (saved, original):
-                self.early = [*self.pool, *self.early]
+            # The sealed receipt owns the batch, including AI placeholders. The editable
+            # pool contains human declarations only and must never be replayed as new work.
             self.pool = saved
         acted = {seat for seat, _ in self.pool}
         declared = {seat for seat, _ in self.early}
@@ -1709,8 +1865,8 @@ class Hub:
         self.game.begin_round()  # the round's actions happen at once: one clock, one telling (Game.narrate)
         settled = False
         try:
-            # arrange_party checkpoints its raw receipt before its first await, atomically
-            # moving this window out of the unstarted queue and into round_plan.
+            # Ordinary collection already sealed this batch. Tactical collection prepares
+            # here and atomically seals its complete plan before any action is executed.
             st.queued_actions = list(self.early)
             prepared = {str(n): self.state.unfinished[seat]["execution"]["arrangement"]["plan"]
                         for n, (seat, _) in enumerate(order)
@@ -1868,6 +2024,18 @@ class Hub:
         self.state.unfinished[seat] = {"original": original, "remaining": remaining,
                                       "completed": previous.get("completed", []), "reason": reason}
 
+    def _init_planning(self) -> None:
+        """Every scene owns its draft, even when its host shares the root room."""
+        self.preparing: asyncio.Task | None = None
+        self.round_id = uuid.uuid4().hex
+        self.planning_revision = 0
+        self.joining: set[str] = set()
+        self.phase = "waiting"
+        self.preparation_error = ""
+
+    def _abandon_turn(self) -> None:
+        """Scene hosts also release time and resource reservations here."""
+
     async def _unattended(self, inv: Any, exc: BaseException) -> None:
         """A turn that failed with nobody to /retry it (an AI seat, a player who left): the table
         resumes it itself, twice, and then lets it go: what was settled stays, the journal is
@@ -1887,6 +2055,7 @@ class Hub:
             if (token := self.state.pending_turn.get("party_token")) is not None:
                 who, original = self.state.round_plan["input"][int(token)]
                 self.game.finish_party_declaration(who, original, token=token)
+            self._abandon_turn()
             self.state.pending_turn.clear()
             self._save()
             note = f"{inv.name}的回合未能完成，已结算的结果保留，游戏继续。"
@@ -1905,6 +2074,7 @@ class Hub:
             self.game.visuals.resume()
             await self._event({"type": "status", "text": ""})
             if said and self.state.pending_turn.get("input") == said:
+                self._abandon_turn()
                 self.state.pending_turn.clear()
                 self._save()
             self._failed(what, exc)
@@ -2109,6 +2279,8 @@ class Hub:
             await self._broadcast({"t": "sync", "state": self._view()})
 
     async def _ai_turn(self, inv: Any) -> None:
+        if inv.id in self.state.human and self.sits.get(inv.id) is not None:
+            return
         delegated = inv.id in self.takeovers.active
         if self.takeovers.enabled and inv.id in self.state.human and not delegated:
             return
@@ -2125,6 +2297,8 @@ class Hub:
             context += "\n【临时代管】延续这名调查员已有的意图、性格与约定，仅依据他自己的见闻行动。玩家重连后交还控制权。"
         move = await self.cast.investigator(self.state, inv.id, context,  # in a fight: its choices
                                             stances=views.stances(self.game, inv.id))
+        if inv.id in self.state.human and self.sits.get(inv.id) is not None:
+            return
         if delegated and inv.id not in self.takeovers.active:
             return  # A reconnect invalidates an unstarted AI proposal, never an executed action.
         if move is None:  # no action it could play, after one resend (Cast.investigator): none is made up
@@ -2134,6 +2308,8 @@ class Hub:
         if move.react:  # its answer to blows from now on, as a seat's "react" sets it
             self.game.set_react(inv.id, move.react)
         await self._table_input(inv.id, move.text, ai=True)
+        if inv.id in self.state.human and self.sits.get(inv.id) is not None:
+            return
         if delegated and inv.id not in self.takeovers.active:
             return
         await self._run(move.text, inv.id, ai=True, push=move.push)
@@ -2329,6 +2505,7 @@ class Hub:
             if linger:
                 await asyncio.Event().wait()
         finally:
+            await self._stop_preparing()
             key_file.unlink(missing_ok=True)
             await self.takeovers.close()
             if self._scene_tables is not None:

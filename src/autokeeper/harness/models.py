@@ -89,6 +89,12 @@ class Reply:
         self.retries += other.retries
 
 
+def _carry_usage(error: BaseException, reply: Reply) -> None:
+    """Retain already-reported usage on failure, without carrying a draft or changing the exception."""
+    if reply.usage or reply.cost_usd:
+        error.partial_reply = Reply(usage=dict(reply.usage), cost_usd=reply.cost_usd)  # type: ignore[attr-defined]
+
+
 # -- transient failures --------------------------------------------------------------------
 ATTEMPTS = 3
 RETRY_WAIT = (1.0, 20.0)  # first back-off and cap in seconds; exponential with jitter
@@ -429,6 +435,8 @@ class Model:
                     raise StructuredOutputError(errors, remaining)
             return reply
         except BaseException as exc:
+            if isinstance(partial := getattr(exc, "partial_reply", None), Reply):
+                reply.add(partial)
             error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
@@ -457,23 +465,37 @@ class Model:
             finally:
                 streamed = streamed or _shown(on_delta)
 
-        reply = Reply()
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(ATTEMPTS),
-            wait=wait_exponential_jitter(initial=RETRY_WAIT[0], max=RETRY_WAIT[1]),
-            retry=retry_if_exception(lambda e: transient(e) and not streamed),
-            before_sleep=lambda attempt: trace.progress(
-                "retry", attempt=attempt.attempt_number,
-                error=str(attempt.outcome.exception()) if attempt.outcome else "",
-                delay=attempt.next_action.sleep if attempt.next_action else 0),
-            reraise=True,
-        ):
-            with attempt:
-                parts = self._guard_input(messages, schema)
-                trace.progress("attempt", attempt=attempt.retry_state.attempt_number, context=parts)
-                async with asyncio.timeout(call_timeout(self.label)):
-                    reply = await self._call(messages, schema=schema, images=images, on_delta=delta if on_delta else None)
-                reply.retries = attempt.retry_state.attempt_number - 1
+        reply, used = Reply(), Reply()
+        try:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(ATTEMPTS),
+                wait=wait_exponential_jitter(initial=RETRY_WAIT[0], max=RETRY_WAIT[1]),
+                retry=retry_if_exception(lambda e: transient(e) and not streamed),
+                before_sleep=lambda attempt: trace.progress(
+                    "retry", attempt=attempt.attempt_number,
+                    error=str(attempt.outcome.exception()) if attempt.outcome else "",
+                    delay=attempt.next_action.sleep if attempt.next_action else 0),
+                reraise=True,
+            ):
+                with attempt:
+                    parts = self._guard_input(messages, schema)
+                    trace.progress("attempt", attempt=attempt.retry_state.attempt_number, context=parts)
+                    try:
+                        async with asyncio.timeout(call_timeout(self.label)):
+                            reply = await self._call(messages, schema=schema, images=images, on_delta=delta if on_delta else None)
+                    except BaseException as exc:
+                        # asyncio.timeout wraps the cancellation that carries the
+                        # transport's known usage in TimeoutError.__cause__.
+                        for failure in (exc, exc.__cause__):
+                            if isinstance(partial := getattr(failure, "partial_reply", None), Reply):
+                                used.add(partial)
+                                break
+                        raise
+                    reply.add(used)
+                    reply.retries = attempt.retry_state.attempt_number - 1
+        except BaseException as exc:
+            _carry_usage(exc, used)
+            raise
         return reply
 
     async def warm(self) -> None:
@@ -682,6 +704,17 @@ class ClaudeCodeModel(Model):
                                 reply.text += b.text
                             elif isinstance(b, ThinkingBlock):
                                 reply.thinking += b.thinking
+                        if u := getattr(msg, "usage", None):
+                            # The SDK can report usage before its final ResultMessage.
+                            # A cancellation in between must retain those known tokens;
+                            # the final aggregate below replaces these partial counts.
+                            for name, amount in {
+                                "input_tokens": (u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+                                                 + u.get("cache_read_input_tokens", 0)),
+                                "cache_read": u.get("cache_read_input_tokens", 0),
+                                "output_tokens": u.get("output_tokens", 0),
+                            }.items():
+                                reply.usage[name] = reply.usage.get(name, 0) + amount
                     elif isinstance(msg, ResultMessage):
                         u = msg.usage or {}
                         cached = u.get("cache_read_input_tokens", 0)
@@ -694,7 +727,8 @@ class ClaudeCodeModel(Model):
                         reply.data = msg.structured_output
                         if msg.is_error:  # never hand an API error on as the reply (it would be narrated)
                             raise ClaudeError(msg.result or reply.text or "Claude Code reported an error")
-            except BaseException:
+            except BaseException as exc:
+                _carry_usage(exc, reply)
                 self._discard(key)  # a half-read stream is unusable; a retry gets a fresh process
                 raise
             self._wiping[key] = asyncio.create_task(self._wipe(key))
@@ -802,14 +836,18 @@ class LangChainModel(Model):
         history = self._messages(messages, images, schema)
         reply = Reply()
         if schema is None:
-            async for chunk in self.chat.astream(history):
-                if piece := chunk.text:
-                    reply.text += piece
-                    if on_delta:
-                        await on_delta(piece)
-                reply.thinking += _thinking(chunk)
-                if chunk.usage_metadata:
-                    reply.usage = _usage(chunk.usage_metadata)
+            try:
+                async for chunk in self.chat.astream(history):
+                    reply.thinking += _thinking(chunk)
+                    if chunk.usage_metadata:
+                        reply.usage = _usage(chunk.usage_metadata)
+                    if piece := chunk.text:
+                        reply.text += piece
+                        if on_delta:
+                            await on_delta(piece)
+            except BaseException as exc:
+                _carry_usage(exc, reply)
+                raise
             return reply
         if self.mode == "json":
             # Dialogue can carry actions, discoveries and private intentions. Optional fields do
@@ -823,13 +861,17 @@ class LangChainModel(Model):
             if switch:
                 runnable = runnable.bind(response_format={"type": "json_object"})
             if on_delta:  # the JSON as it is written, for a caller that reads it on the way (the keeper's telling)
-                async for chunk in runnable.astream(history):
-                    if piece := chunk.text:
-                        reply.text += piece
-                        await on_delta(piece)
-                    reply.thinking += _thinking(chunk)
-                    if chunk.usage_metadata:
-                        reply.usage = _usage(chunk.usage_metadata)
+                try:
+                    async for chunk in runnable.astream(history):
+                        reply.thinking += _thinking(chunk)
+                        if chunk.usage_metadata:
+                            reply.usage = _usage(chunk.usage_metadata)
+                        if piece := chunk.text:
+                            reply.text += piece
+                            await on_delta(piece)
+                except BaseException as exc:
+                    _carry_usage(exc, reply)
+                    raise
             else:
                 msg = await runnable.ainvoke(history)
                 reply.text, reply.thinking, reply.usage = msg.text, _thinking(msg), _usage(msg.usage_metadata)

@@ -1,4 +1,4 @@
-"""Offline audit cases: strict expected failures track unresolved scene lifecycle defects."""
+"""Regressions for scene cancellation, failed-turn cleanup and the shared room lifecycle."""
 
 from __future__ import annotations
 
@@ -47,10 +47,6 @@ def make_table(fake: FakeDice) -> tuple[Hub, SceneTables]:
     return hub, tables
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="P1 audit: abandoning a failed turn leaves an orphan time/resource reservation that survives reload",
-)
 async def test_abandoned_turn_releases_its_reservation_and_unblocks_the_other_scene(fake):
     hub, tables = make_table(fake)
     first, other = tables.for_member("zhouheng"), tables.for_member("lin")
@@ -60,8 +56,10 @@ async def test_abandoned_turn_releases_its_reservation_and_unblocks_the_other_sc
         with pytest.raises(ValueError, match="malformed model content") as error:
             await first._run("检查桌上的文件", "zhouheng", ai=True)
         assert first.state.pending_turn and first.scene.reservation
+        settled_at, recorded = first.scene.at, first.state.record.seq
         await first._unattended(first.state.investigator, error.value)
         assert first.cast.failures == 3 and not first.state.pending_turn
+        assert first.scene.at == settled_at and first.state.record.seq == recorded
         restored = type(hub.state).model_validate_json(hub.state.model_dump_json())
         assert not first.scene.reservation, "Abandoned action must not continue reserving time or shared resources"
         assert not restored.scenes[first.ident].reservation
@@ -76,10 +74,25 @@ async def test_abandoned_turn_releases_its_reservation_and_unblocks_the_other_sc
         await hub.game.close()
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="P2 audit: the root finishes the game but scene copies still queue growth commands and new actions",
-)
+async def test_failed_table_command_releases_its_reservation(fake):
+    hub, tables = make_table(fake)
+    worker = tables.for_member("zhouheng")
+    said = "/kp 解释目前的情况"
+    worker.state.pending_turn = {"input": said}
+    tables.runtime.reserve(worker.ident, Action(kind="meta", summary=said), Ruling(needs_roll=False))
+
+    async def interrupted():
+        raise ValueError("offline fake: command interrupted")
+
+    try:
+        await worker._safely(interrupted(), "主持提问", said)
+        assert not worker.state.pending_turn and not worker.scene.reservation
+        assert tables.runtime.pass_time(worker.ident)
+    finally:
+        await tables.close()
+        await hub.game.close()
+
+
 async def test_finished_scene_runs_growth_commands_and_rejects_new_actions(fake, monkeypatch):
     hub, tables = make_table(fake)
     worker = tables.for_member("zhouheng")
@@ -108,10 +121,6 @@ async def test_finished_scene_runs_growth_commands_and_rejects_new_actions(fake,
         await hub.game.close()
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="P2 audit: a cancelled time proposal remains deduplicated after the interrupting declaration is undone",
-)
 async def test_cancelled_time_proposal_can_resume_after_input_is_undone(fake, monkeypatch):
     hub, tables = make_table(fake)
     first, other = tables.for_member("zhouheng"), tables.for_member("lin")
@@ -149,5 +158,89 @@ async def test_cancelled_time_proposal_can_resume_after_input_is_undone(fake, mo
     finally:
         await first._stop_time()
         hub.clients.clear()
+        await tables.close()
+        await hub.game.close()
+
+
+async def test_closing_a_scene_cancels_its_uncommitted_preparation(fake):
+    hub, tables = make_table(fake)
+    worker = tables.for_member("zhouheng")
+    started = asyncio.Event()
+
+    async def preparation():
+        started.set()
+        await asyncio.Event().wait()
+
+    worker.preparing = task = asyncio.create_task(preparation())
+    await started.wait()
+    revision = worker.planning_revision
+    worker.halted = True
+    try:
+        await worker.run()
+        assert task.cancelled() and worker.preparing is None
+        assert worker.planning_revision > revision
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await tables.close()
+        await hub.game.close()
+
+
+@pytest.mark.parametrize("phase", ["thinking", "ready"])
+async def test_an_uncommitted_round_cannot_grant_a_time_cut(fake, phase):
+    hub, tables = make_table(fake)
+    worker = tables.for_member("zhouheng")
+    worker.open = True
+    hub.sits["zhouheng"] = "player-a"
+    called = []
+
+    async def scene_time(state, until):
+        called.append(until)
+
+    worker.cast.scene_time = scene_time
+    worker.phase = phase
+    try:
+        worker.request_time(worker.scene.at + 20)
+        await asyncio.sleep(0)
+        assert not called and worker.time_task is None
+        assert worker.scene.passed_until is None
+    finally:
+        await worker._stop_time()
+        await tables.close()
+        await hub.game.close()
+
+
+@pytest.mark.parametrize("kind", ["act", "join", "done", "undo"])
+async def test_a_previous_rounds_delayed_message_cannot_change_the_current_scene(fake, monkeypatch, kind):
+    hub, tables = make_table(fake)
+    worker = tables.for_member("zhouheng")
+    hub.sits["zhouheng"] = "player-a"
+    hub.round_id, worker.round_id = "another-scene-round", "current-scene-round"
+    worker.open, worker.phase = True, "collecting"
+    worker.pool = [("zhouheng", "本轮已提交的行动")]
+    sent = []
+
+    async def send(cid, payload):
+        sent.append(payload)
+
+    monkeypatch.setattr(hub, "_send", send)
+    try:
+        await hub._on("player-a", {"t": kind, "text": "迟到的旧行动", "round": "previous-scene-round"})
+        assert worker.pool == [("zhouheng", "本轮已提交的行动")]
+        assert not worker.done and not worker.joining
+        assert worker.planning_revision == 0
+        if kind == "act":
+            assert any(message["t"] == "action_rejected" and message["text"] == "迟到的旧行动" for message in sent)
+        # Validate after scene routing: the root room may have a different live round id.
+        await hub._on("player-a", {"t": kind, "text": "本轮修订的行动", "round": worker.round_id})
+        if kind == "act":
+            assert worker.pool == [("zhouheng", "本轮修订的行动")]
+        elif kind == "join":
+            assert worker.joining == {"zhouheng"}
+        elif kind == "done":
+            assert worker.done == {"zhouheng"}
+        else:
+            assert not worker.pool
+    finally:
         await tables.close()
         await hub.game.close()

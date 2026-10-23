@@ -64,6 +64,19 @@ class TableCast:
         return None
 
 
+def hold_preparation(monkeypatch, game):
+    """Keep a fake KP thinking until the test releases its current declaration batch."""
+    ready = asyncio.Event()
+    original = game.prepare_party
+
+    async def prepare(order, **kwargs):
+        await ready.wait()
+        return await original(order, **kwargs)
+
+    monkeypatch.setattr(game, "prepare_party", prepare)
+    return ready
+
+
 async def until(ws: aiohttp.ClientWebSocketResponse, test, limit: float = 5.0) -> dict[str, Any]:
     """The next message that passes `test` (others are skipped)."""
     while True:
@@ -117,6 +130,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
     state = Game.new(m, [lead, friend], slot="lan-test", human=[lead.id, "lin"])
     cast = TableCast()
     hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
     url = f"ws://127.0.0.1:{hub.port}/ws"
     async with aiohttp.ClientSession() as http:
@@ -138,24 +152,25 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         assert "已被占用" in (await until(b, lambda x: x["t"] == "error"))["text"]
         await b.send_json({"t": "sit", "investigator": "lin"})  # every seat taken: the game begins
 
-        opened_round = await until(a, pool_open)  # a round: both may act, in any order
-        assert opened_round["capacity"] == 3  # two players: three actions, nobody more than two
+        opened_round = await until(a, pool_open)
+        assert opened_round["capacity"] == 2
         await b.send_json({"t": "act", "text": "我抢着先说"})
-        await b.send_json({"t": "act", "text": "我再四下看看"})
-        pooled = await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)
-        assert pooled["open"] and pooled["by"] == {"zhouheng": 0, "lin": 2} and pooled["waiting"] == ["周衡"]
-        assert pooled["mine"] == {"now": [], "next": []}  # only the owner can edit their queue; messages are public
-        await b.send_json({"t": "act", "text": "我还要第三件事"})  # no room for it this round: it waits for the next
-        held = await until(b, lambda x: x["t"] == "pool" and bool(x["mine"].get("next")))
-        assert held["count"] == 2 and held["mine"] == {"now": ["我抢着先说", "我再四下看看"], "next": ["我还要第三件事"]}
-        await b.send_json({"t": "undo"})  # takes back her latest: the one for the next round
-        assert (await until(b, lambda x: x["t"] == "pool" and not x["mine"]["next"]))["count"] == 2
-        await b.send_json({"t": "undo"})  # then her last one in this round
-        await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
+        pooled = await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
+        assert pooled["open"] and pooled["by"] == {"zhouheng": 0, "lin": 1}
+        assert pooled["mine"] == {"now": [], "next": []}
+        for text in ("我再四下看看", "我改为看看门口"):
+            await b.send_json({"t": "act", "text": text})
+            revised = await until(b, lambda x, text=text: x["t"] == "pool" and x["mine"]["now"] == [text])
+            assert revised["count"] == 1 and revised["mine"]["next"] == []
+        await b.send_json({"t": "undo"})
+        await until(a, lambda x: x["t"] == "pool" and x["count"] == 0)
         await b.send_json({"t": "act", "text": "我改主意了，翻翻报纸"})
-        await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)  # hers are in first
-        await a.send_json({"t": "act", "text": "我看看告示栏"})  # three in: the keeper settles it
+        await until(b, lambda x: x["t"] == "pool" and x["mine"]["now"] == ["我改主意了，翻翻报纸"])
+        await a.send_json({"t": "act", "text": "我看看告示栏"})
+        await until(b, lambda x: x["t"] == "pool" and x["count"] == 2)
+        ready.set()
         await until(b, lambda x: x["t"] == "pool" and not x["open"])
+        await until(a, lambda x: x["t"] == "pool" and not x["open"])
         for cid in ("a", "b"):
             transcript = [(e["who"], e["text"]) for e in hub._welcome(cid)["log"] if e["kind"] == "player"]
             assert ("周衡", "我看看告示栏") in transcript
@@ -168,9 +183,10 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await b.close()  # 小红 drops out: the AI plays her seat
         seats = await until(a, lambda x: x["t"] == "seats" and not x["seats"][1]["online"])
         assert [s["online"] for s in seats["seats"]] == [True, False]
+        ready.clear()
         await a.send_json({"t": "act", "text": "我四下看看"})
-        assert (await until(a, lambda x: x["t"] == "pool" and x["count"] == 1))["capacity"] == 2  # alone: two
-        await a.send_json({"t": "done"})  # one is enough this time
+        assert (await until(a, lambda x: x["t"] == "pool" and x["count"] == 1))["capacity"] == 1
+        ready.set()
         await until(a, lambda x: x["t"] == "pool" and not x["open"])
         await until(a, pool_open)
         assert cast.ai_turns == ["lin"]
@@ -203,20 +219,20 @@ async def test_only_the_host_adds_a_house_rule(monkeypatch, tmp_path, skills_dir
     await closed(task)
 
 
-async def test_everyone_has_a_slot_and_one_player_may_take_the_extra_one(skills_dir, fake):
+async def test_every_player_has_exactly_one_current_declaration(skills_dir, fake):
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     party = [lead, *(lead.model_copy(update={"id": i, "name": n}, deep=True) for i, n in (("lin", "林秋"), ("su", "苏青")))]
     hub = Hub(EXAMPLE, state=Game.new(m, party, slot="lan-three", human=[p.id for p in party]), cast=TableCast(), rules=Rules(dice=fake))
     hub.sits = {p.id: f"c{i}" for i, p in enumerate(party)}
     hub.open = True
-    assert hub.capacity() == 4
-    hub.pool = [("zhouheng", "一"), ("zhouheng", "二")]  # he took the extra slot
+    assert hub.capacity() == 3
+    hub.pool = [("zhouheng", "查看门锁")]
     assert not hub._may_add("zhouheng") and hub._may_add("lin") and hub._may_add("su")
-    hub.pool.append(("lin", "三"))
-    assert not hub._may_add("lin") and hub._waiting_for() == ["su"]  # her second would take 苏青's place
-    hub.pool.append(("su", "四"))
-    assert hub._waiting_for() == []  # full: everyone in, one of them twice
+    hub.pool.append(("lin", "留意楼梯"))
+    assert not hub._may_add("lin") and hub._waiting_for() == ["su"]
+    hub.pool.append(("su", "检查窗户"))
+    assert hub._waiting_for() == [] and len(hub.pool) == hub.capacity()
 
 
 class GatedCast(TableCast):
@@ -232,42 +248,38 @@ class GatedCast(TableCast):
         return await super().keeper(state, report, on_delta, lore)
 
 
-async def test_what_is_said_while_the_keeper_tells_goes_in_first_next_round(monkeypatch, tmp_path, skills_dir, fake):
+async def test_actions_sent_while_the_keeper_tells_are_rejected_without_queuing(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
     cast = GatedCast()
-    hub = Hub(EXAMPLE, state=Game.new(m, [lead, friend], slot="lan-early", human=[lead.id, "lin"]), cast=cast, rules=Rules(dice=fake))
+    hub = Hub(EXAMPLE, state=Game.new(m, [lead, friend], slot="lan-sealed", human=[lead.id, "lin"]), cast=cast, rules=Rules(dice=fake))
     task = await opened(hub)
     url = f"ws://127.0.0.1:{hub.port}/ws"
-    async with aiohttp.ClientSession() as http:
-        a, b = await http.ws_connect(url), await http.ws_connect(url)
-        for ws, name, seat in ((a, "小明", "zhouheng"), (b, "小红", "lin")):
-            await ws.send_json({"t": "hello", "name": name})
-            await until(ws, lambda x: x["t"] == "welcome")
-            await ws.send_json({"t": "sit", "investigator": seat})
-        await until(b, pool_open)
-        cast.gate.clear()  # the keeper takes their time over this round
-        await a.send_json({"t": "act", "text": "我看看告示栏"})
-        await a.send_json({"t": "done"})
-        await b.send_json({"t": "done"})  # nothing from her this round
-        await until(b, lambda x: x["t"] == "turn" and x["investigator"] == "zhouheng")  # his turn is settling
-        await b.send_json({"t": "act", "text": "等等，我拉住他"})
-        await b.send_json({"t": "act", "text": "我喊他名字"})
-        held = await until(b, lambda x: x["t"] == "pool" and len(x["mine"]["next"]) == 2)
-        assert not held["open"] and held["mine"]["next"] == ["等等，我拉住他", "我喊他名字"]
-        await b.send_json({"t": "act", "text": "还有一句"})
-        assert "2 条" in (await until(b, lambda x: x["t"] == "error"))["text"]
-        await b.send_json({"t": "undo"})  # her latest
-        await until(b, lambda x: x["t"] == "pool" and x["mine"]["next"] == ["等等，我拉住他"])
+    try:
+        async with aiohttp.ClientSession() as http:
+            a, b = await http.ws_connect(url), await http.ws_connect(url)
+            for ws, name, seat in ((a, "小明", "zhouheng"), (b, "小红", "lin")):
+                await ws.send_json({"t": "hello", "name": name})
+                await until(ws, lambda x: x["t"] == "welcome")
+                await ws.send_json({"t": "sit", "investigator": seat})
+            await until(b, pool_open)
+            cast.gate.clear()
+            await a.send_json({"t": "act", "text": "我看看告示栏"})
+            await until(b, lambda x: x["t"] == "turn" and x["investigator"] == "zhouheng")
+            for text in ("等等，我拉住他", "我喊他名字"):
+                await b.send_json({"t": "act", "text": text})
+                rejected = await until(b, lambda x: x["t"] == "action_rejected")
+                assert rejected["text"] == text and "封闭" in rejected["reason"]
+            assert not hub.early and not hub.state.queued_actions
+            cast.gate.set()
+            following = await until(b, pool_open)
+            assert following["count"] == 0 and following["mine"] == {"now": [], "next": []}
+            assert not any("等等，我拉住他" in e.text or "我喊他名字" in e.text for e in hub.state.log)
+    finally:
         cast.gate.set()
-        second = await until(a, lambda x: pool_open(x) and x["by"].get("lin") == 1)
-        assert second["count"] == 1 and second["by"]["zhouheng"] == 0  # hers went in first
-        assert (await until(b, lambda x: pool_open(x) and bool(x["mine"]["now"])))["mine"] == {"now": ["等等，我拉住他"], "next": []}
-        await a.close()
-        await b.close()
-    await closed(task)
+        await closed(task)
 
 
 async def test_a_player_joins_from_the_game_screen(monkeypatch, tmp_path, skills_dir, fake):
@@ -393,6 +405,7 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
     friend = lead.model_copy(update={"id": "lin", "name": "林秋", "marks": []}, deep=True)
     state = Game.new(m, [lead, friend], slot="lan-dice", human=[lead.id, "lin"])
     hub = Hub(EXAMPLE, state=state, cast=LeverCast(), rules=Rules(dice=fake))
+    ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
     url = f"ws://127.0.0.1:{hub.port}/ws"
     async with aiohttp.ClientSession() as http:
@@ -411,15 +424,20 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
         assert early["ev"]["kind"] == "refused" and "结局" in early["ev"]["text"]
         await b.send_json({"t": "act", "text": "我四下看看"})
         await a.send_json({"t": "done"})
-        await b.send_json({"t": "done"})  # both done before the pool is full: settled now
+        await b.send_json({"t": "done"})
+        await until(b, lambda x: x["t"] == "pool" and x["count"] == 2)
+        ready.set()
         heard = []
         while "pool-closed" not in heard or heard[-1] != "pool-open":  # until the next round opens
             msg = await asyncio.wait_for(a.receive_json(), 5.0)
             heard.append(msg["ev"]["type"] if msg["t"] == "event" else ("pool-open" if msg["open"] else "pool-closed") if msg["t"] == "pool" else msg["t"])
         assert "error" not in heard and heard.index("said") < heard.index("keeper_end")  # public input precedes ruling
         fake.queue_totals(3, 2)  # the ending's 理智 +1D6, for each of them
+        ready.clear()
         await a.send_json({"t": "act", "text": "我拉下制动杆"})
         await b.send_json({"t": "act", "text": "我跟上"})
+        await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)
+        ready.set()
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
         await until(a, lambda x: x["t"] == "over")
@@ -727,14 +745,14 @@ async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next
         await a.send_json({"t": "start"})
         await until(a, pool_open)
         await a.send_json({"t": "act", "text": "我四下看看"})
-        await a.send_json({"t": "done"})
         note = await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"])
         assert note["text"] == "林秋的回合未能完成，已结算的结果保留，游戏继续。" and not hub.state.pending_turn  # let go, what settled stays
-        await until(a, pool_open)  # the room goes on
+        next_round = await until(a, pool_open)
+        assert next_round["count"] == 0 and not hub.early  # settled human input must not replay beside an AI placeholder
         cast.fail_ai = 1  # the AI cannot even think of a move this time
         await a.send_json({"t": "act", "text": "我看看告示栏"})  # the next action is not refused
-        await a.send_json({"t": "done"})
-        assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said"))["ev"]["text"] == "我看看告示栏"
+        assert (await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said"
+                            and x["ev"]["who"] == "周衡" and x["ev"]["text"] == "我看看告示栏"))["ev"]["text"] == "我看看告示栏"
         assert (await until(a, lambda x: x["t"] == "say" and "林秋" in x["text"]))["text"] == "林秋本轮未行动。"  # no ConnectionError on screen
         await until(a, pool_open)
         assert "c_notice" in hub.state.clues
@@ -764,6 +782,7 @@ async def test_a_rounds_actions_happen_at_once_and_are_told_together(monkeypatch
 
     cast = Timed()
     hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
     async with aiohttp.ClientSession() as http:
         a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
@@ -780,6 +799,8 @@ async def test_a_rounds_actions_happen_at_once_and_are_told_together(monkeypatch
         await b.send_json({"t": "act", "text": "我和站长聊几句"})  # 10, at the same time
         await a.send_json({"t": "done"})
         await b.send_json({"t": "done"})
+        await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)
+        ready.set()
         held = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "held")  # the first waits for the second
         assert held
         end = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
@@ -794,39 +815,44 @@ async def test_a_rounds_actions_happen_at_once_and_are_told_together(monkeypatch
     await closed(task)
 
 
-async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not_act(monkeypatch, tmp_path, skills_dir, fake):
+async def test_latest_preparation_seals_without_a_timer_or_waiting_for_an_undeclared_player(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     m = Module.load(EXAMPLE)
     lead = m.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
-    state = Game.new(m, [lead, friend], slot="lan-window", human=[lead.id, "lin"])
-    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake))
-    hub.window = 0.6
+    state = Game.new(m, [lead, friend], slot="lan-preparation", human=[lead.id, "lin"])
+    cast = GatedCast()
+    hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
+    ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
-    async with aiohttp.ClientSession() as http:
-        a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
-        b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
-        await a.send_json({"t": "hello", "name": "小明"})
-        await b.send_json({"t": "hello", "name": "小红"})
-        await until(a, lambda x: x["t"] == "welcome")
-        await until(b, lambda x: x["t"] == "welcome")
-        await a.send_json({"t": "sit", "investigator": "zhouheng"})
-        await b.send_json({"t": "sit", "investigator": "lin"})
-        assert (await until(a, pool_open))["closes_in"] is None  # nobody has acted: no clock yet
-        await a.send_json({"t": "act", "text": "我看看告示栏"})
-        said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
-        assert said["ev"]["who"] == "周衡"  # visible before the collection window closes
-        counting = await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
-        # Subtracting floating-point deadlines can exceed the configured window by a few ulps.
-        assert 0 < counting["closes_in"] <= hub.window + 1e-9
-        closed_round = await until(a, lambda x: x["t"] == "pool" and not x["open"], limit=3)
-        assert closed_round["count"] == 1  # 小红 did not act in time: settled without her, nobody waited
-        await b.send_json({"t": "act", "text": "我也去看看"})  # too late for that moment: the next round's
-        nxt = await until(a, pool_open)
-        assert nxt["count"] == 1 and nxt["closes_in"] is not None  # it opens the next moment at once
-        await a.close()
-        await b.close()
-    await closed(task)
+    try:
+        async with aiohttp.ClientSession() as http:
+            a = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+            b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+            for ws, name, seat in ((a, "小明", "zhouheng"), (b, "小红", "lin")):
+                await ws.send_json({"t": "hello", "name": name})
+                await until(ws, lambda x: x["t"] == "welcome")
+                await ws.send_json({"t": "sit", "investigator": seat})
+            assert (await until(a, pool_open))["closes_in"] is None
+            cast.gate.clear()
+            await a.send_json({"t": "act", "text": "我看看告示栏"})
+            said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
+            assert said["ev"]["who"] == "周衡"
+            thinking = await until(a, lambda x: pool_open(x) and x["phase"] == "thinking")
+            assert thinking["count"] == 1 and thinking["closes_in"] is None
+            ready.set()
+            sealed = await until(a, lambda x: x["t"] == "pool" and not x["open"])
+            assert sealed["count"] == 1
+            await b.send_json({"t": "act", "text": "我也去看看"})
+            rejected = await until(b, lambda x: x["t"] == "action_rejected")
+            assert rejected["text"] == "我也去看看" and not hub.early
+            cast.gate.set()
+            following = await until(a, pool_open)
+            assert following["count"] == 0 and following["closes_in"] is None
+    finally:
+        cast.gate.set()
+        ready.set()
+        await closed(task)
 
 
 async def test_a_fights_round_at_the_table_is_declared_by_everyone_and_settled_once(monkeypatch, tmp_path, skills_dir, fake):

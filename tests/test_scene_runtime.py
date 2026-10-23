@@ -660,3 +660,63 @@ async def test_retired_and_closed_hosts_release_their_owned_dice_and_cast(fake):
     await runtime.close()
     assert closed == [("cast", a), ("dice", a), ("cast", b), ("dice", b)]
     assert ga is not gb and not runtime._games
+
+
+async def test_abandoned_joint_attempt_unblocks_its_follower_without_claiming_completion(fake):
+    action = Action(kind="use", summary="继续整理记录")
+    runtime, _, _ = made(fake, rulings={action.summary: Ruling(needs_roll=False, minutes=0)})
+    first, other = runtime.for_member("zhouheng"), runtime.for_member("lin")
+    plan = Plan(action=action).model_dump(mode="json")
+    key = "scene-handoff:abandoned-attempt"
+    receipt = runtime.state.scene_handoffs[key] = {
+        "kind": "scene-handoff", "order": [first, other], "completed": [],
+        "steps": {sid: {"plan": plan} for sid in (first, other)},
+    }
+    try:
+        for ident in (first, other):
+            scene = runtime.scenes[ident]
+            scene.pending_turn = {
+                "input": "继续整理记录", "scene_joint": {
+                    "id": key, "needs_prepare": True, "arrangement": {"at": scene.turn, "plan": plan},
+                },
+            }
+            runtime.reserve(ident, action, Ruling(needs_roll=False, minutes=0))
+        runtime.abandon(first)
+        assert receipt["completed"] == [] and receipt["abandoned"] == [first]
+        assert not runtime.scenes[first].pending_turn and not runtime.scenes[first].reservation
+        await asyncio.wait_for(runtime.wait(other), 1)
+        related = runtime.scenes[other].pending_turn["scene_coordination"]["related"]
+        assert related == [{"actor": "zhouheng", "action": plan["action"], "committed": False, "abandoned": True}]
+        runtime.release(other)
+        assert receipt["completed"] == [other] and receipt["abandoned"] == [first]
+        assert not runtime.scenes[other].reservation
+    finally:
+        await runtime.close()
+
+
+async def test_restart_keeps_a_sealed_batches_unexecuted_declaration_after_its_first_player_moves(fake):
+    runtime, _, _ = made(fake)
+    restored = None
+    try:
+        runtime.state.positions["lin"] = "tower"
+        ident, = runtime.reconcile()
+        scene = runtime.scenes[ident]
+        scene.round_plan = {
+            "input": [["zhouheng", "我独自去报社"], ["lin", "我留在原地检查招牌"]],
+            "steps": [{"token": "0"}, {"token": "1"}], "used": ["0"], "done": ["0"], "planned": True,
+            "started": 600,
+        }
+        runtime.state.positions["zhouheng"] = "office"
+        scene.place, scene.at = "office", 610
+        scene.member_at = {"zhouheng": 610, "lin": 600}
+        scene.round_spent, scene.round_elapsed = 10, {"zhouheng": 10}
+        loaded = GameState.model_validate_json(runtime.state.model_dump_json())
+        restored, _, _ = made(fake, state=loaded, m=runtime.module)
+        saved = restored.state_view(restored.for_member("lin"))
+        assert restored.game(saved.scene.id).pending_party() == [("lin", "我留在原地检查招牌")]
+        assert saved.scene.id == ident and not saved.scene.closed
+        assert saved.round_plan["done"] == ["0"]
+    finally:
+        if restored is not None:
+            await restored.close()
+        await runtime.close()

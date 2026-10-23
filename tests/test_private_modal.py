@@ -67,7 +67,10 @@ async def test_sc_body_is_private_while_normal_input_still_submits_a_public_acti
         await pilot.pause()
         assert link.sent[-1]["t"] == "kp_private"
         assert link.sent[-1]["text"] == "我想确认一下刚才的异常。"
+        await screen.on_msg({"t": "pool", "open": True, "round": "private-test", "phase": "collecting",
+                             "count": 0, "capacity": 1, "open_to": [lead.id], "waiting": [],
+                             "mine": {"now": [], "next": []}})
         screen.query_one("#command", Input).value = "我去查看书房。"
         await pilot.press("enter")
         await pilot.pause()
-        assert link.sent[-1] == {"t": "act", "text": "我去查看书房。"}
+        assert link.sent[-1] == {"t": "act", "text": "我去查看书房。", "round": "private-test"}

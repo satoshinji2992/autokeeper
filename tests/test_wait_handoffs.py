@@ -75,6 +75,21 @@ def pool(hub, *declarations, automatic=()):
             hub._accept_declaration(seat, text)
 
 
+async def collecting(hub):
+    """Open the real editable window; pure preparation, not an expired timer, seals it."""
+    task = asyncio.create_task(hub._collect())
+    for _ in range(100):
+        if hub.open:
+            return task
+        if task.done():
+            await task
+            raise AssertionError("collection ended before an input window opened")
+        await asyncio.sleep(.001)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    raise AssertionError("input window did not open")
+
+
 def wait_plans():
     guard = Action(kind="wait", summary="守在门口到六点；有人求救就停止", wait_until="D2 06:00")
     hurry = Action(kind="move", summary="立即去广场找医生", destination="square", alone=True)
@@ -98,13 +113,13 @@ async def test_idle_peer_holds_a_long_wait_until_explicit_pass_without_replannin
         hub.done = {"lin"}
         await hub._settle()
         assert hub.state.minutes == 1800 and not hub.state.unfinished and not hub.state.pending_turn
-        assert hub.cast.planned == ["守候"] and len(hub.cast.ruled) == 1
+        assert hub.cast.party_calls == 1 and not hub.cast.planned and len(hub.cast.ruled) == 1
         assert [entry.text for entry in hub.state.log if entry.kind == "player"] == ["守候"]
     finally:
         await hub.game.close()
 
 
-async def test_declaration_arriving_during_wait_ruling_is_handled_before_the_clock_can_skip(fake):
+async def test_sealed_wait_rejects_late_input_then_accepts_it_in_the_next_window_before_time_can_skip(fake, monkeypatch):
     class Paused(WaitingCast):
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -118,23 +133,31 @@ async def test_declaration_arriving_during_wait_ruling_is_handled_before_the_clo
     plans, rulings = wait_plans()
     hub = made(fake, plans, rulings, cast_type=Paused)
     start = hub.state.minutes
+    sent = []
+
+    async def send(cid, msg):
+        sent.append((cid, msg))
+
+    monkeypatch.setattr(hub, "_send", send)
     try:
         pool(hub, ("zhouheng", "守候"))
         task = asyncio.create_task(hub._settle())
         await asyncio.wait_for(hub.cast.entered.wait(), 3)
         await hub._on("b", {"t": "act", "text": "急事"})
-        assert hub.state.queued_receipts == [{"seat": "lin", "text": "急事", "at": start}]
+        assert sent[-1][1]["t"] == "action_rejected" and sent[-1][1]["text"] == "急事"
+        assert not hub.early and not hub.state.queued_receipts
         hub.cast.release.set()
         await asyncio.wait_for(task, 3)
-        assert hub.state.minutes == start and hub.early == [("lin", "急事")]
+        assert hub.state.minutes == start and not hub.early
         assert not hub.cast.reports and hub.game.world.place("lin") == "tower"
-        queued = hub.early.pop()
-        pool(hub, ("zhouheng", "守候"), queued, automatic=["zhouheng"])
+        task = await collecting(hub)
+        await hub._on("b", {"t": "act", "text": "急事", "round": hub.round_id})
+        await asyncio.wait_for(task, 3)
         await hub._settle()
         travel = hub.game._travel("tower", "square")
         assert hub.state.minutes == start + travel and hub.game.world.place("lin") == "square"
         assert "execution" in hub.state.unfinished["zhouheng"]
-        assert hub.cast.planned.count("守候") == 2, (hub.state.unfinished, hub.game.world.rec.seq)
+        assert hub.cast.party_calls == 2 and hub.cast.planned == ["守候"]
         assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "守候"]) == 1
     finally:
         await hub.game.close()
@@ -198,35 +221,45 @@ async def test_a_new_declaration_or_undo_cancels_only_unperformed_waiting(fake, 
     plans, rulings = wait_plans()
     hub = made(fake, plans, rulings)
     start = hub.state.minutes
+    task = None
     try:
         pool(hub, ("zhouheng", "守候"))
         await hub._settle()
         assert hub.state.unfinished["zhouheng"].get("execution")
+        task = await collecting(hub)
         if command == "replace":
-            await hub._on("a", {"t": "act", "text": "急事"})
-            assert hub.early == [("zhouheng", "急事")]
+            await hub._on("a", {"t": "act", "text": "急事", "round": hub.round_id})
+            assert hub.pool == [("zhouheng", "急事")] and not hub.early
         else:
-            await hub._on("a", {"t": "undo"})
-            assert not hub.early
+            await hub._on("a", {"t": "undo", "round": hub.round_id})
+            assert not hub.pool and not hub.early
         assert "execution" not in hub.state.unfinished["zhouheng"]
         assert hub.state.minutes == start and not hub.state.checks
         assert len([entry for entry in hub.state.log if entry.kind == "player"]) == 1
     finally:
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         await hub.game.close()
 
 
-async def test_queue_receipts_survive_restore_and_are_not_exposed_to_clients(fake):
+async def test_accepted_editable_receipts_survive_restore_and_are_not_exposed_to_clients(fake):
     plans, rulings = wait_plans()
     hub = made(fake, plans, rulings)
+    task = None
     try:
         start = hub.state.minutes
-        await hub._on("b", {"t": "act", "text": "急事"})
+        task = await collecting(hub)
+        await hub._on("b", {"t": "act", "text": "急事", "round": hub.round_id})
         restored = GameState.model_validate_json(hub.state.model_dump_json())
         assert restored.queued_actions == [("lin", "急事")]
         assert restored.queued_receipts == [{"seat": "lin", "text": "急事", "at": start}]
         assert "queued_receipts" not in hub._view("zhouheng")
         assert "unfinished" not in hub._view("lin")
     finally:
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         await hub.game.close()
 
 
@@ -236,19 +269,17 @@ async def test_suspended_wait_does_not_start_a_timer_and_peer_done_releases_the_
     try:
         pool(hub, ("zhouheng", "守候"))
         await hub._settle()
-        collecting = asyncio.create_task(hub._collect())
-        for _ in range(100):
-            if hub.open:
-                break
-            await asyncio.sleep(.001)
+        task = await collecting(hub)
         assert hub.open and hub._left() is None and hub._waiting_for() == ["lin"]
-        assert not collecting.done()
-        await hub._on("b", {"t": "done"})
-        await asyncio.wait_for(collecting, 3)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(task), .06)
+        assert hub.open and hub.preparing is None and hub.state.minutes == 1647
+        await hub._on("b", {"t": "done", "round": hub.round_id})
+        await asyncio.wait_for(task, 3)
         assert hub.pool == [("zhouheng", "守候")] and hub.automatic == {"zhouheng"}
         await hub._settle()
         assert hub.state.minutes == 1800 and not hub.state.unfinished
-        assert hub.cast.planned == ["守候"]
+        assert hub.cast.party_calls == 1 and not hub.cast.planned
     finally:
         await hub.game.close()
 
@@ -301,20 +332,20 @@ async def test_a_prepared_continuation_yields_to_new_input_and_resumes_without_r
         assert parked["request"]["completed"][0]["action"] == work.summary
         assert "ruling" not in parked  # KP prepared this prefix; no rules call occurred yet
         assert parked["request"]["wait_window"]["end"] == start + 10
-        await hub._on("b", {"t": "act", "text": "急事"})
-        pair = hub.early.pop()
-        pool(hub, pair, ("zhouheng", "复合"), automatic=["zhouheng"])
+        task = await collecting(hub)
+        await hub._on("b", {"t": "act", "text": "急事", "round": hub.round_id})
+        await asyncio.wait_for(task, 3)
         await hub._settle()
         assert hub.state.minutes == start + hub.game._travel("tower", "square")
         assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "复合"]) == 1
         assert [action.summary for action in hub.cast.ruled].count(work.summary) == 1
-        assert hub.cast.planned.count("复合") == 2  # one current-world recheck; completed work was not repeated
+        assert hub.cast.party_calls == 2 and hub.cast.planned == ["复合"]
         assert "zhouheng" not in hub.state.unfinished  # the original ten minutes elapsed during the actual journey
     finally:
         await hub.game.close()
 
 
-async def test_replacing_a_closed_but_unstarted_wait_during_another_seats_ruling_does_not_revive_it(fake):
+async def test_a_late_replacement_cannot_cancel_a_sealed_wait_while_another_seat_is_being_ruled(fake, monkeypatch):
     class Paused(WaitingCast):
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -330,6 +361,12 @@ async def test_replacing_a_closed_but_unstarted_wait_during_another_seats_ruling
     plans["急事"] = Plan(action=work)
     rulings[work.summary] = Ruling(needs_roll=False, minutes=1)
     hub = made(fake, plans, rulings, cast_type=Paused)
+    sent = []
+
+    async def send(cid, msg):
+        sent.append((cid, msg))
+
+    monkeypatch.setattr(hub, "_send", send)
     try:
         pool(hub, ("zhouheng", "守候"))
         await hub._settle()
@@ -341,13 +378,16 @@ async def test_replacing_a_closed_but_unstarted_wait_during_another_seats_ruling
             await settling
         assert reached.done(), (hub.pool, hub.cast.planned, hub.cast.ruled, hub.state.round_plan, hub.state.pending_turn, hub.state.unfinished)
         await hub._on("a", {"t": "act", "text": "急事"})
+        assert sent[-1][1]["t"] == "action_rejected" and sent[-1][1]["text"] == "急事"
+        assert hub.state.unfinished["zhouheng"].get("execution")
         hub.cast.release.set()
         await asyncio.wait_for(settling, 3)
-        assert hub.early == [("zhouheng", "急事")]
-        assert "execution" not in hub.state.unfinished["zhouheng"]
-        assert hub.cast.planned.count("守候") == 1
+        assert not hub.early
+        assert hub.state.unfinished["zhouheng"]["execution"]["request"]["wait_window"]["end"] == 1800
+        assert hub.cast.party_calls == 2 and hub.cast.planned == ["守候"]
         assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "守候"]) == 1
-        assert len([action for action in hub.cast.ruled if action.kind == "wait"]) == 1
+        assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "急事"]) == 1
+        assert hub.state.minutes == 1648
     finally:
         await hub.game.close()
 
@@ -355,26 +395,12 @@ async def test_replacing_a_closed_but_unstarted_wait_during_another_seats_ruling
 async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnection(fake, monkeypatch):
     import aiohttp
 
-    from .test_net import closed, opened, pool_open, until
+    from .test_net import closed, hold_preparation, opened, pool_open, until
 
     plans, rulings = wait_plans()
     hub = made(fake, plans, rulings)
     hub.sits = {"zhouheng": None, "lin": None}
-    expired = asyncio.Event()
-    collect = hub._collect
-
-    async def collect_until_expired():
-        expired.clear()
-        await collect()
-
-    # Drive the collection deadline only after the server acknowledges each action.
-    # Reconnection speed must not decide whether the scripted human becomes an AI.
-    monkeypatch.setattr(hub, "_collect", collect_until_expired)
-    monkeypatch.setattr(hub, "_left", lambda: 0 if expired.is_set() else None)
-
-    def expire_window():
-        expired.set()
-        hub.wake.set()
+    ready = hold_preparation(monkeypatch, hub.game)
 
     task = await opened(hub)
     try:
@@ -385,11 +411,11 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
                 await ws.send_json({"t": "hello", "name": name})
                 await until(ws, lambda message: message["t"] == "welcome")
                 await ws.send_json({"t": "sit", "investigator": seat})
-            await until(first, pool_open)
+            initial = await until(first, pool_open)
             start = hub.state.minutes
-            await first.send_json({"t": "act", "text": "守候"})
+            await first.send_json({"t": "act", "text": "守候", "round": initial["round"]})
             await until(first, lambda message: pool_open(message) and message["mine"]["now"] == ["守候"])
-            expire_window()
+            ready.set()
             await until(first, lambda message: pool_open(message) and "execution" in hub.state.unfinished.get("zhouheng", {}))
             assert hub.state.minutes == start
             await first.close()
@@ -399,13 +425,15 @@ async def test_real_websocket_wait_handoff_survives_disconnection_and_reconnecti
             await replacement.send_json({"t": "sit", "investigator": "zhouheng"})
             seated = await until(replacement, lambda message: message["t"] == "seated")
             assert seated["pool"]["open"] and seated["pool"]["mine"]["now"] == ["守候"]
-            await second.send_json({"t": "act", "text": "急事"})
+            assert seated["pool"]["closes_in"] is None and hub.preparing is None
+            ready.clear()
+            await second.send_json({"t": "act", "text": "急事", "round": seated["pool"]["round"]})
             await until(second, lambda message: pool_open(message) and message["mine"]["now"] == ["急事"])
-            expire_window()
-            await until(second, lambda message: pool_open(message) and hub.game.world.place("lin") == "square")
+            ready.set()
+            current = await until(second, lambda message: pool_open(message) and hub.game.world.place("lin") == "square")
             assert hub.state.minutes == start + hub.game._travel("tower", "square")
             assert hub.game.world.place("zhouheng") == "tower"
-            await second.send_json({"t": "done"})
+            await second.send_json({"t": "done", "round": current["round"]})
             await until(replacement, lambda message: pool_open(message) and hub.state.minutes == 1800 and not hub.state.pending_turn)
             assert not hub.state.pending_turn and not hub.state.unfinished
             assert len([entry for entry in hub.state.log if entry.kind == "player" and entry.text == "守候"]) == 1
@@ -553,14 +581,14 @@ async def test_new_world_facts_reach_the_same_kp_before_a_saved_wait_can_advance
         await hub._settle()
         assert hub.state.minutes == start and not hub.state.unfinished and not hub.state.pending_turn
         assert [action.summary for action in hub.cast.ruled] == [plans["守候"].action.summary, stopped.summary]
-        assert hub.cast.planned == ["守候", "守候"]
+        assert hub.cast.party_calls == 1 and hub.cast.planned == ["守候"]
         assert len([entry for entry in hub.state.log if entry.kind == "player"]) == 1
         assert not hub.state.checks
     finally:
         await hub.game.close()
 
 
-async def test_raw_batch_checkpoint_recovery_keeps_the_wait_marker_deadline_and_one_original_input(fake):
+async def test_sealed_checkpoint_recovery_keeps_the_wait_marker_deadline_and_one_original_input(fake):
     plans, rules = wait_plans()
     hub = made(fake, plans, rules)
     games, snapshots = [hub.game], []
@@ -570,14 +598,14 @@ async def test_raw_batch_checkpoint_recovery_keeps_the_wait_marker_deadline_and_
         deadline = hub.state.unfinished["zhouheng"]["execution"]["request"]["wait_window"]
         pool(hub, ("zhouheng", "守候"), automatic=["zhouheng"])
 
-        def raw_checkpoint():
+        def sealed_checkpoint():
             receipt = hub.state.round_plan
-            if receipt.get("steps") and not receipt.get("planned"):
+            if receipt.get("planned") and any(step.get("resuming_wait") for step in receipt.get("steps", [])):
                 snapshots.append(hub.state.model_dump_json())
-                raise ConnectionError("raw waiting batch saved")
+                raise ConnectionError("sealed waiting batch saved")
 
-        hub.game.checkpoint = raw_checkpoint
-        with pytest.raises(ConnectionError, match="raw waiting batch"):
+        hub.game.checkpoint = sealed_checkpoint
+        with pytest.raises(ConnectionError, match="sealed waiting batch"):
             await hub._settle()
         restored = GameState.model_validate_json(snapshots[-1])
         assert restored.round_plan["steps"][0]["resuming_wait"]

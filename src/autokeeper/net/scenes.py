@@ -12,7 +12,7 @@ from ..engine.state import time_of_day
 from ..engine.timing import SceneResourceConflict
 from .hub import Hub
 
-ROUTED = {"act", "done", "undo", "respond", "react", "speak", "kp_private", "retell", "suggest", "recount",
+ROUTED = {"act", "join", "done", "undo", "respond", "react", "speak", "kp_private", "retell", "suggest", "recount",
           "answer", "command"}
 
 
@@ -46,6 +46,7 @@ class SceneTable(Hub):
         self.private_requests, self.private_pending = asyncio.Queue(), set()
         self.private_lock, self.private_task = asyncio.Lock(), None
         self.open, self.closes_at, self.retrying = False, None, None
+        self._init_planning()
         self.halted = False
         self.time_task: asyncio.Task | None = None
         self.time_asked: tuple | None = None
@@ -58,6 +59,11 @@ class SceneTable(Hub):
     def scene(self):
         return self.tables.runtime.scenes[self.ident]
 
+    @property
+    def over(self) -> bool:
+        """The room's lifecycle is shared; a scene must never retain its own old end flag."""
+        return self.root.over
+
     def _participants(self):
         return [person for person in self.state.investigators if person.id in self.scene.members]
 
@@ -69,6 +75,7 @@ class SceneTable(Hub):
 
     def _accept_declaration(self, seat: str, text: str) -> None:
         if self.time_task is not None:
+            self.time_asked = None
             self.time_task.cancel()
         self.tables.runtime.revoke_pass(self.ident)
         super()._accept_declaration(seat, text)
@@ -77,6 +84,8 @@ class SceneTable(Hub):
         """An unstarted clock proposal must yield to actual input and actual choices."""
         return (self.open and not self.halted and not self.tables.closing and not self.root.state.ending
                 and not self.scene.closed and not self.scene.busy and not self.state.held
+                and self.phase not in ("thinking", "ready") and not self.joining
+                and (self.preparing is None or self.preparing.done())
                 and not self.state.pending_turn and not self.scene.reservation and not self.scene.encounter
                 and not self.state.pending_push and not self.pool and not self.early and not self.asking
                 and not self.state.queued_actions and not self.state.queued_receipts and not self.confirming
@@ -101,7 +110,7 @@ class SceneTable(Hub):
             decision = TimeHandoff.model_validate(await self.cast.scene_time(self.state, until))
             current = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
             allowed = False
-            if (decision.advance and current == stamp and self._time_available()
+            if (decision.advance and current == stamp and self.time_asked == stamp[:4] and self._time_available()
                     and self.tables.runtime.time_requested(self.ident) == until):
                 allowed = self.tables.runtime.pass_time(self.ident, until)
             elif decision.advance:
@@ -109,6 +118,8 @@ class SceneTable(Hub):
             self.game._debug("scene_time", {"until": until, "decision": decision.model_dump(),
                                             "status": "allowed" if allowed else "expired" if decision.advance else "declined"})
         except asyncio.CancelledError:
+            if self.time_asked == stamp[:4]:
+                self.time_asked = None
             raise
         except Exception as exc:
             self._failed("场景时间衔接", exc)
@@ -118,6 +129,8 @@ class SceneTable(Hub):
     async def _stop_time(self) -> None:
         if self.time_task is not None:
             task, self.time_task = self.time_task, None
+            if not task.done():
+                self.time_asked = None
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
@@ -162,6 +175,9 @@ class SceneTable(Hub):
     def _save(self) -> None:
         self.tables.runtime.checkpoint(self.ident)
 
+    def _abandon_turn(self) -> None:
+        self.tables.runtime.abandon(self.ident)
+
     async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
         while True:
             try:
@@ -203,6 +219,9 @@ class SceneTable(Hub):
                     self.tables.runtime.set_busy(self.ident, False)
                 await self.tables.regroup()
         finally:
+            if self.preparing is not None:
+                self.planning_revision += 1
+                await self._stop_preparing()
             await self._stop_time()
             if self.private_task is not None:
                 self.private_task.cancel()
@@ -246,7 +265,7 @@ class SceneTables:
             if self.closing:
                 return
             active = set(self.runtime.reconcile())
-            # Only unstarted input migrates. A pending journal/choice pins its controller.
+            # Only unstarted input migrates. A sealed batch/journal/choice pins its controller.
             queued, receipts, retired = [], [], []
             for ident, worker in self.workers.items():
                 if ident not in active and not worker.halted:

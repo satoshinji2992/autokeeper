@@ -129,13 +129,14 @@ async def test_normal_declarations_are_public_immediately_and_survive_reload(pri
     hub, messages = private_hub
     hub.state.apart["chen"] = "tower"
     hub.state.record.entities["chen"].at = "tower"
+    hub.open = True
     text = "我先去书房，帮托马斯找一找。"
     await hub._on("a", {"t": "act", "text": text})  # queued, no model has run
     echoes = [(cid, msg["ev"]) for cid, msg in messages if msg.get("ev", {}).get("type") == "said"]
     assert [cid for cid, _ in echoes] == ["a", "b", "c", "watch"]
     assert all(ev["text"] == text and "audience" not in ev for _, ev in echoes)
     assert not hub.state.log and not audience.log(hub.state, "chen")  # PL visibility is not character knowledge
-    assert hub.early == [("zhouheng", text)]
+    assert hub.pool == [("zhouheng", text)] and not hub.early
     restored = GameState.model_validate_json(hub.state.model_dump_json())
     rebuilt = Hub(EXAMPLE, state=restored, cast=TableCast(), rules=Rules(dice=fake))
     rebuilt.clients, rebuilt.sits = hub.clients, hub.sits
@@ -143,7 +144,7 @@ async def test_normal_declarations_are_public_immediately_and_survive_reload(pri
         history = rebuilt._welcome(cid)["log"]
         assert sum(entry["text"] == text for entry in history) == 1
     await hub._on("a", {"t": "undo"})
-    assert not hub.early and hub.state.table_history[-1].text == "（撤回声明）" + text
+    assert not hub.pool and hub.state.table_history[-1].text == "（撤回声明）" + text
 
 
 async def test_private_correspondence_is_never_added_to_the_public_transcript(private_hub):

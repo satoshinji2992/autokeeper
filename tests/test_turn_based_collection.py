@@ -56,7 +56,8 @@ async def test_reading_an_encounter_never_times_out_and_a_remote_nonparticipant_
         await until(a, lambda msg: msg["t"] == "pool" and msg["open"])
         await a.send_json({"t": "act", "text": "守住门口"})
         pool = await until(a, lambda msg: msg["t"] == "pool" and msg["count"] == 1)
-        assert pool["closes_in"] is None and pool["open_to"] == ["lin"]
+        assert pool["closes_in"] is None and pool["open_to"] == ["zhouheng", "lin", "remote"]
+        assert pool["waiting"] == ["林秋"] and hub._waiting_for() == ["lin"]
         if focused_remote:
             await remote.send_json({"t": "act", "text": "翻阅报纸"})
             await until(remote, lambda msg: msg["t"] == "pool" and msg["count"] == 2)

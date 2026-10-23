@@ -86,8 +86,14 @@ async def test_failed_card_send_does_not_wait_forever_for_a_reply(fail_at):
     assert not remote._due
 
 
-@pytest.mark.parametrize("text", ["我查看柜台上的账本。", "/sc 请不要公开这件事。", "/w lin 先保管这封信。"])
-async def test_failed_send_preserves_the_typed_text_and_its_private_channel(text):
+@pytest.mark.parametrize("text, opened", [
+    ("我查看柜台上的账本。", True),
+    ("/sc 请不要公开这件事。", True),
+    ("/sc 请不要公开这件事。", False),
+    ("/w lin 先保管这封信。", True),
+    ("/w lin 先保管这封信。", False),
+])
+async def test_failed_send_preserves_the_typed_text_and_its_private_channel(text, opened):
     module = Module.load(EXAMPLE)
     lead = module.pregens[0].model_copy(deep=True)
     peer = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
@@ -98,11 +104,33 @@ async def test_failed_send_preserves_the_typed_text_and_its_private_channel(text
     async with app.run_test(size=(120, 40)) as pilot:
         screen = NetGameScreen(module, state, link, lead.id, [])
         await app.push_screen(screen)
-        link.handler = screen.on_msg
+        failures, failed = [], asyncio.Event()
+
+        async def handle(message):
+            await screen.on_msg(message)
+            if message["t"] == "unsent":
+                failures.append(message["message"])
+                failed.set()
+
+        link.handler = handle
+        await screen.on_msg({"t": "pool", "open": opened, "round": "test-round",
+                             "phase": "collecting" if opened else "settling", "count": 0, "capacity": 2,
+                             "open_to": [lead.id, peer.id] if opened else [], "waiting": [],
+                             "mine": {"now": [], "next": []}})
         command = screen.query_one("#command", Input)
         command.focus()
         await pilot.pause()
         command.value = text
         await pilot.press("enter")
+        await asyncio.wait_for(failed.wait(), 2)
         await pilot.pause()
         assert command.value == text
+        assert len(failures) == 1
+        original = failures[0]
+        if text.startswith("/sc "):
+            assert original["t"] == "kp_private" and original["text"] == text[4:]
+            assert original["request"] and "round" not in original
+        elif text.startswith("/w "):
+            assert original == {"t": "speak", "text": "先保管这封信。", "to": ["lin"], "channel": "whisper"}
+        else:
+            assert original == {"t": "act", "text": text, "round": "test-round"}

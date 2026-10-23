@@ -313,7 +313,10 @@ class SceneRuntime:
                     scene.at = max(scene.member_at.values())
                 created.append(scene.id)
             return created
-        fixed = [scene for scene in current if scene.busy or scene.pending_turn or scene.encounter or scene.reservation]
+        fixed = [scene for scene in current
+                 if scene.busy or scene.pending_turn or scene.encounter or scene.reservation
+                 or any(step["token"] not in scene.round_plan.get("done", [])
+                        for step in scene.round_plan.get("steps", []))]
         owned = {who for scene in fixed for who in scene.members}
         source_for = {who: scene for scene in current for who in scene.members}
         groups: dict[str, list[str]] = {}
@@ -523,7 +526,8 @@ class SceneRuntime:
             if joint.get("needs_prepare") and not joint.get("preparing"):
                 receipt = self.state.scene_handoffs[joint["id"]]
                 before = receipt["order"][:receipt["order"].index(ident)]
-                if any(other not in receipt.get("completed", []) for other in before):
+                finished = set(receipt.get("completed", [])) | set(receipt.get("abandoned", []))
+                if any(other not in finished for other in before):
                     pulse = self._pulse
                     await pulse.wait()
                     continue
@@ -678,7 +682,9 @@ class SceneRuntime:
         step = receipt["steps"][ident]
         related = [{"actor": self.state.investigators[self.scenes[sid].active].id,
                     "action": receipt["steps"][sid]["plan"]["action"],
-                    "committed": sid in receipt["completed"]} for sid in receipt["order"] if sid != ident]
+                    "committed": sid in receipt["completed"],
+                    "abandoned": sid in receipt.get("abandoned", [])}
+                   for sid in receipt["order"] if sid != ident]
         journal["scene_coordination"] = {"coordination": step.get("coordination", ""), "related": related}
         journal["scene_handoff_note"] = "共同安排已交接；已发生的结果以当前世界记录为准，未办部分在本轮重新裁定。"
         joint["preparing"] = True
@@ -725,11 +731,23 @@ class SceneRuntime:
         self.checkpoint(ident)
 
     def release(self, ident: str) -> None:
-        joint = self.scenes[ident].reservation.get("joint")
+        """Finish an executed attempt, making its final record available to later scenes."""
+        self._finish_reservation(ident, abandoned=False)
+
+    def abandon(self, ident: str) -> None:
+        """Release a discarded attempt without undoing committed facts or claiming it completed."""
+        scene = self.scenes[ident]
+        scene.pending_turn.clear()
+        self._finish_reservation(ident, abandoned=True)
+
+    def _finish_reservation(self, ident: str, *, abandoned: bool) -> None:
+        scene = self.scenes[ident]
+        joint = scene.reservation.get("joint")
         if joint and (receipt := self.state.scene_handoffs.get(joint)) is not None:
-            if ident not in receipt.setdefault("completed", []):
-                receipt["completed"].append(ident)
-        self.scenes[ident].reservation.clear()
+            finished = receipt.setdefault("abandoned" if abandoned else "completed", [])
+            if ident not in finished:
+                finished.append(ident)
+        scene.reservation.clear()
         self.checkpoint(ident)
 
     def checkpoint(self, ident: str) -> None:

@@ -200,7 +200,7 @@ class TimeHandoff(BaseModel):
 
 class PartyInput(BaseModel):
     token: str = Field(min_length=1, description="本次收集窗口内稳定且唯一的原始行动编号")
-    who: str = Field(min_length=1, description="提出这条行动的调查员 id；同一调查员可以有多条行动")
+    who: str = Field(min_length=1, description="提出这份完整声明的调查员 id；本轮每人只保留一份，以最后修改为准")
     text: str = Field(min_length=1, description="玩家原话，仅供守秘人理解，不转交裁定员")
 
 
@@ -918,6 +918,7 @@ class Cast:
         # reply's receipt, kept with its turn (Game._reply), as soon as the reply comes back
         self.told: dict[str, list[str]] = {}
         self.media: dict[str, list[dict]] = {}
+        self._usage_observer: Callable[[str, dict], None] | None = None
 
     # -- session plumbing -----------------------------------------------------
     def _open(self, key: str, role: str, system: str, *, schema: dict | None = None) -> Session:
@@ -938,6 +939,9 @@ class Cast:
         def observe(row: dict) -> None:
             if row.get("phase", "complete") == "complete":
                 self.debug_calls.append({**row, "session": key, "turn": turn})
+                if self._usage_observer is not None:
+                    role = "summarizer" if row.get("agent") == "summarizer" else key.split(":")[0]
+                    self._usage_observer(role, row)
             if journal := getattr(self, "debug_journal", None):
                 journal.observe(row, turn=turn, session=key)
 
@@ -968,6 +972,8 @@ class Cast:
         def observe(row: dict) -> None:
             if journal:
                 journal.observe(row, turn=turn, session="lore")
+            if row.get("phase") == "complete" and self._usage_observer is not None:
+                self._usage_observer("lore", row)
             if row.get("phase") == "complete" and not row.get("error"):
                 state.record_usage("lore", Reply(usage={key: row.get(key, 0) for key in
                                                        ("input_tokens", "output_tokens", "cache_read")},
@@ -1263,17 +1269,44 @@ class Cast:
                 self._journal("plan", {"status": "repair-failed", "error": type(exc).__name__}, state)
         return plan.model_copy(update={"lookup": "", "action": plan.action.model_copy(update={"echo": ""})})
 
+    async def prepare_party_plan(self, state: GameState, inputs: list[PartyInput], *,
+                                 check: Callable[[PartyPlan], list[str]] | None = None,
+                                 on_usage: Callable[[str, dict], None] | None = None) -> PartyPlan | None:
+        """Plan on the caller's disposable state snapshot, never on a live conversation or world.
+
+        Game.prepare_party owns this snapshot. Only lookup and proposal generation are
+        available: no Game, execution gateway, NPC performance or player delivery is exposed.
+        Cancelling closes the temporary sessions, including intermediate successful drafts.
+        """
+        from ..world.store import World
+
+        module = self.module.model_copy(deep=True)
+        scratch = Cast(self.cfg, module)
+        scratch.prefs, scratch.backstage = self.prefs, self.backstage
+        scratch.world = World(module, state, initialize=False)
+        scratch.debug_journal = getattr(self, "debug_journal", None)
+        scratch._usage_observer = on_usage
+        # Reuse only the stateless channel. The temporary keeper owns its own
+        # messages, notes and compaction; closing it cannot close the live channel.
+        scratch.sessions["plan"] = self._plan(state)
+        try:
+            return await scratch.party_plan(state, inputs, check=check, single=True)
+        finally:
+            scratch.sessions.pop("plan", None)
+            await scratch.close()
+
     async def party_plan(self, state: GameState, inputs: list[PartyInput], *,
-                         check: Callable[[PartyPlan], list[str]] | None = None) -> PartyPlan | None:
+                         check: Callable[[PartyPlan], list[str]] | None = None, single: bool = False) -> PartyPlan | None:
         """Read a collection window together, replacing its separate everyday plan calls.
 
-        A step is tied to its original action token, including when one investigator submitted
-        twice. This is an arrangement, not a ruling or public narration. Independent scenes
+        A step is tied to one investigator's current declaration token. This is an arrangement,
+        not a ruling or public narration. Independent scenes
         retain their own contexts; their processing order does not advance world time twice.
         The caller keeps single-person and encounter windows on their existing paths.
         """
         items = [PartyInput.model_validate(item) for item in inputs]
-        if len(items) < 2 or len({item.who for item in items}) < 2 or state.encounter is not None or state.ending:
+        if (not items or (not single and (len(items) < 2 or len({item.who for item in items}) < 2))
+                or state.encounter is not None or state.ending):
             return None
         tokens = [item.token for item in items]
         if len(set(tokens)) != len(tokens):
@@ -1307,8 +1340,8 @@ class Cast:
         prompt = (
             "【同一收集窗口的整批安排】\n"
             "先读完所有原话，再理解配合、互相阻拦、争夺同一物件和独立行动，不把每人单独的愿望当成共同同意。"
-            "这次改用 PartyPlan 格式：steps 的先后就是准备结算的顺序，每个 token 恰好一次，同一人提交两条也不能合并或漏掉。"
-            "本人明确先后进行的事保留其声明次序，不因别人的配合而反转。"
+            "这次改用 PartyPlan 格式：steps 的先后就是准备结算的顺序，每人一份完整声明，每个 token 恰好一次。"
+            "声明内明确先后进行的尝试保留其先后和条件，不因别人的配合而反转；后续意图留在remaining，不提前执行。"
             "related 只引用本窗口的其他 token；coordination 写中立的尝试关系、先后理由或尚待前项成立的条件，"
             "仅供后台判断，不作为公共台词或已发生事实。不要把别人的私语、单独感知和幕后真相写进本人的 action.summary。\n"
             "互助只有实际实施后才改变条件；递灯、开门、牵制和抢夺仍按实际归属、位置和检定结果落实。"

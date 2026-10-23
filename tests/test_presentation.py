@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 
 import pytest
@@ -529,4 +530,5 @@ async def test_current_single_picture_and_batch_picture_envelopes_are_sent_and_c
 
     hub.clients["a"] = Receiver()
     await Hub._send(hub, "a", packet)
-    assert received == [packet] and hub.sent_to["a"]["current_picture"] == str(path)
+    assert received == [packet]
+    assert hub.sent_to["a"]["current_picture"] == hashlib.sha256(data.encode("ascii")).hexdigest()

@@ -16,7 +16,7 @@ from autokeeper.net.hub import Hub
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 
-from .test_net import TableCast, opened, pool_open, until
+from .test_net import TableCast, hold_preparation, opened, pool_open, until
 from .test_net_scenes import joined
 
 MOVE = "我独自前往报社，林秋留在广场。"
@@ -83,7 +83,7 @@ async def stop(task):
         await task
 
 
-async def test_actual_move_preserves_queued_original_time_retires_background_and_restores_both_scenes(fake):
+async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarted_declaration(fake, monkeypatch):
     module = Module.load(EXAMPLE)
     lead = module.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
@@ -106,19 +106,27 @@ async def test_actual_move_preserves_queued_original_time_retires_background_and
             await x.send_json({"t": "act", "text": MOVE})
             await asyncio.wait_for(parsing.wait(), 5)
             await y.send_json({"t": "act", "text": QUEUED})
-            await eventually(lambda: (friend.id, QUEUED) in source.early)
-            original_receipt = next(dict(row) for row in source.state.queued_receipts
-                                    if row["seat"] == friend.id and row["text"] == QUEUED)
-            assert original_receipt["at"] == 600
+            rejected = await until(y, lambda msg: msg["t"] == "action_rejected")
+            assert rejected["text"] == QUEUED and not source.early
             await y.close()
             await eventually(lambda: hub.sits.get(friend.id) is None)
             release.set()
             await eventually(lambda: source.halted and source.cast.closed)
             a, b = hub._context(lead.id), hub._context(friend.id)
+            hold_preparation(monkeypatch, b.game)
+            y = await joined(http, hub, friend.id)
+            await until(y, pool_open)
+            await y.send_json({"t": "act", "text": QUEUED})
+            await until(y, lambda msg: pool_open(msg) and msg["mine"]["now"] == [QUEUED])
+            original_receipt = next(dict(row) for row in b.state.queued_receipts
+                                    if row["seat"] == friend.id and row["text"] == QUEUED)
+            assert original_receipt["at"] == 600
+            await y.close()
+            await eventually(lambda: hub.sits.get(friend.id) is None)
             assert a is not b and a is not source and b is not source
             assert hub.state.positions == {lead.id: "office", friend.id: "square"}
             assert a.scene.at == 610 and b.scene.at == 600 and source.scene.closed
-            assert (friend.id, QUEUED) in b.early
+            assert b.pool == [(friend.id, QUEUED)] and not b.early
             assert original_receipt in b.state.queued_receipts
             assert not any(row["text"] == QUEUED for cast in casts.values() for row in cast.inputs)
             assert background.cancelled() and source.game._recounting is None
