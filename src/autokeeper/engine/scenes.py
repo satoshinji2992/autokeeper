@@ -218,6 +218,7 @@ class SceneRuntime:
         self._games: dict[str, Game] = {}
         self._graphs: dict[str, Any] = {}
         self.on_checkpoint: Callable[[], None] | None = None
+        self.on_time_block: Callable[[str, int], None] | None = None
         for saved_scene in state.scenes.values():
             saved_scene.busy = False  # process-owned tasks are rebuilt from durable journals
             saved_scene.region = hosting_region(module, saved_scene.place)
@@ -401,6 +402,22 @@ class SceneRuntime:
         self.checkpoint(ident)
         return True
 
+    def time_requested(self, ident: str) -> int | None:
+        """Only live blocked attempts ask a quiet scene for a bounded time permission."""
+        own = self.scenes[ident]
+        if own.closed:
+            return None
+        ends = [ticket["end"] for scene in self.scenes.values()
+                if not scene.closed and scene.id != ident and scene.pending_turn
+                and (ticket := scene.reservation)
+                and any(block["kind"] == "time" and block["scene"] == ident
+                        for block in ticket.get("blocked", []))]
+        if not ends:
+            return None
+        until = min(ends)
+        return (until if until > own.at and own.passed_until != -1
+                and (own.passed_until is None or own.passed_until < until) else None)
+
     def reserve(self, ident: str, action: Action, ruling: Ruling | None) -> None:
         scene, game = self.scenes[ident], self.game(ident)
         saved = scene.reservation
@@ -526,6 +543,10 @@ class SceneRuntime:
                 raise SceneResourceConflict(conflict)
             blocks = self.blockers(ident)
             scene.reservation["blocked"] = blocks
+            if self.on_time_block is not None:
+                for block in blocks:
+                    if block["kind"] == "time":
+                        self.on_time_block(block["scene"], scene.reservation.get("end", scene.at))
             if any(block.get("owner") for block in blocks):
                 conflict = {"resources": sorted({resource for block in blocks for resource in block.get("resources", [])}),
                             "attempts": [self._retained_attempt(sid) for sid in dict.fromkeys(
@@ -568,9 +589,11 @@ class SceneRuntime:
             if other.closed or other.id == ident or other.at >= end or other.passed_until is None:
                 continue
             if other.passed_until == -1 or end <= other.passed_until:
+                previous = other.at
                 other.at = end
                 other.member_at.update(dict.fromkeys(other.members, end))
                 other.day = end // 1440
+                other.notices.append({"type": "time_cut", "start": previous, "end": end})
         scene.reservation["committed"] = max(scene.reservation.get("committed", scene.at), end)
 
     async def prepare_conflict(self, ident: str) -> None:

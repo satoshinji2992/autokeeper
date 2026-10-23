@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from ..agents.cast import TimeHandoff
 from ..engine.game import PLAY_WAIT
 from ..engine.scenes import SceneRuntime
+from ..engine.state import time_of_day
 from ..engine.timing import SceneResourceConflict
 from .hub import Hub
 
@@ -45,6 +47,8 @@ class SceneTable(Hub):
         self.private_lock, self.private_task = asyncio.Lock(), None
         self.open, self.closes_at, self.retrying = False, None, None
         self.halted = False
+        self.time_task: asyncio.Task | None = None
+        self.time_asked: tuple | None = None
         for key, receipt in root.state.private_messages.items():
             if receipt["who"] in members and not receipt.get("delivered"):
                 self.private_requests.put_nowait((receipt["who"], receipt["text"], key.split(":", 1)[1]))
@@ -64,8 +68,58 @@ class SceneTable(Hub):
         return seat in self.scene.members and super()._acts(seat)
 
     def _accept_declaration(self, seat: str, text: str) -> None:
+        if self.time_task is not None:
+            self.time_task.cancel()
         self.tables.runtime.revoke_pass(self.ident)
         super()._accept_declaration(seat, text)
+
+    def _time_available(self) -> bool:
+        """An unstarted clock proposal must yield to actual input and actual choices."""
+        return (self.open and not self.halted and not self.tables.closing and not self.root.state.ending
+                and not self.scene.closed and not self.scene.busy and not self.state.held
+                and not self.state.pending_turn and not self.scene.reservation and not self.scene.encounter
+                and not self.state.pending_push and not self.pool and not self.early and not self.asking
+                and not self.state.queued_actions and not self.state.queued_receipts and not self.confirming
+                and not self.private_pending and (self.private_task is None or self.private_task.done())
+                and not any(self.state.unfinished.get(who, {}).get("execution") for who in self.scene.members)
+                and any(self.sits.get(who) is not None for who in self.scene.members))
+
+    def request_time(self, until: int) -> None:
+        if not self._time_available() or not callable(getattr(self.cast, "scene_time", None)):
+            return
+        if self.time_task is not None and not self.time_task.done():
+            return
+        key = (self.scene.turn, self.scene.at, self.scene.logged, until)
+        if key == self.time_asked:
+            return
+        self.time_asked = key
+        stamp = (*key, self.state.record.seq)
+        self.time_task = asyncio.create_task(self._handoff_time(until, stamp), name=f"scene-time:{self.ident}")
+
+    async def _handoff_time(self, until: int, stamp: tuple) -> None:
+        try:
+            decision = TimeHandoff.model_validate(await self.cast.scene_time(self.state, until))
+            current = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
+            allowed = False
+            if (decision.advance and current == stamp and self._time_available()
+                    and self.tables.runtime.time_requested(self.ident) == until):
+                allowed = self.tables.runtime.pass_time(self.ident, until)
+            elif decision.advance and current != stamp:
+                self.time_asked = None  # only a stale approval needs a fresh consultation
+            self.game._debug("scene_time", {"until": until, "decision": decision.model_dump(),
+                                            "status": "allowed" if allowed else "expired" if decision.advance else "declined"})
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._failed("场景时间衔接", exc)
+        finally:
+            self.tables.runtime._notify()
+
+    async def _stop_time(self) -> None:
+        if self.time_task is not None:
+            task, self.time_task = self.time_task, None
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     async def _on(self, cid: str, msg: dict[str, Any]) -> None:
         await super()._on(cid, msg)
@@ -140,6 +194,7 @@ class SceneTable(Hub):
                     await self._collect()
                 if self.halted or self.scene.closed:
                     return
+                await self._stop_time()
                 await self.tables.host_ready.wait()
                 self.tables.runtime.set_busy(self.ident, True)
                 try:
@@ -148,6 +203,7 @@ class SceneTable(Hub):
                     self.tables.runtime.set_busy(self.ident, False)
                 await self.tables.regroup()
         finally:
+            await self._stop_time()
             if self.private_task is not None:
                 self.private_task.cancel()
                 await asyncio.gather(self.private_task, return_exceptions=True)
@@ -161,6 +217,7 @@ class SceneTables:
         self.root = root
         self.runtime = SceneRuntime(root.state, root.m, cast_factory, rules_factory, self._event)
         self.runtime.on_checkpoint = root._save
+        self.runtime.on_time_block = self._request_time
         self.workers: dict[str, SceneTable] = {}
         self.tasks: dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
@@ -168,6 +225,10 @@ class SceneTables:
         self.host_ready = asyncio.Event()
         self.host_ready.set()
         root.game.scene_runtime = self.runtime
+
+    def _request_time(self, ident: str, until: int) -> None:
+        if not self.closing and (worker := self.workers.get(ident)) is not None:
+            worker.request_time(until)
 
     def for_member(self, who: str | None) -> SceneTable | None:
         return self.workers.get(self.runtime.for_member(who)) if who else None
@@ -224,9 +285,22 @@ class SceneTables:
     async def run(self) -> None:
         await self.regroup()
         while not self.root.state.ending:
+            self.runtime.changed.clear()
             for task in self.tasks.values():
                 if task.done() and not task.cancelled() and task.exception():
                     raise task.exception()
+            for ident, worker in list(self.workers.items()):
+                if not worker.halted and (until := self.runtime.time_requested(ident)) is not None:
+                    worker.request_time(until)
+                for notice in list(worker.scene.notices):
+                    if notice.get("type") == "time_cut":
+                        if worker.halted or worker.scene.closed:
+                            await self.root._broadcast({"t": "sync", "state": {}, "audience": list(worker.scene.members)})
+                        else:
+                            await worker._event({"type": "time", "clock": worker.state.clock,
+                                                 "phase": time_of_day(worker.state.minutes)})
+                        worker.scene.notices.remove(notice)
+                        self.root._save()
             if (not any(person.can_act for person in self.root.state.investigators)
                     and not any(scene.encounter or scene.pending_turn for scene in self.runtime.scenes.values()
                                 if not scene.closed)):
@@ -249,7 +323,6 @@ class SceneTables:
                     await self.root._house_rules()
                 finally:
                     self.host_ready.set()
-            self.runtime.changed.clear()
             wake = asyncio.create_task(self.runtime.changed.wait())
             running = [task for task in self.tasks.values() if not task.done()]
             try:
