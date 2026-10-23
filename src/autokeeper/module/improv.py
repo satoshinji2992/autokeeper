@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .identity import identity
 from .schema import NPC, Check, Clue, Ending, Event, Item, Location, Module, Showcase
 
 DIRECTED = 6  # plugins the director may write in one game; upgrading one of them is always fine
@@ -37,10 +38,6 @@ class Applied:
 def _now_flag(event_id: str) -> str:
     """The flag that fires an event this turn; the director often names such events now_… itself."""
     return event_id if event_id.startswith("now_") else f"now_{event_id}"
-
-
-def _identity(name: str) -> str:
-    return "".join(name.split()).translate(str.maketrans("", "", "·・.．•")).casefold()
 
 
 def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None,
@@ -100,8 +97,12 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None,
     # Selected pregens cover callers without a World; custom cards supply their actual names.
     players = (player_names or set()) | {p.name for p in m.pregens if p.id in (actors or set())}
     for n in plan.npcs:
-        if _identity(n.name) in {_identity(name) for name in players}:
+        if identity(n.name) in {identity(name) for name in players}:
             problems.append(f"{n.name} 是本局调查员，不能另建为 NPC；保留其调查员身份与玩家决定权")
+        existing = [npc.id for npc in m.npcs if identity(npc.name) == identity(n.name)]
+        if existing:
+            problems.append(f"NPC「{n.name}」已有记录：{'、'.join(existing)}；引用已有 id，不再用 {n.id} 重复登记。"
+                            "若确为另一个同名人物，使用能区分二人的完整称呼。")
         if n.location not in locs:
             problems.append(f"新 NPC {n.id} 所在地点 {n.location} 不存在")
     for item in plan.items:

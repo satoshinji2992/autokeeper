@@ -332,6 +332,24 @@ def audit(m: Module) -> list[Issue]:
     def warn(text: str) -> None:
         issues.append(Issue("warning", text))
 
+    # Every identity becomes a stable key in the world and/or compiled references. Checking
+    # references through sets alone would hide a duplicate before the compiler overwrites it.
+    entities: dict[str, str] = {}
+    for group, label in ((m.locations, "地点"), (m.npcs, "NPC"), (m.clues, "线索"), (m.handouts, "手稿"),
+                         (m.events, "事件"), (m.items, "物件"), (m.creatures, "怪物"), (m.pregens, "调查员"),
+                         (m.endings, "结局"), (m.conclusions, "结论")):
+        seen: set[str] = set()
+        for entry in group:
+            if entry.id in seen:
+                err(f"{label} id {entry.id} 重复：使用不同的稳定 id")
+            seen.add(entry.id)
+            if label not in {"地点", "NPC", "物件", "调查员"}:
+                continue  # facts and reference files have their own explicit namespaces
+            if entry.id in entities and entities[entry.id] != label:
+                err(f"id {entry.id} 重复用于{entities[entry.id]}和{label}：使用不同的稳定 id")
+            else:
+                entities[entry.id] = label
+
     locs = {x.id for x in m.locations}
     npcs = {x.id for x in m.npcs}
     clues = {x.id for x in m.clues}

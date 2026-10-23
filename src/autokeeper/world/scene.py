@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, Field
 
 from ..engine import world as legacy_world
+from ..module.identity import identity
 from .context import rooms
 from .ops import Bring, Follow, Improvise, Move, Occur, Transfer, names
 from .record import ENGINE, KEEPER
@@ -190,11 +191,16 @@ def _find(w: World, text: str, kinds: tuple[str, ...]) -> str | None:
     known = [(e.id, e.name) for e in w.rec.entities.values() if e.kind in kinds]
     if "location" in kinds:
         known += [(loc.id, a) for loc in w.m.locations for a in loc.aliases]
-    for x in _bare(text):
+    candidates = _bare(text)
+    for x in candidates:
         if (e := w.rec.entities.get(x)) is not None and e.kind in kinds:
             return x
-        if found := next((ident for ident, name in known if name == x), None):
-            return found
+    for x in candidates:
+        found = {ident for ident, name in known if identity(name) == identity(x)}
+        if len(found) == 1:
+            return found.pop()
+        if len(found) > 1:
+            return None  # two genuine same-named people must be addressed by their ids
     for x in _bare(text):
         inside = [(ident, name) for ident, name in known if len(name) >= 2 and name in x]
         longest = max((len(name) for _, name in inside), default=0)
@@ -311,6 +317,15 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     src = st.location
     at_start = set(w.present(src, at=ctx.interval[0])) if ctx.interval else set(w.present(src))
     problems: list[str] = []
+    references = [*scene.here, *scene.follow, *(gone.who for gone in scene.left),
+                  *(who for observation in scene.observations for who in observation.witnesses)]
+    for text in references:
+        if any(candidate in rec.entities for candidate in _bare(text)):
+            continue
+        matches = [entity for entity in rec.entities.values() if entity.kind == "npc" and any(
+            identity(entity.name) == identity(candidate) for candidate in _bare(text))]
+        if len(matches) > 1:
+            problems.append(f"「{text}」对应多位人物：{'、'.join(entity.id for entity in matches)}；使用具体人物 id，不按同名猜测。")
     units: dict[str, Unit] = {}
     count = itertools.count(ctx.start)
     movers: dict[str, str] = {}  # person -> the unit that moves them
@@ -358,6 +373,11 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                 continue
             if p.id in w.rec.entities:
                 problems.append(f"人物 id {p.id} 已经存在：已有的人只写进 here，不要重新登记。")
+                continue
+            existing = [npc for npc in w.rec.entities.values() if npc.kind == "npc" and identity(npc.name) == identity(p.name)]
+            if existing:
+                problems.append(f"人物「{p.name}」已有记录：{'、'.join(npc.id for npc in existing)}；"
+                                "把已有 id 写进 here，不另建新人物。若确为另一位同名者，使用可区分的完整称呼。")
                 continue
             location = (p.location if (place := w.rec.entities.get(p.location)) is not None and place.kind == "location"
                         else None) if p.location else room
