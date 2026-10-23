@@ -119,6 +119,7 @@ PRIVATE |= {"presentations", "private_messages", "presentation_issues"}
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
+PRIVATE |= {"clue_settled"}  # formal acquisition receipts are not another player's knowledge or notebook
 PRIVATE |= {"perceptions", "perception_key"}  # real targets and signed personal choices stay on the server
 # The encounter is the keeper's: true names, every HP, the arrangements (engine/encounter); the table gets
 # its public view instead (views.table, as encounter_public).

@@ -3961,7 +3961,8 @@ class Game(Encounters):
         selected = readers if readers is not None else [i.id for i in st.investigators]
         for cid in ids:
             key = f"/clue:{cid}"
-            if all(knowledge.clue_known(st, cid, who) for who in selected) and not self._resolution_pending(key):
+            if (actor in st.clue_settled.get(cid, []) and all(knowledge.clue_known(st, cid, who) for who in selected)
+                    and not self._resolution_pending(key)):
                 continue
             clue = m.clue(cid)
             if not clue.available(st.flags, st.clues) and not self._resolution_pending(key):
@@ -3970,7 +3971,9 @@ class Game(Encounters):
             def commit(clue=clue, cid=cid) -> dict:
                 inv = st.find(actor)
                 audience = readers
-                first = not knowledge.clue_known(st, cid, inv.id)
+                # An already-saved NPC line may establish knowledge on reload, before
+                # this award's costs have committed. Knowledge is not its receipt.
+                first = inv.id not in st.clue_settled.get(cid, [])
                 sanity = None
                 if clue.sanity and first:
                     ok, bad = clue.sanity.split("/")
@@ -3981,6 +3984,8 @@ class Game(Encounters):
                     inv.skills["克苏鲁神话"] = inv.value("克苏鲁神话") + clue.mythos
                 if cid not in st.clues:
                     st.clues.append(cid)
+                if first:
+                    st.clue_settled.setdefault(cid, []).append(inv.id)
                 knowledge.seed(m, st, self.world.rec)
                 fact = self.world.rec.facts[f"clue:{cid}"]
                 fact.known_by = list(dict.fromkeys([*fact.known_by, *selected]))

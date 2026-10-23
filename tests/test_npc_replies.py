@@ -95,6 +95,60 @@ async def test_what_the_one_spoken_to_told_reaches_the_notebook_when_the_turn_is
     await resumed.close()
 
 
+async def test_known_testimony_still_settles_the_second_person_once_after_reload_and_compaction(fake):
+    m = Module.load(EXAMPLE)
+    m.clue("c_diary").sanity, m.clue("c_diary").mythos = "1/1", 1
+    lead = m.pregens[0].model_copy(deep=True)
+    second = lead.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(m, [lead, second])
+    state.location, state.turn = "tower", 1
+    state.npc("warden").unlocked = ["c_diary"]
+    game, _, _ = table(fake, state=state, module=m)
+    base_san, base_mythos = second.san, second.value("克苏鲁神话")
+    fake.queue(20, 20)
+    await game._gain(["c_diary"], Turn(), None, scope={"audience": [lead.id]})
+    assert game.state.clue_settled == {"c_diary": [lead.id]}
+    game.state.active, game.state.turn = 1, 2
+    turn = await game.resolve(ASK, Ruling(needs_roll=False))
+    saved = {}
+
+    def crash(kept: Turn) -> None:
+        saved.update(state=game.state.model_dump_json(), turn=TURN_RECORD.dump_json(kept))
+        raise ConnectionError("台词保存后、后果结算前断线")
+
+    game.turn_checkpoint = crash
+    with pytest.raises(ConnectionError):
+        await game.talk(turn)
+    await game.close()
+    resumed, cast, _ = table(fake, state=GameState.model_validate_json(saved["state"]), module=m)
+    kept = TURN_RECORD.validate_json(saved["turn"])
+    try:
+        from autokeeper.world import knowledge
+
+        assert knowledge.clue_known(resumed.state, "c_diary", second.id)
+        assert second.id not in resumed.state.clue_settled["c_diary"]
+        await resumed.talk(kept)
+        actual = resumed.state.find(second.id)
+        assert not cast.npc_calls and not fake.values
+        assert actual.san == base_san - 1 and actual.value("克苏鲁神话") == base_mythos + 1
+        assert resumed.state.clue_settled["c_diary"] == [lead.id, second.id]
+        for n in range(50):
+            resumed.state.add("keeper", f"其后经过{n}。")
+        await resumed.remember()
+        assert not any(e.kind == "clue" for e in resumed.state.log)
+        restored = GameState.model_validate_json(resumed.state.model_dump_json())
+    finally:
+        await resumed.close()
+    loaded, _, _ = table(fake, state=restored, module=m)
+    try:
+        await loaded._gain(["c_diary"], Turn(), None)
+        actual = loaded.state.find(second.id)
+        assert actual.san == base_san - 1 and actual.value("克苏鲁神话") == base_mythos + 1
+        assert not fake.values
+    finally:
+        await loaded.close()
+
+
 async def test_a_told_clue_cut_off_before_its_card_is_not_rolled_for_again(fake):
     """A clue with a sanity cost, its roll made and kept, the connection gone before its card: the
     resumed turn shows the card and the roll as they were, and rolls nothing."""

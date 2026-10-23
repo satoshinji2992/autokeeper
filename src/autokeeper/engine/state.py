@@ -157,6 +157,7 @@ class GameState(BaseModel):
     aftercare_seconds: int = Field(0, ge=0, lt=60)  # sub-minute aftercare rounds; old saves start at zero
     day: int = 0  # the game day the investigators' daily SAN count belongs to (minutes // 1440)
     clues: list[str] = Field(default_factory=list)
+    clue_settled: dict[str, list[str]] = Field(default_factory=dict)  # clue -> investigators whose acquisition costs committed
     handouts: list[str] = Field(default_factory=list)
     presentations: list[dict] = Field(default_factory=list)  # addressed media snapshots; never a shared discovery
     private_messages: dict[str, dict] = Field(default_factory=dict)  # keeper correspondence receipts, keyed by seat/request
