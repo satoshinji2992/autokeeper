@@ -1157,16 +1157,23 @@ async def test_a_reaction_not_answered_in_time_takes_the_default_and_a_late_answ
 
 
 @pytest.mark.parametrize("kind", ["roll", "reaction"])
-async def test_a_window_the_host_stopped_waiting_for_shows_its_countdown_closes_and_sends_nothing(kind):
+async def test_a_window_the_host_stopped_waiting_for_shows_its_countdown_closes_and_sends_nothing(kind, monkeypatch):
     """Review 2026-10-22: a roll prompt stayed up after the host rolled for the seat, and a dialog that ran
     out of time sent its default back (「这个选择已经结算」)."""
+    from types import SimpleNamespace
+
     from textual.widgets import Static
 
     from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals import dialogs
     from autokeeper.tui.modals.dialogs import RollModal
     from autokeeper.tui.modals.reaction import ChoiceModal
     from autokeeper.tui.screens.net import NetGameScreen
 
+    from .test_tui import until
+
+    now = 0.0
+    monkeypatch.setattr(dialogs, "time", SimpleNamespace(monotonic=lambda: now))
     m = Module.load(EXAMPLE)
     st = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot="lan", human=[m.pregens[0].id])
     st.location, st.prologue, st.turn = "tower", "（开场已讲过）", 3
@@ -1177,16 +1184,28 @@ async def test_a_window_the_host_stopped_waiting_for_shows_its_countdown_closes_
     app = AutoKeeperApp(theme="amber")
     async with app.run_test(size=(140, 44)) as pilot:
         screen = NetGameScreen(m, st, link, st.investigators[0].id, [])
-        app.push_screen(screen)
-        await pilot.pause(0.3)
+        await app.push_screen(screen)
+        assert screen.ready
         await screen.on_msg({"t": "offer", "offer": offer})
-        await pilot.pause(0.5)
+        window_type = RollModal if kind == "roll" else ChoiceModal
+        assert await until(pilot, lambda: isinstance(app.screen, window_type) and app.screen.is_mounted)
         window = app.screen
-        assert isinstance(window, RollModal if kind == "roll" else ChoiceModal)
+        assert isinstance(window, window_type)
         assert "剩余 20 秒" in "".join(str(w.render()) for w in window.query(Static))
         await screen.on_msg({"t": "offer_closed", "id": "other"})  # another offer's: this one stays
-        await pilot.pause(0.1)
+        await pilot.pause()
         assert app.screen is window
         await screen.on_msg({"t": "offer_closed", "id": "o1"})
-        await pilot.pause(0.3)
+        assert await until(pilot, lambda: app.screen is screen)
+        now += 21  # the closed window's old deadline cannot produce a late response
+        await pilot.pause()
+        assert app.screen is screen and not any(x["t"] == "respond" for x in link.sent)
+
+        short = {**offer, "id": "o2", "respond_id": "o2", "closes_in": 0.15}
+        await screen.on_msg({"t": "offer", "offer": short})
+        assert await until(pilot, lambda: isinstance(app.screen, window_type) and app.screen.is_mounted)
+        assert "剩余 1 秒" in "".join(str(w.render()) for w in app.screen.query(Static))
+        now += 0.2  # expiry starts after mounting, independent of screen-loading time
+        assert await until(pilot, lambda: app.screen is screen)
+        await pilot.pause()
         assert app.screen is screen and not any(x["t"] == "respond" for x in link.sent)
