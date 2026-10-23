@@ -9,7 +9,7 @@ import aiohttp
 
 from autokeeper.agents.cast import Ruling
 from autokeeper.engine.game import Game
-from autokeeper.module.schema import Module
+from autokeeper.module.schema import Handout, Module
 from autokeeper.net.hub import Hub
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
@@ -55,6 +55,12 @@ async def test_pending_roll_in_another_scene_does_not_block_conversation_or_leak
             await until(x, pool_open)
             await until(y, pool_open)
             assert len(casts) == 2
+            hub.m.handouts.append(Handout(id="sealed_letter", title="私人信件", text="零点到东门。"))
+            await hub._context(a.id).game.present([{"ref": "handout:sealed_letter", "to": [b.id]}], key="remote-letter")
+            letter = await until(y, lambda msg: msg.get("ev", {}).get("type") == "presentation")
+            assert letter["ev"]["payload"]["handout"]["text"] == "零点到东门。"
+            assert not hub._media_view(a.id)["papers"]
+            assert hub._media_view(b.id)["papers"]
             await y.send_json({"t": "act", "text": "我要检定侦查"})
             prompt = await until(y, lambda msg: msg["t"] == "offer")
             assert prompt["offer"]["kind"] == "roll"

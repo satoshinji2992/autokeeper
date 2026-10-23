@@ -117,7 +117,7 @@ async def test_actual_move_preserves_queued_original_time_retires_background_and
             a, b = hub._context(lead.id), hub._context(friend.id)
             assert a is not b and a is not source and b is not source
             assert hub.state.positions == {lead.id: "office", friend.id: "square"}
-            assert a.scene.at == b.scene.at == 610 and source.scene.closed
+            assert a.scene.at == 610 and b.scene.at == 600 and source.scene.closed
             assert (friend.id, QUEUED) in b.early
             assert original_receipt in b.state.queued_receipts
             assert not any(row["text"] == QUEUED for cast in casts.values() for row in cast.inputs)
@@ -144,17 +144,19 @@ async def test_actual_move_preserves_queued_original_time_retires_background_and
             x = await joined(http, resumed, lead.id)
             await until(x, pool_open)
             await x.send_json({"t": "act", "text": OTHER})
-            done_x, done_y = await asyncio.gather(
-                until(x, lambda msg: msg.get("ev", {}).get("type") == "keeper_end"),
-                until(y, lambda msg: msg.get("ev", {}).get("type") == "keeper_end"),
-            )
+            done_y = await until(y, lambda msg: msg.get("ev", {}).get("type") == "keeper_end")
+            b = resumed._context(friend.id)
+            await eventually(lambda: b.open and not b.scene.pending_turn)
+            assert b.scene.at == 601  # A's ten-minute walk did not consume B's opportunity to act.
+            await y.send_json({"t": "done"})  # B explicitly allows time to pass before A's later result.
+            done_x = await until(x, lambda msg: msg.get("ev", {}).get("type") == "keeper_end")
             assert done_x["ev"]["text"] == "zhouheng|office|现场继续。"
             assert done_y["ev"]["text"] == "lin|square|现场继续。"
             a, b = resumed._context(lead.id), resumed._context(friend.id)
             assert a is not b and a.cast is not b.cast and len(resumed_casts) == 2
             assert a.scene.at == b.scene.at == 611
             original_calls = [row for cast in resumed_casts.values() for row in cast.inputs if row["text"] == QUEUED]
-            assert original_calls == [{"who": friend.id, "text": QUEUED, "at": 610, "received": 600, "place": "square"}]
+            assert original_calls == [{"who": friend.id, "text": QUEUED, "at": 600, "received": 600, "place": "square"}]
             assert not any(row["text"] == MOVE for cast in resumed_casts.values() for row in cast.inputs)
             assert not a.state.pending_turn and not b.state.pending_turn
             assert not b.state.queued_actions and not b.state.queued_receipts

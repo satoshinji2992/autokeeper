@@ -57,6 +57,9 @@ class SceneTable(Hub):
     def _participants(self):
         return [person for person in self.state.investigators if person.id in self.scene.members]
 
+    def _context(self, viewer: str | None):
+        return self if viewer in self.scene.members else self.root._context(viewer)
+
     def _acts(self, seat: str) -> bool:
         return seat in self.scene.members and super()._acts(seat)
 
@@ -72,8 +75,15 @@ class SceneTable(Hub):
         self.tables.runtime.changed.set()
 
     async def _send(self, cid: str, msg: dict[str, Any]) -> None:
-        if self._seat_of(cid) in self.scene.members:
-            await super()._send(cid, msg)
+        await self.root._send(cid, msg)
+
+    async def _pool(self) -> None:
+        for cid in list(self.clients):
+            if self._seat_of(cid) in self.scene.members:
+                await self._send(cid, self._pool_view(cid))
+
+    async def _share_book(self) -> None:
+        await self.root._share_book()
 
     async def _broadcast(self, msg: dict[str, Any]) -> None:
         if msg.get("t") == "event":
@@ -82,7 +92,7 @@ class SceneTable(Hub):
             msg = {**msg, "ev": event}
         else:
             msg = {**msg, "audience": msg.get("audience", list(self.scene.members))}
-        await super()._broadcast(msg)
+        await self.root._broadcast(msg)
 
     def _start_privates(self) -> None:
         # Each consumer owns only its members; the retained mailbox itself is shared.
@@ -203,10 +213,7 @@ class SceneTables:
                 if task := self.tasks.get(worker.ident):
                     if task is not asyncio.current_task():
                         await asyncio.gather(task, return_exceptions=True)
-                await worker.game.close()
-                await worker.cast.close()
-                self.runtime._games.pop(worker.ident, None)
-                self.runtime._graphs.pop(worker.ident, None)
+                await self.runtime.retire(worker.ident)
             self.runtime.changed.set()
 
     async def run(self) -> None:
