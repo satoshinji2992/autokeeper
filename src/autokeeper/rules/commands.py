@@ -167,9 +167,8 @@ def _set(body: str, inv: Investigator | None) -> CommandResult:
 
 def sheet(inv: Investigator) -> str:
     """The investigator sheet as text (.st with nothing after it)."""
-    san = str(inv.san) if inv.san is not None else "未公开"
     rows = [
-        f"{inv.name}（{inv.occupation}，{inv.age} 岁）HP {inv.hp}/{inv.hp_max} MP {inv.mp}/{inv.mp_max} 理智 {san} 幸运 {inv.luck}",
+        f"{inv.name}（{inv.occupation}，{inv.age} 岁）HP {inv.hp}/{inv.hp_max} MP {inv.mp}/{inv.mp_max} 理智 {inv.san} 幸运 {inv.luck}",
         " ".join(f"{k}{v}" for k, v in inv.characteristics.items()),
         " ".join(f"{k}{v}" for k, v in sorted(inv.skills.items(), key=lambda kv: -kv[1])),
     ]
@@ -187,7 +186,7 @@ def _current(inv: Investigator, name: str) -> int:
     if low in ("mp", "魔法"):
         return inv.mp
     if low in ("san", "理智"):
-        return inv.require_sanity()
+        return inv.san
     if low in ("luck", "幸运"):
         return inv.luck
     return inv.value(name)

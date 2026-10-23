@@ -237,8 +237,7 @@ def details(save: Save, m: Module | None) -> Text:
     for inv in st.investigators:
         out.append(inv.name, style="bold")
         out.append(f"  {inv.occupation.split('（')[0]}\n", style="dim")
-        san = str(inv.san) if inv.san is not None else "未公开"
-        out.append(f"  HP {inv.hp}/{inv.hp_max}  SAN {san}", style="bold red" if inv.hp * 3 <= inv.hp_max else "")
+        out.append(f"  HP {inv.hp}/{inv.hp_max}  SAN {inv.san}", style="bold red" if inv.hp * 3 <= inv.hp_max else "")
         if inv.conditions:
             out.append("  " + "、".join(inv.conditions), style="red")
         out.append("\n")

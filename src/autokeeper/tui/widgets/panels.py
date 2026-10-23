@@ -1034,20 +1034,17 @@ class SheetPanel(Static):
         head = Text()
         head.append(set_cell_size(inv.name, beside).rstrip() + "\n", style="bold")
         head.append(set_cell_size(f"{inv.occupation.split('（')[0]}  {inv.age}岁", beside).rstrip() + "\n", style="dim")
-        tail = max(cell_len(f" {inv.hp}/{inv.hp_max}"), cell_len(f" {inv.san if inv.san is not None else '未公开'}"))
+        tail = max(cell_len(f" {inv.hp}/{inv.hp_max}"), cell_len(f" {inv.san}"))
         long = max(3, min(12, beside - 4 - tail))  # the bar gives way: the numbers stay on their line
         hp_style = "bold red" if inv.hp * 3 <= inv.hp_max else "bold"
+        san_ratio = inv.san / max(1, inv.characteristics.get("意志", 50))
+        san_style = "bold red" if san_ratio < 0.6 else "bold magenta" if san_ratio < 0.85 else "bold"
         head.append("HP  ")
         head.append(art.bar(inv.hp, inv.hp_max, long), style=hp_style)
         head.append(f" {inv.hp}/{inv.hp_max}\n")
         head.append("SAN ")
-        if inv.san is None:
-            head.append("未公开\n", style="dim")
-        else:
-            san_ratio = inv.san / max(1, inv.characteristics.get("意志", 50))
-            san_style = "bold red" if san_ratio < 0.6 else "bold magenta" if san_ratio < 0.85 else "bold"
-            head.append(art.bar(inv.san, inv.characteristics.get("意志", inv.san) or 1, long), style=san_style)
-            head.append(f" {inv.san}\n")
+        head.append(art.bar(inv.san, inv.characteristics.get("意志", inv.san) or 1, long), style=san_style)
+        head.append(f" {inv.san}\n")
         head.append(f"MP {inv.mp}  幸运 {inv.luck}\nMOV {inv.move}  DB {inv.damage_bonus}")
         if inv.conditions:
             head.append("\n" + "、".join(inv.conditions), style="bold red")
@@ -1086,8 +1083,7 @@ def party_rows(party: list[Investigator], acting: str, width: int) -> Text:
         name = set_cell_size(p.name.split("（")[0], max(4, width - 18))
         style = "bold" if p.id == acting else "dim" if not p.can_act else ""
         out.append(("▸ " if p.id == acting else "  ") + name, style=style)
-        san = str(p.san) if p.san is not None else "未公开"
-        out.append(f" HP{p.hp:>3} SAN{san:>3}", style="bold red" if p.hp * 3 <= p.hp_max else style)
+        out.append(f" HP{p.hp:>3} SAN{p.san:>3}", style="bold red" if p.hp * 3 <= p.hp_max else style)
         if n + 1 < len(party):
             out.append("\n")
     return out

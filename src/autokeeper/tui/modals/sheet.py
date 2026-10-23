@@ -40,7 +40,7 @@ MARKS = {"act": "▸", "check": "◈", "handout": "▤", "sanity": "※", "damag
 LEDGER = {"fact": "记下", "relationship": "关系", "promise": "约定", "fulfill": "约定", "transfer": "转交"}
 
 
-def skill_rows(inv: Investigator) -> list[tuple[str, int | str, bool, bool]]:
+def skill_rows(inv: Investigator) -> list[tuple[str, int, bool, bool]]:
     """(name, value, raised above its base, ticked for improvement) for every skill on the sheet."""
     names = [k for k in SKILL_BASE if k not in ("克苏鲁神话", "信用评级")]
     special = [k for k in inv.skills if k not in SKILL_BASE]
@@ -53,9 +53,6 @@ def skill_rows(inv: Investigator) -> list[tuple[str, int | str, bool, bool]]:
     names = ["信用评级", "克苏鲁神话", *names]
     rows = []
     for name in names:
-        if name == "克苏鲁神话" and inv.san is None:
-            rows.append((name, "未公开", False, False))
-            continue
         base = base_value(name, inv.characteristics, default=1 if name in inv.skills else None)
         value = inv.skills.get(name, base)
         rows.append((name, value, value > base or (name == "克苏鲁神话" and value > 0), name in inv.marks))
@@ -85,11 +82,8 @@ def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | Non
     who.append("HP  ")
     who.append(art.bar(inv.hp, inv.hp_max), style="bold red" if inv.hp * 3 <= inv.hp_max else "bold")
     who.append(f" {inv.hp}/{inv.hp_max}\nSAN ")
-    if inv.san is None:
-        who.append("未公开\n", style="dim")
-    else:
-        who.append(art.bar(inv.san, inv.san_max), style="bold magenta" if inv.san * 5 < inv.san_max * 3 else "bold")
-        who.append(f" {inv.san}/{inv.san_max}\n")
+    who.append(art.bar(inv.san, inv.san_max), style="bold magenta" if inv.san * 5 < inv.san_max * 3 else "bold")
+    who.append(f" {inv.san}/{inv.san_max}\n")
     gap = "\n" if width is not None and width < 96 else "   "  # beside a portrait in a narrow pane: two lines
     who.append(f"MP {inv.mp}/{inv.mp_max}   幸运 {inv.luck}   MOV {inv.move}{gap}DB {inv.damage_bonus}   体格 {inv.build}\n")
     if inv.conditions:
@@ -121,7 +115,7 @@ def sheet_view(inv: Investigator, portrait: Text | None = None, width: int | Non
     n = 4 if width is None or width >= 96 else 3 if width >= 72 else 2
     for i in range(n):  # n (name, value) pairs, values right-aligned
         skills.add_column(no_wrap=True)
-        skills.add_column(justify="right", width=6 if inv.san is None else 3)
+        skills.add_column(justify="right", width=3)
         if i < n - 1:
             skills.add_column(width=2)
     rows = skill_rows(inv)

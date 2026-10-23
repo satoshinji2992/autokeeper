@@ -61,10 +61,9 @@ class Investigator(BaseModel):
     hp_max: int = 0
     mp: int = 0
     mp_max: int = 0
-    # None is an explicitly undisclosed network projection, never a playable investigator.
-    san: int | SkipJsonSchema[None] = 0
-    san_start_of_day: int | SkipJsonSchema[None] = 0
-    san_lost_today: int | SkipJsonSchema[None] = 0
+    san: int = 0
+    san_start_of_day: int = 0
+    san_lost_today: int = 0
     skills: dict[str, int] = Field(default_factory=dict)
     inventory: list[str] = Field(default_factory=list)
 
@@ -129,14 +128,8 @@ class Investigator(BaseModel):
             self.san_start_of_day = self.san
 
     # -- lookups ------------------------------------------------------------
-    def require_sanity(self) -> int:
-        if self.san is None or self.san_start_of_day is None or self.san_lost_today is None:
-            raise ValueError("理智资料未公开，不能用于规则结算。")
-        return self.san
-
     @property
     def san_max(self) -> int:
-        self.require_sanity()
         return 99 - self.skills.get("克苏鲁神话", 0)
 
     @property
@@ -166,13 +159,11 @@ class Investigator(BaseModel):
         if key in self.characteristics:
             return self.characteristics[key]
         if key == "理智":
-            return self.require_sanity()
+            return self.san
         if key == "幸运":
             return self.luck
         if key in self.skills:
             return self.skills[key]
-        if key == "克苏鲁神话" and self.san is None:
-            raise ValueError("克苏鲁神话资料未公开，不能用于规则结算。")
         # specialised skills such as 外语(英语) fall back to the general entry
         general = key.split("(")[0]
         for skill, v in self.skills.items():
@@ -211,7 +202,7 @@ class Investigator(BaseModel):
         return not {"昏迷", "濒死", "死亡", "永久疯狂"} & set(self.conditions)
 
     def new_day(self) -> None:
-        self.san_start_of_day = self.require_sanity()
+        self.san_start_of_day = self.san
         self.san_lost_today = 0
 
     def recover_madness(self, now: int, *, rested_since: int | None = None) -> list[str]:
@@ -437,7 +428,6 @@ class Rules:
         return Opposed(a, b, "tie")
 
     def sanity(self, inv: Investigator, on_success: str, on_failure: str, *, now: int = 0) -> Sanity:
-        inv.require_sanity()
         check = self.check(inv, "理智", mark=False)
         expr = on_success if check.passed else on_failure
         if check.level == Level.FUMBLE:

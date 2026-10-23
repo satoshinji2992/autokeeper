@@ -235,9 +235,8 @@ def public_card(inv: dict[str, Any], viewer: str | None, m: Module, st: GameStat
               and (PLAYERS in ent.observed_by or viewer in ent.observed_by)}
     return {**inv, "backstory": {}, "known_locations": [],
             "inventory": [name for name in inv.get("inventory", []) if name in names],
-            "skills": {name: value for name, value in inv.get("skills", {}).items() if name != "克苏鲁神话"},
-            "madness": {}, "injury": {}, "marks": [], "san": None, "san_lost_today": None,
-            "san_start_of_day": None,
+            "madness": {}, "injury": {}, "marks": [], "san_lost_today": 0,
+            "san_start_of_day": inv["san"],
             "conditions": [condition for condition in inv.get("conditions", []) if "疯狂" not in condition]}
 
 

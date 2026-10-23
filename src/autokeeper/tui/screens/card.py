@@ -38,8 +38,7 @@ def sheet(inv: Investigator, picture: Text | None = None, note: str = "", fixes:
     t.append(f"\n{inv.name}", style="bold")
     t.append(f"  {inv.occupation} · {inv.age}岁{' · ' + inv.sex if inv.sex else ''}\n", style="dim")
     t.append("  ".join(f"{k}{v}" for k, v in inv.characteristics.items()) + "\n")
-    san = str(inv.san) if inv.san is not None else "未公开"
-    t.append(f"HP {inv.hp_max}  MP {inv.mp_max}  理智 {san}  幸运 {inv.luck}  MOV {inv.move}  DB {inv.damage_bonus}\n\n", style="bold")
+    t.append(f"HP {inv.hp_max}  MP {inv.mp_max}  理智 {inv.san}  幸运 {inv.luck}  MOV {inv.move}  DB {inv.damage_bonus}\n\n", style="bold")
     t.append("  ".join(f"{k} {v}" for k, v in inv.skills.items()) + "\n\n")
     for k, v in inv.backstory.items():
         if k != "说明":

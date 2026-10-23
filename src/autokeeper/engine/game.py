@@ -236,8 +236,6 @@ class _ResolutionDice:
 class Game(Encounters):
     def __init__(self, module: Module, state: GameState, cast: Cast, rules: Rules, emit: Emit | None = None,
                  *, restore: bool = True):
-        for inv in state.investigators:
-            inv.require_sanity()  # Client projections cannot become authoritative game state.
         self.m, self.state, self.cast, self.rules = module, state, cast, rules
         pictures.adopt(module)  # what was found or drawn for the module on this machine (pictures.py)
         self.emit: Emit = emit or _silent
