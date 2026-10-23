@@ -920,11 +920,11 @@ class GameScreen(Screen):
             story.add("echo", Text(ev["text"]))
         elif t == "keeper_start":  # told again: the same block, new words
             self._status("守秘人换个讲法…" if ev.get("again") else "守秘人正在讲述…")
-            self.told = story.begin_keeper(self.told if ev.get("again") else None)
+            self.told = story.begin_keeper(self.told if ev.get("again") else None, delivery=ev.get("delivery", ""))
         elif t == "keeper_delta":
-            story.feed(ev["text"])
+            story.feed(ev["text"], delivery=ev.get("delivery", ""))
         elif t == "keeper_end":
-            story.end_keeper(ev["text"])
+            story.end_keeper(ev["text"], delivery=ev.get("delivery", ""))
             self._status("")
             self._pages()  # the opening, once told, is on the 背景 page
         elif t == "held":  # a LAN round: the others' actions first, then one telling of them all
@@ -1489,9 +1489,13 @@ class GameScreen(Screen):
                 await self.game.start()
             elif self.state.pending_turn:
                 self.story.add("system", Text("上一回合尚未讲完，正在接续已保存的结果。"))
-                for entry in self.state.log:
-                    if entry.turn == self.state.turn and entry.kind in ("dice", "npc", "event"):
-                        self.story.add(entry.kind, Text(entry.text))
+                for entry in audience.log(self.state, self._me() or self._viewer().id):
+                    if entry.turn == self.state.turn and entry.kind in ("dice", "npc", "event", "keeper"):
+                        text = (f"【守秘人·私密】{entry.text}" if entry.kind == "keeper" and not audience.public(entry)
+                                else entry.text)
+                        block = self.story.add(entry.kind, Text(text), delivery=entry.delivery)
+                        if entry.kind == "keeper" and audience.public(entry):
+                            self.told = block
                 await self._run_turn({"input": "/retry"})
             elif self.resume:
                 self._status("正在回顾前情…")
@@ -1858,7 +1862,7 @@ class GameScreen(Screen):
             journal.sync(self.game)
         del self.dev_errors[:-20]
         text = f"这一段暂未完成：{config.plain(exc)}。输入 /retry 接着讲，已掷出的结果会保留。"
-        self.story.end_keeper("这一段暂时中断。")
+        self.story.pause_keeper()
         self.story.add("system", Text(text))
         self.app.notify(text, severity="warning", timeout=12)
         write_save(self.state, self.m)

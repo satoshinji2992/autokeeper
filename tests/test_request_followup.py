@@ -79,8 +79,9 @@ async def test_a_validated_handover_that_goes_stale_before_landing_cannot_contin
     games, saved = [game], []
     who = game.state.investigator.id
     parcel = game.world.apply(O.Bring(name="空木盒", holder="warden", actor="warden")).data
-    cast.tellings.append(telling(next=proposed, scene={"here": ["warden"],
-                                                     "holds": [{"item": parcel, "holder": who}]}))
+    draft = telling(next=proposed, scene={"here": ["warden"], "holds": [{"item": parcel, "holder": who}]})
+    draft.text = "你接过木盒，准备离开。"
+    cast.tellings.append(draft)
 
     def checkpoint() -> None:
         receipt = game.state.pending_turn.get("keeper", {})
@@ -96,14 +97,21 @@ async def test_a_validated_handover_that_goes_stale_before_landing_cannot_contin
         with pytest.raises(RuntimeError, match="交付前断线"):
             await run(graph, game, {"input": original})
         assert len(saved) == 1 and len(cast.reports) == 1 and not cast.tellings
+        pending = "木盒没有交到手里，先处理眼前情况，再决定是否去广场。"
+        corrected = telling(pending=pending)
+        corrected.text = "木盒仍在桌上。"
+        cast.tellings.append(corrected)
         game, graph = make(fake, cast, m=game.m.model_copy(deep=True), state=GameState.model_validate_json(saved[0]))
         games.append(game)
-        _, offers = await run(graph, game, {"input": "/retry"})
-        assert not offers and len(cast.reports) == 1 and cast.planned == [original]
+        events, offers = await run(graph, game, {"input": "/retry"})
+        assert not offers and len(cast.reports) == 2 and cast.planned == [original] and not cast.tellings
         assert game.state.turn == 1 and game.state.location == "tower" and not game.state.pending_turn
         assert game.world.rec.entities[parcel].at == "tower" and "空木盒" not in game.state.investigator.inventory
         assert [action.summary for action in cast.ruled] == [first.summary]
-        assert "场面未完整落实" in game.state.unfinished[who]["reason"]
+        assert game.state.unfinished[who]["remaining"] == pending
+        assert draft.text not in [entry.text for entry in game.state.log]
+        assert [event["text"] for event in events if event["type"] == "keeper_delta"] == [corrected.text]
+        assert not any(event["type"] == "move" for event in events)
     finally:
         for old in games:
             await old.close()

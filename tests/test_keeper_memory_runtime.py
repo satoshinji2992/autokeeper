@@ -349,7 +349,6 @@ async def test_rejected_scene_does_not_acknowledge_or_lose_an_already_executed_t
 async def test_final_display_disconnect_recovers_the_remembered_receipt_without_repeating_acknowledged_npcs(fake, monkeypatch):
     game, graph, cast = two_people(fake)
     script(game)
-    SCRIPT.append(final("器材整理好了。"))  # A displayed final without its completed receipt may need one new model reply.
     fake.queue(1)
     games, casts, saved, emitted = [game], [cast], [], []
     start = game.state.minutes
@@ -367,35 +366,37 @@ async def test_final_display_disconnect_recovers_the_remembered_receipt_without_
                 await on_delta(text)
             if text == "器材整理好了。" and not saved:
                 receipt = game.state.pending_turn["keeper"]
-                assert "text" not in receipt and receipt["memory_at"] == 1
+                assert receipt["text"] == text and receipt["landed"] and receipt["memory_at"] == 2
                 assert game.state.transcripts["keeper"][-2]["content"].startswith(
                     f"【主持记录 {receipt['memory_id']}｜配音回执至 2】")
                 assert all(reply["shown"] for reply in receipt["voice_turn"]["replies"].values())
                 saved.append(game.state.model_dump_json())
-                raise RuntimeError("终稿已展示，完成收据尚未回填")
+                raise RuntimeError("终稿已展示，交付确认尚未完成")
 
         return await original_narrate(report, shown, lore, turn, **kwargs)
 
     monkeypatch.setattr(game, "_narrate", narrate)
     try:
-        with pytest.raises(RuntimeError, match="终稿已展示，完成收据尚未回填"):
+        with pytest.raises(RuntimeError, match="终稿已展示，交付确认尚未完成"):
             await run(graph, game, {"input": ORIGINAL})
         assert len(saved) == 1 and len(role_calls("HostedReply")) == 3
         restored = GameState.model_validate_json(saved[0])
+        body_acknowledged = restored.pending_turn["keeper"].get("body_shown", False)
         game, graph, cast = two_people(fake, module=game.m.model_copy(deep=True), state=restored)
         games.append(game)
         casts.append(cast)
         _, offers = await run(graph, game, {"input": "/retry"})
         assert not offers and not SCRIPT and not game.state.pending_turn
         assert_once(game.state)
-        assert len(role_calls("HostedReply")) == 4  # The unacknowledged final is regenerated, not its tools.
+        assert len(role_calls("HostedReply")) == 3  # Delivery resumes the saved final, never regenerates it.
         assert len(role_calls("Dialogue")) == 2 and len(role_calls("Plan")) == len(role_calls("Ruling")) == 1
         assert game.state.turn == 1 and game.state.minutes == start + 3
         assert len(game.state.checks) == 1 and not fake.values and game.state.investigator.inventory.count("擦手布") == 1
         for line in (FIRST, SECOND):
             assert len([event for event in emitted if event["type"] == "npc" and event["text"] == line]) == 1
-        # Both finals streamed; only the second acquired a completed telling/log receipt.
-        assert len([event for event in emitted if event["type"] == "keeper_delta" and event["text"] == "器材整理好了。"]) == 2
+        # The body can be redelivered only if its caller had not acknowledged it; NPC receipts already held.
+        bodies = [event for event in emitted if event["type"] == "keeper_delta" and event["text"] == "器材整理好了。"]
+        assert len(bodies) == (1 if body_acknowledged else 2)
         assert [entry.text for entry in game.state.log if entry.kind == "keeper"] == ["器材整理好了。"]
     finally:
         await shut(games, casts)

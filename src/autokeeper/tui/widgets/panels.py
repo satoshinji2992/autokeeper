@@ -465,6 +465,7 @@ class StoryLog(VerticalScroll):
         self._shown = ""
         self._pending = ""
         self._typing = False
+        self._deliveries: dict[str, list] = {}  # the same records used when old story blocks fold away
         self.names: dict[str, str] = {}  # a name, or the part of it people go by -> its style
         self.on_entry = None  # told of every block added: (kind, body, block); the history panel
         self._folded: list[list] = []  # [classes, content, block] of each folded block, oldest first
@@ -487,7 +488,9 @@ class StoryLog(VerticalScroll):
             text.highlight_words([name], style)
         return text
 
-    def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "") -> Static:
+    def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "", delivery: str = "") -> Static:
+        if delivery and (existing := self._delivery_block(delivery)) is not None:
+            return existing
         if isinstance(body, Static):  # a block that draws itself, such as a roll
             block = body
             block.add_class("entry", kind)
@@ -501,6 +504,9 @@ class StoryLog(VerticalScroll):
             if kind in self.MARKED and isinstance(body, Text):
                 body = self.lit(body.copy())
             block = Prose(body, classes=f"entry {kind}")
+        if delivery:
+            record = [" ".join(sorted(block.classes)), block.content, block]
+            self._deliveries[delivery] = self._origin[block] = record
         self.mount(block)
         self.scroll_end(animate=False)
         self._trim()
@@ -571,21 +577,35 @@ class StoryLog(VerticalScroll):
             self.call_after_refresh(self.scroll_to_widget, record[2], animate=False, top=True)
 
     # -- typewriter ----------------------------------------------------------------
-    def begin_keeper(self, again: Static | None = None) -> Static:
+    def _delivery_block(self, delivery: str) -> Static | None:
+        record = self._deliveries.get(delivery)
+        if record is None:
+            return None
+        if record[2] is None and record in self._folded:
+            self.unfold(len(self._folded) - self._folded.index(record))
+        return record[2]
+
+    def begin_keeper(self, again: Static | None = None, *, delivery: str = "") -> Static:
         """A narration starts: a new block that types itself out, or `again`, the block of a
         narration being told again, whose old words fade until the new ones come in."""
-        if again is not None and again.parent is self:
+        existing = self._delivery_block(delivery) if delivery else None
+        if existing is not None:
+            self._live = existing
+        elif again is not None and again.parent is self:
             again.styles.text_opacity = 0.45
             again.display = True
             for old in getattr(again, "voices", []):  # the lines of the first telling go with it
                 old.remove()
             self._live = again
         else:
-            self._live = self.add("keeper", Text(""))
+            self._live = self.add("keeper", Text(""), delivery=delivery)
         self._shown, self._pending = "", ""
+        self._typing = False
         return self._live
 
-    def feed(self, text: str) -> None:
+    def feed(self, text: str, *, delivery: str = "") -> None:
+        if delivery and (self._live is None or self._delivery_block(delivery) is not self._live):
+            self.begin_keeper(delivery=delivery)
         self._pending += text
         if not self._typing:
             self._typing = True
@@ -612,17 +632,34 @@ class StoryLog(VerticalScroll):
         size = block.content_size
         return not size.width or block.get_content_height(size, size, size.width) != size.height
 
-    def end_keeper(self, full: str) -> None:
+    def pause_keeper(self) -> None:
+        """Stop typing on interruption, retaining received words instead of inventing a telling."""
+        text = self._shown + self._pending
+        self._pending = ""
+        self._typing = False
+        if self._live is not None:
+            if text:
+                self.end_keeper(text)
+            else:
+                self._unfade(self._live)
+                self._live = None
+
+    def end_keeper(self, full: str, *, delivery: str = "") -> None:
         """The narration told: its words in the block, and the lines of people the keeper plays
         (a passer-by, a clerk), written as 【称呼】 paragraphs, out in boxes of their own the way
         an NPC's are, in their place in the telling."""
+        if delivery:
+            self._live = self._delivery_block(delivery)
         if self._live is None:
-            self._live = self.add("keeper", Text(""))
+            self._live = self.add("keeper", Text(""), delivery=delivery)
         self._pending = ""
         self._typing = False
         self._unfade(self._live)
         parts = voices(full)
         block = self._live
+        for old in getattr(block, "voices", []):
+            old.remove()
+        block.display = True
         lines: list[Static] = []
         block.update(self.lit(Text(parts[0][2] if parts and parts[0][0] == "keeper" else "")))
         if parts and parts[0][0] != "keeper":

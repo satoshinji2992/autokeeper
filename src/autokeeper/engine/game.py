@@ -248,6 +248,7 @@ class Game(Encounters):
         self.director_wait: float | None = None
         self.backstage: list[Backstage] = []
         self._late = Turn()  # what landed from backstage, told in the next narration
+        self._walked_receipts: set[str] = set()  # restored visit results already joined to this instance's _late
         self.debug_world: list[scheduler.Report] = []  # recent scheduling decisions, including refused operations
         self.told: Told | None = None  # the latest narration, while it can still be told again (retell)
         self.holding = False  # a round's action that is not its last: its telling waits for the others (narrate)
@@ -1012,11 +1013,14 @@ class Game(Encounters):
         record.minutes, record.seen = self.state.minutes, self._seen()
 
     # -- improvisation ----------------------------------------------------------------
-    async def present(self, actions: list[dict], *, key: str = "") -> list[str]:
-        """One addressed delivery path for keeper, NPC and director media. No clue acquisition."""
+    async def present(self, actions: list[dict], *, key: str = "", shown: list[int] | None = None) -> list[str]:
+        """One addressed delivery path for keeper, NPC and director media. No clue acquisition.
+        An optional caller-owned `shown` receipt records only notifications whose emit returned."""
         st, errors = self.state, []
         prefix = key or f"present:{st.turn}:{len(st.presentations)}"
         for n, raw in enumerate(actions):
+            if shown is not None and n in shown:
+                continue
             ident = f"{prefix}:{n}"
             scope = raw.get("to")
             if isinstance(scope, list):
@@ -1043,6 +1047,10 @@ class Game(Encounters):
                 if self.checkpoint:
                     self.checkpoint()
             await self.emit(presentation.event(saved))
+            if shown is not None:
+                shown.append(n)
+                if self.checkpoint:
+                    self.checkpoint()
         if errors:
             self._debug("presentation", {"phase": "unavailable", "problems": errors})
         return errors
@@ -4188,10 +4196,11 @@ class Game(Encounters):
         return telling.name_rows(keeper, players)
 
     async def _narrate(self, report: str, on_delta=None, lore: str = "", turn: Turn | None = None, *,
-                       _receipt: dict | None = None, _owner: Turn | None = None) -> str:
+                       _receipt: dict | None = None, _owner: Turn | None = None, _tools: bool = True) -> str:
         """The keeper tells it: first how things stand as the telling ends, then the words
         (agents/cast.Telling). The scene is compared with the record and lands as world operations
-        (world/scene.py); the words stream to the player once it holds (Game._tell). Nothing reads
+        (world/scene.py); a structured telling is saved and lands before its words are delivered.
+        Plain answers without a world-result schema may still stream. Nothing reads
         the words, and nothing in them is cut or replaced (the user's call, 2026-10-20). The whole
         telling goes into the turn's journal (pending_turn["keeper"]) before it lands: a turn resumed
         after that lands it from there and does not ask the keeper again."""
@@ -4200,36 +4209,50 @@ class Game(Encounters):
         sky = (st.sky, st.sky_at)
         receipt: dict = (_receipt if _receipt is not None else
                          st.pending_turn.setdefault("keeper", {}) if st.pending_turn else {})
+        if "delivery_id" not in receipt:
+            receipt["delivery_id"] = (f"keeper:{receipt['memory_id']}" if "memory_id" in receipt else
+                                      f"keeper:{st.turn}:{st.logged}")
+            if self.checkpoint:
+                self.checkpoint()
+        delivery = receipt["delivery_id"]
         started = False
 
         async def start() -> None:
             nonlocal started
             if not started:
-                await self.emit({"type": "keeper_start"})
+                await self.emit({"type": "keeper_start", "delivery": delivery})
                 started = True
 
         async def delta(text: str) -> None:
             await start()
-            await self.emit({"type": "keeper_delta", "text": text})
+            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery})
             if on_delta:
                 await on_delta(text)
 
-        if "text" in receipt:  # told before the turn was cut short: shown again, not asked again
-            await delta(receipt["text"])
-        else:
+        if "text" not in receipt:
             await self.emit({"type": "status", "text": "KP 正在构思…"})
-            receipt.update(await self._tell(report, lore, delta, turn, receipt=receipt))
+            receipt.update(await self._tell(report, lore, delta, turn, receipt=receipt, tools=_tools))
+            if started:  # the plain path already delivered its complete streamed answer
+                receipt.update(body_started=True, body_shown=True, body_forwarded=True)
             if self.checkpoint:
                 self.checkpoint()
         text = receipt["text"]
-        if not receipt.get("landed"):  # the record and the log together, with no await between
-            landed = scene.land(self.world, [scene.Unit.load(u) for u in receipt.get("units", [])])
+        if not receipt.get("landed"):  # actual world operations and their receipt, without an await between
+            units = [scene.Unit.load(u) for u in receipt.get("units", [])]
+            landed = scene.land(self.world, units)
             if any(u.key.startswith("introduce:") for u in landed):
                 self.visuals.schedule()
             if len(landed) < len(receipt.get("units", [])):
                 self._debug("scene", {"phase": "stale", "units": receipt["units"], "landed": [u.key for u in landed]})
                 receipt["rested"] = {}
                 receipt["scene_complete"] = False
+                trial = World(self.m.model_copy(deep=True), st.model_copy(deep=True))
+                problems = [problem for unit in units if unit not in landed
+                            for problem in (scene.run(trial, unit) or [f"场面操作 {unit.key} 未落实"])]
+                receipt["stale"] = {"landed": [u.dump() for u in landed], "problems": problems,
+                                    "standing": scene.standing(self.world)}
+                receipt["story_flags"] = []
+                receipt["room"] = next((u.room for u in landed if u.room), "")
             else:
                 receipt["story_flags"] = []
                 for flag in receipt.get("flags", []):
@@ -4238,11 +4261,30 @@ class Game(Encounters):
                     done = self.world.apply(SetFlag(id=f"keeper:{st.turn}:flag:{flag}", flag=flag, actor=KEEPER))
                     if done.ok:
                         receipt["story_flags"].append(flag)
-            st.ongoing = receipt.get("now", "")
-            st.add("keeper", text, who="守秘人")
+            if not receipt.get("stale"):
+                st.ongoing = receipt.get("now", "")
             receipt["landed"] = True
             if self.checkpoint:
                 self.checkpoint()
+        if receipt.get("stale"):
+            # A saved draft whose operations no longer hold is not a delivered story.
+            # Keep the actual partial effects, then let this keeper correct only the telling.
+            came = None
+            if receipt.get("room"):
+                came = await self._walked(receipt["room"], receipt, defer=False)
+            following = receipt.setdefault("following_keeper", {})
+            following.setdefault("delivery_id", f"{delivery}:stale")
+            corrected = (self._report(turn) if turn is not None else report)
+            corrected += ("\n【未展示草稿的场面未全部落实】\n"
+                          + json.dumps(receipt["stale"], ensure_ascii=False)
+                          + "\n上一份正文只是未展示草稿，不是已经发生的事实；只以上述实际落账与当前记录为准。"
+                          "已成立操作保留，未成立操作不能当作完成；不重做原行动、骰点或人物配音。"
+                          "据此写这一段实际经过；尚待意图按真实结果保留，不执行或预演后续行动。")
+            if came is not None:
+                corrected += ("\n【本次实际走入地点后已经结算的结果】\n" + self._report(came)
+                              + "\n到访通知与检定已按原收件人展示，保留实际后果，叙述自然承接，不重复已显示的原文或骰点。")
+            return await self._narrate(corrected, on_delta, lore=lore, turn=turn, _receipt=following,
+                                       _owner=_owner, _tools=False)
         if not receipt.get("perceptions_landed"):
             changes = receipt.get("perceptions", [])
             if problems := perception.check_changes(self, changes):
@@ -4262,16 +4304,35 @@ class Game(Encounters):
             receipt["rested_landed"] = True
             if self.checkpoint:
                 self.checkpoint()
-        if receipt.get("room") and not receipt.get("walked"):
-            await self._walked(receipt["room"])
-            receipt["walked"] = True
+        if receipt.get("room"):
+            await self._walked(receipt["room"], receipt)
+        await self._people()
+        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and recipients.public(e)
+                      and e.delivery == delivery), None)
+        if entry is None:
+            entry = st.add("keeper", text, who="守秘人", delivery=delivery)
             if self.checkpoint:
                 self.checkpoint()
-        await self._people()
-        entry = next((e for e in reversed(st.log) if e.kind == "keeper" and recipients.public(e) and e.text == text), None)
-        entry = entry or st.add("keeper", text, who="守秘人")
-        await start()
-        await self.emit({"type": "keeper_end", "text": text})
+        if not receipt.get("body_started"):
+            await self.emit({"type": "keeper_start", "delivery": delivery})
+            receipt["body_started"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        if not receipt.get("body_shown"):
+            await self.emit({"type": "keeper_delta", "text": text, "delivery": delivery})
+            receipt["body_shown"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        if on_delta and not receipt.get("body_forwarded"):
+            await on_delta(text)
+            receipt["body_forwarded"] = True
+            if self.checkpoint:
+                self.checkpoint()
+        if not receipt.get("body_ended"):
+            await self.emit({"type": "keeper_end", "text": text, "delivery": delivery})
+            receipt["body_ended"] = True
+            if self.checkpoint:
+                self.checkpoint()
         if not receipt.get("asides_landed"):
             # The accepted telling and its recipients are saved together before delivery. A
             # resumed turn never registers a private observation a second time.
@@ -4280,10 +4341,17 @@ class Game(Encounters):
             receipt["asides_landed"] = True
             if self.checkpoint:
                 self.checkpoint()
-        for aside in receipt.get("asides", []):
+        asides_shown = receipt.setdefault("asides_shown", [])
+        for index, aside in enumerate(receipt.get("asides", [])):
+            if index in asides_shown:
+                continue
             await self.emit({"type": "aside", "audience": aside["to"], "text": aside["text"], "who": "守秘人"})
+            asides_shown.append(index)
+            if self.checkpoint:
+                self.checkpoint()
         media_key = receipt.setdefault("media_key", f"keeper:{st.turn}:{st.logged}")
-        receipt["media_unshown"] = await self.present(receipt.get("media", []), key=media_key)
+        receipt["media_unshown"] = await self.present(receipt.get("media", []), key=media_key,
+                                                     shown=receipt.setdefault("media_shown", []))
         if self.checkpoint:
             self.checkpoint()
         if receipt.get("offer_idea") and not receipt.get("idea_offered"):
@@ -4324,7 +4392,7 @@ class Game(Encounters):
         turn.ending = turn.ending or extra.ending
         keep(extra)
 
-    async def _keeper_reply(self, report: str, lore: Callable[[], str], delta: Callable[[str], Awaitable[None]],
+    async def _keeper_reply(self, report: str, lore: Callable[[], str], delta: Callable[[str], Awaitable[None]] | None,
                             turn: Turn | None, receipt: dict, *, enabled: bool = True, **kwargs: Any) -> Any:
         """The same keeper may request an NPC performance before its final telling.
 
@@ -4443,7 +4511,9 @@ class Game(Encounters):
                     remember += "\n【新增实际配音回执】\n" + json.dumps(fresh, ensure_ascii=False)
                 elif kept_at >= 0:
                     remember += "原行动与配音均按已记结果；本次只修正或收束主持输出，不重新执行。"
-            told = await keeper(self.state, prompt, on_delta=delta,
+            # A tool-capable reply can contain world results or private material. Keep
+            # its final body buffered until the caller has saved and landed that reply.
+            told = await keeper(self.state, prompt, on_delta=None if voices or calls else delta,
                                 lore=lore() + extra,
                                 **({"voices": voices} if voices else {}),
                                 **({"remember": remember} if remembering else {}), **kwargs)
@@ -4458,8 +4528,8 @@ class Game(Encounters):
             calls.append(call.model_dump(mode="json"))
             keep(turn)  # a stable request exists before a voice, world operation or notification runs
 
-    async def _tell(self, report: str, lore: str, delta: Callable[[str], Awaitable[None]], turn: Turn | None,
-                    *, receipt: dict | None = None) -> dict:
+    async def _tell(self, report: str, lore: str, delta: Callable[[str], Awaitable[None]] | None, turn: Turn | None,
+                    *, receipt: dict | None = None, tools: bool = True) -> dict:
         """The keeper's telling and what of its scene lands, as the turn's journal keeps it. A scene
         that does not hold goes back once, with what did not hold and what could be written
         instead; failing again, the units that hold make up the scene, and the keeper writes the
@@ -4471,7 +4541,7 @@ class Game(Encounters):
         initial_world = self._brief()
         initial_scene = ""
 
-        async def ask(*, lore: str, tools: bool = True, **kwargs: Any) -> Any:
+        async def ask(*, lore: str, voices: bool = True, **kwargs: Any) -> Any:
             uses_scene = bool(initial_scene and initial_scene in lore)
             fixed = lore.replace(initial_world, "", 1) if initial_world else lore
             if uses_scene:
@@ -4486,14 +4556,15 @@ class Game(Encounters):
                 return current
 
             return await self._keeper_reply(report, current_lore, delta, turn, receipt,
-                                            enabled=tools and turn is not None and not (
+                                            enabled=tools and voices and turn is not None and not (
                                                 turn.fight or (turn.action is not None and turn.action.kind == "meta")),
                                             **kwargs)
 
         words = {"units": [], "flags": [], "room": "", "now": "", "note": "", "offer_idea": False, "asides": [],
                  "media": [], "perceptions": [], "scene_complete": False}
         continuing = bool(st.pending_turn.get("request", {}).get("remaining"))
-        if (not _staged(turn) and not continuing) or not _takes(keeper, "check"):
+        structured = (_staged(turn) or continuing) and _takes(keeper, "check")
+        if not structured:
             told = await ask(lore=lore)
             if isinstance(told, str):
                 return words | {"text": told}
@@ -4504,6 +4575,7 @@ class Game(Encounters):
         ctx = self._scene_context(turn)
         brief = self._scene_brief(ctx) + "\n【个人知觉】\n" + perception.brief(st)
         initial_scene = brief
+        delta = None  # structured final bodies are delivered only after their receipt lands
         plans: list[scene.Plan] = []
 
         def check(raw: Any) -> bool:
@@ -4531,8 +4603,6 @@ class Game(Encounters):
                 continue
             p = plans[-1]
             if not p.problems or told.shown:
-                if not told.shown:  # written words first: shown now that the scene holds
-                    await delta(told.text)
                 if p.problems:  # shown on a scene that held, then came back otherwise: what holds of it lands
                     self._debug("scene", {"phase": "kept", "problems": p.problems, "scene": told.scene})
                 return self._staging(told.text, p, partial=bool(p.problems)) | {
@@ -4541,7 +4611,7 @@ class Game(Encounters):
             self._debug("scene", {"phase": "rejected", "attempt": attempt, "problems": p.problems, "scene": told.scene})
             fix = scene.feedback(p)
         self._debug("scene", {"phase": "settled", "held": [u.key for u in p.held], "problems": p.problems})
-        settled = await ask(lore=lore + scene.settled(p), tools=False)
+        settled = await ask(lore=lore + scene.settled(p), voices=False)
         text = settled if isinstance(settled, str) else settled.text
         return self._staging(text, p, partial=True)
 
@@ -4616,12 +4686,27 @@ class Game(Encounters):
                 + (f"\n【本场面物件引用，仅供操作，不代表玩家已发现】\n{items}" if items else "")
                 + (f"\n【尚未成立的剧情标记】{flags}" if flags else ""))
 
-    async def _walked(self, room: str) -> None:
+    async def _walked(self, room: str, receipt: dict, *, defer: bool = True) -> Turn:
         """The investigators walked to another room of the place in the telling (world/scene.py
         moved them already): what coming there brings (its events, its first sight, its
         foreshadowing) happens now, and is told next."""
-        came = Turn()
-        await self._arrive(room, came)
+        journal = receipt.setdefault("walk_journal", {})
+        came = TURN_RECORD.validate_python(journal["turn"]) if "turn" in journal else Turn()
+
+        def keep(acted: Turn) -> None:
+            journal["turn"] = TURN_RECORD.dump_python(acted, mode="json")
+            if self.checkpoint:
+                self.checkpoint()
+
+        if not receipt.get("walked"):
+            with self._journal(journal, keep):
+                await self._arrive(room, came)
+            receipt["walked"] = True
+            keep(came)
+        if not defer:  # the current correction tells this receipt's visit, not a later action
+            return came
+        if receipt["delivery_id"] in self._walked_receipts:
+            return came
         late = self._late
         for attr in ("events", "sanity", "hints", "world"):
             getattr(late, attr).extend(getattr(came, attr))
@@ -4629,6 +4714,8 @@ class Game(Encounters):
         if came.first_visit:
             loc = self.m.location(room)
             late.notes.append(f"上一段叙述里调查员已经走进{loc.name}，接着写，不必再写进门；这里初见的样子：{loc.read_aloud.strip()}")
+        self._walked_receipts.add(receipt["delivery_id"])
+        return came
 
     async def _sky(self, narration: str) -> None:
         """The keeper's words set the weather; unmentioned for a few hours, it passes."""

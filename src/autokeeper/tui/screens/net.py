@@ -241,7 +241,8 @@ class NetGameScreen(GameScreen):
         self.set_interval(0.1, self._spin)
         self.set_interval(0.5, self._countdown)
         for e in self.backlog:  # what happened before you sat down
-            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, history_text(e))
+            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, history_text(e),
+                                   delivery=e.delivery)
             if e.kind == "keeper" and getattr(e, "audience", None) is None:  # public narration alone can be retold
                 self.told = block
         self.ready = True
@@ -484,7 +485,8 @@ class NetGameScreen(GameScreen):
                     known[key] -= 1
                     continue
                 self.backlog.append(entry)
-                block = self.story.add("keeper" if entry.kind == "keeper" else "system", history_text(entry))
+                block = self.story.add("keeper" if entry.kind == "keeper" else "system", history_text(entry),
+                                       delivery=entry.delivery)
                 if (line := log_line(entry)) is not None:
                     self.query_one(HistoryPanel).note(line, block, entry.turn)
         elif t == "notice":  # an answer that came too late, or twice: the host ignored it
@@ -502,7 +504,7 @@ class NetGameScreen(GameScreen):
             if msg.get("retry"):
                 self.status_text = ""
                 self.retry_due = True
-                self.story.end_keeper("叙述已中断，输入 /retry 继续。")
+                self.story.pause_keeper()
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
             self.app.notify("与房主的连接已断开。", severity="error", timeout=10)

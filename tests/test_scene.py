@@ -314,7 +314,7 @@ async def test_words_written_before_the_scene_wait_for_it(fake):
     SCRIPT.append(telling("布道者清了清嗓子，又念起经来。", here=["preacher"]))
     events.clear()
     await game.narrate(acted(game, "我听他念", 1))
-    assert len([e for e in events if e["type"] == "keeper_delta"]) > 1  # scene first: the words stream
+    assert [e["text"] for e in events if e["type"] == "keeper_delta"] == ["布道者清了清嗓子，又念起经来。"]
     await game.cast.close()
 
 

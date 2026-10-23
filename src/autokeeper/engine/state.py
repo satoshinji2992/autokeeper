@@ -33,6 +33,7 @@ class LogEntry(BaseModel):
     text: str
     audience: list[str] | None = None  # None: public; []: keeper only; otherwise these investigator ids
     presented: dict[str, dict[str, str]] = Field(default_factory=dict)  # immutable delivery-time personal lines
+    delivery: str = ""  # the same accepted telling in saved history and live delivery
 
 
 class Deed(BaseModel):
@@ -281,13 +282,14 @@ class GameState(BaseModel):
         return format_time(self.minutes)
 
     def add(self, kind: LogKind, text: str, who: str = "", *, audience: list[str] | None = None,
-            presented: dict[str, dict[str, str]] | None = None) -> LogEntry:
+            presented: dict[str, dict[str, str]] | None = None, delivery: str = "") -> LogEntry:
         shown = {viewer: {"who": appearance.name or "未辨明的身影", "text": "受了伤。" if kind == "damage" else text}
                  for viewer, masks in self.perceptions.items() for target, appearance in masks.items()
                  if who and appearance.original_name == who}
         shown.update(presented or {})
         entry = LogEntry(turn=self.turn, time=self.clock, kind=kind, who=who, text=text,
-                         audience=list(dict.fromkeys(audience)) if audience is not None else None, presented=shown)
+                         audience=list(dict.fromkeys(audience)) if audience is not None else None, presented=shown,
+                         delivery=delivery)
         self.log.append(entry)
         self.logged += 1
         self._deed(entry, self.investigator.name if 0 <= self.active < len(self.investigators) else "")
