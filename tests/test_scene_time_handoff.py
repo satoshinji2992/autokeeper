@@ -31,14 +31,14 @@ async def eventually(check):
             await asyncio.sleep(0.005)
 
 
-def make_hub(fake, factory):
+def make_hub(fake, factory, *, disconnect_ai=False):
     m = module()
     m.location("tower").within = None
     a = m.pregens[0].model_copy(deep=True)
     b = a.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
     state = Game.new(m, [a, b], human=[a.id, b.id], slot="clock-handoff")
     state.location, state.minutes, state.apart = "tower", 600, {"lin": "square"}
-    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake),
+    hub = Hub(EXAMPLE, state=state, cast=TableCast(), rules=Rules(dice=fake), disconnect_ai=disconnect_ai,
               scene_cast_factory=factory, scene_rules_factory=lambda _: Rules(dice=fake))
     hub.m.events.clear()
     hub.m.endings.clear()
@@ -128,6 +128,52 @@ async def test_declined_cut_keeps_input_open_and_is_not_polled_repeatedly(fake):
             await until(a, lambda msg: msg.get("ev", {}).get("type") == "keeper_end")
             assert hub._context("lin").state.minutes == 620
     finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+async def test_grace_period_reconnect_retries_a_time_approval_that_expired_while_offline(fake):
+    gates = [asyncio.Event(), asyncio.Event()]
+    calls = []
+
+    class Reconnected(ClockCast):
+        async def scene_time(self, state, end):
+            index = len(calls)
+            calls.append((state.minutes, end))
+            await gates[min(index, 1)].wait()
+            return TimeHandoff(advance=True, reason="本场没有紧迫决定，可以略过空白。")
+
+    hub = make_hub(fake, lambda _: Reconnected(), disconnect_ai=True)
+    task = await opened(hub)
+    try:
+        async with aiohttp.ClientSession() as http:
+            a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
+            await until(a, pool_open)
+            await until(b, pool_open)
+            await a.send_json({"t": "act", "text": "办理长行动"})
+            await eventually(lambda: len(calls) == 1)
+            worker = hub._context("lin")
+            await b.close()
+            await eventually(lambda: hub.sits["lin"] is None)
+            gates[0].set()
+            await eventually(lambda: worker.time_task.done())
+            assert worker.state.minutes == 600 and worker.scene.passed_until is None
+            assert worker.time_asked is None
+            assert hub._context("zhouheng").state.minutes == 600
+            assert hub.takeovers.delay == 60 and "lin" not in hub.takeovers.active
+            b = await joined(http, hub, "lin")
+            await eventually(lambda: len(calls) == 2)
+            assert calls == [(600, 620), (600, 620)]
+            assert "lin" not in hub.takeovers.active and "lin" not in hub.takeovers.tasks
+            gates[1].set()
+            await until(a, lambda msg: msg.get("ev", {}).get("type") == "keeper_end")
+            await until(b, lambda msg: msg.get("ev", {}).get("type") == "time")
+            assert worker.state.minutes == hub._context("zhouheng").state.minutes == 620
+            assert len(calls) == 2
+    finally:
+        for gate in gates:
+            gate.set()
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task

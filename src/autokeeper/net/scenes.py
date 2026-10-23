@@ -104,8 +104,8 @@ class SceneTable(Hub):
             if (decision.advance and current == stamp and self._time_available()
                     and self.tables.runtime.time_requested(self.ident) == until):
                 allowed = self.tables.runtime.pass_time(self.ident, until)
-            elif decision.advance and current != stamp:
-                self.time_asked = None  # only a stale approval needs a fresh consultation
+            elif decision.advance:
+                self.time_asked = None  # expired permission may be reconsidered after a reconnect or other interruption
             self.game._debug("scene_time", {"until": until, "decision": decision.model_dump(),
                                             "status": "allowed" if allowed else "expired" if decision.advance else "declined"})
         except asyncio.CancelledError:
