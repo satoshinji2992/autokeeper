@@ -561,13 +561,28 @@ async def test_a_handout_over_a_big_scene_stays_until_closed_and_the_scene_goes_
         screen, _, _ = fight_screen(module)
         app.push_screen(screen)
         assert await until(pilot, lambda: screen.game is not None and not screen.busy)
-        app.push_screen(ShowcaseScreen(str(pic), "钟楼顶上", seconds=0.5))
-        await pilot.pause(0.2)
-        app.push_screen(HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件"))
-        await pilot.pause(0.8)  # the picture's time ran out under the handout
+        showcase = ShowcaseScreen(str(pic), "钟楼顶上", seconds=0.5)
+        timers = []
+        set_timer = showcase.set_timer
+
+        def paused_timer(delay, callback):
+            timer = set_timer(delay, callback, pause=True)
+            timers.append(timer)
+            return timer
+
+        monkeypatch.setattr(showcase, "set_timer", paused_timer)
+        await app.push_screen(showcase)
+        handout = HandoutModal("日记", "……钟声停了以后，它们就来了。", [], kind="信件")
+        await app.push_screen(handout)
+        assert app.screen is handout and showcase.is_mounted and handout.is_mounted
+        assert len(timers) == 1
+        timers[0].resume()  # expire only after the handout is mounted, regardless of runner speed
+        assert await until(pilot, lambda: showcase._due)
+        assert not showcase._gone and app.screen is handout
         assert [type(s) for s in app.screen_stack[-2:]] == [ShowcaseScreen, HandoutModal]
         await pilot.press("escape")
         assert await until(pilot, lambda: app.screen is screen)  # the handout closed, the picture went after it
+        assert not any(isinstance(s, (ShowcaseScreen, HandoutModal)) for s in app.screen_stack)
 
 
 # -- the round's list and its clock -------------------------------------------------------------------
