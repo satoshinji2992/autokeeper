@@ -6,8 +6,10 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
+from filelock import FileLock
 from rich.text import Text
 from textual.theme import Theme
 
@@ -30,17 +32,49 @@ THEMES = [
 
 def save_index() -> dict:
     f = paths.save_index()
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    recovered = {}
+    try:
+        value = json.loads(f.read_text(encoding="utf-8"))
+        if isinstance(value, dict):
+            recovered = value
+    except (OSError, ValueError):
+        pass
+    # The index is a listing, not the authoritative save. Recover it from complete bodies.
+    for file in paths.games().glob("*.json"):
+        if file == f or file.stem in recovered:
+            continue
+        try:
+            state = GameState.model_validate_json(file.read_text(encoding="utf-8"))
+            recovered[state.slot] = {"label": state.label, "module": state.module, "title": state.module,
+                                     "party": "、".join(i.name for i in state.investigators), "clock": state.clock,
+                                     "location": state.location, "ending": state.ending,
+                                     "updated": time.strftime("%Y-%m-%d %H:%M", time.localtime(file.stat().st_mtime))}
+        except (OSError, ValueError):
+            continue
+    return recovered
+
+
+def save_index_lock() -> FileLock:
+    paths.games().mkdir(parents=True, exist_ok=True)
+    return FileLock(paths.save_lock(), timeout=10)
+
+
+def atomic_json(target: Path, text: str) -> None:
+    temporary = target.with_name(f"{target.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_index(index: dict) -> None:
+    """Caller owns save_index_lock across reading, modifying and writing the listing."""
+    atomic_json(paths.save_index(), json.dumps(index, ensure_ascii=False, indent=1))
 
 
 def write_save(state: GameState, module: Module) -> None:
-    paths.games().mkdir(parents=True, exist_ok=True)
-    target = paths.save(state.slot)
-    temporary = target.with_suffix(".json.tmp")
-    temporary.write_text(state.model_dump_json(indent=1), encoding="utf-8")
-    temporary.replace(target)
-    idx = save_index()
-    idx[state.slot] = {
+    metadata = {
         "label": state.label,
         "module": module.id,
         "title": module.title,
@@ -51,7 +85,11 @@ def write_save(state: GameState, module: Module) -> None:
         "updated": time.strftime("%Y-%m-%d %H:%M"),
         "path": str(module_dir(module.id)),
     }
-    paths.save_index().write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
+    with save_index_lock():
+        atomic_json(paths.save(state.slot), state.model_dump_json(indent=1))
+        idx = save_index()
+        idx[state.slot] = metadata
+        write_index(idx)
     paths.remember_checkout()  # a later installed copy finds these saves
 
 

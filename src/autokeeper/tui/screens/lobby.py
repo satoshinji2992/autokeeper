@@ -100,6 +100,8 @@ class LobbyScreen(Screen):
         self.link = Link(address, name, key)
         self.room = room  # opened by this app: its host may close it here
         self.welcome: dict[str, Any] | None = None
+        self._welcomed = asyncio.Event()
+        self._watching = False
         self.m: Module | None = None  # the table's copy, with its art and pictures
         self.state: GameState | None = None
         self.seats: list[dict[str, Any]] = []
@@ -155,6 +157,9 @@ class LobbyScreen(Screen):
         try:
             async with asyncio.timeout(CONNECT_SECONDS):
                 await self.link.connect()
+                self.link.handler = self.on_msg
+                self.app.run_worker(self.link.pump, name="link", group="link", exit_on_error=False)
+                await self._welcomed.wait()
         except Exception:  # wrong address, host not up yet, a firewall in between
             waiting.stop()
             await self.link.close()
@@ -168,8 +173,6 @@ class LobbyScreen(Screen):
                 self.app.switch_screen(JoinScreen(self.link.url.removeprefix("ws://").removesuffix("/ws"), self.link.name))
             return
         waiting.stop()
-        self.link.handler = self.on_msg
-        self.app.run_worker(self.link.pump, name="link", group="link", exit_on_error=False)
 
     async def on_unmount(self) -> None:
         if self.link.handler != self._game_handler:  # not handed on to the game screen: hang up
@@ -193,12 +196,24 @@ class LobbyScreen(Screen):
             self.seats = msg["seats"]
             self.bring = bool(msg.get("bring"))
             self._show_all()
+            self._welcomed.set()
         elif t == "seats":
             self.seats = msg["seats"]
             self.bring = bool(msg.get("bring", self.bring))
             self._list_seats()
             self._head()
             self._card()
+        elif t == "watching":
+            self.chosen = ""
+            self._watching = False
+            self.welcome = msg
+            self.state = GameState.model_validate(msg["state"])
+            self.seats = msg["seats"]
+            self.bring = bool(msg.get("bring"))
+            if self.started:
+                self._enter([])
+            else:
+                self._show_all()
         elif t == "seated":  # a confirmed seat, or a brought card's replacement investigator
             self.chosen = msg["investigator"]
             self.pending_seat = None
@@ -560,13 +575,11 @@ class LobbyScreen(Screen):
         await self.link.send({"t": "ready", "on": not seat.get("ready")})
 
     async def action_watch(self) -> None:
-        if self.gone or self.pending_seat is not None:
+        if self.gone or self.pending_seat is not None or self._watching:
             return
-        self.chosen = ""
-        if self.started:
-            self._enter([])
-        else:
-            self._list_seats()
+        self._watching = True
+        if not await self.link.send({"t": "watch"}):
+            self._watching = False
 
     async def action_start(self) -> None:
         if self.gone or self.started or self.pending_seat is not None:

@@ -40,6 +40,7 @@ from ... import imagery, paths
 from ...engine.state import SAVE_FORMAT, GameState, SaveRefused, read_save, time_of_day
 from ...module.schema import Module
 from .. import notes
+from ..library import atomic_json, save_index, save_index_lock, write_index
 from ..modals.menu import AskText, Confirm
 
 
@@ -62,25 +63,15 @@ class Save:
 
 
 def _index() -> dict:
-    try:
-        idx = json.loads(paths.save_index().read_text(encoding="utf-8"))
-    except (OSError, ValueError):  # no index yet, or one cut short: no saves to list
-        return {}
-    return idx if isinstance(idx, dict) else {}
+    return save_index()
 
 
 def _write_index(idx: dict) -> None:
-    paths.games().mkdir(parents=True, exist_ok=True)
-    target = paths.save_index()
-    temporary = target.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
-    temporary.replace(target)
+    write_index(idx)
 
 
 def _write_json(target: Path, data: dict) -> None:
-    temporary = target.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    temporary.replace(target)
+    atomic_json(target, json.dumps(data, ensure_ascii=False, indent=1))
 
 
 def saves() -> list[Save]:
@@ -123,43 +114,46 @@ def to_trash(files: list[Path], name: str, note: dict | None = None) -> Path:
 def rename(slot: str, label: str) -> None:
     """A name of the player's own, in the save and its index line. Empty: the module title.
     A save of another version keeps its file as it is: the name goes in its index line only."""
-    file = paths.save(slot)
-    data = json.loads(file.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("不是存档")
-    if data.get("save_format") == SAVE_FORMAT:
-        data["label"] = label
-        _write_json(file, data)
-    idx = _index()
-    if slot in idx:
-        idx[slot]["label"] = label
-        _write_index(idx)
+    with save_index_lock():
+        file = paths.save(slot)
+        data = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("不是存档")
+        if data.get("save_format") == SAVE_FORMAT:
+            data["label"] = label
+            _write_json(file, data)
+        idx = _index()
+        if slot in idx:
+            idx[slot]["label"] = label
+            _write_index(idx)
 
 
 def delete(slot: str) -> Path:
     """Into the trash: the file and its index line. Its checkpoints stay (see the module doc)."""
-    idx = _index()
-    meta = idx.pop(slot, {})
-    box = to_trash([paths.save(slot)], slot, {slot: meta})
-    _write_index(idx)
+    with save_index_lock():
+        idx = _index()
+        meta = idx.pop(slot, {})
+        box = to_trash([paths.save(slot)], slot, {slot: meta})
+        _write_index(idx)
     return box
 
 
 def copy(save: Save) -> str:
     """A second save of the same game, to try something else from here; its slot is new."""
-    assert save.state is not None
-    base = ("lan-" if save.lan else "") + f"{save.state.module}-{time.strftime('%m%d-%H%M%S')}"
-    slot, n = base, 2
-    while paths.save(slot).exists():
-        slot, n = f"{base}-{n}", n + 1
-    data = json.loads(paths.save(save.slot).read_text(encoding="utf-8"))
-    data["slot"], data["label"] = slot, f"{save.name} 副本"
-    paths.games().mkdir(parents=True, exist_ok=True)
-    _write_json(paths.save(slot), data)
-    idx = _index()
-    idx[slot] = {**save.meta, "label": data["label"], "updated": time.strftime("%Y-%m-%d %H:%M")}
-    _write_index(idx)
-    return slot
+    with save_index_lock():
+        assert save.state is not None
+        base = ("lan-" if save.lan else "") + f"{save.state.module}-{time.strftime('%m%d-%H%M%S')}"
+        slot, n = base, 2
+        while paths.save(slot).exists():
+            slot, n = f"{base}-{n}", n + 1
+        data = json.loads(paths.save(save.slot).read_text(encoding="utf-8"))
+        data["slot"], data["label"] = slot, f"{save.name} 副本"
+        paths.games().mkdir(parents=True, exist_ok=True)
+        _write_json(paths.save(slot), data)
+        idx = _index()
+        idx[slot] = {**save.meta, "label": data["label"], "updated": time.strftime("%Y-%m-%d %H:%M")}
+        _write_index(idx)
+        return slot
 
 
 # -- the words -----------------------------------------------------------------------------------

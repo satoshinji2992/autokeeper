@@ -1,4 +1,4 @@
-"""Offline audit reproductions: expected failures document unresolved UI/persistence defects."""
+"""Regression coverage for confirmed room and save-persistence defects."""
 
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ from .test_multiplayer_transport import transport_hub as _transport_hub
 transport_hub = _transport_hub
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="P2 audit: switching to watching leaves the human seat occupied")
 async def test_watching_releases_the_players_former_seat(transport_hub):
     hub = transport_hub
     app = AutoKeeperApp(theme="amber")
@@ -48,30 +46,22 @@ async def test_watching_releases_the_players_former_seat(transport_hub):
         await hub.game.close()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="P1 audit: concurrent room saves overwrite each others index entries")
 def test_two_rooms_saving_together_keep_both_index_entries(transport_hub, monkeypatch):
-    original_index = library.save_index
     barrier = Barrier(2)
 
-    def concurrent_index():
-        result = original_index()
+    def concurrent_save(state):
         barrier.wait(timeout=3)
-        return result
-
-    monkeypatch.setattr(library, "save_index", concurrent_index)
+        library.write_save(state, transport_hub.m)
     first = transport_hub.state.model_copy(update={"slot": "review-room-a"}, deep=True)
     second = transport_hub.state.model_copy(update={"slot": "review-room-b"}, deep=True)
     with ThreadPoolExecutor(max_workers=2) as executor:
-        jobs = [executor.submit(library.write_save, state, transport_hub.m) for state in (first, second)]
+        jobs = [executor.submit(concurrent_save, state) for state in (first, second)]
         for job in jobs:
             job.result(timeout=5)
     assert paths.save(first.slot).is_file() and paths.save(second.slot).is_file()
-    assert {first.slot, second.slot} <= set(original_index())
+    assert {first.slot, second.slot} <= set(library.save_index())
 
 
-@pytest.mark.xfail(strict=True, raises=json.JSONDecodeError,
-                   reason="P1 audit: interrupted index write destroys the previously valid save listing")
 def test_interrupted_index_write_keeps_the_previous_index_readable(transport_hub, monkeypatch):
     from pathlib import Path
 
@@ -81,7 +71,7 @@ def test_interrupted_index_write_keeps_the_previous_index_readable(transport_hub
     target = paths.save_index()
 
     def interrupted(path, text, *args, **kwargs):
-        if path == target:
+        if path.parent == target.parent and path.name.startswith(target.name + "."):
             original_write(path, "{", encoding="utf-8")
             raise OSError("offline injected interruption")
         return original_write(path, text, *args, **kwargs)
@@ -92,8 +82,6 @@ def test_interrupted_index_write_keeps_the_previous_index_readable(transport_hub
     assert state.slot in json.loads(target.read_text())
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError,
-                   reason="P2 audit: connect timeout ends before the required room welcome arrives")
 async def test_room_confirmation_is_covered_by_the_connection_timeout(monkeypatch):
     accepted = asyncio.Event()
 
@@ -126,3 +114,12 @@ async def test_room_confirmation_is_covered_by_the_connection_timeout(monkeypatc
             assert not isinstance(app.screen, LobbyScreen)
     finally:
         await runner.cleanup()
+
+
+def test_corrupt_listing_is_reconstructed_from_complete_save_bodies(transport_hub):
+    state, module = transport_hub.state, transport_hub.m
+    library.write_save(state, module)
+    paths.save_index().write_text("{", encoding="utf-8")
+    assert state.slot in library.save_index()
+    library.write_save(state, module)
+    assert state.slot in json.loads(paths.save_index().read_text())

@@ -203,6 +203,10 @@ def save_index() -> Path:
     return games() / "index.json"
 
 
+def save_lock() -> Path:
+    return games() / "index.lock"
+
+
 def checkpoints() -> Path:
     return games() / "checkpoints.sqlite"
 
