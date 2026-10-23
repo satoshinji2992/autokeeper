@@ -28,6 +28,8 @@ irm https://raw.githubusercontent.com/satoshinji2992/autokeeper/main/install.ps1
 
 再运行一次脚本即可更新。通过 PyPI 手动安装的，也可以用 `uv tool upgrade autokeeper`（pipx 是 `pipx upgrade autokeeper`）。新版本不一定能读取旧版本的存档，更新前请看[更新记录](../CHANGELOG.md)。脚本可以用环境变量调整：`AUTOKEEPER_VERSION` 装指定版本（如 `0.0.3`），`AUTOKEEPER_EXTRAS=graphrag` 加上模组原文检索（约 1 GB，首次使用还会下载嵌入模型），`AUTOKEEPER_FROM=git` 和 `AUTOKEEPER_REF` 从 GitHub 的某个分支或标签装。不用脚本的话，原文检索这样加：`uv tool install "autokeeper[graphrag]"`。
 
+Windows 脚本查询 GitHub 版本失败时，会改从 PyPI 查询正式版本，并保留原始错误原因。指定 `AUTOKEEPER_VERSION` 可以跳过最新版本查询；`AUTOKEEPER_FROM=pypi` 可直接从 PyPI 安装。
+
 掷骰需要 Node.js 18+ 和 npm。Windows 一键脚本会检查版本，缺少时通过 winget 安装 LTS 版，并刷新当前终端的环境后继续；已有可用版本则跳过。没有 winget 时，脚本会提示从 [Node.js 官网](https://nodejs.org/) 安装。其他系统或手动安装可参考下表；手动装好 Node.js 后，重新打开终端并运行 `autokeeper setup`。
 
 | 系统 | 安装方式 |

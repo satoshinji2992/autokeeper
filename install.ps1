@@ -53,18 +53,34 @@ if ($From -eq "auto" -and $Ref) { $From = "git" }
 if ($From -in @("auto", "github")) {
     if (-not $Version) {
         $Api = $Repo -replace '^https://github.com/', 'https://api.github.com/repos/'
-        try { $Release = Invoke-RestMethod "$Api/releases/latest" -Headers @{ 'User-Agent' = 'AutoKeeper-installer' } }
-        catch { Fail "无法确认最新发行版。检查网络，或用 AUTOKEEPER_VERSION 指定版本。" }
-        $Tag = $Release.tag_name
-        $Version = $Tag -replace '^v', ''
-        if (-not $Tag -or $Version -notmatch '^\d+\.\d+\.\d+([.a-zA-Z0-9+-]*)$') { Fail "未取得有效的发行版标签。" }
+        try {
+            $Release = Invoke-RestMethod "$Api/releases/latest" -Headers @{ 'User-Agent' = 'AutoKeeper-installer' } -TimeoutSec 20
+            $Tag = $Release.tag_name
+            $Version = $Tag -replace '^v', ''
+            if (-not $Tag -or $Version -notmatch '^\d+\.\d+\.\d+([.a-zA-Z0-9+-]*)$') { throw "未取得有效的发行版标签。" }
+        } catch {
+            $GitHubError = $_.Exception.Message
+            if ($From -ne "auto" -or $Repo.TrimEnd('/') -ne 'https://github.com/satoshinji2992/autokeeper') {
+                Fail "无法查询 GitHub 发行版：$GitHubError 可用 AUTOKEEPER_VERSION 指定版本。"
+            }
+            try {
+                $Package = Invoke-RestMethod 'https://pypi.org/pypi/autokeeper/json' -TimeoutSec 20
+                $Version = $Package.info.version
+                if ($Version -notmatch '^\d+\.\d+\.\d+([.a-zA-Z0-9+-]*)$') { throw "PyPI 未返回有效版本。" }
+            } catch { Fail "无法查询正式版本。GitHub：$GitHubError PyPI：$($_.Exception.Message) 可用 AUTOKEEPER_VERSION 指定版本。" }
+            $Tag = "v$Version"
+            $From = "pypi"
+            Write-Warning "GitHub 版本查询失败，改用 PyPI 的 $Version。原因：$GitHubError"
+        }
     } else { $Tag = "v$Version" }
-    $Available = $false
-    if ($From -eq "auto") {
-        try { Invoke-WebRequest -UseBasicParsing -Method Head "https://pypi.org/pypi/autokeeper/$Version/json" | Out-Null; $Available = $true }
-        catch { $Available = $false }
+    if ($From -ne "pypi") {
+        $Available = $false
+        if ($From -eq "auto") {
+            try { Invoke-WebRequest -UseBasicParsing -Method Head "https://pypi.org/pypi/autokeeper/$Version/json" | Out-Null; $Available = $true }
+            catch { $Available = $false }
+        }
+        $From = if ($Available) { "pypi" } else { "github" }
     }
-    $From = if ($Available) { "pypi" } else { "github" }
 }
 if ($From -eq "git") {
     if ($Version) {

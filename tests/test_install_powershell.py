@@ -14,7 +14,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "install.ps1"
 pytestmark = pytest.mark.skipif(POWERSHELL is None, reason="PowerShell is not installed")
 
 
-def run(tmp_path, *, source="auto", version="", available=True, node="ready", winget="success"):
+def run(tmp_path, *, source="auto", version="", available=True, node="ready", winget="success", github=True):
     harness = tmp_path / "installer-test.ps1"
     harness.write_text("""param([string]$Installer)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -39,7 +39,15 @@ function winget {
     $global:LASTEXITCODE = if ($env:TEST_WINGET -eq 'fail') { 1 } else { 0 }
     if ($env:TEST_WINGET -eq 'success') { $script:NodeState = 'ready' }
 }
-function Invoke-RestMethod { return [PSCustomObject]@{ tag_name = 'v0.0.5' } }
+function Invoke-RestMethod {
+    param([string]$Uri, $Headers, $TimeoutSec)
+    if ($Uri -like '*api.github.com*') {
+        if ($env:TEST_GITHUB -ne '1') { throw 'GitHub HTTP 403' }
+        return [PSCustomObject]@{ tag_name = 'v0.0.5' }
+    }
+    if ($env:TEST_PYPI -ne '1') { throw 'PyPI connection failed' }
+    return [PSCustomObject]@{ info = [PSCustomObject]@{ version = '0.0.5.4' } }
+}
 function Invoke-WebRequest { if ($env:TEST_PYPI -ne '1') { throw 'Version unavailable' } }
 function uv { Write-Output ('SPEC=' + $args[-1]); throw 'RELEASE_SPEC_CAPTURE' }
 try { . $Installer }
@@ -47,7 +55,7 @@ catch { if ($_.Exception.Message -eq 'RELEASE_SPEC_CAPTURE') { exit 0 }; Write-E
 """, encoding="utf-8-sig")
     env = {**os.environ, "AUTOKEEPER_FROM": source, "AUTOKEEPER_VERSION": version, "AUTOKEEPER_REF": "",
            "AUTOKEEPER_EXTRAS": "", "AUTOKEEPER_SHA256": "", "TEST_PYPI": "1" if available else "0",
-           "TEST_NODE": node, "TEST_WINGET": winget}
+           "TEST_NODE": node, "TEST_WINGET": winget, "TEST_GITHUB": "1" if github else "0"}
     return subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(harness), str(SCRIPT)],
                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
 
@@ -80,3 +88,23 @@ def test_windows_installer_stops_when_node_is_still_unavailable(tmp_path, winget
     assert result.returncode != 0
     assert "SPEC=" not in result.stdout
     assert "Node.js" in result.stdout + result.stderr
+
+
+def test_blocked_github_api_falls_back_to_an_exact_pypi_release(tmp_path):
+    result = run(tmp_path, github=False)
+    assert result.returncode == 0, result.stderr
+    assert "SPEC=autokeeper==0.0.5.4" in result.stdout
+    assert "GitHub HTTP 403" in result.stdout
+
+
+def test_release_query_failure_preserves_both_network_errors(tmp_path):
+    result = run(tmp_path, github=False, available=False)
+    assert result.returncode != 0
+    assert "SPEC=" not in result.stdout
+    assert "GitHub HTTP 403" in result.stderr and "PyPI connection failed" in result.stderr
+
+
+def test_an_explicit_github_source_does_not_silently_change_to_pypi(tmp_path):
+    result = run(tmp_path, source="github", github=False)
+    assert result.returncode != 0 and "SPEC=" not in result.stdout
+    assert "GitHub HTTP 403" in result.stderr
