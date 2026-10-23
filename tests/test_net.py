@@ -816,7 +816,8 @@ async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not
         assert (await until(a, pool_open))["closes_in"] is None  # nobody has acted: no clock yet
         await a.send_json({"t": "act", "text": "我看看告示栏"})
         counting = await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
-        assert 0 < counting["closes_in"] <= 0.6  # from the first action, the others have the window
+        # Subtracting floating-point deadlines can exceed the configured window by a few ulps.
+        assert 0 < counting["closes_in"] <= hub.window + 1e-9
         closed_round = await until(a, lambda x: x["t"] == "pool" and not x["open"], limit=3)
         assert closed_round["count"] == 1  # 小红 did not act in time: settled without her, nobody waited
         said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
