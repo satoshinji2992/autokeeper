@@ -20,7 +20,7 @@ from .perception import Appearance
 # read as it is. A save without it (0.0.3 and before) or with another one is refused whole (read_save): loading it
 # would drop what this version does not know (0.0.3's `chase`, `pending_resolution`) and the next autosave would
 # write it back without them. Old saves are not migrated; their files are left as they are.
-SAVE_FORMAT = 1
+SAVE_FORMAT = 2
 
 LogKind = Literal["opening", "player", "speech", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
