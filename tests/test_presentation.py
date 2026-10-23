@@ -10,7 +10,7 @@ from PIL import Image
 
 from autokeeper import config
 from autokeeper.agents.cast import Action, BeforeTravel, Cast, _personal_situation
-from autokeeper.engine import audience, perception, presentation
+from autokeeper.engine import audience, fog, perception, presentation
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Handout, Module
@@ -20,6 +20,7 @@ from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.tui.screens.game import GameScreen
 from autokeeper.tui.screens.net import NetGameScreen
+from autokeeper.world import knowledge
 
 from .test_engine import FakeCast
 from .test_harness import SCRIPT, SCRIPTED, SEEN, harness_sandbox  # noqa: F401
@@ -399,7 +400,8 @@ async def test_a_personal_appearance_picture_is_sent_only_to_its_viewer_and_rest
     assert "monster_face" not in hub._welcome("a")["picture_data"]
 
 
-async def test_a_private_before_travel_reply_keeps_its_recipients_across_interruption_and_reload(fake):
+@pytest.mark.parametrize("costs", [False, True])
+async def test_a_private_before_travel_reply_keeps_its_recipients_across_interruption_and_reload(fake, costs):
     module = Module.load(EXAMPLE)
     lead = module.pregens[0].model_copy(deep=True)
     friend = lead.model_copy(update={"id": "friend", "name": "同伴"}, deep=True)
@@ -408,9 +410,14 @@ async def test_a_private_before_travel_reply_keeps_its_recipients_across_interru
     state.pending_turn = {"input": "临行前私下询问"}
     clue = module.clue("c_diary")
     clue.npc = "warden"
+    if costs:
+        clue.sanity, clue.mythos = "1/1", 2
+        fake.queue(20)
     module.npc("warden").clues.append(clue.id)
     module.npc("warden").gates.pop(clue.id, None)
     calls, events = [], []
+    before_san = {inv.id: inv.san for inv in state.investigators}
+    before_mythos = {inv.id: inv.value("克苏鲁神话") for inv in state.investigators}
 
     class Privately(FakeCast):
         async def npc(self, st, npc_id, message, *, travel=False, private=False):
@@ -435,6 +442,7 @@ async def test_a_private_before_travel_reply_keeps_its_recipients_across_interru
             await game.prepare(action)
         assert events[-1]["audience"] == [lead.id]
         assert next(e for e in state.log if e.kind == "npc").audience == [lead.id]
+        assert clue.id not in state.clues and not state.clue_settled  # Delivery interrupted before formal settlement.
         saved = GameState.model_validate_json(state.model_dump_json())
 
         async def emit(ev):
@@ -442,13 +450,36 @@ async def test_a_private_before_travel_reply_keeps_its_recipients_across_interru
 
         resumed = Game(module, saved, cast, Rules(dice=fake), emit=emit)
         await resumed.prepare(action)
+        await resumed.prepare(action)  # Reusing the completed preparation cannot award its information twice.
         assert calls == ["warden"]
         assert all(ev["audience"] == [lead.id] for ev in events if ev["type"] in ("npc", "presentation"))
         assert sum(e.kind == "npc" for e in saved.log) == 1
-        assert clue.id not in saved.clues and not saved.handouts
+        # Internal progress records a real private discovery; personal knowledge controls publication.
+        assert clue.id in saved.clues and saved.clue_settled[clue.id] == [lead.id]
+        assert not saved.handouts and not presentation.papers(saved, lead.id)
+        assert not presentation.papers(saved, friend.id)
         assert lead.id in saved.record.facts[f"clue:{clue.id}"].known_by
         assert "players" not in saved.record.facts[f"clue:{clue.id}"].known_by
+        assert knowledge.clue_known(saved, clue.id, lead.id)
+        assert not knowledge.clue_known(saved, clue.id, friend.id)
+        assert clue.id in fog.personal(module, saved, lead.id).clues
+        assert clue.id not in fog.personal(module, saved, friend.id).clues
+        assert saved.find(lead.id).san == before_san[lead.id] - int(costs)
+        assert saved.find(lead.id).value("克苏鲁神话") == before_mythos[lead.id] + 2 * int(costs)
+        assert saved.find(friend.id).san == before_san[friend.id]
+        assert saved.find(friend.id).value("克苏鲁神话") == before_mythos[friend.id]
+        assert sum(e.kind == "sanity" for e in saved.log) == int(costs) and not fake.values
         assert "密码是十七" not in "\n".join(e.text for e in audience.log(saved, "friend"))
+        projected = Hub(EXAMPLE, state=saved, cast=cast, rules=Rules(dice=fake))
+        projected.sits = {lead.id: "lead-client", friend.id: "friend-client"}
+        try:
+            for data in (projected._view(friend.id), projected._welcome("friend-client"), projected._welcome("watch")):
+                wire = json.dumps(data, ensure_ascii=False)
+                assert "密码是十七" not in wire and clue.id not in wire
+                assert clue.text not in wire and clue.handout not in wire
+            assert "密码是十七" in json.dumps(projected._welcome("lead-client")["log"], ensure_ascii=False)
+        finally:
+            await projected.game.close()
     finally:
         if resumed is not None:
             await resumed.close()
