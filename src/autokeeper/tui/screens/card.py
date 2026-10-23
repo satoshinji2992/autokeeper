@@ -177,7 +177,7 @@ class CardScreen(Screen[Investigator | None]):
     def _photos(self) -> None:
         fig = self.builder.figure
         if fig and not fig.photos and fig.source != "描述":  # a description never had photos to find
-            self.app.notify("未找到照片，可以用本地照片，或不用照片继续。")
+            self.app.notify(fig.photo_notice, severity="warning" if fig.photo_errors else "information", timeout=10)
         self.step = "photo"
         opts = [Option(f"照片 {i + 1} · {_host(p.page or p.url)}", id=f"photo-{i}") for i, p in enumerate((fig.photos if fig else [])[:SHOWN])]
         again = "重新输入姓名" if self.start == "figure" else "重新导入"
@@ -377,7 +377,7 @@ class CardScreen(Screen[Investigator | None]):
         fig = await self.builder.find(text)
         self.shots, self.from_card = {}, True
         if not fig.photos:
-            self.app.notify("未找到照片", severity="warning")
+            self.app.notify(fig.photo_notice, severity="warning", timeout=10)
             self._card()
             return
         self._photos()

@@ -74,6 +74,13 @@ class Figure:
     web: list[str] = field(default_factory=list)  # search snippets and page excerpts, with their sources
     photos: list[Photo] = field(default_factory=list)
     source: str = "维基百科"  # where `extract` comes from: Wikipedia, or the player's character card
+    photo_errors: list[str] = field(default_factory=list)
+
+    @property
+    def photo_notice(self) -> str:
+        if self.photo_errors:
+            return "图片搜索未完成：" + "；".join(self.photo_errors) + "。可使用本地图片，或暂不配图。"
+        return "未检索到人物图片，可使用本地图片，或暂不配图。"
 
     @property
     def name(self) -> str:
@@ -242,11 +249,14 @@ async def _image_search(fig: Figure, query: str = "") -> None:
     """Photos from web image search (ddgs), larger ones first: by `query` when the person is known
     (Proposal.photo: 「哈姆」 alone found Hamtaro, the user, 2026-10-20), else by the name typed."""
     if not importlib.util.find_spec("ddgs"):
-        return
+        raise RuntimeError("图片搜索组件未安装")
     from ddgs import DDGS
 
     rows = await asyncio.to_thread(lambda: DDGS().images(query or fig.query, max_results=12))
-    rows = [r for r in rows or [] if min(int(r.get("width") or 0), int(r.get("height") or 0)) >= 300]
+    # Search providers may omit dimensions. Validate those images when downloaded,
+    # rather than treating missing metadata as a zero-pixel picture.
+    rows = [r for r in rows or [] if r.get("image") and
+            all(not r.get(k) or int(r[k]) >= 300 for k in ("width", "height"))]
     fig.photos += [Photo(r["image"], r.get("url", ""), r.get("title", "")[:40]) for r in rows[:6]]
 
 
@@ -269,18 +279,29 @@ async def find_photos(fig: Figure, query: str = "") -> None:
     """Photo candidates: web image search by `query` (who this is, in a few words) or the name,
     then Commons by the English name or the page's title when that found few."""
     headers = {"User-Agent": imagery.USER_AGENT, "Accept-Language": "zh-cn"}
+    fig.photo_errors.clear()
     async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
         try:
             await _image_search(fig, query)
-        except Exception:  # offline, rate-limited: Commons may still have them
-            pass
-        if len(fig.photos) < 3 and (fig.english or fig.title):  # famous enough for Commons
+        except Exception as exc:  # offline, rate-limited: Commons may still have them
+            fig.photo_errors.append(_photo_error("图片搜索", exc))
+        if len(fig.photos) < 3:
             try:
-                fig.photos += [Photo(c.thumb.replace("/360px-", "/800px-"), c.page, c.title, c.license) for c in await imagery.search(client, fig.english or fig.title, limit=8)]
-            except httpx.HTTPError:
-                pass
+                fig.photos += [Photo(c.thumb.replace("/360px-", "/800px-"), c.page, c.title, c.license) for c in await imagery.search(client, fig.english or fig.title or query or fig.query, limit=8)]
+            except Exception as exc:
+                fig.photo_errors.append(_photo_error("维基共享资源", exc))
     seen: set[str] = set()
     fig.photos = [p for p in fig.photos if not (p.url in seen or seen.add(p.url))]
+
+
+def _photo_error(source: str, exc: Exception) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return f"{source}请求超时"
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"{source}返回 HTTP {exc.response.status_code}"
+    if isinstance(exc, httpx.RequestError):
+        return f"无法连接{source}"
+    return f"{source}暂不可用（{type(exc).__name__}）"
 
 
 async def download(photo: Photo, dest: Path) -> bool:
