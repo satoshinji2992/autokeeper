@@ -31,7 +31,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input, Static
 
 from ... import config, paths
-from ...engine import chat, idea
+from ...engine import audience, chat, idea
 from ...engine.game import RETELL
 from ...engine.state import GameState, LogEntry
 from ...module.schema import Module, PreludeFrame
@@ -42,6 +42,7 @@ from ...rules import commands
 from .. import notes
 from ..modals.dialogs import PushModal, RollModal, Timed
 from ..modals.engine import EngineModal
+from ..modals.private import PrivateMessageModal
 from ..modals.retell import RetellModal
 from ..widgets.panels import HistoryPanel, SceneArt, log_line
 from .game import GameScreen
@@ -172,6 +173,8 @@ class RoomCommands(Provider):
     """Ctrl+P at the table, for the host who opened the room in this app: close it."""
 
     def _entries(self):
+        if getattr(self.screen, "seat", None) and not self.screen.state.ending:
+            yield "私信 /sc", "选择收件人并发送私信", self.screen.action_private_message
         if getattr(self.app, "room", None) is not None:
             yield "关闭房间", "所有人断开，存档还在", partial(self.screen.run_action, "close_room")
 
@@ -197,6 +200,8 @@ class NetGameScreen(GameScreen):
         """The Esc menu at a shared table: the host saves; 关闭房间 before 回到标题 for the
         host who opened the room in this app."""
         items = [item for item in super().menu_items() if item[0] not in ("save", "load")]
+        if self.seat and not self.state.ending:
+            items.insert(1, ("private_message", "私信 /sc"))
         if getattr(self.app, "room", None) is not None:  # the room was opened in this app
             items.insert([key for key, _ in items].index("title"), ("close_room", "关闭房间"))
         return items
@@ -326,6 +331,8 @@ class NetGameScreen(GameScreen):
                            "还能交一条，空行回车结束" if self.my_turn else
                            "守秘人在讲，现在交的留到下一轮" if self.seat else
                            "观战模式下可用 // 开头发送场外消息")
+        if self.seat:
+            inp.placeholder += " · 默认公开，/sc 私信"
 
     @work(group="offer")
     async def _offer(self, offer: dict[str, Any]) -> None:
@@ -552,16 +559,33 @@ class NetGameScreen(GameScreen):
             payload["picture"] = media.unpack(payload.pop("picture_data", ""), max_size=1600)
         return ev
 
+    def action_private_message(self) -> None:
+        if not self.seat or self.state.ending:
+            self.app.notify("当前无法发送私信。", severity="warning")
+            return
+        nearby = set(audience.listeners(self.state, self.seat))
+        recipients = [(inv.name, f"seat:{inv.id}") for inv in self.state.investigators
+                      if inv.id != self.seat and inv.id in nearby]
+        self.app.push_screen(PrivateMessageModal(recipients), self._private_composed)
+
+    def _private_composed(self, result: tuple[str, str] | None) -> None:
+        if result is None:
+            return
+        target, body = result
+        packet = ({"t": "kp_private", "text": body, "request": uuid.uuid4().hex} if target == "kp" else
+                  {"t": "speak", "text": body, "to": [target.removeprefix("seat:")], "channel": "whisper"})
+        self.run_worker(partial(self.link.send, packet))
+
     def send_line(self, text: str) -> None:
         word = text.split()[0].lower() if text.split() else ""
         if word in PRIVATE_COMMANDS:
             private_line(self, text)
-        elif word == "/私信kp":
+        elif word in ("/sc", "/私信kp"):
             body = text.partition(" ")[2].strip()
             if not self.seat:
                 self.app.notify("观战模式下无法向守秘人私信。", severity="warning")
             elif not body:
-                self.app.notify("用法：/私信kp 正文。私信不直接结算秘密行动。", timeout=6)
+                self.action_private_message()
             else:
                 self.run_worker(partial(self.link.send, {"t": "kp_private", "text": body, "request": uuid.uuid4().hex}))
         elif (aside := chat.ooc(text)) is not None:  # out of character: to everyone, spectators too, never an action

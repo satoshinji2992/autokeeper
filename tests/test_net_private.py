@@ -83,13 +83,15 @@ async def test_whispers_cannot_reach_a_distant_investigator(private_hub):
     assert not hub.state.log
 
 
-async def test_ordinary_speech_reaches_only_present_investigators_when_apart(private_hub):
+async def test_ordinary_speech_is_public_to_players_but_only_heard_by_present_characters(private_hub):
     hub, messages = private_hub
     hub.state.apart["chen"] = "tower"
     hub.state.record.entities["chen"].at = "tower"
     await hub._on("a", {"t": "speak", "text": "“先检查门锁。”"})
-    assert [cid for cid, _ in messages] == ["a", "b"]
+    assert [cid for cid, _ in messages] == ["a", "b", "c", "watch"]
     assert set(hub.state.log[-1].audience) == {"zhouheng", "lin"}
+    assert hub.state.table_history[-1].audience is None
+    assert "先检查门锁" in json.dumps(hub._welcome("c")["log"], ensure_ascii=False)
 
 
 async def test_addressing_someone_normally_is_not_a_whisper(private_hub):
@@ -106,7 +108,7 @@ async def test_explicit_rp_accepts_natural_speech_without_reclassifying_it_as_an
     text = "林秋，我们先在这里等一会儿，你听见刚才的声音了吗？"
     before = hub.state.minutes
     await hub._on("a", {"t": "speak", "text": text})
-    assert [cid for cid, _ in messages] == ["a", "b"]
+    assert [cid for cid, _ in messages] == ["a", "b", "c", "watch"]
     assert all(msg["t"] == "event" and msg["ev"]["type"] == "speech" for _, msg in messages)
     assert messages[0][1]["ev"]["text"] == text
     assert hub.state.log[-1].audience == ["zhouheng", "lin"]
@@ -118,6 +120,38 @@ async def test_empty_explicit_rp_does_not_record_an_action_or_speech(private_hub
     await hub._on("a", {"t": "speak", "text": "   "})
     assert messages == [("a", {"t": "error", "text": "请输入对话内容。"})]
     assert not hub.state.log and not hub.pool
+
+
+async def test_normal_declarations_are_public_immediately_and_survive_reload(private_hub, fake):
+    from autokeeper.engine import audience
+    from autokeeper.engine.state import GameState
+
+    hub, messages = private_hub
+    hub.state.apart["chen"] = "tower"
+    hub.state.record.entities["chen"].at = "tower"
+    text = "我先去书房，帮托马斯找一找。"
+    await hub._on("a", {"t": "act", "text": text})  # queued, no model has run
+    echoes = [(cid, msg["ev"]) for cid, msg in messages if msg.get("ev", {}).get("type") == "said"]
+    assert [cid for cid, _ in echoes] == ["a", "b", "c", "watch"]
+    assert all(ev["text"] == text and "audience" not in ev for _, ev in echoes)
+    assert not hub.state.log and not audience.log(hub.state, "chen")  # PL visibility is not character knowledge
+    assert hub.early == [("zhouheng", text)]
+    restored = GameState.model_validate_json(hub.state.model_dump_json())
+    rebuilt = Hub(EXAMPLE, state=restored, cast=TableCast(), rules=Rules(dice=fake))
+    rebuilt.clients, rebuilt.sits = hub.clients, hub.sits
+    for cid in ("a", "b", "c", "watch"):
+        history = rebuilt._welcome(cid)["log"]
+        assert sum(entry["text"] == text for entry in history) == 1
+    await hub._on("a", {"t": "undo"})
+    assert not hub.early and hub.state.table_history[-1].text == "（撤回声明）" + text
+
+
+async def test_private_correspondence_is_never_added_to_the_public_transcript(private_hub):
+    hub, _messages = private_hub
+    await hub._on("a", {"t": "speak", "text": "只有你知道密码。", "to": ["lin"]})
+    assert not hub.state.table_history
+    assert "只有你知道密码" not in json.dumps(hub._welcome("c"), ensure_ascii=False)
+    assert "只有你知道密码" not in json.dumps(hub._welcome("watch"), ensure_ascii=False)
 
 
 async def test_table_chat_remains_out_of_character_and_unrecorded(private_hub):

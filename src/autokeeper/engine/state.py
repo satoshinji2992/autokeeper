@@ -257,6 +257,7 @@ class GameState(BaseModel):
     notes: dict[str, str] = Field(default_factory=dict)
     log: list[LogEntry] = Field(default_factory=list)
     private_history: list[LogEntry] = Field(default_factory=list)  # private or differently perceived originals folded out of log
+    table_history: list[LogEntry] = Field(default_factory=list)  # public player messages; not character knowledge
     logged: int = 0  # lines ever added to the log, which keeps only the recent ones
     memory: str = ""  # chronicler's summary of everything before the recent log
     deeds: list[Deed] = Field(default_factory=list)  # each investigator's own record (the sheet's 本局经历)

@@ -1,0 +1,10 @@
+#private-message {
+    width: 78;
+    max-width: 95%;
+    height: auto;
+    max-height: 90%;
+}
+
+#private-recipient, #private-body {
+    margin: 1 0;
+}

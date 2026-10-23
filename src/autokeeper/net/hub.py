@@ -92,7 +92,7 @@ from ..engine.encounter import views
 from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.offers import public_push
-from ..engine.state import GameState
+from ..engine.state import GameState, LogEntry
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..plugins.schema import does
@@ -132,7 +132,7 @@ PRIVATE |= {"mentions"}  # the clues not found yet, by id: what an Idea roll wou
 PRIVATE |= {"held", "signs", "expanded", "ongoing"}
 # A player's notes are theirs alone (tui/notes.py): the host's own, kept in a save played on this machine, too.
 PRIVATE |= {"notebook"}
-PRIVATE |= {"private_history"}  # retained private lines are replayed only to their own seat after it sits down
+PRIVATE |= {"private_history", "table_history"}  # the welcome/history messages carry the appropriate transcript
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
 PRIVATE |= {"unfinished", "last_actions"}  # remaining private intent is for its player and the keeper only
 PRIVATE |= {"queued_receipts", "queued_actions", "world", "event_attempts", "pending_story_flags", "ideas"}
@@ -529,6 +529,7 @@ class Hub:
             elif text.strip().startswith("/kp ") or commands.instant(text):  # questions do not occupy an action slot
                 self.instant.put_nowait((seat, text))
                 self.wake.set()
+                await self._table_input(seat, text)
             elif not text.strip():
                 return
             elif self.open and seat in self.confirming and (rid := self.asking.get(seat)):
@@ -541,6 +542,7 @@ class Hub:
                 self._start_window()
                 self.wake.set()
                 self._save_queued()
+                await self._table_input(seat, perception.input_label(self.game, seat, text))
                 await self._pool()
             elif sum(1 for s, _ in self.early if s == seat) >= PER_PLAYER:
                 await self._send(cid, {"t": "error", "text": f"下一轮已有 {PER_PLAYER} 条行动，可用 /undo 撤回上一条。"})
@@ -549,6 +551,7 @@ class Hub:
                 self.done.discard(seat)
                 self.early.append((seat, text))
                 self._save_queued()
+                await self._table_input(seat, perception.input_label(self.game, seat, text))
                 await self._pool()
         elif t == "kp_private":
             seat = self._seat_of(cid)
@@ -602,6 +605,8 @@ class Hub:
                 return
             self.wake.set()
             self._save_queued()
+            if held or mine:
+                await self._table_input(seat, "（撤回声明）" + perception.input_label(self.game, seat, removed[1]))
             await self._pool()
         elif t == "respond":
             seat = self._seat_of(cid)
@@ -721,7 +726,7 @@ class Hub:
         self.sits[inv_id] = cid
         await self.takeovers.returned(inv_id)
         await self._share_seats()
-        private_log = [e.model_dump(mode="json") for e in audience.log(self.state, inv_id)
+        private_log = [e.model_dump(mode="json") for e in self._history(inv_id)
                        if e.audience is not None and e.kind != "clue"][-40:]
         # An empty history also matters: switching to a character with no private knowledge
         # must clear the previous character's private backlog in the lobby.
@@ -1030,7 +1035,7 @@ class Hub:
             "colors": {k: v for k, v in self.m.art_colors.items() if k in keys},
             "picture_data": self._shared(self._pictures(book, keys)),
             "state": self._view(self._seat_of(cid)),
-            "log": [e.model_dump(mode="json") for e in audience.log(self.state, self._seat_of(cid))
+            "log": [e.model_dump(mode="json") for e in self._history(self._seat_of(cid))
                     if e.kind != "clue"][-40:],  # an unseated connection never receives someone else's private history
             "seats": self._seats(cid),
             "bring": self.bringing,  # seats may still change their investigator
@@ -1233,6 +1238,39 @@ class Hub:
         await self._broadcast({"t": "event", "ev": ev})
         if ev.get("type") in SYNC_AFTER:
             await self._broadcast({"t": "sync", "state": self._view()})
+
+    def _history(self, viewer: str | None) -> list[LogEntry]:
+        """Public table messages and this seat's observations remain separate in the save.
+
+        Seeing another player's declaration does not teach an absent investigator its contents.
+        The private player entries remain in the game record for its agents, without a second UI echo.
+        """
+        table = self.state.table_history
+        published = {entry.delivery for entry in table}
+        personal = [entry for entry in audience.log(self.state, viewer)
+                    if entry.kind != "player" and (not entry.delivery or entry.delivery not in published)]
+        return sorted([*personal, *table], key=lambda entry: entry.turn)
+
+    async def _table_input(self, inv_id: str, text: str, *, ai: bool = False, speech: dict | None = None) -> None:
+        """Echo ordinary input to the entire table, including players in other scenes."""
+        inv = self.state.find(inv_id)
+        ident = "table:" + uuid.uuid4().hex
+        event = {"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv_id) or "", ""),
+                 "text": text, "ai": ai, "delivery": ident}
+        if speech is None:
+            entry = LogEntry(turn=self.state.turn, time=self.state.clock, kind="player", who=inv.name,
+                             text=text, delivery=ident)
+        else:
+            # Keep real listeners in Game.speak's record; only the table transcript is public.
+            original = self.state.log[-1]
+            original.delivery = ident
+            entry = original.model_copy(update={"audience": None, "presented": {}})
+            event = {**speech, "delivery": ident}
+            event.pop("audience", None)
+        self.state.table_history.append(entry)
+        self._save()
+        root = getattr(self, "root", self)
+        await root._broadcast({"t": "event", "ev": event})
 
     # -- the game ---------------------------------------------------------------------------
     async def play(self) -> None:
@@ -1458,9 +1496,8 @@ class Hub:
 
     async def _speak(self, cid: str, text: str, *, to: Any = None, private: bool = False,
                      channel: str = "whisper") -> None:
-        """Speech takes no model or action slot. Its recipients come from the sender's seat and
-        actual presence, never a client-supplied identity. A note or whisper reaches only its
-        named recipients; ordinary speech can be heard by everyone at that place."""
+        """Speech takes no model or action slot. Character listeners follow actual presence;
+        ordinary input is visible to every player. Explicit whispers reach only their recipients."""
         seat = self._seat_of(cid)
         inv = next((i for i in self.state.investigators if i.id == seat), None)
         if inv is None:
@@ -1514,8 +1551,11 @@ class Hub:
         # Settle against the place and listeners just validated, before any await or display.
         # A later action may move or incapacitate someone; that cannot undo words already heard.
         self.game.speak(inv.id, recorded.line, recorded.to, audience=scope, private=private)
-        self._save()
-        await self._event(ev)
+        if private:
+            self._save()
+            await self._event(ev)
+        else:
+            await self._table_input(inv.id, said.line, speech=ev)
         self.wake.set()
 
     async def _collect(self) -> None:
@@ -1750,12 +1790,8 @@ class Hub:
                 self.game.finish_party_declaration(seat, text, token=token)
                 self._save()
                 continue
-            from ..engine.perception import input_label
-
-            resumed = self.game.resume_wait(seat, token=token) if resuming else False
-            if not resumed:
-                await self._event({"type": "said", "who": inv.name, "player": self.names.get(who or "", ""),
-                                   "text": input_label(self.game, inv.id, text), "audience": [inv.id]})
+            if resuming:
+                self.game.resume_wait(seat, token=token)
             original = text
             while True:
                 try:
@@ -2084,8 +2120,7 @@ class Hub:
             return
         if move.react:  # its answer to blows from now on, as a seat's "react" sets it
             self.game.set_react(inv.id, move.react)
-        await self._event({"type": "said", "who": inv.name, "player": "", "text": move.text, "ai": True,
-                           "audience": [inv.id]})
+        await self._table_input(inv.id, move.text, ai=True)
         if delegated and inv.id not in self.takeovers.active:
             return
         await self._run(move.text, inv.id, ai=True, push=move.push)

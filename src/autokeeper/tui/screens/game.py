@@ -116,7 +116,7 @@ COMMANDS = (
 
 
 # Commands that open a window or write a note: they work while the keeper is telling (notes.JOT too).
-ANYTIME = ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo")
+ANYTIME = ("/notes", "/map", "/sheet", "/help", "/theme", "/prefs", "/usage", "/undo", "/sc", "/私信kp", "/私聊", "/w")
 BATTLE_SECONDS, CHASE_SECONDS = 20.0, 12.0  # how long a fight's and a chase's round waits for the player (设置 turns it off)
 FIGHT_EVENTS = ("fight_start", "reveal", "fight_round", "fight_act", "fight_state", "fight_say", "fight_end",
                 "chase_start", "chase_round", "chase_state", "chase_end")
@@ -1729,12 +1729,12 @@ class GameScreen(Screen):
                 self.story.add("system", Text(f"【场外】{aside}", style="italic dim"))
             return
         if text.startswith("/"):
-            if text.split()[0].lower() == "/私信kp":
+            if text.split()[0].lower() in ("/sc", "/私信kp"):
                 body = text.partition(" ")[2].strip()
                 if body:
                     self.private_keeper(body)
                 else:
-                    self.app.notify("用法：/私信kp 正文。私信不直接结算秘密行动。", timeout=6)
+                    self.app.notify("用法：/sc 正文。私信不直接结算秘密行动。", timeout=6)
                 return
             if text.startswith("/kp "):
                 self.play(text)

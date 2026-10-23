@@ -62,6 +62,8 @@ async def test_pending_roll_in_another_scene_does_not_block_conversation_or_leak
             assert not hub._media_view(a.id)["papers"]
             assert hub._media_view(b.id)["papers"]
             await y.send_json({"t": "act", "text": "我要检定侦查"})
+            public_input = await until(x, lambda msg: msg.get("ev", {}).get("type") == "said")
+            assert public_input["ev"]["text"] == "我要检定侦查" and "audience" not in public_input["ev"]
             prompt = await until(y, lambda msg: msg["t"] == "offer")
             assert prompt["offer"]["kind"] == "roll"
             await x.send_json({"t": "act", "text": "我看看广场"})

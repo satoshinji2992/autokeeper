@@ -144,7 +144,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await b.send_json({"t": "act", "text": "我再四下看看"})
         pooled = await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)
         assert pooled["open"] and pooled["by"] == {"zhouheng": 0, "lin": 2} and pooled["waiting"] == ["周衡"]
-        assert pooled["mine"] == {"now": [], "next": []}  # A sees how many she put in, not what
+        assert pooled["mine"] == {"now": [], "next": []}  # only the owner can edit their queue; messages are public
         await b.send_json({"t": "act", "text": "我还要第三件事"})  # no room for it this round: it waits for the next
         held = await until(b, lambda x: x["t"] == "pool" and bool(x["mine"].get("next")))
         assert held["count"] == 2 and held["mine"] == {"now": ["我抢着先说", "我再四下看看"], "next": ["我还要第三件事"]}
@@ -156,11 +156,11 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await until(a, lambda x: x["t"] == "pool" and x["count"] == 2)  # hers are in first
         await a.send_json({"t": "act", "text": "我看看告示栏"})  # three in: the keeper settles it
         await until(b, lambda x: x["t"] == "pool" and not x["open"])
-        mine = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
-        assert mine["ev"]["who"] == "周衡" and mine["ev"]["text"] == "我看看告示栏"
-        said = [(m["ev"]["who"], m["ev"]["text"]) for m in
-                [await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "said") for _ in range(2)]]
-        assert said == [("林秋", "我抢着先说"), ("林秋", "我改主意了，翻翻报纸")]  # each receives their own original declarations
+        for cid in ("a", "b"):
+            transcript = [(e["who"], e["text"]) for e in hub._welcome(cid)["log"] if e["kind"] == "player"]
+            assert ("周衡", "我看看告示栏") in transcript
+            assert ("林秋", "我改主意了，翻翻报纸") in transcript
+            assert transcript.count(("林秋", "我抢着先说")) == 1
         await until(a, pool_open)  # told: the next round
 
         await a.send_json({"t": "say", "text": "（场外）我去倒杯水"})
@@ -173,7 +173,7 @@ async def test_two_players_share_a_table_and_the_ai_covers_for_a_dropout(monkeyp
         await a.send_json({"t": "done"})  # one is enough this time
         await until(a, lambda x: x["t"] == "pool" and not x["open"])
         await until(a, pool_open)
-        assert cast.ai_turns == ["lin"]  # the AI acted; its private declaration is not a public telling
+        assert cast.ai_turns == ["lin"]
         await a.close()
     await closed(task)
     assert paths.save("lan-test").exists()  # the host saves after every turn
@@ -416,8 +416,7 @@ async def test_a_check_is_the_turn_s_action_and_growth_waits_for_the_end(monkeyp
         while "pool-closed" not in heard or heard[-1] != "pool-open":  # until the next round opens
             msg = await asyncio.wait_for(a.receive_json(), 5.0)
             heard.append(msg["ev"]["type"] if msg["t"] == "event" else ("pool-open" if msg["open"] else "pool-closed") if msg["t"] == "pool" else msg["t"])
-        heard = heard[heard.index("pool-closed"):]
-        assert "error" not in heard and heard.index("said") < heard.index("keeper_end")  # ruled and told
+        assert "error" not in heard and heard.index("said") < heard.index("keeper_end")  # public input precedes ruling
         fake.queue_totals(3, 2)  # the ending's 理智 +1D6, for each of them
         await a.send_json({"t": "act", "text": "我拉下制动杆"})
         await b.send_json({"t": "act", "text": "我跟上"})
@@ -815,13 +814,13 @@ async def test_a_round_is_a_moment_in_real_time_and_nobody_waits_on_who_does_not
         await b.send_json({"t": "sit", "investigator": "lin"})
         assert (await until(a, pool_open))["closes_in"] is None  # nobody has acted: no clock yet
         await a.send_json({"t": "act", "text": "我看看告示栏"})
+        said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
+        assert said["ev"]["who"] == "周衡"  # visible before the collection window closes
         counting = await until(a, lambda x: x["t"] == "pool" and x["count"] == 1)
         # Subtracting floating-point deadlines can exceed the configured window by a few ulps.
         assert 0 < counting["closes_in"] <= hub.window + 1e-9
         closed_round = await until(a, lambda x: x["t"] == "pool" and not x["open"], limit=3)
         assert closed_round["count"] == 1  # 小红 did not act in time: settled without her, nobody waited
-        said = await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "said")
-        assert said["ev"]["who"] == "周衡"
         await b.send_json({"t": "act", "text": "我也去看看"})  # too late for that moment: the next round's
         nxt = await until(a, pool_open)
         assert nxt["count"] == 1 and nxt["closes_in"] is not None  # it opens the next moment at once
