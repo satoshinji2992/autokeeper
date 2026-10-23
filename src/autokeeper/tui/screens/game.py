@@ -709,7 +709,8 @@ class GameScreen(Screen):
         right = Text(no_wrap=True)
         if not self.query_one("#right").display:
             inv = self._viewer()
-            right.append(f"HP {inv.hp}/{inv.hp_max}  SAN {inv.san}  ", style="bold red" if inv.hp * 3 <= inv.hp_max else "bold")
+            san = str(inv.san) if inv.san is not None else "未公开"
+            right.append(f"HP {inv.hp}/{inv.hp_max}  SAN {san}  ", style="bold red" if inv.hp * 3 <= inv.hp_max else "bold")
         tokens = sum(int(u.get("input", 0) + u.get("output", 0)) for u in st.usage.values())
         cost = sum(u.get("cost_usd", 0.0) for u in st.usage.values())
         right.append(f"第 {st.turn} 轮 · {tokens / 1000:.1f}k tokens" + (f" ${cost:.2f}" if cost else ""), style="dim")
@@ -760,7 +761,7 @@ class GameScreen(Screen):
         self.query_one(SheetPanel).show(inv, face, st.investigators)
         self.story.mark(st.investigators, self._me())
         self.query_one(NotesPanel).show(self.notes())
-        lost = 1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)
+        lost = (1 - inv.san / max(1, inv.characteristics.get("意志", inv.san) or 1)) if inv.san is not None else 0
         for scene in self.query(SceneArt):  # none while the screen is being taken down (a face drawn late)
             scene.madness = max(0.0, min(0.6, lost * 2))
         self._pages()
@@ -2004,7 +2005,8 @@ class GameScreen(Screen):
         t = Text()
         t.append(f"线索 {found}/{total} · 用时至 {st.clock} · 共 {st.turn} 轮\n", style="bold")
         for inv in st.investigators:
-            t.append(f"{inv.name}：HP {inv.hp}/{inv.hp_max}  理智 {inv.san}  {'、'.join(inv.conditions)}\n")
+            san = str(inv.san) if inv.san is not None else "未公开"
+            t.append(f"{inv.name}：HP {inv.hp}/{inv.hp_max}  理智 {san}  {'、'.join(inv.conditions)}\n")
         calls = sum(int(u["calls"]) for u in st.usage.values())
         tokens = sum(int(u["input"] + u["output"]) for u in st.usage.values())
         t.append(f"\n模型调用 {calls} 次 · {tokens} tokens\n", style="dim")

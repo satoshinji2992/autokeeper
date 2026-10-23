@@ -57,6 +57,8 @@ def vet(data: Any, inv_id: str) -> Investigator:
     """The card as the table takes it, under `inv_id`; Refused when it cannot be played."""
     if not isinstance(data, dict) or len(json.dumps(data, ensure_ascii=False, default=str)) > CARD_BYTES:
         raise Refused("无法读取人物卡。")
+    if "san" in data and data["san"] is None:
+        raise Refused("人物卡未公开理智值，不能用于参加调查。")
     name = _text(data.get("name"), 24)
     if not name:
         raise Refused("人物卡缺少姓名。")
