@@ -74,7 +74,7 @@ async def test_telling_distinguishes_current_result_from_other_pending_declarati
         prompt = SEEN[-1]["messages"][-1]["content"]
         if settled:
             assert "【本批实际进度】" not in prompt
-            assert "本段仅补叙报告中已经结算的经过" in prompt
+            assert "本段回顾报告中已经结算的经过" in prompt
         else:
             assert "本次行动 1（周衡）" in prompt
             assert "其他已结束编号：0；尚未结算编号：2" in prompt
