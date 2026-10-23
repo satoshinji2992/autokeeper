@@ -205,9 +205,11 @@ class Room:
         any_port: bool = False,
         cast: Any = None,
         rules: Any = None,
+        disconnect_ai: bool = True,
     ):
         self.dir, self.seats, self.state, self.cast, self.rules = Path(module_dir), seats, state, cast, rules
         self.host, self.port, self.web_port = host, port, web_port
+        self.disconnect_ai = disconnect_ai
         self.any_port = any_port  # a port already taken: another one, without asking (the title screen's rooms)
         self.hub: Hub | None = None
         self.page: subprocess.Popen | None = None
@@ -255,7 +257,8 @@ class Room:
         from .hub import Hub
 
         self._loop, self._main = asyncio.get_running_loop(), asyncio.current_task()
-        self.hub = hub = Hub(self.dir, seats=self.seats, state=self.state, cast=self.cast, rules=self.rules)
+        self.hub = hub = Hub(self.dir, seats=self.seats, state=self.state, cast=self.cast, rules=self.rules,
+                            disconnect_ai=self.disconnect_ai)
         serving = asyncio.create_task(hub.serve(self.host, self.port))
         try:
             while not hub.port:

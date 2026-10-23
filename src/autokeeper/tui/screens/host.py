@@ -86,6 +86,8 @@ class HostScreen(Screen):
                             yield Static("名字", classes="field-label")
                             yield Input(str(last.get("name", "")), placeholder="房主", id="host-name", max_length=16, compact=True)
                         yield Checkbox("同时开网页版", bool(last.get("web", True)), id="host-web", compact=True)
+                        yield Checkbox("断线后由 AI 临时接管", bool(last.get("disconnect_ai", True)),
+                                       id="host-disconnect-ai", compact=True)
                         yield Static(id="host-note")
                         with Horizontal(classes="buttons"):
                             yield Button("开房间", id="host-open", variant="primary", compact=True)
@@ -420,7 +422,9 @@ class HostScreen(Screen):
         if (old := getattr(self.app, "room", None)) is not None:  # one room at a time; this one had stopped
             self.app.room = None  # type: ignore[attr-defined]
             await asyncio.to_thread(old.close)
-        room = lan.Room(self.path, seats=seats, state=state, port=port, web_port=web_port, any_port=True)
+        disconnect_ai = self.query_one("#host-disconnect-ai", Checkbox).value
+        room = lan.Room(self.path, seats=seats, state=state, port=port, web_port=web_port, any_port=True,
+                        disconnect_ai=disconnect_ai)
         try:
             await asyncio.to_thread(room.open)
             if web:
@@ -434,7 +438,7 @@ class HostScreen(Screen):
             button.disabled = False
             hint.update(ROOM_KEYS)
             return
-        lan.remember(name=name, web=web)
+        lan.remember(name=name, web=web, disconnect_ai=disconnect_ai)
         self.app.room = room  # type: ignore[attr-defined]
         from .lobby import LobbyScreen
 
