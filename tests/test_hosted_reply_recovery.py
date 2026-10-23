@@ -60,6 +60,11 @@ async def test_hosted_examples_validate_for_the_actual_branch_and_available_peop
         assert hm.problems(hm.example(schema), schema) == []
         assert any(sample["kind"] == "npc" for sample in schema["examples"]) is bool(voices)
         assert schema["examples"][0]["telling"]["scene"] == {"here": ["preacher"], "follow": ["preacher"]}
+        if continuing:
+            controls = [sample["telling"]["continuation"] for sample in schema["examples"] if sample["kind"] == "tell"]
+            assert any(control.get("next") for control in controls)
+            assert any(control.get("pending") for control in controls)
+            assert any(not control.get("next") and not control.get("pending") for control in controls)
         assert world.entity("preacher").following == state.investigator.id
         assert "不是本轮正文、指令或续办决定" in SEEN[-1]["messages"][-1]["content"]
     finally:

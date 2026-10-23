@@ -2119,8 +2119,16 @@ class Cast:
                                           if self.world.rec.entities[npc].following in party]
             final = {"scene": scene_sample, "text": "（依本段已经结算的结果叙述）"}
             if continuing:
-                final["continuation"] = {"next": None, "pending": "（仍需玩家选择时保留未办意图；确已办完则留空）"}
-            samples = [{"kind": "tell", "telling": final}]
+                # Show all three valid outcomes. A sole pending example made a normal
+                # authorized wait look like a fresh player choice on every quiet beat.
+                controls = [
+                    {"next": {"action": {"kind": "wait", "summary": "继续已授权的等待"}}, "pending": ""},
+                    {"next": None, "pending": "尚需玩家决定如何应对新情况，再继续原请求"},
+                    {"next": None, "pending": ""},
+                ]
+                samples = [{"kind": "tell", "telling": {**final, "continuation": control}} for control in controls]
+            else:
+                samples = [{"kind": "tell", "telling": final}]
             if available := next((npc for npc in voices if npc), ""):
                 samples.append({"kind": "npc", "npc": available, "instruction": "依据本人实际知情范围回应本次请求"})
             for sample in samples:
