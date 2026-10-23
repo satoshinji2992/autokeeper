@@ -62,6 +62,27 @@ async def test_shared_keeper_memory_reads_the_whole_window_and_leaves_the_world_
     await cast.close()
 
 
+@pytest.mark.parametrize("settled", [False, True])
+async def test_telling_distinguishes_current_result_from_other_pending_declarations(party_state, settled):
+    module, state = party_state
+    state.pending_turn = {"party_token": "1"}
+    state.round_plan = {"steps": [{"token": "0"}, {"token": "1"}, {"token": "2"}], "done": ["0"]}
+    cast = Cast(config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}), module)
+    SCRIPT.append("窗边的光线暗了下来。")
+    try:
+        await cast.keeper(state, "当前动作已实际结算，其他动作仍等待执行。", settled=settled)
+        prompt = SEEN[-1]["messages"][-1]["content"]
+        if settled:
+            assert "【本批实际进度】" not in prompt
+            assert "本段仅补叙报告中已经结算的经过" in prompt
+        else:
+            assert "本次行动 1（周衡）" in prompt
+            assert "其他已结束编号：0；尚未结算编号：2" in prompt
+            assert "不用scene替他们提前执行" in prompt
+    finally:
+        await cast.close()
+
+
 async def test_multiple_inputs_by_one_person_have_separate_stable_tokens_and_local_contexts(party_state, monkeypatch):
     module, state = party_state
     state.apart["lin"] = "square"

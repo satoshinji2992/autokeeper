@@ -44,7 +44,7 @@ from ..module.schema import Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
 from ..rules import commands, wounds
 from ..rules.bcdice import Level, Roll
-from ..rules.catalog import canonical
+from ..rules.catalog import UnknownSkill, canonical
 from ..rules.coc import DIFFICULTY_ZH, Check, Investigator, Rules, Sanity
 from ..world import adapters, desk, knowledge, scene, scheduler, stage
 from ..world import context as world_view
@@ -93,6 +93,7 @@ class Said:
     journal: dict = field(default_factory=dict)
     media: list[dict] = field(default_factory=list)
     audience: list[str] | None = None
+    communication: str = "local"
 
 
 @dataclass
@@ -361,18 +362,26 @@ class Game(Encounters):
         return state
 
     async def prepare_opening(self) -> improv.Applied | None:
-        """What the opening needs before the keeper speaks: the director's adaptation of the
-        module to these investigators, with its first pictures. A screen runs it while the
-        prelude plays (module/prelude.py), so no one waits on a silent game screen; start() then
-        finds it done (its receipt in pending_turn)."""
+        """Adapt custom identities; authored pregens already have prepared connections.
+
+        Resume an existing adaptation receipt before introducing any of its new people.
+        The keeper still receives every investigator's background for the opening itself.
+        """
         st = self.state
         if not st.pending_turn:
             st.pending_turn.update(input="/opening", opening=True)
             if self.checkpoint:
                 self.checkpoint()
-        # Opening adaptation must exist before the keeper introduces its people and premise.
         adapting = st.pending_turn.get("scene_package", {}).get("kind") == "开局改编"
-        return await self._improvise("开局改编", required=True) if not st.improv or adapting else None
+        authored = {inv.id: inv for inv in self.m.pregens}
+        identity = ("name", "occupation", "backstory", "known_locations")
+        custom = any(
+            inv.id not in authored or any(getattr(inv, key) != getattr(authored[inv.id], key) for key in identity)
+            for inv in st.investigators
+        )
+        if adapting or (custom and not st.improv):
+            return await self._improvise("开局改编", required=True)
+        return None
 
     async def start(self, on_delta=None) -> str:
         st, m = self.state, self.m
@@ -669,12 +678,18 @@ class Game(Encounters):
             prepared.problems.append(f"目的地 id {plan.action.destination} 未登记；已有地点使用原 id，"
                                      "需要新去处时 destination 留空，在 summary 保留完整目的，交裁定与即兴准备。")
         if plan.present or plan.people:
-            here = list(dict.fromkeys([*self._present(), *plan.present, *(p.id for p in plan.people)]))
-            raw = scene.Scene(people=plan.people, here=here)
+            missing_contact = {p.id for p in plan.people if plan.action.communication == "remote"
+                               and p.id == plan.action.npc and not p.location}
+            here = list(dict.fromkeys([*self._present(), *plan.present,
+                                      *(p.id for p in plan.people if p.id not in missing_contact
+                                        and (not p.location or p.location == self.state.location))]))
+            raw = scene.Scene(people=[p for p in plan.people if p.id not in missing_contact], here=here)
             cursor = self._actor_cursor()
             prepared = scene.plan(self.world, raw, scene.Context(travel=self._travel, walk=False,
                                                                ids=ids or f"plan:{self.state.turn}",
                                                                interval=(cursor, cursor)))
+            prepared.problems += [f"远程联系人 {who} 须登记实际所在的已有location；不能默认放在调查员眼前。"
+                                  for who in missing_contact]
         introduced = {p.id for p in plan.people}
         for ident in plan.present:
             if ident not in introduced and (not (e := self.world.entity(ident)) or e.kind != "npc"):
@@ -732,6 +747,7 @@ class Game(Encounters):
         kwargs = {"coordination": self._party_context()} if _takes(arbiter, "coordination") else {}
         ruling = (Ruling.model_validate(draft["ruling"]) if draft.get("action") == action.ruled()
                   else await arbiter(self.state, action, at=heading, **kwargs))
+        ruling = await self.checked_skill(action, ruling, at=heading, **kwargs)
         if ruling.scope != "模组内" and not prepared:  # the module is silent here: the director fills the gap
             if journal:
                 journal["draft_ruling"] = {"action": action.ruled(), "ruling": ruling.model_dump(mode="json")}
@@ -747,6 +763,36 @@ class Game(Encounters):
                     return await self._continue_prepared(action, applied)
                 ruling = self._steer(ruling, applied)
         return self._no_reroll(action, ruling, heading or self.state.location)
+
+    async def checked_skill(self, action: Action, ruling: Ruling, **context: Any) -> Ruling:
+        """Resolve aliases before an offer; an unrecognised roll is corrected once, never rolled at 1%."""
+        if not ruling.needs_roll or ruling.repeat or not ruling.skill.strip():
+            return ruling
+        try:
+            self.state.investigator.value(ruling.skill)
+            return ruling
+        except UnknownSkill as exc:
+            problem = str(exc)
+        journal = self.state.pending_turn
+        key = action.ruled()
+        saved = journal.get("skill_correction", {})
+        if saved.get("action") == key:
+            corrected = Ruling.model_validate(saved["ruling"])
+        else:
+            arbiter = self.cast.arbiter
+            if not _takes(arbiter, "problems"):
+                raise PreparationError(problem + "；原行动已保留，尚未掷骰")
+            corrected = await arbiter(self.state, action, problems=[problem], **context)
+            if journal:
+                journal["skill_correction"] = {"action": key, "ruling": corrected.model_dump(mode="json")}
+                if self.checkpoint:
+                    self.checkpoint()
+        if corrected.needs_roll and not corrected.repeat:
+            try:
+                self.state.investigator.value(corrected.skill)
+            except UnknownSkill as exc:
+                raise PreparationError(str(exc) + "；原行动已保留，尚未掷骰") from exc
+        return corrected
 
     async def _continue_prepared(self, action: Action, applied: improv.Applied) -> Ruling | None:
         """A new stage needs an action, not a check assembled from its first clue. The same keeper
@@ -806,7 +852,7 @@ class Game(Encounters):
                     if e.kind in ("damage", "edge", "freed") and e.target not in known]
         if problems:
             ruling = await arbiter(self.state, asked, encounter=brief, problems=problems)
-        return ruling
+        return await self.checked_skill(asked, ruling, encounter=brief)
 
     async def prepare(self, action: Action) -> None:
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
@@ -1071,7 +1117,7 @@ class Game(Encounters):
             self._debug("presentation", {"phase": "unavailable", "problems": errors})
         return errors
 
-    def receive_private_message(self, who: str, text: str, *, request: str = "") -> tuple[str, dict]:
+    def receive_private_message(self, who: str, text: str, *, request: str = "", offer: dict | None = None) -> tuple[str, dict]:
         """Save accepted correspondence before putting its model response in a queue."""
         st = self.state
         if not text.strip() or who not in {i.id for i in st.investigators}:
@@ -1081,24 +1127,36 @@ class Game(Encounters):
         if receipt is None:
             receipt = st.private_messages[ident] = {"who": who, "text": text.strip()}
             st.add("system", f"对守秘人（私信）：{text.strip()}", who=st.find(who).name, audience=[who])
+            from ..agents.cast import private_context
+
+            receipt["context"] = private_context(self.m, st, who, text.strip(), self.world)
+            if offer is not None:
+                receipt["context"] += "\n【本人提问时待答选择】" + json.dumps(offer, ensure_ascii=False)
+                receipt["waiting"] = True
             if self.checkpoint:
                 self.checkpoint()
         elif receipt["text"] != text.strip():
             raise ValueError("同一私信编号不能替换正文")
         return ident, receipt
 
-    async def private_message(self, who: str, text: str, *, request: str = "") -> str:
+    async def show_private_input(self, who: str, receipt: dict) -> None:
+        """Acknowledge accepted mail without waiting for the keeper or the player's roll."""
+        st = self.state
+        if receipt.get("input_shown"):
+            return
+        await self.emit({"type": "private_input", "audience": [who], "text": receipt["text"], "who": st.find(who).name})
+        receipt["input_shown"] = True
+        if self.checkpoint:
+            self.checkpoint()
+
+    async def private_message(self, who: str, text: str, *, request: str = "", defer_media: bool = False) -> str:
         """A PL message to the keeper, with a private reply; never a secret physical action."""
         st = self.state
         ident, receipt = self.receive_private_message(who, text, request=request)
-        if not receipt.get("input_shown"):
-            await self.emit({"type": "private_input", "audience": [who], "text": receipt["text"], "who": st.find(who).name})
-            receipt["input_shown"] = True
-            if self.checkpoint:
-                self.checkpoint()
+        await self.show_private_input(who, receipt)
         if "reply" not in receipt:
-            result = await self.cast.private_keeper(st, who, receipt["text"])
-            receipt["reply"] = result["text"]
+            result = await self.cast.private_keeper(st, who, receipt["text"], context=receipt["context"])
+            receipt["reply"] = ("（按你提问时的状态答复，不改变当前待答选择或已结算结果。）\n" if receipt.get("waiting") else "") + result["text"]
             receipt["media"] = [{**m, "to": [who]} for m in result.get("media", [])]
             st.add("keeper", receipt["reply"], who="守秘人", audience=[who])
             if self.checkpoint:
@@ -1110,6 +1168,14 @@ class Game(Encounters):
                 self.checkpoint()
         # Text and attachments have separate receipts: a disconnect after the text must
         # still resume the same saved media without asking the keeper again.
+        if defer_media and receipt.get("media"):
+            if not receipt.get("media_deferred"):
+                await self.emit({"type": "aside", "audience": [who], "who": "守秘人",
+                                 "text": "私信附件已保存，将在本次行动结束后单独发送。"})
+                receipt["media_deferred"] = True
+            if self.checkpoint:
+                self.checkpoint()
+            return receipt["reply"]
         receipt["delivered"] = not await self.present(receipt.get("media", []), key=f"private:{ident}")
         if self.checkpoint:
             self.checkpoint()
@@ -2416,12 +2482,16 @@ class Game(Encounters):
             key = f"talk:{addressed}"
             if key not in turn.replies and any(nid == addressed for nid, _ in turn.npc_lines):
                 pass  # answered already this turn (stepping in, before the journey): never asked the same thing twice
-            elif key not in turn.replies and not any(n.id == addressed for n in m.npcs_at(st.location)):
+            elif key not in turn.replies and addressed not in self._callable(turn):
                 turn.notes.append(f"{addressed} 不在这里")
             elif turn.primary is None and turn.earlier is None:
                 npc = m.npc(addressed)
-                await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id)),
-                                  self._keep, record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…")
+                remote = action.communication == "remote"
+                await self._reply(turn, key, npc.id, lambda: self.cast.npc(st, npc.id, self._npc_message(turn, npc.id),
+                                  **({"communication": "remote"} if remote else {})), self._keep,
+                                  record=partial(self._exchanged, npc.id, action), status=f"等待 {npc.name} 回应…",
+                                  audience=[st.investigator.id] if remote else None,
+                                  communication=action.communication)
         await self._perform_events(turn, self._keep)
         # Important information heard in a zero-minute exchange can change a person's
         # next action now, using the same allowance as this turn's elapsed-time work.
@@ -2476,9 +2546,20 @@ class Game(Encounters):
         spoken = {nid for nid, _ in turn.npc_lines}
         here = set(self._present())
         out = [{"npc": x.npc, "intention": x.does} for x in plans if not x.first and x.npc in here and x.npc not in spoken]
-        if (addressed := self._addressed(turn.action)) and addressed in here and addressed not in spoken:
+        if (addressed := self._addressed(turn.action)) and addressed in self._callable(turn) and addressed not in spoken:
             out.insert(0, {"npc": addressed, "intention": "回应调查员实际提出的问题；以最终检定和当前记录确定本次可演范围"})
         return out
+
+    def _callable(self, turn: Turn) -> list[str]:
+        """Physical voices, plus the one explicitly addressed over this action's remote channel."""
+        when = int(turn.interval["end"]) if turn.interval else self.world.now
+        out = list(self._present(at=when))
+        action = turn.action
+        if action is not None and action.communication == "remote" and (addressed := self._addressed(action)):
+            ent = self.world.entity(addressed)
+            if ent is not None and ent.kind == "npc" and ent.status not in ("死亡", "失踪"):
+                out.append(addressed)
+        return list(dict.fromkeys(out))
 
     async def _step_in(self, action: Action) -> None:
         """Those the keeper's plan has step in before the action is settled (Initiative.first: the
@@ -2556,12 +2637,14 @@ class Game(Encounters):
         it as a memory. Significant exchanges can wake its autonomous action this turn."""
         st, npc = self.state, self.m.npc(npc_id)
         inv = st.investigator
-        said = action.speech or action.visible or "（没有逐字台词）"
+        remote = action.communication == "remote"
+        private = private or remote
+        said = action.speech or (action.visible if not remote else "") or "（没有逐字台词）"
         text = f"{inv.name}和{npc.name}说话：「{said}」{npc.name}答：「{line}」"
         ident = f"talk:{st.turn}:{inv.id}:{npc_id}" + (f":{key}" if key else "")
         done = self.world.apply(Occur(id=ident, actor=inv.id, participants=[npc_id], place=st.location,
                                      text=text, visibility="private" if private else "public", reactive=not action.casual, transcript=True))  # fmt: skip
-        if done.ok:
+        if done.ok and not remote:
             self.world.observe(st.location, [inv.id] if private else self.world.observers(st.location), done.event,
                                leaving=npc_id if self.world.place(npc_id) != st.location else "")
 
@@ -2617,7 +2700,7 @@ class Game(Encounters):
 
     async def _reply(self, turn: Turn, key: str, npc_id: str, ask: Callable[[], Awaitable[str]], keep: Callable[[Turn], None],
                      *, record: Callable[[str], None] | None = None, joined: bool = False, kind: str = "npc",
-                     status: str = "", audience: list[str] | None = None) -> Said:
+                     status: str = "", audience: list[str] | None = None, communication: str = "local") -> Said:
         """One NPC reply settled, whatever asked for it (talk, _join_in, _step_in, prepare): its words,
         and what it meant to do and could not, go into `turn`, the log and the world record (`record`),
         with its receipt (Said: what it told, Dialogue.told), and are kept before anything is shown;
@@ -2637,7 +2720,7 @@ class Game(Encounters):
                 said = turn.replies[key] = Said(npc=npc_id, line="", shown=True, heard=True)
                 keep(turn)
                 return said
-            allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec)
+            allowed = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec, present=communication != "remote")
             listeners = self.world.observers(st.location, at=when)
             if audience is None and len(listeners) != len(st.investigators):
                 audience = listeners
@@ -2650,7 +2733,8 @@ class Game(Encounters):
             told = self.cast.told.pop(npc_id, [])
             said = turn.replies[key] = Said(npc=npc_id, line=line,
                                            told=self._told_clues(npc_id, [cid for cid in told if cid in allowed], present=False),
-                                           media=getattr(self.cast, "media", {}).pop(npc_id, []), audience=audience)
+                                           media=getattr(self.cast, "media", {}).pop(npc_id, []), audience=audience,
+                                           communication=communication)
             if audience is not None:
                 said.media = [{**raw, "to": audience} for raw in said.media]
             if kind == "performance":
@@ -2660,7 +2744,7 @@ class Game(Encounters):
             if joined:
                 turn.joined.append(npc_id)
             turn.notes += self._unsettled(npc_id)
-            if (gone := self.world.place(npc_id)) and gone != st.location:  # its reply's leave landed (Dialogue.leave)
+            if communication != "remote" and (gone := self.world.place(npc_id)) and gone != st.location:
                 turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
             st.npc(npc_id).met = True
             st.add("npc", line, who=npc.name, audience=said.audience)
@@ -2670,7 +2754,8 @@ class Game(Encounters):
             keep(turn)
         if not said.shown:
             await self.emit({"type": kind, "npc": npc_id, "name": npc.name, "text": said.line,
-                             "portrait": m.art.get(npc.portrait or "", ""), "audience": said.audience})
+                             "portrait": m.art.get(npc.portrait or "", "") if said.communication != "remote" else "",
+                             "audience": said.audience})
             said.shown = True
             keep(turn)
         if said.told and not said.heard:
@@ -4160,10 +4245,15 @@ class Game(Encounters):
         inv = st.investigator
         action = turn.action
         assert action is not None
-        said = f"对你说：「{action.speech}」" if action.speech else f"在你面前：{action.visible}" if action.visible else "等候你的回应"
-        parts = [f"（系统：{st.clock}，{m.location(st.location).name}。{inv.name}（{inv.occupation}）{said}"]
+        remote = action.communication == "remote"
+        said = (f"对你说：「{action.speech}」" if action.speech else
+                f"在你面前：{action.visible}" if action.visible and not remote else "等候你的回应")
+        where = self.world.name(self.world.place(npc_id)) if remote else m.location(st.location).name
+        parts = [f"（系统：{st.clock}，你在{where}。{'通过远程渠道，' if remote else ''}{inv.name}（{inv.occupation}）{said}"]
         if action.approach and action.approach != "心理学":
             parts.append(f"方式：{action.approach}。")
+        if remote and (settled := self._social_result(turn, npc_id)):
+            parts.append(f"【已结算的演出边界，不是角色听到的话】{settled}")
         parts.append(self._npc_disclosure(turn, npc_id))
         parts.append("用你的口吻回答。）")
         return "".join(parts)
@@ -4201,7 +4291,8 @@ class Game(Encounters):
     def _npc_disclosure(self, turn: Turn, npc_id: str) -> str:
         """The same disclosure context for replies, initiative and encounter speech."""
         st, m = self.state, self.m
-        available = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec)
+        remote = turn.action is not None and turn.action.npc == npc_id and turn.action.communication == "remote"
+        available = knowledge.disclosable_clues(m, st, npc_id, record=self.world.rec, present=not remote)
         mine = [c.id for c in m.clues if c.id in available]
         if mine:
             return ("已解锁，现在可以说出（含此前已授权内容）：" + "；".join(f"{cid}「{m.clue(cid).title}」" for cid in mine)
@@ -4694,8 +4785,7 @@ class Game(Encounters):
                 if row.get("done"):
                     continue
                 npc_id, instruction = row["npc"], row["instruction"]
-                at = int(turn.interval["end"]) if turn.interval else self.world.now
-                if npc_id not in self._present(at=at) or self.battling():
+                if npc_id not in self._callable(turn) or self.battling():
                     row.update(done=True, result={"call": index, "npc": npc_id,
                                                  "private": row.get("private", False), "audience": [], "told": [],
                                                  "problem": "人物不在当前现场，未执行配音或操作"})
@@ -4707,6 +4797,8 @@ class Game(Encounters):
                 private = row.get("private", False)
                 action = turn.action
                 addressed = self._addressed(action) == npc_id
+                remote = addressed and action.communication == "remote"
+                private = private or remote
                 record = (partial(self._exchanged, npc_id, action, key=f"keeper:{index}", private=private) if addressed else
                           partial(self._initiated, npc_id, key=f"keeper:{index}", private=private))
                 message = (f"（系统：{self.state.clock}，{self.m.location(self.state.location).name}。\n"
@@ -4714,12 +4806,15 @@ class Game(Encounters):
                            "按你自己的知识、动机、口吻和实际持有物回应；这份安排不使你获知未亲历的玩家意图或他人秘密。"
                            "已结算部分照实兑现，尚未决定的态度、隐瞒、提议和真实打算仍由你结合处境表达。"
                            + self._npc_disclosure(turn, npc_id) + "）")
+                if remote:
+                    message = self._npc_message(turn, npc_id)
                 said = await self._reply(
                     turn, f"keeper:{index}:{npc_id}", npc_id,
-                    lambda npc_id=npc_id, message=message, private=private:
-                        self.cast.npc(self.state, npc_id, message, **({"private": True} if private else {})),
+                    lambda npc_id=npc_id, message=message, private=private, remote=remote:
+                        self.cast.npc(self.state, npc_id, message, **({"private": True} if private else {}),
+                                      **({"communication": "remote"} if remote else {})),
                     keep, record=record, joined=not addressed, audience=[self.state.investigator.id] if private else None,
-                    status=f"等待 {self.m.npc(npc_id).name} 回应…")
+                    status=f"等待 {self.m.npc(npc_id).name} 回应…", communication="remote" if remote else "local")
                 with self._journal(row.setdefault("settling", {}), keep):
                     await self._perform_events(turn, keep)
                     await self._resolution_step("world", turn, lambda: self._world(turn))
@@ -4735,7 +4830,7 @@ class Game(Encounters):
                                              "notes": turn.notes[before["notes"]:], "world": turn.world[before["world"]:]})
                 keep(turn)
             voices = ([] if not enabled or self.battling() or self.fought_this_turn() else
-                      self._present(at=int(turn.interval["end"]) if turn.interval else None))
+                      self._callable(turn))
             extra = ""
             if intents := self._voice_intents(turn):
                 extra += ("\n【骰前考虑的参与意图，尚未发生】\n" + json.dumps(intents, ensure_ascii=False)
@@ -4910,9 +5005,11 @@ class Game(Encounters):
         interval = ((turn.interval["start"], turn.interval["end"]) if acted and turn.interval else None)
         elapsed = interval[1] - interval[0] if interval else max(0, st.minutes - start)
         participants = self._travellers(turn.action.alone) if acted else []
+        contacts = [said.npc for said in turn.replies.values()
+                    if said.communication == "remote" and said.line] if turn is not None else []
         return scene.Context(travel=self._travel, elapsed=elapsed if acted else 0,
                              missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1,
-                             rests=rests, interval=interval, participants=participants)
+                             rests=rests, interval=interval, participants=participants, contacts=contacts)
 
     def _scene_brief(self, ctx: scene.Context) -> str:
         """The scene as the record has it, for the keeper's to start from: where they are, who is
@@ -4937,6 +5034,8 @@ class Game(Encounters):
                           "同地点、一起等待或全局过了一夜，不代表其他调查员也睡过；个人时段不因并行增量为0而消失。")
         return (f"\n\n【场面】先写 scene，是这段讲完时的样子，没变的照抄。现在：调查员在 {st.location}（{w.name(st.location)}），"
                 f"在场 {here}。这一轮过了 {ctx.elapsed} 分钟，有人来去，路上的时间要在这里面。"
+                + (f"本段实际远程交谈的联系人：{'、'.join(ctx.contacts)}；他们不在here，只可用communication=remote记实际听见的交谈。"
+                   if ctx.contacts else "") +
                 "本段真正做成的剧情事实写进 scene.flags，不等下一轮裁定员补记；未完成的决定和谎言不算事实。"
                 + madness + rest_scope +
                 "物件的拿起、交出、归还或放回地点都写进 holds；已有 item 用下表实际 id，不能用合称另造物件。"

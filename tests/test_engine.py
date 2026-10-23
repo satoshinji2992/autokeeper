@@ -555,6 +555,7 @@ async def test_the_opening_weaves_in_the_investigators(module, fake):
         note="周衡的老上司钱伯也在镇上，开场时可以提一句",
     )
     game, cast, _ = improvised(module, fake, {}, [friend])
+    game.state.investigator.backstory["重要之人"] = "报社的老上司钱伯"
     await game.start()
     assert cast.asked[0][0] == "开局改编" and module.npc("old_editor").location == "office"
     assert "钱伯" in cast.reports[-1]  # the opening narration knows about it
@@ -720,6 +721,7 @@ async def test_the_opening_waits_for_its_adaptation_before_introducing_the_story
     friend = Improv(kind="开局改编", reason="把老上司写进来", npcs=[NewNPC(id="old_editor", name="老编辑钱伯", role="老上司", location="office")])
     look = Action(kind="investigate", summary="周衡四下看看")
     game, _, _ = make(module, fake, {"y": (look, Ruling(needs_roll=False))})
+    game.state.investigator.backstory["重要之人"] = "报社的老上司钱伯"
     game.cast, game.director_wait = SlowDirector({"y": (look, Ruling(needs_roll=False))}, [friend]), PLAY_WAIT
     await game.start()
     assert game.state.improv and not game.backstage

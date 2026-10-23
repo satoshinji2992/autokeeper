@@ -105,38 +105,39 @@ class Watch:
         problems, valid = getattr(cast, "_dialogue_problems", None), getattr(game, "_valid_clues", None)
         watch = self
 
-        async def watched_keeper(state, report, on_delta=None, lore="", *, check=None, fix=""):
+        async def watched_keeper(state, report, on_delta=None, lore="", *, check=None, fix="", **kwargs):
             if check is None:
                 if "【场面已经定了】" in lore:
                     watch.settled += 1
-                return await keeper(state, report, on_delta=on_delta, lore=lore)
+                return await keeper(state, report, on_delta=on_delta, lore=lore, **kwargs)
             verdicts: list[bool] = []
 
             def checked(raw: Any) -> bool:
                 verdicts.append(ok := check(raw))
                 return ok
 
-            told = await keeper(state, report, on_delta=on_delta, lore=lore, check=checked, fix=fix)
+            told = await keeper(state, report, on_delta=on_delta, lore=lore, check=checked, fix=fix, **kwargs)
             scene = getattr(told, "scene", None)
             watch.tellings.append({"retry": bool(fix), "held": verdicts[-1] if verdicts else None,
                                    "scene": scene, "shown": bool(getattr(told, "shown", False))})
             return told
 
-        async def watched_npc(state, npc_id, message, *, travel=False, private=False):
+        async def watched_npc(state, npc_id, message, *, travel=False, private=False, **kwargs):
             offered = []
             if cast.world is not None:
                 brief = world_view.npc_brief(cast.world, npc_id, query=message)
                 offered = re.findall(r"（([^（）]+)）", brief.split("【见到调查员时，你会】", 1)[1].split("\n", 1)[0]) \
                     if "【见到调查员时，你会】" in brief else []
             watch.replies.append({"npc": npc_id, "checks": [], "offered": offered, "fields": {}, "text": ""})
-            return await npc(state, npc_id, message, travel=travel, private=private)
+            return await npc(state, npc_id, message, travel=travel, private=private, **kwargs)
 
-        def watched_problems(state, npc_id, dialogue, text, destinations, *, private):
+        def watched_problems(state, npc_id, dialogue, text, destinations, *, private, **kwargs):
             reply = next((r for r in reversed(watch.replies) if r["npc"] == npc_id), None)
             if watch.snaps is not None:
                 watch.snaps.append({"state": state.model_dump(mode="json"), "npc": npc_id, "destinations": dict(destinations),
-                                    "private": private, "offered": reply["offered"] if reply else []})
-            found = problems(state, npc_id, dialogue, text, destinations, private=private)
+                                    "private": private, "remote": kwargs.get("remote", False),
+                                    "offered": reply["offered"] if reply else []})
+            found = problems(state, npc_id, dialogue, text, destinations, private=private, **kwargs)
             if reply is not None:
                 reply["checks"].append(found)  # the list itself: a problem added after the check still shows
                 reply["text"] = text

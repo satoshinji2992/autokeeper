@@ -53,8 +53,9 @@ def skill_rows(inv: Investigator) -> list[tuple[str, int, bool, bool]]:
     names = ["信用评级", "克苏鲁神话", *names]
     rows = []
     for name in names:
-        value = inv.skills.get(name, base_value(name, inv.characteristics))
-        rows.append((name, value, value > base_value(name, inv.characteristics) or (name == "克苏鲁神话" and value > 0), name in inv.marks))
+        base = base_value(name, inv.characteristics, default=1 if name in inv.skills else None)
+        value = inv.skills.get(name, base)
+        rows.append((name, value, value > base or (name == "克苏鲁神话" and value > 0), name in inv.marks))
     return rows
 
 

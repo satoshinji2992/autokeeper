@@ -134,7 +134,7 @@ async def test_private_keeper_input_uses_the_connection_seat_and_retries_idempot
     paper = private_paper(hub, tmp_path)
     calls = []
 
-    async def reply(state, who, text):
+    async def reply(state, who, text, *, context=""):
         calls.append((who, text))
         return {"text": "你可以私下提出这个问题，但移动尚未结算。", "media": [paper | {"to": ["zhouheng"]}]}
 
@@ -142,7 +142,8 @@ async def test_private_keeper_input_uses_the_connection_seat_and_retries_idempot
     before = (hub.state.turn, hub.state.minutes, copy.deepcopy(hub.state.record))
     msg = {"t": "kp_private", "text": "我想独自到东门。", "request": "letter-1", "from": "zhouheng"}
     await hub._on("b", msg)
-    assert not messages and not hub.pool and not hub.early and hub.private_requests.qsize() == 1
+    assert [msg["ev"]["type"] for _, msg in messages] == ["private_input"]
+    assert not hub.pool and not hub.early and hub.private_requests.qsize() == 1
     await hub._privates()
     assert calls == [("lin", msg["text"])] and {cid for cid, _ in messages} == {"b"}
     assert all(e.audience == ["lin"] for e in hub.state.log)
@@ -168,7 +169,7 @@ async def test_a_spectator_cannot_send_private_keeper_requests(private_hub):
 async def test_private_keeper_failures_only_reach_the_requesting_seat(private_hub, monkeypatch):
     hub, messages = private_hub
 
-    async def fail(*args):
+    async def fail(*args, **kwargs):
         raise RuntimeError("do not broadcast private question or provider details")
 
     monkeypatch.setattr(hub.cast, "private_keeper", fail, raising=False)
@@ -186,7 +187,7 @@ async def test_a_private_reply_resumes_undelivered_attachments_after_reload(
     paper = private_paper(hub, tmp_path)
     calls, snapshots = [], []
 
-    async def reply(state, who, text):
+    async def reply(state, who, text, *, context=""):
         calls.append((who, text))
         return {"text": "这是单独交给你的信。", "media": [paper]}
 

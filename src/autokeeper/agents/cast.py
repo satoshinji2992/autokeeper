@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from pydantic_core import from_json
 
@@ -51,7 +51,7 @@ from ..module.schema import NPC, Module
 from ..plugins.schema import Call as PluginCall
 from ..prefs import LINES, Prefs
 from ..rules import commands
-from ..rules.catalog import CHARACTERISTICS, base_value
+from ..rules.catalog import CHARACTERISTICS, base_value, canonical
 from ..rules.coc import DIFFICULTY_NAME, Investigator
 from ..rules.combat import stats_of
 from ..rules.dice_expr import DiceText, SanityText
@@ -61,7 +61,7 @@ from ..world import context as world_view
 from ..world import knowledge as world_knowledge
 from ..world.ops import AddFact, Enlist, Follow, SetPlan
 from ..world.record import Step
-from ..world.scene import Person, Scene
+from ..world.scene import Communication, Person, Scene
 from .aftermath import AFTERMATH, Aftermath
 from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
 from .director import context as director_context
@@ -98,7 +98,8 @@ class Action(BaseModel):
     kind: ActionKind = Field(description="行动类别")
     summary: str = Field(description="中立记录玩家声明的意图、尝试与方法；不将愿望写成已完成的动作或结果")
     target: str = Field("", description="行动对象：场景里的某个东西、物品或人")
-    npc: str = Field("", description="互动的在场 NPC 的 id，没有就留空")
+    npc: str = Field("", description="互动的 NPC id；本地须在场，远程须明确communication，没有就留空")
+    communication: Communication = Field("local", description="local：面对面；remote：通过已具备的电话、无线电等非同场渠道交流，只传实际说话，不看见另一端动作或房间。不是要求远处人物赶来")
     destination: str = Field("", description="本轮为当前行动立即前往的地点 id；只是提及、询问或打算稍后去的地点留空")
     arrival_after_success: bool = Field(False, description=(
         "本轮主行动就是避开阻拦、攀越或穿过障碍而抵达目的地，完成前仍在出发点时填 true；"
@@ -158,7 +159,7 @@ class Plan(BaseModel):
     present: list[str] = Field(default_factory=list,
                               description="已经在眼前、但位置漏记的已有 NPC id；不是让远处的人瞬移，也不写尚未发生的行动结果")
     people: list[Person] = Field(default_factory=list,
-                                description="现场即兴且后续需要记住的新人物；只登记人物，不替调查员完成交涉或取得物品，普通背景人群不必逐人写")
+                                description="即兴且后续需要记住的新人物；远程联系人填实际已有location，不放进present。普通背景接线员不必登记；不提前完成交涉")
     initiative: list[Initiative] = Field(default_factory=list,
                                          description="在场的人这一轮主动开口、帮忙或阻拦；通常只需一两人，有必要时可多人，没人参与就留空")
     beats: list[BeatChoice] = Field(default_factory=list,
@@ -301,6 +302,11 @@ class Ruling(BaseModel):
     go: SkipJsonSchema[str] = ""
     note: SkipJsonSchema[str] = ""
 
+    @field_validator("skill")
+    @classmethod
+    def _skill_name(cls, name: str) -> str:
+        return canonical(name)
+
 
 # The arbiter's word on how a push is made (Cast.repush, Game._method). No docstring: a schema's
 # descriptions are what the model reads.
@@ -311,6 +317,11 @@ class PushRuling(BaseModel):
     difficulty: Literal["", "常规", "困难", "极难"] = Field("", description="局势确实变了才换的难度；照旧留空")
     minutes: int = Field(ge=0, le=240, description="这个做法实际要花的分钟数，至少 1")
     on_push_fail: Failure = Field(default_factory=Failure, description="照这个做法孤注一掷再失败的后果")
+
+    @field_validator("skill")
+    @classmethod
+    def _skill_name(cls, name: str) -> str:
+        return canonical(name)
 
 
 class Sketch(BaseModel):
@@ -737,6 +748,7 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
    可以展开符合年代的营生、琐事、人物关系与普通应答，采用不同于模组预写的合理办法。新增的重要人物和可追查的现场变化同时写进 scene；特殊物品效果、检定结果与伤害仍须工具结算。
    已有 NPC 的对话仍由对应角色说。玩家愿意停下来就展开，明确赶路或略过时压缩过渡；不能替调查员决定行动、态度或内心感受。NPC 提出的新要求不等于玩家已经接受；完成当前声明的行动后，停在需要玩家作出新决定的位置。
 10. 行动描述是玩家的尝试，不保证已经完成。持有物、转交与取得以本轮记录为准，不为动作补出铲子、武器、钥匙或钱物；缺少条件时说明限制，保留玩家选择。
+    整批安排中的其他声明仍是待办，不提前替其他调查员执行，也不把草案里的动作写成已发生；当前报告的实际结算优先。
     保留玩家声明的行动范围及不做的事。只看外观、不进屋、暂不开门时，只写该位置实际能观察到的内容，不从场景底稿替他完成进入、解剖、翻找或接触危险。
     心理学、侦查等成功只说明系统允许观察到的内容，不读出未解锁的思想；失败的代价以本轮结算为准，已结算的敌意、伤害或物品损失照实呈现，不自行追加。
 11. 场景介绍是首次进入时的底稿。此刻的人物、时间、物品和事件优先于底稿，不让已经离开的人重现，也不把一个房间无人扩大成整栋房屋无人：同一处别的房间里的人听得见调查员喊人、敲门，照他的打算应声、出来或隔着门答话，不写成没人应。
@@ -1749,7 +1761,7 @@ class Cast:
         return ops
 
     def _dialogue_problems(self, state: GameState, npc_id: str, dialogue: Dialogue, text: str,
-                           destinations: dict[str, str], *, private: bool) -> list[str]:
+                           destinations: dict[str, str], *, private: bool, remote: bool = False) -> list[str]:
         """Check the full reply before its actions become visible or mutate the live save."""
         if self.world is None:
             return []
@@ -1757,6 +1769,8 @@ class Cast:
 
         trial = World(self.module.model_copy(deep=True), state.model_copy(deep=True))
         problems = []
+        if remote and dialogue.media:
+            problems.append("本次只有远程交谈，不能当场展示纸张图片；media 留空。")
         for deception in dialogue.deceptions:
             if not all(part.strip() for part in (deception.claim, deception.intent, deception.motive)):
                 problems.append("有意欺骗必须明确台词、真实意图与具体动机")
@@ -1837,12 +1851,15 @@ class Cast:
             failed += [] if receipt.get("ok") else receipt.get("problems") or ["当场的动作没有通过校验"]
         return failed
 
-    async def npc(self, state: GameState, npc_id: str, message: str, *, travel: bool = False, private: bool = False) -> str:
+    async def npc(self, state: GameState, npc_id: str, message: str, *, travel: bool = False, private: bool = False,
+                  communication: Communication = "local") -> str:
         npc = self.module.npc(npc_id)
+        remote = communication == "remote"
+        private = private or remote
         # Capture disclosure while the speaker is actually here. Its reply may hand things
         # over and leave; that does not unsay the words it spoke before departing.
         allowed = world_knowledge.disclosable_clues(self.module, state, npc_id,
-                                                   record=self.world.rec if self.world is not None else None)
+                                                   record=self.world.rec if self.world is not None else None, present=not remote)
         key = f"npc:{npc_id}"
         # What an earlier reply handed over and nobody took is not this one's (Game._reply takes it at once).
         self.unsettled.pop(npc_id, None)
@@ -1857,6 +1874,10 @@ class Cast:
         listeners = [state.investigator.id] if private else audience.listeners(state, state.investigator.id)
         mood += "【本次回复的收件调查员】" + "、".join(f"{state.find(who).name}（{who}）" for who in listeners)
         mood += "。text 直接展示给这些人；他们没有听见的私语或内心不写在 text 中。\n"
+        if remote:
+            mood += (f"【远程交流】你实际在{self.world.name(self.world.place(npc_id)) if self.world is not None else npc.location}。"
+                     "只听见本次发给你的实际话语；看不见另一端房间、人物动作、藏匿物或未说出的意图。"
+                     "text只写对方能听见的话，不把自己的动作当作对方已看见；不能隔空交物、同行或展示纸张图片。\n")
         equipment_names = {"carried": "携带", "worn": "穿戴", "held": "手持", "concealed": "藏匿"}
         items = (world_knowledge.visible_items(self.world, npc_id, holder=npc_id) if self.world is not None else
                  [item for item in self.module.items if item.important and world.owner(self.module, state, item.id) == npc_id])
@@ -1867,7 +1888,7 @@ class Cast:
                                                   if e.kind == "item" and not e.important and e.at == npc_id]):
             mood += f"你手边的日常物件：{'、'.join(things)}。\n"
         mood += world.context(state, npc=npc_id)
-        if refs := presentation.npc_refs(self.module, state, npc_id):
+        if not remote and (refs := presentation.npc_refs(self.module, state, npc_id)):
             mood += "\n【可当场展示的材料引用】" + "、".join(sorted(refs)) + "。只有你这次确实展示时才填media，普通对话留空。"
         knows, secrets = self._learned(npc_id)
         if knows:
@@ -1891,7 +1912,7 @@ class Cast:
             if brief := world_view.npc_brief(self.world, npc_id, query=message, covered_facts=covered):
                 mood += "\n" + brief
         mood += self.prefs.for_npc()
-        destinations = {state.location: self.module.location(state.location).name, **fog.bearings(self.module, state)}
+        destinations = {} if remote else {state.location: self.module.location(state.location).name, **fog.bearings(self.module, state)}
         mood += "\n【可提出同行的地点】" + "、".join(f"{name}（{pid}）" for pid, name in destinations.items())
         output = {"schema": _schema(TravelDialogue)} if travel else {}
         reply = await self._send(key, s, state, message, extra=mood, **output)
@@ -1899,7 +1920,7 @@ class Cast:
         text = dialogue.text.strip()
         # What it says is its own (the user's call, 2026-10-20: no string matching or cutting of a
         # model's words). It knows only its own part (_npc_system); what of it it tells is its call.
-        problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
+        problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private, remote=remote)
         intentions = {d.model_dump_json() for d in dialogue.deceptions}
         for _attempt in range(2):  # told again, knowing what did not hold; every reply is checked the same way
             if not problems:
@@ -1910,7 +1931,7 @@ class Cast:
             reply = await self._send(key, s, state, message, extra=mood + fix, **output)
             dialogue = Dialogue.model_validate(reply.data)
             text = dialogue.text.strip()
-            problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private)
+            problems = self._dialogue_problems(state, npc_id, dialogue, text, destinations, private=private, remote=remote)
             if any(d.model_dump_json() not in intentions for d in dialogue.deceptions):
                 problems.append("状态修正不能新增原回复没有声明的欺骗意图")
         else:
@@ -1950,7 +1971,7 @@ class Cast:
         self.media[npc_id] = [media.model_dump(mode="json") | {
             "to": media.to if media.to is not None else (None if not private and len(listeners) == len(state.investigators) else listeners),
             "slot": "overlay"}
-            for media in dialogue.media if media.action == "show" and media.ref in refs
+            for media in dialogue.media if not remote and media.action == "show" and media.ref in refs
             and (media.to is None or (media.to and all(who in listeners for who in media.to)))]
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
@@ -2035,6 +2056,13 @@ class Cast:
                       and bool(request.get("remaining", "").strip()))
         if settled:
             extra += "\n本段仅补叙报告中已经结算的经过，不执行当前待办请求、不添加场面操作或决定，不续办其他人的行动。"
+        elif (token := state.pending_turn.get("party_token")) is not None:
+            receipt = state.round_plan
+            done = receipt.get("done", [])
+            waiting = [step["token"] for step in receipt.get("steps", []) if step["token"] not in [token, *done]]
+            extra += (f"\n【本批实际进度】本次行动 {token}（{state.investigator.name}），按本条报告的结算叙述。"
+                      f"其他已结束编号：{'、'.join(done) or '无'}；尚未结算编号：{'、'.join(waiting) or '无'}。"
+                      "尚未结算者在此前草案中写过的行动仍是尝试，不写成已完成，不用scene替他们提前执行。")
         if continuing:
             extra += ("\n\n【本次原请求的续办】\n"
                       + json.dumps({key: request.get(key) for key in ("original", "completed", "remaining")},
@@ -2114,7 +2142,11 @@ class Cast:
             self._unsaid(s, kept)
         return told
 
-    async def private_keeper(self, state: GameState, who: str, text: str) -> dict:
+    def private_context(self, state: GameState, who: str, text: str) -> str:
+        """Freeze a correspondence prompt before its model call can wait behind other mail."""
+        return private_context(self.module, state, who, text, self.world)
+
+    async def private_keeper(self, state: GameState, who: str, text: str, *, context: str = "") -> dict:
         """One private use of the keeper model; no shared transcript or world action channel."""
         system = ("你是本局守秘人，正在回复一名玩家的私信。只向来信人回应，不把他人的私人见闻泄露给他。"
                   "这是场外沟通，不执行秘密物理行动、检定、移动、交物、伤害或线索结算；玩家提出这类要求时，"
@@ -2122,21 +2154,12 @@ class Cast:
                   "已发生的事实与个人知情范围以记录为准。后台真相不因玩家询问就全部揭露。"
                   "若先前旁白或答复与正式遭遇快照冲突，以正式状态和结算为准，澄清先前措辞有误；"
                   "不能宣称旁白优先、面板失效，也不能以私信取消压制、伤害或正式检定结果。"
+                  "资料冻结于提问时刻；只澄清当时的状态和规则，回复可能晚于玩家的选择。不能宣称替换待答选项、撤销选择或重掷骰子。"
+                  "已有叙述若有明显的物理矛盾，应承认并更正措辞，不为圆场擅自改变已经确认的门窗、物件或现场状态。"
                   "媒体只能引用索引中已经准备的资源，且只向来信人展示。\n【模组备课】\n" + _book(self.module))
         key = f"private_keeper:{who}"
         s = self._oneshot(key, "keeper", system, PrivateTelling)
-        entries = audience.log(state, who)
-        if entries and (last := entries[-1]).kind == "system" and last.who == state.find(who).name \
-                and last.audience == [who] and last.text == f"对守秘人（私信）：{text.strip()}":
-            entries = entries[:-1]  # this receipt's current message is supplied separately below
-        recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in entries[-12:])
-        where = audience.location(state, who)
-        brief = world_view.keeper_brief(self.world, at=where) if self.world else ""
-        encounter = encounter_views.settled_text(self.world, viewer=who) if self.world is not None else ""
-        prompt = (f"【来信调查员】{state.find(who).name}（{who}）\n【该玩家近期记录】\n{recent}\n"
-                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=where)}\n{brief}\n{encounter}"
-                  + presentation.personal_context(state, who)
-                  + presentation.index(self.module, state, at=where))
+        prompt = context or self.private_context(state, who, text)
         reply = await self._send(key, s, state, prompt, bind=False)
         parsed = PrivateTelling.model_validate(reply.data) if isinstance(reply.data, dict) else PrivateTelling(text=reply.text)
         return parsed.model_dump(mode="json")
@@ -2393,6 +2416,23 @@ SEEN_BY_ARBITER = ("npc", "keeper", "event", "clue", "handout")
 
 TELLING = _schema(Telling)
 CONTINUED_TELLING = _schema(ContinuedTelling)
+
+
+def private_context(m: Module, state: GameState, who: str, text: str, w: World | None) -> str:
+    """A saved prompt at the question's own time; never a second mutable game snapshot."""
+    entries = audience.log(state, who)
+    if entries and (last := entries[-1]).kind == "system" and last.who == state.find(who).name \
+            and last.audience == [who] and last.text == f"对守秘人（私信）：{text.strip()}":
+        entries = entries[:-1]
+    recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in entries[-12:])
+    where = audience.location(state, who)
+    loc = m.location(where)
+    brief = world_view.keeper_brief(w, at=where) if w is not None else ""
+    encounter = encounter_views.settled_text(w, viewer=who) if w is not None else ""
+    return (f"【提问时刻】第{state.turn}回合，{state.clock}；仅澄清此刻，不改变待答选择或后续结果。\n"
+            f"【来信调查员】{state.find(who).name}（{who}）\n【该玩家近期记录】\n{recent}\n"
+            f"【私信；不是角色行动】{text}\n【所在现场】{loc.name}({loc.id})：{loc.read_aloud}\n{brief}\n{encounter}"
+            + presentation.personal_context(state, who) + presentation.index(m, state, at=where))
 
 
 def _asides(raw: Any, state: GameState) -> list[dict]:

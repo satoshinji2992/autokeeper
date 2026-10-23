@@ -159,6 +159,11 @@ def build(game: Game, checkpointer=None):
         _bind(game)
         journal = game.state.pending_turn
         if "ruling" in journal:
+            if journal["ruling"] is not None and "turn" not in journal and not journal.get("resolution"):
+                action = Action.model_validate(journal["action"])
+                ruling = await game.checked_skill(action, Ruling.model_validate(journal["ruling"]), at=game._heading(action))
+                journal["ruling"] = ruling.model_dump(mode="json")
+                keep()
             return {"action": journal["action"], "ruling": journal["ruling"]}
         action = Action.model_validate(state["action"])
         ruling = await game.rule(action)

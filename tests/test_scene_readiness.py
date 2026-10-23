@@ -116,6 +116,7 @@ async def test_a_committed_scene_can_resume_after_its_notification_fails(module,
 async def test_opening_retry_keeps_its_committed_adaptation(module, fake):
     plan = scene()
     game, cast, _ = improvised(module, fake, {}, [plan])
+    game.state.investigator.backstory["重要之人"] = "镇上的报童"
 
     async def interrupted(event):
         if event["type"] == "improv":

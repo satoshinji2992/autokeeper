@@ -31,7 +31,7 @@ import itertools
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,8 @@ from .record import ENGINE, KEEPER
 
 if TYPE_CHECKING:
     from .store import World
+
+Communication = Literal["local", "remote"]
 
 
 class Left(BaseModel):
@@ -72,6 +74,7 @@ class Trace(BaseModel):
 class Observation(BaseModel):
     witnesses: list[str] = Field(description="本段实际在场看见或听见内容的 NPC id 或姓名；只写确实知情者")
     text: str = Field(max_length=300, description="当场获知的重要事实或承诺，一两句；含KP替NPC说过且影响后续回答的话。不是痕迹、推测或尚未完成的结果")
+    communication: Communication = Field("local", description="local：实际在场见闻；remote：本段已实际通话的联系人仅听见的交流内容，不含另一端房间、动作或私语")
 
 
 class Person(BaseModel):
@@ -79,6 +82,7 @@ class Person(BaseModel):
 
     id: str = Field(description="新人物的 id，英文小写加下划线；已有的人只写进 here")
     name: str = Field(description="姓名或稳定称呼")
+    location: str = Field("", description="实际所在的已有地点id；空为调查员本地。远程联系人写真实地点，不写进here，不创造新地点")
     role: str = Field("路人", description="身份，一句话")
     look: str = Field("", description="看得见的外貌、衣着")
     personality: str = Field("", description="性格和处事方式")
@@ -90,7 +94,7 @@ class Person(BaseModel):
 # model reads a schema's descriptions, and these are written for it.)
 class Scene(BaseModel):
     room: str = Field("", description="讲完时调查员在哪；只在同一处的房间之间走动时写，没走动留空")
-    people: list[Person] = Field(default_factory=list, description="现场新出现、后续还会参与的人；只登记必要资料，普通背景人群不用写")
+    people: list[Person] = Field(default_factory=list, description="后续还会参与的新人物；远程联系人填实际location且不写here，普通背景接线员或人群不用逐个登记")
     here: list[str] = Field(default_factory=list, description="讲完时和调查员在一起的人；没变也照抄")
     follow: list[str] = Field(default_factory=list, description="here 里跟着调查员走的人")
     left: list[Left] = Field(default_factory=list, description="这段里离开的人和去向")
@@ -121,6 +125,7 @@ class Context:
     rests: dict[str, tuple[int, int]] = field(default_factory=dict)  # actual completed rest attempts, by their own actor
     interval: tuple[int, int] | None = None  # actual host-owned action interval, independent of global clock
     participants: list[str] = field(default_factory=list)
+    contacts: list[str] = field(default_factory=list)  # host-owned NPCs whose remote reply actually landed this segment
 
     @property
     def resting(self) -> bool:
@@ -354,8 +359,13 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             if p.id in w.rec.entities:
                 problems.append(f"人物 id {p.id} 已经存在：已有的人只写进 here，不要重新登记。")
                 continue
-            raw = op(Improvise, at=room, actor=KEEPER, thread=False,
-                     plan={"kind": "展开", "reason": f"现场登记：{p.name}", "npcs": [{**p.model_dump(), "location": room}]})
+            location = (p.location if (place := w.rec.entities.get(p.location)) is not None and place.kind == "location"
+                        else None) if p.location else room
+            if location is None:
+                problems.append(f"登记{p.name}的地点 {p.location} 不存在；使用已有地点id。")
+                continue
+            raw = op(Improvise, at=location, actor=KEEPER, thread=False,
+                     plan={"kind": "展开", "reason": f"人物登记：{p.name}", "npcs": [{**p.model_dump(), "location": location}]})
             with w.at(ctx.interval[1] if ctx.interval else None):
                 result = w.apply(raw)
             if not result.ok:
@@ -365,7 +375,7 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             # later handovers/company, which may fail without making the person cease to exist.
             u = unit(f"introduce:{p.id}")
             u.steps.append(raw)
-            u.said.append(f"登记{p.name}，在{name(room)}")
+            u.said.append(f"登记{p.name}，在{name(location)}")
     here_now = w.present(src)
     there_now = w.present(room) if room != src else []
     seen = list(dict.fromkeys([*here_now, *there_now]))
@@ -389,8 +399,9 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     for n in end:
         e = rec.entities[n]
         if ctx.interval and (available := w.available_at(n)) is not None and available > ctx.interval[1]:
-            problems.append(f"{e.name}已有更晚时段的实际行动，不能在本段较早时刻重复出场；按已提交记录继续。")
-            continue
+            if not (e.at == room and w.place_at(n, ctx.interval[1]) == room):
+                problems.append(f"{e.name}已有更晚时段的实际行动，不能在本段较早时刻重复出场；按已提交记录继续。")
+                continue
         enc = st.encounter
         if (enc is not None and enc.phase != "ended" and enc.place != room
                 and any(p.id == n and p.presence == "in" for p in enc.participants)):
@@ -551,11 +562,16 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             problems.append("observations.witnesses 要写本段实际在场的 NPC id 或姓名，不能留空或写未登记的人。")
             continue
         u = unit(f"observation:{i}")
+        remote = observed.communication == "remote"
+        if remote and any(who not in ctx.contacts for who in witnesses):
+            problems.append("远程见闻只可记给本段已有实际回复的联系人，不能让其他人旁听。")
+            del units[u.key]
+            continue
         for who in witnesses:
             u.steps.append({"kind": "witness", "who": who, "lead": lead, "room": room,
-                            "at_start": who in at_start,
+                            "at_start": who in at_start, "remote": remote,
                             "why": f"{name(who)}本段起点、结尾都未实际在场，不能记下这段见闻。"})
-        u.steps.append(op(Occur, text=observed.text.strip(), participants=witnesses,
+        u.steps.append(op(Occur, text=observed.text.strip(), participants=[*witnesses, *([lead] if remote else [])],
                           place=room, visibility="private", actor=KEEPER, reactive=False))
         u.said.append(f"{'、'.join(name(n) for n in witnesses)}当场获知：{observed.text.strip()}")
 
@@ -653,7 +669,8 @@ def _run(w: World, u: Unit) -> list[str]:
             continue
         if kind == "witness":
             person = w.rec.entities.get(step["who"])
-            if person is None or person.kind != "npc" or (not step["at_start"] and (
+            if person is None or person.kind != "npc" or (step.get("remote") and person.status in ("死亡", "失踪")) or (
+                    not step.get("remote") and not step["at_start"] and (
                     person.status in ("死亡", "失踪") or w.place(person.id) != step["room"]
                     or w.st.location != step["room"])):
                 problems = [step["why"]]

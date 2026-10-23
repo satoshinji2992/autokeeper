@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, field_vali
 from pydantic.json_schema import SkipJsonSchema
 
 from .bcdice import BCDice, Level, Roll
-from .catalog import CHARACTERISTICS, NO_IMPROVEMENT, UNPUSHABLE, base_value, canonical
+from .catalog import CHARACTERISTICS, NO_IMPROVEMENT, UNPUSHABLE, UnknownSkill, base_value, canonical, known
 from .physdice import PhysDice, physical
 
 DIFFICULTY_ZH = {"常规": Level.REGULAR, "困难": Level.HARD, "极难": Level.EXTREME}
@@ -83,6 +83,17 @@ class Investigator(BaseModel):
             key = canonical(name)
             if key in named and named[key] != value:
                 raise ValueError(f"{key} 有两个不同的技能值，请在人物卡中保留一个")
+            named[key] = value
+        return named
+
+    @field_validator("characteristics")
+    @classmethod
+    def _characteristic_names(cls, values: dict[str, int]) -> dict[str, int]:
+        named: dict[str, int] = {}
+        for name, value in values.items():
+            key = canonical(name)
+            if key in named and named[key] != value:
+                raise ValueError(f"{key} 有两个不同的属性值，请在人物卡中保留一个")
             named[key] = value
         return named
 
@@ -158,6 +169,8 @@ class Investigator(BaseModel):
         for skill, v in self.skills.items():
             if skill.split("(")[0] == general and "(" not in key:
                 return v
+        if not known(key):
+            raise UnknownSkill(name)
         return base_value(key, self.characteristics)
 
     def set(self, name: str, value: int) -> str:

@@ -417,9 +417,14 @@ class Hub:
         self.desk = asyncio.Lock()  # after the end, one player's command at a time
         self.asks: asyncio.Queue = asyncio.Queue()  # retellings asked for mid-game: (client, nudge, narration), done between actions
         self.private_requests: asyncio.Queue = asyncio.Queue()  # (seat, text, request id); no public action slot
+        self.private_pending: set[str] = set()
+        self.private_lock = asyncio.Lock()
+        self.private_task: asyncio.Task | None = None
+        self.offers: dict[str, dict] = {}  # the public choice, frozen into a question's private context
         for ident, receipt in self.state.private_messages.items():
             if not receipt.get("delivered"):
                 self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
+                self.private_pending.add(ident)
         self.thinking: dict[str, asyncio.Task] = {}  # client -> the ideas being thought of for them (F5)
         self.port = 0
         self.key = secrets.token_hex(16)  # room_key(): the host's own `join` proves it sits at this machine
@@ -520,8 +525,12 @@ class Hub:
                 await self._send(cid, {"t": "error", "text": "本局已结束。"})
             else:
                 request = str(msg.get("request") or uuid.uuid4().hex)
-                self.game.receive_private_message(seat, text, request=request)
-                self.private_requests.put_nowait((seat, text, request))
+                ident, receipt = self.game.receive_private_message(seat, text, request=request, offer=self.offers.get(seat))
+                await self.game.show_private_input(seat, receipt)
+                if ident not in self.private_pending:
+                    self.private_pending.add(ident)
+                    self.private_requests.put_nowait((seat, text, request))
+                self._start_privates()
                 self.wake.set()
         elif t == "done":
             seat = self._seat_of(cid)
@@ -556,6 +565,7 @@ class Hub:
                                        else "没有在等这个回复，已忽略。"})
                 return
             self.asking.pop(seat, None)
+            self.offers.pop(seat, None)
             self.settled = [*self.settled[-31:], rid]
             answer = msg.get("choice")
             if msg.get("text") or msg.get("ask"):  # their own words, or "ask me every time" (engine/encounter respond)
@@ -1144,6 +1154,7 @@ class Hub:
     async def play(self) -> None:
         await self.started.wait()
         await self._broadcast({"t": "begin"})
+        self._start_privates()
         st = self.state
         if self.fresh and not st.log:
             try:
@@ -1338,7 +1349,7 @@ class Hub:
                 await self._house_rules()
                 await self._plays()
                 await self._asks()
-                await self._privates()
+                self._start_privates()
                 while not self.instant.empty():
                     seat, text = self.instant.get_nowait()
                     await self._safely(self._afterwards(seat, text), f"「{text[:20]}」", text)
@@ -1655,18 +1666,32 @@ class Hub:
         while not self.asks.empty():
             await self._tell_again(*self.asks.get_nowait())
 
+    def _start_privates(self) -> None:
+        """One mail consumer, independent of offers; deferred attachments reuse their receipts."""
+        if not self.asking and not self.state.pending_turn:
+            for ident, receipt in self.state.private_messages.items():
+                if not receipt.get("delivered") and "reply" in receipt and ident not in self.private_pending:
+                    self.private_pending.add(ident)
+                    self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
+        if not self.private_requests.empty() and (self.private_task is None or self.private_task.done()):
+            self.private_task = asyncio.create_task(self._privates())
+
     async def _privates(self) -> None:
-        while not self.private_requests.empty():
-            seat, text, request = self.private_requests.get_nowait()
-            self.game.emit = self._event
-            try:
-                await self.game.private_message(seat, text, request=request)
-            except Exception as exc:
-                self._failed("守秘人私信", exc)
-                if cid := self.sits.get(seat):
-                    await self._send(cid, {"t": "error", "text": "私信暂未完成，已有记录保留。"})
-            finally:
-                self._save()
+        async with self.private_lock:
+            while not self.private_requests.empty():
+                seat, text, request = self.private_requests.get_nowait()
+                ident = f"{seat}:{request}"
+                self.game.emit = self._event
+                try:
+                    await self.game.private_message(seat, text, request=request,
+                                                    defer_media=bool(self.asking or self.state.pending_turn))
+                except Exception as exc:
+                    self._failed("守秘人私信", exc)
+                    if cid := self.sits.get(seat):
+                        await self._send(cid, {"t": "error", "text": "私信暂未完成，已有记录保留。"})
+                finally:
+                    self.private_pending.discard(ident)
+                    self._save()
 
     def _media_wire(self, delivery: dict) -> dict:
         """Only a selected asset snapshot travels; host paths and real image identities do not."""
@@ -1795,6 +1820,7 @@ class Hub:
         while not queue.empty():
             queue.get_nowait()
         self.asking[seat] = rid
+        self.offers[seat] = offer
         name = next((i.name for i in self.state.investigators if i.id == seat), "")
         if offer.get("kind") in ("reaction", "redeclare", "roll"):
             for cid in list(self.clients):
@@ -1802,12 +1828,15 @@ class Hub:
                     await self._send(cid, {"t": "event", "ev": {"type": "encounter_wait", "who": name, "kind": offer.get("kind"),
                                                                  "closes_in": REACTION_WAIT if timed else None}})
         await self._send(who, {"t": "offer", "offer": offer})
+        self._start_privates()
         try:
             return await asyncio.wait_for(queue.get(), REACTION_WAIT if timed else None)
         except TimeoutError:
             await self._send(who, {"t": "offer_closed", "id": rid})  # the default stands: the window goes, nothing is sent back
             return None
         finally:
+            if self.offers.get(seat, {}).get("respond_id") == rid:
+                self.offers.pop(seat, None)
             if self.asking.get(seat) == rid:
                 self.asking.pop(seat, None)
                 self.settled = [*self.settled[-31:], rid]
@@ -1866,6 +1895,10 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            if self.private_task is not None:
+                self.private_task.cancel()
+                await asyncio.gather(self.private_task, return_exceptions=True)
+                self._save()
             # Every screen hears the room close at once (their link pumps end with "closed").
             await asyncio.gather(*(asyncio.wait_for(ws.close(code=WSCloseCode.GOING_AWAY, message=b"closed"), 2.0)
                                    for ws in list(self.clients.values())), return_exceptions=True)

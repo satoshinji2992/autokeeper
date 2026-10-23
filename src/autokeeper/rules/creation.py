@@ -8,7 +8,7 @@ player never gets a sheet the rules would refuse.
 
 from __future__ import annotations
 
-from .catalog import CHARACTERISTICS, base_value, canonical
+from .catalog import CHARACTERISTICS, base_value, canonical, known
 from .coc import Investigator
 
 ARRAY = (80, 70, 60, 60, 50, 50, 50, 40)  # quick fire: each value once
@@ -75,7 +75,7 @@ def make(
         fixes.append(f"兴趣技能点只有 {stats['智力'] * 2}（智力×2），按比例减少")
     skills: dict[str, int] = {}
     for key in {**occ, **hobby}:
-        value = base_value(key, stats) + occ.get(key, 0) + hobby.get(key, 0)
+        value = base_value(key, stats, default=1) + occ.get(key, 0) + hobby.get(key, 0)
         if value > CAP:
             fixes.append(f"{key} 建卡时最多 {CAP}")
         skills[key] = min(value, CAP)
@@ -127,7 +127,7 @@ def accept(
         value = int(value or 0)
         if value > 99:
             fixes.append(f"{key} {value} 超过 99，按 99 算")
-        if value > base_value(key, stats) or (key == "克苏鲁神话" and value > 0):
+        if value >= 0 and (value == 0 or not known(key) or value > base_value(key, stats, default=1)):
             kept[key] = min(value, 99)
     kept = dict(sorted(kept.items(), key=lambda kv: -kv[1]))
     inv = Investigator(id=inv_id, name=name, age=max(15, min(int(age or 30), 89)), characteristics=stats, luck=int(luck), skills=kept, **profile)

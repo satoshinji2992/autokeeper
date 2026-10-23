@@ -25,6 +25,8 @@ CHARACTERISTIC_ALIASES = {
     "INT": "智力",
     "POW": "意志",
     "EDU": "教育",
+    "SAN": "理智",
+    "LUCK": "幸运",
 }
 
 # Base chances; "敏捷/2" style entries are derived from characteristics.
@@ -138,6 +140,9 @@ SKILL_ALIASES = {
     "重型机械": "操作重型机械",
     "重型操作": "操作重型机械",
     "语言": "母语",
+    "巧手": "妙手",
+    "艺术和手艺": "艺术与手艺",
+    "格斗(拳击)": "格斗(斗殴)",
 }
 
 # Skills that never get an improvement tick.
@@ -152,14 +157,41 @@ def canonical(name: str) -> str:
     name = name.strip().replace("（", "(").replace("）", ")").replace(" ", "")
     if name in CHARACTERISTIC_ALIASES or name.upper() in CHARACTERISTIC_ALIASES:  # .st lines write str60 as often as STR60
         return CHARACTERISTIC_ALIASES.get(name) or CHARACTERISTIC_ALIASES[name.upper()]
+    if "(" in name and name.endswith(")"):
+        general, detail = name.split("(", 1)
+        family = SKILL_ALIASES.get(general, general)
+        name = f"{family if '(' not in family else general}({detail}"
     return SKILL_ALIASES.get(name) or SKILL_ALIASES.get(name.upper(), name)
 
 
-def base_value(skill: str, characteristics: dict[str, int]) -> int:
-    """Base chance of a skill nobody has invested in."""
+class UnknownSkill(ValueError):
+    """A requested roll has neither a catalog skill nor a value on this character's sheet."""
+
+    def __init__(self, name: str):
+        super().__init__(f"未识别的技能或属性“{name}”：须使用人物卡或规则中的名称，不能按 1% 代替")
+
+
+def known(name: str) -> bool:
+    """Whether the rules supply a base; explicit custom skills are resolved by their own sheets."""
+    key = canonical(name)
+    if key in CHARACTERISTICS or key in ("理智", "幸运") or key in SKILL_BASE:
+        return True
+    general, opening, detail = key.partition("(")
+    return bool(opening and detail.rstrip(")") and key.endswith(")")
+                and general in ("艺术与手艺", "科学", "生存", "驾驶", "外语", "母语"))
+
+
+def base_value(skill: str, characteristics: dict[str, int], *, default: int | None = None) -> int:
+    """A catalog base; a caller creating an explicit custom skill may supply its own default."""
     skill = canonical(skill)
+    if not known(skill):
+        if default is None:
+            raise UnknownSkill(skill)
+        return default
     key = skill if skill in SKILL_BASE else skill.split("(")[0]
-    base = SKILL_BASE.get(key, 1)
+    if key not in SKILL_BASE:
+        raise UnknownSkill(skill)
+    base = SKILL_BASE[key]
     if isinstance(base, int):
         return base
     stat, _, div = base.partition("/")

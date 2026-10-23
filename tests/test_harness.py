@@ -320,7 +320,7 @@ def test_strict_schema_for_codex_closes_every_object():
     assert strict["additionalProperties"] is False and set(strict["required"]) == set(strict["properties"])
     assert "default" not in json.dumps(strict)
     full = {k: "" for k in strict["properties"]} | {
-        "kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False,
+        "kind": "investigate", "summary": "翻抽屉", "travel": "direct", "casual": False, "communication": "local",
         "companions": [], "alone": False, "before": [], "precautions": [], "arrival_after_success": False,
     }
     assert not hm.problems(full, Action.model_json_schema())  # what strict mode yields still passes our check
