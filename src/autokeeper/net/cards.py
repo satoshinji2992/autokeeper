@@ -208,13 +208,15 @@ class RemoteBuilder:
 
     async def _call(self, op: str, **fields: Any) -> dict:
         if not self._begun:
+            if await self.link.send({"t": "card", "op": "begin"}) is False:
+                raise CardError("连接已断开，角色创建请求未发送。")
             self._begun = True
-            await self.link.send({"t": "card", "op": "begin"})
         self._n += 1
         n, due = self._n, asyncio.get_running_loop().create_future()
         self._due[n] = due
         try:
-            await self.link.send({"t": "card", "op": op, "n": n, **fields})
+            if await self.link.send({"t": "card", "op": op, "n": n, **fields}) is False:
+                raise CardError("连接已断开，角色创建请求未发送。")
             reply = await due
         except asyncio.CancelledError:  # Esc on the card screen: the host stops too
             await asyncio.shield(self.link.send({"t": "card", "op": "cancel"}))

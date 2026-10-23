@@ -243,9 +243,14 @@ class LobbyScreen(Screen):
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed" and self.remote is not None:
             self.remote.reply(msg)
+        elif t == "unsent":
+            self.pending_seat = None
+            if self.remote is not None:
+                self.remote.reply({"t": "closed"})
+            self.app.notify("消息未发送，连接已断开。请重新加入房间。", severity="error", timeout=10)
         if t == "closed" and not self.gone:
             self.gone = True
-            self.app.notify("房主关闭了房间", severity="error")
+            self.app.notify(msg.get("text") or "与房主的连接已断开。", severity="error")
             self.query_one("#lobby-hint", Static).update(Text("房间已关闭，按 Esc 离开。", style="bold"))
             self._buttons()
         if (t in ("begin", "turn", "event") and self.chosen is not None and self.pending_seat is None

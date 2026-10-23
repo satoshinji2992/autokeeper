@@ -226,6 +226,8 @@ class NetGameScreen(GameScreen):
         self.inbox: list[dict[str, Any]] = []  # messages that arrive before the screen is up
         self.ready = False
         self.ideas_due: asyncio.Future | None = None  # the Hub's answer to F5
+        self._pending_module: Module | None = None
+        self._pending_state: GameState | None = None
         # The player's own notes (tui/notes.py): this machine's, never sent anywhere. A browser's seat runs
         # on the host's machine (net/web.py): its notes live as long as its page, and nothing is written.
         self.guest = bool(os.environ.get("AUTOKEEPER_GUEST"))
@@ -372,7 +374,18 @@ class NetGameScreen(GameScreen):
         self.run_worker(self.link.send({"t": "react", "react": react}), group="react")
 
     def _sync(self, view: dict[str, Any]) -> None:
-        self.state = GameState.model_validate(view)
+        updated = GameState.model_validate(view)
+        if self._pending_module and any(location.id == updated.location for location in self._pending_module.locations):
+            self.m, self._pending_module = self._pending_module, None
+        if not any(location.id == updated.location for location in self.m.locations):
+            self._pending_state = updated
+            return  # keep a coherent screen until this location's module envelope arrives
+        previous = self.state
+        self.state, self._pending_state = updated, None
+        if (previous.location, previous.view) != (self.state.location, self.state.view):
+            self.view = (self.state.location, self.state.view)
+        if any(location.id == self.state.location for location in self.m.locations):
+            self._scene(self.state.location)
         self._panels()
         self._battle_synced()
 
@@ -431,7 +444,15 @@ class NetGameScreen(GameScreen):
             m.art, m.art_colors, m.pictures = self.m.art, self.m.art_colors, self.m.pictures
             m.art.update(msg.get("art", {}))
             m.art_colors.update(msg.get("colors", {}))
-            self.m = m
+            matching = self._pending_state or self.state
+            if not any(location.id == matching.location for location in m.locations):
+                self._pending_module = m
+            else:
+                self.m, self._pending_module = m, None
+            if self._pending_state and any(location.id == self._pending_state.location for location in self.m.locations):
+                self._sync(self._pending_state.model_dump(mode="json"))
+            elif any(location.id == self.state.location for location in self.m.locations):
+                self._scene(self.state.location)
         elif t == "sync":
             self._sync(msg["state"])
         elif t == "pool":
@@ -514,7 +535,26 @@ class NetGameScreen(GameScreen):
                 self.story.pause_keeper()
             self.app.notify(msg["text"], severity="warning")
         elif t == "closed":
-            self.app.notify("与房主的连接已断开。", severity="error", timeout=10)
+            self.pool_open, self.my_turn = False, False
+            self.engine_label = "局域网联机 · 连接已断开"
+            self._topbar()
+            self.app.notify(msg.get("text") or "与房主的连接已断开。", severity="error", timeout=10)
+        elif t == "unsent":
+            original = msg.get("message", {})
+            body, kind = str(original.get("text") or ""), original.get("t")
+            retry = body if kind in ("act", "speak") else ""
+            if kind == "kp_private":
+                retry = "/sc " + body
+            elif kind == "say":
+                retry = "// " + body
+            elif kind == "speak" and original.get("to"):
+                retry = f"/w {original['to'][0]} {body}"
+            if retry:
+                command = self.query_one("#command", Input)
+                if not command.value:
+                    command.value = retry
+                self.story.add("system", Text(f"【未发送】{retry}"))
+            self.app.notify("消息未发送，连接已断开。请重新加入房间；待答选择会在入座后恢复。", severity="error", timeout=10)
 
     async def handle(self, ev: dict) -> None:
         t = ev.get("type")

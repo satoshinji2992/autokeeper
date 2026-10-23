@@ -297,7 +297,7 @@ async def test_abandoned_partial_turn_is_closed_in_same_save_as_its_journal(tran
 
 
 @pytest.mark.parametrize("route", ["round", "command", "ai"])
-async def test_raw_declaration_echo_reaches_only_its_own_seat(transport_hub, monkeypatch, route):
+async def test_ordinary_declaration_echo_is_public_on_every_submission_route(transport_hub, monkeypatch, route):
     from autokeeper.agents.cast import Proposal
 
     hub = transport_hub
@@ -319,13 +319,14 @@ async def test_raw_declaration_echo_reaches_only_its_own_seat(transport_hub, mon
         await watcher.send_json({"t": "hello", "name": "旁观"})
         await until(watcher, lambda msg: msg["t"] == "welcome")
         if route == "round":
+            await hub._on(hub.sits["zhouheng"], {"t": "act", "text": secret})
             await hub._settle_round([("zhouheng", secret)])
         elif route == "command":
             await hub._afterwards("zhouheng", secret)
         else:
             await hub._ai_turn(hub.state.find("zhouheng"))
         await hub._broadcast({"t": "notice", "text": "boundary"})
-        for ws, mine in ((a, True), (b, False), (watcher, False)):
+        for ws in (a, b, watcher):
             echoes = []
             while True:
                 message = await asyncio.wait_for(ws.receive_json(), 2.0)
@@ -333,9 +334,8 @@ async def test_raw_declaration_echo_reaches_only_its_own_seat(transport_hub, mon
                     break
                 if message["t"] == "event" and message["ev"]["type"] == "said":
                     echoes.append(message["ev"])
-            assert bool(echoes) == mine
-            if mine:
-                assert echoes[0]["text"] == secret and echoes[0]["audience"] == ["zhouheng"]
+            assert len(echoes) == 1
+            assert echoes[0]["text"] == secret and "audience" not in echoes[0]
         await a.close()
         await b.close()
         await watcher.close()

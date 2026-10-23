@@ -70,6 +70,7 @@ the room does not provide separate accounts or permanently bind a seat to a huma
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -104,7 +105,7 @@ from .room import BLANKS
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())  # recorded if logging is set up, never printed over the game
 
-SYNC_AFTER = {"move", "time", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
+SYNC_AFTER = {"move", "time", "sky", "people", "npc", "improv", "performance", "sanity", "damage", "flag", "sheet", "luck", "handout", "ending", "plugin_effect", "progress", "plugin_panel"}
 SEATS = ("玩家", "AI", "不上场")
 PER_PLAYER = 2  # actions one player may put in a round
 # A round is a moment in real time (the user, 2026-10-21: 「时间同一轮应该是个现实 7s 的窗口」): from the
@@ -450,7 +451,7 @@ class Hub:
         self.plays: asyncio.Queue = asyncio.Queue()  # answers to plugins' questions and /commands, done between actions
         self.game.plugins.away = lambda seat: self.sits.get(seat) is None  # an empty seat's questions take the default
         self.sent: dict[str, str] = {}  # art key -> the picture the screens were sent for it
-        self.sent_to: dict[str, dict[str, str]] = {}  # only images this connection actually received
+        self.sent_to: dict[str, dict[str, str]] = {}  # image key -> digest of bytes actually delivered to this connection
         from .takeover import Takeovers
 
         self.takeovers = Takeovers(self, disconnect_ai)
@@ -1089,20 +1090,23 @@ class Hub:
         real = self.faces.get(key, key)
         shown = self._face(real)
         path = self.m.pictures.get(real)
+        data = media.pack(path) if path else ""
+        if not data:
+            return
+        fingerprint = hashlib.sha256(data.encode("ascii")).hexdigest()
         pending = [cid for cid in self.clients if (only is None or cid == only)
                    and (revealed or real in self._visible_art_keys(self._seat_of(cid)))
                    and perception.picture_visible(self.game, self._seat_of(cid), real)
-                   and self.sent_to.get(cid, {}).get(shown) != path]
-        if not path or not pending:
+                   and self.sent_to.get(cid, {}).get(shown) != fingerprint]
+        if not pending:
             return
-        if data := media.pack(path):
-            self.sent[shown] = path
-            art = self.m.art.get(real, "")
-            for cid in pending:
-                await self._send(cid, {"t": "event", "ev": {"type": "art", "key": shown, "art": art, "status": "ready",
-                                                            "mask": self.m.art_colors.get(real) or artkit.auto_mask(art),
-                                                            "picture_data": data}})
-                self.sent_to.setdefault(cid, {})[shown] = path
+        self.sent[shown] = path
+        art = self.m.art.get(real, "")
+        for cid in pending:
+            await self._send(cid, {"t": "event", "ev": {"type": "art", "key": shown, "art": art, "status": "ready",
+                                                        "mask": self.m.art_colors.get(real) or artkit.auto_mask(art),
+                                                        "picture_data": data}})
+            self.sent_to.setdefault(cid, {})[shown] = fingerprint
 
     async def _personal_faces(self, cid: str) -> None:
         for p in perception.appearances(self.state, self._seat_of(cid)).values():
@@ -1159,8 +1163,8 @@ class Hub:
                 if image_event.get("type") == "art" and isinstance(image_event.get("picture_data"), str):
                     delivered.append((image_event["key"], image_event["picture_data"]))
                 for key, data in delivered:
-                    if data and (path := self.m.pictures.get(self.faces.get(key, key))):
-                        self.sent_to.setdefault(cid, {})[key] = path
+                    if isinstance(data, str) and data:
+                        self.sent_to.setdefault(cid, {})[key] = hashlib.sha256(data.encode("ascii")).hexdigest()
             except ConnectionError:  # gone mid-send; the connection handler cleans up
                 pass
 
@@ -1900,9 +1904,7 @@ class Hub:
         async with self.desk:  # each command runs as its own investigator
             st = self.state
             st.active = next(i for i, inv in enumerate(st.investigators) if inv.id == seat)
-            await self._event({"type": "said", "who": st.investigator.name,
-                               "player": self.names.get(self.sits.get(seat) or "", ""), "text": text,
-                               "audience": [seat]})
+            await self._table_input(seat, text)
             await self._run(text, seat, ai=False)
 
     # -- telling again, and after the end ------------------------------------------------------
