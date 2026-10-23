@@ -241,6 +241,91 @@ async def _until(pilot, test, rounds: int = 100) -> None:
     raise AssertionError("the screen never got there")
 
 
+@pytest.mark.parametrize("entry", ["list", "hotkey"])
+@pytest.mark.parametrize("choice", ["import", "figure", None])
+async def test_the_seat_card_creation_menu_closes_its_picker_without_awaiting_it(entry, choice, skills_dir):
+    from textual.widgets import OptionList
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.menu import GameMenu
+    from autokeeper.tui.screens.seatcard import SeatCardScreen
+
+    results = []
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        picker = SeatCardScreen(Module.load(EXAMPLE), [], set())
+        await app.push_screen(picker, results.append)
+        if entry == "list":
+            choices = picker.query_one("#choices", OptionList)
+            choices.highlighted = choices.get_option_index("create")
+            await pilot.press("enter")
+        else:
+            await pilot.press("a")
+        await _until(pilot, lambda: isinstance(app.screen, GameMenu) and app.screen.is_mounted)
+        if choice is None:
+            await pilot.press("escape")
+            await _until(pilot, lambda: app.screen is picker)
+            assert results == []
+            await pilot.press("escape")
+            await _until(pilot, lambda: results == [None])
+        else:
+            choices = app.screen.query_one(OptionList)
+            choices.highlighted = choices.get_option_index(choice)
+            await pilot.press("enter")
+            await _until(pilot, lambda: results == [(choice, "")])
+        assert not any(isinstance(screen, (GameMenu, SeatCardScreen)) for screen in app.screen_stack)
+
+
+@pytest.mark.parametrize("guest", [False, True])
+async def test_a_player_imports_a_card_through_the_lobby_list(cards, monkeypatch, skills_dir, fake, guest):  # noqa: F811
+    from textual.widgets import Input, OptionList
+
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.menu import GameMenu
+    from autokeeper.tui.screens.card import CardScreen
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.seatcard import SeatCardScreen
+
+    from .test_card import ST, CardModel
+
+    if guest:
+        monkeypatch.setenv("AUTOKEEPER_GUEST", "1")
+    else:
+        monkeypatch.delenv("AUTOKEEPER_GUEST", raising=False)
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub.card_builder = lambda: Builder(cards, hub.m)
+    task = await opened(hub)
+    app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
+    try:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await _until(pilot, lambda: isinstance(app.screen, LobbyScreen) and app.screen.welcome is not None)
+            lobby = app.screen
+            await pilot.press("enter")
+            await _until(pilot, lambda: lobby.chosen is not None)
+            await pilot.press("r")
+            await _until(pilot, lambda: isinstance(app.screen, SeatCardScreen) and app.screen.is_mounted)
+            choices = app.screen.query_one("#choices", OptionList)
+            choices.highlighted = choices.get_option_index("create")
+            await pilot.press("enter")
+            await _until(pilot, lambda: isinstance(app.screen, GameMenu) and app.screen.is_mounted)
+            await pilot.press("down", "enter")
+            await _until(pilot, lambda: isinstance(app.screen, CardScreen) and app.screen.is_mounted)
+            screen = app.screen
+            assert screen.start == "import" and screen.step == "source"
+            screen.query_one(Input).value = ST
+            await pilot.press("enter")
+            await _until(pilot, lambda: screen.step == "card")
+            assert screen.builder.card.san == 35 and screen.builder.card.skills["侦查"] == 60
+            await pilot.press("enter")
+            await _until(pilot, lambda: app.screen is lobby and lobby.chosen == hub.state.investigators[0].id
+                         and hub.state.investigators[0].skills.get("侦查") == 60 and not hub.builders)
+            assert hub.state.investigators[0].san == 35 and hub.state.investigators[0].hp == 9
+            assert lobby.remote is None and CardModel.calls == []
+            assert bool(roster.saved()) is not guest
+    finally:
+        await closed(task)
+
+
 async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypatch, tmp_path, skills_dir, fake):  # noqa: F811
     from textual.widgets import Input, OptionList, Static
 

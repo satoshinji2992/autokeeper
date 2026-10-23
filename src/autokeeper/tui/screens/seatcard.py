@@ -113,7 +113,12 @@ class SeatCardScreen(Screen[tuple[str, object] | None]):
     def action_create(self) -> None:
         items = [("figure", "AI 协助车卡"), ("import", "导入已有的卡")]
         self.app.push_screen(GameMenu(items, "figure", title="新建角色", hint="Enter 选择 · Esc 返回"),
-                             lambda how: self.dismiss((how, "")) if how else None)  # fmt: skip
+                             self._creation_selected)  # fmt: skip
+
+    def _creation_selected(self, how: str | None) -> None:
+        if how:
+            # Textual runs this callback on the picker; returning dismiss() would await its own removal.
+            self.dismiss((how, ""))
 
     def action_back(self) -> None:
         self.dismiss(None)
