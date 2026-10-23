@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from autokeeper.agents.cast import Action, BeforeTravel, Initiative, Ruling
+from autokeeper.agents.cast import Action, BeforeTravel, Initiative, KeeperCall, Ruling
 from autokeeper.engine.game import TURN_RECORD, Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Event, Module
@@ -192,12 +192,16 @@ async def test_what_one_tells_before_the_journey_is_in_the_notebook(fake):
 
 async def test_one_who_joins_in_tells_a_clue_and_walks_off_and_the_clue_stays(fake):
     """Told, then gone in the same reply (Dialogue.leave): the clue was said here, whoever is here now."""
-    game, _, _ = table(fake, leaves={"warden": "tower"})
+    game, cast, _ = table(fake, leaves={"warden": "tower"})
     game.world.apply(O.Move(id="down", actor="director", entity="warden", to="square"))
     game.state.location = "square"
+    game.state.pending_turn = {"input": "看看告示"}
     game.initiative = [Initiative(npc="warden", does="说起日记里写的，然后回钟楼去")]
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="向调查员说起你愿意透露的日记内容，随后回钟楼。"))
     turn = await game.resolve(Action(kind="investigate", summary="周衡看看告示", target="告示栏"), Ruling(needs_roll=False))
     await game.talk(turn)
+    assert game.world.place("warden") == "square" and not turn.joined
+    await game.narrate(turn)
     assert game.world.place("warden") == "tower" and turn.joined == ["warden"]
     assert turn.clues == ["c_diary"] and game.state.clues == ["c_diary"]
     assert any(n.startswith("老守钟人说完就走了") for n in turn.notes)
@@ -257,9 +261,13 @@ async def test_what_ones_manner_gives_away_is_found_even_when_they_are_spoken_to
     game.m.npc("warden").gates["c_diary"] = Check(skill="心理学", difficulty="常规")
     fake.queue(5)
     ask = ASK.model_copy(update={"approach": "心理学"})
+    game.state.pending_turn = {"input": ask.speech}
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="调查员已从你的举止看出异样；按自己的处境回应其提问。"))
     turn = await game.resolve(ask, Ruling(needs_roll=True, skill="心理学", clues_on_success=["c_diary"]))
     assert turn.clues == ["c_diary"] and game.state.npc("warden").unlocked == ["c_diary"]
     await game.talk(turn)
+    assert not cast.npc_calls and kinds(events) == ["clue"]
+    await game.narrate(turn)
     assert [n for n, _ in cast.npc_calls] == ["warden"] and kinds(events) == ["clue", "npc"]
     await game.close()
 

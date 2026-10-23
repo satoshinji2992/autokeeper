@@ -344,8 +344,9 @@ async def test_a_failed_media_delivery_resumes_the_same_keeper_receipt_without_a
             raise OSError("display disconnected")
 
     game = Game(module, state, cast, Rules(dice=fake), emit=interrupted)
-    SCRIPT.append({"scene": {"here": cast.present(state.location)}, "text": "灯光映出一面墙。",
-                   "media": [{"ref": "image:resume_image", "slot": "scene"}]})
+    SCRIPT.append({"kind": "tell", "telling": {
+        "scene": {"here": cast.present(state.location)}, "text": "灯光映出一面墙。",
+        "media": [{"ref": "image:resume_image", "slot": "scene"}]}})
     turn = Turn(action=Action(kind="daily", summary="我看向房间"))
     try:
         with pytest.raises(OSError):

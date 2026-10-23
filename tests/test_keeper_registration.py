@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autokeeper import config
-from autokeeper.agents.cast import Action, Cast, Initiative, Plan, Ruling
+from autokeeper.agents.cast import Action, Cast, Initiative, KeeperCall, Plan, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Item, Module
@@ -80,11 +80,16 @@ async def test_new_witnesses_can_join_in_this_turn_and_no_third_person_is_silent
     plan = Plan(action=LOOK, people=people,
                 initiative=[Initiative(npc=p.id, does="主动扶起地上的行李") for p in people])
     cast = PlanCast({"看看": (LOOK, Ruling(needs_roll=False))}, {"看看": plan})
+    cast.voice_script = [KeeperCall(npc=p.id, instruction="同伴的行李掉在地上，你按现场情形帮忙收拾。") for p in people]
     game = make(module, fake, cast)
+    game.state.pending_turn = {"input": "看看"}
     action = await game.parse("看看")
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
+    assert not cast.npc_calls
+    await game.narrate(turn)
     assert {n for n, _ in cast.npc_calls} == {p.id for p in people}
+    assert not cast.voice_script
     assert all(game.world.entity(p.id).at == "tower" for p in people)
     assert not game.world.rec.agents.keys() & {p.id for p in people}  # no resident NPC agents
     await game.close()

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from autokeeper import config, paths
-from autokeeper.agents.cast import PLAN_SYSTEM, Action, Cast, Initiative, Plan, Ruling
+from autokeeper.agents.cast import PLAN_SYSTEM, Action, Cast, Initiative, KeeperCall, Plan, Ruling
 from autokeeper.engine.game import Game
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
@@ -136,18 +136,23 @@ async def test_one_the_keeper_has_join_in_speaks_in_its_own_voice_and_the_turn_i
         events.append(ev)
 
     game.emit = emit
+    game.state.pending_turn = {"input": "我看看齿轮"}
+    instruction = "调查员正在查看齿轮。咳嗽一声，提醒他别乱碰齿轮。"
+    cast.voice_script.append(KeeperCall(npc="warden", instruction=instruction))
     action = await game.parse("我看看齿轮")
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
+    assert cast.npc_calls == []  # the pre-roll idea does not dispatch the voice
+    told = await game.narrate(turn)
     [(npc, message)] = cast.npc_calls
-    assert npc == "warden" and "这一轮你主动：咳嗽一声，提醒他别乱碰齿轮" in message and "不是你知道的事" in message
+    assert npc == "warden" and instruction in message and "按你自己的知识、动机、口吻" in message
     assert turn.npc_lines == [("warden", "warden 的回答")] and turn.joined == ["warden"]
     assert any(e["type"] == "npc" and e["npc"] == "warden" for e in events)
-    assert game.state.log[-1].kind == "npc" and game.state.npc("warden").met
-    talk = next((e for e in game.world.rec.events if e.op == "talk:1:warden:initiative"), None)
+    assert any(e.kind == "npc" for e in game.state.log) and game.state.npc("warden").met
+    talk = next((e for e in game.world.rec.events if e.op == "talk:1:warden:keeper:0"), None)
     assert talk is not None and talk.visibility == "public" and "warden 的回答" in talk.text
-    told = await game.narrate(turn)  # what the player did is still told, the line is not repeated
     assert told and "其中老守钟人是这一轮自己主动开口的" in cast.reports[-1] and "【对话已展示】" in cast.reports[-1]
+    assert not cast.voice_script and len(cast.reports) == 2
     await game.close()
 
 
@@ -168,6 +173,19 @@ async def test_the_one_addressed_is_not_asked_twice_and_one_gone_is_not_asked(mo
     await game.close()
 
 
+async def test_the_keeper_can_leave_a_pre_roll_participation_idea_unplayed(module, fake):
+    game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
+    game.state.pending_turn = {"input": "我看看齿轮"}
+    action = await game.parse("我看看齿轮")
+    turn = await game.resolve(action, await game.rule(action))
+    await game.talk(turn)
+    assert not cast.npc_calls
+    await game.narrate(turn)  # this scripted keeper deliberately chooses no voice tool
+    assert "拦住他" in cast.lores[0]
+    assert not cast.npc_calls and not turn.joined and not turn.npc_lines
+    await game.close()
+
+
 async def test_a_resumed_turn_takes_who_joins_in_from_its_journal(module, fake):
     game, cast = joining(module, fake, [])
     game.state.pending_turn = {"input": "我看看齿轮"}
@@ -177,7 +195,11 @@ async def test_a_resumed_turn_takes_who_joins_in_from_its_journal(module, fake):
     game.initiative = []  # a new process
     turn = await game.resolve(LOOK, Ruling(needs_roll=False, minutes=1, reason=""))
     await game.talk(turn)
+    assert not cast.npc_calls
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="调查员还在看齿轮，出声提醒他别碰。"))
+    await game.narrate(turn)
     assert [n for n, _ in cast.npc_calls] == ["warden"]
+    assert "拦住他" in cast.lores[0]  # the resumed plan reaches the keeper before its choice
     await game.close()
 
 
@@ -196,7 +218,12 @@ async def test_one_who_joined_in_is_not_woken_backstage_in_the_same_turn(module,
     action = await game.parse("我看看齿轮")
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)  # the world lives after the exchange (world_later off)
+    assert not turn.joined and decided == []
+    game.state.pending_turn = {"input": "我看看齿轮"}
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="调查员正在看齿轮，按现场情况提醒他别碰。"))
+    await game.narrate(turn)
     assert turn.joined == ["warden"] and decided == [] and game._directed == {"warden"}
+    game.state.pending_turn.clear()
     cast.plans["我看看齿轮"] = Plan(action=LOOK)
     await game.parse("我看看齿轮")  # a valid keeper plan also owns the people who stay quiet
     assert game._directed == set()
@@ -333,10 +360,20 @@ async def test_who_joins_in_belongs_to_the_turn_that_planned_it(module, fake):
     assert cast.npc_calls == []
     await game.close()
     game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
+    game.state.pending_turn = {"input": "我看看齿轮"}
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="调查员看齿轮时，提醒他别碰。"))
     action = await game.parse("我看看齿轮")
-    for _ in range(2):  # played once; a later turn with no plan of its own does not play it again
+    for _ in range(2):  # replaying this completed telling does not dispatch its voice again
         turn = await game.resolve(action, Ruling(needs_roll=False, minutes=1, reason=""))
         await game.talk(turn)
+        await game.narrate(turn)
+    game.state.pending_turn.clear()
+    cast.plans["我看看齿轮"] = Plan(action=LOOK)
+    action = await game.parse("我看看齿轮")
+    turn = await game.resolve(action, Ruling(needs_roll=False, minutes=1, reason=""))
+    await game.talk(turn)
+    assert game._voice_intents(turn) == []
+    await game.narrate(turn)
     assert [n for n, _ in cast.npc_calls] == ["warden"]
     await game.close()
 

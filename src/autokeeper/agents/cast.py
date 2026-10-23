@@ -381,6 +381,45 @@ class ContinuedTelling(Telling):
         "必填，不因叙述结束就把尚未执行的意图当作完成"))
 
 
+class KeeperCall(BaseModel):
+    npc: str = Field(min_length=1, description="本轮可请求配音的 NPC id")
+    instruction: str = Field(min_length=1, description="此人可感知的情境与本次演出边界，不含他未知的私有依据")
+    private: bool = Field(False, description="本次只向当前行动调查员私下回应；普通现场对白为 false")
+
+    @model_validator(mode="after")
+    def nonempty(self) -> KeeperCall:
+        self.npc, self.instruction = self.npc.strip(), self.instruction.strip()
+        if not self.npc or not self.instruction:
+            raise ValueError("配音请求必须有 NPC id 和具体演出指令")
+        return self
+
+
+class HostedReply(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    kind: Literal["npc", "tell"] = Field(description="先写：npc 请求一次配音；tell 在实际回应已结算后交最终叙述")
+    npc: str = Field("", description="kind=npc 时填可配音名单中的 id；kind=tell 时留空")
+    instruction: str = Field("", description="kind=npc 时填写本次演出指令；kind=tell 时留空")
+    private: bool = Field(False, description="kind=npc 时仅向当前行动调查员私下回应；kind=tell 时为 false")
+    telling: Telling | None = Field(None, description="kind=tell 时填写最终场面与叙述；kind=npc 时必须为 null")
+
+    @model_validator(mode="after")
+    def exclusive(self) -> HostedReply:
+        self.npc, self.instruction = self.npc.strip(), self.instruction.strip()
+        if self.kind == "npc":
+            if self.telling is not None:
+                raise ValueError("请求配音时不能同时提交叙述或续办，须等实际回应")
+            KeeperCall(npc=self.npc, instruction=self.instruction, private=self.private)
+        elif self.telling is None or self.npc or self.instruction or self.private:
+            raise ValueError("最终叙述必须填写 telling，npc、instruction 留空，private 为 false")
+        return self
+
+
+class ContinuedHostedReply(HostedReply):
+    telling: ContinuedTelling | None = Field(None, description=(
+        "kind=tell 时根据实际回应填写最终场面、叙述和 continuation；kind=npc 时必须为 null"))
+
+
 @dataclass
 class Narration:
     """A telling as it came back: the words, the scene as written (None when none could be read),
@@ -396,6 +435,8 @@ class Narration:
     perceptions: list[dict] = field(default_factory=list)
     continuation: Continuation | None = None
     continuation_error: str = ""
+    call: KeeperCall | None = None
+    call_error: str = ""
 
 
 class IdeaFailure(BaseModel):
@@ -411,8 +452,9 @@ class _Telling:
     words back until the reply is complete. `shown` tells the harness whether the player saw any
     of it (harness/models._shown): until then a failed call may still be tried again."""
 
-    def __init__(self, check: Callable[[Any], bool], on_delta: Any):
+    def __init__(self, check: Callable[[Any], bool], on_delta: Any, *, hosted: bool = False):
         self.check, self.on_delta = check, on_delta
+        self.hosted = hosted
         self.raw, self.sent = "", 0
         self.verdict: bool | None = None  # None: no scene read yet
         self.first = True
@@ -427,6 +469,15 @@ class _Telling:
             data = from_json(self.raw[start:], allow_partial="trailing-strings")
         except ValueError:
             return
+        if not isinstance(data, dict):
+            return
+        if self.hosted:
+            keys = list(data)
+            if (data.get("kind") != "tell" or "telling" not in data
+                    or keys.index("kind") > keys.index("telling") or data.get("npc") or data.get("instruction")
+                    or data.get("private")):
+                return
+            data = data["telling"]
         if not isinstance(data, dict) or "text" not in data:
             return
         if self.verdict is None:  # the words have begun: whatever came before them is complete
@@ -1928,14 +1979,17 @@ class Cast:
         return self._open("keeper", "keeper", system)
 
     async def keeper(self, state: GameState, report: str, on_delta: OnDelta = None, lore: str = "", *,
-                     check: Callable[[Any], bool] | None = None, fix: str = "") -> str | Narration:
+                     check: Callable[[Any], bool] | None = None, fix: str = "",
+                     voices: list[str] | None = None) -> str | Narration:
         """The settled turn told. `lore`, the scene's backstage (world/context.keeper_brief), and the
         narrative preferences ride along this call only, without rewriting the cached prefix.
 
         With `check`, the telling comes with its scene (Telling): the scene is checked as soon as it
         is written and the words stream once it holds (_Telling); `fix` says what did not hold last
         time. It comes back as a Narration. The keeper's memory keeps the words alone, and only of a
-        telling whose scene held or that the player already saw: one turned back is not remembered."""
+        telling whose scene held or that the player already saw: one turned back is not remembered.
+        With `voices`, the same session may instead request one NPC reply. That structured request
+        stays in its history; only a final telling can stream or decide the request's continuation."""
         s = self._keeper(state)
         if question := kp_question(report):
             if found := await self._rules(state, question):  # a /kp question about the rules: the book's words
@@ -1954,15 +2008,53 @@ class Cast:
                       "next=null，pending 保留尚未办理的意图与条件。两者都空只表示原请求确已办完，不能用来略过后半段。"
                       "next.lookup 必须为空；续办不会再次检索，尚需补查资料时用 pending 保留意图，不声称已经查过。"
                       "不预演下一段的结果，不替其他真人答应或行动。已单独展示的台词不必重复；本段无需额外叙述时 text 可为空。")
-        if check is None and not continuing:
+        if check is None and not continuing and voices is None:
             reply = await self._send("keeper", s, state, report, extra=extra, on_delta=on_delta)
             return reply.text.strip()
         scene_check = check or (lambda _: True)
-        reader = _Telling(scene_check, on_delta)
+        # Read a hosted scene as it arrives, but expose its words only after the call/telling
+        # boundary and completed scene hold. An invalid continuation preserves that completed scene.
+        reader = _Telling(scene_check, on_delta if voices is None else None, hosted=voices is not None)
         extra += presentation.index(self.module, state)
+        schema = CONTINUED_TELLING if continuing else TELLING
+        if voices is not None:
+            hosted_model = ContinuedHostedReply if continuing else HostedReply
+            schema = _schema(hosted_model)
+            schema["properties"]["npc"]["enum"] = ["", *dict.fromkeys(npc for npc in voices if npc)]
+            extra += ("\n\n【本轮现场主持与配音】\n"
+                      "骰前 initiative 是尚待考虑的参与意图；依据最终主检定、当前实际记录和已经发生的回复，"
+                      "决定谁此刻参与、怎样参与，或不再参与。已结算范围优先，未决部分仍保留角色自身选择。"
+                      "需要人物回应时 kind=npc，npc 只用本次名单：" + "、".join(voices or ["无"]) + "。"
+                      "instruction 只交给该人的可感知情境和本次演出边界，私有裁定依据留在主持侧。"
+                      "只向当前行动调查员私下回应时 private=true，普通现场对白为 false；不指定其他或远处收件人。"
+                      "请求配音时 telling=null，等实际台词、操作与未落实原因回来后再决定场面和续办。"
+                      "可以直接收束时 kind=tell，npc、instruction 留空，private=false，telling 填最终回复；"
+                      "只用已有场面能力，不请求检索或其他世界工具。先写 kind，再写其余字段。")
         reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader,
-                                 schema=CONTINUED_TELLING if continuing else TELLING)
+                                 schema=schema)
         data = reply.data if isinstance(reply.data, dict) else {}
+        if voices is not None:
+            try:
+                try:
+                    hosted = hosted_model.model_validate(data)
+                except ValidationError:
+                    if not continuing:
+                        raise
+                    # A bad next action does not undo a valid completed scene. Keep the
+                    # same continuation_error path as ordinary ContinuedTelling, while the
+                    # base envelope still rejects mixed calls and invalid telling fields.
+                    hosted = HostedReply.model_validate(data)
+                    if hosted.kind != "tell":
+                        raise
+                if hosted.kind == "npc":
+                    if hosted.npc not in voices:
+                        raise ValueError("配音对象不在本轮可用名单中")
+                    return Narration(text="", call=KeeperCall(npc=hosted.npc, instruction=hosted.instruction,
+                                                              private=hosted.private))
+            except (ValidationError, ValueError) as exc:
+                self._unsaid(s, report)
+                return Narration(text="", call_error=f"主持回复尚未通过校验：{exc}")
+            data = data["telling"]
         text, scene = data.get("text"), data.get("scene")
         if not isinstance(text, str):  # no telling could be read: plain words stand for it, with no scene
             text, scene = _words(reply.text), None
@@ -1976,6 +2068,9 @@ class Cast:
             except ValidationError:
                 told.continuation_error = "原请求的续办安排尚未通过校验，已执行结果保留，不能视为完成"
         holds = told.scene is None or scene_check(told.scene)  # the final word, on the scene as it came back
+        if voices is not None and holds and on_delta is not None and told.text:
+            await on_delta(told.text)
+            told.shown = True
         if told.shown or holds:
             self._kept(s, report, told.text)
         else:

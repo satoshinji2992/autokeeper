@@ -38,7 +38,7 @@ def assert_success(game: Game, turn: Turn) -> None:
     text = game._social_result(turn, "warden")
     assert "本次交涉成功" in text and "本次交涉未达成" not in text
     report = game._report(turn)
-    assert text in game._npc_message(turn, "warden") and text in report
+    assert text not in game._npc_message(turn, "warden") and text in report
     if turn.ruling and turn.ruling.why:
         assert "【主行动的公开裁定目标】" + turn.ruling.why in report
         assert "【该目标的最终主检定】" + turn.checks[turn.primary].describe() in report

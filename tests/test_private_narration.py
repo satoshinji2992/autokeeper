@@ -59,8 +59,9 @@ async def test_recovery_after_private_registration_does_not_repeat_the_call_or_l
             raise RuntimeError("投递前断开")
 
     game.checkpoint = checkpoint
-    SCRIPT.append({"scene": {}, "text": "钟声停了。",
-                   "asides": [{"to": [st.investigator.id], "text": "你独自听见最后一声。"}]})
+    SCRIPT.append({"kind": "tell", "telling": {
+        "scene": {}, "text": "钟声停了。",
+        "asides": [{"to": [st.investigator.id], "text": "你独自听见最后一声。"}]}})
     with pytest.raises(RuntimeError, match="投递前断开"):
         await game.narrate(turn)
     assert len(SEEN) == 1

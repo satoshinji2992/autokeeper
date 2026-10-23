@@ -77,7 +77,7 @@ async def test_runtime_preparer_returns_material_for_hosting_without_moving_the_
         await cast.close()
 
 
-async def test_runtime_npc_keeps_unresolved_agency_and_receives_the_exact_settled_request(fake):
+async def test_runtime_npc_keeps_unresolved_agency_and_keeper_directs_the_settled_request(fake):
     game, cast = table(fake)
     clue = game.m.clue("c_diary")
     assert game.world.apply(O.Learn(fact=f"clue:{clue.id}", who=["preacher"], actor="engine")).ok
@@ -100,16 +100,27 @@ async def test_runtime_npc_keeps_unresolved_agency_and_receives_the_exact_settle
         assert game.m.truth.strip() not in first["system"]
 
         fake.queue(1)
-        settled = Turn(action=action, ruling=Ruling(needs_roll=True, skill="说服", why="说出你读到的日记内容"),
+        private_reason = "幕后依据仅供主持：其他人物尚不知道调查员读过那封信。"
+        settled = Turn(action=action, ruling=Ruling(needs_roll=True, skill="说服", why="说出你读到的日记内容",
+                                                  reason=private_reason),
                        primary=0, checks=[game.rules.check(game.state.investigator, "说服")])
-        SCRIPT.append({"text": clue.text, "told": [clue.id]})
-        await game._reply(settled, "settled", "preacher",
-                          lambda: cast.npc(game.state, "preacher", game._npc_message(settled, "preacher")), lambda _: None)
+        instruction = "说出你读到的日记内容，这项让步已经成立；其他打算仍按你自己的处境决定。"
+        game.state.pending_turn = {"input": action.speech}
+        SCRIPT.extend([
+            {"kind": "npc", "npc": "preacher", "instruction": instruction},
+            {"text": clue.text, "told": [clue.id]},
+            {"kind": "tell", "telling": {"scene": {}, "text": ""}},
+        ])
+        assert await game.narrate(settled) == ""
         assert game.state.clues == [clue.id] and game.state.handouts == []
         assert game.world.agent("preacher").goals == goals
-        assert len(SEEN) == 2 and game.state.usage["npc"]["calls"] == 2
-        prompt = SEEN[-1]["messages"][-1]["content"]
-        assert "本次检定范围：说出你读到的日记内容" in prompt and "兑现已经成功的这项让步" in prompt
+        assert len(SEEN) == 4 and game.state.usage["npc"]["calls"] == game.state.usage["keeper"]["calls"] == 2
+        keeper_prompt = SEEN[1]["messages"][-1]["content"]
+        assert "本次检定范围：说出你读到的日记内容" in keeper_prompt and "兑现已经成功的这项让步" in keeper_prompt
+        assert private_reason in keeper_prompt
+        npc_prompt = SEEN[2]["messages"][-1]["content"]
+        assert instruction in npc_prompt and private_reason not in npc_prompt
+        assert clue.text in SEEN[-1]["messages"][-1]["content"] and not SCRIPT
     finally:
         await game.close()
         await cast.close()

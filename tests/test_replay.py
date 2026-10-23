@@ -18,6 +18,12 @@ played), each investigator reply in the Proposal shape (text and push), the one 
 made said as a way of pushing, and the arbiter's review of that push (agent "repush": it can
 be done, in one minute, the failure as ruled before). The minute is the only change to the
 final state (890 → 891); the dice and every other reply are as recorded.
+
+Migrated offline on 2026-10-23 to the current keeper protocol: each intent is wrapped
+as the same action in a Plan, the opening uses Telling, and on-scene narration uses
+HostedReply. Turn 3's checked conversation now has a keeper voice request before the
+original NPC reply and an empty final telling after it. NPC wording, player actions,
+all three dice and the complete final fingerprint are unchanged; no model was called.
 """
 
 from __future__ import annotations

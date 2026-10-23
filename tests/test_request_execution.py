@@ -10,10 +10,10 @@ from langgraph.types import Command
 
 from autokeeper import config
 from autokeeper.agents.cast import (
-    CONTINUED_TELLING,
     Action,
     Cast,
     Continuation,
+    ContinuedHostedReply,
     Narration,
     PartyPlan,
     PartyStep,
@@ -114,10 +114,10 @@ async def test_real_cast_talk_then_wait_executes_the_tail_from_the_same_keeper_r
          "remaining": "原地等到20:35。"},
         {"needs_roll": False, "minutes": 5},
         {"text": "借给你。", "items": [{"name": "借用钥匙", "to": who}]},
-        {"scene": {}, "text": "钥匙已经交到你手里。", "continuation": {
-            "next": {"action": {"kind": "wait", "summary": "周衡原地等到20:35"}}}},
+        {"kind": "tell", "telling": {"scene": {}, "text": "钥匙已经交到你手里。", "continuation": {
+            "next": {"action": {"kind": "wait", "summary": "周衡原地等到20:35"}}}}},
         {"needs_roll": False, "minutes": 10, "rest": True},
-        {"scene": {}, "text": "钟面走到了20:35。"},
+        {"kind": "tell", "telling": {"scene": {}, "text": "钟面走到了20:35。"}},
     ])
     try:
         value = {"input": original}
@@ -146,7 +146,8 @@ async def test_real_cast_talk_then_wait_executes_the_tail_from_the_same_keeper_r
         assert st.investigator.inventory.count("借用钥匙") == 1
         assert st.usage["plan"]["calls"] == 1 and st.usage["npc"]["calls"] == 1
         assert st.usage["keeper"]["calls"] == 2 and st.usage["arbiter"]["calls"] == 2
-        assert sum(row["schema"] == CONTINUED_TELLING for row in SEEN) == 1
+        continued = [row["schema"] for row in SEEN if row["schema"].get("title") == ContinuedHostedReply.__name__]
+        assert len(continued) == 1 and "telling" in continued[0]["properties"]
         assert len([e for e in st.log if e.kind == "npc"]) == 1
         assert len([e for e in events if e["type"] == "npc"]) == (0 if recover_after_gift else 1)
     finally:
@@ -337,8 +338,8 @@ async def test_real_keeper_lookup_in_next_plan_is_not_silently_dropped_or_execut
     SCRIPT.extend([
         {"action": {"kind": "use", "summary": "周衡收起工具"}, "remaining": "查明关门时间后等一会儿。"},
         {"needs_roll": False, "minutes": 1},
-        {"scene": {}, "text": "工具已经收好。", "continuation": {"next": {
-            "lookup": "今晚钟楼何时关门", "action": {"kind": "wait", "summary": "周衡等一会儿"}}}},
+        {"kind": "tell", "telling": {"scene": {}, "text": "工具已经收好。", "continuation": {"next": {
+            "lookup": "今晚钟楼何时关门", "action": {"kind": "wait", "summary": "周衡等一会儿"}}}}},
     ])
     try:
         _, offers = await run(graph, game, {"input": original})

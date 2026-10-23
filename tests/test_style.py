@@ -112,9 +112,11 @@ class Canned(hm.Model):
     as an NPC, it answers with a habit every time."""
 
     told: list[str] = []
+    schemas: list[str] = []
 
     async def _call(self, messages, *, schema, images, on_delta):
         Canned.told.append(messages[-1]["content"])
+        Canned.schemas.append(schema.get("title", "") if schema else "")
         text = "雾还没散，你仿佛听见了什么。"
         if schema and schema.get("title") == "Telling":  # the keeper: the scene as it was, then the words
             return Reply(text="", data={"scene": {}, "text": text})
@@ -139,8 +141,10 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
     reports = []
     for _ in range(2):
         Canned.told = []
+        Canned.schemas = []
         s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
+        assert Canned.schemas == ["Telling"] * 10  # fixed plans and voices never ask the live model
     assert s["narrations"] == 10 and s["hits"]["仿佛"] == 10 and s["usage"]["calls"] == 10
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
     told = "\n".join(reports[0])
@@ -149,6 +153,9 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
     assert "一个佝偻的身影翻过矮墙" in told and "雷区" not in told
     saved = json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))
     assert saved["told"] == ["雾还没散，你仿佛听见了什么。"] * 10 and len(saved["reports"]) == 10
+    fixed = {beat.action.npc: beat.npc for beat in style.SCRIPTS["zhuishuren"]() if beat.npc}
+    book = style.module_of("zhuishuren")
+    assert saved["said"] == {book.npc(npc).name: [line] for npc, line in fixed.items()}
     assert saved["examples"] == style.examples(skills.body("keeper-craft"))  # the passages the keeper was shown
 
 

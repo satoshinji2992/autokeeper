@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from autokeeper.agents.cast import Action, Initiative, Narration, Ruling
+from autokeeper.agents.cast import Action, Initiative, KeeperCall, Narration, Ruling
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Module
@@ -21,14 +21,19 @@ class FakeCast:
         self.unsettled: dict[str, list[str]] = {}
         self.npc_calls: list[str] = []
         self.reports: list[str] = []
+        self.voice_script: list[KeeperCall] = []
 
     async def npc(self, state: GameState, npc_id: str, message: str) -> str:
         self.npc_calls.append(npc_id)
         return "您先在这儿坐，茶水在桌上。"
 
     async def keeper(self, state: GameState, report: str, on_delta=None, lore: str = "", *,
-                     check: Callable[[Any], bool] | None = None, fix: str = "") -> Narration:
+                     check: Callable[[Any], bool] | None = None, fix: str = "", voices: list[str] | None = None) -> Narration:
         self.reports.append(report)
+        if voices is not None and self.voice_script:
+            call = self.voice_script.pop(0)
+            assert call.npc in voices
+            return Narration(text="", call=call)
         scene = {"things": [{"name": "整理好的采访笔记", "holder": state.investigator.id}],
                  "now": "采访笔记已整理妥当，调查员坐在窗旁。"}
         assert check is not None and check(scene)
@@ -88,13 +93,15 @@ async def test_other_work_or_rest_continues_after_the_npcs_answer(fake, kind, su
 async def test_an_npcs_initiative_does_not_replace_the_players_action(fake):
     game, cast, events = made(fake)
     game.initiative = [Initiative(npc="warden", does="告诉周衡茶水放在桌上")]
+    game.state.pending_turn = {"input": "我整理一下采访笔记。"}
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="对方正在整理笔记，告诉他茶水放在桌上。"))
     action = Action(kind="investigate", summary="周衡整理采访笔记", target="采访笔记")
     game.state.add("player", "我整理一下采访笔记。", who=game.state.investigator.name)
     turn = Turn(action=action, ruling=Ruling(needs_roll=False))
     await game.talk(turn)
-    assert turn.joined == ["warden"]
+    assert not turn.joined and not cast.npc_calls
     await game.narrate(turn)
-    assert cast.npc_calls == ["warden"] and len(cast.reports) == 1
+    assert turn.joined == ["warden"] and cast.npc_calls == ["warden"] and len(cast.reports) == 2
     assert "整理好的采访笔记" in game.state.investigator.inventory
     assert not any(event["type"] == "dialogue_end" for event in events)
     await game.close()

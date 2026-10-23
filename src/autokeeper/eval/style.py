@@ -11,8 +11,8 @@ list, and code does the counting:
               props carried over from the narration before
     voice     NPC lines: how many open with an action in brackets, and how many repeat an
               action or catchphrase from that NPC's two lines before
-    run       a scripted game with a live keeper: the same actions, rulings, NPC lines and
-              dice every time, the director off, so two runs differ only in the telling
+    run       a scripted game with a live narrator: plans, rulings, NPC replies and dice are
+              experiment inputs; this measures prose, not the keeper's NPC direction
     talk      the same questions to three NPCs, the NPCs live and nothing else
 
 Read from any file: a trace written with AUTOKEEPER_TRACE=full, an autoplay log, a save,
@@ -36,7 +36,7 @@ import warnings
 from collections import Counter, deque
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from functools import lru_cache
+from functools import lru_cache, partial
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -45,7 +45,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from .. import config, paths, skills
-from ..agents.cast import Action, Cast, Ruling
+from ..agents.cast import Action, Cast, Plan, Ruling
 from ..agents.guard import Habits, habits, opens_with_action, repeats
 from ..engine import graph as turn_graph
 from ..engine.game import Game, Turn
@@ -307,6 +307,7 @@ class Beat:
     ruling: Ruling
     dice: tuple[int, ...] = ()  # what the checks come up as, in order
     npc: str = ""  # the NPC's answer, when the action talks to one
+    told: tuple[str, ...] = ()  # explicit disclosures in that fixed answer, never extracted from its prose
 
 
 def _beats_zhuishuren() -> list[Beat]:
@@ -338,7 +339,8 @@ def _beats_zhuishuren() -> list[Beat]:
              Action(kind="talk", summary=f"{who}和守墓人套近乎，打听道格拉斯常坐哪块墓碑", npc="jefferson",
                     speech="听说道格拉斯先生以前常来这儿读书，他一般坐在哪儿？", approach="魅惑", echo=f"{who}给守墓人递过去一支烟"),
              Ruling(needs_roll=True, skill="魅惑", clues_on_success=["c_jefferson_tomb"], minutes=15), dice=(9,),
-             npc="（铁铲往地上一杵）金博尔？好人。常陪我扯天气、扯政治，还讲外国的事。（朝东边一指）喏，那块矮碑，他老坐那儿看书。"),
+             npc="（铁铲往地上一杵）金博尔？好人。常陪我扯天气、扯政治，还讲外国的事。（朝东边一指）喏，那块矮碑，他老坐那儿看书。",
+             told=("c_jefferson_tomb",)),
         Beat("我蹲下查看那块墓碑周围的地面",
              Action(kind="investigate", summary=f"{who}蹲下查看那块低矮墓碑周围的地面", target="墓碑周围的地面", echo=f"{who}在矮碑旁蹲下身"),
              Ruling(needs_roll=True, skill="侦查", clues_on_success=["c_footprints"], minutes=15), dice=(83,)),
@@ -391,7 +393,11 @@ class Loaded:
 
 
 class Scripted(Cast):
-    """The real keeper; whatever decides what happens comes from the script."""
+    """A live prose-only keeper; plans, outcomes and NPC replies are fixed experimental inputs.
+
+    This deliberately does not measure production NPC direction or the HostedReply tool loop.
+    Its narrator retains the normal Telling contract rather than wrapping model output.
+    """
 
     def __init__(self, cfg: config.Config, module: Module, beats: list[Beat]):
         super().__init__(cfg, module)
@@ -404,11 +410,15 @@ class Scripted(Cast):
         self.now = self.beats[text]
         return self.now.action
 
+    async def plan(self, state, text: str) -> Plan:
+        return Plan(action=await self.intent(state, text))
+
     async def arbiter(self, state, action: Action, at: str | None = None) -> Ruling:
         assert self.now is not None
         return self.now.ruling
 
     async def npc(self, state, npc_id: str, message: str) -> str:
+        self.told[npc_id] = list(self.now.told) if self.now else []
         return self.now.npc if self.now and self.now.npc else "……"
 
     async def keeper(self, state, report: str, on_delta=None, lore: str = "", *, check=None, fix: str = ""):
@@ -420,6 +430,28 @@ class Scripted(Cast):
         return ""
 
 
+class _ScriptedGame(Game):
+    """Settle the script's post-check reply before measuring any remaining narration.
+
+    Production delegates checked dialogue to the keeper's tool loop. Here the speaker and
+    answer are fixed inputs, so the ordinary reply receipt is settled after resolve and before
+    talk's event/world tail. An already complete dialogue still needs no narrated repetition.
+    """
+
+    async def talk(self, turn: Turn) -> None:
+        cast = self.cast
+        if (isinstance(cast, Scripted) and cast.now is not None and cast.now.npc
+                and (turn.primary is not None or turn.earlier is not None)
+                and (npc := self._addressed(turn.action)) and npc in self._present()
+                and not turn.declared and not self.fought_this_turn()):
+            key = f"talk:{npc}"
+            if key in turn.replies or not any(nid == npc for nid, _ in turn.npc_lines):
+                await self._reply(turn, key, npc,
+                                  lambda: cast.npc(self.state, npc, self._npc_message(turn, npc)), self._keep,
+                                  record=partial(self._exchanged, npc, turn.action))
+        await super().talk(turn)
+
+
 def _write(out: Path | None, summary: dict[str, Any]) -> None:
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -427,7 +459,7 @@ def _write(out: Path | None, summary: dict[str, Any]) -> None:
 
 
 async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> dict[str, Any]:
-    """Play the module's script once with the configured keeper and measure its narration."""
+    """Measure narration with fixed plans, checks and NPC replies, not production direction."""
     m = Module.load(module_dir)
     if m.id not in SCRIPTS:
         raise ValueError(f"没有《{m.title}》的脚本（有：{'、'.join(SCRIPTS)}）")
@@ -442,7 +474,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         if ev.get("type") == "keeper_end":
             told.append(ev["text"])
 
-    game = Game(m, state, cast, Rules(dice=Loaded(d for b in beats for d in b.dice)), emit=emit)  # type: ignore[arg-type]
+    game = _ScriptedGame(m, state, cast, Rules(dice=Loaded(d for b in beats for d in b.dice)), emit=emit)  # type: ignore[arg-type]
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": state.slot}}
     try:
@@ -466,6 +498,10 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         await cast.close()
     keeper = cfg.role("keeper")
     shown = examples(system)
+    said: dict[str, list[str]] = {}
+    for entry in state.log:
+        if entry.kind == "npc":
+            said.setdefault(entry.who, []).append(entry.text)
     summary = {
         "module": m.id,
         "label": label,
@@ -477,6 +513,7 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         "usage": state.usage.get("keeper", {}),
         "spent": round(sum(u.get("cost_usd", 0.0) for u in state.usage.values()), 6),  # with any summaries
         "told": told,
+        "said": said,
         "reports": cast.reports,
         "examples": shown,
     }

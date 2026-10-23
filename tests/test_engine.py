@@ -12,7 +12,7 @@ from PIL import Image
 
 from autokeeper import paths
 from autokeeper.agents import guard
-from autokeeper.agents.cast import Action, Failure, PushRuling, Ruling, Sketch
+from autokeeper.agents.cast import Action, Failure, KeeperCall, Narration, PushRuling, Ruling, Sketch
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
 from autokeeper.engine.state import parse_time
@@ -31,6 +31,7 @@ class FakeCast:
         self.performances: list[str] = []
         self.reports: list[str] = []
         self.lores: list[str] = []  # the backstage each telling was given
+        self.voice_script: list[KeeperCall] = []  # explicit keeper choices, never inferred from initiative or a roll
         self.told: dict[str, list[str]] = {}  # as Cast.told: what an NPC's last reply told
         self.unsettled: dict[str, list[str]] = {}  # as Cast.unsettled: what it could not do
 
@@ -55,9 +56,13 @@ class FakeCast:
         self.performances.append(deeds)
         return "诸位，钟声会替我们作证……"
 
-    async def keeper(self, state, report, on_delta=None, lore=""):
+    async def keeper(self, state, report, on_delta=None, lore="", *, voices=None):
         self.reports.append(report)
         self.lores.append(lore)
+        if voices is not None and self.voice_script:
+            call = self.voice_script.pop(0)
+            assert call.npc in voices
+            return Narration(text="", call=call)
         if on_delta:
             await on_delta("叙事")
         return "叙事"
@@ -272,6 +277,7 @@ async def test_social_check_unlocks_npc_clue_handout_and_flag(module, fake):
     talk = Action(kind="talk", summary="周衡劝守钟人说实话", npc="warden", speech="钟里到底有什么？", approach="说服")
     ruling = Ruling(needs_roll=True, skill="说服", difficulty="困难", clues_on_success=["c_diary"], set_flags=["bell_stopped"], minutes=15)
     game, cast, _ = make(module, fake, {"ask": (talk, ruling)}, location="tower")
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="本次交涉成功，按已解锁范围回答钟里的事。"))
     fake.queue(8).queue_totals(4)  # 说服 40 → extreme success; the flag ends the game, 理智 +1D6 = 4
     app = turn_graph.build(game, InMemorySaver())
     events, interrupts = await run_turn(app, "ask", {"configurable": {"thread_id": "t1"}})
@@ -280,6 +286,7 @@ async def test_social_check_unlocks_npc_clue_handout_and_flag(module, fake):
     assert st.clues == ["c_diary"] and st.handouts == ["h_diary"] and "bell_stopped" in st.flags
     assert st.npc("warden").unlocked == ["c_diary"]
     assert cast.npc_calls and "已解锁" in cast.npc_calls[0][1]
+    assert "本次交涉成功" in cast.reports[0] and not cast.voice_script
     assert st.ending == "stopped"
     kinds = [e["type"] for e in events]
     assert kinds.index("dice") < kinds.index("clue") < kinds.index("npc") < kinds.index("keeper_end")
@@ -292,6 +299,7 @@ async def test_what_a_person_knows_reaches_the_notebook_when_they_say_it(module,
     ruling = Ruling(needs_roll=True, skill="说服", difficulty="困难", clues_on_success=["c_diary"], minutes=15)
     again = Action(kind="talk", summary="周衡追问守钟人", npc="warden", speech="您接着说，那本日记呢？")
     game, cast, _ = make(module, fake, {"ask": (talk, ruling), "more": (again, Ruling(needs_roll=False))}, location="tower")
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="交涉已经成功，回应对方关于钟里东西的提问。"))
     cast.told = {}
     fake.queue(8)  # 说服 40 → success
     app = turn_graph.build(game, InMemorySaver())
@@ -907,7 +915,7 @@ SCARE = Action(kind="talk", summary="周衡逼近一步，威吓守钟人说出�
 
 
 @pytest.mark.parametrize("rolled,passed", [(8, True), (99, False)])
-async def test_one_scoped_social_settlement_reaches_both_npc_and_keeper(module, fake, rolled, passed):
+async def test_scoped_social_settlement_reaches_only_the_keeper_before_it_selects_a_voice(module, fake, rolled, passed):
     from autokeeper.agents.cast import Initiative
 
     game, *_ = make(module, fake, {}, location="tower")
@@ -918,12 +926,13 @@ async def test_one_scoped_social_settlement_reaches_both_npc_and_keeper(module, 
     assert turn.checks[0].passed == passed
     settled = game._social_result(turn, "warden")
     message = game._npc_message(turn, "warden")
-    assert settled and settled in message and settled in game._report(turn)
-    assert public_scope in message and ruling.reason not in message
+    assert settled and settled in game._report(turn)
+    assert "【本次交涉已结算范围】" + settled in game._report(turn)
+    assert settled not in message and public_scope not in message and ruling.reason not in message
     assert "不涉及交出日记" in settled
     initiative = Initiative(npc="warden", does="回答同行的请求")
-    assert settled in game._joining(turn, initiative)
-    assert settled not in game._joining(turn, initiative, before=True)
+    first = game._joining(turn, initiative)
+    assert settled not in first and public_scope not in first and ruling.reason not in first
     assert game._social_result(turn, "preacher") == ""  # not another character's concession
     await game.close()
 
@@ -953,7 +962,8 @@ async def test_social_performance_follows_the_settled_skill_when_it_differs_from
     settled = game._social_result(restored, "warden")
     assert turn.checks[0].passed == passed and "检定：说服" in settled
     assert ("本次交涉成功" if passed else "本次交涉未达成") in settled
-    assert settled in game._npc_message(restored, "warden") and settled in game._report(restored)
+    assert settled not in game._npc_message(restored, "warden") and settled in game._report(restored)
+    assert ruling.why not in game._npc_message(restored, "warden")
     assert game._social_result(restored, "preacher") == ""
     await game.close()
 
@@ -967,7 +977,8 @@ async def test_a_reused_social_result_keeps_its_actual_skill_after_the_requested
     earlier = CheckRecord(turn=1, who=game.state.investigator.id, at="tower", skill="说服", npc="warden",
                           text="说服失败", passed=False)
     turn = Turn(action=action, ruling=ruling, earlier=earlier)
-    assert "同样的说服刚才已经试过" in game._npc_message(turn, "warden")
+    assert "同样的说服刚才已经试过" not in game._npc_message(turn, "warden")
+    assert "同样的说服刚才已经试过" in game._report(turn)
     assert "本次请求仍未达成" in game._report(turn)
     assert not fake.values
     await game.close()
@@ -990,7 +1001,8 @@ async def test_a_push_with_a_revised_skill_uses_the_actual_second_throw_for_perf
         assert not message  # an observed judgment is not another concession to the NPC
     else:
         assert f"检定：{final_skill}" in message and "本次交涉成功" in message
-        assert "未达成" not in message and message in game._npc_message(restored, "warden")
+        assert "未达成" not in message and message in game._report(restored)
+        assert message not in game._npc_message(restored, "warden")
     assert not fake.values
     await game.close()
 
@@ -1005,7 +1017,7 @@ async def test_a_failed_push_does_not_instruct_the_npc_to_cancel_already_ruled_c
     settled = game._social_result(turn, "warden")
     assert "已结算的后果仍成立" in settled
     assert "不因此增加敌意" not in settled and ruling.on_push_fail.text not in settled
-    assert settled in game._npc_message(turn, "warden") and settled in game._report(turn)
+    assert settled not in game._npc_message(turn, "warden") and settled in game._report(turn)
     await game.close()
 
 
@@ -1025,7 +1037,8 @@ async def test_luck_updates_the_same_throw_for_npc_keeper_and_saved_turn(module,
     assert restored.checks[0].value == 18 and restored.checks[0].luck_spent == 3
     assert game.state.investigator.luck == before - 3 and not fake.values
     assert game.state.checks[-1].passed
-    assert "本次交涉成功" in game._npc_message(restored, "warden")
+    assert "本次交涉成功" not in game._npc_message(restored, "warden")
+    assert ruling.why not in game._npc_message(restored, "warden")
     assert "检定：恐吓 失败" not in game._npc_message(restored, "warden")
     report = game._report(restored)
     assert "常规成功 ✓（花 3 点幸运）" in report and "本次交涉成功" in report
@@ -1034,8 +1047,10 @@ async def test_luck_updates_the_same_throw_for_npc_keeper_and_saved_turn(module,
 
 async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fake):
     """`.ra 恐吓` is the investigator's attempt, read in context and ruled like any action:
-    rolled once, and the NPC answers the outcome without a second telling."""
+    rolled once; the keeper reads its actual result before choosing the NPC's reply."""
     game, cast, _ = make(module, fake, {".ra 恐吓": (SCARE, Ruling(needs_roll=True, skill="恐吓", minutes=5))}, location="tower")
+    instruction = "对方的恐吓没有奏效，本次交涉未达成；按你的处境回应。"
+    cast.voice_script.append(KeeperCall(npc="warden", instruction=instruction))
     fake.queue(52)  # 恐吓 15: a failure
     app = turn_graph.build(game, InMemorySaver())
     events, interrupts = await run_turn(app, ".ra 恐吓", {"configurable": {"thread_id": "t-dice"}}, resume="drop")
@@ -1044,8 +1059,9 @@ async def test_a_dice_check_goes_to_the_keeper_and_the_npc_answers_it(module, fa
     assert [e["text"] for e in events if e["type"] == "dice"] == ["恐吓 15 → 52 失败 ✗"]
     assert not [e for e in events if e["type"] == "command"]
     npc, said = cast.npc_calls[0]
-    assert npc == "warden" and "方式：恐吓" in said and "检定：恐吓 失败，本次交涉未达成" in said
-    assert not cast.reports and any(e["type"] == "npc" for e in events)
+    assert npc == "warden" and instruction in said
+    assert "检定：恐吓 15 → 52 失败" in cast.reports[0] and "本次交涉未达成" in cast.reports[0]
+    assert len(cast.reports) == 2 and any(e["type"] == "npc" for e in events) and not cast.voice_script
     record = game.state.checks[-1]
     assert (record.skill, record.aim, record.passed, game.state.turn) == ("恐吓", "warden", False, 1)
     cast.script["我盯着他"] = (SCARE.model_copy(update={"summary": "周衡盯着守钟人", "asked": Asked(skill="说服")}), Ruling(needs_roll=False))
@@ -1068,13 +1084,16 @@ async def test_a_failed_check_is_not_rolled_again(module, fake):
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": "t-again"}}
     fake.queue(52)  # one die for 恐吓; a second roll would find the fake dice empty
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="本次恐吓失败，按未被说动的处境回应。"))
     await run_turn(app, ".ra 恐吓", thread, resume="drop")
     for _ in range(2):  # the same attempt again, and again: the failure stands
+        instruction = "相同恐吓已经失败，局面没有改变；这次请求仍未达成，回应对方的重复威胁。"
+        cast.voice_script.append(KeeperCall(npc="warden", instruction=instruction))
         events, _ = await run_turn(app, ".ra 恐吓", thread)
         assert not [e for e in events if e["type"] == "dice"]
         assert [e["text"] for e in events if e["type"] == "repeat"] == ["恐吓 15 → 52 失败 ✗"]
-        assert "同样的恐吓刚才已经试过，不重掷，结果照旧：本次请求仍未达成" in cast.npc_calls[-1][1]
-        assert not cast.reports  # the repeat notice and NPC reply already convey the result
+        assert instruction in cast.npc_calls[-1][1] and not cast.voice_script
+        assert "同样的恐吓刚才已经试过，不重掷，结果照旧：本次请求仍未达成" in cast.reports[-1]
     fake.queue(30)  # another skill is another attempt
     events, _ = await run_turn(app, ".ra 说服", thread, resume="drop")
     assert [e["skill"] for e in events if e["type"] == "dice"] == ["说服"]
@@ -1120,11 +1139,15 @@ async def test_the_arbiter_can_call_a_repeat_itself(module, fake):
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": "t-arbiter"}}
     fake.queue(52)
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="这次恐吓失败，按实际处境回答。"))
     for text in (".ra 恐吓", "点头"):
         await run_turn(app, text, thread, resume="drop")
+    instruction = "相同威吓的失败结果沿用，本次请求仍未达成；回应对方。"
+    cast.voice_script.append(KeeperCall(npc="warden", instruction=instruction))
     events, _ = await run_turn(app, "再吓他", thread)
     assert [e["type"] for e in events if e["type"] in ("dice", "repeat")] == ["repeat"]
-    assert "c_diary" not in game.state.clues and "本次请求仍未达成" in cast.npc_calls[-1][1]
+    assert "c_diary" not in game.state.clues and instruction in cast.npc_calls[-1][1]
+    assert "本次请求仍未达成" in cast.reports[-1] and not cast.voice_script
 
 
 async def test_a_plain_roll_is_answered_at_once(module, fake):
@@ -1185,6 +1208,7 @@ async def test_the_player_throws_their_own_dice(module, fake):
     asked, the numbers and why, and only the throw rolls them. Under the result comes what
     it led to."""
     game, cast, _ = make(module, fake, {"劝他": (PLEAD, HARD_TALK)}, location="tower")
+    cast.voice_script.append(KeeperCall(npc="warden", instruction="本次交涉已经成功，按已解锁范围回应对方。"))
     app = turn_graph.build(game, InMemorySaver())
     thread = {"configurable": {"thread_id": "t-hand"}}
     fake.queue(8)  # 说服 40, hard: 8 is an extreme success

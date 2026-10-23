@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from autokeeper.agents.cast import Action, Failure, Plan, Ruling
+from autokeeper.agents.cast import Action, Failure, KeeperCall, Plan, Ruling
 from autokeeper.agents.director import Improv, NewClue, NewNPC
 from autokeeper.engine import graph
 from autokeeper.engine.game import Game
@@ -85,6 +85,7 @@ def made(fake, cast, state=None):
 
 async def test_prepared_material_replans_and_rules_the_real_target_without_replaying_the_prefix(fake):
     cast = PreparedCast()
+    cast.voice_script.append(KeeperCall(npc="archivist", instruction="本次核对登记册的请求已经成功，按实际开放的记录回应。"))
     game, _ = made(fake, cast)
     fake.queue(1)
     start = game.state.minutes

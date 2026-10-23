@@ -8,7 +8,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from autokeeper import paths
-from autokeeper.agents.cast import Action, BeforeTravel, Initiative, Ruling
+from autokeeper.agents.cast import Action, BeforeTravel, Initiative, KeeperCall, Ruling
 from autokeeper.engine import graph, world
 from autokeeper.engine.game import Game, Said, Turn
 from autokeeper.engine.state import CheckRecord, GameState, WorldChange
@@ -142,7 +142,7 @@ async def test_an_npc_keeps_permission_to_discuss_clues_unlocked_on_previous_tur
     await game.close()
 
 
-async def test_initiative_and_encounter_speech_receive_the_same_disclosure_permissions(module, fake):
+async def test_pre_ruling_reactions_and_encounter_speech_receive_the_same_disclosure_permissions(module, fake):
     game, _, _ = make(module, fake, {}, location="tower")
     turn = Turn(action=Action(kind="talk", summary="周衡询问过去发生的事", npc="warden"))
 
@@ -389,11 +389,13 @@ async def test_greeting_is_a_conversation_not_three_more_model_calls(module, fak
 class Interrupted(FakeCast):
     failures = 1
 
-    async def keeper(self, *args, **kwargs):
+    async def keeper(self, *args, voices=None, **kwargs):
+        if voices is not None and self.voice_script:
+            return await super().keeper(*args, voices=voices, **kwargs)
         if self.failures:
             self.failures -= 1
             raise ConnectionError("provider unavailable after the dice already fell")
-        return await super().keeper(*args, **kwargs)
+        return await super().keeper(*args, voices=voices, **kwargs)
 
 
 async def test_a_saved_failed_narration_resumes_without_rolls_time_or_npc_duplicates(module, fake):
@@ -401,6 +403,7 @@ async def test_a_saved_failed_narration_resumes_without_rolls_time_or_npc_duplic
     ruling = Ruling(needs_roll=True, skill="说服", minutes=5, note="楼上传来一阵敲门声")
     game, _, _events = make(module, fake, {}, location="tower")
     game.cast = Interrupted({"问工作": (action, ruling)})
+    game.cast.voice_script.append(KeeperCall(npc="warden", instruction="对方关于修钟工作的询问已成功，按当前处境回应。"))
     saved = []
     game.checkpoint = lambda: saved.append(game.state.model_dump_json())
     fake.queue(5)

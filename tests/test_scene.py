@@ -359,7 +359,8 @@ async def test_a_resumed_turn_lands_its_telling_without_asking_the_keeper_again(
             raise RuntimeError("断电了")  # the telling is in the journal; nothing of it has landed
 
     game.checkpoint = checkpoint
-    SCRIPT.append(telling("布道者跟着你进了钟楼。", room="tower", here=["preacher", "warden"], follow=["preacher"]))
+    SCRIPT.append({"kind": "tell", "telling": telling(
+        "布道者跟着你进了钟楼。", room="tower", here=["preacher", "warden"], follow=["preacher"])})
     with pytest.raises(RuntimeError):
         await game.narrate(turn)
     calls = len(SEEN)
@@ -442,7 +443,7 @@ async def test_a_story_ending_resumed_after_its_notice_does_not_reward_or_ask_tw
 
     game.emit = cut
     fake.queue_totals(3)
-    SCRIPT.append(telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"]))
+    SCRIPT.append({"kind": "tell", "telling": telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"])})
     with pytest.raises(ConnectionError):
         await game.narrate(turn)
     again = GameState.model_validate_json(saved[-1])
@@ -480,9 +481,9 @@ async def test_a_story_event_resumes_its_performance_and_scene_without_replaying
     game.emit = cut
     san = st.investigator.san
     fake.queue(20)
-    SCRIPT.extend([telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"]),
+    SCRIPT.extend([{"kind": "tell", "telling": telling("守钟人关掉了钟表。", here=["warden"], flags=["bell_stopped"])},
                    {"text": "广场上突然安静下来了，大家都在往钟楼这边看。"},
-                   telling("门外的人还在等待消息。", here=["warden", "preacher"])])
+                   {"kind": "tell", "telling": telling("门外的人还在等待消息。", here=["warden", "preacher"])}])
     with pytest.raises(ConnectionError):
         await game.narrate(turn)
     again = GameState.model_validate_json(saved[-1])
@@ -564,7 +565,7 @@ async def test_an_old_save_plays_on(fake):
         old.pop(key, None)
     st = GameState.model_validate(old)
     loaded, _ = made(state=st)
-    SCRIPT.append(telling("广场上的雾散了一些。", here=["preacher"], now="布道者在整理册子"))
+    SCRIPT.append({"kind": "tell", "telling": telling("广场上的雾散了一些。", here=["preacher"], now="布道者在整理册子")})
     assert await loaded.narrate(acted(loaded, "我四处看看", 3)) == "广场上的雾散了一些。"
     assert st.ongoing == "布道者在整理册子" and st.pending_turn["keeper"]["landed"]
     assert [m["content"] for m in st.transcripts["keeper"] if m["role"] == "assistant"] == ["旧的叙述。", "广场上的雾散了一些。"]
