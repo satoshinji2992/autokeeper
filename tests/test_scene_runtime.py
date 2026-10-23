@@ -46,6 +46,23 @@ async def spin_until(predicate):
             await asyncio.sleep(0)
 
 
+async def test_the_whole_party_scene_stays_public_for_shared_memory_and_recap(fake):
+    from autokeeper.engine import audience
+
+    runtime, _, _ = made(fake)
+    try:
+        runtime.state.positions["lin"] = "tower"
+        ident, = runtime.reconcile()
+        view = runtime.state_view(ident)
+        public = view.add("keeper", "大家听见钟声停了。", who="守秘人")
+        secret = view.add("keeper", "仅向一人交代的消息。", audience=["zhouheng"])
+        assert public.audience is None and audience.shared(public)
+        assert public in audience.log(runtime.state) and secret not in audience.log(runtime.state)
+        assert secret.audience == ["zhouheng"]
+    finally:
+        await runtime.close()
+
+
 async def test_scoped_cursors_share_only_the_authoritative_world_and_save(fake):
     runtime, _, _ = made(fake)
     a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")

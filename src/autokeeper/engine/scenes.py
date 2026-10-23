@@ -19,6 +19,7 @@ from ..agents.cast import Action, PartyInput, PartyPlan, Plan, Ruling
 from ..module import improv
 from ..module.schema import Module
 from ..rules.coc import Rules
+from . import audience
 from . import graph as turn_graph
 from .game import Game, PreparationError
 from .state import GameState, LogEntry, SceneState, format_time, parse_time
@@ -123,8 +124,8 @@ class SceneView:
     def add(self, kind, text: str, who: str = "", **kwargs) -> LogEntry:
         # Assign the actual source scene and keep the same entry in the aggregate history.
         if kwargs.get("audience") is None:
-            kwargs["audience"] = [who for who in self.scene.members
-                                  if self.root.positions.get(who) == self.scene.place]
+            kwargs["audience"] = audience.scope(self.root, [who for who in self.scene.members
+                                                            if self.root.positions.get(who) == self.scene.place])
         entry = GameState.add(self, kind, text, who=who, **kwargs)
         entry.scene = self.scene.id
         self.root.log.append(entry)
