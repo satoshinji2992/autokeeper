@@ -131,6 +131,7 @@ class Party(BaseModel):
     kind: Literal["party"] = "party"
     place: str
     apart: dict[str, str] = Field(default_factory=dict)
+    participants: list[str] | None = None  # an encounter's actual movers; None keeps a local whole-party move
 
 
 class Obstacle(BaseModel):
@@ -418,6 +419,7 @@ def problems(w: World, effects: list) -> list[str]:
                 if dest is None or dest.kind != "location":
                     out.append(f"地点 {place} 不存在")
             out += [f"{x} 不是调查员" for x in e.apart if x not in investigators]
+            out += [f"{x} 不是调查员" for x in (e.participants or []) if x not in investigators]
         elif isinstance(e, Obstacle):
             if not e.way:
                 out.append("障碍缺少所在路段的 id")
@@ -527,10 +529,19 @@ def settle(w: World, effects: list, *, oid: str) -> Settled:
                        witnesses=[*w.present(src), *w.present(e.place)], op=oid)
         elif isinstance(e, Party):
             st = w.st
-            if st.location != e.place:
-                w.rec.left[st.location] = w.rec.seq
+            places = {inv.id: w.place(inv.id) for inv in st.investigators} if e.participants is not None else None
+            if places is None:
+                if st.location != e.place:
+                    w.rec.left[st.location] = w.rec.seq
                 st.location = e.place
-            st.apart = {**st.apart, **e.apart}
+                st.apart = {**st.apart, **e.apart}
+            else:
+                places.update(dict.fromkeys(e.participants, e.place))
+                places.update(e.apart)
+                if st.location != e.place and st.location not in places.values():
+                    w.rec.left[st.location] = w.rec.seq
+                st.location = e.place
+                st.apart = {who: where for who, where in places.items() if where != st.location}
         elif isinstance(e, Obstacle):
             if e.obstacle is None:
                 w.rec.obstacles.pop(e.way, None)

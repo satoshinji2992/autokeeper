@@ -333,7 +333,7 @@ class Bring(Base):
     source: SkipJsonSchema[str] = Field("", description="已实际取得的手稿线索；只由引擎落实守秘人明确写出的持有场面")
 
     def check(self, w: World) -> list[str]:
-        name, here = self.name.strip(), w.st.location
+        name, here = self.name.strip(), w.place(self.actor) or w.st.location
         if not name or len(name) > 16:
             return ["东西的名称要写，且不超过 16 个字"]
         if bool(self.holder) == bool(self.place):
@@ -384,7 +384,8 @@ class Bring(Base):
             text = f"{w.name(self.holder)}{'拿出了' if self.actor == self.holder else '拿着'}{name}{seen}"
         actor = self.actor if self.actor not in STAFF else self.holder or ENGINE
         # Seen, not news: nobody is woken to think again over a torch (scheduler._affects).
-        event = w.emit("bring", text, actor=actor, participants=[x for x in (self.holder, ident) if x], place=w.st.location,
+        event = w.emit("bring", text, actor=actor, participants=[x for x in (self.holder, ident) if x],
+                       place=w.place(actor) or w.st.location,
                        visibility=self.visibility, op=oid, reactive=False)
         ent.observed_by = list(dict.fromkeys([*([self.holder] if self.holder else []), *event.witnesses,
                                               *([PLAYERS] if event.visibility == "public" else [])]))

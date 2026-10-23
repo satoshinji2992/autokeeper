@@ -1056,23 +1056,27 @@ class Encounters:
         from ...world import adapters
 
         ruling = Ruling.model_validate({**rest["ruling"], "effects": []})  # its effects landed with the unit
+        actor = rest["actor"]
+        scope = rest["scope"]
         step = self._resolution_step
         if not rest.get("passed"):
             return
         if ruling.set_flags:
-            await step(f"/{key}/rest-flags", turn, lambda: self._flags(ruling.set_flags, turn))
+            await step(f"/{key}/rest-flags", turn, lambda: self._flags(ruling.set_flags, turn, readers=scope["audience"]))
 
         def changes() -> None:
-            adapters.settle_changes(self.world, ruling.changes, source="arbiter")
-            self._equipment(ruling, turn)
-            self._takes(ruling, turn)
+            adapters.settle_changes(self.world, ruling.changes, source="arbiter", who=actor)
+            self._equipment(ruling, turn, who=actor)
+            self._takes(ruling, turn, who=actor)
 
         await step(f"/{key}/rest-changes", turn, changes)
         if ruling.rejoin:
-            await step(f"/{key}/rest-rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn))
-        clues = await step(f"/{key}/rest-clues", turn, lambda: self._valid_clues(ruling.clues_on_success + ruling.auto_clues, None))
+            await step(f"/{key}/rest-rejoin", turn, lambda: self._rejoin(ruling.rejoin, turn, who=actor))
+        clues = await step(f"/{key}/rest-clues", turn, lambda: self._valid_clues(
+            ruling.clues_on_success + ruling.auto_clues, None, who=actor))
         if clues:
-            await step(f"/{key}/rest-gain", turn, lambda: self._gain(clues, turn, None))
+            await step(f"/{key}/rest-gain", turn, lambda: self._gain(
+                clues, turn, None, who=actor, scope=scope))
 
     # -- a round ----------------------------------------------------------------------------------
     async def _round_start(self, enc: EncounterState, nxt: int, turn: Turn, settle: bool) -> None:
@@ -1569,7 +1573,7 @@ class Encounters:
         if there := (value.get("extra") or {}).get("arrive"):
             # Caught up in another place: the op moved the fight and the party there (chase.to_fight); what
             # arriving brings about (the scene, its events) as any arrival.
-            await self._arrive(there, turn)
+            await self._encounter_arrive(there, (value.get("extra") or {}).get("arrive_participants", []), turn)
         enc = self.world_encounter()
         if enc is None:
             await step(f"/{base}/snapshot", turn, snapshot)
@@ -1786,7 +1790,11 @@ class Encounters:
                 for p in e.participants:  # the keeper's people end where they are: where they ran to, where it was fought
                     if p.kind != "investigator" and where.get(p.id) and self.world.place(p.id) not in ("", where[p.id]):
                         w.unit.effects.append(effects.Relocate(who=p.id, place=where[p.id]))
-                w.unit.extra = {"arrive": party_at if party_at != st.location else "", "apart": apart,
+                movers = [p.id for p in e.participants if p.kind == "investigator" and where.get(p.id) == party_at]
+                relocate = ran and (party_at != st.location or apart or any(self.world.place(who) != party_at for who in movers))
+                if relocate:
+                    w.unit.effects.append(effects.Party(place=party_at, apart=apart, participants=movers))
+                w.unit.extra = {"arrive": party_at if relocate else "", "arrive_participants": movers, "apart": apart,
                                 "witnesses": witnesses}
                 w.unit.lines.append(f"【{word}结束】{text}")
                 w.unit.notices.append({"type": "chase_end" if ran else "fight_end", "end": how, "text": text})
@@ -1817,9 +1825,15 @@ class Encounters:
         if fired:
             await step(f"/{key}/flags", turn, lambda: self._flags(fired, turn, readers=extra.get("witnesses")))
         if extra.get("arrive"):
-            await self._arrive(extra["arrive"], turn)
+            await self._encounter_arrive(extra["arrive"], extra["arrive_participants"], turn)
         if extra.get("apart"):
             await step(f"/{key}/apart", turn, lambda: self._left_apart(extra["apart"], turn))
+
+    async def _encounter_arrive(self, where: str, participants: list[str], turn: Turn) -> None:
+        """Actual chase movement already landed; run its visit without moving the focused room."""
+        await self._arrive(where, turn, interval={"origin": where, "destination": where,
+                                                "participants": participants,
+                                                "start": self.world.now, "end": self.world.now})
 
     def _left_apart(self, apart: dict[str, str], turn: Turn) -> None:
         """Investigators the chase left somewhere else than the party: kept there, with whoever was apart
@@ -1892,7 +1906,10 @@ class Encounters:
 
     async def respond(self, cid: str, value: Any, *, who: str = "") -> Turn:
         """The answer to the choice the encounter waits on (a reaction, a roll, a new declaration), then
-        the encounter goes on. Its own journal, as push has: resumed, nothing is asked or rolled twice."""
+        the encounter goes on. Its own journal, as push has: resumed, nothing is asked or rolled twice.
+        This settles the owner's choice without changing narration focus; the table's graph merges
+        the returned, owner-scoped turn into the original action's narration.
+        """
         from ..game import TURN_RECORD, Turn
 
         async with self._resolution_lock:  # type: ignore[attr-defined]
@@ -1923,7 +1940,12 @@ class Encounters:
             if who and who != pend.who:
                 raise ValueError("这个选择不是你的")
         pend = enc.pending
-        answer = await self._resolution_step(f"/{key}/read", turn, lambda: self._read_answer(pend, value))
+        async def read() -> dict:
+            assert pend is not None
+            return {**(await self._read_answer(pend, value)), "actor": pend.who}
+
+        answer = await self._resolution_step(f"/{key}/read", turn, read)
+        owner = answer["actor"]
         revised = Action.model_validate(answer["action"]) if answer.get("action") else None
         revised_ruling = None
         if revised is not None:
@@ -1972,6 +1994,12 @@ class Encounters:
         await self._beat(turn)
         await self._resolution_step("ending", turn, lambda: self._check_ending(turn))
         await self._resolution_step("party-down", turn, lambda: self._party_down(turn))
+        if not turn.interval and owner:
+            # The response may be serviced while an unrelated investigator is focused. Keep
+            # its resulting narration with the actual choice owner, without changing live focus.
+            where = self.world.place(owner)
+            turn.interval = {"actor": owner, "participants": [owner], "start": self.world.now,
+                             "end": self.world.now, "origin": where, "destination": where}
 
     async def _read_answer(self, pend: PendingChoice | None, value: Any) -> dict:
         """Read a button or interpret an explicit new intention for its actual owner.

@@ -307,11 +307,12 @@ def _gather(w: Work, place: str, ran_to: dict[str, str]) -> None:
     st = w.game.state
     party = [p for p in enc.participants if p.kind == "investigator"]
     if any(p.presence == "in" for p in party):
+        participants = [p.id for p in party if p.presence == "in"]
         apart = {p.id: ran_to[p.id] for p in party if p.presence != "in" and ran_to.get(p.id) not in (None, "", place)}
-        if place != st.location or apart:
-            w.unit.effects.append(effects.Party(place=place, apart=apart))
-        if place != st.location:
+        if place != st.location or apart or any(w.ctx.world.place(who) != place for who in participants):
+            w.unit.effects.append(effects.Party(place=place, apart=apart, participants=participants))
             w.unit.extra["arrive"] = place
+            w.unit.extra["arrive_participants"] = participants
     for p in enc.participants:
         if p.presence == "in":
             _move(w, p.id, place)

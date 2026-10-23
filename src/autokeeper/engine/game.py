@@ -2259,33 +2259,39 @@ class Game(Encounters):
                           f"{self.world.name(st.location)}。")
         return {}
 
-    def _rejoin(self, rejoins: list, turn: Turn) -> None:
+    def _rejoin(self, rejoins: list, turn: Turn, *, who: str = "") -> None:
         """Those of the investigators apart from the party (GameState.apart) whom a ruling brings back
         (Ruling.rejoin): with the party again, as the ruling says they came; never someone who is not
         apart, nor someone walking back who cannot act. What does not hold, the keeper hears of."""
         st = self.state
+        destination = self.world.place(who) if who else st.location
         words = {"carried": "被背了回来", "fetched": "被找到领了回来", "walked": "自己走了回来"}
         for r in rejoins:
             inv = next((i for i in st.investigators if i.id == r.who), None)
-            if inv is None or r.who not in st.apart:
+            if inv is None or self.world.place(r.who) == destination:
                 turn.notes.append(f"{inv.name if inv else r.who}本来就和大家在一起，不用会合。")
                 continue
             if r.how == "walked" and not inv.can_act:
-                turn.notes.append(f"{inv.name}现在没法自己走回来，还在{self.world.name(st.apart[r.who])}。")
+                turn.notes.append(f"{inv.name}现在没法自己走回来，还在{self.world.name(self.world.place(r.who))}。")
                 continue
-            was = st.apart.pop(r.who)
-            text = f"{inv.name}从{self.world.name(was)}{words[r.how]}，和大家在一起了"
-            self.world.apply(Occur(id=f"rejoin:{st.turn}:{r.who}", actor=inv.id, participants=[inv.id], place=st.location,
+            was = self.world.place(r.who)
+            if destination == st.location:
+                st.apart.pop(r.who, None)
+            else:
+                st.apart[r.who] = destination
+            text = (f"{inv.name}从{self.world.name(was)}{words[r.how]}，抵达{self.world.name(destination)}"
+                    if who else f"{inv.name}从{self.world.name(was)}{words[r.how]}，和大家在一起了")
+            self.world.apply(Occur(id=f"rejoin:{st.turn}:{r.who}", actor=inv.id, participants=[inv.id], place=destination,
                                    text=text, visibility="public"))
             turn.notes.append(text + "。")
 
-    def _takes(self, ruling: Ruling, turn: Turn) -> None:
+    def _takes(self, ruling: Ruling, turn: Turn, *, who: str = "") -> None:
         """Everyday things the investigator takes up in this action (Ruling.takes), registered in
         their hands (world/adapters.bring_ops); what cannot be, the keeper hears of."""
         if not ruling.takes:
             return
-        inv = self.state.investigator
-        found = adapters.bring_ops(self.world, ruling.takes, actor="arbiter", holder=inv.id)
+        inv = self.state.find(who) if who else self.state.investigator
+        found = adapters.bring_ops(self.world, ruling.takes, actor=inv.id, holder=inv.id)
         problems = list(found.problems)
         for op in found.ops:
             result = self.world.apply(op)
@@ -2293,12 +2299,12 @@ class Game(Encounters):
         if problems:
             turn.notes.append(f"【未落实】{inv.name}没拿到：{'；'.join(problems)}。叙述里照实交代，不写成已经拿到。")
 
-    def _equipment(self, ruling: Ruling, turn: Turn) -> None:
+    def _equipment(self, ruling: Ruling, turn: Turn, *, who: str = "") -> None:
         """Maintain important gear after success, without publishing a permanent inventory UI."""
         if not ruling.equipment:
             return
         trial = World(self.m.model_copy(deep=True), self.state.model_copy(deep=True))
-        who = self.state.investigator.id
+        who = who or self.state.investigator.id
         ops = []
         for index, change in enumerate(ruling.equipment):
             ident = world.item_id(trial.m, trial.st, change.item, holder=who)
@@ -3915,19 +3921,21 @@ class Game(Encounters):
                 and any(not knowledge.clue_known(st, cid, who) for who in listeners)
                 and clues[cid].available(st.flags, st.clues)]
 
-    def _valid_clues(self, ids: list[str], action: Action | None) -> list[str]:
+    def _valid_clues(self, ids: list[str], action: Action | None, *, who: str = "") -> list[str]:
         """Of the clues a ruling gives, those to be had here now (module/graph.at_hand): what lies here,
         and what comes from someone the world record has here, alive and not gone (2026-10-22: the
         clue about the truck's driver was given at an empty cab)."""
         st, m = self.state, self.m
-        people = self.world.present(st.location)
-        here = {c.id for c in module_graph.at_hand(m, st.location, people, record=self.world.rec)}
+        who = who or st.investigator.id
+        location = self.world.place(who)
+        people = self.world.present(location)
+        here = {c.id for c in module_graph.at_hand(m, location, people, record=self.world.rec)}
         known = {c.id for c in m.clues if c.available(st.flags, st.clues)}
         found = [c for c in dict.fromkeys(ids) if c in known and c in here
-                 and not knowledge.clue_known(st, c, st.investigator.id)]
+                 and not knowledge.clue_known(st, c, who)]
         addressed = self._addressed(action)
         found = [cid for cid in found if module_graph.original_source_at_hand(
-            m, m.clue(cid), st.location, people, record=self.world.rec)
+            m, m.clue(cid), location, people, record=self.world.rec)
             or addressed in module_graph.tellers(m, m.clue(cid), record=self.world.rec)]
         if action and (action.approach == "心理学" or (action.asked and canonical(action.asked.skill) == "心理学")):
             # An observation cannot unlock testimony behind a different social gate, even
@@ -3942,11 +3950,12 @@ class Game(Encounters):
         return found
 
     async def _gain(self, ids: list[str], turn: Turn, action: Action | None, heard: str = "", *,
-                    originals: set[str] | None = None, scope: dict | None = None) -> None:
+                    originals: set[str] | None = None, scope: dict | None = None, who: str = "") -> None:
         """Commit an authorized award and its costs. Callers may explicitly limit which awards
         came through the original discovery/material route; a summary still grants the clue,
         SAN/Mythos and its actual consequences, without the source's paper or personal gate."""
         st, m = self.state, self.m
+        actor = who or st.investigator.id
         step = self._resolution_step
         readers = scope["audience"] if scope is not None else self._narrative_audience(turn, discovery=True)
         selected = readers if readers is not None else [i.id for i in st.investigators]
@@ -3959,7 +3968,7 @@ class Game(Encounters):
                 continue
 
             def commit(clue=clue, cid=cid) -> dict:
-                inv = st.investigator
+                inv = st.find(actor)
                 audience = readers
                 first = not knowledge.clue_known(st, cid, inv.id)
                 sanity = None

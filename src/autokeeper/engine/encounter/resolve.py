@@ -814,8 +814,9 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
     head = d.summary if d.summary.strip() else f"{{{a}}}做了别的事"
     if ruling is None:
         return [head]
+    scope = w.game._check_scope(a, personal=ruling.get("result_scope", "personal") == "personal")
     if ruling.get("needs_roll") and not ruling.get("skill"):
-        w.unit.rest = {"ruling": ruling, "passed": False}
+        w.unit.rest = {"actor": a, "scope": scope, "ruling": ruling, "passed": False}
         return [head, "【未落实】裁定要求检定但没有指定技能，行动后果尚未结算"]
     passed = True
     if ruling.get("needs_roll") and ruling.get("skill"):
@@ -830,7 +831,7 @@ def _other(w: Work, receipt: ActionReceipt, a: str, ruling: Any) -> list[str]:
         if passed and roll.name == "潜行":  # sneaking off, ruled: out of sight as a hide is
             hidden(w, a, "暗处")
     out = [head]
-    w.unit.rest = {"ruling": ruling, "passed": passed}
+    w.unit.rest = {"actor": a, "scope": scope, "ruling": ruling, "passed": passed}
     if not passed:
         if d.goal:
             out.append(f"已结算：未达成目标（{d.goal}）")

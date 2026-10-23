@@ -47,18 +47,18 @@ if TYPE_CHECKING:
     from .store import World
 
 
-def change_ops(w: World, c: WorldChange, *, source: str, spoken: str = "") -> list[Any]:
+def change_ops(w: World, c: WorldChange, *, source: str, spoken: str = "", who: str = "") -> list[Any]:
     """One admissible change as ops (ids from its key and the turn, so a retried turn repeats them)."""
     st = w.st
-    me = st.investigator.id
+    me = who or st.investigator.id
     oid = f"wc:{st.turn}:{c.kind}:{c.key}"
-    common = {"id": oid, "actor": source, "key": c.key, "tag": c.npc, "visibility": "public"}
+    common = {"id": oid, "actor": me if who and not spoken else source, "key": c.key, "tag": c.npc, "visibility": "public"}
     if c.kind == "transfer":
         ident = legacy_world.item_id(w.m, st, c.item, holder=source if spoken else me)
         return [Transfer(item=ident, to=c.owner, text=c.text, **common)] if ident is not None else []
     if c.kind == "fulfill":
         if c.key in w.rec.promises and w.rec.promises[c.key].status == "active":
-            return [Fulfil(promise=c.key, text=c.text, id=oid, actor=source, visibility="public")]
+            return [Fulfil(promise=c.key, text=c.text, id=oid, actor=common["actor"], visibility="public")]
         return []
     if c.kind == "promise" and c.key not in w.rec.promises:
         by, to = (c.npc, me) if spoken and c.npc == source else (me, c.npc or PLAYERS)
@@ -71,14 +71,19 @@ def change_ops(w: World, c: WorldChange, *, source: str, spoken: str = "") -> li
                     public=True, **common)]  # fmt: skip
 
 
-def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken: str = "", private: bool = False) -> list[Result]:
+def settle_changes(w: World, changes: list[WorldChange], *, source: str, spoken: str = "", private: bool = False,
+                   who: str = "") -> list[Result]:
     """engine/world.apply through the world API."""
-    present = legacy_world.actors(w.m, w.st)
+    state = w.st
+    if who:
+        index = next(i for i, investigator in enumerate(state.investigators) if investigator.id == who)
+        state = state.model_copy(update={"active": index, "location": w.place(who)})
+    present = {i.id for i in state.investigators} | set(w.present(state.location)) | {state.location}
     out: list[Result] = []
     for c in changes[:8]:
-        if not legacy_world.admissible(w.m, w.st, c, source=source, spoken=spoken, present=present):
+        if not legacy_world.admissible(w.m, state, c, source=source, spoken=spoken, present=present):
             continue
-        ops = change_ops(w, c, source=source, spoken=spoken)
+        ops = change_ops(w, c, source=source, spoken=spoken, who=who)
         if private:
             ops = [op.model_copy(update={"visibility": "private"}) for op in ops]
         if not ops:  # a promise restated: as engine/world.apply leaves it
@@ -133,10 +138,10 @@ def _location(w: World, where: str) -> str:
     return named[0] if len(named) == 1 else ""
 
 
-def _lying(w: World, name: str, taken: list[str]) -> str:
+def _lying(w: World, name: str, taken: list[str], *, here: str = "") -> str:
     """An everyday thing of this name lying where the investigators are, not spoken for in this batch:
     one registered as it came up (Bring), or one of the module's items of no importance."""
-    here = w.st.location
+    here = here or w.st.location
     hit = next((e.id for e in w.rec.entities.values() if e.kind == "item" and not e.important and e.at == here
                 and e.id not in taken and overlap(name, e.name)), "")
     return hit or next((i.id for i in w.m.items if not i.important and i.id not in taken and i.id not in w.rec.entities
@@ -175,7 +180,8 @@ def bring_ops(w: World, items: Iterable[Any], *, actor: str, holder: str | None 
         if where and (there := holding(w, where, name)):
             ids.append(there)  # it is already where it is said to be
             continue
-        if who and not at and (lying := _lying(w, name, ids)):  # taken up from where it lies
+        here = w.place(actor) or w.place(who) or w.st.location
+        if who and not at and (lying := _lying(w, name, ids, here=here)):  # taken up from where it lies
             take = Transfer(id=f"pick:{w.st.turn}:{lying}:{who}", item=lying, to=who, actor=actor,
                             visibility=visibility)  # type: ignore[arg-type]
             if bad := take.check(w):

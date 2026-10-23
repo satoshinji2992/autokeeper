@@ -284,7 +284,8 @@ class World:
     def legacy(self, key: str, kind: str, text: str, npc: str, source: str) -> None:
         """Mirror into GameState.world, which the keeper and NPC prompts still read (engine/world.py)."""
         if key:
-            self.st.world[key] = WorldFact(kind=kind, text=text, who=self.st.investigator.id, npc=npc, turn=self.st.turn, source=source)
+            who = source if any(inv.id == source for inv in self.st.investigators) else self.st.investigator.id
+            self.st.world[key] = WorldFact(kind=kind, text=text, who=who, npc=npc, turn=self.st.turn, source=source)
 
     # -- settling ------------------------------------------------------------------------------
     def apply(self, op: Op | dict) -> Result:
