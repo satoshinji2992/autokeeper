@@ -51,11 +51,30 @@ def stand_ins(monkeypatch, tmp_path, skills_dir, fake):
     import autokeeper.agents.cast as cast_module
     import autokeeper.rules.coc as coc
 
+    class RoomCast(TableCast):
+        # Keep the production constructor/type contract: Hub derives an independent Cast
+        # factory for each hosted scene instead of sharing one mutable model session.
+        def __init__(self, cfg, module):
+            super().__init__()
+            self.cfg, self.module = cfg, module
+
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
-    monkeypatch.setattr(cast_module, "Cast", lambda cfg, m: TableCast())
+    monkeypatch.setattr(cast_module, "Cast", RoomCast)
     real = coc.Rules
     monkeypatch.setattr(coc, "Rules", lambda: real(dice=fake))
     return fake
+
+
+async def test_room_constructor_preserves_independent_scene_cast_factories(stand_ins):
+    hub = Hub(EXAMPLE, seats=["玩家"])
+    try:
+        assert hub.scene_cast_factory is not None
+        first, second = hub.scene_cast_factory("scene-a"), hub.scene_cast_factory("scene-b")
+        assert first is not second and first is not hub.cast and second is not hub.cast
+        assert type(first) is type(second) is type(hub.cast)
+        assert first.cfg is second.cfg is hub.cast.cfg
+    finally:
+        await hub.game.close()
 
 
 def test_each_address_says_which_network_it_is_on():
