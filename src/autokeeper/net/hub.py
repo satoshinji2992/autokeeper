@@ -462,6 +462,8 @@ class Hub:
         await ws.prepare(request)
         cid = uuid.uuid4().hex[:8]
         self.clients[cid] = ws
+        if not self.state.human:
+            self.takeovers.pulse()
         try:
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:

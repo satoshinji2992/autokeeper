@@ -19,6 +19,8 @@ class Takeovers:
         self.closed = False
 
     def online(self) -> bool:
+        if not self.hub.state.human:
+            return bool(self.hub.clients)
         return any(self.hub.sits.get(who) is not None for who in self.hub.state.human)
 
     def waiting(self, who: str) -> bool:

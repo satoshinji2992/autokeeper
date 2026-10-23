@@ -48,6 +48,48 @@ async def eventually(check):
             await asyncio.sleep(0.005)
 
 
+async def test_ai_only_room_runs_for_spectators_and_resumes_when_they_return(fake, monkeypatch):
+    cast = TableCast()
+    hub = Hub(EXAMPLE, seats=["AI"], cast=cast, rules=Rules(dice=fake), disconnect_ai=True)
+    assert hub.state.human == []
+    executed = []
+
+    async def interlude():
+        pass
+
+    async def run(text, inv_id, **kwargs):
+        executed.append((inv_id, text))
+
+    monkeypatch.setattr(hub, "_interlude", interlude)
+    monkeypatch.setattr(hub, "_run", run)
+    pending = None
+    try:
+        async with sockets(hub) as (http, url):
+            watch = await http.ws_connect(url)
+            await watch.send_json({"t": "hello", "name": "观战者"})
+            await until(watch, lambda msg: msg["t"] == "welcome")
+            investigator = hub.state.investigators[0]
+            await asyncio.wait_for(hub._ai_turn(investigator), 1)
+            assert len(executed) == len(cast.ai_turns) == 1
+            await watch.close()
+            await eventually(lambda: not hub.clients)
+            pending = asyncio.create_task(hub._ai_turn(investigator))
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(pending), 0.03)
+            assert len(executed) == len(cast.ai_turns) == 1
+            watch = await http.ws_connect(url)
+            await watch.send_json({"t": "hello", "name": "返回的观战者"})
+            await until(watch, lambda msg: msg["t"] == "welcome")
+            await asyncio.wait_for(pending, 1)
+            assert len(executed) == len(cast.ai_turns) == 2
+    finally:
+        if pending is not None:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await hub.takeovers.close()
+        await hub.game.close()
+
+
 def pacing_room():
     away = SimpleNamespace(id="away", at=0, reservation={}, closed=False)
     live = SimpleNamespace(id="live", at=0, reservation={"end": 30}, closed=False)
