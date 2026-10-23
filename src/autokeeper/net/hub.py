@@ -118,6 +118,7 @@ PRIVATE |= {"looks", "shown"}  # what the story changed and which big scenes cam
 PRIVATE |= {"presentations", "private_messages", "presentation_issues"}
 PRIVATE |= {"plugin_data", "plugin_versions", "plugin_sources", "plugin_receipts", "plugin_errors",
             "plugin_prompts", "plugin_timers", "plugin_marks", "plugin_serial"}
+PRIVATE |= {"scenes", "positions", "next_scene"}
 PRIVATE |= {"record"}  # the world record holds the backstage: secrets, plans, who knows what (world/)
 PRIVATE |= {"clue_settled"}  # formal acquisition receipts are not another player's knowledge or notebook
 PRIVATE |= {"perceptions", "perception_key"}  # real targets and signed personal choices stay on the server
@@ -352,6 +353,8 @@ class Hub:
         state: GameState | None = None,
         cast: Any = None,
         rules: Any = None,
+        scene_cast_factory: Any = None,
+        scene_rules_factory: Any = None,
     ):
         from ..agents.cast import Cast
         from ..rules.coc import Rules
@@ -385,6 +388,11 @@ class Hub:
             if inv.portrait and inv.portrait not in self.m.pictures and face.is_file():
                 self.m.pictures[inv.portrait] = str(face)
         self.cast = cast or Cast(config.load(), self.m)
+        self._scene_tables = None
+        self.scene_cast_factory = scene_cast_factory
+        self.scene_rules_factory = scene_rules_factory or (lambda _ident: Rules())
+        if self.scene_cast_factory is None and isinstance(self.cast, Cast):
+            self.scene_cast_factory = lambda _ident: Cast(self.cast.cfg, self.m)
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
         self.game.write_progress = True  # the 进展 page on every screen, through the sync
@@ -469,6 +477,13 @@ class Hub:
 
     async def _on(self, cid: str, msg: dict[str, Any]) -> None:
         t = msg.get("t")
+        if self._scene_tables is not None:
+            from .scenes import ROUTED
+
+            worker = self._context(self._seat_of(cid))
+            if worker is not self and (t in ROUTED or (t == "say" and "to" in msg)):
+                await worker._on(cid, msg)
+                return
         if t == "hello":
             self.names[cid] = (msg.get("name") or "").strip()[:16] or f"玩家{len(self.names) + 1}"
             if msg.get("key") and secrets.compare_digest(str(msg["key"]), self.key):
@@ -705,18 +720,23 @@ class Hub:
             self.started.set()
         await self._send(cid, {**self._welcome(cid), "t": "seated", "investigator": inv_id,
                                "pool": self._pool_view(cid)})
-        if offer := self.offers.get(inv_id):
+        context = self._context(inv_id)
+        if offer := context.offers.get(inv_id):
             await self._send(cid, {"t": "offer", "offer": offer})
-        if self.retrying == inv_id:
+        if context.retrying == inv_id:
             await self._send(cid, {"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续；已结算的结果保留。"})
         self.wake.set()
+        if self._scene_tables is not None:
+            self._scene_tables.wake(inv_id)
         await self._maybe_begin()
 
     def _free(self, seat: str) -> None:
         """Release the connection, retaining an encounter human's unfinished choices."""
         self.sits[seat] = None
         self.ready.discard(seat)
-        if not self._encounter_human(seat):
+        if self._scene_tables is not None:
+            self._scene_tables.wake(seat)
+        if not self._encounter_human(seat) and not self._context(seat).asking.get(seat):
             self.inbox[seat].put_nowait(None)
             self.choices[seat].put_nowait(None)
         self.wake.set()
@@ -912,7 +932,15 @@ class Hub:
             shutil.rmtree(self._card_dir(builder), ignore_errors=True)
 
     # -- what clients see ------------------------------------------------------------------
+    def _context(self, viewer: str | None):
+        if self._scene_tables is not None:
+            return self._scene_tables.for_member(viewer) or self
+        return self
+
     def _view(self, viewer: str | None = None) -> dict[str, Any]:
+        context = self._context(viewer)
+        if context is not self:
+            return context._view(viewer)
         source = self.state
         if viewer not in {investigator.id for investigator in source.investigators}:
             viewer = None  # Empty lobby seats have no character's private view yet.
@@ -1003,6 +1031,9 @@ class Hub:
 
     def _visible_art_keys(self, viewer: str | None, book: dict | None = None) -> set[str]:
         """Pictures in this reader's own book, personal appearances or current observed encounter."""
+        context = self._context(viewer)
+        if context is not self:
+            return context._visible_art_keys(viewer, book)
         keys = self._art_keys(self._book(viewer) if book is None else book)
         keys |= {p.portrait for p in perception.appearances(self.state, viewer).values() if p.visible and p.portrait}
         if viewer is not None or set(views.observers(self.game)) == {inv.id for inv in self.state.investigators}:
@@ -1072,6 +1103,9 @@ class Hub:
         """The module for the players' screens: the table's copy while the game is on, the
         whole book once it has ended (the debrief lays it open anyway), but for big scenes
         that never came."""
+        context = self._context(viewer)
+        if context is not self:
+            return context._book(viewer)
         if viewer not in {investigator.id for investigator in self.state.investigators}:
             viewer = None
         if not self.state.ending:
@@ -1085,10 +1119,11 @@ class Hub:
         if ws is not None and not ws.closed:
             try:
                 viewer = self._seat_of(cid)
+                game = self._context(viewer).game
                 ev = msg.get("ev", {})
-                if ev.get("type") == "art" and not perception.picture_visible(self.game, viewer, self.faces.get(ev.get("key"), ev.get("key"))):
+                if ev.get("type") == "art" and not perception.picture_visible(game, viewer, self.faces.get(ev.get("key"), ev.get("key"))):
                     return
-                msg = perception.project_payload(self.game, viewer, msg)
+                msg = perception.project_payload(game, viewer, msg)
                 # Personal projection may rebuild a battle view. Apply the network contract
                 # last so its fresh names cannot restore private stats, route nodes or asset ids.
                 if isinstance(event := msg.get("ev"), dict) and (event.get("type") in BATTLE or "fight" in event or "chase" in event):
@@ -1199,6 +1234,14 @@ class Hub:
                 await self._broadcast({"t": "say", "from": "系统", "text": "开场叙述未能完成，可直接开始行动。"})
             self._save()
             await self._broadcast({"t": "sync", "state": self._view()})
+        if self.scene_cast_factory is not None and len(st.investigators) > 1:
+            from .scenes import SceneTables
+
+            self._scene_tables = SceneTables(self, self.scene_cast_factory, self.scene_rules_factory)
+            await self._scene_tables.run()
+            self.over = True
+            await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
+            return
         while not st.ending:
             if not any(inv.can_act for inv in st.investigators):  # nobody left standing
                 break
@@ -1236,10 +1279,13 @@ class Hub:
     def _count(self, seat: str) -> int:
         return sum(1 for s, _ in self.pool if s == seat)
 
+    def _participants(self):
+        return self.state.investigators
+
     def _players(self) -> list[str]:
         """Able participants, including a disconnected seat whose declaration still stands."""
         declared = {seat for seat, _ in [*self.pool, *self.early]}
-        return [inv.id for inv in self.state.investigators if inv.can_act
+        return [inv.id for inv in self._participants() if inv.can_act
                 and (self.sits.get(inv.id) is not None or inv.id in declared)]
 
     def capacity(self) -> int:
@@ -1275,10 +1321,13 @@ class Hub:
             self.closes_at = asyncio.get_running_loop().time() + self.window
 
     def _round_seats(self) -> list[str]:
-        return [inv.id for inv in self.state.investigators if inv.can_act and self._encounter_human(inv.id)]
+        return [inv.id for inv in self._participants() if inv.can_act and self._encounter_human(inv.id)]
 
     def _encounter_human(self, seat: str) -> bool:
         """An encounter's human controller persists independently of its live connection."""
+        context = self._context(seat)
+        if context is not self:
+            return context._encounter_human(seat)
         enc = self.game.world_encounter()
         return (seat in self.state.human and enc is not None and (person := enc.get(seat)) is not None
                 and person.controller == "human" and person.presence == "in")
@@ -1295,6 +1344,9 @@ class Hub:
 
     def _pool_view(self, cid: str) -> dict[str, Any]:
         """The current collection window, including only this connection's declarations."""
+        context = self._context(self._seat_of(cid))
+        if context is not self:
+            return context._pool_view(cid)
         names = {inv.id: inv.name for inv in self.state.investigators}
         waiting = self._waiting_for() if self.open else []
         public = {"t": "pool", "open": self.open, "capacity": self.capacity(), "count": len(self.pool),
@@ -1468,7 +1520,7 @@ class Hub:
                 note.pop("execution")
                 note["reason"] = "新的遭遇打断了等待，先确认本轮行动"
                 self.automatic.remove(seat)
-        self.pool.extend((inv.id, self.state.unfinished[inv.id]["original"]) for inv in self.state.investigators
+        self.pool.extend((inv.id, self.state.unfinished[inv.id]["original"]) for inv in self._participants()
                          if inv.id in self.automatic)
         for seat, text in early:  # in the order it was said; what finds no room waits a round more
             (self.pool if seat not in affected and self._acts(seat) and self._may_add(seat, capacity=capacity)
@@ -1572,7 +1624,7 @@ class Hub:
         acted = {seat for seat, _ in self.pool}
         declared = {seat for seat, _ in self.early}
         order = (saved if saved is not None else
-                 [*self.pool, *[(inv.id, None) for inv in st.investigators
+                 [*self.pool, *[(inv.id, None) for inv in self._participants()
                                 if inv.id not in acted | declared and inv.id not in self.done and self.sits.get(inv.id) is None]])
         if saved is None and self.automatic:
             order.sort(key=lambda pair: pair[0] in self.automatic)  # actual new requests precede passive continuations
@@ -1941,6 +1993,9 @@ class Hub:
         return ev
 
     def _media_view(self, viewer: str | None) -> dict:
+        context = self._context(viewer)
+        if context is not self:
+            return context._media_view(viewer)
         return {"slots": {slot: self._media_wire(p) for slot, p in presentation.current(self.state, viewer).items()},
                 "papers": [self._media_wire(p) for p in presentation.papers(self.state, viewer).values()]}
 
@@ -2160,6 +2215,8 @@ class Hub:
                 await asyncio.Event().wait()
         finally:
             key_file.unlink(missing_ok=True)
+            if self._scene_tables is not None:
+                await self._scene_tables.close()
             if self.private_task is not None:
                 self.private_task.cancel()
                 await asyncio.gather(self.private_task, return_exceptions=True)
