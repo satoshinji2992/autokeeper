@@ -391,6 +391,11 @@ async def test_joint_kp_order_then_real_commit_refreshes_the_other_graph_ruling(
             tb.cancel()
             await asyncio.gather(tb, return_exceptions=True)
             await runtime.close()
+            # A model task that was already scheduled can finish while cancellation is
+            # delivered, after the saved crash boundary. It committed no result or roll;
+            # count the new process's preparation below, not that discarded computation.
+            seen.clear()
+            contexts.clear()
             runtime, casts, _ = made(fake, state=GameState.model_validate_json(saved))
             ga, gb = runtime.game(a), runtime.game(b)
             casts[a].npc = casts[b].npc = voice
