@@ -651,6 +651,8 @@ class Game(Encounters):
     async def _cue_scene(self, plan: Plan, receipt: dict) -> None:
         """An explicit interruption changes the scene before the rules assistant reads it.
         Its operations, consequences and notices use the ordinary durable stage journal."""
+        if self.state.held:
+            await self.tell_held()
         journal = receipt.setdefault("cues", {})
         receipt.setdefault("cue_present", self._present())
         turn = TURN_RECORD.validate_python(receipt["cue_turn"]) if "cue_turn" in receipt else Turn()
@@ -2806,6 +2808,10 @@ class Game(Encounters):
         goes on from it, never asking the NPC again (the review of 2026-10-21: the line was kept and
         what the warden told was lost)."""
         st, m = self.state, self.m
+        if st.held:
+            # Deliver earlier settled actions before this visible performance can
+            # move anyone or interrupt the scene with a new encounter.
+            await self.tell_held()
         npc = m.npc(npc_id)
         said = turn.replies.get(key)
         if said is None:
