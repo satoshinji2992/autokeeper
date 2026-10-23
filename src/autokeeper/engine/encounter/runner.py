@@ -500,6 +500,8 @@ class Encounters:
             if not event:
                 turn.notes.append("没有可以动手的对象")
             return ""
+        if st.held:
+            await self.tell_held()
         base = f"enc/{eid}/begin"
         done = await step("/" + base, turn, lambda: self._begin(eid, start, foes, turn, event))
         await self._notify(base, done["notices"], turn)

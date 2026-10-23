@@ -101,6 +101,36 @@ async def test_an_early_npc_performance_follows_the_preceding_settled_scene_once
     assert len(reports) == 1 and sum(event["type"] == "npc" for event in events) == 1
 
 
+async def test_a_fight_begins_after_held_results_and_a_retry_does_not_retell_them(recorded):
+    from autokeeper.engine.encounter.plan import EncounterStart
+
+    hub, reports, _ = recorded
+    game, st = hub.game, hub.state
+    st.location, st.turn, game.holding = "square", 1, True
+    await game.narrate(acted(hub, "A_RESULT"))
+    assert st.held and not reports
+    st.active, st.turn = 1, 2
+    start = EncounterStart(mode="fight", foes=["warden"], reason="守钟人扑了过来")
+    action = Action(kind="other", summary="冲突开始", declared={"start": start.model_dump(mode="json")})
+    st.pending_turn = {"input": action.summary}
+    events, broke = [], []
+
+    async def emit(event):
+        if event["type"] == "fight_start" and not broke:
+            broke.append(True)
+            raise ConnectionError("the fight's first notice did not arrive")
+        events.append(event)
+
+    game.emit = emit
+    with pytest.raises(ConnectionError):
+        await game.resolve(action, Ruling(needs_roll=False))
+    assert not st.held and len(reports) == 1
+    await game.resolve(action, Ruling(needs_roll=False))
+    kinds = [event["type"] for event in events]
+    assert kinds.index("keeper_end") < kinds.index("fight_start")
+    assert kinds.count("keeper_end") == kinds.count("fight_start") == 1 and len(reports) == 1
+
+
 async def test_solo_move_does_not_pull_earlier_shared_report_into_private_destination(recorded):
     hub, reports, _ = recorded
     game, st = hub.game, hub.state
