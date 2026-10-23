@@ -367,12 +367,30 @@ class Encounters:
             if d:
                 await self._declare(turn, st.investigator.id, DeclaredAction.model_validate(d),
                                     "button" if declared.get("source") == "button" else "words", ruling)
-        if self.holding:  # a LAN round: the others declare in the same window, the last settles it
+        if self._awaiting_encounter_declarations(enc):
             turn.declared = True
             return
         await self._beat(turn, settle=bool(declared.get("beat")) or st.round_spent is not None)
         await step("ending", turn, lambda: self._check_ending(turn))
         await step("party-down", turn, lambda: self._party_down(turn))  # over, and none of them can act: Game._party_down
+
+    def _awaiting_encounter_declarations(self, enc: EncounterState) -> bool:
+        """Scene narration and tactical collection have different boundaries.
+
+        An unrelated scene between two participants must neither settle their round early
+        nor keep it open after both declarations have actually reached the encounter.
+        """
+        st = self.state
+        if not self.table_turn_based or st.round_spent is None:
+            return self.holding
+        participants = {inv.id for inv in st.investigators if inv.can_act
+                        and (person := enc.get(inv.id)) is not None and person.presence == "in"}
+        receipt = st.round_plan
+        done = receipt.get("done", [])
+        current = st.pending_turn.get("party_token")
+        return any(step["token"] != current and step["token"] not in done
+                   and receipt["input"][int(step["token"])][0] in participants
+                   for step in receipt.get("steps", []))
 
     # -- starting one -----------------------------------------------------------------------------
     async def _start_from(self, action: Action, turn: Turn) -> str:
