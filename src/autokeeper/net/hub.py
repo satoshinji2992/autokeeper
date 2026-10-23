@@ -1415,7 +1415,7 @@ class Hub:
         if self.game.world_encounter() is not None:
             return st.minutes
         limits = []
-        peers = [inv.id for inv in st.investigators if inv.can_act and inv.id != actor
+        peers = [inv.id for inv in self._participants() if inv.can_act and inv.id != actor
                  and (self.sits.get(inv.id) is not None or any(seat == inv.id for seat, _ in self.early)
                       or st.unfinished.get(inv.id, {}).get("execution"))]
         if any(seat == actor for seat, _ in self.early):

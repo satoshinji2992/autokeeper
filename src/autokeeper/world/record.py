@@ -328,6 +328,7 @@ class WorldRecord(BaseModel):
     requests: dict[str, Request] = Field(default_factory=dict)
     ticks: list[str] = Field(default_factory=list)  # time advances already simulated
     simulated: int | None = None  # game minutes the world has been simulated up to (engine/game.py)
+    reviewed_at: int | None = None  # shared backstage review, once per actual time boundary across scenes
     left: dict[str, int] = Field(default_factory=dict)  # place -> record seq when the party last left it
     journal: list[Entry] = Field(default_factory=list)
     npc_budget_turn: int = -1

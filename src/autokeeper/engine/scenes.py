@@ -172,6 +172,7 @@ class SceneRuntime:
         self.state, self.module = state, module
         self.cast_factory, self.rules_factory, self.emit = cast_factory, rules_factory, emit
         self.changed = asyncio.Event()
+        self.world_scheduler_lock = asyncio.Lock()
         self._pulse = asyncio.Event()
         self._views: dict[str, SceneView] = {}
         self._games: dict[str, Game] = {}
@@ -299,6 +300,7 @@ class SceneRuntime:
             game.time_wait = lambda end=None: self.wait(ident, end)
             game.time_commit = lambda end: self.commit_time(ident, end)
             game.time_release = lambda: self.release(ident)
+            game.world_scheduler_lock = self.world_scheduler_lock
             game.listener = game.emit = lambda event: self.emit(ident, event)
             self._games[ident] = game
         return self._games[ident]

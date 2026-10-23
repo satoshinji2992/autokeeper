@@ -101,7 +101,8 @@ class SceneTable(Hub):
         self._start_privates()
         try:
             while not self.halted and not self.root.state.ending:
-                if not any(person.can_act for person in self._participants()):
+                if (not any(person.can_act for person in self._participants())
+                        and self.game.world_encounter() is None and not self.state.pending_turn):
                     return
                 humans = [who for who in self.scene.members if who in self.state.human]
                 if ((humans and not any(self.sits.get(who) for who in humans)) or not self.clients):
@@ -160,10 +161,12 @@ class SceneTables:
                 return
             active = set(self.runtime.reconcile())
             # Only unstarted input migrates. A pending journal/choice pins its controller.
-            queued = []
+            queued, receipts, retired = [], [], []
             for ident, worker in self.workers.items():
                 if ident not in active and not worker.halted:
+                    retired.append(worker)
                     queued.extend(worker.early)
+                    receipts.extend(worker.state.queued_receipts)
                     if worker.open:
                         queued.extend(pair for pair in worker.pool if pair[0] not in worker.automatic)
                     worker.halted = True
@@ -176,8 +179,24 @@ class SceneTables:
                     for who, text in queued:
                         if who in worker.scene.members and (who, text) not in worker.early:
                             worker.early.append((who, text))
+                    worker.state.queued_receipts.extend(row for row in receipts
+                                                        if row["seat"] in worker.scene.members)
                     worker._save_queued()
                     self.tasks[ident] = asyncio.create_task(worker.run(), name=f"table:{ident}")
+            # A closed scene must not keep a director/image task that can still write facts.
+            # Install the new routing before awaits so incoming declarations cannot fall
+            # back into the no-longer-running root table.
+            for worker in retired:
+                if worker.private_task is not None:
+                    worker.private_task.cancel()
+                    await asyncio.gather(worker.private_task, return_exceptions=True)
+                if task := self.tasks.get(worker.ident):
+                    if task is not asyncio.current_task():
+                        await asyncio.gather(task, return_exceptions=True)
+                await worker.game.close()
+                await worker.cast.close()
+                self.runtime._games.pop(worker.ident, None)
+                self.runtime._graphs.pop(worker.ident, None)
             self.runtime.changed.set()
 
     async def run(self) -> None:
@@ -186,7 +205,9 @@ class SceneTables:
             for task in self.tasks.values():
                 if task.done() and not task.cancelled() and task.exception():
                     raise task.exception()
-            if not any(person.can_act for person in self.root.state.investigators):
+            if (not any(person.can_act for person in self.root.state.investigators)
+                    and not any(scene.encounter or scene.pending_turn for scene in self.runtime.scenes.values()
+                                if not scene.closed)):
                 break
             if ((not self.root.swaps.empty() or not self.root.rules.empty())
                     and not any(scene.busy or scene.pending_turn for scene in self.runtime.scenes.values()

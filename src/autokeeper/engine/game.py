@@ -246,6 +246,7 @@ class Game(Encounters):
         self.time_wait: Callable[[int | None], Awaitable[None]] | None = None
         self.time_commit: Callable[[int], None] | None = None
         self.time_release: Callable[[], None] | None = None
+        self.world_scheduler_lock: asyncio.Lock | None = None
         self.turn_checkpoint: Callable[[Turn], None] | None = None
         self._resolution: dict | None = None
         self._resolution_scope: list[str] = []
@@ -4207,6 +4208,17 @@ class Game(Encounters):
             await self._flags([f for f in self.state.flags if f not in before], turn, landed=True)
 
     async def _look(self) -> None:
+        if self.world_scheduler_lock is not None:
+            async with self.world_scheduler_lock:
+                reviewed = self.world.rec.reviewed_at
+                if reviewed is not None and reviewed >= self.state.minutes:
+                    return
+                await self._look_once()
+                self.world.rec.reviewed_at = self.state.minutes
+            return
+        await self._look_once()
+
+    async def _look_once(self) -> None:
         """After a long stretch of game time (a night, a journey) the director looks backstage, on
         the screens: a backstage adjustment of its own if one is called for (a rewrite, a plan, an
         arrangement), checked as its plans are. What the important NPCs do is decided when they
@@ -4304,6 +4316,13 @@ class Game(Encounters):
             self.checkpoint()
 
     async def _live(self, turn: Turn, *, inline: bool = True) -> None:
+        if self.world_scheduler_lock is not None:
+            async with self.world_scheduler_lock:
+                await self._live_once(turn, inline=inline)
+            return
+        await self._live_once(turn, inline=inline)
+
+    async def _live_once(self, turn: Turn, *, inline: bool = True) -> None:
         """Advance prepared work or react to new experienced events, within one turn's allowance."""
         st, rec = self.state, self.world.rec
         start = st.minutes if rec.simulated is None else rec.simulated
