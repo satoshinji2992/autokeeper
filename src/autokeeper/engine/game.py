@@ -471,7 +471,9 @@ class Game(Encounters):
                 st.developed.append(inv.id)
             if result.kind in ("roll", "develop"):  # things that happened at the table; lookups do not count
                 st.add("dice", result.text, who=inv.name)
-        await self.emit({"type": "command", "kind": result.kind, "text": result.text, "who": inv.name})
+        audience = [inv.id] if what in ("sanity", "set", "madness") else None
+        await self.emit({"type": "command", "kind": result.kind, "text": result.text, "who": inv.name,
+                         "audience": audience})
         await self.emit({"type": "sheet"})
         return result
 
@@ -3648,15 +3650,11 @@ class Game(Encounters):
         turn.notes.append(f"读图员：与“{asked}”的相似度 {result.resemblance:.2f}。{result.notes}")
         if prompt and result.resemblance >= prompt.threshold:
             if prompt.sanity:
-                ok, bad = prompt.sanity.split("/")
                 watching = set(self.world.observers(self.world.place(st.investigator.id)))
                 for inv in st.investigators:
                     if inv.id not in watching or not inv.can_act:
                         continue
-                    s = self._sanity(inv, ok, bad)
-                    turn.sanity.append((inv.name, s))
-                    st.add("sanity", s.describe(), who=inv.name)
-                    await self.emit({"type": "sanity", "who": inv.name, **_sanity_view(s), **self._madness(inv, s, turn)})
+                    await self.emit(self._lose_sanity(inv, prompt.sanity, turn))
                 turn.notes.append("画得太像了——他本不该画得出来")
             if prompt.clue:
                 await self._gain([prompt.clue], turn, None)
@@ -3682,13 +3680,15 @@ class Game(Encounters):
                 if dealt.card.hp else None
             if wounded:
                 dealt.lines.insert(0, f"{inv.name}{wounded['text']}")
-            st.add("event", f"惨事卡〔{dealt.card.name}〕", who=inv.name)
-            turn.notes.append(cards.mishap_note(inv, dealt))
-            events = [{"type": "card", **cards.view(dealt.card, inv.name)}, *([wounded] if wounded else [])]
+            st.add("event", f"惨事卡〔{dealt.card.name}〕", who=inv.name, audience=[inv.id])
+            turn.notes.append("【主持用个人惨事资料；完整卡片和规则后果仅告知本人】" + cards.mishap_note(inv, dealt))
+            events = [{"type": "card", **cards.view(dealt.card, inv.name), "audience": [inv.id]},
+                      *([wounded] if wounded else [])]
             if dealt.sanity is not None:
                 turn.sanity.append((inv.name, dealt.sanity))
-                st.add("sanity", dealt.sanity.describe(), who=inv.name)
-                events.append({"type": "sanity", "who": inv.name, **_sanity_view(dealt.sanity), **self._madness(inv, dealt.sanity, turn)})
+                st.add("sanity", dealt.sanity.describe(), who=inv.name, audience=[inv.id])
+                events.append({"type": "sanity", "who": inv.name, **_sanity_view(dealt.sanity),
+                               **self._madness(inv, dealt.sanity, turn), "audience": [inv.id]})
             return {"name": dealt.card.name, "events": [*events, {"type": "sheet"}]}
 
         done = await step(key, turn, commit)
