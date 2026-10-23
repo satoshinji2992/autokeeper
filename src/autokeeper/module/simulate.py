@@ -95,7 +95,15 @@ def reach(m: Module, *, without_places: frozenset[str] = frozenset(), without_np
             if e.id in r.events:
                 continue
             when = e.when.strip()
-            if possible(when):
+            gate = e.after_rounds
+            origin = next((event for event in m.events if gate and event.id == gate.event), None)
+            opponents = [*origin.fight, *origin.chase] if origin is not None else []
+            forms = {c.id: c.npc or c.id for c in m.creatures}
+            rounds_possible = gate is None or (gate.event in r.events and any(
+                forms.get(who, who) not in without_npcs for who in opponents))
+            # Reachability considers a possible completed encounter, never claims that
+            # those rounds elapsed on the unattended world's clock (drift).
+            if rounds_possible and (possible(when) if when else gate is not None):
                 r.events.add(e.id)
                 r.flags |= set(e.sets)
                 r.met |= set(e.present)
@@ -166,7 +174,8 @@ def drift(m: Module, *, days: int = DAYS) -> Drift:
     # A step whose grounds the condition language cannot say (Move.only_if) is judged when it comes, not done.
     pending = [(a.npc, s) for a in m.agendas for s in a.steps if s.does.strip() and s.when.strip() and not s.only_if.strip()
                and not s.ruling and a.npc in at]
-    timed = sorted((parse_time(e.when.strip()), e) for e in m.events if TIMED.fullmatch(e.when.strip()))
+    timed = sorted((parse_time(e.when.strip()), e) for e in m.events
+                   if not e.after_rounds and TIMED.fullmatch(e.when.strip()))
 
     from ..world.agents import split_when
 

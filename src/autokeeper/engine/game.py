@@ -344,6 +344,8 @@ class Game(Encounters):
     # -- setup ----------------------------------------------------------------------
     @staticmethod
     def new(module: Module, investigators: list[Investigator], *, slot: str = "default", human: list[str] | None = None) -> GameState:
+        for inv in investigators:
+            fog.validate_familiar(module, inv)
         state = GameState(
             module=module.id,
             slot=slot,
@@ -811,7 +813,7 @@ class Game(Encounters):
         and consent before travelling, checkpointed one at a time. Each reply settles as any does
         (_reply), into the preparation's own turn (_preparing)."""
         await self._step_in(action)
-        if not action.destination or action.kind == "meta" or not fog.findable(self.m, self.state, action.destination):
+        if not action.destination or action.kind == "meta" or not fog.findable(self.m, self.state, action.destination, viewer=self.state.investigator.id):
             return
         st = self.state
         journal, turn, keep = self._preparing(action)
@@ -1671,7 +1673,7 @@ class Game(Encounters):
         if (action.kind == "move" or action.arrival_after_success or not dst or dst == self.state.location
                 or self._travel(self.state.location, dst) is None):
             return None
-        return dst if fog.findable(self.m, self.state, dst) else None
+        return dst if fog.findable(self.m, self.state, dst, viewer=self.state.investigator.id) else None
 
     def _resolution_key(self, key: str) -> str:
         return key[1:] if key.startswith("/") else "/".join([*self._resolution_scope, key])
@@ -1823,7 +1825,7 @@ class Game(Encounters):
             return
         inv = st.investigator
         blocked = await step("entry-condition", turn, lambda: bool(action.arrival_after_success and (
-            ruling.missing or not action.destination or not fog.findable(self.m, st, action.destination)
+            ruling.missing or not action.destination or not fog.findable(self.m, st, action.destination, viewer=st.investigator.id)
             or self._travel(st.location, action.destination) is None))) if action.arrival_after_success else False
         if blocked:
             await step("entry-blocked", turn, lambda: turn.notes.append(
@@ -1837,7 +1839,7 @@ class Game(Encounters):
                 return self._straggle(inv, ruling.go or action.destination, turn)
             heading = ruling.go or (action.destination if action.kind == "move" else self._heading(action))
             heading = None if heading == st.location else heading
-            if heading and heading != ruling.go and not fog.findable(self.m, st, heading):
+            if heading and heading != ruling.go and not fog.findable(self.m, st, heading, viewer=inv.id):
                 heading = None
             if not heading and not ruling.go and (action.kind == "move" or action.destination) and action.destination != st.location:
                 turn.notes.append(NOWHERE)
@@ -2059,7 +2061,7 @@ class Game(Encounters):
 
         def route() -> dict:
             path = self._route(st.location, action.destination)
-            if not path or not fog.findable(self.m, st, action.destination):
+            if not path or not fog.findable(self.m, st, action.destination, viewer=st.investigator.id):
                 turn.notes.append("原定路线已无法使用，尚未抵达目的地。")
                 return {}
             stopping = action.travel == "stroll" and len(path) > 2
@@ -2126,7 +2128,7 @@ class Game(Encounters):
         a rejoin (rule), not this. {}: the party does not move."""
         st = self.state
         here = st.apart[inv.id]
-        if not dest or dest in (here, st.location) or not fog.findable(self.m, st, dest):
+        if not dest or dest in (here, st.location) or not fog.findable(self.m, st, dest, viewer=inv.id):
             return {}
         minutes = self._travel(here, dest)
         if minutes is None:
@@ -3631,7 +3633,7 @@ class Game(Encounters):
         if turn.clues:
             await step("clue-sheet", turn, lambda: self.emit({"type": "sheet"}))
 
-    async def _flags(self, flags: list[str], turn: Turn, *, landed: bool = False) -> None:
+    async def _flags(self, flags: list[str], turn: Turn, *, landed: bool = False, readers: list[str] | None = None) -> None:
         """Set story flags, and what hangs on them happens. `landed`: the world already set them (an
         agenda brought them about, world/agents.effects); only their consequences are left."""
         st, m = self.state, self.m
@@ -3647,7 +3649,8 @@ class Game(Encounters):
                 st.progress_at = st.turn
 
             async def settle(flag=flag) -> None:
-                scope = await step("audience", turn, lambda: self._narrative_audience(turn))
+                scope = await step("audience", turn, lambda: recipients.scope(st, readers) if readers is not None
+                                   else self._narrative_audience(turn))
                 await step("commit", turn, commit)
                 await step("notice", turn, lambda: self.emit({"type": "flag", "flag": flag, "meaning": m.flags[flag], "audience": scope}))
                 await step("showcase", turn, lambda: self.showcases.fire(f"flag:{flag}", audience=scope))
@@ -3683,6 +3686,11 @@ class Game(Encounters):
             key = f"/event:{ev.id}"
             if ev.id in st.fired and not self._resolution_pending(key):
                 continue
+            if ev.after_rounds and not self._resolution_pending(key):
+                gate = ev.after_rounds
+                encounters = [*st.encounter_log, *([st.encounter] if st.encounter is not None else [])]
+                if not any(enc.source_event == gate.event and enc.completed_rounds >= gate.completed for enc in encounters):
+                    continue
             if ev.when.startswith("visit:"):
                 if ev.when[6:] != visit:
                     continue
@@ -4009,9 +4017,11 @@ class Game(Encounters):
             # anyone. A retry or arrival beside another investigator cannot add witnesses.
             observed = await step("audience", turn, observers)
             witnesses, sanity_witnesses, victim = observed["witnesses"], observed["sanity"], observed["victim"]
-            await step("commit", turn, commit)
             if ev.present and self.world is not None:
                 await step("present", turn, appear)
+            if ev.effects:
+                await step("effects", turn, lambda: self._event_effects(ev, turn, at=event_time))
+            await step("commit", turn, commit)
             if not witnessed:
                 await step("sets", turn, sets)
                 return
@@ -4308,6 +4318,16 @@ class Game(Encounters):
                 opts.append(f"花 {turn.push['luck']} 点幸运")
             out.append(f"（玩家可以选择：{'或'.join(opts)}，结果下一步揭晓；现在只写失败的样子。）")
         out += turn.fight  # a round of a fight or a chase, as settled (engine/encounter)
+        from .encounter import views as encounter_views
+
+        if "encounter_snapshot" not in turn.narrating:
+            when = int(turn.interval["end"]) if turn.interval else None
+            place = turn.interval.get("destination", "") if turn.interval else ""
+            viewer = turn.interval.get("actor", inv.id) if turn.interval else inv.id
+            turn.narrating["encounter_snapshot"] = encounter_views.settled_text(
+                self.world, viewer=viewer, at=when, place=place, include_results=not bool(turn.fight))
+        if snapshot := turn.narrating["encounter_snapshot"]:
+            out.append(snapshot)
         out += self._found(turn)
         for who, s in turn.sanity:
             out.append(f"理智：{who} {s.describe()}" + (f"；疯狂发作表（日文原文，请用中文演出）：{s.bout}" if s.bout else ""))

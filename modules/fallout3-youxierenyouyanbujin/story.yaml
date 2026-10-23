@@ -37,8 +37,14 @@ events:
   - mccurdy
 - id: e_stanley_shoots
   title: 三声枪响
-  when: D1 19:45
-  move_to: meeting_house
+  after_rounds:
+    event: e_mccurdy_attack
+    completed: 3
+  where: meeting_house
+  effects:
+  - kind: die
+    target: mccurdy
+    why: 原文明定副警长从背后连开三枪，当场击毙（必杀，无需掷骰）
   performer: stanley
   performance: 不示警，从背后连开三枪打死麦克迪；然后皱着眉头想很久，再安抚调查员说“没事了，疯了的流浪汉，很快就有人来收尸”，劝大家别声张。
   read_aloud: 门口炸开三声枪响。袭击者向前扑倒，再也没起来。副警长斯坦利·亚历山大站在门口，枪口还冒着烟。

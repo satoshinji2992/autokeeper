@@ -17,6 +17,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from ..plugins.schema import Plugin
 from ..rules.coc import Investigator
+from ..rules.consequences import Die
 from ..rules.dice_expr import StoredDiceText
 
 
@@ -255,10 +256,16 @@ class Stake(BaseModel):
     note: str = Field("", max_length=80, description="这一条意味着什么，一句话，给守秘人看")
 
 
+class RoundGate(BaseModel):
+    event: str = Field(description="开启该战斗或追逐的事件 id，不是人物 id")
+    completed: int = Field(ge=1, description="该遭遇已经实际完成的轮数，不含刚开始而尚未结算的轮次")
+
+
 class Event(BaseModel):
     id: str
     title: str
-    when: str = Field(description="触发条件：D1 21:00、flag:x、visit:地点id；也可用 &、| 连接 flag、hour:0-6、at:players:地点、knows:players:clue:线索；! 表示未成立")
+    when: str = Field("", description="触发条件：D1 21:00、flag:x、visit:地点id；可用 &、| 连接，! 表示未成立；仅由 after_rounds 触发时留空")
+    after_rounds: RoundGate | None = Field(None, description="原文明示经过若干遭遇轮次才发生时填写；与 when 的条件须同时成立，不把轮次改编成任意钟点")
     where: str = Field("", description="事件实际发生的地点；异地事件只进入世界记录，不搬运调查员、不向异地玩家展示现场或结算当场伤害")
     check: Check | None = Field(None, description="条件满足后还需通过的检定；每游戏日最多尝试一次，失败后下日可再试，成功才发生")
     advance_to: str = Field("", pattern=r"^(?:(?:D[1-9]\d* )?(?:[01]\d|2[0-3]):[0-5]\d)?$",
@@ -270,6 +277,7 @@ class Event(BaseModel):
     present: list[str] = Field(default_factory=list, description="朗读里出现在调查员眼前的 NPC id（推门进来的人、桥头的人影）；"
                                                                 "触发时他们来到事件发生的地方。只是听说、打来电话、远远望见的不写")
     damage: str | None = Field(None, description="当场受到的伤害，如 1D3（由行动的调查员承受）")
+    effects: list[Die] = Field(default_factory=list, description="原文明示无须检定、确定发生的身体后果；kind=die 指明目标与原文依据。可能死亡或需先检定的攻击不填")
     move_to: str | None = None
     performer: str | None = Field(None, description="由哪个 NPC 当场表演（例如说书）")
     performance: str = Field("", description="表演要求，NPC 会结合本局发生过的事现编")

@@ -126,6 +126,7 @@ class Draft(BaseModel):
     sex: str = ""
     residence: str = ""
     birthplace: str = ""
+    known_locations: list[str] = Field(default_factory=list, description="本人背景明确熟悉的模组地点 id；仅从提供的地点中按明确背景选取，不猜私人地址，不能填全地图")
     characteristics: Stats = Field(description="把 80、70、60、60、50、50、50、40 分给八项属性，每个数用一次")
     formula: Literal["教育×4", "教育×2+敏捷×2", "教育×2+力量×2", "教育×2+外貌×2", "教育×2+意志×2"] = Field(description="职业技能点的算法")
     credit: int = Field(description="信用评级，从职业技能点里出")
@@ -145,6 +146,7 @@ class Sheet(BaseModel):
     sex: str = ""
     residence: str = ""
     birthplace: str = ""
+    known_locations: list[str] = Field(default_factory=list, description="原卡明确熟悉、且在本模组地点表内的 id；没有明确依据留空，不能猜地址")
     characteristics: Stats = Field(description="八项属性，原卡写多少填多少，没写的填 0")
     # A 0 the card writes stands (luck spent, sanity gone); one it does not write is None (rules/creation.accept).
     luck: int | None = Field(None, description="幸运，原卡写多少填多少，写的是 0 也填 0；没写填 null")
@@ -376,7 +378,12 @@ def read_file(path: Path) -> tuple[dict | None, str, list[bytes] | None]:
 
 # -- the agent ------------------------------------------------------------------------
 def _setting(m: Module) -> str:
-    return f"【模组】《{m.title}》 {m.era} {m.setting}\n【开场】{m.hook.strip()[:400]}"
+    from ..engine import fog
+
+    public = {m.start, *fog.mentions(m, [m.title, m.subtitle, m.setting, m.hook])}
+    places = "、".join(f"{loc.name}({loc.id})" for loc in m.locations if loc.id in public)
+    return (f"【模组】《{m.title}》 {m.era} {m.setting}\n【开场】{m.hook.strip()[:400]}"
+            f"\n【公开地点】{places}\nknown_locations 只登记背景明确熟悉的上述地点 id；不把公开目录当作本人经历。")
 
 
 def describe(inv: Investigator) -> str:
@@ -432,7 +439,7 @@ class Builder:
         sheet = Sheet(characteristics=Stats(**dict.fromkeys(CHARACTERISTICS, 0)))
         if images or numbers is None or len(rest) > 10:  # more than a bare .st line: names, a story, a scan
             skills = "、".join(k for k in SKILL_BASE)
-            sheet = await self._ask_model(READ_SYSTEM.format(skills=skills), f"【原卡】\n{text or '（见图片）'}", Sheet, images=images)
+            sheet = await self._ask_model(READ_SYSTEM.format(skills=skills), f"{_setting(self.m)}\n【原卡】\n{text or '（见图片）'}", Sheet, images=images)
         stats = numbers["characteristics"] if numbers else sheet.characteristics.model_dump()
         if not any(stats.values()):  # not a sheet at all: a character to build one for
             name = sheet.name or "这个角色"
@@ -446,8 +453,10 @@ class Builder:
             self.id, name=sheet.name or "无名调查员", occupation=sheet.occupation, age=sheet.age or 30, sex=sheet.sex,
             residence=sheet.residence, birthplace=sheet.birthplace, characteristics=stats, skills=skills_found,
             backstory={"说明": "玩家带来的人物卡"} | {k: v for k, v in sheet.backstory.items() if v}, inventory=sheet.inventory,
+            known_locations=sheet.known_locations,
             portrait=self.id, **pools,
         )  # fmt: skip
+        self._validate_locations(self.card)
         self.note = sheet.note or ("这张卡没有名字和职业，可以在“提要求修改”里补上" if not sheet.name else "")
         self.kind = "sheet"
         return "sheet"
@@ -494,7 +503,9 @@ class Builder:
             formula=d.formula, credit=d.credit, occupation_skills=d.occupation_skills, interest_skills=d.interest_skills,
             luck=self.luck, sex=d.sex, residence=d.residence, birthplace=d.birthplace, portrait=self.id,
             backstory=story, inventory=d.inventory,
+            known_locations=d.known_locations,
         )  # fmt: skip
+        self._validate_locations(card)
         self.card, self.note = card, d.note
         return card
 
@@ -503,7 +514,8 @@ class Builder:
         if request:
             self.requests.append(request)
         c = self.card
-        prompt = f"【现在的卡】{describe(c)}\n当前理智{c.san} HP{c.hp}\n【玩家的要求】{request}"
+        prompt = (f"{_setting(self.m)}\n【现在的卡】{describe(c)}\n本人既知地点 id：{c.known_locations}"
+                  f"\n当前理智{c.san} HP{c.hp}\n【玩家的要求】{request}")
         d = await self._ask_model(REVISE_SYSTEM, prompt, Sheet)
         story = {"说明": c.backstory.get("说明", "玩家带来的人物卡")} | {k: v for k, v in d.backstory.items() if v and k != "说明"}
         # What the request leaves alone stays as it was, a 0 too, and MP with it (the sheet has none).
@@ -513,9 +525,16 @@ class Builder:
             characteristics=d.characteristics.model_dump(), skills=d.skills, luck=c.luck if d.luck is None else d.luck,
             san=c.san if d.san is None else d.san, hp=c.hp if d.hp is None else d.hp, mp=c.mp,
             backstory=story or c.backstory, inventory=d.inventory or c.inventory, portrait=self.id,
+            known_locations=d.known_locations if "known_locations" in d.model_fields_set else c.known_locations,
         )  # fmt: skip
+        self._validate_locations(card)
         self.card, self.note = card, d.note
         return card
+
+    def _validate_locations(self, inv: Investigator) -> None:
+        from ..engine import fog
+
+        fog.validate_familiar(self.m, inv)
 
     async def find(self, query: str) -> Figure:
         """Photos for a card that came without one, by name (the card screen's 配一张照片)."""

@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from ..rules import wounds
 from ..rules.bcdice import Level
 from ..rules.coc import Damage
+from ..rules.consequences import Die
 from ..rules.wounds import Body
 from .encounter.plan import ObstacleState
 
@@ -72,12 +73,6 @@ class Stabilize(BaseModel):
 
     kind: Literal["stabilize"] = "stabilize"
     target: str
-
-
-class Die(BaseModel):
-    kind: Literal["die"] = "die"
-    target: str
-    why: str  # 濒死时体质检定失败、一击超过生命上限……
 
 
 class Relapse(BaseModel):

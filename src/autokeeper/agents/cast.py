@@ -39,6 +39,8 @@ from .. import cards, rules_lookup, skills
 from ..config import Config
 from ..engine import audience, fog, perception, presentation, world
 from ..engine.encounter import site as chase_site
+from ..engine.encounter import telling as encounter_telling
+from ..engine.encounter import views as encounter_views
 from ..engine.encounter.actions import REACT_WORDS
 from ..engine.encounter.plan import EncounterStart, EncounterTurnPlan
 from ..engine.perception import PerceptionChange
@@ -1080,7 +1082,8 @@ class Cast:
         A batch supplies the scene and recent world record once; each action then adds only its author."""
         inv = state.investigator
         asked = commands.asked(text)
-        prompt = (f"【场景】\n{self.bearings(state)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
+        view = fog.personal(self.module, state, inv.id).model_copy(update={"journey": state.journey, "ongoing": state.ongoing})
+        prompt = (f"【场景】\n{self.bearings(view)}\n【刚才的经过】\n{_recent(state, viewer=inv.id, keeper=False)}\n"
                   if shared else "")
         prompt += (self._party(state) + f"\n【调查员】{inv.name}({inv.id})\n"
                    f"【实际持有】{'、'.join(inv.inventory) or '未登记随身物品'}\n【玩家】{text}")
@@ -1091,6 +1094,9 @@ class Cast:
                        + "\n这只是尚待意图，不是正在执行的旧 Plan。以本次玩家新输入为先，结合实际结果判断是否继续、改变或放弃；"
                        "不能自动恢复旧动作，也不能把尝试或承诺当作已经完成。"
                        "本次 Plan 是本人未办意图的当前版本；仍成立的旧意图合并到 remaining，改变或放弃则按本次输入更新。")
+        if familiar := fog.familiar(self.module, inv):
+            prompt += "\n【本人既知地点】" + "、".join(f"{name}({pid})" for pid, name in familiar.items())
+            prompt += "。本人知道地址与路线，移动的 destination 填上述 id；不表示本局已到访或知道现场现状。不能借给其他人。"
         if inv.backstory:
             prompt += "\n【调查员既有背景】" + "；".join(f"{key}：{value}" for key, value in inv.backstory.items() if value)
         if shared and state.perceptions and self.world is not None:
@@ -1248,7 +1254,7 @@ class Cast:
             state, viewers=tuple(dict.fromkeys(item.who for item in items)))
         places = list(dict.fromkeys(audience.location(state, item.who) for item in items))
         for where in places:
-            view = state.model_copy(update={"active": -1, "location": where})
+            view = fog.personal(self.module, state, None).model_copy(update={"active": -1, "location": where})
             prompt += f"\n\n【共用场景 {where}】\n" + self.bearings(view)
             if self.world is not None:
                 prompt += "\n【已建立的关系与现场事实】\n" + world_view.keeper_view(self.world, at=where)
@@ -2022,6 +2028,8 @@ class Cast:
                 lore += ("\n【规则书原文】（玩家问的是规则时，照原文回答并说出书名和页码；不是规则问题就不用管）\n"
                          + rules_lookup.quote(found))
         extra = ("\n\n" + lore.strip() if lore.strip() else "") + "\n" + self._party(state) + self.prefs.for_keeper() + fix
+        if not settled and self.world is not None and encounter_telling.STATE_HEAD not in report:
+            extra += "\n" + encounter_views.settled_text(self.world, viewer=state.investigator.id)
         request = state.pending_turn.get("request", {})
         continuing = (not settled and request.get("actor") == state.investigator.id
                       and bool(request.get("remaining", "").strip()))
@@ -2112,6 +2120,8 @@ class Cast:
                   "这是场外沟通，不执行秘密物理行动、检定、移动、交物、伤害或线索结算；玩家提出这类要求时，"
                   "说明尚未结算，需要正式提交行动。可以澄清其本人经历、规则或约定，也可以按情境给其私人提示。"
                   "已发生的事实与个人知情范围以记录为准。后台真相不因玩家询问就全部揭露。"
+                  "若先前旁白或答复与正式遭遇快照冲突，以正式状态和结算为准，澄清先前措辞有误；"
+                  "不能宣称旁白优先、面板失效，也不能以私信取消压制、伤害或正式检定结果。"
                   "媒体只能引用索引中已经准备的资源，且只向来信人展示。\n【模组备课】\n" + _book(self.module))
         key = f"private_keeper:{who}"
         s = self._oneshot(key, "keeper", system, PrivateTelling)
@@ -2122,8 +2132,9 @@ class Cast:
         recent = "\n".join(f"{e.who or e.kind}：{e.text}" for e in entries[-12:])
         where = audience.location(state, who)
         brief = world_view.keeper_brief(self.world, at=where) if self.world else ""
+        encounter = encounter_views.settled_text(self.world, viewer=who) if self.world is not None else ""
         prompt = (f"【来信调查员】{state.find(who).name}（{who}）\n【该玩家近期记录】\n{recent}\n"
-                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=where)}\n{brief}"
+                  f"【私信；不是角色行动】{text}\n【所在现场】{self.scene(state, at=where)}\n{brief}\n{encounter}"
                   + presentation.personal_context(state, who)
                   + presentation.index(self.module, state, at=where))
         reply = await self._send(key, s, state, prompt, bind=False)

@@ -66,10 +66,11 @@ from ..engine.encounter import profiles
 from ..harness import Session
 from ..rules import dice_expr
 from ..rules.combat import stats_of, traits
+from ..rules.consequences import Die
 from ..rules.weapons import carried, parse_attack, unread, weapon_in
 from . import conditions, package, prelude, yamledit
 from .graph import SLUG, audit, fighting, known_skill, leg_key, shown, stake_problems, supporting_clues, tellers, ways
-from .schema import Agenda, Bond, Foreshadow, Leg, Mechanic, Module, Past, PreludeFrame, Stage, Stake, Tie
+from .schema import Agenda, Bond, Foreshadow, Leg, Mechanic, Module, Past, PreludeFrame, RoundGate, Stage, Stake, Tie
 
 PASSES = ("npcs", "present", "relations", "agendas", "meet", "foreshadow", "clueweb", "ties", "endings", "mechanics", "history",
           "prelude", "combat", "verify")
@@ -264,6 +265,9 @@ class Trigger(BaseModel):
     chase_party: Literal["", "逃", "追"] = Field("", description="追逐时调查员是逃还是追")
     stakes: list[Stake] = Field(default_factory=list, description="这场打斗或追逐的胜负会带来什么：原文写明的每种收场一条，条件成立时设上的标记只用已声明的")
     sights: list[str] = Field(default_factory=list, description="这件事的理智检定就是看见哪些怪物的那一次（怪物 id）：照面时不再另扣；事件没有理智检定就不写")
+    effects: list[Die] = Field(default_factory=list, description="原文明示必然发生、无须检定的死亡，指明 target 与原文依据 why；尚需交锋或仅有可能的不填")
+    after_rounds: RoundGate | None = Field(None, description="原文明示在另一事件开启的遭遇经过若干轮后发生；填起源事件与完成轮数，替换无依据的绝对钟点")
+    clear_clock: bool = Field(False, description="原文只有相对轮次、事件却编造了绝对时刻时为 true；原文有明确钟点或其他条件时不得清除")
 
 
 class Combat(BaseModel):
@@ -362,7 +366,11 @@ ASK: dict[str, tuple[str, type[BaseModel]]] = {
                "（down:谁 倒下、dead:谁、escaped:谁 脱身、caught:谁 被抓住、surrendered:谁，谁写 NPC、怪物的 id 或 players；"
                "ended:won 赢、lost 输、fled 逃了、escaped、parley 谈和；也可以用 flag:、at:谁:地点；& 表示且，| 表示或），flags 写成立时设上的已声明标记，"
                "note 一句话说它意味着什么。事件自己的理智检定就是看见某个怪物的那一次的（原文写明这次检定是遭遇它的震惊），sights 写那个怪物的 id，"
-               "照面时就不再另扣；没有 fight 的事件也可以只写 sights。", Combat),
+               "照面时就不再另扣；没有 fight 的事件也可以只写 sights。"
+               "原文明确必杀、不掷骰或确定击毙的后果写 effects（kind=die、target、why原文依据），不只写朗读或剧情标记；"
+               "普通攻击、可能死亡、需要玩家选择或检定的结果不写。"
+               "原文写‘交锋若干轮后’则写 after_rounds（event=开启遭遇的事件id、completed=已经完成的轮数），"
+               "不自行改成十五分钟后等钟点。后果事件本身没有 fight 也可以补这些字段。", Combat),
 }
 
 
@@ -499,7 +507,8 @@ def _focus(m: Module, name: str) -> list[str]:
     if name == "npcs":
         return [n.name for n in m.npcs if not (n.personality and n.voice and n.goal and n.knows)]
     if name == "combat":
-        return [c.name for c in m.creatures] + [n.name for n in m.npcs if n.important] + [e.title for e in m.events if e.id in _violent(m)]
+        events = set(_violent(m)) | set(_unprepared_events(m))
+        return [c.name for c in m.creatures] + [n.name for n in m.npcs if n.important] + [e.title for e in m.events if e.id in events]
     return [n.name for n in m.npcs if n.important] or [n.name for n in m.npcs]
 
 
@@ -571,6 +580,8 @@ def need(m: Module, name: str) -> str:
             why.append(f"首次目击的理智检定会算两次的事件：{_few(twice)}")
         if forms := _forms(m):
             why.append(f"没写明是哪个 NPC 战斗形态的怪物：{_few([c for c, _ in forms])}")
+        if events := _unprepared_events(m):
+            why.append(f"需对照原文补确定后果或遭遇轮次的事件：{_few(events)}")
         return "；".join(why)
     if name == "clueweb":
         from .simulate import playthrough
@@ -611,6 +622,14 @@ def _unmarked(m: Module) -> list[tuple[str, Any]]:
     return [(a.npc, s) for a in m.agendas for s in a.steps if not s.does and not s.ruling and (s.meet is None or (s.meet and s.once is None))]
 
 
+def _unprepared_events(m: Module) -> list[str]:
+    """Compile-time review candidates; prose never executes a consequence at runtime."""
+    death = re.compile(r"必杀|当场(?:将其)?击毙|(?:不需|无需|不用|不需要)掷骰[^。；\n]{0,24}(?:死亡|打死|杀死|击毙)")
+    rounds = re.compile(r"[一二三四五六七八九十两\d]+\s*轮[）)\s]*后")
+    return [e.id for e in m.events if (not e.effects and death.search(f"{e.text}\n{e.read_aloud}"))
+            or (e.after_rounds is None and rounds.search(f"{e.text}\n{e.read_aloud}"))]
+
+
 def _armoury(m: Module) -> str:
     """What a fight and a chase read of the module now, for the combat pass: each creature's sheet as
     written and as the rules read it, whose fighting form it is, the NPCs' numbers, weapons, attacks and
@@ -643,6 +662,9 @@ def _armoury(m: Module) -> str:
         if e.fight or e.chase:
             rows.append(f"事件 {e.id} 写定了" + (f"打斗 {e.fight}" if e.fight else f"追逐 {e.chase}")
                         + (f"；stakes {[x.when for x in e.stakes]}" if e.stakes else "；还没有 stakes") + (f"；sights {e.sights}" if e.sights else ""))
+        if e.effects or e.after_rounds:
+            rows.append(f"事件 {e.id} 的正式后果：{[effect.model_dump(mode='json') for effect in e.effects]}"
+                        + (f"；轮次条件 {e.after_rounds.model_dump(mode='json')}" if e.after_rounds else ""))
     if twice := _twice(m):
         rows.append(f"有自己的理智检定、打起来的怪物照面还要再扣一次的事件（原文写明这次检定就是照面的，写 sights）：{'、'.join(twice)}")
     if violent := _violent(m):
@@ -993,16 +1015,20 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
         taken.add(loc.id)
         found.append(("replace" if loc.chase else "put", "locations", loc.id, "chase", legs))
     people, events = {*npcs, *creatures}, {e.id: e for e in m.events}
+    targets = people | {inv.id for inv in m.pregens}
+    triggers = {}
+    for trigger in out.triggers:
+        triggers.setdefault(trigger.event, trigger)
     for t in out.triggers:
-        if (e := events.get(t.event)) is None or e.ending or f"event:{e.id}" in done:
+        if (e := events.get(t.event)) is None or f"event:{e.id}" in done:
             continue
         done.add(f"event:{e.id}")
         fight, chase = [x for x in dict.fromkeys(t.fight) if x in people], [x for x in dict.fromkeys(t.chase) if x in people]
         begins = bool(e.fight or e.chase)
-        if not begins and fight:
+        if not begins and fight and not e.ending:
             begins = True
             found += [("put", "events", e.id, "fight", fight)] + ([("put", "events", e.id, "surprise", t.surprise)] if t.surprise else [])
-        elif not begins and chase:
+        elif not begins and chase and not e.ending:
             begins = True
             found += [("put", "events", e.id, "chase", chase)] + ([("put", "events", e.id, "chase_party", t.chase_party)] if t.chase_party else [])
         stakes = [x.model_dump(mode="json", exclude_defaults=True) for x in t.stakes
@@ -1012,6 +1038,18 @@ def _armed(m: Module, out: Combat) -> list[tuple[Any, ...]]:
         sights = [x for x in dict.fromkeys(t.sights) if x in creatures]
         if sights and e.sanity and not e.sights:
             found.append(("put", "events", e.id, "sights", sights))
+        outcomes = [x.model_dump(mode="json") for x in t.effects if x.target in targets and x.why.strip()]
+        if outcomes and not e.effects:
+            found.append(("put", "events", e.id, "effects", outcomes))
+        if t.after_rounds and not e.after_rounds and t.after_rounds.event != e.id:
+            origin = events.get(t.after_rounds.event)
+            prepared = triggers.get(t.after_rounds.event)
+            starts = origin and (origin.fight or origin.chase or (not origin.ending and prepared
+                                  and any(who in people for who in [*prepared.fight, *prepared.chase])))
+            if starts:
+                found.append(("put", "events", e.id, "after_rounds", t.after_rounds.model_dump(mode="json")))
+                if t.clear_clock and re.fullmatch(r"D\d+ \d{1,2}:\d{2}", e.when.strip()):
+                    found.append(("replace", "events", e.id, "when", ""))
     return found
 
 

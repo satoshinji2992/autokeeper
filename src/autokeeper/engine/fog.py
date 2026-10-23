@@ -37,6 +37,7 @@ from functools import lru_cache
 import networkx as nx
 
 from ..module.schema import Module
+from ..rules.coc import Investigator
 from . import audience, world
 from .state import GameState
 
@@ -114,6 +115,17 @@ def mentions(m: Module, texts: Iterable[str]) -> dict[str, str]:
     return found
 
 
+def familiar(m: Module, inv: Investigator) -> dict[str, str]:
+    """Explicit background addresses, never inferred from names or another seat's discoveries."""
+    return {loc.id: loc.name for loc in m.locations if loc.id in inv.known_locations}
+
+
+def validate_familiar(m: Module, inv: Investigator) -> None:
+    missing = set(inv.known_locations) - {loc.id for loc in m.locations}
+    if missing:
+        raise ValueError(f"{inv.name} 的已知地点不存在：{'、'.join(sorted(missing))}")
+
+
 def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     """A read-only map projection from this investigator's actual observations and deliveries.
 
@@ -168,6 +180,7 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     texts += [f"{clue.title}\n{clue.text}" for clue in m.clues if clue.id in clues]
     texts += [row["payload"]["handout"][key] for row in papers.values() for key in ("title", "text")]
     texts += [h.text for h in m.handouts if h.id in handouts and h.id not in papers]
+    background = familiar(m, next(inv for inv in st.investigators if inv.id == viewer)) if viewer else {}
     known_npcs = set(st.record.sightings.get(viewer, {})) if viewer is not None else set()
     known_npcs.update(n.id for n in m.npcs if viewer is not None and n.location == here)
     if single_history:
@@ -176,8 +189,8 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     apart = {investigator.id: "" for investigator in st.investigators
              if investigator.id != viewer and audience.location(st, investigator.id) != here}
     return st.model_copy(update={
-        "location": here, "visited": visited, "heard": ({**st.heard, **mentions(m, texts)} if single_history
-                                                           else mentions(m, texts)),
+        "location": here, "visited": visited, "heard": ({**st.heard, **mentions(m, texts), **background} if single_history
+                                                           else {**mentions(m, texts), **background}),
         "clues": [clue.id for clue in m.clues if clue.id in clues],
         "handouts": [h.id for h in m.handouts if h.id in handouts], "log": readable, "private_history": [],
         "npcs": npcs, "improv": [], "view": views.default(m, places[here], st.minutes) if here in places else "",
@@ -217,6 +230,8 @@ def heard(m: Module, st: GameState) -> dict[str, str]:
     what the engine kept in st.heard, and anything the players were shown since."""
     ids = {loc.id for loc in m.locations}
     out = {pid: name for pid, name in st.heard.items() if pid in ids}
+    if len(st.investigators) == 1:
+        out.update(familiar(m, st.investigators[0]))
     for pid, name in mentions(m, shown(m, st)).items():
         if len(plain(name)) > len(plain(out.get(pid, ""))):
             out[pid] = name
@@ -294,10 +309,12 @@ def landmarks(m: Module, st: GameState | None = None) -> dict[str, str]:
     return out
 
 
-def findable(m: Module, st: GameState, place: str) -> bool:
+def findable(m: Module, st: GameState, place: str, *, viewer: str | None = None) -> bool:
     """Whether the investigators can set out for a place: one they know of, one in plain
     sight, or one next door, which going that way shows them. A place nobody has mentioned
     is not reached by guessing its name from across town."""
+    if viewer is not None:
+        st = personal(m, st, viewer)
     if place == st.location:
         return True
     if not any(loc.id == place for loc in m.locations):

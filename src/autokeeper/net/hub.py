@@ -229,7 +229,8 @@ def public_card(inv: dict[str, Any], viewer: str | None, m: Module, st: GameStat
     names = {item.name for item in m.items if item.id in shown}
     names |= {ent.name for ent in st.record.entities.values() if ent.kind == "item" and ent.at == inv["id"]
               and (PLAYERS in ent.observed_by or viewer in ent.observed_by)}
-    return {**inv, "backstory": {}, "inventory": [name for name in inv.get("inventory", []) if name in names],
+    return {**inv, "backstory": {}, "known_locations": [],
+            "inventory": [name for name in inv.get("inventory", []) if name in names],
             "madness": {}, "injury": {}, "marks": [], "san_lost_today": 0,
             "san_start_of_day": inv["san"],
             "conditions": [condition for condition in inv.get("conditions", []) if "疯狂" not in condition]}
@@ -791,6 +792,11 @@ class Hub:
             if picture:
                 self.m.pictures[inv.portrait] = self.sent[inv.portrait] = picture
                 face = str(msg["portrait"])
+        try:
+            fog.validate_familiar(self.m, inv)
+        except ValueError as exc:
+            await self._no(cid, str(exc))
+            return
         note = "" if origin == "" else cards.era_note(inv, self.m)
         new = self._install(seat, inv, origin)
         if note:

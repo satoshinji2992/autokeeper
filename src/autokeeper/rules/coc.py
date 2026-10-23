@@ -53,6 +53,7 @@ class Investigator(BaseModel):
     birthplace: str = ""
     portrait: str = ""  # ASCII art asset id
     backstory: dict[str, str] = Field(default_factory=dict)
+    known_locations: list[str] = Field(default_factory=list, description="本人背景明确熟悉的模组地点 id；只知地址与路线，不代表本局已到访或知道现场内容，不向同伴公开")
 
     characteristics: dict[str, int]
     luck: int

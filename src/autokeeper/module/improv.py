@@ -78,13 +78,14 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None,
     flags |= {key for plugin in plan.plugins for key in plugin.flags}
     endings = {x.id for x in m.endings} | {x.id for x in plan.endings}
     conclusions = {x.id for x in m.conclusions}
-    from .graph import event_when_problems, stake_problems
+    from .graph import event_outcome_problems, event_when_problems, stake_problems
 
     references = m.model_copy(update={
         "npcs": [*m.npcs, *(NPC(**n.model_dump(exclude={"card"})) for n in plan.npcs)],
         "locations": [*m.locations, *(Location(**loc.model_dump()) for loc in plan.locations)],
         "items": [*m.items, *(Item(**item.model_dump()) for item in plan.items)],
         "flags": dict.fromkeys(flags, ""),
+        "events": [*m.events, *plan.events],
         "clues": [*m.clues, *(Clue(id=c.id, title=c.title, text=c.text, where=c.where, npc=c.npc or None)
                                 for c in plan.clues)],
     })
@@ -125,8 +126,9 @@ def check(m: Module, plan: Any, *, at: str, actors: set[str] | None = None,
                      for problem in stake_problems(references, stake.when, actors=actors)]
         problems += [f"事件 {e.id} 的恐怖照面 {creature} 不存在" for creature in e.sights if creature not in {c.id for c in m.creatures}]
         when = e.when.strip()
-        if when != "now":
+        if when != "now" and (when or not e.after_rounds):
             problems += [f"事件 {e.id} 的条件 {problem}" for problem in event_when_problems(references, when)]
+        problems += [f"事件 {e.id} 的后果 {problem}" for problem in event_outcome_problems(references, e, actors=actors)]
         problems += [f"事件 {e.id} 设置的标记 {f} 没有声明" for f in e.sets if f not in flags]
         if e.move_to and e.move_to not in locs:
             problems.append(f"事件 {e.id} 的地点 {e.move_to} 不存在")
@@ -240,7 +242,8 @@ def apply(m: Module, plan: Any) -> Applied:
             continue
         m.events.append(
             Event(id=e.id, title=e.title, when=when, text=e.text or e.read_aloud, read_aloud=e.read_aloud, sets=e.sets,
-                  where=e.where, check=e.check, advance_to=e.advance_to,
+                  where=e.where, check=e.check, advance_to=e.advance_to, after_rounds=e.after_rounds,
+                  effects=[effect.model_copy(deep=True) for effect in e.effects],
                   sanity=e.sanity or None, damage=e.damage or None, move_to=e.move_to or None, performer=e.performer or None,
                   performance=e.performance, ending=e.ending or None, present=list(e.present), fight=list(e.fight),
                   surprise=e.surprise, chase=list(e.chase), chase_party=e.chase_party,

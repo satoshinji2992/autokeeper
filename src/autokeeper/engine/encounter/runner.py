@@ -520,7 +520,7 @@ class Encounters:
                 p.arrangement, p.arranged_round, p.react = a, 1, a.react
         module = event.stakes if event is not None else []
         enc = EncounterState(id=eid, mode=start.mode, place=st.location, reason=(start.reason or (event.title if event else ""))[:120],
-                             started_turn=st.turn, participants=parts,
+                             started_turn=st.turn, participants=parts, source_event=event.id if event is not None else "",
                              stakes=[*(StakeState(**s.model_dump(), source="module") for s in module),
                                      *(StakeState(**s.model_dump(), source="keeper") for s in start.stakes)])
         if start.pace:
@@ -652,6 +652,54 @@ class Encounters:
         start = EncounterStart(mode="chase", foes=list(ev.chase), reason=ev.title[:60], pace=None,
                                quarry="foe" if ev.chase_party == "追" else "party")
         await self._encounter_open(start, turn, event=ev)
+
+    async def _event_effects(self, ev: Event, turn: Turn, *, at: int) -> None:
+        """Land prepared bodily consequences; narration and flags never determine a body's state.
+
+        Participants go through the same atomic unit as a combat action, so holds, assistance,
+        pending choices and the encounter's ending follow the actual death. The original encounter
+        id is journaled before applying anything: a retry after archive still finishes its notices.
+        """
+        def prepare() -> dict:
+            planned = [e.model_copy(update={"target": profiles.combatant(self.world, e.target)}) for e in ev.effects]
+            problems = effects.problems(self.world, planned)
+            if problems:
+                raise RuntimeError("事件身体后果没有落实：" + "；".join(problems))
+            enc = self.world_encounter()
+            involved = enc is not None and any(enc.get(e.target) is not None for e in planned)
+            readers = self.world.observers(enc.place, at=at) if involved else []
+            return {"effects": [e.model_dump(mode="json") for e in planned], "encounter": enc.id if involved else "",
+                    "readers": readers, "local": self.state.investigator.id in readers}
+
+        plan = await self._resolution_step("body-plan", turn, prepare)
+        planned = effects.EFFECTS.validate_python(plan["effects"])
+        eid = plan["encounter"]
+        key = f"event/{ev.id}/effects"
+        if eid:
+            def apply(w: Work) -> None:
+                for e in planned:
+                    if w.enc.get(e.target) is not None:
+                        w.apply(e.target, e)
+                        w.unit.lines.append(f"{{{e.target}}}死了")
+                    else:
+                        w.unit.effects.append(e)
+
+            await self._unit(key, turn, apply, at=at, local=plan["local"], readers=plan["readers"])
+            enc = self.world_encounter()
+            if enc is not None and enc.id == eid:
+                how = self._outcome(Ctx.of(self, enc))
+                if how:
+                    await self._encounter_end(how, turn, eid=eid, local=plan["local"], readers=plan["readers"])
+            elif self._ending_owed(eid):
+                await self._encounter_end("", turn, eid=eid, local=plan["local"], readers=plan["readers"])
+        else:
+            def commit() -> None:
+                with self.world.at(at):
+                    result = effects.commit(self.world, planned, op_id=key, source=f"event:{ev.id}")
+                if not result.ok:
+                    raise RuntimeError("事件身体后果没有落实：" + "；".join(result.problems))
+
+            await self._resolution_step("body-commit", turn, commit)
 
     def _coming(self, ids: list[str], *, fight_ok: bool) -> list[str]:
         """Of those sent at the investigators, who can come: the module's NPCs and creatures (a
@@ -867,7 +915,8 @@ class Encounters:
             if row and row.get("done") and isinstance(row.get("value"), dict):
                 await self._owed(key, row["value"], turn)
 
-    async def _unit(self, key: str, turn: Turn, fn) -> dict:
+    async def _unit(self, key: str, turn: Turn, fn, *, at: int | None = None, local: bool = True,
+                    readers: list[str] | None = None) -> dict:
         """One unit: `fn` works on a copy (resolve.Work) with the journal's dice, then one op lands it
         all; its lines join the keeper's account, its notices go out after."""
         if self._resolution is not None:
@@ -875,9 +924,9 @@ class Encounters:
             if key not in units:
                 units.append(key)
 
-        def run() -> dict:
+        def settle() -> dict:
             ctx = Ctx.of(self)
-            audience = scope(self.state, views.observers(self, ctx.enc))
+            audience = scope(self.state, views.observers(self, ctx.enc) if readers is None else readers)
             w = Work(self, ctx, key)
             fn(w)
             changes = w.changes()
@@ -891,7 +940,9 @@ class Encounters:
                     raise RuntimeError("遭遇结算没有落地：" + "；".join(result.problems))
             after = Ctx.of(self, self.state.encounter or w.enc)
             kn, pn = views.names(after, "keeper"), views.names(after, "players")
-            turn.fight += [telling.render(x, kn) for x in w.unit.lines]
+            if local:
+                turn.fight += [telling.render(x, kn) for x in w.unit.lines]
+                turn.narrating["encounter_snapshot"] = views.settled_text(self.world, include_results=False)
             public = [w.unit.public.get(i, x) for i, x in enumerate(w.unit.lines)]
             shown = [telling.render(x, pn) for x in public if x and not x.startswith(KEEPER_ONLY)]
             notices = []
@@ -919,6 +970,10 @@ class Encounters:
                         st.add("dice", x, presented=personal, audience=audience)
             return {"notices": [self._filled(ev) for ev in notices], "rest": w.unit.rest, "flags": w.unit.flags,
                     "fired": w.unit.fired, "extra": w.unit.extra}
+
+        def run() -> dict:
+            with self.world.at(self.world.now if at is None else at):
+                return settle()
 
         value = await self._resolution_step("/" + key, turn, run)
         await self._owed(key, value, turn)
@@ -1444,6 +1499,7 @@ class Encounters:
         if enc.cursor == _end_slot(enc):
             def end(w: Work) -> None:
                 round_end(w)
+                w.enc.completed_rounds += 1
                 w.enc.clock = clock.tick(w.enc.clock)
                 if w.enc.mode == "chase":
                     chasing.round_end(w)
@@ -1459,18 +1515,25 @@ class Encounters:
             value = await self._unit(base, turn, end)
         await step(f"/{base}/time", turn, lambda: self._clock_minutes())
         await step(f"/{base}/clock", turn, lambda: self._time(turn))
+
+        def snapshot() -> None:
+            with self.world.at(self.state.minutes):
+                turn.narrating["encounter_snapshot"] = views.settled_text(self.world, include_results=False)
+
         if there := (value.get("extra") or {}).get("arrive"):
             # Caught up in another place: the op moved the fight and the party there (chase.to_fight); what
             # arriving brings about (the scene, its events) as any arrival.
             await self._arrive(there, turn)
         enc = self.encounter()
         if enc is None:
+            await step(f"/{base}/snapshot", turn, snapshot)
             return
         if enc.cursor == _end_slot(enc) + 1:
             await self._switch(enc, turn)
         enc = self.encounter()
         if enc is not None:
             await self._stakes(enc, turn, f"enc/{enc.id}/r{n}/stakes")
+        await step(f"/{base}/snapshot", turn, snapshot)
 
     def _clock_minutes(self) -> None:
         """The whole minutes the encounter owes the game clock, added once with the encounter's own
@@ -1643,7 +1706,8 @@ class Encounters:
             rows.append(f"{ctx.name(p.id, 'players')}{word}")
         return f"{OUTCOME_WORDS.get(how, how)}：" + "，".join(rows)
 
-    async def _encounter_end(self, how: str, turn: Turn, *, eid: str = "") -> None:
+    async def _encounter_end(self, how: str, turn: Turn, *, eid: str = "", local: bool = True,
+                             readers: list[str] | None = None) -> None:
         """Over: who ended how, the stakes that hold, the record, the minutes; its notices; then it goes
         into the log of finished encounters (archived) before its stakes' flags set off anything, so a
         fight a flag begins (an event's) begins cleanly. A turn resumed after any of it goes on from
@@ -1654,7 +1718,8 @@ class Encounters:
         key = f"enc/{eid}/end"
         if enc is not None and enc.id == eid and enc.phase != "ended":
             ctx = Ctx.of(self)
-            audience = scope(st, views.observers(self, enc))
+            witnesses = views.observers(self, enc) if readers is None else readers
+            audience = scope(st, witnesses)
             due = stakes.due(self, enc, how)
             text = self._summary(ctx, how)
             ran = enc.mode == "chase" and enc.chase is not None
@@ -1675,7 +1740,8 @@ class Encounters:
                 for p in e.participants:  # the keeper's people end where they are: where they ran to, where it was fought
                     if p.kind != "investigator" and where.get(p.id) and self.world.place(p.id) not in ("", where[p.id]):
                         w.unit.effects.append(effects.Relocate(who=p.id, place=where[p.id]))
-                w.unit.extra = {"arrive": party_at if party_at != st.location else "", "apart": apart}
+                w.unit.extra = {"arrive": party_at if party_at != st.location else "", "apart": apart,
+                                "witnesses": witnesses}
                 w.unit.lines.append(f"【{word}结束】{text}")
                 w.unit.notices.append({"type": "chase_end" if ran else "fight_end", "end": how, "text": text})
                 if minutes:
@@ -1691,7 +1757,7 @@ class Encounters:
                 st.add("event", f"{word}结束：{text}", audience=audience)
 
             await step(f"/{key}/record", turn, land)
-            value = await self._unit(key, turn, close)
+            value = await self._unit(key, turn, close, local=local, readers=witnesses)
         else:  # resumed after the end landed: its notices as the journal has them
             row = ((self._resolution or {}).get("steps") or {}).get(key) or {}
             value = row.get("value") if row.get("done") else None
@@ -1703,7 +1769,7 @@ class Encounters:
         extra = (value or {}).get("extra") or {}
         await step(f"/{key}/archive", turn, lambda: self._archive(eid))
         if fired:
-            await step(f"/{key}/flags", turn, lambda: self._flags(fired, turn))
+            await step(f"/{key}/flags", turn, lambda: self._flags(fired, turn, readers=extra.get("witnesses")))
         if extra.get("arrive"):
             await self._arrive(extra["arrive"], turn)
         if extra.get("apart"):
@@ -1757,6 +1823,7 @@ class Encounters:
             return
         summary = EncounterSummary(id=enc.id, mode=enc.mode, place=enc.place, reason=enc.reason, started_turn=enc.started_turn,
                                    rounds=enc.round, participants=[p.id for p in enc.participants], ended=enc.ended,
+                                   source_event=enc.source_event, completed_rounds=enc.completed_rounds,
                                    history=[*enc.history, *(f"第 {r.round} 轮：" + "；".join(r.lines) for r in enc.receipts if r.lines)][-40:])
         result = self.world.apply(EncounterStep(id=f"enc/{enc.id}/archive", encounter=enc.id, unit="archive",
                                                 changes=[Archive(summary=summary)], actor=ENGINE))

@@ -20,8 +20,9 @@ from pydantic.json_schema import SkipJsonSchema
 from .. import cards
 from ..engine.presentation import MediaAction
 from ..engine.state import GameState
-from ..module.schema import Check, Leg, Module, Stake
+from ..module.schema import Check, Leg, Module, RoundGate, Stake
 from ..plugins.schema import Plugin
+from ..rules.consequences import Die
 from ..world.ops import Condition, Enlist, Learn, Move, Occur, Relate, Rewrite, Schedule, SetPlan
 from .writing import INTERFACE_COPY
 
@@ -98,7 +99,8 @@ class NewItem(BaseModel):
 class NewEvent(BaseModel):
     id: str
     title: str
-    when: str = Field(description="now 表示这一轮马上发生；也可以是 'D1 22:00'、'flag:标记'、'visit:地点id'")
+    when: str = Field("", description="now 表示这一轮马上发生；或 'D1 22:00'、'flag:标记'、'visit:地点id'；仅按遭遇轮次触发时留空")
+    after_rounds: RoundGate | None = Field(None, description="指定事件开启的遭遇完成若干轮后发生，与 when 的条件同时成立")
     where: str = Field("", description="事件发生的地点；异地发生只记世界，不强行移动调查员")
     check: Check | None = Field(None, description="条件成立后还需通过的检定；每游戏日最多一次，失败次日可再试")
     advance_to: str = Field("", pattern=r"^(?:(?:D[1-9]\d* )?(?:[01]\d|2[0-3]):[0-5]\d)?$",
@@ -107,6 +109,7 @@ class NewEvent(BaseModel):
     text: str = Field("", description="守秘人须知")
     sanity: str = Field("", description="理智检定，如 0/1D3，不需要就留空")
     damage: str = Field("", description="当场受到的伤害，如 1D3，由行动的调查员承受，不需要就留空")
+    effects: list[Die] = Field(default_factory=list, description="无须检定、已经确定的死亡后果，目标与依据须明确；不提前兑现仍需交锋、检定或玩家选择的结果")
     sets: list[str] = Field(default_factory=list, description="事件发生时设置的标记")
     move_to: str = Field("", description="把调查员带到哪个地点，不需要就留空")
     performer: str = Field("", description="由哪个 NPC 当场表演，不需要就留空")
@@ -236,7 +239,7 @@ DIRECTOR_SYSTEM = """你为这场 CoC 7 版跑团的守秘人准备模组未写�
 - 看到能让跑团更顺、冲突更有戏的地方，就主动改写：线索断在一个找不到的人身上，就让够得着的人也知道；两个人物的打算能撞到一起，就改他们的往事让它撞上。没有这样的地方就不改。
 - 玩家见过、听过的事，为了阴谋或剧情也可以改出另一个真相（有人撒谎、记错、伪造、设局、假扮），但要自圆其说：reason 写清玩家当初为什么会听到、看到那样，他们知道的其他事也都还说得通。玩家手里线索的原文不能改，要改的是它背后的事。改写只改真相，不挪人，也不改东西在谁手里。
 - 提交前由你结合完整世界记录核对时间、地点、人物动机、消息来源与已发生的后果，说明新真相怎样解释既有经历。保留调查员确实做过、见过、听过的事，不以改写暗中撤销他们的行动成果；需要移动或交物时另交相应操作。
-- 人物要有自己的打算：enlist 登记 NPC 的持久目标，plan 写接下来几步及条件；记录人数不是后台调用并发数。调查员不在场时按计划或幕后触发继续，schedule 安排到点发生的事。事件里实际出场的人填 present；当场战斗、追逐与其结果填 fight/chase/stakes，不只写在朗读里。
+- 人物要有自己的打算：enlist 登记 NPC 的持久目标，plan 写接下来几步及条件；记录人数不是后台调用并发数。调查员不在场时按计划或幕后触发继续，schedule 安排到点发生的事。事件里实际出场的人填 present；当场战斗、追逐与其结果填 fight/chase/stakes，不只写在朗读里。确定、无须检定的死亡后果填 effects，仍需交锋、检定或玩家选择的结果不提前兑现；遭遇若干轮后的事件用 after_rounds，保留实际时机。
 - 把敌意落实为这些人物能够执行的步骤、资源与时机，不只写一句“暗中筹划”。模型负责理解复杂动机、矛盾和临场变化，不预设固定的恐惧阈值、恶意频率或每轮冲突指标。后台校验检查的是依据、权限和执行结果，不因角色行事卑劣而撤销计划。
 - 时间写成游戏分钟数，【世界】里写着现在是第几分钟。引用的 id 只用【世界】和上面资料里有的，或者这次方案里新建的。用不着就留空，一次最多 6 条。""" + """
 

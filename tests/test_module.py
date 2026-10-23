@@ -216,6 +216,14 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
         for p, q in zip(then.pregens, now.pregens, strict=True):
             assert {k: v.removeprefix("AutoKeeper 补充：") for k, v in p.backstory.items() if k != "说明"} == q.backstory
             p.backstory = q.backstory
+            familiar = {
+                "betty": ["mother_bakers", "bank", "mcdermott_house"], "elois": ["church"],
+                "bert": ["lowry_house"], "annabelle": ["steakhouse"], "fred": ["church", "bank"],
+                "wesley": ["ferguson_house"],
+            } if folder.name == "fallout3-youxierenyouyanbujin" else {}
+            assert q.known_locations == familiar.get(q.id, [])
+            assert set(q.known_locations) <= {loc.id for loc in now.locations}
+            p.known_locations = q.known_locations
         for h, g in zip(then.handouts, now.handouts, strict=True):
             h.originals = g.originals
         if folder.name == "fallout3-youxierenyouyanbujin":
@@ -228,6 +236,18 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             then.flags |= {k: v for k, v in now.flags.items() if k not in then.flags}
             assert now.keeper_notes.startswith(then.keeper_notes.rstrip())
             then.keeper_notes = now.keeper_notes
+            # The source specifies a rescue after two or three combat rounds and an
+            # unconditional shooting. The old timestamp/flag did not execute either.
+            before = next(e for e in then.events if e.id == "e_stanley_shoots")
+            after = next(e for e in now.events if e.id == "e_stanley_shoots")
+            assert "两三轮" in before.text and "必杀" in before.text and "不掷骰" in before.text
+            assert before.when == "D1 19:45" and before.move_to == "meeting_house"
+            assert after.when == "" and after.move_to is None and after.where == "meeting_house"
+            assert after.after_rounds and after.after_rounds.event == "e_mccurdy_attack" and after.after_rounds.completed == 3
+            assert len(after.effects) == 1 and after.effects[0].kind == "die" and after.effects[0].target == "mccurdy"
+            assert "必杀" in after.effects[0].why
+            before.when, before.move_to, before.where = after.when, after.move_to, after.where
+            before.after_rounds, before.effects = after.after_rounds, after.effects
         # The fights the story scripts (Event.fight), the gun the deputy fires in it, and what the players
         # call a creature before they know what it is (Creature.called): written by hand from the modules'
         # own text on 2026-10-21.

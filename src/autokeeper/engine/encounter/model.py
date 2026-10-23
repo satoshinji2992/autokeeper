@@ -249,6 +249,8 @@ class EncounterState(BaseModel):
     reason: str = ""
     started_turn: int
     participants: list[Participant]
+    source_event: str = ""  # the formal event that began this encounter; never inferred from its reason
+    completed_rounds: int = Field(0, ge=0)  # only rounds whose end unit actually committed
     round: int = 0
     order: list[str] = Field(default_factory=list)  # this round's DEX order
     cursor: int = 0  # index into order
@@ -280,6 +282,8 @@ class EncounterSummary(BaseModel):
     reason: str = ""
     started_turn: int
     rounds: int
+    source_event: str = ""
+    completed_rounds: int = Field(0, ge=0)
     participants: list[str] = Field(default_factory=list)
     ended: EndRecord | None = None
     history: list[str] = Field(default_factory=list)
@@ -389,6 +393,11 @@ class SetClock(BaseModel):
     clock: EncounterClock
 
 
+class SetCompleted(BaseModel):
+    kind: Literal["completed"] = "completed"
+    rounds: int = Field(ge=0)
+
+
 class Close(BaseModel):
     """It is over: the record is kept, nothing more is asked; it stays until archived."""
 
@@ -405,7 +414,7 @@ class Archive(BaseModel):
 
 EncounterChange = Annotated[
     Begin | SetParticipant | SetReceipt | SetRound | SetCursor | SetBudget | SetScene | SetChase | SetPending
-    | SetMode | SetPhase | SetStake | AddStakes | AddChanges | Compact | SetClock | Close | Archive,
+    | SetMode | SetPhase | SetStake | AddStakes | AddChanges | Compact | SetClock | SetCompleted | Close | Archive,
     Field(discriminator="kind"),
 ]
 
@@ -469,6 +478,8 @@ def _apply(enc: EncounterState, c) -> None:
             enc.receipts = [r for r in enc.receipts if r.id in c.receipts]
         case SetClock():
             enc.clock = c.clock.model_copy()
+        case SetCompleted():
+            enc.completed_rounds = c.rounds
         case Close():
             enc.ended, enc.phase, enc.pending = c.record.model_copy(deep=True), "ended", None
         case _:  # pragma: no cover - the union is closed

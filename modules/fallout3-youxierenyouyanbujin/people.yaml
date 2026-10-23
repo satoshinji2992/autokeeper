@@ -550,6 +550,7 @@ pregens:
   age: 27
   sex: 女
   residence: 斯托威尔
+  known_locations: [mother_bakers, bank, mcdermott_house]
   portrait: betty
   characteristics:
     力量: 55
@@ -594,6 +595,7 @@ pregens:
   age: 27
   sex: 女
   residence: 斯托威尔
+  known_locations: [church]
   portrait: elois
   characteristics:
     力量: 30
@@ -639,6 +641,7 @@ pregens:
   age: 27
   sex: 男
   residence: 斯托威尔
+  known_locations: [lowry_house]
   portrait: bert
   characteristics:
     力量: 75
@@ -683,6 +686,7 @@ pregens:
   age: 27
   sex: 女
   residence: 斯托威尔
+  known_locations: [steakhouse]
   portrait: annabelle
   characteristics:
     力量: 30
@@ -727,6 +731,7 @@ pregens:
   age: 27
   sex: 男
   residence: 斯托威尔
+  known_locations: [church, bank]
   portrait: fred
   characteristics:
     力量: 60
@@ -771,6 +776,7 @@ pregens:
   age: 27
   sex: 男
   residence: 斯托威尔
+  known_locations: [ferguson_house]
   portrait: wesley
   characteristics:
     力量: 45

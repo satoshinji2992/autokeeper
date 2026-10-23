@@ -14,10 +14,11 @@ from typing import TYPE_CHECKING, Any
 
 from ... import weather
 from ...rules.wounds import Body
-from . import actions, profiles
+from . import actions, combatant, profiles, telling
 from .actions import ATTACKING, VERBS, Ctx
 
 if TYPE_CHECKING:
+    from ...world.store import World
     from .model import EncounterState
 
 DOWN = ("死亡", "濒死", "昏迷", "倒下")  # the status words of someone who can do nothing now (status)
@@ -379,7 +380,7 @@ def keeper_text(game: Any, **kw) -> str:
     from ...world.context import apart
     from .. import perception
 
-    text = encounter_brief(brief(game, **kw))
+    text = settled_text(game.world, include_results=False) + "\n" + encounter_brief(brief(game, **kw))
     enc = kw.get("enc") or game.state.encounter
     if enc is not None:
         declared = [f"{r.actor}：{r.declared.summary}" + (f"；目标：{r.declared.goal}" if r.declared.goal else "")
@@ -395,7 +396,63 @@ def keeper_text(game: Any, **kw) -> str:
     return text + (f"\n【和大家分开的调查员】{left}（不在这场遭遇里）" if left else "")
 
 
-__all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "names", "status", "wound_word"]
+def settled_text(world: World, *, viewer: str = "", at: int | None = None, place: str = "",
+                 include_results: bool = True) -> str:
+    """One read-only combat context for narration, adjudication and private clarification.
+
+    It describes durable state, never infers a release from a failed new attack or from prose.
+    A past report may use a snapshot frozen when made; newer persistent state cannot replace it.
+    """
+    state = world.st
+    enc = state.encounter
+    if enc is None or enc.phase == "ended":
+        return ""
+    when = world.now if at is None else at
+    participant = enc.get(viewer) if viewer else None
+    chasing = enc.mode == "chase" and participant is not None and participant.presence == "in"
+    where = place or (world.place_at(viewer, when) if viewer else enc.place)
+    if viewer and where != enc.place and not chasing:
+        return ""
+    latest = max((entry.t for entry in world.rec.journal
+                  if entry.id.startswith(f"enc/{enc.id}/") and not entry.undone), default=when)
+    if at is not None and max(latest, world.now) > at:
+        return (telling.STATE_HEAD + f"\n本段时刻：{when}；现存遭遇记录已更新到较晚时刻，不能冒充本段快照。"
+                "只使用本段已经保存的结算结果，不从较晚的状态倒推旧局面。")
+    bodies = {p.id: combatant.view(world, p.id) for p in enc.participants}
+
+    def name(pid: str) -> str:
+        if (view := bodies.get(pid)) is None:
+            return profiles.bare(world.name(pid))
+        return profiles.bare(view.true_name)
+
+    mode = "追逐" if enc.mode == "chase" else "战斗"
+    out = [telling.STATE_HEAD, f"时刻：{when}；地点：{world.name(enc.place)}；{mode}第 {enc.round} 轮；阶段：{enc.phase}",
+           telling.STATE_RULE]
+    out.append("压制：" + ("；".join(f"{name(h.by)}（{h.by}）仍制住{name(h.held)}（{h.held}）" for h in enc.scene.holds) or "无"))
+    out.append("倒地：" + ("、".join(f"{name(pid)}（{pid}）" for pid in enc.scene.prone) or "无"))
+    for p in enc.participants:
+        view = bodies.get(p.id)
+        if view is None:
+            continue
+        body = view.body()
+        conditions = [*body.conditions]
+        if p.id in enc.scene.prone:
+            conditions.append("倒地")
+        if any(h.held == p.id for h in enc.scene.holds):
+            conditions.append("仍被制住")
+        conditions = list(dict.fromkeys(conditions)) or ["清醒" if body.conscious else "不能行动"]
+        out.append(f"{name(p.id)}（{p.id}）：生命 {body.hp}/{body.hp_max}；{'、'.join(conditions)}；参与状态 {p.presence}")
+    if enc.pending is not None:
+        out.append(f"尚未结算：正在等{name(enc.pending.who)}作出选择（{enc.pending.kind}），不预先执行其结果")
+    if include_results:
+        receipts = [r for r in enc.receipts if r.round == enc.round and r.phase in ("committed", "lapsed")]
+        lines = [line for r in receipts for line in (r.lines or [r.summary + (f"：{r.lapsed}" if r.lapsed else "")])]
+        out.append("【最近已结算结果】\n" + ("\n".join(telling.render(line, {pid: name(pid) for pid in bodies}) for line in lines)
+                                             if lines else "本轮尚无已结算结果"))
+    return "\n".join(out)
+
+
+__all__ = ["brief", "chase_view", "fight_view", "initiative", "keeper_text", "names", "settled_text", "status", "wound_word"]
 
 
 # -- what the table sees: the players' screens, the LAN clients, the AI players ------------------------

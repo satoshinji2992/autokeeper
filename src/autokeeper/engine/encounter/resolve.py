@@ -42,6 +42,7 @@ from .model import (
     SetBudget,
     SetChase,
     SetClock,
+    SetCompleted,
     SetCursor,
     SetMode,
     SetParticipant,
@@ -185,7 +186,20 @@ class Work:
             b = wounds.wake(b)
         elif isinstance(e, effects.Die):
             b = effects.die(b)
+            for h in list(self.enc.scene.holds):
+                if h.by == pid:
+                    self.free(h.held, by=pid)
             self.fell(pid)
+            self.free(pid)
+            for p in self.enc.participants:
+                p.edges = [edge for edge in p.edges if edge.source != pid]
+            for r in self.enc.receipts:
+                if r.actor == pid and r.phase in ("declared", "awaiting_reaction"):
+                    r.phase, r.lapsed = "lapsed", "行动者已死亡"
+            pending = self.enc.pending
+            receipt = self.enc.receipt(pending.receipt) if pending else None
+            if pending and (pending.who == pid or (receipt is not None and receipt.actor == pid)):
+                self.enc.pending = None
         self.bodies[pid] = b
         self.unit.effects.append(e)
 
@@ -258,6 +272,8 @@ def diff(old: EncounterState, new: EncounterState) -> list:
     out += [SetStake(index=i, fired=s.fired) for i, s in enumerate(new.stakes) if i < len(old.stakes) and s.fired != old.stakes[i].fired]
     if new.clock != old.clock:
         out.append(SetClock(clock=new.clock))
+    if new.completed_rounds != old.completed_rounds:
+        out.append(SetCompleted(rounds=new.completed_rounds))
     if len(new.changes) > len(old.changes):
         out.append(AddChanges(changes=new.changes[len(old.changes):]))
     if new.ended is not None and old.ended is None:

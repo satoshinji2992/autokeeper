@@ -436,6 +436,10 @@ def _events_md(m: Module) -> str:
             out += [f"> {e.read_aloud.strip()}", ""]
         out += [e.text.strip(), ""]
         meta = []
+        if e.after_rounds:
+            meta.append(f"`{e.after_rounds.event}` 开启的遭遇完成 {e.after_rounds.completed} 轮后（与其余触发条件同时成立）")
+        if e.effects:
+            meta.extend(f"确定后果：`{effect.target}` 死亡；依据：{effect.why}（引擎结算，不再掷骰）" for effect in e.effects)
         if e.where:
             meta.append(f"发生在 `{e.where}`（调查员不在场不搬运队伍）")
         if e.check:
@@ -539,4 +543,7 @@ def _pregens_md(m: Module) -> str:
         stats = "，".join(f"{k}{v}" for k, v in p.characteristics.items())
         skills = "，".join(f"{k}{v}" for k, v in sorted(p.skills.items(), key=lambda kv: -kv[1]))
         out += [f"## {p.name}（{p.occupation}，{p.age} 岁）", "", stats + f"，幸运{p.luck}", "", skills, ""]
+        if p.known_locations:
+            out += ["本人既知地点（私人背景，不代表本局已到访）：" + "、".join(
+                f"{loc.name}({loc.id})" for loc in m.locations if loc.id in p.known_locations), ""]
     return "\n".join(out)

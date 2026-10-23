@@ -304,6 +304,26 @@ def event_when_problems(m: Module, when: str) -> list[str]:
     return out
 
 
+def event_outcome_problems(m: Module, e: Event, *, actors: set[str] | None = None) -> list[str]:
+    """Validate explicit consequences and their source encounter, without interpreting prose."""
+    out = []
+    people = {n.id for n in m.npcs} | {c.id for c in m.creatures} | {i.id for i in m.pregens} | (actors or set())
+    for effect in e.effects:
+        if effect.target not in people:
+            out.append(f"死亡后果的目标 {effect.target} 不存在")
+        if not effect.why.strip():
+            out.append(f"死亡后果 {effect.target} 缺少明确依据")
+    if gate := e.after_rounds:
+        origin = next((event for event in m.events if event.id == gate.event), None)
+        if gate.event == e.id:
+            out.append("轮次条件不能等待本事件自己开启的遭遇")
+        elif origin is None:
+            out.append(f"轮次条件的起源事件 {gate.event} 不存在")
+        elif not (origin.fight or origin.chase):
+            out.append(f"轮次条件的起源事件 {gate.event} 没有开启战斗或追逐")
+    return out
+
+
 def audit(m: Module) -> list[Issue]:
     issues: list[Issue] = []
     def err(text: str) -> None:
@@ -323,6 +343,10 @@ def audit(m: Module) -> list[Issue]:
 
     if m.start not in locs:
         err(f"起始地点 {m.start} 不存在")
+    for inv in m.pregens:
+        for place in inv.known_locations:
+            if place not in locs:
+                err(f"调查员 {inv.id} 的已知地点 {place} 不存在")
     for item in m.items:
         if item.where not in locs:
             err(f"物件 {item.id} 所在地点 {item.where} 不存在")
@@ -410,8 +434,10 @@ def audit(m: Module) -> list[Issue]:
                 err(f"事件 {e.id} 设置了未声明的标记 {f}")
         if e.art and e.art not in m.pictures:
             warn(f"事件 {e.id} 的图 {e.art} 还没有")
-        for problem in event_when_problems(m, e.when):
+        for problem in ([] if not e.when.strip() and e.after_rounds else event_when_problems(m, e.when)):
             err(f"事件 {e.id} 的条件 {problem}")
+        for problem in event_outcome_problems(m, e):
+            err(f"事件 {e.id} 的后果 {problem}")
     for end in m.endings:
         if end.condition.startswith("flag:") and end.condition[5:] not in m.flags:
             err(f"结局 {end.id} 依赖未声明的标记 {end.condition[5:]}")

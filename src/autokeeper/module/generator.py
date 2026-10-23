@@ -50,9 +50,12 @@ GENERATE = """你是 AutoKeeper 的模组编剧。根据种子和考据，原创
   它出没、最可能发生追逐的地点写 chase 路线：4–12 段，每段 id、名字、样子、在哪个地点（place），岔路写 links，能脱身的段写 exit；
   约一半有 obstacle：hazard 险阻边跑边过、失败耽搁或受伤，barrier 路障不过检定过不去，写 methods（几种办法和技能）、harm（骰子式）、能打破的路障写 hp；
   剧情里写定的袭击在那个事件写 fight（谁动手）、surprise、stakes（每种收场设上的标记）、sights（这件事的理智检定已经算了哪个怪物的照面）。
+  无须检定而确定发生的死亡写 effects（kind: die、target、why依据），不只写朗读或标记；尚需交锋、检定或玩家选择的后果不提前兑现。
+  遭遇若干轮后的事件用 after_rounds（event 起源事件id、completed 完成轮数），没有其他条件时 when 留空，不用编造钟点代替轮次。
   数值照 CoC 7 版的尺度：普通人生命 10–12、格斗 25–50。
 - 全部原创，可以借用公有领域作品的元素，但不要照搬任何受版权保护的模组、怪物设定或插图。
 - 模组 id 用 "{module_id}"。格式照着 _example/module.yaml，字段含义见 _example/schema.json。
+- 每张调查员卡用 known_locations 登记背景明确熟悉的 locations id（家、工作地点、已知亲友地址）；不按姓名猜地址，不把全地图给全员。外地初来者可为空，只知路线不代表已到访或知道现场现状。
 
 ## 美术
 - 每个地点画场景图（≤56 列、≤14 行），每个 NPC 和预设调查员画头像（≤18 列、7 行），各配同形状 .color 蒙版。颜色键：{palette}
