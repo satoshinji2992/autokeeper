@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from ...agents.cast import Action, Ruling
     from ...module.schema import Event
     from ..game import Turn
+    from ..state import GameState
 
 UNSETTLED = "【未落实】"
 # The keeper's lines the screens never get: cues, what did not land, the round's order line (in a chase with
@@ -287,16 +288,21 @@ class Encounters:
             return self._action(enc, d, {"plan": EncounterTurnPlan(action=d).model_dump(mode="json", by_alias=True),
                                          "source": "words"})
         checked = await self._ask_plan(text, "act")
+        return self._planned_action(enc, checked, me.id)
+
+    def _planned_action(self, enc: EncounterState, checked: Any, who: str) -> Action:
+        """Use the same action interpretation for initial and revised declarations."""
         if checked is None or checked.value is None:
             raise RuntimeError("守秘人没能读懂这一轮的行动：" + "；".join(checked.problems if checked else []))
         plan: EncounterTurnPlan = checked.value
-        landed = plan_check.land(self, plan, me.id)
+        landed = plan_check.land(self, plan, who)
         d = landed.action
         unsettled = list(landed.unsettled) if checked.problems else []
         if d is None:  # still not something the rules settle: the arbiter rules it, with its neutral summary
-            summary = plan.action.summary if plan.action is not None and plan.action.summary.strip() else f"{me.name}做了别的事"
+            name = self.state.find(who).name
+            summary = plan.action.summary if plan.action is not None and plan.action.summary.strip() else f"{name}做了别的事"
             d = DeclaredAction(do="other", summary=summary, takes=plan.action.takes if plan.action else [])
-            unsettled += [f"{me.name}的行动按“别的事”交给裁定：{x}" for x in landed.action_problems]
+            unsettled += [f"{name}的行动按“别的事”交给裁定：{x}" for x in landed.action_problems]
         plan = plan.model_copy(update={"action": d})
         return self._action(enc, d, {"plan": plan.model_dump(mode="json", by_alias=True), "source": "words",
                                      "unsettled": unsettled})
@@ -307,13 +313,28 @@ class Encounters:
         summary = d.summary + (f"；目标：{d.goal}" if d.goal else "")
         return Action(kind="attack" if d.do in ATTACKING else "other", summary=summary, encounter=enc.id, declared=declared)
 
-    async def _ask_plan(self, text: str, mode: str, *, ask: str = "", check=None):
+    def _encounter_choice_state(self, who: str = "") -> GameState:
+        """Read the choice owner's sheet without rebinding the live table during an await."""
+        st = self.state
+        if not who or who == st.investigator.id:
+            return st
+        index = next((i for i, inv in enumerate(st.investigators) if inv.id == who), None)
+        if index is None:
+            raise ValueError("这位调查员不在游戏中")
+        places = {inv.id: self.world.place(inv.id) for inv in st.investigators}
+        return st.model_copy(update={"active": index, "location": places[who],
+                                     "apart": {actor: place for actor, place in places.items() if place != places[who]}})
+
+    async def _ask_plan(self, text: str, mode: str, *, ask: str = "", check=None, actor: str = ""):
         """The keeper plan inside the encounter; its answer and what is still wrong with it (Checked).
         What is still wrong after the one resend goes to the developer's journal whole."""
-        me = self.state.investigator.id
+        state = self._encounter_choice_state(actor)
+        me = state.investigator.id
         brief = views.keeper_text(self)
+        if actor:
+            ask = f"【本次选择者】{state.investigator.name}（{me}）。只解释此人的回应，不替当前主持焦点人物选择。\n" + ask
         check = check or plan_check.turn(self, me, act=mode == "act")
-        checked = await self.cast.plan(self.state, text, encounter=brief, mode=mode, check=check, ask=ask)
+        checked = await self.cast.plan(state, text, encounter=brief, mode=mode, check=check, ask=ask)
         if checked.problems:
             self._debug("encounter-plan", {"mode": mode, "problems": checked.problems, "answer": checked.raw})
         return checked
@@ -487,7 +508,7 @@ class Encounters:
         """A chase from the start: the side in flight (EncounterStart.quarry) runs from everyone of the
         other side who can, on the site built where it begins; True while it goes on (a quarry faster
         than everyone after them is away at once, and it ends)."""
-        enc = self.encounter()
+        enc = self.world_encounter()
         assert enc is not None
         ctx = Ctx.of(self)
         party = [p.id for p in enc.participants if p.side == "party" and ctx.acting(p.id)]
@@ -501,7 +522,7 @@ class Encounters:
     async def _chase_settled(self, turn: Turn) -> bool:
         """A chase over as soon as it begins (all away at once, nobody left to run after) ends; True
         while it goes on."""
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is None or enc.mode != "chase":
             return enc is not None
         how = chasing.verdict(Ctx.of(self))
@@ -798,7 +819,7 @@ class Encounters:
     async def _plan_unit(self, key: str, plan: dict, unsettled: list[str], turn: Turn) -> None:
         """The keeper plan's arrangements landing: what holds (plan_check.land) for the keeper's people,
         those joining, numbers filled, stakes, the pace; the rest noted for the keeper as 【未落实】."""
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is None:
             return
         parsed = EncounterTurnPlan.model_validate(plan)
@@ -863,7 +884,7 @@ class Encounters:
     async def _propose_end(self, end, turn: Turn) -> None:
         """The keeper's own end of it (parley, surrender, someone giving up): those named stop, and the
         encounter ends that way unless someone still has to answer a choice."""
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is None or enc.pending is not None:
             return
 
@@ -890,7 +911,7 @@ class Encounters:
         await self._replay(turn)
         started = 0
         for _ in range(400):
-            enc = self.encounter()
+            enc = self.world_encounter()
             if enc is None or enc.pending is not None:
                 return
             if _between(enc):
@@ -1061,7 +1082,7 @@ class Encounters:
         for p in enc.participants:
             if p.controller == "ai" and ctx.acting(p.id) and self._declared(enc, p.id, nxt) is None:
                 await self._ai_declare(p.id, nxt, turn)
-        enc = self.encounter()
+        enc = self.world_encounter()
         assert enc is not None
         if getattr(self.cast, "plan", None) is not None and any(
                 choices.needs_arrangement(enc, p) and ctx.acting(p.id) for p in enc.participants):
@@ -1116,7 +1137,7 @@ class Encounters:
         """An AI companion's pick among the round's choices (Cast.encounter_choice), from what the
         players' screens show, with how it answers blows from now on in a fight (as a player's Tab
         sets it, held to the same: _stance_problem); without a valid pick, it only defends."""
-        enc = self.encounter()
+        enc = self.world_encounter()
         assert enc is not None
         ctx = Ctx.of(self)
         offered = choices.options(self, pid, ctx)
@@ -1152,7 +1173,7 @@ class Encounters:
         for f in view["fighters"]:
             hp = f"生命 {f['hp']}/{f['hp_max']}" if f["hp"] is not None else f["wound"]
             rows.append(f"- {f['name']}（{'我方' if f['side'] == 'party' else '对手'}）：{hp}" + (f"，{f['status']}" if f["status"] else ""))
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is not None and enc.mode == "fight":
             rows.append(f"你被攻击时：{actions.REACT_WORDS[choices.preset(Ctx.of(self), pid)]}")
         return "\n".join(rows)
@@ -1201,14 +1222,14 @@ class Encounters:
         d = r.declared
         if d.takes:
             await self._take(r, base, turn)
-            enc = self.encounter()
+            enc = self.world_encounter()
             assert enc is not None
             r = self._declared(enc, actor, enc.round) or r
             d = r.declared
         problems = actions.preconditions(ctx, actor, d) if not r.settled and not r.moved else []
         if problems:
-            if (p.controller == "human" and r.source not in ("table",) and self.asking and not self.holding
-                    and self.state.round_spent is None):
+            if (p.controller == "human" and r.source not in ("table",) and self.asking
+                    and (self.table_turn_based or (not self.holding and self.state.round_spent is None))):
                 await self._unit(f"{base}/redeclare/{r.id}", turn, lambda w: self._ask_again(w, r, problems))
                 return False
             line = f"{{{actor}}}没能{actions.VERBS.get(d.do, d.do)}：{actions.said(problems[0])}"  # in the names each one knows, no ids
@@ -1549,13 +1570,13 @@ class Encounters:
             # Caught up in another place: the op moved the fight and the party there (chase.to_fight); what
             # arriving brings about (the scene, its events) as any arrival.
             await self._arrive(there, turn)
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is None:
             await step(f"/{base}/snapshot", turn, snapshot)
             return
         if enc.cursor == _end_slot(enc) + 1:
             await self._switch(enc, turn)
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is not None:
             await self._stakes(enc, turn, f"enc/{enc.id}/r{n}/stakes")
         await step(f"/{base}/snapshot", turn, snapshot)
@@ -1667,7 +1688,7 @@ class Encounters:
             chasing.begin(w, quarry, hunters, site.build(self.m, e.place, kept=self.world.rec.obstacles))
 
         await self._unit(base, turn, switch)
-        enc = self.encounter()
+        enc = self.world_encounter()
         if enc is not None and enc.mode == "chase":
             await self._chase_settled(turn)
 
@@ -1860,7 +1881,7 @@ class Encounters:
         """The interrupt a choice shows (graph `offer`): the same payload as a roll prompt for a roll."""
         st = self.state
         name = next((i.name for i in st.investigators if i.id == choice.who), choice.who)
-        enc = self.encounter()
+        enc = self.world_encounter()
         if choice.kind == "roll":
             return {"kind": "roll", "id": choice.id, "encounter": enc.id if enc else "", "seat": choice.who, **choice.options[0].value}
         return {"kind": choice.kind, "id": choice.id, "encounter": enc.id if enc else "", "receipt": choice.receipt,
@@ -1889,6 +1910,8 @@ class Encounters:
                 self._resolution, self._resolution_scope = None, []  # type: ignore[attr-defined]
 
     async def _respond_stages(self, cid: str, value: Any, who: str, turn: Turn) -> None:
+        from ...agents.cast import Action
+
         enc = self.state.encounter
         assert enc is not None
         key = f"enc/{enc.id}/answer/{cid.replace(':', '-')}"
@@ -1901,6 +1924,18 @@ class Encounters:
                 raise ValueError("这个选择不是你的")
         pend = enc.pending
         answer = await self._resolution_step(f"/{key}/read", turn, lambda: self._read_answer(pend, value))
+        revised = Action.model_validate(answer["action"]) if answer.get("action") else None
+        revised_ruling = None
+        if revised is not None:
+            async def rule_revision() -> dict:
+                ruling = self.encounter_ruling(revised)
+                if ruling is None:
+                    ruling = await self._encounter_arbiter(revised, who=answer["actor"])
+                return ruling.model_dump(mode="json")
+
+            revised_ruling = await self._resolution_step(f"/{key}/ruling", turn, rule_revision)
+            declaration = revised.declared or {}
+            await self._plan_unit(f"{key}/plan", declaration["plan"], declaration.get("unsettled", []), turn)
 
         def apply(w: Work) -> None:
             p = w.enc.pending
@@ -1920,12 +1955,17 @@ class Encounters:
                     r.lines.append(f"{{{p.who}}}的应对：{answer['summary']}")
             elif p.kind == "redeclare":
                 option = next((o for o in p.options if o.id == answer["choice"]), None)
+                d = (DeclaredAction.model_validate((revised.declared or {})["plan"]["action"]) if revised is not None
+                     else DeclaredAction.model_validate(option.value) if option is not None else None)
                 r.phase = "cancelled"
-                if option is not None:
-                    d = DeclaredAction.model_validate(option.value)
+                if d is not None:
                     n = sum(1 for x in w.enc.receipts if x.actor == r.actor and x.round == r.round)
                     w.enc.receipts.append(ActionReceipt(id=f"{w.enc.id}:r{r.round}:{r.actor}:{n}", round=r.round, actor=r.actor,
-                                                        source="button", declared=d, summary=d.summary))
+                                                        source="words" if revised is not None else "button",
+                                                        declared=d, summary=d.summary,
+                                                        ruling=revised_ruling if d.needs_ruling else None))
+                    if me is not None and d.react:
+                        me.react = d.react
             w.enc.pending = None
 
         await self._unit(key, turn, apply)
@@ -1934,8 +1974,11 @@ class Encounters:
         await self._resolution_step("party-down", turn, lambda: self._party_down(turn))
 
     async def _read_answer(self, pend: PendingChoice | None, value: Any) -> dict:
-        """The answer as a choice id: a button's id, or the player's own words read by the keeper plan
-        (mode "react"); a reaction the attack does not allow is the default."""
+        """Read a button or interpret an explicit new intention for its actual owner.
+
+        Failed interpretation leaves the original choice open; it is not permission to
+        substitute the table's default for the words the player actually submitted.
+        """
         if pend is None:
             return {"choice": ""}
         ids = [o.id for o in pend.options]
@@ -1952,9 +1995,17 @@ class Encounters:
             return {"choice": "roll"}
         if pend.kind == "reaction" and text.strip() and getattr(self.cast, "plan", None) is not None:
             ask = "【可选的应对】" + "、".join(f"{o.id}（{o.label}）" for o in pend.options)
-            checked = await self._ask_plan(text, "react", ask=ask, check=plan_check.react(ids))
+            checked = await self._ask_plan(text, "react", ask=ask, check=plan_check.react(ids), actor=pend.who)
             if checked is not None and checked.value is not None and not checked.problems:
                 return {"choice": checked.value.reaction, "summary": checked.value.summary, **setting}
+            raise RuntimeError("守秘人未能确认这次应对，原选择已保留，尚未执行")
+        if pend.kind == "redeclare" and text.strip():
+            enc = self.state.encounter
+            assert enc is not None
+            checked = await self._ask_plan(text, "act", actor=pend.who,
+                                           ask="原行动前提已变化。按当前现场解释本人重新声明，不默认防守，不预定行动结果。")
+            revised = self._planned_action(enc, checked, pend.who)
+            return {"choice": "", "actor": pend.who, "action": revised.model_dump(mode="json"), **setting}
         return {"choice": pend.default, **setting}
 
 

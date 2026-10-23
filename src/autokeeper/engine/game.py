@@ -766,17 +766,19 @@ class Game(Encounters):
                 ruling = self._steer(ruling, applied)
         return self._no_reroll(action, ruling, heading or self.state.location)
 
-    async def checked_skill(self, action: Action, ruling: Ruling, **context: Any) -> Ruling:
+    async def checked_skill(self, action: Action, ruling: Ruling, *, state: GameState | None = None,
+                            **context: Any) -> Ruling:
         """Resolve aliases before an offer; an unrecognised roll is corrected once, never rolled at 1%."""
         if not ruling.needs_roll or ruling.repeat or not ruling.skill.strip():
             return ruling
+        state = state or self.state
         try:
-            self.state.investigator.value(ruling.skill)
+            state.investigator.value(ruling.skill)
             return ruling
         except UnknownSkill as exc:
             problem = str(exc)
         journal = self.state.pending_turn
-        key = action.ruled()
+        key = f"{state.investigator.id}:{action.ruled()}"
         saved = journal.get("skill_correction", {})
         if saved.get("action") == key:
             corrected = Ruling.model_validate(saved["ruling"])
@@ -784,14 +786,14 @@ class Game(Encounters):
             arbiter = self.cast.arbiter
             if not _takes(arbiter, "problems"):
                 raise PreparationError(problem + "；原行动已保留，尚未掷骰")
-            corrected = await arbiter(self.state, action, problems=[problem], **context)
+            corrected = await arbiter(state, action, problems=[problem], **context)
             if journal:
                 journal["skill_correction"] = {"action": key, "ruling": corrected.model_dump(mode="json")}
                 if self.checkpoint:
                     self.checkpoint()
         if corrected.needs_roll and not corrected.repeat:
             try:
-                self.state.investigator.value(corrected.skill)
+                state.investigator.value(corrected.skill)
             except UnknownSkill as exc:
                 raise PreparationError(str(exc) + "；原行动已保留，尚未掷骰") from exc
         return corrected
@@ -838,23 +840,24 @@ class Game(Encounters):
             self.checkpoint()
         return ruling
 
-    async def _encounter_arbiter(self, action: Action) -> Ruling:
+    async def _encounter_arbiter(self, action: Action, *, who: str = "") -> Ruling:
         """Something else in a fight (a lamp thrown, a door slammed): the arbiter rules it with the
         encounter's brief, its results in Ruling.effects; a target not in the encounter goes back once."""
         from .encounter import views
 
         await self.emit({"type": "status", "text": "裁定中…"})
         brief = views.keeper_text(self)
+        state = self._encounter_choice_state(who)
         asked = Action(kind="other", summary=action.summary)
         arbiter = self.cast.arbiter
-        ruling = await arbiter(self.state, asked, encounter=brief)
-        enc = self.encounter()
+        ruling = await arbiter(state, asked, encounter=brief)
+        enc = self.world_encounter() if who else self.encounter()
         known = {p.id for p in enc.participants} if enc is not None else set()
         problems = [f"effects 里的 {e.target} 不在这场遭遇里" for e in ruling.effects
                     if e.kind in ("damage", "edge", "freed") and e.target not in known]
         if problems:
-            ruling = await arbiter(self.state, asked, encounter=brief, problems=problems)
-        return await self.checked_skill(asked, ruling, encounter=brief)
+            ruling = await arbiter(state, asked, encounter=brief, problems=problems)
+        return await self.checked_skill(asked, ruling, state=state, encounter=brief)
 
     async def prepare(self, action: Action) -> None:
         """Who steps in before the action is settled (Initiative.first), then explicit conversations
