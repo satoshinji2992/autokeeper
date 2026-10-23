@@ -12,6 +12,7 @@ from autokeeper.engine.scenes import SceneRuntime
 from autokeeper.engine.state import GameState
 from autokeeper.rules.coc import Rules
 from autokeeper.world.ops import SetFlag
+from autokeeper.world.tools import Gateway
 
 from .conftest import FakeDice
 from .test_request_execution import RequestCast, module, run, telling
@@ -90,6 +91,45 @@ async def test_scoped_cursors_share_only_the_authoritative_world_and_save(fake):
             assert again.for_member("lin") == b
         finally:
             await again.close()
+    finally:
+        await runtime.close()
+
+
+@pytest.mark.parametrize("mode", ["settle", "commit"])
+async def test_npc_world_operation_keeps_live_scene_cursors_and_shared_history(fake, mode):
+    runtime, _, _ = made(fake)
+    ident = runtime.for_member("zhouheng")
+    view = runtime.state_view(ident)
+    scene = runtime.scenes[ident]
+    try:
+        game = runtime.game(ident)
+        view.pending_turn = {"input": "我要喝水"}
+        scene.at, scene.turn = 600, 1
+        gateway = Gateway(game.world, "director")
+        operations = [{"kind": "move", "entity": "warden", "to": "square"}]
+        result = (gateway.settle(operations, request_id="npc-leaves-room") if mode == "settle" else
+                  gateway.commit(operations, reads=gateway.query()["reads"], request_id="npc-leaves-room"))
+        assert result["ok"], result
+        assert game.world.place("warden") == "square"
+        assert runtime.scenes[ident] is scene
+        assert view.record is runtime.state.record
+        other = runtime.state_view(runtime.for_member("lin"))
+        assert other.record is view.record
+        assert set(view.__dict__) == {"root", "scene", "_apart"}
+        scene.at, scene.turn = 605, 2
+        scene.pending_turn.clear()
+        view.location = "square"
+        assert view.clock == "D1 10:05" and view.turn == 2 and not view.pending_turn
+        assert scene.place == "square"
+        entry = view.add("player", "我跟着走到街上", who=view.investigator.name)
+        assert scene.log[-1] is entry and runtime.state.log[-1] is entry
+        assert runtime.game(ident).world.st.location == "square"
+        runtime.checkpoint(ident)
+        saved = GameState.model_validate_json(runtime.state.model_dump_json())
+        assert saved.scenes[ident].place == "square" and saved.scenes[ident].at == 605
+        assert saved.scenes[ident].turn == 2 and not saved.scenes[ident].pending_turn
+        assert saved.scenes[ident].log[-1].text == "我跟着走到街上"
+        assert saved.record.entities["warden"].at == "square"
     finally:
         await runtime.close()
 

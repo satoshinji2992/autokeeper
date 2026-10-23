@@ -199,9 +199,8 @@ class NetGameScreen(GameScreen):
     def menu_items(self) -> list[tuple[str, str]]:
         """The Esc menu at a shared table: the host saves; 关闭房间 before 回到标题 for the
         host who opened the room in this app."""
-        items = [item for item in super().menu_items() if item[0] not in ("save", "load")]
-        if self.seat and not self.state.ending:
-            items.insert(1, ("private_message", "私信 /sc"))
+        items = [item for item in super().menu_items()
+                 if item[0] != "load" and (item[0] != "save" or self.seat or self.link.host)]
         if getattr(self.app, "room", None) is not None:  # the room was opened in this app
             items.insert([key for key, _ in items].index("title"), ("close_room", "关闭房间"))
         return items
@@ -524,6 +523,8 @@ class NetGameScreen(GameScreen):
                     self.query_one(HistoryPanel).note(line, block, entry.turn)
         elif t == "notice":  # an answer that came too late, or twice: the host ignored it
             self.app.notify(msg.get("text", ""), severity="warning", timeout=4)
+        elif t == "saved":
+            self.app.notify(msg["text"])
         elif t == "ideas":  # for this screen alone
             if self.ideas_due is not None and not self.ideas_due.done():
                 self.ideas_due.set_result(msg.get("ideas", []))
@@ -686,7 +687,6 @@ class NetGameScreen(GameScreen):
 
     def action_retry(self) -> None:
         if self.seat and self.retry_due:
-            self.retry_due = False
             self.run_worker(partial(self.link.send, {"t": "act", "text": "/retry"}))
         else:
             self.app.notify("等待房主恢复当前回合后可重试。")
@@ -747,7 +747,10 @@ class NetGameScreen(GameScreen):
         self.app.notify("前情回顾由房主发起。")
 
     def action_save(self) -> None:
-        self.app.notify("房主设备每回合自动保存进度。")
+        if self.seat or self.link.host:
+            self.run_worker(partial(self.link.send, {"t": "save"}))
+        else:
+            self.app.notify("观战模式下无法请求存档。")
 
     # Telling again and the epilogue happen on the host too, asked for from here.
     def action_retell(self, nudge: str = "") -> None:

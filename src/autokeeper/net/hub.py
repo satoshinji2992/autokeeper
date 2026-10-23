@@ -504,6 +504,17 @@ class Hub:
                     await self._send(host, {"t": "error", "text": f"{self.names[cid]} 的版本和你不一样，可能会出错"})
         elif t == "sit":
             await self._sit(cid, msg.get("investigator", ""))
+        elif t == "save":
+            if cid not in self.hosts and self._seat_of(cid) is None:
+                await self._send(cid, {"t": "error", "text": "请先入座，再请求保存本局进度。"})
+                return
+            try:
+                self._save()
+            except (OSError, ValueError) as exc:
+                self._failed("手动存档", exc)
+                await self._send(cid, {"t": "error", "text": "存档未完成，请房主检查存储空间与写入权限。"})
+            else:
+                await self._send(cid, {"t": "saved", "text": "本局进度已保存到房主设备。"})
         elif t == "start":
             await self._begin(cid)
         elif t == "bring":

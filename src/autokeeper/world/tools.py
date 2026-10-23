@@ -363,12 +363,17 @@ class Gateway:
     def _publish(self, trial: World) -> None:
         """What a validated copy changed, onto the live save at once."""
         w = self.world
+        # Scoped scene views store routing metadata in __dict__, not game fields.
+        # Compare the same materialized projection used to prepare the transaction;
+        # publish through attributes so scene cursors stay local and world data shared.
+        current = w.st.model_copy()
         state_changes = {name: copy.deepcopy(value) for name, value in trial.st.__dict__.items()
-                         if value != w.st.__dict__.get(name)}
+                         if value != getattr(current, name)}
         module_changes = {name: copy.deepcopy(value) for name, value in trial.m.__dict__.items()
                           if value != w.m.__dict__.get(name)}
         w.m.__dict__.update(module_changes)
-        w.st.__dict__.update(state_changes)
+        for name, value in state_changes.items():
+            setattr(w.st, name, value)
 
 
 def harness_tools(gateway: Gateway, *, writable: bool = False) -> list:

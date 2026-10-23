@@ -38,9 +38,32 @@ async def test_failed_round_shows_retry_instead_of_claiming_the_keeper_is_still_
         assert "本回合已中断" in str(screen.query_one("#turnline", Static).content)
         assert "/retry" in screen.query_one("#command", Input).placeholder
         assert "守秘人在讲" not in str(screen.query_one("#turnline", Static).content)
+        screen.action_retry()
+        await pilot.pause()
+        assert screen.retry_due  # remains recoverable until the server confirms progress
         await screen.on_msg({"t": "turn", "investigator": lead.id, "state": state.model_dump(mode="json"),
                              "name": lead.name, "player": "玩家", "index": 1, "total": 2})
         assert not screen.retry_due
+
+
+async def test_multiplayer_menu_restores_save_and_keeps_private_chat_out_of_settings():
+    module = Module.load(EXAMPLE)
+    lead = module.pregens[0].model_copy(deep=True)
+    state = Game.new(module, [lead], human=[lead.id])
+    link = FakeLink()
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = NetGameScreen(module, state, link, lead.id, [])
+        await app.push_screen(screen)
+        assert "save" in dict(screen.menu_items())
+        assert "private_message" not in dict(screen.menu_items())
+        assert "private_message" not in dict(screen.settings_items())
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+        assert {"t": "save"} in link.sent
+        screen.send_line("/sc")
+        await pilot.pause()
+        assert app.screen.__class__.__name__ == "PrivateMessageModal"
 
 
 @pytest.mark.parametrize("change", ["location", "time", "sky", "people"])

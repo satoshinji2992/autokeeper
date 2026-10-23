@@ -432,7 +432,9 @@ class HostedReply(BaseModel):
     npc: str = Field("", description="kind=npc 时填可配音名单中的 id；kind=tell 时留空")
     instruction: str = Field("", description="kind=npc 时填写本次演出指令；kind=tell 时留空")
     private: bool = Field(False, description="kind=npc 时仅向当前行动调查员私下回应；kind=tell 时为 false")
-    telling: Telling | None = Field(None, description="kind=tell 时填写最终场面与叙述；kind=npc 时必须为 null")
+    telling: Telling | None = Field(None, description=(
+        "kind=tell 时填写最终场面与叙述，scene、text、asides、media、perceptions 都写在此对象内，不放顶层；"
+        "kind=npc 时必须为 null"))
 
     @model_validator(mode="after")
     def exclusive(self) -> HostedReply:
@@ -2187,7 +2189,7 @@ class Cast:
                 party = {inv.id for inv in state.investigators}
                 scene_sample["follow"] = [npc for npc in scene_sample["here"]
                                           if self.world.rec.entities[npc].following in party]
-            final = {"scene": scene_sample, "text": "（依本段已经结算的结果叙述）"}
+            final = {"scene": scene_sample, "text": "（依本段已经结算的结果叙述）", "asides": [], "media": []}
             if continuing:
                 # Show all three valid outcomes. A sole pending example made a normal
                 # authorized wait look like a fresh player choice on every quiet beat.
@@ -2215,6 +2217,7 @@ class Cast:
                       "只向当前行动调查员私下回应时 private=true，普通现场对白为 false；不指定其他或远处收件人。"
                       "请求配音时 telling=null，等实际台词、操作与未落实原因回来后再决定场面和续办。"
                       "可以直接收束时 kind=tell，npc、instruction 留空，private=false，telling 填最终回复；"
+                      "scene、text、asides、media、perceptions 和 continuation 均为 telling 内的字段，不放到顶层。"
                       "只用已有场面能力，不请求检索或其他世界工具。先写 kind，再写其余字段。")
         reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader,
                                  schema=schema, remember=remember)

@@ -342,7 +342,7 @@ async def test_the_host_opens_a_room_from_the_title_and_plays_in_it(monkeypatch,
         assert isinstance(game, NetGameScreen) and game.seat == "zhouheng" and game.link.host
         hub = app.room.hub
         assert hub is not None and hub.names[next(iter(hub.hosts))] == "小明·房主"
-        assert [key for key, _ in game.menu_items()] == ["continue", "private_message", "guide", "close_room", "title", "quit", "settings"]
+        assert [key for key, _ in game.menu_items()] == ["continue", "save", "guide", "close_room", "title", "quit", "settings"]
         game.action_close_room()  # Ctrl+P → 关闭房间, for the host
         await pilot.pause(0.2)
         assert isinstance(app.screen, CloseRoomModal)

@@ -79,6 +79,38 @@ async def test_disconnect_retains_queued_declarations_and_reconnect_shows_them(t
         await b.close()
 
 
+async def test_seated_player_can_request_an_actual_save_without_advancing_the_world(transport_hub):
+    hub = transport_hub
+    async with sockets(hub) as (http, url):
+        player = await sit(http, url, "lin")
+        hub.state.flags.append("manual-save-test")
+        hub.state.queued_actions = [("lin", "下一轮查看门口")]
+        before = hub.state.turn, hub.state.minutes
+        await player.send_json({"t": "save"})
+        reply = await until(player, lambda msg: msg["t"] == "saved")
+        assert "房主设备" in reply["text"]
+        saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
+        assert "manual-save-test" in saved.flags
+        assert saved.queued_actions == [("lin", "下一轮查看门口")]
+        assert (saved.turn, saved.minutes) == before
+        await player.close()
+
+
+async def test_failed_manual_save_does_not_claim_success(transport_hub, monkeypatch):
+    hub = transport_hub
+
+    def broken():
+        raise PermissionError("offline test: read-only directory")
+
+    monkeypatch.setattr(hub, "_save", broken)
+    async with sockets(hub) as (http, url):
+        player = await sit(http, url, "lin")
+        await player.send_json({"t": "save"})
+        reply = await until(player, lambda msg: msg["t"] in ("saved", "error"))
+        assert reply["t"] == "error" and "存档未完成" in reply["text"]
+        await player.close()
+
+
 async def test_disconnected_queued_action_is_collected_without_ai_replacement(transport_hub, monkeypatch):
     hub = transport_hub
     hub.early = [("lin", "留意楼梯")]
