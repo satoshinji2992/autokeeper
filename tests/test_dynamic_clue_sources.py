@@ -279,7 +279,8 @@ async def test_private_testimony_does_not_automatically_attach_its_underlying_ha
     said = await game._reply(turn, "private", "preacher", lambda: cast.npc(game.state, "preacher", "私下告诉我。", private=True),
                              lambda _: None, audience=[who])
     assert said.told == ["c_diary"] and not said.media
-    assert not game.state.handouts and not game.state.presentations and not game.state.clues
+    assert not game.state.handouts and not game.state.presentations
+    assert game.state.clues == ["c_diary"] and game.state.clue_settled["c_diary"] == [who]
     assert knowledge.sees(game.world.rec.facts["clue:c_diary"], who)
     await game.close()
 

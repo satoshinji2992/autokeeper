@@ -2822,14 +2822,15 @@ class Game(Encounters):
             said.shown = True
             keep(turn)
         if said.told and not said.heard:
-            if said.audience is not None:
-                # A private testimony updates its listeners, never the party's shared clue flags.
-                for cid in said.told:
-                    self.world.apply(Learn(id=f"private-told:{st.turn}:{npc_id}:{key}:{cid}", fact=f"clue:{cid}",
-                                           who=said.audience, actor=npc_id, visibility="private", how="私下告知"))
-            else:
-                with self._journal(said.journal, keep):  # each card and its dice once, however often resumed
-                    await self._gain(said.told, turn, None, heard=npc_id, scope={"audience": said.audience})
+            with self._journal(said.journal, keep):
+                if said.audience is not None:
+                    for cid in said.told:
+                        await self._resolution_step(f"private-source:{cid}", turn, lambda cid=cid: self.world.apply(
+                            Learn(id=f"private-told:{st.turn}:{npc_id}:{key}:{cid}", fact=f"clue:{cid}",
+                                  who=said.audience, actor=npc_id, visibility="private", how="私下告知")).ok)
+                # Testimony grants its listeners the information and its authored effects,
+                # not possession of the underlying diary or a public disclosure to the party.
+                await self._gain(said.told, turn, None, heard=npc_id, scope={"audience": said.audience})
             said.heard = True
             keep(turn)
         await self.present(said.media, key=f"npc:{st.turn}:{npc_id}:{key}")
@@ -3702,10 +3703,7 @@ class Game(Encounters):
         sanity = self._sanity(trial, ok, bad)
         inv.__dict__.update(trial.__dict__)
         turn.sanity.append((inv.name, sanity))
-        when = self.world.now
-        place = self.world.place_at(inv.id, when)
-        observers = self.world.observers(place, at=when) if place else []
-        audience = recipients.scope(self.state, [inv.id, *observers])
+        audience = [inv.id]
         self.state.add("sanity", sanity.describe(), who=inv.name, audience=audience)
         return {"type": "sanity", "who": inv.name, **_sanity_view(sanity), **self._madness(inv, sanity, turn),
                 "audience": audience}
@@ -3955,40 +3953,25 @@ class Game(Encounters):
         came through the original discovery/material route; a summary still grants the clue,
         SAN/Mythos and its actual consequences, without the source's paper or personal gate."""
         st, m = self.state, self.m
-        actor = who or st.investigator.id
         step = self._resolution_step
         readers = scope["audience"] if scope is not None else self._narrative_audience(turn, discovery=True)
-        selected = readers if readers is not None else [i.id for i in st.investigators]
+        selected = list(dict.fromkeys(readers if readers is not None else [i.id for i in st.investigators]))
         for cid in ids:
             key = f"/clue:{cid}"
-            if (actor in st.clue_settled.get(cid, []) and all(knowledge.clue_known(st, cid, who) for who in selected)
+            if (all(reader in st.clue_settled.get(cid, []) and knowledge.clue_known(st, cid, reader) for reader in selected)
                     and not self._resolution_pending(key)):
                 continue
             clue = m.clue(cid)
             if not clue.available(st.flags, st.clues) and not self._resolution_pending(key):
                 continue
 
-            def commit(clue=clue, cid=cid) -> dict:
-                inv = st.find(actor)
-                audience = readers
-                # An already-saved NPC line may establish knowledge on reload, before
-                # this award's costs have committed. Knowledge is not its receipt.
-                first = inv.id not in st.clue_settled.get(cid, [])
-                sanity = None
-                if clue.sanity and first:
-                    ok, bad = clue.sanity.split("/")
-                    trial = inv.model_copy(deep=True)
-                    sanity = self._sanity(trial, ok, bad)
-                    inv.__dict__.update(trial.__dict__)
-                if clue.mythos and first:
-                    inv.skills["克苏鲁神话"] = inv.value("克苏鲁神话") + clue.mythos
+            def commit(observed: dict, clue=clue, cid=cid) -> dict:
+                audience = observed["audience"]
                 if cid not in st.clues:
                     st.clues.append(cid)
-                if first:
-                    st.clue_settled.setdefault(cid, []).append(inv.id)
                 knowledge.seed(m, st, self.world.rec)
                 fact = self.world.rec.facts[f"clue:{cid}"]
-                fact.known_by = list(dict.fromkeys([*fact.known_by, *selected]))
+                fact.known_by = list(dict.fromkeys([*fact.known_by, *observed["readers"]]))
                 st.progress_at = st.turn
                 turn.clues.append(cid)
                 original = originals is None or cid in originals
@@ -4009,17 +3992,37 @@ class Game(Encounters):
                                         "audience": audience})
                     else:
                         paper = h.id
-                if sanity is not None:
-                    turn.sanity.append((inv.name, sanity))
-                    st.add("sanity", sanity.describe(), who=inv.name, audience=audience)
-                    notices.append({"type": "sanity", "who": inv.name, **_sanity_view(sanity),
-                                    **self._madness(inv, sanity, turn), "audience": audience})
                 return {"notices": notices, "paper": paper, "audience": audience}
 
+            def exposure(reader: str, clue=clue, cid=cid) -> dict | None:
+                if reader in st.clue_settled.get(cid, []):
+                    return None
+                inv = st.find(reader)
+                trial = inv.model_copy(deep=True)
+                sanity = self._sanity(trial, *clue.sanity.split("/")) if clue.sanity else None
+                if clue.mythos:
+                    trial.skills["克苏鲁神话"] = trial.value("克苏鲁神话") + clue.mythos
+                inv.__dict__.update(trial.__dict__)
+                st.clue_settled.setdefault(cid, []).append(reader)
+                if sanity is None:
+                    return None
+                turn.sanity.append((inv.name, sanity))
+                st.add("sanity", sanity.describe(), who=inv.name, audience=[reader])
+                return {"type": "sanity", "who": inv.name, **_sanity_view(sanity),
+                        **self._madness(inv, sanity, turn), "audience": [reader]}
+
             async def gain(cid: str = cid) -> None:
-                acquired = await step("commit", turn, commit)
+                observed = await step("audience", turn, lambda: {"audience": readers, "readers": selected})
+                effects = []
+                for reader in observed["readers"]:
+                    notice = await step(f"exposure:{reader}", turn, lambda reader=reader: exposure(reader))
+                    if notice is not None:
+                        effects.append(notice)
+                acquired = await step("commit", turn, lambda: commit(observed))
                 for index, notice in enumerate(acquired["notices"]):
                     await step(f"notice:{index}", turn, lambda notice=notice: self.emit(notice))
+                for notice in effects:
+                    await step(f"sanity-notice:{notice['audience'][0]}", turn, lambda notice=notice: self.emit(notice))
                 if acquired["paper"]:
                     await step("paper", turn, lambda cid=cid: self.present(
                         [{"ref": f"handout:{acquired['paper']}", "to": acquired["audience"]}],
@@ -4736,7 +4739,9 @@ class Game(Encounters):
             out.append(snapshot)
         out += self._found(turn)
         for who, s in turn.sanity:
-            out.append(f"理智：{who} {s.describe()}" + (f"；疯狂发作表（日文原文，请用中文演出）：{s.bout}" if s.bout else ""))
+            out.append(f"【主持用个人理智结算】{who} {s.describe()}"
+                       + (f"；疯狂发作表（日文原文，请用中文演出）：{s.bout}" if s.bout else "")
+                       + "。个人数值与具体症状只向本人交代；共同正文只描写旁人实际能观察到的反应，不替他人公布秘密或内心。")
         if turn.npc_lines:
             names = "、".join(m.npc(npc_id).name for npc_id, _ in turn.npc_lines)
             out.append(f"【对话已展示】{names}已回应。不要引用、概述或解释刚才的对话，也不重复检定卡；只叙述本轮另行发生的变化。")

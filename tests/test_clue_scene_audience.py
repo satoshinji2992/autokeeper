@@ -28,7 +28,7 @@ async def test_local_original_and_sanity_are_delivered_only_to_actual_observers(
     add_local_material(hub)
     hub.state.apart["chen"] = "tower"
     hub.state.record.entities["chen"].at = "tower"
-    fake.queue(10)
+    fake.queue(10, 10)
     await hub.game._gain(["qa_local_clue"], Turn(), None)
     hub.game.world.sync()
     fact = hub.state.record.facts["clue:qa_local_clue"]
@@ -42,8 +42,11 @@ async def test_local_original_and_sanity_are_delivered_only_to_actual_observers(
     assert "QA_LOCAL_PAPER_93624" not in json.dumps(hub._welcome("c"), ensure_ascii=False)
     delivered = [(cid, msg) for cid, msg in messages if msg.get("ev", {}).get("type") in ("presentation", "sanity")]
     assert {cid for cid, _ in delivered} == {"a", "b"}
-    assert all(set(msg["ev"]["audience"]) == {"zhouheng", "lin"} for _, msg in delivered)
-    assert all(entry.audience == ["zhouheng", "lin"] for entry in hub.state.log if entry.kind in ("clue", "sanity"))
+    assert all(set(msg["ev"]["audience"]) == {"zhouheng", "lin"} for _, msg in delivered
+               if msg["ev"]["type"] == "presentation")
+    assert all(len(msg["ev"]["audience"]) == 1 for _, msg in delivered if msg["ev"]["type"] == "sanity")
+    assert all(entry.audience == ["zhouheng", "lin"] for entry in hub.state.log if entry.kind == "clue")
+    assert all(len(entry.audience) == 1 for entry in hub.state.log if entry.kind == "sanity")
     saved = GameState.model_validate_json(hub.state.model_dump_json())
     assert not presentation.papers(saved, "chen") and presentation.papers(saved, "zhouheng")
     assert not fake.values
@@ -52,7 +55,7 @@ async def test_local_original_and_sanity_are_delivered_only_to_actual_observers(
 async def test_full_party_original_keeps_the_shared_handout_path(private_hub, fake):
     hub, _messages = private_hub
     add_local_material(hub)
-    fake.queue(10)
+    fake.queue(10, 10, 10)
     await hub.game._gain(["qa_local_clue"], Turn(), None)
     assert "qa_local_paper" in hub.state.handouts and not hub.state.presentations
     assert "QA_LOCAL_PAPER_93624" in json.dumps(hub._book("chen"), ensure_ascii=False)
@@ -67,3 +70,12 @@ async def test_sanity_scope_follows_the_affected_investigator_and_preserves_own_
     await hub.game.emit(notice)
     assert notice["audience"] == ["chen"] and hub.state.log[-1].audience == ["chen"]
     assert [cid for cid, msg in messages if msg.get("ev", {}).get("type") == "sanity"] == ["c"]
+
+
+async def test_sanity_receipt_remains_personal_when_everyone_can_see_the_same_scene(private_hub, fake):
+    hub, messages = private_hub
+    fake.queue(10)
+    notice = hub.game._lose_sanity(hub.state.find("lin"), "1/1", Turn())
+    await hub.game.emit(notice)
+    assert notice["audience"] == ["lin"] and hub.state.log[-1].audience == ["lin"]
+    assert [cid for cid, msg in messages if msg.get("ev", {}).get("type") == "sanity"] == ["b"]

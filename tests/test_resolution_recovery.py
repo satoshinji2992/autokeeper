@@ -286,7 +286,7 @@ async def test_sanity_tool_receipts_keep_completed_rolls_if_the_madness_table_fa
     assert not game.state.clues and not game.state.handouts
     assert game.state.investigator.san == san and not game.state.investigator.conditions
     assert not fake.values and not fake.totals
-    receipt = game.state.pending_turn["resolution"]["steps"]["clue:c_diary/commit"]
+    receipt = game.state.pending_turn["resolution"]["steps"]["clue:c_diary/exposure:zhouheng"]
     assert not receipt["done"] and len(receipt["tools"]) == 3
     fake.table = table
     fake.queue_totals(4)  # the temporary-insanity hours, after the restored table roll

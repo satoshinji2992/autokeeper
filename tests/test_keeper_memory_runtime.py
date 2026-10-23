@@ -147,7 +147,8 @@ async def test_private_disclosure_and_real_handover_survive_deduplication_withou
         assert "广场" in recorded  # Its actual departure, beyond its promise to wait outside.
         assert "clue:c_diary" in {f.id for f in knowledge.known(game.world.rec, actor)}
         assert "clue:c_diary" not in {f.id for f in knowledge.known(game.world.rec, "lin")}
-        assert "c_diary" not in game.state.clues
+        assert "c_diary" in game.state.clues  # global progress does not grant the other seats its knowledge
+        assert game.state.clue_settled["c_diary"] == [actor]
         private = next(event for event in events if event["type"] == "npc" and event["text"] == first)
         assert private["audience"] == [actor]
         assert first not in words(role_calls("Dialogue")[1]["messages"])
@@ -261,7 +262,8 @@ async def test_two_voice_receipts_restore_once_at_every_saved_boundary(fake, mon
             actor = game.state.investigator.id
             assert "clue:c_diary" in {f.id for f in knowledge.known(game.world.rec, actor)}
             assert "clue:c_diary" not in {f.id for f in knowledge.known(game.world.rec, "lin")}
-            assert "c_diary" not in game.state.clues
+            assert "c_diary" in game.state.clues
+            assert game.state.clue_settled["c_diary"] == [actor]
         planned = await next_action(graph, game)
         assert first in words(planned["messages"]) and SECOND in words(planned["messages"])
     finally:
