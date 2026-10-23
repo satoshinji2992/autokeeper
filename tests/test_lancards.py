@@ -4,6 +4,7 @@ models; checked by the Hub, shown to everyone (no model calls)."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 from typing import Any
 
@@ -379,6 +380,119 @@ async def test_a_player_picks_and_makes_their_card_in_the_lobby(cards, monkeypat
         await pilot.press("y")  # ready: the game begins
         await _until(pilot, lambda: hub.started.is_set())
     await closed(task)
+
+
+@pytest.mark.parametrize("guest", [False, True])
+async def test_lan_character_creation_receives_new_photo_candidates_and_does_not_reuse_the_previous_person(
+    cards, monkeypatch, tmp_path, skills_dir, fake, guest,  # noqa: F811
+):
+    from textual.widgets import Input, OptionList
+
+    from autokeeper import imagery
+    from autokeeper.agents.card import Figure, Photo
+    from autokeeper.tui.app import AutoKeeperApp
+    from autokeeper.tui.modals.menu import GameMenu
+    from autokeeper.tui.screens.card import CardScreen
+    from autokeeper.tui.screens.lobby import LobbyScreen
+    from autokeeper.tui.screens.seatcard import SeatCardScreen
+
+    if guest:
+        monkeypatch.setenv("AUTOKEEPER_GUEST", "1")
+    else:
+        monkeypatch.delenv("AUTOKEEPER_GUEST", raising=False)
+    portraits = {}
+    for name, colour in (("鲁迅", "red"), ("许广平", "blue")):
+        portraits[name] = tmp_path / f"{name}.png"
+        Image.new("RGB", (120, 160), colour).save(portraits[name])
+
+    async def research(query, provider="auto", *, photos=True):
+        assert not photos  # Look-up deliberately has no candidates; propose must return the later search result.
+        return Figure(query, title=query, extract="人物资料。")
+
+    async def find_photos(fig, query=""):
+        fig.photos.extend(Photo(str(portraits[fig.query]), title=fig.query) for _ in range(4))
+
+    monkeypatch.setattr(cardmod, "research", research)
+    monkeypatch.setattr(cardmod, "find_photos", find_photos)
+    monkeypatch.setattr(imagery, "preprocess", lambda source, *args, **kwargs: source)
+    hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
+    hub.card_builder = lambda: Builder(cards, hub.m)
+    task = await opened(hub)
+    app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
+    try:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await _until(pilot, lambda: isinstance(app.screen, LobbyScreen) and app.screen.welcome is not None)
+            lobby = app.screen
+            await pilot.press("enter")
+            await _until(pilot, lambda: lobby.chosen is not None)
+            await pilot.press("r")
+            await _until(pilot, lambda: isinstance(app.screen, SeatCardScreen) and app.screen.is_mounted)
+            await pilot.press("a")
+            await _until(pilot, lambda: isinstance(app.screen, GameMenu) and app.screen.is_mounted)
+            await pilot.press("enter")
+            await _until(pilot, lambda: isinstance(app.screen, CardScreen) and app.screen.is_mounted)
+            screen = app.screen
+            for name, channel in (("鲁迅", 0), ("许广平", 2)):
+                screen.query_one(Input).value = name
+                await pilot.press("enter")
+                await _until(pilot, lambda: screen.step == "photo" and all(screen.shots.get(i) is not None for i in range(4)))
+                assert screen.builder.figure.photos[0].title == name
+                assert screen.builder.figure.photos[0].url == "upload:0"  # host paths do not cross the wire
+                assert Image.open(screen.shots[0]).getpixel((10, 10))[channel] > 240
+                assert screen.query_one(OptionList).get_option_at_index(0).id == "photo-0"
+                if name == "鲁迅":
+                    choices = screen.query_one(OptionList)
+                    choices.highlighted = choices.get_option_index("again")
+                    await pilot.press("enter")
+                    await _until(pilot, lambda: screen.step == "name")
+            screen.query_one(OptionList).highlighted = 0
+            await pilot.press("enter")
+            await _until(pilot, lambda: screen.step == "ask")
+            assert screen.chosen and Image.open(screen.chosen).getpixel((10, 10))[2] > 240
+            for _ in range(3):
+                await pilot.press("space")
+                await pilot.pause()
+            await _until(pilot, lambda: screen.step == "extra")
+            await pilot.press("enter")
+            await _until(pilot, lambda: screen.step == "card")
+            await pilot.press("enter")
+            await _until(pilot, lambda: app.screen is lobby and bool(hub.state.investigators[0].portrait))
+    finally:
+        await closed(task)
+
+
+async def test_photo_search_errors_are_included_in_the_remote_proposal(cards, monkeypatch, tmp_path):  # noqa: F811
+    from autokeeper.agents.card import Figure
+
+    builder = Builder(cards, Module.load(EXAMPLE))
+    builder.figure = Figure("鲁迅", title="鲁迅")
+
+    async def unavailable(fig, query=""):
+        fig.photo_errors.append("图片搜索请求超时")
+
+    monkeypatch.setattr(cardmod, "find_photos", unavailable)
+    reply = await netcards.step(builder, "propose", {}, tmp_path)
+    assert reply["proposal"]["questions"]
+    result = netcards.figure_in(reply["figure"])
+    assert not result.photos and "请求超时" in result.photo_notice
+
+
+async def test_replacing_an_uploaded_portrait_invalidates_its_cached_preview(cards, monkeypatch, tmp_path):  # noqa: F811
+    from autokeeper.agents.card import Figure, Photo
+
+    builder = Builder(cards, Module.load(EXAMPLE))
+
+    async def read(path):
+        builder.figure = Figure("人物", source="角色卡", photos=[Photo(str(path))])
+        return "persona"
+
+    monkeypatch.setattr(builder, "read", read)
+    for colour, channel in (("red", 0), ("blue", 2)):
+        image = io.BytesIO()
+        Image.new("RGB", (64, 80), colour).save(image, "PNG")
+        await netcards.step(builder, "read", {"file": base64.b64encode(image.getvalue()).decode(), "name": "portrait.png"}, tmp_path)
+        reply = await netcards.step(builder, "photo", {"i": 0}, tmp_path)
+        assert Image.open(io.BytesIO(media.picture(reply["data"]))).getpixel((10, 10))[channel] > 240
 
 
 async def test_a_browser_seat_never_lists_the_host_s_cards(monkeypatch, tmp_path, skills_dir, fake):

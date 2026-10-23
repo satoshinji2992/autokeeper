@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 import json
 import re
 import uuid
@@ -155,12 +156,15 @@ async def step(b: Builder, op: str, msg: dict, work: Path) -> dict:
             work.mkdir(parents=True, exist_ok=True)
             path = work / f"upload{suffix}"
             path.write_bytes(data)
+            for cached in work.glob("photo-*.jpg"):
+                cached.unlink(missing_ok=True)  # replacing upload.png changes its contents without changing its address
             await b.read(str(path))  # a file the Hub wrote itself
         else:
             await b.read(_text(msg.get("text"), 12000), files=False)  # never a path on the host
         return {"figure": figure_out(b.figure)} | _card(b)
     if op == "propose":
-        return {"proposal": (await b.propose()).model_dump()}
+        proposal = await b.propose()
+        return {"proposal": proposal.model_dump(), "figure": figure_out(b.figure)}
     if op == "build":
         answers = msg.get("answers") or []
         b.answers = [(_text(q, 60), _text(a, 60)) for q, a in answers[:6]] if isinstance(answers, list) else []
@@ -168,9 +172,10 @@ async def step(b: Builder, op: str, msg: dict, work: Path) -> dict:
         return _card(b)
     if op == "photo":
         i = msg.get("i")
-        if not isinstance(i, int) or not 0 <= i < PHOTOS:
+        if not isinstance(i, int) or not 0 <= i < PHOTOS or not b.figure or i >= len(b.figure.photos):
             raise CardError("这张照片拿不到")
-        dest = work / f"photo-{i}.jpg"
+        identity = hashlib.sha256(b.figure.photos[i].url.encode()).hexdigest()[:20]
+        dest = work / f"photo-{i}-{identity}.jpg"
         if not dest.exists() and not await b.download(i, dest):
             return {"data": ""}
         return {"data": await asyncio.to_thread(media.pack, str(dest), max_size=800)}
@@ -199,6 +204,7 @@ class RemoteBuilder:
         self._n = 0
         self._due: dict[int, asyncio.Future] = {}
         self._begun = False
+        self._photo_lock = asyncio.Lock()  # the host accepts one card step at a time, including photo downloads
 
     async def _call(self, op: str, **fields: Any) -> dict:
         if not self._begun:
@@ -272,7 +278,9 @@ class RemoteBuilder:
         return "sheet" if self.kind == "sheet" and self.card else "persona"
 
     async def propose(self) -> Proposal:
-        return Proposal.model_validate((await self._call("propose"))["proposal"])
+        reply = await self._call("propose")
+        self._take(reply)
+        return Proposal.model_validate(reply["proposal"])
 
     async def build(self, request: str = "") -> Investigator:
         if request:
@@ -288,7 +296,9 @@ class RemoteBuilder:
         if not photo.url.startswith(("http://", "https://", "upload:")):  # one the player picked on this machine
             return self.files and await download(photo, dest)
         try:
-            data = media.picture((await self._call("photo", i=i)).get("data", ""), max_size=800)
+            async with self._photo_lock:
+                reply = await self._call("photo", i=i)
+            data = media.picture(reply.get("data", ""), max_size=800)
         except CardError:
             return False
         if not data:

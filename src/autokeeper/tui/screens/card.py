@@ -356,6 +356,8 @@ class CardScreen(Screen[Investigator | None]):
         self.query_one("#preview-body", Static).update(Text(fig.brief(800), style="dim"))
         try:
             self.proposal = await self.builder.propose()  # who this is, then their photos by it
+            fig = self.builder.figure  # a remote proposal also replaces the figure with its updated photo candidates
+            assert fig
             await self._fetch(range(min(4, len(fig.photos))))
         except Exception as exc:  # the model is down or answered nonsense twice
             self.app.notify(str(exc) if isinstance(exc, CardError) else f"未能生成问题：{config.plain(exc)}。", severity="error")
