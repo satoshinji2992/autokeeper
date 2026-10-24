@@ -220,7 +220,7 @@ async def test_two_voice_receipts_restore_once_at_every_saved_boundary(fake, mon
         calls = receipt.get("calls", [])
         replies = receipt.get("voice_turn", {}).get("replies", {})
         if stage == "before-call":
-            ready = journal.get("talk_done") and not calls
+            ready = journal.get("stage") == "narrate" and not calls
         elif stage == "final-saved":
             ready = "text" in receipt and not receipt.get("landed")
         else:

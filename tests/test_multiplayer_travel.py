@@ -136,7 +136,7 @@ async def test_a_retained_unstarted_declaration_does_not_authorise_somebody_else
         await hub._settle()
         assert hub.game.world.place("elois") == "tower"
         assert hub.game.world.place("betty") == hub.game.world.place("bert") == "square"
-        assert hub.early == original and hub.state.queued_actions == original
+        assert hub.early == original and hub.queued_declarations() == original
         assert set(journeys(hub)[0].motions) == {"elois"} and cast.party_calls == 1
     finally:
         await hub.game.close()

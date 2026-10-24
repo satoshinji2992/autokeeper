@@ -145,7 +145,7 @@ async def test_sealed_wait_rejects_late_input_then_accepts_it_in_the_next_window
         await asyncio.wait_for(hub.cast.entered.wait(), 3)
         await hub._on("b", {"t": "act", "text": "急事"})
         assert sent[-1][1]["t"] == "action_rejected" and sent[-1][1]["text"] == "急事"
-        assert not hub.early and not hub.state.queued_receipts
+        assert not hub.early and not any(row.seat == "lin" for row in hub.state.declarations)
         hub.cast.release.set()
         await asyncio.wait_for(task, 3)
         assert hub.state.minutes == start and not hub.early
@@ -252,9 +252,9 @@ async def test_accepted_editable_receipts_survive_restore_and_are_not_exposed_to
         task = await collecting(hub)
         await hub._on("b", {"t": "act", "text": "急事", "round": hub.round_id})
         restored = GameState.model_validate_json(hub.state.model_dump_json())
-        assert restored.queued_actions == [("lin", "急事")]
-        assert restored.queued_receipts == [{"seat": "lin", "text": "急事", "at": start}]
-        assert "queued_receipts" not in hub._view("zhouheng")
+        assert [(row.seat, row.text) for row in restored.declarations if not row.batch] == [("lin", "急事")]
+        assert [(row.seat, row.text, row.at) for row in restored.declarations] == [("lin", "急事", start)]
+        assert "declarations" not in hub._view("zhouheng")
         assert "unfinished" not in hub._view("lin")
     finally:
         if task is not None:
@@ -627,6 +627,7 @@ async def test_redeclaring_with_new_text_replaces_the_old_input_timestamp(fake, 
     plans, rules = wait_plans()
     hub = made(fake, plans, rules)
     try:
+        hub.open = True
         start = hub.state.minutes
         hub._accept_declaration("zhouheng", "守候")
         hub.early = [("zhouheng", "守候")]
@@ -638,10 +639,10 @@ async def test_redeclaring_with_new_text_replaces_the_old_input_timestamp(fake, 
         monkeypatch.setattr(hub, "_ask", revise)
         await hub._confirm_queued("zhouheng", "守候")
         assert hub.pool == [("zhouheng", "改去广场")] and not hub.early
-        assert hub.state.queued_receipts == [{"seat": "zhouheng", "text": "改去广场", "at": start + 10}]
+        assert [(row.seat, row.text, row.at) for row in hub.state.declarations] == [("zhouheng", "改去广场", start + 10)]
         hub.state.minutes += 10
         hub._accept_declaration("zhouheng", "守候")
-        assert hub.state.queued_receipts[-1]["at"] == start + 20
-        assert len([row for row in hub.state.queued_receipts if row["text"] == "守候"]) == 1
+        assert hub.state.declarations[-1].at == start + 20
+        assert len([row for row in hub.state.declarations if row.text == "守候"]) == 1
     finally:
         await hub.game.close()

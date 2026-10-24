@@ -142,7 +142,7 @@ async def test_a_sudden_encounter_defers_the_unstarted_rest_of_the_original_batc
     monkeypatch.setattr(hub, "_run", run)
     await hub._settle_round(order)
     assert calls == order[:1]
-    assert hub.early == order[1:] and hub.state.queued_actions == order[1:]
+    assert hub.early == order[1:] and hub.queued_declarations() == order[1:]
     assert hub.game.pending_party() is None
     restored = Hub(EXAMPLE, state=GameState.model_validate_json(hub.state.model_dump_json()), cast=TableCast(), rules=Rules(dice=fake))
     assert restored.early == order[1:] and restored.game.pending_party() is None

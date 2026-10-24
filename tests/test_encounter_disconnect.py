@@ -195,12 +195,12 @@ async def test_encounter_participants_revise_one_action_and_each_must_declare_or
             await asyncio.wait_for(task, 5)
             assert hub.pool == [("zhouheng", "改为守住楼梯")] and "lin" in hub.done
             assert hub.state.round_plan["encounter"] == ["sudden", mode, 1]
-            accepted = list(hub.state.queued_actions)
+            accepted = list(hub.queued_declarations())
             assert accepted == [("zhouheng", "改为守住楼梯")]
             await a.send_json({"t": "act", "text": "再行动一次", "round": current["round"]})
             rejected = await until(a, lambda msg: msg["t"] == "action_rejected")
             assert rejected["text"] == "再行动一次" and not hub.early
-            assert hub.state.queued_actions == accepted
+            assert hub.queued_declarations() == accepted
             assert hub.state.encounter.completed_rounds == 0
     finally:
         if task is not None:

@@ -42,8 +42,9 @@ class SplitCast(TableCast):
         receipt = state.round_plan
         step = next((row for row in receipt.get("steps", [])
                      if receipt["input"][int(row["token"])] == [state.investigator.id, text]), {})
+        declaration = next((row for row in state.declarations if row.id == step.get("declaration")), None)
         self.inputs.append({"who": state.investigator.id, "text": text, "at": state.minutes,
-                            "received": step.get("received"), "place": state.location})
+                            "received": declaration.at if declaration else None, "place": state.location})
         if text == MOVE:
             if self.started is not None:
                 self.started.set()
@@ -118,16 +119,16 @@ async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarte
             await until(y, pool_open)
             await y.send_json({"t": "act", "text": QUEUED})
             await until(y, lambda msg: pool_open(msg) and msg["mine"]["now"] == [QUEUED])
-            original_receipt = next(dict(row) for row in b.state.queued_receipts
-                                    if row["seat"] == friend.id and row["text"] == QUEUED)
-            assert original_receipt["at"] == 600
+            original_receipt = next(row.model_copy(deep=True) for row in b.state.declarations
+                                    if row.seat == friend.id and row.text == QUEUED)
+            assert original_receipt.at == 600
             await y.close()
             await eventually(lambda: hub.sits.get(friend.id) is None)
             assert a is not b and a is not source and b is not source
             assert hub.state.positions == {lead.id: "office", friend.id: "square"}
             assert a.scene.at == 610 and b.scene.at == 600 and source.scene.closed
             assert b.pool == [(friend.id, QUEUED)] and not b.early
-            assert original_receipt in b.state.queued_receipts
+            assert original_receipt in b.state.declarations
             assert not any(row["text"] == QUEUED for cast in casts.values() for row in cast.inputs)
             assert background.cancelled() and source.game._recounting is None
             assert old_cast.background.cancelled()
@@ -137,7 +138,8 @@ async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarte
             hub._save()
             loaded = GameState.model_validate_json(paths.save(state.slot).read_text(encoding="utf-8"))
             saved_b = next(scene for scene in loaded.scenes.values() if not scene.closed and friend.id in scene.members)
-            assert saved_b.queued_actions == [(friend.id, QUEUED)] and original_receipt in saved_b.queued_receipts
+            assert [(row.seat, row.text) for row in saved_b.declarations if not row.batch] == [(friend.id, QUEUED)]
+            assert original_receipt in saved_b.declarations
     finally:
         release.set()
         await stop(task)
@@ -169,7 +171,7 @@ async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarte
             assert original_calls == [{"who": friend.id, "text": QUEUED, "at": 600, "received": 600, "place": "square"}]
             assert not any(row["text"] == MOVE for cast in resumed_casts.values() for row in cast.inputs)
             assert not a.state.pending_turn and not b.state.pending_turn
-            assert not b.state.queued_actions and not b.state.queued_receipts
+            assert not b.state.declarations
             assert not fake.values and not fake.tables
     finally:
         await stop(task)

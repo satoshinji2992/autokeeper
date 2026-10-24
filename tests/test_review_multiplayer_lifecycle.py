@@ -151,7 +151,7 @@ async def test_cancelled_time_proposal_can_resume_after_input_is_undone(fake, mo
         await hub._on("player-a", {"t": "act", "text": "误输入的行动"})
         await hub._on("player-a", {"t": "undo"})
         await asyncio.gather(first.time_task, return_exceptions=True)
-        assert first._time_available() and not first.pool and not first.state.queued_actions
+        assert first._time_available() and not first.pool and not first.queued_declarations()
         first.request_time(until)
         await asyncio.sleep(0)
         assert calls == [until, until], "An interrupted proposal without a decision must remain eligible for retry"

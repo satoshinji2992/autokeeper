@@ -224,9 +224,15 @@ async def test_disconnected_remote_scene_continues_and_reconnect_returns_its_con
             assert calls and all(who == "lin" for who, _ in calls)
             assert "临时代管" in calls[0][1]
             before = hub._context("lin").state.minutes
-            b = await joined(http, hub, "lin")
+            b = await http.ws_connect(f"ws://127.0.0.1:{hub.port}/ws")
+            await b.send_json({"t": "hello", "name": "lin"})
+            await b.send_json({"t": "sit", "investigator": "lin"})
+            seated = await until(b, lambda msg: msg["t"] == "seated")
             await eventually(lambda: "lin" not in hub.takeovers.active)
-            await until(b, pool_open)
+            # A fast handoff can open the window before the seating response.
+            # Its included snapshot is authoritative; no extra pool event is owed.
+            if not seated["pool"]["open"]:
+                await until(b, pool_open)
             assert hub._context("lin").state.minutes >= before
             assert "lin" in hub.state.human and hub.sits["lin"] is not None
             assert not hub._seats()[1]["ai_takeover"]

@@ -125,7 +125,7 @@ async def test_real_cast_talk_then_wait_executes_the_tail_from_the_same_keeper_r
             saved = []
 
             def disconnect():
-                if st.pending_turn.get("talk_done") and not st.pending_turn.get("narrated"):
+                if st.pending_turn.get("stage") == "narrate":
                     saved.append(st.model_dump_json())
                     raise RuntimeError("NPC交物后断开")
 

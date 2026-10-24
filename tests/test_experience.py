@@ -412,7 +412,7 @@ async def test_a_saved_failed_narration_resumes_without_rolls_time_or_npc_duplic
     thread = {"configurable": {"thread_id": "journey"}}
     with pytest.raises(ConnectionError):
         await app.ainvoke({"input": "问工作"}, thread)
-    assert game.state.pending_turn["talk_done"] and len(game.cast.npc_calls) == 1
+    assert game.state.pending_turn["stage"] == "narrate" and len(game.cast.npc_calls) == 1
     loaded = GameState.model_validate_json(saved[-1])
     assert loaded.minutes == before + 5 and len(loaded.checks) == 1
     await game.close()
@@ -593,7 +593,7 @@ async def test_the_screen_recovers_from_a_provider_failure_and_accepts_retry(mod
         screen.cast.intent, screen.cast.arbiter, screen.cast.keeper = intent, ruling, keeper
         screen.query_one(Input).value = "先坐一会儿"
         await pilot.press("enter")
-        assert await until(pilot, lambda: state.pending_turn.get("talk_done") and not screen.busy)
+        assert await until(pilot, lambda: state.pending_turn.get("stage") == "narrate" and not screen.busy)
         clock = state.minutes
         screen.query_one(Input).value = "/retry"
         await pilot.press("enter")

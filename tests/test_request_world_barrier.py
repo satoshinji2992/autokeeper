@@ -176,7 +176,7 @@ async def test_narrated_save_before_remember_recovers_world_debt_without_an_in_m
 
     def checkpoint():
         journal = game.state.pending_turn
-        if journal.get("narrated") and "request_world" not in journal:
+        if journal.get("stage") == "remember" and "request_world" not in journal:
             assert game._world_owed and game._world_task is None
             saved.append(game.state.model_dump_json())
             raise RuntimeError("讲述已保存，remember之前断线")
@@ -188,7 +188,7 @@ async def test_narrated_save_before_remember_recovers_world_debt_without_an_in_m
         assert len(saved) == 1 and len(brain.asks) == 0 and not fake.values
         state = GameState.model_validate_json(saved[0])
         assert state.record.simulated == start and state.minutes == start + minutes
-        assert state.pending_turn["narrated"] and "request_world" not in state.pending_turn
+        assert state.pending_turn["stage"] == "remember" and "request_world" not in state.pending_turn
         assert state.pending_turn["keeper"]["calls"][0]["done"]
         old_module = game.m.model_copy(deep=True)
         await game.close()

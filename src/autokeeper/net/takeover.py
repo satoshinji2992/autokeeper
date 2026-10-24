@@ -68,14 +68,14 @@ class Takeovers:
                 person.controller = kind
 
     async def returned(self, who: str) -> None:
-        if pending := self.tasks.pop(who, None):
-            pending.cancel()
-            await asyncio.gather(pending, return_exceptions=True)
         controlled = who in self.active
         self.active.discard(who)
         if who in self.hub.state.human:
             self._controller(who, "human")
         self.pulse()
+        if pending := self.tasks.pop(who, None):
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
         if controlled:
             self.hub._save()
             await self.hub._send(self.hub.sits[who], {"t": "notice", "text": "已收回调查员控制权，代管期间已完成的行动保留。"})

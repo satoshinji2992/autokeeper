@@ -94,7 +94,7 @@ async def test_join_reserves_a_place_even_when_the_draft_is_ready_and_late_input
         await hub._on("b", {"t": "act", "text": "守住楼梯"})
         await asyncio.wait_for(task, 3)
         await hub._on("a", {"t": "act", "text": "锁轮后再拿走钥匙"})
-        assert not hub.early and not hub.state.queued_actions
+        assert not hub.early and not hub.queued_declarations()
         assert messages[-1][1]["t"] == "action_rejected"
         assert messages[-1][1]["text"] == "锁轮后再拿走钥匙"
         assert set(map(tuple, hub.state.round_plan["input"])) == {("zhouheng", "检查门锁"), ("lin", "守住楼梯")}

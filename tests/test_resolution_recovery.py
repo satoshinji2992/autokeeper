@@ -25,7 +25,7 @@ def module() -> Module:
 
 
 def turn_going(game: Game, text: str) -> None:
-    """A turn begun as the turn graph begins one (graph.route): its journal (pending_turn) keeps the
+    """A turn begun as the execution begins one: its journal (pending_turn) keeps the
     stages a retry goes on from."""
     game.state.pending_turn = {"input": text}
 

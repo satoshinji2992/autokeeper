@@ -86,14 +86,14 @@ async def test_seated_player_can_request_an_actual_save_without_advancing_the_wo
     async with sockets(hub) as (http, url):
         player = await sit(http, url, "lin")
         hub.state.flags.append("manual-save-test")
-        hub.state.queued_actions = [("lin", "下一轮查看门口")]
+        hub._accept_declaration("lin", "下一轮查看门口")
         before = hub.state.turn, hub.state.minutes
         await player.send_json({"t": "save"})
         reply = await until(player, lambda msg: msg["t"] == "saved")
         assert "房主设备" in reply["text"]
         saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
         assert "manual-save-test" in saved.flags
-        assert saved.queued_actions == [("lin", "下一轮查看门口")]
+        assert [(row.seat, row.text) for row in saved.declarations if not row.batch] == [("lin", "下一轮查看门口")]
         assert (saved.turn, saved.minutes) == before
         await player.close()
 
@@ -142,7 +142,7 @@ async def test_pending_originals_survive_save_reload_and_explicit_undo(transport
     restored.sits["zhouheng"] = "new"
     await restored._on("new", {"t": "undo"})
     saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
-    assert not saved.queued_actions
+    assert not [(row.seat, row.text) for row in saved.declarations if not row.batch]
 
 
 async def test_open_collection_survives_host_restart(transport_hub, fake):
@@ -176,14 +176,14 @@ async def test_batch_restart_skips_finished_actions_and_keeps_duplicate_original
         await hub._settle()
     saved = read_save(paths.save(hub.state.slot).read_text(encoding="utf-8"))
     assert saved.round_plan["done"] == ["0"]
-    assert not saved.queued_actions  # an action sent while executing was explicitly rejected
+    assert not [(row.seat, row.text) for row in saved.declarations if not row.batch]  # an action sent while executing was explicitly rejected
     restored = Hub(EXAMPLE, state=saved, cast=TableCast(), rules=Rules(dice=fake))
     await restored._settle()
     actions = [line.text for line in restored.state.log if line.kind == "player"]
     assert sum("检查门锁" in line for line in actions) == 2
     assert {line.who for line in restored.state.log if line.kind == "player"} == {"周衡", "林秋"}
     assert restored.cast.ai_turns == []
-    assert not restored.early and not restored.state.queued_actions
+    assert not restored.early and not restored.queued_declarations()
     assert not restored.state.round_plan and not restored.state.pending_turn
 
 

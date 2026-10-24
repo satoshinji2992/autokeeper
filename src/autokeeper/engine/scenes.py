@@ -272,16 +272,23 @@ class SceneRuntime:
         # A retained group keeps its model sessions; changing members starts a separate
         # session from attributed history rather than cloning another player's private chat.
         if opening and set(members) == {inv.id for inv in root.investigators}:
-            for key in LOCAL_FIELDS - {"location", "minutes", "active", "log", "private_history", "logged"}:
+            for key in LOCAL_FIELDS - {"location", "minutes", "active", "log", "private_history", "logged", "declarations"}:
                 if hasattr(root, key):
                     setattr(scene, key, deepcopy(getattr(root, key)))
             scene.turn, scene.active = root.turn, root.active
         elif opening and root.investigator.id in members:
             # The root opening may have paused in a real encounter or a declaration.
             for key in ("pending_turn", "pending_push", "encounter", "encounter_log", "round_spent", "round_elapsed",
-                        "round_plan", "held", "queued_actions", "queued_receipts"):
+                        "round_plan", "held"):
                 setattr(scene, key, deepcopy(getattr(root, key)))
             scene.turn, scene.active = root.turn, root.active
+        if opening:
+            # An accepted declaration has one owner, including initial root-to-scene handoff.
+            bound = {step.get("declaration") for step in scene.round_plan.get("steps", [])}
+            scene.declarations = [row for row in root.declarations
+                                  if (not row.batch and row.seat in members) or row.id in bound]
+            moved = {row.id for row in scene.declarations}
+            root.declarations = [row for row in root.declarations if row.id not in moved]
         if histories:
             scene.member_at = {who: source.member_at.get(who, source.at)
                                for source in histories for who in members if who in source.members}

@@ -188,7 +188,7 @@ async def test_sealed_batch_rejects_late_action_without_queueing_it(fake, monkey
         cast.gates[0].set()
         await asyncio.wait_for(collecting, 3)
         assert late_sent and hub.state.round_plan["input"] == [["zhouheng", "先看告示栏"]]
-        assert not hub.early and not hub.state.queued_actions
+        assert not hub.early and not hub.queued_declarations()
         assert any(cid == "a" and msg.get("t") == "action_rejected" for cid, msg in sent)
     finally:
         await stop_collecting(collecting)
@@ -207,7 +207,7 @@ async def test_cancelling_collection_cleans_up_its_pending_model(fake, monkeypat
             await collecting
         assert hub.preparing is None and cast.cancelled == 1
         assert not hub.open and not hub.state.round_plan.get("input")
-        assert hub.state.queued_actions == [("zhouheng", "查看告示栏")]
+        assert hub.queued_declarations() == [("zhouheng", "查看告示栏")]
     finally:
         await stop_collecting(collecting)
         await hub.game.close()

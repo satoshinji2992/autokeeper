@@ -272,7 +272,7 @@ async def test_actions_sent_while_the_keeper_tells_are_rejected_without_queuing(
                 await b.send_json({"t": "act", "text": text})
                 rejected = await until(b, lambda x: x["t"] == "action_rejected")
                 assert rejected["text"] == text and "封闭" in rejected["reason"]
-            assert not hub.early and not hub.state.queued_actions
+            assert not hub.early and not hub.queued_declarations()
             cast.gate.set()
             following = await until(b, pool_open)
             assert following["count"] == 0 and following["mine"] == {"now": [], "next": []}

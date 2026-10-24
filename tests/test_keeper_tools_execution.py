@@ -226,7 +226,7 @@ async def test_saved_voice_stages_do_not_repeat_models_transfer_check_time_or_an
         replies = receipt.get("voice_turn", {}).get("replies", {})
         said = replies.get("keeper:0:warden", {})
         ready = {
-            "before-call": journal.get("talk_done") and not calls,
+            "before-call": journal.get("stage") == "narrate" and not calls,
             "call-saved": bool(calls) and not replies,
             "reply-saved": bool(said) and not said.get("shown"),
             "shown-saved": said.get("shown") and not calls[0].get("done"),

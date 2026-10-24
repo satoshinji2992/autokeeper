@@ -66,6 +66,7 @@ from .state import (
     GameState,
     LogEntry,
     Progress,
+    bind_declarations,
     format_time,
     parse_time,
     time_of_day,
@@ -525,7 +526,7 @@ class Game(Encounters):
         st = self.state
         if self.world.place(st.investigator.id) == st.location:
             return ""
-        if st.pending_push or set(st.pending_turn) - {"input", "active", "by_hand"}:
+        if st.pending_push or set(st.pending_turn) - {"input", "active", "by_hand", "id", "stage"}:
             return "上一回合尚未讲完，请先继续原回合，再切换到异地调查员。"
         return ""
 
@@ -1086,7 +1087,7 @@ class Game(Encounters):
 
     # -- the player's own roll -----------------------------------------------------------
     def roll_prompt(self, action: Action, ruling: Ruling) -> dict[str, Any]:
-        """What a player sees before throwing their own dice (graph.ask_roll): the check the
+        """What a player sees before the execution waits for their roll: the check the
         keeper asks for, the numbers to beat, and one line on why. Nothing it shows is
         anything the module keeps back."""
         inv = self.state.investigator
@@ -2667,7 +2668,7 @@ class Game(Encounters):
         return action.npc
 
     def _keep(self, turn: Turn) -> None:
-        """The turn as it stands, saved where its caller keeps it (graph.build's keep)."""
+        """The turn as it stands, saved by its caller's execution journal."""
         if self.turn_checkpoint:
             self.turn_checkpoint(turn)
 
@@ -3150,6 +3151,7 @@ class Game(Encounters):
         st.round_plan.clear()
         st.round_plan.update(input=[list(pair) for pair in draft.order], steps=deepcopy(draft.steps),
                              used=[], done=[], at=draft.at, started=draft.started, planned=True)
+        bind_declarations(st)
         if draft.note:
             self._late.notes.append(draft.note)
         if self.checkpoint:
@@ -3245,7 +3247,7 @@ class Game(Encounters):
 
         A waiting intention is a private note, not a pending execution lock. Every next segment
         gets its own turn and ordinary resolution journal; the player's original words are logged once.
-        The turn graph calls this after remember, before its final checkpoint.
+        The execution calls this after remember, before its final checkpoint.
         """
         st, journal = self.state, self.state.pending_turn
         if turn is not None and turn.action is not None:
@@ -3469,6 +3471,9 @@ class Game(Encounters):
         elif not self.state.pending_turn and not self.pending_party():
             self.state.round_spent = None
             self.state.round_elapsed.clear()
+        active = {step["declaration"] for step in self.state.round_plan.get("steps", [])
+                  if step.get("declaration") and step["token"] not in self.state.round_plan.get("done", [])}
+        self.state.declarations = [row for row in self.state.declarations if not row.batch or row.id in active]
         self.holding = False
 
     def _align_interaction(self, action: Action) -> list[str]:
@@ -3545,7 +3550,8 @@ class Game(Encounters):
             token = journal.get("party_token")
             row = next((row for row in st.round_plan.get("steps", []) if row["token"] == token), {})
             if not action.destination and owner.get("part", 0) == 0:
-                accepted = min(start, row.get("received", start))
+                declaration = next((entry for entry in st.declarations if entry.id == row.get("declaration")), None)
+                accepted = min(start, declaration.at if declaration is not None else start)
             ends = ([accepted + action.wait_limit] if action.wait_limit is not None else [])
             if action.wait_until:
                 ends.append(parse_time(action.wait_until))

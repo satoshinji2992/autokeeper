@@ -20,7 +20,7 @@ from .perception import Appearance
 # read as it is. A save without it (0.0.3 and before) or with another one is refused whole (read_save): loading it
 # would drop what this version does not know (0.0.3's `chase`, `pending_resolution`) and the next autosave would
 # write it back without them. Old saves are not migrated; their files are left as they are.
-SAVE_FORMAT = 2
+SAVE_FORMAT = 3  # unified accepted declarations and turn execution; old layouts are not migrated
 
 LogKind = Literal["opening", "player", "speech", "keeper", "npc", "dice", "clue", "sanity", "damage", "event", "system", "handout", "ending"]
 
@@ -141,6 +141,37 @@ class CheckRecord(BaseModel):
         return self.npc or self.target
 
 
+class Declaration(BaseModel):
+    """One accepted player intention, from the editable queue through its sealed batch."""
+
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    seat: str
+    text: str
+    at: int  # the personal game cursor when this version was accepted
+    batch: str = ""  # empty while editable; the sealed batch references this same id
+
+
+def bind_declarations(state: GameState) -> None:
+    """Bind sealed steps to accepted originals before the batch's atomic checkpoint."""
+    receipt = state.round_plan
+    if not receipt.get("steps"):
+        return
+    batch = receipt.setdefault("id", uuid.uuid4().hex)
+    for step in receipt["steps"]:
+        if step.get("declaration") or step["token"] in receipt.get("done", []):
+            continue
+        seat, text = receipt["input"][int(step["token"])]
+        row = next((row for row in state.declarations
+                    if not row.batch and (row.seat, row.text) == (seat, text)), None)
+        if row is None:
+            if text is None or step.get("resuming_wait"):
+                continue  # automatic work has no fresh player declaration
+            row = Declaration(seat=seat, text=text, at=receipt["started"])
+            state.declarations.append(row)
+        row.batch = batch
+        step["declaration"] = row.id
+
+
 class SceneState(BaseModel):
     """One continuing scene's execution cursors, not a copy of the shared world."""
 
@@ -163,8 +194,7 @@ class SceneState(BaseModel):
     round_spent: int | None = None
     round_elapsed: dict[str, int] = Field(default_factory=dict)
     round_plan: dict = Field(default_factory=dict)
-    queued_actions: list[tuple[str, str]] = Field(default_factory=list)
-    queued_receipts: list[dict] = Field(default_factory=list)
+    declarations: list[Declaration] = Field(default_factory=list)
     held: list[dict] = Field(default_factory=list)
     aftercare_seconds: int = Field(0, ge=0, lt=60)
     day: int = 0
@@ -232,8 +262,7 @@ class GameState(BaseModel):
     round_spent: int | None = None
     round_elapsed: dict[str, int] = Field(default_factory=dict)  # serial work per investigator inside the shared window
     round_plan: dict = Field(default_factory=dict)  # private batch plans and consumption receipts, not player-visible
-    queued_actions: list[tuple[str, str]] = Field(default_factory=list)  # LAN declarations not yet assigned to a settled window
-    queued_receipts: list[dict] = Field(default_factory=list)  # unstarted LAN input: seat, text and accepted game minute
+    declarations: list[Declaration] = Field(default_factory=list)  # accepted LAN input; batches reference its stable ids
     held: list[dict] = Field(default_factory=list)  # {"turn", "who", "report", "rest"}, told together (Game.narrate)
     # 0.0.4's fights and chases (engine/encounter/): the one going on, in either mode, and the last
     # finished ones (KEEP_ENCOUNTERS). Private at a LAN table: the players see its public view only.

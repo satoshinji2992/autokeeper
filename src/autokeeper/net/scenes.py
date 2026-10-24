@@ -17,12 +17,32 @@ ROUTED = {"act", "join", "done", "undo", "respond", "react", "speak", "kp_privat
 TIME_RETRY_WAIT = (1.0, 2.0)
 
 
+def _room_resource(name: str) -> property:
+    """An explicit live room resource, never a copied controller snapshot."""
+    return property(lambda scene: getattr(scene.root, name))
+
+
 class SceneTable(Hub):
-    """Reuse the table protocol, with only this scene's execution queues and sessions."""
+    """Reuse the protocol; room resources are shared, execution belongs to this scene."""
+
+    # Hub's protocol methods use these room resources. Listing them here keeps new
+    # Hub fields from silently becoming scene state, and sees room-wide replacements.
+    m = _room_resource("m")
+    clients = _room_resource("clients")
+    names = _room_resource("names")
+    sits = _room_resource("sits")
+    started = _room_resource("started")
+    hosts = _room_resource("hosts")
+    key = _room_resource("key")
+    desk = _room_resource("desk")
+    thinking = _room_resource("thinking")
+    takeovers = _room_resource("takeovers")
+    faces = _room_resource("faces")
+    sent = _room_resource("sent")
+    sent_to = _room_resource("sent_to")
 
     def __init__(self, tables: SceneTables, ident: str):
         root, runtime = tables.root, tables.runtime
-        self.__dict__.update(root.__dict__)
         self._scene_tables = None
         self.tables, self.ident, self.root = tables, ident, root
         self.state = runtime.state_view(ident)
@@ -37,9 +57,7 @@ class SceneTable(Hub):
         self.game.wait_horizon = self._wait_horizon
         self.game.plugins.away = lambda who: self.sits.get(who) is None
         members = set(self.scene.members)
-        self.inbox = {who: queue for who, queue in root.inbox.items() if who in members}
-        self.choices = {who: queue for who, queue in root.choices.items() if who in members}
-        self.pool, self.early = [], list(self.state.queued_actions)
+        self.pool, self.early = [], self.queued_declarations()
         self.done, self.automatic, self.confirming = set(), set(), set()
         self.asking, self.offers, self.settled = {}, {}, []
         self.wake, self.instant, self.asks = asyncio.Event(), asyncio.Queue(), asyncio.Queue()
@@ -56,6 +74,14 @@ class SceneTable(Hub):
             if receipt["who"] in members and not receipt.get("delivered"):
                 self.private_requests.put_nowait((receipt["who"], receipt["text"], key.split(":", 1)[1]))
                 self.private_pending.add(key)
+
+    @property
+    def inbox(self) -> dict[str, asyncio.Queue]:
+        return {who: queue for who, queue in self.root.inbox.items() if who in self.scene.members}
+
+    @property
+    def choices(self) -> dict[str, asyncio.Queue]:
+        return {who: queue for who, queue in self.root.choices.items() if who in self.scene.members}
 
     @property
     def scene(self):
@@ -91,7 +117,7 @@ class SceneTable(Hub):
                 and (self.preparing is None or self.preparing.done())
                 and not self.state.pending_turn and not self.scene.reservation and not self.scene.encounter
                 and not self.state.pending_push and not self.pool and not self.early and not self.asking
-                and not self.state.queued_actions and not self.state.queued_receipts and not self.confirming
+                and not self.state.declarations and not self.confirming
                 and not self.private_pending and (self.private_task is None or self.private_task.done())
                 and not any(self.state.unfinished.get(who, {}).get("execution") for who in self.scene.members)
                 and any(self.sits.get(who) is not None for who in self.scene.members))
@@ -204,11 +230,64 @@ class SceneTable(Hub):
     async def _run(self, text: str, inv_id: str, *, ai: bool, push: str = "") -> None:
         while True:
             try:
-                await super()._run(text, inv_id, ai=ai, push=push)
+                if ai and inv_id in self.state.human and inv_id in self.takeovers.active:
+                    await self._delegated_run(text, inv_id, push=push)
+                else:
+                    await super()._run(text, inv_id, ai=ai, push=push)
                 return
             except SceneResourceConflict:
                 await self.tables.runtime.prepare_conflict(self.ident)
                 text = "/retry"
+
+    def _unexecuted_proposal(self) -> bool:
+        """Only abandon an AI thought before any world, rule or presentation receipt."""
+        journal, ticket = self.state.pending_turn, self.scene.reservation
+        if self.game.world_encounter() is not None or self.state.pending_push:
+            return False
+        if ticket.get("phase") == "running" or "committed" in ticket:
+            return False
+        if journal.get("stage", "parse") not in {"parse", "prepare", "rule", "resolve"}:
+            return False
+        if any(journal.get(key) for key in ("turn", "resolution", "push_resolution", "preparation", "interaction",
+                                             "prepared_action")):
+            return False
+        if journal.get("request", {}).get("completed"):
+            return False
+        # A saved plan and remaining intention alone have no effects. Landed scene
+        # operations and performed cues do; the owner resumes those actual results.
+        arranged = journal.get("arrangement", {})
+        if (arranged.get("units") and arranged.get("landed")) or arranged.get("cues") or arranged.get("cue_turn"):
+            return False
+        return True
+
+    async def _delegated_run(self, text: str, inv_id: str, *, push: str) -> None:
+        """Returning humans may withdraw an AI proposal still waiting to start."""
+        work = asyncio.create_task(super()._run(text, inv_id, ai=True, push=push), name=f"takeover-action:{inv_id}")
+        try:
+            while not work.done():
+                changed = self.takeovers.changed
+                if inv_id not in self.takeovers.active:
+                    if self._unexecuted_proposal():
+                        # No await between the receipt check and cancellation. The
+                        # action cannot begin effects while the owner takes it back.
+                        work.cancel()
+                        await asyncio.gather(work, return_exceptions=True)
+                        self._abandon_turn()
+                        self.game.visuals.resume()
+                        await self._event({"type": "status", "text": ""})
+                        return
+                    break
+                signal = asyncio.create_task(changed.wait())
+                try:
+                    await asyncio.wait({work, signal}, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    signal.cancel()
+                    await asyncio.gather(signal, return_exceptions=True)
+            await work
+        finally:
+            if not work.done():
+                work.cancel()
+                await asyncio.gather(work, return_exceptions=True)
 
     async def run(self) -> None:
         self._start_privates()
@@ -289,26 +368,25 @@ class SceneTables:
                 return
             active = set(self.runtime.reconcile())
             # Only unstarted input migrates. A sealed batch/journal/choice pins its controller.
-            queued, receipts, retired = [], [], []
+            queued, retired = {}, []
             for ident, worker in self.workers.items():
                 if ident not in active and not worker.halted:
                     retired.append(worker)
-                    queued.extend(worker.early)
-                    receipts.extend(worker.state.queued_receipts)
-                    if worker.open:
-                        queued.extend(pair for pair in worker.pool if pair[0] not in worker.automatic)
+                    for declaration in worker.state.declarations:
+                        if not declaration.batch:
+                            queued[declaration.id] = declaration
+                    worker.state.declarations = [row for row in worker.state.declarations if row.batch]
                     worker.halted = True
                     worker.wake.set()
-                    if self.tasks.get(ident) is not asyncio.current_task():
-                        self.tasks[ident].cancel()
+                    if (task := self.tasks.get(ident)) is not None and task is not asyncio.current_task():
+                        task.cancel()
             for ident in active:
                 if ident not in self.workers:
                     worker = self.workers[ident] = SceneTable(self, ident)
-                    for who, text in queued:
-                        if who in worker.scene.members and (who, text) not in worker.early:
-                            worker.early.append((who, text))
-                    worker.state.queued_receipts.extend(row for row in receipts
-                                                        if row["seat"] in worker.scene.members)
+                    retained = {row.id for row in worker.state.declarations}
+                    worker.state.declarations.extend(row for row in queued.values()
+                                                     if row.seat in worker.scene.members and row.id not in retained)
+                    worker.early = worker.queued_declarations()
                     worker._save_queued()
                     self.tasks[ident] = asyncio.create_task(worker.run(), name=f"table:{ident}")
             # A closed scene must not keep a director/image task that can still write facts.

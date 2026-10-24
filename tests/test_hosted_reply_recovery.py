@@ -136,7 +136,7 @@ async def test_real_graph_retry_recovers_only_telling_and_preserves_failed_check
     fake.queue(80)
     turn = await game.resolve(action, ruling)
     turn.absorb(await game.push("drop"))
-    state.pending_turn.update(turn=TURN_RECORD.dump_python(turn, mode="json"), push_merged=True, talk_done=True)
+    state.pending_turn.update(turn=TURN_RECORD.dump_python(turn, mode="json"), push_merged=True, stage="narrate")
     before = (state.investigator.luck, state.investigator.hp, state.minutes, len(state.checks))
     cast = HostedCast(module)
     game.cast, cast.host.world = cast, game.world

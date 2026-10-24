@@ -1,45 +1,28 @@
-"""LangGraph orchestration of a turn.
+"""Execute one durable turn; LangGraph transports events, choices and final snapshots.
 
-    START ─┬─ command ──────────────────────────────────────────────────────┐
-           └─ parse → rule ─┬─ ask_roll ─┬─ resolve ─┬─ offer ⟲ ─┐             │
-                            └────────────┘           └───────────┴─ talk → narrate → remember → END
-
-* parse / rule / talk / narrate call agents; resolve is pure engine code.
-* command answers the dice-bot commands that stand outside the story (.r, .st, .coc, ...)
-  at once. A check the player asks for (.ra 恐吓) is an action like any other: it goes
-  through parse, so the keeper rules it in context and the dice are rolled once.
-* ask_roll lets a player throw their own dice: when the turn came in with by_hand and the
-  ruling calls for a check, the graph pauses with interrupt() showing what is asked and
-  why, and resolve rolls once the UI resumes it. AI investigators, autoplay and replays
-  never set by_hand, so their dice fall at once, in the same order as ever.
-* offer pauses the graph with interrupt() and waits for the player: a push (孤注一掷 / 花幸运 /
-  放弃, its resume value passed to Game.push as it came), or a choice a fight waits on (how to
-  answer a blow, a roll of their own, a new declaration: Game.respond). One interrupt per run of
-  the node, as LangGraph matches resume values by their place; it loops while another is pending.
-  In a fight, "/encounter" (the LAN table's settling, the screen's 继续) goes on with the round.
-* Every node streams UI events through get_stream_writer(); the TUI consumes
-  stream_mode="custom".
-* The checkpointer stores a snapshot of GameState after every turn, so a save slot
-  is just a LangGraph thread.
+The pending-turn journal owns the stage, tool receipts and any frozen player choice.
+Only execute/choice remain in the graph: it cannot retain a competing parse/resolve
+cursor. Existing rule and world tools keep their own committed side effects.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, TypedDict
+from uuid import uuid4
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
-from pydantic import TypeAdapter
 
 from ..agents.cast import Action, Ruling
 from ..rules.commands import instant
-from .game import Game, Turn
+from ..world.store import digest
+from .game import TURN_RECORD, Game, Turn
 from .observability import record_event
 from .offers import public_push
 
-TURN = TypeAdapter(Turn)
+TURN = TURN_RECORD
 
 
 class TurnState(TypedDict, total=False):
@@ -94,225 +77,218 @@ async def stream(graph: Any, game: Game, input: Any, config: Any = None, **kwarg
         current = {**original, "input": "/retry", "by_hand": journal.get("by_hand", original.get("by_hand", False))}
 
 
-def build(game: Game, checkpointer=None):
-    holder: dict[str, Turn] = {}
+class Execution:
+    """One durable turn journal; the graph only transports events and player choices.
 
-    def keep(turn: Turn | None = None) -> None:
+    A stage advances after its work is saved. Tool-level receipts still own partial
+    side effects, so cancelling a later thought never rewinds a roll or an NPC reply.
+    No graph channel or in-memory Turn is an alternative execution authority.
+    """
+
+    def __init__(self, game: Game):
+        self.game = game
+        game.turn_checkpoint = self.keep
+
+    @property
+    def journal(self) -> dict:
+        return self.game.state.pending_turn
+
+    def keep(self, turn: Turn | None = None) -> None:
         if turn is not None:
-            game.state.pending_turn["turn"] = TURN.dump_python(turn, mode="json")
-        if game.checkpoint:
-            game.checkpoint()
+            self.journal["turn"] = TURN.dump_python(turn, mode="json")
+        if self.game.checkpoint:
+            self.game.checkpoint()
 
-    game.turn_checkpoint = keep
-
-    def held() -> Turn:
-        if "turn" not in holder:
-            holder["turn"] = TURN.validate_python(game.state.pending_turn["turn"])
-        return holder["turn"]
-
-    async def route(state: TurnState) -> dict:
-        holder.clear()
-        journal = game.state.pending_turn
+    def begin(self, state: TurnState) -> None:
+        game, journal = self.game, self.journal
+        text = state["input"]
         if journal:
-            if state["input"] not in (journal["input"], "/retry", "继续这一回合"):
+            if text not in (journal["input"], "/retry", "继续这一回合"):
                 raise ValueError("上一回合尚未讲完，请输入 /retry 继续，避免重复结算")
             if journal.get("request", {}).pop("ready", False):
-                keep()  # consuming a prepared next segment is durable before parse can run
+                self.keep()
         else:
-            if state["input"] in ("/retry", "继续这一回合"):
+            if text in ("/retry", "继续这一回合"):
                 raise ValueError("目前没有未完成的回合")
-            if not instant(state["input"]) and (why := game._focus_blocked()):
-                raise ValueError(why)  # a refused remote seat must not acquire an unfinished turn
-            journal.update(input=state["input"], by_hand=state.get("by_hand", False), active=game.state.active)
-            keep()
+            if not instant(text) and (why := game._focus_blocked()):
+                raise ValueError(why)
+            journal.update(input=text, by_hand=state.get("by_hand", False), active=game.state.active)
+        journal.setdefault("id", uuid4().hex)
+        journal.setdefault("stage", "command" if instant(journal["input"]) else "parse")
         game.state.active = journal.get("active", game.state.active)
+        self.keep()
         game.visuals.pause()
-        return {"input": journal["input"], "by_hand": journal.get("by_hand", False),
-                "action": None, "ruling": None, "pending": False}
 
-    def which(state: TurnState) -> str:
-        return "command" if instant(state["input"]) else "parse"
+    def advance(self, stage: str, turn: Turn | None = None) -> None:
+        self.journal.pop("awaiting", None)
+        self.journal["stage"] = stage
+        self.keep(turn)
 
-    async def command(state: TurnState) -> dict:
-        _bind(game)
-        await game.command(state["input"])
-        return {}
+    def turn(self) -> Turn:
+        return TURN.validate_python(self.journal["turn"])
 
-    async def parse(state: TurnState) -> dict:
-        _bind(game)
-        journal = game.state.pending_turn
-        if "action" in journal:
-            return {"action": journal["action"]}
-        turn, count, logged, deeds = game.state.turn, len(game.state.log), game.state.logged, list(game.state.deeds)
-        try:
-            action = await game.parse(state["input"])
-        except BaseException:
-            if rollback := getattr(game.state, "rollback_parse", None):
-                rollback(turn, count, logged)
-            else:
-                game.state.turn, game.state.logged, game.state.deeds = turn, logged, deeds
-                del game.state.log[count:]
-            raise
-        journal["action"] = action.model_dump(mode="json")
-        keep()
-        await game.emit({"type": "action", **action.model_dump()})
-        return {"action": action.model_dump()}
+    def answer(self, key: str, payload: dict, *, request: str = "") -> tuple[bool, Any]:
+        """Freeze one pending choice; only the choice transport obtains its response."""
+        expected = {"key": key, "payload": payload, "request": request}
+        waiting = self.journal.get("awaiting", {})
+        if any(waiting.get(field) != value for field, value in expected.items()):
+            # A cross-scene arrangement can change the action while its roll prompt
+            # is on screen. An answer to that old question cannot confirm the new one.
+            waiting = self.journal["awaiting"] = expected
+        if "answer" not in waiting:
+            self.keep()
+            return False, None
+        answer = waiting["answer"]
+        del self.journal["awaiting"]
+        return True, answer
 
-    async def rule(state: TurnState) -> dict:
-        _bind(game)
-        journal = game.state.pending_turn
-        if "ruling" in journal:
-            if journal["ruling"] is not None and "turn" not in journal and not journal.get("resolution"):
+    async def run(self, state: TurnState) -> dict:
+        self.begin(state)
+        game = self.game
+        while True:
+            journal, stage = self.journal, self.journal["stage"]
+            if stage == "command":
+                await game.command(journal["input"])
+                self.advance("remember")
+            elif stage == "parse":
+                if "action" not in journal:
+                    turn, count, logged, deeds = game.state.turn, len(game.state.log), game.state.logged, list(game.state.deeds)
+                    try:
+                        action = await game.parse(journal["input"])
+                    except BaseException:
+                        if rollback := getattr(game.state, "rollback_parse", None):
+                            rollback(turn, count, logged)
+                        else:
+                            game.state.turn, game.state.logged, game.state.deeds = turn, logged, deeds
+                            del game.state.log[count:]
+                        raise
+                    journal["action"] = action.model_dump(mode="json")
+                    self.keep()
+                    await game.emit({"type": "action", **action.model_dump()})
+                self.advance("prepare")
+            elif stage == "prepare":
+                if "turn" not in journal and not journal.get("resolution"):
+                    await game.prepare(Action.model_validate(journal["action"]))
+                self.advance("rule")
+            elif stage == "rule":
                 action = Action.model_validate(journal["action"])
-                ruling = await game.checked_skill(action, Ruling.model_validate(journal["ruling"]), at=game._heading(action))
-                journal["ruling"] = ruling.model_dump(mode="json")
-                keep()
-            if game.time_reserve is not None:
-                game.time_reserve(Action.model_validate(journal["action"]),
-                                  Ruling.model_validate(journal["ruling"]) if journal["ruling"] else None)
-            return {"action": journal["action"], "ruling": journal["ruling"]}
-        action = Action.model_validate(state["action"])
-        ruling = await game.rule(action)
-        journal["action"] = action.model_dump(mode="json")
-        journal["ruling"] = ruling.model_dump(mode="json") if ruling else None
-        if game.time_reserve is not None:
-            game.time_reserve(action, ruling)
-        keep()
-        if ruling:
-            await game.emit({"type": "ruling", **ruling.model_dump()})
-        return {"action": journal["action"], "ruling": ruling.model_dump() if ruling else None}
+                if "ruling" not in journal:
+                    ruling = await game.rule(action)
+                    journal["action"] = action.model_dump(mode="json")
+                    journal["ruling"] = ruling.model_dump(mode="json") if ruling else None
+                    self.keep()
+                    if ruling:
+                        await game.emit({"type": "ruling", **ruling.model_dump()})
+                elif journal["ruling"] is not None and "turn" not in journal and not journal.get("resolution"):
+                    ruling = await game.checked_skill(action, Ruling.model_validate(journal["ruling"]), at=game._heading(action))
+                    journal["ruling"] = ruling.model_dump(mode="json")
+                    self.keep()
+                if game.time_reserve is not None:
+                    game.time_reserve(Action.model_validate(journal["action"]),
+                                      Ruling.model_validate(journal["ruling"]) if journal["ruling"] else None)
+                self.advance("resolve")
+            elif stage == "resolve":
+                if "turn" not in journal:
+                    if game.time_wait is not None:
+                        await game.time_wait(None)
+                    action = Action.model_validate(journal["action"])
+                    ruling = Ruling.model_validate(journal["ruling"]) if journal.get("ruling") else None
+                    rolled = journal.get("resolution", {}).get("steps", {}).get("check", {}).get("done")
+                    if (journal.get("by_hand") and ruling is not None and ruling.needs_roll and ruling.skill
+                            and not ruling.repeat and action.declared is None and not journal.get("roll_confirmed") and not rolled):
+                        ready, _ = self.answer("roll", {"kind": "roll", **game.roll_prompt(action, ruling)},
+                                               request=digest([game.state.investigator.id, action.model_dump(mode="json"),
+                                                               ruling.model_dump(mode="json")]))
+                        if not ready:
+                            return self.view()
+                        journal["roll_confirmed"] = True
+                        self.keep()
+                    turn = await game.resolve(action, ruling)
+                    self.keep(turn)
+                self.advance("offer")
+            elif stage == "offer":
+                turn = self.turn()
+                if turn.push and not journal.get("push_merged"):
+                    if "push_choice" not in journal:
+                        ready, value = self.answer("push", {"kind": "push", **public_push(game.state.pending_push or {})})
+                        if not ready:
+                            return self.view()
+                        journal["push_choice"] = value
+                        self.keep()
+                    extra = await game.push(journal["push_choice"])
+                    turn.absorb(extra)
+                    turn.push = None
+                    journal["push_merged"] = True
+                    self.keep(turn)
+                    continue
+                accepted = next((key for key in journal if key.startswith("choice:")
+                                 and not key.endswith(":merged") and not journal.get(f"{key}:merged")), None)
+                if accepted is not None:
+                    # The encounter can consume its pending choice before all damage
+                    # and notifications finish. Its accepted answer remains the work
+                    # to resume even when pending_choice() already returns None.
+                    turn.absorb(await game.respond(accepted.removeprefix("choice:"), journal[accepted]))
+                    journal[f"{accepted}:merged"] = True
+                    self.keep(turn)
+                    continue
+                choice = game.pending_choice()
+                if choice is not None:
+                    key = f"choice:{choice.id}"
+                    ready, value = self.answer(key, game.offer_payload(choice))
+                    if not ready:
+                        return self.view()
+                    journal[key] = value
+                    self.keep()
+                    continue
+                self.advance("talk")
+            elif stage == "talk":
+                turn = self.turn()
+                await game.talk(turn)
+                self.advance("narrate", turn)
+            elif stage == "narrate":
+                turn = self.turn()
+                await game.narrate(turn)
+                self.advance("remember", turn)
+            elif stage == "remember":
+                await game.remember()
+                self.advance("finish")
+            elif stage == "finish":
+                view = self.view()
+                await game.finish_request(self.turn() if "turn" in journal else None)
+                if game.time_release is not None:
+                    game.time_release()
+                self.keep()
+                game.visuals.resume()
+                await game.emit({"type": "sheet"})
+                return {**view, "pending": False, "snapshot": game.state.model_dump(mode="json")}
+            else:
+                raise ValueError(f"未知执行阶段：{stage}")
 
-    async def prepare(state: TurnState) -> dict:
+    def view(self) -> dict:
+        return {"input": self.journal["input"], "by_hand": self.journal.get("by_hand", False),
+                "action": self.journal.get("action"), "ruling": self.journal.get("ruling"),
+                "pending": bool(self.journal.get("awaiting"))}
+
+
+def build(game: Game, checkpointer=None):
+    execution = Execution(game)
+
+    async def execute(state: TurnState) -> dict:
         _bind(game)
-        await game.prepare(Action.model_validate(state["action"]))
+        return await execution.run(state)
+
+    async def choice(state: TurnState) -> dict:
+        _bind(game)
+        waiting = execution.journal["awaiting"]
+        if "answer" not in waiting:
+            waiting["answer"] = interrupt(waiting["payload"])
+            execution.keep()
         return {}
 
-    def after_rule(state: TurnState) -> str:
-        if (state.get("action") or {}).get("declared") is not None:
-            return "resolve"  # a fight's dice are thrown at the investigator's slot (engine/encounter)
-        r = state.get("ruling") or {}
-        rolls = r.get("needs_roll") and r.get("skill") and not r.get("repeat")
-        return "ask_roll" if rolls and state.get("by_hand") else "resolve"
-
-    async def ask_roll(state: TurnState) -> dict:
-        # Runs again from the top when resumed: nothing before interrupt() may change state.
-        _bind(game)
-        journal = game.state.pending_turn
-        rolled = journal.get("resolution", {}).get("steps", {}).get("check", {}).get("done")
-        if "turn" not in journal and not journal.get("roll_confirmed") and not rolled:
-            interrupt({"kind": "roll", **game.roll_prompt(Action.model_validate(state["action"]), Ruling.model_validate(state["ruling"]))})
-            journal["roll_confirmed"] = True
-            keep()
-        return {}
-
-    async def resolve(state: TurnState) -> dict:
-        _bind(game)
-        if "turn" not in game.state.pending_turn:
-            if game.time_wait is not None:
-                await game.time_wait(None)
-            journal = game.state.pending_turn
-            action = Action.model_validate(journal["action"])
-            ruling = Ruling.model_validate(journal["ruling"]) if journal.get("ruling") else None
-            if (state.get("by_hand") and ruling is not None and ruling.needs_roll and ruling.skill
-                    and not ruling.repeat and action.declared is None and not journal.get("roll_confirmed")):
-                interrupt({"kind": "roll", **game.roll_prompt(action, ruling)})
-                journal["roll_confirmed"] = True
-                keep()
-            holder["turn"] = await game.resolve(action, ruling)
-            keep(holder["turn"])
-        return {"pending": pending()}
-
-    def pending() -> bool:
-        journal = game.state.pending_turn
-        return (bool(held().push) and not journal.get("push_merged")) or game.pending_choice() is not None
-
-    def after_resolve(state: TurnState) -> str:
-        return "offer" if state.get("pending") else "talk"
-
-    async def offer(state: TurnState) -> dict:
-        # Runs again from the top when resumed: nothing before interrupt() may change state.
-        _bind(game)
-        journal = game.state.pending_turn
-        if held().push and not journal.get("push_merged"):
-            if "push_choice" not in journal:
-                offer = public_push(game.state.pending_push or {})
-                journal["push_choice"] = interrupt({"kind": "push", **offer})  # as it came: a word, or {choice, how}
-                keep()
-            extra = await game.push(journal["push_choice"])
-            turn = held()
-            turn.absorb(extra)  # the events a failure set off too: who comes to stop them speaks this turn
-            turn.push = None
-            journal["push_merged"] = True
-            keep(turn)
-            return {"pending": pending()}
-        choice = game.pending_choice()
-        if choice is None:
-            return {"pending": False}
-        key = f"choice:{choice.id}"
-        if key not in journal:
-            journal[key] = interrupt(game.offer_payload(choice))
-            keep()
-        if not journal.get(f"{key}:merged"):
-            extra = await game.respond(choice.id, journal[key])
-            held().absorb(extra)
-            journal[f"{key}:merged"] = True
-            keep(held())
-        return {"pending": pending()}
-
-    def after_offer(state: TurnState) -> str:
-        return "offer" if state.get("pending") else "talk"
-
-    async def talk(state: TurnState) -> dict:
-        _bind(game)
-        if not game.state.pending_turn.get("talk_done"):
-            await game.talk(held())
-            game.state.pending_turn["talk_done"] = True
-            keep(held())
-        return {}
-
-    async def narrate(state: TurnState) -> dict:
-        _bind(game)
-        if not game.state.pending_turn.get("narrated"):
-            await game.narrate(held())
-            game.state.pending_turn["narrated"] = True
-            keep(held())
-        return {}
-
-    async def remember(state: TurnState) -> dict:
-        _bind(game)
-        await game.remember()
-        # finish_request alone settles the old party token and clears or replaces its
-        # journal. keep() must never write the preceding Turn into that new segment.
-        await game.finish_request(held() if "turn" in game.state.pending_turn else None)
-        if game.time_release is not None:
-            game.time_release()
-        keep()
-        game.visuals.resume()
-        await game.emit({"type": "sheet"})
-        return {"snapshot": game.state.model_dump(mode="json")}
-
-    g = StateGraph(TurnState)
-    g.add_node("route", route)
-    g.add_node("command", command)
-    g.add_node("parse", parse)
-    g.add_node("rule", rule)
-    g.add_node("prepare", prepare)
-    g.add_node("ask_roll", ask_roll)
-    g.add_node("resolve", resolve)
-    g.add_node("offer", offer)
-    g.add_node("talk", talk)
-    g.add_node("narrate", narrate)
-    g.add_node("remember", remember)
-    g.add_edge(START, "route")
-    g.add_conditional_edges("route", which, ["command", "parse"])
-    g.add_edge("command", "remember")
-    g.add_edge("parse", "prepare")
-    g.add_edge("prepare", "rule")
-    g.add_conditional_edges("rule", after_rule, ["ask_roll", "resolve"])
-    g.add_edge("ask_roll", "resolve")
-    g.add_conditional_edges("resolve", after_resolve, ["offer", "talk"])
-    g.add_conditional_edges("offer", after_offer, ["offer", "talk"])
-    g.add_edge("talk", "narrate")
-    g.add_edge("narrate", "remember")
-    g.add_edge("remember", END)
-    return g.compile(checkpointer=checkpointer)
+    graph = StateGraph(TurnState)
+    graph.add_node("execute", execute)
+    graph.add_node("choice", choice)
+    graph.add_edge(START, "execute")
+    graph.add_conditional_edges("execute", lambda state: "choice" if state.get("pending") else END, ["choice", END])
+    graph.add_edge("choice", "execute")
+    return graph.compile(checkpointer=checkpointer)

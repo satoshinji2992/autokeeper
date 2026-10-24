@@ -89,7 +89,7 @@ from ..engine.encounter import views
 from ..engine.encounter.views import DOWN
 from ..engine.game import PLAY_WAIT, RETELL, Game, Told, ai_choice, push_choice
 from ..engine.offers import public_push
-from ..engine.state import GameState, LogEntry
+from ..engine.state import Declaration, GameState, LogEntry, bind_declarations
 from ..module.compiler import ensure_compiled
 from ..module.schema import Module
 from ..plugins.schema import does
@@ -127,7 +127,7 @@ PRIVATE |= {"notebook"}
 PRIVATE |= {"private_history", "table_history"}  # the welcome/history messages carry the appropriate transcript
 PRIVATE |= {"round_plan", "round_elapsed"}  # the shared-round plan and per-person work counters stay on the host
 PRIVATE |= {"unfinished", "last_actions"}  # remaining private intent is for its player and the keeper only
-PRIVATE |= {"queued_receipts", "queued_actions", "world", "event_attempts", "pending_story_flags", "ideas"}
+PRIVATE |= {"declarations", "world", "event_attempts", "pending_story_flags", "ideas"}
 # Export only the parts the current client uses. New module fields remain keeper-only until
 # deliberately added here; Module's defaults supply the omitted collections on the client.
 PLAYER_MODULE_FIELDS = {
@@ -448,7 +448,7 @@ class Hub:
         self.pool: list[tuple[str, str]] = []  # (seat, action) in the order they came in
         self.done: set[str] = set()  # seats that said they have nothing more this round
         self.confirming: set[str] = set()  # a queued declaration needs its owner's choice in the new encounter
-        self.early: list[tuple[str, str]] = list(state.queued_actions)  # original declarations waiting for a collection window
+        self.early: list[tuple[str, str]] = self.queued_declarations()
         self.instant: asyncio.Queue = asyncio.Queue()  # (seat, .r / .st ...) to run while the pool is open
         self.wake = asyncio.Event()  # something for the round loop: an action, a request, someone left
         self.closes_at: float | None = None  # when the open round's window ends (loop time), once someone acted
@@ -1512,13 +1512,25 @@ class Hub:
             await self._send(cid, self._pool_view(cid))
 
     def _save_queued(self) -> None:
-        """Only unstarted original declarations are queued; round_plan owns the closed batch."""
-        self.state.queued_actions = [*((pair for pair in self.pool if pair[0] not in self.automatic) if self.open else []), *self.early]
+        """Persist editable originals once, retaining each accepted version's id and time."""
+        wanted = [*((pair for pair in self.pool if pair[0] not in self.automatic) if self.open else []), *self.early]
+        bound = [row for row in self.state.declarations if row.batch]
+        queued = []
+        for seat, text in dict.fromkeys(wanted):
+            row = next((row for row in self.state.declarations
+                        if not row.batch and (row.seat, row.text) == (seat, text)), None)
+            queued.append(row or Declaration(seat=seat, text=text, at=self.game._actor_cursor(seat)))
+        self.state.declarations = [*bound, *queued]
         self._save()
+
+    def queued_declarations(self) -> list[tuple[str, str]]:
+        """Editable queue view; accepted text and time live only in declarations."""
+        return [(row.seat, row.text) for row in self.state.declarations if not row.batch]
 
     def _accept_declaration(self, seat: str, text: str) -> None:
         """An accepted replacement supersedes only an unperformed wait, never its past effects."""
-        self.state.queued_receipts.append({"seat": seat, "text": text, "at": self.game._actor_cursor(seat)})
+        self.state.declarations = [row for row in self.state.declarations if row.batch or row.seat != seat]
+        self.state.declarations.append(Declaration(seat=seat, text=text, at=self.game._actor_cursor(seat)))
         self._cancel_wait(seat, "玩家已提交新行动，原等待未执行部分已取消")
         if seat in self.automatic:
             self.pool = [pair for pair in self.pool if pair[0] != seat]
@@ -1532,23 +1544,12 @@ class Hub:
         return True
 
     def _forget_declaration(self, seat: str, text: str) -> None:
-        row = next((row for row in reversed(self.state.queued_receipts)
-                    if row["seat"] == seat and row["text"] == text), None)
-        if row is not None:
-            self.state.queued_receipts.remove(row)
+        self.state.declarations = [row for row in self.state.declarations
+                                   if row.batch or (row.seat, row.text) != (seat, text)]
 
     def _freeze_declarations(self) -> None:
-        """The closed batch owns its input timestamps; retry and reconnect reuse them."""
-        receipt = self.state.round_plan
-        for step in receipt.get("steps", []):
-            if "received" in step:
-                continue
-            seat, text = receipt["input"][int(step["token"])]
-            row = next((row for row in self.state.queued_receipts
-                        if row["seat"] == seat and row["text"] == text), None)
-            step["received"] = row["at"] if row else receipt["started"]
-            if row is not None:
-                self.state.queued_receipts.remove(row)
+        """Bind the closed batch to accepted originals; never copy or match timestamps again."""
+        bind_declarations(self.state)
 
     def _wait_horizon(self, actor: str) -> int | None:
         """A wait may catch up with settled work; forward skips need the other seats' consent.
@@ -1773,8 +1774,7 @@ class Hub:
                         self.game.seal_party(ready)
                         self.open, self.phase = False, "settling"
                         self._freeze_declarations()
-                        self.state.queued_actions = []
-                        self._save()
+                        self._save_queued()
                         break
                     ready = None
                 if (ready is None and self.preparing is None and not self.preparation_error
@@ -1941,13 +1941,13 @@ class Hub:
         try:
             # Ordinary collection already sealed this batch. Tactical collection prepares
             # here and atomically seals its complete plan before any action is executed.
-            st.queued_actions = list(self.early)
             prepared = {str(n): self.state.unfinished[seat]["execution"]["arrangement"]["plan"]
                         for n, (seat, _) in enumerate(order)
                         if seat in self.automatic and self.state.unfinished.get(seat, {}).get("execution")}
             order = (await self.game.arrange_party(order, prepared=prepared) if prepared else
                      await self.game.arrange_party(order))
             self._freeze_declarations()
+            self._save_queued()
             if confirmed is not None:
                 st.round_plan["encounter"] = confirmed
                 self._save()
@@ -2087,6 +2087,12 @@ class Hub:
         """Move unstarted originals back to their saved queue after the scene interrupts a batch."""
         self.early = [*(pair for pair in order if pair[1] is not None), *self.early]
         for seat, text in order:
+            step = next((step for step in self.state.round_plan.get("steps", [])
+                         if step["token"] not in self.state.round_plan.get("done", [])
+                         and tuple(self.state.round_plan["input"][int(step["token"])]) == (seat, text)), {})
+            row = next((row for row in self.state.declarations if row.id == step.get("declaration")), None)
+            if row is not None:
+                row.batch = ""
             self.game.finish_party_declaration(seat, text)
         self._save_queued()
 
