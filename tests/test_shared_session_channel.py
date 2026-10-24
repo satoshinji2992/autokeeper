@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from autokeeper.config import Role
-from autokeeper.harness import ContextBudgetExceeded, Reply, Session, spend, trace
+from autokeeper.harness import ContextBudgetExceeded, Reply, Session, trace
 from autokeeper.harness import models as hm
 
 PLAN = {"title": "OfflinePlan", "type": "object", "properties": {"kind": {"type": "string"}}, "required": ["kind"]}
@@ -59,13 +59,11 @@ async def channel(monkeypatch):
     monkeypatch.setattr(hm, "listeners", [])
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
     monkeypatch.delenv("AUTOKEEPER_BUDGET_USD", raising=False)
-    spend.budget.cache_clear()
     yield SimpleNamespace(calls=calls, answers=answers, session=session, model=model)
     for owner in sessions:
         await owner.close()
     for transport in models:
         await transport.close()
-    spend.budget.cache_clear()
 
 
 async def test_model_override_keeps_one_transcript_and_does_not_leave_a_default_schema(channel):

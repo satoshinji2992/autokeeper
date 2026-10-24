@@ -92,8 +92,9 @@ async def test_a_game_with_no_pictures_left_does_not_wait_for_one(module, fake):
 async def test_a_committed_scene_can_resume_after_its_notification_fails(module, fake):
     ask = Action(kind="investigate", summary="查看报童的报纸")
     ruling = Ruling(needs_roll=True, skill="侦查", scope="可即兴", minutes=10)
-    game, cast, _ = improvised(module, fake, {"x": (ask, ruling)}, [scene()])
+    game, cast, events = improvised(module, fake, {"x": (ask, ruling)}, [scene()])
     game.state.pending_turn = {"input": "x"}
+    deliver = game.emit
 
     async def interrupted(event):
         if event["type"] == "improv":
@@ -106,17 +107,20 @@ async def test_a_committed_scene_can_resume_after_its_notification_fails(module,
     assert game.state.pending_turn["scene_package"]["applied"]
     assert game.state.pending_turn["scene_package"]["reads"]
     assert game.state.minutes == before and len(game.state.improv) == 1
+    game.emit = deliver  # the replacement display connection can receive its refresh
     fake.queue(5)
     steered = await game.rule(ask)
     turn = await game.resolve(ask, steered)
     assert len(turn.checks) == 1 and len(cast.asked) == 1 and len(cast.ruled) == 1
     assert len(game.state.improv) == 1 and game.state.minutes == before + 10
+    assert sum(event["type"] == "improv" for event in events) == 1
 
 
 async def test_opening_retry_keeps_its_committed_adaptation(module, fake):
     plan = scene()
-    game, cast, _ = improvised(module, fake, {}, [plan])
+    game, cast, events = improvised(module, fake, {}, [plan])
     game.state.investigator.backstory["重要之人"] = "镇上的报童"
+    deliver = game.emit
 
     async def interrupted(event):
         if event["type"] == "improv":
@@ -127,9 +131,11 @@ async def test_opening_retry_keeps_its_committed_adaptation(module, fake):
         await game.start()
     saved = game.state.pending_turn["scene_package"]["applied"]
     assert saved and len(game.state.improv) == 1
+    game.emit = deliver
     await game.start()
     assert len(cast.asked) == 1 and not game.state.pending_turn
     assert len(game.state.improv) == 1
+    assert sum(event["type"] == "improv" for event in events) == 1
 
 
 def test_recent_context_preserves_a_destination_at_the_start_of_a_long_reply(module, fake):

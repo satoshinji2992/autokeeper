@@ -83,7 +83,8 @@ async def test_the_entity_is_fought_as_the_man_they_met_with_a_question_mark(mod
     assert all("_entity_line" not in e and "_entity_lines" not in e for e in out)
     assert {e["attacker_name"] for e in shown if e["type"] == "fight_act"} == {SHOWN, "托马斯·里德"}
     report = cast.reports[-1]
-    assert f"【称呼】“埃里”（玩家所见：{SHOWN}）" in report and "异界存在" not in report  # the keeper's note never in it
+    assert f"【称呼】“埃里”（玩家所见：{SHOWN}）" in report  # the omniscient keeper may receive private backstage notes
+    assert "异界存在" not in "\n".join(event.get("text", "") for event in out)
     assert not any(leaked(e.text) for e in game.state.log if e.kind in ("event", "dice"))
 
 

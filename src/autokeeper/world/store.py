@@ -32,7 +32,7 @@ from ..engine.encounter.model import EncounterState, EncounterSummary
 from ..engine.state import GameState, WorldFact
 from ..module.schema import Module
 from ..rules.coc import Investigator
-from . import knowledge
+from . import conditions, knowledge
 from .record import (
     ENGINE,
     PLAYERS,
@@ -56,7 +56,7 @@ JOURNAL_KEEP = 4000  # entries kept for repeats and the trace
 EVENTS_KEEP = 6000
 MEMORY_KEEP = 40  # memories an important NPC keeps
 # The journal's, the desk's, the scheduler's and the game's own clocks: undo leaves them.
-BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "npc_budget_turn", "npc_budget_calls", "npc_budget_limit", "npc_work",
+BOOKKEEPING = {"journal", "requests", "ticks", "simulated", "left", "backstage", "schedule_work",
                "beats", "missing", "missing_turn"}
 
 
@@ -107,7 +107,6 @@ class World:
     def __init__(self, m: Module, st: GameState, *, checker=None, initialize: bool = True):
         self.m, self.st = m, st
         self.checker = checker  # optional synchronous extension hook; ordinary play has no model approval
-        self.reviewing = False  # a screen has the director look backstage after a long stretch of time (Game._look)
         self.clock: int | None = None  # game minutes ops happen at, while the scheduler runs a time skip
         self.motion_start: int | None = None  # host-owned departure time for a committed move
         if initialize:
@@ -148,6 +147,7 @@ class World:
         knowledge.seed(self.m, self.st, self.rec)
         revealed = knowledge.sync(self.m, self.st, self.rec)
         knowledge.project(self.m, self.rec)
+        conditions.sync(self)
         return revealed
 
     def entity(self, ident: str) -> Entity | None:
@@ -346,17 +346,33 @@ class World:
             if prior.digest != dig:
                 return Result(False, oid, [f"op id {oid} 已经用于另一个操作"])
             return Result(True, oid, event=prior.event, repeat=True)
+        explicit_conditions = conditions.targets(self, op)
+        if late := conditions.conflicts(self, explicit_conditions):
+            return Result(False, oid, ["不能在较早时点覆盖已有未来条件：" + "、".join(late)])
         problems = op.check(self)
         if problems:
             return Result(False, oid, problems)
         before = self.domain()
+        condition_before = conditions.capture(self)
+        observed_visuals = {key: dict(value) for key, value in self.st.visuals.items()}
+        observed_art = {name: dict(getattr(self.m, name)) for name in ("art", "art_colors", "pictures")}
+
+        def rollback() -> None:
+            self.load(before)
+            # Observations made by this synchronous attempt are not independent image work.
+            # A refused operation must not leave a personal picture or a seen-* alias behind;
+            # normal undo continues to retain its caches through load().
+            _restore(self.st.visuals, observed_visuals)
+            for name, values in observed_art.items():
+                _restore(getattr(self.m, name), values)
+
         places = {e.id: self.place(e.id) for e in self.rec.entities.values() if e.kind in ("npc", "creature")}
         places.update({i.id: self.place(i.id) for i in self.st.investigators})
         self.rec.seq += 1
         try:
             event, data = op.settle(self, oid)
         except Exception as exc:  # an op lands whole or not at all
-            self.load(before)
+            rollback()
             return Result(False, oid, [f"结算失败：{type(exc).__name__}: {str(exc)[:200]}"])
         moved = {who: {"origin": origin, "destination": self.place(who),
                        "start": self.now if self.motion_start is None else self.motion_start, "end": self.now}
@@ -372,6 +388,12 @@ class World:
                                   op=oid, motions=moved)
             else:
                 event.motions.update(moved)
+        condition_after = conditions.capture(self)
+        late = conditions.record(self, condition_before, condition_after,
+                                 explicit=explicit_conditions | conditions.targets(self, op, event))
+        if late:
+            rollback()
+            return Result(False, oid, ["不能在较早时点覆盖已有未来条件：" + "、".join(late)])
         after = self.domain()
         entry = Entry(id=oid, seq=self.rec.seq, kind=op.kind, digest=dig, turn=self.st.turn, t=self.now, actor=op.actor,
                       summary=(event.text if event else op.kind)[:200], public=bool(event and event.visibility == "public"),

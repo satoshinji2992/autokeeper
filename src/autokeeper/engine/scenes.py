@@ -292,8 +292,11 @@ class SceneRuntime:
         if histories:
             scene.member_at = {who: source.member_at.get(who, source.at)
                                for source in histories for who in members if who in source.members}
-            scene.ongoing = "\n".join(dict.fromkeys(source.ongoing for source in histories if source.ongoing))
-            scene.journey = next((source.journey for source in histories if source.journey), "")
+            # History follows its readers; an unfinished scene belongs to its actual place.
+            # The source's focus may already have moved before a group is split or merged.
+            local = [source for source in histories if hosting_region(self.module, source.place) == scene.region]
+            scene.ongoing = "\n".join(dict.fromkeys(source.ongoing for source in local if source.ongoing))
+            scene.journey = next((source.journey for source in local if source.journey), "")
         root.scenes[scene.id] = scene
         return scene
 
@@ -460,6 +463,7 @@ class SceneRuntime:
         resources.update(ent.id for ent in game.world.rec.entities.values()
                          if ent.kind == "item" and target and target in (ent.id, ent.name))
         scene.reservation = {"turn": scene.turn, "start": start, "end": start + travel + minutes,
+                             "origin": scene.place, "destination": heading,
                              "actor": self.state.investigators[scene.active].id,
                              "original": scene.pending_turn.get("input", action.summary),
                              "resources": sorted(resources), "phase": "prepared",
@@ -473,6 +477,24 @@ class SceneRuntime:
     def _resource_versions(self, resources: set[str]) -> dict[str, dict]:
         return {who: {"version": ent.version, "at": ent.at, "status": ent.status}
                 for who in resources if (ent := self.state.record.entities.get(who)) is not None}
+
+    def _arriving(self, source: SceneState, destination: SceneState) -> bool:
+        heading = source.reservation.get("destination", "")
+        origin = source.reservation.get("origin", source.place)
+        return bool(heading and hosting_region(self.module, heading) != hosting_region(self.module, origin)
+                    and hosting_region(self.module, heading) == hosting_region(self.module, destination.place))
+
+    def _meeting(self, own: SceneState, other: SceneState) -> bool:
+        """Only an actual journey connects two otherwise independent scene clocks."""
+        return self._arriving(own, other) or self._arriving(other, own)
+
+    def incoming_boundary(self, ident: str) -> int | None:
+        """An authorized wait yields to an actual incoming party, not a remote clock."""
+        own = self.scenes[ident]
+        ends = [other.reservation["end"] for other in self.scenes.values()
+                if not other.closed and other.id != ident and self._arriving(other, own)
+                and other.reservation["end"] > own.at]
+        return min(ends) if ends else None
 
     def blockers(self, ident: str, end: int | None = None) -> list[dict]:
         own = self.scenes[ident]
@@ -499,6 +521,8 @@ class SceneRuntime:
                     continue
                 blocks.append({"scene": other.id, "kind": "resource", "resources": sorted(shared), "at": other.at,
                                "owner": order < peer_order})
+                continue
+            if not self._meeting(own, other):
                 continue
             if end <= other.at or other.passed_until == -1 or (other.passed_until is not None and end <= other.passed_until):
                 continue
@@ -572,9 +596,8 @@ class SceneRuntime:
                 if shown is not None:
                     await self.emit(ident, {"type": "status", "text": "", "audience": list(scene.members)})
                 return
-            message = (f"行动预计于{format_time(scene.reservation.get('end', scene.at))}结束；"
-                       + ("正在协调共同人物或物品。" if any(block["kind"] == "resource" for block in blocks)
-                          else "等待其他现场推进。"))
+            message = ("正在协调共同人物或物品。" if any(block["kind"] == "resource" for block in blocks)
+                       else "正在衔接会合场景。")
             if scene.reservation.get("waiting_shown") != message:
                 scene.reservation["waiting_shown"] = message
                 self.checkpoint(ident)
@@ -598,6 +621,8 @@ class SceneRuntime:
         # accepted before this point revokes permission; one accepted afterwards sees this time.
         for other in self.scenes.values():
             if other.closed or other.id == ident or other.at >= end or other.passed_until is None:
+                continue
+            if not self._meeting(scene, other):
                 continue
             if other.passed_until == -1 or end <= other.passed_until:
                 previous = other.at

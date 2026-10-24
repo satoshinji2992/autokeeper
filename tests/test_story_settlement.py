@@ -250,8 +250,8 @@ async def test_an_overnight_event_advances_the_real_clock_and_due_events_without
     module.flags["bells"] = "晚钟敲过了"
     module.events = [Event(id="waking", title="夜醒", when="flag:fainted", text="夜间苏醒。", advance_to="20:00"),
                      Event(id="bells", title="晚钟", when="D1 18:00", text="敲过晚钟。", sets=["bells"])]
+    module.start_time = "D1 11:48"
     game, _, _ = make(module, fake, {}, location="tower")
-    game.state.minutes = parse_time("D1 11:48")
     await game._flags(["fainted"], Turn())
     assert game.state.clock == "D1 20:00" and {"waking", "bells"} <= set(game.state.fired)
     assert "bells" in game.state.flags and game.world.rec.simulated == game.state.minutes
@@ -273,8 +273,8 @@ async def test_an_overnight_event_keeps_its_saved_target_after_a_failed_waking_n
                            read_aloud="天已经亮了。", advance_to="D2 08:00", sanity="1/1")]
     action = Action(kind="investigate", summary="打开石门")
     ruling = Ruling(needs_roll=False, set_flags=["fainted"], minutes=0)
+    module.start_time = "D1 11:48"
     game, _, _ = make(module, fake, {}, location="tower")
-    game.state.minutes = parse_time("D1 11:48")
     turn_going(game, action.summary)
     saved = snapshots(game)
 

@@ -150,25 +150,26 @@ def test_compact_preview_does_not_bypass_engine_rules_or_change_world(op):
 
 def test_compact_preview_and_commit_keep_scene_clock_and_shared_record_objects():
     world = staged("tower")
-    first = SceneState(id="a", members=[world.st.investigator.id], place="tower", at=600)
-    second = SceneState(id="b", members=[], place="office", at=900)
+    start = world.now
+    first = SceneState(id="a", members=[world.st.investigator.id], place="tower", at=start)
+    second = SceneState(id="b", members=[], place="office", at=start + 300)
     world.st.scenes = {"a": first, "b": second}
     view = SceneView(world.st, first)
     scoped = World(world.m, view, initialize=False)
-    scoped.clock = 600
+    scoped.clock = start
     gateway = Gateway(scoped, "keeper")
     original_record = world.st.record
     original_npc = world.rec.entities["warden"]
     ops = [{"kind": "move", "entity": "warden", "to": "square"}]
     before = world.st.model_dump_json()
     preview = gateway.preview(ops, compact=True)
-    assert preview["ok"] and preview["clock"] == format_time(600)
+    assert preview["ok"] and preview["clock"] == format_time(start)
     assert world.st.model_dump_json() == before
     result = gateway.commit(ops, reads=preview["reads"], request_id="scene-move", compact=True)
     assert result["ok"], result
     assert world.st.record is view.record is original_record
     assert world.rec.entities["warden"] is original_npc and original_npc.at == "square"
-    assert first.at == 600 and second.at == 900 and world.st.scenes["b"] is second
+    assert first.at == start and second.at == start + 300 and world.st.scenes["b"] is second
 
 
 def test_plan_dependencies_include_nested_targets_and_fact_conditions():

@@ -7,7 +7,7 @@ import pytest
 from autokeeper.engine.state import GameState
 from autokeeper.world import context, scheduler, stage
 from autokeeper.world import ops as O
-from autokeeper.world.agents import Canned, Decision, Scene, meeting
+from autokeeper.world.agents import meeting
 from autokeeper.world.record import Step
 from autokeeper.world.store import World
 from autokeeper.world.tools import Gateway
@@ -145,37 +145,12 @@ async def test_explicit_report_survives_save_and_is_not_blocked_as_an_unverified
     w = World(w.m.model_copy(deep=True), GameState.model_validate_json(w.st.model_dump_json()))
     assert not meeting(w, "warden", w.agent("warden").plan[-1])
     before = physical(w)
-    brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[done()])]))
-    report = await scheduler.advance(w, brain, w.now, w.now + 1)
-    assert len(brain.asks) == 1 and not report.refused and not report.blocked
-    assert "该做了" in brain.asks[0].reasons["warden"]
+    report = await scheduler.advance(w, w.now, w.now + 1)
+    assert not report.refused and not report.blocked
+    assert any(n.npc == "warden" and n.kind == "due" for n in scheduler.pending(w))
+    assert w.agent("warden").plan[-1].status == "pending" and physical(w) == before
+    assert Gateway(w, "keeper").settle([done()], request_id="keeper-review")["ok"]
     assert w.agent("warden").plan[-1].status == "done" and physical(w) == before
-
-
-@pytest.mark.parametrize("saved_status", ["ready", "done"])
-async def test_saved_scheduler_result_recovers_without_another_decision_or_report(saved_status):
-    w = planned()
-    brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[done()])]))
-    saved = ""
-
-    def checkpoint():
-        nonlocal saved
-        jobs = [job for work in w.rec.npc_work.values() for batch in work["batches"].values() for job in batch]
-        if any(job["status"] == saved_status for job in jobs):
-            saved = w.st.model_dump_json()
-            raise RuntimeError("disconnected")
-
-    start, end = w.now, w.now + 1
-    with pytest.raises(RuntimeError, match="disconnected"):
-        await scheduler.advance(w, brain, start, end, checkpoint=checkpoint)
-    restored = World(w.m.model_copy(deep=True), GameState.model_validate_json(saved))
-    no_call = Canned(lambda ask: pytest.fail("saved report decision must not be requested again"))
-    report = await scheduler.advance(restored, no_call, start, end)
-    assert not report.refused and not no_call.asks
-    assert restored.agent("warden").plan[-1].status == "done"
-    assert len([e for e in restored.rec.events if "报告完成" in e.text]) == 1
-    again = await scheduler.advance(restored, no_call, start, end)
-    assert again.repeat and len([e for e in restored.rec.events if "报告完成" in e.text]) == 1
 
 
 def test_report_receipt_keeps_real_operation_order_and_plan_replacement_boundary():
@@ -210,7 +185,7 @@ def test_report_type_reaches_the_existing_character_and_planning_contexts():
 
 def test_step_completion_is_exposed_in_existing_decision_and_tool_schemas():
     w = planned()
-    schemas = [Scene.model_json_schema(), Gateway(w, "warden").schema()["operations"]]
+    schemas = [Gateway(w, "keeper").schema()["operations"], Gateway(w, "warden").schema()["operations"]]
     for schema in schemas:
         completion = schema["$defs"]["Step"]["properties"]["completion"]
         assert completion["enum"] == ["state", "report"] and completion["default"] == "state"

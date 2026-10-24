@@ -10,14 +10,9 @@ from autokeeper.module.schema import Agenda, Module, Move
 from autokeeper.paths import EXAMPLE
 from autokeeper.world import agents, context, scheduler
 from autokeeper.world import ops as O
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
 from .test_world import fresh, staged
-
-
-def nothing(ask):
-    return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
 
 
 @pytest.fixture
@@ -29,10 +24,9 @@ async def test_what_it_does_on_meeting_the_investigators_never_wakes_it():
     w = staged()
     greet = Step(id="greet", text="有人上门就请他们进屋喝茶", meet=True)
     assert w.apply(O.SetPlan(npc="warden", steps=[greet])).ok
-    w.agent("warden").seen = w.rec.seq  # nothing new has happened to it
-    brain = Canned(nothing)
-    report = await scheduler.advance(w, brain, w.now, w.now + 30)
-    assert not any("warden" in ask.npcs for ask in brain.asks) and not any(x.startswith("warden") for x in report.woke)
+    report = await scheduler.advance(w, w.now, w.now + 30)
+    assert not [n for n in scheduler.pending(w, ["warden"]) if n.kind == "due"]
+    assert not report.blocked
     assert w.agent("warden").plan[0].status == "pending"  # character material: never done, never blocked
     assert "请他们进屋喝茶" not in context.npc_view(w, "warden").text  # not a backstage step
 
@@ -76,43 +70,6 @@ def test_the_module_marks_its_meeting_steps_when_the_game_starts(module):
     assert door.meet is True and not door.ops and lock.meet is None and lock.ops
 
 
-async def test_a_conversation_it_has_answered_does_not_wake_it_again():
-    w = staged(location="tower")
-    me = w.st.investigator.id
-    w.agent("warden").seen = w.rec.seq
-    assert w.apply(O.Occur(id="talk:1:x:warden", actor=me, participants=["warden"], place="tower",
-                           text="周衡和守钟人说话：「钟怎么了？」守钟人答：「没事。」", transcript=True)).ok
-    assert w.apply(O.Occur(actor=me, participants=["warden"], place="tower", text="周衡撬开了齿轮间的门")).ok
-    brain = Canned(nothing)
-    await scheduler.advance(w, brain, w.now, w.now, events_only=True)
-    [ask] = brain.asks
-    assert "撬开了齿轮间的门" in ask.reasons["warden"]  # what it saw done, not what it was told and answered
-
-
-async def test_one_with_nothing_left_to_do_plans_again_when_the_party_moves_on():
-    w = fresh()
-    assert w.apply(O.Enlist(npc="warden", goals=["守住钟楼"])).ok
-    brain = Canned(nothing)
-    await scheduler.advance(w, brain, w.now, w.now + 10)
-    assert brain.asks == []
-    await scheduler.advance(w, brain, w.now + 10, w.now + 20)
-    assert brain.asks == []  # minutes go by in the same place
-    await scheduler.advance(w, brain, w.now + 20, w.now + 80, moved_on=True)  # an hour on, somewhere else
-    assert len(brain.asks) == 1 and "还没有接下来的安排" in brain.asks[0].reasons["warden"]
-
-
-async def test_what_stopped_a_decision_is_what_it_hears_when_it_wakes():
-    w = staged()
-    assert w.apply(O.SetPlan(npc="warden", steps=[Step(id="help", text="想下一步")])).ok
-    first = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[O.Move(entity="warden", to="nowhere_known")])]))
-    await scheduler.advance(w, first, w.now, w.now + 1)
-    assert "不知道" in w.agent("warden").refused
-    later = Canned(nothing)
-    await scheduler.advance(w, later, w.now + 1, w.now + 2)
-    assert "上次没做成" in later.asks[0].reasons["warden"] and "不知道" in later.asks[0].reasons["warden"]
-    assert w.agent("warden").refused == ""  # decided again: it is behind it
-
-
 def test_what_it_did_on_meeting_them_is_not_put_to_it_again():
     """Thomas answered the door and settled their bags: that is done, not a standing order for every
     later talk (the review of 2026-10-20). Done only when its voice says it played it."""
@@ -145,9 +102,9 @@ async def test_a_step_at_an_hour_waits_for_its_condition_as_well(module):
     [step] = w.agent("warden").plan
     assert step.due == parse_time("D1 22:00") and step.when == "flag:bell_stopped" and step.ops
     w.st.minutes = parse_time("D1 22:30")
-    await scheduler.advance(w, Canned(nothing), parse_time("D1 21:50"), w.now)
+    await scheduler.advance(w, parse_time("D1 21:50"), w.now)
     assert w.place("warden") == "tower"  # ten has come, the bell has not stopped
-    w.st.flags.append("bell_stopped")
-    await scheduler.advance(w, Canned(nothing), w.now, w.now + 10)
+    assert w.apply(O.SetFlag(flag="bell_stopped", actor="engine")).ok
+    await scheduler.advance(w, w.now, w.now + 10)
     assert w.place("warden") == "square"
     assert agents.split_when("D1 22:00 | flag:x") == ("", "D1 22:00 | flag:x")  # no hour to wait for: audit says so

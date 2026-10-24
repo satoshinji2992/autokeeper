@@ -10,8 +10,6 @@ from autokeeper.agents.cast import Action, Ruling
 from autokeeper.engine.state import format_time, parse_time
 from autokeeper.module.schema import Module
 from autokeeper.module.simulate import drift, playthrough
-from autokeeper.world import scheduler
-from autokeeper.world.agents import Canned, Scene
 
 from .test_engine import make
 
@@ -65,8 +63,6 @@ async def test_in_play_the_events_fire_on_time_and_the_ending_comes(stowell, fak
     st = game.state
     st.fired += ["e_mccurdy_attack", "e_stanley_shoots", "e_jensen_arrives"]  # the opening fight is played elsewhere
     st.flags.append("mccurdy_dead")
-    game.brain = Canned(lambda ask: Scene(decisions=[]))  # type: ignore[assignment]
-    game.minds = scheduler.Budget(turn=2, skip=4)
     fake.queue(*[1] * 10)  # sanity rolls pass
     seen: dict[str, str] = {}
     while not st.ending and st.minutes < parse_time("D6 00:00"):

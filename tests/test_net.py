@@ -614,7 +614,7 @@ async def test_an_ai_seat_with_no_action_to_play_makes_no_move(fake):
     await hub.game.close()
 
 
-async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_path, skills_dir, fake):
+async def test_a_seated_players_failed_narration_resumes_automatically(monkeypatch, tmp_path, skills_dir, fake):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
 
     class InterruptedTable(TableCast):
@@ -636,17 +636,13 @@ async def test_a_seated_player_can_resume_a_failed_narration(monkeypatch, tmp_pa
         await until(ws, lambda x: x["t"] == "welcome")
         await ws.send_json({"t": "sit", "investigator": st.investigator.id})
         await until(ws, pool_open)
+        minute = st.minutes
         await ws.send_json({"t": "act", "text": "我看看告示栏"})
         await ws.send_json({"t": "done"})
-        error = await until(ws, lambda x: x["t"] == "error")
-        assert error["retry"] and st.pending_turn and st.turn == 1
-        assert error["text"] == "本回合未能完成，输入 /retry 继续；已结算的结果保留。"  # the error's class stays in the host's log
-        minute = st.minutes
-        await ws.send_json({"t": "act", "text": "/retry"})
         await until(ws, lambda x: x["t"] == "event" and x["ev"]["type"] == "keeper_end")
         await until(ws, pool_open)
-        assert not st.pending_turn and st.turn == 1 and st.minutes == minute
-        assert st.clues.count("c_notice") == 1
+        assert not st.pending_turn and st.turn == 1 and st.minutes == minute + 5
+        assert st.clues.count("c_notice") == 1 and hub.cast.calls == 2
         await ws.close()
     await closed(task)
 
@@ -734,7 +730,7 @@ async def test_an_ai_seat_that_fails_neither_closes_the_room_nor_blocks_the_next
             return await super().investigator(state, inv_id, situation)
 
     cast = Failing()
-    cast.fail_keeper = 3  # the turn and both of the table's tries to finish it
+    cast.fail_keeper = 2  # the turn and its one bounded stage recovery
     hub = Hub(EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
     task = await opened(hub)
     async with aiohttp.ClientSession() as http:

@@ -15,6 +15,10 @@ import functools
 import json
 import os
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from pathlib import Path
 from typing import Any
 
 from filelock import FileLock
@@ -29,6 +33,7 @@ PRICES: dict[str, tuple[float, float, float]] = {
 }
 
 _lock = threading.Lock()
+_run: ContextVar[tuple[float | None, Path] | None] = ContextVar("spend_run", default=None)
 
 
 class BudgetExceeded(RuntimeError):
@@ -36,7 +41,23 @@ class BudgetExceeded(RuntimeError):
 
 
 def _file():
-    return paths.spend()
+    return _run.get()[1] if _run.get() is not None else paths.spend()
+
+
+@contextmanager
+def scoped(cap: float | None, ledger_file: Path) -> Iterator[None]:
+    """One evaluation's cap and ledger, inherited by its tasks and restored on exit.
+
+    Processes joining the same evaluation use the same ledger_file; record() retains
+    its file lock. Nothing is written to the user's settings or ordinary game ledger.
+    """
+    if cap is not None and cap < 0:
+        raise ValueError("费用上限不能为负数")
+    token = _run.set((cap, ledger_file))
+    try:
+        yield
+    finally:
+        _run.reset(token)
 
 
 def ledger() -> dict[str, Any]:
@@ -74,9 +95,10 @@ def estimate(model: str, usage: dict) -> float:
     return (fresh * p[0] + cached * p[1] + usage.get("output_tokens", 0) * p[2]) / 1_000_000
 
 
-@functools.cache
 def budget() -> float | None:
-    return config.load().budget_usd
+    # Settings may be changed while a LAN room is paused at a limit. Do not pin the
+    # first cap for the process's lifetime, or a corrected setting still cannot resume.
+    return _run.get()[0] if _run.get() is not None else config.load().budget_usd
 
 
 def guard(model: str) -> None:
@@ -85,7 +107,7 @@ def guard(model: str) -> None:
         return
     spent = ledger()["total_usd"]
     if spent >= cap:
-        raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（data/spend.json；在配置里调 budget_usd）")
+        raise BudgetExceeded(f"API 花费估计已达 ${spent:.3f}，超过预算 ${cap:g}（账本：{_file()}）")
 
 
 def record(model: str, usage: dict, cost: float | None = None) -> float:

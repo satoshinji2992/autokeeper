@@ -117,11 +117,10 @@ async def test_waiting_stops_at_a_scheduled_arrival_instead_of_skipping_an_hour(
     await game.close()
 
 
-async def test_deferred_world_work_still_lands_scheduled_rescue_before_aftercare_continues(module, fake):
+async def test_scheduled_rescue_lands_before_aftercare_continues(module, fake):
     game, cast, _ = make(module, fake, {}, location="tower")
     inv = down(game, dying=False)
     start = game.state.minutes
-    game.world_later = True
     game.world.rec.entities["warden"].at = "office"
     game.world.apply(Schedule(id="call-for-aid", event="return", at=start + 1, text="守钟人赶回查看倒地的人",
                               place="tower", participants=["warden"]))
@@ -130,7 +129,7 @@ async def test_deferred_world_work_still_lands_scheduled_rescue_before_aftercare
     await game._party_down(Turn())
     assert inv.can_act and game.state.minutes == start + 1 and len(calls) == 2
     assert game.world.rec.scheduled["return"].status == "done" and game.world.rec.entities["warden"].at == "tower"
-    assert game.world_later and not game._world_owed
+    assert game.world.rec.simulated == game.state.minutes
     await game.close()
 
 

@@ -72,7 +72,7 @@ async def test_repush_receives_the_full_private_contract_separately_from_the_ann
     module = Module.load(EXAMPLE)
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     state.location = "office"
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     full = Failure(text="移开夹板后仍得到旧报原稿，但弄脏管理员的账本", risk="可能弄脏账本并赔偿", clues=["c_archive"], minutes=15)
     pending = {"skill": "图书馆使用", "target": 60, "difficulty": "常规", "risk": full.risk,

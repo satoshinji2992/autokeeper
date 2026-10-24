@@ -1,79 +1,85 @@
-"""Game time drives the world: when time passes, scheduled things happen and important NPCs go on.
+"""Run prepared world changes and leave judgment to the keeper.
 
-advance(world, brain, start, end) simulates the minutes between in chunks. In each chunk:
-
-    1. scheduled events that came due land (dropped, and their author woken, if what they read
-       has changed since);
-    2. promises whose time came are noted, and the important NPCs in them wake;
-    3. each important NPC (one passive, Agent.passive, only the first of these: its fixed steps
-       land, nothing wakes it): a due plan step whose condition holds lands its prepared
-       ops with no model call while the plan is fresh; one without ops, or a stale plan, wakes
-       the NPC; a step whose condition stays unmet past its grace is blocked, and wakes it;
-       events it took part in or saw since it last decided wake it; a conversation with the
-       investigators only once time jumps or they move on (its voice answered it at the time); so
-       does its own timer. One with goals and nothing left to do thinks of its next step only when
-       time jumps or the party moves on;
-    4. those woken are decided together in one call while the budget lasts (the rest wait),
-       each by its own view, each op held to what that NPC can do (agents.vet), and each decision
-       resting only on lines of its own view (agents.foreign).
-
-A step marked for meeting the investigators (agents.meeting: coming to the door, being asked)
-never wakes anyone: it is character material for the NPC's voice. NPCs where the party is also
-react to witnessed changes and due plans; what would change the scene in front of the party is
-left for the keeper to play (world/stage.py). A tick id (the span simulated) is kept in the
-record, so a retried turn never simulates the same span twice; every op gets a deterministic id
-for the same reason.
+No model, periodic NPC wake-up, or call budget lives here. Known outcomes execute on game
+time; blocked arrangements, due work without an outcome, and newly experienced events become
+persistent attention notes. Reading or retrying a note does not consume it: the keeper must
+finish a valid response before the caller acknowledges its captured version.
 """
 
 from __future__ import annotations
 
-import asyncio
-import math
 from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from . import agents, context, stage
-from .ops import AdvancePlan, Occur, SetPlan, execution_order, parse
-from .record import Agent
+from . import agents, stage
+from .ops import AdvancePlan, SetPlan, execution_order, parse
+from .record import Agent, BackstageNeed
 
 if TYPE_CHECKING:
     from .store import World
 
-RANK = {"promise": 0, "blocked": 1, "stale": 1, "due": 2, "affected": 3, "timer": 4}
-SCENE = ":scene"  # the id suffix of a decided scene's summary (_settle)
-TALK = "talk:"  # the op id prefix of a conversation with the investigators (engine/game.Game._exchanged)
-
-
-@dataclass
-class Budget:
-    turn: int = 2  # decisions in a player turn
-    skip: int = 4  # decisions in a time skip (travel, a long rest, leaving for the night)
-    long: int = 120  # minutes from which an advance counts as a skip
-    chunk: int = 240  # minutes simulated at a time
-    chunks: int = 12  # at most; a longer skip gets longer chunks
-    grace: int = 120  # minutes a due step may wait for its condition before it is blocked
+GRACE = 120  # game minutes a scheduled condition may wait before it is reported blocked
+TALK = "talk:"
 
 
 @dataclass
 class Report:
     tick: str
     repeat: bool = False
-    calls: int = 0
-    chunks: int = 0
-    woke: list[str] = field(default_factory=list)  # npc: reason, of those who decided
-    deferred: list[str] = field(default_factory=list)  # woken, but the budget ran out
-    landed: list[str] = field(default_factory=list)  # op ids
-    refused: list[str] = field(default_factory=list)  # what an NPC tried and could not do
-    blocked: list[str] = field(default_factory=list)  # npc:step
-    fired: list[str] = field(default_factory=list)  # scheduled ids
-    dropped: list[str] = field(default_factory=list)  # scheduled ids gone stale
-    staged: list[str] = field(default_factory=list)  # beats left for the keeper: they would change the scene (stage.py)
+    chunks: int = 0  # deterministic calendar boundaries processed
+    landed: list[str] = field(default_factory=list)
+    refused: list[str] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
+    fired: list[str] = field(default_factory=list)
+    dropped: list[str] = field(default_factory=list)
+    staged: list[str] = field(default_factory=list)
+    pending: list[str] = field(default_factory=list)
 
     @classmethod
     def restored(cls, saved: dict[str, Any]) -> Report:
-        """A report kept in an interrupted tick, without the fields of older versions."""
-        return cls(**{k: v for k, v in saved.items() if k in cls.__dataclass_fields__})
+        return cls(**saved)
+
+
+def pending(w: World, npcs: Collection[str] | None = None) -> list[BackstageNeed]:
+    """Unconsidered work, optionally selected by related NPCs; global notes remain available."""
+    chosen = None if npcs is None else set(npcs)
+    return [need for need in w.rec.backstage.values() if need.status == "pending" and need.t <= w.now
+            and (chosen is None or not need.people or bool(chosen.intersection(need.people)))]
+
+
+def acknowledge(w: World, tickets: dict[str, int]) -> list[str]:
+    """Mark only the exact changes the keeper considered, never a plan or goal as completed."""
+    handled = []
+    for ident, version in tickets.items():
+        need = w.rec.backstage.get(ident)
+        if need is None or need.status != "pending" or need.version != version:
+            continue
+        need.status = "considered"
+        handled.append(ident)
+    return handled
+
+
+def _notice(w: World, source: str, npc: str, kind: str, text: str, *, at: int | None = None,
+            people: Collection[str] = (), evidence: dict[str, int] | None = None) -> BackstageNeed:
+    """A stable source is not a repeated alarm; only changed evidence opens a new version."""
+    from .store import digest
+
+    ident = "backstage:" + digest(source)[:20]
+    related = list(dict.fromkeys(x for x in [npc, *people] if x in w.rec.agents))
+    evidence = dict(evidence or {})
+    when = w.now if at is None else at
+    known = w.rec.backstage.get(ident)
+    if known is not None:
+        if (known.kind, known.text, known.evidence) != (kind, text, evidence):
+            known.kind, known.text, known.evidence = kind, text, evidence
+            known.people, known.version, known.status = related, known.version + 1, "pending"
+            known.t, known.turn = when, w.st.turn
+        return known
+    need = BackstageNeed(id=ident, npc=npc, people=related, kind=kind, source=source,
+                         text=text, evidence=evidence, t=when, turn=w.st.turn)
+    w.rec.backstage[ident] = need
+    return need
 
 
 def fresh(w: World, reads: dict[str, int]) -> list[str]:
@@ -86,7 +92,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     """A decision is one unit: a refused transfer must not leave a successful handover story.
     Work that would change the scene in front of the investigators waits for the keeper as a
     beat instead of landing behind their backs (stage.py), keeping what it rested on (reads,
-    the plan step's when): if that moved by the time it plays, its author decides again. The
+    the plan step's when): if that moved by the time it plays, the keeper reconsiders it. The
     rest lands now, turning points included: whoever decides has decided."""
     from .store import World
     from .tools import Gateway
@@ -125,7 +131,7 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
             return False
         report.staged.append(beat.id)
         return True
-    # No await or model call between validation and commit. The NPC operations are
+    # No await or model call between validation and commit. The prepared operations are
     # deterministic, so they see exactly the state against which they just checked.
     for op in prepared:
         r = w.apply(op)
@@ -136,127 +142,205 @@ def _land(w: World, ops: list[dict[str, Any]], *, prefix: str, actor: str, repor
     return True
 
 
-def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
-    """New experienced information or a prepared action; elapsed minutes are not required. Once
-    the party has moved on, the conversations they left behind count too."""
-    for npc, a in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
+def _affects(event, npc: str, *, talks: bool = False) -> bool:
+    return (event.reactive and event.actor != npc and (talks or not event.op.startswith(TALK))
+            and (npc in event.participants or npc in event.witnesses))
+
+
+def _stamp(w: World, seq: int) -> int | None:
+    return next((entry.t for entry in reversed(w.rec.journal) if entry.seq == seq),
+                next((event.t for event in reversed(w.rec.events) if event.seq == seq), None))
+
+
+def _current(w: World, obj) -> bool:
+    """Current mutable plans/intentions may belong to a leading scene's future."""
+    stamp = _stamp(w, obj.changed)
+    return stamp is None or stamp <= w.now
+
+
+def _source(w: World, source: str) -> BackstageNeed | None:
+    from .store import digest
+
+    return w.rec.backstage.get("backstage:" + digest(source)[:20])
+
+
+def collect(w: World, *, moved_on: bool = False, held: Collection[str] = ()) -> list[BackstageNeed]:
+    """Collect attention at this scene's time, without running any part of the past calendar.
+
+    Each experienced event owns a versioned ticket. Record sequence is submission order, not
+    game time: acknowledging a late-written old event cannot consume an earlier-written future one.
+    """
+    for promise in w.rec.promises.values():
+        if (promise.status == "active" and promise.made <= w.now and promise.due is not None
+                and promise.due <= w.now and _current(w, promise)):
+            _notice(w, f"promise:{promise.id}", promise.by, "promise",
+                    f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}",
+                    people=[promise.by, promise.to], at=max(promise.made, promise.due),
+                    evidence={f"promise:{promise.id}": promise.version})
+    for npc, agent in w.rec.agents.items():
+        if npc in held:
             continue
-        if not a.passive and any(_affects(e, npc, a.seen, talks=moved_on) for e in w.rec.events):
-            return True
-        if any(s.status == "pending" and s.ops and (s.due is None or s.due <= w.now)
-               and not agents.meeting(w, npc, s) and agents.holds(w, s.when) for s in a.plan):
-            return True
-    return (any(s.status == "pending" and s.at <= w.now for s in w.rec.scheduled.values())
-            or any(p.status == "active" and not p.noted and p.due is not None and p.due <= w.now
-                   for p in w.rec.promises.values()))
-
-
-async def advance(w: World, brain: agents.Brain | None, start: int, end: int, *, budget: Budget | None = None,
-                  tick: str = "", shared: bool = False, events_only: bool = False, moved_on: bool = False,
-                  checkpoint: Callable[[], None] | None = None, held: Collection[str] = ()) -> Report:
-    """`moved_on`: the party went somewhere else this turn; like a jump in time, a moment for
-    those with nothing left to do to think of their next step. `held`: those the keeper already
-    had act in front of the party this turn (engine/game.Game._join_in): nothing wakes them and
-    no step of theirs lands in this advance, so no one decides twice in a turn; what is due
-    for them comes in the next."""
-    budget = budget or Budget()
-    tick = tick or f"tick:{start}:{end}"
-    report = Report(tick)
-    if tick in w.rec.ticks:
-        report.repeat = True
-        return report
-    skip = end - start >= budget.long
-    limit = budget.skip if skip else budget.turn
-    if shared:
-        if w.rec.npc_budget_turn != w.st.turn:
-            w.rec.npc_budget_turn = w.st.turn
-            w.rec.npc_budget_calls = w.rec.npc_budget_limit = 0
-            for old in [key for key, item in w.rec.npc_work.items() if item["turn"] != w.st.turn]:
-                w.rec.npc_work.pop(old)
-        w.rec.npc_budget_limit = max(w.rec.npc_budget_limit, limit)
-    work = w.rec.npc_work.setdefault(tick, {"turn": w.st.turn, "start": start, "end": end, "since": w.rec.seq,
-                                           "events_only": events_only, "report": asdict(report), "chunks": {}, "batches": {}})
-    report = Report.restored(work["report"])
-
-    def save() -> None:
-        work["report"] = asdict(report)
-        if checkpoint:
-            checkpoint()
-
-    def reserve() -> bool:
-        if shared:
-            if limit <= 0 or w.rec.npc_budget_calls >= w.rec.npc_budget_limit:
-                return False
-            w.rec.npc_budget_calls += 1
-        elif report.calls >= limit:
-            return False
-        report.calls += 1
-        return True
-
-    n = max(1, min(budget.chunks, math.ceil(max(0, end - start) / budget.chunk)))
-    size = max(0, end - start) / n
-    try:
-        for i in range(n):
-            c = end if i == n - 1 else start + round(size * (i + 1))
-            w.clock = c
-            chunk = work["chunks"].get(str(i))
-            if chunk and chunk.get("done"):
+        for event in w.rec.events:
+            if event.t > w.now or not _affects(event, npc, talks=moved_on):
                 continue
-            wakes: dict[str, tuple[str, str]] = {}  # npc -> (rank kind, reason)
+            changes = [revision for revision in w.rec.revisions if revision.target == f"event:{event.id}"
+                       or f"event:{event.id}" in revision.touched]
+            if any(revision.t > w.now for revision in changes):
+                continue  # do not pass a future rewrite off as this past event's original words
+            _notice(w, f"event:{npc}:{event.id}", npc, "affected", "亲历或获知：" + event.text,
+                    at=max([event.t, *(revision.t for revision in changes)]),
+                    evidence={f"event:{event.id}": event.version})
+        for revision in w.rec.revisions:
+            if revision.t > w.now:
+                continue
+            kind, _, ident = revision.target.partition(":")
+            fact = w.rec.facts.get(ident) if kind == "fact" else None
+            event = w.rec.event(ident) if kind == "event" else None
+            if (f"agent:{npc}" in revision.touched or (fact is not None and npc in fact.known_by)
+                    or (event is not None and (npc in event.participants or npc in event.witnesses))):
+                _notice(w, f"revision:{revision.id}:{npc}", npc, "revised",
+                        f"人物相关的幕后设定已修改：{revision.new}（{revision.reason}）", at=revision.t,
+                        evidence={revision.target: revision.new_version})
+        if not _current(w, agent):
+            continue
+        entity = w.rec.entities[npc]
+        if (_current(w, entity) and entity.status == "死亡") or stage.waiting(w, npc):
+            continue
+        _judgments(w, npc, agent)
+        if agent.refused:
+            _notice(w, f"refused:{npc}", npc, "blocked", f"未落实：{agent.refused}")
+        if (moved_on and not agent.passive and agent.goals
+                and not any(step.status in {"pending", "blocked"} and not agents.meeting(w, npc, step)
+                            for step in agent.plan)):
+            _notice(w, f"goals:{npc}:{agent.goal_source}", npc, "goals",
+                    "尚无后续安排的目标：" + "；".join(agent.goals), at=_stamp(w, agent.changed))
+    return pending(w)
 
-            def wake(npc: str, kind: str, reason: str, wakes=wakes) -> None:
-                a = w.rec.agents.get(npc)
-                if (a is not None and not a.passive and npc not in held
-                        and (npc not in wakes or RANK[kind] < RANK[wakes[npc][0]])):
-                    wakes[npc] = (kind, reason)
 
-            if chunk is None:
-                report.chunks += 1
-                _prepare(w, c, budget, report, wake, events_only=events_only, planning=skip or moved_on, held=held)
-                chunk = work["chunks"][str(i)] = {"wakes": wakes, "before": w.rec.seq}
-                save()
-            await _serve(w, brain, chunk["wakes"], f"{tick}:{c}", report, work["batches"], reserve, save)
-            # Those the decisions just touched may answer in the same time slice.
-            if "ripple" not in chunk:
-                ripple: dict[str, tuple[str, str]] = {}
-                for npc, a in w.rec.agents.items():
-                    if w.rec.entities[npc].status != "死亡" and not stage.waiting(w, npc) and npc not in held and not a.passive:
-                        _affected(w, npc, a, lambda x, kind, why, ripple=ripple: ripple.setdefault(x, (kind, why)), since=chunk["before"])
-                chunk["ripple"] = ripple
-                save()
-            await _serve(w, brain, chunk["ripple"], f"{tick}:{c}:r", report, work["batches"], reserve, save)
-            chunk["done"] = True
-            save()
+def _judgments(w: World, npc: str, agent: Agent) -> None:
+    for step in agent.plan:
+        installed = _stamp(w, step.started)
+        if (step.status not in {"pending", "blocked"} or (installed is not None and installed > w.now)
+                or (step.due is not None and step.due > w.now) or agents.meeting(w, npc, step)):
+            continue
+        source = f"step:{npc}:{step.id}:{step.started}"
+        evidence = {ref: w.version(ref) for ref in agent.reads}
+        if step.status == "blocked":
+            if _source(w, source) is None:
+                _notice(w, source, npc, "blocked", f"计划受阻：{step.text}（{step.note}）", evidence=evidence)
+            continue
+        problems = agents.condition_problems(w, step.when) + agents.condition_problems(w, step.achieved)
+        if problems:
+            _notice(w, source, npc, "blocked", f"计划条件无效：{step.text}（{'；'.join(problems)}）", evidence=evidence)
+        elif agents.holds(w, step.when):
+            moved = fresh(w, agent.reads)
+            previous = _source(w, source)
+            if step.ops and not moved and previous is not None and previous.kind == "blocked" and previous.evidence == evidence:
+                continue  # keep the actual execution failure rather than replacing it with a generic due note
+            kind = "stale" if moved else "due"
+            text = f"计划依据已变化：{step.text}（{'、'.join(moved)}）" if moved else f"待判断的安排已到时机：{step.text}"
+            _notice(w, source, npc, kind, text, evidence=evidence)
+        elif step.due is not None and w.now - step.due >= GRACE:
+            _notice(w, source, npc, "blocked", f"计划受阻：{step.text}（条件未满足：{step.when}）", evidence=evidence)
+
+
+def reactions_ready(w: World, *, moved_on: bool = False) -> bool:
+    """Collect attention and report prepared work that can execute at the current boundary."""
+    if collect(w, moved_on=moved_on):
+        return True
+    return (any(s.status == "pending" and s.at <= w.now for s in w.rec.scheduled.values())
+            or any(_current(w, agent) and step.status == "pending" and step.ops
+                   and (step.due is None or step.due <= w.now) and not agents.meeting(w, npc, step)
+                   and agents.holds(w, step.when)
+                   for npc, agent in w.rec.agents.items() for step in agent.plan))
+
+
+def _next_boundary(w: World, cursor: int, end: int) -> int:
+    from ..engine.state import hours
+
+    due = [end]
+    due += [row.t for history in w.rec.conditions.values() for row in history if cursor < row.t <= end]
+    due += [int(motion[edge]) for event in w.rec.events for motion in event.motions.values()
+            for edge in ("start", "end") if cursor < int(motion[edge]) <= end]
+    due += [s.at for s in w.rec.scheduled.values() if s.status == "pending" and cursor < s.at <= end]
+    due += [p.due for p in w.rec.promises.values()
+            if p.status == "active" and p.due is not None and cursor < p.due <= end]
+    for npc, agent in w.rec.agents.items():
+        if not _current(w, agent):
+            continue
+        for step in agent.plan:
+            if step.status != "pending" or agents.meeting(w, npc, step):
+                continue
+            if step.due is not None:
+                due += [t for t in (step.due, step.due + GRACE) if cursor < t <= end]
+            for group in step.when.split("|"):
+                for kind, value, _negated in agents.condition_atoms(group):
+                    if kind == "after" and value.isdecimal() and cursor < int(value) <= end:
+                        due.append(int(value))
+                    if kind == "hour" and (span := hours(value)) is not None:
+                        for hour in span:
+                            boundary = cursor // 1440 * 1440 + hour % 24 * 60
+                            if boundary <= cursor:
+                                boundary += 1440
+                            if boundary <= end:
+                                due.append(boundary)
+    return min(due)
+
+
+async def advance(w: World, start: int, end: int, *, tick: str = "", events_only: bool = False,
+                  moved_on: bool = False, checkpoint: Callable[[], None] | None = None,
+                  held: Collection[str] = ()) -> Report:
+    """Execute fixed work and collect durable keeper notes, with no independent NPC model."""
+    if end < start:
+        raise ValueError("世界时间不能倒退")
+    tick = tick or f"tick:{start}:{end}"
+    if tick in w.rec.ticks:
+        return Report(tick=tick, repeat=True, pending=[need.id for need in pending(w)])
+    work = w.rec.schedule_work.setdefault(tick, {"turn": w.st.turn, "start": start, "end": end,
+                                                "since": w.rec.seq, "cursor": None, "report": asdict(Report(tick))})
+    report = Report.restored(work["report"])
+    cursor = work["cursor"]
+    try:
+        while cursor is None or cursor < end:
+            c = start if cursor is None else _next_boundary(w, cursor, end)
+            w.clock = c
+            # A fixed operation can make another condition true or schedule work for right now.
+            while True:
+                before = w.rec.seq
+                _prepare(w, c, report, planning=moved_on or not events_only, held=held)
+                if before == w.rec.seq:
+                    break
+            report.chunks += 1
+            report.pending = [need.id for need in pending(w)]
+            work["cursor"], work["report"] = c, asdict(report)
+            cursor = c
+            if checkpoint:
+                checkpoint()
     finally:
         w.clock = None
     w.rec.ticks.append(tick)
     del w.rec.ticks[:-200]
-    w.rec.npc_work.pop(tick, None)  # completed ticks need no retained private prompt copies
+    w.rec.schedule_work.pop(tick, None)
     if checkpoint:
         checkpoint()
     return report
 
 
-PLANNING_GAP = 60  # game minutes since its last decision before one with nothing to do plans again
-
-
-def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_only: bool, planning: bool = False,
-             held: Collection[str] = ()) -> None:
-    """Synchronous work and wake reasons are checkpointed before any model is awaited."""
+def _prepare(w: World, c: int, report: Report, *, planning: bool, held: Collection[str]) -> None:
     for sch in sorted((s for s in w.rec.scheduled.values() if s.status == "pending" and s.at <= c), key=lambda s: s.at):
+        who = sch.actor if sch.actor in w.rec.agents else ""
+        source = f"scheduled:{sch.id}"
         if moved := fresh(w, sch.reads):
             sch.status = "dropped"
             report.dropped.append(sch.id)
-            wake(sch.actor, "stale", f"原先安排的事落空了：{sch.text}（{'、'.join(moved)} 变了）")
+            _notice(w, source, who, "stale", f"原先安排的事落空了：{sch.text}（{'、'.join(moved)} 变了）",
+                    people=sch.participants, evidence={ref: w.version(ref) for ref in sch.reads})
             continue
-        # A commitment to the investigators outranks an arrangement made elsewhere: it goes on
-        # without someone walking with them (stage.py), and whoever made it hears why.
         busy = {p: why for p in sch.participants if p in w.rec.entities and w.place(p) != sch.place
                 and (why := stage.committed(w, p))}
         people = [p for p in sch.participants if p in w.rec.entities and p not in busy]
-        for why in busy.values():
-            wake(sch.actor, "blocked", f"安排「{sch.text}」少了一个人：{why}")
+        for person, why in busy.items():
+            _notice(w, f"{source}:busy:{person}", who, "blocked", f"安排「{sch.text}」缺席：{why}", people=[person])
         ops = list(sch.ops)
         if (spot := w.rec.entities.get(sch.place)) is not None and spot.kind == "location":
             for person in people:
@@ -267,264 +351,47 @@ def _prepare(w: World, c: int, budget: Budget, report: Report, wake, *, events_o
         if not _land(w, ops, prefix=sch.id, actor=sch.actor or "engine", report=report, text=sch.text, reads=sch.reads):
             sch.status = "dropped"
             report.dropped.append(sch.id)
-            wake(sch.actor, "blocked", f"原先安排无法执行：{sch.text}")
+            _notice(w, source, who, "blocked", f"原先安排无法执行：{sch.text}", people=sch.participants)
             continue
         sch.status = "done"
         report.fired.append(sch.id)
-    for promise in w.rec.promises.values():
-        if promise.status == "active" and promise.due is not None and promise.due <= c and not promise.noted:
-            promise.noted = True
-            for who in (promise.by, promise.to):
-                wake(who, "promise", f"约定的时间到了：{w.name(promise.by)}答应{w.name(promise.to)}：{promise.text}")
     for npc, agent in w.rec.agents.items():
-        if w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):  # its move is waiting
+        if not _current(w, agent) or w.rec.entities[npc].status == "死亡" or stage.waiting(w, npc):
             continue
-        if npc in held:  # the keeper's plan has it act this turn: no model asked for it, its fixed steps land all the same
-            _fixed(w, npc, agent, c, report)
+        _steps(w, npc, agent, c, report)
+    collect(w, moved_on=planning, held=held)
+
+
+def _steps(w: World, npc: str, agent: Agent, c: int, report: Report) -> None:
+    for step in agent.plan:
+        if step.status != "pending" or (step.due is not None and step.due > c) or agents.meeting(w, npc, step):
             continue
-        _steps(w, npc, agent, c, budget, report, wake)
-        _affected(w, npc, agent, wake, talks=planning)
-        if agent.refused:  # what it last meant to do could not be done: it hears what stopped it
-            wake(npc, "blocked", f"上次没做成：{agent.refused}")
-        if events_only:
-            continue  # a zero-minute reaction does not create an extra periodic planning cycle
-        if agent.wake is not None and agent.wake <= c:
-            wake(npc, "timer", "该想想下一步了")
-        elif (planning and agent.wake is None and agent.goals and c - agent.acted >= PLANNING_GAP
-              and not any(s.status == "pending" and not agents.meeting(w, npc, s) for s in agent.plan)):
-            wake(npc, "timer", "有自己的目标，但还没有接下来的安排")
-
-
-def _affects(event, npc: str, since: int, *, talks: bool = False) -> bool:
-    """Something it went through or saw, other than its own doing. A conversation with the
-    investigators counts only with `talks` (time has jumped, or they have moved on): its voice
-    answered it in the same breath, and what it makes of it backstage can wait until they go."""
-    if event.id.endswith(SCENE) and npc in event.participants:
-        return False  # the summary of a scene it was decided in
-    return (event.reactive and event.seq > since and event.actor != npc and (talks or not event.op.startswith(TALK))
-            and (npc in event.participants or npc in event.witnesses))
-
-
-def _affected(w: World, npc: str, a: Agent, wake, *, since: int = 0, talks: bool = False) -> None:
-    for event in w.rec.events:
-        if _affects(event, npc, max(a.seen, since), talks=talks):
-            wake(npc, "affected", f"发生了：{event.text}")
-
-
-async def _serve(w: World, brain: agents.Brain | None, wakes: dict[str, tuple[str, str]], prefix: str,
-                 report: Report, batches: dict, reserve: Callable[[], bool], save: Callable[[], None]) -> None:
-    """Freeze permissions, persist each returned result, then settle in priority order.
-
-    An interrupted provider call still consumes its reserved allowance. Completed
-    sibling results survive cancellation and are revalidated rather than requested twice.
-    """
-    if prefix not in batches:
-        # Everyone woken in this slice is decided in one call, wherever they are: those in the same
-        # place can act together, and the world gets one look per slice instead of one per room.
-        group = sorted(wakes, key=lambda x: RANK[wakes[x][0]])
-        places = {w.place(npc) for npc in group}
-        batches[prefix] = [
-            {"place": next(iter(places)) if len(places) == 1 else "", "group": group,
-             "views": {npc: asdict(context.npc_view(w, npc)) for npc in group},
-             "reasons": {npc: wakes[npc][1] for npc in group}, "t": w.now, "status": "pending"}
-        ] if group else []
-    jobs = batches[prefix]
-
-    async def think(job: dict) -> None:
-        views = {npc: context.View(**view) for npc, view in job["views"].items()}
-        ask = agents.Ask(npcs=job["group"], views={npc: view.text for npc, view in views.items()},
-                         known={npc: view.facts for npc, view in views.items()}, reasons=job["reasons"],
-                         t=job["t"], place=w.name(job["place"]) if job["place"] else "")
-        try:
-            assert brain is not None
-            scene = await brain.decide(ask)
-            job["scene"] = scene.model_dump(mode="json") if scene is not None else None
-        except asyncio.CancelledError:
-            # Keep the old permission snapshot; a resumed result must still pass freshness.
-            for npc, reads in ask.consulted_reads.items():
-                if npc in job["views"]:
-                    job["views"][npc]["reads"].update(reads)
-            save()
-            raise
-        except Exception as exc:
-            job["scene"], job["error"] = None, type(exc).__name__
-        for npc, reads in ask.consulted_reads.items():
-            if npc in job["views"]:
-                job["views"][npc]["reads"].update(reads)
-        job["status"] = "ready"
-        save()
-
-    selected = []
-    for job in jobs:
-        if job["status"] != "pending":
-            continue
-        if job.get("attempts") and any(fresh(w, view["reads"]) for view in job["views"].values()):
-            report.deferred += [f"{npc}：恢复构思时依据已变化，需重新决策" for npc in job["group"]]
-            job["status"] = "done"
-            continue
-        if brain is not None and reserve():
-            job["attempts"] = job.get("attempts", 0) + 1
-            selected.append(job)
-        else:
-            report.deferred += [f"{npc}：{job['reasons'][npc]}" for npc in job["group"]]
-            job["status"] = "done"
-    save()  # record every call reservation before any provider is allowed to run
-    if selected:
-        tasks = [asyncio.create_task(think(job)) for job in selected]
-        try:
-            await asyncio.gather(*tasks)
-        finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-    for job in jobs:
-        if job["status"] != "ready":
-            continue
-        if job.get("error") == "CassetteError":
-            from ..harness.replay import CassetteError
-
-            raise CassetteError("NPC 决策的离线回放不匹配")
-        if job.get("error"):
-            report.refused.append(f"{'、'.join(job['group'])} 决策失败：{job['error']}")
-        scene = agents.Scene.model_validate(job["scene"]) if job.get("scene") is not None else None
-        views = {npc: context.View(**view) for npc, view in job["views"].items()}
-        _settle(w, scene, job["group"], views, job["reasons"], prefix, report)
-        job["status"] = "done"
-        for key in ("scene", "views"):
-            job.pop(key, None)
-        save()  # landed operations and the completion receipt share one checkpoint
-
-
-def _fixed(w: World, npc: str, a: Agent, c: int, report: Report) -> None:
-    """The fixed steps of one the keeper's plan has act this turn (Plan.initiative): what their time
-    and condition bring about lands as anyone's does (the appointment half an hour on is kept while
-    the party waits two hours); what would ask a model (a step to judge, a block, a stale plan)
-    waits for the next turn, when it is no longer held."""
-    for s in a.plan:
-        if s.status != "pending" or not s.ops or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
-            continue
-        if agents.condition_problems(w, s.when) or agents.condition_problems(w, s.achieved) or fresh(w, a.reads):
-            continue
-        if agents.holds(w, s.when):
-            ops = [*_outstanding(w, s.ops), {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
-            _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text, reads=a.reads, when=s.when)
-
-
-def _steps(w: World, npc: str, a: Agent, c: int, budget: Budget, report: Report, wake) -> None:
-    for s in a.plan:
-        if s.status != "pending" or (s.due is not None and s.due > c) or agents.meeting(w, npc, s):
-            continue  # not yet; or what it does on meeting the investigators, for its voice
-        problems = agents.condition_problems(w, s.when) + agents.condition_problems(w, s.achieved)
-        if s.completion == "state" and not s.started and not s.achieved and not s.ops:
-            problems.append("旧计划缺少完成依据，需重新规划")
+        source = f"step:{npc}:{step.id}:{step.started}"
+        problems = agents.condition_problems(w, step.when) + agents.condition_problems(w, step.achieved)
+        evidence = {ref: w.version(ref) for ref in agent.reads}
         if problems:
-            # Older saves may contain invented IDs or an unsupported condition.
-            # Make the fault observable and ask the NPC to reconsider, not wait forever.
             note = "；".join(problems)
-            w.apply(AdvancePlan(id=f"{npc}:{s.id}:{s.started}:invalid", npc=npc, step=s.id, status="blocked", note=note, actor=npc))
-            report.blocked.append(f"{npc}:{s.id}")
-            wake(npc, "blocked", f"计划条件无效，需重新安排：{s.text}（{note}）")
-            continue
-        if agents.holds(w, s.when):
-            if s.ops and not fresh(w, a.reads):
-                ops = [*_outstanding(w, s.ops), {"kind": "step", "npc": npc, "step": s.id, "status": "done"}]
+            w.apply(AdvancePlan(id=f"{source}:invalid", npc=npc, step=step.id, status="blocked", note=note, actor=npc))
+            report.blocked.append(f"{npc}:{step.id}")
+            _notice(w, source, npc, "blocked", f"计划条件无效：{step.text}（{note}）", evidence=evidence)
+        elif agents.holds(w, step.when):
+            moved = fresh(w, agent.reads)
+            if step.ops and not moved:
+                ops = [*_outstanding(w, step.ops), {"kind": "step", "npc": npc, "step": step.id, "status": "done"}]
                 mark = len(report.refused)
-                if not _land(w, ops, prefix=f"{npc}:{s.id}:{s.started}", actor=npc, report=report, text=s.text,
-                             reads=a.reads, when=s.when):
-                    why = "；".join(p.partition(" ")[2] or p for p in report.refused[mark:])[:160]
-                    wake(npc, "blocked", f"计划未能执行，需处理实际阻碍：{s.text}" + (f"（{why}）" if why else ""))
-                    report.blocked.append(f"{npc}:{s.id}")
-            elif s.ops:
-                wake(npc, "stale", f"计划依据的事变了：{s.text}（{'、'.join(fresh(w, a.reads))}）")
-            elif s.woke is None:
-                wake(npc, "due", f"该做了：{s.text}")
-        elif s.due is not None and c - s.due >= budget.grace:
-            w.apply(AdvancePlan(id=f"{npc}:{s.id}:{s.started}:blocked", npc=npc, step=s.id, status="blocked", note=f"条件没满足：{s.when}", actor=npc))
-            report.blocked.append(f"{npc}:{s.id}")
-            wake(npc, "blocked", f"计划受阻：{s.text}")
+                if not _land(w, ops, prefix=f"{npc}:{step.id}:{step.started}", actor=npc, report=report,
+                             text=step.text, reads=agent.reads, when=step.when):
+                    why = "；".join(report.refused[mark:])
+                    _notice(w, source, npc, "blocked", f"计划无法执行：{step.text}（{why}）", evidence=evidence)
+                    if f"{npc}:{step.id}" not in report.blocked:
+                        report.blocked.append(f"{npc}:{step.id}")
+        elif step.due is not None and c - step.due >= GRACE:
+            w.apply(AdvancePlan(id=f"{source}:blocked", npc=npc, step=step.id, status="blocked",
+                                note=f"条件未满足：{step.when}", actor=npc))
+            report.blocked.append(f"{npc}:{step.id}")
+            _notice(w, source, npc, "blocked", f"计划受阻：{step.text}（条件未满足：{step.when}）", evidence=evidence)
 
 
 def _outstanding(w: World, ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A step's prepared outcome less what already holds: going where one already is, is no move to
-    make (the minister holds the night's mass in the church he is in), and no reason to refuse the step."""
     return [op for op in ops if not (op.get("kind") == "move" and op.get("entity") in w.rec.entities
                                      and w.place(op["entity"]) == op.get("to"))]
-
-
-def _together(where: dict[str, str], accepted: set[str]) -> tuple[str, list[str]] | None:
-    """The one place where several of a call's people were together, every one of them decided:
-    a scene's summary is told there. Two such places, or one of them refused, and it is not."""
-    by_place: dict[str, list[str]] = {}
-    for npc, place in where.items():
-        by_place.setdefault(place, []).append(npc)
-    shared = [(place, people) for place, people in by_place.items() if place and len(people) > 1]
-    if len(shared) != 1 or not set(shared[0][1]) <= accepted:
-        return None
-    return shared[0]
-
-
-def _settle(w: World, scene: agents.Scene | None, group: list[str], views: dict[str, context.View],
-            reasons: dict[str, str], prefix: str, report: Report) -> None:
-    if scene is None:  # no decision came: they stay woken and are asked again later
-        report.deferred += [f"{x}：{reasons[x]}" for x in group]
-        return
-    report.woke += [f"{x}：{reasons[x]}" for x in group]
-    where = {npc: w.place(npc) for npc in group}  # as they stood when the call was answered
-    accepted = set()
-    for d in scene.decisions:
-        if d.npc not in group:
-            report.refused.append(f"{d.npc} 不在这场戏里")
-            continue
-        if moved := fresh(w, views[d.npc].reads):
-            report.deferred.append(f"{d.npc}：构思期间依据发生变化，需重新决策（{'、'.join(moved)}）")
-            if a := w.rec.agents.get(d.npc):
-                a.wake = w.now
-            continue
-        if bad := agents.foreign(w, d.npc, d.basis, group):
-            # One call decides for several people: a decision resting on what only another of them
-            # knows is not this NPC's to make.
-            report.refused.append(f"{d.npc} 的依据出自别人那一段资料：{'、'.join(bad)}")
-            if a := w.rec.agents.get(d.npc):
-                a.wake, a.refused = w.now, "那个决定依据了他并不知道的事"
-            continue
-        ops = []
-        for op in d.ops:
-            if isinstance(op, SetPlan) and not op.reads:
-                op = op.model_copy(update={"reads": views[d.npc].reads})
-            ops.append(op.model_dump(mode="json"))
-        mark = len(report.refused)
-        if not _land(w, ops, prefix=f"{prefix}:{d.npc}", actor=d.npc, report=report, text=d.judge or d.notice,
-                     reads=views[d.npc].reads):
-            # A failed decision must remain eligible on the next turn, told what stopped it,
-            # instead of sleeping for four hours.
-            if a := w.rec.agents.get(d.npc):
-                a.wake, a.refused = w.now, "；".join(p.partition(" ")[2] or p for p in report.refused[mark:])[:200]
-            report.deferred.append(f"{d.npc}：行动未能执行，需重新决策")
-            continue
-        accepted.add(d.npc)
-        if a := w.rec.agents.get(d.npc):
-            a.wake, a.refused = w.now + d.wait, ""
-            if d.mood:
-                a.mood = d.mood
-                w.touch(a)
-    if scene.summary and (together := _together(where, accepted)):
-        place, people = together
-        op = Occur(id=f"{prefix}{SCENE}", actor=people[0], text=scene.summary, place=place, participants=people)
-        if problems := agents.vet(w, people[0], op):
-            report.refused.extend(problems)
-        else:
-            r = w.apply(op)
-            (report.landed.append(r.op) if r.ok else report.refused.extend(r.problems))
-    for npc in accepted:
-        if a := w.rec.agents.get(npc):
-            # Other groups may already have committed after this view was captured.
-            # Their new events must remain unread, so they can wake this NPC later.
-            a.seen, a.acted = views[npc].seen, w.now
-            for s in a.plan:  # it has thought about these now; its timer brings it back to them
-                if s.status == "pending" and (s.due is None or s.due <= w.now) and s.woke is None:
-                    s.woke = w.now
-            if not any(isinstance(op, SetPlan) for d in scene.decisions if d.npc == npc for op in d.ops):
-                a.reads = {ref: version for ref, version in views[npc].reads.items() if ref != f"agent:{npc}"}
-            if a.wake is not None and a.wake <= w.now:
-                a.wake = None

@@ -20,7 +20,7 @@ def table():
     module = Module.load(EXAMPLE)
     state = Game.new(module, [module.pregens[0]])
     roles = {role: SCRIPTED for role in config.DEFAULT_ROLES}
-    cast = Cast(config.Config(roles=roles, minds=0, visual_limit=0, imagegen=False, search="none"), module)
+    cast = Cast(config.Config(roles=roles, visual_limit=0, imagegen=False, search="none"), module)
     return cast, state
 
 
@@ -30,6 +30,7 @@ def table():
     {"tool": "world_preview", "operations": [{"kind": "follow", "npc": "warden", "leader": "chen"}]},
     {"tool": "world_commit", "operations": [{"kind": "follow", "npc": "warden", "leader": "chen"}]},
     {"tool": "lore", "query": "钟楼窗边的痕迹", "keywords": ["钟楼"], "max_tokens": 700},
+    {"tool": "director", "query": "准备报社旁的备用会面地点与所需素材，不改变调查员当前位置"},
 ])
 @pytest.mark.parametrize("continuing", [False, True])
 async def test_tools_use_the_existing_keeper_session_without_speaking_or_completing_the_request(call_data, continuing):
@@ -103,6 +104,9 @@ def test_tool_and_player_telling_or_voice_are_exclusive(payload):
     {"tool": "world_query", "max_tokens": 200},
     {"tool": "lore", "query": " "},
     {"tool": "lore", "query": "钟楼", "limit": 5},
+    {"tool": "director"},
+    {"tool": "director", "query": " "},
+    {"tool": "director", "query": "准备一次遭遇", "max_tokens": 700},
     *[{"tool": "world_commit", "operations": [{"kind": "follow", field: "untrusted"}]}
       for field in ("actor", "id", "request_id", "reads")],
 ])

@@ -525,7 +525,8 @@ async def test_a_sensible_unwritten_action_opens_a_new_line(module, fake):
     assert "newsstand" in module.location("square").exits and module.npc("paperboy").location == "newsstand"
     assert any("报童凑上来" in n for n in turn.notes)  # the keeper is told how to tell it
     assert [p["kind"] for p in game.state.improv] == ["展开"]
-    assert any(e["type"] == "improv" and "报童小六" in e["summary"] for e in events)
+    assert any(e["type"] == "improv" for e in events)
+    assert not any("summary" in e or "reason" in e for e in events if e["type"] == "improv")
 
 
 async def test_an_outrageous_action_plays_out_and_costs_something(module, fake):

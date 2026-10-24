@@ -158,7 +158,7 @@ async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarte
             b = resumed._context(friend.id)
             await eventually(lambda: b.open and not b.scene.pending_turn)
             assert b.scene.at == 601  # A's ten-minute walk did not consume B's opportunity to act.
-            await y.send_json({"t": "done"})  # B explicitly allows time to pass before A's later result.
+            await y.send_json({"t": "done"})  # Passing here does not couple two independent scene clocks.
             done_x = await until(x, lambda msg: msg.get("ev", {}).get("type") == "keeper_end")
             assert done_x["ev"]["text"] == "zhouheng|office|现场继续。"
             assert done_y["ev"]["text"] == "lin|square|现场继续。"
@@ -166,7 +166,7 @@ async def test_actual_move_rejects_late_input_and_restores_a_new_scenes_unstarte
             assert a is not b and a.cast is not b.cast and len(resumed_casts) == 2
             # keeper_end is the delivered narration, before the turn journal is closed.
             await eventually(lambda: not a.state.pending_turn and not b.state.pending_turn)
-            assert a.scene.at == b.scene.at == 611
+            assert (a.scene.at, b.scene.at) == (611, 601)
             original_calls = [row for cast in resumed_casts.values() for row in cast.inputs if row["text"] == QUEUED]
             assert original_calls == [{"who": friend.id, "text": QUEUED, "at": 600, "received": 600, "place": "square"}]
             assert not any(row["text"] == MOVE for cast in resumed_casts.values() for row in cast.inputs)

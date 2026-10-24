@@ -54,7 +54,7 @@ from . import control, variants
 from .style import Loaded, module_of
 
 GONE = ("死亡", "失踪")
-BACKGROUND = {"world", "summarizer", "progress", "judge"}
+BACKGROUND = {"summarizer", "progress", "judge"}
 
 
 # -- the recorded session --------------------------------------------------------------------------
@@ -433,7 +433,6 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
     cast.backstage = not blind
     game = Game(m, st, cast, Rules(dice=Loaded(dice)))  # type: ignore[arg-type]
     game.director_wait = None  # nobody is waiting: a plan the turn asks for lands in it
-    game.world_later = True  # as on a screen: the NPCs' own decisions come after the turn is told
     if pairable(given):
         _feed(cast, given)  # type: ignore[arg-type]
     watch = control.Watch(snaps)
@@ -454,11 +453,9 @@ async def replay(m_dir: Path, before: dict[str, Any], text: str, dice: list[int]
                 if offer is None:
                     break
                 inp = Command(resume="drop")  # a failed roll stays failed, as most players leave it
-            if game._world_task is not None:  # counted with the turn, though nobody waited for it
-                await asyncio.gather(game._world_task, return_exceptions=True)
         report = game.told.report if game.told is not None else ""
         shown.append({"type": "hints", "lines": [line.removeprefix("备注：") for line in report.splitlines() if "端倪" in line]})
-        shown.append({"type": "woke", "lines": [x for r in game.debug_world for x in r.woke]})  # who decided backstage, and why
+        shown.append({"type": "backstage", "lines": [x for r in game.debug_world for x in r.pending]})
         shown.append({"type": "initiative", "items": [x.model_dump() for x in getattr(game, "initiative", [])]})
         journal = getattr(game, "debug_journal", None)
         rows = [r for r in (journal.read(kind="scene")[0] if journal else []) if r.get("run") == journal.run]
@@ -563,7 +560,7 @@ async def run(slot: str, *, turns: str = "", recorded_only: bool = False, out: P
                     row["replayed"]["ruling"] = ruling
                     hints = next((e["lines"] for e in shown if e.get("type") == "hints"), [])
                     row["replayed"]["problems"] = await judge(m2, st, turn, before, text, ruling, row["replayed"], hints)
-                    row["replayed"]["woke"] = next((e["lines"] for e in shown if e.get("type") == "woke"), [])
+                    row["replayed"]["backstage"] = next((e["lines"] for e in shown if e.get("type") == "backstage"), [])
                     row["replayed"]["paired"] = pairable(paired.get(turn))
                     row["replayed"]["initiative"] = next((e["items"] for e in shown if e.get("type") == "initiative"), [])
                     row["replayed"]["control"] = next(({k: v for k, v in e.items() if k != "type"} for e in shown
@@ -658,17 +655,13 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if calls:
             out["cost_usd"] = round(sum(c["cost"] for c in calls), 4)
             out["model_seconds_per_turn"] = round(sum(c["seconds"] for c in calls) / len(done), 1)
-            # What the player sits through: not the NPCs' own decisions, the folding of old
-            # conversation or the 进展 page, which run beside the game (nor this eval's judge).
+            # The player's wait excludes asynchronous memory/progress maintenance and
+            # this eval's judge. Requested scene preparation is part of the wait.
             waited = [c for c in calls if c["agent"] not in BACKGROUND]
             out["wait_seconds_per_turn"] = round(sum(c["seconds"] for c in waited) / len(done), 1)
             out["calls_per_turn"] = round(len(calls) / len(done), 1)
-            # Each turn starts again from the save: an NPC woken once in play is woken again on every
-            # replayed turn, so the backstage calls are not comparable with a game; what is, is how
-            # many different (NPC, reason) wakes the whole run had.
-            out["world_calls_not_comparable"] = sum(c["agent"] == "world" for c in calls)
-        if any("woke" in x for x in done):
-            out["woke_pairs"] = len({line for x in done for line in x.get("woke", [])})
+        if any("backstage" in x for x in done):
+            out["pending_backstage"] = len({line for x in done for line in x.get("backstage", [])})
         out["clue_slips"] = {k: sum(len(x.get("clues", {}).get(k, [])) for x in done) for k in ("missed_told", "early_told")}
         out["rules"] = {k: sum(len(x.get("rules", {}).get(k, [])) for x in done) for k in ("secret_spoken", "unhurt", "nobody", "absent")}
         if controls := [x["control"] for x in done if x.get("control")]:

@@ -243,7 +243,7 @@ async def test_keeper_media_use_separate_receipts_for_two_responses_in_the_same_
     module = Module.load(EXAMPLE)
     module.art["presentation_test"] = "[ a dark room ]"
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     events = []
 
@@ -269,7 +269,7 @@ async def test_keeper_media_use_separate_receipts_for_two_responses_in_the_same_
 async def test_a_private_keeper_call_uses_isolated_transcripts_and_the_keeper_role(fake):
     module = Module.load(EXAMPLE)
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     game = Game(module, state, cast, Rules(dice=fake))
     before = copy.deepcopy(state.transcripts)
@@ -297,7 +297,7 @@ async def test_a_split_player_private_reply_reads_their_own_place_and_current_qu
     state.add("system", f"对守秘人（私信）：{question}", who=second.name, audience=[second.id])
     state.add("keeper", "你还未检查过柜子。", who="守秘人", audience=[second.id])
     state.add("keeper", "另一人的私密约定，不应出现在这封信里。", who="守秘人", audience=[first.id])
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     game = Game(module, state, cast, Rules(dice=fake))
     SCRIPT.append({"text": "你仍在报社，柜子的状态需要正式检查。"})
@@ -316,7 +316,7 @@ async def test_a_split_player_private_reply_reads_their_own_place_and_current_qu
 async def test_a_real_keeper_response_can_introduce_a_person_and_set_their_personal_appearance(fake):
     module = Module.load(EXAMPLE)
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     game = Game(module, state, cast, Rules(dice=fake))
     SCRIPT.append({"scene": {"people": [{"id": "visitor", "name": "访客", "look": "灰色外套"}],
@@ -338,7 +338,7 @@ async def test_a_failed_media_delivery_resumes_the_same_keeper_receipt_without_a
     module.art["resume_image"] = "[]"
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     state.pending_turn = {"input": "我看向房间"}
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
 
     async def interrupted(ev):

@@ -335,7 +335,7 @@ async def test_graph_retry_resumes_a_saved_entry_without_repeating_the_roll_time
 async def test_actual_arbiter_reads_the_origin_and_does_not_claim_the_destination_was_reached(module, fake, harness_sandbox):
     module.location("square").keeper = "广场的当前哨卡。"
     module.location("tower").keeper = "钟楼内部尚未到达的房间。"
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, visual_limit=0, minds=0), module)
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, visual_limit=0), module)
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     game = Game(module, state, cast, Rules(dice=fake))
     SCRIPT.append({"needs_roll": True, "skill": "潜行", "minutes": 3})

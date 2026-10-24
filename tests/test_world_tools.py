@@ -175,7 +175,7 @@ async def test_harness_typed_tool_arguments_execute_a_real_world_preview(world, 
     assert schema["properties"]["reads"]["type"] == "object"
     assert {t.name for t in tools} == {"world_query", "world_preview"}
     assert all("actor" not in t.args for t in tools)
-    agent = Agent("world", "只读取和预演", tools, cfg=cfg, on_event=lambda kind, data: observations.append((kind, data)))
+    agent = Agent("keeper", "只读取和预演", tools, cfg=cfg, on_event=lambda kind, data: observations.append((kind, data)))
     try:
         result = await agent.run("预演去广场")
         assert result.finished and result.answer == "尚未执行行动" and world.place("warden") == "tower"

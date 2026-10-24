@@ -19,7 +19,7 @@ async def test_prepare_accepts_a_false_public_agreement_without_forcing_follow_o
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     state.location = "tower"
     state.turn = 1
-    cfg = config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, minds=0, visual_limit=0)
+    cfg = config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, visual_limit=0)
     cast = Cast(cfg, module)
     events = []
 
@@ -70,7 +70,7 @@ async def test_partial_travel_consent_keeps_its_destination_and_waits_for_the_pl
     state.location = "tower"
     state.turn = 1
     state.heard.update({"square": "广场", "office": "报社"})
-    cfg = config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, minds=0, visual_limit=0)
+    cfg = config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, visual_limit=0)
     cast = Cast(cfg, module)
     events = []
 

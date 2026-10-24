@@ -238,8 +238,6 @@ class GameScreen(Screen):
         self.query_one(DiceTray).tumbling = cfg.animations
         self.game.director_wait = PLAY_WAIT  # someone is waiting: a slow plan lands next turn instead
         self.game.write_progress = True  # someone reads it: the 进展 page
-        self.game.world_later = True  # NPCs decide while the player reads, not while they wait
-        self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
         channels.listeners.append(self._fell_back)
         paths.games().mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(paths.checkpoints())
@@ -448,7 +446,10 @@ class GameScreen(Screen):
         scene = found.first()
         scene.style_name = self.app.art_style  # type: ignore[attr-defined]
         scene.when = time_of_day(self.state.minutes)  # lit before the first frame, no bright flash
-        if shown := self._media_slots.get("scene"):
+        shown = self._media_slots.get("scene")
+        if shown is not None and (anchor := presentation.scene_location(shown)) and anchor != loc_id:
+            shown = None  # a local close-up cannot cover every later location
+        if shown is not None:
             payload = shown["payload"]
             scene.show(shown.get("title") or loc.name, payload.get("art", ""), payload.get("colors"),
                        payload.get("picture"), description="", sky=self._sky(loc_id), people=())
@@ -492,6 +493,8 @@ class GameScreen(Screen):
             self._media_papers[h["id"]] = payload
         if not display:
             return
+        if slot == "scene" and not presentation.scene_location(ev):
+            ev = {**ev, "location": self.state.location}
         self._media_slots[slot] = ev
         if slot == "scene":
             self._scene(self.state.location)
@@ -508,7 +511,7 @@ class GameScreen(Screen):
             self.story.add("handout", Text(f"▤ 材料：{h['title']}（F2 可重看）", style="bold"))
         else:
             pictures = [payload["picture"]] if payload.get("picture") else []
-            modal = HandoutModal(ev.get("title") or "插图", payload.get("art", ""), pictures, kind="插图")
+            modal = HandoutModal(ev.get("title") or "插图", "", pictures, kind="插图", fallback_art=payload.get("art", ""))
         self._media_overlay = modal
         self._flash_off()
         self.app.push_screen(modal)

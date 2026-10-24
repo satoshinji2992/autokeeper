@@ -166,7 +166,7 @@ def cue(w: World, ident: str, action: str, reason: str) -> None:
     if action == "drop":
         beat.status = "dropped"
         if (agent := w.rec.agents.get(beat.actor)) is not None:
-            agent.wake, agent.refused = w.now, f"守秘人撤回安排：{reason}"
+            agent.refused = f"守秘人撤回安排：{reason}"
     elif action in ("play", "hold"):
         beat.cue = action
 
@@ -214,5 +214,5 @@ def play(w: World, beat: Beat) -> list[str]:
         beat.note = "；".join(problems)[:200]
     if problems and (a := w.rec.agents.get(beat.actor)) is not None:
         # What it meant to do no longer fits: it thinks again, knowing why.
-        a.wake, a.refused = w.now, f"{beat.text or '原先的安排'}没做成：{'；'.join(problems)}"[:200]
+        a.refused = f"{beat.text or '原先的安排'}没做成：{'；'.join(problems)}"[:200]
     return problems

@@ -1,4 +1,4 @@
-"""Actual sockets: a quiet scene's KP may cut blank time, never another player's choice."""
+"""Actual reunions may cut blank time; unrelated scenes need no clock consultation."""
 
 from __future__ import annotations
 
@@ -45,12 +45,15 @@ def make_hub(fake, factory, *, disconnect_ai=False):
     hub.m.foreshadow.clear()
     hub.m.agendas.clear()
     hub.m.location("tower").within = None
+    hub.m.location("tower").travel_minutes["square"] = 20
     hub.window = 0.01
     return hub
 
 
 class ClockCast(TableCast):
     async def intent(self, state, text):
+        if "会合" in text:
+            return Action(kind="move", summary=text, destination="square")
         return Action(kind="use", summary=text)
 
     async def arbiter(self, state, action, at=None, **kwargs):
@@ -80,7 +83,7 @@ async def test_quiet_scene_kp_allows_bounded_cut_without_inventing_an_action(fak
             note = {"original": "有空去书房", "remaining": "之后再去书房", "reason": "暂留意图，不是正在执行"}
             if with_note:
                 hub.state.unfinished["lin"] = note
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await asyncio.wait_for(entered.wait(), 5)
             assert calls[0][:3] == ("lin", 600, 620)
             assert not calls[0][3]  # no other scene's raw action or dialogue is forwarded
@@ -117,7 +120,7 @@ async def test_declined_cut_keeps_input_open_and_is_not_polled_repeatedly(fake):
             a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
             await until(a, pool_open)
             await until(b, pool_open)
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await eventually(lambda: len(calls) == 1 and hub._context("lin").time_task.done())
             for _ in range(5):
                 hub._scene_tables.runtime._notify()
@@ -151,7 +154,7 @@ async def test_grace_period_reconnect_retries_a_time_approval_that_expired_while
             a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
             await until(a, pool_open)
             await until(b, pool_open)
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await eventually(lambda: len(calls) == 1)
             worker = hub._context("lin")
             await b.close()
@@ -225,8 +228,8 @@ async def test_an_actual_unanswered_roll_cannot_be_fast_forwarded(fake):
             await until(b, pool_open)
             await b.send_json({"t": "act", "text": "我要掷骰侦查"})
             offer = (await until(b, lambda msg: msg["t"] == "offer"))["offer"]
-            await a.send_json({"t": "act", "text": "办理长行动"})
-            await until(a, lambda msg: "等待其他现场" in msg.get("ev", {}).get("text", ""))
+            await a.send_json({"t": "act", "text": "去广场会合"})
+            await until(a, lambda msg: "衔接会合场景" in msg.get("ev", {}).get("text", ""))
             assert not calls and hub._context("lin").state.minutes == 600
             assert list(fake.values) == [30]
             await b.send_json({"t": "respond", "id": offer["respond_id"], "choice": "roll"})
@@ -262,7 +265,7 @@ async def test_new_declaration_invalidates_even_a_cancellation_resistant_clock_r
             a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
             await until(a, pool_open)
             await until(b, pool_open)
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await asyncio.wait_for(entered.wait(), 5)
             await b.send_json({"t": "act", "text": "我要掷骰侦查"})
             await until(b, lambda msg: msg["t"] == "offer")
@@ -296,7 +299,7 @@ async def test_shutdown_cancels_a_clock_proposal_without_committing_its_late_agr
             a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
             await until(a, pool_open)
             await until(b, pool_open)
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await asyncio.wait_for(entered.wait(), 5)
             worker = hub._context("lin")
             proposal = worker.time_task
@@ -316,7 +319,7 @@ async def test_handoff_request_uses_the_earliest_live_blocked_action_and_is_boun
     a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
     try:
         runtime.scenes[a].pending_turn = {"input": "原声明"}
-        runtime.reserve(a, Action(kind="use", summary="长行动"), Ruling(needs_roll=False, minutes=20))
+        runtime.reserve(a, Action(kind="move", summary="前往广场会合", destination="square"), Ruling(needs_roll=False, minutes=10))
         runtime.scenes[a].reservation["blocked"] = runtime.blockers(a)
         assert runtime.time_requested(b) == 620
         assert runtime.pass_time(b, 620)
@@ -338,7 +341,7 @@ async def test_an_already_started_action_can_request_more_time_for_its_real_cost
     try:
         game = runtime.game(a)
         runtime.scenes[a].pending_turn = {"input": "已开始的行动"}
-        runtime.reserve(a, Action(kind="use", summary="原动作"), Ruling(needs_roll=False, minutes=10))
+        runtime.reserve(a, Action(kind="move", summary="前往广场会合", destination="square"), Ruling(needs_roll=False, minutes=0))
         assert runtime.pass_time(b, 610)
         await runtime.wait(a)
         turn = Turn()
@@ -367,7 +370,7 @@ async def test_a_saved_bounded_permission_resumes_the_original_time_only_once(fa
     restored = None
     try:
         runtime.scenes[a].pending_turn = {"input": "原来的长行动"}
-        runtime.reserve(a, Action(kind="use", summary="原动作"), Ruling(needs_roll=False, minutes=20))
+        runtime.reserve(a, Action(kind="move", summary="前往广场会合", destination="square"), Ruling(needs_roll=False, minutes=10))
         runtime.scenes[a].reservation["blocked"] = runtime.blockers(a)
         runtime.pass_time(b, 620)
         saved = GameState.model_validate_json(runtime.state.model_dump_json())
@@ -406,7 +409,7 @@ async def test_a_world_revision_requires_a_fresh_kp_decision_before_the_cut(fake
             a, b = await joined(http, hub, "zhouheng"), await joined(http, hub, "lin")
             await until(a, pool_open)
             await until(b, pool_open)
-            await a.send_json({"t": "act", "text": "办理长行动"})
+            await a.send_json({"t": "act", "text": "去广场会合"})
             await eventually(lambda: len(calls) == 1)
             assert hub.game.world.apply(SetFlag(flag="bell_stopped")).ok
             gates[0].set()

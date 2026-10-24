@@ -114,11 +114,8 @@ class SettingsModal(ModalScreen[None]):
 
     def _model_summary(self) -> Text:
         cfg = config.load()
-        world = cfg.role("world")
-        inherited = "（随裁定配置）" if "world" not in cfg.roles else "（单独配置）"
         own = config.ui_settings().get("role_models", {})
-        return Text(f"当前：{cfg.preset} · {cfg.mode} · {cfg.role('keeper').model}\n"
-                    f"世界推演：{world.model} · 思考 {world.effort or '关'}{inherited}"
+        return Text(f"当前：{cfg.preset} · {cfg.mode} · {cfg.role('keeper').model}"
                     + (f"\n单独指定：{'、'.join(config.ROLES_SHOWN[r][0] for r in own)}" if own else ""), style="dim")
 
     @on(Button.Pressed, "#settings-models")

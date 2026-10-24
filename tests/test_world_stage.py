@@ -10,7 +10,6 @@ from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.world import ops as O
 from autokeeper.world import scheduler, stage
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
 from .test_engine import make
@@ -29,12 +28,12 @@ async def test_backstage_work_lands_at_once_and_work_in_front_of_the_party_waits
     w.apply(O.SetPlan(npc="preacher", steps=[Step(id="preach", text="在广场布道", due=w.now + 1,
                                                   ops=[{"kind": "occur", "text": "布道者站上木箱开始布道", "place": "square"}])]))
     w.apply(O.Move(entity="preacher", to="square", actor="director"))
-    report = await scheduler.advance(w, None, w.now, w.now + 5)
+    report = await scheduler.advance(w, w.now, w.now + 5)
     texts = [e.text for e in w.rec.events]
     assert "守钟人在齿轮间里上油" in texts  # up in the tower, away from them: it simply happened
     assert "布道者站上木箱开始布道" not in texts and [b.actor for b in stage.waiting(w)] == ["preacher"]
     assert report.staged == [stage.waiting(w)[0].id]
-    again = await scheduler.advance(w, None, w.now + 5, w.now + 10)
+    again = await scheduler.advance(w, w.now + 5, w.now + 10)
     assert not again.staged and len(stage.waiting(w)) == 1  # the same step is not queued twice
     assert stage.play(w, stage.waiting(w)[0]) == []
     assert any(e.text == "布道者站上木箱开始布道" and e.visibility == "public" for e in w.rec.events)
@@ -44,12 +43,12 @@ async def test_a_beat_that_no_longer_fits_is_dropped_and_its_author_thinks_again
     w = staged(location="tower")
     w.apply(O.SetPlan(npc="warden", steps=[Step(id="go", text="下楼去广场", due=w.now + 1,
                                                 ops=[{"kind": "move", "entity": "warden", "to": "square"}])]))
-    await scheduler.advance(w, None, w.now, w.now + 2)
+    await scheduler.advance(w, w.now, w.now + 2)
     beat = stage.waiting(w)[0]
     assert beat.leaving == ["warden"]
     w.apply(O.Condition(entity="warden", status="死亡", actor="director"))
     assert stage.play(w, beat) and beat.status == "dropped"
-    assert w.entity("warden").at == "tower" and w.agent("warden").wake == w.now
+    assert w.entity("warden").at == "tower" and w.agent("warden").refused
 
 
 async def test_a_held_step_whose_condition_no_longer_holds_is_thought_again():
@@ -57,24 +56,11 @@ async def test_a_held_step_whose_condition_no_longer_holds_is_thought_again():
     show = Step(id="show", text="把日记摊给调查员看", due=w.now + 1, when="at:players:tower",
                 ops=[{"kind": "occur", "text": "守钟人把日记摊开在桌上", "place": "tower"}])
     w.apply(O.SetPlan(npc="warden", steps=[show]))
-    await scheduler.advance(w, None, w.now, w.now + 2)
+    await scheduler.advance(w, w.now, w.now + 2)
     [beat] = stage.waiting(w)
     w.st.location = "square"  # the party went down before it played
     assert any("条件不再成立" in p for p in stage.play(w, beat)) and beat.status == "dropped"
-    assert not any(e.text == "守钟人把日记摊开在桌上" for e in w.rec.events) and w.agent("warden").wake == w.now
-
-
-async def test_a_held_decision_resting_on_what_has_since_changed_is_decided_again():
-    w = staged(location="tower")
-    w.agent("warden").wake = w.now
-    leave = Scene(decisions=[Decision(npc="warden", ops=[O.Move(entity="warden", to="square")])])
-    await scheduler.advance(w, Canned(lambda ask: leave), w.now, w.now + 1)
-    [beat] = stage.waiting(w)
-    assert "entity:warden" in beat.reads and "agent:warden" not in beat.reads  # not its own mood and timer
-    assert w.apply(O.Condition(entity="warden", add="扭伤了脚", actor="director")).ok  # hurt meanwhile
-    assert stage.play(w, beat) == ["老守钟人的情况变了"] and beat.status == "dropped"
-    assert w.entity("warden").at == "tower" and w.agent("warden").wake == w.now
-    assert "老守钟人的情况变了" in w.agent("warden").refused  # it hears why when it thinks again
+    assert not any(e.text == "守钟人把日记摊开在桌上" for e in w.rec.events) and w.agent("warden").refused
 
 
 def test_only_the_partys_own_travel_takes_a_companion_along():
@@ -88,28 +74,6 @@ def test_only_the_partys_own_travel_takes_a_companion_along():
     assert w.apply(O.Move(entity="warden", to="square", actor="warden")).ok
 
 
-async def test_player_input_count_never_forces_someone_out_of_an_active_conversation(module, fake):
-    module.npc("warden").important = True
-    game, _, _ = make(module, fake, {}, location="tower")
-    w = game.world
-    w.apply(O.Enlist(npc="warden", places=["square"]))
-    game.brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", wait=600, ops=[
-        O.Move(entity="warden", to="square")])]))  # type: ignore[assignment]
-    game.minds = scheduler.Budget(turn=2, skip=4)
-    w.agent("warden").wake = game.state.minutes  # it means to think: it decides to go down
-    talk = Action(kind="talk", summary="周衡问守钟人钟的事", npc="warden", speech="这钟怎么了？")
-    for _ in range(6):
-        game.state.turn += 1
-        turn = await game.resolve(talk, Ruling(needs_roll=False, minutes=1))
-        await game.talk(turn)
-        assert w.entity("warden").at == "tower"  # still being talked to
-    game.state.turn += 1
-    turn = await game.resolve(Action(kind="investigate", summary="周衡转去查看齿轮"),
-                              Ruling(needs_roll=False, minutes=1))
-    assert w.entity("warden").at == "square" and any("离开了钟楼" in t for t in turn.world)
-    await game.close()
-
-
 async def test_someone_walking_in_is_told_when_it_plays(module, fake):
     module.npc("preacher").important = True
     game, cast, _ = make(module, fake, {}, location="square")
@@ -118,7 +82,6 @@ async def test_someone_walking_in_is_told_when_it_plays(module, fake):
     w.apply(O.Move(entity="preacher", to="office", actor="director"))
     w.apply(O.SetPlan(npc="preacher", steps=[Step(id="come", text="去广场", due=w.now + 5,
                                                   ops=[{"kind": "move", "entity": "preacher", "to": "square"}])]))
-    game.minds = scheduler.Budget(turn=0, skip=0)
     wait = Action(kind="wait", summary="周衡在广场等了一会儿")
     turn = await game.resolve(wait, Ruling(needs_roll=False, minutes=10))
     assert w.entity("preacher").at == "square" and any("来到广场" in t for t in turn.world)

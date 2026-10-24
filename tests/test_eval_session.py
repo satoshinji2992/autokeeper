@@ -158,16 +158,17 @@ async def test_a_slip_stands_when_both_readings_name_it():
     assert told["findings"] == {"假线索": 1, "白给": 0, "伏笔": 1, "不确定": 1}
 
 
-def test_backstage_wakes_are_counted_once_across_the_run_and_calls_are_marked():
-    def side(woke, agents):
-        return {"problems": [], "target": "", "echo": 0.0, "chars": 10, "npc": [], "woke": woke,
+def test_pending_backstage_is_reported_and_requested_preparation_counts_as_wait_time():
+    def side(pending, agents):
+        return {"problems": [], "target": "", "echo": 0.0, "chars": 10, "npc": [], "backstage": pending,
                 "calls": [{"agent": a, "seconds": 1.0, "cost": 0.001} for a in agents]}
 
-    rows = [{"turn": 1, "replayed": side(["thomas：该做了：应门"], ["keeper", "world"])},
-            {"turn": 2, "replayed": side(["thomas：该做了：应门", "asata：发生了：有人敲门"], ["keeper", "world"])}]
+    rows = [{"turn": 1, "replayed": side(["thomas：尚待判断：是否应门"], ["keeper", "director"])},
+            {"turn": 2, "replayed": side(["thomas：尚待判断：是否应门", "asata：尚待判断：是否赴约"], ["keeper", "director"])}]
     got = session.summarize(rows)["replayed"]
-    assert got["woke_pairs"] == 2  # the same wake on every replayed turn counts once
-    assert got["world_calls_not_comparable"] == 2
+    assert got["pending_backstage"] == 2
+    assert got["wait_seconds_per_turn"] == got["model_seconds_per_turn"] == 2.0
+    assert got["calls_per_turn"] == 2.0
 
 
 def test_an_npc_telling_what_it_knows_is_no_slip():

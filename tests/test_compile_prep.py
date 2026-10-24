@@ -18,6 +18,7 @@ from autokeeper.module import adapt, compiler, conditions, yamledit
 from autokeeper.module.graph import audit
 from autokeeper.module.schema import Agenda, Mechanic, Module, Move
 from autokeeper.world import adapters, agents, context, scheduler
+from autokeeper.world import ops as O
 from autokeeper.world.store import World
 
 BUNDLED = ["zhuishuren", "dongxuezhixia", "fallout3-youxierenyouyanbujin"]
@@ -306,24 +307,24 @@ def test_case_liquor_bought_is_not_liquor_given():
     assert not [f for f in conditions.findings(m) if f.ref == "agendas:jefferson:take_bribe"]
     w = world(m, "mudi", 12 * 60)
     assert "收下酒" not in context.npc_brief(w, "jefferson", query="下午好")
-    w.st.flags.append("has_liquor")
+    assert w.apply(O.SetFlag(flag="has_liquor", actor="engine")).ok
     brief = context.npc_brief(w, "jefferson", query="下午好，您在这里干了多久？")
     assert "收下酒，态度松动，说出深夜在那块墓碑旁见过人影（只在调查员当面把酒递给你、你收下以后；只是买到了酒不算时才这样）" in brief
 
 
-async def test_case_what_the_players_learned_privately_wakes_no_one_without_the_grounds():
-    """玩家私下得到情报：斯坦利醒来想的理由里写着要有人报告或亲眼看到，他自己的资料里没有就不抓人。"""
+async def test_case_what_the_players_learned_privately_keeps_the_npcs_grounds_explicit():
+    """玩家私下得到情报：KP 准备里仍须有人报告或亲眼看到，不能把玩家获知当作斯坦利获知。"""
     m = Module.load(paths.MODULES / "fallout3-youxierenyouyanbujin")
     for a in m.agendas:
         for s in a.steps:
             if s.id == "stanley_arrests":
                 s.text, s.only_if = "带人上门抓人，关进警局后面的牢房。", "有手下或有福者向他报告、或他亲眼看到调查员在追查教授和望远镜"
     w = world(m, m.start, 12 * 60)
-    w.st.flags.append("learned_telescope")
-    brain = agents.Canned(lambda ask: agents.Scene(decisions=[agents.Decision(npc=npc, wait=600) for npc in ask.npcs]))
-    await scheduler.advance(w, brain, w.now, w.now, events_only=True)
-    reasons = [ask.reasons["stanley"] for ask in brain.asks if "stanley" in ask.reasons]
-    assert reasons and all("只在有手下或有福者向他报告、或他亲眼看到调查员在追查教授和望远镜时才这样" in r for r in reasons)
+    assert w.apply(O.SetFlag(flag="learned_telescope", actor="engine")).ok
+    await scheduler.advance(w, w.now, w.now, events_only=True)
+    notes = scheduler.pending(w, ["stanley"])
+    assert any("只在有手下或有福者向他报告、或他亲眼看到调查员在追查教授和望远镜时才这样" in note.text for note in notes)
+    assert not any(event.kind == "move" and event.actor == "stanley" for event in w.rec.events)
 
 
 def test_case_polite_small_talk_does_not_replay_the_greeting():

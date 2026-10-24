@@ -113,10 +113,12 @@ class Canned(hm.Model):
 
     told: list[str] = []
     schemas: list[str] = []
+    labels: list[str] = []
 
     async def _call(self, messages, *, schema, images, on_delta):
         Canned.told.append(messages[-1]["content"])
         Canned.schemas.append(schema.get("title", "") if schema else "")
+        Canned.labels.append(self.label)
         text = "雾还没散，你仿佛听见了什么。"
         if schema and schema.get("title") == "Telling":  # the keeper: the scene as it was, then the words
             return Reply(text="", data={"scene": {}, "text": text})
@@ -142,9 +144,12 @@ async def test_the_scripted_run_is_the_same_game_every_time(monkeypatch, tmp_pat
     for _ in range(2):
         Canned.told = []
         Canned.schemas = []
+        Canned.labels = []
         s = await style.run(paths.MODULES / "zhuishuren", label="t", out=tmp_path / "out.json")
         reports.append(Canned.told)
-        assert Canned.schemas == ["Telling"] * 10  # fixed plans and voices never ask the live model
+        calls = list(zip(Canned.labels, Canned.schemas, strict=True))
+        assert calls == [("keeper", "Telling")] * 10 + [("summarizer", "")]
+        # Fixed plans and voices never call a model; the keeper's full window is compacted once.
     assert s["narrations"] == 10 and s["hits"]["仿佛"] == 10 and s["usage"]["calls"] == 10
     assert reports[0] == reports[1]  # same turns, same dice: only the keeper could differ
     told = "\n".join(reports[0])

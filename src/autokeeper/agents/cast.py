@@ -63,7 +63,7 @@ from ..world.ops import AddFact, Enlist, Follow, SetPlan
 from ..world.record import Step
 from ..world.scene import Communication, Person, Scene
 from .aftermath import AFTERMATH, Aftermath
-from .director import DIRECTOR_SYSTEM, REVIEW_SYSTEM, Improv, Review
+from .director import DIRECTOR_SYSTEM, Improv
 from .director import context as director_context
 from .encounter import (
     ARBITER_ENCOUNTER,
@@ -430,9 +430,10 @@ class KeeperCall(BaseModel):
 class KeeperToolCall(BaseModel):
     model_config = {"extra": "forbid"}
 
-    tool: Literal["world_query", "world_schema", "world_preview", "world_commit", "lore"] = Field(
-        description="按需查询本局记录、取得世界操作格式、预演或提交操作，或查询模组原文")
-    query: str = Field("", description="world_query 的检索词；lore 要查的模组资料或原文问题")
+    tool: Literal["world_query", "world_schema", "world_preview", "world_commit", "lore",
+                  "encounter_schema", "encounter", "director"] = Field(
+        description="按需查询资料、提交世界操作、请导演备场，或发起正式战斗/追逐")
+    query: str = Field("", description="world_query 的检索词；lore 的原文问题；director 的自然语言备场要求")
     limit: int = Field(20, ge=1, le=100, description="仅 world_query：每类返回记录的上限")
     scope: list[str] = Field(default_factory=list, max_length=24, description=(
         "仅 world_query：要查的明确记录引用，如 entity:warden、fact:truth、agent:warden；不填则按 query 检索"))
@@ -444,6 +445,10 @@ class KeeperToolCall(BaseModel):
         "调查员状态和模组线索走正式规则结算"))
     keywords: list[str] = Field(default_factory=list, max_length=6, description="仅 lore：辅助原文检索的具体人名、地点或物件")
     max_tokens: int = Field(1500, ge=1, le=4000, description="仅 lore：本次原文资料的最大返回 token 数")
+    encounter: dict[str, Any] | None = Field(None, description=(
+        "仅 encounter：按 encounter_schema 返回的格式填写正式战斗或追逐。"
+        "已有参与者须在现场，模组生物可首次现身；opening 留空，不替调查员声明行动；"
+        "NPC 首轮意图写 npcs，伤害由回合结算"))
 
     @model_validator(mode="after")
     def arguments(self) -> KeeperToolCall:
@@ -456,10 +461,10 @@ class KeeperToolCall(BaseModel):
                 raise ValueError("预演或提交世界操作必须填写非空 operations")
         elif self.operations:
             raise ValueError("只有 world_preview/world_commit 可以填写 operations")
-        if self.tool not in {"world_query", "lore"} and self.query:
-            raise ValueError("只有 world_query/lore 可以填写 query")
-        if self.tool == "lore" and not self.query:
-            raise ValueError("查询模组原文必须说明 query")
+        if self.tool not in {"world_query", "lore", "director"} and self.query:
+            raise ValueError("只有 world_query/lore/director 可以填写 query")
+        if self.tool in {"lore", "director"} and not self.query:
+            raise ValueError("查询原文或请求导演备场必须说明 query")
         if self.tool != "world_query" and self.limit != 20:
             raise ValueError("只有 world_query 可以设置 limit")
         if self.tool != "world_query" and self.scope:
@@ -468,6 +473,11 @@ class KeeperToolCall(BaseModel):
             raise ValueError("只有 world_schema 可以设置 kinds")
         if self.tool != "lore" and (self.keywords or self.max_tokens != 1500):
             raise ValueError("只有 lore 可以设置 keywords/max_tokens")
+        if self.tool == "encounter":
+            if not self.encounter:
+                raise ValueError("发起战斗或追逐必须填写非空 encounter")
+        elif self.encounter is not None:
+            raise ValueError("只有 encounter 可以填写 encounter")
         for operation in self.operations:
             if {"actor", "id", "request_id", "reads"} & operation.keys():
                 raise ValueError("世界操作的 actor、id、request_id、reads 由宿主绑定，不由模型指定")
@@ -671,6 +681,8 @@ ACTION_RULES = """- summary：第三人称一句话，只记录当前可执行�
   玩家明确要去的地方暂时没有可用 id，仍保留 move 与完整目的，不改成留在原地听人说话；交裁定与导演安排找路或接触，不凭空改成另一个目的地。
 - 调查员为了做这件事要先走到另一个地点（“我走到陵墓石门前看门缝”“我去书房翻日记”），destination 填那个地点，
   kind 照实填（看门缝还是 investigate）。只是远远望一眼、隔空喊话、打听那个地方，不算去，destination 留空。
+  同一现场挪到桌边、门边不另作 move；确实跨到已有相邻地点时，照填该地点 id，不因距离近就省略。未知去处仍按备场规则处理。
+  玩家指着眼前的人或物提出检查，而对象已经离场、转移或指代不明时，保留原检查意图，先交代现场与对象的差异；不自行补成去远处追索、探访或接受新任务。明确追赶、赴约或接续既定行程时才按该目的前往，职业背景和模组建议不代表玩家已选择路线。
 - 进入、穿越或避开阻碍本身就是本轮要完成的行动，成功前不能算已抵达时，kind=move、arrival_after_success=true；
   是否需要检定仍交裁定。普通赶路和先到目的地再调查，arrival_after_success=false；不靠方法中的某个词自动判成有风险。
 - speech：对 NPC 说的话、登台讲的内容，照抄原话。
@@ -814,9 +826,9 @@ KEEPER_SYSTEM = """你是 CoC 7 版跑团的守秘人，正用简体中文主持
 2. NPC 台词已直接展示给玩家，不复述或补写新的台词；有助于理解场景时，再补充动作与环境变化。
    这些话已经说出口，不是备选草稿。不能把已经邀请玩家进门写成拒绝开门，也不能说刚回应过的人始终没有应声。若存在未落实的动作，按明确返回的原因交代实际经过，不改写他说过什么。
 3. 仅叙述系统给定的检定结果。界面已提供的检定选项无需重复说明，也不自行追加重试机会、代价或线索。
-4. 以第二人称叙述。普通回合通常 80–200 字，简单应答或过渡可更短，开场与重要场景按本轮要求展开。信息交代完整即可结束，不凑篇幅，不固定以悬念、反问或行动邀请收尾，不列选项。
+4. 按实际收件人组织叙述：只给一人时可用“你”；同一段给多人时，个人动作、位置与发现用调查员姓名，换人时重新点名，不把当前行动者写成所有读者的“你”。“你们”只指明确共同参与或共同感知的人，收件不等于同行或行动。NPC 对白中的“你／您”可以保留，交代清楚在对谁说话。普通回合通常 80–200 字，简单应答或过渡可更短，开场与重要场景按本轮要求展开。信息交代完整即可结束，不凑篇幅，不固定以悬念、反问或行动邀请收尾，不列选项。
 5. 不要用 Markdown 标题和列表；需要强调时用中文引号。
-6. 天色及正文中的具体时刻以本段正式报告为准，不另编几点几分；补叙已发生的经过时使用其发生时间，不混成眼前正在发生。天气承接本局已有记录。你可结合地域、季节与眼前局势补充有来由的环境细节；改变行动条件或带来危险的变化，通过相应场面与规则操作落实。
+6. 天色及正文中的具体时刻以本段正式报告为准，不另编几点几分；补叙已发生的经过时使用其发生时间，不混成眼前正在发生。分队换场时按当前地点与在场名单承接，旧场景的未完描述不当作新场景正在发生。天气承接本局已有记录。你可结合地域、季节与眼前局势补充有来由的环境细节；改变行动条件或带来危险的变化，通过相应场面与规则操作落实。
 7. 未预写的日常应答、人物反应与现场细节，由你结合当前动机和记录就地确定并提交 scene。完整的新地点、调查路线、持续日程与规则由备场工具准备；已提交的内容成为本局资料，你结合实时局势决定怎样呈现和发展。
    行动无法成立时，根据系统结果交代具体限制，不替玩家补出失败动作或额外后果。
 8. 张力要有起伏：调查和危险时留下悬念或压力，日常场景允许平静、亲切、幽默和闲聊，不要每一轮都安排异响、怪人或催促查案。
@@ -1303,9 +1315,8 @@ class Cast:
         reply = await self._send("plan", s, state, prompt, **send)
         plan = Plan.model_validate(reply.data)
         # What it asks to look up is answered and it is asked again, twice at most; a lookup after
-        # that is not answered. A model-free loop: one JSON field, no vendor's tool calls (as the
-        # NPCs' backstage decisions, world/agents.CastBrain). A call that then fails leaves the plan
-        # it had, whose action was already filled in.
+        # that is not answered. A JSON field requests the lookup without a separate
+        # vendor tool protocol. A failed lookup leaves the plan's already-filled action intact.
         for _asked in range(LOOKUPS):
             query = plan.lookup.strip()
             if not query:
@@ -2327,6 +2338,12 @@ class Cast:
                       "tool.tool=world_query 查询本局记录（query、limit、scope）；知道记录引用时用 scope 精准查询。"
                       "lore 查询模组原文（query、keywords、max_tokens）。world_schema 按需取得操作格式（kinds 选操作类型）；"
                       "world_commit 提交 operations，必要时 world_preview 先预演。"
+                      "需要完整新遭遇、可持续互动的地点或人物、图片或规则插件时，用 director，query 写本次备场需求。"
+                      "导演准备完成后以实际回执为准；临场判断、人物日常反应和已有世界记录调整由你直接处理，不必另请导演。"
+                      "敌人主动袭击或开始追捕时，用 encounter_schema 按需查格式，再用 encounter 提交 encounter；"
+                      "已有参与者须实际在场，不隔空拉人；模组生物可经此次遭遇首次现身。"
+                      "不替调查员填写 opening，NPC 首轮意图写 npcs。"
+                      "正式遭遇按回合与应对选择结算，不在文字或世界操作里直接造成伤害；已有遭遇不重新开局。"
                       "不把预演、请求或失败操作当成已经发生；依实际回执继续。actor、id、request_id、reads 由宿主绑定，"
                       "工具不改时钟、骰点、HP、调查员规则状态或直接分发模组线索；这些走正式规则结算。"
                       "即时移动限于已过去的时段，未来动作登记计划或日程。除正在调用的工具参数外，其余参数留默认值。"
@@ -2398,6 +2415,8 @@ class Cast:
                   "不能宣称旁白优先、面板失效，也不能以私信取消压制、伤害或正式检定结果。"
                   "资料冻结于提问时刻；只澄清当时的状态和规则，回复可能晚于玩家的选择。不能宣称替换待答选项、撤销选择或重掷骰子。"
                   "已有叙述若有明显的物理矛盾，应承认并更正措辞，不为圆场擅自改变已经确认的门窗、物件或现场状态。"
+                  "玩家质疑自己为何移动或行动时，对照其原始声明；系统生成的行动摘要、角色背景和模组建议不等于玩家选择。"
+                  "若安排扩大了原意，承认理解有误，说明实际记录与尚待处理的部分，不捏造玩家说过的话为旧安排辩解。"
                   "媒体只能引用索引中已经准备的资源，且只向来信人展示。\n【模组备课；仅供主持判断，不是给玩家的答复材料】\n" + _book(self.module))
         key = f"private_keeper:{who}"
         s = self._oneshot(key, "keeper", system, PrivateTelling)
@@ -2593,25 +2612,6 @@ class Cast:
         except ValueError:
             return None
 
-    async def review(self, state: GameState, material: str) -> Review | None:
-        """The director's look backstage after a long stretch of game time (Game._look): a backstage
-        adjustment of its own if one is called for. Stateless, on the director's model; None when
-        no look was had."""
-        from ..harness.replay import CassetteError
-
-        s = self._open("review", "director", REVIEW_SYSTEM, schema=_schema(Review))
-        try:
-            reply = await self._send("review", s, state, material, bind=False)
-        except CassetteError:  # a replay that drifted must fail loudly
-            raise
-        except Exception:
-            return None
-        if not isinstance(reply.data, dict):
-            return None
-        try:
-            return Review.model_validate(reply.data)
-        except ValueError:
-            return None
 
     async def author_plugin(self, state: GameState, request: str, problems: list[str] | None = None):
         """Turn a player's one-sentence house rule into one tested plugin (tui/modals/plugins.py, the

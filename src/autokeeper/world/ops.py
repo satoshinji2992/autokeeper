@@ -539,6 +539,8 @@ class Condition(Base):
         if not (self.add or self.remove or self.status is not None):
             return ["add、remove、status 至少写一个"]
         if any(i.id == self.entity for i in w.st.investigators):
+            if self.actor != ENGINE:
+                return ["调查员的状态须由正式规则结算，人物或导演不能直接添加、移除或恢复"]
             return [] if self.status is None else ["调查员的状况由规则结算，这里只改状态"]
         return [] if _npc(w, self.entity) else [f"{self.entity} 不是调查员或 NPC"]
 
@@ -1011,8 +1013,7 @@ class Enlist(Base):
         a = w.rec.agents.get(self.npc)
         if a is None:
             n = next((x for x in w.m.npcs if x.id == self.npc), None)
-            a = w.rec.agents[self.npc] = Agent(npc=self.npc, goals=self.goals or ([n.goal] if n and n.goal else []), changed=w.rec.seq,
-                                               seen=w.rec.seq, acted=w.now)  # fmt: skip
+            a = w.rec.agents[self.npc] = Agent(npc=self.npc, goals=self.goals or ([n.goal] if n and n.goal else []), changed=w.rec.seq)  # fmt: skip
         else:
             w.touch(a)
             a.goals = self.goals or a.goals

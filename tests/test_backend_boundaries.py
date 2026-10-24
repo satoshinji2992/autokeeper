@@ -133,10 +133,12 @@ async def test_failed_time_handoff_retries_boundedly_without_granting_time_on_er
 
     monkeypatch.setattr(hub, "_send", send)
     monkeypatch.setattr(first.cast, "scene_time", scene_time, raising=False)
-    other.state.pending_turn = {"input": "调查二十分钟"}
-    tables.runtime.reserve(other.ident, Action(kind="use", summary="调查二十分钟"), Ruling(needs_roll=False, minutes=20))
+    other.state.pending_turn = {"input": "前往广场会合"}
+    tables.runtime.reserve(other.ident, Action(kind="move", summary="前往广场会合", destination=first.scene.place),
+                           Ruling(needs_roll=False, minutes=10))
     other.scene.reservation["blocked"] = tables.runtime.blockers(other.ident)
     until = tables.runtime.time_requested(first.ident)
+    assert until == first.scene.at + 20
     try:
         first.request_time(until)
         await first.time_task

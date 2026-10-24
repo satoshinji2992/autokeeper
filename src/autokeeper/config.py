@@ -23,7 +23,6 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     improv = "即兴"            # 严格: only what the module wrote; 即兴: the director fills the gaps
     imagegen = true            # pictures from Codex's image tool, when codex is installed and logged in
     showcase = true            # 大场景: a big picture over the screen at the turning points of the story
-    minds = 2                  # important NPCs' backstage decisions a turn (twice that on a long skip); 0: only their plans
     tips = false               # no first-time hints in the story (also switched in the guide, F1)
     battle_timer = true        # a fight's or a chase's round waits only so long for the choice (off by default)
     ask_every_blow = true      # asked how to answer every attack, not only the first and the dangerous ones (off by default)
@@ -41,11 +40,6 @@ or the budget runs out. Single roles are overridden in autokeeper.toml or
     model = "deepseek:deepseek-flash"
     effort = "low"             # none | low | medium | high | max
     window = 8000              # characters of conversation the harness resends
-
-    [roles.world]              # optional; otherwise the resolved arbiter route, thinking low
-    backend = "langchain"
-    model = "deepseek:deepseek-flash"
-    effort = "low"             # NPC plans and world consequences; separate from NPC dialogue
 
 Keys come from the environment; ~/.config/autokeeper/.env and ./.env are read too.
 """
@@ -98,7 +92,7 @@ DEFAULT_ROLES: dict[str, Role] = {
     # Narrates the game. Against Opus on the same scripted turns (docs/eval.md): as few stock
     # phrases, closer to the length asked for, half the latency, under half the price.
     "keeper": SONNET,
-    # Rules on checks without seeing the player's wording; the world's NPC decisions inherit it. On 19
+    # Rules on checks without seeing the player's wording. On 19
     # real rulings (docs/eval.md, 2026-10-21) Sonnet at low ruled as Opus did 18 times and gave the
     # same clues every time, about a fifth faster; Haiku skipped a roll the player asked for.
     "arbiter": replace(SONNET, effort="low"),
@@ -115,15 +109,11 @@ DEFAULT_ROLES: dict[str, Role] = {
     "card": SONNET,  # makes an investigator out of a public figure (agents/card.py); the player waits on each step
 }
 
-# Optional roles inherit the effective route, including local/global overrides. Leaving
-# them out of presets keeps older configurations and custom arbiter routes compatible.
-ROLE_PARENTS = {"world": "arbiter", "plan": "keeper"}
-# What an inherited role changes of its parent's route. Important NPCs' own decisions think
-# low, not at the arbiter's high (the user's call, 2026-10-20): at high one took 6.4 s and they
-# were four tenths of a replayed session's spend. A configured effort still wins.
+# Optional roles inherit the effective route, including local/global overrides.
+ROLE_PARENTS = {"plan": "keeper"}
 # The keeper's plan (agents/cast.Cast.plan) is on the player's wait, before any roll: the keeper's
 # model, thinking low (DeepSeek's keeper thinks high, which the telling can afford, not this).
-ROLE_EFFORT = {"world": "low", "plan": "low"}
+ROLE_EFFORT = {"plan": "low"}
 
 # The roles as the model settings list them: name, what it does. Only 读图 is sent pictures.
 ROLES_SHOWN: dict[str, tuple[str, str]] = {
@@ -132,7 +122,6 @@ ROLES_SHOWN: dict[str, tuple[str, str]] = {
     "arbiter": ("裁定", "判定是否检定及所用技能"),
     "npc": ("NPC", "扮演 NPC"),
     "director": ("导演", "补充模组未写明的情节"),
-    "world": ("世界推演", "重要 NPC 的幕后决定"),
     "investigator": ("AI 调查员", "AI 队友与观战"),
     "intent": ("解析行动", "守秘人安排失败时解析玩家输入"),
     "summarizer": ("摘要", "压缩较早的记录"),
@@ -250,7 +239,6 @@ class Config:
     visual_limit: int = 24  # illustration attempts per save, including unmetered backends
     imagegen: bool = True  # pictures from Codex's image tool where the story changes a place or a person (imagegen.py)
     showcase: bool = True  # 大场景: one big picture over the screen at the story's turning points (engine/showcase.py)
-    minds: int = 2  # important NPCs' backstage decisions a player turn; a long skip gets twice (world/scheduler.py)
     improv: str = "即兴"  # 严格: only what the module wrote; 即兴: the director fills the gaps
     mode: str = "标准"  # 经济 / 标准 / 高级剧情: the preset's thinking levels, one step down or up
     tips: bool = True  # first-time hints for new players (tui/widgets/tips.py)
@@ -606,7 +594,13 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     if fallback := given("fallback", "AUTOKEEPER_FALLBACK"):
         every.update(fallback=fallback)
     for name in (set(DEFAULT_ROLES) | set(roles)) - {"all", *ROLE_PARENTS}:
-        cfg.roles[name] = _role(_role(cfg.role(name), every), roles.get(name, {}))
+        specific = dict(roles.get(name, {}))
+        if name not in DEFAULT_ROLES and specific.get("model") and "backend" not in specific and "backend" not in every:
+            # A plugin/eval role has no preset backend. Its named route must not
+            # accidentally inherit the unknown-role Claude default.
+            backend, model = route(specific["model"])
+            specific.update(backend=backend, model=model)
+        cfg.roles[name] = _role(_role(cfg.role(name), every), specific)
     for name, parent in ROLE_PARENTS.items():
         if name in roles:
             inherited = cfg.role(parent)
@@ -634,7 +628,6 @@ def load(path: Path | None = None, *, choice: dict | None = None) -> Config:
     cfg.prices = data.get("prices", {}) if isinstance(data.get("prices"), dict) else {}
     cfg.visual_budget_usd = max(0.0, float(data.get("visual_budget_usd", cfg.visual_budget_usd)))
     cfg.visual_limit = max(0, int(data.get("visual_limit", cfg.visual_limit)))
-    cfg.minds = max(0, min(8, int(data.get("minds", cfg.minds))))
     cfg.improv = os.environ.get("AUTOKEEPER_IMPROV") or data.get("improv", cfg.improv)
     if cfg.improv not in IMPROV:
         raise ValueError(f"未知的自由度：{cfg.improv}（可选：{'、'.join(IMPROV)}）")

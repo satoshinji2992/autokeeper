@@ -129,7 +129,6 @@ class Promise(Versioned):
     status: Literal["active", "fulfilled", "broken"] = "active"
     public: bool = True
     settled: int | None = None
-    noted: bool = False  # its due time came and the parties were woken
 
 
 class Thread(Versioned):
@@ -167,7 +166,6 @@ class Step(BaseModel):
     once: SkipJsonSchema[bool | None] = None  # the module's meeting reaction (Move.once): True once only, False its way every time
     status: SkipJsonSchema[Literal["pending", "done", "blocked", "dropped"]] = "pending"
     note: SkipJsonSchema[str] = ""
-    woke: SkipJsonSchema[int | None] = None  # game minutes it last woke its NPC for a decision; the NPC's timer takes it from there
     started: SkipJsonSchema[int] = 0  # record seq when this plan was installed; completion needs a real outcome since then
 
 
@@ -192,15 +190,9 @@ class Agent(Versioned):
     reads: dict[str, int] = Field(default_factory=dict)  # versions the plan was made from
     memory: list[Memory] = Field(default_factory=list)
     mood: str = ""
-    wake: int | None = None  # game minutes it wants to think again
-    seen: int = 0  # record seq when it last decided
-    acted: int = -1  # game minutes it last decided
     places: list[str] = Field(default_factory=list)  # places it knows besides the public ones and its own
-    refused: str = ""  # why what it last meant to do could not be done; it hears this when it next wakes
-    # Only the module's fixed steps (a time or a condition, and what they bring about) run; nothing
-    # wakes it to decide (world/scheduler.py). Those the module gives an agenda but does not mark
-    # important (agents.marked); the director enlisting one makes it decide again.
-    passive: bool = False
+    refused: str = ""  # why an on-stage arrangement failed; collected as keeper attention
+    passive: bool = False  # fixed module material; no open-goal attention note
 
 
 class Event(BaseModel):
@@ -340,11 +332,37 @@ class PlaceSighting(BaseModel):
     views: dict[str, str] = Field(default_factory=dict)
 
 
+class BackstageNeed(BaseModel):
+    """A durable change for the keeper to consider, never a second agent's work queue."""
+
+    id: str
+    npc: str = ""
+    people: list[str] = Field(default_factory=list)
+    kind: str
+    source: str
+    text: str
+    evidence: dict[str, int] = Field(default_factory=dict)
+    version: int = 1
+    status: Literal["pending", "considered"] = "pending"
+    t: int = 0
+    turn: int = 0
+
+
+class ConditionValue(BaseModel):
+    """One effective value for a condition resource; retained independently of event/undo folding."""
+
+    t: int
+    seq: int
+    value: bool | str | None
+    seed: bool = False
+
+
 class WorldRecord(BaseModel):
     seq: int = 0
     seeded: list[str] = Field(default_factory=list)  # module objects already in the record
     entities: dict[str, Entity] = Field(default_factory=dict)
     facts: dict[str, Fact] = Field(default_factory=dict)
+    conditions: dict[str, list[ConditionValue]] = Field(default_factory=dict)
     relations: dict[str, Relation] = Field(default_factory=dict)
     promises: dict[str, Promise] = Field(default_factory=dict)
     threads: dict[str, Thread] = Field(default_factory=dict)
@@ -358,13 +376,10 @@ class WorldRecord(BaseModel):
     requests: dict[str, Request] = Field(default_factory=dict)
     ticks: list[str] = Field(default_factory=list)  # time advances already simulated
     simulated: int | None = None  # game minutes the world has been simulated up to (engine/game.py)
-    reviewed_at: int | None = None  # shared backstage review, once per actual time boundary across scenes
     left: dict[str, int] = Field(default_factory=dict)  # place -> record seq when the party last left it
     journal: list[Entry] = Field(default_factory=list)
-    npc_budget_turn: int = -1
-    npc_budget_calls: int = 0
-    npc_budget_limit: int = 0
-    npc_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted scheduler batches, private save data
+    backstage: dict[str, BackstageNeed] = Field(default_factory=dict)
+    schedule_work: dict[str, dict[str, Any]] = Field(default_factory=dict)  # interrupted deterministic calendar execution
     beats: list[Beat] = Field(default_factory=list)  # arrangements left for the keeper to play (world/stage.py)
     # What the turn's action lacks and so cannot do (agents/cast.Ruling.missing): nobody brings it
     # out that turn (ops.Bring).

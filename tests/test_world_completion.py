@@ -7,7 +7,6 @@ import pytest
 from autokeeper.engine.state import GameState
 from autokeeper.world import ops as O
 from autokeeper.world import scheduler, stage
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 from autokeeper.world.store import World
 from autokeeper.world.tools import Gateway
@@ -124,35 +123,6 @@ def test_a_staged_action_that_becomes_invalid_does_not_complete_the_plan():
 
     assert stage.play(w, beat) and beat.status == "dropped"
     assert w.place("warden") == "tower" and w.agent("warden").plan[-1].status == "pending"
-
-
-@pytest.mark.parametrize("checkpoint_status", ["ready", "done"])
-async def test_interrupted_decision_recovers_the_saved_result_without_another_call_or_completion(checkpoint_status):
-    w = planned(achieved="at:warden:square")
-    w.agent("warden").wake = w.now
-    w.agent("preacher").passive = True
-    brain = Canned(lambda ask: Scene(decisions=[Decision(npc="warden", ops=[completion(), move()])]))
-    saved = ""
-
-    def checkpoint():
-        nonlocal saved
-        jobs = [job for work in w.rec.npc_work.values() for batch in work["batches"].values() for job in batch]
-        if any(job["status"] == checkpoint_status for job in jobs):
-            saved = w.st.model_dump_json()
-            raise RuntimeError("disconnected")
-
-    start, end = w.now, w.now + 1
-    with pytest.raises(RuntimeError, match="disconnected"):
-        await scheduler.advance(w, brain, start, end, checkpoint=checkpoint)
-    restored = World(w.m.model_copy(deep=True), GameState.model_validate_json(saved))
-    no_call = Canned(lambda ask: pytest.fail("a saved decision must not be requested again"))
-    report = await scheduler.advance(restored, no_call, start, end)
-
-    assert not report.refused and len(brain.asks) == 1 and not no_call.asks
-    assert restored.place("warden") == "square" and restored.agent("warden").plan[-1].status == "done"
-    assert len([e for e in restored.rec.events if e.kind == "step"]) == 1
-    again = await scheduler.advance(restored, no_call, start, end)
-    assert again.repeat and len([e for e in restored.rec.events if e.kind == "step"]) == 1
 
 
 def test_gateway_preview_and_commit_use_the_same_order_and_replay_receipt():

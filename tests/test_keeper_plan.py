@@ -15,7 +15,6 @@ from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.world import ops as O
 from autokeeper.world import scheduler
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
 from .test_engine import FakeCast
@@ -207,61 +206,45 @@ async def test_a_resumed_turn_takes_who_joins_in_from_its_journal(module, fake):
     await game.close()
 
 
-async def test_one_who_joined_in_is_not_woken_backstage_in_the_same_turn(module, fake):
+async def test_keeper_voice_decisions_do_not_spawn_a_second_npc_runtime(module, fake):
     module.npc("warden").important = True
     game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
-    decided: list[list[str]] = []
-
-    async def decide(ask):
-        decided.append(list(ask.npcs))
-        return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
-
-    game.brain, game.minds = Canned(decide), scheduler.Budget()  # type: ignore[assignment]
-    w = game.world
-    w.agent("warden").wake = w.now  # he means to think now
     action = await game.parse("我看看齿轮")
     turn = await game.resolve(action, await game.rule(action))
-    await game.talk(turn)  # the world lives after the exchange (world_later off)
-    assert not turn.joined and decided == []
+    await game.talk(turn)
+    assert not turn.joined and not cast.npc_calls
     game.state.pending_turn = {"input": "我看看齿轮"}
     cast.voice_script.append(KeeperCall(npc="warden", instruction="调查员正在看齿轮，按现场情况提醒他别碰。"))
     await game.narrate(turn)
-    assert turn.joined == ["warden"] and decided == [] and game._directed == {"warden"}
+    assert turn.joined == ["warden"]
     game.state.pending_turn.clear()
     cast.plans["我看看齿轮"] = Plan(action=LOOK)
     await game.parse("我看看齿轮")  # a valid keeper plan also owns the people who stay quiet
-    assert game._directed == set()
+    assert not game.initiative
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
-    assert decided == []
+    assert len(cast.npc_calls) == 1
     cast.plans["我看看齿轮"] = RuntimeError("the keeper plan is unavailable")
-    action = await game.parse("我看看齿轮")  # a parser-only turn retains the autonomous path
+    action = await game.parse("我看看齿轮")
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
-    assert decided == [["warden"]] and cast.heard == ["我看看齿轮"]
+    assert len(cast.npc_calls) == 1 and cast.heard == ["我看看齿轮"]
+    assert not hasattr(game, "brain")
     await game.close()
 
 
-async def test_the_scheduler_holds_those_named_wakes_and_steps_alike(module, fake):
+async def test_held_scene_participants_keep_fixed_appointments_without_independent_judgment(module, fake):
     module.npc("warden").important = True
     game = make(module, fake, PlanCast({}, {}), location="square")  # away from the party, his step lands offscreen
     w = game.world
     w.apply(O.SetPlan(npc="warden", steps=[Step(id="go", text="下楼", due=w.now,
                                                 ops=[{"kind": "move", "entity": "warden", "to": "office"}])]))
-    w.agent("warden").wake = w.now
-    decided = []
-
-    async def decide(ask):
-        decided.append(list(ask.npcs))
-        return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
-
     start = w.now
-    report = await scheduler.advance(w, Canned(decide), start, start + 5, tick="held", held={"warden"})
-    # The review of 2026-10-20: held means no model asked for him, not his appointment missed.
-    assert decided == [] and not report.woke and w.entity("warden").at == "office"
+    report = await scheduler.advance(w, start, start + 5, tick="held", held={"warden"})
+    assert report.landed and w.entity("warden").at == "office"
     assert w.agent("warden").plan[0].status == "done"
-    report = await scheduler.advance(w, Canned(decide), start + 5, start + 10, tick="free")
-    assert decided == [["warden"]]  # the next turn he is the world's again: it asks him what next
+    await scheduler.advance(w, start + 5, start + 10, tick="free")
+    assert any(need.npc == "warden" and need.kind == "goals" for need in scheduler.pending(w))
     await game.close()
 
 
@@ -358,7 +341,7 @@ async def test_who_joins_in_belongs_to_the_turn_that_planned_it(module, fake):
     game, cast = joining(module, fake, [Initiative(npc="warden", does="拦住他")])
     action = await game.parse("我看看齿轮")
     await game.parse("/kp 规则上能不能这样？")  # a question to the keeper: nobody arranged for it
-    assert game.initiative == [] and game._directed == set()
+    assert game.initiative == []
     turn = await game.resolve(action, await game.rule(action))
     await game.talk(turn)
     assert cast.npc_calls == []

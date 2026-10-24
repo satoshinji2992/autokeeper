@@ -141,7 +141,7 @@ async def test_a_past_report_without_a_snapshot_does_not_claim_newer_state_as_it
 
 
 def scripted_cast(module, game):
-    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES}, minds=0,
+    cast = Cast(config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES},
                              visual_limit=0, imagegen=False, search="none"), module)
     cast.world = game.world
     return cast

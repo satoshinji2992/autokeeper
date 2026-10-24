@@ -121,18 +121,11 @@ async def notices(game: Game, turn: Turn, rows: list[dict]) -> None:
 
 
 async def time_(game: Game, turn: Turn) -> None:
-    """Aftercare waits on due world work, even when normal player turns defer it until narration."""
-    await game._world_settled()
-    old = game.world_later
-    game.world_later = False
-    try:
-        await game._time(turn)
-        # An exchange from before the party fell must not hold an already scheduled rescue.
-        flags = game._play(turn, set())
-        await game._flags(flags, turn, landed=True)
-        game._world_owed = False
-    finally:
-        game.world_later = old
+    """Aftercare uses the same immediate calendar as ordinary turns."""
+    await game._time(turn)
+    # An exchange from before the party fell must not hold an already scheduled rescue.
+    flags = game._play(turn, set())
+    await game._flags(flags, turn, landed=True)
 
 
 def _dying(game: Game, turn: Turn, key: str) -> list[dict]:

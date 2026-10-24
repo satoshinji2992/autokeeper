@@ -76,7 +76,9 @@ async def test_words_are_the_keeper_plans_never_parsed_by_their_first_word(modul
     acts = [e for e in out if e["type"] == "fight_act"]
     assert [a["attacker"] for a in acts] == ["f1"]  # nobody attacked the warden
     report = cast.reports[-1]
-    assert "打开门逃跑" not in report and "周衡想拉开门逃出去" in report  # never the player's raw words
+    assert "【玩家本次原话，供核对行动范围】打开门逃跑" in report
+    assert "周衡想拉开门逃出去" in report
+    assert all("打开门逃跑" not in action.model_dump_json() for action in cast.ruled)
 
 
 async def test_an_unruled_npc_intention_is_not_presented_as_an_executed_hold_or_move(module, fake):
@@ -358,7 +360,9 @@ async def test_something_else_is_ruled_and_the_whole_ruling_lands(module, fake):
     fake.queue(10).queue_totals(4)
     await play(app, "我把油灯砸过去！")
     assert "lamp_broken" in game.state.flags and game.world.rec.entities["warden"].life.hp == 7
-    assert "我把油灯砸过去" not in cast.reports[-1]
+    assert "【玩家本次原话，供核对行动范围】我把油灯砸过去！" in cast.reports[-1]
+    assert [action.summary for action in cast.ruled] == [lamp.summary]
+    assert all("我把油灯砸过去" not in action.model_dump_json() for action in cast.ruled)
 
 
 async def test_a_weapon_picked_up_is_registered_before_it_is_used(module, fake):

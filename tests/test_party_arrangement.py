@@ -229,9 +229,9 @@ async def test_encounters_keep_their_own_round_arrangement(fake, monkeypatch, mo
     assert cast.batches == [] and settled == hub.pool
 
 
-@pytest.mark.parametrize("resume", [False, True])
-async def test_real_action_window_passes_both_declarations_to_one_plan(fake, monkeypatch, resume):
-    cast = PartyCast(fail_telling=resume)
+@pytest.mark.parametrize("interrupted", [False, True])
+async def test_real_action_window_passes_both_declarations_to_one_plan(fake, monkeypatch, interrupted):
+    cast = PartyCast(fail_telling=interrupted)
     hub = make_hub(fake, cast)
     ready = hold_preparation(monkeypatch, hub.game)
     task = await opened(hub)
@@ -244,6 +244,7 @@ async def test_real_action_window_passes_both_declarations_to_one_plan(fake, mon
                     await until(ws, lambda x: x["t"] == "welcome")
                     await ws.send_json({"t": "sit", "investigator": seat})
                 await until(a, pool_open)
+                fake.queue(37)  # Neither settled action needs a roll, including after recovery.
                 await a.send_json({"t": "act", "text": "我试着开锁"})
                 await b.send_json({"t": "act", "text": "我拖住布道者"})
                 await a.send_json({"t": "done"})
@@ -255,16 +256,18 @@ async def test_real_action_window_passes_both_declarations_to_one_plan(fake, mon
                 ready.set()
                 first = await until(a, lambda x: x["t"] == "turn")
                 assert first["investigator"] == "lin"  # the selected batch order, independent of private declaration echoes
-                if resume:
-                    error = await until(a, lambda x: x["t"] == "error" and x.get("retry"))
-                    assert error and len(cast.ruled) == 2 and len(cast.batches) == 1
+                if interrupted:
+                    await until(a, lambda x: x["t"] == "event" and x["ev"]["type"] == "status"
+                                and "自动恢复" in x["ev"].get("text", ""))
+                    assert len(cast.ruled) == 2 and len(cast.batches) == 1
                     minute = hub.state.minutes
-                    await a.send_json({"t": "act", "text": "/retry"})
                 await until(a, pool_open)
                 assert len(cast.batches) == 1 and len(cast.ruled) == 2 and not cast.individual_plans
                 assert [who for who, _ in cast.ruled] == ["lin", "zhouheng"]
-                if resume:
-                    assert hub.state.minutes == minute and not hub.state.pending_turn
+                assert [entry.text for entry in hub.state.log if entry.kind == "player"] == ["我拖住布道者", "我试着开锁"]
+                assert not hub.state.checks and list(fake.values) == [37] and not hub.state.pending_turn
+                if interrupted:
+                    assert hub.state.minutes == minute
             finally:
                 await asyncio.gather(a.close(), b.close())
     finally:

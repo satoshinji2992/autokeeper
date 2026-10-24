@@ -21,6 +21,7 @@ from autokeeper.module.schema import Creature, Event, Module, Stake
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.rules.consequences import Die
+from autokeeper.world import ops as O
 
 from .encounter_kit import Keeper, arrange, fight_game, play
 
@@ -198,6 +199,7 @@ async def test_unwitnessed_consequence_commits_but_never_invents_a_player_witnes
 
 
 async def test_round_gate_uses_finished_summary_and_keeps_other_conditions(module, fake):
+    module.flags["permission"] = "调查员得到许可"
     game, _, _ = fight_game(module, fake)
     try:
         await ambush(game)
@@ -207,7 +209,7 @@ async def test_round_gate_uses_finished_summary_and_keeps_other_conditions(modul
         game.m.events = [event]
         await game._events(Turn())
         assert "reinforcement" not in game.state.fired
-        game.state.flags.append("permission")
+        assert game.world.apply(O.SetFlag(flag="permission", actor="engine")).ok
         await game._events(Turn())
         assert "reinforcement" in game.state.fired and game.world.rec.entities["warden"].status == "死亡"
     finally:

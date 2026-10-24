@@ -16,7 +16,7 @@ from autokeeper.config import Role
 from autokeeper.engine import debrief
 from autokeeper.engine import graph as turn_graph
 from autokeeper.engine.game import PLAY_WAIT, Game, Turn
-from autokeeper.harness import Reply, spend
+from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Module
 from autokeeper.net.hub import Hub
@@ -164,10 +164,8 @@ def scripted(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setattr(paths, "USER_DIR", tmp_path / "user")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
-    spend.budget.cache_clear()
     Scripted.replies, Scripted.seen = [], []
     yield config.Config(roles={r: Role("scripted", "scripted", None) for r in config.DEFAULT_ROLES})
-    spend.budget.cache_clear()
 
 
 async def test_the_keeper_remembers_only_the_new_telling(module, fake, scripted, skills_dir):

@@ -2,11 +2,11 @@
 
 from autokeeper.engine.state import GameState
 from autokeeper.module.schema import NPC
-from autokeeper.world import context, knowledge, scheduler
+from autokeeper.world import context, knowledge
 from autokeeper.world import ops as O
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 from autokeeper.world.store import World
+from autokeeper.world.tools import Gateway
 
 from .test_world import fresh
 
@@ -80,18 +80,16 @@ async def test_normal_world_decisions_can_relay_an_opaque_claim_without_converti
     w, claim = a_reported_claim()
     alias = knowledge.public_ref(claim, "preacher")
     assert w.apply(O.Enlist(npc="preacher")).ok
-    w.agent("preacher").wake = w.now
-
-    def decide(ask):
-        assert alias in ask.views["preacher"] and claim.id not in ask.views["preacher"]
-        return Scene(decisions=[Decision(npc="preacher", ops=[
-            O.Learn(fact=alias, who=["editor"], visibility="private"),
-            O.Remember(npc="preacher", text="已经把守钟人的说法告诉编辑。", fact=alias),
-            O.SetPlan(npc="preacher", steps=[Step(id="later", text="等编辑再来询问", when=f"knows:editor:{alias}")]),
-        ])])
-
-    report = await scheduler.advance(w, Canned(decide), w.now, w.now + 1)
-    assert not report.refused and len(report.landed) == 3
+    view = context.npc_view(w, "preacher").text
+    assert alias in view and claim.id not in view
+    result = Gateway(w, "preacher").settle([
+        {"kind": "learn", "fact": alias, "who": ["editor"], "visibility": "private"},
+        {"kind": "remember", "npc": "preacher", "text": "已经把守钟人的说法告诉编辑。", "fact": alias},
+        {"kind": "plan", "npc": "preacher", "steps": [
+            {"id": "later", "text": "等编辑再来询问", "when": f"knows:editor:{alias}"},
+        ]},
+    ], request_id="character-relay")
+    assert result["ok"], result
     assert "editor" in claim.known_by and claim.true is False and claim.kind == "lie"
     assert any(memory.fact == claim.id for memory in w.agent("preacher").memory)
     assert w.agent("preacher").plan[0].when == f"knows:editor:{claim.id}"

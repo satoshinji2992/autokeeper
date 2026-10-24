@@ -52,7 +52,7 @@ class SceneTable(Hub):
         self.game.listener = self.game.emit = self._event
         self.game.checkpoint = self._save
         self.game.director_wait = PLAY_WAIT
-        self.game.write_progress = self.game.world_later = self.game.world.reviewing = True
+        self.game.write_progress = True
         self.game.table_turn_based = True
         self.game.wait_horizon = self._wait_horizon
         self.game.plugins.away = lambda who: self.sits.get(who) is None
@@ -109,6 +109,11 @@ class SceneTable(Hub):
         self.tables.runtime.revoke_pass(self.ident)
         super()._accept_declaration(seat, text)
 
+    def _wait_horizon(self, actor: str) -> int | None:
+        limits = [end for end in (super()._wait_horizon(actor), self.tables.runtime.incoming_boundary(self.ident))
+                  if end is not None]
+        return min(limits) if limits else None
+
     def _time_available(self) -> bool:
         """An unstarted clock proposal must yield to actual input and actual choices."""
         return (self.open and not self.halted and not self.tables.closing and not self.root.state.ending
@@ -122,7 +127,9 @@ class SceneTable(Hub):
                 and not any(self.state.unfinished.get(who, {}).get("execution") for who in self.scene.members)
                 and any(self.sits.get(who) is not None for who in self.scene.members))
 
-    def request_time(self, until: int) -> None:
+    def request_time(self, until: int | None) -> None:
+        if until is None or until <= self.scene.at:
+            return
         if not self._time_available() or not callable(getattr(self.cast, "scene_time", None)):
             return
         if self.time_task is not None and not self.time_task.done():
@@ -150,7 +157,7 @@ class SceneTable(Hub):
                         return
                     if attempt == len(TIME_RETRY_WAIT):
                         self.time_failed = stamp
-                        await self._broadcast({"t": "notice", "text": "时间衔接暂未完成，进度已保留。可提交行动或空行跳过。"})
+                        await self._broadcast({"t": "notice", "text": "会合衔接暂未完成，进度已保留。仍可正常行动。"})
                         return
                     await asyncio.sleep(TIME_RETRY_WAIT[attempt])
                     if not self._time_available() or (self.scene.turn, self.scene.at, self.scene.logged, until,

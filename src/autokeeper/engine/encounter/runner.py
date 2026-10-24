@@ -32,7 +32,10 @@ those left elsewhere).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
 
 from ...rules import combat as rules
 from ...rules.melee import opposed_difficulty
@@ -192,6 +195,7 @@ class Encounters:
         _equipment: Any
         _arrive: Any
         _rejoin: Any
+        _journal: Any
 
     # -- whether there is one -------------------------------------------------------------------
     def encounter(self) -> EncounterState | None:
@@ -424,6 +428,111 @@ class Encounters:
                    for step in receipt.get("steps", []))
 
     # -- starting one -----------------------------------------------------------------------------
+    async def _keeper_encounter(self, raw: dict, turn: Turn, journal: dict,
+                                keep: Callable[[Turn], None]) -> dict:
+        """Open a keeper-initiated conflict through the existing rule journal.
+
+        This is a saved tool call, not a second decision-maker. It cannot spend a
+        player's action, deal narrative damage, teleport its cast or replace a fight.
+        Its opening notices, sight checks and chase speed dice retain their normal
+        receipts when the tool is resumed after a disconnection.
+        """
+        if "result" in journal:
+            return journal["result"]
+        st = self.state
+
+        def prepare() -> dict:
+            problems: list[str] = []
+            if not isinstance(raw, dict):
+                return {"ok": False, "status": "rejected", "problems": ["encounter 必须是遭遇对象"]}
+            unknown = set(raw) - set(EncounterStart.model_fields)
+            if unknown:
+                problems.append("遭遇有未声明的字段：" + "、".join(sorted(unknown)))
+            try:
+                start = EncounterStart.model_validate(raw)
+            except ValidationError as exc:
+                return {"ok": False, "status": "rejected", "problems": [str(exc)[:2000]]}
+            if st.encounter is not None:
+                problems.append("已有遭遇仍在进行或等待收尾，请完成现有遭遇，不重新开局")
+            if self.world.place(st.investigator.id) != st.location or not st.investigator.can_act:
+                problems.append("当前调查员不在现场或无法行动，不能在这里发起新的遭遇")
+            if start.opening is not None:
+                problems.append("主动遭遇不替调查员声明行动；opening 留空，NPC 首轮意图写 npcs")
+            candidates = set()
+            for ident in [*start.foes, *start.allies]:
+                who = profiles.combatant(self.world, ident)
+                profile = profiles.profile(self.world, who)
+                if profile is None:
+                    problems.append(f"{ident} 没有可用的战斗资料")
+                    continue
+                # A module creature gets its first body/place atomically in _begin.
+                # Existing people and creatures must actually be here already.
+                appearing = profile.kind == "creature" and who not in self.world.rec.entities
+                if not appearing and self.world.place(who) != st.location:
+                    problems.append(f"{ident} 不在现场；先按实际经过落实到场，再发起遭遇")
+                if self._dead(who) or who not in self._coming([who], fight_ok=True):
+                    problems.append(f"{ident} 已死亡或失踪，不能参与这次遭遇")
+                candidates.add(ident)
+            party = {inv.id for inv in st.investigators if self.world.place(inv.id) == st.location}
+            for ident in {st.investigator.id, *party, *start.foes, *start.allies}:
+                who = profiles.combatant(self.world, ident)
+                available = self.world.available_at(who)
+                if available is not None and available > self.world.now:
+                    problems.append(f"{ident} 已有更晚时刻的实际行动，不能在当前时点重新安排")
+            foes = {profiles.combatant(self.world, who) for who in start.foes}
+            allies = {profiles.combatant(self.world, who) for who in start.allies}
+            if foes & allies:
+                problems.append("同一个人的不同形态不能分列为对手和同伴")
+            start = start.model_copy(update={
+                "foes": list(dict.fromkeys(profiles.combatant(self.world, who) for who in start.foes)),
+                "allies": list(dict.fromkeys(profiles.combatant(self.world, who) for who in start.allies)),
+                "npcs": [npc.model_copy(update={
+                    "who": profiles.combatant(self.world, npc.who),
+                    "actions": [plan_check.combatants(self, action) for action in npc.actions],
+                    "pursue": [profiles.combatant(self.world, who) for who in npc.pursue],
+                    "let_go": [profiles.combatant(self.world, who) for who in npc.let_go],
+                    "release": [profiles.combatant(self.world, who) for who in npc.release],
+                }) for npc in start.npcs],
+            })
+            problems += plan_check.start(self, {profiles.combatant(self.world, who) for who in candidates})(start)
+            participants = party | foes | allies
+            if start.surprise_contest is not None:
+                problems += [f"偷袭对抗中的 {who} 不在这次遭遇里" for who in start.surprise_contest.by
+                             if profiles.combatant(self.world, who) not in participants]
+            if problems:
+                return {"ok": False, "status": "rejected", "problems": list(dict.fromkeys(problems))}
+            return {"ok": True, "start": start.model_dump(mode="json", by_alias=True),
+                    "id": f"e{st.turn}n{len(st.encounter_log)}"}
+
+        with self._journal(journal, keep):
+            prepared = await self._resolution_step("prepare", turn, prepare)
+            if prepared["ok"] and not journal.get("steps", {}).get(f"enc/{prepared['id']}/begin", {}).get("done"):
+                # An accepted request is not yet an occurrence. Another scene may
+                # have moved its cast since that request was saved; recheck until
+                # Begin lands, then resume the same encounter and its sight dice.
+                current = prepare()
+                if not current["ok"]:
+                    prepared = current
+            if not prepared["ok"]:
+                result = prepared
+            else:
+                active = self.world_encounter()
+                if active is not None and active.id != prepared["id"]:
+                    result = {"ok": False, "status": "rejected",
+                              "problems": ["另一场遭遇已经开始，不能覆盖它"]}
+                else:
+                    start = EncounterStart.model_validate(prepared["start"])
+                    eid = await self._resolution_step("open", turn, lambda: self._encounter_open(
+                        start, turn, identity=prepared["id"]))
+                    active = self.world_encounter()
+                    result = ({"ok": True, "status": "started" if active is not None and active.id == eid else "ended",
+                               "encounter": eid, "mode": start.mode,
+                               "notice": "遭遇已按规则开局；NPC 意图尚非行动结果，后续按回合与调查员应对结算。"}
+                              if eid else {"ok": False, "status": "rejected", "problems": ["没有可以参与遭遇的对手"]})
+            journal["result"] = result
+            keep(turn)
+            return result
+
     async def _start_from(self, action: Action, turn: Turn) -> str:
         """The encounter this turn begins: one written out already (EncounterStart in the action), or the one the
         keeper plan announced (Plan.encounter), set up by one more keeper-plan call (plan_encounter)."""
@@ -482,7 +591,7 @@ class Encounters:
         return start
 
     async def _encounter_open(self, start: EncounterStart, turn: Turn, *, event: Event | None = None,
-                              actor: str = "") -> str:
+                              actor: str = "", identity: str = "") -> str:
         """An encounter begins where the investigators are: who is in it, their bodies kept by the world
         from now on, the creatures first seen (sanity, per investigator), its stakes. A fight's
         `opening` is the investigator's first action: the first round runs at once; otherwise the next
@@ -493,7 +602,8 @@ class Encounters:
             turn.notes.append("【未落实】已有遭遇仍在进行，这次新的冲突尚未开始结算")
             return ""
         st, step = self.state, self._resolution_step
-        eid = await step("enc-id", turn, lambda: f"e{st.turn}n{len(st.encounter_log)}" + (f"x{event.id}" if event else ""))
+        eid = await step("enc-id", turn, lambda: identity or (
+            f"e{st.turn}n{len(st.encounter_log)}" + (f"x{event.id}" if event else "")))
         # Who comes, decided once: resumed after the opening blow killed its foe, the fight still ends.
         foes = await step("enc-foes", turn, lambda: self._coming(start.foes, fight_ok=True))
         if not foes:
@@ -508,6 +618,10 @@ class Encounters:
         if not done.get("ok"):
             return ""
         await self._sights(turn, paid=bool(event and event.sanity), event=event)
+        if self.world_encounter() is None:
+            if self._ending_owed(eid):
+                await self._encounter_end("", turn, eid=eid)
+            return eid
         if start.mode == "chase":
             if not await self._chase_open(start, turn):
                 return eid

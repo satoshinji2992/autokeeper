@@ -51,11 +51,9 @@ def harness_sandbox(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTOKEEPER_TRACE", "meta")
     for var in ("AUTOKEEPER_PRESET", "AUTOKEEPER_MODEL", "AUTOKEEPER_SEARCH", "AUTOKEEPER_BUDGET_USD"):
         monkeypatch.delenv(var, raising=False)
-    spend.budget.cache_clear()
     SCRIPT.clear()
     SEEN.clear()
     yield
-    spend.budget.cache_clear()
 
 
 async def test_json_is_validated_and_repaired_once():
@@ -313,7 +311,6 @@ async def test_no_fallback_once_the_player_has_read_part_of_a_reply(standby):
 
 async def test_spent_budget_falls_back_to_a_free_model(standby, monkeypatch):
     monkeypatch.setenv("AUTOKEEPER_BUDGET_USD", "0")
-    spend.budget.cache_clear()
     SCRIPT.append("本地模型接手")
     spec = Role("scripted", "deepseek:deepseek-flash", "low", fallback="claude:local-model")  # priced, so capped
     reply = await hm.make_model(spec, "NPC").complete([{"role": "user", "content": "你好"}])
@@ -1058,7 +1055,6 @@ def test_ledger_survives_processes_spending_at_once(tmp_path):
 
 def test_budget_guard_stops_metered_calls(monkeypatch):
     monkeypatch.setenv("AUTOKEEPER_BUDGET_USD", "0.01")
-    spend.budget.cache_clear()
     spend.guard("deepseek:deepseek-flash")  # nothing spent yet
     cost = spend.record("deepseek:deepseek-flash", {"input_tokens": 50_000, "cache_read": 0, "output_tokens": 5_000})
     assert cost == pytest.approx(0.021)
@@ -1067,13 +1063,11 @@ def test_budget_guard_stops_metered_calls(monkeypatch):
     spend.guard("claude-opus-5-5")  # Claude Code reports its own cost and is not capped here
 
 
-async def test_claude_code_gets_the_backstage_schema_without_its_discriminator(monkeypatch):
-    """Claude Code refuses a schema with OpenAPI's `discriminator`, which pydantic writes for the NPC's
-    backstage ops (world.agents.Scene): every backstage decision on the Claude preset failed. It is
-    sent without one; the reply is still checked against the full schema."""
+async def test_claude_code_gets_scene_preparation_operations_without_their_discriminator(monkeypatch):
+    """The Claude transport strips unsupported discriminator labels, preserving scene-preparation operations."""
     sdk = pytest.importorskip("claude_agent_sdk")
+    from autokeeper.agents.director import Improv
     from autokeeper.harness import models as hm
-    from autokeeper.world.agents import Scene
 
     seen: dict = {}
 
@@ -1086,9 +1080,9 @@ async def test_claude_code_gets_the_backstage_schema_without_its_discriminator(m
 
     monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
     monkeypatch.setattr(sdk, "ClaudeAgentOptions", lambda **kw: kw)
-    schema = Scene.model_json_schema()
+    schema = Improv.model_json_schema()
     assert "discriminator" in json.dumps(schema)
-    model = hm.make_model(Role(backend="claude", model="claude-haiku-5-5", effort=None), "幕后")
+    model = hm.make_model(Role(backend="claude", model="claude-haiku-5-5", effort=None), "导演备场")
     await model._client("scene", schema)  # type: ignore[attr-defined]
     sent = seen["options"]["output_format"]["schema"]
     assert "discriminator" not in json.dumps(sent) and json.dumps(sent).count('"const"') == json.dumps(schema).count('"const"')

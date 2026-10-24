@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import typer
 from rich.console import Console
@@ -1011,11 +1012,15 @@ def autoplay(
     slot: str | None = None,
     record: Annotated[Path | None, typer.Option(help="把这局录成录像：每个 Agent 的回复和每一次掷骰")] = None,
     replay: Annotated[Path | None, typer.Option(help="回放一盘录像，不调用任何模型")] = None,
+    budget: Annotated[float | None, typer.Option(min=0, help="仅本次自动试玩的 API 费用上限（美元），不影响正常游玩")] = None,
 ) -> None:
     """无界面自动跑团：全部由 AI 调查员行动，输出跑团记录。"""
     from .engine.autoplay import run
+    from .harness import spend
 
-    summary = asyncio.run(run(module, party=party, max_turns=turns, slot=slot, console=console, record=record, replay=replay))
+    ledger = paths.dev_output("spend", f"autoplay-{uuid4().hex}.json")
+    with spend.scoped(budget if budget is not None else config.load().budget_usd, ledger):
+        summary = asyncio.run(run(module, party=party, max_turns=turns, slot=slot, console=console, record=record, replay=replay))
     if replay is not None:
         from .harness.replay import cassette
 
@@ -1030,9 +1035,15 @@ app.add_typer(eval_app, name="eval")
 
 @eval_app.callback()
 def eval_main(
+    ctx: typer.Context,
     prompts: Annotated[Path | None, typer.Option(help="换一组提示词再评测：YAML 文件，写法见 eval/variants.py；不改任何文件")] = None,
+    budget: Annotated[float | None, typer.Option(min=0, help="仅本次评测的 API 费用上限（美元），不影响正常游玩")] = None,
 ) -> None:
     """评测。加 --prompts 时，这一次评测用文件里写的提示词变体。"""
+    from .harness import spend
+
+    ledger = paths.dev_output("spend", f"eval-{uuid4().hex}.json")
+    ctx.with_resource(spend.scoped(budget if budget is not None else config.load().budget_usd, ledger))
     if prompts is not None:
         from .eval import variants
 

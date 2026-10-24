@@ -6,11 +6,14 @@ import pytest
 
 from autokeeper import paths
 from autokeeper.agents.director import Improv
-from autokeeper.engine.game import Game
+from autokeeper.engine.game import Game, Turn
+from autokeeper.engine.state import GameState
 from autokeeper.module.schema import Module
 from autokeeper.rules.coc import Rules
+from autokeeper.world import knowledge
 from autokeeper.world import ops as O
-from autokeeper.world.store import World
+from autokeeper.world.store import World, digest
+from autokeeper.world.tools import Gateway
 
 from .test_engine import FakeCast
 
@@ -37,6 +40,17 @@ def game_with(fake, plan=None):
     return Game(module, state, Director(plan), Rules(dice=fake))
 
 
+async def commit_reinterpretation(game, change):
+    """Exercise the keeper's current tool handler with host-owned identity and read versions."""
+    raw = change.model_dump(mode="json", exclude={"id", "actor"})
+    gateway = Gateway(game.world, "keeper")
+    snapshot = gateway.snapshot_reads()
+    row = {"tool": "world_commit", "operations": [raw],
+           "reads": {ref: snapshot.get(ref, 0) for ref in gateway.required_reads([raw])},
+           "request_id": f"rewrite-authority:{digest(raw)}", "before_flags": list(game.state.flags)}
+    return await game._keeper_tool(row, Turn(), lambda _turn: None)
+
+
 async def test_scene_preparation_accepts_the_directors_reinterpretation_without_an_approval_call(fake):
     change = O.Rewrite(target=f"fact:{SECRET}", text="布道者藏了那件东西", reason="布道者把自己的行为栽给守钟人")
     package = Improv(kind="展开", reason="纠正证词背后的真相", backstage=[change])
@@ -51,7 +65,7 @@ async def test_scene_preparation_accepts_the_directors_reinterpretation_without_
     await game.close()
 
 
-async def test_direct_backstage_reinterpretation_preserves_the_old_account_and_survives_reload(fake):
+async def test_keeper_tool_reinterpretation_preserves_the_old_account_and_survives_reload(fake):
     game = game_with(fake)
     old = game.world.rec.facts[SECRET].text
     entry = game.state.add("npc", f"布道者说：{old}。", who="布道者")
@@ -60,7 +74,7 @@ async def test_direct_backstage_reinterpretation_preserves_the_old_account_and_s
     owners = dict(game.state.item_owners)
     change = O.Rewrite(target=f"fact:{SECRET}", text="布道者藏了那件东西", reason="布道者栽赃守钟人")
 
-    assert await game._backstage([change], "这次证词是栽赃") == []
+    assert (await commit_reinterpretation(game, change))["ok"]
     assert entry.text == f"布道者说：{old}。"
     told = game.world.rec.facts[f"told:{SECRET}:1"]
     assert told.text == old and told.revealed is not None
@@ -70,9 +84,12 @@ async def test_direct_backstage_reinterpretation_preserves_the_old_account_and_s
     assert game.state.item_owners == owners
     revision = game.world.rec.revisions[-1]
     assert revision.old == old and revision.new == change.text and revision.reason == change.reason
-    restored = World(game.m.model_copy(deep=True), game.state.model_copy(deep=True))
+    restored = World(game.m.model_copy(deep=True), GameState.model_validate_json(game.state.model_dump_json()))
     assert restored.rec.facts[f"told:{SECRET}:1"].text == old
     assert restored.rec.revisions[-1].reason == change.reason
+    assert knowledge.sees(restored.rec.facts[f"told:{SECRET}:1"], "players")
+    assert not knowledge.sees(restored.rec.facts[SECRET], "players")
+    assert not knowledge.sees(restored.rec.facts[SECRET], restored.st.investigator.id)
     await game.close()
 
 
@@ -87,7 +104,7 @@ async def test_removing_model_approval_does_not_remove_observation_or_material_g
     game.world.sync()
     before = game.state.model_dump_json()
 
-    assert await game._backstage([change], "改写")
+    assert not (await commit_reinterpretation(game, change))["ok"]
     assert game.state.model_dump_json() == before
     await game.close()
 
@@ -98,10 +115,10 @@ async def test_reinterpreting_a_public_event_cannot_erase_the_event_or_move_its_
     event = game.world.rec.event(result.event)
     assert event is not None
     invalid = O.Rewrite(target=f"event:{event.id}", retract=True, reason="其实没人看见")
-    assert await game._backstage([invalid], "取消目击")
+    assert not (await commit_reinterpretation(game, invalid))["ok"]
 
     change = O.Rewrite(target=f"event:{event.id}", text="报童在广场外牵动了提前布好的细线。", reason="停钟是人为布置")
-    assert await game._backstage([change], "另有真相") == []
+    assert (await commit_reinterpretation(game, change))["ok"]
     assert game.world.rec.event(event.id).text == "钟停了一下。"
     assert game.state.location == "square"
     assert game.world.rec.facts[f"behind:{event.id}:1"].text == change.text

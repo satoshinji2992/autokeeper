@@ -15,7 +15,7 @@ from pydantic import TypeAdapter
 
 from ..engine import world as legacy_world
 from ..engine.state import format_time
-from . import agents, context, knowledge, scene
+from . import agents, conditions, context, knowledge, scene
 from .ops import (
     ENGINE_ONLY,
     OPS,
@@ -214,7 +214,7 @@ class Gateway:
         events = self._select(self._events(), query, limit)
         entities = self._select(self._entities(), query, limit)
         plans = {npc: agent.model_dump(mode="json") if self.staff else agent.model_dump(
-            mode="json", include={"npc", "goals", "goal_reason", "goal_source", "plan", "mood", "resources", "wake", "version"})
+            mode="json", include={"npc", "goals", "goal_reason", "goal_source", "plan", "mood", "resources", "version"})
                  for npc, agent in w.rec.agents.items()
                  if self.staff or npc == self.actor}
         schedules = [s for s in w.rec.scheduled.values() if self.staff or s.actor == self.actor]
@@ -276,7 +276,7 @@ class Gateway:
                 result[name] = [self._entity_data(row) for row in selected]
             else:
                 data = {row.npc: row.model_dump(mode="json", include=None if self.staff else {
-                    "npc", "goals", "goal_reason", "goal_source", "plan", "mood", "resources", "wake", "version"
+                    "npc", "goals", "goal_reason", "goal_source", "plan", "mood", "resources", "version"
                 }) for row in selected} if name == "plans" else [row.model_dump(mode="json") for row in selected]
                 result[name] = self._public_data(data)
         # An NPC's decision always depends on its own location and current plan.
@@ -284,7 +284,7 @@ class Gateway:
             reads.update({ref: allowed[ref] for ref in (f"entity:{self.actor}", f"agent:{self.actor}") if ref in allowed})
         result["reads"] = self._public_reads(reads)
         if self.staff:
-            flags = {flag: flag in w.st.flags for flag in w.m.flags
+            flags = {flag: conditions.value(w, f"flag:{flag}") for flag in w.m.flags
                      if native_scope is not None and f"flag:{flag}" in native_scope}
             if flags:
                 result["flags"] = flags

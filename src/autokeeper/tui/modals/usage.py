@@ -16,7 +16,7 @@ from ...harness import spend
 
 AGENTS = {
     "keeper": "守秘人", "plan": "守秘人安排", "arbiter": "裁定员", "intent": "解析行动", "npc": "NPC", "investigator": "AI 调查员",
-    "director": "导演", "mind": "世界推演", "chronicler": "记录员", "summarizer": "摘要员", "lore": "知识库", "vision": "读图",
+    "director": "导演", "chronicler": "记录员", "summarizer": "摘要员", "lore": "知识库", "vision": "读图",
     "card": "车卡", "importer": "导入", "artist": "美术", "progress": "进展", "visual:imagegen": "AI 画图", "diagnostic": "开发排查",
 }  # fmt: skip
 BARS = "▁▂▃▄▅▆▇█"

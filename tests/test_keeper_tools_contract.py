@@ -20,7 +20,7 @@ def table():
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     state.location, state.turn = "tower", 1
     cast = Cast(config.Config(roles={role: WRITER for role in config.DEFAULT_ROLES},
-                              minds=0, visual_limit=0, imagegen=False), module)
+                              visual_limit=0, imagegen=False), module)
     return cast, state
 
 

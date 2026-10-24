@@ -20,8 +20,8 @@ class MediaAction(BaseModel):
     to: list[str] | None = Field(None, description="收件调查员id名单；单人也可填一个id；null沿用调用方指定的投递范围")
     action: Literal["show", "clear"] = Field("show", description="show展示并保留；clear撤下当前画面，不撤销已读材料；省略动作保持原样")
     ref: str = Field("", description="只引用资源索引里的handout:/scene:/portrait:/image:；clear时留空，不填路径或网址")
-    slot: Literal["scene", "overlay"] = Field("overlay", description="scene替换场景图直到clear；overlay打开插图或材料")
-    title: str = Field("", description="可选的玩家可见标题，不写真实身份或后台说明")
+    slot: Literal["scene", "overlay"] = Field("overlay", description="scene仅替换展示地点的场景图，切换地点不沿用；overlay打开需单独查看的插图或材料，普通人物登场沿用人物栏")
+    title: str = Field("", description="可选的玩家可见标题，使用调查员已知称呼，不写后台说明")
 
     @field_validator("to", mode="before",
                      json_schema_input_type=Annotated[str, Field(min_length=1, pattern=r"\S")] | list[str] | None)
@@ -85,12 +85,23 @@ def prepare(module: Module, state: GameState, raw: dict | MediaAction, ident: st
     payload = resolve(module, state, action.ref) if action.action == "show" else {}
     if action.slot == "scene" and payload.get("kind") == "handout":
         raise ValueError("手稿使用overlay展示，不替换场景图")
+    scope = {"location": state.location} if action.slot == "scene" and action.action == "show" else {}
     return {"id": ident, "turn": state.turn, "audience": list(dict.fromkeys(action.to)) if action.to is not None else None,
-            "action": action.action, "slot": action.slot, "ref": action.ref, "title": action.title, "payload": payload}
+            "action": action.action, "slot": action.slot, "ref": action.ref, "title": action.title, "payload": payload,
+            **scope}
+
+
+def scene_location(delivery: dict) -> str:
+    """Scene overrides belong to the place where they were displayed, not a permanent backdrop."""
+    if place := delivery.get("location"):
+        return place
+    kind, _, place = delivery.get("ref", "").partition(":")
+    return place if kind == "scene" else ""
 
 
 def event(delivery: dict) -> dict:
-    return {"type": "presentation", **{k: v for k, v in delivery.items() if k != "ref"}}
+    scope = {"location": scene_location(delivery)} if delivery.get("slot") == "scene" else {}
+    return {"type": "presentation", **{k: v for k, v in delivery.items() if k != "ref"}, **scope}
 
 
 def history(state: GameState, viewer: str | None) -> list[dict]:
@@ -104,6 +115,9 @@ def current(state: GameState, viewer: str | None) -> dict[str, dict]:
             slots.pop(p["slot"], None)
         else:
             slots[p["slot"]] = p
+    if (shown := slots.get("scene")) is not None and (place := scene_location(shown)):
+        if state.positions.get(viewer, state.apart.get(viewer, state.location)) != place:
+            slots.pop("scene")
     return slots
 
 
@@ -127,7 +141,7 @@ def index(module: Module, state: GameState, *, at: str = "") -> str:
             refs.append(f"scene:{target.id}：{target.name}")
     for npc in module.npcs:
         if npc.id in people and ready(module, npc.portrait):
-            refs.append(f"portrait:{npc.id}：{npc.name}（仅图片，不以真名揭示身份）")
+            refs.append(f"portrait:{npc.id}：{npc.name}（人物栏呈现；需要单独特写时再用overlay，使用调查员已知称呼）")
     hids = {c.handout for c in module.clues if c.where == place or c.npc in people}
     hids |= set(state.handouts)
     for h in module.handouts:
@@ -141,6 +155,7 @@ def index(module: Module, state: GameState, *, at: str = "") -> str:
     pending = [f"{p['action']}：{p['problem']}" for p in state.presentation_issues.values()]
     return ("\n【可呈现资源；这里只是候选，不表示玩家已经看过】\n" + "\n".join(refs)
             + "\nmedia省略或留空保持原呈现；show指定受众展示；clear撤下对应槽位。只用已有资源。"
+            + "普通人物登场无需逐一弹出肖像；需要单独查看、强调可见细节或玩家要求时再展示特写。"
             + ("\n【此前媒体投递】\n" + "\n".join(shown) if shown else "")
             + ("\n【尚未展示；不要写成已看过，下次补齐资源或改用其他材料】\n" + "\n".join(pending) if pending else "")) if refs or shown or pending else ""
 

@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
-
 from autokeeper.world import context, desk, scheduler
 from autokeeper.world import ops as O
-from autokeeper.world.agents import Canned, Decision, Scene, vet
+from autokeeper.world.agents import vet
 from autokeeper.world.record import Step
-from autokeeper.world.scheduler import Budget
 
 from .test_world import fresh, staged
 
@@ -154,114 +151,21 @@ def test_requests_are_merged_checked_for_staleness_and_land_whole():
 
 
 # -- NPCs on game time ------------------------------------------------------------------------------------
-def crowd(location: str = "office"):
-    """Four important NPCs in four places, each with a step that wants a decision now."""
-    w = fresh(location)
-    from autokeeper.module.schema import NPC, Location
-
-    w.m.locations.append(Location(id="inn", name="客栈", read_aloud="", exits=["square"]))
-    w.m.npcs += [NPC(id="clerk", name="店员", role="报社店员", location="office"), NPC(id="cook", name="厨子", role="客栈厨子", location="inn")]
-    w.sync()
-    for npc in ("warden", "preacher", "clerk", "cook"):
-        w.apply(O.Enlist(npc=npc))
-        w.apply(O.SetPlan(npc=npc, steps=[Step(id="go", text="做点事", due=w.now)]))
-    return w
-
-
-def nothing(ask):
-    return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
-
-
-async def test_everyone_woken_in_a_turn_is_decided_in_one_call():
-    w = crowd(location="tower")  # the warden is onscreen, the others in three places
-    brain = Canned(nothing)
-    report = await scheduler.advance(w, brain, w.now, w.now + 10, budget=Budget(turn=2))
-    assert report.calls == 1 == len(brain.asks) and report.chunks == 1
-    assert set(brain.asks[0].npcs) == {"warden", "preacher", "clerk", "cook"} and not brain.asks[0].place
-    assert len(report.woke) == 4 and not report.deferred
-    spent = crowd(location="tower")
-    report = await scheduler.advance(spent, Canned(nothing), spent.now, spent.now + 10, budget=Budget(turn=0))
-    assert report.calls == 0 and len(report.deferred) == 4  # no allowance: they wait
-
-
-async def test_a_long_skip_is_simulated_in_chunks_on_its_own_budget():
-    w = crowd(location="tower")
-    brain = Canned(nothing)
-    start = w.now
-    w.st.minutes += 8 * 60
-    report = await scheduler.advance(w, brain, start, w.st.minutes, budget=Budget(skip=4, chunk=240))
-    assert report.chunks == 2 and report.calls == 1 and not report.deferred  # they chose to wait 600 minutes
-    w.st.minutes += 3 * 1440
-    report = await scheduler.advance(w, None, start + 480, w.st.minutes, budget=Budget(chunks=12))
-    assert report.chunks == 12 and report.calls == 0
-    assert (await scheduler.advance(w, brain, start + 480, w.st.minutes)).repeat  # the same span twice: nothing twice
-
-
-def square_scene(cook_op):
-    def scene(ask):
-        if len(ask.npcs) < 4:  # a later look by those the scene touched
-            return nothing(ask)
-        assert set(ask.npcs) == {"warden", "clerk", "cook", "preacher"}  # one call, wherever they are
-        assert "齿轮间的钥匙" not in ask.views["clerk"]  # each sees only its own view
-        return Scene(summary="三个人在广场上吵了起来", decisions=[
-            Decision(npc="warden", wait=600),
-            Decision(npc="clerk", ops=[O.Relate(a="clerk", b="cook", rel="敌对", delta=-20, note="吵架")]),
-            Decision(npc="cook", ops=[cook_op]),
-            Decision(npc="preacher", wait=600),
-        ])  # fmt: skip
-    return scene
-
-
-def at_the_square():
-    w = crowd(location="tower")
-    for npc in ("clerk", "cook", "preacher"):
-        w.apply(O.Move(entity=npc, to="square"))
-    return w
-
-
-async def test_those_together_in_one_place_share_one_offscreen_scene():
-    w = at_the_square()
-    brain = Canned(square_scene(O.Relate(a="cook", b="clerk", rel="敌对", delta=-10, note="吵架")))
-    await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=2))
-    assert w.relation("clerk", "cook", "敌对").value == -20
-    assert not any("preacher" in ask.npcs for ask in brain.asks[1:])  # its own scene wakes none of them again
-    [scene] = [e for e in w.rec.events if e.text == "三个人在广场上吵了起来"]
-    assert scene.place == "square" and set(scene.participants) == {"clerk", "cook", "preacher"}  # not the warden
-
-
-async def test_a_scene_is_not_told_when_one_of_those_in_it_was_refused():
-    w = at_the_square()
-    brain = Canned(square_scene(O.Relate(a="clerk", b="cook", rel="盟友", value=99)))  # not its own view to change
-    report = await scheduler.advance(w, brain, w.now, w.now + 30, budget=Budget(turn=2))
-    assert w.relation("clerk", "cook", "盟友") is None and any("只能改变自己" in x for x in report.refused)
-    # A summary must not claim the whole scene happened after one participant's
-    # proposed actions were refused (or another participant gave no decision).
-    assert not any(e.text == "三个人在广场上吵了起来" for e in w.rec.events)
 
 
 async def test_prepared_steps_land_without_a_call_while_the_plan_is_fresh():
     w = staged(location="office")
     w.apply(O.SetPlan(npc="warden", steps=[Step(id="walk", text="去广场", due=w.now + 60, ops=[{"kind": "move", "entity": "warden", "to": "square"}])],
                       reads={SECRET: 1}))  # fmt: skip
-    report = await scheduler.advance(w, None, w.now, w.now + 90)
-    assert report.calls == 0 and w.entity("warden").at == "square" and w.agent("warden").plan[-1].status == "done"
+    await scheduler.advance(w, w.now, w.now + 90)
+    assert w.entity("warden").at == "square" and w.agent("warden").plan[-1].status == "done"
     w2 = staged(location="office")
     w2.apply(O.SetPlan(npc="warden", steps=[Step(id="walk", text="去广场", due=w2.now + 60, ops=[{"kind": "move", "entity": "warden", "to": "square"}])],
                        reads={SECRET: 1}))  # fmt: skip
     w2.apply(O.Rewrite(target=SECRET, text="他在钟里藏了一封信"))
-    report = await scheduler.advance(w2, None, w2.now, w2.now + 90)
-    assert w2.entity("warden").at == "tower" and any("计划依据的事变了" in x for x in report.deferred)
-
-
-async def test_a_step_whose_condition_never_comes_is_blocked_and_wakes_its_npc():
-    w = fresh(location="office")
-    w.apply(O.Enlist(npc="warden"))
-    w.apply(O.SetPlan(npc="warden", steps=[Step(id="wait", text="等钟停", due=w.now, when="flag:bell_stopped")]))
-    brain = Canned(nothing)
-    report = await scheduler.advance(w, brain, w.now, w.now + 60, budget=Budget(grace=120))
-    assert not report.blocked and brain.asks == []
-    report = await scheduler.advance(w, brain, w.now + 60, w.now + 200, budget=Budget(grace=120))
-    assert report.blocked == ["warden:wait"] and "计划受阻" in brain.asks[0].reasons["warden"]
+    await scheduler.advance(w2, w2.now, w2.now + 90)
+    w2.st.minutes += 90
+    assert w2.entity("warden").at == "tower" and any(n.npc == "warden" and n.kind == "stale" for n in scheduler.pending(w2))
 
 
 async def test_scheduled_events_land_or_fall_through_when_what_they_read_changed():
@@ -271,7 +175,7 @@ async def test_scheduled_events_land_or_fall_through_when_what_they_read_changed
     w.apply(O.Schedule(event="gossip", at=w.now + 60, text="守钟人去报社", actor="warden", reads={SECRET: 1},
                        ops=[{"kind": "move", "entity": "warden", "to": "office"}]))  # fmt: skip
     w.apply(O.Rewrite(target=SECRET, text="他在钟里藏了一封信"))
-    report = await scheduler.advance(w, None, w.now, w.now + 120)
+    report = await scheduler.advance(w, w.now, w.now + 120)
     assert report.fired == ["sermon"] and report.dropped == ["gossip"]
     assert w.entity("preacher").at == "tower" and w.entity("warden").at == "tower"
 
@@ -282,7 +186,7 @@ async def test_an_arrangement_does_not_pull_a_companion_away_from_the_investigat
     assert w.apply(O.Follow(npc="warden", actor="warden", leader=me, destination="square")).ok
     w.apply(O.Schedule(event="meeting", at=w.now + 60, text="守钟人和布道者在报社碰头", place="office",
                        participants=["warden", "preacher"], actor="director"))
-    report = await scheduler.advance(w, None, w.now, w.now + 120)
+    report = await scheduler.advance(w, w.now, w.now + 120)
     assert report.fired == ["meeting"]
     assert w.entity("warden").at == "tower" and w.entity("warden").following == me  # still walking with them
     assert w.entity("preacher").at == "office"
@@ -296,31 +200,6 @@ def test_an_npc_can_only_do_what_it_can_reach():
     assert vet(w, "preacher", O.Occur(text="x", facts=["f_key"]))  # it does not know that
     assert vet(w, "warden", O.Transfer(item="coat", to="tower")) == []  # put it down where it stands
     assert vet(w, "warden", O.Move(entity="warden", to="square")) == []
-
-
-async def test_the_cast_brain_asks_one_stateless_session_per_group_and_reads_its_scene():
-    from types import SimpleNamespace
-
-    from autokeeper.world.agents import Ask, CastBrain
-
-    sent = []
-
-    class Cast:
-        sessions = {"mind:preacher+warden": "session"}  # opened before: no model is made here
-
-        async def _send(self, key, session, state, prompt, **kw):
-            sent.append((key, prompt))
-            return SimpleNamespace(data={"summary": "两人碰了个头", "decisions": [
-                {"npc": "warden", "notice": "布道者来了", "judge": "别让他上楼",
-                 "ops": [{"kind": "relate", "a": "warden", "b": "preacher", "rel": "戒备", "delta": -10}]}]})  # fmt: skip
-
-    w = staged()
-    ask = Ask(npcs=["warden", "preacher"], views={"warden": "守钟人的资料", "preacher": "布道者的资料"}, known={}, reasons={}, t=w.now)
-    scene = await CastBrain(Cast(), w.st).decide(ask)
-    assert sent[0][0] == "mind:preacher+warden" and "守钟人的资料" in sent[0][1] and "布道者的资料" in sent[0][1]
-    assert scene.summary == "两人碰了个头" and scene.decisions[0].ops[0].rel == "戒备"
-    schema = json.dumps(Scene.model_json_schema(), ensure_ascii=False)
-    assert '"tag"' not in schema and '"key"' not in schema  # the adapters' bookkeeping is not offered to the model
 
 
 def test_npcs_the_module_marks_important_are_enlisted_once():
@@ -339,7 +218,7 @@ async def test_a_scheduled_scene_brings_its_people_who_learn_of_it_only_when_it_
     assert w.apply(O.Schedule(event="visit", at=w.now + 60, text="布道者走进报社，打听那个记者", place="office",
                               participants=["preacher"], actor="director")).ok  # fmt: skip
     assert len(w.agent("preacher").memory) == before  # an arrangement is not something that happened to him
-    report = await scheduler.advance(w, None, w.now, w.now + 90)
+    report = await scheduler.advance(w, w.now, w.now + 90)
     assert report.fired == ["visit"] and w.entity("preacher").at == "office"
     assert any("打听那个记者" in m.text for m in w.agent("preacher").memory)
 

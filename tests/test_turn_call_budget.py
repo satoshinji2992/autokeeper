@@ -16,7 +16,6 @@ from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
 from autokeeper.rules.commands import Asked
-from autokeeper.world import scheduler
 from autokeeper.world.ops import AddFact
 
 from .test_engine import NEWSSTAND, FakeCast, Improvising
@@ -62,15 +61,6 @@ async def test_pure_rp_uses_one_keeper_plan_and_one_npc_reply(kind, fake):
     action = Action(kind=kind, summary="聊聊守钟人如何度过雨天", npc="warden",
                     speech="下雨的时候，您一般怎么打发时间？", casual=True)
     game, cast = game_for(fake, action)
-    game.world_later = True
-    game.minds = scheduler.Budget(turn=2, skip=4)
-
-    class QuietBrain:
-        async def decide(self, ask):
-            cast.calls["world"] += 1
-            pytest.fail("ordinary zero-minute RP must not wake an independent NPC decision")
-
-    game.brain = QuietBrain()
     try:
         parsed = await game.parse("聊聊")
         await game.prepare(parsed)
@@ -78,7 +68,7 @@ async def test_pure_rp_uses_one_keeper_plan_and_one_npc_reply(kind, fake):
         await game.talk(turn)
         assert await game.narrate(turn) == ""
         await game.remember()
-        await game._world_settled()
+        assert not hasattr(game, "brain")
         assert cast.calls == {"plan": 1, "npc": 1}
         assert turn.npc_lines == [("warden", "warden 的回答")] and not turn.checks
         assert not game.state.clues  # skipping a rule call does not deliver gated evidence

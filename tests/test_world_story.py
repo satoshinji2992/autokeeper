@@ -1,9 +1,9 @@
-"""A scripted playthrough with a canned NPC brain: the world goes on while the party is away.
+"""A scripted world story: the KP chooses consequences, fixed plans keep game time.
 
 Day one at the clock tower, the warden lends the reporter his raincoat; the reporter promises
 it back by eight the next morning. Played twice: once the coat goes back before the party
 leaves, once it does not. The party spends the night at the newspaper office; then walks to
-the square. The brain decides only from each NPC's own view, as a model would.
+the square. Explicit KP tool commits preserve each NPC's actual knowledge and relationships.
 """
 
 from __future__ import annotations
@@ -11,41 +11,21 @@ from __future__ import annotations
 from autokeeper.engine.state import WorldChange, parse_time
 from autokeeper.world import adapters, context, index, knowledge, scheduler, stage
 from autokeeper.world import ops as O
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import PLAYERS, Step
+from autokeeper.world.tools import Gateway
 
 from .test_world import fresh
 
 SERMON = "布道者当众说：有个记者借了守钟人的雨衣，到期也不还"
 
 
-def mind(ask) -> Scene:
-    """Each NPC reads only its own view: its promises, its memories, why it woke."""
-    out = []
-    for npc in ask.npcs:
-        view, why = ask.views[npc], ask.reasons[npc]
-        if npc == "warden" and "约定的时间到了" in why and "active" in view:
-            out.append(Decision(npc=npc, notice="雨衣没还回来", judge="这记者靠不住", ops=[
-                O.Break(promise="coat", text="过了八点雨衣还没还"),
-                O.Relate(a="warden", b="zhouheng", rel="信任", delta=-40, note="借了雨衣不还"),
-                O.Move(entity="warden", to="square"),
-                O.Occur(text="守钟人在广场上向布道者抱怨，记者借了他的雨衣不还", place="square", participants=["warden", "preacher"]),
-            ]))  # fmt: skip
-        elif npc == "warden" and "fulfilled" in view and "按时还了" not in view:
-            out.append(Decision(npc=npc, notice="雨衣按时还了", judge="这人守信", ops=[
-                O.Relate(a="warden", b="zhouheng", rel="信任", delta=30, note="借的雨衣按时还了"),
-                O.SetPlan(npc="warden", steps=[Step(id="diary", text="记者再来时，把日记给他看", when="at:zhouheng:tower")]),
-            ]))  # fmt: skip
-        elif npc == "preacher" and "雨衣不还" in view and "借东西不还" not in view:
-            at = ask.t + 60
-            out.append(Decision(npc=npc, notice="守钟人在抱怨记者", judge="正好拿来布道", ops=[
-                O.Relate(a="preacher", b="zhouheng", rel="信任", delta=-20, note="听说他借东西不还"),
-                O.SetPlan(npc="preacher", steps=[Step(id="sermon", text="布道时点名那个记者", due=at,
-                                                      ops=[{"kind": "occur", "text": SERMON, "place": "square"}])]),
-            ]))  # fmt: skip
-        else:
-            out.append(Decision(npc=npc, wait=720))
-    return Scene(decisions=out)
+def keeper(w, key, *ops):
+    """An explicit host-bound KP tool request, rather than a hidden NPC decision worker."""
+    receipt = Gateway(w, "keeper").settle([op.model_dump(mode="json", exclude={"actor", "id"})
+                                          | {"visibility": "private"} for op in ops],
+                                        request_id=key)
+    assert receipt["ok"], receipt
+    return receipt
 
 
 async def play(kept: bool):
@@ -69,31 +49,52 @@ async def play(kept: bool):
     st.turn = 3
     left = st.minutes
     st.location, st.minutes = "office", st.minutes + 10
-    brain = Canned(mind)
-    night = scheduler.Budget(skip=4)
     start, st.minutes = st.minutes, parse_time("D2 09:00")
-    overnight = await scheduler.advance(w, brain, start, st.minutes, budget=night)
+    w.sync()
+    overnight = await scheduler.advance(w, start, st.minutes)
+    # The KP sees the deadline/actual return and decides its meaning. The preacher
+    # does not know the promise merely because the omniscient KP can read it.
+    assert "雨衣不还" not in context.npc_view(w, "preacher").text
+    if kept:
+        assert w.rec.promises["coat"].status == "fulfilled"
+        keeper(w, "coat-kept",
+               O.Relate(a="warden", b=me, rel="信任", delta=30, note="借的雨衣按时还了"),
+               O.SetPlan(npc="warden", steps=[Step(id="diary", text="记者再来时，把日记给他看",
+                                                   when="at:zhouheng:tower", meet=True)]))
+    else:
+        assert any("约定的时间到了" in need.text for need in scheduler.pending(w))
+        keeper(w, "coat-broken",
+               O.Break(promise="coat", text="过了八点雨衣还没还"),
+               O.Relate(a="warden", b=me, rel="信任", delta=-40, note="借了雨衣不还"),
+               O.Move(entity="warden", to="square", visibility="private"),
+               O.Occur(text="守钟人在广场上向布道者抱怨，记者借了他的雨衣不还", place="square",
+                       participants=["warden", "preacher"], visibility="private"))
+        assert "记者借了他的雨衣不还" in context.npc_view(w, "preacher").text
+        keeper(w, "sermon-prepared",
+               O.Relate(a="preacher", b=me, rel="信任", delta=-20, note="听说他借东西不还"),
+               O.SetPlan(npc="preacher", steps=[Step(id="sermon", text="布道时点名那个记者", due=st.minutes + 60,
+                                                     meet=False, ops=[{"kind": "occur", "text": SERMON, "place": "square"}])]))
+    scheduler.acknowledge(w, {need.id: need.version for need in scheduler.pending(w)})
     # Turn 4: they walk to the square in the morning.
     st.turn = 4
     st.location, st.minutes = "square", st.minutes + 10
     w.sync()
-    # Different places think from the same instant: the preacher learns of the
-    # warden's committed complaint on his next decision, then needs an hour to prepare.
-    morning = await scheduler.advance(w, brain, st.minutes - 10, st.minutes + 200, budget=scheduler.Budget(chunk=70))
+    # A prepared sermon executes on game time, without another model or free-running worker.
+    morning = await scheduler.advance(w, st.minutes - 10, st.minutes + 200)
     st.minutes += 200
     for beat in stage.waiting(w):  # what came about in front of them, played by the keeper (engine/game.py)
         assert stage.play(w, beat) == []
-    return w, brain, overnight, morning, left
+    return w, overnight, morning, left
 
 
 async def test_npcs_act_after_the_players_leave():
-    w, brain, overnight, morning, left = await play(kept=False)
-    acted = [e for e in w.rec.events if e.actor in ("warden", "preacher") and e.t > left]
+    w, overnight, morning, left = await play(kept=False)
+    acted = [e for e in w.rec.events if e.actor == "keeper" and e.t > left]
     assert acted and all(e.visibility == "private" for e in acted if e.t < parse_time("D2 09:10"))
     assert w.entity("warden").at == "square"  # he went down to the square in the night
-    assert overnight.calls <= 4 and len(brain.asks) == overnight.calls + morning.calls and overnight.chunks == 5
-    assert any("约定的时间到了" in a.reasons.get("warden", "") for a in brain.asks)
-    # Back in the square, the keeper sees him there; it never sees his plans.
+    assert overnight.chunks > 0 and morning.chunks > 0
+    # The public scene material contains observed events; the KP's private notes
+    # and the NPC's private knowledge remain separate records.
     view = context.keeper_view(w, "square")
     assert "老守钟人" in view and "打算" not in view and w.m.truth not in view
 

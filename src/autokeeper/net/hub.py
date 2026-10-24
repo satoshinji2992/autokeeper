@@ -95,7 +95,7 @@ from ..module.schema import Module
 from ..plugins.schema import does
 from ..rules import commands
 from ..rules.coc import Investigator
-from . import cards, media
+from . import cards, media, recovery
 from .room import BLANKS
 
 log = logging.getLogger(__name__)
@@ -420,8 +420,6 @@ class Hub:
         self.game = Game(self.m, state, self.cast, rules or Rules(), emit=self._event)
         self.game.director_wait = PLAY_WAIT
         self.game.write_progress = True  # the 进展 page on every screen, through the sync
-        self.game.world_later = True  # NPCs decide between rounds, not while the table waits
-        self.game.world.reviewing = True  # the director looks backstage after a night or a journey (Game._look)
         self.game.table_turn_based = True
         self.game.wait_horizon = self._wait_horizon
         self.graph = turn_graph.build(self.game, InMemorySaver())
@@ -801,7 +799,9 @@ class Hub:
         if offer := context.offers.get(inv_id):
             await self._send(cid, {"t": "offer", "offer": offer})
         if context.retrying == inv_id:
-            await self._send(cid, {"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续；已结算的结果保留。"})
+            reason = context.state.pending_turn.get("failure", "")
+            await self._send(cid, {"t": "error", "retry": True,
+                                   "text": reason + "已结算结果保留，问题排除后输入 /retry 继续。"})
         self.wake.set()
         if self._scene_tables is not None:
             self._scene_tables.wake(inv_id)
@@ -1766,7 +1766,8 @@ class Hub:
                         self.preparation_error = str(exc)
                         self.phase = "collecting"
                         await self._broadcast({"t": "error", "retry": True,
-                                               "text": "本轮准备未完成，声明已保留。可修改行动或输入 /retry。"})
+                                               "text": "本轮准备未完成，声明已保留。" + recovery.explanation(exc)
+                                               + "可修改行动，或在问题排除后输入 /retry。"})
                         await self._pool()
                 if ready is not None and not self.joining:
                     # No await between checking the revision, sealing, and closing admission.
@@ -1784,7 +1785,7 @@ class Hub:
                                 for n, (seat, _) in enumerate(self._proposed_order())
                                 if seat in self.automatic and self.state.unfinished.get(seat, {}).get("execution")}
                     self.preparing = asyncio.create_task(
-                        self.game.prepare_party(self._proposed_order(), prepared=prepared), name="scene-preparation")
+                        self._prepare_batch(self._proposed_order(), prepared=prepared), name="scene-preparation")
                     self.phase = "thinking"
                     await self._pool()
                     continue
@@ -1802,6 +1803,19 @@ class Hub:
             await self._stop_preparing()
             self.open = False
         await self._pool()
+
+    async def _prepare_batch(self, order: list[tuple[str, str | None]], *, prepared: dict) -> Any:
+        """Retry only a transient/invalid unexecuted draft; new declarations still cancel it."""
+        for attempt in range(recovery.ATTEMPTS + 1):
+            try:
+                return await self.game.prepare_party(order, prepared=prepared)
+            except Exception as exc:
+                if attempt == recovery.ATTEMPTS or not recovery.recoverable(exc):
+                    raise
+                self.game._debug("lan", {"phase": "auto-retry", "stage": "preparation", "attempt": attempt + 1,
+                                         "error": type(exc).__name__})
+                await self._event({"type": "status", "text": "行动准备中断，正在自动恢复。"})
+                await asyncio.sleep(recovery.DELAY)
 
     async def _collect_turn_based(self) -> None:
         """Collect explicit tactical declarations or passes from all relevant players.
@@ -1997,9 +2011,12 @@ class Hub:
                 self.game.finish_party_declaration(seat, text, token=token)
                 continue
             inv = next((i for i in st.investigators if i.id == seat), None)
-            if st.ending:
+            resuming_turn = (bool(st.pending_turn) and inv is not None
+                             and st.pending_turn.get("active", st.active) == st.investigators.index(inv)
+                             and st.pending_turn.get("party_token", token) == token)
+            if st.ending and not resuming_turn:
                 return
-            if inv is None or not inv.can_act:
+            if inv is None or (not inv.can_act and not resuming_turn):
                 if text is not None and inv is not None:
                     self._remember_unstarted(seat, text, "当前调查员无法行动")
                 self.game.finish_party_declaration(seat, text, token=token)
@@ -2027,7 +2044,10 @@ class Hub:
                     self._save()
                     continue
                 try:
-                    await self._ai_turn(inv)
+                    if resuming_turn:
+                        await self._run("/retry", seat, ai=True)
+                    else:
+                        await self._ai_turn(inv)
                 except Exception as exc:
                     self.game.visuals.resume()
                     await self._event({"type": "status", "text": ""})
@@ -2070,8 +2090,11 @@ class Hub:
                     while not queue.empty():  # a None left by an earlier disconnect is not an answer now
                         queue.get_nowait()
                     self._failed(f"{inv.name}的回合", exc)
-                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动未能完成，等待{self.names.get(who, '该玩家')}输入 /retry 继续。"})
-                    await self._send(who, {"t": "error", "retry": True, "text": "本回合未能完成，输入 /retry 继续；已结算的结果保留。"})
+                    st.pending_turn["failure"] = recovery.explanation(exc)
+                    self._save()
+                    await self._broadcast({"t": "say", "from": "系统", "text": f"{inv.name}的行动暂停；已结算结果保留。"})
+                    await self._send(who, {"t": "error", "retry": True,
+                                           "text": st.pending_turn["failure"] + "已结算结果保留，问题排除后输入 /retry 继续。"})
                     self.retrying = seat
                     try:
                         text = await queue.get()
@@ -2117,19 +2140,11 @@ class Hub:
         """Scene hosts also release time and resource reservations here."""
 
     async def _unattended(self, inv: Any, exc: BaseException) -> None:
-        """A turn that failed with nobody to /retry it (an AI seat, a player who left): the table
-        resumes it itself, twice, and then lets it go: what was settled stays, the journal is
-        cleared, the round goes on. Before, an AI's failure closed the room, and a turn left
-        unfinished refused every action after it (graph.route)."""
-        for _ in range(2):
-            if not self.state.pending_turn:
-                break
-            try:
-                await self._run("/retry", inv.id, ai=True)
-                return
-            except Exception as again:
-                self.game.visuals.resume()
-                exc = again
+        """After bounded recovery in _run, release an unattended turn without replaying it.
+
+        Already-settled facts remain. There is no second AI-only retry loop or a budget
+        bypass; an absent player's failed journal must not keep the scene reserved forever.
+        """
         self._failed(f"{inv.name}的回合", exc)
         if self.state.pending_turn:
             if (token := self.state.pending_turn.get("party_token")) is not None:
@@ -2400,12 +2415,33 @@ class Hub:
         self.game.by_hand_seats = frozenset(x for x, cid in self.sits.items() if cid is not None or self._encounter_human(x))
         while True:
             offer = None
-            async for mode, chunk in turn_graph.stream(self.graph, self.game, inp, self.thread,
-                                                       stream_mode=["custom", "updates"]):
-                if mode == "custom":
-                    await self._event(chunk)
-                elif isinstance(chunk, dict) and "__interrupt__" in chunk:
-                    offer = chunk["__interrupt__"][0].value
+            partial = False
+            try:
+                async for mode, chunk in turn_graph.stream(self.graph, self.game, inp, self.thread,
+                                                           stream_mode=["custom", "updates"]):
+                    if mode == "custom":
+                        partial = partial or chunk.get("type") == "keeper_delta"
+                        await self._event(chunk)
+                    elif isinstance(chunk, dict) and "__interrupt__" in chunk:
+                        offer = chunk["__interrupt__"][0].value
+            except Exception as exc:
+                journal = self.state.pending_turn
+                stage = journal.get("stage", "")
+                retries = journal.get("auto_recovery", {})
+                # An unfinished plain stream has no saved body to deliver exactly once.
+                # Structured tellings already save their full text before any delta is shown.
+                unsafe = partial and "text" not in journal.get("keeper", {})
+                if (not journal or not recovery.recoverable(exc) or unsafe
+                        or retries.get(stage, 0) >= recovery.ATTEMPTS):
+                    raise
+                journal.setdefault("auto_recovery", {})[stage] = retries.get(stage, 0) + 1
+                self._save()
+                self.game._debug("lan", {"phase": "auto-retry", "stage": stage,
+                                         "attempt": journal["auto_recovery"][stage], "error": type(exc).__name__})
+                await self._event({"type": "status", "text": "本回合中断，正在自动恢复；已结算结果保留。"})
+                await asyncio.sleep(recovery.DELAY)
+                inp = {"input": "/retry", "by_hand": journal.get("by_hand", False)}
+                continue
             if offer is None:
                 break
             choice = None

@@ -19,7 +19,7 @@ def table(fake) -> tuple[Game, Cast]:
     state = Game.new(module, [module.pregens[0].model_copy(deep=True)])
     state.location, state.turn = "square", 1
     cast = Cast(config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES},
-                              minds=0, visual_limit=0, imagegen=False), module)
+                              visual_limit=0, imagegen=False), module)
     return Game(module, state, cast, Rules(dice=fake)), cast
 
 

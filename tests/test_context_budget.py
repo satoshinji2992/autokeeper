@@ -54,7 +54,7 @@ async def test_fixed_input_components_cannot_bypass_the_session_budget(probe, co
     system = "大" * 200 if component == "system" else "系统"
     schema = {"type": "object", "description": "模式" * 200} if component == "schema" else None
     extra = "临时资料" * 100 if component == "extra" else ""
-    session = Session("world", _spec(100), system, schema=schema)
+    session = Session("keeper", _spec(100), system, schema=schema)
     with pytest.raises(ContextBudgetExceeded) as error:
         await session.send("现在处理", extra=extra)
     assert error.value.parts["total_chars"] > 100 and not probe.calls
@@ -104,11 +104,11 @@ async def test_a_failed_or_insufficient_summary_keeps_the_original_and_does_not_
     await session.close()
 
 
-async def test_a_stateless_world_request_does_not_attempt_to_compact(probe):
+async def test_a_stateless_preparation_request_does_not_attempt_to_compact(probe):
     async def summarize(*args):
         pytest.fail("无状态调用不能压缩其他角色的记忆")
 
-    session = Session("world", _spec(100), "角色", memory=0, summarizer=summarize)
+    session = Session("director", _spec(100), "角色", memory=0, summarizer=summarize)
     with pytest.raises(ContextBudgetExceeded):
         await session.send("当前世界切片" * 100)
     assert not probe.calls
@@ -180,7 +180,7 @@ def test_a_configured_budget_is_retained_by_automatically_created_fallbacks(prob
 
 async def test_concurrent_sessions_keep_separate_context_breakdowns(probe):
     first = Session("first", _spec(), "甲系统", memory=1000, key="npc:a")
-    second = Session("second", _spec(), "乙系统更长", memory=0, key="world:b")
+    second = Session("second", _spec(), "乙系统更长", memory=0, key="director:b")
     first.pinned = "甲的任务"
     expected = {"first": first.context_size("甲问题", extra="甲的临时资料"), "second": second.context_size("乙问题", extra="乙")}
     rows = []

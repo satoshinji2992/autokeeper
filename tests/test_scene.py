@@ -16,7 +16,7 @@ from autokeeper.agents.cast import Action, Cast, Ruling, _Telling
 from autokeeper.config import Role
 from autokeeper.engine.game import Game, Turn
 from autokeeper.engine.state import GameState
-from autokeeper.harness import Reply, spend
+from autokeeper.harness import Reply
 from autokeeper.harness import models as hm
 from autokeeper.module.schema import Ending, Event, Item, Module
 from autokeeper.paths import EXAMPLE
@@ -54,11 +54,9 @@ def sandbox(monkeypatch, tmp_path):
     monkeypatch.setitem(hm.MODELS, "writer", Writer)
     monkeypatch.setattr(paths, "DATA", tmp_path / "saves")
     monkeypatch.setenv("AUTOKEEPER_TRACE", "off")
-    spend.budget.cache_clear()
     SCRIPT.clear()
     SEEN.clear()
     yield
-    spend.budget.cache_clear()
 
 
 def telling(text: str, **scene_fields) -> dict:

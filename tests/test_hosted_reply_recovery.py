@@ -30,7 +30,7 @@ FINAL = {"kind": "tell", "telling": {"scene": {}, "text": "雨水遮住视野，
 
 
 def real_cast(module):
-    return Cast(config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES}, minds=0,
+    return Cast(config.Config(roles={role: SCRIPTED for role in config.DEFAULT_ROLES},
                               visual_limit=0, imagegen=False, search="none"), module)
 
 

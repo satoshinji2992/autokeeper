@@ -177,7 +177,7 @@ async def test_a_stake_that_fired_mid_fight_sets_its_flags_on_the_retry(module, 
     module.events.append(Event(id="ev_post", title="钟声", when="flag:post", text="钟声响了"))
     keep = arrange("warden", DeclaredAction(do="defend", summary="守"))
     game, _cast, events = fight_game(module, fake, arrange=lambda *a: EncounterTurnPlan(npcs=[keep]))
-    game.state.flags.append("pre")
+    assert game.world.apply({"kind": "flag", "flag": "pre", "actor": "engine"}).ok
     await begin(game, ["warden"], npcs=[keep], stakes=[Stake(when="flag:pre", flags=["post"])])
     original, broke = game.emit, []
 

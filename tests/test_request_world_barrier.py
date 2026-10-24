@@ -1,236 +1,153 @@
-"""Background world work cannot carry a request past a new visible decision unnoticed."""
+"""Prepared arrivals settle before the KP chooses whether a compound request continues.
+
+There is no post-narration NPC worker or second world-barrier narration. The first
+actual scene report already contains what happened during the player's action.
+"""
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
-from autokeeper.agents.cast import Action, KeeperCall, Narration, Plan, Ruling
 from autokeeper.engine.state import GameState
 from autokeeper.world import ops as O
-from autokeeper.world import scheduler
-from autokeeper.world.agents import Canned, Decision, Scene
 from autokeeper.world.record import Step
 
-from .test_request_execution import RequestCast, make, module, run, telling
+from .test_keeper_backstage_runtime import assert_no_independent_world_model, table
+from .test_keeper_memory_runtime import words
+from .test_keeper_tools_execution import final, role_calls, shut, voice
+from .test_request_execution import run
+from .test_scene import SCRIPT, sandbox  # noqa: F401
 
 HELP = "布道者当面喊：救救我，有人在追我！先听我说！"
 PRIVATE = "布道者在报社核对私人账目。"
 PENDING = "先听布道者解释求救，再决定是否继续等到20:35。"
 ORIGINAL = "先向守钟人确认时间，没有新情况就等到20:35；有人求救先停下来听。"
+FIRST_BODY = "老人告诉了你时间，布道者赶到门前呼救。"
 
 
-class BarrierCast(RequestCast):
-    voice_requested = False
-
-    async def keeper(self, state, report, on_delta=None, lore="", *, check=None, fix="", voices=None):
-        if not self.voice_requested and voices and "warden" in voices:
-            self.voice_requested = True
-            return Narration(text="", call=KeeperCall(npc="warden", instruction="根据刚才的实际检定回答来访者。"))
-        return await super().keeper(state, report, on_delta, lore, check=check, fix=fix)
-
-
-def setup(fake, *, private=False):
-    m = module()
-    m.npc("preacher").important = True
-    first = Action(kind="talk", summary="周衡向守钟人确认时间", npc="warden", speech="能确认一下时间吗？")
-    wait = Action(kind="wait", summary="没有新情况就等到20:35")
-    cast = BarrierCast({ORIGINAL: Plan(action=first, remaining="无新情况就等到20:35；有人求救先停下来听。")}, {
-        first.summary: Ruling(needs_roll=True, skill="说服", minutes=5),
-        wait.summary: Ruling(needs_roll=False, minutes=10, rest=True),
-    }, [telling(next=Plan(action=wait)), telling() if private else telling(pending=PENDING)])
-    game, graph = make(fake, cast, m=m)
-    game.world_later = True
+def setup(fake, *, private=False, state=None, module=None):
+    game, graph, cast = table(fake, state=state, module=module)
+    if state is not None:
+        return game, graph, cast
     w = game.world
     w.rec.simulated = game.state.minutes
     target = "office" if private else "tower"
-    occurred = {"kind": "occur", "place": target, "text": PRIVATE if private else HELP}
-    if private:
-        occurred["visibility"] = "private"
+    assert w.apply(O.Enlist(npc="preacher", goals=["先把眼前的事处理好"], actor="engine")).ok
     assert w.apply(O.SetPlan(npc="preacher", steps=[Step(
         id="arrive", text="去报社处理私事" if private else "跑上钟楼求救", due=w.now + 1,
-        ops=[{"kind": "move", "entity": "preacher", "to": target}, occurred],
-    )])).ok
-    w.agent("preacher").wake = w.now + 3
-
-    async def think(ask):
-        await asyncio.sleep(0)  # let the main graph meet the real running world task
-        return Scene(decisions=[Decision(npc=n, wait=600) for n in ask.npcs])
-
-    brain = Canned(think)
-    game.brain, game.minds = brain, scheduler.Budget(turn=4, skip=4)
-    fake.queue(1)
-    return game, graph, cast, brain
+        achieved=f"at:preacher:{target}", meet=False,
+        ops=[{"kind": "move", "entity": "preacher", "to": target, "visibility": "private" if private else "public"},
+             {"kind": "occur", "place": target, "text": PRIVATE if private else HELP,
+              "visibility": "private" if private else "public"}],
+    )], actor="engine")).ok
+    return game, graph, cast
 
 
-def assert_not_repeated(game, cast):
+def script(*, private=False, minutes=5):
+    SCRIPT.extend([
+        {"action": {"kind": "talk", "summary": "周衡向守钟人确认时间", "npc": "warden", "speech": "能确认一下时间吗？"},
+         "remaining": "无新情况就等到20:35；有人求救先停下来听。"},
+        {"needs_roll": True, "skill": "说服", "minutes": minutes},
+        voice("warden", "请按刚才的实际检定回答调查员询问的时间。"),
+        {"text": "现在是二十点二十五分。"},
+        final("老人告诉了你时间。" if private else FIRST_BODY,
+              continuation={"next": {"action": {"kind": "wait", "summary": "周衡原地等到20:35"}}} if private
+              else {"pending": PENDING}),
+    ])
+    if private:
+        SCRIPT.extend([{"needs_roll": False, "minutes": 15 - minutes, "rest": True}, final("钟面走到了二十点三十五分。")])
+
+
+def assert_not_repeated(game):
     st = game.state
     assert len(st.checks) == 1 and st.checks[0].passed and st.checks[0].turn == 1
-    assert [e.text for e in st.log if e.kind == "player"] == [ORIGINAL]
-    assert len([e for e in st.log if e.kind == "dice"]) == 1
-    assert len(cast.npc_calls) == 1 and len([e for e in st.log if e.kind == "npc"]) == 1
-    assert cast.planned == [ORIGINAL]
+    assert [entry.text for entry in st.log if entry.kind == "player"] == [ORIGINAL]
+    assert len([entry for entry in st.log if entry.kind == "dice"]) == 1
+    assert len(role_calls("Plan")) == len(role_calls("Dialogue")) == 1
+    assert len([entry for entry in st.log if entry.kind == "npc"]) == 1
+    assert_no_independent_world_model(game)
 
 
-async def test_visible_background_arrival_is_told_and_returns_the_decision_before_the_old_wait(fake):
-    game, graph, cast, brain = setup(fake)
+async def test_visible_prepared_arrival_is_in_the_first_report_and_stops_the_old_wait(fake):
+    game, graph, cast = setup(fake)
     start = game.state.minutes
+    script()
+    fake.queue(1)
     try:
         _, offers = await run(graph, game, {"input": ORIGINAL})
         st = game.state
-        assert not offers and not st.pending_turn and not fake.values
+        assert not offers and not SCRIPT and not st.pending_turn and not fake.values
         assert st.turn == 1 and st.minutes == start + 5 and game.world.place("preacher") == "tower"
         assert st.unfinished[st.investigator.id]["remaining"] == PENDING
-        assert len(cast.reports) == 2 and HELP not in cast.reports[0] and HELP in cast.reports[1]
-        assert len(brain.asks) == 1 and len(cast.ruled) == 1
-        assert len([e for e in game.world.rec.events if e.text == HELP]) == 1
-        assert_not_repeated(game, cast)
+        calls = role_calls("ContinuedHostedReply")
+        assert len(calls) == 2 and HELP in words(calls[0]["messages"])
+        assert len(role_calls("Ruling")) == 1
+        assert len([event for event in game.world.rec.events if event.text == HELP]) == 1
+        assert_not_repeated(game)
     finally:
-        await game.close()
+        await shut([game], [cast])
 
 
-async def test_unseen_private_background_work_adds_no_keeper_call_or_interruption(fake):
-    game, graph, cast, brain = setup(fake, private=True)
+async def test_private_prepared_work_does_not_add_a_second_telling_or_interrupt_the_old_wait(fake):
+    game, graph, cast = setup(fake, private=True)
     start = game.state.minutes
+    script(private=True)
+    fake.queue(1)
     try:
         _, offers = await run(graph, game, {"input": ORIGINAL})
         st = game.state
-        assert not offers and not st.pending_turn and not st.unfinished and not fake.values
+        assert not offers and not SCRIPT and not st.pending_turn and not st.unfinished and not fake.values
         assert st.turn == 2 and st.minutes == start + 15 and game.world.place("preacher") == "office"
-        assert len(cast.reports) == 2 and not any(PRIVATE in report for report in cast.reports)
-        assert len(brain.asks) == 1 and len(cast.ruled) == 2
-        assert_not_repeated(game, cast)
+        assert len(role_calls("ContinuedHostedReply")) == 2 and len(role_calls("HostedReply")) == 1
+        assert len(role_calls("Ruling")) == 2
+        assert len([event for event in game.world.rec.events if event.text == PRIVATE]) == 1
+        assert PRIVATE not in "\n".join(entry.text for entry in st.log if entry.kind in {"keeper", "npc"})
+        assert_not_repeated(game)
     finally:
-        await game.close()
+        await shut([game], [cast])
 
 
-@pytest.mark.parametrize("cut", ["before_task", "scheduler_done", "after_play", "settled", "following_ready", "following_landed"])
-async def test_world_barrier_and_following_keeper_resume_from_saved_receipts(fake, cut):
-    game, graph, cast, brain = setup(fake)
-    games, saved = [game], []
+@pytest.mark.parametrize("cut", ["prepared-work", "before-keeper", "final-saved", "final-landed"])
+async def test_inline_world_and_keeper_receipts_resume_without_repeating_arrival_or_original_request(fake, cut):
+    game, graph, cast = setup(fake)
+    games, casts, saved = [game], [cast], []
     start = game.state.minutes
+    script()
+    fake.queue(1)
 
-    def checkpoint():
-        receipt = game.state.pending_turn.get("request_world")
-        if receipt is None:
-            return
-        steps = receipt.get("work", {}).get("steps", {})
-        follow = game.state.pending_turn.get("keeper", {}).get("following_keeper", {})
-        hit = {
-            "before_task": not receipt.get("work"),
-            "scheduler_done": bool(game.world.rec.ticks) and not steps.get("live", {}).get("done"),
-            "after_play": steps.get("play", {}).get("done") and not steps.get("flags", {}).get("done"),
-            "settled": receipt.get("settled") and not receipt.get("complete"),
-            "following_ready": "keeper_depth" in receipt and not follow.get("text"),
-            "following_landed": follow.get("landed") and not receipt.get("complete"),
+    def disconnect():
+        journal = game.state.pending_turn
+        receipt = journal.get("keeper", {})
+        happened = any(event.text == HELP for event in game.world.rec.events)
+        ready = {
+            "prepared-work": happened and journal.get("stage") == "resolve",
+            "before-keeper": journal.get("stage") == "narrate" and not receipt,
+            "final-saved": "text" in receipt and not receipt.get("landed"),
+            "final-landed": receipt.get("landed"),
         }[cut]
-        if hit:
-            if not saved:
-                saved.append(game.state.model_dump_json())
-            raise RuntimeError("屏障检查点断线")
+        if ready and not saved:
+            saved.append(game.state.model_dump_json())
+            raise RuntimeError(f"scripted inline world interrupted: {cut}")
 
-    game.checkpoint = checkpoint
+    game.checkpoint = disconnect
     try:
-        with pytest.raises(RuntimeError):
+        with pytest.raises(RuntimeError, match="scripted inline world interrupted"):
             await run(graph, game, {"input": ORIGINAL})
         assert len(saved) == 1 and not fake.values
-        before = GameState.model_validate_json(saved[0])
-        assert before.turn == 1 and before.minutes == start + 5
-        assert before.pending_turn["request_world"]["since"] >= 0
-        assert before.pending_turn["request_world"]["dealing"] == ["warden"]
-        assert "ready" not in before.pending_turn["request"]
-        old_module = game.m.model_copy(deep=True)
-        # The dying process cannot continue mutating its snapshot's game after loading.
-        await game.close()
-        game, graph = make(fake, cast, m=old_module, state=before)
+        state = GameState.model_validate_json(saved[0])
+        module = game.m.model_copy(deep=True)
+        await shut([game], [cast])
+        game, graph, cast = setup(fake, module=module, state=state)
         games.append(game)
-        game.world_later = True
-        game.brain, game.minds = brain, scheduler.Budget(turn=4, skip=4)
+        casts.append(cast)
         _, offers = await run(graph, game, {"input": "/retry"})
         st = game.state
-        assert not offers and not st.pending_turn and not cast.tellings and not fake.values
+        assert not offers and not SCRIPT and not st.pending_turn and not fake.values
         assert st.turn == 1 and st.minutes == start + 5 and game.world.place("preacher") == "tower"
         assert st.unfinished[st.investigator.id]["remaining"] == PENDING
-        assert len(brain.asks) == 1 and len(cast.reports) == 2 and len(cast.ruled) == 1
-        assert len([e for e in game.world.rec.events if e.text == HELP]) == 1
-        assert len([e for e in st.log if e.kind == "keeper" and HELP in e.text]) <= 1
-        assert_not_repeated(game, cast)
+        assert len(role_calls("Ruling")) == 1 and len(role_calls("ContinuedHostedReply")) == 2
+        assert len([event for event in game.world.rec.events if event.text == HELP]) == 1
+        assert len([entry for entry in st.log if entry.kind == "keeper" and entry.text == FIRST_BODY]) == 1
+        assert_not_repeated(game)
     finally:
-        for old in games:
-            await old.close()
-
-
-@pytest.mark.parametrize("private", [False, True])
-@pytest.mark.parametrize("minutes", [0, 5])
-async def test_narrated_save_before_remember_recovers_world_debt_without_an_in_memory_owed_flag(fake, private, minutes):
-    game, graph, cast, brain = setup(fake, private=private)
-    games, saved = [game], []
-    start = game.state.minutes
-    if minutes == 0:
-        first, wait = cast.rulings
-        cast.rulings[first] = cast.rulings[first].model_copy(update={"minutes": 0})
-        cast.rulings[wait] = cast.rulings[wait].model_copy(update={"minutes": 15})
-        step = game.world.agent("preacher").plan[0].model_copy(update={"due": start})
-        assert game.world.apply(O.SetPlan(npc="preacher", steps=[step])).ok
-
-    def checkpoint():
-        journal = game.state.pending_turn
-        if journal.get("stage") == "remember" and "request_world" not in journal:
-            assert game._world_owed and game._world_task is None
-            saved.append(game.state.model_dump_json())
-            raise RuntimeError("讲述已保存，remember之前断线")
-
-    game.checkpoint = checkpoint
-    try:
-        with pytest.raises(RuntimeError, match="remember之前"):
-            await run(graph, game, {"input": ORIGINAL})
-        assert len(saved) == 1 and len(brain.asks) == 0 and not fake.values
-        state = GameState.model_validate_json(saved[0])
-        assert state.record.simulated == start and state.minutes == start + minutes
-        assert state.pending_turn["stage"] == "remember" and "request_world" not in state.pending_turn
-        assert state.pending_turn["keeper"]["calls"][0]["done"]
-        old_module = game.m.model_copy(deep=True)
-        await game.close()
-        game, graph = make(fake, cast, m=old_module, state=state)
-        games.append(game)
-        game.world_later = True
-        game.brain, game.minds = brain, scheduler.Budget(turn=4, skip=4)
-        assert not game._world_owed and game._world_task is None
-        _, offers = await run(graph, game, {"input": "/retry"})
-        st = game.state
-        assert not offers and not st.pending_turn and not fake.values and not cast.tellings
-        assert len(brain.asks) <= 1 and len(cast.reports) == 2
-        assert_not_repeated(game, cast)
-        if private:
-            assert st.turn == 2 and st.minutes == start + 15 and not st.unfinished
-            assert game.world.place("preacher") == "office"
-            assert not any(PRIVATE in report for report in cast.reports)
-        else:
-            assert st.turn == 1 and st.minutes == start + minutes and game.world.place("preacher") == "tower"
-            assert st.unfinished[st.investigator.id]["remaining"] == PENDING
-            assert HELP in cast.reports[-1]
-    finally:
-        for old in games:
-            await old.close()
-
-
-async def test_inline_world_play_does_not_acquire_a_continuation_background_barrier(fake):
-    game, graph, cast, brain = setup(fake, private=True)
-    game.world_later = False
-    barriers = []
-
-    def checkpoint():
-        if "request_world" in game.state.pending_turn:
-            barriers.append(game.state.pending_turn["request_world"])
-
-    game.checkpoint = checkpoint
-    try:
-        _, offers = await run(graph, game, {"input": ORIGINAL})
-        assert not offers and not barriers and len(cast.reports) == 2 and len(brain.asks) == 1
-        assert game.state.turn == 2 and not game.state.unfinished and not game.state.pending_turn
-        assert game.world.place("preacher") == "office"
-        assert not any(PRIVATE in report for report in cast.reports)
-        assert_not_repeated(game, cast)
-    finally:
-        await game.close()
+        await shut(games, casts)

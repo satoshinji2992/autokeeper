@@ -7,6 +7,7 @@ import asyncio
 import pytest
 
 from autokeeper.agents.cast import Action, Ruling
+from autokeeper.harness.models import StructuredOutputError
 from autokeeper.net.hub import Hub
 from autokeeper.net.scenes import SceneTable, SceneTables
 from autokeeper.paths import EXAMPLE
@@ -30,7 +31,7 @@ class FailingNarrator(TableCast):
 
     async def keeper(self, state, report, on_delta=None, lore=""):
         self.failures += 1
-        raise ValueError("offline fake: malformed model content")
+        raise StructuredOutputError(["malformed model content"], ["malformed model content"])
 
 
 def make_table(fake: FakeDice) -> tuple[Hub, SceneTables]:
@@ -58,7 +59,7 @@ async def test_abandoned_turn_releases_its_reservation_and_unblocks_the_other_sc
         assert first.state.pending_turn and first.scene.reservation
         settled_at, recorded = first.scene.at, first.state.record.seq
         await first._unattended(first.state.investigator, error.value)
-        assert first.cast.failures == 3 and not first.state.pending_turn
+        assert first.cast.failures == 2 and not first.state.pending_turn
         assert first.scene.at == settled_at and first.state.record.seq == recorded
         restored = type(hub.state).model_validate_json(hub.state.model_dump_json())
         assert not first.scene.reservation, "Abandoned action must not continue reserving time or shared resources"
@@ -140,8 +141,9 @@ async def test_cancelled_time_proposal_can_resume_after_input_is_undone(fake, mo
 
     monkeypatch.setattr(first.cast, "scene_time", scene_time, raising=False)
     monkeypatch.setattr(hub, "_send", send)
-    other.state.pending_turn = {"input": "耗时行动"}
-    tables.runtime.reserve(other.ident, Action(kind="use", summary="耗时行动"), Ruling(needs_roll=False, minutes=20))
+    other.state.pending_turn = {"input": "前往广场会合"}
+    tables.runtime.reserve(other.ident, Action(kind="move", summary="前往广场会合", destination=first.scene.place),
+                           Ruling(needs_roll=False, minutes=10))
     other.scene.reservation["blocked"] = tables.runtime.blockers(other.ident)
     until = tables.runtime.time_requested(first.ident)
     assert until == 860

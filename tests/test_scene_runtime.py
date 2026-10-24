@@ -181,7 +181,7 @@ async def test_reconcile_closes_a_split_source_and_preserves_actual_audienced_ex
         await runtime.close()
 
 
-async def test_two_hour_result_waits_while_other_scene_finishes_and_continues(fake):
+async def test_independent_long_and_short_actions_keep_their_own_time_without_waiting(fake):
     short = Action(kind="use", summary="问诊十分钟")
     next_short = Action(kind="use", summary="再调查十分钟")
     long = Action(kind="use", summary="查档两小时")
@@ -194,18 +194,13 @@ async def test_two_hour_result_waits_while_other_scene_finishes_and_continues(fa
     ta = tb = None
     try:
         tb = asyncio.create_task(run(runtime.graph(b), gb, {"input": "B"}))
-        await spin_until(lambda: runtime.scenes[b].reservation)
+        await asyncio.wait_for(tb, 3)
         ta = asyncio.create_task(run(runtime.graph(a), ga, {"input": "A"}))
         await asyncio.wait_for(ta, 3)
-        assert runtime.scenes[a].at == 610 and runtime.scenes[b].at == 600
-        assert "bell_stopped" not in runtime.state.flags and not tb.done()
-        assert not casts[b].reports  # final research result is not generated or committed early
+        assert runtime.scenes[a].at == 610 and runtime.scenes[b].at == 720
+        assert "bell_stopped" in runtime.state.flags and casts[b].reports
         await asyncio.wait_for(run(runtime.graph(a), ga, {"input": "A2"}), 3)
-        assert runtime.scenes[a].at == 620 and not tb.done()
-        assert runtime.pass_time(a)
-        await asyncio.wait_for(tb, 3)
-        assert runtime.scenes[a].at == runtime.scenes[b].at == runtime.state.minutes == 720
-        assert "bell_stopped" in runtime.state.flags
+        assert runtime.scenes[a].at == 620 and runtime.state.minutes == 720
         assert len([entry for entry in runtime.state.log if entry.kind == "player"]) == 3
         assert len({entry.turn for entry in runtime.state.log if entry.kind == "player"}) == 3
     finally:
@@ -271,9 +266,9 @@ async def test_failed_world_transaction_keeps_other_awaiting_scene_references_li
 
 
 async def test_prepared_time_ticket_restores_without_new_input_log_or_relative_deadline(fake):
-    long = Action(kind="use", summary="查档两小时")
+    long = Action(kind="move", summary="去钟楼会合", destination="tower")
     runtime, _, _ = made(fake, plans={"B": Plan(action=long)},
-                         rulings={long.summary: Ruling(needs_roll=False, minutes=120)})
+                         rulings={long.summary: Ruling(needs_roll=False)})
     a, b = runtime.for_member("zhouheng"), runtime.for_member("lin")
     task = asyncio.create_task(run(runtime.graph(b), runtime.game(b), {"input": "B"}))
     try:
@@ -284,11 +279,11 @@ async def test_prepared_time_ticket_restores_without_new_input_log_or_relative_d
         await asyncio.gather(task, return_exceptions=True)
         restored, casts, _ = made(fake, state=GameState.model_validate_json(saved))
         try:
-            assert not restored.scenes[b].busy and restored.scenes[b].reservation["end"] == 720
+            assert not restored.scenes[b].busy and restored.scenes[b].reservation["end"] == 610
             assert restored.pass_time(a)
             await asyncio.wait_for(run(restored.graph(b), restored.game(b), {"input": "/retry"}), 3)
             assert not casts[b].planned and not casts[b].ruled
-            assert restored.scenes[b].at == 720
+            assert restored.scenes[b].at == 610
             assert len([entry for entry in restored.state.log if entry.kind == "player"]) == 1
         finally:
             await restored.close()
@@ -346,7 +341,8 @@ async def test_revoked_pass_rechecks_the_synchronous_time_commit_before_spending
     try:
         assert runtime.pass_time(b)
         ga.state.turn = runtime.allocate_turn()
-        runtime.reserve(a, Action(kind="use", summary="搜查"), Ruling(needs_roll=False, minutes=20))
+        runtime.reserve(a, Action(kind="move", summary="前往广场会合", destination="square"),
+                        Ruling(needs_roll=False, minutes=10))
         await runtime.wait(a)
         runtime.revoke_pass(b)  # accepted during a prior await, before any real time mutation
         try:
@@ -419,7 +415,7 @@ async def test_scoped_presence_projects_committed_movements_at_local_time(fake):
 
 @pytest.mark.parametrize("by_hand", [False, True])
 @pytest.mark.parametrize("recover", [False, True])
-async def test_joint_kp_order_then_real_commit_refreshes_the_other_graph_ruling(fake, by_hand, recover):
+async def test_joint_kp_order_then_real_commit_refreshes_the_other_graph_ruling(fake, by_hand, recover, monkeypatch):
     from autokeeper.agents.cast import PartyPlan, PartyStep
     from autokeeper.engine.timing import SceneResourceConflict
 
@@ -435,6 +431,16 @@ async def test_joint_kp_order_then_real_commit_refreshes_the_other_graph_ruling(
     casts[a].npc = casts[b].npc = voice
     seen, contexts = [], []
     tasks = []
+    prepared = asyncio.Event()
+    original_wait = runtime.wait
+
+    async def wait_for_both(ident, end=None):
+        if runtime.scenes[a].reservation and runtime.scenes[b].reservation:
+            prepared.set()
+        await prepared.wait()
+        await original_wait(ident, end)
+
+    monkeypatch.setattr(runtime, "wait", wait_for_both)
 
     async def joint(state, inputs):
         # The KP explicitly chooses B first, overriding the earlier network/global-turn order.

@@ -8,10 +8,9 @@ from copy import deepcopy
 import pytest
 from jsonschema import Draft202012Validator
 
-from autokeeper.agents.cast import Dialogue, Plan, Ruling, Telling
+from autokeeper.agents.cast import Dialogue, HostedReply, KeeperToolCall, Plan, Ruling, Telling
 from autokeeper.agents.director import Improv
 from autokeeper.harness import models as hm
-from autokeeper.world.agents import Decision
 
 
 def test_compaction_preserves_named_fields_literals_and_constraints():
@@ -67,7 +66,7 @@ def test_schema_combinators_are_walked_but_literal_dictionaries_are_not():
     assert compact["enum"] == [{"title": "literal"}]
 
 
-@pytest.mark.parametrize("model", [Plan, Ruling, Dialogue, Telling, Improv, Decision])
+@pytest.mark.parametrize("model", [Plan, Ruling, Dialogue, Telling, Improv, HostedReply, KeeperToolCall])
 def test_game_contracts_keep_all_fields_descriptions_and_examples(model):
     schema = model.model_json_schema()
     compact = hm.compact_schema(schema)

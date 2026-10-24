@@ -38,7 +38,7 @@ def table(fake, *, module=None, state=None, party=False):
         state = Game.new(module, investigators, human=[i.id for i in investigators])
         state.location, state.minutes = "tower", 20 * 60 + 20
     cast = Cast(config.Config(roles={role: WRITER for role in config.DEFAULT_ROLES},
-                              minds=0, visual_limit=0, imagegen=False), module)
+                              visual_limit=0, imagegen=False), module)
     game = Game(module, state, cast, Rules(dice=fake))
     return game, turn_graph.build(game, InMemorySaver()), cast
 
@@ -78,7 +78,7 @@ async def test_three_players_keep_their_own_checks_and_replies_after_an_npc_hand
 
     def factory(ident):
         return Cast(config.Config(roles={role: WRITER for role in config.DEFAULT_ROLES},
-                                  minds=0, visual_limit=0, imagegen=False), module)
+                                  visual_limit=0, imagegen=False), module)
 
     runtime = SceneRuntime(state, module, factory, lambda _: Rules(dice=fake), emit)
     ident = runtime.for_member(people[0].id)

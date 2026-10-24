@@ -40,14 +40,13 @@ def table(fake, monkeypatch, *, state=None, module=None, public=False):
         module.art["resonance"] = "  ~~~ /  *  / ~~~  "
         module.clues.append(Clue(id="c_resonance", title="异响的节律", text=SECRET,
                                  where="tower", handout="h_resonance"))
-    cast = Cast(config.Config(roles={r: WRITER for r in config.DEFAULT_ROLES}, minds=0, visual_limit=0,
+    cast = Cast(config.Config(roles={r: WRITER for r in config.DEFAULT_ROLES}, visual_limit=0,
                               imagegen=False, public_rolls=public), module)
     # The real Hub and Graph share exactly this module and persistent world.
     with monkeypatch.context() as patch:
         patch.setattr(Module, "load", lambda _: module)
         hub = Hub(paths.EXAMPLE, state=state, cast=cast, rules=Rules(dice=fake))
-    hub.game.write_progress = hub.game.world_later = False
-    hub.game.world.reviewing = False
+    hub.game.write_progress = False
     hub.clients = dict.fromkeys(("a", "b", "c", "watch"))
     hub.names = {cid: cid for cid in hub.clients}
     hub.sits = {state.investigators[0].id: "a", "lin": "b", "chen": "c"}

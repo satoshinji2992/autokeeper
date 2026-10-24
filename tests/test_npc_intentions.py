@@ -51,7 +51,7 @@ async def test_a_conversation_replaces_the_real_goal_and_retires_old_work_across
     await restored_cast.npc(state, "warden", "你接下来有什么打算？")
     assert "请街坊一起查看钟楼" in SEEN[-1]["messages"][-1]["content"]
     state.location = "office"  # the party left; the fixed action now happens offscreen
-    report = await scheduler.advance(restored.world, None, state.minutes, state.minutes + 15)
+    report = await scheduler.advance(restored.world, state.minutes, state.minutes + 15)
     assert not report.refused and restored.world.place("warden") == "square"
     assert next(s for s in restored.world.agent("warden").plan if s.id == "get_help").status == "done"
     await restored.close()

@@ -325,7 +325,9 @@ async def test_something_else_in_a_chase_is_ruled_and_lands_on_the_way(module, f
     assert enc.chase.site.obstacles["ob_office_door"].state == "blocked"
     assert enc.budget.movement["zhouheng"] == 0 and [a.summary for a in cast.ruled] == [wedge.summary]
     report = cast.reports[-1]
-    assert "把门关上顶住" not in report and "周衡把门撞上" in report and "堵上了" in report
+    assert "【玩家本次原话，供核对行动范围】把门关上顶住" in report
+    assert "周衡把门撞上" in report and "堵上了" in report
+    assert all("把门关上顶住" not in action.model_dump_json() for action in cast.ruled)
 
 
 async def test_hiding_far_ahead_gets_a_bonus_die_and_a_hidden_quarry_cannot_be_gone_after(module, fake):

@@ -33,10 +33,12 @@ async def test_world_change_invalidates_finished_time_consultation(fake, monkeyp
 
     monkeypatch.setattr(hub, "_send", send)
     monkeypatch.setattr(quiet.cast, "scene_time", clock, raising=False)
-    active.state.pending_turn = {"input": "调查二十分钟"}
-    tables.runtime.reserve(active.ident, Action(kind="use", summary="调查二十分钟"), Ruling(needs_roll=False, minutes=20))
+    active.state.pending_turn = {"input": "前往广场会合"}
+    tables.runtime.reserve(active.ident, Action(kind="move", summary="前往广场会合", destination=quiet.scene.place),
+                           Ruling(needs_roll=False, minutes=10))
     active.scene.reservation["blocked"] = tables.runtime.blockers(active.ident)
     until = tables.runtime.time_requested(quiet.ident)
+    assert until == quiet.scene.at + 20
     try:
         quiet.request_time(until)
         await quiet.time_task

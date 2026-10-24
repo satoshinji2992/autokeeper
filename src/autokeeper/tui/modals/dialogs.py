@@ -218,27 +218,35 @@ class PushModal(Timed, ModalScreen[str | dict | None]):
 
 
 class HandoutModal(ModalScreen[None]):
-    """The handout on its kind of paper (drawing/paper.py), the ink soaking in."""
+    """A written handout, or a picture whose ASCII art is only a rendering fallback."""
 
     BINDINGS = [("escape", "dismiss", "关闭"), ("enter", "dismiss", "关闭")]
 
-    def __init__(self, title: str, text: str, pictures: list[str] | None = None, kind: str = "信件"):
+    def __init__(self, title: str, text: str, pictures: list[str] | None = None, kind: str = "信件", *,
+                 fallback_art: str | None = None):
         super().__init__()
-        self.sheet = paper.sheet(kind, title, text, width=60)
+        self.title_text, self.fallback_art = title, fallback_art
+        self.sheet = paper.sheet(kind, title, text, width=60) if fallback_art is None else None
         self.revealed = 0
         self.pictures = pictures or []
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal", id="handout-modal"):
             with VerticalScroll(classes="modal-body"):
+                if self.fallback_art is not None:
+                    yield Static(Text(self.title_text, style="bold"), id="illustration-title")
                 for i, _ in enumerate(self.pictures):
                     yield Static("正在加载原图……", id=f"handout-image-{i}")
                     yield Button(f"查看原图 {i + 1}", id=f"original-{i}")
-                yield Static("", id="paper")
+                if self.fallback_art is None:
+                    yield Static("", id="paper")
+                elif not self.pictures:
+                    yield Static(self._fallback(), id="illustration-fallback")
             yield Static("Esc 收起", classes="system")
 
     def on_mount(self) -> None:
-        self.set_interval(0.02, self._develop)
+        if self.sheet is not None:
+            self.set_interval(0.02, self._develop)
         if self.pictures:
             self.run_worker(self._load_pictures())
 
@@ -250,9 +258,16 @@ class HandoutModal(ModalScreen[None]):
                 preview = ""
             if not self.is_mounted:
                 return
-            self.query_one(f"#handout-image-{i}", Static).update(
-                Text.from_ansi(preview) if preview else Text("原图可通过下方按钮查看。", style="dim")
-            )
+            if preview:
+                content = Text.from_ansi(preview)
+            elif self.fallback_art is not None:
+                content = self._fallback()
+            else:
+                content = Text("原图可通过下方按钮查看。", style="dim")
+            self.query_one(f"#handout-image-{i}", Static).update(content)
+
+    def _fallback(self) -> Text:
+        return Text.from_ansi(self.fallback_art) if self.fallback_art else Text("图像暂不可用。", style="dim")
 
     @on(Button.Pressed)
     def open_original(self, event: Button.Pressed) -> None:
@@ -266,6 +281,8 @@ class HandoutModal(ModalScreen[None]):
                 self.app.open_url(path.as_uri())
 
     def _develop(self) -> None:
+        if self.sheet is None:
+            return
         size = self.sheet.size
         if self.revealed >= size:
             return
