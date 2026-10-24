@@ -56,11 +56,11 @@ class NewNPC(BaseModel):
     name: str
     role: str = Field(description="身份，一句话")
     look: str = Field("", description="可见的年龄、衣着、外貌，作为独立立绘的依据")
-    location: str = Field(description="在哪个地点（已有的，或这次新建的）")
+    location: str = Field(description="此刻实际在哪个地点，不是未来约见地点；稍后才来的人先放在合理的别处，届时由事件 present 带到现场")
     personality: str = ""
     voice: str = Field("", description="说话方式")
     goal: str = ""
-    knows: list[str] = Field(default_factory=list, description="肯说的事")
+    knows: list[str] = Field(default_factory=list, description="本人知道的事与来源；包括与调查员的联系、如何得知并找到当前地点，不等于已经向玩家说过")
     secrets: list[str] = Field(default_factory=list, description="不公开的事；结合人物动机、关系和局势决定是否透露，不固定要逼问才说")
     lies: list[str] = Field(default_factory=list, description="会主动撒的谎")
     card: str = Field("", description="用【好事者卡】里的一张做底子时填卡 id：人物得到卡上的属性、技能与攻击；不用就留空")
@@ -180,6 +180,7 @@ DIRECTOR_SYSTEM = """你为这场 CoC 7 版跑团的守秘人准备模组未写�
 世界观不能破：
 - 时代、地域与神话体系以模组为准。已向玩家建立的事实保持一致；未公开的秘密、动机、往事和真相可为改善剧情而调整，玩家见过、听过的事也可以为阴谋或剧情改出另一个真相，但只能通过 backstage 的 rewrite 提交并接受世界记录校验，不能靠新增旁白或传言暗中覆盖。
 - 新人物、新地点要像本来就在这个故事里：符合时代和地方，和已有的人和事有关联。
+  主动来找调查员的人，写明做什么营生、为谁或什么事而来、如何认识对方或得知其去处；放进 role、goal、knows 或关系记录，供守秘人交代。登记姓名不等于玩家已经认识此人，出场须有可以理解的引见、自报家门或已有联系。
 - 本局调查员保持自己的 id 与身份，不把队友或调查员背景中对自己的描述另建成同名 NPC，也不代替真人玩家作答、同意或行动。
 - 新人物的消息有来源和局限。传言可以错误，但须作为人物的说法存在，不由旁白替它作证；尚未提交到记录的改写不能当成新事实使用。
 - 新人物写出 look；地点的 read_aloud 和物件的 description 写出能画出来的外观，后台美术会据此独立配图。
@@ -202,6 +203,8 @@ DIRECTOR_SYSTEM = """你为这场 CoC 7 版跑团的守秘人准备模组未写�
 - NPC 的目标与营生、处境相符，区分亲历、转述和推测，不让多人重复传言就变成事实；案情仍遵守线索权限。玩家谢绝推销、帮助或邀约后，按人物动机和已有关系处理，不自动升级冲突。
 - 开局改编时依照调查员的来意补生活与关系，保留原模组的矛盾；不强制预埋额外冲突，也不另设催玩家查案的时限。
   交代眼前处境和可接触的人与地方，保留玩家决定先做什么的机会；不为安排日常演出制造等车、延误或必须完成的琐事。
+  先读原作开场和当前地点的准备，不把已经写好的抵达、接待、必发事件重复安排一遍。私人联系可以先作为人物、关系或以后有条件才发生的事件备好；只有确实此刻到场且来由成立的事才写 now，不把每位调查员的背景同时变成登门求助的新任务。
+  人物的 location 是此刻实际所在；准备稍后到访的人，不先放进调查员当前地点，等对应事件的 present 使其到场。
 - 调查结果可以完整解决当前问题。仅在既有因果确实产生新问题时保留悬念；按已确认的行动与裁定安排发现，不为延长剧情制造疑点或强塞线索。
 - 有必要时给 NPC 一条角色弧光：在 arcs 里写这个 NPC 此刻的心境和正在发生的变化（从戒备到信任、从隐瞒到崩溃），他之后的言行会随之变化。
 - 这一轮的事让某个已有地点或 NPC 的样子明显变了（失火烧毁、被水淹、被洗劫一空、受了重伤、变异、死去），在 looks 里写一条：target 填它的 id，change 写画面上看得见的变化。心情、天气和昼夜不算。
@@ -209,7 +212,7 @@ DIRECTOR_SYSTEM = """你为这场 CoC 7 版跑团的守秘人准备模组未写�
 - 可以调动情绪，靠具体的细节和动作，写得克制。
 
 按触发原因安排：
-- 开局改编：读调查员的背景（重要之人、意义非凡之地、信念、宝贵之物），挑一两样织进故事，让调查员和这个案子有私人牵连，比如背景里的人成了 NPC、寄来一封信、出现在某个地点。模组里体验不好的地方（关键线索只有一条路、某段时间无事可做）可以补一条线索或一个事件。不改开场，不改原有结局。
+- 开局改编：读调查员的背景（重要之人、意义非凡之地、信念、宝贵之物），挑有因果依据的联系织进故事，比如原有委托与职业相符、背景里的人成了当地熟人，或某地保留着他们共同经历的痕迹。联系不必开场就全部揭出，已有来意足够时可以不新增。保留原作开局事实和原有结局；补充进入故事的承接，不把开场变成任务清单。
 - 展开：调查员动机正常、合情合理，只是模组没写到。不要拒绝，给它一个合理的结果：一段演出、一个新地点或一个新 NPC。
   日常行动只补生活需要的人、地点和应答，clues、give、endings 留空；普通吃饭、闲聊不算偏离主线，不要强行带回查案。
   只有调查员真的在那里调查，才考虑新线索；需要引路时用人物反应轻轻带一下，不直接交出关键信息。玩家主动追寻别的故事时才考虑新结局。
@@ -314,6 +317,14 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
         "【本局的规则插件】" + ("；".join(f"{x.id} v{x.version}「{x.name}」" for x in m.extensions.values()) or "无")
         + f"（导演已写 {len(m.directed)}/6 个）",
     ]
+    if kind == "开局改编":
+        lines.append(f"【原作开场准备】\n{m.opening.strip() or '未另写'}")
+        lines.append(f"【抵达地点的准备】\n眼前：{here.read_aloud}\n守秘人须知：{here.keeper or '无'}")
+        events = [e for e in m.events if e.id not in st.fired and (e.where == here.id or e.when == f"visit:{here.id}")]
+        if events:
+            lines.append("【此地已有事件（按各自条件发生，不是全在开场发生）】\n" + "\n".join(
+                f"- {e.id}｜条件 {e.when or '遭遇轮次'}：{e.text}"
+                + (f"\n  眼前演出：{e.read_aloud}" if e.read_aloud else "") for e in events))
     if m.ties:  # threads the investigators' backgrounds can be tied to (Module.ties)
         lines.append("【可以接上调查员背景的线头】\n" + "\n".join(f"- {t.hook}" + (f"（{t.npc or t.place}）" if t.npc or t.place else "")
                                                          + (f"，适合：{'、'.join(t.fits)}" if t.fits else "") for t in m.ties))  # fmt: skip

@@ -40,7 +40,7 @@ from ..agents.director import Improv
 from ..harness.models import Reply, refused
 from ..harness.replay import CassetteError
 from ..module import graph as module_graph
-from ..module import improv
+from ..module import improv, prelude
 from ..module.schema import Event, Item, Module
 from ..plugins.engine import Manager as PluginManager
 from ..rules import commands, wounds
@@ -438,22 +438,31 @@ class Game(Encounters):
         report = (
             f"【开场｜{st.clock}｜{loc.name}】\n年代与地方：{m.era}，{m.setting}\n调查员：\n{party}\n"
             f"开场钩子（玩家已经知道）：{m.hook.strip()}\n"
-            f"【开场素材（尚未朗读，融入叙事，不要先照抄再重讲）】\n{m.opening.strip()}\n"
-            f"【进入地点】\n{self._public_location(loc.id)}\n"
+            f"【抵达背景与开场素材（尚未朗读，与眼前事件合成一次叙述，不重复演出）】\n{m.opening.strip()}\n"
+            f"【当前位置与接待底稿（邀请和可做的事不代表调查员已经接受或完成）】\n{self._public_location(loc.id)}\n"
         )
         if adapted is not None and adapted.note:
             report += f"导演为这几位调查员改编了模组：{adapted.note}\n"
-        happened = [e.read_aloud.strip() or e.title for e in opening.events]
+        happened = [f"{e.title}：{e.read_aloud.strip()}" if e.read_aloud.strip() else e.title for e in opening.events]
         if happened:
-            report += "【开场时发生的事（尚未展示给玩家，融入同一段叙事，按先后自然带出，不逐件罗列）】\n" + "\n".join(happened) + "\n"
+            report += ("【已触发的开场事件（尚未展示给玩家，按实际先后自然带出；与底稿相同的事只演一次）】\n"
+                       + "\n".join(happened) + "\n")
         report += "".join(f"{line}\n" for line in self._found(opening))  # a rule's find at the start (plugins "start")
+        if self.prelude_played:
+            report += ("【已播放的序幕字幕】\n" + "\n".join(frame.text for frame in prelude.frames(m))
+                       + "\n承接这些内容，落到当前抵达场面，不从头复述。\n")
         report += (
-            "请用 180–320 字、两到四个自然段引入故事（有玩家篇幅偏好时以偏好为准）："
-            "先用来信、旅途、职业或已写的关系自然交代为何而来，再让调查员看见眼前的生活和地方。"
-            "不要把钩子念成任务简报，不要一开口就列调查方向或制造恐怖。"
+            "围绕抵达后的眼前场面引入故事，篇幅随人物与信息量展开，并遵循玩家的叙事偏好。"
+            "尚未交代的来意与旅途，用来信、职业或已写的关系简要衔接，让调查员先认清身在何处、面前是谁。"
+            "通过连贯的动作、接待与生活细节建立场景，不把旅途、安顿、几轮详谈和开始调查压成一段摘要。"
+            "不要把钩子念成任务简报，不列调查方向；异常按已触发事件呈现，不额外堆叠求助、催促或惊吓。"
+            "未触发的计划与背景联系是后续素材，不必在开场逐一兑现；已触发的事仍完整交代。"
+            "开场材料中的当面招呼与事件台词尚未单独展示，可在本次叙述里直接呈现，不预演后续几轮问答。"
             "原作开场中已写明的人数、物件数量与必发事实必须保留；只有一位调查员时称‘你’，不要凭空加队友。"
             f"叙事停在当前地点“{loc.name}”能接话或行动的一刻，之后由玩家决定去哪、是否停留。"
             "到达别处、见到委托人、进屋或开始调查，若尚未发生就不能替玩家完成；也不能擅自编造调查员的经历与心情。"
+            "首次登场的人物通过自我介绍、熟人引见或实际交流交代身份与来意；"
+            "主动来找调查员的人还应有得知身份、找到此处的合理来源。未通名时按外观或职务称呼，不以姓名标签代替介绍。"
             "人物背景是各自的资料，不代表队友已经知情；私下来意、关系和随身物件不要在共同开场公开。"
             "需要交代个人已知的事，用 asides 只发给本人；共同正文只写在场者能观察到的情境，不替玩家出示或分享物品。"
         )
@@ -4830,7 +4839,8 @@ class Game(Encounters):
         loc = self.m.location(loc_id)
         status = {n: e.status for n, e in self.world.rec.entities.items() if e.kind == "npc" and e.status}
         people = "\n".join(f"{n.name}" + (f"（{status[n.id]}）" if n.id in status else "") + f"：{n.look}" for n in self.m.npcs_at(loc_id))
-        return f"{loc.name}\n{loc.read_aloud.strip()}\n{people}"
+        return (f"{loc.name}\n{loc.read_aloud.strip()}\n"
+                + (f"【在场人物资料（姓名供主持辨认，不代表玩家已经听过介绍）】\n{people}" if people else ""))
 
     def _report(self, turn: Turn, *, omit_replies: set[str] | None = None) -> str:
         st, m = self.state, self.m

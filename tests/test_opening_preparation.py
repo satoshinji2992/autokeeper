@@ -9,10 +9,10 @@ import pytest
 from autokeeper import config
 from autokeeper.agents.director import Improv, NewItem
 from autokeeper.engine.visuals import Visuals
-from autokeeper.module.schema import Module
+from autokeeper.module.schema import Module, PreludeFrame
 from autokeeper.paths import EXAMPLE
 
-from .test_engine import NEWSSTAND, improvised
+from .test_engine import NEWSSTAND, improvised, make
 
 
 @pytest.mark.parametrize("change", ["none", "stats", "equipment"])
@@ -92,4 +92,26 @@ async def test_opening_connections_and_story_do_not_wait_for_an_unfinished_prop_
         release.set()
         preparing.cancel()
         await asyncio.gather(preparing, return_exceptions=True)
+        await game.close()
+
+
+@pytest.mark.parametrize("played", [False, True])
+async def test_keeper_can_continue_the_actual_prelude_without_assuming_it_has_been_shown(fake, played):
+    module = Module.load(EXAMPLE)
+    module.prelude = [PreludeFrame(text="行李箱上的铜扣已经松了。"), PreludeFrame(text="介绍信的收件人住在广场对面。")]
+    game, cast, events = make(module, fake, {})
+    game.prelude_played = played
+    before = game.state.model_copy(deep=True)
+    try:
+        await game.start()
+        report = cast.reports[0]
+        assert all((frame.text in report) == played for frame in module.prelude)
+        # This is still one arrival and one telling, without executing an unchosen
+        # conversation, visit to the addressee, or departure during the opening.
+        assert game.state.location == before.location
+        assert game.state.minutes == before.minutes
+        assert game.state.visited == before.visited
+        assert not cast.npc_calls and not game.state.clues
+        assert len([event for event in events if event["type"] == "keeper_end"]) == 1
+    finally:
         await game.close()

@@ -304,6 +304,24 @@ def test_the_bundled_modules_kept_their_content_when_split(tmp_path):
             assert now.clue("c_douglas_truth").mythos == 3
             then.clue("c_douglas_truth").mythos = 3
         if folder.name == "dongxuezhixia":
+            # Original p. 4: lodging is booked before arrival; the two covered bodies are
+            # visible outside on arrival. The 2026-10-24 opening edit separates that event
+            # from the journey and a doorstep welcome, retaining the same time and place.
+            assert then.start == now.start == "ratger_house" and then.start_time == now.start_time == "D1 14:00"
+            assert "卡车" in then.opening and "卡车" not in now.opening
+            assert "电报" in now.opening and "拉特格" in now.opening
+            then.opening = now.opening
+            before = next(e for e in then.events if e.id == "e_arrival")
+            after = next(e for e in now.events if e.id == "e_arrival")
+            assert before.when == after.when == "visit:ratger_house"
+            assert "两具蒙着白布的尸体" in before.text and "两具蒙着白布的尸体" in after.read_aloud
+            assert after.text.startswith(before.text)
+            before.text, before.read_aloud = after.text, after.read_aloud
+            before, after = then.location("ratger_house"), now.location("ratger_house")
+            assert "晚饭六点" in before.read_aloud and "晚饭六点" in after.keeper
+            assert "我是多琳·拉特格" in after.read_aloud
+            assert "分发材料" in after.keeper and "退休" in after.keeper
+            before.read_aloud, before.keeper = after.read_aloud, after.keeper
             # Original p. 14: the organs are found on either autopsy result, but only a failed
             # Medicine roll ruptures them and calls for SAN. External inspection is not dissection.
             before, after = then.clue("c_autopsy"), now.clue("c_autopsy")

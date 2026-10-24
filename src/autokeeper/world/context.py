@@ -483,10 +483,25 @@ def keeper_brief(w: World, *, at: str = "") -> str:
     def person(npc: str) -> str:
         own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]
         a = rec.agents.get(npc)
+        role = m.npc(npc).role
         goal = "；".join(a.goals) if a is not None else next((f.text for f in own if f.kind == "goal"), "")
         secrets = [_clip(f.text) for f in own if f.kind == "secret" and f.revealed is None]
         lies = [_clip(f.text) for f in own if f.kind == "lie"]
-        parts = [f"当前想要：{goal or '无'}"] if a is not None else ([f"想要：{_clip(goal)}"] if goal else [])
+        parts = [f"身份：{role}"] if role else []
+        parts += [f"当前想要：{goal or '无'}"] if a is not None else ([f"想要：{_clip(goal)}"] if goal else [])
+        # Identity and the practical reason for approaching the party often live in knows,
+        # not in secrets or goals. Read current facts, including their source and conditions.
+        knows = [f for f in _npc_facts(w, npc, "", _concerns(w, npc)) if f.text.strip()
+                 and (f.kind == "knows" or (f.origin == "game" and f.kind in {"state", "rumor", "event", "setting"}))]
+        if knows:
+            sources = {fid: event for event in rec.events if _at_view_time(w, event.t) and knowledge.saw(event, npc)
+                       for fid in event.facts}
+            parts.append("本人所知（不等于已经告诉调查员）：\n" + "\n".join(
+                _fact_line(npc, fact, sources, w) for fact in knows))
+        relations = [r for r in rec.relations.values() if npc in (r.a, r.b) and _at_view_time(w, r.since)]
+        if relations:
+            parts.append("关系（后台依据）：" + "；".join(
+                f"{w.name(r.a)}对{w.name(r.b)}：{r.kind}" + (f"（{r.note}）" if r.note else "") for r in relations))
         if a is not None and a.goal_reason:
             parts.append(f"改变依据：{a.goal_reason}")
         parts += [f"秘密：{'；'.join(secrets)}"] if secrets else []
@@ -521,7 +536,8 @@ def keeper_brief(w: World, *, at: str = "") -> str:
 
     present = w.present(here)
     if present:
-        lines.append("在场的人：\n" + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
+        lines.append("在场的人（后台登记不等于调查员已经认识；首次登场须在场面中交代身份和来意）：\n"
+                     + "\n".join(f"- {w.name(x)}：{person(x)}" for x in present))
     if left := apart(st, w.name):
         lines.append(f"和大家分开的调查员（不在这里；大家去到那里、或有人把他带回来才会合）：{left}")
     from ..engine.encounter.site import ways_at
