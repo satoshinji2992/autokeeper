@@ -5,7 +5,7 @@
     context   sessions whose history the harness owns: windowing, compaction, persistence
     tools     a sandboxed workspace, file tools, a vision tool, web tools
     search    web search providers with an offline setting
-    loop      a LangGraph agent loop that gives tools to models without tool-calling APIs
+    loop      an async agent loop that gives tools to models without tool-calling APIs
     spend     token-cost estimates and a hard budget cap for metered APIs
     trace     one JSON line per model call
 """

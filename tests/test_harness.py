@@ -17,7 +17,7 @@ from autokeeper.engine.game import Game
 from autokeeper.engine.state import CheckRecord
 from autokeeper.harness import Agent, BudgetExceeded, Reply, Session, spend
 from autokeeper.harness import models as hm
-from autokeeper.harness.tools import Workspace, check_tool, file_tools, web_tools
+from autokeeper.harness.tools import Tool, ToolError, Workspace, check_tool, file_tools, web_tools
 from autokeeper.module.schema import Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
@@ -914,6 +914,81 @@ async def test_agent_stops_at_the_step_cap(tmp_path):
     result = await agent.run("随便看看")
     assert not result.finished and result.steps == 3
     assert "只剩" in SEEN[-1]["messages"][-1]["content"]
+
+
+async def test_agent_cancellation_does_not_execute_later_tools():
+    entered, release = asyncio.Event(), asyncio.Event()
+    completed = []
+
+    async def blocked() -> str:
+        entered.set()
+        await release.wait()
+        completed.append("blocked")
+        return "已完成"
+
+    async def later() -> str:
+        completed.append("later")
+        return "不应执行"
+
+    SCRIPT.extend([{"thought": "开始", "tool": "blocked"}, {"thought": "继续", "tool": "later"}])
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    agent = Agent("importer", "整理资料。", [Tool("blocked", "等待", (), blocked),
+                                         Tool("later", "后续写入", (), later)], cfg=cfg)
+    task = asyncio.create_task(agent.run("整理资料"))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert completed == [] and len(SEEN) == 1 and len(SCRIPT) == 1
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await agent.close()
+
+
+@pytest.mark.parametrize("error", [ToolError("缺少资料"), OSError("读取失败")])
+async def test_agent_tool_error_is_an_observation_and_work_continues(error):
+    completed = []
+
+    async def failed() -> str:
+        raise error
+
+    async def recover() -> str:
+        completed.append("recovered")
+        return "恢复完成"
+
+    SCRIPT.extend([{"thought": "读取", "tool": "failed"}, {"thought": "换一种办法", "tool": "recover"},
+                   {"thought": "完成", "tool": "finish", "answer": "已完成整理"}])
+    events = []
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    agent = Agent("importer", "整理资料。", [Tool("failed", "读取", (), failed),
+                                         Tool("recover", "恢复", (), recover)], cfg=cfg,
+                  on_event=lambda kind, data: events.append((kind, data)))
+    try:
+        result = await agent.run("整理资料")
+        assert result.finished and result.steps == 2 and result.answer == "已完成整理"
+        assert completed == ["recovered"] and "出错：" in SEEN[1]["messages"][-1]["content"]
+        assert [kind for kind, _ in events] == ["think", "act", "think", "act", "think"]
+        assert str(error) in events[1][1]["observation"]
+    finally:
+        await agent.close()
+
+
+async def test_agent_repeated_run_resets_steps_and_preserves_the_original_task(tmp_path):
+    SCRIPT.extend([{"thought": "查看", "tool": "ls"}] * 3
+                  + [{"thought": "检查完成", "tool": "finish"}])
+    cfg = config.Config(roles={r: SCRIPTED for r in config.DEFAULT_ROLES})
+    agent = Agent("importer", "整理资料。", file_tools(Workspace(tmp_path)), cfg=cfg, max_steps=2)
+    try:
+        first = await agent.run("原始整理要求")
+        second = await agent.run("继续检查并收尾")
+        assert not first.finished and first.steps == 2
+        assert second.finished and second.steps == 1 and second.answer == "检查完成"
+        assert agent.session.pinned == "原始整理要求"
+        assert "继续检查并收尾" in SEEN[2]["messages"][-1]["content"]
+    finally:
+        await agent.close()
 
 
 async def test_web_tools_degrade_offline():

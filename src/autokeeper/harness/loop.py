@@ -1,8 +1,4 @@
-"""A tool-using agent loop that runs on any model, built on LangGraph.
-
-    START ─→ think ─┬─ finish ──────────→ END
-               ↑    └─→ act ─┬─ step cap → END
-               └─────────────┘
+"""A tool-using agent loop that runs on any model.
 
 Each step the model returns one JSON object: a short thought, the tool to call and
 that tool's arguments as flat fields. Any provider can produce it, through its own
@@ -19,9 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, TypedDict
-
-from langgraph.graph import END, START, StateGraph
+from typing import Any
 
 from .. import config
 from .context import Session, Summarizer
@@ -61,14 +55,6 @@ def manual(tools: list[Tool]) -> str:
     return "\n".join(rows)
 
 
-class LoopState(TypedDict, total=False):
-    observation: str
-    step: dict
-    steps: int
-    answer: str
-    done: bool
-
-
 @dataclass
 class AgentResult:
     answer: str
@@ -97,28 +83,18 @@ class Agent:
         self.session = Session(
             role, cfg.role(role), system + manual(tools), schema=step_schema(tools), memory=memory, summarizer=self.summarizer
         )
-        g = StateGraph(LoopState)
-        g.add_node("think", self._think)
-        g.add_node("act", self._act)
-        g.add_edge(START, "think")
-        g.add_conditional_edges("think", lambda s: END if s.get("done") else "act", ["act", END])
-        g.add_conditional_edges("act", lambda s: END if s.get("steps", 0) >= self.max_steps else "think", ["think", END])
-        self.graph = g.compile()
 
     def _emit(self, kind: str, data: dict) -> None:
         if self.on_event:
             self.on_event(kind, data)
 
-    async def _think(self, state: LoopState) -> dict:
-        reply = await self.session.send(state["observation"])
+    async def _think(self, observation: str) -> dict:
+        reply = await self.session.send(observation)
         step = reply.data if isinstance(reply.data, dict) else {}
         self._emit("think", {**step, "repairs": reply.repairs})
-        if step.get("tool") == "finish":
-            return {"step": step, "answer": step.get("answer") or step.get("thought", ""), "done": True}
-        return {"step": step}
+        return step
 
-    async def _act(self, state: LoopState) -> dict:
-        step = state.get("step") or {}
+    async def _act(self, step: dict, steps: int) -> str:
         name = step.get("tool", "")
         tool = self.tools.get(name)
         args = {k: step[k] for k in (tool.args if tool else ()) if step.get(k) not in (None, "")}
@@ -135,21 +111,27 @@ class Agent:
                 obs = f"出错：{type(exc).__name__}: {exc}"
         if len(obs) > OBSERVATION_LIMIT:
             obs = obs[:OBSERVATION_LIMIT] + f"\n（结果太长，只给前 {OBSERVATION_LIMIT} 字）"
-        steps = state.get("steps", 0) + 1
         if (left := self.max_steps - steps) <= 5:
             obs += f"\n\n（系统：只剩 {left} 步了，请收尾，最后调用 finish。）"
         self._emit("act", {"tool": name, "args": args, "observation": obs})
-        return {"observation": f"〔{name} 的结果〕\n{obs}", "steps": steps}
+        return f"〔{name} 的结果〕\n{obs}"
 
     async def run(self, task: str) -> AgentResult:
         """The first task is pinned at the head of every window, so folding old steps never
         loses its rules; later tasks (fix rounds) arrive as ordinary messages."""
         if not self.session.pinned:
-            self.session.pinned, first = task, "开始执行任务。"
+            self.session.pinned, observation = task, "开始执行任务。"
         else:
-            first = task
-        final = await self.graph.ainvoke({"observation": first, "steps": 0}, {"recursion_limit": self.max_steps * 2 + 10})
-        return AgentResult(final.get("answer", ""), final.get("steps", 0), bool(final.get("done")))
+            observation = task
+        steps = 0
+        while True:
+            step = await self._think(observation)
+            if step.get("tool") == "finish":
+                return AgentResult(step.get("answer") or step.get("thought", ""), steps, True)
+            observation = await self._act(step, steps + 1)
+            steps += 1
+            if steps >= self.max_steps:
+                return AgentResult("", steps, False)
 
     async def close(self) -> None:
         await self.session.close()
