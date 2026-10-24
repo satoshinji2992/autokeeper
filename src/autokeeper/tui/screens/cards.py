@@ -27,7 +27,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Footer, OptionList, Static
+from textual.widgets import Button, Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ... import artkit, credits, imagery, paths, roster
@@ -145,6 +145,7 @@ def export(inv: Investigator, m: Module | None, folder: Path) -> Path:
 
 
 class CardsScreen(Screen):
+    CSS_PATH = "cards.tcss"
     BINDINGS = [
         Binding("escape", "app.pop_screen", "返回", show=False),
         Binding("e,r", "edit", "编辑", show=False),
@@ -171,6 +172,13 @@ class CardsScreen(Screen):
                 yield OptionList(id="choices")
                 with VerticalScroll(id="preview"):
                     yield Static(id="preview-body")
+            with Horizontal(id="card-actions"):
+                yield Button("编辑", id="card-action-edit", compact=True)
+                yield Button("删除", id="card-action-delete", variant="error", compact=True)
+                yield Button("复制", id="card-action-copy", compact=True)
+                yield Button("导出", id="card-action-export", compact=True)
+                yield Button("新建角色", id="card-action-create", variant="primary", compact=True)
+                yield Button("返回", id="card-action-back", compact=True)
             yield Static(id="setup-hint")
         yield Footer()
 
@@ -256,6 +264,11 @@ class CardsScreen(Screen):
         return oid if oid in self.cards else None
 
     def _hint(self, oid: str | None) -> None:
+        mine = bool(oid and oid.startswith("r:"))
+        for action in ("edit", "delete"):
+            self.query_one(f"#card-action-{action}", Button).disabled = not mine
+        self.query_one("#card-action-copy", Button).disabled = not oid or mine
+        self.query_one("#card-action-export", Button).disabled = not oid
         keys = [("open", "Enter 打开")] if oid else []
         if oid and oid.startswith("r"):
             keys += [("edit", "E 编辑"), ("export", "X 导出"), ("delete", "D 删除"), ("new_game", "N 开新游戏")]
@@ -265,6 +278,11 @@ class CardsScreen(Screen):
         keys += [("create", "A 新建角色"), ("app.pop_screen", "Esc 返回")]
         self.query_one("#setup-hint", Static).update(
             " · ".join(f"[@click={a if '.' in a else 'screen.' + a}]{w}[/]" for a, w in keys))  # fmt: skip
+
+    @on(Button.Pressed, "#card-actions Button")
+    async def pressed(self, event: Button.Pressed) -> None:
+        action = (event.button.id or "").removeprefix("card-action-")
+        await self.run_action("app.pop_screen" if action == "back" else action)
 
     def _portrait(self, inv: Investigator, m: Module | None, style: str) -> Text | None:
         return portrait(inv, m, style)

@@ -1,0 +1,15 @@
+#update-dialog {
+    width: 72;
+    max-width: 96%;
+}
+#update-version, #update-status, #update-method {
+    height: auto;
+    margin-bottom: 1;
+}
+#update-method {
+    color: $text-muted;
+}
+#update-dialog .buttons Button {
+    min-width: 10;
+    margin: 0 1 0 0;
+}

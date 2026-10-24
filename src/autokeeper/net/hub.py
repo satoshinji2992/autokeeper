@@ -537,6 +537,9 @@ class Hub:
             await self._sit(cid, msg.get("investigator", ""))
         elif t == "watch":
             if (seat := self._seat_of(cid)) is not None:
+                if self.bringing and seat in self.ready:
+                    await self._no(cid, "请先取消准备，再更换座位或角色。")
+                    return
                 self._free(seat, keep_offer=True)
             await self._share_seats()
             await self._send(cid, {**self._welcome(cid), "t": "watching"})
@@ -775,6 +778,10 @@ class Hub:
         await self._send(cid, {"t": "ideas", "ideas": ideas})
 
     async def _sit(self, cid: str, inv_id: str) -> None:
+        current = self._seat_of(cid)
+        if self.bringing and current in self.ready and current != inv_id:
+            await self._no(cid, "请先取消准备，再更换座位或角色。")
+            return
         if inv_id not in self.sits:
             await self._send(cid, {"t": "error", "text": "此座位由 AI 控制，无法入座。"})
             return
@@ -917,6 +924,9 @@ class Hub:
         if seat is None:
             await self._no(cid, "入座后可选择角色。")
             return
+        if seat in self.ready:
+            await self._no(cid, "请先取消准备，再更换角色。")
+            return
         face = ""
         if pregen := msg.get("pregen"):
             found = next((p for p in self.m.pregens if p.id == pregen), None)
@@ -968,6 +978,8 @@ class Hub:
         why = ""
         if not self.bringing or self._seat_of(cid) is None:
             why = "仅入座玩家可在开局前创建调查员。"
+        elif self._seat_of(cid) in self.ready:
+            why = "请先取消准备，再更换角色。"
         elif op == "begin":
             self._drop_card(cid)  # one card at a time for each player
             self.builders[cid] = self.card_builder()

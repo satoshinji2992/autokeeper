@@ -87,7 +87,7 @@ class LobbyScreen(Screen):
     BINDINGS = [
         Binding("escape", "leave", "离开"),
         Binding("w", "watch", "观战"),
-        Binding("s", "start", "现在开始"),
+        Binding("s", "start", "开始游戏"),
         Binding("c", "sheet", "人物卡"),
         Binding("r", "pick", "选角色 · 车卡"),
         Binding("y", "ready", "准备"),
@@ -129,16 +129,18 @@ class LobbyScreen(Screen):
                         yield Static(id="lobby-module")
                 with VerticalScroll(id="lobby-card"):
                     yield Static(id="lobby-sheet")
-            with Horizontal(id="lobby-actions"):
-                yield Button("入座", id="sit", variant="primary", compact=True)
-                yield Button("选角色 · 车卡", id="pick", variant="primary", compact=True)
-                yield Button("准备", id="ready", compact=True)
-                yield Button("观战", id="watch", compact=True)
-                yield Button("现在开始", id="start", compact=True)
-                yield Button("人物卡", id="sheet", compact=True)
-                yield Button("离开", id="leave", compact=True)
-                yield Button("遇到问题", id="help", compact=True)
-                yield Button("关闭房间", id="close_room", variant="error", compact=True)
+            with Vertical(id="lobby-controls"):
+                with Horizontal(id="lobby-actions"):
+                    yield Button("入座", id="sit", variant="primary", compact=True)
+                    yield Button("选角色 · 车卡", id="pick", variant="primary", compact=True)
+                    yield Button("准备", id="ready", compact=True)
+                    yield Button("观战", id="watch", compact=True)
+                    yield Button("人物卡", id="sheet", compact=True)
+                    yield Button("离开", id="leave", compact=True)
+                    yield Button("遇到问题", id="help", compact=True)
+                    yield Button("关闭房间", id="close_room", variant="error", compact=True)
+                with Horizontal(id="lobby-start"):
+                    yield Button("开始游戏", id="start", variant="success")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -349,7 +351,7 @@ class LobbyScreen(Screen):
         else:
             line.append(inv.name, style="bold")
             line.append(f" · {seat.get('occupation') or inv.occupation} · {inv.age} 岁", style="dim")
-        if seat is not None and seat["investigator"] == self.chosen and self.bring:
+        if seat is not None and seat["investigator"] == self.chosen and self.bring and not seat.get("ready"):
             line.append("  R 选择角色或车卡", style="dim")
         self.query_one("#lobby-investigator", Static).update(clip(line, self.width))
 
@@ -379,7 +381,7 @@ class LobbyScreen(Screen):
             if mine.get("blank"):
                 hint = "R 选择角色或车卡 · Y 准备"
             elif mine.get("ready"):
-                hint = "等待所有玩家准备 · Y 取消准备"
+                hint = "已准备，座位与角色已锁定 · Y 取消准备"
             else:
                 hint = "R 更换角色或车卡 · Y 准备 · 全员准备后开始"
         elif self.chosen:
@@ -399,16 +401,18 @@ class LobbyScreen(Screen):
 
     def _buttons(self) -> None:
         seat = self._highlighted()
+        mine = self._my_seat()
+        locked = bool(self.bring and mine and mine.get("ready"))
         sittable = bool(seat and seat["human"] and (not seat["online"] or seat["investigator"] == self.chosen))
-        self.query_one("#sit", Button).disabled = not sittable or self.gone or self.pending_seat is not None
+        self.query_one("#sit", Button).disabled = not sittable or locked or self.gone or self.pending_seat is not None
         self.query_one("#sit", Button).label = "收回控制" if seat and seat.get("ai_takeover") else "入座"
         self.query_one("#start", Button).disabled = self.started or self.gone
-        self.query_one("#watch", Button).disabled = self.gone
-        mine = next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
+        self.query_one("#watch", Button).disabled = self.gone or locked
         choosing = bool(self.bring and mine and not self.gone)
         self.query_one("#sit", Button).display = not choosing
         for button in ("#pick", "#ready"):
             self.query_one(button, Button).display = choosing
+        self.query_one("#pick", Button).disabled = locked
         self.query_one("#ready", Button).label = "取消准备" if mine and mine.get("ready") else "准备"
         self.refresh_bindings()
 
@@ -496,13 +500,15 @@ class LobbyScreen(Screen):
     async def _picked(self) -> None:
         await self.action_sit()
 
-    @on(Button.Pressed, "#lobby-actions Button")
+    @on(Button.Pressed, "#lobby-controls Button")
     async def _pressed(self, event: Button.Pressed) -> None:
         await self.run_action(event.button.id or "")
 
     async def action_sit(self) -> None:
         seat = self._highlighted()
         if self.gone or seat is None or self.pending_seat is not None:
+            return
+        if self._seat_locked():
             return
         if not seat["human"]:
             self.app.notify("这个座位由 AI 扮演", severity="warning")
@@ -518,6 +524,13 @@ class LobbyScreen(Screen):
     def _my_seat(self) -> dict[str, Any] | None:
         return next((s for s in self.seats if s["investigator"] == self.chosen), None) if self.chosen else None
 
+    def _seat_locked(self) -> bool:
+        mine = self._my_seat()
+        if self.bring and mine and mine.get("ready"):
+            self.app.notify("请先取消准备，再更换座位或角色。", severity="warning")
+            return True
+        return False
+
     def action_pick(self) -> None:
         from .seatcard import SeatCardScreen
 
@@ -526,6 +539,8 @@ class LobbyScreen(Screen):
             return
         if seat is None:
             self.app.notify("入座后可选择角色。", severity="warning")
+            return
+        if self._seat_locked():
             return
         mine = None if self.guest else roster.saved()  # a browser seat: the cards on this machine are the host's
         taken = {s["investigator"] for s in self.seats} - {seat["investigator"]}
@@ -576,6 +591,8 @@ class LobbyScreen(Screen):
 
     async def action_watch(self) -> None:
         if self.gone or self.pending_seat is not None or self._watching:
+            return
+        if self._seat_locked():
             return
         self._watching = True
         if not await self.link.send({"t": "watch"}):

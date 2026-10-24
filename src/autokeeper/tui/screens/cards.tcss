@@ -1,0 +1,10 @@
+CardsScreen #card-actions {
+    height: 3;
+    margin-top: 1;
+    align-vertical: middle;
+}
+CardsScreen #card-actions Button {
+    min-width: 8;
+    width: auto;
+    margin-right: 1;
+}

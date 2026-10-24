@@ -1,0 +1,24 @@
+CardEditModal #card-edit {
+    width: 96;
+    max-width: 96%;
+    height: 90%;
+    max-height: 48;
+}
+CardEditModal #card-edit-body {
+    height: 1fr;
+}
+CardEditModal #card-edit-fields {
+    width: 1fr;
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+    padding-right: 1;
+}
+CardEditModal #card-edit-actions {
+    width: 14;
+    margin-left: 1;
+}
+CardEditModal #card-edit-actions Button {
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 1;
+}

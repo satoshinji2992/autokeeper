@@ -142,9 +142,13 @@ LobbyScreen #lobby-card {
 LobbyScreen.-narrow #lobby-card {
     display: none;
 }
+LobbyScreen #lobby-controls {
+    height: 5;
+    margin: 1 0 0 1;
+}
 LobbyScreen #lobby-actions {
     height: 1;
-    margin: 1 0 0 1;
+    align-vertical: middle;
 }
 LobbyScreen #lobby-actions Button {
     min-width: 0;
@@ -153,4 +157,15 @@ LobbyScreen #lobby-actions Button {
 }
 LobbyScreen.-narrow #lobby-actions Button {
     padding: 0;
+}
+LobbyScreen #lobby-start {
+    height: 3;
+    margin-top: 1;
+    align: right middle;
+}
+LobbyScreen #start {
+    width: 24;
+    min-width: 20;
+    height: 3;
+    text-style: bold;
 }

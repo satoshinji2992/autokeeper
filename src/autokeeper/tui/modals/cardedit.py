@@ -11,7 +11,7 @@ from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static, TextArea
 
@@ -31,6 +31,7 @@ class CardEditModal(ModalScreen[dict | None]):
     """Dismisses with the changes ({"investigator": fields, "photo": a picture file or None}),
     or None on Esc. Nothing is written here; tui/screens/cards.py saves them."""
 
+    CSS_PATH = "cardedit.tcss"
     BINDINGS = [Binding("escape", "dismiss(None)", "取消"), Binding("ctrl+s", "keep", "保存")]
 
     def __init__(self, inv: Investigator, has_photo: bool):
@@ -39,29 +40,33 @@ class CardEditModal(ModalScreen[dict | None]):
 
     def compose(self) -> ComposeResult:
         inv = self.inv
-        with VerticalScroll(id="card-edit", classes="modal"):
+        with Vertical(id="card-edit", classes="modal"):
             yield Static(f"编辑 {inv.name}", classes="modal-title")
             yield Static(Text("属性与技能数值不可手动修改。", style="dim"), classes="edit-note")
-            for key, label in FIELDS:
-                with Horizontal(classes="edit-row"):
-                    yield Static(label, classes="edit-label")
-                    yield Input(str(getattr(inv, key)), id=f"edit-{key}", compact=True, type="integer" if key == "age" else "text")
-            yield Static("背景", classes="edit-head")
-            for i, key in enumerate(backstory_keys(inv)):
-                with Horizontal(classes="edit-row edit-tall"):
-                    yield Static(key, classes="edit-label")
-                    yield TextArea(inv.backstory.get(key, ""), id=f"edit-story-{i}", compact=True, soft_wrap=True, show_line_numbers=False)
-            with Horizontal(classes="edit-row edit-tall"):
-                yield Static("随身物品", classes="edit-label")
-                yield TextArea("\n".join(inv.inventory), id="edit-inventory", compact=True, soft_wrap=True)
-            with Horizontal(classes="edit-row"):
-                yield Static("照片", classes="edit-label")
-                yield Input(id="edit-photo", compact=True,
-                            placeholder="拖入图片文件以更换照片" + ("；留空保留当前照片" if self.has_photo else ""))  # fmt: skip
-            with Horizontal(classes="buttons"):
-                yield Button("保存", id="edit-save", variant="primary")
-                yield Button("取消", id="edit-cancel")
-            yield Static("Tab 下一栏 · Ctrl+S 保存 · Esc 取消", classes="system")
+            with Horizontal(id="card-edit-body"):
+                with VerticalScroll(id="card-edit-fields"):
+                    for key, label in FIELDS:
+                        with Horizontal(classes="edit-row"):
+                            yield Static(label, classes="edit-label")
+                            yield Input(str(getattr(inv, key)), id=f"edit-{key}", compact=True,
+                                        type="integer" if key == "age" else "text")
+                    yield Static("背景", classes="edit-head")
+                    for i, key in enumerate(backstory_keys(inv)):
+                        with Horizontal(classes="edit-row edit-tall"):
+                            yield Static(key, classes="edit-label")
+                            yield TextArea(inv.backstory.get(key, ""), id=f"edit-story-{i}", compact=True,
+                                           soft_wrap=True, show_line_numbers=False)
+                    with Horizontal(classes="edit-row edit-tall"):
+                        yield Static("随身物品", classes="edit-label")
+                        yield TextArea("\n".join(inv.inventory), id="edit-inventory", compact=True, soft_wrap=True)
+                    with Horizontal(classes="edit-row"):
+                        yield Static("照片", classes="edit-label")
+                        yield Input(id="edit-photo", compact=True,
+                                    placeholder="拖入图片文件以更换照片" + ("；留空保留当前照片" if self.has_photo else ""))
+                with Vertical(id="card-edit-actions"):
+                    yield Button("保存", id="edit-save", variant="primary")
+                    yield Button("取消", id="edit-cancel")
+                    yield Static("Ctrl+S 保存\nEsc 取消", classes="system")
 
     def on_mount(self) -> None:
         self.query_one("#edit-name", Input).focus()

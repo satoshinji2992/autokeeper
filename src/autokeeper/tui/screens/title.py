@@ -54,6 +54,7 @@ class TitleScreen(Screen):
             Option("角色卡", id="cards"),
             Option("导入模组", id="import"),
             Option("设置", id="settings"),
+            Option("检查更新", id="update"),
             Option("玩法说明", id="guide"),
             Option("离开", id="quit"),
             id="menu",
@@ -228,6 +229,10 @@ class TitleScreen(Screen):
             from .cards import CardsScreen
 
             self.app.push_screen(CardsScreen())
+        elif choice == "update":
+            from ..modals.update import UpdateModal
+
+            self.app.push_screen(UpdateModal())
         elif choice == "import":
             from .importing import ImportScreen
 
