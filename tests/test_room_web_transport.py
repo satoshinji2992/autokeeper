@@ -9,14 +9,15 @@ from urllib.parse import urlsplit
 import aiohttp
 import pytest
 from aiohttp import web
-from textual.widgets import Button
+from textual.widgets import Button, Input
 from textual_serve.server import Server
 
+from autokeeper.net import room as lan
 from autokeeper.net.link import Link, address
 from autokeeper.net.web import Page
 from autokeeper.tui.app import AutoKeeperApp
 from autokeeper.tui.screens.lobby import LobbyScreen
-from autokeeper.tui.screens.net import NetGameScreen
+from autokeeper.tui.screens.net import JoinScreen, NetGameScreen
 
 from .test_disconnect_takeover import make_hub
 from .test_multiplayer_transport import sit, sockets
@@ -72,7 +73,13 @@ async def test_native_client_on_a_single_player_page_gets_an_explanation():
             assert reply["t"] == "error" and "单人游戏网页" in reply["text"]
 
 
-async def test_http_room_url_reclaims_ai_control_in_the_real_lobby(fake):
+@pytest.mark.parametrize("guest", [False, True])
+async def test_http_room_url_reclaims_ai_control_in_the_real_lobby(fake, monkeypatch, guest):
+    if guest:
+        monkeypatch.setenv("AUTOKEEPER_GUEST", "1")
+    else:
+        monkeypatch.delenv("AUTOKEEPER_GUEST", raising=False)
+    lan.remember(address="old-host:8765", name="旧名字")
     hub = make_hub(fake)
     hub.takeovers.active.add("lin")
     app = AutoKeeperApp(theme="amber")
@@ -86,6 +93,13 @@ async def test_http_room_url_reclaims_ai_control_in_the_real_lobby(fake):
                     while lobby.welcome is None:
                         await pilot.pause(0.05)
                 assert lobby.link.ws.protocol == "autokeeper"
+                if guest:
+                    assert lan.recall()["address"] == "old-host:8765"
+                else:
+                    # Direct CLI entry bypasses JoinScreen.go; successful admission must persist it.
+                    again = JoinScreen()
+                    assert address(again.address) == address(page_url)
+                    assert again.name_ == "回来的人"
                 assert str(lobby.query_one("#sit", Button).label) == "收回控制"
                 await pilot.press("enter")
                 async with asyncio.timeout(5):
@@ -108,3 +122,35 @@ async def test_http_room_url_reclaims_ai_control_in_the_real_lobby(fake):
     finally:
         await hub.takeovers.close()
         await hub.game.close()
+
+
+@pytest.mark.parametrize("target", [
+    "http://room.example", "https://room.example", "http://room.example:8123/table/",
+    "192.168.1.5:9000",
+])
+async def test_retry_preserves_endpoint_scheme_port_and_proxy_path(monkeypatch, target):
+    attempted = []
+
+    async def unavailable(self):
+        attempted.append(self.url)
+        raise ConnectionError("test disconnect")
+
+    monkeypatch.setattr(Link, "connect", unavailable)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        await app.push_screen(LobbyScreen(target, "玩家"))
+        for attempt in range(2):
+            async with asyncio.timeout(5):
+                while not isinstance(app.screen, JoinScreen) or len(attempted) != attempt + 1:
+                    await pilot.pause(0.05)
+            assert app.screen.query_one("#addr", Input).value == address(target)
+            assert attempted[-1] == address(target)
+            if attempt == 0:
+                app.screen.go()
+    assert attempted == [address(target), address(target)]
+
+
+@pytest.mark.parametrize("target", ["http://room.example", "https://room.example/table/", "host:9000"])
+def test_room_without_advertised_addresses_shares_actual_endpoint(target):
+    lobby = LobbyScreen(target, "玩家")
+    assert lobby._room_text({}).plain == "客户端加入地址：" + address(target)

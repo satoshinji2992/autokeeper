@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import os
 from typing import Any
-from urllib.parse import urlparse
 
 from rich.table import Table
 from rich.text import Text
@@ -172,7 +171,7 @@ class LobbyScreen(Screen):
             else:
                 from .net import JoinScreen
 
-                self.app.switch_screen(JoinScreen(self.link.url.removeprefix("ws://").removesuffix("/ws"), self.link.name))
+                self.app.switch_screen(JoinScreen(self.link.url, self.link.name))
             return
         waiting.stop()
 
@@ -198,6 +197,8 @@ class LobbyScreen(Screen):
             self.seats = msg["seats"]
             self.bring = bool(msg.get("bring"))
             self._show_all()
+            if not self.guest and self.room is None:
+                lan.remember(address=self.link.url, name=self.link.name)
             self._welcomed.set()
         elif t == "seats":
             self.seats = msg["seats"]
@@ -437,9 +438,10 @@ class LobbyScreen(Screen):
         info = w.get("room") or {}
         rows = [str(ip) for ip, _ in info.get("addresses", [])]
         port, web = int(info.get("port") or 0), int(info.get("web") or 0)
-        if not rows:  # a host without the room's addresses: the one this screen came in by
-            url = urlparse(self.link.url)
-            rows, port = [url.hostname or ""], url.port or lan.HUB_PORT
+        if not rows:  # Preserve the actual route, including default web ports and proxy paths.
+            t = Text("客户端加入地址：", style="bold")
+            t.append(self.link.url, style="bold underline")
+            return t
         t = Text()
         if web:
             t.append("发给朋友：", style="bold")
