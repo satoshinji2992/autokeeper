@@ -221,7 +221,7 @@ class SceneTable(Hub):
         # Each consumer owns only its members; the retained mailbox itself is shared.
         if not self.asking and not self.state.pending_turn:
             for ident, receipt in self.state.private_messages.items():
-                if (receipt["who"] in self.scene.members and not receipt.get("delivered")
+                if (receipt["who"] in self.scene.members and not receipt.get("delivered") and not receipt.get("failure")
                         and "reply" in receipt and ident not in self.private_pending):
                     self.private_pending.add(ident)
                     self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
@@ -299,7 +299,7 @@ class SceneTable(Hub):
     async def run(self) -> None:
         self._start_privates()
         try:
-            while not self.halted and not self.root.state.ending:
+            while not self.halted and (not self.root.state.ending or self.state.pending_turn):
                 if (not any(person.can_act for person in self._participants())
                         and self.game.world_encounter() is None and not self.state.pending_turn):
                     return
@@ -411,7 +411,10 @@ class SceneTables:
 
     async def run(self) -> None:
         await self.regroup()
-        while not self.root.state.ending:
+        # The ending flag can land before the last telling. Its owner must finish
+        # the saved journal, and an active settlement must return before "over".
+        while not self.root.state.ending or any(
+                scene.pending_turn or scene.busy for scene in self.runtime.scenes.values() if not scene.closed):
             self.runtime.changed.clear()
             for task in self.tasks.values():
                 if task.done() and not task.cancelled() and task.exception():
@@ -457,6 +460,11 @@ class SceneTables:
             finally:
                 wake.cancel()
                 await asyncio.gather(wake, return_exceptions=True)
+        # Another scene may have reached the global ending while these already
+        # settled reports were waiting to be told. Each keeps its own receipt.
+        for worker in self.workers.values():
+            if not worker.scene.closed and worker.state.held:
+                await worker._safely(worker._tell_held(), "最后的叙述")
 
     async def close(self) -> None:
         self.closing = True

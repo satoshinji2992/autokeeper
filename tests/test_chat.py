@@ -183,6 +183,7 @@ async def test_at_a_lan_table_words_to_the_party_take_no_slot_and_no_keeper(monk
         heard = await until(b, lambda x: x["t"] == "event" and x["ev"]["type"] == "speech")
         speech = dict(heard["ev"])
         assert speech.pop("delivery").startswith("table:")
+        assert speech.pop("table_present") == ["zhouheng", "lin"]
         assert speech == {"type": "speech", "who": "周衡", "player": "小明", "to": "", "text": "（压低声音）“把枪给我。”"}
         for _ in range(50):
             if any(e.kind == "speech" for e in hub.state.log):

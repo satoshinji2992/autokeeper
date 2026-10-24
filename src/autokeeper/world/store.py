@@ -215,11 +215,12 @@ class World:
                 and not {"死亡", "昏迷"}.intersection(i.conditions)]
 
     def observe_place(self, place: str, witnesses: list[str], event: str) -> None:
-        """Freeze images seen here; a remote redraw is not another visit."""
+        """Freeze the place's visible text and images; a remote change is not another visit."""
         sheet = next((loc for loc in self.m.locations if loc.id == place), None)
         if sheet is None or not witnesses:
             return
-        seen = PlaceSighting(event=event, art=media_snapshot.remember(self.m, self.st, sheet.art) or None,
+        seen = PlaceSighting(event=event, read_aloud=sheet.read_aloud,
+                             art=media_snapshot.remember(self.m, self.st, sheet.art) or None,
                              views={view.key: media_snapshot.remember(self.m, self.st, view.key)
                                     for view in sheet.views})
         for who in witnesses:

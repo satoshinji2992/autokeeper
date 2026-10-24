@@ -752,7 +752,7 @@ class GameScreen(Screen):
                 label = "守秘人·私密" if e.kind == "keeper" else f"私语·{e.who}"
                 line = Text(f"【{label}】{e.text.splitlines()[0]}")
             else:
-                line = log_line(e)
+                line = log_line(e, self._me())
             if line is not None:
                 panel.note(line, None, e.turn)
         self.story.on_entry = self._history
@@ -877,7 +877,8 @@ class GameScreen(Screen):
             self._status(ev["text"])
         elif t == "speech":  # a teammate's words to the party, at a shared table (net/hub.Hub._speak)
             who = f"{ev['who']}（{ev['player']}）" if ev.get("player") else ev["who"]
-            story.add("player", speech_line(who, ev.get("to", ""), ev["text"]))
+            story.add("player", speech_line(who, ev.get("to", ""), ev["text"]),
+                      delivery=ev.get("delivery", ""), offscene=audience.offscene(ev, self._me()))
         elif t == "move":
             self.view = (ev["location"], ev.get("view", ""))
             self._scene(ev["location"])

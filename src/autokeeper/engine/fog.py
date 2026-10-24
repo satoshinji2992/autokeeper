@@ -126,6 +126,27 @@ def validate_familiar(m: Module, inv: Investigator) -> None:
         raise ValueError(f"{inv.name} 的已知地点不存在：{'、'.join(sorted(missing))}")
 
 
+def read_aloud(m: Module, st: GameState, place: str, *, viewer: str | None = "") -> str:
+    """The description last seen by this reader; current module text remains the keeper's.
+
+    An empty id selects the focused investigator. None selects common observations,
+    as does an unseated projection whose current location is an empty placeholder.
+    A client without a world record already holds a filtered module copy.
+    """
+    from ..world.record import PLAYERS
+
+    if not st.record.seeded:
+        return m.location(place).read_aloud
+    if viewer == "":
+        viewer = st.investigator.id if st.investigators and st.location else None
+    if viewer in (None, PLAYERS):
+        seen = [st.record.place_sightings.get(inv.id, {}).get(place) for inv in st.investigators]
+        return (seen[0].read_aloud if seen and all(item is not None and item.read_aloud == seen[0].read_aloud
+                                                  for item in seen) else "")
+    seen = st.record.place_sightings.get(viewer, {}).get(place)
+    return seen.read_aloud if seen is not None else ""
+
+
 def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     """A read-only map projection from this investigator's actual observations and deliveries.
 
@@ -176,7 +197,7 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     if single_history:
         handouts.update(st.handouts)
     texts = [m.title, m.subtitle, m.hook, m.setting, st.memory, st.prologue, st.progress.text]
-    texts += [places[place].read_aloud for place in visited]
+    texts += [read_aloud(m, st, place, viewer=viewer) for place in visited]
     texts += [entry.text for entry in readable if entry.kind in SHOWN]
     texts += [f"{clue.title}\n{clue.text}" for clue in m.clues if clue.id in clues]
     texts += [row["payload"]["handout"][key] for row in papers.values() for key in ("title", "text")]
@@ -221,7 +242,7 @@ def shown(m: Module, st: GameState) -> list[str]:
     places = {loc.id: loc for loc in m.locations}
     clues, handouts = {c.id: c for c in m.clues}, {h.id: h for h in m.handouts}
     texts = [m.title, m.subtitle, m.hook, m.setting]
-    texts += [places[v].read_aloud for v in st.visited if v in places]  # what they saw on arriving
+    texts += [read_aloud(m, st, v) for v in st.visited if v in places]  # what they saw on arriving
     texts += [e.text for e in st.log if e.kind in SHOWN and audience.public(e)]
     texts += [f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues]
     texts += [f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts]
@@ -237,7 +258,8 @@ def kept(m: Module, st: GameState, *, viewer: str | None = "") -> list[str]:
     the clues and handouts found, who the people they met turned out to be."""
     places = {loc.id: loc for loc in m.locations}
     clues, handouts = {c.id: c for c in m.clues}, {h.id: h for h in m.handouts}
-    return [m.title, m.subtitle, m.hook, m.setting, *(places[v].read_aloud for v in st.visited if v in places),
+    return [m.title, m.subtitle, m.hook, m.setting,
+            *(read_aloud(m, st, v, viewer=viewer) for v in st.visited if v in places),
             *(f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues),
             *(f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts),
             *_npc_looks(m, st, shared=viewer is None)]
@@ -312,7 +334,7 @@ def landmarks(m: Module, st: GameState | None = None) -> dict[str, str]:
         out = {loc.id: loc.name for loc in m.locations if loc.public}
         for loc in m.locations:
             if loc.id == st.location or loc.id in st.visited:
-                out.update(mentions(m, [loc.read_aloud]))
+                out.update(mentions(m, [read_aloud(m, st, loc.id)]))
         return out
     opening = set(mentions(m, [m.title, m.subtitle, m.hook, m.setting, m.opening]))
     found = mentions(m, [f"{c.title}\n{c.text}" for c in m.clues] + [f"{h.title}\n{h.text}" for h in m.handouts])
@@ -383,7 +405,8 @@ def chart(m: Module, st: GameState) -> Chart:
     there = been(m, st, told)
     trails: list[tuple[str, str]] = []
     for v in visited:  # they looked around where they stopped, not on the way through
-        named = mentions(m, [places[v].read_aloud, *(f"{c.title}\n{c.text}" for c in m.clues if c.where == v and c.id in st.clues)])
+        named = mentions(m, [read_aloud(m, st, v),
+                             *(f"{c.title}\n{c.text}" for c in m.clues if c.where == v and c.id in st.clues)])
         trails += [(v, p) for p in places if p in named and p in told and p not in there and g.has_edge(v, p)]
     # A map in hand (the user, 2026-10-22: the Ratgers' drawing of Esnel left the map as it was)
     mapped = set(mentions(m, [f"{h.title}\n{h.text}" for h in m.handouts if h.id in st.handouts and "地图" in h.kind])) & set(places)
@@ -475,7 +498,7 @@ def things(m: Module, st: GameState, *, viewer: str = "") -> dict[str, str]:
     seen: dict[str, list[str]] = {}
     for v in dict.fromkeys([*st.visited, st.location]):
         if v in places:
-            seen.setdefault(v, []).append(plain(m.location(v).read_aloud))
+            seen.setdefault(v, []).append(plain(read_aloud(m, st, v, viewer=reader)))
     for c in m.clues:
         if c.id in st.clues and c.where in places:
             seen.setdefault(c.where, []).append(plain(f"{c.title}{c.text}"))

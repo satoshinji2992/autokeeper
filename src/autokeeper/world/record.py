@@ -328,6 +328,7 @@ class Sighting(BaseModel):
 
 class PlaceSighting(BaseModel):
     event: str
+    read_aloud: str = ""  # the visible description at this observation, not a later remote rewrite
     art: str | None = None
     views: dict[str, str] = Field(default_factory=dict)
 

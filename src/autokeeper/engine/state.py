@@ -35,6 +35,7 @@ class LogEntry(BaseModel):
     presented: dict[str, dict[str, str]] = Field(default_factory=dict)  # immutable delivery-time personal lines
     delivery: str = ""  # the same accepted telling in saved history and live delivery
     scene: str = ""  # stable source scene, never inferred from the viewer's latest place
+    table_present: list[str] | None = None  # public player input: scene members when sent; display only
 
 
 class Deed(BaseModel):

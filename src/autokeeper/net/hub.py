@@ -182,6 +182,7 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
             loc.update(name=known[here], read_aloud="", features=[], art=None, weather=[], views=[])
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
+            loc["read_aloud"] = fog.read_aloud(m, source, here, viewer=observer)
             loc["views"] = [{**v, "features": [], "prompt": ""} for v in loc["views"]]  # nor what each picture is for
             if seen := place_sightings.get(here):
                 loc["art"] = seen.art
@@ -572,6 +573,8 @@ class Hub:
                 await self._pool()
             elif self.retrying == seat and text.strip().startswith("/retry"):
                 self.inbox[seat].put_nowait(text)
+            elif self.state.ending:
+                await self._send(cid, {"t": "error", "text": "本局已结束，正在完成最后的叙述。"})
             elif idea.asked(text) and (why := self.game.idea_refused()):  # said at once; nothing goes in the round
                 await self._send(cid, {"t": "error", "text": why})
             elif text.strip().startswith("/") and not text.strip().startswith("/kp ") and not idea.asked(text):
@@ -603,7 +606,7 @@ class Hub:
                                        "reason": "本轮已封闭，请在叙述结束后提交。原文已保留。"})
         elif t == "join":
             seat = self._seat_of(cid)
-            if seat is not None and self.open and self._acts(seat):
+            if seat is not None and self.open and not self.state.ending and self._acts(seat):
                 self.joining.add(seat)
                 self.done.discard(seat)
                 self.wake.set()
@@ -1360,19 +1363,27 @@ class Hub:
 
     async def _table_input(self, inv_id: str, text: str, *, ai: bool = False, speech: dict | None = None) -> None:
         """Echo ordinary input to the entire table, including players in other scenes."""
+        from ..engine.scenes import hosting_region
+
         inv = self.state.find(inv_id)
+        scene = getattr(self._context(inv_id), "scene", None)
+        region = hosting_region(self.m, audience.location(self.state, inv_id))
+        present = list(scene.members) if scene is not None else [
+            person.id for person in self.state.investigators
+            if hosting_region(self.m, audience.location(self.state, person.id)) == region
+        ]
         ident = "table:" + uuid.uuid4().hex
         event = {"type": "said", "who": inv.name, "player": self.names.get(self.sits.get(inv_id) or "", ""),
-                 "text": text, "ai": ai, "delivery": ident}
+                 "text": text, "ai": ai, "delivery": ident, "table_present": present}
         if speech is None:
             entry = LogEntry(turn=self.state.turn, time=self.state.clock, kind="player", who=inv.name,
-                             text=text, delivery=ident)
+                             text=text, delivery=ident, table_present=present)
         else:
             # Keep real listeners in Game.speak's record; only the table transcript is public.
             original = self.state.log[-1]
             original.delivery = ident
-            entry = original.model_copy(update={"audience": None, "presented": {}})
-            event = {**speech, "delivery": ident}
+            entry = original.model_copy(update={"audience": None, "presented": {}, "table_present": present})
+            event = {**speech, "delivery": ident, "table_present": present}
             event.pop("audience", None)
         self.state.table_history.append(entry)
         self._save()
@@ -1407,8 +1418,9 @@ class Hub:
             self.over = True
             await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
             return
-        while not st.ending:
-            if not any(inv.can_act for inv in st.investigators):  # nobody left standing
+        while not st.ending or st.pending_turn:
+            if (not any(inv.can_act for inv in st.investigators)
+                    and not st.pending_turn and self.game.world_encounter() is None):
                 break
             while not self.clients:  # nobody at the table: the AI does not play on alone, spending
                 await asyncio.sleep(1.0)
@@ -1417,6 +1429,8 @@ class Hub:
                     await self._safely(self._tell_held(), "上一轮的叙述")
                 await self._collect()
             await self._settle()
+        if st.held:
+            await self._safely(self._tell_held(), "最后的叙述")
         self.over = True
         await self._broadcast({"t": "over", "ending": st.ending, "state": self._view()})
 
@@ -2287,7 +2301,8 @@ class Hub:
         """One mail consumer, independent of offers; deferred attachments reuse their receipts."""
         if not self.asking and not self.state.pending_turn:
             for ident, receipt in self.state.private_messages.items():
-                if not receipt.get("delivered") and "reply" in receipt and ident not in self.private_pending:
+                if (not receipt.get("delivered") and not receipt.get("failure")
+                        and "reply" in receipt and ident not in self.private_pending):
                     self.private_pending.add(ident)
                     self.private_requests.put_nowait((receipt["who"], receipt["text"], ident.split(":", 1)[1]))
         if not self.private_requests.empty() and (self.private_task is None or self.private_task.done()):
@@ -2299,12 +2314,28 @@ class Hub:
                 seat, text, request = self.private_requests.get_nowait()
                 ident = f"{seat}:{request}"
                 try:
-                    await self.game.private_message(seat, text, request=request,
-                                                    defer_media=bool(self.asking or self.state.pending_turn))
-                except Exception as exc:
-                    self._failed("守秘人私信", exc)
-                    if cid := self.sits.get(seat):
-                        await self._send(cid, {"t": "error", "text": "私信暂未完成，已有记录保留。"})
+                    while True:
+                        try:
+                            await self.game.private_message(seat, text, request=request,
+                                                            defer_media=bool(self.asking or self.state.pending_turn))
+                        except Exception as exc:
+                            self._failed("守秘人私信", exc)
+                            receipt = self.state.private_messages.get(ident, {})
+                            receipt["failure"] = recovery.explanation(exc)
+                            if (recovery.recoverable(exc)
+                                    and receipt.get("auto_recovery", 0) < recovery.ATTEMPTS):
+                                receipt["auto_recovery"] = receipt.get("auto_recovery", 0) + 1
+                                self._save()
+                                if cid := self.sits.get(seat):
+                                    await self._send(cid, {"t": "notice", "text": "私信暂未完成，正在自动恢复。"})
+                                await asyncio.sleep(recovery.DELAY)
+                                continue
+                            if cid := self.sits.get(seat):
+                                await self._send(cid, {"t": "error", "text": "私信暂未完成，已有记录保留。"
+                                                      + receipt["failure"]})
+                        else:
+                            self.state.private_messages.get(ident, {}).pop("failure", None)
+                        break
                 finally:
                     self.private_pending.discard(ident)
                     self._save()

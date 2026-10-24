@@ -203,8 +203,15 @@ GameScreen.-dev #topbar {
     color: $foreground;
 }
 .player {
+    color: $foreground;
+    padding: 0 1;
+    border-left: wide $accent;
+    background: $accent 5%;
+}
+.player.offscene {
     color: $text-muted;
-    text-style: italic;
+    border-left: wide $surface-lighten-2;
+    background: transparent;
 }
 .echo {
     color: $foreground;

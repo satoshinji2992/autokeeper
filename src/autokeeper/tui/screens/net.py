@@ -104,7 +104,7 @@ def history_text(entry: LogEntry) -> Text:
         return Text(f"【守秘人·私密】{entry.text}", style="dim")
     label = "【私语】" if private and entry.kind == "speech" else ""
     who = f"{entry.who}：" if entry.who else ""
-    return Text(f"{label}{who}{entry.text}", style="dim")
+    return Text(f"{label}{who}{entry.text}", style="" if entry.kind in ("player", "speech") else "dim")
 
 
 def table_module(welcome: dict[str, Any]) -> Module:
@@ -252,13 +252,22 @@ class NetGameScreen(GameScreen):
         self.set_interval(0.1, self._spin)
         self.set_interval(0.5, self._countdown)
         for e in self.backlog:  # what happened before you sat down
-            block = self.story.add("system" if e.kind not in ("keeper", "npc") else e.kind, history_text(e),
-                                   delivery=e.delivery)
+            block = self._restore_entry(e)
             if e.kind == "keeper" and (e.audience is None or e.delivery):
                 self.told = block
         self.ready = True
         while self.inbox:
             await self.on_msg(self.inbox.pop(0))
+
+    def _restore_entry(self, entry: LogEntry) -> Static:
+        """Replay styling from the sent scene, without recording it as a new action."""
+        kind = "player" if entry.kind in ("player", "speech") else entry.kind if entry.kind in ("keeper", "npc") else "system"
+        callback, self.story.on_entry = self.story.on_entry, None
+        try:
+            return self.story.add(kind, history_text(entry), delivery=entry.delivery,
+                                  offscene=audience.offscene(entry, self.seat))
+        finally:
+            self.story.on_entry = callback
 
     async def on_unmount(self) -> None:
         await self.link.close()
@@ -533,9 +542,9 @@ class NetGameScreen(GameScreen):
                     known[key] -= 1
                     continue
                 self.backlog.append(entry)
-                block = self.story.add("keeper" if entry.kind == "keeper" else "system", history_text(entry),
-                                       delivery=entry.delivery)
-                if (line := log_line(entry)) is not None:
+                shown = self.story.has_delivery(entry.delivery)
+                block = self._restore_entry(entry)
+                if not shown and (line := log_line(entry, self.seat)) is not None:
                     self.query_one(HistoryPanel).note(line, block, entry.turn)
         elif t == "notice":  # an answer that came too late, or twice: the host ignored it
             self.app.notify(msg.get("text", ""), severity="warning", timeout=4)
@@ -592,13 +601,15 @@ class NetGameScreen(GameScreen):
         if t == "speech" and ev.get("channel") in ("whisper", "note"):
             who = f"{ev['who']}（{ev['player']}）" if ev.get("player") else ev["who"]
             label = "私语" if ev["channel"] == "whisper" else "纸条"
-            self.story.add("player", Text(f"▷ 【{label}】{who} → {ev.get('to') or '收件人'}：{ev['text']}"))
+            self.story.add("player", Text(f"▷ 【{label}】{who} → {ev.get('to') or '收件人'}：{ev['text']}"),
+                           delivery=ev.get("delivery", ""))
             return
         if t == "said":
             who = f"{ev['who']}（{ev.get('player') or 'AI'}）"
             text = ev["text"]
-            self.story.add("system" if text.startswith("/kp ") else "player",
-                           Text(f"▶ {who} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {who}：{text}"))
+            self.story.add("player",
+                           Text(f"▶ {who} → KP：{text[4:]}" if text.startswith("/kp ") else f"▶ {who}：{text}"),
+                           delivery=ev.get("delivery", ""), offscene=audience.offscene(ev, self.seat))
             return
         if t == "encounter_wait":  # the table waits for one player's answer in a fight
             what = {"reaction": "应对攻击", "redeclare": "改选行动", "roll": "掷骰"}.get(ev.get("kind", ""), "选择")

@@ -18,6 +18,12 @@ def public(entry: Any) -> bool:
     return visible(entry)
 
 
+def offscene(entry: Any, viewer: str | None) -> bool:
+    """De-emphasize another group's public input without changing who may read it."""
+    present = entry.get("table_present") if isinstance(entry, Mapping) else getattr(entry, "table_present", None)
+    return viewer is not None and present is not None and viewer not in present
+
+
 def scope(state: GameState, readers: Iterable[str]) -> list[str] | None:
     """Freeze explicitly established observers; None only when the whole party observed it.
 

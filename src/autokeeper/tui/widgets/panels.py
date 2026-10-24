@@ -22,6 +22,7 @@ from textual.suggester import SuggestFromList
 from textual.widgets import Static
 
 from ... import artkit, atmosphere, imagery, pictures, scenery, weather
+from ...engine import audience
 from ...module.schema import Module
 from ...rules.catalog import CHARACTERISTICS, SKILL_BASE
 from ...rules.coc import Investigator
@@ -488,7 +489,8 @@ class StoryLog(VerticalScroll):
             text.highlight_words([name], style)
         return text
 
-    def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "", delivery: str = "") -> Static:
+    def add(self, kind: str, body: Text | str | Group | Static, *, who: str = "", delivery: str = "",
+            offscene: bool = False) -> Static:
         if delivery and (existing := self._delivery_block(delivery)) is not None:
             return existing
         if isinstance(body, Static):  # a block that draws itself, such as a roll
@@ -501,9 +503,9 @@ class StoryLog(VerticalScroll):
                     text.append(f"{who}：", style="bold")
                 text.append(body)
                 body = text
-            if kind in self.MARKED and isinstance(body, Text):
+            if (kind in self.MARKED or (kind == "player" and not offscene)) and isinstance(body, Text):
                 body = self.lit(body.copy())
-            block = Prose(body, classes=f"entry {kind}")
+            block = Prose(body, classes=f"entry {kind}" + (" offscene" if offscene else ""))
         if delivery:
             record = [" ".join(sorted(block.classes)), block.content, block]
             self._deliveries[delivery] = self._origin[block] = record
@@ -577,6 +579,9 @@ class StoryLog(VerticalScroll):
             self.call_after_refresh(self.scroll_to_widget, record[2], animate=False, top=True)
 
     # -- typewriter ----------------------------------------------------------------
+    def has_delivery(self, delivery: str) -> bool:
+        return bool(delivery) and delivery in self._deliveries
+
     def _delivery_block(self, delivery: str) -> Static | None:
         record = self._deliveries.get(delivery)
         if record is None:
@@ -1148,7 +1153,8 @@ def history_line(kind: str, body, block=None) -> Text | None:
     if not first:
         return None
     if kind == "player":
-        line = Text(first.removeprefix("▶ ").removeprefix("▷ "), style="bold")
+        away = block is not None and block.has_class("offscene")
+        line = Text(first.removeprefix("▶ ").removeprefix("▷ "), style="dim" if away else "bold")
         line.truncate(120, overflow="ellipsis")
         return line
     if kind == "dice":
@@ -1158,11 +1164,11 @@ def history_line(kind: str, body, block=None) -> Text | None:
     return None
 
 
-def log_line(entry) -> Text | None:
+def log_line(entry, viewer: str | None = None) -> Text | None:
     """A saved log entry (state.log, the LAN backlog) as a history line. Never a clue's: the
     module's words for what was found are the keeper's, the story told it."""
     if entry.kind in ("player", "speech"):  # an action, or words to the party (engine/chat.py)
-        return Text(f"{entry.who}：{entry.text}"[:120], style="bold")
+        return Text(f"{entry.who}：{entry.text}"[:120], style="dim" if audience.offscene(entry, viewer) else "bold")
     if entry.kind == "dice":
         return Text(f"  ◈ {entry.text}", style="dim")
     first = entry.text.split("\n", 1)[0]
