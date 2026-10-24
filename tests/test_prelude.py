@@ -14,6 +14,7 @@ from autokeeper.module import adapt, prelude
 from autokeeper.module.schema import Module, PreludeFrame
 from autokeeper.paths import EXAMPLE
 from autokeeper.tui.app import AutoKeeperApp
+from autokeeper.tui.modals.dialogs import HandoutModal
 from autokeeper.tui.screens import prelude as screen
 from autokeeper.tui.screens.game import GameScreen
 from autokeeper.tui.screens.prelude import PreludeScreen
@@ -107,3 +108,97 @@ async def test_waiting_for_the_opening_after_the_shots_shows_it_is_still_going()
             if not isinstance(app.screen, PreludeScreen):
                 break
         assert not isinstance(app.screen, PreludeScreen)
+
+
+async def test_a_finished_prelude_cannot_dismiss_a_different_window():
+    ready = asyncio.get_running_loop().create_future()
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        opening = PreludeScreen(Module.load(EXAMPLE), ready, shots=[])
+        app.push_screen(opening)
+        await pilot.pause()
+        handout = HandoutModal("介绍信", "请到镇上调查。")
+        app.push_screen(handout)
+        await pilot.pause()
+        ready.set_result(None)
+        await pilot.pause(0.2)
+        assert app.screen is handout  # completion must not pop someone else's modal
+        handout.dismiss()
+        for _ in range(20):
+            await pilot.pause(0.05)
+            if opening not in app.screen_stack:
+                break
+        assert opening not in app.screen_stack
+
+
+async def test_opening_media_is_shown_once_after_the_prelude_and_does_not_strand_it(monkeypatch, skills_dir):
+    monkeypatch.setitem(hm.MODELS, "canned", Canned)
+    cfg = config.Config(animations=False, roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
+    monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
+    monkeypatch.setattr(screen, "HOLD", 0.01)
+    module = Module.load(EXAMPLE)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="opening-media")
+    release = asyncio.Event()
+    prepare = Game.prepare_opening
+    shown = False
+
+    async def preparing(game):
+        nonlocal shown
+        if not shown:
+            await release.wait()
+            shown = True
+            await game.emit({"type": "presentation", "id": "opening:portrait", "slot": "overlay", "action": "show",
+                             "title": "守钟人", "payload": {"kind": "image", "art": "[人物画像]"}})
+        return await prepare(game)
+
+    monkeypatch.setattr(Game, "prepare_opening", preparing)
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(120, 40)) as pilot:
+        game_screen = GameScreen(module, state)
+        app.push_screen(game_screen)
+        for _ in range(30):
+            await pilot.pause(0.05)
+            if isinstance(app.screen, PreludeScreen):
+                break
+        assert isinstance(app.screen, PreludeScreen)
+        release.set()
+        for _ in range(60):
+            await pilot.pause(0.05)
+            if state.prologue and not game_screen.busy and isinstance(app.screen, HandoutModal):
+                break
+        assert state.prologue and not game_screen.busy
+        assert not any(isinstance(page, PreludeScreen) for page in app.screen_stack)
+        assert isinstance(app.screen, HandoutModal)
+        assert "opening:portrait" in game_screen._media_seen
+        app.screen.dismiss()
+        await pilot.pause(0.2)
+        assert app.screen is game_screen
+        assert not game_screen.query_one("#command").disabled
+
+
+async def test_cancelling_boot_also_stops_its_opening_preparation(monkeypatch, skills_dir):
+    monkeypatch.setitem(hm.MODELS, "canned", Canned)
+    cfg = config.Config(animations=False, roles={r: Role("canned", "canned", None) for r in config.DEFAULT_ROLES})
+    monkeypatch.setattr(config, "load", lambda *a, **k: cfg)
+    stopped = asyncio.Event()
+
+    async def preparing(game):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    monkeypatch.setattr(Game, "prepare_opening", preparing)
+    module = Module.load(EXAMPLE)
+    state = Game.new(module, [module.pregens[0].model_copy(deep=True)], slot="cancel-opening")
+    app = AutoKeeperApp(theme="amber")
+    async with app.run_test(size=(100, 30)) as pilot:
+        game_screen = GameScreen(module, state)
+        app.push_screen(game_screen)
+        for _ in range(30):
+            await pilot.pause(0.05)
+            if isinstance(app.screen, PreludeScreen):
+                break
+        assert isinstance(app.screen, PreludeScreen)
+        app.workers.cancel_group(game_screen, "turn")
+        await asyncio.wait_for(stopped.wait(), 1)

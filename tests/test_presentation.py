@@ -495,6 +495,7 @@ def test_ui_media_replays_do_not_reopen_an_overlay_and_clear_keeps_the_paper():
     screen = SimpleNamespace(_media_slots={}, _media_papers={}, _media_seen=set(), _media_overlay=None,
                              app=app, story=SimpleNamespace(add=lambda *args, **kwargs: None),
                              _flash_off=lambda: None, _scene=lambda loc: scene.append(loc), state=SimpleNamespace(location="square"))
+    app.screen = screen
     ev = {"id": "paper", "slot": "overlay", "action": "show", "payload": {"kind": "handout",
           "handout": {"id": "letter", "title": "信", "text": "正文", "images": [], "kind": "信件"}}}
     GameScreen._present(screen, ev)

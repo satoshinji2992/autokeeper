@@ -299,6 +299,7 @@ class GameScreen(Screen):
             for box in self.query("#command").results(Input):
                 box.focus()
         self.call_later(self.plays.ready)  # a plugin's question that waited behind another window
+        self.call_after_refresh(self._resume_media)
 
     # A click on the story or the stage takes the focus off the command box. Whatever is typed
     # or pasted then still goes into the box, instead of waiting for Esc to bring it back.
@@ -472,6 +473,10 @@ class GameScreen(Screen):
         for p in presentation.current(self.state, viewer).values():
             self._present(presentation.event(p))
 
+    def _resume_media(self) -> None:
+        if overlay := self._media_slots.get("overlay"):
+            self._present(overlay)
+
     def _present(self, ev: dict, *, display: bool = True) -> None:
         slot = ev["slot"]
         if ev["action"] == "clear":
@@ -493,6 +498,8 @@ class GameScreen(Screen):
             return
         if ev["id"] in self._media_seen:
             return
+        if self.app.screen is not self:
+            return  # retained in its slot; resume after the opening or current question closes
         self._media_seen.add(ev["id"])
         if payload.get("kind") == "handout":
             h = payload["handout"]
@@ -536,7 +543,7 @@ class GameScreen(Screen):
         pushed over the flash was closed by the flash's going. Never over a roll prompt, a fight's question
         or another one."""
         await self._after_flash()
-        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ChoiceModal, ShowcaseScreen)):
+        if self.is_attached and not isinstance(self.app.screen, (RollModal, PushModal, ChoiceModal, ShowcaseScreen, PreludeScreen)):
             self.app.push_screen(shown)
 
     async def _after_flash(self) -> None:
@@ -1474,12 +1481,17 @@ class GameScreen(Screen):
         investigators (screens/prelude.py); the keeper begins as soon as both are done."""
         assert self.game
         ready = asyncio.ensure_future(self.game.prepare_opening())
-        if not self.spectate:
-            animations = config.load().animations
-            await self.app.push_screen_wait(PreludeScreen(self.m, ready, style=self.app.art_style,  # type: ignore[attr-defined]
-                                                          animations=animations))
-            self.game.prelude_played = True
-        await ready
+        try:
+            if not self.spectate:
+                animations = config.load().animations
+                await self.app.push_screen_wait(PreludeScreen(self.m, ready, style=self.app.art_style,  # type: ignore[attr-defined]
+                                                              animations=animations))
+                self.game.prelude_played = True
+            await ready
+        finally:
+            if not ready.done():
+                ready.cancel()
+                await asyncio.gather(ready, return_exceptions=True)
 
     @work(exclusive=True, group="turn")
     async def boot(self) -> None:

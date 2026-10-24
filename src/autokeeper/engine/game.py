@@ -1347,8 +1347,10 @@ class Game(Encounters):
                         self.checkpoint()
             left = deadline - loop.time()
             try:
+                # Custom identity connections must be ready before play; their
+                # illustrations are enrichment, not a condition for entering it.
                 applied = await self._land(kind, plan, at, receipt=receipt,
-                                           draw=left if drawn < PREPARE_DRAWS and left > 0 else 0)
+                                           draw=left if kind != "开局改编" and drawn < PREPARE_DRAWS and left > 0 else 0)
             except PreparationError as exc:
                 self._debug("director", {"phase": "failed", "kind": kind, "error": str(exc)})
                 drawn += 1

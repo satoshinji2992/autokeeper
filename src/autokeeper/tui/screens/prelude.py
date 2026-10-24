@@ -42,6 +42,7 @@ class PreludeScreen(ModalScreen[None]):
         self.m, self.ready, self.style_name, self.animations = m, ready, style, animations
         self.shots = prelude.frames(m) if shots is None else shots  # a LAN seat's come from the host
         self._next = asyncio.Event()
+        self._foreground = asyncio.Event()
         self._skip = False
 
     def compose(self) -> ComposeResult:
@@ -60,7 +61,16 @@ class PreludeScreen(ModalScreen[None]):
             await self._show(shot)
         if not self.ready.done():
             await self._waiting()
-        self.dismiss()
+        # dismiss() pops the top screen, even when called by a covered modal.
+        # Never signal completion while a different window is still in front.
+        while self.is_attached and self.app.screen is not self:
+            self._foreground.clear()
+            await self._foreground.wait()
+        if self.is_attached:
+            self.dismiss()
+
+    def on_screen_resume(self) -> None:
+        self._foreground.set()
 
     async def _waiting(self) -> None:
         """The opening still being written after the shots: dots that move and the seconds so far,
