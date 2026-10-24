@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import audience
 
@@ -16,11 +16,21 @@ if TYPE_CHECKING:
 
 
 class MediaAction(BaseModel):
-    to: list[str] | None = Field(None, description="收件调查员id；null公开给全桌，名单仅这些人")
+    to: list[str] | None = Field(None, description="收件调查员id名单；单人也可填一个id；null沿用调用方指定的投递范围")
     action: Literal["show", "clear"] = Field("show", description="show展示并保留；clear撤下当前画面，不撤销已读材料；省略动作保持原样")
     ref: str = Field("", description="只引用资源索引里的handout:/scene:/portrait:/image:；clear时留空，不填路径或网址")
     slot: Literal["scene", "overlay"] = Field("overlay", description="scene替换场景图直到clear；overlay打开插图或材料")
     title: str = Field("", description="可选的玩家可见标题，不写真实身份或后台说明")
+
+    @field_validator("to", mode="before",
+                     json_schema_input_type=Annotated[str, Field(min_length=1, pattern=r"\S")] | list[str] | None)
+    @classmethod
+    def recipients(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            if not value.strip():
+                raise ValueError("收件人不能为空；指定实际调查员id，不能推断为公开")
+            return [value.strip()]
+        return value
 
 
 def ready(module: Module, key: str | None) -> bool:

@@ -181,11 +181,20 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
             loc["views"] = [{**v, "features": [], "prompt": ""} for v in loc["views"]]  # nor what each picture is for
     d["npcs"] = [n for n in d["npcs"] if (not unseated and n["location"] == st.location)
                  or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
+    observer = viewer or (source.investigators[0].id if len(source.investigators) == 1 else None)
+    sightings = source.record.sightings.get(observer, {})
     for n in d["npcs"]:
         n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
-        n["status"] = m.npc(n["id"]).status  # the dead and the missing are not shown standing in a scene
-        if n["location"] not in visited:
-            n["location"] = None
+        if seen := sightings.get(n["id"]):
+            n.update(location=None if seen.left else seen.place, status=seen.status,
+                     look=seen.look, portrait=seen.portrait)
+        elif not source.record.seeded:  # standalone UI state, before a mutable World exists
+            if n["location"] not in visited:
+                n["location"] = None
+        else:
+            n["status"] = ""  # meeting someone does not grant their future private state
+            if n["location"] != st.location:
+                n["location"] = None
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")

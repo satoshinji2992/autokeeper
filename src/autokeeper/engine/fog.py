@@ -415,12 +415,17 @@ def minutes(m: Module, a: str, b: str) -> int:
 
 
 def met(m: Module, st: GameState) -> dict[str, list[str]]:
-    """The people the investigators have met, by the place they keep to (only where they have stopped)."""
+    """People met, at their last observed place rather than their secret current location."""
     stopped = set(st.visited) | {st.location}
+    sightings = st.record.sightings.get(st.investigator.id, {})
     out: dict[str, list[str]] = {}
     for n in m.npcs:
-        if n.location in stopped and st.npcs.get(n.id) and st.npcs[n.id].met:
-            out.setdefault(n.location, []).append(n.name)
+        place = n.location
+        if st.record.seeded:
+            seen = sightings.get(n.id)
+            place = seen.place if seen is not None and not seen.left else None
+        if place in stopped and st.npcs.get(n.id) and st.npcs[n.id].met:
+            out.setdefault(place, []).append(n.name)
     return out
 
 

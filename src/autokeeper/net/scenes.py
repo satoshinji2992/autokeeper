@@ -14,6 +14,7 @@ from .hub import Hub
 
 ROUTED = {"act", "join", "done", "undo", "respond", "react", "speak", "kp_private", "retell", "suggest", "recount",
           "answer", "command"}
+TIME_RETRY_WAIT = (1.0, 2.0)
 
 
 class SceneTable(Hub):
@@ -50,6 +51,7 @@ class SceneTable(Hub):
         self.halted = False
         self.time_task: asyncio.Task | None = None
         self.time_asked: tuple | None = None
+        self.time_failed: tuple | None = None
         for key, receipt in root.state.private_messages.items():
             if receipt["who"] in members and not receipt.get("delivered"):
                 self.private_requests.put_nowait((receipt["who"], receipt["text"], key.split(":", 1)[1]))
@@ -74,6 +76,7 @@ class SceneTable(Hub):
         return seat in self.scene.members and super()._acts(seat)
 
     def _accept_declaration(self, seat: str, text: str) -> None:
+        self.time_failed = None
         if self.time_task is not None:
             self.time_asked = None
             self.time_task.cancel()
@@ -99,7 +102,7 @@ class SceneTable(Hub):
         if self.time_task is not None and not self.time_task.done():
             return
         key = (self.scene.turn, self.scene.at, self.scene.logged, until)
-        if key == self.time_asked:
+        if key in (self.time_asked, self.time_failed):
             return
         self.time_asked = key
         stamp = (*key, self.state.record.seq)
@@ -107,7 +110,27 @@ class SceneTable(Hub):
 
     async def _handoff_time(self, until: int, stamp: tuple) -> None:
         try:
-            decision = TimeHandoff.model_validate(await self.cast.scene_time(self.state, until))
+            for attempt in range(len(TIME_RETRY_WAIT) + 1):
+                try:
+                    decision = TimeHandoff.model_validate(await self.cast.scene_time(self.state, until))
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    self._failed("场景时间衔接", exc)
+                    self.time_asked = None
+                    current = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
+                    if current != stamp or not self._time_available():
+                        return
+                    if attempt == len(TIME_RETRY_WAIT):
+                        self.time_failed = stamp[:4]
+                        await self._broadcast({"t": "notice", "text": "时间衔接暂未完成，进度已保留。可提交行动或空行跳过。"})
+                        return
+                    await asyncio.sleep(TIME_RETRY_WAIT[attempt])
+                    if not self._time_available() or (self.scene.turn, self.scene.at, self.scene.logged, until,
+                                                      self.state.record.seq) != stamp:
+                        return
+                    self.time_asked = stamp[:4]
             current = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
             allowed = False
             if (decision.advance and current == stamp and self.time_asked == stamp[:4] and self._time_available()

@@ -310,6 +310,9 @@ class Sighting(BaseModel):
     place: str
     event: str  # the observation's source; never inferred from a later true position
     left: bool = False  # seen leaving this place, without learning the destination
+    status: str = ""
+    look: str = ""
+    portrait: str = ""
 
 
 class WorldRecord(BaseModel):

@@ -80,6 +80,7 @@ class Reply:
     seconds: float = 0.0
     repairs: int = 0
     retries: int = 0
+    validation_errors: list[str] = field(default_factory=list)
 
     def add(self, other: Reply) -> None:
         for k, v in other.usage.items():
@@ -426,7 +427,8 @@ class Model:
                 remaining = _output_problems(second, schema)
                 if not remaining or (reply.data is None and second.data is not None):
                     reply.data, reply.text = second.data, second.text
-                if _output_problems(reply, schema) and not isinstance(reply.data, dict):
+                reply.validation_errors = _output_problems(reply, schema)
+                if reply.validation_errors and not isinstance(reply.data, dict):
                     # A structured envelope can contain private plans and motives. After the
                     # one format retry, fail the call; never turn that envelope into dialogue.
                     # Stateful plain-text replies also lack their operation/disclosure receipt.

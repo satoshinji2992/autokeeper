@@ -64,6 +64,7 @@ class Investigator(BaseModel):
     san: int = 0
     san_start_of_day: int = 0
     san_lost_today: int = 0
+    san_day: int = Field(default=0, description="规则维护：个人每日理智计数最近初始化的游戏日")
     skills: dict[str, int] = Field(default_factory=dict)
     inventory: list[str] = Field(default_factory=list)
 
@@ -213,7 +214,11 @@ class Investigator(BaseModel):
     def can_act(self) -> bool:
         return not {"昏迷", "濒死", "死亡", "永久疯狂"} & set(self.conditions)
 
-    def new_day(self) -> None:
+    def new_day(self, day: int | None = None) -> None:
+        if day is not None:
+            if day <= self.san_day:
+                return
+            self.san_day = day
         self.san_start_of_day = self.san
         self.san_lost_today = 0
 
@@ -440,6 +445,7 @@ class Rules:
         return Opposed(a, b, "tie")
 
     def sanity(self, inv: Investigator, on_success: str, on_failure: str, *, now: int = 0) -> Sanity:
+        inv.new_day(now // 1440)
         check = self.check(inv, "理智", mark=False)
         expr = on_success if check.passed else on_failure
         if check.level == Level.FUMBLE:

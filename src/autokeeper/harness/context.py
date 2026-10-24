@@ -77,6 +77,7 @@ class Session:
         self.notes: dict[str, str] = {} if notes is None else notes
         self.model = make_model(spec, system, label=role)
         self._folding: asyncio.Task | None = None
+        self._unkept_reply = False
 
     def bind(self, transcript: list[Msg], notes: dict[str, str]) -> Session:
         """Point the session at the caller's current state objects (after a load or a copy)."""
@@ -86,6 +87,10 @@ class Session:
     @property
     def summary(self) -> str:
         return self.notes.get(self.key, "")
+
+    @property
+    def reply_kept(self) -> bool:
+        return not self._unkept_reply
 
     def window(self, prompt: str, *, include_memory: bool = True) -> list[Msg]:
         msgs: list[Msg] = []
@@ -154,12 +159,14 @@ class Session:
             trace.progress("context_blocked", session=self.key, context=parts)
             raise ContextBudgetExceeded(parts)
         window = self.window(prompt + extra)
+        self._unkept_reply = True
         with trace.input_context(parts, owner=transport):
             reply = await transport.complete(window, schema=response_schema, images=images, on_delta=on_delta)
-        if self.memory:
+        if self.memory and not reply.validation_errors:
             answer = reply.text if response_schema is None else json.dumps(reply.data, ensure_ascii=False)
             kept = prompt if remember is None else remember
             self.transcript += [{"role": "user", "content": kept}, {"role": "assistant", "content": answer}]
+            self._unkept_reply = False
             if len(self.transcript) >= 4 and sum(len(m["content"]) for m in self.transcript) > self.memory:
                 self._folding = asyncio.create_task(self.compact())
         return reply
@@ -172,6 +179,12 @@ class Session:
 
     def forget(self, turns: int = 1) -> None:
         del self.transcript[-2 * turns :]
+
+    def discard_reply(self) -> None:
+        """Reject this attempt without removing an earlier, accepted exchange."""
+        if not self._unkept_reply:
+            self.forget()
+            self._unkept_reply = True
 
     async def compact(self, *, target: int | None = None) -> None:
         """Fold the oldest turns into the summary. The old turns are removed only once the new

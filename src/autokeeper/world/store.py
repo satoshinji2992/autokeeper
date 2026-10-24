@@ -208,10 +208,16 @@ class World:
         for who in actual:
             masked = self.st.perceptions.get(who, {})
             people = [*self.present(place), *([leaving] if leaving else [])]
+            if (source := self.rec.event(event)) is not None and source.kind == "condition":
+                people += [ident for ident in source.participants if ident in self.rec.entities
+                           and self.rec.entities[ident].kind == "npc" and self.place(ident) == place]
             for npc in dict.fromkeys(people):
                 if npc in masked or not ((known := self.st.npcs.get(npc)) and known.met):
                     continue
-                self.rec.sightings.setdefault(who, {})[npc] = Sighting(place=place, event=event, left=npc == leaving)
+                sheet = self.m.npc(npc)
+                self.rec.sightings.setdefault(who, {})[npc] = Sighting(
+                    place=place, event=event, left=npc == leaving,
+                    status=self.rec.entities[npc].status, look=sheet.look, portrait=sheet.portrait)
 
     def agent(self, npc: str) -> Agent | None:
         return self.rec.agents.get(npc)

@@ -122,6 +122,8 @@ def emit(model: Model, messages: list[dict], reply: Reply, *, schema: dict | Non
         row["context"] = dict(parts)
     if error:
         row["error"] = error[:500]
+    if reply.validation_errors:
+        row["validation_errors"] = reply.validation_errors
     _notify({**row, "phase": "complete", "call_id": _call.get(), "system": model.system,
              "input": [dict(m) for m in messages], "output": reply.text,
              "thinking": reply.thinking, "data": reply.data, "schema": schema})

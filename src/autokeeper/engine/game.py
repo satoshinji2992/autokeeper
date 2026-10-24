@@ -390,6 +390,7 @@ class Game(Encounters):
         )
         state.day = state.minutes // 1440
         for inv in state.investigators:  # the 1/5-of-SAN-in-a-day count starts now
+            inv.san_day = state.day
             inv.new_day()
         return state
 
@@ -3485,6 +3486,12 @@ class Game(Encounters):
         base = st.round_plan.setdefault("started", st.minutes - st.round_spent)
         return base + st.round_elapsed.get(who or st.investigator.id, 0)
 
+    def _personal_time(self, who: str) -> int:
+        for local in self.state.scenes.values():
+            if not local.closed and who in local.members:
+                return local.member_at.get(who, local.at)
+        return self._actor_cursor(who)
+
     def _wait_minutes(self, action: Action, minutes: int, turn: Turn, *, start: int) -> int:
         """Keep the original deadline, yielding before accepted work can be skipped over."""
         st, journal = self.state, self.state.pending_turn
@@ -3864,11 +3871,13 @@ class Game(Encounters):
         def commit() -> list[dict]:
             notices = []
             for inv in st.investigators:
+                now = self._personal_time(inv.id)
                 period = (rested or {}).get(inv.id)
-                since = period[0] if period is not None and period[0] < period[1] <= st.minutes else None
-                for recovered in inv.recover_madness(st.minutes, rested_since=since):
+                since = period[0] if period is not None and period[0] < period[1] <= now else None
+                for recovered in inv.recover_madness(now, rested_since=since):
                     text = f"{inv.name}：{recovered}；已损失的理智不返还。"
-                    st.add("system", text, audience=[inv.id])
+                    entry = st.add("system", text, audience=[inv.id])
+                    entry.time = format_time(now)
                     turn.notes.append(text)
                     notices.append({"text": text, "audience": [inv.id]})
             return notices
@@ -4227,10 +4236,9 @@ class Game(Encounters):
         st, m = self.state, self.m
         turn = turn or Turn()
         await self._recover_madness(turn)
-        if st.minutes // 1440 != st.day:  # a new day: each investigator's daily SAN loss starts again
-            st.day = st.minutes // 1440
-            for inv in st.investigators:
-                inv.new_day()
+        st.day = st.minutes // 1440
+        for inv in st.investigators:
+            inv.new_day(self._personal_time(inv.id) // 1440)
         await self._events(turn)
         await self._world(turn)
         await self._people()

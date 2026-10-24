@@ -95,12 +95,12 @@ async def test_what_changed_while_they_were_away_is_drawn_and_so_is_a_wounded_fa
     assert "受伤" in game.state.looks[module.npc("warden").portrait]["change"]
 
 
-def test_the_players_screens_get_the_pictures_not_what_they_are_for(module, fake):
+async def test_the_players_screens_get_the_pictures_not_what_they_are_for(module, fake):
     module.events.append(Event(id="bell", title="钟声", when="D1 20:30", text="钟多敲了一下", art="bell_moment"))
     game, _, _ = make(module, fake, {}, location="square")
     book = table(module, game.state)
     assert next(x for x in book["locations"] if x["id"] == "tower")["views"] == []  # not been there
-    game.state.visited.append("tower")
+    await game._arrive("tower", Turn())  # the changed condition is observed here, not learned remotely
     game.state.npc("warden").met = True
     game.world.apply(O.Condition(entity="warden", status="受伤"))
     book = table(module, game.state)
