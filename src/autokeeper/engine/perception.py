@@ -103,8 +103,11 @@ def resolve_target(state: GameState, viewer: str, handle: str) -> str:
 
 def picture_visible(game: Any, viewer: str | None, key: str) -> bool:
     own = next((inv.portrait for inv in game.state.investigators if inv.id == viewer), "")
-    return key == own or not any(p.original_portrait == key and (not p.visible or p.portrait != key)
-                                 for p in appearances(game.state, viewer).values())
+    source = game.state.visuals.get(key, {}).get("source", key)
+    return key == own or not any(
+        game.state.visuals.get(p.original_portrait, {}).get("source", p.original_portrait) == source
+        and (not p.visible or p.portrait not in {key, source})
+        for p in appearances(game.state, viewer).values())
 
 
 def choice_handle(game: Any, viewer: str, value: dict) -> str:

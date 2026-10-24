@@ -18,10 +18,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .. import media_snapshot
 from ..engine import audience, fog
 from ..engine.state import GameState
 from ..module.schema import Module
-from .record import DIRECTOR, PLAYERS, Entity, Event, Fact, Relation, WorldRecord, relation_key
+from .record import DIRECTOR, PLAYERS, Entity, Event, Fact, ItemSighting, Relation, WorldRecord, relation_key
 
 if TYPE_CHECKING:
     from .store import World
@@ -380,30 +381,100 @@ def public_text(w: World, npc: str, text: str) -> str:
     return text
 
 
-def item_known(w: World, item: Entity | str, viewer: str) -> bool:
-    """Current item knowledge, distinct from being in the same room as its holder."""
+def item_observers(w: World, viewers: Iterable[str]) -> list[str]:
+    """Common item knowledge requires a nonempty party whose members actually learned it."""
+    people = {entity.id for entity in w.rec.entities.values() if entity.kind in {"npc", "investigator", "creature"}}
+    actual = list(dict.fromkeys(viewer for viewer in viewers if viewer in people))
+    party = {investigator.id for investigator in w.st.investigators}
+    if party and party <= set(actual):
+        actual.append(PLAYERS)
+    return actual
+
+
+def remember_item(w: World, item: Entity, viewers: Iterable[str], event: str) -> None:
+    """Keep what an actual transfer, discovery or inspection showed, independently of truth."""
+    if item.kind != "item":
+        return
+    sheet = next((entry for entry in w.m.items if entry.id == item.id), None)
+    seen = ItemSighting(
+        event=event, at=item.at, name=item.name, equipment=item.equipment,
+        quantity=item.quantity, status=item.status, hidden=item.hidden, look=item.look,
+        description=sheet.description if sheet else item.look,
+        art=media_snapshot.remember(w.m, w.st, sheet.art) if sheet and sheet.art else None,
+        where=sheet.where if sheet else "", version=item.version, changed=item.changed)
+    for viewer in item_observers(w, viewers):
+        observed = seen.model_copy(deep=True)
+        if viewer != item.at and (item.hidden or item.equipment == "concealed"):
+            # Showing one object does not expose the rest of a concealed supply.
+            observed.hidden, observed.equipment = False, "carried"
+            observed.quantity = min(observed.quantity, 1)
+        w.rec.item_sightings.setdefault(viewer, {})[item.id] = observed
+
+
+def observe_items(w: World, place: str, witnesses: Iterable[str], event: str) -> None:
+    """A room visit reveals exposed objects there, never the contents of another pocket."""
+    witnesses = list(witnesses)
+    for item in w.rec.entities.values():
+        if item.kind != "item":
+            continue
+        floor = item.at == place and not item.hidden and item.equipment != "concealed"
+        viewers = [viewer for viewer in witnesses if floor or item.at == viewer]
+        if viewers:
+            remember_item(w, item, viewers, event)
+
+
+def item_sighting(w: World, item: Entity, viewer: str) -> ItemSighting | None:
+    """The remembered state, unless this viewer can inspect their own current possession."""
+    if viewer == PLAYERS and len(w.st.investigators) == 1:
+        viewer = w.st.investigators[0].id
+    if item.at == viewer:
+        return None
+    if seen := w.rec.item_sightings.get(viewer, {}).get(item.id):
+        return seen
+    investigators = {inv.id for inv in w.st.investigators}
+    if viewer == PLAYERS or viewer in investigators:
+        return w.rec.item_sightings.get(PLAYERS, {}).get(item.id)
+    return None
+
+
+def item_view(w: World, item: Entity | str, viewer: str) -> Entity | None:
+    """Return an actor's current possession or their last observed copy, never unseen changes."""
     from .ops import STAFF
 
     item = w.rec.entities.get(item) if isinstance(item, str) else item
-    if item is None or item.kind != "item" or not item.important:
-        return False
+    if item is None or item.kind != "item":
+        return None
+    if viewer == PLAYERS and len(w.st.investigators) == 1:
+        viewer = w.st.investigators[0].id
     if viewer in STAFF or item.at == viewer:
-        return True
+        return item
+    if seen := item_sighting(w, item, viewer):
+        return Entity(id=item.id, kind="item", name=seen.name, at=seen.at,
+                      equipment=seen.equipment, quantity=seen.quantity, status=seen.status,
+                      hidden=seen.hidden, look=seen.look, version=seen.version, changed=seen.changed)
     investigators = {inv.id for inv in w.st.investigators}
-    if viewer == PLAYERS and item.at in investigators:
-        return True
+    # These markers describe current observation only; operations replace them when
+    # truth changes and retain the previous observation above.
     if viewer in item.observed_by or (viewer in investigators and PLAYERS in item.observed_by):
-        return True
+        return item
+    if viewer == PLAYERS:
+        return None  # a multiplayer table has no physical viewpoint of its own
     place = w.rec.entities.get(item.at)
-    here = w.st.location if viewer == PLAYERS else w.place(viewer)
-    return bool(place and place.kind == "location" and item.at == here
-                and not item.hidden and item.equipment != "concealed")
+    here = w.place(viewer)
+    return item if (place and place.kind == "location" and item.at == here
+                    and not item.hidden and item.equipment != "concealed") else None
+
+
+def item_known(w: World, item: Entity | str, viewer: str) -> bool:
+    """Knowing an item exists survives later unobserved changes to its ownership or state."""
+    item = w.rec.entities.get(item) if isinstance(item, str) else item
+    return bool(item is not None and item.important and item_view(w, item, viewer) is not None)
 
 
 def visible_items(w: World, viewer: str, holder: str = "") -> list[Entity]:
     """Important items this actor can know now; quantity 0 is known but cannot be used."""
-    return [item for item in w.rec.entities.values()
-            if (not holder or item.at == holder) and item_known(w, item, viewer)]
+    return [seen for item in w.rec.entities.values() if item.important
+            and (seen := item_view(w, item, viewer)) is not None and (not holder or seen.at == holder)]
 
 
 # -- back into this game's module ---------------------------------------------------------------

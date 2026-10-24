@@ -101,7 +101,10 @@ def test_public_presentation_informs_present_witnesses_and_private_changes_do_no
     assert knowledge.item_known(w, "pistol", PLAYERS) and knowledge.item_known(w, "pistol", "preacher")
     assert w.rec.events[-1].text in context.happened(w, w.rec.seq - 1)
     assert w.apply(O.Equip(item="pistol", equipment="concealed", actor="warden")).ok
-    assert not knowledge.item_known(w, "pistol", PLAYERS) and not knowledge.item_known(w, "pistol", "preacher")
+    assert knowledge.item_known(w, "pistol", PLAYERS) and knowledge.item_known(w, "pistol", "preacher")
+    assert knowledge.item_view(w, "pistol", PLAYERS).equipment == "held"
+    assert knowledge.item_view(w, "pistol", "preacher").equipment == "held"
+    assert w.entity("pistol").equipment == "concealed"
     assert any("展示给在场的人" in event.text for event in w.rec.events)  # prior observation remains in history
 
 

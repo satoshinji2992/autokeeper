@@ -346,10 +346,11 @@ async def test_a_module_s_own_change_shows_its_picture_once_its_flag_is_set(fake
     game.visuals.schedule()
     await asyncio.gather(*game.visuals.tasks.values())
     assert m.pictures["square"] == m.pictures["square_still"] and state.looks["square"]["applied"] == "flag:bell_stopped"
-    assert [e["key"] for e in events if e["type"] == "art"] == ["square"]
+    observed = state.record.place_sightings[state.investigators[0].id]["square"].art
+    assert [e["key"] for e in events if e["type"] == "art"] == ["square", observed]
     game.visuals.schedule()
     await asyncio.gather(*game.visuals.tasks.values())
-    assert len([e for e in events if e["type"] == "art"]) == 1  # shown once
+    assert len([e for e in events if e["type"] == "art"]) == 2  # each world/observed version shown once
     await game.close()
 
 
@@ -369,11 +370,13 @@ async def test_lan_players_see_the_redrawn_picture_and_a_late_joiner_gets_it_too
     hub.game.visuals.schedule()
     await asyncio.gather(*(t for k, t in hub.game.visuals.tasks.items() if k.startswith("look:")))
     event = next(msg["ev"] for msg in sent if msg["t"] == "event" and msg["ev"]["type"] == "art")
-    assert event["key"] == "square" and "picture" not in event  # no host path, the picture itself
+    observed = next(loc["art"] for loc in table(hub.m, hub.state)["locations"] if loc["id"] == "square")
+    assert event["key"] == observed and "picture" not in event  # no host path, the observed picture itself
     assert near(colour_of(media.unpack(event["picture_data"])), RED)
     assert "洪水" not in json.dumps(sent, ensure_ascii=False)  # the change itself is the keeper's
     welcome = hub._welcome("late")
-    assert "looks" not in welcome["state"] and near(colour_of(table_module(welcome).pictures["square"]), RED)
+    restored = table_module(welcome)
+    assert "looks" not in welcome["state"] and near(colour_of(restored.pictures[restored.location("square").art]), RED)
     await hub.game.close()
 
 
@@ -543,6 +546,7 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
     hub = Hub(EXAMPLE, seats=["玩家"], cast=TableCast(), rules=Rules(dice=fake))
     hub.game.visuals.cfg = config.Config()
     hub.m.pictures["square"] = str(picture(tmp_path / "art" / "square.jpg"))
+    hub.game.world.observe_place("square", [hub.state.investigators[0].id], "prepared-picture")
     task = await opened(hub)
     app = AutoKeeperApp(theme="amber", join=(f"127.0.0.1:{hub.port}", "小明"))
     async with app.run_test(size=(140, 44)) as pilot:
@@ -555,15 +559,16 @@ async def test_a_player_at_a_shared_table_sees_the_place_redrawn(codex, skills_d
             if isinstance(app.screen, NetGameScreen) and app.screen.my_turn:
                 break
         screen = app.screen
-        assert isinstance(screen, NetGameScreen) and near(colour_of(screen.m.pictures["square"]), BLUE)
+        assert isinstance(screen, NetGameScreen) and near(colour_of(screen.m.pictures[screen.m.location("square").art]), BLUE)
         hub.game.visuals.look("square", "广场被洪水淹了，水没过台阶")
         hub.game.visuals.schedule()
         for _ in range(50):
             await pilot.pause(0.1)
-            if near(colour_of(screen.m.pictures["square"]), RED):
+            if near(colour_of(screen.m.pictures.get(screen.m.location("square").art, "")), RED):
                 break
-        assert near(colour_of(screen.m.pictures["square"]), RED)  # through the table's art event
-        assert Path(screen.m.pictures["square"]).is_relative_to(paths.table_art())  # the player's own copy
+        shown = screen.m.pictures[screen.m.location("square").art]
+        assert near(colour_of(shown), RED)  # through the table's observed-version art event
+        assert Path(shown).is_relative_to(paths.table_art())  # the player's own copy
     await closed(task)
     await hub.game.close()
 
@@ -591,11 +596,13 @@ async def test_a_place_redrawn_before_anyone_saw_it_reaches_the_screens_when_the
     assert hub.m.location("tower").art == key and not [m for m in sent if m["t"] == "event"]  # nobody has seen it yet
     hub.state.location = "tower"
     hub.state.visited.append("tower")
+    hub.game.world.observe_place("tower", [hub.state.investigators[0].id], "arrived")
     await hub._event({"type": "move", "location": "tower", "name": "钟楼", "art": ""})
     kinds = [m["ev"]["type"] if m["t"] == "event" else m["t"] for m in sent]
     assert kinds[:3] == ["module", "art", "move"]  # the picture is there before the scene is drawn
     art = next(m["ev"] for m in sent if m["t"] == "event" and m["ev"]["type"] == "art")
-    assert art["key"] == key and near(colour_of(media.unpack(art["picture_data"])), RED)
+    observed = hub.state.record.place_sightings[hub.state.investigators[0].id]["tower"].art
+    assert art["key"] == observed and near(colour_of(media.unpack(art["picture_data"])), RED)
     sent.clear()
     await hub._event({"type": "move", "location": "tower", "name": "钟楼", "art": ""})
     assert not [m for m in sent if m["t"] == "event" and m["ev"]["type"] == "art"]  # sent once

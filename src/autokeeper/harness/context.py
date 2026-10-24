@@ -77,7 +77,7 @@ class Session:
         self.notes: dict[str, str] = {} if notes is None else notes
         self.model = make_model(spec, system, label=role)
         self._folding: asyncio.Task | None = None
-        self._unkept_reply = False
+        self._unkept_reply = True
 
     def bind(self, transcript: list[Msg], notes: dict[str, str]) -> Session:
         """Point the session at the caller's current state objects (after a load or a copy)."""
@@ -130,6 +130,7 @@ class Session:
         Folding old turns runs in the background after the reply is out, so the player never
         waits for the summarizer; the next call waits for it instead. `model` changes only this
         call's transport and input limit; the conversation and its compaction remain this session's."""
+        self._unkept_reply = True
         await self.settle()
         transport = model or self.model
         response_schema = self.schema if schema is None else schema
@@ -159,7 +160,6 @@ class Session:
             trace.progress("context_blocked", session=self.key, context=parts)
             raise ContextBudgetExceeded(parts)
         window = self.window(prompt + extra)
-        self._unkept_reply = True
         with trace.input_context(parts, owner=transport):
             reply = await transport.complete(window, schema=response_schema, images=images, on_delta=on_delta)
         if self.memory and not reply.validation_errors:

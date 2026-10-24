@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from .. import media_snapshot
 from . import audience
 
 if TYPE_CHECKING:
@@ -46,11 +47,15 @@ def resolve(module: Module, state: GameState, ref: str) -> dict:
         if h is None:
             raise ValueError(f"手稿 {ident} 不存在")
         keys = [*h.images, *h.original_keys()]
+        art_keys, color_keys = set(module.art), set(module.art_colors)
+        frozen = {key: media_snapshot.remember(module, state, key)
+                  for key in keys if key in module.art or key in module.pictures}
         return {"kind": "handout", "handout": {"id": h.id, "title": h.title, "kind": h.kind, "text": h.text,
                                                   "images": keys},
-                "art": {k: module.art[k] for k in keys if k in module.art},
-                "colors": {k: module.art_colors[k] for k in keys if k in module.art_colors},
-                "pictures": {k: module.pictures[k] for k in keys if k in module.pictures}}
+                "versions": frozen,
+                "art": {key: module.art[version] for key, version in frozen.items() if key in art_keys},
+                "colors": {key: module.art_colors[version] for key, version in frozen.items() if key in color_keys},
+                "pictures": {key: module.pictures[version] for key, version in frozen.items() if version in module.pictures}}
     if kind == "scene":
         loc = next((loc for loc in module.locations if loc.id == ident), None)
         if loc is None:
@@ -67,6 +72,7 @@ def resolve(module: Module, state: GameState, ref: str) -> dict:
         raise ValueError("图片必须引用资源索引，不能使用路径或网址")
     if not ready(module, key):
         raise ValueError(f"资源 {ref} 尚未准备好")
+    key = media_snapshot.remember(module, state, key)
     return {"kind": "image", "art": module.art.get(key, ""), "colors": module.art_colors.get(key, ""),
             "picture": module.pictures.get(key, "")}
 

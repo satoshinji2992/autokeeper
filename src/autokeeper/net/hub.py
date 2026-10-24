@@ -147,6 +147,8 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
     it names, never its title or its words; what was found the story told."""
     source = st
     st = fog.personal(m, st, viewer)
+    observer = viewer or (source.investigators[0].id if len(source.investigators) == 1 else None)
+    place_sightings = source.record.place_sightings.get(observer, {})
     unseated = viewer is None and len(st.investigators) > 1
     mapped = st.model_copy(update={"location": ""}) if unseated else st
     d = m.model_dump(mode="json", include=PLAYER_MODULE_FIELDS)
@@ -179,12 +181,16 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
         else:
             loc["features"] = []  # a keeper's searchable inventory is not a player's observation
             loc["views"] = [{**v, "features": [], "prompt": ""} for v in loc["views"]]  # nor what each picture is for
+            if seen := place_sightings.get(here):
+                loc["art"] = seen.art
+                loc["views"] = [{**v, "key": seen.views[v["key"]]} for v in loc["views"] if v["key"] in seen.views]
+            elif source.record.seeded and here != st.location:
+                loc.update(art=None, views=[])
     d["npcs"] = [n for n in d["npcs"] if (not unseated and n["location"] == st.location)
                  or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
-    observer = viewer or (source.investigators[0].id if len(source.investigators) == 1 else None)
     sightings = source.record.sightings.get(observer, {})
     for n in d["npcs"]:
-        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, arc="", looks=[])
+        n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, attacks=[], arc="", looks=[])
         if seen := sightings.get(n["id"]):
             n.update(location=None if seen.left else seen.place, status=seen.status,
                      look=seen.look, portrait=seen.portrait)
@@ -195,16 +201,33 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
             n["status"] = ""  # meeting someone does not grant their future private state
             if n["location"] != st.location:
                 n["location"] = None
+    papers = presentation.papers(source, observer)
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
             h.update(title="", text="")
-    party = {inv.id for inv in st.investigators}
+        elif delivery := papers.get(h["id"]):
+            payload = delivery["payload"]
+            received = payload["handout"]
+            versions = payload.get("versions", {})
+            h.update(title=received["title"], text=received["text"], kind=received["kind"], originals=[],
+                     images=[versions[key] for key in received.get("images", []) if versions.get(key)])
     shown = known_items(m, source, viewer)
     d["items"] = [item for item in d["items"] if item["id"] in shown]
+    from ..world import knowledge
+    from ..world.record import PLAYERS
+    from ..world.store import World
+
+    world = World(m, source, initialize=False)
+    reader = viewer or PLAYERS
+    people = {entity.id for entity in source.record.entities.values() if entity.kind in {"npc", "investigator"}}
     for item in d["items"]:
-        ent = st.record.entities.get(item["id"])
-        if ent is not None and ent.at in party:
-            item.update(owner=ent.at, equipment=ent.equipment, quantity=ent.quantity, status=ent.status, hidden=ent.hidden)
+        ent = knowledge.item_view(world, item["id"], reader)
+        if ent is not None:
+            item.update(name=ent.name, owner=ent.at if ent.at in people else "",
+                        where=ent.at if ent.at not in people else "", equipment=ent.equipment,
+                        quantity=ent.quantity, status=ent.status, hidden=ent.hidden)
+            if seen := knowledge.item_sighting(world, source.record.entities[item["id"]], reader):
+                item.update(description=seen.description, art=seen.art)
         else:
             item.update(owner="", equipment="carried", quantity=1, status="", hidden=False)
     for e in d["events"]:
@@ -226,16 +249,21 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
 
 def public_card(inv: dict[str, Any], viewer: str | None, m: Module, st: GameState) -> dict[str, Any]:
     """Keep a usable public sheet while private background and possessions stay with its seat."""
+    from ..world import knowledge
     from ..world.record import PLAYERS
+    from ..world.store import World
 
     if inv["id"] == viewer:
         return inv
-    shown = known_items(m, st, viewer)
-    names = {item.name for item in m.items if item.id in shown}
-    names |= {ent.name for ent in st.record.entities.values() if ent.kind == "item" and ent.at == inv["id"]
-              and (PLAYERS in ent.observed_by or viewer in ent.observed_by)}
+    world = World(m, st, initialize=False)
+    names = [seen.name for ent in st.record.entities.values()
+             if (seen := knowledge.item_view(world, ent, viewer or PLAYERS)) is not None
+             and seen.at == inv["id"] and seen.quantity > 0]
+    # A secret transfer cannot remove an item from the observer's last known sheet.
+    # Untracked background possessions are never inferred from the actual inventory.
+    inventory = list(dict.fromkeys(names))
     return {**inv, "backstory": {}, "known_locations": [],
-            "inventory": [name for name in inv.get("inventory", []) if name in names],
+            "inventory": inventory,
             "madness": {}, "injury": {}, "marks": [], "san_lost_today": 0,
             "san_start_of_day": inv["san"],
             "conditions": [condition for condition in inv.get("conditions", []) if "疯狂" not in condition]}
@@ -249,20 +277,12 @@ def known_items(m: Module, st: GameState, viewer: str | None = None) -> set[str]
     from ..world.store import World
 
     observed = fog.personal(m, st, viewer)
-    seen = fog.things(m, observed)
+    seen = fog.things(m, observed, viewer=viewer or PLAYERS)
     view = World(m, st, initialize=False)
-    party = {inv.id for inv in st.investigators}
     visited = set(observed.visited)
 
     def visible(item: Any) -> bool:
         if item.id in st.record.entities:
-            ent = st.record.entities[item.id]
-            # Being in another investigator's pocket is not a public reveal. The world
-            # record separately retains actual observation and explicit sharing.
-            if ent.at in party:
-                return ent.at == viewer or PLAYERS in ent.observed_by or viewer in ent.observed_by
-            if viewer is None and len(st.investigators) > 1:
-                return PLAYERS in ent.observed_by
             return knowledge.item_known(view, item.id, viewer or PLAYERS)
         return (item.owner == viewer or (not item.owner and not item.hidden and item.equipment != "concealed"
                 and (item.where in visited or item.id in seen)))
@@ -996,6 +1016,24 @@ class Hub:
             return self._scene_tables.for_member(viewer) or self
         return self
 
+    def _seen_art(self, viewer: str | None, key: str, *, location: str = "") -> str:
+        """Resolve a scene's current resource through this reader's last actual observation."""
+        context = self._context(viewer)
+        if context is not self:
+            return context._seen_art(viewer, key, location=location)
+        if not key or key.startswith("seen-") or self.state.ending:
+            return key
+        observer = viewer or (self.state.investigators[0].id if len(self.state.investigators) == 1 else None)
+        places = [loc for loc in self.m.locations if (not location or loc.id == location)
+                  and (key == loc.art or any(view.key == key for view in loc.views))]
+        if not places:
+            return key  # portraits, handouts and deliberate standalone media have their own permissions
+        for place in places:
+            seen = self.state.record.place_sightings.get(observer, {}).get(place.id)
+            if seen is not None:
+                return (seen.art or "") if key == place.art else seen.views.get(key, "")
+        return "" if self.state.record.seeded else key
+
     def _view(self, viewer: str | None = None) -> dict[str, Any]:
         context = self._context(viewer)
         if context is not self:
@@ -1008,6 +1046,8 @@ class Hub:
         view["active"] = next((n for n, inv in enumerate(st.investigators) if inv.id == viewer), 0)
         if viewer is None and len(st.investigators) > 1:
             view["view"] = ""
+        else:
+            view["view"] = self._seen_art(viewer, view["view"], location=st.location)
         view["flags"], view["fired"] = [], []
         from ..engine.encounter import views
 
@@ -1030,8 +1070,14 @@ class Hub:
                         for k, v in view["npcs"].items() if v["met"] or k in here}
         view["deeds"] = [d for d in view["deeds"] if d["kind"] != "clue" and audience.visible(d, viewer)]
         if view["item_owners"]:  # where things are, only of the things the players know of
+            from ..world import knowledge
+            from ..world.record import PLAYERS
+            from ..world.store import World
+
             shown = known_items(self.m, source, viewer)
-            view["item_owners"] = {k: v for k, v in view["item_owners"].items() if k in shown}
+            world = World(self.m, source, initialize=False)
+            view["item_owners"] = {key: item.at for key in shown
+                                   if (item := knowledge.item_view(world, key, viewer or PLAYERS)) is not None}
         from ..engine import perception
 
         return perception.project_state(game, viewer, view) if game is not None else view
@@ -1126,6 +1172,14 @@ class Hub:
         """A picture to every screen as an art event, unless they have it: never a path on the host, and a
         creature's under its opaque key (_face). One not on disk yet goes the next time it is shown."""
         real = self.faces.get(key, key)
+        if (not self.state.ending and self.state.record.seeded
+                and any(real == loc.art or any(view.key == real for view in loc.views) for loc in self.m.locations)):
+            for cid in list(self.clients):
+                if only is None or cid == only:
+                    seen = self._seen_art(self._seat_of(cid), real)
+                    if seen and seen != real:
+                        await self._picture(seen, only=cid, revealed=revealed)
+            return
         shown = self._face(real)
         path = self.m.pictures.get(real)
         data = media.pack(path) if path else ""
@@ -1216,6 +1270,10 @@ class Hub:
                 # Sync/turn/over all carry state. An addressed deed must never enter a shared
                 # payload first and rely on the other screens to hide it.
                 shown = {**msg, "state": self._view(self._seat_of(cid))} if "state" in msg else msg
+                if ev.get("type") in ("view", "move"):
+                    field = "key" if ev["type"] == "view" else "view"
+                    shown = {**shown, "ev": {**ev, field: self._seen_art(
+                        self._seat_of(cid), ev.get(field, ""), location=ev.get("location", ""))}}
                 if "module" in shown:
                     shown = {**shown, "module": self._book(self._seat_of(cid))}
                     keys = self._visible_art_keys(self._seat_of(cid), shown["module"])
@@ -1253,6 +1311,8 @@ class Hub:
                 if handout:
                     ev["picture_data"] = self._pictures(book, set(_handout_keys(handout)))
         elif ev.get("type") == "art":
+            if self.state.visuals.get(ev.get("key", ""), {}).get("source"):
+                await self._share_book()  # update the scene/portrait reference before its new version arrives
             ev = {k: v for k, v in ev.items() if k in ("type", "key", "art", "mask", "status", "audience")}
             path = self.m.pictures.get(ev["key"])
             if path:
@@ -1278,7 +1338,8 @@ class Hub:
             for cid in self.clients:
                 await self._personal_faces(cid)
         await self._broadcast({"t": "event", "ev": ev})
-        if ev.get("type") in SYNC_AFTER:
+        if ev.get("type") in SYNC_AFTER or (ev.get("type") == "art"
+                                           and self.state.visuals.get(ev.get("key", ""), {}).get("source")):
             await self._broadcast({"t": "sync", "state": self._view()})
 
     def _history(self, viewer: str | None) -> list[LogEntry]:

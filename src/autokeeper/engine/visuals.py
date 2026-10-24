@@ -16,12 +16,13 @@ import asyncio
 import hashlib
 import json
 import re
+import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from .. import artkit, config, imagegen, imagery, paths, pictures
+from .. import artkit, config, imagegen, imagery, media_snapshot, paths, pictures
 from ..module.schema import Module
 from .state import GameState
 
@@ -56,6 +57,10 @@ class Visuals:
         self._recover()
         for key in state.looks:
             self._show(key)
+            record = state.looks[key]
+            if record.get("picture"):
+                media_snapshot.finish(self.module, self.state, key,
+                                      record.get("shown_revision", record.get("revision", "")))
 
     def _attach(self, key: str, record: dict[str, str]) -> None:
         self.module.art[key] = record["art"]
@@ -63,6 +68,8 @@ class Visuals:
         if record.get("picture") and Path(record["picture"]).is_file():
             self.module.pictures[key] = record["picture"]
         self._show(key)  # a place or a person the story changed keeps its new picture in front
+        if record.get("status") == "ready" and not record.get("source"):
+            media_snapshot.finish(self.module, self.state, key, "", source=record)
 
     def schedule(self, keys: set[str] | None = None) -> None:
         targets = [(x.art, x.read_aloud, "scene") for x in self.module.locations]
@@ -223,6 +230,13 @@ class Visuals:
         if key in self.state.looks and self.module.pictures.get(key):  # changed by the story since: that picture stays
             event["picture"] = self.module.pictures[key]
         await self.emit(event)
+        await self._observed(key, "", source=self.state.visuals[key])
+
+    async def _observed(self, key: str, revision: str, *, source: dict[str, str] | None = None) -> None:
+        for ident in media_snapshot.finish(self.module, self.state, key, revision, source=source):
+            record = self.state.visuals[ident]
+            await self.emit({"type": "art", "key": ident, "art": record["art"], "mask": record["mask"],
+                             "status": "ready", "picture": record.get("picture", "")})
 
     async def _cache(self, key: str) -> None:
         try:
@@ -255,6 +269,8 @@ class Visuals:
         async def landed(key: str, path: Path) -> None:
             await self.emit({"type": "art", "key": key, "art": self.module.art.get(key, ""), "status": "ready",
                              "mask": self.module.art_colors.get(key, ""), "picture": str(path)})
+            await self._observed(key, "", source={"art": self.module.art.get(key, ""),
+                                                "mask": self.module.art_colors.get(key, ""), "picture": str(path)})
 
         cfg = self.cfg
         assert cfg is not None
@@ -311,7 +327,7 @@ class Visuals:
             return Target(npc, "portrait", key, "portrait", f"{npc.name}，{npc.look or '衣着朴素的当地成年人'}", f"npc:{ident}")
         return None
 
-    def look(self, target: str, change: str) -> str | None:
+    def look(self, target: str, change: str, *, observed_status: bool = False) -> str | None:
         """A place or a person the story has visibly changed: from now on it shows a picture made
         from the one it shows now, with the change, once Codex has drawn it. Its art key, or
         None for an id that names nobody."""
@@ -321,18 +337,59 @@ class Visuals:
             return None
         record = self.state.looks.get(found.key)
         task = self.tasks.get(f"look:{found.key}")
+        revision = uuid.uuid4().hex
         if record is None:
             record = self.state.looks[found.key] = {"target": found.ref, "kind": found.kind, "change": change,
-                                                    "status": "pending", "picture": ""}
+                                                    "status": "pending", "picture": "", "revision": revision}
         elif task is not None and not task.done():  # being drawn: this one goes on top of it
             record["later"] = "；".join(x for x in (record.get("later", ""), change) if x)
+            record["later_revision"] = revision
         elif record.get("status") == "pending":
             record["change"] = "；".join(x for x in (record.get("change", ""), change) if x)
+            record["revision"] = revision
         else:
-            record.update(change=change, status="pending", attempts="0")
+            record.update(change=change, status="pending", attempts="0", revision=revision)
             record.pop("error", None)
         record["turn"] = str(self.state.turn)
+        self._location_observers(found)
+        if observed_status:
+            self._status_observers(found)
         return found.key
+
+    def _location_observers(self, found: Target) -> None:
+        """A visible change here has a new version; previous visitors keep their old version."""
+        if not found.ref.startswith("location:"):
+            return
+        from ..world.store import World
+
+        world = World(self.module, self.state, initialize=False)
+        for who in world.observers(found.entity.id):
+            seen = self.state.record.place_sightings.get(who, {}).get(found.entity.id)
+            if seen is not None:
+                seen.art = media_snapshot.remember(self.module, self.state, found.key) or None
+                if seen.art and self.state.looks.get(found.key, {}).get("status") == "ready":
+                    self.state.visuals[seen.art]["pending"] = "1"  # its pre-drawn version still needs delivery
+
+    def _status_observers(self, found: Target) -> None:
+        """Status settlement is observed before Game._people requests its illustration."""
+        if not found.ref.startswith("npc:"):
+            return
+        from ..world.store import World
+
+        world = World(self.module, self.state, initialize=False)
+        npc = found.entity.id
+        condition = next((event for event in reversed(self.state.record.events)
+                          if event.kind == "condition" and npc in event.participants), None)
+        entity = self.state.record.entities.get(npc)
+        if condition is None or entity is None:
+            return
+        for who in world.observers(world.place(npc)):
+            seen = self.state.record.sightings.get(who, {}).get(npc)
+            source = self.state.record.event(seen.event) if seen is not None else None
+            if (seen is not None and not seen.left and seen.status == entity.status
+                    and source is not None and source.seq >= condition.seq
+                    and npc not in self.state.perceptions.get(who, {})):
+                seen.portrait = media_snapshot.remember(self.module, self.state, found.key)
 
     def _looks(self) -> None:
         """The module's own changes once their flag is set (drawn at import when Codex could, or
@@ -361,8 +418,12 @@ class Visuals:
                 task = self.tasks.get(f"look:{base}")
                 if drawn and Path(drawn).is_file() and (task is None or task.done()):
                     record = self.state.looks.setdefault(base, {"target": ref, "kind": "scene" if ref.startswith("location:") else "portrait"})
-                    record.update(change=look.change, status="ready", picture=drawn)
+                    revision = uuid.uuid4().hex
+                    record.update(change=look.change, status="ready", picture=drawn,
+                                  revision=revision, shown_revision=revision)
                     self._show(base)
+                    if found := self._target(ref):
+                        self._location_observers(found)
                     if running:
                         self.tasks[f"shown:{base}"] = asyncio.create_task(self._publish_look(base), name=f"shown:{base}")
                 elif self.look(ref, look.change) is None:
@@ -396,11 +457,15 @@ class Visuals:
                     return  # still pending: drawn in a later session that has Codex and budget
                 record["attempts"] = str(int(record.get("attempts", "0")) + 1)
                 made = int(record.get("made", "0")) + 1
+                revision = record.get("revision", "")
                 picture = await self._redraw(record, self.module.pictures.get(key, ""), self.folder / f"{key}.look{made}.jpg")
-                record.update(picture=str(picture), made=str(made))
+                record.update(picture=str(picture), made=str(made), shown_revision=revision)
                 record.pop("error", None)
+                self._show(key)
+                await self._observed(key, revision)
                 if record.get("later"):  # changed again while this one was drawn: that goes on top next
-                    record.update(change=record.pop("later"), status="pending", attempts="0")
+                    record.update(change=record.pop("later"), status="pending", attempts="0",
+                                  revision=record.pop("later_revision"))
                 else:
                     record["status"] = "ready"
                 self._show(key)
@@ -411,6 +476,7 @@ class Visuals:
             record.update(status="failed", error=type(exc).__name__)
             if record.get("later"):
                 record["change"] = "；".join(x for x in (record.get("change", ""), record.pop("later")) if x)
+                record["revision"] = record.pop("later_revision")
             self._keep(key)
             return
         if record.get("status") == "pending" and self._may_make():  # the change that came in meanwhile
@@ -516,6 +582,8 @@ class Visuals:
         art = self.module.art.get(key, "")
         mask = self.module.art_colors.get(key) or artkit.auto_mask(art)
         await self.emit({"type": "art", "key": key, "art": art, "mask": mask, "status": "ready", "picture": self.module.pictures.get(key, "")})
+        if self.state.looks[key].get("status") == "ready":
+            await self._observed(key, self.state.looks[key].get("revision", ""))
 
     def _keep(self, key: str) -> None:
         """A changed look lands between saves: kept beside its picture until the game is saved."""

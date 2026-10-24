@@ -105,7 +105,7 @@ async def test_the_players_screens_get_the_pictures_not_what_they_are_for(module
     game.world.apply(O.Condition(entity="warden", status="受伤"))
     book = table(module, game.state)
     tower = next(x for x in book["locations"] if x["id"] == "tower")
-    assert [v["key"] for v in tower["views"]] == ["tower_gears", "tower_night"]
+    assert [game.state.visuals[v["key"]]["source"] for v in tower["views"]] == ["tower_gears", "tower_night"]
     assert all(v["features"] == [] and v["prompt"] == "" for v in tower["views"])
     assert all(e.get("art", "") == "" for e in book["events"])
     assert next(n for n in book["npcs"] if n["id"] == "warden")["status"] == "受伤"

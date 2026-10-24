@@ -101,11 +101,11 @@ class SceneTable(Hub):
             return
         if self.time_task is not None and not self.time_task.done():
             return
-        key = (self.scene.turn, self.scene.at, self.scene.logged, until)
+        key = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
         if key in (self.time_asked, self.time_failed):
             return
         self.time_asked = key
-        stamp = (*key, self.state.record.seq)
+        stamp = key
         self.time_task = asyncio.create_task(self._handoff_time(until, stamp), name=f"scene-time:{self.ident}")
 
     async def _handoff_time(self, until: int, stamp: tuple) -> None:
@@ -123,17 +123,17 @@ class SceneTable(Hub):
                     if current != stamp or not self._time_available():
                         return
                     if attempt == len(TIME_RETRY_WAIT):
-                        self.time_failed = stamp[:4]
+                        self.time_failed = stamp
                         await self._broadcast({"t": "notice", "text": "时间衔接暂未完成，进度已保留。可提交行动或空行跳过。"})
                         return
                     await asyncio.sleep(TIME_RETRY_WAIT[attempt])
                     if not self._time_available() or (self.scene.turn, self.scene.at, self.scene.logged, until,
                                                       self.state.record.seq) != stamp:
                         return
-                    self.time_asked = stamp[:4]
+                    self.time_asked = stamp
             current = (self.scene.turn, self.scene.at, self.scene.logged, until, self.state.record.seq)
             allowed = False
-            if (decision.advance and current == stamp and self.time_asked == stamp[:4] and self._time_available()
+            if (decision.advance and current == stamp and self.time_asked == stamp and self._time_available()
                     and self.tables.runtime.time_requested(self.ident) == until):
                 allowed = self.tables.runtime.pass_time(self.ident, until)
             elif decision.advance:
@@ -141,7 +141,7 @@ class SceneTable(Hub):
             self.game._debug("scene_time", {"until": until, "decision": decision.model_dump(),
                                             "status": "allowed" if allowed else "expired" if decision.advance else "declined"})
         except asyncio.CancelledError:
-            if self.time_asked == stamp[:4]:
+            if self.time_asked == stamp:
                 self.time_asked = None
             raise
         except Exception as exc:

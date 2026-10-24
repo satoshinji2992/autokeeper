@@ -425,15 +425,19 @@ class Model:
                 reply.add(second)
                 reply.repairs += 1
                 remaining = _output_problems(second, schema)
-                if not remaining or (reply.data is None and second.data is not None):
+                clean_draft = isinstance(second.data, dict) and not _markup(second.data)
+                if (not remaining or (reply.data is None and second.data is not None)
+                        or (_markup(reply.data) and clean_draft)):
                     reply.data, reply.text = second.data, second.text
                 reply.validation_errors = _output_problems(reply, schema)
-                if reply.validation_errors and not isinstance(reply.data, dict):
+                if reply.validation_errors and (not isinstance(reply.data, dict) or _markup(reply.data)):
                     # A structured envelope can contain private plans and motives. After the
                     # one format retry, fail the call; never turn that envelope into dialogue.
                     # Stateful plain-text replies also lack their operation/disclosure receipt.
                     # Parsed but incomplete drafts go to their caller's domain validator;
                     # encounter plans and missing keeper scenes already have recovery there.
+                    # Markup embedded in a field cannot be safely recovered there: its next
+                    # operations may have become words, even when ordinary type checks pass.
                     raise StructuredOutputError(errors, remaining)
             return reply
         except BaseException as exc:

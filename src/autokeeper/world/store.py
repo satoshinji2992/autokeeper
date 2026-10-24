@@ -27,12 +27,26 @@ from typing import TYPE_CHECKING, Any
 import jsonpatch
 from pydantic import BaseModel
 
+from .. import media_snapshot
 from ..engine.encounter.model import EncounterState, EncounterSummary
 from ..engine.state import GameState, WorldFact
 from ..module.schema import Module
 from ..rules.coc import Investigator
 from . import knowledge
-from .record import ENGINE, PLAYERS, Agent, Entity, Entry, Event, Memory, Relation, Sighting, WorldRecord, relation_key
+from .record import (
+    ENGINE,
+    PLAYERS,
+    Agent,
+    Entity,
+    Entry,
+    Event,
+    Memory,
+    PlaceSighting,
+    Relation,
+    Sighting,
+    WorldRecord,
+    relation_key,
+)
 
 if TYPE_CHECKING:
     from .ops import Op
@@ -107,6 +121,7 @@ class World:
                     # of every NPC already marked met. Actual sightings need an event.
                     if ent := self.rec.entities.get(place):
                         ent.observed_by = list(dict.fromkeys([*ent.observed_by, *self.observers(place)]))
+                    self.observe_place(place, self.observers(place), "start")
 
     # -- basics ------------------------------------------------------------------------------
     @property
@@ -199,12 +214,24 @@ class World:
         return [i.id for i in self.st.investigators if self.place_at(i.id, when) == place
                 and not {"死亡", "昏迷"}.intersection(i.conditions)]
 
+    def observe_place(self, place: str, witnesses: list[str], event: str) -> None:
+        """Freeze images seen here; a remote redraw is not another visit."""
+        sheet = next((loc for loc in self.m.locations if loc.id == place), None)
+        if sheet is None or not witnesses:
+            return
+        seen = PlaceSighting(event=event, art=media_snapshot.remember(self.m, self.st, sheet.art) or None,
+                             views={view.key: media_snapshot.remember(self.m, self.st, view.key)
+                                    for view in sheet.views})
+        for who in witnesses:
+            self.rec.place_sightings.setdefault(who, {})[place] = seen.model_copy(deep=True)
+
     def observe(self, place: str, witnesses: list[str], event: str, *, leaving: str = "") -> None:
         """Keep the latest sourced personal sighting; private moves do not call this for bystanders."""
         actual = [who for who in self.observers(place) if who in witnesses]
         location = self.rec.entities.get(place)
         if location is not None and location.kind == "location":
             location.observed_by = list(dict.fromkeys([*location.observed_by, *actual]))
+        self.observe_place(place, actual, event)
         for who in actual:
             masked = self.st.perceptions.get(who, {})
             people = [*self.present(place), *([leaving] if leaving else [])]
@@ -217,7 +244,9 @@ class World:
                 sheet = self.m.npc(npc)
                 self.rec.sightings.setdefault(who, {})[npc] = Sighting(
                     place=place, event=event, left=npc == leaving,
-                    status=self.rec.entities[npc].status, look=sheet.look, portrait=sheet.portrait)
+                    status=self.rec.entities[npc].status, look=sheet.look,
+                    portrait=media_snapshot.remember(self.m, self.st, sheet.portrait))
+        knowledge.observe_items(self, place, actual, event)
 
     def agent(self, npc: str) -> Agent | None:
         return self.rec.agents.get(npc)

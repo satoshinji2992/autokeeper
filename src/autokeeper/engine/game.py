@@ -22,7 +22,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .. import cards, pictures, weather
+from .. import cards, media_snapshot, pictures, weather
 from ..agents.cast import (
     Action,
     Cast,
@@ -1521,6 +1521,10 @@ class Game(Encounters):
         for key in keys:
             if key in staged.st.visuals:
                 self.state.visuals[key] = staged.st.visuals[key]
+        for key, record in staged.st.visuals.items():
+            if record.get("source") and key not in self.state.visuals:
+                self.state.visuals[key] = record
+                media_snapshot.attach(self.m, key, record)
         if receipt is not None:
             receipt.pop("draft", None)
             receipt["applied"] = asdict(applied)
@@ -4316,7 +4320,7 @@ class Game(Encounters):
             if n.status != self._status.get(n.id, ""):
                 self._status[n.id] = n.status
                 if n.status and n.status != "失踪":
-                    self.visuals.look(f"npc:{n.id}", f"{n.name}{n.status}")
+                    self.visuals.look(f"npc:{n.id}", f"{n.name}{n.status}", observed_status=True)
 
     async def _view(self, key: str, kind: str = "", *, audience: list[str] | None = None, local: bool = True,
                     location: str = "") -> None:

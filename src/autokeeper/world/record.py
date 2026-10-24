@@ -306,6 +306,24 @@ class Beat(BaseModel):
     note: str = ""  # why it was dropped
 
 
+class ItemSighting(BaseModel):
+    """The item's last observed state for one investigator; ownership truth stays in Entity."""
+
+    event: str
+    at: str
+    name: str
+    equipment: Literal["carried", "worn", "held", "concealed"] = "carried"
+    quantity: int = Field(1, ge=0)
+    status: str = ""
+    hidden: bool = False
+    look: str = ""
+    description: str = ""
+    art: str | None = None
+    where: str = ""
+    version: int = 1
+    changed: int = 0
+
+
 class Sighting(BaseModel):
     place: str
     event: str  # the observation's source; never inferred from a later true position
@@ -313,6 +331,12 @@ class Sighting(BaseModel):
     status: str = ""
     look: str = ""
     portrait: str = ""
+
+
+class PlaceSighting(BaseModel):
+    event: str
+    art: str | None = None
+    views: dict[str, str] = Field(default_factory=dict)
 
 
 class WorldRecord(BaseModel):
@@ -327,6 +351,8 @@ class WorldRecord(BaseModel):
     scheduled: dict[str, Scheduled] = Field(default_factory=dict)
     events: list[Event] = Field(default_factory=list)
     sightings: dict[str, dict[str, Sighting]] = Field(default_factory=dict)  # investigator -> NPC -> last observation
+    item_sightings: dict[str, dict[str, ItemSighting]] = Field(default_factory=dict)  # investigator -> item -> last observation
+    place_sightings: dict[str, dict[str, PlaceSighting]] = Field(default_factory=dict)  # investigator -> place -> artwork seen
     revisions: list[Revision] = Field(default_factory=list)
     requests: dict[str, Request] = Field(default_factory=dict)
     ticks: list[str] = Field(default_factory=list)  # time advances already simulated

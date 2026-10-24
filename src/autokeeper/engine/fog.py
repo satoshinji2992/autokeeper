@@ -189,6 +189,7 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     apart = {investigator.id: "" for investigator in st.investigators
              if investigator.id != viewer and audience.location(st, investigator.id) != here}
     return st.model_copy(update={
+        "active": next((index for index, investigator in enumerate(st.investigators) if investigator.id == viewer), st.active),
         "location": here, "visited": visited, "heard": ({**st.heard, **mentions(m, texts), **background} if single_history
                                                            else {**mentions(m, texts), **background}),
         "clues": [clue.id for clue in m.clues if clue.id in clues],
@@ -417,7 +418,7 @@ def minutes(m: Module, a: str, b: str) -> int:
 def met(m: Module, st: GameState) -> dict[str, list[str]]:
     """People met, at their last observed place rather than their secret current location."""
     stopped = set(st.visited) | {st.location}
-    sightings = st.record.sightings.get(st.investigator.id, {})
+    sightings = st.record.sightings.get(st.investigator.id, {}) if st.investigators else {}
     out: dict[str, list[str]] = {}
     for n in m.npcs:
         place = n.location
@@ -440,7 +441,7 @@ def named(m: Module, text: str, places: Iterable[str], things: Iterable[str]) ->
     return "、".join([*said, *held])
 
 
-def things(m: Module, st: GameState) -> dict[str, str]:
+def things(m: Module, st: GameState, *, viewer: str = "") -> dict[str, str]:
     """The things the investigators know are lying at a place: item id -> place. They saw it
     there (named in what they saw on arriving, or in a clue found there) or left it there. What
     an investigator holds is on their sheet; what someone was handed goes with them."""
@@ -449,6 +450,7 @@ def things(m: Module, st: GameState) -> dict[str, str]:
     from ..world.store import World
 
     view = World(m, st, initialize=False)
+    reader = viewer or (st.investigator.id if st.investigators else PLAYERS)
     places = {loc.id for loc in m.locations}
     seen: dict[str, list[str]] = {}
     for v in dict.fromkeys([*st.visited, st.location]):
@@ -460,7 +462,10 @@ def things(m: Module, st: GameState) -> dict[str, str]:
     out: dict[str, str] = {}
     for item in m.items:
         recorded = st.record.entities.get(item.id)
-        if recorded and not knowledge.item_known(view, recorded, PLAYERS):
+        if recorded:
+            remembered = knowledge.item_view(view, recorded, reader)
+            if remembered is not None and remembered.at in places:
+                out[item.id] = remembered.at
             continue
         if not recorded and (item.hidden or item.equipment == "concealed"):
             continue

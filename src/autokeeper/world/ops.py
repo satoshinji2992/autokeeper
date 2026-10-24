@@ -332,6 +332,8 @@ class Transfer(Base):
         return [f"{self.item} 已经在 {self.to} 手里"] if before == self.to else []
 
     def settle(self, w: World, oid: str):
+        from .knowledge import item_observers, remember_item
+
         st, m = w.st, w.m
         key = self._item_id(w)
         assert key is not None  # checked against the same record, with no intervening await
@@ -359,8 +361,8 @@ class Transfer(Base):
         event = w.emit("transfer", text, actor=self.actor, participants=[before, self.to, key], place=w.place(before),
                        visibility=self.visibility, op=oid)
         if ent is not None:
-            ent.observed_by = list(dict.fromkeys([before, self.to, *event.witnesses,
-                                                  *([PLAYERS] if event.visibility == "public" else [])]))
+            ent.observed_by = item_observers(w, [before, self.to, *event.witnesses])
+            remember_item(w, ent, ent.observed_by, event.id)
         return event, None
 
 
@@ -416,6 +418,8 @@ class Bring(Base):
         return problems
 
     def settle(self, w: World, oid: str):
+        from .knowledge import item_observers, remember_item
+
         name, look = self.name.strip(), self.look.strip()
         where = self.holder or self.place
         ident = self.item or f"thing:{hashlib.sha256(oid.encode()).hexdigest()[:10]}"
@@ -436,8 +440,8 @@ class Bring(Base):
         event = w.emit("bring", text, actor=actor, participants=[x for x in (self.holder, ident) if x],
                        place=w.place(actor) or w.st.location,
                        visibility=self.visibility, op=oid, reactive=False)
-        ent.observed_by = list(dict.fromkeys([*([self.holder] if self.holder else []), *event.witnesses,
-                                              *([PLAYERS] if event.visibility == "public" else [])]))
+        ent.observed_by = item_observers(w, [self.holder, *event.witnesses])
+        remember_item(w, ent, ent.observed_by, event.id)
         return event, ident
 
 
@@ -488,6 +492,8 @@ class Equip(Base):
         return []
 
     def settle(self, w: World, oid: str):
+        from .knowledge import item_observers, remember_item
+
         item = self._item(w)
         assert item is not None  # check verified the original inventory or ownership record
         w.rec.entities[item.id] = item
@@ -515,9 +521,10 @@ class Equip(Base):
         text = self.evidence if self.reveal else f"整理重要装备：{item.name}（{item.equipment}，数量{item.quantity}）"
         event = w.emit("equip", text, actor=self.actor, participants=[item.at], place=w.place(item.id), visibility=vis, op=oid)
         if self.reveal:
-            item.observed_by = list(dict.fromkeys([*item.observed_by, *event.witnesses,
-                                                  *([PLAYERS] if event.visibility == "public" else [])]))
+            item.observed_by = item_observers(w, [item.at, *event.witnesses])
         w.touch(item)
+        viewers = item.observed_by if self.reveal else [item.at]
+        remember_item(w, item, viewers, event.id)
         return event, None
 
 

@@ -166,8 +166,10 @@ async def test_replacing_image_contents_resends_them_even_when_the_path_is_uncha
     hub.m.art[key] = "."
     hub.m.pictures[key] = str(picture)
     Image.new("RGB", (40, 50), "red").save(picture)
+    hub.game.world.observe(hub.state.location, ["zhouheng"], "first-picture")
     await hub._picture(key)
     Image.new("RGB", (40, 50), "blue").save(picture)
+    hub.game.world.observe(hub.state.location, ["zhouheng"], "updated-picture")
     await hub._picture(key)
     events = [message["ev"] for message in sent if message.get("ev", {}).get("type") == "art"]
     assert len(events) == 2
