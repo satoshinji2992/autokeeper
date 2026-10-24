@@ -145,6 +145,8 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
     handouts already found (the rest arrive with the events that reveal them). Of the clues, only
     those found, as the map needs them (fog.named): where each was found and the places and things
     it names, never its title or its words; what was found the story told."""
+    from ..world import knowledge
+
     source = st
     st = fog.personal(m, st, viewer)
     observer = viewer or (source.investigators[0].id if len(source.investigators) == 1 else None)
@@ -165,7 +167,7 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
     # in what on it, the minutes of the roads walked, and no other way out of anywhere.
     c = fog.chart(m, mapped)
     ways, roads = {frozenset(w) for w in c.roads + c.trails}, {frozenset(w) for w in c.roads}
-    read, names = [fog.plain(text) for text in fog.kept(m, st)], fog.aliases(m)
+    read, names = [fog.plain(text) for text in fog.kept(m, st, viewer=observer)], fog.aliases(m)
     for loc in d["locations"]:
         here = loc["id"]
         loc["keeper"] = ""
@@ -186,21 +188,24 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
                 loc["views"] = [{**v, "key": seen.views[v["key"]]} for v in loc["views"] if v["key"] in seen.views]
             elif source.record.seeded and here != st.location:
                 loc.update(art=None, views=[])
-    d["npcs"] = [n for n in d["npcs"] if (not unseated and n["location"] == st.location)
-                 or (st.npcs.get(n["id"]) and st.npcs[n["id"]].met)]
     sightings = source.record.sightings.get(observer, {})
+    d["npcs"] = [n for n in d["npcs"] if n["id"] in st.npcs]
     for n in d["npcs"]:
         n.update(role="", personality="", voice="", goal="", knows=[], secrets=[], lies=[], clues=[], gates={}, stats={}, attacks=[], arc="", looks=[])
+        name = knowledge.npc_name(m, source, n["id"], observer)
+        n["name"] = name or n["called"].strip() or "未通名的人"
         if seen := sightings.get(n["id"]):
-            n.update(location=None if seen.left else seen.place, status=seen.status,
+            n.update(location=None if seen.left or not seen.place else seen.place, status=seen.status,
                      look=seen.look, portrait=seen.portrait)
+            if not seen.place and not seen.look and not seen.portrait:
+                n["called"] = ""  # a telephone introduction grants no visual descriptor
         elif not source.record.seeded:  # standalone UI state, before a mutable World exists
             if n["location"] not in visited:
                 n["location"] = None
         else:
-            n["status"] = ""  # meeting someone does not grant their future private state
-            if n["location"] != st.location:
-                n["location"] = None
+            # Hearing a name, including a private introduction, grants neither a face
+            # nor the person's current whereabouts or condition.
+            n.update(location=None, status="", look="", portrait="", called="")
     papers = presentation.papers(source, observer)
     for h in d["handouts"]:
         if h["id"] not in st.handouts:
@@ -213,7 +218,6 @@ def table(m: Module, st: GameState, viewer: str | None = None) -> dict[str, Any]
                      images=[versions[key] for key in received.get("images", []) if versions.get(key)])
     shown = known_items(m, source, viewer)
     d["items"] = [item for item in d["items"] if item["id"] in shown]
-    from ..world import knowledge
     from ..world.record import PLAYERS
     from ..world.store import World
 

@@ -43,7 +43,8 @@ async def test_the_parser_can_send_the_party_to_the_room_where_someone_is(module
     cast = Cast(config.load(), game.m)
     cast.world = game.world
     assert "老守钟人(warden) 在 书房(study)" not in cast.bearings(game.state)  # not met yet: no name to give
-    game.state.npc("warden").met = True
+    assert game.world.apply(O.Occur(actor="keeper", text="调查员已通过介绍认识守钟人。", witnesses=[game.state.investigator.id],
+                                    introduced={"warden": "老守钟人"}, visibility="private")).ok
     assert "同一处的别的房间里" not in cast.bearings(game.state)  # a room they have not heard of stays unnamed
     game.state.visited.append("study")
     assert "同一处的别的房间里：老守钟人(warden) 在 书房(study)" in cast.bearings(game.state)

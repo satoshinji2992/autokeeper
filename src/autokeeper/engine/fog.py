@@ -39,7 +39,7 @@ import networkx as nx
 from ..module.schema import Module
 from ..rules.coc import Investigator
 from . import audience, world
-from .state import GameState
+from .state import GameState, NpcState
 
 with warnings.catch_warnings():  # jieba 0.42 predates Python 3.12's stricter string escapes
     warnings.simplefilter("ignore", SyntaxWarning)
@@ -134,6 +134,7 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     reader has only common observations; its required location uses the public starting place
     as a schema placeholder, without recording a visit there.
     """
+    from ..world import knowledge
     from ..world.record import PLAYERS
     from . import presentation, views
 
@@ -182,10 +183,12 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     texts += [h.text for h in m.handouts if h.id in handouts and h.id not in papers]
     background = familiar(m, next(inv for inv in st.investigators if inv.id == viewer)) if viewer else {}
     known_npcs = set(st.record.sightings.get(viewer, {})) if viewer is not None else set()
-    known_npcs.update(n.id for n in m.npcs if viewer is not None and n.location == here)
-    if single_history:
-        known_npcs.update(st.npcs)
-    npcs = {ident: known.model_copy(update={"unlocked": []}) for ident, known in st.npcs.items() if ident in known_npcs}
+    names = {n.id: knowledge.npc_name(m, st, n.id, viewer) for n in m.npcs}
+    known_npcs.update(ident for ident, name in names.items() if name)
+    if not st.record.seeded:  # a standalone UI can still display its local, authored cast
+        known_npcs.update(n.id for n in m.npcs if viewer is not None and n.location == here)
+    npcs = {ident: st.npcs.get(ident, NpcState()).model_copy(update={"unlocked": [], "met": bool(names.get(ident))})
+            for ident in known_npcs}
     apart = {investigator.id: "" for investigator in st.investigators
              if investigator.id != viewer and audience.location(st, investigator.id) != here}
     return st.model_copy(update={
@@ -199,6 +202,20 @@ def personal(m: Module, st: GameState, viewer: str | None) -> GameState:
     })
 
 
+def _npc_looks(m: Module, st: GameState, *, shared: bool = False) -> list[str]:
+    """Only witnessed appearance can disclose a place; a learned name grants no look."""
+    if not st.record.seeded:
+        return [n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
+    readers = [inv.id for inv in st.investigators] if shared else ([st.investigator.id] if st.investigators else [])
+    out = []
+    for npc in st.npcs:
+        looks = [(seen.look if (seen := st.record.sightings.get(who, {}).get(npc)) is not None else "")
+                 for who in readers]
+        if looks and looks[0] and all(look == looks[0] for look in looks):
+            out.append(looks[0])
+    return out
+
+
 def shown(m: Module, st: GameState) -> list[str]:
     """Everything the players have been shown that can name a place."""
     places = {loc.id: loc for loc in m.locations}
@@ -208,13 +225,13 @@ def shown(m: Module, st: GameState) -> list[str]:
     texts += [e.text for e in st.log if e.kind in SHOWN and audience.public(e)]
     texts += [f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues]
     texts += [f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts]
-    texts += [n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met]
+    texts += _npc_looks(m, st, shared=True)
     # The director's new places are announced by name when they open a new line (tui: "improv").
     texts += [loc.get("name", "") for p in st.improv if p.get("kind") == "展开" for loc in p.get("plan", {}).get("locations", [])]
     return texts
 
 
-def kept(m: Module, st: GameState) -> list[str]:
+def kept(m: Module, st: GameState, *, viewer: str | None = "") -> list[str]:
     """What the players' screens hold that can name a place, a shared table's too (they never
     get the log): the module's title, hook and setting, what they saw on arriving somewhere,
     the clues and handouts found, who the people they met turned out to be."""
@@ -223,7 +240,7 @@ def kept(m: Module, st: GameState) -> list[str]:
     return [m.title, m.subtitle, m.hook, m.setting, *(places[v].read_aloud for v in st.visited if v in places),
             *(f"{clues[c].title}\n{clues[c].text}" for c in st.clues if c in clues),
             *(f"{handouts[h].title}\n{handouts[h].text}" for h in st.handouts if h in handouts),
-            *(n.look for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met)]
+            *_npc_looks(m, st, shared=viewer is None)]
 
 
 def heard(m: Module, st: GameState) -> dict[str, str]:
@@ -417,6 +434,8 @@ def minutes(m: Module, a: str, b: str) -> int:
 
 def met(m: Module, st: GameState) -> dict[str, list[str]]:
     """People met, at their last observed place rather than their secret current location."""
+    from ..world import knowledge
+
     stopped = set(st.visited) | {st.location}
     sightings = st.record.sightings.get(st.investigator.id, {}) if st.investigators else {}
     out: dict[str, list[str]] = {}
@@ -425,8 +444,9 @@ def met(m: Module, st: GameState) -> dict[str, list[str]]:
         if st.record.seeded:
             seen = sightings.get(n.id)
             place = seen.place if seen is not None and not seen.left else None
-        if place in stopped and st.npcs.get(n.id) and st.npcs[n.id].met:
-            out.setdefault(place, []).append(n.name)
+        name = knowledge.npc_name(m, st, n.id, st.investigator.id if st.investigators else None)
+        if place in stopped and name and st.npcs.get(n.id) and st.npcs[n.id].met:
+            out.setdefault(place, []).append(name)
     return out
 
 

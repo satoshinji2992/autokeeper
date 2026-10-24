@@ -70,7 +70,7 @@ class Ctx:
     game: Any
     enc: EncounterState
     views: dict[str, Any] = field(default_factory=dict)
-    _shown: dict[str, str] | None = None
+    _shown: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, game: Any, enc: EncounterState | None = None) -> Ctx:
@@ -191,21 +191,21 @@ class Ctx:
         if appearance := perception.get(self.game.state, audience, pid):
             return appearance.name or "未辨明的身影"
         if audience != "keeper" and self.enc.get(pid) is not None:
-            return self.shown().get(pid, pid)
+            return self.shown(audience).get(pid, pid)
         v = self.view(pid)
         return v.public_name(audience) if v is not None else pid  # type: ignore[arg-type]
 
-    def shown(self) -> dict[str, str]:
-        if self._shown is None:
+    def shown(self, audience: str = "players") -> dict[str, str]:
+        if audience not in self._shown:
             out: dict[str, str] = {}
             counts: dict[str, int] = {}
             for p in self.enc.participants:
                 v = self.view(p.id)
-                base = v.public_name("players") if v is not None else p.id
+                base = v.public_name(audience) if v is not None else p.id
                 counts[base] = counts.get(base, 0) + 1
                 out[p.id] = base if counts[base] == 1 else f"{base}{counts[base]}"
-            self._shown = out
-        return self._shown
+            self._shown[audience] = out
+        return self._shown[audience]
 
 
 # -- attacks ---------------------------------------------------------------------------------------

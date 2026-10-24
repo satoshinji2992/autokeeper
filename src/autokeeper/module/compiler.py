@@ -399,7 +399,7 @@ def _npc_md(m: Module, n: NPC) -> str:
             out.append(f"**{label}**：{value}")
     if n.location:
         out.append(f"**通常在**：{m.location(n.location).name}")
-    for label, items in (("知道", n.knows), ("秘密（不被逼问不说）", n.secrets), ("会撒的谎", n.lies)):
+    for label, items in (("知道", n.knows), ("秘密（按动机、关系与处境决定是否透露）", n.secrets), ("会撒的谎", n.lies)):
         if items:
             out += ["", f"## {label}", ""] + [f"- {x}" for x in items]
     if n.clues:
@@ -407,7 +407,9 @@ def _npc_md(m: Module, n: NPC) -> str:
         for cid in n.clues:
             c = m.clue(cid)
             gate = n.gates.get(cid)
-            need = f"需要 {gate.skill}（{gate.difficulty}）" if gate else "问到就说"
+            need = f"需要 {gate.skill}（{gate.difficulty}）" if gate else "无个人交涉门槛，按动机与实际交流回应"
+            if c.requires:
+                need += "；全部前置条件：" + "、".join(c.requires)
             out.append(f"- `{cid}` {c.title}：{need}")
     if n.called:
         out += ["", f"调查员认出他以前叫他「{n.called}」：叙述和屏幕在那之前用这个叫法。"]

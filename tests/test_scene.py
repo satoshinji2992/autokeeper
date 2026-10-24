@@ -21,7 +21,7 @@ from autokeeper.harness import models as hm
 from autokeeper.module.schema import Ending, Event, Item, Module
 from autokeeper.paths import EXAMPLE
 from autokeeper.rules.coc import Rules
-from autokeeper.world import scene
+from autokeeper.world import knowledge, scene
 
 SCRIPT: deque = deque()  # what the keeper answers next: a dict (a telling, streamed as JSON), a str (words), an error
 SEEN: list[dict] = []  # every call: its messages and schema
@@ -97,6 +97,171 @@ def ctx(game: Game, elapsed: int = 0, **kw) -> scene.Context:
 
 def told(events: list[dict]) -> str:
     return "".join(e["text"] for e in events if e["type"] == "keeper_delta")
+
+
+async def test_opening_introductions_and_flags_commit_through_the_normal_scene_pipeline(fake):
+    module = Module.load(EXAMPLE)
+    module.flags["greeted"] = "布道者已向调查员介绍自己"
+    module.events = [Event(id="after_greeting", title="点灯", when="flag:greeted", where="square",
+                           text="布道者介绍后，街边的灯亮了。", read_aloud="街边的灯亮了。")]
+    game, events = made(module=module, fake=fake)
+    SCRIPT.extend([
+        {"kind": "tell", "telling": telling("老人把册子收好：我是这里的布道者。", here=["preacher"],
+                                             introductions=[{"npc": "preacher"}], flags=["greeted"])},
+        {"kind": "tell", "telling": telling("灯光照亮了老人手中的册子。", here=["preacher"])},
+    ])
+    try:
+        await game.start()
+        me = game.state.investigator.id
+        assert game.state.npc("preacher").met
+        assert game.state.record.sightings[me]["preacher"].name == module.npc("preacher").name
+        assert "未通名的人" not in game._report(Turn())
+        assert "greeted" in game.state.flags and game.state.fired == ["after_greeting"]
+        assert len([event for event in events if event["type"] == "event"]) == 1
+        assert len(SEEN) == 2 and not game.state.pending_turn
+        saved = GameState.model_validate_json(game.state.model_dump_json())
+        assert saved.record.sightings[me]["preacher"].name == module.npc("preacher").name
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
+async def test_opening_retry_keeps_fired_arrival_material_and_does_not_rerun_start_plugins(fake, monkeypatch):
+    module = Module.load(EXAMPLE)
+    module.events = [Event(id="arrived", title="抵达", when="visit:square", text="两位访客在广场等候。",
+                           read_aloud="两位访客在广场等候。")]
+    game, _ = made(module=module, fake=fake)
+    started = 0
+    original = game.plugins.run
+
+    async def run(hook, turn, **kwargs):
+        nonlocal started
+        if hook == "start":
+            started += 1
+        return await original(hook, turn, **kwargs)
+
+    monkeypatch.setattr(game.plugins, "run", run)
+    SCRIPT.extend([RuntimeError("scripted interrupted narration"),
+                   {"kind": "tell", "telling": telling("两位访客在广场等候。", here=["preacher"])}])
+    try:
+        with pytest.raises(RuntimeError, match="interrupted narration"):
+            await game.start()
+        assert started == 1 and game.state.fired == ["arrived"]
+        state = GameState.model_validate_json(game.state.model_dump_json())
+        await game.close()
+        await game.cast.close()
+        game, _ = made(module=module, state=state, fake=fake)
+        # A resumed process has no prior plugin calls to rely on; the saved opening
+        # resolution, not a model's memory, must retain the encounter and its results.
+        async def unexpected(*args, **kwargs):
+            raise AssertionError("a completed opening plugin stage was replayed")
+        monkeypatch.setattr(game.plugins, "run", unexpected)
+        await game.start()
+        prompt = SEEN[-1]["messages"][-1]["content"]
+        assert "两位访客在广场等候。" in prompt and "尚未展示给玩家" in prompt
+        assert game.state.fired == ["arrived"]
+        assert not game.state.pending_turn and game.state.prologue
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
+async def test_an_npc_reply_keeps_an_introduced_alias_and_does_not_introduce_him_to_absent_players(fake):
+    module = Module.load(EXAMPLE)
+    first = module.pregens[0].model_copy(deep=True)
+    second = first.model_copy(update={"id": "lin", "name": "林秋"}, deep=True)
+    state = Game.new(module, [first, second])
+    state.location, state.apart = "tower", {"lin": "office"}
+    game, events = made(module=module, state=state, fake=fake)
+    prepared = scene.plan(game.world, {"introductions": [{"npc": "warden", "name": "陈先生"}]},
+                          ctx(game, audience=[first.id]))
+    assert not prepared.problems and scene.land(game.world, prepared.held)
+    SCRIPT.append({"text": "进来坐吧。"})
+    try:
+        turn = await game.resolve(Action(kind="talk", npc="warden", summary="我向陈先生问好", speech="您好。"),
+                                  Ruling(needs_roll=False))
+        await game.talk(turn)
+        assert knowledge.npc_name(module, state, "warden", first.id) == "陈先生"
+        assert not knowledge.npc_name(module, state, "warden", second.id)
+        assert next(event for event in events if event["type"] == "npc")["name"] == "陈先生"
+        assert next(entry for entry in state.log if entry.kind == "npc").who == "陈先生"
+        assert "陈先生" in game.cast.bearings(state)
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
+async def test_opening_retry_after_an_event_moves_the_party_does_not_visit_the_destination_twice(fake, monkeypatch):
+    module = Module.load(EXAMPLE)
+    module.events = [Event(id="escort", title="引路", when="visit:square", where="square", move_to="tower",
+                           text="广场上的人领调查员进钟楼。", read_aloud="调查员被领进钟楼。")]
+    game, _ = made(module=module, fake=fake)
+    SCRIPT.extend([RuntimeError("scripted interrupted narration"),
+                   {"kind": "tell", "telling": telling("钟楼的老人扶住门，请你进来。", here=["warden"])}])
+    try:
+        with pytest.raises(RuntimeError, match="interrupted narration"):
+            await game.start()
+        assert game.state.location == "tower" and game.state.fired == ["escort"]
+        state = GameState.model_validate_json(game.state.model_dump_json())
+        await game.close()
+        await game.cast.close()
+        game, _ = made(module=module, state=state, fake=fake)
+        original = game.plugins.run
+        revisits = []
+
+        async def run(hook, turn, **kwargs):
+            if hook == "visit":
+                revisits.append(game.state.location)
+            return await original(hook, turn, **kwargs)
+
+        monkeypatch.setattr(game.plugins, "run", run)
+        await game.start()
+        assert game.state.location == "tower" and game.state.fired == ["escort"]
+        assert not revisits and not game.state.pending_turn
+        assert "调查员被领进钟楼。" in SEEN[-1]["messages"][-1]["content"]
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
+async def test_opening_records_visible_strangers_without_giving_them_names(fake):
+    from autokeeper.net.hub import table
+
+    game, _ = made(fake=fake)
+    game.m.npc("preacher").name = "尚未介绍的后台真名"
+    game.m.npc("preacher").look = "穿黑衣的瘦男人，手里拿着册子。"
+    SCRIPT.append({"kind": "tell", "telling": telling("一个拿着册子的男人站在石阶上。", here=["preacher"])})
+    try:
+        await game.start()
+        me = game.state.investigator.id
+        sight = game.state.record.sightings[me]["preacher"]
+        assert sight.look and not sight.name
+        shown = next(npc for npc in table(game.m, game.state, viewer=me)["npcs"] if npc["id"] == "preacher")
+        assert shown["look"] == sight.look and shown["name"] != game.m.npc("preacher").name
+        assert not knowledge.npc_name(game.m, game.state, "preacher", me)
+    finally:
+        await game.close()
+        await game.cast.close()
+
+
+@pytest.mark.parametrize("introduced_as", ["", "哈里"])
+async def test_only_an_actual_npc_introduction_gives_a_new_name_and_status_never_uses_the_true_name(fake, introduced_as):
+    game, events = made("tower", fake=fake)
+    game.m.npc("warden").name = "不能提前显示的真名"
+    text = "别挡着门。" if not introduced_as else "叫我哈里就好，进来坐吧。"
+    SCRIPT.append({"text": text, "introduced_as": introduced_as})
+    try:
+        turn = await game.resolve(Action(kind="talk", npc="warden", summary="我向门边的人问好", speech="您好。"),
+                                  Ruling(needs_roll=False))
+        await game.talk(turn)
+        me = game.state.investigator.id
+        assert knowledge.npc_name(game.m, game.state, "warden", me) == introduced_as
+        assert all(game.m.npc("warden").name not in event["text"] for event in events if event["type"] == "status")
+        display = next(event["name"] for event in events if event["type"] == "npc")
+        assert display == introduced_as if introduced_as else display != game.m.npc("warden").name
+    finally:
+        await game.close()
+        await game.cast.close()
 
 
 async def test_the_keeper_gets_actual_object_handles_and_can_put_them_down_without_consuming_them(fake):

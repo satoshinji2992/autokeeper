@@ -693,7 +693,7 @@ async def test_the_speaker_shows_at_a_shared_table(monkeypatch, tmp_path, skills
             await pilot.pause(0.1)
             if panel.display and panel.feeling == "警惕":
                 break
-        assert panel.display and panel.who == "街头布道者" and panel.feeling == "警惕"  # his face, from the table's module
+        assert panel.display and panel.who == "未通名的人" and panel.feeling == "警惕"  # a reply alone gives no name
         assert panel.portrait is not None and panel.portrait.art == hub.m.art["preacher"]
         for _ in range(40):  # the next round is told without him: he steps back
             await pilot.pause(0.1)

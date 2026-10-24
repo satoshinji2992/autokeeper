@@ -239,13 +239,15 @@ class World:
                 people += [ident for ident in source.participants if ident in self.rec.entities
                            and self.rec.entities[ident].kind == "npc" and self.place(ident) == place]
             for npc in dict.fromkeys(people):
-                if npc in masked or not ((known := self.st.npcs.get(npc)) and known.met):
+                if npc in masked:
                     continue
                 sheet = self.m.npc(npc)
+                prior = self.rec.sightings.get(who, {}).get(npc)
                 self.rec.sightings.setdefault(who, {})[npc] = Sighting(
                     place=place, event=event, left=npc == leaving,
                     status=self.rec.entities[npc].status, look=sheet.look,
-                    portrait=media_snapshot.remember(self.m, self.st, sheet.portrait))
+                    portrait=media_snapshot.remember(self.m, self.st, sheet.portrait),
+                    name=prior.name if prior is not None else "")
         knowledge.observe_items(self, place, actual, event)
 
     def agent(self, npc: str) -> Agent | None:

@@ -24,6 +24,9 @@ as the same action in a Plan, the opening uses Telling, and on-scene narration u
 HostedReply. Turn 3's checked conversation now has a keeper voice request before the
 original NPC reply and an empty final telling after it. NPC wording, player actions,
 all three dice and the complete final fingerprint are unchanged; no model was called.
+
+On 2026-10-24 the opening also uses HostedReply, matching the shared scene/tool path.
+Only that reply's envelope changed; its text, scene and recorded results did not.
 """
 
 from __future__ import annotations

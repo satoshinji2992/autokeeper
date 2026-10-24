@@ -34,7 +34,10 @@ class Canned(hm.Model):
         text = "你站在钟楼底下，告示栏上的纸被风掀起一角。"
         if on_delta:
             await on_delta(text)
-        return Reply(text=text, data={} if schema else None)
+        data = {} if schema else None
+        if schema and "telling" in schema.get("properties", {}):
+            data = {"kind": "tell", "telling": {"scene": {}, "text": text}}
+        return Reply(text=text, data=data)
 
 
 @pytest.fixture

@@ -104,10 +104,11 @@ def test_opening_director_receives_authored_arrival_and_conditional_events():
     opening = director.context(module, state, "开局改编")
     assert module.opening in opening and module.location(module.start).keeper in opening
     assert "守钟人开门接待" in opening and "老人将门拉开" in opening
-    assert "条件 D1 21:00：印刷工晚上来送更正稿" in opening
+    assert "条件：D1 21:00\n  守秘人须知：印刷工晚上来送更正稿" in opening
     assert "已经讲过的旧事" not in opening and "远处无关的场面" not in opening
     regular = director.context(module, state, "展开")
-    assert module.opening not in regular and "印刷工晚上来送更正稿" not in regular
+    assert module.opening not in regular
+    assert "印刷工晚上来送更正稿" in regular  # later improvisation must see the existing local appointment too
 
 
 async def test_opening_delivers_an_improvised_visitors_identity_without_firing_later_connections(fake):

@@ -23,6 +23,7 @@ from ..engine.state import GameState
 from ..module.schema import Check, Leg, Module, RoundGate, Stake
 from ..plugins.schema import Plugin
 from ..rules.consequences import Die
+from ..world.context import keeper_brief, scene_preparation
 from ..world.ops import Condition, Enlist, Learn, Move, Occur, Relate, Rewrite, Schedule, SetPlan
 from .writing import INTERFACE_COPY
 
@@ -319,12 +320,28 @@ def context(m: Module, st: GameState, kind: Kind, *, action: str = "", reason: s
     ]
     if kind == "开局改编":
         lines.append(f"【原作开场准备】\n{m.opening.strip() or '未另写'}")
-        lines.append(f"【抵达地点的准备】\n眼前：{here.read_aloud}\n守秘人须知：{here.keeper or '无'}")
-        events = [e for e in m.events if e.id not in st.fired and (e.where == here.id or e.when == f"visit:{here.id}")]
-        if events:
-            lines.append("【此地已有事件（按各自条件发生，不是全在开场发生）】\n" + "\n".join(
-                f"- {e.id}｜条件 {e.when or '遭遇轮次'}：{e.text}"
-                + (f"\n  眼前演出：{e.read_aloud}" if e.read_aloud else "") for e in events))
+    if st.record.seeded:
+        from ..world.store import World
+
+        # The same local people and prepared conditions the keeper sees. A broad
+        # world's last-N fact index cannot replace this relevant, complete material.
+        preparation = keeper_brief(World(m, st, initialize=False), at=here.id)
+    else:
+        preparation = scene_preparation(m, st, at=here.id)
+        local = []
+        for npc in m.npcs_at(here.id):
+            if npc.status in {"死亡", "失踪"}:
+                continue
+            parts = [f"身份：{npc.role}", f"想要：{npc.goal or '未另写'}"]
+            if npc.personality:
+                parts.append(f"性格依据：{npc.personality}")
+            for label, texts in (("本人所知", npc.knows), ("秘密", npc.secrets), ("会说的谎", npc.lies)):
+                if texts:
+                    parts.append(f"{label}：{'；'.join(texts)}")
+            local.append(f"- {npc.name}({npc.id})：{'；'.join(parts)}")
+        if local:
+            preparation += "\n在场人物备课（不是调查员已知）：\n" + "\n".join(local)
+    lines.append(f"【当前地点的准备】\n眼前：{here.read_aloud}\n" + preparation)
     if m.ties:  # threads the investigators' backgrounds can be tied to (Module.ties)
         lines.append("【可以接上调查员背景的线头】\n" + "\n".join(f"- {t.hook}" + (f"（{t.npc or t.place}）" if t.npc or t.place else "")
                                                          + (f"，适合：{'、'.join(t.fits)}" if t.fits else "") for t in m.ties))  # fmt: skip

@@ -164,18 +164,25 @@ def _seen(look: str) -> str:
     return head if 0 < len(head) <= 12 and _FIGURE.search(head) else STRANGER
 
 
-def shown_name(w: World, ident: str) -> str:
+def shown_name(w: World, ident: str, *, viewer: str | None = "") -> str:
     """What the players call someone (an investigator, an NPC, a creature, by either id of a creature
     form), from what they know; "" for nobody. The one name every player surface uses: the fight's
     column, choices and cards, the windows that ask them, the story's lines, a LAN table's view, the
     keeper's 【称呼】. Never a name they have not learned, never the keeper's note in brackets:
 
-    - an NPC they met: his name; one they never met: the module's `called`, else his look (`_seen`);
+    The omitted viewer is the active investigator; explicit None asks for a shared name.
+    Meeting someone and learning their name are distinct, and a private alias remains private.
+
+    - an NPC introduced to this reader: that name; otherwise `called`, else a witnessed look (`_seen`);
     - a creature they identified (GameState.identified): its name; else its `called`, else 不明生物;
     - an NPC fighting as his creature form (Creature.npc), who is not what they know him as: the
       form's name once they identified it; met, the name they know him by with (?) (埃里·赫琴斯(?));
       neither, what they see of it (the form's `called`, his, his look)."""
+    from ...world import knowledge
+
     st = w.st
+    if viewer == "":
+        viewer = st.investigator.id if st.investigators else None
     inv = next((i for i in st.investigators if i.id == ident), None)
     if inv is not None:
         return inv.name
@@ -187,14 +194,20 @@ def shown_name(w: World, ident: str) -> str:
         return bare(c.name) if c.id in st.identified else (c.called.strip() or UNKNOWN)
     own = _creature(w, ident)
     form = own if own is not None and own.npc == npc.id else form_of(w, npc.id)
-    met = (n := st.npcs.get(npc.id)) is not None and n.met
+    name = knowledge.npc_name(w.m, st, npc.id, viewer)
+    readers = [viewer] if viewer is not None else [inv.id for inv in st.investigators]
+    observed = [st.record.sightings.get(who, {}).get(npc.id) for who in readers]
+    look = npc.look
+    if any(seen is not None for seen in observed):
+        looks = [seen.look if seen is not None else "" for seen in observed]
+        look = looks[0] if looks and all(value == looks[0] for value in looks) else ""
     if form is None:
-        return bare(npc.name) if met or npc.id in st.identified else (npc.called.strip() or _seen(npc.look))
+        return name or (npc.called.strip() or _seen(look))
     if form.id in st.identified or npc.id in st.identified:
         return bare(form.name)
-    if met:
-        return bare(npc.name) + DOUBT
-    return form.called.strip() or npc.called.strip() or _seen(npc.look)
+    if name:
+        return name + DOUBT
+    return form.called.strip() or npc.called.strip() or _seen(look)
 
 
 # -- reading a sheet ----------------------------------------------------------------------------

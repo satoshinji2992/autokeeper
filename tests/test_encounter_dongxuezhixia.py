@@ -20,6 +20,7 @@ from autokeeper.engine.encounter.actions import Ctx
 from autokeeper.engine.encounter.plan import AttackPick, DeclaredAction, EncounterStart, EncounterTurnPlan
 from autokeeper.engine.game import Turn
 from autokeeper.module.schema import Module, Stake
+from autokeeper.world.ops import Occur
 
 from .encounter_kit import arrange, attack, begin, fight_game, play
 
@@ -40,6 +41,9 @@ def module() -> Module:
 def winter(module, fake, **modes):
     game, cast, events = fight_game(module, fake, location="main_street", **modes)
     game.state.npc("erie").met = True  # they met him at the truck
+    result = game.world.apply(Occur(text="卡车旁的男人自称埃里·赫琴斯。", place="main_street",
+                                    witnesses=[ME], introduced={"erie": ""}, actor="keeper"))
+    assert result.ok, result.problems
     return game, cast, events
 
 
@@ -86,6 +90,7 @@ async def test_the_entity_is_fought_as_the_man_they_met_with_a_question_mark(mod
 async def test_never_met_he_is_what_they_see_and_once_known_his_name_without_the_note(module, fake):
     game, _cast, _ = winter(module, fake, arrange=hits_him)
     game.state.npc("erie").met = False
+    game.state.record.sightings[ME]["erie"].name = ""
     fake.queue(10)
     await begin(game, ["erie_entity"])
     assert views.fight_view(game)["fighters"][1]["name"] == "正在崩解的人形"  # the form's `called`

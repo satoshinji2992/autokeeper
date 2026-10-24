@@ -360,6 +360,8 @@ class IntentionChange(BaseModel):
 
 class Dialogue(BaseModel):
     text: str = Field(description="本次收件调查员实际能听见的话、看见的动作；不含未听见的密谈或角色内心")
+    introduced_as: str = Field("", description=(
+        "本轮实际自报或认可、听者能获知的姓名或化名；普通发言留空，不因开口就填写真名，也不重复已经介绍的姓名"))
     media: list[presentation.MediaAction] = Field(default_factory=list, description="当场展示自己获准提供的已有材料；普通对话留空，不引用未知资源")
     mood: str = Field("", description="根据这次亲历或可信消息变化后的心境，供后续扮演使用；无变化留空，不能凭空获知秘密")
     changes: list[WorldChange] = Field(default_factory=list, description="只记自己本次回复里明确承诺或发生的生活事实；text 必须逐字摘自回复；不给线索或改规则")
@@ -818,6 +820,7 @@ NPC_SYSTEM = """你在一场中文 CoC 7 版跑团中扮演 NPC「{name}」，�
 - 说话方式里写的口头禅、咳嗽、小动作是这个人的习惯，隔几句露一次就够，资料写着“总是”也不必句句都带；上一轮说过的话，换个说法或者干脆不提。
 - 接住对方实际说的话，结合关系与眼前局势回应；有自己的问题、需要确认的事或想请人帮忙时再问。不要为了维持交谈反问，也不虚构“您刚才问……”的新问题；已经做完的动作不要反复重演。
 - 本轮获准交代、交付或同意的内容就在这次回复中发生；只有近期真实对话里已经说过、做过，才称“刚才说了”“已经给了”。后台刚结算入账不等于玩家此前见过这段演出。
+- 只有这次实际自报或认可一个姓名、化名时才填 introduced_as；普通回应留空，后台姓名不表示听者已经认识你，不重复通名。
 - 已解锁表示你知道且本轮允许表达的信息，许可本身不代表你已经答应透露。结合话题与角色处境表达相关内容；对方问得具体、事情紧迫或你有主动求助的理由时，把要说的内容说清。说出了一条线索的要点，就在 told 里填它的 id。
 - 玩家聊家常就接家常，记住他在意的事，允许关系慢慢建立；不用每次都扯回委托或暗示秘密，也别为了聊天凭空解锁案情。
 - 人物先前的走向与心境是基线，不能压过此后发生的事；按最新经历继续演变。有变化时在 mood 简要记录及其依据，供之后的对话和自主决策沿用，不向玩家直述这份后台心境。
@@ -918,6 +921,7 @@ class Cast:
         # reply's receipt, kept with its turn (Game._reply), as soon as the reply comes back
         self.told: dict[str, list[str]] = {}
         self.media: dict[str, list[dict]] = {}
+        self.introduced_as: dict[str, str] = {}  # only the name actually introduced by this accepted reply
         self._usage_observer: Callable[[str, dict], None] | None = None
 
     # -- session plumbing -----------------------------------------------------
@@ -1057,9 +1061,9 @@ class Cast:
         m = self.module
         loc = m.location(state.location)
         here = m.npcs_at(loc.id)
-        met = {n.id for n in here if n.id in state.npcs and state.npcs[n.id].met}
-        people = "、".join(f"{n.name}({n.id})" for n in here if n.id in met) or "无"
-        if strangers := [f"{n.name}({n.id})" for n in here if n.id not in met]:
+        met = {n.id: label for n in here if (label := world_knowledge.npc_name(m, state, n.id, state.investigator.id))}
+        people = "、".join(f"{met[n.id]}({n.id})" for n in here if n.id in met) or "无"
+        if strangers := [f"{n.called or n.look or '未通名的人'}({n.id})" for n in here if n.id not in met]:
             people += f"；还没通名：{'、'.join(strangers)}（summary 里照玩家的叫法称呼他们）"
         known = {**fog.landmarks(m, state), **fog.known(m, state)}
 
@@ -1071,22 +1075,24 @@ class Cast:
         # The study is part of the house: those met who are in another room of this building,
         # where the party knows the way, by the room's id so "去问托马斯" can go there.
         near = {n: at for n, at in (world_view.nearby(self.world, loc.id) if self.world is not None else {}).items()
-                if state.npcs.get(n) and state.npcs[n].met and fog.findable(m, state, at)}  # fmt: skip
+                if world_knowledge.npc_name(m, state, n, state.investigator.id) and fog.findable(m, state, at)}  # fmt: skip
         if near:
-            ways += "\n同一处的别的房间里：" + "、".join(f"{m.npc(n).name}({n}) 在 {m.location(at).name}({at})" for n, at in near.items())
+            ways += "\n同一处的别的房间里：" + "、".join(
+                f"{world_knowledge.npc_name(m, state, n, state.investigator.id)}({n}) 在 {m.location(at).name}({at})"
+                for n, at in near.items())
         last_seen = []
         for n in m.npcs:
-            if n in here or n.id in near or not (state.npcs.get(n.id) and state.npcs[n.id].met):
+            label = world_knowledge.npc_name(m, state, n.id, state.investigator.id)
+            if n in here or n.id in near or not label:
                 continue
-            seen = next((e for e in reversed(state.record.events) if e.visibility == "public"
-                         and n.id in [e.actor, *e.participants] and e.place), None)
+            seen = state.record.sightings.get(state.investigator.id, {}).get(n.id)
             place = next((loc.name for loc in m.locations if seen and loc.id == seen.place), "")
-            label = f"，最后亲历记录：{place}，{format_time(seen.t)}" if seen and place else ""
-            last_seen.append(f"{n.name}({n.id})不在当前房间{label}；当前位置未获确认")
+            last = f"，最后目击地点：{place}" if place else ""
+            last_seen.append(f"{label}({n.id})不在当前房间{last}；当前位置未获确认")
         left = world_view.apart(state, lambda pid: next((x.name for x in m.locations if x.id == pid), pid))
         return (
             f"地点：{loc.name}({loc.id})；时间：{state.clock}（{time_of_day(state.minutes)}）\n"
-            f"眼前：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
+            f"初见底稿（当前人物与本局记录优先，不表示重新发生）：{loc.read_aloud.strip()}\n在场 NPC：{people}\n能去的地方：{ways}\n"
             f"尚未走完的旅程目的地：{state.journey or '无'}\n"
             f"上一段叙述停在：{state.ongoing or '无'}\n"
             f"【已认识的其他人】{'；'.join(last_seen) or '无'}"
@@ -1970,6 +1976,7 @@ class Cast:
         self.unsettled.pop(npc_id, None)
         self.told.pop(npc_id, None)
         self.media.pop(npc_id, None)
+        self.introduced_as.pop(npc_id, None)
         s = await self._fresh_npc(npc_id)
         mood = (f"\n【先前人物走向】{npc.arc}\n这是此前的基线；最新心境及本轮亲历、可信消息优先，可自然改变反应，不须始终维持这一状态。"
                 if npc.arc else "")
@@ -2078,6 +2085,7 @@ class Cast:
             "slot": "overlay"}
             for media in dialogue.media if not remote and media.action == "show" and media.ref in refs
             and (media.to is None or (media.to and all(who in listeners for who in media.to)))]
+        self.introduced_as[npc_id] = dialogue.introduced_as.strip()
         state.npc(npc_id).lines += 1
         state.npc(npc_id).met = True
         return text

@@ -1346,7 +1346,8 @@ async def test_a_clue_from_someone_is_had_with_them_not_where_they_were(module, 
 
     game, *_ = make(module, fake, {}, location="tower")
     assert game._valid_clues(["c_diary"], None) == ["c_diary"]
-    assert "守钟人的日记（出自老守钟人）" in world_view.keeper_brief(game.world)
+    brief = world_view.keeper_brief(game.world)
+    assert "c_diary「守钟人的日记」" in brief and "出自老守钟人" in brief
     assert game.world.apply(Move(id="away", entity="warden", to="square")).ok
     assert game._valid_clues(["c_diary"], None) == []  # his to hand over: not at the tower he left
     assert "守钟人的日记" not in world_view.keeper_brief(game.world)

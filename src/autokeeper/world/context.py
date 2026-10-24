@@ -416,6 +416,112 @@ def _clip(text: str, n: int = BRIEF_ITEM) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def scene_preparation(m: Module, st: GameState, *, at: str = "", record: WorldRecord | None = None,
+                      present: Collection[str] | None = None) -> str:
+    """The prepared material that can matter here, whole and with its conditions.
+
+    Relevance limits the selection; character clipping must not discard the end of a
+    discovery condition. This is the keeper's private preparation, never player text.
+    """
+    from ..module.graph import at_hand, disclosure_gate, original_source_at_hand, tellers
+
+    here = at or st.location
+    loc = m.location(here)
+    rec = record if record is not None else (st.record if st.record.seeded else None)
+    if present is None:
+        if rec is not None and rec is st.record:
+            from .store import World
+
+            present = World(m, st, initialize=False).present(here)
+        else:
+            present = [n.id for n in m.npcs_at(here) if n.status not in {"死亡", "失踪"}]
+    people = set(present)
+
+    def current(fid: str, original: str) -> str:
+        fact = rec.facts.get(fid) if rec is not None else None
+        return original if fact is None else ("" if fact.retracted else fact.text.strip())
+
+    rows = []
+    note = current(f"location:{here}:keeper", loc.keeper)
+    if note:
+        rows.append(f"此地（{loc.name}）的守秘人须知：{note}")
+    clues = at_hand(m, here, people, record=rec)
+    if clues:
+        prepared = []
+        for clue in clues:
+            body = current(f"clue:{clue.id}", clue.text)
+            if not body:
+                continue
+            sources = [npc for npc in tellers(m, clue, record=rec) if npc in people]
+            routes = []
+            if original_source_at_hand(m, clue, here, people, record=rec):
+                source = (f"出自{m.npc(clue.npc).name}" if clue.npc in people else clue.feature or "此处")
+                check = (f"{clue.check.skill}·{clue.check.difficulty}，奖励骰{clue.check.bonus:+d}"
+                         if clue.check else "未设发现检定，仍须实际接触或查验对应载体")
+                routes.append(f"原载体：{source}；发现参考：{check}")
+            for npc in sources:
+                gate = disclosure_gate(m, clue, npc)
+                need = f"{gate.skill}·{gate.difficulty}，奖励骰{gate.bonus:+d}" if gate else "无个人交涉门槛，按动机与实际交流回应"
+                routes.append(f"{m.npc(npc).name}能说出；{need}")
+            if clue.requires:
+                # A SceneView shares root flags/clues with scenes farther ahead. Do not
+                # describe their later result as already true at this scene's clock.
+                status = ("按本场已结算时刻核对，不以其他场景的后续结果提前满足"
+                          if getattr(st, "scene", None) is not None else
+                          "当前已满足" if clue.available(st.flags, st.clues) else "当前尚未满足")
+                routes.append(f"全部前置：{'、'.join(clue.requires)}（{status}）")
+            else:
+                routes.append("无额外前置")
+            routes.append("本局已有取得记录，不表示全体已知" if clue.id in st.clues else "尚无取得记录")
+            if clue.sanity:
+                routes.append(f"实际发现时理智检定 {clue.sanity}")
+            if clue.mythos:
+                routes.append(f"实际获知时神话 +{clue.mythos}%")
+            if clue.handout:
+                routes.append(f"实际取得时分发材料 {clue.handout}")
+            prepared.append(f"- {clue.id}「{clue.title}」：{'；'.join(routes)}\n  内容：{body}")
+        if prepared:
+            rows.append("本场相关线索备课（不是已经发生的发现；原载体查验与人物转述分别裁定，别提前写出，也别把载体写成空的）：\n"
+                        + "\n".join(prepared))
+    events = [e for e in m.events if e.id not in st.fired and
+              (e.where == here or f"visit:{here}" in [atom.strip().lstrip("!") for atom in re.split(r"[&|]", e.when)]
+               or (not e.where and people.intersection(e.present)))]
+    prepared = []
+    for event in events:
+        body = current(f"event:{event.id}", event.text)
+        if not body:
+            continue
+        conditions = [event.when] if event.when else []
+        if gate := event.after_rounds:
+            conditions.append(f"{gate.event} 开启的遭遇已经完成 {gate.completed} 轮")
+        if event.check:
+            conditions.append(f"还须 {event.check.skill}·{event.check.difficulty} 检定成功，奖励骰{event.check.bonus:+d}")
+        text = f"- {event.id}「{event.title}」条件：{'；且 '.join(conditions) or '由现场裁定'}\n  守秘人须知：{body}"
+        if event.where and event.where != here:
+            text += f"\n  实际发生在{m.location(event.where).name}，属于异地后果，不在当前画面演出。"
+        if event.read_aloud and event.read_aloud.strip() != body.strip():
+            revised = rec.facts.get(f"event:{event.id}") if rec is not None else None
+            label = ("原演出素材（当前正文已改写，冲突部分以当前守秘人须知为准）"
+                     if revised is not None and revised.version > 1 else "成立后眼前演出")
+            text += f"\n  {label}：{event.read_aloud.strip()}"
+        outcomes = []
+        for label, values in (("出场", event.present), ("设置标记", event.sets), ("战斗", event.fight), ("追逐", event.chase)):
+            if values:
+                outcomes.append(f"{label}：{'、'.join(values)}")
+        for label, value in (("伤害", event.damage), ("理智", event.sanity), ("转场", event.move_to),
+                             ("至少推进至", event.advance_to), ("结局", event.ending)):
+            if value:
+                outcomes.append(f"{label}：{value}")
+        outcomes += [f"{effect.target}死亡；依据：{effect.why}" for effect in event.effects]
+        if outcomes:
+            text += "\n  成立后结算：" + "；".join(outcomes)
+        prepared.append(text)
+    if prepared:
+        rows.append("此地已有事件（仅是准备；各自条件全部成立、引擎实际结算后才发生，不在换场时一次演完）：\n"
+                    + "\n".join(prepared))
+    return "\n".join(rows)
+
+
 def rewrites(rec: WorldRecord) -> list[str]:
     """Every fact or event rewritten in this game, once each, however long ago and however many
     rewrites came after: what it first said, and the whole of what it says now."""
@@ -476,18 +582,19 @@ def keeper_brief(w: World, *, at: str = "") -> str:
                      + "\n".join(f"- {b.id}：{w.name(b.actor)}；{b.text or '原定动作'}；时机={b.cue}"
                                  f"；操作={json.dumps(b.ops, ensure_ascii=False)}"
                                  + (f"；理由={b.note}" if b.note else "") for b in pending))
-    note = rec.facts.get(f"location:{here}:keeper")
-    if note is not None and not note.retracted and note.text.strip():
-        lines.append(f"此地（{w.name(here)}）的守秘人须知：{' '.join(note.text.split())}")  # whole: what it says last counts too
+    if preparation := scene_preparation(m, st, at=here, record=rec, present=w.present(here)):
+        lines.append(preparation)
 
     def person(npc: str) -> str:
         own = [f for f in rec.facts.values() if f.id.startswith(f"npc:{npc}:") and not f.retracted and f.text.strip()]
         a = rec.agents.get(npc)
         role = m.npc(npc).role
         goal = "；".join(a.goals) if a is not None else next((f.text for f in own if f.kind == "goal"), "")
-        secrets = [_clip(f.text) for f in own if f.kind == "secret" and f.revealed is None]
-        lies = [_clip(f.text) for f in own if f.kind == "lie"]
+        secrets = [f.text for f in own if f.kind == "secret" and f.revealed is None]
+        lies = [f.text for f in own if f.kind == "lie"]
         parts = [f"身份：{role}"] if role else []
+        if m.npc(npc).personality:
+            parts.append(f"性格依据：{m.npc(npc).personality}")
         parts += [f"当前想要：{goal or '无'}"] if a is not None else ([f"想要：{_clip(goal)}"] if goal else [])
         # Identity and the practical reason for approaching the party often live in knows,
         # not in secrets or goals. Read current facts, including their source and conditions.
@@ -529,7 +636,7 @@ def keeper_brief(w: World, *, at: str = "") -> str:
             parts += [f"上次执行未成：{a.refused}"] if a.refused else []
             parts += [f"心境：{_clip(a.mood, 60)}"] if a.mood else []
         # What may come of a ruling of the keeper's (Move.ruling): not the NPC's to do, the keeper's to decide.
-        ruled = [_clip(s.text, 100) + (f"（只在{s.only_if}时）" if s.only_if else "") for g in m.agendas if g.npc == npc
+        ruled = [s.text + (f"（只在{s.only_if}时）" if s.only_if else "") for g in m.agendas if g.npc == npc
                  for s in g.steps if s.ruling and _ready(w, s.when)]
         parts += [f"要你裁定以后才可能的：{'；'.join(ruled)}"] if ruled else []
         return "；".join(parts) or "没有特别的事"
@@ -547,22 +654,6 @@ def keeper_brief(w: World, *, at: str = "") -> str:
     near = nearby(w, here)
     if near:
         lines.append("同一处别的房间里：\n" + "\n".join(f"- {w.name(x)}（在{w.name(room)}）：{person(x)}" for x, room in near.items()))
-    from ..module.graph import at_hand, tellers
-
-    # What is to be had here: what lies here, and what comes from those who are here (graph.at_hand).
-    hidden = [c for c in at_hand(m, here, present, record=rec) if c.id not in st.clues]
-
-    def source(c) -> str:
-        providers = tellers(m, c, record=rec)
-        if c.npc in present and (c.npc in providers or c.id not in m.npc(c.npc).clues):
-            return f"出自{w.name(c.npc)}"
-        if c.npc or c.where != here:  # someone here who can tell it
-            return "、".join(w.name(x) for x in providers if x in present) + "能说出"
-        return c.feature or "此处"
-
-    if hidden:
-        lines.append("这里还没被找到的东西（别先写出来，也别把它所在的地方写成空的）：" + "；".join(
-            f"{c.title}（{source(c)}）" for c in hidden))
     soon = [(s.at, _clip(s.text)) for s in rec.scheduled.values() if s.status == "pending" and s.at >= w.now]
     soon += [(s.due, f"{w.name(npc)}：{_clip(s.text)}") for npc, a in rec.agents.items()
              for s in a.plan if s.status == "pending" and s.due is not None and s.due >= w.now]

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ...world.record import Entity
     from ...world.store import World
 
-Audience = Literal["players", "keeper"]
+Audience = str  # "keeper", "players" (shared), or one investigator's id
 
 
 @dataclass(frozen=True)
@@ -187,7 +187,7 @@ class EntityView:
         players call them (profiles.shown_name: never a name they have not learned)."""
         if audience == "keeper":
             return profiles.bare(self.profile.name)
-        return profiles.shown_name(self.world, self.id)
+        return profiles.shown_name(self.world, self.id, viewer=None if audience == "players" else audience)
 
     def char(self, key: str) -> int:
         return self.profile.chars.get(canonical(key), 0)

@@ -469,10 +469,15 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
     cast = Scripted(cfg, m, beats)
     state = Game.new(m, [m.pregens[0].model_copy(deep=True)], slot=f"style-{m.id}-{label or 'run'}", human=[])
     told: list[str] = []
+    said: dict[str, list[str]] = {}
 
     async def emit(ev: dict) -> None:
         if ev.get("type") == "keeper_end":
             told.append(ev["text"])
+        elif ev.get("type") == "npc":
+            # Offline measurements group by actual speaker, independently of player
+            # aliases or descriptions that several unknown people may share.
+            said.setdefault(m.npc(ev["npc"]).name, []).append(ev["text"])
 
     game = _ScriptedGame(m, state, cast, Rules(dice=Loaded(d for b in beats for d in b.dice)), emit=emit)  # type: ignore[arg-type]
     app = turn_graph.build(game, InMemorySaver())
@@ -498,10 +503,6 @@ async def run(module_dir: Path, *, label: str = "", out: Path | None = None) -> 
         await cast.close()
     keeper = cfg.role("keeper")
     shown = examples(system)
-    said: dict[str, list[str]] = {}
-    for entry in state.log:
-        if entry.kind == "npc":
-            said.setdefault(entry.who, []).append(entry.text)
     summary = {
         "module": m.id,
         "label": label,

@@ -141,7 +141,7 @@ def _identities(game: Any, viewer: str | None) -> tuple[dict[str, str], dict[str
             ids[masked[target]] = p.handle
         name = p.name or "未辨明的身影"
         original = game.world.name(target)
-        shown = profiles.shown_name(game.world, target)
+        shown = profiles.shown_name(game.world, target, viewer=viewer)
         for text in (original, shown):
             if text and text != name:
                 words[text] = name

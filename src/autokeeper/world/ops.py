@@ -774,6 +774,7 @@ class Occur(Base):
     reactive: SkipJsonSchema[bool] = True  # engine classification of greeting-only dialogue, not an NPC discretion
     transcript: SkipJsonSchema[bool] = False  # complete investigator/NPC exchange, supplied only by the engine
     witnesses: SkipJsonSchema[list[str]] = Field(default_factory=list)  # who else knows of it: the module's past (agents.marked)
+    introduced: SkipJsonSchema[dict[str, str]] = Field(default_factory=dict)  # npc -> introduced name; host-owned receipt
 
     def check(self, w: World) -> list[str]:
         problems = [] if self.text.strip() and (self.transcript or len(self.text) <= 300) else ["要写发生了什么，不超过 300 字"]
@@ -781,6 +782,12 @@ class Occur(Base):
             problems.append("完整对话记录只能由系统登记调查员实际参与的交流")
         if self.witnesses and self.actor not in STAFF:
             problems.append("另外还有谁知道，只能由系统登记")
+        if self.introduced and self.actor not in STAFF:
+            problems.append("调查员实际认识的人只能由系统登记")
+        problems += [f"{npc} 不是 NPC" for npc in self.introduced if _npc(w, npc) is None]
+        if self.introduced and (not self.witnesses or any(
+                who not in {i.id for i in w.st.investigators} for who in self.witnesses)):
+            problems.append("引见的听众只能是本局调查员")
         if self.place and self.place not in w.rec.entities:
             problems.append(f"地点 {self.place} 不存在")
         problems += [f"{x} 不存在" for x in self.participants if not _who(w, x)]
@@ -788,9 +795,34 @@ class Occur(Base):
         return problems
 
     def settle(self, w: World, oid: str):
-        return w.emit("occur", self.text, actor=self.actor, participants=self.participants, place=self.place,
-                      visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid, witnesses=self.witnesses,
-                      reactive=self.reactive, verbatim=self.transcript), None  # fmt: skip
+        event = w.emit("occur", self.text, actor=self.actor, participants=self.participants, place=self.place,
+                       visibility=self.visibility, facts=self.facts, trace=self.trace, op=oid, witnesses=self.witnesses,
+                       reactive=self.reactive, verbatim=self.transcript)
+        if self.introduced:
+            from .. import media_snapshot
+            from ..engine.encounter.profiles import bare
+            from .record import Sighting
+
+            for npc, introduced_name in self.introduced.items():
+                sheet = w.m.npc(npc)
+                label = introduced_name.strip() or bare(sheet.name)
+                # The host supplies the actual meeting place. Someone may already have
+                # left by this segment's end; an actual telephone introduction has no place.
+                local = bool(self.place)
+                for who in self.witnesses:
+                    previous = w.rec.sightings.get(who, {}).get(npc)
+                    if local:
+                        seen = Sighting(place=event.place, event=event.id, left=w.place(npc) != event.place,
+                                        status=w.rec.entities[npc].status,
+                                        look=sheet.look, portrait=media_snapshot.remember(w.m, w.st, sheet.portrait),
+                                        name=label)
+                    elif previous is not None:
+                        seen = previous.model_copy(update={"event": event.id, "name": label})
+                    else:
+                        # A voice on the telephone discloses a name, not the room or face at its other end.
+                        seen = Sighting(place="", event=event.id, name=label)
+                    w.rec.sightings.setdefault(who, {})[npc] = seen
+        return event, None
 
 
 # -- promises and threads ----------------------------------------------------------------------

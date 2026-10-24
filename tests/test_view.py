@@ -84,7 +84,8 @@ def test_the_parser_gets_only_where_they_could_head_and_by_the_names_they_know(z
     st.location = "mudi"
     assert fog.bearings(zhui, st)["lingmu"] == "陵墓" and "suidao" not in fog.bearings(zhui, st)  # next door, by its plainest name
     scene = Cast(config.load(), zhui).bearings(st)
-    assert "陵墓(lingmu)" in scene and "一个园艺工" in scene and "还没通名：梅洛迪亚斯·杰弗逊(jefferson)" in scene
+    assert "陵墓(lingmu)" in scene and "一个园艺工" in scene and "jefferson" in scene
+    assert "梅洛迪亚斯·杰弗逊" not in scene  # a visible stranger is addressed by appearance, not his secret name
     assert "外套口袋" not in scene and "可调查" not in scene  # its summary and first beat reach the player's screen
     st.visited.append("lingmu")
     st.location = "lingmu"

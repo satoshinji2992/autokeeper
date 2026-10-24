@@ -331,6 +331,7 @@ class Sighting(BaseModel):
     status: str = ""
     look: str = ""
     portrait: str = ""
+    name: str = ""  # actually introduced to this observer; seeing a person does not reveal a name
 
 
 class PlaceSighting(BaseModel):

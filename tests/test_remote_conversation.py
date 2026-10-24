@@ -77,6 +77,9 @@ async def test_remote_reply_receipt_and_observation_reach_only_the_actual_two_si
         assert "看不见另一端房间" in prompt
         said = turn.replies["talk:clerk"]
         assert said.communication == "remote" and said.audience == [own.id]
+        introduced = game.world.rec.sightings.get(own.id, {}).get("clerk")
+        assert introduced is None  # merely answering the telephone is not an introduction
+        assert "clerk" not in game.world.rec.sightings.get(other.id, {})
         assert not any("说完就走" in note for note in turn.notes)
         assert next(e for e in events if e["type"] == "npc")["audience"] == [own.id]
         exchange = next(e for e in game.world.rec.events if e.op.startswith("talk:") and "clerk" in e.participants)

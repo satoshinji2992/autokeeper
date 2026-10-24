@@ -110,6 +110,7 @@ class Said:
     media: list[dict] = field(default_factory=list)
     audience: list[str] | None = None
     communication: str = "local"
+    name: str = ""  # the name actually shown with this reply, retained across retries
 
 
 @dataclass
@@ -424,13 +425,23 @@ class Game(Encounters):
         if self.checkpoint:
             self.checkpoint()
         adapted = await self.prepare_opening()
-        opening = Turn(told=True)
-        await self.plugins.run("start", opening)
-        await self._arrive(st.location, opening)
+        preparation = st.pending_turn.setdefault("opening_resolution", {})
+        arrival = preparation.setdefault("arrival", st.location)
+        opening = TURN_RECORD.validate_python(preparation["turn"]) if "turn" in preparation else Turn(told=True)
+
+        def keep(acted: Turn) -> None:
+            preparation["turn"] = TURN_RECORD.dump_python(acted, mode="json")
+            if self.checkpoint:
+                self.checkpoint()
+
+        with self._journal(preparation, keep):
+            await self._resolution_step("plugins", opening, lambda: self.plugins.run("start", opening))
+            await self._arrive(arrival, opening)
+            await self._resolution_step("time", opening, lambda: self._time(opening))
+            if adapted is not None:
+                await self._resolution_step("adapted-flags", opening, lambda: self._flags(adapted.now, opening))
+        await self._perform_events(opening, keep)
         loc = m.location(st.location)
-        await self._time(opening)
-        if adapted is not None:
-            await self._flags(adapted.now, opening)
         party = "\n".join(
             f"- {i.name}（{i.occupation}）：" + ("；".join(f"{k}：{v}" for k, v in i.backstory.items() if k != "说明" and v) or "未写背景")
             for i in st.investigators
@@ -439,15 +450,10 @@ class Game(Encounters):
             f"【开场｜{st.clock}｜{loc.name}】\n年代与地方：{m.era}，{m.setting}\n调查员：\n{party}\n"
             f"开场钩子（玩家已经知道）：{m.hook.strip()}\n"
             f"【抵达背景与开场素材（尚未朗读，与眼前事件合成一次叙述，不重复演出）】\n{m.opening.strip()}\n"
-            f"【当前位置与接待底稿（邀请和可做的事不代表调查员已经接受或完成）】\n{self._public_location(loc.id)}\n"
+            f"【当前场面与已结算结果（邀请和可做的事不代表调查员已经接受或完成）】\n{self._report(opening)}\n"
         )
         if adapted is not None and adapted.note:
             report += f"导演为这几位调查员改编了模组：{adapted.note}\n"
-        happened = [f"{e.title}：{e.read_aloud.strip()}" if e.read_aloud.strip() else e.title for e in opening.events]
-        if happened:
-            report += ("【已触发的开场事件（尚未展示给玩家，按实际先后自然带出；与底稿相同的事只演一次）】\n"
-                       + "\n".join(happened) + "\n")
-        report += "".join(f"{line}\n" for line in self._found(opening))  # a rule's find at the start (plugins "start")
         if self.prelude_played:
             report += ("【已播放的序幕字幕】\n" + "\n".join(frame.text for frame in prelude.frames(m))
                        + "\n承接这些内容，落到当前抵达场面，不从头复述。\n")
@@ -469,7 +475,8 @@ class Game(Encounters):
         self.showcases.prepare()  # (already at it when the game was made inside a running loop)
         if not self.prelude_played:  # after the prelude the keeper's first words are not covered by a picture
             await self.showcases.fire("opening")  # the big picture of the opening, the narration streaming behind it
-        text = await self._narrate(report, on_delta, lore=self._brief())
+        text = await self._narrate(report, on_delta, lore=self._brief(), turn=opening)
+        keep(opening)
         st.prologue = text  # the 背景 page keeps it after the log has moved on
         st.progress.marks = progress.marks(st)  # milestones count from here
         st.heard = fog.heard(m, st)  # the places the opening named reach the screens at a shared table
@@ -2861,7 +2868,7 @@ class Game(Encounters):
             if audience is None and len(listeners) != len(st.investigators):
                 audience = listeners
             if status:
-                await self.emit({"type": "status", "text": status, "audience": audience})
+                await self.emit({"type": "status", "text": "等待回应…", "audience": audience})
             with self.world.at(when):
                 line = await ask()
             # Taken from the cast at once (Cast.told, Cast.unsettled): nothing waits between the reply
@@ -2883,14 +2890,34 @@ class Game(Encounters):
             turn.notes += self._unsettled(npc_id)
             if communication != "remote" and (gone := self.world.place(npc_id)) and gone != st.location:
                 turn.notes.append(f"{npc.name}说完就走了，去了{self.world.name(gone)}：他已经不在这里。")
-            st.npc(npc_id).met = True
-            st.add("npc", line, who=npc.name, audience=said.audience)
+            if line.strip():
+                # A completed conversation and a keeper's staged introduction use the
+                # same personal record. A private/telephone reply grants no remote face.
+                listeners = said.audience if said.audience is not None else self.world.observers(st.location, at=when)
+                introduced_as = getattr(self.cast, "introduced_as", {}).pop(npc_id, "")
+                labels: dict[str, list[str]] = {}
+                for who in listeners:
+                    label = introduced_as or knowledge.npc_name(m, st, npc_id, who)
+                    labels.setdefault(label, []).append(who)
+                label = next(iter(labels)) if len(labels) == 1 else ""
+                said.name = label or ("通话中的人" if communication == "remote" else npc.called or "未通名的人")
+                st.npc(npc_id).met = True  # interaction summary; actual names belong to the explicit personal receipt
+                with self.world.at(when):
+                    for index, (label, readers) in enumerate(labels.items()):
+                        self.world.apply(Occur(
+                            id=f"npc-introduction:{st.turn}:{npc_id}:{key}:{index}", actor=KEEPER,
+                            text=f"{'、'.join(st.find(who).name for who in readers)}与{label or '对方'}交谈。",
+                            introduced={npc_id: introduced_as} if introduced_as else {}, witnesses=list(readers),
+                            place="" if communication == "remote" else st.location,
+                            visibility="private", reactive=False,
+                        ))
+            st.add("npc", line, who=said.name or npc.called or "交谈中的人", audience=said.audience)
             if record is not None:
                 with self.world.at(when):
                     record(line)
             keep(turn)
         if not said.shown:
-            await self.emit({"type": kind, "npc": npc_id, "name": npc.name, "text": said.line,
+            await self.emit({"type": kind, "npc": npc_id, "name": said.name or npc.called or "交谈中的人", "text": said.line,
                              "portrait": m.art.get(npc.portrait or "", "") if said.communication != "remote" else "",
                              "audience": said.audience})
             said.shown = True
@@ -3995,6 +4022,10 @@ class Game(Encounters):
                 with self.world.at(at, start=start):
                     self.world.emit("move", f"调查员抵达{self.world.name(loc_id)}", participants=list(coming), place=loc_id,
                                     op=f"travel:{st.turn}:{src}:{loc_id}", motions=motions)
+            else:
+                with self.world.at(at):
+                    self.world.emit("arrive", f"调查员在{self.world.name(loc_id)}看见眼前的人与地方。",
+                                    participants=list(coming), place=loc_id, op=f"arrival:{st.turn}:{loc_id}", reactive=False)
             if turn.interval:
                 turn.interval["destination"] = loc_id
             for inv_id in joined:  # the moving group came to where another investigator already was
@@ -4857,7 +4888,18 @@ class Game(Encounters):
                        f"\n【共同现场名单】{seats}。个人所得为正文时，共同可见的变化另外用asides向本名单讲述；"
                        "没有共同新变化就留空。只结算本人检定所得，不因同场或公开骰点把所得交给未成功的人；"
                        "NPC已经公开说出的内容与共同事件仍保留原受众，已经分享的见闻不因这次个人检定重新保密。")
-        people = [n.name if st.npc(n.id).met else f"未通名的人（{n.look or '暂无外观记录'}）" for n in m.npcs_at(st.location)]
+        readers = self._narrative_audience(turn)
+        viewers = readers if readers is not None else [investigator.id for investigator in st.investigators]
+        people = []
+        for npc in m.npcs_at(st.location):
+            known = {viewer: knowledge.npc_name(m, st, npc.id, viewer) for viewer in viewers}
+            names = set(known.values())
+            if len(names) == 1 and "" not in names:
+                people.append(f"{next(iter(names))}（{npc.id}）")
+            else:
+                partial = "；".join(f"{st.find(viewer).name}称其为{label}" for viewer, label in known.items() if label)
+                people.append(f"未通名的人（{npc.look or npc.called or '暂无外观记录'}；主持用id={npc.id}）"
+                              + (f"〔{partial}，不代表其他人已认识〕" if partial else ""))
         if st.ongoing:
             out.append(f"【上一段叙述停在】{st.ongoing}")
         out.append("【当前在场人物，以记录为准】" + ("、".join(people) or "没有其他人")
@@ -4901,7 +4943,7 @@ class Game(Encounters):
             out += [f"路过{m.location(pid).name}：{m.location(pid).read_aloud.strip()}" for pid in turn.route[1:-1]]
             out.append("按行进顺序带出一两处路边生活，再衔接目的地；只是路过，没有进门调查、获得线索或与人交谈。")
         if turn.arrived:
-            if turn.first_visit:
+            if turn.first_visit or turn.told:
                 out.append(f"【进入新地点】\n{self._public_location(turn.arrived)}")
             else:
                 out.append(f"回到了 {m.location(turn.arrived).name}。")
@@ -4970,8 +5012,10 @@ class Game(Encounters):
             listeners = "全桌" if said is None or said.audience is None else "仅" + "、".join(st.find(i).name for i in said.audience)
             out.append(f"【NPC表演原话｜{listeners}已听到，不复述】{m.npc(performer).name}：{line}")
         for ev in turn.events:
-            if ev.read_aloud.strip():  # the screen showed it word for word (the event notice): go on from it
-                out.append(f"眼前发生（原文已展示给玩家，不要复述，接着写之后的变化）：{ev.read_aloud.strip()}")
+            if ev.read_aloud.strip():
+                status = ("尚未展示给玩家，融入本段叙述" if turn.told else
+                          "原文已展示给玩家，不要复述，接着写之后的变化")
+                out.append(f"眼前发生（{status}）：{ev.read_aloud.strip()}")
         if names := self._unknown(turn.events):  # a horror seen before it is known, or anyone in the fight (Creature.called, NPC.called)
             out.append("【称呼】" + "；".join(names) + "。调查员还不知道这是什么：只写看得见、听得见、闻得到的样子，不说出名字和来历")
         arrangements = [st.pending_turn.get("arrangement", {}),
@@ -5186,6 +5230,10 @@ class Game(Encounters):
             receipt["perceptions_landed"] = True
             if self.checkpoint:
                 self.checkpoint()
+        for sightings in self.world.rec.sightings.values():
+            for npc, sighting in sightings.items():
+                if sighting.name:
+                    st.npc(npc).met = True  # summary only; each reader's name remains in their own sighting
         if receipt.get("rested") and not receipt.get("rested_landed"):
             with self._journal(receipt.setdefault("rest_journal", {}), self._keep):
                 await self._recover_madness(turn or Turn(), rested=receipt["rested"])
@@ -5593,6 +5641,7 @@ class Game(Encounters):
                     if said.communication == "remote" and said.line] if turn is not None else []
         return scene.Context(travel=self._travel, elapsed=elapsed if acted else 0,
                              missing=[_lack(x) for x in lacks], walk=acted, ids=ids, start=max(used, default=-1) + 1,
+                             audience=self._narrative_audience(turn),
                              rests=rests, interval=interval, participants=participants, contacts=contacts)
 
     def _scene_brief(self, ctx: scene.Context) -> str:
@@ -5621,6 +5670,8 @@ class Game(Encounters):
                 + (f"本段实际远程交谈的联系人：{'、'.join(ctx.contacts)}；他们不在here，只可用communication=remote记实际听见的交谈。"
                    if ctx.contacts else "") +
                 "本段真正做成的剧情事实写进 scene.flags，不等下一轮裁定员补记；未完成的决定和谎言不算事实。"
+                "本段实际自报姓名或被引见的人写进 introductions（npc填已有id，name填实际称呼，to省略表示正文受众）；"
+                "私下引见用to列听到的调查员。仅在场或已经登记人物不代表通名，之后不重复介绍。"
                 + madness + rest_scope +
                 "物件的拿起、交出、归还或放回地点都写进 holds；已有 item 用下表实际 id，不能用合称另造物件。"
                 "新日常物件先在 things 写拿出者，交出或留下时再以同名写 holds。"

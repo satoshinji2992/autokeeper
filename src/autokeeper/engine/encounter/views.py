@@ -175,6 +175,8 @@ def chase_view(game: Any, enc: EncounterState | None = None, *, viewer: str | No
         if appearance is not None:
             r.update(name=appearance.name or "未辨明的身影", portrait=appearance.portrait,
                      side=appearance.side or r.get("side", "foe"), kind="creature", hp=None, hp_max=None)
+        else:
+            r["name"] = ctx.name(r["id"], viewer or "players")
         r["id"] = appearance.handle if appearance is not None else m.get(r["id"], r["id"])
         kept.append(r)
     out["runners"] = kept

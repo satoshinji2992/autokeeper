@@ -78,6 +78,12 @@ class Observation(BaseModel):
     communication: Communication = Field("local", description="local：实际在场见闻；remote：本段已实际通话的联系人仅听见的交流内容，不含另一端房间、动作或私语")
 
 
+class Introduction(BaseModel):
+    npc: str = Field(description="本段实际通名或有人引见的已有NPC id；登记、在场或只看见外貌不算已经介绍")
+    to: list[str] | None = Field(None, description="实际听到介绍的调查员id；省略为本段正文接收者，私语或asides明确写实际听见者")
+    name: str = Field("", description="本段实际介绍的称呼；化名写化名，空白用登记姓名，不写主持用的身份注释")
+
+
 class Person(BaseModel):
     """A lasting person improvised here, without a full character sheet or a scene package."""
 
@@ -104,6 +110,8 @@ class Scene(BaseModel):
     traces: list[Trace] = Field(default_factory=list, description="本段新产生、有后续意义的痕迹；不每段抄写原有摆设或旧痕迹")
     observations: list[Observation] = Field(default_factory=list,
                                            description="本段NPC实际看见或听见的重要事实与承诺，明确witnesses；只记影响后续应答的内容，不写逐句流水账")
+    introductions: list[Introduction] = Field(default_factory=list,
+                                             description="本段实际完成的通名或引见；按实际正文或asides的听众登记，未介绍、已认识或只是背景里的人不用填")
     flags: list[str] = Field(default_factory=list, description=(
         "本段已经发生、满足完整含义的剧情标记 id；人物本次真正做成的事也在这里登记。"
         "只从已声明标记中选，不将尝试、提议、口头谎言或尚未完成的计划当成事实，不改写骰点和取得条件"))
@@ -127,6 +135,7 @@ class Context:
     interval: tuple[int, int] | None = None  # actual host-owned action interval, independent of global clock
     participants: list[str] = field(default_factory=list)
     contacts: list[str] = field(default_factory=list)  # host-owned NPCs whose remote reply actually landed this segment
+    audience: list[str] | None = None  # actual readers of the final body; None means the local scene observers
 
     @property
     def resting(self) -> bool:
@@ -318,7 +327,8 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
     at_start = set(w.present(src, at=ctx.interval[0])) if ctx.interval else set(w.present(src))
     problems: list[str] = []
     references = [*scene.here, *scene.follow, *(gone.who for gone in scene.left),
-                  *(who for observation in scene.observations for who in observation.witnesses)]
+                  *(who for observation in scene.observations for who in observation.witnesses),
+                  *(introduced.npc for introduced in scene.introductions)]
     for text in references:
         if any(candidate in rec.entities for candidate in _bare(text)):
             continue
@@ -595,6 +605,51 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
                           place=room, visibility="private", actor=KEEPER, reactive=False))
         u.said.append(f"{'、'.join(name(n) for n in witnesses)}当场获知：{observed.text.strip()}")
 
+    for i, introduced in enumerate(scene.introductions):
+        from ..engine.encounter.profiles import bare
+
+        who = _npc(w, introduced.npc)
+        if who is None:
+            problems.append(f"引见的人物 {introduced.npc} 没有登记；已有的人写实际id，新人物先写进people。")
+            continue
+        remote = who in ctx.contacts and who not in at_start and who not in end
+        if not remote and who not in at_start and who not in end:
+            problems.append(f"{name(who)}本段未在场，也没有实际远程交谈，不能登记为已经介绍。")
+            continue
+        at_end = who in end
+        meeting_place = room if at_end else src
+        meeting_at = ctx.interval[1 if at_end else 0] if ctx.interval else None
+        local = w.observers(meeting_place, at=meeting_at)
+        if walks and at_end:
+            # These people really walk into the room in the party unit below. Do not
+            # borrow the people who remain at its origin for the new room's conversation.
+            coming = ctx.participants or [lead]
+            local = [reader for reader in local if reader not in coming]
+            local += [reader for reader in coming if reader in party
+                      and not {"死亡", "昏迷"}.intersection(st.find(reader).conditions)]
+        local = list(dict.fromkeys(local))
+        readers = introduced.to if introduced.to is not None else ctx.audience if ctx.audience is not None else local
+        readers = list(dict.fromkeys(readers))
+        eligible = ctx.audience if remote and ctx.audience is not None else local
+        if not readers or any(reader not in party or reader not in eligible for reader in readers):
+            problems.append(f"{name(who)}的介绍只能记给本段实际在场或实际接收远程交谈的调查员，不能留空或给异地玩家。")
+            continue
+        u = unit(f"introduction:{i}")
+        if not remote:
+            u.steps.append({"kind": "witness", "who": who, "lead": lead, "room": meeting_place,
+                            "at_start": who in at_start, "remote": False,
+                            "why": f"{name(who)}本段未实际在场，不能登记为已介绍。"})
+        label = introduced.name.strip() or bare(w.m.npc(who).name)
+        receipt = op(Occur, text=f"{'、'.join(name(reader) for reader in readers)}听到了{label}的介绍。",
+                     witnesses=readers, introduced={who: introduced.name}, place="" if remote else meeting_place,
+                     visibility="private", actor=KEEPER, reactive=False)
+        if meeting_at is not None:
+            # The same unit may also contain a later room walk. Its information event
+            # keeps the actual meeting time rather than borrowing that walk's endpoint.
+            receipt["observed_at"] = meeting_at
+        u.steps.append(receipt)
+        u.said.append(f"{'、'.join(name(reader) for reader in readers)}已认识{label}")
+
     merged = _merge(units, movers)
     end_words = _try(original, merged)
     for u in merged:
@@ -705,6 +760,9 @@ def _run(w: World, u: Unit) -> list[str]:
             problems = refused
             break
         for raw in ops:
+            observed_at = raw.get("observed_at")
+            if observed_at is not None:
+                raw = {key: value for key, value in raw.items() if key != "observed_at"}
             who = raw.get("entity") if raw.get("kind") == "move" else raw.get("npc")
             if u.end is not None and who:
                 ready = available.get(who)
@@ -715,7 +773,7 @@ def _run(w: World, u: Unit) -> list[str]:
             begin = w.now if u.begin is None else u.begin
             ready = available.get(who)
             departure = max(begin, begin if ready is None else ready)
-            with w.at(u.end, start=departure):
+            with w.at(u.end if observed_at is None else observed_at, start=departure):
                 result = w.apply(raw)
             if not result.ok:
                 problems = [f"{'；'.join(u.said) or u.key}：{p}" for p in result.problems]

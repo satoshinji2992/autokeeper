@@ -30,6 +30,24 @@ if TYPE_CHECKING:
 PROJECTED_KNOWS = 8  # facts an NPC learned in this game that go into its sheet's 知道的事
 
 
+def npc_name(m: Module, st: GameState, npc: str, viewer: str | None = None) -> str:
+    """A name actually introduced to this reader; None asks for the party's shared name.
+
+    The world can know an identity without any investigator knowing it. A sighting can
+    likewise remember a face without a name, or a telephone introduction without a face.
+    """
+    if not st.record.seeded:  # standalone UI state before a world record has been initialized
+        from ..engine.encounter.profiles import bare
+
+        known = st.npcs.get(npc)
+        person = next((person for person in m.npcs if person.id == npc), None)
+        return bare(person.name) if known is not None and known.met and person is not None else ""
+    readers = [viewer] if viewer is not None else [investigator.id for investigator in st.investigators]
+    names = [(seen.name if (seen := st.record.sightings.get(who, {}).get(npc)) is not None else "")
+             for who in readers]
+    return names[0] if names and names[0] and all(name == names[0] for name in names) else ""
+
+
 def improvised(st: GameState) -> set[str]:
     """Ids the director's plans brought into this game's module."""
     groups = ("npcs", "locations", "clues", "items", "events", "endings")
@@ -133,8 +151,19 @@ def evidence(m: Module, st: GameState, rec: WorldRecord, *, include_private: boo
     out += [PublicEvidence(f"clue:{c.id}", c.text) for c in m.clues if c.id in st.clues
             and (len(party) == 1 or ((f := rec.facts.get(f"clue:{c.id}")) is not None and everyone(f.known_by)))]
     out += [PublicEvidence(f"handout:{h.id}", h.text) for h in m.handouts if h.id in st.handouts]
-    out += [PublicEvidence(f"look:{n.id}", n.look) for n in m.npcs if n.id in st.npcs and st.npcs[n.id].met
-            and (observed(n.id) or all(n.id in rec.sightings.get(who, {}) for who in party))]
+    # An introduction can happen over the telephone. Only the frozen appearance a
+    # reader actually saw is evidence; neither `met` nor the sheet's current look is.
+    for npc in m.npcs:
+        looks: dict[str, list[str]] = {}
+        for who in sorted(party):
+            seen = rec.sightings.get(who, {}).get(npc.id)
+            if seen is not None and seen.look.strip():
+                looks.setdefault(seen.look, []).append(who)
+        for index, (look, readers) in enumerate(looks.items()):
+            if everyone(readers):
+                out.append(PublicEvidence(f"look:{npc.id}", look))
+            elif include_private:
+                out.append(PublicEvidence(f"private-look:{npc.id}:{index}", look, readers=tuple(readers)))
     out += [PublicEvidence(f"event:{e.id}", e.text, e.turn)
             for e in rec.events if e.visibility == "public" and e.kind in _PUBLIC_EVENTS]
     out += [PublicEvidence("memory", st.memory), PublicEvidence("prologue", st.prologue, 0),
