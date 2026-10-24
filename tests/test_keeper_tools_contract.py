@@ -82,7 +82,7 @@ async def test_only_the_final_hosted_telling_can_decide_a_compound_requests_cont
         assert request.call is not None and request.continuation is None and request.scene is None
         definitions = SEEN[0]["schema"]["$defs"]
         assert "continuation" in definitions["ContinuedTelling"]["required"]
-        assert set(SEEN[0]["schema"]["properties"]) == {"kind", "npc", "instruction", "private", "telling"}
+        assert set(SEEN[0]["schema"]["properties"]) == {"kind", "npc", "instruction", "private", "tool", "telling"}
         final = await cast.keeper(state, "老人实际回复已结算。", check=lambda _: True, voices=[])
         assert final.call is None and not final.call_error and final.continuation is not None
         assert final.continuation.next.action.kind == "wait" and not final.continuation.pending

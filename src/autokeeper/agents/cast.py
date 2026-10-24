@@ -427,32 +427,84 @@ class KeeperCall(BaseModel):
         return self
 
 
+class KeeperToolCall(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    tool: Literal["world_query", "world_schema", "world_preview", "world_commit", "lore"] = Field(
+        description="按需查询本局记录、取得世界操作格式、预演或提交操作，或查询模组原文")
+    query: str = Field("", description="world_query 的检索词；lore 要查的模组资料或原文问题")
+    limit: int = Field(20, ge=1, le=100, description="仅 world_query：每类返回记录的上限")
+    scope: list[str] = Field(default_factory=list, max_length=24, description=(
+        "仅 world_query：要查的明确记录引用，如 entity:warden、fact:truth、agent:warden；不填则按 query 检索"))
+    kinds: list[str] = Field(default_factory=list, max_length=24, description=(
+        "仅 world_schema：所需操作 kind，如 follow、remember；不填则取全部可用操作格式"))
+    operations: list[dict[str, Any]] = Field(default_factory=list, max_length=24, description=(
+        "仅 world_preview/world_commit：按 world_schema 返回格式填写的操作；不知道格式时先查 schema。"
+        "actor、id、request_id、reads 由宿主生成，不填写；不改时钟、骰点、HP 或规则效果，"
+        "调查员状态和模组线索走正式规则结算"))
+    keywords: list[str] = Field(default_factory=list, max_length=6, description="仅 lore：辅助原文检索的具体人名、地点或物件")
+    max_tokens: int = Field(1500, ge=1, le=4000, description="仅 lore：本次原文资料的最大返回 token 数")
+
+    @model_validator(mode="after")
+    def arguments(self) -> KeeperToolCall:
+        self.query = self.query.strip()
+        self.scope = [ref.strip() for ref in self.scope if ref.strip()]
+        self.kinds = [kind.strip() for kind in self.kinds if kind.strip()]
+        self.keywords = [word.strip() for word in self.keywords if word.strip()]
+        if self.tool in {"world_preview", "world_commit"}:
+            if not self.operations:
+                raise ValueError("预演或提交世界操作必须填写非空 operations")
+        elif self.operations:
+            raise ValueError("只有 world_preview/world_commit 可以填写 operations")
+        if self.tool not in {"world_query", "lore"} and self.query:
+            raise ValueError("只有 world_query/lore 可以填写 query")
+        if self.tool == "lore" and not self.query:
+            raise ValueError("查询模组原文必须说明 query")
+        if self.tool != "world_query" and self.limit != 20:
+            raise ValueError("只有 world_query 可以设置 limit")
+        if self.tool != "world_query" and self.scope:
+            raise ValueError("只有 world_query 可以设置 scope")
+        if self.tool != "world_schema" and self.kinds:
+            raise ValueError("只有 world_schema 可以设置 kinds")
+        if self.tool != "lore" and (self.keywords or self.max_tokens != 1500):
+            raise ValueError("只有 lore 可以设置 keywords/max_tokens")
+        for operation in self.operations:
+            if {"actor", "id", "request_id", "reads"} & operation.keys():
+                raise ValueError("世界操作的 actor、id、request_id、reads 由宿主绑定，不由模型指定")
+        return self
+
+
 class HostedReply(BaseModel):
     model_config = {"extra": "forbid"}
 
-    kind: Literal["npc", "tell"] = Field(description="先写：npc 请求一次配音；tell 在实际回应已结算后交最终叙述")
-    npc: str = Field("", description="kind=npc 时填可配音名单中的 id；kind=tell 时留空")
-    instruction: str = Field("", description="kind=npc 时填写本次演出指令；kind=tell 时留空")
-    private: bool = Field(False, description="kind=npc 时仅向当前行动调查员私下回应；kind=tell 时为 false")
+    kind: Literal["npc", "tool", "tell"] = Field(description=(
+        "先写：npc 请求一次配音；tool 按需查询或操作世界；tell 在实际回应与操作已结算后交最终叙述"))
+    npc: str = Field("", description="kind=npc 时填可配音名单中的 id；kind=tell/tool 时留空")
+    instruction: str = Field("", description="kind=npc 时填写本次演出指令；kind=tell/tool 时留空")
+    private: bool = Field(False, description="kind=npc 时仅向当前行动调查员私下回应；kind=tell/tool 时为 false")
+    tool: KeeperToolCall | None = Field(None, description="kind=tool 时填写一个工具请求；其他 kind 必须为 null")
     telling: Telling | None = Field(None, description=(
         "kind=tell 时填写最终场面与叙述，scene、text、asides、media、perceptions 都写在此对象内，不放顶层；"
-        "kind=npc 时必须为 null"))
+        "kind=npc/tool 时必须为 null"))
 
     @model_validator(mode="after")
     def exclusive(self) -> HostedReply:
         self.npc, self.instruction = self.npc.strip(), self.instruction.strip()
         if self.kind == "npc":
-            if self.telling is not None:
+            if self.telling is not None or self.tool is not None:
                 raise ValueError("请求配音时不能同时提交叙述或续办，须等实际回应")
             KeeperCall(npc=self.npc, instruction=self.instruction, private=self.private)
-        elif self.telling is None or self.npc or self.instruction or self.private:
-            raise ValueError("最终叙述必须填写 telling，npc、instruction 留空，private 为 false")
+        elif self.kind == "tool":
+            if self.tool is None or self.telling is not None or self.npc or self.instruction or self.private:
+                raise ValueError("工具请求只填写 tool，须等实际回执后再交叙述")
+        elif self.telling is None or self.tool is not None or self.npc or self.instruction or self.private:
+            raise ValueError("最终叙述必须填写 telling，tool 为 null，npc、instruction 留空，private 为 false")
         return self
 
 
 class ContinuedHostedReply(HostedReply):
     telling: ContinuedTelling | None = Field(None, description=(
-        "kind=tell 时根据实际回应填写最终场面、叙述和 continuation；kind=npc 时必须为 null"))
+        "kind=tell 时根据实际回应填写最终场面、叙述和 continuation；kind=npc/tool 时必须为 null"))
 
 
 @dataclass
@@ -470,7 +522,7 @@ class Narration:
     perceptions: list[dict] = field(default_factory=list)
     continuation: Continuation | None = None
     continuation_error: str = ""
-    call: KeeperCall | None = None
+    call: KeeperCall | KeeperToolCall | None = None
     call_error: str = ""
 
 
@@ -510,7 +562,7 @@ class _Telling:
             keys = list(data)
             if (data.get("kind") != "tell" or "telling" not in data
                     or keys.index("kind") > keys.index("telling") or data.get("npc") or data.get("instruction")
-                    or data.get("private")):
+                    or data.get("private") or data.get("tool")):
                 return
             data = data["telling"]
         if not isinstance(data, dict) or "text" not in data:
@@ -2184,8 +2236,9 @@ class Cast:
         is written and the words stream once it holds (_Telling); `fix` says what did not hold last
         time. It comes back as a Narration. The keeper's memory keeps the words alone, and only of a
         telling whose scene held or that the player already saw: one turned back is not remembered.
-        With `voices`, the same session may instead request one NPC reply. That structured request
-        stays in its history; only a final telling can stream or decide the request's continuation."""
+        With `voices`, the same session may instead request one NPC reply or a world/lore tool.
+        Structured requests stay in its history; only a final telling can stream or decide the
+        request's continuation. The host binds tool identity and returns actual execution receipts."""
         s = self._keeper(state)
         kept = report if remember is None else remember
         if question := kp_question(report):
@@ -2256,10 +2309,11 @@ class Cast:
                 samples = [{"kind": "tell", "telling": final}]
             if available := next((npc for npc in voices if npc), ""):
                 samples.append({"kind": "npc", "npc": available, "instruction": "依据本人实际知情范围回应本次请求"})
+            samples.append({"kind": "tool", "tool": {"tool": "world_query", "query": "需要补查的本局人物或经过"}})
             for sample in samples:
                 hosted_model.model_validate(sample)
             schema["examples"] = samples
-            extra += ("\n\n【本轮现场主持与配音】\n"
+            extra += ("\n\n【本轮现场主持与工具】\n"
                       "格式示例中的 scene 只给出当前在场与跟随记录，实际变化按本段已结算报告填写；不因照抄例子让人物离场或取消跟随。"
                       "text、instruction 与 continuation 是格式示意，不是本轮正文、指令或续办决定；"
                       "是否继续、挂起或完成原请求，仍按 remaining、已结算结果和实际回应判断。"
@@ -2268,10 +2322,17 @@ class Cast:
                       "需要人物回应时 kind=npc，npc 只用本次名单：" + "、".join(voices or ["无"]) + "。"
                       "instruction 只交给该人的可感知情境和本次演出边界，私有裁定依据留在主持侧。"
                       "只向当前行动调查员私下回应时 private=true，普通现场对白为 false；不指定其他或远处收件人。"
-                      "请求配音时 telling=null，等实际台词、操作与未落实原因回来后再决定场面和续办。"
-                      "可以直接收束时 kind=tell，npc、instruction 留空，private=false，telling 填最终回复；"
+                      "请求配音时 telling=null、tool=null，等实际台词、操作与未落实原因回来后再决定场面和续办。"
+                      "资料或场面能力够用时直接处理；需要补查或提交其他世界变化时 kind=tool，只填 tool 对象，telling=null。"
+                      "tool.tool=world_query 查询本局记录（query、limit、scope）；知道记录引用时用 scope 精准查询。"
+                      "lore 查询模组原文（query、keywords、max_tokens）。world_schema 按需取得操作格式（kinds 选操作类型）；"
+                      "world_commit 提交 operations，必要时 world_preview 先预演。"
+                      "不把预演、请求或失败操作当成已经发生；依实际回执继续。actor、id、request_id、reads 由宿主绑定，"
+                      "工具不改时钟、骰点、HP、调查员规则状态或直接分发模组线索；这些走正式规则结算。"
+                      "即时移动限于已过去的时段，未来动作登记计划或日程。除正在调用的工具参数外，其余参数留默认值。"
+                      "可以直接收束时 kind=tell，npc、instruction 留空，private=false、tool=null，telling 填最终回复；"
                       "scene、text、asides、media、perceptions 和 continuation 均为 telling 内的字段，不放到顶层。"
-                      "只用已有场面能力，不请求检索或其他世界工具。先写 kind，再写其余字段。")
+                      "请求不是已执行的结果，不另写面向玩家的正文；先写 kind，再写其余字段。")
         reply = await self._send("keeper", s, state, report, extra=extra, on_delta=reader,
                                  schema=schema, remember=remember)
         data = reply.data if isinstance(reply.data, dict) else {}
@@ -2293,6 +2354,8 @@ class Cast:
                         raise ValueError("配音对象不在本轮可用名单中")
                     return Narration(text="", call=KeeperCall(npc=hosted.npc, instruction=hosted.instruction,
                                                               private=hosted.private))
+                if hosted.kind == "tool":
+                    return Narration(text="", call=hosted.tool)
             except (ValidationError, ValueError) as exc:
                 self._unsaid(s, kept)
                 return Narration(text="", call_error=f"主持回复尚未通过校验：{exc}")

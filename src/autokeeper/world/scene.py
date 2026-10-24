@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import itertools
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -350,13 +350,6 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         return units.setdefault(key, Unit(key, begin=ctx.interval[0] if ctx.interval else None,
                                          end=ctx.interval[1] if ctx.interval else None))
 
-    def budget(npc: str) -> int:
-        if ctx.interval is None:
-            return ctx.elapsed
-        begin, end = ctx.interval
-        available = w.available_at(npc)
-        return end - max(begin, available if available is not None else begin)
-
     # Where the investigators are as it ends: a room of the place they are in, or where they were.
     room = src
     if "room" in given and not _blank(scene.room):
@@ -432,11 +425,6 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             if not (e.at == room and w.place_at(n, ctx.interval[1]) == room):
                 problems.append(f"{e.name}已有更晚时段的实际行动，不能在本段较早时刻重复出场；按已提交记录继续。")
                 continue
-        enc = st.encounter
-        if (enc is not None and enc.phase != "ended" and enc.place != room
-                and any(p.id == n and p.presence == "in" for p in enc.participants)):
-            problems.append(f"{e.name}仍在{name(enc.place)}的遭遇中，不能移到{name(room)}。")
-            continue
         if n in leaving:
             problems.append(f"{e.name}同时写在 here 和 left 里，只能写一处。")
             leaving.pop(n)
@@ -449,6 +437,11 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             continue
         if e.at == room:
             continue
+        active = getattr(original.st, "root", original.st).scenes
+        if bad := movement_problems(w, n, room, ctx, arriving=True,
+                                     encounters=(state.encounter for state in active.values() if not state.closed)):
+            problems += bad
+            continue
         if walks and e.at == src:  # goes along with them
             party_unit.steps.append(op(Move, entity=n, to=room, actor=ENGINE))
             party_unit.said.append(f"{e.name}一起过去")
@@ -460,17 +453,10 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
             u.said.append(f"补记{e.name}在{name(room)}")
             movers[n] = u.key
             continue
-        minutes = _way(w, ctx, e.at, room)
-        if minutes is None:
-            problems.append(f"{e.name}在{name(e.at) or '别处'}，从那里到不了{name(room)}：他不在这里，可以写他没来。")
-        elif minutes > budget(n):
-            problems.append(f"{e.name}在{name(e.at)}，到{name(room)}要 {minutes} 分钟，这一轮只过了 {max(0, budget(n))} 分钟，赶不到："
-                            "可以写他动身、在路上，还没到。")
-        else:
-            u = unit(f"npc:{n}")
-            u.steps.append(op(Move, entity=n, to=room, actor=KEEPER))
-            u.said.append(f"{e.name}来到{name(room)}")
-            movers[n] = u.key
+        u = unit(f"npc:{n}")
+        u.steps.append(op(Move, entity=n, to=room, actor=KEEPER))
+        u.said.append(f"{e.name}来到{name(room)}")
+        movers[n] = u.key
 
     for n in seen:
         if n in end:
@@ -478,15 +464,14 @@ def plan(w: World, raw: Any, ctx: Context) -> Plan:
         e = rec.entities[n]
         if n in leaving:
             to = _place(w, leaving[n])
-            minutes = _way(w, ctx, e.at, to) if to else None
             if to is None or to == room:
                 problems.append(f"{e.name}的去向「{leaving[n]}」不是能离开去的地点：写一个别的地点。")
-            elif minutes is None:
-                problems.append(f"{e.name}从{name(e.at)}去不了{name(to)}：写一个走得到的地点。")
-            elif minutes > budget(n):
-                problems.append(f"{e.name}从{name(e.at)}到{name(to)}要 {minutes} 分钟，这一轮只过了 {max(0, budget(n))} 分钟，到不了："
-                                "可以写他起身要走，人还写在 here 里。")
             else:
+                active = getattr(original.st, "root", original.st).scenes
+                if bad := movement_problems(w, n, to, ctx,
+                                             encounters=(state.encounter for state in active.values() if not state.closed)):
+                    problems += bad
+                    continue
                 u = unit(f"npc:{n}")
                 if n in following:
                     u.steps.append(op(Follow, npc=n, actor=KEEPER))
@@ -670,6 +655,17 @@ def _meet(a: str, b: str, why: str) -> dict[str, Any]:
     return {"kind": "meet", "a": a, "b": b, "why": why}
 
 
+def meeting_problems(w: World, a: str, b: str, why: str, *, at: int | None = None,
+                     items: Iterable[str] = ()) -> list[str]:
+    """An immediate physical exchange needs one place and an uncommitted time slice."""
+    if at is not None:
+        late = [w.name(who) for who in dict.fromkeys((a, b, *items)) if who
+                and (ready := w.available_at(who)) is not None and ready > at]
+        if late:
+            return [f"{'、'.join(late)}已有更晚时段的实际操作，不能在本段较早时刻重排。"]
+    return [] if w.place(a) == w.place(b) else [why]
+
+
 def _merge(units: dict[str, Unit], movers: dict[str, str]) -> list[Unit]:
     """A handover that needs both hands in one place lands with the moves of the people in it."""
     root = {k: k for k in units}
@@ -741,8 +737,7 @@ def _run(w: World, u: Unit) -> list[str]:
                    place=step["to"], op=f"walk:{w.st.turn}:{w.rec.seq}", motions=motions)
             continue
         if kind == "meet":
-            if w.place(step["a"]) != w.place(step["b"]):
-                problems = [step["why"]]
+            if problems := meeting_problems(w, step["a"], step["b"], step["why"]):
                 break
             continue
         if kind == "witness":
@@ -831,6 +826,40 @@ def _way(w: World, ctx: Context, a: str, b: str) -> int | None:
     a few steps away (Thomas comes over from the study while they talk, as they walk into it
     themselves); between places, the way there takes its time."""
     return 0 if b in rooms(w.m, a) else ctx.travel(a, b)
+
+
+def movement_problems(w: World, npc: str, destination: str, ctx: Context, *, arriving: bool = False,
+                      encounters: Iterable[Any] = ()) -> list[str]:
+    """Shared time, room and encounter boundaries for a scene or immediate tool move.
+
+    A missing original position can be registered; it is not a journey from an invented
+    place. Future scheduled moves are checked when they execute, outside this scene budget.
+    """
+    person = w.entity(npc)
+    if person is None or person.kind != "npc":
+        return []  # Move.check reports the concrete identity/destination problem.
+    begin, end = ctx.interval or (w.now - ctx.elapsed, w.now)
+    available = w.available_at(npc)
+    if available is not None and available > end:
+        return [f"{person.name}已有更晚时段的实际操作，不能在本段较早时刻重排。"]
+    for encounter in (w.st.encounter, *encounters):
+        if (encounter is not None and encounter.phase != "ended"
+                and any(p.id == npc and p.presence == "in" for p in encounter.participants)):
+            return [f"{person.name}仍在{w.name(encounter.place)}的遭遇中，移动须由遭遇回合结算。"]
+    if not person.at or person.at == destination:
+        return []
+    minutes = _way(w, ctx, person.at, destination)
+    budget = max(0, end - max(begin, available if available is not None else begin))
+    if minutes is None:
+        return [f"{person.name}从{w.name(person.at)}去不了{w.name(destination)}。"]
+    if minutes > budget:
+        if arriving:
+            return [f"{person.name}在{w.name(person.at)}，到{w.name(destination)}要 {minutes} 分钟，"
+                    f"这一轮只过了 {budget} 分钟，赶不到：可以写他动身、在路上，还没到。"]
+        return [f"{person.name}从{w.name(person.at)}到{w.name(destination)}要 {minutes} 分钟，"
+                f"这一轮只过了 {budget} 分钟，到不了：可以写他起身要走，人还写在 here 里；"
+                "未来行动另作日程或计划。"]
+    return []
 
 
 MISSING = "\n\n【上一稿没有 scene】先写 scene（这段讲完时的场面，没变的照抄），再照 scene 写 text。"

@@ -122,6 +122,10 @@ async def test_two_actual_voices_keep_a_live_complete_report_and_only_new_receip
             assert current.count(FIRST) <= 1 and current.count(SECOND) <= 1
         assert "擦手布" in hosted[1]["messages"][-1]["content"]
         assert FIRST in words(hosted[-1]["messages"]) and SECOND in words(hosted[-1]["messages"])
+        # Already-acknowledged receipts remain in history, rather than being
+        # copied into every new prompt as well. This counts copies, not tokens.
+        assert words(hosted[-1]["messages"]).count(FIRST) == 1
+        assert words(hosted[-1]["messages"]).count(SECOND) == 1
         assert_once(game.state)
         planned = await next_action(graph, game)
         assert FIRST in words(planned["messages"]) and SECOND in words(planned["messages"])

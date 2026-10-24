@@ -62,6 +62,9 @@ async def test_a_remote_npc_cannot_be_named_as_a_witness_and_a_failed_arrival_gr
 async def test_a_witness_arrives_with_the_memory_atomically_and_a_refused_move_lands_neither(game):
     text = "调查员当面解释：警局已经接手，自己明天再来。"
     assert game.world.apply(Move(id="away", entity="warden", to="office")).ok
+    # The claimed travel interval must actually pass after the recorded move;
+    # elapsed=30 alone cannot send him back before his latest commitment.
+    game.state.minutes += 30
     raw = {"here": ["preacher", "warden"], "observations": [{"witnesses": ["warden"], "text": text}]}
     planned = scene.plan(game.world, raw, scene_context(game, elapsed=30))
     assert not planned.problems and len(planned.held) == 1

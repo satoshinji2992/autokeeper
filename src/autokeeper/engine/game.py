@@ -29,6 +29,7 @@ from ..agents.cast import (
     Failure,
     IdeaFailure,
     Initiative,
+    KeeperToolCall,
     PartyInput,
     PartyPlan,
     Plan,
@@ -53,6 +54,7 @@ from ..world.agents import CastBrain, holds, marked, split_when
 from ..world.ops import Equip, Follow, Improvise, Learn, Move, Occur, SetFlag
 from ..world.record import DIRECTOR, KEEPER
 from ..world.store import World, digest
+from ..world.tools import Gateway
 from . import audience as recipients
 from . import diagnostics, effects, fog, idea, perception, presentation, progress, signs, views, world
 from .encounter.runner import Encounters
@@ -5343,9 +5345,55 @@ class Game(Encounters):
         turn.ending = turn.ending or extra.ending
         keep(extra)
 
+    async def _keeper_tool(self, row: dict, turn: Turn) -> dict:
+        """Execute a saved, host-bound request without another decision-making agent.
+
+        Results stay in this keeper's journal. In particular, reading private records
+        neither teaches them to an NPC nor delivers them to a player.
+        """
+        call = KeeperToolCall.model_validate({key: row[key] for key in KeeperToolCall.model_fields if key in row})
+        gateway = Gateway(self.world, KEEPER, scene_context=self._scene_context(turn))
+        try:
+            if call.tool == "world_query":
+                return gateway.query(call.query, call.limit, compact=True, scope=call.scope or None)
+            if call.tool == "world_schema":
+                return gateway.schema(call.kinds or None)
+            if call.tool == "world_preview":
+                return gateway.preview(call.operations, row["reads"], row["request_id"], compact=True)
+            if call.tool == "world_commit":
+                result = gateway.commit(call.operations, reads=row["reads"], request_id=row["request_id"], compact=True)
+                if result.get("ok"):
+                    result["flags"] = sorted({op["flag"] for op in call.operations
+                                              if op.get("kind") == "flag" and op.get("on", True)
+                                              and op["flag"] not in row["before_flags"] and op["flag"] in self.state.flags})
+                    result["flag_audiences"] = {}
+                    for applied in result["ops"]:
+                        if applied["kind"] != "flag":
+                            continue
+                        raw = call.operations[int(applied["id"].rsplit(":", 1)[1])]
+                        event = self.world.rec.event(applied["event"])
+                        if raw["flag"] in result["flags"] and event is not None:
+                            result["flag_audiences"][raw["flag"]] = [inv.id for inv in self.state.investigators
+                                                                    if inv.id in event.witnesses]
+                return result
+            # Static source retrieval cannot override this game's explicit rewrites.
+            async with asyncio.timeout(8):
+                text = await self.cast.lore(self.state, call.query, keywords=call.keywords or None,
+                                            max_tokens=call.max_tokens)
+            rewritten = world_view.rewrites(self.world.rec)
+            return {"ok": True, "text": text, "rewrites": rewritten,
+                    "notice": "原文只作参考；本局改写及当前世界记录优先。空结果不表示资料不存在。"}
+        except (ValueError, TypeError, KeyError) as exc:
+            return {"ok": False, "status": "rejected", "problems": [str(exc)[:1000]]}
+        except Exception as exc:
+            if call.tool != "lore":
+                raise
+            self._debug("retrieval", {"status": "unavailable", "error": type(exc).__name__})
+            return {"ok": False, "status": "unavailable", "problems": ["模组原文检索暂不可用，未取得资料。"]}
+
     async def _keeper_reply(self, report: str, lore: Callable[[], str], delta: Callable[[str], Awaitable[None]] | None,
                             turn: Turn | None, receipt: dict, *, enabled: bool = True, **kwargs: Any) -> Any:
-        """The same keeper may request an NPC performance before its final telling.
+        """The same keeper may use world tools or an NPC voice before its final telling.
 
         Requests and actual replies share the existing telling receipt. A retry settles any
         saved request first, then presents its result; it never replays the action or asks an
@@ -5394,6 +5442,39 @@ class Game(Encounters):
         while True:
             for index, row in enumerate(calls):
                 if row.get("done"):
+                    continue
+                if "tool" in row:
+                    if "result" not in row:
+                        row["before"] = {key: len(getattr(turn, key)) for key in
+                                         ("events", "checks", "sanity", "notes", "world")}
+                        result = await self._keeper_tool(row, turn)
+                        row["result"] = {"call": index, "tool": row["tool"], **result}
+                        keep(turn)  # the committed tool is durable before any awaited consequences
+                    if row["tool"] == "world_commit" and row["result"].get("ok"):
+                        with self._journal(row.setdefault("settling", {}), keep):
+                            # All actual conditions matter, not just flags. Hidden flag
+                            # meanings remain backstage; events use their own audiences.
+                            for flag, readers in row["result"].get("flag_audiences", {}).items():
+                                if readers:
+                                    await self._resolution_step(
+                                        f"flag-showcase:{flag}", turn,
+                                        lambda flag=flag, readers=readers: self.showcases.fire(f"flag:{flag}",
+                                                                                           audience=readers))
+                            await self._resolution_step("events", turn, lambda: self._events(turn))
+                            await self._perform_events(turn, keep)
+                            await self._resolution_step("people", turn, self._people)
+                            await self._resolution_step("ending", turn, lambda: self._check_ending(turn))
+                        before = row["before"]
+                        row["result"]["consequences"] = {
+                            "events": [{"id": event.id, "text": event.read_aloud or event.text}
+                                       for event in turn.events[before["events"]:]],
+                            "checks": [check.describe() for check in turn.checks[before["checks"]:]],
+                            "sanity": [{"source": source, "result": result.describe()}
+                                       for source, result in turn.sanity[before["sanity"]:]],
+                            "notes": turn.notes[before["notes"]:], "world": turn.world[before["world"]:],
+                        }
+                    row["done"] = True
+                    keep(turn)
                     continue
                 npc_id, instruction = row["npc"], row["instruction"]
                 if npc_id not in self._callable(turn) or self.battling():
@@ -5446,20 +5527,28 @@ class Game(Encounters):
             if intents := self._voice_intents(turn):
                 extra += ("\n【骰前考虑的参与意图，尚未发生】\n" + json.dumps(intents, ensure_ascii=False)
                           + "\n按最终主检定、已发生的对白和实时记录重新决定是否参与及怎样参与，旧意图不构成已发现或已同意。")
-            actual = ""
+            kept_at = memory_at()
+
+            def actual_results(rows: list[dict]) -> str:
+                if not rows:
+                    return ""
+                heading = "工具实际执行回执" if any("tool" in row for row in rows) else "配音实际执行回执"
+                return (f"\n【{heading}】\n" + json.dumps([row["result"] for row in rows], ensure_ascii=False)
+                        + "\n台词已向实际听见者展示，不复述；未落实不当作成功，不替玩家接受新条件。")
+
             current_report = report
             if calls:
-                actual = "\n【配音实际执行回执】\n" + json.dumps([row["result"] for row in calls], ensure_ascii=False)
-                actual += "\n台词已向实际听见者展示，不复述；未落实不当作成功，不替玩家接受新条件。"
                 # Render the current action once, not one growing copy per voice. A held
                 # round also retains its other investigators' original reports.
-                current_report = self._report(turn, omit_replies={f"keeper:{i}:{row['npc']}" for i, row in enumerate(calls)})
+                current_report = self._report(turn, omit_replies={f"keeper:{i}:{row['npc']}" for i, row in enumerate(calls)
+                                                               if "npc" in row})
                 if not own_report:
                     current_report = report + "\n【本次行动更新】\n" + current_report
             # Tool observations belong to the keeper's conversation, not just an ephemeral
             # lore block: otherwise its next turn remembers a request without its result.
-            prompt = current_report + actual
-            kept_at = memory_at()
+            # Earlier results already live in this same conversation. Only append
+            # observations it has not acknowledged; keep the complete report for retell.
+            prompt = current_report + actual_results(calls[max(0, kept_at):] if remembering else calls)
             remember = prompt
             if remembering:
                 remember = f"【主持记录 {receipt['memory_id']}｜配音回执至 {len(calls)}】\n"
@@ -5467,7 +5556,8 @@ class Game(Encounters):
                     remember += report
                 fresh = [row["result"] for row in calls[max(0, kept_at):]]
                 if fresh:
-                    remember += "\n【新增实际配音回执】\n" + json.dumps(fresh, ensure_ascii=False)
+                    heading = "新增实际工具回执" if any("tool" in row for row in fresh) else "新增实际配音回执"
+                    remember += f"\n【{heading}】\n" + json.dumps(fresh, ensure_ascii=False)
                 elif kept_at >= 0:
                     remember += "原行动与配音均按已记结果；本次只修正或收束主持输出，不重新执行。"
             # A tool-capable reply can contain world results or private material. Keep
@@ -5475,9 +5565,17 @@ class Game(Encounters):
             asking = dict(kwargs)
             if envelope_retry:
                 asking["fix"] = asking.get("fix", "") + envelope_retry
-            told = await keeper(self.state, prompt, on_delta=None if voices or calls else delta,
+            # Capture before the model runs. Unrelated records are never included in
+            # a mutation's dependency set, but a concurrent change of its target is stale.
+            gateway = Gateway(self.world, KEEPER)
+            observed = gateway.snapshot_reads()
+            for row in calls:
+                result = row["result"]
+                if result.get("ok") and row.get("tool") in {"world_query", "world_preview", "world_commit"}:
+                    observed.update(result.get("reads", {}))
+            told = await keeper(self.state, prompt, on_delta=None if enabled or calls else delta,
                                 lore=lore() + extra,
-                                **({"voices": voices} if voices else {}),
+                                **({"voices": voices} if enabled else {}),
                                 **({"remember": remember} if remembering else {}), **asking)
             if error := getattr(told, "call_error", ""):
                 if not envelope_repaired and _takes(keeper, "fix"):
@@ -5487,18 +5585,30 @@ class Game(Encounters):
                     envelope_retry = ("\n【主持回复格式需修正】\n" + error
                                       + "\n重新提交完整回复。kind=tell 时 scene、text、asides、media、perceptions、"
                                       "continuation 放进 telling；kind=npc 时 telling=null。"
+                                      "kind=tool 时只填 tool 请求，telling=null。"
                                       "只修输出结构，保留已经结算和实际配音，不再执行它们。")
                     self._debug("keeper-format", {"phase": "repair", "error": error})
                     continue
                 raise PreparationError(error)
             envelope_retry = ""
-            receipt.update(report=prompt, memory=remember)
+            receipt.update(report=current_report + actual_results(calls), memory=remember)
             # A rejected scene is removed from the conversation. Do not acknowledge its
             # observations until an actual exchange retains them, including after a retry.
             receipt["memory_at"] = memory_at()
             if (call := getattr(told, "call", None)) is None:
                 return told
-            calls.append(call.model_dump(mode="json"))
+            row = call.model_dump(mode="json")
+            if isinstance(call, KeeperToolCall):
+                row["request_id"] = "keeper:" + digest([self.state.slot, self.state.pending_turn["id"],
+                                                       receipt.get("memory_id"), len(calls)])[:40]
+                if call.tool in {"world_preview", "world_commit"}:
+                    try:
+                        refs = gateway.required_reads(call.operations)
+                    except (ValueError, TypeError, KeyError):
+                        refs = set()  # the gateway returns the concrete validation error
+                    row["reads"] = {ref: observed.get(ref, 0) for ref in refs}
+                    row["before_flags"] = list(self.state.flags)
+            calls.append(row)
             keep(turn)  # a stable request exists before a voice, world operation or notification runs
 
     async def _tell(self, report: str, lore: str, delta: Callable[[str], Awaitable[None]] | None, turn: Turn | None,
